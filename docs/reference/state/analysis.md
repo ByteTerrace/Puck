@@ -105,15 +105,27 @@ own `Cost`.
 
 - **Setup**: what one sweep costs before its first evaluation, one unit per key
   a `forEach` snapshots.
-- **Check**: what one evaluation costs whether or not its gate holds: locals,
-  the gate, and any row selection.
-- **Effects**: what one firing costs.
+- **Check**: what one evaluation costs whether or not its gate holds: the gate,
+  the locals it reads (directly or through another local), and any row
+  selection.
+- **Effects**: what one firing costs: the locals only the effects read, which
+  the evaluator computes only once the gate has opened on an evaluation that
+  fires (`CompiledRule.Deferred`), and the effects themselves.
+
+So a binding whose gate stays closed costs its gate, never the work its effects
+alone need: a sweep over many candidates of which few can fire, such as a judge
+over a step's input events, pays a full judgement only for the bindings that
+fire.
 
 `RuleWorkBudget.Contributor` turns that into a **contributor line**. The
 line's **multiplier** is the number of evaluations per tick: 1 for a rule
 evaluated once, the iterated row's capacity for a `forEach` rule, the zone
 table's entry count for a rule over zones, the pool's capacity for a pool
-sweep, and, in Puck.World, the carrier or pair count for an interaction. Its
+sweep, in Puck.World the carrier or pair count for an interaction, and for a
+`forEach: $inputEvents:<owner>` sweep the events one step can admit: the
+document's `inputHistory.maximumEventsPerStep` plus the terminal cancellations
+one switch writes (`WorldInputIteration.StepCapacity`), since the sweep binds
+only the current step's events and admission refuses a batch past the bound. Its
 **firings** are the multiplier, or the rule's `maxFirings` when that is
 smaller: the evaluator ends a sweep once that many bindings have fired
 ([Bound how many bindings fire](rules.md#bound-how-many-bindings-fire)). Its
@@ -207,6 +219,9 @@ options weighed are in [costing](../../decisions/state-and-language.md#costing).
   (`state.rules.skips`), and one firing per committed firing that moved the
   arena (`state.rules.firings`). Puck.World reads them through
   `WorldRuleHost.RuleWork`.
+- In Puck.World an input-history read costs the retained history its
+  newest-first scan walks; a read of the event a sweep bound (`each`) or of a
+  hold costs the one record it names, and a pattern read its matching program.
 - A pattern over a board costs its ray visits plus one step per cell. When the
   rule asks for the position or length of an occurrence, it adds the square of
   the longest ray in the read's direction, or of the cell count for `any`. A
@@ -230,15 +245,31 @@ always sum, because a closed gate still costs its check.
 
 The discount has to account for writes during the tick. `CountWriters` counts,
 per cell, how many firings per tick can write it (each rule's write set times
-its firings); a write whose key isn't literal counts against every cell of its
-row, pinned cells included. For each
-of those writers, the tally takes one more of the costliest values, because a
-cell that changes mid-tick can let a second exclusive rule fire later in the
-same tick.
+its firings) and where in the tick's pass each runs; a write whose key isn't
+literal counts against every cell of its row, pinned cells included. A cell
+that changes mid-tick can let a second exclusive rule fire later in the same
+tick, but only a write that lands between two lines changes what they read: one
+at or after the earlier line's place and before the later one's. So for each
+cell, the tally takes one more of the costliest values per writer firing placed
+from the first through before the last of the lines that pin it
+(`RuleCellWriters.Between`), and per writer firing everywhere when one of those
+lines may run anywhere.
+
+Each line carries its place (`RuleWorkContributor.Order`). In Puck.World a tick
+runs the rules no group claims in one pass in document order, then every
+group's passes, then the interactions in theirs
+(`WorldRuleHost.EvaluateWorldRules`), so an ungrouped rule's place is its
+document index, an interaction's comes after every rule, and a grouped rule's
+line may run anywhere while its writes land after every ungrouped rule and
+before every interaction. A search judge run is one pass over its rules in
+order, so each judge rule's place is its index.
 
 In the example, `income` and `bankrupt` pin `phase` to 1 and 2, and nothing
 writes `phase`, so the sheet charges the costlier of their two firings once.
-`buy-card`'s firing is charged in full, and all three checks are charged.
+`buy-card`'s firing is charged in full, and all three checks are charged. Had a
+rule placed between `income` and `bankrupt` written `phase`, both firings would
+be charged; placed before `income` or after `bankrupt`, it changes nothing the
+two can read in one tick.
 
 ### The ceiling
 
@@ -340,14 +371,26 @@ schedule names:
   (`WorldRuleHost.RefreshFacts`), for a literal body or the body bound to
   `$each`; a pose read through a placement reference (`placement:$each`) names
   the pose of whichever body inhabits the placement, paired with the
-  population's placement table version;
+  population's placement table version; an input-history read of a literal
+  owner (an event, its time, value or tick, a hold, or the music clock at an
+  event) as that owner's input version, which moves on an admission, an
+  expiry, a switch or a restore; and the music clock's current beat, bar,
+  beat in bar or phase error as a version that moves when the value does, so a
+  beat read moves on the beat's edge;
 - for a sweep, the set it sweeps: the keyed row it iterates, or the live-body
   roster;
-- a **deadline**: a gate conjunct `$tick >= X` or `$tick > X` (or the same with
-  the tick on the right) whose falsehood alone closes the gate, and where X
-  reads no tick (`RuleDeadline`). Its tick read is not a dependency: a closed
-  verdict carries the first tick the comparison holds, and is judged again
-  then.
+- a **deadline**: a gate conjunct `$tick >= X`, `$tick > X` or `$tick == X` (or
+  the same with the tick on the right) whose falsehood alone closes the gate,
+  and where X reads no tick (`RuleDeadline`). Its tick read is not a
+  dependency: a closed verdict carries the first tick the comparison holds, and
+  is judged again then. An equality is how a rule names the tick an event
+  landed (`inputTick(seat, channel, Press, 0) == $tick`): closed, it wakes at
+  X if X is ahead and never once X has passed; held open by an `Edge`, it wakes
+  the next tick, when the equality stops holding.
+
+A judgement's dependencies are its gate's and the gate's locals' reads; a local
+only the effects read is computed when the rule fires, after the verdict, and
+names no dependency.
 
 A schedule is **volatile** when it can't name a dependency, and a volatile rule
 is judged every tick. It is volatile when the judgement:
@@ -444,9 +487,13 @@ Every ceiling in the state engine bounds one whole document: the work sheet's
 `RuleCapacity.MaxWorkUnitsPerTick`, the arena's byte ceiling, and declaration
 counts such as `StateCapacity.MaxRows` (1,024). A world that imports several
 districts or games merges them into one document, so content that fits
-comfortably on its own can cross a ceiling once it's merged. When that happens,
-raise the ceiling that was hit by changing the constant and whatever it sizes,
-and keep the content as it is. [Limits and capacities](limits.md) lists every
+comfortably on its own can cross a ceiling once it's merged. When the work
+sheet is the ceiling hit, first read the costliest lines' derivations
+(`world.budget.rules --why`): a line priced for work that cannot run, or for
+firings that cannot land in one tick together, is a pricing defect, fixed in
+the analysis. When the sheet prices what can run, raise the ceiling that was
+hit by changing the constant and whatever it sizes, and keep the content as it
+is. [Limits and capacities](limits.md) lists every
 ceiling and how they behave.
 
 ## Limitations

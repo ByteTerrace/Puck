@@ -695,7 +695,7 @@ local name = <operand>
 | Member | Written | Kind | Admitted on | Lowers to | Default | Means |
 |---|---|---|---|---|---|---|
 | `name` (required) | header | name | — | `name` | — | The local's lexical name, read bare in later expressions and bracket indices. Function names are functions only in calls. |
-| `expression` (required) | header | operand | — | `expression` | — | What the local evaluates to, in declaration order before the gate and effects. |
+| `expression` (required) | header | operand | — | `expression` | — | What the local evaluates to, in declaration order: before the gate when the gate reads it, and otherwise only when the rule fires. |
 
 Printed back as `local` when the node carries `expression`, `name`; otherwise the explicit `locals` array. Every field of the node the description does not name prints as an ordinary property.
 

@@ -110,7 +110,12 @@ is corrected in the same change.
   calibration and the judged clock (`Capture` or `Admission`). An overflowing
   batch is refused whole and resets the owner into a new epoch; history is
   never truncated. Size it for the rate and sample density
-  ([bindings.md](references/bindings.md)).
+  ([bindings.md](references/bindings.md)). A `forEach: $inputEvents:<owner>`
+  rule binds only the step's events and is priced at `maximumEventsPerStep`
+  plus the terminal cancellations (`WorldInputIteration.StepCapacity`); a read
+  through `each` costs one record. A rule reading a literal owner's events or
+  holds is scheduled on that owner's input version, so the due list leaves it
+  alone on a tick the owner's history did not change (`WorldRuleHost.TryInputScope`).
 - In a scenario, `seat1: player.signal <source> press at:<seconds>` places a
   press at a sub-tick offset; `keyboard.text` commits text as ordered Unicode
   scalar events.

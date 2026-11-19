@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using Puck.Maths;
 using Puck.Physics.Motion;
 
@@ -266,37 +267,18 @@ public sealed partial class WorldRuleHost {
         }
 
         for (var index = 0; (index < capacity); index++) {
-            var live = population.IsActive(index: index);
-
-            if (live != m_seenLive[index]) {
-                m_seenLive[index] = live;
-                m_liveVersion++;
-                m_factMoves.Add(item: new FactRead(Body: index, Source: LiveBodiesSource));
-            }
+            _ = See(move: new FactRead(Body: index, Source: LiveBodiesSource), now: population.IsActive(index: index), seen: ref m_seenLive[index], version: ref m_liveVersion);
             if (!m_watchPoses && !m_watchFacts) {
                 continue;
             }
 
             var body = Host.Body(index: index);
 
-            if (m_watchPoses) {
-                var pose = BodyPose.Of(body: body);
-
-                if (pose != m_seenPose[index]) {
-                    m_seenPose[index] = pose;
-                    m_poseVersions[index]++;
-                    m_factMoves.Add(item: new FactRead(Body: index, Source: BodyPoseSource));
-                    placementMoved |= (m_watchPlacements && (index < m_inhabitant.Length) && m_inhabitant[index]);
-                }
+            if (m_watchPoses && See(move: new FactRead(Body: index, Source: BodyPoseSource), now: BodyPose.Of(body: body), seen: ref m_seenPose[index], version: ref m_poseVersions[index])) {
+                placementMoved |= (m_watchPlacements && (index < m_inhabitant.Length) && m_inhabitant[index]);
             }
             if (m_watchFacts) {
-                var facts = ((body is not null) ? body.Facts : BodyFacts.None);
-
-                if (facts != m_seenFacts[index]) {
-                    m_seenFacts[index] = facts;
-                    m_factsVersions[index]++;
-                    m_factMoves.Add(item: new FactRead(Body: index, Source: BodyFactsSource));
-                }
+                _ = See(move: new FactRead(Body: index, Source: BodyFactsSource), now: ((body is not null) ? body.Facts : BodyFacts.None), seen: ref m_seenFacts[index], version: ref m_factsVersions[index]);
             }
         }
         if (placementMoved) {
@@ -331,14 +313,12 @@ public sealed partial class WorldRuleHost {
             return;
         }
         m_inputsStale = false;
-        for (var index = 0; (index < m_inputPrincipals.Count); index++) {
-            var seen = InputSeen.Of(owner: InputOwner(principal: m_inputPrincipals[index]));
 
-            if (seen != m_seenInputs[index]) {
-                m_seenInputs[index] = seen;
-                m_inputVersions[index]++;
-                m_factMoves.Add(item: new FactRead(Body: index, Source: InputSource));
-            }
+        var seen = CollectionsMarshal.AsSpan(list: m_seenInputs);
+        var versions = CollectionsMarshal.AsSpan(list: m_inputVersions);
+
+        for (var index = 0; (index < seen.Length); index++) {
+            _ = See(move: new FactRead(Body: index, Source: InputSource), now: InputSeen.Of(owner: InputOwner(principal: m_inputPrincipals[index])), seen: ref seen[index], version: ref versions[index]);
         }
     }
     // A clock read names the clock's current position, which moves once a step: its beat, bar and beat in bar only on a
@@ -356,18 +336,23 @@ public sealed partial class WorldRuleHost {
     }
     private void DeriveClocks() {
         for (var index = 0; (index < m_watchClocks.Length); index++) {
-            if (!m_watchClocks[index]) {
-                continue;
-            }
-
-            var value = Host.ReadClock(facet: (ClockFacet)index);
-
-            if (value != m_seenClocks[index]) {
-                m_seenClocks[index] = value;
-                m_clockVersions[index]++;
-                m_factMoves.Add(item: new FactRead(Body: index, Source: ClockSource));
+            if (m_watchClocks[index]) {
+                _ = See(move: new FactRead(Body: index, Source: ClockSource), now: Host.ReadClock(facet: (ClockFacet)index), seen: ref m_seenClocks[index], version: ref m_clockVersions[index]);
             }
         }
+    }
+    // The one comparison every derived version rests on: what a source answers now against what it answered when the
+    // versions were last derived. A difference takes the new answer as seen, moves the version and hands the due list
+    // the move.
+    private bool See<T>(ref T seen, T now, ref ulong version, FactRead move) {
+        if (EqualityComparer<T>.Default.Equals(x: seen, y: now)) {
+            return false;
+        }
+        seen = now;
+        version++;
+        m_factMoves.Add(item: move);
+
+        return true;
     }
     // Rebuilds which bodies inhabit a placement when the population's table moved, reporting whether it did.
     private bool SeeInhabitants() {

@@ -157,8 +157,19 @@ its scope validation is in `WorldDefinitionValidator.BodyGates.cs`. No body gate
 - **Bounded before it runs.** Every row, pool, pattern and search has a
   ceiling checked at compile or load, and a world whose rules could exceed
   `RuleCapacity.MaxWorkUnitsPerTick` is refused at load. When merged content
-  hits a ceiling, raise the engine constant rather than cutting content
+  hits the work ceiling, first check the sheet prices only what can run
+  (`world.budget.rules --why`); then raise the engine constant rather than
+  cutting content
   ([the rule](../../../docs/reference/state/analysis.md#when-merged-content-collides-with-a-capacity)).
+- **The sheet prices what the evaluator runs.** A local the gate does not read
+  is computed only when the rule fires, and priced with the firing; both read
+  one `CompiledRule.Deferred`, which the compiler derives from the one door
+  every `$local:` spelling resolves through. A second split of a rule's work
+  (a new lazily evaluated part) is priced where the evaluator runs it, or the
+  admitted sheet stops bounding the tick. Exclusive lines share an allowance
+  unless a write can land between them in the tick's pass
+  (`RuleCellWriters.Between`); a host that evaluates rules in another order
+  places its lines and writers by that order.
 - **A price reads declarations, never members.** Every price reads a row's room
   through `RuleCompileContext.RowCapacity`: an uncapped keyed row is priced at
   `StateCapacity.MaxCellsPerRow` (or its token domain's room), never at its cells
@@ -198,7 +209,7 @@ its scope validation is in `WorldDefinitionValidator.BodyGates.cs`. No body gate
 | Latch lifecycle writes stay outside firings | `RuleLatch` writers take the journal and refuse inside a scope |
 | A transform reads no names while it runs | `RuleCompiler.TryResolveTransform` resolves to an `ArenaTransform` of ordinals |
 | A rule fits its host | `RuleNeeds`, read off the rule's own declarations by `RuleNeedsBuilder` and admitted against the host's facets; a rule the host cannot serve is refused before evaluation |
-| Worst-case work fits a tick | `RuleWorkBudget` against `RuleCapacity.MaxWorkUnitsPerTick`, at load |
+| Worst-case work fits a tick | `RuleWorkBudget` against `RuleCapacity.MaxWorkUnitsPerTick`, at load; the evaluator's deferred locals and the sheet read one `CompiledRule.Deferred`. Nothing checks that a host's line places (`RuleWorkContributor.Order`) match the order it evaluates in |
 | A price is a function of declarations | `RuleCompileContext.RowCapacity`, the one room `IRuleCostContext` serves every fact, search price and rewind estimate; `RecipientOracleLawTests` compares two hidden-member variants. Nothing refuses a new price that reads storage instead |
 | A read audience encloses the destination's | `StateArena.ReadAudienceEncloses`, called by search and the disclosure transforms |
 | Same input, same state | row digests in `StateArena.ComputeHash`; `puck test --reproduce` compares two runs and recomputes every tick |

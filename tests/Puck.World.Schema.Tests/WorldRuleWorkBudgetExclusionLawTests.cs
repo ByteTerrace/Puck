@@ -1,5 +1,6 @@
 using Xunit;
 
+using RuleCellWriters = Puck.State.Rules.RuleCellWriters;
 using RuleCost = Puck.State.Rules.RuleCost;
 using RulePinnedCell = Puck.State.Rules.RulePinnedCell;
 using RuleWorkBudget = Puck.State.Rules.RuleWorkBudget;
