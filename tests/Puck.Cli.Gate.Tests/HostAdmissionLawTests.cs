@@ -51,23 +51,23 @@ public sealed class HostAdmissionLawTests {
         Assert.Contains(actualString: large.ToString(), expectedSubstring: "freeRAM=3.0GB (admission needs at least 4.0GB (memory pressure))");
     }
     // Peaks measured on the machine this was found on (a 32 GB desk, 64 GB commit limit), written as the tracker writes
-    // them (one line per observed process: start ticks, id, private GB, working-set GB): a windowed World reaches 20.4 GB
-    // of private bytes (commit) but holds about 14 GB resident.
+    // them (one line per observed process: start ticks, id, private GB, private working-set GB, working-set GB): a
+    // windowed World reaches 20.4 GB of private bytes (commit) but holds about 14 GB privately resident.
     private static HostStartTracker MeasuredDesk(string root) {
-        var peaks = Path.Combine(root, "host-observations");
+        var peaks = Path.Combine(root, HostStartTracker.ObservationDirectory);
 
         Directory.CreateDirectory(peaks);
-        foreach (var (name, text) in (IEnumerable<(string, string)>)[("WindowedWorld", "1 1 20.4 14\n"), ("HeadlessWorld", "1 1 1.5 1.2\n"), ("HeavySuite", "1 1 1.6 1.3\n")]) {
+        foreach (var (name, text) in (IEnumerable<(string, string)>)[("WindowedWorld", "1 1 20.4 14 15.3\n"), ("HeadlessWorld", "1 1 1.5 1.2 1.4\n"), ("HeavySuite", "1 1 1.6 1.3 1.4\n")]) {
             File.WriteAllText(Path.Combine(peaks, name), text);
         }
 
         return new HostStartTracker(root);
     }
     // Feeds one finished process of a kind to a tracker over the shared root: seen, then gone after a plateau.
-    private static void Observed(string root, GateClock clock, HostStartKind kind, int id, double privateGb, double workingSetGb) {
+    private static void Observed(string root, GateClock clock, HostStartKind kind, int id, double privateGb, double workingSetGb, double privateResidentGb = double.NaN) {
         var tracker = new HostStartTracker(root);
 
-        _ = tracker.Judge(reading: Sample(starts: [new(Id: id, Kind: kind, PrivateGb: privateGb, StartTicks: id, WorkingSetGb: workingSetGb)]), kind: HostStartKind.Step, thresholds: Desk, clock: clock, reserve: false);
+        _ = tracker.Judge(reading: Sample(starts: [new(Id: id, Kind: kind, PrivateGb: privateGb, PrivateResidentGb: privateResidentGb, StartTicks: id, WorkingSetGb: workingSetGb)]), kind: HostStartKind.Step, thresholds: Desk, clock: clock, reserve: false);
         clock.Advance(HostStartTracker.Plateau);
         _ = tracker.Judge(reading: Sample(), kind: HostStartKind.Step, thresholds: Desk, clock: clock, reserve: false);
     }
@@ -124,18 +124,18 @@ public sealed class HostAdmissionLawTests {
 
         Assert.Equal(expected: (12.6, true), actual: (Math.Round(value: idle.ResidentNeedGb, digits: 6), idle.PhysicalCovered));
         Assert.Equal(expected: (12.6, false), actual: (Math.Round(value: second.ResidentNeedGb, digits: 6), second.PhysicalCovered));
-        Assert.Equal(expected: HostLoadThresholds.WindowedWorldPeakGb * HostLoadThresholds.ResidentFraction, actual: tracker.ExpectedResidentPeakGb(kind: HostStartKind.WindowedWorld));
+        Assert.Equal(expected: HostLoadThresholds.WindowedWorldPeakGb * HostLoadThresholds.ResidentFraction, actual: tracker.ExpectedPeaks(kind: HostStartKind.WindowedWorld).ResidentGb);
 
         HostStartTracker Tracker() => new();
     }
-    // The tracker measures working-set peaks beside private-byte peaks, from the same plateaued or finished processes, and
-    // shares both under the lease root: the private-byte file keeps its name and contents, the working set goes in a sibling.
+    // The tracker measures each kind's peaks in three quantities from the same plateaued or finished processes (private
+    // bytes, private working set, whole working set) and shares them under the lease root, one line per process.
     [Fact]
-    public void WorkingSetPeaksAreMeasuredBesideThePrivateBytePeaksAndShared() {
+    public void EachKindsPeaksAreMeasuredByKindOfMemoryAndShared() {
         using var directory = new Puck.Testing.TemporaryDirectory();
         var clock = new GateClock();
         var tracker = new HostStartTracker(directory.RootPath);
-        var process = new HostRunningStart(Id: 8, Kind: HostStartKind.WindowedWorld, PrivateGb: 20, StartTicks: 1, WorkingSetGb: 12);
+        var process = new HostRunningStart(Id: 8, Kind: HostStartKind.WindowedWorld, PrivateGb: 20, PrivateResidentGb: 10, StartTicks: 1, WorkingSetGb: 12);
 
         _ = tracker.Judge(reading: Sample(starts: [process]), kind: HostStartKind.Step, thresholds: Desk, clock: clock, reserve: false);
         clock.Advance(HostStartTracker.Plateau);
@@ -143,8 +143,75 @@ public sealed class HostAdmissionLawTests {
 
         var next = new HostStartTracker(directory.RootPath);
 
-        Assert.Equal(expected: (20.0, 12.0), actual: (next.ExpectedPeakGb(kind: HostStartKind.WindowedWorld), next.ExpectedResidentPeakGb(kind: HostStartKind.WindowedWorld)));
-        Assert.Equal(expected: "1 8 20 12\n", actual: File.ReadAllText(Path.Combine(directory.RootPath, "host-observations", "WindowedWorld")));
+        Assert.Equal(expected: new HostPeaks(PrivateGb: 20, ResidentGb: 10, WorkingSetGb: 12), actual: next.ExpectedPeaks(kind: HostStartKind.WindowedWorld));
+        Assert.Equal(expected: "1 8 20 10 12\n", actual: File.ReadAllText(Path.Combine(directory.RootPath, HostStartTracker.ObservationDirectory, "WindowedWorld")));
+        Assert.True(condition: double.IsNaN(next.ExpectedPeaks(kind: HostStartKind.HeadlessWorld).WorkingSetGb));
+    }
+    // A windowed World's working set is mostly memory the system can take back: a clean shader-cache mapping and shared
+    // images. Free memory is judged by its private working set, so on the idle 32 GB desk (18.9 GB free, 29.5 GB of commit
+    // headroom) a World whose 15.3 GB working set holds 12.8 GB privately is admitted, where judging the whole working set
+    // refused it (18.9 - 15.3 leaves under the 4 GB floor). The commit check still reads private bytes, driver mirror and
+    // all. A start whose private working set does not fit free memory above the floor is still refused, and the refusal
+    // names both figures.
+    [Fact]
+    public void AStartIsJudgedByItsPrivateWorkingSetNotTheCleanPagesItShares() {
+        using var split = new Puck.Testing.TemporaryDirectory();
+        using var whole = new Puck.Testing.TemporaryDirectory();
+        var clock = new GateClock();
+        var idle = Sample(commit: (100.0 * (64 - 29.5) / 64), limit: 64, ram: 18.9);
+        var crowded = Sample(commit: (100.0 * (64 - 29.5) / 64), limit: 64, ram: 16);
+
+        Observed(split.RootPath, clock, HostStartKind.WindowedWorld, id: 1, privateGb: 20.4, workingSetGb: 15.3, privateResidentGb: 12.8);
+        Observed(whole.RootPath, clock, HostStartKind.WindowedWorld, id: 1, privateGb: 20.4, workingSetGb: 15.3);
+
+        var admitted = new HostStartTracker(split.RootPath).Judge(reading: idle, kind: HostStartKind.WindowedWorld, thresholds: Desk, clock: clock, reserve: false);
+        var unsplit = new HostStartTracker(whole.RootPath).Judge(reading: idle, kind: HostStartKind.WindowedWorld, thresholds: Desk, clock: clock, reserve: false);
+
+        Assert.Equal(expected: (true, true, 12.8, 15.3, 20.4), actual: (admitted.CommitCovered, admitted.PhysicalCovered, admitted.ResidentOwnGb, admitted.WorkingSetOwnGb, admitted.OwnGb));
+        Assert.Equal(expected: (true, false, 15.3), actual: (unsplit.CommitCovered, unsplit.PhysicalCovered, unsplit.ResidentOwnGb));
+        Assert.True(condition: Admits(kind: HostStartKind.WindowedWorld, reading: idle, tracker: new HostStartTracker(split.RootPath), clock: new GateClock(), on: Desk));
+
+        using var error = new StringWriter();
+        var waiting = new GateClock();
+
+        Assert.False(condition: HostAdmission.Wait("puck_world_start", true, false, () => crowded, waiting, waiting.Advance, error, CancellationToken.None, Desk, TimeSpan.FromSeconds(seconds: 15), null, HostStartKind.WindowedWorld, new HostStartTracker(split.RootPath)));
+        Assert.Contains(expectedSubstring: "freeRAM=16.0GB (admission needs at least 16.8GB (12.8GB expected private working set of a windowed World of its 15.3GB working set plus 0.0GB still to grow in the admitted starts plus the 4.0GB pressure floor))", actualString: error.ToString());
+    }
+    // A live start's private working set is what holds free memory: one booting beside the start holds back only the private
+    // working set it has left to grow, and a reading that cannot split residency falls back to the whole working set.
+    [Fact]
+    public void ARunningStartsResidentGrowthIsReadFromItsPrivateWorkingSet() {
+        using var directory = new Puck.Testing.TemporaryDirectory();
+        var clock = new GateClock();
+
+        Observed(directory.RootPath, clock, HostStartKind.WindowedWorld, id: 1, privateGb: 20.4, workingSetGb: 15.3, privateResidentGb: 12.8);
+
+        HostStartDemand Beside(HostRunningStart booting) => new HostStartTracker(directory.RootPath).Judge(reading: Sample(ram: 30, starts: [booting]), kind: HostStartKind.HeadlessWorld, thresholds: Desk, clock: clock, reserve: false);
+        var split = Beside(new(Id: 2, Kind: HostStartKind.WindowedWorld, PrivateGb: 10, PrivateResidentGb: 4.8, StartTicks: 2, WorkingSetGb: 6));
+        var unsplit = Beside(new(Id: 3, Kind: HostStartKind.WindowedWorld, PrivateGb: 10, StartTicks: 3, WorkingSetGb: 6));
+
+        Assert.Equal(expected: (8.0, 6.8), actual: (Math.Round(split.ResidentGrowthGb, 6), Math.Round(unsplit.ResidentGrowthGb, 6)));
+        Assert.Equal(expected: (4.8, 6.0, 6.0), actual: (new HostRunningStart(Id: 2, Kind: HostStartKind.WindowedWorld, PrivateGb: 10, PrivateResidentGb: 4.8, WorkingSetGb: 6).ResidentGb, new HostRunningStart(Id: 3, Kind: HostStartKind.WindowedWorld, PrivateGb: 10, WorkingSetGb: 6).ResidentGb, new HostRunningStart(Id: 2, Kind: HostStartKind.WindowedWorld, PrivateGb: 10, PrivateResidentGb: 4.8, WorkingSetGb: 6).HeldGb));
+    }
+    // The operating system answers a process's private working set, for this process and for another one the same user runs,
+    // and it never exceeds the process's whole working set.
+    [Fact]
+    public void AProcessPrivateWorkingSetIsReadAndNeverExceedsItsWorkingSet() {
+        if (!(OperatingSystem.IsWindows() || OperatingSystem.IsLinux())) { return; }
+
+        var parent = ProcessInspection.ParentId(processId: Environment.ProcessId);
+
+        foreach (var id in ((parent > 0) ? new[] { Environment.ProcessId, parent } : [Environment.ProcessId])) {
+            using var process = System.Diagnostics.Process.GetProcessById(processId: id);
+            var before = ProcessInspection.PrivateResidentBytes(processId: id);
+
+            process.Refresh();
+            var workingSet = process.WorkingSet64;
+
+            Assert.True(condition: before is > 0, userMessage: $"process {id}");
+            // The process runs on between the two reads, so the working set is allowed a little slack.
+            Assert.True(condition: (before <= (workingSet + (64L << 20))), userMessage: $"process {id}: private {before} of {workingSet}");
+        }
     }
     // One unusual session (the owner's long play, 15.3 GB resident against about 11 for an ordinary windowed World) holds the
     // estimate up only briefly: five ordinary starts later it is back down, and a process that loaded the outlier before
@@ -154,7 +221,7 @@ public sealed class HostAdmissionLawTests {
         using var directory = new Puck.Testing.TemporaryDirectory();
         var clock = new GateClock();
         var longLived = new HostStartTracker(directory.RootPath);
-        double Resident() => longLived.ExpectedResidentPeakGb(kind: HostStartKind.WindowedWorld);
+        double Resident() => longLived.ExpectedPeaks(kind: HostStartKind.WindowedWorld).ResidentGb;
 
         Observed(directory.RootPath, clock, HostStartKind.WindowedWorld, id: 1, privateGb: 20, workingSetGb: 15.3);
         Assert.Equal(expected: 15.3, actual: Resident());
@@ -165,8 +232,8 @@ public sealed class HostAdmissionLawTests {
         }
 
         Assert.Equal(expected: 11.0, actual: Resident());
-        Assert.Equal(expected: 16.0, actual: longLived.ExpectedPeakGb(kind: HostStartKind.WindowedWorld));
-        Assert.Equal(expected: 11.0, actual: new HostStartTracker(directory.RootPath).ExpectedResidentPeakGb(kind: HostStartKind.WindowedWorld));
+        Assert.Equal(expected: 16.0, actual: longLived.ExpectedPeaks(kind: HostStartKind.WindowedWorld).PrivateGb);
+        Assert.Equal(expected: 11.0, actual: new HostStartTracker(directory.RootPath).ExpectedPeaks(kind: HostStartKind.WindowedWorld).ResidentGb);
     }
     // A new normal is learned in both directions: three of the last ten starts at 14 GB raise the estimate to it, and ten
     // at 11 GB bring it back.
@@ -180,12 +247,12 @@ public sealed class HostAdmissionLawTests {
         for (var i = 0; i < 10; ++i) { Observed(directory.RootPath, clock, HostStartKind.WindowedWorld, id: ++id, privateGb: 16, workingSetGb: 11); }
         for (var i = 0; i < 2; ++i) { Observed(directory.RootPath, clock, HostStartKind.WindowedWorld, id: ++id, privateGb: 20, workingSetGb: 14); }
 
-        Assert.Equal(expected: 11.0, actual: tracker.ExpectedResidentPeakGb(kind: HostStartKind.WindowedWorld));
+        Assert.Equal(expected: 11.0, actual: tracker.ExpectedPeaks(kind: HostStartKind.WindowedWorld).ResidentGb);
         Observed(directory.RootPath, clock, HostStartKind.WindowedWorld, id: ++id, privateGb: 20, workingSetGb: 14);
-        Assert.Equal(expected: (14.0, 20.0), actual: (tracker.ExpectedResidentPeakGb(kind: HostStartKind.WindowedWorld), tracker.ExpectedPeakGb(kind: HostStartKind.WindowedWorld)));
+        Assert.Equal(expected: (14.0, 20.0), actual: (tracker.ExpectedPeaks(kind: HostStartKind.WindowedWorld).ResidentGb, tracker.ExpectedPeaks(kind: HostStartKind.WindowedWorld).PrivateGb));
         for (var i = 0; i < 10; ++i) { Observed(directory.RootPath, clock, HostStartKind.WindowedWorld, id: ++id, privateGb: 16, workingSetGb: 11); }
 
-        Assert.Equal(expected: (11.0, 16.0), actual: (tracker.ExpectedResidentPeakGb(kind: HostStartKind.WindowedWorld), tracker.ExpectedPeakGb(kind: HostStartKind.WindowedWorld)));
+        Assert.Equal(expected: (11.0, 16.0), actual: (tracker.ExpectedPeaks(kind: HostStartKind.WindowedWorld).ResidentGb, tracker.ExpectedPeaks(kind: HostStartKind.WindowedWorld).PrivateGb));
     }
     // A kind the idle machine could not hold is refused by name at once, however long the bound: its working set plus the
     // pressure floor exceed the installed memory, or its commit plus the reserve exceed the commit limit.
@@ -194,7 +261,7 @@ public sealed class HostAdmissionLawTests {
         var smallRam = HostLoadThresholds.For(installedRamGb: 8, logicalProcessors: 6);
         var smallCommit = HostLoadThresholds.For(installedRamGb: 32, logicalProcessors: 16);
         var cases = new (HostLoadThresholds Thresholds, HostSample Reading, string Expected)[] {
-            (smallRam, Sample(commit: 10, limit: 64), "a windowed World can never be admitted on this machine, it expects 12.6GB of working set and the pressure floor is 1.0GB, over the machine's 8.0GB of memory"),
+            (smallRam, Sample(commit: 10, limit: 64), "a windowed World can never be admitted on this machine, it expects 12.6GB of private working set and the pressure floor is 1.0GB, over the machine's 8.0GB of memory"),
             (smallCommit, Sample(commit: 10, limit: 19), "a windowed World can never be admitted on this machine, it expects 18.0GB of commit and the commit reserve is 1.9GB, over the machine's 19.0GB commit limit"),
         };
 
@@ -636,17 +703,17 @@ public sealed class HostAdmissionLawTests {
         var tracker = new HostStartTracker();
         var clock = new GateClock();
 
-        Assert.Equal(expected: HostLoadThresholds.HeadlessWorldPeakGb, actual: tracker.ExpectedPeakGb(kind: HostStartKind.HeadlessWorld));
+        Assert.Equal(expected: HostLoadThresholds.HeadlessWorldPeakGb, actual: tracker.ExpectedPeaks(kind: HostStartKind.HeadlessWorld).PrivateGb);
         _ = tracker.Judge(reading: Sample(starts: [new(Id: 4, Kind: HostStartKind.HeadlessWorld, PrivateGb: 9)]), kind: HostStartKind.Step, thresholds: Thresholds, clock: clock, reserve: false);
         _ = tracker.Judge(reading: Sample(starts: [new(Id: 4, Kind: HostStartKind.HeadlessWorld, PrivateGb: 4)]), kind: HostStartKind.Step, thresholds: Thresholds, clock: clock, reserve: false);
-        Assert.Equal(expected: HostLoadThresholds.HeadlessWorldPeakGb, actual: tracker.ExpectedPeakGb(kind: HostStartKind.HeadlessWorld));
+        Assert.Equal(expected: HostLoadThresholds.HeadlessWorldPeakGb, actual: tracker.ExpectedPeaks(kind: HostStartKind.HeadlessWorld).PrivateGb);
         clock.Advance(HostStartTracker.Plateau);
         _ = tracker.Judge(reading: Sample(), kind: HostStartKind.Step, thresholds: Thresholds, clock: clock, reserve: false);
-        Assert.Equal(expected: 9.0, actual: tracker.ExpectedPeakGb(kind: HostStartKind.HeadlessWorld));
-        Assert.Equal(expected: HostLoadThresholds.WindowedWorldPeakGb, actual: tracker.ExpectedPeakGb(kind: HostStartKind.WindowedWorld));
+        Assert.Equal(expected: 9.0, actual: tracker.ExpectedPeaks(kind: HostStartKind.HeadlessWorld).PrivateGb);
+        Assert.Equal(expected: HostLoadThresholds.WindowedWorldPeakGb, actual: tracker.ExpectedPeaks(kind: HostStartKind.WindowedWorld).PrivateGb);
         _ = tracker.Judge(reading: Sample(starts: [new(Id: 5, Kind: HostStartKind.HeadlessWorld, PrivateGb: 30)]), kind: HostStartKind.Step, thresholds: Thresholds, clock: clock, reserve: false);
         _ = tracker.Judge(reading: Sample(), kind: HostStartKind.Step, thresholds: Thresholds, clock: clock, reserve: false);
-        Assert.Equal(expected: 30.0, actual: tracker.ExpectedPeakGb(kind: HostStartKind.HeadlessWorld));
+        Assert.Equal(expected: 30.0, actual: tracker.ExpectedPeaks(kind: HostStartKind.HeadlessWorld).PrivateGb);
     }
     // A process is its id and start ticks: a headless World that reuses a finished heavy suite's id is a new start, so the
     // suite's 15 GB peak is measured for heavy suites when it exits and never carried into the headless kind.
@@ -659,7 +726,7 @@ public sealed class HostAdmissionLawTests {
         clock.Advance(HostStartTracker.Plateau);
         _ = tracker.Judge(reading: Sample(starts: [new(Id: 7, Kind: HostStartKind.HeadlessWorld, PrivateGb: 0.5, StartTicks: 2)]), kind: HostStartKind.Step, thresholds: Thresholds, clock: clock, reserve: false);
         _ = tracker.Judge(reading: Sample(), kind: HostStartKind.Step, thresholds: Thresholds, clock: clock, reserve: false);
-        Assert.Equal(expected: (15.0, HostLoadThresholds.HeadlessWorldPeakGb), actual: (tracker.ExpectedPeakGb(kind: HostStartKind.HeavySuite), tracker.ExpectedPeakGb(kind: HostStartKind.HeadlessWorld)));
+        Assert.Equal(expected: (15.0, HostLoadThresholds.HeadlessWorldPeakGb), actual: (tracker.ExpectedPeaks(kind: HostStartKind.HeavySuite).PrivateGb, tracker.ExpectedPeaks(kind: HostStartKind.HeadlessWorld).PrivateGb));
     }
 
     [Fact]
@@ -701,7 +768,7 @@ public sealed class HostAdmissionLawTests {
         Assert.True(demand.Covered);
         Measure(11);
         next.Judge(Sample(), HostStartKind.Step, Thresholds, clock, false);
-        Assert.Equal(13, next.ExpectedPeakGb(HostStartKind.WindowedWorld));
+        Assert.Equal(13, next.ExpectedPeaks(HostStartKind.WindowedWorld).PrivateGb);
         var live = new HostStartTracker(directory.RootPath).Judge(
             Sample(starts: [new(9, HostStartKind.WindowedWorld, 18)]), HostStartKind.WindowedWorld, Thresholds, clock, false);
         Assert.Equal(18, live.OwnGb);

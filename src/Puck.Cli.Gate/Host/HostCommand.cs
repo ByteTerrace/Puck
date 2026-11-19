@@ -28,10 +28,10 @@ public static class HostCommand {
                 }
                 if (lines.Count > 0) {
                     foreach (var demand in demands) {
-                        Console.Out.WriteLine(FormattableString.Invariant($"admission {demand.Kind}: headroom={demand.HeadroomGb:0.0}GB peak={demand.OwnGb:0.0}GB growth={demand.GrowthGb:0.0}GB need={demand.NeedGb:0.0}GB commit-covered={demand.CommitCovered} freeRAM={demand.FreeRamGb:0.0}GB workingSet={demand.ResidentOwnGb:0.0}GB workingSetGrowth={demand.ResidentGrowthGb:0.0}GB workingSetNeed={demand.ResidentNeedGb:0.0}GB ram-covered={demand.PhysicalCovered} admitted={demand.Covered}"));
+                        Console.Out.WriteLine(FormattableString.Invariant($"admission {demand.Kind}: headroom={demand.HeadroomGb:0.0}GB peak={demand.OwnGb:0.0}GB growth={demand.GrowthGb:0.0}GB need={demand.NeedGb:0.0}GB commit-covered={demand.CommitCovered} freeRAM={demand.FreeRamGb:0.0}GB privateResident={demand.ResidentOwnGb:0.0}GB privateResidentGrowth={demand.ResidentGrowthGb:0.0}GB privateResidentNeed={demand.ResidentNeedGb:0.0}GB workingSet={Measured(demand.WorkingSetOwnGb)} ram-covered={demand.PhysicalCovered} admitted={demand.Covered}"));
                     }
                     foreach (var start in sample.Starts ?? []) {
-                        Console.Out.WriteLine(FormattableString.Invariant($"start {start.Kind} {start.Id}: private={start.PrivateGb:0.0}GB workingSet={start.ResidentGb:0.0}GB ready={start.Ready}"));
+                        Console.Out.WriteLine(FormattableString.Invariant($"start {start.Kind} {start.Id}: private={start.PrivateGb:0.0}GB privateResident={Measured(start.PrivateResidentGb)} workingSet={Measured(start.WorkingSetGb)} judged={start.ResidentGb:0.0}GB ready={start.Ready}"));
                     }
                 }
             } else if (lines.Count > 0) {
@@ -43,8 +43,30 @@ public static class HostCommand {
                     ["commitPercent"] = Finite(value: sample.CommitPercent),
                     ["commitChargeGb"] = Finite(sample.CommitChargeGb),
                     ["commitLimitGb"] = Finite(sample.CommitLimitGb),
-                    ["starts"] = System.Text.Json.JsonSerializer.SerializeToNode(sample.Starts),
-                    ["demands"] = System.Text.Json.JsonSerializer.SerializeToNode(demands),
+                    ["starts"] = new System.Text.Json.Nodes.JsonArray([.. (sample.Starts ?? []).Select(static start => new System.Text.Json.Nodes.JsonObject {
+                        ["id"] = start.Id,
+                        ["kind"] = start.Kind.ToString(),
+                        ["privateGb"] = Finite(start.PrivateGb),
+                        ["privateResidentGb"] = Finite(start.PrivateResidentGb),
+                        ["workingSetGb"] = Finite(start.WorkingSetGb),
+                        ["judgedResidentGb"] = Finite(start.ResidentGb),
+                        ["ready"] = start.Ready,
+                    })]),
+                    ["demands"] = new System.Text.Json.Nodes.JsonArray([.. demands.Select(static demand => new System.Text.Json.Nodes.JsonObject {
+                        ["kind"] = demand.Kind.ToString(),
+                        ["headroomGb"] = Finite(demand.HeadroomGb),
+                        ["peakGb"] = Finite(demand.OwnGb),
+                        ["growthGb"] = Finite(demand.GrowthGb),
+                        ["needGb"] = Finite(demand.NeedGb),
+                        ["commitCovered"] = demand.CommitCovered,
+                        ["freeRamGb"] = Finite(demand.FreeRamGb),
+                        ["privateResidentGb"] = Finite(demand.ResidentOwnGb),
+                        ["privateResidentGrowthGb"] = Finite(demand.ResidentGrowthGb),
+                        ["privateResidentNeedGb"] = Finite(demand.ResidentNeedGb),
+                        ["workingSetGb"] = Finite(demand.WorkingSetOwnGb),
+                        ["ramCovered"] = demand.PhysicalCovered,
+                        ["admitted"] = demand.Covered,
+                    })]),
                     ["reuseNodes"] = sample.ReuseNodes,
                     ["gpuHolder"] = sample.GpuHolder,
                     ["heavyTestHolder"] = sample.HeavyTestHolder,
@@ -66,8 +88,9 @@ public static class HostCommand {
             : CliExit.Success);
     }
     private static double? Finite(double value) => (double.IsFinite(d: value) ? Math.Round(value: value, digits: 1) : null);
+    private static string Measured(double gb) => (double.IsFinite(d: gb) ? FormattableString.Invariant($"{gb:0.0}GB") : "unmeasured");
     private static Command CreateLoad() {
-        var jsonOption = CliOptions.Json(description: "Write one JSON object per transition reading: at, cpuPercent (window mean), freeRamGb, freeDiskGb, commitPercent, commitChargeGb, commitLimitGb, starts, per-kind demands, reuseNodes, gpuHolder, heavyTestHolder and admission.");
+        var jsonOption = CliOptions.Json(description: "Write one JSON object per transition reading: at, cpuPercent (window mean), freeRamGb, freeDiskGb, commitPercent, commitChargeGb, commitLimitGb, starts (with private, private working-set and working-set GB), per-kind demands, reuseNodes, gpuHolder, heavyTestHolder and admission; an unreported figure is null.");
         var watchOption = new Option<bool>(name: "--watch") { Description = "Keep reading every --interval seconds and print a line on each transition, until cancelled." };
         var intervalOption = CliOptions.Count(defaultValue: 10, description: "Seconds between readings with --watch.", minimum: 1, name: "--interval");
         var windowOption = CliOptions.Count(defaultValue: 6, description: "Readings the CPU mean covers with --watch; CAPACITY waits until that many exist.", minimum: 1, name: "--window");
@@ -94,18 +117,21 @@ public static class HostCommand {
               One line per transition: a state that holds prints nothing more.
               Each transition also reports, per start kind, what a start of that kind needs in two quantities: its
               private bytes (expected peak plus the growth running starts have left) against the commit headroom less
-              the reserve (commit-covered), and its working set (the same sum in resident memory) against free RAM
-              above the pressure floor (ram-covered). Private bytes are commit and overstate residency, so each is
-              judged against its own quantity. admitted= is both, the decision gate, lease and the MCP World start
-              make for that kind. Each live start's kind, PID, private bytes, working set and readiness follow.
+              the reserve (commit-covered), and its private working set (the same sum in privately resident memory,
+              privateResidentNeed) against free RAM above the pressure floor (ram-covered). Private bytes are commit
+              and overstate residency (a driver's device-memory mirror charges commit and holds no page); the whole
+              working set overstates it too (clean mapped-file and image pages are shared and reclaimed), so it is
+              printed (workingSet=, unmeasured before the kind's first observation) and never judged. admitted= is
+              both, the decision gate, lease and the MCP World start make for that kind. Each live start's kind, PID,
+              private bytes, private working set, working set, the figure judged and readiness follow.
               A kind's expected peak is the high percentile of its last ten observed starts, kept per machine in the
               lease root, so one unusual session moves it only briefly; unused growth tapers away over
               HostStartTracker.Plateau and returns on renewed allocation.
               PRESSURE wins over CAPACITY within one reading. Defaults scale with the machine: CAPACITY needs three
               logical processors idle, but never fewer than 40% of them nor more than half; PRESSURE is free RAM
               below 1/8 of the installed memory (rounded up to whole gigabytes) or free disk below
-              {HostLoadThresholds.DiskPressureGb}GB. No fixed amount of free RAM or commit gates a start: it needs its own working
-              set free above the pressure floor and its own private bytes plus the reserve in the commit headroom. Here:
+              {HostLoadThresholds.DiskPressureGb}GB. No fixed amount of free RAM or commit gates a start: it needs its own private
+              working set free above the pressure floor and its own private bytes plus the reserve in the commit headroom. Here:
               CPU below {HostLoadThresholds.ThisMachine.CapacityCpuPercent:0.#}%, {HostLoadThresholds.ThisMachine.CommitReservePercent:0.##}% of the commit limit kept unclaimed (allocation fails at the limit with RAM still free); pressure below {HostLoadThresholds.ThisMachine.PressureRamGb:0.##}GB RAM. Options override these defaults; gate, lease and the MCP World start admit by them unchanged.
 
               GPU work is a World that opens a device (Puck.World or Puck.World.dll), or a test host for {string.Join(separator: ", ", values: HostProcesses.DeviceTestAssemblies)}

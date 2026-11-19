@@ -37,7 +37,7 @@ Decisions: [state and language](../decisions/state-and-language.md).
 - [Records and pools](records-and-pools.md): the record traits rows still carry alone, and remote home adoption.
 - [Remaining rule-fault work](rule-faults.md): what the rule-fault design leaves unbuilt, differing or unmeasured.
 - [A body's state behind one write door](body-state-door.md): a body's continuation as versioned sections the compiler will not let a write bypass, and the followers that read those versions.
-- [Disclosure](disclosure.md): one per-recipient view that every read, write admission, layout and delta derives from, with a noninterference harness as the definition of done.
+- [Disclosure](disclosure.md): one per-recipient view that every read, write admission, layout and delta derives from, with a noninterference harness as the definition of done. [The withdrawal chokepoint](disclosure/withdrawal-chokepoint.md) is its presentation half: what a viewer is shown after its access narrows, as one door through delivery and the render graph.
 - [Milestone 1 acceptance laws](acceptance-laws.md): the cross-system scenarios still unbuilt; dormant while test requirements are suspended.
 
 ## Worlds, federation and play
