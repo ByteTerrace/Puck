@@ -382,7 +382,8 @@ public sealed class AdmissionSecurityLawTests {
                 Grantee: Principal.Seat(slot: 0),
                 Capability: WorldCapability.Observe,
                 Subject: body,
-                Exclusive: true
+                Exclusive: true,
+                Budget: 4
             );
 
             fixture.Server.Grant(
