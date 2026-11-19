@@ -7012,6 +7012,29 @@ export type WorldDestinationDurability = "ephemeral" | "persisted";
 
 export type WorldDestinationScope = "user" | "group" | "global";
 
+export type WorldDeviceProfile = {
+  /**
+   * The profile's name, unique within the world, which world.device-profile and a benchmark run select by.
+   */
+  name: string;
+  /**
+   * The text the driver's adapter name must contain, ignoring case, for the engine to select the profile on that adapter.
+   */
+  match: string;
+  /**
+   * The quality table the profile runs: the tier of the world's render preset it applies (Names).
+   */
+  quality: QualityTier;
+  /**
+   * The most device memory the process admits on a discrete adapter, in mebibytes, where that is below the adapter's own budget less a tenth; absent leaves the device pool at the adapter's reading.
+   */
+  deviceMemoryMiB?: number | null;
+  /**
+   * The most host memory the process admits, in mebibytes, where that is below the machine's budget; absent leaves it. A unified-memory device states its one bar here, since its device segments lie in the host pool.
+   */
+  hostMemoryMiB?: number | null;
+};
+
 export type WorldDisclosureTier = "Frames" | "Presentation" | "Replica";
 
 /**
@@ -10883,6 +10906,10 @@ export type WorldRenderDefaults = {
    * The default shading program inherited by materials without their own.
    */
   shade?: SdfShadeDefinition | null;
+  /**
+   * The world's device profiles (WorldDeviceProfile): for each graphics device, the quality table it runs and the memory it may use. The engine selects one by the adapter it runs on and by name (world.device-profile). Absent authors none, and no cap applies.
+   */
+  devices?: (WorldDeviceProfile | null)[] | null;
 };
 
 export type WorldRenderEnvironment = {
