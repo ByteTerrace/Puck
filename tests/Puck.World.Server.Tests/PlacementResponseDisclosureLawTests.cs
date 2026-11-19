@@ -61,6 +61,30 @@ public sealed class PlacementResponseDisclosureLawTests {
     }
     private static WorldPlacement Find(IReadOnlyList<WorldPlacement> placements, string id) =>
         WorldDefinitionRows.FindPlacement(id: id, placements: placements)!;
+
+    [Fact]
+    public void AReplicaPatchesPublicHoldingsWhileAnotherPlacementIsMasked() {
+        using var fixture = Fixtures.FreshServer(definition: Document());
+        fixture.Step();
+        Set(fixture, "vault", 1L);
+        var images = new WorldDisclosureImages();
+        var server = fixture.Server;
+        var view = new WorldRecipientView(() => server.Definition, () => server.Arena, SeatTwo,
+            WorldDisclosureTier.Replica, () => true, images, server.AuthorityIdentity, () => server.DeliveryTime);
+        var cursor = new WorldDeliveryCursor();
+        Assert.Equal(Shut, Find(cursor.DeliverDefinition(view)!.Placements, "vaultGate").ShownPrototypeId);
+        var compositions = images.DefinitionsComposed;
+
+        foreach (var (value, prototype) in new[] { (1L, Open), (0L, Shut) }) {
+            Set(fixture, "score", value);
+            Assert.True(cursor.FrameMoved(view));
+            var delivered = cursor.DeliverDefinition(view)!;
+            Assert.Equal(prototype, Find(delivered.Placements, "scoreGate").ShownPrototypeId);
+            Assert.Equal(Shut, Find(delivered.Placements, "vaultGate").ShownPrototypeId);
+            Assert.Equal(compositions, images.DefinitionsComposed);
+        }
+    }
+
     // What a presentation-tier peer serving one seat is handed on the wire, decoded as the peer decodes it.
     private static IReadOnlyList<WorldPlacement> Served(WorldFixture fixture, Principal recipient) {
         var bytes = WorldFederationCodec.EncodeDocument(
