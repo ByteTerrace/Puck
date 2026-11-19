@@ -361,13 +361,15 @@ no demand point and no groups (`demand-points=0 groups=0 … frames=0` in
 `world.residency`); only the world's residency logged a start line. What made
 that measurement's session scene render and bake (its capture tool and
 captures, the camera, or something else it did during the bake) was not found,
-so the share it costs today is unmeasured. The structural cause is still in
-the code: a second residency that plans a geometry before the first lands it
-bakes it again. Had it baked here as it did there (886 M samples beside the
-world's 1,035 M), it would have added about 85 % to the pool's work, since one
-pool serves every residency (`SdfMeshPathBake.Schedule`); that is an inference
-from the pool being the bottleneck, and it would account for much of the
-difference between that measurement's 188 seconds and run A's 95.
+so what it cost on the build measured here is unknown. Had it baked here as it
+did there (886 M samples beside the world's 1,035 M), it would have added
+about 85 % to the pool's work, since one pool serves every residency
+(`SdfMeshPathBake.Schedule`); that is an inference from the pool being the
+bottleneck, and it would account for much of the difference between that
+measurement's 188 seconds and run A's 95. The integration branch has since
+shared a bake in flight across residencies (`SdfMeshBakeShare`, through
+`SdfMeshLibrary.Share`, counted under `sdf.mesh-shares`), which removes the
+structural cause; these runs predate it.
 
 ## Store I/O
 
@@ -478,10 +480,10 @@ Savings are against run D's 77-second lockstep bake unless stated; run C's
    of the 2 % the store costs. *Saving:* about half a second.
 9. **Share a geometry being baked across residencies**, as [the kernel
    measurement's](research-measure.md#what-the-numbers-say-to-build) first
-   step proposes. It is unranked here because no boot on this page baked the
-   routed session scene; where that scene bakes, it saves up to about half the
-   pool's work. *Check:* reproduce the session bake first, then its start line
-   counts the world's groups as shared.
+   step proposed, has landed on the integration branch since these runs
+   (`SdfMeshBakeShare`). It is unranked here because no boot on this page baked
+   the routed session scene. *Check:* where that scene bakes, the
+   `sdf.mesh-shares` counters name its groups as joined and landed.
 
 ## What remains to measure
 
