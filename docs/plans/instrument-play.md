@@ -481,9 +481,9 @@ weighed beside what other engines do.
 
 ## The concept-art brief
 
-For a Codex art lane, as a pack under `docs/game/art/` beside the Moth's, with
-its prompts and provenance recorded as the other packs do. A Claude partner
-writes the prompts' constraints and checks them. Every panel passes the
+The [instrument and dance concept pack](../game/art/instrument-play-pack/README.md)
+keeps the sheets, prompts and provenance beside the Moth's own references.
+A Claude partner writes the prompts' constraints and checks them. Every panel passes the
 [concept art review](../game/art/README.md#concept-art-review), with joint
 range as the audit that matters most here.
 
