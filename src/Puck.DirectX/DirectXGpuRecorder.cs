@@ -442,8 +442,14 @@ public sealed unsafe partial class DirectXGpuRecorder(DirectXDeviceContext devic
         // their accesses without attempting the forbidden legacy-to-enhanced resource handoff.
         var heap = default(D3D12_HEAP_PROPERTIES);
         var flags = default(D3D12_HEAP_FLAGS);
-        ((ID3D12Resource*)bufferHandle)->GetHeapProperties(&heap, &flags);
-        if (heap.Type is D3D12_HEAP_TYPE.D3D12_HEAP_TYPE_UPLOAD or D3D12_HEAP_TYPE.D3D12_HEAP_TYPE_READBACK) {
+        // ID3D12Resource::GetHeapProperties (slot 14) fails for a reserved buffer, which lies on no heap and is
+        // device-local; the slot is called for its result, where the generated wrapper would throw.
+        var onHeap = ((delegate* unmanaged[Stdcall]<ID3D12Resource*, D3D12_HEAP_PROPERTIES*, D3D12_HEAP_FLAGS*, HRESULT>)(*((void***)bufferHandle))[14])(
+            ((ID3D12Resource*)bufferHandle),
+            &heap,
+            &flags
+        ).Succeeded;
+        if (onHeap && (heap.Type is D3D12_HEAP_TYPE.D3D12_HEAP_TYPE_UPLOAD or D3D12_HEAP_TYPE.D3D12_HEAP_TYPE_READBACK)) {
             MemoryBarrier(commandBufferHandle, sourceAccessMask, destinationAccessMask, sourceStageMask, destinationStageMask);
             return;
         }

@@ -504,6 +504,15 @@ file sealed class FaultingBufferFactory(IGpuBufferFactory inner, GpuCreationFaul
             usage: usage
         );
     }
+    public IGpuMappedBuffer? TryCreateMapped(ulong reservedBytes, GpuBufferUsage usage, in GpuObjectName name) {
+        Enter(kind: GpuCreationKind.Buffer);
+
+        return inner.TryCreateMapped(
+            name: name,
+            reservedBytes: reservedBytes,
+            usage: usage
+        );
+    }
     public IGpuStorageBuffer CreateHostVisible(ulong sizeBytes, GpuBufferUsage usage, in GpuObjectName name) {
         Enter(kind: GpuCreationKind.Buffer);
 
