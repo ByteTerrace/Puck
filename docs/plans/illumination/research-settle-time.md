@@ -318,8 +318,10 @@ and runs above; none is measured on changed code.
    bias moves, and a wave of camera tier changes logs none.
 3. **Share one residency's meshes between the world and a session that renders the same world.** The session
    residency holds its own copy of the boot world's meshes (871 MB to 1.13 GB named) in the pool the world's
-   residency draws on, which is what raised the bias to 6 in leg 3. A session handed the same scene, or a subset
-   of it, can read the world residency's region (the disclosure plan decides what it may read). *Saving:* the
+   residency draws on, which is what raised the bias to 6 in leg 3. `SdfMeshBakeShare` already has one bake of a
+   geometry serve every residency that plans it, but each residency still lands the mesh in its own region and
+   counts it against the pool. A session handed the same scene, or a subset of it, can read the world residency's
+   region (the disclosure plan decides what it may read). *Saving:* the
    bias rise and every coarsening wave it causes in every residency, and about 1 GB of device memory while the
    painting is in view; on Vulkan, the bias of 14 and 2,121 coarsened world groups of leg 4. *Check:* `detail-bias`
    stays 0 in legs 3 and 4 and the session's `region-named` is near zero. This
