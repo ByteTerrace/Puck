@@ -457,16 +457,17 @@ public sealed class CreationRig {
 
         var effectorRows = (document.Effectors ?? []);
         var effectors = new CreationRigEffector[effectorRows.Count];
+        var lookup = new CreationShapeLookup(shapes: shapes);
 
         for (var index = 0; (index < effectorRows.Count); index++) {
             var row = effectorRows[index];
             var chain = (row.Chain ?? []);
-            var tip = FindShape(name: row.Tip, shapes: shapes);
+            var tip = lookup.Find(name: row.Tip);
             var bones = new int[chain.Count];
             var resolved = ((tip >= 0) && (chain.Count >= CreationEffectorDocument.MinChainBones) && (chain.Count <= CreationEffectorDocument.MaxChainBones));
 
             for (var bone = 0; (resolved && (bone < chain.Count)); bone++) {
-                bones[bone] = FindShape(name: chain[bone], shapes: shapes);
+                bones[bone] = lookup.Find(name: chain[bone]);
                 resolved = (bones[bone] >= 0);
             }
 
@@ -620,14 +621,6 @@ public sealed class CreationRig {
     }
     private static void CurveOfWave(ReadTable reads, string? wave) {
         if (CreationWave.TryCurveName(name: out var name, wave: wave)) { _ = reads.Curve(name: name); }
-    }
-    private static int FindShape(IReadOnlyList<ShapeDocument> shapes, string? name) {
-        if (name is null) { return -1; }
-        for (var index = 0; (index < shapes.Count); index++) {
-            if (string.Equals(a: shapes[index].Name?.Value, b: name, comparisonType: StringComparison.Ordinal)) { return index; }
-        }
-
-        return -1;
     }
     // Whether a timeline frame poses a shape away from its authored position or rotation.
     private static bool FramesMove(CreationDocument document, ShapeDocument shape) {

@@ -488,7 +488,7 @@ public static partial class CreationCanonicalizer {
     }
     // Whether `descendant` reaches `ancestor` by walking `parent`. A parent is validated to be declared earlier, so
     // the walk strictly decreases and terminates even on a document that bypassed that check.
-    private static bool DescendsFrom(IReadOnlyList<ShapeDocument> shapes, ShapeLookup lookup, int descendant, int ancestor) {
+    private static bool DescendsFrom(IReadOnlyList<ShapeDocument> shapes, CreationShapeLookup lookup, int descendant, int ancestor) {
         var cursor = descendant;
 
         while (cursor > ancestor) {
@@ -503,7 +503,7 @@ public static partial class CreationCanonicalizer {
 
         return (cursor == ancestor);
     }
-    private static void ValidateEffectors(CreationDocument document, ShapeLookup lookup, List<DocumentValidationError> errors) {
+    private static void ValidateEffectors(CreationDocument document, CreationShapeLookup lookup, List<DocumentValidationError> errors) {
         if (document.Effectors is not { Count: > 0 } effectors) {
             return;
         }
@@ -568,7 +568,7 @@ public static partial class CreationCanonicalizer {
             );
         }
     }
-    private static void ValidateEffectorChain(IReadOnlyList<ShapeDocument> shapes, ShapeLookup lookup, CreationEffectorDocument effector, List<DocumentValidationError> errors, string path) {
+    private static void ValidateEffectorChain(IReadOnlyList<ShapeDocument> shapes, CreationShapeLookup lookup, CreationEffectorDocument effector, List<DocumentValidationError> errors, string path) {
         var chain = (effector.Chain ?? []);
 
         if (chain.Count < CreationEffectorDocument.MinChainBones) {
@@ -878,7 +878,7 @@ public static partial class CreationCanonicalizer {
     // (a zero axis is an identity rotation, an unresolvable driver never advances, either facet beside a domain op
     // composes onto a transform nothing reads for that shape's geometry). Each of those is refused rather than folded
     // to a default: a limb that silently never moves reads as a rig defect, not as authored data.
-    private static void ValidateShapeAnimation(CreationDocument document, ShapeLookup lookup, ShapeDocument shape, List<DocumentValidationError> errors, string path) {
+    private static void ValidateShapeAnimation(CreationDocument document, CreationShapeLookup lookup, ShapeDocument shape, List<DocumentValidationError> errors, string path) {
         var swings = (shape.Swings ?? []);
         var slides = (shape.Slides ?? []);
 
@@ -1064,7 +1064,7 @@ public static partial class CreationCanonicalizer {
     // A trim's own scope opens AFTER the host shape's own emission closes, so it never has to nest inside one the
     // host's own emission already opened. Grouped and creation-wide shared emission do not lower independent trim
     // copies, and domain folds own their point/field. Mirrors ValidatePanel's supported authoring recipes.
-    private static void ValidateTrims(CreationDocument document, ShapeLookup lookup, ShapeDocument shape, List<DocumentValidationError> errors, string path) {
+    private static void ValidateTrims(CreationDocument document, CreationShapeLookup lookup, ShapeDocument shape, List<DocumentValidationError> errors, string path) {
         if (shape.Trims is not { Count: > 0 } trims) {
             return;
         }
@@ -1457,7 +1457,7 @@ public static partial class CreationCanonicalizer {
             ));
         }
 
-        var lookup = new ShapeLookup(shapes: shapes);
+        var lookup = new CreationShapeLookup(shapes: shapes);
 
         for (var i = 0; (i < palette.Count); i++) {
             var entry = palette[i];
@@ -2462,7 +2462,7 @@ public static partial class CreationCanonicalizer {
 
         var errors = new List<DocumentValidationError>();
         var shapeIds = new HashSet<int>();
-        var lookup = new ShapeLookup(shapes: (document.Shapes ?? []));
+        var lookup = new CreationShapeLookup(shapes: (document.Shapes ?? []));
 
         for (var i = 0; (i < (document.Shapes?.Count ?? 0)); i++) {
             var shape = document.Shapes![i];
