@@ -440,11 +440,6 @@ precise float sdfGlyphSampleFieldMedian(float2 uv) {
 // glyph's distance scale (SdfProgram.GlyphStroke). Every other kernel leaves the cell zero, which thickens nothing.
 static float sdfGlyphCell = 0.0;
 static float sdfGlyphStroke = 0.0;
-// The cells a thickened stroke spans. KEEP IN SYNC with SdfProgramBuilder.GlyphStrokeCells, the cells GlyphDetail asks.
-#define SDF_GLYPH_STROKE_CELLS 3.0
-// The share of the atlas's half distance range a thickening may reach and still be read from the encoded field, short
-// of where it saturates.
-#define SDF_GLYPH_WIDEN_SHARE 0.75
 
 precise float sdfGlyph(float3 p, float4 data0, float4 data1) {
     float2 halfSize = float2(data1.y, data1.z);
@@ -455,16 +450,16 @@ precise float sdfGlyph(float3 p, float4 data0, float4 data1) {
     float widen = 0.0;
 
     // A glyph baked at a cell its strokes or relief are too thin for loses them between samples. Its thinnest stroke
-    // widens to SDF_GLYPH_STROKE_CELLS cells and its relief to a cell, so the bake drawing it at any tier keeps every
+    // widens to SDF_GLYPH_THICKEN_CELLS cells and its relief to a cell, so the bake drawing it at any tier keeps every
     // stroke. A widening past what the encoded band measures draws the glyph as its ink box instead: the cell less the
     // band (the atlas pads each cell by at least the band, so the box holds every stroke), widened to the same cells
     // inside the cell. The group's box grows by the cell to hold the raised relief (SdfMeshBakeGroup.GlyphCell).
     if (sdfGlyphCell > 0.0) {
-        widen = max((0.5 * ((SDF_GLYPH_STROKE_CELLS * sdfGlyphCell) - (sdfGlyphStroke * distanceScale))), 0.0);
+        widen = max((0.5 * ((SDF_GLYPH_THICKEN_CELLS * sdfGlyphCell) - (sdfGlyphStroke * distanceScale))), 0.0);
         halfDepth = max(halfDepth, sdfGlyphCell);
         if (widen > (SDF_GLYPH_WIDEN_SHARE * band)) {
             float2 ink = max((halfSize - band), 0.0);
-            float grow = min(max(((0.5 * SDF_GLYPH_STROKE_CELLS * sdfGlyphCell) - min(ink.x, ink.y)), 0.0), band);
+            float grow = min(max(((0.5 * SDF_GLYPH_THICKEN_CELLS * sdfGlyphCell) - min(ink.x, ink.y)), 0.0), band);
 
             return sdfExtrude2D((puckBoxDistance2(abs(p.xy) - ink) - grow), p.z, halfDepth);
         }

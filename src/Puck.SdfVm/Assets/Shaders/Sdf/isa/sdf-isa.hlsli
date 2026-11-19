@@ -195,6 +195,10 @@
 #define SDF_SWEEP_ROUNDS       12u
 #define SDF_ELLIPSE_ROOT_STEPS 96u
 
+// The mesh bake's lettering stroke rule (sdfGlyph): the cells a thickened stroke spans and the share of a glyph's distance band a widening may reach before the glyph bakes as its ink box.
+#define SDF_GLYPH_THICKEN_CELLS 2.5
+#define SDF_GLYPH_WIDEN_SHARE   0.9
+
 // The integer hash (Pcg3dLatticeNoise): PCG3D's LCG step, the stream decorrelators, and the 3D value noise's seed streams.
 #define SDF_PCG_MULTIPLIER      0x0019660Du
 #define SDF_PCG_INCREMENT       0x3C6EF35Fu

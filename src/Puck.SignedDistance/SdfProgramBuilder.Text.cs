@@ -152,10 +152,19 @@ public sealed partial class SdfProgramBuilder {
     /// 2048 units, 0.082 and 0.093 em), so a letter's arms are the strokes its bake must hold.</summary>
     public const float GlyphStrokeEms = 0.08f;
 
-    /// <summary>The fine cells <see cref="GlyphDetail"/> asks across a run's thinnest stroke, and the cells the mesh bake's
-    /// lettering stroke rule thickens a stroke to where its group's tier cell is coarser than that
-    /// (<see cref="SdfProgram.GlyphStroke"/>).</summary>
+    /// <summary>The fine cells <see cref="GlyphDetail"/> asks across a run's thinnest stroke.</summary>
     public const float GlyphStrokeCells = 3f;
+
+    /// <summary>The cells the mesh bake's lettering stroke rule widens a glyph's thinnest stroke to where its group's tier
+    /// cell is coarser than its strokes allow (<c>sdfGlyph</c>, <see cref="SdfProgram.GlyphStroke"/>): more than two, so
+    /// every lattice line across the stroke holds at least two inside samples, and fewer than
+    /// <see cref="GlyphStrokeCells"/>, which a faithful bake asks, so a coarse tier's letters thicken no more than they
+    /// must.</summary>
+    public const float GlyphThickenCells = 2.5f;
+
+    /// <summary>The share of a glyph's distance band (half its atlas's distance range, past which the encoded field
+    /// saturates) the lettering stroke rule widens a glyph by before baking it as its ink box instead.</summary>
+    public const float GlyphWidenShare = 0.9f;
 
     /// <summary>Returns the thinnest stroke an atlas's glyphs are taken to have, in units of a glyph's distance scale as
     /// <see cref="Text(FontAtlas, string, Vector3, Vector3, Vector3, float, int, SdfBlendOp, float, float, TextLayoutOptions, int?, TextLayoutResult?)"/>

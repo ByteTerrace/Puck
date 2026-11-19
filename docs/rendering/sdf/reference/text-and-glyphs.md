@@ -75,7 +75,7 @@ bake for a third of its thinnest stroke and its half relief
 region's budget raised the detail bias, would otherwise lose strokes and faces
 between samples. The bake kernel thickens each glyph instead (`sdfGlyph`): its
 thinnest stroke, `SdfProgram.GlyphStroke` distance scales wide
-(`GlyphStrokeEms` ems of its atlas), widens to `GlyphStrokeCells` cells, and
+(`GlyphStrokeEms` ems of its atlas), widens to `GlyphThickenCells` cells (two and a half: every lattice line across it holds two inside samples), and
 its relief rises to one cell. Where that widening reaches past what the atlas's
 distance band measures, the glyph bakes as its ink box (the cell less half the
 distance range, which holds every stroke because the atlas pads each cell by at

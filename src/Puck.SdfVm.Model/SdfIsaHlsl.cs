@@ -258,6 +258,9 @@ public static class SdfIsaHlsl {
         declarations.Count(name: "SDF_SWEEP_SAMPLES", value: SdfFieldEvaluator.SweepSamples);
         declarations.Count(name: "SDF_SWEEP_ROUNDS", value: SdfFieldEvaluator.SweepRounds);
         declarations.Count(name: "SDF_ELLIPSE_ROOT_STEPS", value: SdfFieldEvaluator.EllipseRootSteps);
+        declarations.Section(title: "The mesh bake's lettering stroke rule (sdfGlyph): the cells a thickened stroke spans and the share of a glyph's distance band a widening may reach before the glyph bakes as its ink box.");
+        declarations.Real(name: "SDF_GLYPH_THICKEN_CELLS", value: SdfProgramBuilder.GlyphThickenCells);
+        declarations.Real(name: "SDF_GLYPH_WIDEN_SHARE", value: SdfProgramBuilder.GlyphWidenShare);
         declarations.Section(title: "The integer hash (Pcg3dLatticeNoise): PCG3D's LCG step, the stream decorrelators, and the 3D value noise's seed streams.");
         declarations.Bits(name: "SDF_PCG_MULTIPLIER", value: Pcg3dLatticeNoise.PcgMultiplier);
         declarations.Bits(name: "SDF_PCG_INCREMENT", value: Pcg3dLatticeNoise.PcgIncrement);
