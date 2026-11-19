@@ -10,6 +10,10 @@
 #include "../field/sdf-vm.hlsli"
 #include "../frame/sdf-work.hlsli"
 
+// The rows each lattice takes in the pass block's meshBakeLattices. KEEP IN SYNC with SdfWorldPackage.MeshBakeLatticeRows
+// and SdfMeshBakeBlock.Write.
+#define SDF_MESH_BAKE_LATTICE_ROWS 5u
+
 // Where a bake lattice's instance mask starts: its mask words, then their summary words, one lattice after another.
 uint worldInstanceMaskBase(uint lattice) {
     uint summaryWords = ((passGroup.instanceMaskWordCount + 31u) >> 5u);

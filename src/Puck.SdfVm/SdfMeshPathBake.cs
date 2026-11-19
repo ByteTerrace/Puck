@@ -63,6 +63,13 @@ public readonly record struct SdfMeshBakeRequest(Vector3 Origin, Vector3 Cell, (
     /// instances of one rigid copy, which bake as one mesh (<see cref="SdfInstanceRange.BakesWithPrevious"/>). One for
     /// every other selector.</summary>
     public int Instances { get; init; } = 1;
+
+    /// <summary>Gets the cell the bake kernel thickens the lattice's glyphs to and the thinnest stroke it takes them to
+    /// have, in units of a glyph's distance scale (the lettering stroke rule, <c>sdfGlyph</c>): its group's
+    /// <see cref="SdfMeshBakeGroup.GlyphCell"/> and <see cref="SdfMeshGeometryBuilder.GlyphStroke"/>, the same for every
+    /// lattice of the group, so its coarse samples, fine samples, gradient taps and material reads read one field. Zero
+    /// cell, the default, thickens nothing.</summary>
+    public (float Cell, float Stroke) Glyphs { get; init; }
 }
 /// <summary>The lattices one bake dispatch samples, at most <see cref="SdfWorldPackage.MeshBakeBatch"/> holding at most
 /// <see cref="SdfWorldPackage.MeshBakeMaxSamples"/> samples together, and the group each answers.</summary>
@@ -1428,8 +1435,16 @@ public sealed partial class SdfMeshPathBake {
     private static SdfMeshBakeRequest Spanning(Group group, Vector3 extent, (int X, int Y, int Z) dims, bool gradients) {
         var cell = new Vector3(x: (extent.X / (dims.X - 1)), y: (extent.Y / (dims.Y - 1)), z: (extent.Z / (dims.Z - 1)));
 
-        return new SdfMeshBakeRequest(Cell: cell, Dims: dims, Gradients: gradients, Origin: group.Low, Selector: group.Selector) { FrameSlot = (group.Dynamic ? group.Slot : -1), Instances = group.Instances };
+        return RequestOf(cell: cell, dims: dims, gradients: gradients, group: group, origin: group.Low);
     }
+    // A lattice of a group: the one place a request takes its group's selector, frame, instance run and glyph
+    // thickening (SdfMeshBakeRequest.Glyphs), so every lattice of the group samples one field.
+    private static SdfMeshBakeRequest RequestOf(Group group, Vector3 cell, (int X, int Y, int Z) dims, bool gradients, Vector3 origin) =>
+        new(Cell: cell, Dims: dims, Gradients: gradients, Origin: origin, Selector: group.Selector) {
+            FrameSlot = (group.Dynamic ? group.Slot : -1),
+            Glyphs = (group.GlyphCell, group.Geometry.GlyphStroke),
+            Instances = group.Instances,
+        };
     // Whether a sheet thinner than the spacing passes between any two samples of a lattice (SdfSampledLattice.SheetsBetween).
     private static bool SheetBetween(in SdfMeshBakeRequest lattice, ReadOnlySpan<float> values) => Array.Exists(array: SdfSampledLattice.SheetsBetween(cell: lattice.Cell, dims: lattice.Dims, values: values), match: static mask => (mask != 0));
     // Narrows a group's box to the cells the surface can cross: every cell whose corners change sign and every sample
@@ -1827,9 +1842,7 @@ public sealed partial class SdfMeshPathBake {
         var gradients = (final.Stage == FinalStage.Gradients);
         var count = Math.Clamp(value: (LatticeTaps / (gradients ? 5 : 1)), min: 1, max: (final.Points.Length - final.Answered));
 
-        return new SdfMeshBakeRequest(Cell: final.Sampled!.ContourCell, Dims: (count, 1, 1), Gradients: gradients, Origin: Vector3.Zero, Selector: group.Selector) {
-            FrameSlot = (group.Dynamic ? group.Slot : -1),
-            Instances = group.Instances,
+        return RequestOf(cell: final.Sampled!.ContourCell, dims: (count, 1, 1), gradients: gradients, group: group, origin: Vector3.Zero) with {
             Points = final.Points.Slice(start: final.Answered, length: count),
         };
     }
@@ -1964,9 +1977,7 @@ public sealed partial class SdfMeshPathBake {
     private static SdfMeshBakeRequest CreaseChunk(Group group) {
         var count = Math.Min(val1: (group.Points!.Length - group.PointsAnswered), val2: (LatticeTaps / 5));
 
-        return new SdfMeshBakeRequest(Cell: group.CreaseSpacing, Dims: (count, 1, 1), Gradients: true, Origin: Vector3.Zero, Selector: group.Selector) {
-            FrameSlot = (group.Dynamic ? group.Slot : -1),
-            Instances = group.Instances,
+        return RequestOf(cell: group.CreaseSpacing, dims: (count, 1, 1), gradients: true, group: group, origin: Vector3.Zero) with {
             Points = group.Points.Memory.Slice(group.PointsAnswered, count),
         };
     }
@@ -2079,9 +2090,7 @@ public sealed partial class SdfMeshPathBake {
     private static SdfMeshBakeRequest PointChunk(Group group) {
         var count = Math.Min(val1: (group.Points!.Length - group.PointsAnswered), val2: LatticeTaps);
 
-        return new SdfMeshBakeRequest(Cell: Vector3.One, Dims: (count, 1, 1), Gradients: false, Origin: Vector3.Zero, Selector: group.Selector) {
-            FrameSlot = (group.Dynamic ? group.Slot : -1),
-            Instances = group.Instances,
+        return RequestOf(cell: Vector3.One, dims: (count, 1, 1), gradients: false, group: group, origin: Vector3.Zero) with {
             Points = group.Points.Memory.Slice(group.PointsAnswered, count),
         };
     }

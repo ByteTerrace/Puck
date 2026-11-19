@@ -27,16 +27,18 @@ public static partial class SdfWorldPackage {
     /// each axis and, as bits, the selector (a dynamic-transform slot whose instances it samples when non-negative, the one
     /// instance <c>-(selector + 1)</c> otherwise); then, as bits, the samples along each axis and whether it measures
     /// gradients; then, as bits, the point table entry the poses its group bakes through start at, their first slot and how
-    /// many slots they cover (<c>float4</c>, <see cref="MeshBakeLatticeRows"/> per lattice of <see cref="MeshBakeBatch"/>).</summary>
+    /// many slots they cover; then the cell its group's glyphs are thickened to and the thinnest stroke they are taken to
+    /// have, in units of a glyph's distance scale (the lettering stroke rule, zero cell for none) (<c>float4</c>,
+    /// <see cref="MeshBakeLatticeRows"/> per lattice of <see cref="MeshBakeBatch"/>).</summary>
     public const string MeshBakeLattices = "meshBakeLattices";
     /// <summary>The pass-block value holding the lattices in <see cref="MeshBakeLattices"/> (<c>uint</c>).</summary>
     public const string MeshBakeCount = "meshBakeCount";
     /// <summary>The most lattices one bake dispatch samples: each selects its instances in its own mask words. Every group
     /// owing a lattice can wait on a dispatch, so this bounds how many groups bake at once; their rows keep the pass block
     /// within the portable 16 KiB uniform range.</summary>
-    public const int MeshBakeBatch = 240;
+    public const int MeshBakeBatch = 192;
     /// <summary>The rows one lattice takes in <see cref="MeshBakeLattices"/>.</summary>
-    public const int MeshBakeLatticeRows = 4;
+    public const int MeshBakeLatticeRows = 5;
     /// <summary>The near shadow cascade's depth, sampled by the surface pass.</summary>
     public const string MeshShadowNear = "meshShadowNear";
     /// <summary>The far shadow cascade's depth, sampled by the surface pass.</summary>

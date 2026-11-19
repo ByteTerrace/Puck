@@ -16,6 +16,8 @@ public sealed partial class SdfProgramBuilder {
         internal (int InstructionIndex, int ReachPerUnit, int RawValue)? Fold { get; init; }
         // The atlas pixels the emission's glyphs sample (SdfProgram.GlyphAtlas), default when it holds no glyph.
         internal Puck.Assets.AssetContentHash GlyphAtlas { get; init; }
+        // The thinnest stroke of the emission's glyphs (SdfProgram.GlyphStroke), infinity when it holds no glyph.
+        internal float GlyphStroke { get; init; } = float.PositiveInfinity;
         internal SdfInstanceRange[] Instances { get; init; } = [];
         internal SdfInstruction[] Instructions { get; init; } = [];
         internal int Materials { get; init; }
@@ -51,10 +53,12 @@ public sealed partial class SdfProgramBuilder {
             windows[index] = (window.Op, window.Material, window.MaxDelta, (window.Scope is not null));
         }
         var instructions = m_instructions.GetRange(mark.Instructions, (m_instructions.Count - mark.Instructions)).ToArray();
+        var glyphs = Array.Exists(array: instructions, match: static instruction => ((instruction.Op == SdfOp.ShapeBlend) && (instruction.Shape == ((uint)SdfShapeType.Glyph))));
 
         return new Emission {
             First = mark.Instructions,
-            GlyphAtlas = (Array.Exists(array: instructions, match: static instruction => ((instruction.Op == SdfOp.ShapeBlend) && (instruction.Shape == ((uint)SdfShapeType.Glyph)))) ? m_glyphAtlas : default),
+            GlyphAtlas = (glyphs ? m_glyphAtlas : default),
+            GlyphStroke = (glyphs ? m_glyphStroke : float.PositiveInfinity),
             Instructions = instructions,
             Instances = m_instances.GetRange(mark.Instances, (m_instances.Count - mark.Instances)).ToArray(),
             Polygons = m_convexPolygonProfiles.GetRange(mark.Polygons, (m_convexPolygonProfiles.Count - mark.Polygons)).ToArray(),
@@ -82,6 +86,7 @@ public sealed partial class SdfProgramBuilder {
             throw new SdfProgramCapacityException(capacity: "instances", limit: MaxInstances, message: $"A program may declare at most {MaxInstances} instances.");
         }
         if (emission.GlyphAtlas != default) { SampleGlyphAtlas(atlas: emission.GlyphAtlas); }
+        m_glyphStroke = MathF.Min(x: m_glyphStroke, y: emission.GlyphStroke);
         var offset = (m_instructions.Count - emission.First);
 
         m_instructions.AddRange(collection: emission.Instructions);

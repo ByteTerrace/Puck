@@ -72,6 +72,7 @@ public sealed partial class SdfProgramBuilder {
             subject: "A glyph distance scale"
         );
         if (atlas.ImageData is { } pixels) { SampleGlyphAtlas(atlas: pixels.ContentHash); }
+        m_glyphStroke = MathF.Min(x: m_glyphStroke, y: GlyphStrokeScale(atlas: atlas));
 
         return Shape(
             blend: blend,
@@ -151,8 +152,26 @@ public sealed partial class SdfProgramBuilder {
     /// 2048 units, 0.082 and 0.093 em), so a letter's arms are the strokes its bake must hold.</summary>
     public const float GlyphStrokeEms = 0.08f;
 
-    /// <summary>The fine cells <see cref="GlyphDetail"/> asks across a run's thinnest stroke.</summary>
+    /// <summary>The fine cells <see cref="GlyphDetail"/> asks across a run's thinnest stroke, and the cells the mesh bake's
+    /// lettering stroke rule thickens a stroke to where its group's tier cell is coarser than that
+    /// (<see cref="SdfProgram.GlyphStroke"/>).</summary>
     public const float GlyphStrokeCells = 3f;
+
+    /// <summary>Returns the thinnest stroke an atlas's glyphs are taken to have, in units of a glyph's distance scale as
+    /// <see cref="Text(FontAtlas, string, Vector3, Vector3, Vector3, float, int, SdfBlendOp, float, float, TextLayoutOptions, int?, TextLayoutResult?)"/>
+    /// lays it out (the atlas's <see cref="FontAtlas.DistanceRange"/> texels of the world size of one texel, one em being
+    /// <see cref="FontAtlas.Size"/> texels): <see cref="GlyphStrokeEms"/> ems.</summary>
+    /// <param name="atlas">The atlas.</param>
+    /// <returns>The stroke over the distance scale; infinity for an atlas with no positive size or distance range,
+    /// whose glyphs are never thickened.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="atlas"/> is <see langword="null"/>.</exception>
+    public static float GlyphStrokeScale(FontAtlas atlas) {
+        ArgumentNullException.ThrowIfNull(atlas);
+
+        var scale = ((GlyphStrokeEms * atlas.Size) / atlas.DistanceRange);
+
+        return ((float.IsFinite(f: scale) && (scale > 0f)) ? scale : float.PositiveInfinity);
+    }
 
     /// <summary>Returns the spacing a run's glyphs ask of the mesh bake: the lesser of the half slab each glyph extrudes
     /// and a third of its thinnest stroke (<see cref="GlyphStrokeEms"/>, <see cref="GlyphStrokeCells"/>). A plate's two

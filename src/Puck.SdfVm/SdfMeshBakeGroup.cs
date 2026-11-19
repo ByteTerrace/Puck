@@ -140,7 +140,8 @@ public class SdfMeshBakeGroup(int selector, bool dynamic) {
     public Vector3 Low { get; set; }
     /// <summary>Gets or sets the high corner of the group's box.</summary>
     public Vector3 High { get; set; }
-    /// <summary>Gets the low corner of the box the group was planned with, before any lattice narrowed <see cref="Low"/>:
+    /// <summary>Gets the low corner of the box the group was planned with, before its glyph cell grew it
+    /// (<see cref="GlyphCell"/>) and any lattice narrowed <see cref="Low"/>:
     /// the box a plan of the same instances at another sampled set or pose covers (<see cref="Refresh{T}"/>).</summary>
     public Vector3 PlannedLow { get; private set; }
     /// <summary>Gets the high corner of the box the group was planned with.</summary>
@@ -163,6 +164,11 @@ public class SdfMeshBakeGroup(int selector, bool dynamic) {
     /// <summary>Gets the coarsest tier that changes the group's mesh: the first rung at or past its planned final
     /// lattice's cell (<see cref="SdfMeshTier.Coarsest"/>).</summary>
     public int CoarsestTier { get; private set; }
+    /// <summary>Gets the cell the bake's lettering stroke rule thickens the group's glyphs to (<c>sdfGlyph</c>): its
+    /// tier's cell (<see cref="SdfMeshTier.Cell"/>) for a group holding a glyph, which every lattice of the group carries
+    /// (<see cref="SdfMeshBakeRequest.Glyphs"/>), so its coarse and fine samples read one field; zero for any other
+    /// group.</summary>
+    public float GlyphCell { get; private set; }
 
     /// <summary>Plans the groups of a program: one per dynamic slot and per run of static instances baked together (one
     /// rigid copy), unions of several static shapes first, so among groups the demand points rank alike their long
@@ -529,11 +535,19 @@ public class SdfMeshBakeGroup(int selector, bool dynamic) {
         FinestTier = SdfMeshTier.Finest(spacing: finest);
         CoarsestTier = SdfMeshTier.Coarsest(longestExtent: MathF.Max(x: extent.X, y: MathF.Max(x: extent.Y, y: extent.Z)));
         Tier = SdfMeshTier.Clamp(coarsest: CoarsestTier, finest: FinestTier, tier: (tier?.Invoke(arg: this) ?? 0));
+        PlannedLow = Low;
+        PlannedHigh = High;
+        GlyphCell = (Geometry.ContainsGlyph ? SdfMeshTier.Cell(tier: Tier) : 0f);
+        // The lettering stroke rule raises a glyph's relief to at most the cell it bakes at (sdfGlyph), past the box its
+        // emitter declared: the box grows by that cell, a function of the tier the geometry holds. The planned box stays
+        // the declared one, so a plan of the group at another tier grows it from there.
+        if (GlyphCell > 0f) {
+            Low -= new Vector3(value: GlyphCell);
+            High += new Vector3(value: GlyphCell);
+        }
         Geometry.AppendOperands(cell: SdfMeshTier.Cell(tier: Tier), transforms: transforms);
         Geometry.AppendTier(tier: Tier);
         Geometry.Seal();
-        PlannedLow = Low;
-        PlannedHigh = High;
         Sealed = Geometry.Geometry;
         Form = Geometry.Form;
         MaterialOrder = [.. Geometry.Materials];

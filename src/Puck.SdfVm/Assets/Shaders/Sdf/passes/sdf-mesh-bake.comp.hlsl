@@ -39,15 +39,15 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
         while ((low + 1u) < high) {
             uint middle = ((low + high) >> 1u);
 
-            if (asuint(passGroup.meshBakeLattices[middle * 4u].w) <= sample) {
+            if (asuint(passGroup.meshBakeLattices[middle * SDF_MESH_BAKE_LATTICE_ROWS].w) <= sample) {
                 low = middle;
             } else {
                 high = middle;
             }
         }
 
-        uint4 dims = asuint(passGroup.meshBakeLattices[(low * 4u) + 2u]);
-        uint first = asuint(passGroup.meshBakeLattices[low * 4u].w);
+        uint4 dims = asuint(passGroup.meshBakeLattices[(low * SDF_MESH_BAKE_LATTICE_ROWS) + 2u]);
+        uint first = asuint(passGroup.meshBakeLattices[low * SDF_MESH_BAKE_LATTICE_ROWS].w);
 
         if ((sample >= first) && (sample < (first + (dims.x * dims.y * dims.z)))) {
             lattice = low;
@@ -55,10 +55,12 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
     }
 
     if (lattice != 0xFFFFFFFFu) {
-        float4 row0 = passGroup.meshBakeLattices[lattice * 4u];
-        float4 row1 = passGroup.meshBakeLattices[(lattice * 4u) + 1u];
-        uint4 dims = asuint(passGroup.meshBakeLattices[(lattice * 4u) + 2u]);
-        uint4 poses = asuint(passGroup.meshBakeLattices[(lattice * 4u) + 3u]);
+        uint rowBase = (lattice * SDF_MESH_BAKE_LATTICE_ROWS);
+        float4 row0 = passGroup.meshBakeLattices[rowBase];
+        float4 row1 = passGroup.meshBakeLattices[rowBase + 1u];
+        uint4 dims = asuint(passGroup.meshBakeLattices[rowBase + 2u]);
+        uint4 poses = asuint(passGroup.meshBakeLattices[rowBase + 3u]);
+        float4 glyphs = passGroup.meshBakeLattices[rowBase + 4u];
         uint local = (sample - asuint(row0.w));
         // The mode word: the mode in its low two bits, a slab's first plane of its final lattice above them, and the
         // instance run the mask pass reads in its high half. A slab's origin is its final lattice's, so its samples lie
@@ -79,6 +81,9 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
         uint maskBase = worldInstanceMaskBase(lattice);
         int selector = asint(row1.w);
 
+        // The lettering stroke rule's cell and stroke, one for every lattice of the group (sdfGlyph).
+        sdfGlyphCell = glyphs.x;
+        sdfGlyphStroke = glyphs.y;
         sdfBakePoseBase = poses.x;
         sdfBakePoseFirst = poses.y;
         sdfBakePoseCount = poses.z;
