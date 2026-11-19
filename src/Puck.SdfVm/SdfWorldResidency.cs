@@ -182,8 +182,10 @@ public sealed partial class SdfWorldResidency : IDisposable {
     public SdfMeshDemand MeshDemand { get; } = new();
 
     /// <summary>Describes the residency's mesh residency for <c>world.residency</c>: the latest bake's landing from its
-    /// start, near the primary seat's eye and everywhere (<see cref="SdfMeshPathBake.DescribeResidency"/>), the store's reads,
-    /// the mesh region's landing (<see cref="SdfWorldTables.DescribeLanding"/>), its presentation's selector
+    /// start, near the primary seat's eye and everywhere (<see cref="SdfMeshPathBake.DescribeResidency"/>), its floors
+    /// (<see cref="SdfMeshPathBake.DescribeFloors"/>), the store's reads, the mesh region's landing
+    /// (<see cref="SdfWorldTables.DescribeLanding"/>), what the raster passes selected of it
+    /// (<see cref="SdfWorldTables.DescribeSelection"/>), its presentation's selector
     /// (<see cref="SdfResidencySelector.Describe"/>) with the background work's one budget, the tables' fixed cost (<see cref="SdfWorldTables.DescribeFixedCost"/>), the background GPU work's buffers
     /// (<see cref="SdfGpuWork.DescribeBytes"/>), the frame's sampled table (<see cref="SdfWorldTables.DescribeFrameSampled"/>),
     /// the latest program's emission, build and size, and the irradiance
@@ -198,8 +200,10 @@ public sealed partial class SdfWorldResidency : IDisposable {
 
         return [
             MeshPathBake.DescribeResidency(radius: radius),
+            MeshPathBake.DescribeFloors(),
             $"{(MeshPathBake.Library.Disk?.DescribeReads() ?? "store=none")} {SdfMesh.DescribeRestores()}",
             (m_tables?.DescribeLanding() ?? "region=none"),
+            (m_tables?.DescribeSelection() ?? "selection=none"),
             ((m_tables is { } tables) ? $"{tables.Grant.Selector.Describe()}{tables.Grant.Selector.Work.Describe()}" : "selector=none"),
             (m_tables?.DescribeFixedCost() ?? "fixed-cost=none"),
             $"{(m_tables?.GpuWork.DescribeBytes() ?? "gpu-work=none")} late-stagings={LateStagings}{(m_tables?.GpuWork.Describe() ?? string.Empty)}",
@@ -594,7 +598,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
                 );
             }
 
-            tables.Pack(frame: frame);
+            using (HostFrameWork.Measure(HostFrameWorkPart.Pack)) { tables.Pack(frame: frame); }
             m_packedFrame = frame;
             m_frame = frame;
             m_pendingFrame = null;
@@ -609,13 +613,17 @@ public sealed partial class SdfWorldResidency : IDisposable {
         PrepareShade(device: device, frame: m_frame!);
         FollowRunningCode();
         MeshPathBake.ObserveResidency(tables: tables);
-        MeshIrradianceParameters = MeshIrradiance.Stage(frame: m_frame!, tables: tables, tier: IndirectTier, bakePending: MeshPathBake.IrradiancePending);
+        using (HostFrameWork.Measure(HostFrameWorkPart.Lighting)) {
+            MeshIrradianceParameters = MeshIrradiance.Stage(frame: m_frame!, tables: tables, tier: IndirectTier, bakePending: MeshPathBake.IrradiancePending);
+        }
         // Latch readiness for this whole frame. A worker finishing after preparation cannot make an image whose
         // exposure was held stand for converged lighting. The next preparation publishes and meters that result.
         LightingPending = (m_frame!.ConvergesLighting && MeshIrradiance.Settling);
         // A locked tick adapts once its complete geometry supplies the meter, not over partial mesh arrivals.
         if ((!m_frame.TickLocked || !MeshPathBake.Pending) && !LightingPending) {
-            Exposures.Stage(frame: m_frame, irradiance: MeshIrradiance, seconds: ExposureSeconds(context: in context, frame: m_frame));
+            using (HostFrameWork.Measure(HostFrameWorkPart.Exposure)) {
+                Exposures.Stage(frame: m_frame, irradiance: MeshIrradiance, seconds: ExposureSeconds(context: in context, frame: m_frame));
+            }
         } else {
             Exposures.Hold();
         }
@@ -906,6 +914,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
 
     // Captures the frame from the frame source when it films one this frame.
     private void Capture(in FrameContext context) {
+        using var work = HostFrameWork.Measure(HostFrameWorkPart.Capture);
         if (!(m_film?.Invoke(arg: context) ?? true)) {
             return;
         }

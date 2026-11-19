@@ -381,6 +381,7 @@ public sealed partial class SdfWorldTables {
                     ((draws.Rows is not null) && !ReferenceEquals(objA: m_meshCauseSource, objB: draws.Roster)));
 
                 if (ReferenceEquals(objA: old, objB: mesh) && !occupantChanged) { continue; }
+                RowChanged(row: row);
                 if (occupantChanged && ReferenceEquals(objA: old, objB: mesh) && (mesh is not null)) { m_meshArena.NameRow(index: row, mesh: null); }
                 m_meshArena.NameRow(index: row, mesh: mesh);
                 if (mesh is not null) { m_meshClaims.Claim(mesh: mesh); m_rowsByMesh.Set(key: mesh, row: row); } else { m_rowsByMesh.Remove(row: row); }
@@ -413,6 +414,7 @@ public sealed partial class SdfWorldTables {
         FinishMeshStaging(frame: frame);
     }
     private void Unname(int row) {
+        RowChanged(row: row);
         if (m_stagedDraws[row].Mesh is { } mesh) { m_meshClaims!.Release(mesh: mesh); }
         m_rowsByMesh.Remove(row: row); m_absentRows.Remove(item: row); m_glassIndices.Remove(item: row);
         m_stagedDraws[row] = default; m_stagedOccupancies[row] = 0;
@@ -642,6 +644,11 @@ public sealed partial class SdfWorldTables {
     /// <param name="mesh">The mesh, a chunk of a chunked group's mesh being a mesh of its own.</param>
     /// <returns><see langword="true"/> while the region owes it.</returns>
     public bool OwesMesh(SdfMesh mesh) => (m_meshArena.Refused.Contains(item: mesh) || (m_meshArena.Placements.ContainsKey(key: mesh) && m_meshesOwed.Contains(mesh: mesh)));
+    /// <summary>Returns whether the latest staged draw list names a mesh the region refuses under its limit, so its draws
+    /// wait out of the frame until a later list fits it. Read on the frame's thread.</summary>
+    /// <param name="mesh">The mesh, a chunk of a chunked group's mesh being a mesh of its own.</param>
+    /// <returns><see langword="true"/> while the region refuses it.</returns>
+    public bool RefusesMesh(SdfMesh mesh) => m_meshArena.Refused.Contains(item: mesh);
     /// <summary>Names the meshes the draws are about to name, in place of those named ahead before
     /// (<see cref="SdfMeshRegionArena.PlanAhead"/>): each is placed beside the meshes the draws read and lands through
     /// the background work after the meshes a draw waits on, and the region keeps it until a draw list names it or it

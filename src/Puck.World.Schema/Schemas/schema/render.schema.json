@@ -829,6 +829,110 @@
       "additionalProperties": false,
       "default": null,
       "title": "SdfShadeDefinition"
+    },
+    "devices": {
+      "description": "The world\u0027s device profiles (WorldDeviceProfile): for each graphics device, the quality table it runs and the memory it may use. The engine selects one by the adapter it runs on and by name (world.device-profile). Absent authors none, and no cap applies.",
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "description": "One graphics device\u0027s profile: the quality table it runs and the memory it may use. A profile is data a world (the standard package, for the shipped devices) authors in render.devices; the engine selects one by the adapter it runs on (Select) or by name, applies its table through the same levers world.quality writes, and admits memory against its bars. No device name or figure is engine code.",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "name": {
+            "description": "The profile\u0027s name, unique within the world, which world.device-profile and a benchmark run select by.",
+            "type": "string"
+          },
+          "match": {
+            "description": "The text the driver\u0027s adapter name must contain, ignoring case, for the engine to select the profile on that adapter.",
+            "type": "string"
+          },
+          "quality": {
+            "description": "The quality table the profile runs: the tier of the world\u0027s render preset it applies (Names).",
+            "title": "QualityTier",
+            "type": "string",
+            "enum": [
+              "low",
+              "medium",
+              "high"
+            ]
+          },
+          "deviceMemoryMiB": {
+            "description": "The most device memory the process admits on a discrete adapter, in mebibytes, where that is below the adapter\u0027s own budget less a tenth; absent leaves the device pool at the adapter\u0027s reading.",
+            "type": [
+              "integer",
+              "null"
+            ],
+            "default": null
+          },
+          "hostMemoryMiB": {
+            "description": "The most host memory the process admits, in mebibytes, where that is below the machine\u0027s budget; absent leaves it. A unified-memory device states its one bar here, since its device segments lie in the host pool.",
+            "type": [
+              "integer",
+              "null"
+            ],
+            "default": null
+          }
+        },
+        "required": [
+          "name",
+          "match",
+          "quality"
+        ],
+        "additionalProperties": false,
+        "title": "WorldDeviceProfile"
+      },
+      "default": null
+    },
+    "nested": {
+      "description": "What a nested view gives up at each presented size (WorldNestedViewQuality). Absent gives up nothing.",
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "description": "One row of the nested-view table (render.nested): what a view shown inside another (through a window or portal, on a screen a camera films, or a session\u0027s screen) gives up while it is presented at or below a share of the display\u0027s height. A nested view takes the first row, in ascending Share, whose share it does not exceed, and gives up nothing past the last row; a world with no table gives up nothing at any size, so a portal that fills the screen is lit as the room behind it.",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "share": {
+            "description": "The largest share of the display\u0027s height, in (0, 1], at which the row applies; rows ascend strictly.",
+            "type": "number"
+          },
+          "shadows": {
+            "description": "The finest shadow tier the view keeps: Off drops its cascades, so its lights take the probes\u0027 answer. Absent keeps the world\u0027s.",
+            "enum": [
+              "Off",
+              "Low",
+              "Medium",
+              "High",
+              null
+            ],
+            "default": null,
+            "title": "ShadowTier"
+          },
+          "ambientOcclusion": {
+            "description": "Whether the view keeps ambient occlusion: false drops it. Absent keeps the world\u0027s.",
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "default": null
+          }
+        },
+        "required": [
+          "share"
+        ],
+        "additionalProperties": false,
+        "title": "WorldNestedViewQuality"
+      },
+      "default": null
     }
   },
   "additionalProperties": false,

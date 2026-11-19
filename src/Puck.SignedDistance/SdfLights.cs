@@ -39,8 +39,6 @@ public readonly record struct SdfCurvature(float Cavity, float Rim, float Ink, f
 /// table the shadow and views passes read (<see cref="Pack"/>).
 /// </summary>
 public sealed class SdfLights {
-    /// <summary>The pinned penumbra half-slope.</summary>
-    public const float DefaultPenumbraSlope = (1f / 9f);
     /// <summary>The default point or spot light's luminous intensity, in candela: about a 1,000-lumen bulb's.</summary>
     public const float DefaultPointIntensity = 80f;
     /// <summary>The default rim exponent.</summary>
@@ -90,13 +88,55 @@ public sealed class SdfLights {
     /// <exception cref="IndexOutOfRangeException"><paramref name="index"/> is outside the table.</exception>
     public SdfLight this[int index] => m_lights[index];
 
+    /// <summary>Gets the frame's key light: the light holding the primary shadow role (<see cref="RoleSlot"/>), or -1 when
+    /// no slotted light emits.</summary>
+    public int Key => RoleLight(role: SdfShadowSlots.Primary);
+
+    /// <summary>Returns the stable shadow slot that holds a role, derived from the slots' owners and what each emits so no
+    /// writer can leave it stale: the primary role goes to the slotted directional light of greatest luminance (its weight
+    /// times its colour's luminance), the secondary to the next, ties to the lower slot. A light that emits nothing holds
+    /// no role, nor does a vacant slot, a departed light or one that is not directional.</summary>
+    /// <param name="role">The role, <see cref="SdfShadowSlots.Primary"/> or <see cref="SdfShadowSlots.Secondary"/>.</param>
+    /// <returns>The slot, or -1 when no slot holds the role.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="role"/> is not a role.</exception>
+    public int RoleSlot(int role) {
+        ArgumentOutOfRangeException.ThrowIfNegative(value: role);
+        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(value: role, other: SdfShadowSlots.Roles);
+        var taken = 0u;
+        var slot = -1;
+
+        for (var pass = 0; (pass <= role); pass++) {
+            slot = -1;
+            var best = 0f;
+
+            for (var candidate = 0; (candidate < ShadowSlots.SlotCount); candidate++) {
+                var light = ShadowSlots[candidate];
+
+                if (((taken & (1u << candidate)) != 0u) || (light < 0) || (light >= m_count) || (m_lights[light].Kind != SdfLightKind.Directional)) { continue; }
+                var luminance = (m_lights[light].Weight * SdfPhotometry.LuminanceOf(color: m_lights[light].Color));
+
+                if (luminance > best) { best = luminance; slot = candidate; }
+            }
+            if (slot < 0) { return -1; }
+            taken |= (1u << slot);
+        }
+        return slot;
+    }
+    /// <summary>Returns the light that holds a shadow role (<see cref="RoleSlot"/>), or -1 when no slot holds it.</summary>
+    /// <param name="role">The role, <see cref="SdfShadowSlots.Primary"/> or <see cref="SdfShadowSlots.Secondary"/>.</param>
+    /// <returns>The light's index in the table.</returns>
+    public int RoleLight(int role) => ((RoleSlot(role: role) is >= 0 and var slot) ? ShadowSlots[slot] : -1);
+
     // What a point or occluder light's dynamic slot may be.
     private static string LightSlotRule => $"a point or occluder light's dynamic slot must be {SdfProgram.NoDynamicTransformSlot} or in [0, {SdfProgram.MaxDynamicTransformSlot}].";
 
-    /// <summary>Creates the lights an unauthored world renders: the pinned sun with shadows.</summary>
+    /// <summary>Creates the lights an unauthored world renders: the pinned sun with shadows, a point source (a directional
+    /// light's <see cref="SdfLight.Param"/> is its penumbra half-slope, the tangent of its angular radius, and zero
+    /// casts the hardest edge the cascades' filter draws).</summary>
     /// <returns>The lights.</returns>
     public static SdfLights Default() {
         var lights = new SdfLights();
+        var weight = SdfPhotometry.DirectionalWeight(lux: DefaultSunIlluminance);
 
         lights.Set(
             index: 0,
@@ -104,8 +144,8 @@ public sealed class SdfLights {
                 Kind: SdfLightKind.Directional,
                 Direction: DefaultSunDirection,
                 Color: Vector3.One,
-                Weight: SdfPhotometry.DirectionalWeight(lux: DefaultSunIlluminance),
-                Param: DefaultPenumbraSlope,
+                Weight: weight,
+                Param: 0f,
                 Shadows: true
             )
         );

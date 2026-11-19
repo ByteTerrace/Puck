@@ -21,9 +21,11 @@ grant and returns unused cores; it makes no blocking follow-up engine request. T
 
 Kernel projects build their declaration generator before compiling shaders.
 The generator reconciles on every build and leaves equal files untouched.
-CI runs `puck shaders generate --check` with its candidate CLI before the
-solution build; because a build may already have reconciled the tree, the check
-also refuses a generated file whose staged copy differs from the model's.
+CI runs `puck shaders generate --check` from the installed candidate CLI in the
+verification and formatting workflows, on a checkout no build has touched, so
+the check also refuses a generated file whose committed copy differs from the
+model's. The artifact producer does not run it: a drift reports there and holds
+no deploy.
 Packing with `--no-build` compiles nothing: it checks each output against the
 sidecar its current closure and options would publish, refuses a missing or
 stale one, and collects the rest.

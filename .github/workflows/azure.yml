@@ -32,9 +32,24 @@ jobs:
   artifacts:
     name: Build .NET artifacts
     uses: ./.github/workflows/artifacts.yml
+  # The deploy path is what it ships: the artifact build (whose published-World startup check is part of it), the
+  # infrastructure compile, the application bundle (browser payload, API documentation) and the verified container
+  # images (the silo's activation, QUIC and checkpoint recovery run inside `containers`). Everything else reports on
+  # every push in parallel and holds no release while the refactoring campaign suspends test requirements (AGENTS.md):
+  # the test shards (`build`), line coverage (`coverage`), the runtime verification (`verify`: documentation corpus,
+  # generated contracts, emulator batteries, Linux world tests, SPIR-V comparison), package installation (`pack`)
+  # and the browser harness (`browser-verify`). None of them is in deploy's `needs`.
   browser:
     name: Build the WebAssembly payload
     uses: ./.github/workflows/browser.yml
+    with:
+      stage: publish
+  browser-verify:
+    name: Verify the WebAssembly payload
+    needs: browser
+    uses: ./.github/workflows/browser.yml
+    with:
+      stage: verify
   docs:
     name: Build API documentation
     uses: ./.github/workflows/docs.yml
@@ -45,6 +60,7 @@ jobs:
     with:
       prebuilt: true
   # Outside deploy's needs: it reports on every push to main and holds no deploy while the suite climbs to 100%.
+  # Its `if` runs it whatever a shard's result, so a red shard still reports coverage.
   # Every shard writes a Cobertura report per assembly; the union must cover every live line outside the hardware-only
   # list (build/CoverageHardwareOnly.txt), and every live project must be loaded by some run. The Puck.*.Post emulator
   # batteries are harnesses and sit outside both rules; the emulator test suites run them to cover the cores.
@@ -135,9 +151,10 @@ jobs:
       (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
       (github.event_name == 'workflow_dispatch' && inputs.deploy && github.ref == 'refs/heads/main')
     name: Deploy and verify Azure production
-    # The test shards (build) sit outside deploy's needs while the owner's refactoring campaign suspends test
-    # requirements (AGENTS.md): they report on every push and hold no release, as coverage does.
-    needs: [verify, pack, infrastructure, applications, containers, browser]
+    # Only what the release ships sits in needs (see the comment above `browser`): the verification workflows, the test
+    # shards, coverage and the browser harness report on every push and neither hold nor skip it, while the owner's
+    # refactoring campaign suspends test requirements (AGENTS.md). The browser payload arrives through `applications`.
+    needs: [applications, artifacts, containers, infrastructure]
     permissions:
       contents: read
       id-token: write

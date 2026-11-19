@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.CommandLine;
 using System.Globalization;
 using System.Numerics;
@@ -6,6 +7,7 @@ using System.Text;
 using Puck.Cli.Host;
 using Puck.Maths;
 using Puck.SdfVm;
+using Puck.SignedDistance.Baking;
 using Puck.SignedDistance.Queries;
 using Puck.World.Client;
 
@@ -29,6 +31,9 @@ public static class MeshCommand {
     private const float HistoryReach = 0.001f;
     private const int HistorySamples = 512;
 
+    // The member poses a group whose operands --pose moved takes: none, since a group that reads an operand has no skin.
+    private static readonly IReadOnlyDictionary<int, Puck.SignedDistance.DynamicTransform> NoPoses = new Dictionary<int, Puck.SignedDistance.DynamicTransform>();
+
     /// <summary>Creates the <c>mesh</c> verb and its <c>audit</c>, <c>preview</c>, <c>scene</c> and <c>identity</c> subverbs.</summary>
     /// <returns>The verb.</returns>
     public static Command Create() => new(description: "Inspect the meshes the baked-mesh path stores.", name: "mesh") {
@@ -51,7 +56,7 @@ public static class MeshCommand {
         var imagesOption = new Option<string?>(name: "--images") { Description = "A directory to write a PNG of each cluster of the closing list into: the mesh around its worst sample from three sides, shading normals beside face normals." };
         var historyOption = new Option<bool>(name: "--history") { Description = "Also audit, for each selected group, every mesh the store holds under any bake identity whose vertices lie on the group's field, oldest first: how earlier builds' bakes of the same geometry compare. Needs --group." };
         var cpuOption = new Option<bool>(name: "--cpu") { Description = "Bake each selected group offline on the CPU, the bake's own lattices answered through the field evaluator (MeshCpuBake), and audit that mesh in place of a stored one: a bake change measured with no device. Reads no store." };
-        var poseOption = new Option<string?>("--pose") { Description = "Audit a skin against its posed field: slotOffset=tx,ty,tz,qx,qy,qz,qw; repeat separated by semicolons. Transforms are in the group's frame. Unnamed slots hold rest." };
+        var poseOption = new Option<string?>("--pose") { Description = "Audit a skin against its posed field: slotOffset=tx,ty,tz,qx,qy,qz,qw; repeat separated by semicolons. Transforms are in the group's frame. Unnamed slots hold rest. A pose of an operand's slot (a moving cutter) plans its group again with the cut there, so the group prints that pose's geometry key and the operand's snapped pose." };
         var levelOption = CliOptions.Count(defaultValue: 0, description: "Measure this rendered level, clamped to each piece's last available level. Keeps level zero's error thresholds and coverage lattice.", minimum: 0, name: "--level");
         var fieldLevelsOption = new Option<bool>(name: "--field-levels") { Description = "With --cpu, also contour each group's field levels (cells of twice the previous, offset outward by half a cell, per member where its shapes ride several slots, to an empty level) and measure them and the collapse's levels by the error contract: both geometric directions, enclosure, material and normal runs, vanished parts, open edges, flips and missing crossings, field evaluations and each path's own processor work." };
         var aimOption = new Option<string>(name: "--field-aim") { DefaultValueFactory = static _ => "local", Description = "How --field-levels converts a level's offset to field units to aim its contour: local, by each sample's own slope, or lattice, by the lattice's median slope. The oracle measures where either landed." };
@@ -161,19 +166,36 @@ public static class MeshCommand {
         var farDistance = WorldRenderFarDistance.Resolve(defaults: definition.Render);
         var tier = TierPlan(eye: eye, scene: scene, tier: request.Tier, viewHeight: request.ViewHeight);
         var groups = scene.Plan(farDistance: farDistance, tier: tier);
+        var selected = groups.Where(predicate: group => Selected(group: group, request: request, scene: scene)).ToArray();
+
+        // A pose of an operand's slot moves the cutter in the group's geometry: the group is planned again, keyed and baked
+        // where the operand stands. A pose of any other slot poses a skin's mesh and field.
+        if (poses.Count > 0) {
+            var posed = scene.WithOperandPoses(groups: selected, moved: out _, poses: poses);
+
+            if (!ReferenceEquals(objA: posed, objB: scene)) {
+                scene = posed;
+                groups = scene.Plan(farDistance: farDistance, tier: tier);
+                selected = [.. groups.Where(predicate: group => Selected(group: group, request: request, scene: scene))];
+            }
+        }
         var store = new SdfMeshStore(directory: meshes);
         var options = new SdfMeshAuditOptions { Clusters = Math.Max(val1: request.Top, val2: request.Worst), Level = request.Level };
         var results = new Outcome?[groups.Count];
-        var selected = groups.Where(predicate: group => Selected(group: group, request: request, scene: scene)).ToArray();
         var evaluations = new Dictionary<int, long>();
         var taps = new Dictionary<int, MeshCpuTaps>();
-        var baked = (request.Cpu ? MeshCpuBake.Bake(evaluations: evaluations, farDistance: farDistance, groups: selected, scene: scene, taps: taps, tier: tier) : null);
+        var refinements = new ConcurrentDictionary<int, SdfRefinementMap>();
+        var baked = (request.Cpu ? MeshCpuBake.Bake(evaluations: evaluations, farDistance: farDistance, groups: selected, refinements: refinements, scene: scene, taps: taps, tier: tier) : null);
+        // An operand's pose was planned into its group's geometry, so that group's mesh is posed by no member pose.
+        IReadOnlyDictionary<int, Puck.SignedDistance.DynamicTransform> MemberPoses(SdfMeshBakeGroup group) => (group.Geometry.ReadsOperands ? NoPoses : poses);
+        // A posed mesh is no longer in the lattice's frame, so no map reads its cells.
+        SdfRefinementMap? RefinementOf(SdfMeshBakeGroup group) => (((MemberPoses(group: group).Count == 0) && refinements.TryGetValue(key: group.Selector, value: out var map)) ? map : null);
 
         _ = Parallel.For(fromInclusive: 0, toExclusive: groups.Count, body: ordinal => {
             var group = groups[ordinal];
 
             if (!selected.Contains(value: group)) { return; }
-            results[ordinal] = Audit(baked: baked, group: group, options: options, owner: scene.Owner(group: group), scene: scene, store: store, identity: identity, poses: poses);
+            results[ordinal] = Audit(baked: baked, group: group, options: options, owner: scene.Owner(group: group), poses: MemberPoses(group: group), refinement: RefinementOf(group: group), scene: scene, store: store, identity: identity) with { Operands = Operands(group: group) };
         });
 
         var audited = results.Count(predicate: static result => (result?.Report is not null));
@@ -194,13 +216,14 @@ public static class MeshCommand {
             .ToArray();
 
         foreach (var ordinal in ordered) {
-            Write(ordinal: ordinal, outcome: results[ordinal]!, output: output, taps: taps.GetValueOrDefault(key: groups[ordinal].Selector, defaultValue: MeshCpuTaps.None), top: request.Top);
+            Write(ordinal: ordinal, outcome: results[ordinal]!, output: output, taps: taps.GetValueOrDefault(key: groups[ordinal].Selector, defaultValue: MeshCpuTaps.None), top: request.Top, refinement: RefinementOf(group: groups[ordinal]));
             if (request.History && (results[ordinal]!.Field is { } field)) {
                 History(field: field, group: groups[ordinal], options: options, output: output, store: store);
             }
         }
 
         WriteWorst(images: request.Images, level: request.Level, ordered: ordered, output: output, results: results, worst: request.Worst);
+        WriteDefects(ordered: ordered, output: output, results: results);
         if (request.FieldLevels) {
             FieldLevels(evaluations: evaluations, groups: groups, options: new SdfMeshFieldLevelOptions { LocalAim = request.LocalAim }, output: output, results: results, scene: scene);
         }
@@ -252,7 +275,7 @@ public static class MeshCommand {
             && ((request.Group is null) || scene.Label(group: group, owner: owner).Contains(value: request.Group, comparisonType: StringComparison.Ordinal)));
     }
     // One group's audit: its stored mesh, or with baked its offline bake, measured against its field, or why it was not.
-    private static Outcome Audit(SdfMeshBakeGroup group, RestScene scene, RestBody? owner, SdfMeshStore store, UInt128 identity, SdfMeshAuditOptions options, Dictionary<int, SdfMesh>? baked, IReadOnlyDictionary<int, Puck.SignedDistance.DynamicTransform> poses) {
+    private static Outcome Audit(SdfMeshBakeGroup group, RestScene scene, RestBody? owner, SdfMeshStore store, UInt128 identity, SdfMeshAuditOptions options, Dictionary<int, SdfMesh>? baked, IReadOnlyDictionary<int, Puck.SignedDistance.DynamicTransform> poses, SdfRefinementMap? refinement) {
         var label = MeshAuditLines.Label(geometry: group.Sealed.Hash, posed: (poses.Count > 0), prototype: scene.Prototype(group: group), scene: scene.Label(group: group, owner: owner));
         var toWorld = scene.ToWorld(group: group);
 
@@ -279,7 +302,7 @@ public static class MeshCommand {
 
             if ((own is not null) && (poses.Count > 0)) { own = SdfMeshSkin.Pose(mesh: own, poses: poses); }
 
-            return new Outcome(Field: field, Label: label, Mesh: own, Owner: owner, Refusal: ((own is null) ? "no surface baked" : null), Report: ((own is null) ? null : SdfMeshAudit.Audit(field: field, mesh: own, options: options, shapes: shapes)), Stored: (own is not null), ToWorld: toWorld);
+            return new Outcome(Field: field, Label: label, Mesh: own, Owner: owner, Refusal: ((own is null) ? "no surface baked" : null), Report: ((own is null) ? null : SdfMeshAudit.Audit(field: field, mesh: own, options: options, refinement: refinement, shapes: shapes)), Stored: (own is not null), ToWorld: toWorld);
         }
         if (!store.TryPeek(geometry: group.Sealed, identity: identity, materials: out _, mesh: out var mesh, refusal: out var refusal)) {
             return new Outcome(Field: field, Label: label, Mesh: null, Owner: owner, Refusal: (refusal ?? "no stored mesh"), Report: null, Stored: (refusal is not null), ToWorld: toWorld);
@@ -320,7 +343,7 @@ public static class MeshCommand {
 
         return (near >= (HistoryShare * count));
     }
-    private static void Write(int ordinal, Outcome outcome, StringBuilder output, MeshCpuTaps taps, int top) {
+    private static void Write(int ordinal, Outcome outcome, StringBuilder output, MeshCpuTaps taps, int top, SdfRefinementMap? refinement) {
         if (outcome.Report is not { } report) {
             output.Append(provider: CultureInfo.InvariantCulture, handler: $"group {ordinal} {outcome.Label}: {outcome.Refusal}\n");
             return;
@@ -331,11 +354,18 @@ public static class MeshCommand {
         output.Append(provider: CultureInfo.InvariantCulture, handler: $"  normal (deg): face {Statistic(statistic: report.NormalError, scale: 1f)} | shading {Statistic(statistic: report.ShadingError, scale: 1f)} | rough {Statistic(statistic: report.RoughError, scale: 1f)}\n");
         output.Append(provider: CultureInfo.InvariantCulture, handler: $"  field slope deficit: {Statistic(statistic: report.SlopeDeficit, scale: 1f)}{((report.LooseShapes.Count == 0) ? string.Empty : $"; loose near {string.Join(separator: ", ", values: report.LooseShapes.Select(selector: static shape => $"{shape.Name} {shape.Count}"))}")}\n");
         output.Append(value: MeshAuditLines.TopologyLine(report: report)).Append(value: '\n');
+        if (MeshAuditLines.DefectText(tallies: report.Defects) is { } defects) {
+            output.Append(provider: CultureInfo.InvariantCulture, handler: $"  defects: {defects}\n");
+        }
+        if (refinement is not null) {
+            output.Append(provider: CultureInfo.InvariantCulture, handler: $"  refinement: lattice cell {Millimetres(metres: MathF.Max(x: refinement.Cell.X, y: MathF.Max(x: refinement.Cell.Y, y: refinement.Cell.Z)))} mm, scan asked {refinement.Asked}, split {refinement.Factor}, {refinement.Measured} cells measured, {refinement.Refined} contoured fine, {refinement.Thin} thin\n");
+        }
         // Taps the evaluator could not place where the kernel does straddle a crease the device's do not, so the crease
         // normals near them, and the folds and flips they place, are not what a World bakes.
         if (taps.Widened > 0L) {
             output.Append(provider: CultureInfo.InvariantCulture, handler: $"  cpu taps: {taps.Widened} of {taps.Samples} gradient samples answered {(SdfMeshCpuField.ResolutionSpacing * 1.0e6f):0} um out where the device's lie as close as {(taps.Narrowest * 1.0e6f):0} um; crease normals near them are not the device's\n");
         }
+        if (outcome.Operands.Length > 0) { output.Append(value: outcome.Operands).Append(value: '\n'); }
         if (outcome.Mesh is { } skin) {
             var influences = SdfMeshSkin.Audit(mesh: skin);
 
@@ -344,6 +374,18 @@ public static class MeshCommand {
         for (var rank = 0; (rank < Math.Min(val1: top, val2: report.Clusters.Count)); rank++) {
             output.Append(provider: CultureInfo.InvariantCulture, handler: $"  cluster {(rank + 1)}: {Describe(cluster: report.Clusters[rank], outcome: outcome)}\n");
         }
+    }
+    // The operands a group reads, each by its slot's offset from the group's, at the pose its geometry snapped it to and
+    // the step it snapped to; empty for a group that reads none.
+    private static string Operands(SdfMeshBakeGroup group) {
+        var line = new StringBuilder();
+
+        foreach (var (slot, pose, cell) in group.Geometry.Operands) {
+            line.Append(value: ((line.Length == 0) ? "  operands:" : ";"));
+            line.Append(provider: CultureInfo.InvariantCulture, handler: $" slot +{(slot - group.Slot)} at {Point(point: pose.Position)} turned {Point(point: new Vector3(x: pose.Orientation.X, y: pose.Orientation.Y, z: pose.Orientation.Z))}/{pose.Orientation.W:0.####}, step {Millimetres(metres: cell)} mm");
+        }
+
+        return line.ToString();
     }
     // Each audited group's collapse levels and the field levels that follow them (MeshFieldLevels), in group order, then
     // the totals the plan's clauses read.
@@ -448,6 +490,33 @@ public static class MeshCommand {
             }
         }
     }
+    // Every failing group with its defect classes and where the refinement stood at each, then the classes' totals: for
+    // each failing shape, which defect it shows and whether its cells were ever flagged for finer samples.
+    private static void WriteDefects(int[] ordered, Outcome?[] results, StringBuilder output) {
+        var failing = ordered
+            .Where(predicate: ordinal => (results[ordinal]!.Report is { } report) && report.Defects.Any(predicate: static tally => (tally.Count > 0)))
+            .ToArray();
+
+        output.Append(provider: CultureInfo.InvariantCulture, handler: $"defects by group: {failing.Length} group(s) with a defect (cells: not-scanned, scanned-nothing-flagged, unflagged, ring, measured; no-map when the mesh was stored; thin cells beside):\n");
+        foreach (var ordinal in failing) {
+            output.Append(provider: CultureInfo.InvariantCulture, handler: $"  group {ordinal} {results[ordinal]!.Label}: {MeshAuditLines.DefectText(tallies: results[ordinal]!.Report!.Defects)}\n");
+        }
+
+        var totals = Enum.GetValues<SdfMeshDefectClass>()
+            .Select(selector: defect => new SdfMeshDefectTally(
+                Class: defect,
+                Count: failing.Sum(selector: ordinal => results[ordinal]!.Report!.Defects[((int)defect)].Count),
+                NotScanned: failing.Sum(selector: ordinal => results[ordinal]!.Report!.Defects[((int)defect)].NotScanned),
+                LatticeUnrefined: failing.Sum(selector: ordinal => results[ordinal]!.Report!.Defects[((int)defect)].LatticeUnrefined),
+                Measured: failing.Sum(selector: ordinal => results[ordinal]!.Report!.Defects[((int)defect)].Measured),
+                Ring: failing.Sum(selector: ordinal => results[ordinal]!.Report!.Defects[((int)defect)].Ring),
+                Unflagged: failing.Sum(selector: ordinal => results[ordinal]!.Report!.Defects[((int)defect)].Unflagged),
+                Unknown: failing.Sum(selector: ordinal => results[ordinal]!.Report!.Defects[((int)defect)].Unknown)
+            ) { Thin = failing.Sum(selector: ordinal => results[ordinal]!.Report!.Defects[((int)defect)].Thin) })
+            .ToArray();
+
+        output.Append(provider: CultureInfo.InvariantCulture, handler: $"defects total: {(MeshAuditLines.DefectText(tallies: totals) ?? "none")}\n");
+    }
     private static string Describe(SdfMeshAuditCluster cluster, Outcome outcome) {
         var world = outcome.ToWorld(arg: cluster.Center);
         var builder = new StringBuilder();
@@ -491,5 +560,8 @@ public static class MeshCommand {
     private sealed record AuditRequest(string World, IReadOnlyList<string> Prototypes, string? Group, string? CacheRoot, string? Build, string? Identity, string Backend, int Top, int Worst, string? Images, bool History, bool Cpu, int Level, bool FieldLevels, bool LocalAim, string? Pose, int Tier, string? Eye, int ViewHeight);
     // A group's audit: its report, or why there is none, with its label, the map from its frame to world space, and the
     // mesh and fields it was measured with.
-    private sealed record Outcome(string Label, string? Refusal, SdfMeshAuditReport? Report, bool Stored, Func<Vector3, Vector3> ToWorld, RestBody? Owner, SdfMesh? Mesh, SdfFieldEvaluator? Field);
+    private sealed record Outcome(string Label, string? Refusal, SdfMeshAuditReport? Report, bool Stored, Func<Vector3, Vector3> ToWorld, RestBody? Owner, SdfMesh? Mesh, SdfFieldEvaluator? Field) {
+        // The operands the group reads, each slot offset and its snapped pose in the group's frame; empty for none.
+        public string Operands { get; init; } = string.Empty;
+    }
 }
