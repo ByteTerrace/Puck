@@ -12,7 +12,8 @@ namespace Puck.Cli.Host;
 /// the start's own peak in private bytes (<see cref="HostLoadThresholds.DefaultPeakGb"/> by <see cref="HostStartKind"/>)
 /// plus what the admitted starts still running have left to grow, since admitted Worlds grow into each other, and
 /// still hold the commit reserve afterwards (<see cref="HostLoadThresholds.CommitCovers"/>); free physical memory must
-/// cover the start's own working set plus the running starts' working-set growth and still sit at the pressure floor
+/// cover the start's own private working set plus the running starts' private working-set growth and still sit at the
+/// pressure floor
 /// (<see cref="HostLoadThresholds.PhysicalCovers"/>). A start whose own need exceeds the machine's totals is refused by
 /// name at once (<see cref="HostLoadThresholds.NeverFits"/>). A busy CPU only slows a step, so the CPU is
 /// advisory: a step admitted over the CPU threshold runs, and the admission prints the load it ran under. A step that
@@ -57,7 +58,7 @@ public static class HostAdmission {
         } else if (demand is { PhysicalCovered: false } crowded) {
             shortfalls.Add(item: (
                 string.Create(provider: CultureInfo.InvariantCulture, handler: $"freeRAM={crowded.FreeRamGb:0.0}GB"),
-                string.Create(provider: CultureInfo.InvariantCulture, handler: $"at least {(crowded.ResidentNeedGb + (thresholds.PressureRamGb ?? 0)):0.0}GB ({crowded.ResidentOwnGb:0.0}GB expected working set of a {KindName(kind: crowded.Kind)} plus {crowded.ResidentGrowthGb:0.0}GB still to grow in the admitted starts plus the {thresholds.PressureRamGb ?? 0:0.0}GB pressure floor)")
+                string.Create(provider: CultureInfo.InvariantCulture, handler: $"at least {(crowded.ResidentNeedGb + (thresholds.PressureRamGb ?? 0)):0.0}GB ({crowded.ResidentOwnGb:0.0}GB expected private working set of a {KindName(kind: crowded.Kind)}{(double.IsFinite(crowded.WorkingSetOwnGb) ? $" of its {crowded.WorkingSetOwnGb:0.0}GB working set" : string.Empty)} plus {crowded.ResidentGrowthGb:0.0}GB still to grow in the admitted starts plus the {thresholds.PressureRamGb ?? 0:0.0}GB pressure floor)")
             ));
         }
         if (!(reading.FreeDiskGb >= (thresholds.PressureDiskGb ?? 0))) {
