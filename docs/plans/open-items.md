@@ -3942,6 +3942,13 @@ and calibration, delivered cues, haptics) and the standard package's judge.
 - Its last stage, a crowd of performers at the frame bar, waits on
   [virtual geometry](virtual-geometry.md#d2-bounds-for-skinned-and-multi-slot-draws)'s
   bounds for many-part bodies and on the benchmark's remote route.
+- The pose-clip design removes the rig's caps on swings, slides, drivers and
+  effectors ([the caps](instrument-play/pose-clips.md#9-the-caps-come-off)).
+  A world's own creations then pay a counted cost. A look that arrives with a
+  visiting character is work another player's client must do, and nothing
+  budgets its terms, effectors and transform slots. Admitting a visiting
+  look's rig waits on that budget, which the plan that admits visiting looks
+  owns.
 - It is the first of the [play expressions](play-expressions.md). The other
   two the owner named, play by solving and play by calculating, are open
   explorations: that page holds
