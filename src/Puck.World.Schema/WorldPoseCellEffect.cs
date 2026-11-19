@@ -36,6 +36,14 @@ public sealed class WorldPoseCellEffect(WorldBodyRef body, string topology, Comp
     /// <inheritdoc/>
     public override bool SubmitsMutation => false;
 
+    /// <summary>Declares the bodies: firing refuses when the addressed body is inactive.</summary>
+    /// <param name="into">The dependencies being collected.</param>
+    public override void CollectDisclosure(WorldDisclosureNeeds into) {
+        ArgumentNullException.ThrowIfNull(argument: into);
+
+        into.Add(reach: WorldDisclosureReach.Bodies);
+    }
+
     /// <inheritdoc/>
     public override void CollectReads(List<CellAccess> into) {
         RuleDataflow.CollectExpression(into: into, tokens: Expression);

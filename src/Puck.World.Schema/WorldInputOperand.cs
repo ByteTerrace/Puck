@@ -78,4 +78,12 @@ public sealed class WorldInputConsumeEffect(WorldInputOwnerReference owner, int 
     public override RuleWork Cost(IRuleCostContext context) => work;
     /// <inheritdoc/>
     public override void CollectReads(List<CellAccess> into) => Owner.CollectReads(into: into);
+    /// <summary>Declares the bodies: an input owner named by a body reference resolves through the population, and an
+    /// input fact is disclosed with the bodies its owner drives, as every input read is.</summary>
+    /// <param name="into">The dependencies being collected.</param>
+    public override void CollectDisclosure(WorldDisclosureNeeds into) {
+        ArgumentNullException.ThrowIfNull(argument: into);
+
+        into.Add(reach: WorldDisclosureReach.Bodies);
+    }
 }

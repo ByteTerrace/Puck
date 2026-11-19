@@ -4,16 +4,18 @@ using Puck.World.Audio;
 namespace Puck.World.Client;
 
 public sealed partial class WorldAudioDirector {
-    // The row's Source/Hash were already proven to load, canonicalize, and pin-verify by WorldDefinitionValidator —
-    // this load is expected to succeed by construction, the same discipline WorldServer's music/judge loads take.
-    private static TuneHost CreateTuneHost(string? documentDirectory, WorldTune tune, AudioMixer mixer) {
+    // The row passed a validating door, but its file can change on disk after validation and this runs on the frame
+    // thread: a tune that no longer loads plays silent and is reported, never thrown.
+    private static TuneHost? CreateTuneHost(string? documentDirectory, WorldTune tune, AudioMixer mixer) {
         if (!WorldAssetRowLoader.TryLoadTune(
             document: out var document,
             documentDirectory: documentDirectory,
             error: out var loadError,
             row: tune
         )) {
-            throw new InvalidOperationException(message: $"tune[{tune.Name}]: {loadError} (a validated document must still resolve at construction)");
+            Console.Error.WriteLine(value: $"[world.audio: tune[{tune.Name}] skipped: {loadError}]");
+
+            return null;
         }
 
         var source = new TuneMachineSource(document: document!);

@@ -42,8 +42,11 @@ public readonly record struct WorldBodyAction(BodyMotionOp Operation, FixedQ4816
 /// <see cref="IWorldFacts"/> as an argument.</summary>
 /// <remarks>Every world effect but the identity-fact write lands outside the arena, so it declares
 /// <see cref="EffectNeeds.Irreversible"/> and the compiler defers it to after the firing's scope commits.</remarks>
-public abstract class WorldFactEffect : EffectFact<IWorldFacts>, IRuleEffect {
+public abstract class WorldFactEffect : EffectFact<IWorldFacts>, IRuleEffect, IWorldDisclosedFact {
     private protected WorldFactEffect(string describe) : base(describe: describe) { }
+
+    /// <inheritdoc/>
+    public abstract void CollectDisclosure(WorldDisclosureNeeds into);
 
     /// <inheritdoc/>
     public IReadOnlyList<IRuleEffect[]> Arms => [];
@@ -119,6 +122,16 @@ public sealed class WorldDocumentEffect : WorldFactEffect {
     /// <summary>Gets what the effect installs.</summary>
     public WorldDocumentWrite Write { get; }
 
+    /// <summary>Declares the bodies for a placement write, whose transaction reconciles the population and refuses
+    /// when the reconcile cannot hold; a HUD write or a save depends on nothing.</summary>
+    /// <param name="into">The dependencies being collected.</param>
+    public override void CollectDisclosure(WorldDisclosureNeeds into) {
+        ArgumentNullException.ThrowIfNull(argument: into);
+
+        if (Write is WorldDocumentWrite.UpsertPlacement or WorldDocumentWrite.RemovePlacement) {
+            into.Add(reach: WorldDisclosureReach.Bodies);
+        }
+    }
     /// <inheritdoc/>
     public override RuleWork Cost(IRuleCostContext context) => m_cost;
 }
@@ -160,6 +173,10 @@ public sealed class WorldCueEffect : WorldFactEffect {
     /// <inheritdoc/>
     public override bool SubmitsMutation => false;
 
+    /// <summary>Declares nothing: a cue whose body is absent is not emitted and refuses nothing, and the delivery
+    /// itself admits a body cue only to a recipient whose snapshot carries that body.</summary>
+    /// <param name="into">The dependencies being collected.</param>
+    public override void CollectDisclosure(WorldDisclosureNeeds into) { }
     /// <inheritdoc/>
     public override void CollectReads(List<CellAccess> into) {
         CompiledCellRef.CollectReference(into: into, reference: Body?.KeyFrom);
@@ -204,6 +221,15 @@ public sealed class WorldPoseEffect : WorldFactEffect {
     public string SpawnPoint { get; }
     /// <inheritdoc/>
     public override bool SubmitsMutation => false;
+
+    /// <summary>Declares the bodies: firing refuses when the addressed body is inactive, which rewinds the whole
+    /// firing, so whether the firing lands depends on which bodies exist.</summary>
+    /// <param name="into">The dependencies being collected.</param>
+    public override void CollectDisclosure(WorldDisclosureNeeds into) {
+        ArgumentNullException.ThrowIfNull(argument: into);
+
+        into.Add(reach: WorldDisclosureReach.Bodies);
+    }
 
     /// <inheritdoc/>
     public override void CollectReads(List<CellAccess> into) => CompiledCellRef.CollectReference(
@@ -251,6 +277,14 @@ public sealed class WorldBodyMotionEffect : WorldFactEffect {
     /// <inheritdoc/>
     public override bool SubmitsMutation => false;
 
+    /// <summary>Declares the bodies: firing refuses when the addressed body is inactive, which rewinds the whole
+    /// firing, so whether the firing lands depends on which bodies exist.</summary>
+    /// <param name="into">The dependencies being collected.</param>
+    public override void CollectDisclosure(WorldDisclosureNeeds into) {
+        ArgumentNullException.ThrowIfNull(argument: into);
+
+        into.Add(reach: WorldDisclosureReach.Bodies);
+    }
     /// <inheritdoc/>
     public override void CollectReads(List<CellAccess> into) {
         CompiledCellRef.CollectReference(
@@ -298,6 +332,15 @@ public sealed class WorldRigidImpulseEffect : WorldFactEffect {
     /// <summary>Gets the struck body.</summary>
     public WorldBodyRef Target { get; }
 
+    /// <summary>Declares the bodies: firing refuses when the addressed body is inactive, which rewinds the whole
+    /// firing, so whether the firing lands depends on which bodies exist.</summary>
+    /// <param name="into">The dependencies being collected.</param>
+    public override void CollectDisclosure(WorldDisclosureNeeds into) {
+        ArgumentNullException.ThrowIfNull(argument: into);
+
+        into.Add(reach: WorldDisclosureReach.Bodies);
+    }
+
     /// <inheritdoc/>
     public override void CollectReads(List<CellAccess> into) => Magnitude.CollectReads(into: into);
     /// <inheritdoc/>
@@ -315,6 +358,14 @@ public sealed class WorldPaintFieldEffect : WorldFactEffect {
     /// <inheritdoc/>
     public override bool SubmitsMutation => false;
 
+    /// <summary>Declares the field regions the paint lands in.</summary>
+    /// <param name="into">The dependencies being collected.</param>
+    public override void CollectDisclosure(WorldDisclosureNeeds into) {
+        ArgumentNullException.ThrowIfNull(argument: into);
+
+        into.Add(reach: WorldDisclosureReach.Fields);
+    }
+
     /// <inheritdoc/>
     public override RuleWork Cost(IRuleCostContext context) {
         var diameter = ((2L * Paint.Radius) + 1L);
@@ -325,7 +376,7 @@ public sealed class WorldPaintFieldEffect : WorldFactEffect {
 /// <summary>Writes one <c>state.body</c> counter of a world-addressed body, in the arena's participant lane.</summary>
 /// <remarks>The lane cell is an arena row, so this arm is rewound by the firing's own scope and declares nothing. A
 /// <c>bodyState</c> read is a fact rather than a row read, so the write declares no row either.</remarks>
-public sealed class WorldBodyStateEffect : WorldFactEffect {
+public sealed class WorldBodyStateEffect : WorldFactEffect, IValueSourcedEffect {
     /// <summary>Initializes a new instance of the <see cref="WorldBodyStateEffect"/> class.</summary>
     /// <param name="key">The addressed body's literal key, or the invalid default.</param>
     /// <param name="keyFrom">The addressed body's live indirection, or <see langword="null"/>.</param>
@@ -362,6 +413,14 @@ public sealed class WorldBodyStateEffect : WorldFactEffect {
     /// <summary>Gets the compiled value source.</summary>
     public CompiledValueSource Source { get; }
 
+    /// <summary>Declares the bodies: firing refuses when the addressed body is inactive, which rewinds the whole
+    /// firing, so whether the firing lands depends on which bodies exist.</summary>
+    /// <param name="into">The dependencies being collected.</param>
+    public override void CollectDisclosure(WorldDisclosureNeeds into) {
+        ArgumentNullException.ThrowIfNull(argument: into);
+
+        into.Add(reach: WorldDisclosureReach.Bodies);
+    }
     /// <inheritdoc/>
     public override void CollectReads(List<CellAccess> into) {
         Source.CollectReads(into: into);
@@ -403,7 +462,7 @@ public sealed class WorldBodyStateEffect : WorldFactEffect {
 /// identity's persisted row together.</summary>
 /// <remarks>The lane cell is an arena row, so this arm is rewound by the firing's own scope and declares
 /// nothing.</remarks>
-public sealed class WorldIdentityFactEffect : WorldFactEffect {
+public sealed class WorldIdentityFactEffect : WorldFactEffect, IValueSourcedEffect {
     /// <summary>Initializes the effect.</summary>
     /// <param name="key">The addressed body's literal key, or the invalid default.</param>
     /// <param name="keyFrom">The addressed body's live indirection, or <see langword="null"/>.</param>
@@ -446,6 +505,14 @@ public sealed class WorldIdentityFactEffect : WorldFactEffect {
     /// <summary>Gets the compiled value source.</summary>
     public CompiledValueSource Source { get; }
 
+    /// <summary>Declares the bodies: firing refuses when the addressed body is inactive, which rewinds the whole
+    /// firing, so whether the firing lands depends on which bodies exist.</summary>
+    /// <param name="into">The dependencies being collected.</param>
+    public override void CollectDisclosure(WorldDisclosureNeeds into) {
+        ArgumentNullException.ThrowIfNull(argument: into);
+
+        into.Add(reach: WorldDisclosureReach.Bodies);
+    }
     /// <inheritdoc/>
     public override void CollectReads(List<CellAccess> into) {
         Source.CollectReads(into: into);

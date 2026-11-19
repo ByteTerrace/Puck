@@ -160,7 +160,7 @@ public sealed class WorldFederationProjectionSink(WorldDisclosureTier tier, stri
 
         if (m_cursor.DeliverDefinition(view: m_view) is { } delivered) {
             Write(WorldFederationResponse.Definition, WorldFederationCodec.DocumentLeaf(
-                payload: WorldDefinitionSerialization.SerializeCompact(definition: WorldAssetRowLoader.EmbedAudio(delivered)), tier: tier, version: Version));
+                payload: WorldDefinitionSerialization.SerializeCompact(definition: delivered), tier: tier, version: Version));
         }
     }
     public void DeliverSessionLever(WorldSessionLever lever) { }

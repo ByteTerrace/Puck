@@ -230,7 +230,20 @@ public enum WorldBodyDesignationKind : byte {
 /// <param name="Tick">The simulation tick that emitted it.</param>
 /// <param name="Argument">The optional integer argument.</param>
 /// <param name="Generation">The addressed body's generation, or zero when there is no body.</param>
-public readonly record struct WorldGameplayCue(string Name, string? Payload, int? Body, ulong Tick, long? Argument = null, int Generation = 0) {
+/// <param name="Audience">For an in-process delivery that serves every local seat, the seats whose own views admit the
+/// cue, one bit per seat slot; zero for a delivery to one recipient, whose view already admitted it. It never crosses a
+/// wire.</param>
+public readonly record struct WorldGameplayCue(string Name, string? Payload, int? Body, ulong Tick, long? Argument = null, int Generation = 0, ulong Audience = 0UL) {
+    /// <summary>The number of local seat slots <see cref="Audience"/> can name.</summary>
+    public const int MaxAudienceSeats = 64;
+
+    /// <summary>Determines whether the cue may be presented for a local seat.</summary>
+    /// <param name="seat">The seat slot, or a negative value for a presentation that follows no seat.</param>
+    /// <returns><see langword="true"/> when the delivery served one recipient, or when the seat's own view admitted the
+    /// cue; for no seat, when any local seat's view admitted it.</returns>
+    public bool AdmitsSeat(int seat) => (Audience == 0UL) || (seat < 0) ||
+        ((seat < MaxAudienceSeats) && ((Audience & (1UL << seat)) != 0UL));
+
     /// <summary>Determines whether a cue name is a bounded dot-separated token suitable for a document and log.</summary>
     /// <param name="candidate">The candidate cue name.</param>
     /// <returns><see langword="true"/> when the name is non-empty, bounded, begins and ends with an ASCII letter or

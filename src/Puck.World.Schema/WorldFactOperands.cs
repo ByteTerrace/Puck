@@ -18,8 +18,11 @@ namespace Puck.World;
 public readonly record struct WorldBodyRef(CompiledBodyRefKind Kind, int Index, int RowOrdinal = -1, CellKey Key = default, IReadOnlyList<int>? PlacementOrdinals = null);
 /// <summary>The operand facts only a world answers. The facet is the type argument, so the read receives
 /// <see cref="IWorldFacts"/> as an argument and a fact cannot reach a capability it did not declare.</summary>
-public abstract class WorldFactOperand : Puck.State.Rules.FacetRuleOperand<IWorldFacts> {
+public abstract class WorldFactOperand : Puck.State.Rules.FacetRuleOperand<IWorldFacts>, IWorldDisclosedFact {
     private protected WorldFactOperand(CellKind valueKind) : base(valueKind: valueKind) { }
+
+    /// <inheritdoc/>
+    public abstract void CollectDisclosure(WorldDisclosureNeeds into);
 
     /// <summary>Returns the population capacity the context's document declares — the per-tick cost of a read that
     /// scans every population slot.</summary>
@@ -36,6 +39,8 @@ public sealed class WorldPopulationOperand : WorldFactOperand {
 
     private WorldPopulationOperand() : base(valueKind: CellKind.Int) { }
 
+    /// <inheritdoc/>
+    public override void CollectDisclosure(WorldDisclosureNeeds into) => into.Add(reach: WorldDisclosureReach.Bodies);
     /// <inheritdoc/>
     public override RuleWork Cost(IRuleCostContext context) => 1L;
     /// <inheritdoc/>
@@ -60,6 +65,8 @@ public sealed class WorldPhysicsQuiescentOperand : WorldFactOperand {
         : PhysicsQuiescentOperand.ForBodies(bodies: bodies));
 
     /// <inheritdoc/>
+    public override void CollectDisclosure(WorldDisclosureNeeds into) => into.Add(reach: WorldDisclosureReach.Bodies);
+    /// <inheritdoc/>
     public override RuleWork Cost(IRuleCostContext context) => ((m_operand.Bodies is { } bodies) ? bodies.Count : PopulationCapacity(context: context));
     /// <inheritdoc/>
     public override Fact Read(IStateReader reader, IWorldFacts facet) {
@@ -77,6 +84,10 @@ public sealed class WorldClockOperand : WorldFactOperand {
     /// <param name="facet">The value read from the clock's current position.</param>
     public WorldClockOperand(ClockFacet facet) : base(valueKind: CellKind.Int) => m_operand = new ClockOperand(facet: facet);
 
+    /// <summary>Declares nothing: the clock's position is the score's, which every delivery carries as its beat and
+    /// bar boundaries.</summary>
+    /// <param name="into">The dependencies being collected.</param>
+    public override void CollectDisclosure(WorldDisclosureNeeds into) { }
     /// <inheritdoc/>
     public override RuleWork Cost(IRuleCostContext context) => 1L;
     /// <inheritdoc/>
@@ -97,6 +108,13 @@ public sealed class WorldRegionOccupancyOperand : WorldFactOperand {
     /// <summary>Gets the region placement's id.</summary>
     public string PlacementId => m_operand.PlacementId;
 
+    /// <inheritdoc/>
+    public override void CollectDisclosure(WorldDisclosureNeeds into) {
+        ArgumentNullException.ThrowIfNull(argument: into);
+
+        into.AddPlacement(placementId: PlacementId);
+        into.Add(reach: WorldDisclosureReach.Bodies);
+    }
     /// <inheritdoc/>
     public override RuleWork Cost(IRuleCostContext context) => PopulationCapacity(context: context);
     /// <inheritdoc/>
@@ -152,6 +170,13 @@ public sealed class WorldPlacementInfluenceOperand : WorldFactOperand {
         into: into,
         reference: KeyFrom
     );
+    /// <inheritdoc/>
+    public override void CollectDisclosure(WorldDisclosureNeeds into) {
+        ArgumentNullException.ThrowIfNull(argument: into);
+
+        into.AddPlacement(placementId: PlacementId);
+        into.Add(reach: WorldDisclosureReach.Bodies);
+    }
     /// <summary>Returns the placement scan the read is bounded by: every spatial volume the document declares, which
     /// is what an influence count walks. A document with volumes that read a state-bound value adds the compile a read
     /// can owe after a write moved one: each volume copied twice (the index and its occupation targets) and each bound
@@ -238,6 +263,14 @@ public sealed class WorldMachineMemoryOperand : WorldFactOperand {
     /// <summary>Gets the screen index.</summary>
     public int Screen => m_operand.Screen;
 
+    /// <summary>Declares the screen: a byte of machine memory is disclosed to a recipient that holds the screen's
+    /// machine and reads every row its memory bindings exchange.</summary>
+    /// <param name="into">The dependencies being collected.</param>
+    public override void CollectDisclosure(WorldDisclosureNeeds into) {
+        ArgumentNullException.ThrowIfNull(argument: into);
+
+        into.AddScreen(screen: Screen);
+    }
     /// <inheritdoc/>
     public override RuleWork Cost(IRuleCostContext context) => 1L;
     /// <inheritdoc/>
@@ -288,6 +321,10 @@ public sealed class WorldArgBodyOperand : WorldFactOperand {
             ));
         }
     }
+    /// <summary>Declares the bodies: a cell whose key names no active body is skipped, so the answer depends on which
+    /// bodies exist.</summary>
+    /// <param name="into">The dependencies being collected.</param>
+    public override void CollectDisclosure(WorldDisclosureNeeds into) => into.Add(reach: WorldDisclosureReach.Bodies);
     /// <inheritdoc/>
     public override RuleWork Cost(IRuleCostContext context) {
         ArgumentNullException.ThrowIfNull(argument: context);
@@ -315,11 +352,14 @@ public sealed class WorldBodyFactOperand : WorldFactOperand {
     /// <param name="cost">The conservative work units one read costs.</param>
     /// <param name="read">The world reader's own read of the same fact.</param>
     /// <param name="describe">The authored channel, for the read-back.</param>
+    /// <param name="reach">What the read's answer depends on beyond the rows it reads; every body fact reads
+    /// bodies, and a read that tests a sight line or a path adds <see cref="WorldDisclosureReach.Fields"/>.</param>
     /// <param name="payload">The payload <paramref name="read"/> hands the world reader, when it is one, so a host can
     /// name what the read depends on (<see cref="IStateReader.TryScheduleFact"/>); <see langword="null"/> otherwise.</param>
-    public WorldBodyFactOperand(CellKind valueKind, WorldBodyRef bodyA, WorldBodyRef bodyB, int rowOrdinal, long cost, Func<IWorldFacts, Fact> read, string describe, WorldOperandFact? payload = null) : base(valueKind: valueKind) {
+    public WorldBodyFactOperand(CellKind valueKind, WorldBodyRef bodyA, WorldBodyRef bodyB, int rowOrdinal, long cost, Func<IWorldFacts, Fact> read, string describe, WorldDisclosureReach reach, WorldOperandFact? payload = null) : base(valueKind: valueKind) {
         ArgumentNullException.ThrowIfNull(argument: read);
 
+        Reach = (reach | WorldDisclosureReach.Bodies);
         BodyA = bodyA;
         BodyB = bodyB;
         Describe = describe;
@@ -331,6 +371,16 @@ public sealed class WorldBodyFactOperand : WorldFactOperand {
 
     /// <summary>Gets the payload the read hands the world reader, or <see langword="null"/> when the read builds its own.</summary>
     public WorldOperandFact? Payload { get; }
+    /// <summary>Gets what the read's answer depends on beyond the rows it reads; always includes
+    /// <see cref="WorldDisclosureReach.Bodies"/>.</summary>
+    public WorldDisclosureReach Reach { get; }
+
+    /// <inheritdoc/>
+    public override void CollectDisclosure(WorldDisclosureNeeds into) {
+        ArgumentNullException.ThrowIfNull(argument: into);
+
+        into.Add(reach: Reach);
+    }
 
     /// <inheritdoc/>
     public override string ToString() => Describe;
@@ -440,7 +490,12 @@ public sealed class WorldIdentityFactOperand : WorldFactOperand {
             Key: default,
             RowOrdinal: LaneOrdinal
         ));
+        WorldBodyRefReads.Collect(body: in m_body, into: into);
     }
+    /// <summary>Declares the bodies: the fact is the lane cell of whichever body the reference resolves to, and a body
+    /// that is absent reads zero.</summary>
+    /// <param name="into">The dependencies being collected.</param>
+    public override void CollectDisclosure(WorldDisclosureNeeds into) => into.Add(reach: WorldDisclosureReach.Bodies);
     /// <inheritdoc/>
     public override RuleWork Cost(IRuleCostContext context) => 1L;
     /// <inheritdoc/>
@@ -480,7 +535,7 @@ public sealed class WorldIdentityFactOperand : WorldFactOperand {
 /// <summary>A <c>$pair:&lt;bodyRefA&gt;:&lt;bodyRefB&gt;</c> cell key, resolved from the two bodies' indices at
 /// evaluation. Reads resolve only an already-admitted key; a state-writing effect admits its pair key inside the
 /// firing's journal scope.</summary>
-public sealed class WorldPairKeyFact : KeyFact<IWorldFacts>, IRuleKey {
+public sealed class WorldPairKeyFact : KeyFact<IWorldFacts>, IRuleKey, IWorldDisclosedFact {
     private readonly PairKeyFact m_key;
 
     /// <summary>Initializes the key.</summary>
@@ -489,6 +544,27 @@ public sealed class WorldPairKeyFact : KeyFact<IWorldFacts>, IRuleKey {
         ArgumentNullException.ThrowIfNull(argument: key);
 
         m_key = key;
+    }
+
+    /// <summary>Appends the rows the two body references resolve through: a cell reference's row and an extremum's
+    /// keyed row.</summary>
+    /// <param name="into">The read set being collected.</param>
+    public override void CollectReads(List<CellAccess> into) {
+        ArgumentNullException.ThrowIfNull(argument: into);
+
+        var bodyA = m_key.BodyA;
+        var bodyB = m_key.BodyB;
+
+        WorldBodyRefReads.Collect(body: in bodyA, into: into);
+        WorldBodyRefReads.Collect(body: in bodyB, into: into);
+    }
+    /// <summary>Declares the bodies: the key names a cell only while both bodies resolve, so whether it reads anything
+    /// depends on which bodies exist.</summary>
+    /// <param name="into">The dependencies being collected.</param>
+    public void CollectDisclosure(WorldDisclosureNeeds into) {
+        ArgumentNullException.ThrowIfNull(argument: into);
+
+        into.Add(reach: WorldDisclosureReach.Bodies);
     }
 
     /// <inheritdoc/>
@@ -556,5 +632,19 @@ public sealed class WorldPairKeyFact : KeyFact<IWorldFacts>, IRuleKey {
         )
             ? Resolved<long>.Named(value: index)
             : Resolved<long>.Nothing);
+    }
+}
+/// <summary>The rows a compiled body reference resolves through.</summary>
+public static class WorldBodyRefReads {
+    /// <summary>Appends the row a body reference reads to resolve: a cell reference's row or an extremum's keyed row.
+    /// A literal, bound or placement reference reads no row.</summary>
+    /// <param name="body">The compiled reference.</param>
+    /// <param name="into">The read set being collected.</param>
+    public static void Collect(in CompiledBodyRef body, List<CellAccess> into) {
+        ArgumentNullException.ThrowIfNull(argument: into);
+
+        if ((body.Kind is CompiledBodyRefKind.Cell or CompiledBodyRefKind.ArgMax or CompiledBodyRefKind.ArgMin) && body.Handle.IsValid) {
+            into.Add(item: new CellAccess(Key: default, RowOrdinal: body.Handle.Ordinal));
+        }
     }
 }

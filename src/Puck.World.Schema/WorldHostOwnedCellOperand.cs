@@ -30,6 +30,9 @@ public sealed class WorldHostOwnedCellOperand : WorldFactOperand, IStateAddresse
     /// <inheritdoc/>
     public CompiledCellRef? KeyFrom { get; }
 
+    /// <summary>Declares nothing beyond the host-owned row the read addresses, which its read set carries.</summary>
+    /// <param name="into">The dependencies being collected.</param>
+    public override void CollectDisclosure(WorldDisclosureNeeds into) { }
     /// <inheritdoc/>
     public override RuleWork Cost(IRuleCostContext context) => 1L;
     /// <inheritdoc/>
