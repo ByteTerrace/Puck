@@ -1992,23 +1992,23 @@ export type CreationNoiseDocument = {
    */
   masks?: ({
     /**
-     * The region's shapes, at least one: geometry only (type, name, pose, scale, exponent, rounding, chamfer, elongate, a prism's profile and lift), of a type contact admits.
+     * The region's shapes, at least one: geometry only (type, name, pose, scale, exponent, rounding), each a box, a sphere, an ellipsoid, a superellipsoid, a capsule scaled alike in X and Z or a plane (Lower). A relief's masks hold at most MaxRegions shapes in all.
      */
     shapes: (ShapeNullable33 | null)[];
     /**
-     * The band's width, in creation units, above zero.
+     * The band's width, in creation units, at least 2⁻¹²; snapped to a multiple of 2⁻¹² (SdfReliefBand).
      */
     fade: number;
     /**
-     * Where the band starts, as a distance in creation units from the region's surface; negative starts it inside the region (null = 0).
+     * Where the band starts, as a distance in creation units from the region's surface; negative starts it inside the region (null = 0). Snapped to a multiple of 2⁻¹²; the start, the fade and their sum lie within Limit units.
      */
     start?: number | null;
     /**
-     * The weight on and inside the region, in [0, 1] (null = 0).
+     * The weight on and inside the region, in [0, 1] (null = 0), snapped to a multiple of 2⁻¹⁶.
      */
     inside?: number | null;
     /**
-     * The weight past the band, in [0, 1] (null = 1).
+     * The weight past the band, in [0, 1] (null = 1), snapped to a multiple of 2⁻¹⁶.
      */
     outside?: number | null;
   } | null)[] | null;
@@ -7229,6 +7229,24 @@ export type WorldDeviceProfile = {
 export type WorldDisclosureTier = "Frames" | "Presentation" | "Replica";
 
 /**
+ * The key light's distant shadow map: one more shadow map past the far cascade, with texels of its own, so ridges shadow walls hundreds of metres off without costing the near cascades precision. It draws only what stands still and holds what it drew while the light turns within TurnDegrees and the eye stays within an eighth of the reach of where it was centred, so it costs a frame nothing between those changes. A device's quality row chooses it (DistantShadows); a view's shadow quality halves its texels as it does the cascades'.
+ */
+export type WorldDistantShadows = {
+  /**
+   * The distance, in metres from the eye in every direction, the map covers: past the far cascade's reach and up to the far distance, within [1, 8192].
+   */
+  reach: number;
+  /**
+   * The texels along each side of the map at full shadow quality: a power of two from 256 through 4096. Its texel is about twice the reach over this.
+   */
+  texels: number;
+  /**
+   * The light turn, in degrees, a held map tolerates before it is drawn again: the most its shadows lag a moving sun by, in (0, 10].
+   */
+  turnDegrees: number;
+};
+
+/**
  * A spatial region composed with the deterministic sequence that fills it.
  */
 export type WorldDistribution = {
@@ -10882,6 +10900,10 @@ export type WorldQualityPreset = {
    * Whether the preset lets the indirect volume's background rays take the device's ray hardware where it has it (world.rays); the software walk answers the same hits elsewhere.
    */
   rayQueries?: boolean;
+  /**
+   * The distant shadow map the device draws past the far cascade (its reach, texels and the light turn a held map tolerates): far shadows by rasterization, which need no ray hardware. Absent draws none.
+   */
+  distantShadows?: WorldDistantShadows | null;
 };
 
 export type WorldReaction = WorldReactionDiffuse | WorldReactionDecay | WorldReactionTransform | WorldReactionEmit | WorldReactionExpose | WorldReactionFlow | null;
@@ -11196,6 +11218,10 @@ export type WorldRenderDefaults = {
    * Whether the indirect volume's background rays (its probe trace, the relight's shadow rays and the camera sample) boot taking the device's ray hardware where it has it, through the scene's acceleration structures (world.rays). The software walk answers the same hits wherever it is off or the device has none. Absent is off.
    */
   rayQueries?: boolean;
+  /**
+   * The distant shadow map the world boots drawing past the far cascade (WorldDistantShadows); a quality preset's row replaces it. Absent draws none.
+   */
+  distantShadows?: WorldDistantShadows | null;
 };
 
 export type WorldRenderEnvironment = {

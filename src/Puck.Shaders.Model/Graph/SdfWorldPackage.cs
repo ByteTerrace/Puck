@@ -374,7 +374,7 @@ public static partial class SdfWorldPackage {
         Value(name: MeshShadowParameters, type: ShaderValueType.Float4),
         Value(name: MeshShadowSlopes, type: ShaderValueType.Float4),
         Value(name: MeshShadowRoles, type: ShaderValueType.Uint4),
-        Value(name: MeshShadowTexels, type: ShaderValueType.Uint),
+        Value(name: MeshShadowTexels, type: ShaderValueType.Uint4),
         ShaderInterfaceMember.Value(group: ShaderInterfaceGroup.Pass, length: MeshIrradianceLevelCount, name: MeshIrradianceLevels, type: ShaderValueType.Int4),
         ShaderInterfaceMember.Value(group: ShaderInterfaceGroup.Pass, length: MeshIrradianceLevelCount, name: MeshIrradianceSpacings, type: ShaderValueType.Float4),
         ShaderWorkCounters.RowMember,
@@ -471,6 +471,8 @@ public static partial class SdfWorldPackage {
         ShaderInterfaceMember.SampledImage(group: ShaderInterfaceGroup.Pass, name: MeshShadowNearExit, type: ShaderValueType.Float4),
         ShaderInterfaceMember.SampledImage(group: ShaderInterfaceGroup.Pass, name: MeshShadowFarExit, type: ShaderValueType.Float4),
         ShaderInterfaceMember.SampledImage(group: ShaderInterfaceGroup.Pass, name: MeshShadowSecondExit, type: ShaderValueType.Float4),
+        ShaderInterfaceMember.SampledImage(group: ShaderInterfaceGroup.Pass, name: MeshShadowDistant, type: ShaderValueType.Float4),
+        ShaderInterfaceMember.SampledImage(group: ShaderInterfaceGroup.Pass, name: MeshShadowDistantExit, type: ShaderValueType.Float4),
         ShaderWorkCounters.BufferMember,
         Read(element: ShaderValueType.Uint, name: MeshShadowNearOptical),
         Read(element: ShaderValueType.Uint, name: MeshShadowFarOptical),
@@ -502,11 +504,12 @@ public static partial class SdfWorldPackage {
             ShadowRaster(depth: Parts.ShadowNearDepth, exit: Parts.ShadowNearExit, name: Parts.ShadowNear),
             ShadowRaster(depth: Parts.ShadowFarDepth, exit: Parts.ShadowFarExit, name: Parts.ShadowFar),
             ShadowRaster(depth: Parts.ShadowSecondDepth, exit: Parts.ShadowSecondExit, name: Parts.ShadowSecond),
+            ShadowRaster(depth: Parts.ShadowDistantDepth, exit: Parts.ShadowDistantExit, name: Parts.ShadowDistant),
             Pass(inputs: [Parts.MeshTarget], name: Parts.Pyramid, outputs: [Parts.MeshPyramid]),
             Pass(
                 inputs: [
                     Parts.MeshTarget, Parts.MeshPyramid, Parts.ShadowNearDepth, Parts.ShadowFarDepth, Parts.ShadowSecondDepth,
-                    Parts.ShadowNearExit, Parts.ShadowFarExit, Parts.ShadowSecondExit,
+                    Parts.ShadowNearExit, Parts.ShadowFarExit, Parts.ShadowSecondExit, Parts.ShadowDistantDepth, Parts.ShadowDistantExit,
                 ],
                 name: Parts.Surface,
                 outputs: [Parts.Visibility]
@@ -526,6 +529,8 @@ public static partial class SdfWorldPackage {
             ShadowDepth(name: Parts.ShadowNearExit, texels: MeshShadowResolution),
             ShadowDepth(name: Parts.ShadowFarExit, texels: MeshShadowResolution),
             ShadowDepth(name: Parts.ShadowSecondExit, texels: MeshShadowResolution),
+            ShadowDepth(name: Parts.ShadowDistantDepth, texels: MeshShadowResolution),
+            ShadowDepth(name: Parts.ShadowDistantExit, texels: MeshShadowResolution),
             Image(format: MeshTargetFormat, from: null, name: Parts.MeshTarget, retained: true),
             // Two words a pyramid texel; the levels one up hold under a third of the extent's texels, with their tiles'
             // padding, and the kernels bound every level by the buffer's length.
@@ -663,6 +668,14 @@ public static partial class SdfWorldPackage {
         public const string ShadowFar = "shadow-far";
         /// <summary>The second shadow slot's cascade raster pass.</summary>
         public const string ShadowSecond = "shadow-second";
+        /// <summary>The distant shadow map's raster pass: the key light's static casters out to the authored distant
+        /// reach, redrawn only when the light turns past its authored tolerance, the eye crosses a cell of the map's
+        /// grid or a static draw changes (<c>SdfWorldPasses</c>).</summary>
+        public const string ShadowDistant = "shadow-distant";
+        /// <summary>The distant shadow map's depth.</summary>
+        public const string ShadowDistantDepth = "shadowDistantDepth";
+        /// <summary>The distant shadow map's exit layer.</summary>
+        public const string ShadowDistantExit = "shadowDistantExit";
         /// <summary>The near cascade's depth: per texel the reversed-Z orthographic depth of the nearest caster, zero (the
         /// far plane) where none was drawn.</summary>
         public const string ShadowNearDepth = "shadowNearDepth";

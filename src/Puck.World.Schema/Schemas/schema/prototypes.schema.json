@@ -1449,11 +1449,11 @@
                         "$ref": "./common.schema.json#/$defs/ShapeNullable33",
                         "description": "The persisted form of a placed shape. Position and Rotation are authored in the creation\u0027s author frame \u2014 see CreationFrame \u2014 and Scale is the primitive\u0027s size directly: see CreationGeometry\u0027s unit table."
                       },
-                      "description": "The region\u0027s shapes, at least one: geometry only (type, name, pose, scale, exponent, rounding, chamfer, elongate, a prism\u0027s profile and lift), of a type contact admits."
+                      "description": "The region\u0027s shapes, at least one: geometry only (type, name, pose, scale, exponent, rounding), each a box, a sphere, an ellipsoid, a superellipsoid, a capsule scaled alike in X and Z or a plane (Lower). A relief\u0027s masks hold at most MaxRegions shapes in all."
                     },
                     "fade": {
                       "type": "number",
-                      "description": "The band\u0027s width, in creation units, above zero."
+                      "description": "The band\u0027s width, in creation units, at least 2\u207B\u00B9\u00B2; snapped to a multiple of 2\u207B\u00B9\u00B2 (SdfReliefBand)."
                     },
                     "start": {
                       "type": [
@@ -1461,7 +1461,7 @@
                         "null"
                       ],
                       "default": null,
-                      "description": "Where the band starts, as a distance in creation units from the region\u0027s surface; negative starts it inside the region (null = 0)."
+                      "description": "Where the band starts, as a distance in creation units from the region\u0027s surface; negative starts it inside the region (null = 0). Snapped to a multiple of 2\u207B\u00B9\u00B2; the start, the fade and their sum lie within Limit units."
                     },
                     "inside": {
                       "type": [
@@ -1469,7 +1469,7 @@
                         "null"
                       ],
                       "default": null,
-                      "description": "The weight on and inside the region, in [0, 1] (null = 0)."
+                      "description": "The weight on and inside the region, in [0, 1] (null = 0), snapped to a multiple of 2\u207B\u00B9\u2076."
                     },
                     "outside": {
                       "type": [
@@ -1477,7 +1477,7 @@
                         "null"
                       ],
                       "default": null,
-                      "description": "The weight past the band, in [0, 1] (null = 1)."
+                      "description": "The weight past the band, in [0, 1] (null = 1), snapped to a multiple of 2\u207B\u00B9\u2076."
                     }
                   },
                   "required": [

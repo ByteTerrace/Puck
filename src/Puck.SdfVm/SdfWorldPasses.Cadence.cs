@@ -13,6 +13,13 @@ public sealed partial class SdfWorldPasses {
         var tables = view.Residency.Staged(context: in context);
         var frame = view.Residency.Frame!;
 
+        // The distant map stands while its own inputs stand, whatever forces the frame's other passes
+        // (SdfWorldPasses.Distant).
+        if (part == SdfWorldPackage.Parts.ShadowDistant) {
+            _ = CascadesOf(frame: frame, instance: instance, view: view.View);
+
+            return ((entry.DistantDecided == m_frame) ? DistantSignatureOf(entry: entry, frame: frame, tables: tables) : null);
+        }
         // A held far cascade stands whatever forces the frame's other passes (SdfWorldPasses.Rates).
         if ((part == SdfWorldPackage.Parts.ShadowFar) && HoldsFar(frame: frame, instance: instance, view: view.View)) {
             return FarSignatureOf(entry: entry, signature: null);

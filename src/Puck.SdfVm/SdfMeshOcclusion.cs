@@ -135,8 +135,9 @@ internal sealed class SdfMeshOcclusion : IDisposable {
 
     // Each pass uploads constant-sized controls. The residency already uploaded each changed draw once.
     // A cascade that draws one layer of a split refresh (skipsDepth, skipsExit) emits and counts commands for that layer
-    // alone, so its counted draws and vertices are the work it draws.
-    public void Stage(SdfWorldTables tables, int slot, uint count, uint width, uint height, in SdfMeshCull cull, in SdfMeshDetail detail, bool held, bool glass, bool occlude, bool splitExit = false, bool skipsDepth = false, bool skipsExit = false, Puck.Abstractions.Cameras.CameraSnapshot camera = default, uint receiverWidth = 0, uint receiverHeight = 0, System.Numerics.Vector2 jitter = default) {
+    // alone, so its counted draws and vertices are the work it draws. A pass staged staticOnly (the distant shadow map)
+    // keeps only draws of the static scene (SdfMeshRecord.DynamicFlag clear).
+    public void Stage(SdfWorldTables tables, int slot, uint count, uint width, uint height, in SdfMeshCull cull, in SdfMeshDetail detail, bool held, bool glass, bool occlude, bool splitExit = false, bool skipsDepth = false, bool skipsExit = false, Puck.Abstractions.Cameras.CameraSnapshot camera = default, uint receiverWidth = 0, uint receiverHeight = 0, System.Numerics.Vector2 jitter = default, bool staticOnly = false) {
         // The node completed this slot before its recording (Completed): replacements made here retire at its next
         // completion, after this slot's history copy and every preceding submission.
         m_slot = slot;
@@ -161,7 +162,7 @@ internal sealed class SdfMeshOcclusion : IDisposable {
         words[0] = count;
         words[1] = m_levels;
         words[2] = (occlude ? 1u : 0u) | (splitExit ? 2u : 0u) | (m_argumentPhases << 2);
-        words[3] = (glass ? 1u : 0u) | (skipsDepth ? 2u : 0u) | (skipsExit ? 4u : 0u) | (m_marking ? 8u : 0u);
+        words[3] = (glass ? 1u : 0u) | (skipsDepth ? 2u : 0u) | (skipsExit ? 4u : 0u) | (m_marking ? 8u : 0u) | (staticOnly ? 16u : 0u);
         detail.WriteGpu(rows: rows[1..4], held: held);
         cull.WriteGpu(rows: rows[4..]);
         rows[SdfKernelInterfaces.MeshReceiverRow] = new(receiverWidth, receiverHeight, jitter.X, jitter.Y);

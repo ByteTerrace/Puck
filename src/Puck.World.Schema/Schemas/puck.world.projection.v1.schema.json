@@ -256,6 +256,35 @@
               "description": "Whether the preset lets the indirect volume\u0027s background rays take the device\u0027s ray hardware where it has it (world.rays); the software walk answers the same hits elsewhere.",
               "type": "boolean",
               "default": false
+            },
+            "distantShadows": {
+              "description": "The distant shadow map the device draws past the far cascade (its reach, texels and the light turn a held map tolerates): far shadows by rasterization, which need no ray hardware. Absent draws none.",
+              "type": [
+                "object",
+                "null"
+              ],
+              "properties": {
+                "reach": {
+                  "description": "The distance, in metres from the eye in every direction, the map covers: past the far cascade\u0027s reach and up to the far distance, within [1, 8192].",
+                  "type": "number"
+                },
+                "texels": {
+                  "description": "The texels along each side of the map at full shadow quality: a power of two from 256 through 4096. Its texel is about twice the reach over this.",
+                  "type": "integer"
+                },
+                "turnDegrees": {
+                  "description": "The light turn, in degrees, a held map tolerates before it is drawn again: the most its shadows lag a moving sun by, in (0, 10].",
+                  "type": "number"
+                }
+              },
+              "required": [
+                "reach",
+                "texels",
+                "turnDegrees"
+              ],
+              "additionalProperties": false,
+              "default": null,
+              "title": "WorldDistantShadows"
             }
           },
           "required": [
@@ -378,6 +407,10 @@
               "description": "Whether the preset lets the indirect volume\u0027s background rays take the device\u0027s ray hardware where it has it (world.rays); the software walk answers the same hits elsewhere.",
               "type": "boolean",
               "default": false
+            },
+            "distantShadows": {
+              "$ref": "#/properties/render/properties/low/properties/distantShadows",
+              "default": null
             }
           },
           "required": [
@@ -500,6 +533,10 @@
               "description": "Whether the preset lets the indirect volume\u0027s background rays take the device\u0027s ray hardware where it has it (world.rays); the software walk answers the same hits elsewhere.",
               "type": "boolean",
               "default": false
+            },
+            "distantShadows": {
+              "$ref": "#/properties/render/properties/low/properties/distantShadows",
+              "default": null
             }
           },
           "required": [
@@ -11950,6 +11987,35 @@
           "description": "Whether the indirect volume\u0027s background rays (its probe trace, the relight\u0027s shadow rays and the camera sample) boot taking the device\u0027s ray hardware where it has it, through the scene\u0027s acceleration structures (world.rays). The software walk answers the same hits wherever it is off or the device has none. Absent is off.",
           "type": "boolean",
           "default": false
+        },
+        "distantShadows": {
+          "description": "The distant shadow map the world boots drawing past the far cascade (WorldDistantShadows); a quality preset\u0027s row replaces it. Absent draws none.",
+          "type": [
+            "object",
+            "null"
+          ],
+          "properties": {
+            "reach": {
+              "description": "The distance, in metres from the eye in every direction, the map covers: past the far cascade\u0027s reach and up to the far distance, within [1, 8192].",
+              "type": "number"
+            },
+            "texels": {
+              "description": "The texels along each side of the map at full shadow quality: a power of two from 256 through 4096. Its texel is about twice the reach over this.",
+              "type": "integer"
+            },
+            "turnDegrees": {
+              "description": "The light turn, in degrees, a held map tolerates before it is drawn again: the most its shadows lag a moving sun by, in (0, 10].",
+              "type": "number"
+            }
+          },
+          "required": [
+            "reach",
+            "texels",
+            "turnDegrees"
+          ],
+          "additionalProperties": false,
+          "default": null,
+          "title": "WorldDistantShadows"
         }
       },
       "additionalProperties": false,

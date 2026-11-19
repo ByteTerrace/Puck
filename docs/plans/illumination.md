@@ -681,15 +681,16 @@ them; its checks in build step 1 are owed to a GPU leg.
    primary role when the other goes dark, and the exchange at the horizon does
    not flicker between lights.
 2. *One indexed cascade set.* Built: `SdfMeshShadowCascades` is one list of
-   entries (camera, role, slope), primary near, primary far, secondary, then
-   the far exit camera, whose count is the rendered prefix. Step 4's memo adds
+   entries (camera, role, slope), primary near, primary far, secondary, the
+   primary role's distant map, then the far exit camera; `Holds` says which
+   entries a view draws and reads. Step 4's memo adds
    radii to the entries rather than starting a second set.
 3. *The probes' answer where no entry covers a point.* Built as above. The
    promise is limited: past the far cascade only the coarsest probe level
    answers, 32 m apart, and an unmeasured probe answers lit (never dark, or a
-   camera cut would land in darkness until its probes fill). Until the far
-   shadow maps exist the valley's far view is shadowed in 32 m steps, so the
-   fallback is judged there by presented captures from the rim against the
+   camera cut would land in darkness until its probes fill). Where a device row
+   draws no distant map, and past its reach, the valley's far view is shadowed in
+   32 m steps, so the fallback is judged there by presented captures from the rim against the
    sunlit answer it replaced. A residency has one set of probe windows; they
    follow the first view when the views do not fit inside a level
    (`SdfMeshIrradiance.WindowLow`), so a second view far from the first is
@@ -698,7 +699,9 @@ them; its checks in build step 1 are owed to a GPU leg.
    120 m held between refreshes, after visibility's caster culling and behind a
    memo that states the radii the indexed set's entries gain and what centring
    costs in texels at each field of view. Centring stops a camera turn from ending the far cascade's
-   hold, and the terrain's far shadow map becomes one more entry. Narrow views
+   hold. The terrain's distant map is already an eye-centred entry of its own
+   (a sphere about a grid cell, the stated lag an authored light tolerance per
+   device row), so the memo's radii take it as it stands. Narrow views
    get coarser texels, and a far entry needs either a refresh spread over several
    frames or a stated lag at the authored day speed. A borrowed figure does not
    carry over: Cyberpunk refreshes distant shadows "every few seconds", but the
@@ -880,9 +883,9 @@ and the job system supplies the policy
 these steps. Gap 3, that nothing casts a shadow past 120 m, is step 1's terrain
 cascade, whose one home is the terrain pass's far-shadow step, and that step
 builds on the shadow roles of the rendering plan's decision 6
-(`SdfLights.RoleSlot`): the far map joins the indexed cascade set
-(`SdfMeshShadowCascades`) as one more entry of the primary role, and a point past
-it already takes the probes' answer (`sdfShadowRoleAnswer`).
+(`SdfLights.RoleSlot`): the distant map is built as the indexed cascade set's
+fourth entry of the primary role (`SdfMeshShadowCascades.DistantEntry`), and a
+point past it takes the probes' answer (`sdfShadowRoleAnswer`).
 Gap 12, that a frame holds at most 128 lights (`SdfLights.MaxLights`), blocks no
 place today, so it keeps its place in step 5: step 5's list measurement runs
 as soon as a place authors more lights than the cap.

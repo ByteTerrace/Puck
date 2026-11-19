@@ -22,10 +22,12 @@ public static partial class WorldDefinitionValidator {
         ValidateRenderLanes(definition: definition, errors: errors);
         ValidateSkyFieldScale(definition.Render.SkyFieldScale, "render.skyFieldScale", errors);
         RequireRange(definition.Render.RenderScale, 0.125f, 1f, "render.renderScale", errors);
+        if (definition.Render.DistantShadows?.Refusal(path: "render.distantShadows") is { } distant) { errors.Add(item: distant); }
         foreach (var tier in Enum.GetValues<Puck.Abstractions.Presentation.QualityTier>()) {
             if (definition.Render.Preset(tier: tier) is { } preset) {
                 RequireRange(preset.RenderScale, 0.125f, 1f, $"render.{tier.ToString().ToLowerInvariant()}.renderScale", errors);
                 ValidateSkyFieldScale(preset.SkyFieldScale, $"render.{tier.ToString().ToLowerInvariant()}.skyFieldScale", errors);
+                if (preset.DistantShadows?.Refusal(path: $"render.{tier.ToString().ToLowerInvariant()}.distantShadows") is { } row) { errors.Add(item: row); }
             }
         }
         var names = new HashSet<string>(comparer: StringComparer.Ordinal);

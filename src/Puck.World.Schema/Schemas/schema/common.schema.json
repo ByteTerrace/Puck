@@ -38,6 +38,34 @@
       ],
       "title": "SdfIndirectTier"
     },
+    "WorldDistantShadows": {
+      "description": "The key light\u0027s distant shadow map: one more shadow map past the far cascade, with texels of its own, so ridges shadow walls hundreds of metres off without costing the near cascades precision. It draws only what stands still and holds what it drew while the light turns within TurnDegrees and the eye stays within an eighth of the reach of where it was centred, so it costs a frame nothing between those changes. A device\u0027s quality row chooses it (DistantShadows); a view\u0027s shadow quality halves its texels as it does the cascades\u0027.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "reach": {
+          "description": "The distance, in metres from the eye in every direction, the map covers: past the far cascade\u0027s reach and up to the far distance, within [1, 8192].",
+          "type": "number"
+        },
+        "texels": {
+          "description": "The texels along each side of the map at full shadow quality: a power of two from 256 through 4096. Its texel is about twice the reach over this.",
+          "type": "integer"
+        },
+        "turnDegrees": {
+          "description": "The light turn, in degrees, a held map tolerates before it is drawn again: the most its shadows lag a moving sun by, in (0, 10].",
+          "type": "number"
+        }
+      },
+      "required": [
+        "reach",
+        "texels",
+        "turnDegrees"
+      ],
+      "additionalProperties": false,
+      "title": "WorldDistantShadows"
+    },
     "WorldQualityPreset": {
       "type": [
         "object",
@@ -135,6 +163,11 @@
           "description": "Whether the preset lets the indirect volume\u0027s background rays take the device\u0027s ray hardware where it has it (world.rays); the software walk answers the same hits elsewhere.",
           "type": "boolean",
           "default": false
+        },
+        "distantShadows": {
+          "$ref": "#/$defs/WorldDistantShadows",
+          "description": "The distant shadow map the device draws past the far cascade (its reach, texels and the light turn a held map tolerates): far shadows by rasterization, which need no ray hardware. Absent draws none.",
+          "default": null
         }
       },
       "required": [
