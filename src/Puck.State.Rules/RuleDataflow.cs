@@ -88,9 +88,10 @@ public static class RuleDataflow {
             tokens: tokens
         );
     }
-    /// <summary>Appends everything one judgement of a rule observes — its locals (declared and implicit, all evaluated
-    /// before the gate), its live-row selection and its gate, never its effects, which run only once the verdict is
-    /// in — as the rows it reads and the facts it observes: what a read schedule is built from.</summary>
+    /// <summary>Appends everything one judgement of a rule observes — the locals evaluated before the gate (every one
+    /// <see cref="CompiledRule.Deferred"/> leaves undeferred), its live-row selection and its gate, never its effects
+    /// or the locals deferred to them, which run only once the verdict is in — as the rows it reads and the facts it
+    /// observes: what a read schedule is built from.</summary>
     /// <param name="rule">The compiled rule.</param>
     /// <param name="reads">The read set being collected.</param>
     /// <param name="facts">The needs being built, with every facet-bearing fact instance recorded.</param>
@@ -114,9 +115,14 @@ public static class RuleDataflow {
                 CollectSourceFacts(into: facts, source: token.RightSource);
             }
         }
-        foreach (var local in (rule.Locals ?? [])) {
-            CollectExpression(into: reads, tokens: local.Expression);
-            CollectExpressionSchedulingFacts(into: facts, tokens: local.Expression);
+        var locals = (rule.Locals ?? []);
+
+        for (var ordinal = 0; (ordinal < locals.Length); ordinal++) {
+            if (rule.IsDeferred(ordinal: ordinal)) {
+                continue;
+            }
+            CollectExpression(into: reads, tokens: locals[ordinal].Expression);
+            CollectExpressionSchedulingFacts(into: facts, tokens: locals[ordinal].Expression);
         }
         foreach (var live in (rule.Zones?.References ?? [])) {
             live.CollectReads(into: reads);

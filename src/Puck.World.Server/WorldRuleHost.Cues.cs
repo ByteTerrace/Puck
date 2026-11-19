@@ -20,6 +20,8 @@ public sealed partial class WorldRuleHost {
             if (!factsByRule.TryGetValue(rule.Name, out var facts)) { factsByRule.Add(rule.Name, facts = new()); }
             var access = RuleDataflow.Reads(rule);
             RuleDataflow.CollectJudgement(rule, access, facts);
+            // A firing also reads the locals deferred to it, which a judgement leaves out.
+            foreach (var local in (rule.Locals ?? [])) { RuleDataflow.CollectExpressionSchedulingFacts(local.Expression, facts); }
             RuleDataflow.CollectEffectFacts(rule.Effects, facts, includeSources: true);
             if (rule is CompiledWorldFactsRule world) {
                 if (world.Interaction is not null) { wholePopulation.Add(rule.Name); }

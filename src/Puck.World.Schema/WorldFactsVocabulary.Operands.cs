@@ -285,6 +285,20 @@ public static partial class WorldFactsVocabulary {
             rowOrdinal: rowOrdinal,
             valueKind: valueKind
         );
+        // What one input-history read walks: a pattern its matching program; a read of the event a sweep bound, or of a
+        // hold, the one record it names; any other event read the newest-first scan of the retained history.
+        private static long InputReadWork(WorldInputOperand input, WorldDefinition definition) {
+            var catalog = WorldInputCatalog.For(definition: definition);
+            var capacity = (definition.InputHistory ?? new WorldInputHistory()).EventCapacity;
+
+            if (input.Pattern >= 0) {
+                return catalog.PatternWork(input.Pattern, capacity);
+            }
+
+            return (((input.Occurrence < 0) || (input.Facet is WorldInputFacet.HeldSince or WorldInputFacet.HeldPress))
+                ? 1L
+                : catalog.HistoryCapacity(ingressCapacity: capacity));
+        }
         private static WorldInputOperand CompileInput(ChannelCall call, WorldFactsCompileContext world, string ruleName) {
             var facet = call.Channel switch {
                 "inputEdge" => WorldInputFacet.Edge,
@@ -324,7 +338,7 @@ public static partial class WorldFactsVocabulary {
                     if ((world.Iteration is not WorldInputIteration iteration) || (iteration.Owner != owner)) { throw Invalid(detail: "each requires inputEvents of the same owner"); }
                     occurrence = -1;
                 } else if (!int.TryParse(call.Text(index: (ownerArguments + 2)), NumberStyles.None, CultureInfo.InvariantCulture, out occurrence) || (occurrence < 0) ||
-                    (occurrence >= WorldInputCatalog.For(definition: world.Definition).HistoryCapacity(ingressCapacity: (world.Definition.InputHistory?.EventCapacity ?? 256)))) { throw Invalid(detail: "occurrence outside retained capacity"); }
+                    (occurrence >= WorldInputCatalog.For(definition: world.Definition).HistoryCapacity(ingressCapacity: (world.Definition.InputHistory ?? new WorldInputHistory()).EventCapacity))) { throw Invalid(detail: "occurrence outside retained capacity"); }
             }
             var shape = catalog.Channels[logical].Shape;
 
@@ -370,10 +384,9 @@ public static partial class WorldFactsVocabulary {
             }) {
                 RuleCompiler.RefuseKeyOnReservedChannel(cell, site.KeyFieldLabel, name, ruleName);
                 var input = CompileInput(call: call, ruleName: ruleName, world: world);
-                var capacity = (world.Definition.InputHistory?.EventCapacity ?? 256);
 
-                fact = BodyFact(input.ValueKind, world, (input.Owner.Body ?? default), default, -1,
-                    ((input.Pattern < 0) ? WorldInputCatalog.For(definition: world.Definition).HistoryCapacity(ingressCapacity: capacity) : WorldInputCatalog.For(definition: world.Definition).PatternWork(input.Pattern, capacity)), facet => facet.Read(operand: input), name);
+                fact = BodyFact(input.ValueKind, world, (input.Owner.Body ?? default), default, -1, InputReadWork(definition: world.Definition, input: input),
+                    facet => facet.Read(operand: input), name, payload: input);
                 return true;
             }
             if (string.Equals(
@@ -1331,8 +1344,8 @@ public static partial class WorldFactsVocabulary {
                     var input = CompileInput(new ChannelCall("inputTime", call.Arguments.Skip(count: 2).ToArray()), world, ruleName);
                     var clock = new ClockOperand(facet: clockFacet!.Value, input: input);
 
-                    fact = BodyFact(clock.ValueKind, world, (input.Owner.Body ?? default), default, -1, WorldInputCatalog.For(definition: world.Definition).HistoryCapacity(ingressCapacity: (world.Definition.InputHistory?.EventCapacity ?? 256)),
-                        facet => facet.Read(operand: clock), name);
+                    fact = BodyFact(clock.ValueKind, world, (input.Owner.Body ?? default), default, -1, InputReadWork(definition: world.Definition, input: input),
+                        facet => facet.Read(operand: clock), name, payload: clock);
                 } else { fact = new WorldClockOperand(facet: clockFacet!.Value); }
             } else if (name.StartsWith(
                 comparisonType: StringComparison.Ordinal,

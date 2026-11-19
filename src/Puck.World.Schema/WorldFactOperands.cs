@@ -77,6 +77,9 @@ public sealed class WorldClockOperand : WorldFactOperand {
     /// <param name="facet">The value read from the clock's current position.</param>
     public WorldClockOperand(ClockFacet facet) : base(valueKind: CellKind.Int) => m_operand = new ClockOperand(facet: facet);
 
+    /// <summary>Gets the value read from the clock's current position.</summary>
+    public ClockFacet Reading => m_operand.Facet;
+
     /// <inheritdoc/>
     public override RuleWork Cost(IRuleCostContext context) => 1L;
     /// <inheritdoc/>

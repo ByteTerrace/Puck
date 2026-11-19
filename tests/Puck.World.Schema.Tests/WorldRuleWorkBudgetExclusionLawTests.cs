@@ -231,8 +231,8 @@ public sealed class WorldRuleWorkBudgetExclusionLawTests {
         var firingAdvance = lineAdvance.FiringUnits;
         var advanceCost = lineAdvance.WorkUnits;
 
-        // Effects apply immediately: a rule advancing the phase lets the next phase's rules fire in the same tick, so
-        // the group prices its two costliest values, never one. All checks sum.
+        // Effects apply immediately: a rule advancing the phase between two phases' rules lets the later one fire in
+        // the same tick, so the group prices its two costliest values, never one. All checks sum.
         var ruleC = Rule(
             "c",
             PhaseIs(value: 2)
@@ -244,6 +244,17 @@ public sealed class WorldRuleWorkBudgetExclusionLawTests {
 
         Assert.Equal(
             (((checkAdvance + (3 * checkB)) + firingAdvance) + (2 * firingB)),
+            Work(
+                ruleB,
+                advanceRule,
+                ruleC,
+                ruleD
+            )
+        );
+        // An advance ahead of every phase's rule changes the phase before any of them reads it, so they still read one
+        // value between them and one firing is priced.
+        Assert.Equal(
+            (((checkAdvance + (3 * checkB)) + firingAdvance) + firingB),
             Work(
                 advanceRule,
                 ruleB,
@@ -496,17 +507,44 @@ public sealed class WorldRuleWorkBudgetExclusionLawTests {
             (3L, 130L),
             RuleWorkBudget.Tally(
                 contributors: lines,
-                writers: new Dictionary<(int RowOrdinal, CellKey Key), long>()
+                writers: new Dictionary<(int RowOrdinal, CellKey Key), RuleCellWriters>()
             )
         );
-        // A preceding writer can admit another phase; its own cost belongs to its own contributor.
+        // A writer that may run anywhere can admit another phase; its own cost belongs to its own contributor.
         Assert.Equal(
             (3L, 230L),
             RuleWorkBudget.Tally(
                 contributors: lines,
-                writers: new Dictionary<(int RowOrdinal, CellKey Key), long> { [PhaseCell] = 1 }
+                writers: new Dictionary<(int RowOrdinal, CellKey Key), RuleCellWriters> { [PhaseCell] = Writers(order: -1L) }
             )
         );
+
+        // Placed in one pass at 0, 1 and 2, the phases read one value unless a write lands from the first through
+        // before the last.
+        var placed = lines.Select(selector: static (line, index) => (line with { Order = index })).ToArray();
+
+        Assert.Equal(
+            (3L, 230L),
+            RuleWorkBudget.Tally(
+                contributors: placed,
+                writers: new Dictionary<(int RowOrdinal, CellKey Key), RuleCellWriters> { [PhaseCell] = Writers(order: 1L) }
+            )
+        );
+        Assert.Equal(
+            (3L, 130L),
+            RuleWorkBudget.Tally(
+                contributors: placed,
+                writers: new Dictionary<(int RowOrdinal, CellKey Key), RuleCellWriters> { [PhaseCell] = Writers(order: 2L) }
+            )
+        );
+    }
+
+    private static RuleCellWriters Writers(long order) {
+        var writers = new RuleCellWriters();
+
+        writers.Add(firings: 1L, order: order);
+
+        return writers;
     }
 
     // The one pinned cell these exclusion lines discriminate on, addressed the way a compiled gate pins it.
