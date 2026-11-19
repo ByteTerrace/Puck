@@ -644,6 +644,11 @@ public sealed partial class SdfWorldTables {
     /// <param name="mesh">The mesh, a chunk of a chunked group's mesh being a mesh of its own.</param>
     /// <returns><see langword="true"/> while the region owes it.</returns>
     public bool OwesMesh(SdfMesh mesh) => (m_meshArena.Refused.Contains(item: mesh) || (m_meshArena.Placements.ContainsKey(key: mesh) && m_meshesOwed.Contains(mesh: mesh)));
+    /// <summary>Returns whether the latest staged draw list names a mesh the region refuses under its limit, so its draws
+    /// wait out of the frame until a later list fits it. Read on the frame's thread.</summary>
+    /// <param name="mesh">The mesh, a chunk of a chunked group's mesh being a mesh of its own.</param>
+    /// <returns><see langword="true"/> while the region refuses it.</returns>
+    public bool RefusesMesh(SdfMesh mesh) => m_meshArena.Refused.Contains(item: mesh);
     /// <summary>Names the meshes the draws are about to name, in place of those named ahead before
     /// (<see cref="SdfMeshRegionArena.PlanAhead"/>): each is placed beside the meshes the draws read and lands through
     /// the background work after the meshes a draw waits on, and the region keeps it until a draw list names it or it

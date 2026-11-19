@@ -182,8 +182,10 @@ public sealed partial class SdfWorldResidency : IDisposable {
     public SdfMeshDemand MeshDemand { get; } = new();
 
     /// <summary>Describes the residency's mesh residency for <c>world.residency</c>: the latest bake's landing from its
-    /// start, near the primary seat's eye and everywhere (<see cref="SdfMeshPathBake.DescribeResidency"/>), the store's reads,
-    /// the mesh region's landing (<see cref="SdfWorldTables.DescribeLanding"/>), its presentation's selector
+    /// start, near the primary seat's eye and everywhere (<see cref="SdfMeshPathBake.DescribeResidency"/>), its floors
+    /// (<see cref="SdfMeshPathBake.DescribeFloors"/>), the store's reads, the mesh region's landing
+    /// (<see cref="SdfWorldTables.DescribeLanding"/>), what the raster passes selected of it
+    /// (<see cref="SdfWorldTables.DescribeSelection"/>), its presentation's selector
     /// (<see cref="SdfResidencySelector.Describe"/>) with the background work's one budget, the tables' fixed cost (<see cref="SdfWorldTables.DescribeFixedCost"/>), the background GPU work's buffers
     /// (<see cref="SdfGpuWork.DescribeBytes"/>), the frame's sampled table (<see cref="SdfWorldTables.DescribeFrameSampled"/>),
     /// the latest program's emission, build and size, and the irradiance
@@ -198,6 +200,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
 
         return [
             MeshPathBake.DescribeResidency(radius: radius),
+            MeshPathBake.DescribeFloors(),
             $"{(MeshPathBake.Library.Disk?.DescribeReads() ?? "store=none")} {SdfMesh.DescribeRestores()}",
             (m_tables?.DescribeLanding() ?? "region=none"),
             (m_tables?.DescribeSelection() ?? "selection=none"),
