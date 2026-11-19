@@ -51,7 +51,9 @@ static const float SdfProbeNearest = 1.0e-4;
 bool sdfProbeWalk(float3 origin, float3 direction, float maximum, uint lane, bool anyHit, out float distance, out float3 normal, out uint material, out uint2 identity) {
     distance = maximum; normal = 0; material = 0;
     identity = uint2(0xffffffffu, 0xffffffffu);
-    if (sdfProbeScene[0] == 0) { return false; }
+    // An interval no wider than the near bound holds no hit the software walk accepts, and a ray query needs
+    // TMin <= TMax: a shadow ray toward a light just past its surface offset answers clear here.
+    if ((sdfProbeScene[0] == 0) || (maximum <= SdfProbeNearest)) { return false; }
     RayDesc ray;
     ray.Origin = origin;
     ray.Direction = direction;

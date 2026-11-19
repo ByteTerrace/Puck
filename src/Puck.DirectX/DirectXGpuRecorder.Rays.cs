@@ -8,20 +8,21 @@ public sealed unsafe partial class DirectXGpuRecorder {
         ArgumentNullException.ThrowIfNull(argument: scratch);
         var state = DecodeState(commandBufferHandle: commandBufferHandle);
 
-        // Every earlier copy, kernel or build write is visible to the build's reads of its inputs and scratch.
+        // Every earlier copy, kernel or build write is visible to the build's reads of its inputs and its scratch. Scratch is
+        // unordered access, which no acceleration-structure sync scope carries in the enhanced barriers' compatibility
+        // table, so both sides take SYNC_ALL, compatible with every access.
         GlobalBarrier(state: state,
             accessAfter: (D3D12_BARRIER_ACCESS.D3D12_BARRIER_ACCESS_SHADER_RESOURCE | D3D12_BARRIER_ACCESS.D3D12_BARRIER_ACCESS_UNORDERED_ACCESS |
                 D3D12_BARRIER_ACCESS.D3D12_BARRIER_ACCESS_RAYTRACING_ACCELERATION_STRUCTURE_READ | D3D12_BARRIER_ACCESS.D3D12_BARRIER_ACCESS_RAYTRACING_ACCELERATION_STRUCTURE_WRITE),
             accessBefore: (D3D12_BARRIER_ACCESS.D3D12_BARRIER_ACCESS_COPY_DEST | D3D12_BARRIER_ACCESS.D3D12_BARRIER_ACCESS_UNORDERED_ACCESS |
                 D3D12_BARRIER_ACCESS.D3D12_BARRIER_ACCESS_RAYTRACING_ACCELERATION_STRUCTURE_WRITE),
-            syncAfter: D3D12_BARRIER_SYNC.D3D12_BARRIER_SYNC_BUILD_RAYTRACING_ACCELERATION_STRUCTURE,
-            syncBefore: (D3D12_BARRIER_SYNC.D3D12_BARRIER_SYNC_COPY | D3D12_BARRIER_SYNC.D3D12_BARRIER_SYNC_COMPUTE_SHADING |
-                D3D12_BARRIER_SYNC.D3D12_BARRIER_SYNC_BUILD_RAYTRACING_ACCELERATION_STRUCTURE | D3D12_BARRIER_SYNC.D3D12_BARRIER_SYNC_COPY_RAYTRACING_ACCELERATION_STRUCTURE));
+            syncAfter: D3D12_BARRIER_SYNC.D3D12_BARRIER_SYNC_ALL,
+            syncBefore: D3D12_BARRIER_SYNC.D3D12_BARRIER_SYNC_ALL);
 
         var geometry = default(D3D12_RAYTRACING_GEOMETRY_DESC);
         var description = new D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC {
             DestAccelerationStructureData = DirectXGpuAccelerationStructures.AddressOf(structure: destination),
-            Inputs = DirectXGpuAccelerationStructures.Describe(addresses: true, geometry: &geometry, inputs: in inputs),
+            Inputs = DirectXGpuAccelerationStructures.Describe(geometry: &geometry, inputs: in inputs),
             ScratchAccelerationStructureData = ((ID3D12Resource*)scratch.BufferHandle)->GetGPUVirtualAddress(),
         };
 
@@ -63,14 +64,13 @@ public sealed unsafe partial class DirectXGpuRecorder {
     }
 
     // Makes a build's or copy's structure write, and its scratch write, visible to every later build, copy, post-build
-    // read and kernel.
+    // read and kernel. The scratch's unordered access takes SYNC_ALL on both sides, as BuildAccelerationStructure's does.
     private static void StructureWritten(DirectXCommandBufferState state) =>
         GlobalBarrier(state: state,
             accessAfter: (D3D12_BARRIER_ACCESS.D3D12_BARRIER_ACCESS_RAYTRACING_ACCELERATION_STRUCTURE_READ | D3D12_BARRIER_ACCESS.D3D12_BARRIER_ACCESS_RAYTRACING_ACCELERATION_STRUCTURE_WRITE | D3D12_BARRIER_ACCESS.D3D12_BARRIER_ACCESS_UNORDERED_ACCESS),
             accessBefore: (D3D12_BARRIER_ACCESS.D3D12_BARRIER_ACCESS_RAYTRACING_ACCELERATION_STRUCTURE_WRITE | D3D12_BARRIER_ACCESS.D3D12_BARRIER_ACCESS_UNORDERED_ACCESS),
-            syncAfter: (D3D12_BARRIER_SYNC.D3D12_BARRIER_SYNC_BUILD_RAYTRACING_ACCELERATION_STRUCTURE | D3D12_BARRIER_SYNC.D3D12_BARRIER_SYNC_COPY_RAYTRACING_ACCELERATION_STRUCTURE |
-                D3D12_BARRIER_SYNC.D3D12_BARRIER_SYNC_EMIT_RAYTRACING_ACCELERATION_STRUCTURE_POSTBUILD_INFO | D3D12_BARRIER_SYNC.D3D12_BARRIER_SYNC_COMPUTE_SHADING),
-            syncBefore: (D3D12_BARRIER_SYNC.D3D12_BARRIER_SYNC_BUILD_RAYTRACING_ACCELERATION_STRUCTURE | D3D12_BARRIER_SYNC.D3D12_BARRIER_SYNC_COPY_RAYTRACING_ACCELERATION_STRUCTURE));
+            syncAfter: D3D12_BARRIER_SYNC.D3D12_BARRIER_SYNC_ALL,
+            syncBefore: D3D12_BARRIER_SYNC.D3D12_BARRIER_SYNC_ALL);
     // Records one global barrier after the texture transitions queued before it: the one door a global barrier takes,
     // MemoryBarrier's included.
     private static void GlobalBarrier(DirectXCommandBufferState state, D3D12_BARRIER_SYNC syncBefore, D3D12_BARRIER_SYNC syncAfter, D3D12_BARRIER_ACCESS accessBefore, D3D12_BARRIER_ACCESS accessAfter) {

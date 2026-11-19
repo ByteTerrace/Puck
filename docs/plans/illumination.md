@@ -1051,7 +1051,10 @@ words through `sdfProbeSurface`, so it is never a second relight. As built:
   bottom retired with its mesh tier outlives every queued trace of it.
 - *Switch.* `render.rayQueries`, each quality preset's `rayQueries` row and
   `world.rays` turn it on; a query takes the variant only once the top level
-  stands for the published scene, and the software walk otherwise.
+  stands for the published scene, and the software walk otherwise. Turning it
+  off, or publishing another scene, retires the structures the publication no
+  longer uses, and a structure job the background service hands back (no
+  room) backs off so the software walk's queries keep running.
 - *Reading.* `sdf.mesh-gi.gpu-query-rays` and `gpu-query-trace-nanoseconds`
   are the hardware's share of `gpu-rays` and `gpu-trace-nanoseconds`, so rays
   per second read both ways from one run; `world.residency`'s `trace-structure-*`
