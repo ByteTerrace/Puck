@@ -439,7 +439,7 @@ laws exercise that boundary.
   creation's each on its own slot, before any text-coupled instance opens
   (`WorldCreationInstances.Emit`). A glass draw (`SdfMeshDraw.Glass`) is drawn by the
   glass pass alone and stays out of the mesh pass, the cascades and the
-  irradiance scene (`SdfMeshIrradianceScene.IsStatic`).
+  irradiance scene (`SdfMeshDraw.IsStatic`).
 - **Every shape declares its spacing by one rule.** `WorldShapeDetail.Of`
   serves a static stamp's shape, a pooled blend group's part and an ungrouped
   pooled shape alike, feeding `SdfInstanceRange.Detail` and

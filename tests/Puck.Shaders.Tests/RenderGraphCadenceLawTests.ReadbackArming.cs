@@ -91,6 +91,30 @@ public sealed partial class RenderGraphCadenceLawTests {
         _ = node.ProduceFrame(context: default);
         Assert.Equal(before + 2, node.FrameCounter);
     }
+    // A package's commit (a camera a shadow layer was drawn from, a target known clear) has no checkpoint to roll back, so
+    // a recorder hears Submitted only for a submission that reached the queue: never for one its batch abandoned, whose
+    // commands never ran, and once for the next frame that did run.
+    [Fact]
+    public void ARecorderCommitsOnlyASubmissionThatReachedTheQueue() {
+        var gpu = new FakePipelineGpu { Recording = true };
+        var factory = new ArmingFactory();
+        var packages = new RenderGraphPackageRecorders();
+
+        foreach (var package in new[] { Writer, Shade, Composite }) { packages.Register(factory: factory, package: package); }
+        using var node = new ShaderPipelineRenderNode(name: "commit-on-hand-over", deviceContext: gpu, pipelines: new GpuPassPipelineCache(),
+            hostsOnDirectX: false, width: 32, height: 32, packages: packages);
+
+        node.Swap(pipeline: new CompiledShaderPipeline(plan: new RenderGraphCompiler(Catalog()).Compile(definition: Graph()).Pipeline,
+            shaders: new Dictionary<string, CompiledShader>()));
+        node.ProduceUntilInstalled();
+        Assert.Equal(1, factory.Commits);
+
+        gpu.AbandonNextSubmission = true;
+        _ = node.ProduceFrame(context: default);
+        Assert.Equal(1, factory.Commits);
+        _ = node.ProduceFrame(context: default);
+        Assert.Equal(2, factory.Commits);
+    }
     [Fact]
     public void AnAbandonedSlotsResultIsDroppedAndALaterCompletionDeliversNothing() {
         var completed = new List<int>();
@@ -109,6 +133,8 @@ public sealed partial class RenderGraphCadenceLawTests {
     private sealed class ArmingFactory : IRenderGraphPackageFactory {
         public readonly List<string> Events = [];
         public bool Skip;
+        // The commits (IRenderGraphPackageRecorder.Submitted) the readback pass has heard.
+        public int Commits;
 
         public ValueTask<IDisposable?> BuildAsync(RenderGraphPackageRecorderContext context, CancellationToken cancellationToken) =>
             ValueTask.FromResult<IDisposable?>(result: null);
@@ -129,6 +155,7 @@ public sealed partial class RenderGraphCadenceLawTests {
                 return RenderGraphPackageOutcome.Drew;
             }
             public bool TryReadback(int slot, int index, out RenderGraphBufferReadback readback) { readback = default; return false; }
+            public void Submitted() => owner.Commits++;
             public void Submitted(int slot) => owner.Events.Add(item: $"submitted {slot}");
             public void Completed(int slot) => owner.Events.Add(item: $"completed {slot}");
             public void Abandoned(int slot) => owner.Events.Add(item: $"abandoned {slot}");

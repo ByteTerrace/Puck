@@ -325,9 +325,17 @@ public readonly record struct SdfMeshDisplacement(int Handle, float Low, float H
 public readonly record struct SdfMeshDraw(SdfMesh Mesh, Matrix4x4 ObjectToWorld, int Material, object Identity) {
     /// <summary>Gets a stable surface identity for motion history when the picking identity also carries changing pose metadata.</summary>
     public object? MotionIdentity { get; init; }
-    /// <summary>Gets whether the draw belongs to a moving body or animated placement, which the irradiance volume's
-    /// static scene leaves out (<see cref="SdfMeshIrradianceScene.IsStatic"/>).</summary>
+    /// <summary>Gets whether the draw's placement moves (a moving body or an animated placement), which the static scene
+    /// leaves out (<see cref="IsStatic"/>).</summary>
     public bool IsDynamic { get; init; }
+    /// <summary>Gets whether the draw belongs to the static scene, which the irradiance volume's probes and the distant
+    /// shadow map hold while nothing in its staged record changes: an opaque draw of a mesh whose placement is not
+    /// <see cref="IsDynamic"/> and whose surface reads nothing that moves outside its record. A skinned mesh
+    /// (<see cref="SdfMesh.VertexMembers"/>), which reads its members' live slots, and a displaced draw
+    /// (<see cref="Displacement"/>), which reads the frame's sampled heights, are never static, whatever
+    /// <see cref="IsDynamic"/> says. Glass neither blocks nor bounces the probes' rays, and a draw without a mesh draws
+    /// nothing.</summary>
+    public bool IsStatic => ((Mesh is { } mesh) && mesh.VertexMembers.IsEmpty && (Displacement is null) && !IsDynamic && !Glass);
     /// <summary>Gets the detail tier the drawn mesh was baked at (<see cref="SdfMeshTier"/>), or -1 for a mesh no bake
     /// tiered (an authored mesh). It reports only, in the selection counts
     /// (<see cref="SdfWorldTables.DescribeSelection"/>): no staged record or pass reads it.</summary>
@@ -764,7 +772,7 @@ public static class SdfMeshRegion {
             : draw.EnclosesSolid);
 
         writer[(SdfMeshRecord.SelectionWord + 3)] = (boxed ? 0u : 1u) | (draw.Glass ? 2u : 0u) | (enclosed ? 4u : 0u) |
-            (SdfMeshIrradianceScene.IsStatic(draw: in draw) ? 0u : SdfMeshRecord.DynamicFlag);
+            (draw.IsStatic ? 0u : SdfMeshRecord.DynamicFlag);
         writer[(SdfMeshRecord.SelectionWord + 11)] = generation;
         writer[(SdfMeshRecord.SelectionWord + 15)] = ((uint)mesh.Levels.Count);
 

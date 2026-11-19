@@ -218,7 +218,7 @@ public sealed partial class SdfWorldTables {
     private static long StaticDrawRevisions;
     private long m_staticDrawRevision = Interlocked.Increment(location: ref StaticDrawRevisions);
 
-    /// <summary>Gets the revision of the staged records of the static scene (<see cref="SdfMeshIrradianceScene.IsStatic"/>):
+    /// <summary>Gets the revision of the staged records of the static scene (<see cref="SdfMeshDraw.IsStatic"/>):
     /// a new value whenever a staging changes what such a draw draws (its mesh, placement, material or clip), lands its
     /// mesh, leaves it absent, or adds or removes such a draw, and never otherwise, so a moving body, a pose or a mesh the
     /// arena only relocated leaves it as it was. Unique across every table of the process. A pass that draws static casters
@@ -450,7 +450,7 @@ public sealed partial class SdfWorldTables {
     }
     private void Unname(int row) {
         RowChanged(row: row);
-        if ((m_stagedDraws[row].Mesh is not null) && SdfMeshIrradianceScene.IsStatic(draw: in m_stagedDraws[row])) { StaticDrawsChanged(); }
+        if (m_stagedDraws[row].IsStatic) { StaticDrawsChanged(); }
         if (m_stagedDraws[row].Mesh is { } mesh) { m_meshClaims!.Release(mesh: mesh); }
         m_rowsByMesh.Remove(row: row); m_absentRows.Remove(item: row); m_glassIndices.Remove(item: row);
         m_stagedDraws[row] = default; m_stagedOccupancies[row] = 0;
@@ -570,7 +570,7 @@ public sealed partial class SdfWorldTables {
 
                     // What a static draw draws changed: its content, or whether its mesh stands (a landing or an
                     // eviction). A relocation or an occupancy change alone draws the same triangles.
-                    if ((((draw.Mesh is not null) && SdfMeshIrradianceScene.IsStatic(draw: in draw)) || ((previous.Mesh is not null) && SdfMeshIrradianceScene.IsStatic(draw: in previous))) &&
+                    if ((draw.IsStatic || previous.IsStatic) &&
                         ((index >= m_stagedCount) || !draw.SameStagedContent(other: in previous) ||
                             ((draw.Mesh is not null) && (m_absentRows.Contains(item: index) == MeshStands(mesh: draw.Mesh))))) {
                         StaticDrawsChanged();
