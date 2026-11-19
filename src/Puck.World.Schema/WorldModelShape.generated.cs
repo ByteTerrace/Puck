@@ -1645,6 +1645,8 @@ public static partial class WorldModelShape {
                 M("dynamics", typeof(global::System.String), typeof(global::Puck.World.Authoring.CreationDriverDocument), "Dynamics", Read | Write, static value => ((global::Puck.World.Authoring.CreationDriverDocument)value).Dynamics),
                 M("cadenceBy", typeof(global::Puck.World.Authoring.CreationDriverCurveDocument), typeof(global::Puck.World.Authoring.CreationDriverDocument), "CadenceBy", Read | Write, static value => ((global::Puck.World.Authoring.CreationDriverDocument)value).CadenceBy),
                 M("weightBy", typeof(global::Puck.World.Authoring.CreationDriverCurveDocument), typeof(global::Puck.World.Authoring.CreationDriverDocument), "WeightBy", Read | Write, static value => ((global::Puck.World.Authoring.CreationDriverDocument)value).WeightBy),
+                M("parts", typeof(global::System.Collections.Generic.IReadOnlyList<global::System.String>), typeof(global::Puck.World.Authoring.CreationDriverDocument), "Parts", Read | Write, static value => ((global::Puck.World.Authoring.CreationDriverDocument)value).Parts),
+                M("mode", typeof(global::System.String), typeof(global::Puck.World.Authoring.CreationDriverDocument), "Mode", Read | Write, static value => ((global::Puck.World.Authoring.CreationDriverDocument)value).Mode),
             ],
             []),
         T(typeof(global::Puck.World.Authoring.CreationEffectorDocument), true, JsonTypeInfoKind.Object, null,

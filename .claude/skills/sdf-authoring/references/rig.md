@@ -109,9 +109,32 @@ query padding and the body's contact skin stay in world units. The local mesh st
 baked. The debug glacier is the standard family's example.
 
 `drivers` is any number of named `{ name, signal, cadence, when, blendInSeconds,
-blendOutSeconds, dynamics, cadenceBy, weightBy }`. Everything animated names one.
-They advance in declaration order, and a driver reads only drivers declared
-before it, the rule a shape's `parent` follows.
+blendOutSeconds, dynamics, cadenceBy, weightBy, parts, mode }`. Everything
+animated names one. They advance in declaration order, and a driver reads only
+drivers declared before it, the rule a shape's `parent` follows.
+
+A driver is a layer. `parts` (part ids) is its mask: its swings, slides and
+clip poses play only on the shapes those parts cover (omitted, the shapes it
+poses), and a motion it authors outside its mask is warned about (PUCK132), not
+refused. `mode` is `add` (default) or `replace`: a replacing driver of weight
+`w` scales every driver declared before it by `1 - w` on its mask's shapes and
+nowhere else, so a stance takes the arms from the gait, the run and the jump
+without editing them. A driver's share on a shape is its weight times `1 - w`
+for each replacing driver declared after it that covers the shape
+(`CreationRig.Share`, the one place a share is formed); every swing, slide and
+clip term uses it, and a term at share zero is skipped. Declaration order sets
+shares only: the order turns compose in on a shape is the shape's own, so a
+driver's row can move above or below a stance without changing how the turns
+interleave. A replacing layer at weight zero leaves every pose bit for bit as it
+was.
+
+A smooth seam's envelope (`CreationMotion.Envelope`) counts each swing and slide
+in full and a shape's clip turns as one turn about its joint
+(`CreationMotion.ClipLimit`): each adding driver's tracks on the shape summed,
+plus the largest such sum among replacing drivers. The seam box is the overlap
+of the two parts' boxes widened by the smooth radius `k` on every side, so the
+reach from any joint inside it is at least `√3·k`, and a clip turn over about
+16.6 degrees at a joint cannot skin whatever `k` is.
 
 | Signal | Behavior |
 |---|---|

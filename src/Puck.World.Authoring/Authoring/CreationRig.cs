@@ -129,7 +129,18 @@ public sealed class CreationRigDriver {
     public CreationRigRead? CadenceCurve { get; }
     /// <summary>Gets the curve row <see cref="CreationDriverDocument.WeightBy"/> reads, else <see langword="null"/>.</summary>
     public CreationRigRead? WeightCurve { get; }
+    /// <summary>Gets whether the driver replaces (<see cref="CreationDriverDocument.ModeReplace"/>): it scales every driver
+    /// declared before it by one minus its weight on the shapes of its <see cref="Mask"/>.</summary>
+    public bool Replaces => (Document.Mode is CreationDriverDocument.ModeReplace);
+    /// <summary>Gets the shapes the driver's layer covers, ascending: those its parts cover, or, with no parts, those its
+    /// own terms pose. Its terms play only here.</summary>
+    public IReadOnlyList<int> Mask { get; internal set; } = [];
 }
+/// <summary>A motion a driver authors on a shape its mask does not cover, which never plays.</summary>
+/// <param name="Driver">The driver's index.</param>
+/// <param name="Shape">The shape's index.</param>
+/// <param name="Member">The authored member: <c>swings[i]</c>, <c>slides[i]</c> or <c>clip 'name'</c>.</param>
+public readonly record struct CreationRigUnplayed(int Driver, int Shape, string Member);
 /// <summary>
 /// One motion a driver plays on one shape, in the order the shape composes them: its swings as authored, then its clips'
 /// turns in the order the clips are listed, then its slides and its clips' keyed slides. A term names its driver by index
@@ -242,15 +253,20 @@ public sealed class CreationRig {
     private readonly CreationRigTerm[] m_terms;
     private readonly int[] m_termStarts;
     private readonly DocumentVector3[] m_joints;
+    private readonly int[] m_replacers;
+    private readonly int[] m_replacerStarts;
     private readonly IReadOnlyDictionary<string, string>? m_followed;
     private int[]? m_owners;
     private float? m_reach;
     private string? m_reachRefusal;
     private readonly ConditionalWeakTable<IReadOnlyDictionary<string, string>, CreationRig> m_follows = new();
 
-    private CreationRig(CreationDocument document, CreationRigWriters[] writers, int[] parents, CreationRigTerm[] terms, int[] termStarts, DocumentVector3[] joints, IReadOnlyList<CreationRigDriver> drivers, IReadOnlyList<CreationRigEffector> effectors, IReadOnlyList<CreationRigClip> clips, IReadOnlyList<CreationRigRead> reads, CreationRigRead? sizeBy, bool animates, IReadOnlyDictionary<string, string>? followed) {
+    private CreationRig(CreationDocument document, CreationRigWriters[] writers, int[] parents, CreationRigTerm[] terms, int[] termStarts, DocumentVector3[] joints, IReadOnlyList<CreationRigDriver> drivers, IReadOnlyList<CreationRigEffector> effectors, IReadOnlyList<CreationRigClip> clips, IReadOnlyList<CreationRigRead> reads, CreationRigRead? sizeBy, bool animates, IReadOnlyDictionary<string, string>? followed, int[] replacers, int[] replacerStarts, IReadOnlyList<CreationRigUnplayed> unplayed) {
         Document = document;
         Clips = clips;
+        m_replacers = replacers;
+        m_replacerStarts = replacerStarts;
+        Unplayed = unplayed;
         m_writers = writers;
         m_parents = parents;
         m_terms = terms;
@@ -274,6 +290,8 @@ public sealed class CreationRig {
     public IReadOnlyList<CreationRigClip> Clips { get; }
     /// <summary>Gets the creation's effectors, in declaration order, the order they solve in.</summary>
     public IReadOnlyList<CreationRigEffector> Effectors { get; }
+    /// <summary>Gets each motion a driver authors on a shape outside its mask, which never plays.</summary>
+    public IReadOnlyList<CreationRigUnplayed> Unplayed { get; }
     /// <summary>Gets everything outside the rig the pose depends on, each read once.</summary>
     public IReadOnlyList<CreationRigRead> Reads { get; }
     /// <summary>Gets the read <see cref="CreationDocument.SizeBy"/> samples, or <see langword="null"/>.</summary>
@@ -340,6 +358,31 @@ public sealed class CreationRig {
     /// <summary>Gets each shape's owner (<see cref="Owner"/>).</summary>
     public ReadOnlySpan<int> Owners => (m_owners ??= ResolveOwners());
 
+    /// <summary>Returns the replacing drivers whose masks cover a shape, in declaration order.</summary>
+    /// <param name="shape">The shape's index.</param>
+    /// <returns>The drivers' indices.</returns>
+    public ReadOnlySpan<int> Replacers(int shape) => m_replacers.AsSpan(start: m_replacerStarts[shape], length: (m_replacerStarts[(shape + 1)] - m_replacerStarts[shape]));
+    /// <summary>Returns a driver's share on a shape: its weight times one minus the weight of each replacing driver
+    /// declared after it whose mask covers the shape. Every term the driver plays on the shape scales by it, so
+    /// declaration order decides shares and nothing else, and a replacing driver at weight zero leaves every share
+    /// exactly as it was. This is the one place a share is formed.</summary>
+    /// <param name="driver">The driver's index.</param>
+    /// <param name="shape">The shape's index.</param>
+    /// <param name="weights">The per-driver eased weights, each in [0, 1].</param>
+    /// <returns>The share in [0, 1]; zero for an index past <paramref name="weights"/>.</returns>
+    public float Share(int driver, int shape, ReadOnlySpan<float> weights) {
+        if (((uint)driver) >= ((uint)weights.Length)) { return 0f; }
+
+        var share = weights[driver];
+
+        if (share == 0f) { return 0f; }
+        foreach (var replacer in Replacers(shape: shape)) {
+            if ((replacer > driver) && (((uint)replacer) < ((uint)weights.Length))) { share *= (1f - weights[replacer]); }
+        }
+
+        return share;
+    }
+
     /// <summary>Returns the rig a look plays: this rig with each shape a part follower moves
     /// (<c>partDynamics</c>, keyed by part id) counted as a writer.</summary>
     /// <param name="partDynamics">The look's followers, by part id, or <see langword="null"/> for none.</param>
@@ -361,7 +404,7 @@ public sealed class CreationRig {
                 }
             }
 
-            return (any ? new CreationRig(animates: Animates, clips: Clips, document: Document, drivers: Drivers, effectors: Effectors, followed: map, joints: m_joints, parents: m_parents, reads: Reads, sizeBy: SizeBy, termStarts: m_termStarts, terms: m_terms, writers: writers) : this);
+            return (any ? new CreationRig(animates: Animates, clips: Clips, document: Document, drivers: Drivers, effectors: Effectors, followed: map, joints: m_joints, parents: m_parents, reads: Reads, replacerStarts: m_replacerStarts, replacers: m_replacers, sizeBy: SizeBy, termStarts: m_termStarts, terms: m_terms, unplayed: Unplayed, writers: writers) : this);
         });
     }
     /// <summary>Returns the rig of a document, compiled once per document instance.</summary>
@@ -432,6 +475,37 @@ public sealed class CreationRig {
             );
         }
 
+        // A driver with parts plays only on the shapes they cover; a part that does not resolve covers nothing.
+        var parts = (driverRows.Any(predicate: static row => (row.Parts is not null)) ? CreationPartCompiler.Resolve(document: document, refuse: static (_, _) => { }) : null);
+        var explicitMasks = new bool[driverRows.Count][];
+
+        for (var index = 0; (index < driverRows.Count); index++) {
+            if ((driverRows[index].Parts is not { } mask) || (parts is null)) { continue; }
+            var covered = new bool[shapes.Count];
+
+            foreach (var part in mask) {
+                if ((part is not null) && parts.TryCover(partId: part, shapes: out var cover)) {
+                    foreach (var shape in cover) { covered[shape] = true; }
+                }
+            }
+            explicitMasks[index] = covered;
+        }
+
+        var unplayed = new List<CreationRigUnplayed>();
+        var poses = new bool[driverRows.Count][];
+
+        // Whether a driver's motion on a shape plays: its mask covers the shape. A motion that does not is recorded.
+        bool Plays(int driver, int shape, string member) {
+            if (((uint)driver) < ((uint)explicitMasks.Length) && (explicitMasks[driver] is { } mask) && !mask[shape]) {
+                unplayed.Add(item: new CreationRigUnplayed(Driver: driver, Member: member, Shape: shape));
+
+                return false;
+            }
+            if (((uint)driver) < ((uint)poses.Length)) { (poses[driver] ??= new bool[shapes.Count])[shape] = true; }
+
+            return true;
+        }
+
         var lookup = new CreationShapeLookup(shapes: shapes);
         var clips = new List<CreationRigClip>();
         // A refused clip, key or pose plays nothing; validation reports it through the same compiler.
@@ -456,20 +530,23 @@ public sealed class CreationRig {
             for (var source = 0; (source < swings.Count); source++) {
                 var swing = swings[source];
 
+                if (!Plays(driver: DriverBefore(name: swing.Driver, before: int.MaxValue), member: $"swings[{source}]", shape: index)) { continue; }
                 terms.Add(item: new CreationRigTerm(amplitude: swing.Amplitude, axis: swing.Axis, driver: swing.Driver, driverIndex: DriverBefore(name: swing.Driver, before: int.MaxValue), kind: CreationRigTermKind.Turn, phase: swing.Phase, pivot: swing.Pivot, shape: index, source: source, wave: swing.Wave));
                 CurveOfWave(reads: reads, wave: swing.Wave);
             }
             foreach (var track in shapeTracks) {
+                if (!Plays(driver: track.Clip.Driver, member: $"clip '{track.Clip.Document.Name}'", shape: index)) { continue; }
                 if (track.Turns) { terms.Add(item: ClipTerm(joint: joints[index], kind: CreationRigTermKind.Turn, shape: index, track: track)); }
             }
             for (var source = 0; (source < slides.Count); source++) {
                 var slide = slides[source];
 
+                if (!Plays(driver: DriverBefore(name: slide.Driver, before: int.MaxValue), member: $"slides[{source}]", shape: index)) { continue; }
                 terms.Add(item: new CreationRigTerm(amplitude: slide.Amplitude, axis: slide.Axis, driver: slide.Driver, driverIndex: DriverBefore(name: slide.Driver, before: int.MaxValue), kind: CreationRigTermKind.Slide, phase: slide.Phase, pivot: null, shape: index, source: source, wave: slide.Wave));
                 CurveOfWave(reads: reads, wave: slide.Wave);
             }
             foreach (var track in shapeTracks) {
-                if (track.Slides) { terms.Add(item: ClipTerm(joint: null, kind: CreationRigTermKind.Slide, shape: index, track: track)); }
+                if (track.Slides && ((explicitMasks[track.Clip.Driver] is not { } mask) || mask[index])) { terms.Add(item: ClipTerm(joint: null, kind: CreationRigTermKind.Slide, shape: index, track: track)); }
             }
             if ((swings.Count + slides.Count) > 0) {
                 anyMotion = true;
@@ -481,6 +558,30 @@ public sealed class CreationRig {
             if (FramesMove(document: document, shape: shape)) { writers[index] |= CreationRigWriters.Frame; }
         }
         termStarts[shapes.Count] = terms.Count;
+
+        // Each driver's mask, and each shape's replacing drivers in declaration order.
+        var replacerLists = new List<int>[shapes.Count];
+
+        for (var index = 0; (index < driverRows.Count); index++) {
+            var covered = (explicitMasks[index] ?? poses[index]);
+            var mask = new List<int>();
+
+            for (var shape = 0; ((covered is not null) && (shape < shapes.Count)); shape++) {
+                if (!covered[shape]) { continue; }
+                mask.Add(item: shape);
+                if (drivers[index].Replaces) { (replacerLists[shape] ??= []).Add(item: index); }
+            }
+            drivers[index].Mask = mask;
+        }
+
+        var replacerStarts = new int[(shapes.Count + 1)];
+        var replacers = new List<int>();
+
+        for (var shape = 0; (shape < shapes.Count); shape++) {
+            replacerStarts[shape] = replacers.Count;
+            if (replacerLists[shape] is { } list) { replacers.AddRange(collection: list); }
+        }
+        replacerStarts[shapes.Count] = replacers.Count;
 
         var effectorRows = (document.Effectors ?? []);
         var effectors = new CreationRigEffector[effectorRows.Count];
@@ -524,7 +625,7 @@ public sealed class CreationRig {
             ? (document with { Clips = null, Shapes = lowered, Lowered = true })
             : (document with { Clips = null, Lowered = true }));
 
-        return new CreationRig(animates: animates, clips: clips, document: lowerDocument, drivers: drivers, effectors: effectors, followed: null, joints: joints, parents: parents, reads: reads.Reads, sizeBy: sizeBy, termStarts: termStarts, terms: [.. terms], writers: writers);
+        return new CreationRig(animates: animates, clips: clips, document: lowerDocument, drivers: drivers, effectors: effectors, followed: null, joints: joints, parents: parents, reads: reads.Reads, replacerStarts: replacerStarts, replacers: [.. replacers], sizeBy: sizeBy, termStarts: termStarts, terms: [.. terms], unplayed: unplayed, writers: writers);
     }
 
     // A clip's turn about the shape's joint, or its keyed slide, played by the clip's driver.

@@ -326,16 +326,18 @@ public static class WorldGaitDrivers {
     /// <summary>Composes a shape's terms onto its creation-space rest pose: its swings in authored order, then its clips'
     /// turns, then its slides, so a slide reads as an offset along its own axis rather than one the turns have
     /// turned.</summary>
-    /// <param name="terms">The shape's terms (<see cref="CreationRig.Terms"/>).</param>
+    /// <param name="rig">The creation's rig.</param>
+    /// <param name="shape">The shape's index.</param>
     /// <param name="phases">The per-driver phases.</param>
     /// <param name="weights">The per-driver weights.</param>
     /// <param name="position">The shape's position; replaced by the animated position.</param>
     /// <param name="rotation">The shape's orientation; replaced by the animated orientation.</param>
-    public static void Compose(ReadOnlySpan<CreationRigTerm> terms, ReadOnlySpan<float> phases, ReadOnlySpan<float> weights, ref Vector3 position, ref Quaternion rotation) {
+    public static void Compose(CreationRig rig, int shape, ReadOnlySpan<float> phases, ReadOnlySpan<float> weights, ref Vector3 position, ref Quaternion rotation) {
         _ = ComposeDelta(
             phases: phases,
+            rig: rig,
             rotation: out var deltaRotation,
-            terms: terms,
+            shape: shape,
             translation: out var deltaTranslation,
             weights: weights
         );
@@ -347,29 +349,38 @@ public static class WorldGaitDrivers {
         );
     }
     /// <summary>Computes the rigid delta (<c>x → R·x + t</c>, engine-frame creation space) a shape's terms produce this
-    /// frame, independent of the shape's own rest pose — what a child shape rides. A term whose driver's weight is zero
-    /// produces exactly nothing and is skipped.</summary>
-    /// <param name="terms">The shape's terms (<see cref="CreationRig.Terms"/>), in the order they compose.</param>
+    /// frame, independent of the shape's own rest pose — what a child shape rides. The terms compose in the shape's own
+    /// order (<see cref="CreationRig.Terms"/>), each scaled by its driver's share on the shape
+    /// (<see cref="CreationRig.Share"/>); a term whose share is zero produces exactly nothing and is skipped.</summary>
+    /// <param name="rig">The creation's rig.</param>
+    /// <param name="shape">The shape's index.</param>
     /// <param name="phases">The per-driver phases.</param>
     /// <param name="weights">The per-driver weights.</param>
     /// <param name="rotation">The delta's rotation (identity when nothing composes).</param>
     /// <param name="translation">The delta's translation (zero when nothing composes).</param>
     /// <param name="definition">The live definition a curve waveform samples, or null when none can.</param>
     /// <returns>The number of terms evaluated.</returns>
-    public static int ComposeDelta(ReadOnlySpan<CreationRigTerm> terms, ReadOnlySpan<float> phases, ReadOnlySpan<float> weights, out Quaternion rotation, out Vector3 translation, WorldDefinition? definition = null) {
+    public static int ComposeDelta(CreationRig rig, int shape, ReadOnlySpan<float> phases, ReadOnlySpan<float> weights, out Quaternion rotation, out Vector3 translation, WorldDefinition? definition = null) {
+        ArgumentNullException.ThrowIfNull(argument: rig);
+
         rotation = Quaternion.Identity;
         translation = Vector3.Zero;
 
         var evaluated = 0;
 
-        foreach (var term in terms) {
+        foreach (var term in rig.Terms(shape: shape)) {
             var driver = term.DriverIndex;
 
-            if ((((uint)driver) >= ((uint)phases.Length)) || (((uint)driver) >= ((uint)weights.Length)) || (weights[driver] == 0f)) {
+            if (((uint)driver) >= ((uint)phases.Length)) {
                 continue;
             }
 
-            var share = weights[driver];
+            var share = rig.Share(driver: driver, shape: shape, weights: weights);
+
+            if (share == 0f) {
+                continue;
+            }
+
             Quaternion turn;
 
             evaluated++;

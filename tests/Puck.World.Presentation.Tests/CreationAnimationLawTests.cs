@@ -109,7 +109,8 @@ public sealed class CreationAnimationLawTests {
         var rotation = shape.Rotation.Value;
 
         WorldGaitDrivers.Compose(
-            terms: ClientFixtures.Terms(shape: shape, drivers: [Stride()]),
+            rig: ClientFixtures.ShapeRig(shape: shape, drivers: [Stride()]),
+            shape: 0,
             phases: phases,
             position: ref position,
             rotation: ref rotation,
@@ -133,7 +134,8 @@ public sealed class CreationAnimationLawTests {
         var namedRotation = named.Rotation.Value;
 
         WorldGaitDrivers.Compose(
-            terms: ClientFixtures.Terms(shape: named, drivers: [Stride()]),
+            rig: ClientFixtures.ShapeRig(shape: named, drivers: [Stride()]),
+            shape: 0,
             phases: phases,
             position: ref namedPosition,
             rotation: ref namedRotation,

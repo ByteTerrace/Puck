@@ -53,6 +53,12 @@ namespace Puck.World.Authoring;
 /// driver's phase clamped to [0, 1], or null for 1. Two drivers reading one stride's phase through
 /// <see cref="SignalDriverPrefix"/>, one weighted by a falling curve of speed and one by a rising one, cross-fade a walk
 /// into a run without their legs ever leaving step.</param>
+/// <param name="Parts">The driver's mask: ids of the creation's parts (<see cref="CreationPartDocument"/>). The driver's
+/// swings, slides and clip poses play only on shapes those parts cover, and a replacing driver reduces earlier drivers
+/// only there. Null is the shapes the driver itself poses.</param>
+/// <param name="Mode">How the driver layers: <see cref="ModeAdd"/> (null) adds its motion to the drivers before it;
+/// <see cref="ModeReplace"/> also scales every driver declared before it by one minus its weight on the shapes its mask
+/// covers, so a stance takes the arms from the gait without the gait knowing (<see cref="CreationRig.Share"/>).</param>
 public sealed record CreationDriverDocument(
     string Name,
     string Signal,
@@ -62,8 +68,14 @@ public sealed record CreationDriverDocument(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? BlendOutSeconds = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Dynamics = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] CreationDriverCurveDocument? CadenceBy = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] CreationDriverCurveDocument? WeightBy = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] CreationDriverCurveDocument? WeightBy = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<string>? Parts = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Mode = null
 ) {
+    /// <summary>The layering mode that adds a driver's motion to the drivers before it, the default.</summary>
+    public const string ModeAdd = "add";
+    /// <summary>The layering mode that fades the drivers declared before a driver by its weight, on its mask.</summary>
+    public const string ModeReplace = "replace";
     /// <summary>The largest signal-to-phase gain magnitude.</summary>
     public const float MaxCadence = 256f;
     /// <summary>The most tokens a gate carries — a gate is a conjunction of independent conditions, and four is

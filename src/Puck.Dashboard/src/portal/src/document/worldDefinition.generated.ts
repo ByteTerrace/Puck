@@ -1755,6 +1755,14 @@ export type CreationDocument = {
      * Sets the level the weight eases toward while the gate holds, from a curve of an earlier driver's phase clamped to [0, 1], or null for 1. Two drivers reading one stride's phase through SignalDriverPrefix, one weighted by a falling curve of speed and one by a rising one, cross-fade a walk into a run without their legs ever leaving step.
      */
     weightBy?: ShapeNullable34 | null;
+    /**
+     * The driver's mask: ids of the creation's parts (CreationPartDocument). The driver's swings, slides and clip poses play only on shapes those parts cover, and a replacing driver reduces earlier drivers only there. Null is the shapes the driver itself poses.
+     */
+    parts?: (string | null)[] | null;
+    /**
+     * How the driver layers: ModeAdd (null) adds its motion to the drivers before it; ModeReplace also scales every driver declared before it by one minus its weight on the shapes its mask covers, so a stance takes the arms from the gait without the gait knowing (Share).
+     */
+    mode?: string | null;
   } | null)[] | null;
   /**
    * The inverse-kinematics effectors (null = none), any number — see CreationEffectorDocument. Each corrects a chain of this creation's own shapes so its tip reaches a target, composing after the drivers and the parent chain. Presentation-only, like the drivers.

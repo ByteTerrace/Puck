@@ -1569,6 +1569,28 @@
                   "$ref": "./common.schema.json#/$defs/ShapeNullable34",
                   "description": "Sets the level the weight eases toward while the gate holds, from a curve of an earlier driver\u0027s phase clamped to [0, 1], or null for 1. Two drivers reading one stride\u0027s phase through SignalDriverPrefix, one weighted by a falling curve of speed and one by a rising one, cross-fade a walk into a run without their legs ever leaving step.",
                   "default": null
+                },
+                "parts": {
+                  "type": [
+                    "array",
+                    "null"
+                  ],
+                  "items": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "default": null,
+                  "description": "The driver\u0027s mask: ids of the creation\u0027s parts (CreationPartDocument). The driver\u0027s swings, slides and clip poses play only on shapes those parts cover, and a replacing driver reduces earlier drivers only there. Null is the shapes the driver itself poses."
+                },
+                "mode": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "default": null,
+                  "description": "How the driver layers: ModeAdd (null) adds its motion to the drivers before it; ModeReplace also scales every driver declared before it by one minus its weight on the shapes its mask covers, so a stance takes the arms from the gait without the gait knowing (Share)."
                 }
               },
               "required": [

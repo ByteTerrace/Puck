@@ -201,6 +201,9 @@ public static partial class CreationCommand {
 
             Console.Out.WriteLine(value: $"  {label}: '{id}' {CreationMotion.Describe(blend: blend, rig: rig)}");
         }
+        foreach (var unplayed in rig.Unplayed) {
+            Console.Out.WriteLine(value: $"  warning {PuckDiagnosticCodes.UnplayedMotion}: '{id}' {CreationMotion.DescribeUnplayed(rig: rig, unplayed: unplayed)}");
+        }
         foreach (var shape in CreationMotion.UngroupedBlends(rig: rig)) {
             Console.Out.WriteLine(value: $"  warning {PuckDiagnosticCodes.UngroupedBlend}: '{id}' {CreationMotion.DescribeUngrouped(document: document, shape: shape)}");
         }

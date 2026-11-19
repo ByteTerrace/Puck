@@ -365,6 +365,7 @@ public static partial class CreationCanonicalizer {
         }
 
         var names = new HashSet<string>(comparer: StringComparer.Ordinal);
+        AuthoredPartTable? parts = null;
 
         for (var i = 0; (i < drivers.Count); i++) {
             var driver = drivers[i];
@@ -450,6 +451,18 @@ public static partial class CreationCanonicalizer {
                 gate: driver.When,
                 path: $"drivers[{i}].when"
             );
+            if (driver.Mode is not (null or CreationDriverDocument.ModeAdd or CreationDriverDocument.ModeReplace)) {
+                errors.Add(item: new(Message: $"mode '{driver.Mode}' is not recognized; the modes are '{CreationDriverDocument.ModeAdd}' and '{CreationDriverDocument.ModeReplace}'.", Path: $"drivers[{i}].mode"));
+            }
+            if (driver.Parts is { } mask) {
+                parts ??= CreationPartCompiler.Resolve(document: document, refuse: static (_, _) => { });
+
+                for (var entry = 0; (entry < mask.Count); entry++) {
+                    if ((mask[entry] is not { } part) || !parts.TryCover(partId: part, shapes: out _)) {
+                        errors.Add(item: new(Message: $"names no part '{mask[entry]}'; a mask names the creation's parts.", Path: $"drivers[{i}].parts[{entry}]"));
+                    }
+                }
+            }
         }
     }
     // A driver reads only drivers declared before it, so one pass in declaration order advances every source before
