@@ -5,6 +5,7 @@ using Puck.Maths;
 using Puck.Physics.Motion;
 using Puck.SdfVm;
 using Puck.SdfVm.Views;
+using Puck.World.Authoring;
 using Puck.World.Protocol;
 
 using Xunit;
@@ -360,6 +361,9 @@ public sealed class WorldStateReadRoutingLawTests {
             mirror: mirror
         );
 
+        var gateRig = ClientFixtures.DriverRig(drivers: [new CreationDriverDocument(Cadence: 0f, Name: "gate", Signal: CreationDriverDocument.SignalTime, When: gate)]);
+        var gateReads = new WorldRigReads(lease: reads, rig: gateRig);
+
         void Frames() {
             for (var repetition = 0; (repetition < Repetitions); repetition++) {
                 reads.Bind(
@@ -376,9 +380,9 @@ public sealed class WorldStateReadRoutingLawTests {
                 );
                 sink += (WorldGaitDrivers.HoldsGate(
                     facts: BodyFacts.Grounded,
-                    gate: gate,
+                    gate: gateRig.Drivers[0].Gate,
                     moving: false,
-                    reads: reads
+                    reads: gateReads
                 )
                     ? 1f
                     : 0f);

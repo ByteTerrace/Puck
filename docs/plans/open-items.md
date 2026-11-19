@@ -3970,9 +3970,10 @@ and calibration, delivered cues, haptics) and the standard package's judge.
 - Its last stage, a crowd of performers at the frame bar, waits on
   [virtual geometry](virtual-geometry.md#d2-bounds-for-skinned-and-multi-slot-draws)'s
   bounds for many-part bodies and on the benchmark's remote route.
-- The pose-clip design removes the rig's caps on swings, slides, drivers and
-  effectors ([the caps](instrument-play/pose-clips.md#9-the-caps-come-off)).
-  A world's own creations then pay a counted cost. A look that arrives with a
+- The rig's caps on swings, slides, drivers and effectors are removed
+  ([the caps](instrument-play/pose-clips.md#9-the-caps-come-off)), and a
+  world's own creations pay a counted cost (`sdf.creations.terms.evaluated`,
+  `sdf.creations.effectors.solves`). A look that arrives with a
   visiting character is work another player's client must do, and nothing
   budgets its terms, effectors and transform slots. Admitting a visiting
   look's rig waits on that budget, which the plan that admits visiting looks
@@ -3995,14 +3996,15 @@ reversal brake, then a sitting.
 - [high] Engine gaps [instrument and dance play](instrument-play.md#the-engine-gaps)
   names, each with a lane in that plan's first wave and ahead of further rig
   or move authoring: a creation's poses do not blend and a driver's weight
-  cannot be limited to some shapes (`FrameDocument`, `CreationDocument.MaxDrivers`);
+  cannot be limited to some shapes (`FrameDocument`, `CreationDriverDocument`);
   an effector cannot aim at a point on its own creation
   (`CreationEffectorTargetDocument`); no driver reads the seat's input, so a
   press reaches the rig a tick late; and no motion operation turns a body
   through an angle or moves it along an eased path over a duration
   (`BodyMotionOp`, `WorldEffect.PlanarImpulse`).
   [Pose clips, body parts and reach](instrument-play/pose-clips.md) designs
-  the first three, and its steps are the build lane's order.
+  the first three, and its steps are the build lane's order; steps 1 to 3 (the
+  compiled rig, its reads and the caps) are built, so step 4 is next.
 
 - A reversal should brake faster than it accelerates: `ShapeWholeVelocityRow`
   converges at the engage rate whenever the stick is deflected, so a full

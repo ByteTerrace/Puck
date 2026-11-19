@@ -238,7 +238,7 @@ are the authored ones. Strands closer than twice their radius fuse.
 
 ### Motion
 
-`swings` (up to 8) and `slides` (up to 4); see `rig.md`. A shape carrying
+`swings` and `slides`, any number of each; see `rig.md`. A shape carrying
 `domain` folds may not carry either.
 
 ## Contact admission

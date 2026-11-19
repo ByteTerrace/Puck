@@ -227,11 +227,10 @@ stops authoring around it.
 **Poses do not blend, and layers cannot be masked (gap A).** A creation's
 `frames` are whole poses that replace one another with no interpolation
 ([frames](../../.claude/skills/sdf-authoring/references/rig.md#frames)). The
-blended alternative is a swing under a driver's weight, and a creation holds
-32 drivers and a shape 8 swings (`CreationDocument.MaxDrivers`,
-`ShapeDocument.MaxSwings`). The Moth uses 18 drivers. Her thighs and pelvis
-use all 8 of their swings, her upper arms and torso 7, and her forearms 5. A fingering chart and a set of dance moves, written as one
-driver a pose, do not fit. A driver's weight also applies to every shape it
+blended alternative is a swing under a driver's weight. The caps on drivers,
+swings, slides and effectors are removed and every table is sized from the
+compiled rig (`CreationRig`), but a fingering chart and a set of dance moves
+written as one driver and one swing a pose is still the clumsy form. A driver's weight also applies to every shape it
 moves, so "the gait keeps the legs and gives up the arms while she plays"
 needs a second gait driver for the arms. An author would write a clumsier
 form to fit the caps, which "Ergonomic is optimal" calls an engine defect. The
