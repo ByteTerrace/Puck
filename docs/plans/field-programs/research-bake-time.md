@@ -81,10 +81,10 @@ instrumentation's.
 The sampler ran on a .NET timer, whose callbacks are thread-pool work, and its
 two-second lines stop for 5 to 17 seconds at the start of every busy span
 (run B2's from 35 to 52 seconds after the process started) while the pool's
-threads climb from under ten to between 17 and 36 (`tp-threads` in the lines). The bake's sixteen workers are thread-pool
-items (`SdfMeshPathBake.StartWorkers` runs each with `Task.Run`) that hold
-their threads for the whole bake, so other thread-pool work waits for the
-pool to inject threads. The group-seconds stay whole across those gaps (each
+threads climb from under ten to between 17 and 36 (`tp-threads` in the lines). In these runs the bake's sixteen workers were
+thread-pool items that held their threads for the whole bake, so other
+thread-pool work waited for the pool to inject threads; they now run on threads
+of the pool's own (`SdfMeshPathBake.StartWorkers`). The group-seconds stay whole across those gaps (each
 sample adds the time since the previous one), but they are attributed to the
 state at the sample that ends the gap.
 
@@ -433,16 +433,15 @@ Savings are against run D's 77-second lockstep bake unless stated; run C's
    waiting spent waiting for a take, against zero holds in lockstep. *Check:*
    a free-running cold boot's done line approaches run D's seconds with
    `budget-holds` near zero while groups owe floors.
-2. **Stop allocating the CPU stages' scratch afresh.** About 132 GB a cold
-   bake, three quarters on the large-object heap, drives 13 to 14 seconds of
-   collections per busy span. Keep each worker's or group's scratch for the
-   ten sites above in reusable owned storage, as the point tables and readback
-   copies already are.
-   *Saving:* most of the 15 to 17 % of the busy span spent in collections,
-   about 10 seconds, plus the zeroing and copying those allocations cost
-   inside the stages (not measured). *Check:* a traced cold bake's allocation
-   events fall by an order of magnitude and its gen2 collection count from
-   about 100 toward none.
+2. **Stop allocating the CPU stages' scratch afresh.** The contour, crossing
+   search, weld and crease split now rent their workspace (`RentedList`,
+   `RentedArrays`), which took a cold debug-world bake's collections from
+   748/709/106 (gen0/gen1/gen2) to about 330/290/35 and its allocation by about
+   a third; the collapse, planar merge, chunking and material cut still
+   allocate theirs for each mesh
+   ([refactoring packet](../open-items.md#refactoring-campaign)). *Check:* the
+   done line's `managed=[allocated,gc-pause,collections]` falls by an order of
+   magnitude from the first figures, its gen2 count toward none.
 3. **Start the bake on its own two kernels.** Build the mask and bake kernels
    first and create the bake's GPU client when they exist, rather than after
    all 39 pipelines. *Saving:* up to 16 seconds on Direct3D 12 and 36 on
@@ -453,17 +452,26 @@ Savings are against run D's 77-second lockstep bake unless stated; run C's
    the start line on a cold driver cache.
 4. **Break up the serial tail.** Group −133's crossing search and contour and
    group −7623's contour and landings hold one worker for 25 seconds or more.
-   Splitting such groups' lattices into slabs contoured in parallel, or
-   starting the longest chains first, would let the tail overlap the busy span.
-   *Saving:* up to about 10 seconds. *Check:* the queue-empty tail at the end
-   of the instrumentation's lines shrinks, and no `slow` stage line exceeds a
-   few seconds.
-5. **Shorten the gate's holds.** Replace the linear `m_groups.Contains` with
-   the group's own membership (its `Owner` and `Retired`, which `Restart` and
-   `Replace` already set) and build requests outside the gate. *Saving:* part
-   of the 17 to 21 % of worker samples blocked on the gate; how much needs the
-   hold times measured first. *Check:* `Lock.TryEnterSlow`'s share of worker
-   samples in a traced cold bake.
+   A large refined lattice now reads its fine samples' signs in parallel before
+   its crossing scan (`SdfSampledLattice.PrimeSigns`), which halved −133's first
+   crossing stage offline; the scan itself, the contour
+   (`SdfDualContouring.ExtractRefined`, `Merge`) and the landing still run on
+   one worker. Splitting such groups' lattices into slabs contoured in
+   parallel, or starting the longest chains first, would let the tail overlap
+   the busy span. *Saving:* up to about 10 seconds. *Check:* the done line's
+   `tail=` shrinks, and no `slow` stage line exceeds a few seconds.
+5. **Shorten the gate's holds.** The done line's `gate=` now times every entry
+   by site: the workers' own holds total milliseconds (membership is a flag
+   since `GroupList`, and `Follow` visits only a finished leader's followers),
+   and their waits are the frame thread's holds, seconds in all over a cold
+   bake: the dress (`SdfMeshDresser.Dress` reads the groups and publishes its
+   rows inside `FrameAccess`, about 5 ms a frame while meshes land), each take's
+   walk of every group not yet done (`TryTake`), and the residency's
+   observation (`ObserveResidency`). Shortening those is the remaining work:
+   the dress holding the gate only while it reads the groups and takes its
+   claims, and the take reading a list of groups with a lattice ready rather
+   than walking every group. *Check:* `gate=`'s `dress`, `take` and `observe`
+   holds, and the workers' summed waits.
 6. **Weigh floors on a cold bake.** Floors are 24 % of the pool's work. Baking
    detail first for groups the demand reaches soon, or floors only for groups
    in view, trades how soon a place is whole for how soon it is done. *Saving:*
@@ -487,9 +495,6 @@ Savings are against run D's 77-second lockstep bake unless stated; run C's
 
 ## What remains to measure
 
-- **Who holds the gate.** A hold-time counter on `m_gate`, by call site, would
-  say whether fix 5 is the list search, the requests built under the gate, or
-  holders preempted by collections.
 - **The bake kernels' own compile.** How long the mask and bake kernels take a
   cold driver, which bounds what fix 3 can save.
 - **A free-running bake's frame.** Why the frame's GPU time passed 17 ms during

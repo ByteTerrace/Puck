@@ -1999,7 +1999,7 @@ public sealed partial class SdfMeshPathBake {
         } else if (contour is not null) {
             creases = CreaseVertices(contour: contour);
             if (creases.Length > 0) {
-                group.Projection = new ContourProjection(contour: contour);
+                group.Projection = new ContourProjection(allocator: group.Allocator, contour: contour, observer: group.Memory);
                 group.CreaseSpacing = lattice.ContourCell;
                 group.CreaseSlope = lattice.SurfaceSlope();
                 group.Points.Resize(creases.Length, clear: false, preserve: false);
@@ -2323,30 +2323,34 @@ public sealed partial class SdfMeshPathBake {
     // the same way to the lattice edge its quad crosses (SdfContour.QuadAxes, SdfContourFacing), which the contour's
     // settle left it facing out along: its own facing can turn edge-on to that direction and past it without reversing
     // against where it began.
-    // Its tables are rented (RentedArrays) and go back to the pool when it is disposed: the field check disposes it once
-    // its last vertex moves, a retired group's release once its last job ends.
+    // It lives across the group's field-check rounds, each a GPU round trip, so its tables are the group's owned storage,
+    // charged to the group's account, never collected garbage: the field check disposes it once its last vertex moves, a
+    // retired group's release once its last job ends.
     private sealed class ContourProjection : IDisposable {
-        private int[] m_starts;
-        private int[] m_incident;
-        private Triangle[] m_triangles;
+        private readonly OwnedBuffer<int> m_starts;
+        private readonly OwnedBuffer<int> m_incident;
+        private readonly OwnedBuffer<Triangle> m_triangles;
         private int m_triangleCount;
 
         public void Dispose() {
-            RentedArrays.Return(array: m_starts);
-            RentedArrays.Return(array: m_incident);
-            RentedArrays.Return(array: m_triangles);
-            (m_starts, m_incident, m_triangles, m_triangleCount) = ([], [], [], 0);
+            m_starts.Dispose();
+            m_incident.Dispose();
+            m_triangles.Dispose();
+            m_triangleCount = 0;
         }
 
         // `Axis` is zero where the contour records no lattice edge; `Patches` is the sum of the corners' patch facings
         // (SdfContour.Patches), zero where it records none.
         private readonly record struct Triangle(int A, int B, int C, (double X, double Y, double Z) Reference, sbyte Axis, (double X, double Y, double Z) Patches);
 
-        public ContourProjection(SdfContour contour) {
-            var triangles = (m_triangles = RentedArrays.Rent<Triangle>(minimumLength: (2 * contour.QuadCount)));
+        public ContourProjection(SdfContour contour, IAllocator? allocator = null, IAllocationObserver? observer = null) {
+            m_triangles = new(allocator: allocator, observer: observer);
+            m_starts = new(allocator: allocator, observer: observer);
+            m_incident = new(allocator: allocator, observer: observer);
+            m_triangles.Resize((2 * contour.QuadCount), clear: false, preserve: false);
+            m_starts.Resize((contour.VertexCount + 1), clear: true, preserve: false);
 
-            m_starts = RentedArrays.Rent<int>(minimumLength: (contour.VertexCount + 1));
-            m_starts.AsSpan(start: 0, length: (contour.VertexCount + 1)).Clear();
+            var triangles = m_triangles;
 
             double Patch(int vertex, int axis) => ((((3 * vertex) + axis) < contour.Patches.Length) ? contour.Patches[((3 * vertex) + axis)] : 0.0);
             void Add(int a, int b, int c, sbyte axis) {
@@ -2376,7 +2380,7 @@ public sealed partial class SdfMeshPathBake {
                 Add(a: a, axis: axis, b: c, c: d);
             }
             for (var vertex = 0; (vertex < contour.VertexCount); vertex++) { m_starts[(vertex + 1)] += m_starts[vertex]; }
-            m_incident = RentedArrays.Rent<int>(minimumLength: m_starts[contour.VertexCount]);
+            m_incident.Resize(m_starts[contour.VertexCount], clear: false, preserve: false);
             using var filledLease = RentedArrays.Rent<int>(array: out var filled, minimumLength: contour.VertexCount);
 
             filled.AsSpan(start: 0, length: contour.VertexCount).Clear();

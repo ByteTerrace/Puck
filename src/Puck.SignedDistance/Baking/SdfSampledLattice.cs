@@ -724,7 +724,7 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
     private bool m_crossingsPrepared;
     private bool m_rootsPrepared;
     // Each searched crossing edge's root, in m_crossingKeys' order, and each such edge's index there by its CrossingKey.
-    private CrossingRoot[] m_crossingRoots = [];
+    private readonly OwnedBuffer<CrossingRoot> m_crossingRoots;
 
     private readonly Dictionary<long, int> m_crossingRootIndex = [];
     private readonly OwnedBuffer<long> m_pendingCrossings;
@@ -801,6 +801,7 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
         m_crossedFineCells = new(allocator: allocator, observer: observer);
         m_pendingCrossings = new(allocator: allocator, observer: observer);
         m_pendingRoots = new(allocator: allocator, observer: observer);
+        m_crossingRoots = new(allocator: allocator, observer: observer);
         m_fineValues = new OwnedBuffer<float>(allocator: allocator, observer: observer);
         m_blockSlots = new OwnedBuffer<int>(allocator: allocator, observer: observer);
         m_signInside = new OwnedBuffer<ulong>(allocator: allocator, observer: observer);
@@ -812,7 +813,7 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
     public void Dispose() {
         m_valueHandle.Dispose(); m_materialHandle.Dispose();
         m_measured.Dispose(); m_thin.Dispose(); m_refined.Dispose(); m_strides.Dispose(); m_fineKeys.Dispose();
-        m_gradientKeys.Dispose(); m_points.Dispose(); m_crossingKeys.Dispose(); m_crossedFineCells.Dispose(); m_pendingCrossings.Dispose(); m_pendingRoots.Dispose();
+        m_gradientKeys.Dispose(); m_points.Dispose(); m_crossingKeys.Dispose(); m_crossedFineCells.Dispose(); m_pendingCrossings.Dispose(); m_pendingRoots.Dispose(); m_crossingRoots.Dispose();
         m_gradients.Dispose();
         m_closedValues.Dispose();
         m_signKnown.Dispose();
@@ -1930,7 +1931,7 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
             }
             m_rootsPrepared = true;
             // The first round's roots, in the order of their edges; each later round keeps those still searching.
-            m_crossingRoots = roots.ToArray();
+            m_crossingRoots.CopyFrom(source: roots.AsSpan());
             m_pendingCrossings.CopyFrom(source: keys.AsSpan());
             m_pendingRoots.Resize(m_crossingRoots.Length, clear: false, preserve: false);
             for (var index = 0; (index < m_pendingRoots.Length); index++) { m_pendingRoots[index] = index; }

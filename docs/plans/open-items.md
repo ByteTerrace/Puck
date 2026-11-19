@@ -3585,6 +3585,17 @@ proves itself with `puck compile` lowering to the same document.
   record goes (an `IClientSink` or a wire frame). One stream type writing
   to a record target would hold each rule once; the withdrawal chokepoint's
   step 4 (the mirror per span) is the natural place to make it.
+- The bake's landing stages still allocate each mesh's workspace afresh, which
+  is most of what a cold debug-world bake still allocates and collects
+  ([mesh bake](../../.claude/skills/rendering/references/mesh-bake.md#groups-poses-and-materials),
+  `managed=` on the done line): `SdfMeshCollapse.Collapser`'s constructor (about
+  twenty-five arrays a mesh, several read whole by `.Length` or `Contains`, so a
+  rented array needs each read bounded first), `SdfMeshPlanarMerge.Merger`,
+  `SdfMeshChunks.Bake` and `SdfMeshMaterialCut.Build`/`Points`, and the
+  lattice's own gradient and crossing dictionaries
+  (`SdfSampledLattice.m_fineGradients`, `m_crossingGradients`,
+  `m_crossingRootIndex`). Each moves to `RentedList`/`RentedArrays` as the
+  contour's did.
 - [low] File-system primitives `AtomicFile` cannot serve yet:
   `ShaderCompiler.Entries.cs` wants a write that refuses to replace;
   `DirectoryObjectBlobStoreBackend` stages through a confined handle; a lock
