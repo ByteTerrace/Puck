@@ -23,6 +23,8 @@ internal sealed partial class SdfMeshProbeGpuWork {
     private readonly IGpuAccelerationStructures? m_structures;
     private readonly nint m_raysPool;
     private readonly Dictionary<SdfMeshIrradianceScene.Geometry, Bottom> m_bottoms = new(ReferenceEqualityComparer.Instance);
+    // TryTakeStructures' scratch: the bottoms one pass has already taken into its build or compaction.
+    private readonly HashSet<Bottom> m_takenBottoms = new(ReferenceEqualityComparer.Instance);
     private readonly GpuRetirementQueue<IGpuAccelerationStructure> m_retired = new();
     private readonly List<long> m_flying = [];
     // Seconds a structure job takes a triangle (a bottom's build or copy) or an instance (a top's build).
@@ -151,6 +153,8 @@ internal sealed partial class SdfMeshProbeGpuWork {
         var units = 0L;
         var ready = true;
 
+        // Many instances share one geometry's bottom: each bottom is taken once, whichever instance names it first.
+        m_takenBottoms.Clear();
         for (var index = 0; (index < count); index++) {
             var (geometry, mesh, _) = scene.GpuInstance(index: index);
 
@@ -163,11 +167,11 @@ internal sealed partial class SdfMeshProbeGpuWork {
             ready = false;
             if (bottom.State == BottomState.Wanted) {
                 if ((build.Count != 0) && ((units + geometry.Count) > most)) { continue; }
-                if (build.Exists(match: entry => ReferenceEquals(objA: entry.Bottom, objB: bottom))) { continue; }
+                if (!m_takenBottoms.Add(item: bottom)) { continue; }
                 build.Add(item: (bottom, mesh));
                 units += geometry.Count;
-            } else if (bottom.State == BottomState.Built) {
-                if (!compact.Contains(item: bottom)) { compact.Add(item: bottom); }
+            } else if ((bottom.State == BottomState.Built) && m_takenBottoms.Add(item: bottom)) {
+                compact.Add(item: bottom);
             }
         }
         if (build.Count != 0) {

@@ -156,9 +156,9 @@ public readonly record struct WorldQualityPreset(
 /// <param name="SkyFieldScale">The boot sky field grid fraction, one or one half, independent of view render scale.</param>
 /// <param name="Exposure">The camera exposure each view maps the luminance it shades to the display by, before the
 /// tone curve. Absent is a manual exposure at <c>SdfExposure.DefaultEv100</c>, a sunlit day's.</param>
-/// <param name="Toon">The world's default cel style, which every material that authors no style of its own shades with
-/// (<see cref="ToonStyleDocument"/>), on unless it says <c>enabled: false</c>, and which the live <c>world.toon</c> lever
-/// turns on or off. Absent is off.</param>
+/// <param name="Toon">The world's default cel style (<see cref="ToonStyleDocument"/>), which every material that authors
+/// no style of its own takes: its ink, and the styled mark the live <c>world.toon off</c> suppresses with the
+/// <see cref="Shade"/> default it inks. On unless it says <c>enabled: false</c>; absent is off.</param>
 /// <param name="Bloom">Optional camera scatter. Absent is off.</param>
 /// <param name="ShadowCoverage">How far the key light's shadow cascades reach (<see cref="WorldRenderShadowCoverage"/>).
 /// Absent keeps the engine's 16 m near, 120 m far and 200 m caster reach; <c>world.budget</c> prints the coverage with

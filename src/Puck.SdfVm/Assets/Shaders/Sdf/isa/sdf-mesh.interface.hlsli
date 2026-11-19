@@ -1,4 +1,4 @@
-// Generated from shader interface 'sdf-mesh' (sha256/f3b1865c6628a945bb8591c31502cf653d767623cd3ff5b6c8661e9d4942a09b). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'sdf-mesh' (sha256/bcd2faf77131dc1ab66de24f8dba48d83eb75a5c12dc7bc3a92a464b0cfcb45e). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SDF_MESH
 #define PUCK_SHADER_INTERFACE_SDF_MESH
 
@@ -104,27 +104,25 @@ struct SdfMeshPass {
     [[vk::offset(1236)]] uint _pad1236;
     [[vk::offset(1240)]] uint _pad1240;
     [[vk::offset(1244)]] uint _pad1244;
-    [[vk::offset(1248)]] float4 toonBands;
-    [[vk::offset(1264)]] float4 toonInk;
-    [[vk::offset(1280)]] float4 toonOutline;
-    [[vk::offset(1296)]] float4 toonShadow;
-    [[vk::offset(1312)]] uint viewBase;
-    [[vk::offset(1316)]] uint _pad1316;
-    [[vk::offset(1320)]] uint _pad1320;
+    [[vk::offset(1248)]] float4 toonInk;
+    [[vk::offset(1264)]] float4 toonOutline;
+    [[vk::offset(1280)]] uint viewBase;
+    [[vk::offset(1284)]] uint _pad1284;
+    [[vk::offset(1288)]] uint _pad1288;
+    [[vk::offset(1292)]] uint _pad1292;
+    [[vk::offset(1296)]] float3 viewForward;
+    [[vk::offset(1308)]] uint _pad1308;
+    [[vk::offset(1312)]] float3 viewPosition;
     [[vk::offset(1324)]] uint _pad1324;
-    [[vk::offset(1328)]] float3 viewForward;
+    [[vk::offset(1328)]] float3 viewRight;
     [[vk::offset(1340)]] uint _pad1340;
-    [[vk::offset(1344)]] float3 viewPosition;
-    [[vk::offset(1356)]] uint _pad1356;
-    [[vk::offset(1360)]] float3 viewRight;
+    [[vk::offset(1344)]] float3 viewUp;
+    [[vk::offset(1356)]] uint viewportCount;
+    [[vk::offset(1360)]] uint workCounterRow;
+    [[vk::offset(1364)]] uint workCounterRowDetail;
+    [[vk::offset(1368)]] uint _pad1368;
     [[vk::offset(1372)]] uint _pad1372;
-    [[vk::offset(1376)]] float3 viewUp;
-    [[vk::offset(1388)]] uint viewportCount;
-    [[vk::offset(1392)]] uint workCounterRow;
-    [[vk::offset(1396)]] uint workCounterRowDetail;
-    [[vk::offset(1400)]] uint _pad1400;
-    [[vk::offset(1404)]] uint _pad1404;
-    [[vk::offset(1408)]] float4 worldLanes;
+    [[vk::offset(1376)]] float4 worldLanes;
 };
 [[vk::binding(0, 3)]] ConstantBuffer<SdfMeshPass> passGroup : register(b0, space3);
 [[vk::binding(1, 3)]] StructuredBuffer<uint> sdfMeshRegion : register(t1, space3);

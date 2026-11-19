@@ -178,8 +178,8 @@ class with ready work, and within a class the job its comparer ranks first
 |---|---|---|
 | `Frame` | The frame's own parallel work: view recording (section 3), the pose pack and the other `BeginFrame` partitions, a lockstep frame's synchronous irradiance drain (`SdfMeshIrradiance.cs:531-549`). | The frame thread, inside produce. |
 | `Tick` | The parallel tick's partitions (section 2). | The frame thread, inside the step. |
-| `Bake` | The mesh bake's group stages, kernel-tree compiles on reload (`SdfKernelTreeLoad.cs:62`), shader pipeline builds (`BackgroundBuild`), the composition build (`SdfCompositionFrameSource.cs:268`), the static field build (`WorldFramePresenter.cs:511`). | Residencies and render nodes. |
-| `Lighting` | The irradiance worker's traces and relights, its scene build and refill (`SdfMeshIrradiance.cs:558,1011,1147`), response preparation (`WorldFramePresenter.cs:2436`), the reflow preview (`WorldServer.Reflow.cs:79`). | The irradiance volume, the presenter and the server. |
+| `Bake` | The mesh bake's group stages, kernel-tree compiles on reload (`SdfKernelTreeLoad.cs:62`), shader pipeline builds (`BackgroundBuild`), the composition build (`SdfCompositionFrameSource.cs:268`), the static field build (`WorldFramePresenter.RebuildStaticField`). | Residencies and render nodes. |
+| `Lighting` | The irradiance worker's traces and relights, its scene build and refill (`SdfMeshIrradiance.cs:558,1011,1147`), response preparation (`WorldFramePresenter.PrepareResponses`), the reflow preview (`WorldServer.Reflow.cs:79`). | The irradiance volume, the presenter and the server. |
 
 The `Bake` comparer ranks the group with the **largest** demand priority first:
 `SdfMeshDemand.Priority` grows with nearness and view density

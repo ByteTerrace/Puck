@@ -728,20 +728,27 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   that lights behind its face) widens the tile test in the same change, or
   tiles cut its light off. `SDF_VIEWS_OMIT_LIGHT_TILES` reads the tiles' saving. Index a vector at
   run time only through `sdfComponent`.
-- **Cel shading is a style per material, not a whole-image filter.** A palette
-  row's `toon` (`SdfMaterial.Toon`, material rows 22 to 25) shades that material;
-  every other material inherits the world's default (`render.toon`, which
-  `world.toon` overrides live) through the pass block's toon members. Both are
-  written by `SdfToon.WriteRows` and read by `sdfToonStyle`
-  (`shade/sdf-toon.hlsli`): keep the row layout and the pass block's alike.
-  The band keeps visibility apart (`band(cosine) × visibility`) unless the style
-  says `band: Combined`; rim lights, the environment reflection and ambient
-  occlusion stay in the cel response. `sdf-toon-outline.hlsli` reads
-  depth/normal edges in views, before temporal resolve, at the pixel's own
-  style's width. Keep screen pictures, portal pictures, sky and self-emission
-  out of both the banding and ink. Nested worlds take the live enable override
-  but retain their own document styles. The tuning belongs to the lighting
-  cadence signature, never the bake closure.
+- **Cel shading is a style per material, not a whole-image filter, and the
+  banding is a program.** The standard's `cel` shade program
+  (`worlds/standard/shading.puck`) is the one implementation of the band; no
+  kernel bands. A palette row's `toon` (`SdfMaterial.Toon`, material rows 22 and
+  25) is the style row the engine keeps beside it: the styled mark and the ink.
+  Every other material inherits the world's default (`render.toon`) through the
+  pass block's `toonOutline` and `toonInk`, both written by `SdfToon.WriteRows`
+  and read by `sdfToonStyle` and `sdfToonAuthored` (`shade/sdf-toon.hlsli`):
+  keep the row layout and the pass block's alike. `world.toon off` writes a
+  negative default mode, and `sdfShadeBinding` then marks a styled material's
+  binding unstyled: `sdfShadeHas` reads its light and compose phases as omitted
+  while its surface phase (a terrain under cel) still runs.
+  A program that omits the surface phase keeps the material's layers
+  (`sdfShadeHas(binding, 0u)` in both stages; `SdfShadeProgram.Authors` on the
+  CPU, which `SdfAppearance.ResolveShadeReads` reads). The program's result is
+  scene light for the display pass's one `render.tone`; never expose or
+  compress inside a material. `sdf-toon-outline.hlsli` reads depth/normal
+  edges in views, before temporal resolve, at the pixel's own style's width.
+  Keep screen pictures, portal pictures, sky and self-emission out of both the
+  banding and ink. The tuning belongs to the lighting cadence signature, never
+  the bake closure.
 - **The frame shades luminance in nits, and each view's composite applies its
   exposure** (`SdfPhotometry`, `SdfViewExposures`, the pass block's `exposure`).
   A light record carries illuminance or intensity over π; emission, sky layers
@@ -1308,6 +1315,13 @@ world.budget           # program words, instances, scopes, segments
 world.counters gpu.queue      # native executes, lists, signals and presents by category and split cause
 world.counters render.record  # record jobs' host time per phase, serial sum and per-frame critical path
 ```
+
+The bodies lever rates every stamp pool the presentation packs: the boot world's
+and each routed scene's (a shared session scene among them), each by the views and
+shadow cascades of its own frame (`WorldCreationInstances.ShadowBy`). A pool no view
+rates poses every registration every frame and re-stages each of its mesh rows, which
+shows as `capture` and `pack` in `host.frames` and as `sdf.creations.slots.posed` far
+above the transform rows `sdf.transforms` packs.
 
 Divide `gpu.queue` and `render.record` deltas by their `frames` deltas; [gpu
 cost](references/gpu-cost.md#count-queue-work-and-record-jobs) reads them, and
