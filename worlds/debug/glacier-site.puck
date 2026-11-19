@@ -113,9 +113,9 @@ let valleyMounds = flatMap(
 // The ice, after the references (docs/game/art/caldera-water-pack panel 2, and the glacier references its guide names): a
 // tongue of chunky, bevelled serac blocks filling the trough from wall to wall, stepped down the ramp in rows like a
 // staircase, each block's top tipped back toward level so it catches the sun as a white plane and its down-glacier face
-// stands as a blue cliff. Snow lies only on the tops, as a cap a little wider than its block, so its lip reads as a pale
-// edge. The rows open into crevasses between them, wide where the névé bends over into the icefall and pressed shut at
-// the toe, and their floor is the bed ice, the deep cobalt the slots show. The toe's front row stands in the lake, its
+// stands as a blue cliff. Snow lies only on the tops, as a pillow inside each top's bevelled edges. The rows, blades
+// across the flow, open into crevasses between them, wide where the névé bends over into the icefall and pressed shut
+// at the toe, and their floor is the bed ice, the deep cobalt the slots show. The toe's front row stands in the lake, its
 // foot under the water, so the ice meets the water and no gap opens under it. Up the trough the rows give way to the
 // névé, broad snow-capped slabs that fill the cirque to its headwall, with a few lens-shaped crevasses opening where
 // it bends.
@@ -126,25 +126,31 @@ let glacierHeadS = troughHeadS - 4
 let glacierOrigin = rampPoint(glacierHeadS, 0, 0)
 let iceBed = -3
 let iceCrack = 0.7
-let snowLip = 0.12
-let snowDepth = 0.6
+let iceBevel = 1.2
+let snowInset = 0.6
+let snowDepth = 0.45
+let snowRise = 0.35
 // A serac row: its centre `s` up the ramp, half depth `hz` along the flow, the height `top` of its blocks' tops over the
 // ramp, how far `tilt` (degrees) their tops climb, how far `bow` its middle leads its margins down the ice, and the `cuts`
 // across the trough (x) that split it into blocks; the outer cuts reach into the walls.
 let seracRows = [
-  { s: 1.2, hz: 3.0, top: 5.6, tilt: 8, bow: 0.6, cuts [-21, -11.5, -3, 5.5, 13, 21] }
-  { s: 7.9, hz: 3.3, top: 7.4, tilt: 12, bow: 0.8, cuts [-21, -14, -6, 2, 10, 21] }
-  { s: 15.2, hz: 3.4, top: 8.6, tilt: 10, bow: 1.0, cuts [-21, -10, -1.5, 7.5, 21] }
-  { s: 23.4, hz: 3.5, top: 9.4, tilt: 14, bow: 1.2, cuts [-21, -13.5, -4.5, 4, 12.5, 21] }
-  { s: 32.6, hz: 3.4, top: 10.0, tilt: 12, bow: 1.4, cuts [-21, -9, 0.5, 9.5, 21] }
-  { s: 42.4, hz: 3.5, top: 10.5, tilt: 16, bow: 1.6, cuts [-21, -12.5, -3.5, 5, 13.5, 21] }
-  { s: 52.4, hz: 3.6, top: 11.0, tilt: 14, bow: 1.6, cuts [-21, -8, 2, 21] }
+  { s: 1.5, hz: 3.6, top: 7.5, tilt: 14, bow: 1.0, cuts [-21, -9, 3.5, 21] }
+  { s: 8.6, hz: 2.6, top: 8.4, tilt: 20, bow: 1.2, cuts [-21, -4, 21] }
+  { s: 14.2, hz: 2.4, top: 8.9, tilt: 22, bow: 1.4, cuts [-21, -12, 6, 21] }
+  { s: 19.8, hz: 2.8, top: 9.3, tilt: 20, bow: 1.6, cuts [-21, 1, 21] }
+  { s: 26.4, hz: 2.6, top: 9.7, tilt: 22, bow: 1.8, cuts [-21, -8, 10, 21] }
+  { s: 33.0, hz: 2.8, top: 10.1, tilt: 21, bow: 2.0, cuts [-21, -2, 21] }
+  { s: 40.4, hz: 2.6, top: 10.4, tilt: 23, bow: 2.2, cuts [-21, -13, 4, 21] }
+  { s: 47.6, hz: 2.8, top: 10.7, tilt: 22, bow: 2.2, cuts [-21, 7, 21] }
+  { s: 54.2, hz: 2.4, top: 11.0, tilt: 24, bow: 2.0, cuts [-21, -6, 21] }
 ]
+// How far the middle of the ice stands over its margins, so the section is convex.
+let iceCrown = 1.6
 // The névé's slabs above the icefall: the same rows, deeper, wider and tipped nearer the ramp, so they lie as a broad
 // snowfield; the last meets the headwall.
 let neveRows = [
-  { s: 65, hz: 7.6, top: 11.6, tilt: 22, bow: 1.2, cuts [-21, -2.5, 21] }
-  { s: 85, hz: 10.5, top: 12.2, tilt: 25, bow: 0.8, cuts [-21, 6, 21] }
+  { s: 65, hz: 7.6, top: 11.0, tilt: 22, bow: 1.2, cuts [-21, -2.5, 21] }
+  { s: 85, hz: 10.5, top: 9.5, tilt: 25, bow: 0.8, cuts [-19.5, 6, 19.5] }
 ]
 let iceRows = concat(seracRows, neveRows)
 // One block of row `i`, column `j`: its depth, place along the flow, top's height and tilt jittered so no two blocks
@@ -153,12 +159,17 @@ let iceRows = concat(seracRows, neveRows)
 function seracBlock(row, i, j) = seracPlaced(
   (row.cuts[j] + row.cuts[j + 1]) / 2,
   (row.cuts[j + 1] - row.cuts[j]) / 2 - iceCrack / 2,
-  row.hz * (0.85 + 0.25 * siteScatter(i * 7 + j, 0.236068)),
-  row.tilt + 8 * (siteScatter(i * 7 + j, 0.381966) - 0.5),
-  row.top + 2.4 * (siteScatter(i * 7 + j, 0.618034) - 0.5),
-  row.s + 1.6 * (siteScatter(i * 7 + j, 0.145898) - 0.5) -
+  row.hz * (0.7 + 0.55 * siteScatter(i * 7 + j, 0.236068)),
+  row.tilt + 12 * (siteScatter(i * 7 + j, 0.381966) - 0.5),
+  row.top +
+    3 * (siteScatter(i * 7 + j, 0.618034) - 0.5) +
+    iceCrown * (1 - ((row.cuts[j] + row.cuts[j + 1]) / 42) * ((row.cuts[j] + row.cuts[j + 1]) / 42)),
+  row.s +
+    1.6 * (siteScatter(i * 7 + j, 0.145898) - 0.5) -
     row.bow * (1 - ((row.cuts[j] + row.cuts[j + 1]) / 42) * ((row.cuts[j] + row.cuts[j + 1]) / 42)),
-  0 - 5.5 * row.bow * (row.cuts[j] + row.cuts[j + 1]) / 42 + 50 / row.hz * (siteScatter(i * 7 + j, 0.754878) - 0.5)
+  0 -
+    5.5 * row.bow * (row.cuts[j] + row.cuts[j + 1]) / 42 +
+    60 / (row.cuts[j + 1] - row.cuts[j]) * (siteScatter(i * 7 + j, 0.754878) - 0.5)
 )
 // A block's up axis leans (rampAngle - tilt) back from the ramp's normal, so in the ramp's (s, n) it is
 // (sine, cosine) of that lean; `seracHalfHeight` reaches from the top to `iceBed` under the block's front lower corner.
@@ -175,21 +186,29 @@ function seracPlaced(x, hx, hz, tilt, top, s, yaw) = {
   yaw: yaw
   hy: seracHalfHeight(top, hz, tilt)
 }
-let iceBlocks = flatMap(range(0, length(iceRows)), i => map(range(0, length(iceRows[i].cuts) - 1), j => seracBlock(iceRows[i], i, j)))
-// A block as a glacierMass block: the ice itself, and its snow cap, a slab centred on the ice's top that stands
-// `snowDepth` over it and is wider by `snowLip` all round.
+let iceBlocks = flatMap(
+  range(0, length(iceRows)),
+  i => map(range(0, length(iceRows[i].cuts) - 1), j => seracBlock(iceRows[i], i, j))
+)
+// A block as a glacierMass block: the ice itself, its edges bevelled by `iceBevel`, and its snow cap, a pillow on the
+// flat of its top that stands `snowRise` over it and stops `snowInset` inside its edges, so the bevels stay blue and the
+// snow lies only on the up-facing plane.
 function iceBody(b) = {
   position: rampPoint(b.s - b.hy * seracLeanSine(b.tilt), b.x, b.top - b.hy * seracLeanCosine(b.tilt))
   half [b.hx, b.hy, b.hz]
   rotation: onSlope(cosine(b.tilt * degree), b.yaw)
-  rounding: 1.2
+  rounding: iceBevel
   material: 0
 }
 function iceCap(b) = {
-  position: rampPoint(b.s, b.x, b.top)
-  half [b.hx + snowLip, snowDepth, b.hz + snowLip]
+  position: rampPoint(
+    b.s + (snowRise - snowDepth) * seracLeanSine(b.tilt),
+    b.x,
+    b.top + (snowRise - snowDepth) * seracLeanCosine(b.tilt)
+  )
+  half [b.hx - snowInset, snowDepth, b.hz - snowInset]
   rotation: onSlope(cosine(b.tilt * degree), b.yaw)
-  rounding: 0.55
+  rounding: snowDepth
   material: 1
 }
 // The bed ice the rows stand on: a slab filling the trough's floor from behind the toe's row to under the last névé
@@ -207,9 +226,9 @@ let iceBedSlab = {
 let glacierBlocks = concat([iceBedSlab], map(iceBlocks, b => iceBody(b)), map(iceBlocks, b => iceCap(b)))
 // The height over the ramp of the snow's top at ramp distance `s` and `x` across: the top of whichever block's cap covers
 // that point (a block's yaw is a few degrees and is not followed), for laying a crevasse on it.
-function capTopAt(b, s, x) = (x - b.x) * (x - b.x) < b.hx * b.hx and (s - b.s) * (s - b.s) < b.hz * b.hz ?
-  b.top + snowDepth - (s - b.s) * seracLeanSine(b.tilt) / seracLeanCosine(b.tilt) :
-  -100
+function capTopAt(b, s, x) = (x - b.x) * (x - b.x) < b.hx * b.hx and (s - b.s) * (s - b.s) < b.hz * b.hz ? b.top +
+  snowRise -
+  (s - b.s) * seracLeanSine(b.tilt) / seracLeanCosine(b.tilt) : -100
 function iceTop(s, x) = reduce(iceBlocks, -100, (top, b) => maximum(top, capTopAt(b, s, x)))
 // Lens-shaped crevasses across the névé where it bends over into the icefall: each a tube from [s, x] to [s, x] centred
 // `d` under the snow's top, bowed down-glacier by `bow`, that swells by `bulge` at its middle and closes at its ends, so it
@@ -219,7 +238,8 @@ function crevasseBetween(p0, p1, d, bow, bulge) = {
   position: rampPoint(p0[0], p0[1], iceTop(p0[0], p0[1]) - d)
   b [
     (p1[1] - p0[1]) / 2,
-    2 * (iceTop((p0[0] + p1[0]) / 2, (p0[1] + p1[1]) / 2) - iceTop(p0[0], p0[1])) - (iceTop(p1[0], p1[1]) - iceTop(p0[0], p0[1])) / 2,
+    2 * (iceTop((p0[0] + p1[0]) / 2, (p0[1] + p1[1]) / 2) - iceTop(p0[0], p0[1])) -
+      (iceTop(p1[0], p1[1]) - iceTop(p0[0], p0[1])) / 2,
     (p1[0] - p0[0]) / 2 - 2 * bow
   ]
   c [p1[1] - p0[1], iceTop(p1[0], p1[1]) - iceTop(p0[0], p0[1]), p1[0] - p0[0]]

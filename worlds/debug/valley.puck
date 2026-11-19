@@ -101,6 +101,11 @@ placements {
   }
 }
 
+// The relief masks of the sector named `name`: one over every bowl and cut it carves, or none when it carves nothing.
+function sectorCarveMasks(name) = length(filter(valleyBasins, b => b.sector == name)) +
+  length(filter(valleyCuts, c => c.sector == name)) >
+  0 ? [terrainCarveMask(filter(valleyBasins, b => b.sector == name), filter(valleyCuts, c => c.sector == name))] : []
+
 prototypes {
   for sector in valleySectors {
     prototype $"valley-{sector.name}" {
@@ -114,12 +119,7 @@ prototypes {
         // The relief stays out of the bowls and cuts the sector carves (water-site.puck's valleyBasins, glacier-site.puck's
         // valleyCuts), so the lake's water, lining and stones and the glacier's ice, placed from the analytic carves, sit
         // on the rock the bake draws and contact reads.
-        terrainRelief(
-          seed: sector.seed,
-          masks: length(filter(valleyBasins, b => b.sector == sector.name)) + length(filter(valleyCuts, c => c.sector == sector.name)) > 0
-            ? [terrainCarveMask(filter(valleyBasins, b => b.sector == sector.name), filter(valleyCuts, c => c.sector == sector.name))]
-            : []
-        )
+        terrainRelief(seed: sector.seed, masks: sectorCarveMasks(sector.name))
         terrainMass(
           label: "main",
           foot: sector.foot,

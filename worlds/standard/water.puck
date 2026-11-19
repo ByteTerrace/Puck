@@ -372,7 +372,12 @@ template glacierMass(id, blocks, crevasses, gauge = "glacierLength", origin = [0
 // bowl's own ellipsoid (centred `y`, the bowl's `radii`) less the same ellipsoid raised by `thickness`, a shell that thick
 // everywhere vertically and cut off at height `cut` (under the lake's lowest surface), where it thins to nothing. The floor
 // the stones lie on is then the authored bowl rather than whatever the terrain's relief leaves of it.
-template lakeStones(id, stones, palette, beds = [], exponent = 2.6, relief = { frequency: 0.25, amplitude: 0.06, octaves: 2, seed: 17 }) {
+template lakeStones(id, stones, palette, beds = [], exponent = 2.6, relief = {
+  frequency: 0.25
+  amplitude: 0.06
+  octaves: 2
+  seed: 17
+}) {
   prototype $"{id}" {
     document {
       schema: "puck.creation.v1"
@@ -426,7 +431,9 @@ template lakeStones(id, stones, palette, beds = [], exponent = 2.6, relief = { f
 }
 
 // Use the shared material flow when the lake has a localized current.
-function lakeMaterial(surface, flow, outlet) = outlet.radius <= 0 ? flowed(surface, flow, glass: 1) : (surface with { flow: flow with { region: outlet } })
+function lakeMaterial(surface, flow, outlet) = outlet.radius <= 0 ? flowed(surface, flow, glass: 1) : (surface with {
+  flow: flow with { region: outlet }
+})
 
 // A lake's water: the body of water the bowl holds. A cylinder of the bowl's `depth` and `radius` whose top is the surface,
 // intersected with the bowl itself (`bowl`, { y, radii }: the ellipsoid, in the lake's frame, that the terrain cut for it,
@@ -435,7 +442,9 @@ function lakeMaterial(surface, flow, outlet) = outlet.radius <= 0 ? flowed(surfa
 // shows through it by its depth and the shore is where the rock meets the level. The surface rises and falls with the gauge
 // `state.<gauge>` by `rise` metres a unit above `rest`, the gauge's value at the outlet; the bowl rides it, so no seam
 // stretches.
-template lakeSurface(id, radius, depth, bowl, reach = 0.15, gauge = "lakeLevel", rest = 0.4, rise = 4, palette = waterPalette, flow = lakeFlowLayer, glass = lakeGlass, outlet = { radius: 0 }) {
+template lakeSurface(id, radius, depth, bowl, reach = 0.15, gauge = "lakeLevel", rest = 0.4, rise = 4, palette = waterPalette, flow = lakeFlowLayer, glass = lakeGlass, outlet = {
+  radius: 0
+}) {
   prototype $"{id}" {
     document {
       schema: "puck.creation.v1"
