@@ -199,6 +199,9 @@ public static partial class SdfWorldPackage {
     public const string ScreenFidelity = "screenFidelity";
     /// <summary>The view-local stamp fade: first transform slot, slot count and opacity.</summary>
     public const string StampFade = "stampFade";
+    /// <summary>The view-local pose overlay: first transform slot, slot count and first overlay row, each a whole number
+    /// (<c>SdfPoseOverlay</c>).</summary>
+    public const string PoseOverlay = "poseOverlay";
     /// <summary>The program word stream.</summary>
     public const string ProgramWords = "sdfWords";
     /// <summary>The dynamic-transform table, three float4 rows per slot.</summary>
@@ -369,6 +372,7 @@ public static partial class SdfWorldPackage {
         Value(name: GeometryOnly, type: ShaderValueType.Uint),
         Value(name: ScreenFidelity, type: ShaderValueType.Float),
         Value(name: StampFade, type: ShaderValueType.Float3),
+        Value(name: PoseOverlay, type: ShaderValueType.Uint3),
         ShaderInterfaceMember.Value(group: ShaderInterfaceGroup.Pass, length: (MeshShadowCascadeCount * MeshShadowCascadeRows), name: MeshShadowCascades, type: ShaderValueType.Float4),
         Value(name: MeshShadowCount, type: ShaderValueType.Uint),
         Value(name: MeshShadowParameters, type: ShaderValueType.Float4),

@@ -472,23 +472,22 @@ public static class WorldProjection {
             throw new WorldDisclosureException(message: $"{path} binds state row '{binding.Row}' this recipient may not read; a hidden source sends no derived value.");
         }
     }
-    // The rows a presented bindable reads, which cross as observations so the recipient reads the value the authority
-    // presents rather than its fallback; a field row crosses as the field it is, never also as an observation.
+    // The rows a presented bindable or a creation's pose reads (WorldSceneInputs.CreationRows), which cross as
+    // observations so the recipient reads the value the authority presents rather than its fallback; a row a policy
+    // restricts still crosses only to a recipient the policy admits (WorldStateDisclosure.ComposeRow), and a field row
+    // crosses as the field it is, never also as an observation.
     internal static HashSet<string>? PresentedRows(WorldDefinition definition, IReadOnlyList<WorldBoundValue> bound) {
-        if (bound.Count == 0) {
+        var read = new HashSet<string>(collection: WorldSceneInputs.CreationRows(definition: definition), comparer: StringComparer.Ordinal);
+
+        foreach (var (_, binding, _, _) in bound) { _ = read.Add(item: binding.Row); }
+        if (read.Count == 0) {
             return null;
         }
 
         var rows = new HashSet<string>(comparer: StringComparer.Ordinal);
 
-        foreach (var (_, binding, _, _) in bound) {
-            if (definition.State.FirstOrDefault(predicate: row => string.Equals(
-                a: row.Name.Value,
-                b: binding.Row,
-                comparisonType: StringComparison.Ordinal
-            )) is { Field: null }) {
-                _ = rows.Add(item: binding.Row);
-            }
+        foreach (var row in definition.State) {
+            if ((row.Field is null) && read.Contains(item: row.Name.Value)) { _ = rows.Add(item: row.Name.Value); }
         }
 
         return rows;

@@ -73,6 +73,7 @@ public static partial class SdfFrameBlock {
     private static readonly int NearDistance = Offset(member: SdfWorldPackage.NearDistance);
     private static readonly int ScreenCount = Offset(member: SdfWorldPackage.ScreenCount);
     private static readonly int StampFade = Offset(member: SdfWorldPackage.StampFade);
+    private static readonly int PoseOverlay = Offset(member: SdfWorldPackage.PoseOverlay);
     private static readonly int ShadowSlots = Offset(member: SdfWorldPackage.ShadowSlots);
     private static readonly int ShadowSlotCount = Offset(member: SdfWorldPackage.ShadowSlotCount);
     private static readonly int ShadowRoles = Offset(member: SdfWorldPackage.ShadowRoles);
@@ -283,6 +284,12 @@ public static partial class SdfFrameBlock {
         WriteFlag(block: block, offset: GeometryOnly, value: quality.GeometryOnly);
         WriteSingle(block: block, offset: ScreenFidelity, value: Math.Clamp(max: 1f, min: 0f, value: snapshot.ScreenFidelity));
         WriteVector3(block: block, offset: StampFade, value: new System.Numerics.Vector3(x: snapshot.StampFade.FirstSlot, y: snapshot.StampFade.SlotCount, z: snapshot.StampFade.Opacity));
+        // A disabled overlay writes zeros, which no slot falls inside (sdfViewPoseSlot).
+        var overlay = ((snapshot.PoseOverlay.SlotCount > 0) ? snapshot.PoseOverlay : default);
+
+        WriteUInt32(block: block, offset: PoseOverlay, value: ((uint)overlay.FirstSlot));
+        WriteUInt32(block: block, offset: (PoseOverlay + sizeof(uint)), value: ((uint)overlay.SlotCount));
+        WriteUInt32(block: block, offset: (PoseOverlay + (2 * sizeof(uint))), value: ((uint)overlay.OverlaySlot));
     }
 
 

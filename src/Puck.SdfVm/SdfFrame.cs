@@ -19,6 +19,9 @@ public readonly record struct SdfViewSnapshot(CameraSnapshot Camera, NormalizedR
     public BloomQuality BloomQuality { get; init; }
     /// <summary>A screen-door fade of one stamp's transform-slot range in this view only. Default draws every stamp.</summary>
     public SdfStampFade StampFade { get; init; }
+    /// <summary>A pose of one stamp drawn in this view only: its transform slots read their rows from the overlay's rows.
+    /// Default reads every slot's own row.</summary>
+    public SdfPoseOverlay PoseOverlay { get; init; }
 
     /// <summary>The infinity layers fitted to this consumer's camera, identified by their authored names.
     /// Their producer names identify existing render-graph outputs; the sky recorder binds them under the frame's
@@ -98,6 +101,16 @@ public readonly record struct SdfViewSnapshot(CameraSnapshot Camera, NormalizedR
 /// <param name="SlotCount">The number of slots owned by the stamp; zero disables fading.</param>
 /// <param name="Opacity">The screen coverage, from zero (hidden) to one (solid).</param>
 public readonly record struct SdfStampFade(int FirstSlot, int SlotCount, float Opacity);
+/// <summary>A view-local pose overlay: the slots of one stamp read their dynamic-transform rows from another range of
+/// the same table, which holds that stamp posed for this view alone (<c>frame/sdf-mesh-skin.hlsli</c>,
+/// <c>sdfViewPoseSlot</c>). Every reader of the shared rows (the other views, mirrors and portals, the host's anchors and
+/// picking) reads the stamp's own rows; only the draws this view rasterizes, and the shading of their pixels, read the
+/// overlay.</summary>
+/// <param name="FirstSlot">The stamp's first dynamic-transform slot.</param>
+/// <param name="SlotCount">The number of slots the overlay replaces; zero disables it.</param>
+/// <param name="OverlaySlot">The first row of the overlay's range, which holds the replacement for
+/// <paramref name="FirstSlot"/> and the rows after it in order.</param>
+public readonly record struct SdfPoseOverlay(int FirstSlot, int SlotCount, int OverlaySlot);
 /// <summary>One infinity layer's fitted sampling parameters and the render-graph image this consumer reads.</summary>
 /// <param name="Layer">The infinity layer's unique authored name.</param>
 /// <param name="Parameters">The sampling basis and rectangle fitted to this consumer. The sky retains the

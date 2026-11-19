@@ -118,6 +118,15 @@ internal sealed partial class PlayerCommandModule {
                 : $" shape:{shape.Name} parent={(shape.Parent ?? "root")} delta={Point(value: shape.Delta)} turn={Scalar(value: shape.TurnRadians)}"));
         }
 
+        // The seat's guess layer, the pose its own view alone draws (the drivers above are the shared pose every other
+        // reader sees), echoed only to that seat or the operator.
+        if (pool.TryGuessRig(bodyIndex: bodyIndex, slot: out var guessSlot, state: out var guessed) && (guessed is not null) &&
+            ((context.Principal.Kind == PrincipalKind.Console) || (context.Principal == m_roster.PrincipalOf(slot: guessSlot)))) {
+            foreach (var driver in guessed.Drivers) {
+                if (driver.Source is { } source) { _ = line.Append(value: $" guess:{driver.Name} phase={Scalar(value: driver.Phase)} source={source}"); }
+            }
+        }
+
         _ = line.Append(value: ']');
 
         return new CommandResult(Output: line.ToString());

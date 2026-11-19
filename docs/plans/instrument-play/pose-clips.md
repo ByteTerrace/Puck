@@ -760,21 +760,47 @@ trip late, which is most of the delay there. The wider promise cannot be
 kept.
 
 **What we propose.** A driver whose signal is a state cell may carry `lead`,
-the name of an input channel. The driver's phase follows the seat's level on
-that channel in place of the cell only while all of the following hold.
+the name of an input channel. The guess is drawn in a pose of its own, the
+**guess layer**, and only the owning seat's own view draws it.
 
-1. **One audience.** The client presents for exactly one seat, and that seat
-   controls the body. With two or more seats on a client the guess is off for
-   all of them.
+- **The shared pose never guesses.** Every reader of a body's pose other than
+  the seat's own view reads the shared pose: the other views on the client, a
+  camera screen or a session window that films the same scene, a part-anchored
+  camera or a carried screen (and so the pointer ray a rule may read), another
+  body's effector, the rate tiers and `body.rig`'s driver readings. The shared
+  pose's drivers read their cells, as if no driver carried `lead`.
+- **The layer is a second registration of the seat's body**
+  (`WorldCreationInstances.Guess.cs`), held by the stamp pool of the world the
+  seat's body is in and never entered in the pool, so no lookup that resolves
+  a body reaches it. Only its view answers a lead (`WorldRigReads.ForGuess`);
+  a pool registration's view answers none and refuses a guess outright.
+- **Only the seat's own view reads the layer.** The layer packs into rows past
+  every row the pool and its program name, and the seat's own view snapshot
+  carries a pose overlay (`SdfViewSnapshot.PoseOverlay`) that reads the body's
+  slots from those rows (`sdfViewPoseSlot` in the mesh kernels). No other view
+  carries it, so no other picture can show the guess.
+
+In the layer, the driver's phase follows the seat's level on the channel in
+place of the cell only while all of the following hold.
+
+1. **One audience.** The client presents exactly one seat, and the guess is
+   offered only to the scene of the world whose authority that seat's route
+   names, for the body the route drives there (`WorldClient.SeatGuessAt`). The
+   one-seat test no longer protects anyone else's picture (the overlay does);
+   it stands because a scene holds one guess layer.
 2. **The seat is admitted** (`WorldSeatInput.Admitted`), the channel is live
    in the mapping the authority last published, and the producer has not lost
    a capture.
 3. **An input on that channel is outstanding.** The seat's producer has
    recorded an edge on the channel in a batch it sent, and the tick in which
-   the authority answered that edge has not yet been presented.
-4. **The guess is young.** It is no older than the driver's `leadSeconds`.
+   the authority answered that edge has not yet been presented. Once it has,
+   the producer forgets the edge, so a later delivery that no longer carries
+   the answer (a restored checkpoint, a withdrawn span) revives nothing.
+4. **The guess is young.** It is no older than the driver's `leadSeconds` of
+   presented time: the frames' presentation deltas summed, which advance by
+   the completed ticks under lockstep, never the wall clock.
 
-Otherwise the driver reads its cell, exactly as today.
+Otherwise the layer's driver reads its cell, as the shared pose's does.
 
 - **The level** is the producer's folded value for the channel
   (`WorldInputProducer`), which already obeys the mapping, the rule that a
@@ -797,30 +823,43 @@ Otherwise the driver reads its cell, exactly as today.
   sends it to no one. Each owner's delivery gains the last sequence the
   authority has answered for that owner, taken or refused, and the tick it
   answered in. It goes to that owner only, as the input publication does
-  (`WorldOwnedRecords.ForOwner`). Without it a remote client cannot tell
-  a late answer from a refusal. Prediction will need the same fact. The answer
-  carries the batch's input epoch, since event sequences restart each epoch,
-  and it is delivery only: it is neither hashed nor checkpointed, so a resumed
-  authority answers from its next batch and a guess left open across the
-  resume ends at `leadSeconds`. The answered tick counts as presented once the
-  mirror the rig reads has delivered a later tick, or that tick at a
-  presentation fraction of one.
+  (`WorldOwnedRecords.ForOwner`); an observer with a body disclosure is no
+  owner and is handed none (`WorldOutputHub.Observed`). Without it a remote
+  client cannot tell a late answer from a refusal. Prediction will need the
+  same fact. The answer carries the batch's input epoch, since event sequences
+  restart each epoch, and it is delivery only: it is neither hashed nor
+  checkpointed, so a resumed authority answers from its next batch and a guess
+  left open across the resume ends at `leadSeconds`. The answered tick counts
+  as presented once the mirror the rig reads has delivered a later tick, or
+  that tick at a presentation fraction of one.
+- **Every refusal is answered.** The submission door records the answer
+  (`WorldInputRuntime.Answer`) before any check that can refuse the batch: a
+  drive gate (a stun), a Drive denial, a reach, the admission itself. Only a
+  batch of the owner's current epoch for the owner's own route writes it, so
+  a stale or misdirected batch cannot overwrite the answer the current epoch
+  holds.
+- **The client reads the answer under the authority's owner.** A forwarded
+  authority stamps a traveler as its peer, a principal the client never names,
+  so the client reads its publication and answer under its own principal, else
+  under whichever owner the route's authority publishes the routed body's
+  input as (`WorldSessionMirror.TryInputOf`).
 - **`leadSeconds` bounds a guess that gets no answer** (a stalled link). It
   is authored on the driver, because how long an unconfirmed press may show
-  is a matter of feel. The engine's default is a quarter of a second.
-- **It wakes and is not held.** The guess is one of the rig's reads
+  is a matter of feel. The engine's default is a quarter of a second, and no
+  maximum is imposed: a long value changes only the owning seat's own picture.
+- **It wakes and is not held.** The guess is one of the layer's reads
   ([section 7](#7-a-pose-is-packed-again-when-something-it-reads-changes)).
-  Its revision moves when a guess starts, changes level or ends, and a
-  registration with a guess in force is evaluated in full that frame whatever
-  its rate tier.
+  The layer packs every frame it exists, so a guess shows in the frame after
+  the tick that takes the press in whatever the shared pose's rate tier, and
+  the shared pose holds exactly as it would with no `lead` authored.
 
 The gate still reads stored state, because which controls are live is
 simulation state
 ([modes are simulation state](../../decisions/input-channels.md#modes-are-simulation-state)).
 
 **The promise, in one sentence.** While one of a seat's own inputs has been
-taken in by a tick and not yet answered on screen, that seat's client, and no
-other, may draw the driver at the level the input asks for.
+taken in by a tick and not yet answered on screen, that seat's own view, and no
+other picture, may draw the driver at the level the input asks for.
 
 **What the player gets.** The time from the tick that takes the press in to
 the frame that shows its result. With the authority in the same process that
@@ -839,15 +878,21 @@ own input moves between ticks (`WorldSeatViewState.PresentedLook`).
 
 - *A modified client lies about its guess.* It changes that client's own
   picture and nothing else.
-- *Presentation feeds the simulation.* The guess is read through one function
-  that returns a number and writes nothing. The client cannot reference the
-  server (`build/Architecture.props`), and step 8 compares the authority's
-  hashes with the guess on and off.
+- *Presentation feeds the simulation.* A guessed pose moved a part-anchored
+  camera or a carried screen's camera when the guess was packed into the
+  shared pose, and the pointer ray a rule reads is cast through that camera.
+  Now every camera, anchor and carried screen reads the shared pose, which no
+  lead reaches, and a guess's age is presented time, not the wall clock. The
+  client cannot reference the server (`build/Architecture.props`).
 - *Another viewer sees it.* Not on another client, because nothing about it
-  is sent. Not on the same client, because the guess is off unless one seat
-  is the whole audience.
+  is sent. Not on the same client: a second seat's view, a pending seat's, an
+  operator or named camera, a camera screen and a session window that shares
+  the scene all read the shared pose, and only the owning seat's own view
+  carries the overlay that reads the layer.
+- *The guess lands on the wrong body.* The body index belongs to the world
+  the seat's route names, and only that world's scene is offered the guess.
 - *The guess outlives the truth.* It ends at the answer, at a new epoch, or
-  at `leadSeconds`, whichever comes first.
+  at `leadSeconds`, whichever comes first, and every refusal is answered.
 - *Hidden information.* A seat's own input, shown to that seat.
 
 **What it costs or risks.**
@@ -856,6 +901,13 @@ own input moves between ticks (`WorldSeatViewState.PresentedLook`).
   then refuses. That is what a guess is. An author who cannot accept it
   leaves `lead` off.
 - Split-screen seats get no early feedback.
+- The seat's own body costs a second pose evaluation every frame while it
+  wears a creation with a led driver.
+- In the seat's own view, a light anchored to a guessed part, a mirror or a
+  portal view, and the culling box of a rigid part draw the shared pose: the
+  overlay reaches the mesh vertex and shading reads only. A guessed part that
+  leaves its shared box at the edge of the view can be culled for the frames
+  the guess lasts.
 - A recording of the seat's own screen contains the guess, since it is that
   seat's picture. A replay of the authority's tape does not.
 - When prediction lands, the driver's state read goes through the predicted
@@ -1028,9 +1080,10 @@ structural does, the row says so.
 | An effector reads only poses that are final for it. | Validation over the compiled writes: a target on the effector's own chain is refused, and so is a later effector that writes the target or a shape above it. | A part follower moves a shape after the solve. Another body's part can be a frame old, or as old as its reader's rate tier. |
 | A pose is evaluated again when a value it reads changes. | The pose pass can read only through the view of the rig's compiled reads, and the wake test hashes that view. | A body far away is still evaluated at its tier's rate. A body nothing can see is not evaluated. |
 | A body judged unseen cannot be in view in any pose its rig can reach. | The sphere it is judged by takes the reach derived from the compiled rig. | A part follower can overshoot the derived reach. The widest drawn pose covers that only after it has happened once. |
-| Every state cell a rig reads is sent to the recipients allowed to read it. | The presentation manifest registers from the compiled reads. | Disclosure decides who is allowed, unchanged. |
-| A guess is drawn only for the seat that pressed, and only while its input is outstanding. | One function answers a `lead` (`WorldSeatInput.TryLead`), with the outstanding test and the age test inside it. The one-seat test is in the one place a guess is offered (`IWorldStampSource.SeatGuess`, null on every source but a client presenting for one seat), and the rig's view answers a lead only for the body that guess names. | That seat can see a press the authority refuses, until the answer arrives. A recording of its screen shows the guess. |
-| A guess changes nothing the authority computes. | The function that answers a `lead` writes nothing, and the client cannot reference the server (`build/Architecture.props`, enforced at build). | A player acts on what they see, which is why input is recorded. |
+| Every state cell a rig reads is sent to the recipients allowed to read it, and a scene is shared only between streams that read those cells alike. | The presentation manifest registers from the compiled reads; the scene's input rows and a presentation-tier peer's presented rows take every state read of every creation's compiled rig (`WorldSceneInputs.CreationRows`). | Disclosure decides who is allowed, unchanged. A look's lanes and poses are registered by the manifest and not yet among the scene's input rows. |
+| A guess colours only the owning seat's own presented picture. | The guess layer is a registration no pool lookup reaches; only its view answers a lead (`WorldRigReads.ForGuess`), and a pool registration's view refuses a guess (`WorldRigReads.BindGuess`). The layer packs into rows no program, draw or lookup names, read only through a view's pose overlay, which the presenter sets on the guessing seat's own view alone. | A kernel that reads a slot's row without `sdfViewPoseSlot` (an anchored light, a mirror or portal view) draws the shared pose in that view. That seat can see a press the authority refuses, until the answer arrives, and a recording of its screen shows the guess. |
+| A guess changes nothing the authority computes. | Cameras, anchors, carried screens and so the pointer ray read the shared pose, which no lead reaches; the guess's age is presented time; the client cannot reference the server (`build/Architecture.props`, enforced at build). | A player acts on what they see, which is why input is recorded. |
+| Every input an owner sends is answered in the tick it arrives. | The submission door writes the answer through one function (`WorldInputRuntime.Answer`) before any check that can refuse the batch, for a batch of the owner's current epoch and its own route only. | A batch the door never reaches (no body at the index) is no authority outcome and is not answered; its guess ends at `leadSeconds`. |
 | The engine learns no instrument, dance or finger. | Review. The names are a clip, a part, a mode, a lead. | A leaked name is a defect fixed when found. |
 
 ## The review, finding by finding
@@ -1062,6 +1115,22 @@ step whose check runs the reviewer's counterexample.
 | 20 | Three of the Moth's shapes are at the swing cap, not four. | Corrected. | none |
 | 21 | A pose never drawn can be outside the sphere a body is judged unseen by. | The sphere takes a reach derived from the compiled rig (section 7). | 2 |
 
+### The review of steps 7 and 8 as built
+
+An adversarial review of the built steps 7 and 8 raised the findings below.
+Each was opened in the code before it was answered.
+
+| # | The finding | What the code showed | What changed |
+|---|---|---|---|
+| R1 | A guessed pose moves part-anchored and carried-screen cameras, so the pointer ray a rule reads can come from a guess. | Confirmed: the guess was packed into the shared transform table, which `WorldEntityPartResolver.TryPackedPose` and `TryCarriedScreen` read for the seat's camera. | The guess is a separate layer only the seat's own view reads (section 8); every camera reads the shared pose. |
+| R2 | The cell that selects a reached body is not a scene input, so a restricted stream could share a scene that reveals it, and a presentation-tier peer is never sent it. | Confirmed, and wider: no state cell any rig reads was a scene input or a presented row; only bound values, fields, size sources and clocks were. | Both take every state read of every creation's rig (`WorldSceneInputs.CreationRows`). A restricted row still crosses only to a recipient its policy admits, so no binding check was added. |
+| R3 | The guess is offered with an away world's body index to the boot scene; remote and portal scenes never draw it; and a forwarded authority answers under a principal the client never looks up. | Confirmed, all three. | The guess is offered only to the scene of the world the seat's route names, routed scenes included; the client reads its publication and answer under the owner the authority publishes for its body. |
+| R4 | The guess reaches other views, session windows sharing the scene, camera screens and `body.rig`. | Confirmed for the views, windows and screens, which all drew the shared table. | The overlay reaches the seat's own view alone. `body.rig` prints the layer's drivers only to that seat or the operator. |
+| R5 | A stun, a Drive denial or a reach refusal returns before the answer is written; the answer was written before the body and epoch checks; `leadSeconds` has no maximum. | Confirmed for the first two. | The answer is written first, for the current epoch's own-route batches only. `leadSeconds` stays uncapped: it changes only the owning seat's picture. |
+| R6 | A restored checkpoint or a cut drops the answer and revives an answered guess; the guess's age reads the wall clock. | Confirmed. | The producer forgets an edge once its answer is presented, and the age is presented time. |
+| R7 | A body-disclosure observer is handed every owner's answers. | Confirmed for the observer door; a colocated endpoint is the same process's own client. | The observer door strips owned records (`WorldOutputHub.Observed`), and a leak's excerpt names answers. |
+| R8 | A parked attached reader keeps rating its last target, and a reader later in the pool lags one frame. | Confirmed for the first. | A parked row clears its packed root. The one-frame lag stands. |
+
 ## At the scale of an MMO
 
 Every choice above is presentation, evaluated by each client for the bodies it
@@ -1071,10 +1140,12 @@ index cell that an effector reads is registered for delivery like any other
 cell a rig reads. Each owner receives the last input sequence the authority
 answered for it, which only that owner is sent.
 
-A world places its own authority, and a guess follows the seat. A crossing
-rebuilds the seat's source registry, and the guess reads nothing until the
-world the body now stands in has admitted the seat. So a body that crosses a
-portal starts neutral under the new authority's mapping.
+A world places its own authority, and a guess follows the seat: it is offered
+only to the scene of the world the seat's route names, local or remote, and is
+answered under whatever owner that authority knows the seat's body by. A
+crossing rebuilds the seat's source registry, and the guess reads nothing until
+the world the body now stands in has admitted the seat. So a body that crosses
+a portal starts neutral under the new authority's mapping.
 
 A crowd pays for terms evaluated on bodies that are posed. The existing rate
 tiers already hold a far body's pose between evaluations, and a term at zero
@@ -1106,7 +1177,7 @@ and its applied weight, and the source a led driver read.
 | 5. Clips, adding (built) | The `clips` list, axis and angle keys, the stored sign, the arc routine in `Puck.Maths`, `ease`, held and looping positions. | On a fixture with a two-key clip on a state driver, `body.rig <body> <shape>` reads the key's turn when the cell is at the key, half of it midway under `linear`, and half again at half weight. Keys of plus and minus 90 degrees about one axis read zero at the midpoint, and the same with the second key written about the opposite axis. A key written in the author frame about +X reads the same angle about the engine's −X, and a pose with no turn reads a zero delta. The sketch's finger reads rest at a cell of zero, part way at one half and its key at one. A held clip on a `time` driver is refused by name, and so is a looping clip whose period does not divide one turn. A looping clip crosses its seam, and the point where its driver's phase wraps, with no jump, forward and at a negative cadence. A held clip on a state driver holds its last key when the cell passes it. Validation refuses a clip on a folded shape, an unknown shape, and a composed turn of a half turn or more. A test holds the track bound over random keys under a half turn. |
 | 6. Masks and replacing (built) | `parts` and `mode` on a driver, the shares, the seam bound's clip rules. | On a fixture where a `time` swing and a replacing clip pose one shape: at full weight `body.rig` reads exactly the key's turn at every tick, at half weight the swing reads at half amplitude, and a shape outside the mask is unchanged. A stance clip about X and a sway swing about Y on one shoulder give the same pose whether the sway's driver is declared before or after the stance's, at equal shares. The Moth's strafe reads as in step 1 under a replacing layer at half weight on her arms. Seam fixtures, each read from `creation stats`, on a 1 mm part at its joint inside a static box, smooth 14 mm, so the seam's box reaches 26 mm from the joint: five replacing 15 degree poses on five drivers are admitted (6.78 mm against 7); the same at 17 degrees are split (7.68 mm); the same five 15 degree poses on adding drivers read 75 degrees and are split; a clip that only slides 8 mm is split; two 35 degree clips on one driver and joint read 70 degrees and are split; five 13 degree tracks on one driver read 65 degrees and are split. A test samples weights and positions of random rigs and finds no pose past the bound. |
 | 7. Reach and influence (built) | The `shape` target and its refusals. `reference` and `part` on the `body` target, the identity check, the fade. `weightBy` and blend times on an effector, its share over its writes, the release. | Two arms, one swinging on `time`, the other's fingertip aimed at a point on it: `error` on the final pose stays under a tenth of a millimetre for 200 ticks. The three refusals fire by name. With a cell holding a second body's index, the hand reaches that body's part and follows a change of the cell in the next frame. Clearing the cell reads `target=none` in that frame, the weight eases, and moving the former target during the fade moves the hand by nothing. A cell of zero selects body zero. A slot that is reused releases the latch. A planted leg under a replacing layer at weight one that covers the thigh and shin and leaves out the foot: the applied weight reads zero in the first such frame, with a blend-out of half a second authored, and the knee reads exactly the clip's key. After that layer leaves and the body has walked a metre, the foot plants at the new ground point. An owner whose `parts` leave out a bone is refused, naming the bone. A planted hand under an adding recoil on a later layer keeps its `error`, and the elbow shows the recoil. Two effectors on one shoulder: the later holds its `error`, the earlier reports its own, and the compiler warns. A recipient allowed the index cell sees the reach, and one denied it sees rest. |
-| 8. The guess (built) | `lead` and `leadSeconds` on a state driver, the one function that answers it, the owner's acknowledgement, the wake and the hold bypass. | A log records, for each press, the times of capture, the tick that takes it in, the cell's change and each presented frame. On a one-seat client a scripted press at a stated offset reads source `lead` and a phase above zero in the first frame after the tick that takes it in, and source `cell` once that tick is presented. With two seats on the client the source never reads `lead`, both views draw one pose, and an anchor on the finger reads that pose. A second client watching the same body reads `cell` throughout. A rule that refuses the press while the button is held for 60 ticks: the source returns to `cell` when the answer is presented and the phase reads zero for the rest of the hold. A cell a rule holds at one with the channel idle reads one. A mode switch during an outstanding press ends the guess in that frame. `lead` on a relative or a text channel is refused by name. A body at rest with the rate tiers on is evaluated in the frame after the tick that takes the press in. With answers delayed by a stated number of ticks, the guess holds until the answer is presented, with no return to the cell between, and ends at `leadSeconds` when no answer comes. `puck test --reproduce` on the scripted run gives the same authority hashes with `lead` authored and removed. Read so far: the debug fixture world `worlds/debug/lead-fixture.puck` (and `lead-plain-fixture.puck` with the `lead` removed) with `lead-tests.puck` give the authority half (the take, the refusal held for 60 ticks, the mode switch, equal hashes and snapshots with and without `lead`); `CreationLeadGuessLawTests` gives the pose half with a faked guess. A headless World poses no creation (`body.rig` prints `creation-rig=none`), so the guess's own start and end (`WorldSeatInput.TryLead`, `WorldClient.SeatGuess`: one seat, two seats, delayed answers, `leadSeconds`) have no reading yet. |
+| 8. The guess (built) | `lead` and `leadSeconds` on a state driver, the outstanding test, the owner's acknowledgement written before every refusal, the guess layer and the view-local pose overlay that draws it in the seat's own view alone. | A log records, for each press, the times of capture, the tick that takes it in, the cell's change and each presented frame. On a one-seat client a scripted press at a stated offset reads `guess:` source `lead` and a phase above zero in the first frame after the tick that takes it in, and source `cell` once that tick is presented, while the shared pose's driver reads `cell` throughout. With two seats on the client no layer exists, both views draw one pose, and an anchor on the finger reads that pose. In a windowed batch, the seat's own view draws the press early and a camera screen, a session window and a named camera filming the same body draw it at the cell. A second client watching the same body reads `cell` throughout. A rule that refuses the press while the button is held for 60 ticks: the source returns to `cell` when the answer is presented and the phase reads zero for the rest of the hold. A cell a rule holds at one with the channel idle reads one. A mode switch during an outstanding press ends the guess in that frame. `lead` on a relative or a text channel is refused by name. A body at rest with the rate tiers on is evaluated in the frame after the tick that takes the press in. With answers delayed by a stated number of ticks, the guess holds until the answer is presented, with no return to the cell between, and ends at `leadSeconds` when no answer comes. `puck test --reproduce` on the scripted run gives the same authority hashes with `lead` authored and removed. Read so far: the debug fixture world `worlds/debug/lead-fixture.puck` (and `lead-plain-fixture.puck` with the `lead` removed) with `lead-tests.puck` give the authority half (the take, the refusal held for 60 ticks, the mode switch, equal hashes and snapshots with and without `lead`); `CreationLeadGuessLawTests` gives the pose half with a faked guess (the layer reads `lead` while the shared rows stay bit for bit as they were, the overlay names the body's slots and rows past the pool's, an unanswered edge ends at `leadSeconds` of presented time, a view of the shared pose refuses a guess, and a rate tier holds the shared pose while the layer poses the press); `InputAnswerLawTests` gives the answer (a gated refusal answered in its tick, and a stale or misdirected batch leaving the current answer). A headless World poses no creation (`body.rig` prints `creation-rig=none`), so the guess's own start and end on a live client (`WorldSeatInput.TryLead`, `WorldClient.SeatGuessAt`: one seat, two seats, delayed answers) and the overlay's picture have no reading yet. |
 | 9. The Moth's hand | The plan's hands lane: joints, segments, the stance, the vents. | The plan's stage 2 row, in the lead's windowed batch. |
 
 ## What this design does not cover
@@ -1237,3 +1308,20 @@ The capability searched for, what was read, and why nothing existing owns it.
   acknowledges that a submission arrived, which is a different fact.
 - **Counting rig work.** Read `WorldCreationWork`. It counts drivers and
   slots, and no terms or solves.
+- **Drawing one stamp differently in one view.** Read `SdfViewSnapshot`,
+  `SdfStampFade` and `frame/sdf-stamp-fade.hlsli` (a view-local slot range,
+  the only per-view stamp mechanism, which hides a stamp and moves none),
+  the dynamic-transform table and its history copy (`SdfWorldTables.Motion`),
+  the dresser's draw matrices (`SdfMeshDresser`) and the mesh vertex door
+  (`sdfMeshWorldVertex`, `sdfMeshSkinSlotsOf`, `sdfMeshPreviousPosition`). The
+  pose overlay is the fade's sibling: a view-local slot range read from other
+  rows of the same table, so the history copy, the uploads and the bindings
+  serve it unchanged. A second residency for the seat's view, or swapping rows
+  between views on the queue, were rejected: the first doubles a scene, and
+  the second would race every pass that reads the table.
+- **Holding a second pose of a body.** Read the pool's registrations
+  (`WorldCreationInstances.Registration`), the rigid copies (`WorldRigidAssets`)
+  and the reseeding path. A registration is the one evaluator of a pose and
+  carries every state the evaluation advances, so the guess layer is a second
+  registration packed by the same `PackRegistration`, kept out of the pool's
+  lookups.

@@ -168,14 +168,14 @@ public sealed partial class WorldFramePresenter {
     }
     // Latches a view into the scene of the world its seat is presented in, creating the scene the first frame a seat is
     // presented there.
-    private void RouteView(WorldAuthorityEndpoint endpoint, int view) {
+    private void RouteView(WorldAuthorityEndpoint endpoint, int view, int seat) {
         var scene = SceneOf(endpoint: endpoint);
 
         while (m_viewRoutes.Count < view) {
             m_viewRoutes.Add(item: (null, 0));
         }
 
-        m_viewRoutes.Add(item: (scene, scene.AddView(view: m_views[view])));
+        m_viewRoutes.Add(item: (scene, scene.AddView(seat: seat, view: m_views[view])));
     }
     // The scene of an endpoint's world, created the first time a seat is presented there or a window attaches to it.
     private WorldRoutedScene SceneOf(WorldAuthorityEndpoint endpoint) {
@@ -192,17 +192,25 @@ public sealed partial class WorldFramePresenter {
 
         return scene;
     }
-    private WorldRoutedScene CreateRoutedScene(WorldAuthorityEndpoint endpoint) => NewScene(
-        authority: endpoint.Identity,
-        bodyColor: index => RoutedBodyColor(
+    // A seat may be presented in an endpoint's scene, so the scene is offered the client's guess for that endpoint, which
+    // its pool poses into a layer only that seat's own view reads.
+    private WorldRoutedScene CreateRoutedScene(WorldAuthorityEndpoint endpoint) {
+        var scene = NewScene(
+            authority: endpoint.Identity,
+            bodyColor: index => RoutedBodyColor(
+                endpoint: endpoint,
+                index: index
+            ),
             endpoint: endpoint,
-            index: index
-        ),
-        endpoint: endpoint,
-        key: endpoint,
-        mirror: endpoint.Mirror,
-        name: endpoint.Identity
-    );
+            key: endpoint,
+            mirror: endpoint.Mirror,
+            name: endpoint.Identity
+        );
+
+        scene.SeatGuess = () => m_client.SeatGuessAt(endpoint: endpoint);
+
+        return scene;
+    }
     // A scene under this presentation's levers: its programs build in the background, it takes the dressed frame's
     // clock, and it follows the presentation's shadow slots, sky audition and render levers.
     private WorldRoutedScene NewScene(object key, WorldAuthorityEndpoint? endpoint, WorldSessionMirror mirror, string authority, string name, Func<int, Vector3> bodyColor) => new(

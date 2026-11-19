@@ -260,9 +260,9 @@ new work
 [The design](instrument-play/pose-clips.md#8-the-owning-seat-sees-its-own-press-early-as-a-guess)
 answers with a guess that does not wait for prediction. While one of a seat's
 own inputs has been taken in by a tick and not yet answered on screen, that
-seat's client may draw the driver at the level the input asks for. The guess
-runs only on a client that presents for one seat, and it ends at the
-authority's answer. It removes the presentation's tick and the round trip. It
+seat's own view may draw the driver at the level the input asks for. The guess
+is a pose layer only that view reads, offered only on a client that presents one
+seat, and it ends at the authority's answer. It removes the presentation's tick and the round trip. It
 leaves the wait from the press to the tick that takes it in, which a later
 step closes only if a sitting finds it is felt.
 

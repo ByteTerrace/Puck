@@ -23,8 +23,10 @@ public interface IWorldStampSource {
     /// <summary>Gets the static solid field an effector plants against, or <see langword="null"/> when this world
     /// carries none.</summary>
     SdfFieldEvaluator? StaticField { get; }
-    /// <summary>Gets the presenting seat's guess on its own input, or <see langword="null"/> unless this source presents
-    /// for exactly one seat that controls a body.</summary>
+    /// <summary>Gets the presenting seat's guess on its own input for the world this source presents, or
+    /// <see langword="null"/> unless the client presents exactly one seat and that seat's body is in this world
+    /// (<see cref="WorldClient.SeatGuessAt"/>). A stamp pool reads it into its guess layer alone
+    /// (<see cref="WorldCreationInstances.GuessOverlay"/>).</summary>
     IWorldSeatGuess? SeatGuess => null;
 
     /// <summary>Gets an entity's entity-and-generation address, which a follower reseeds on when it changes.</summary>

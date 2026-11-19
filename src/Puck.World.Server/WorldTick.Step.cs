@@ -705,6 +705,11 @@ public sealed partial class WorldTick {
     /// scripted tape segment (<c>body.fly</c>/<c>EnqueueSegment</c>) is refused by the same fact a raw per-tick
     /// channel submission is.</remarks>
     internal WorldIntentAdmission ApplyIntentSubmission(WorldBody body, in IntentSubmission submission) {
+        var inputOwner = (submission.InputOwner ?? submission.Principal);
+        var ownsInput = ((inputOwner == submission.Principal) || Host.Input.IsController(inputOwner, submission.Principal, submission.EntityIndex));
+
+        // Taken or refused, a batch its owner sent is answered in this tick, before any check below can refuse it.
+        if (ownsInput) { Host.Input.Answer(batch: submission.Input, bodyIndex: submission.EntityIndex, principal: inputOwner); }
         var gated = TryDriveGateVerdict(
             bodyIndex: submission.EntityIndex,
             verdict: out var gatedVerdict
@@ -741,9 +746,8 @@ public sealed partial class WorldTick {
         }
 
         m_driveDenied[submission.EntityIndex] = false;
-        var inputOwner = (submission.InputOwner ?? submission.Principal);
 
-        if ((inputOwner != submission.Principal) && !Host.Input.IsController(inputOwner, submission.Principal, submission.EntityIndex)) {
+        if (!ownsInput) {
             return new(InputRefusal: "input.owner: this actor does not own the submitted controller session and route", Permission: verdict);
         }
         var sourceTable = (Host.Input.TryGet(input: out var admittedOwner, principal: inputOwner)

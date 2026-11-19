@@ -151,21 +151,32 @@ reach from any joint inside it is at least `√3·k`, and a clip turn over about
 
 `lead` (an input channel's name) and `leadSeconds` (default 0.25) let a
 state-cell driver show the presenting seat's own press before the authority's
-answer is drawn: a guess. While the client presents for exactly one seat
-(`IWorldStampSource.SeatGuess`, null with two seats on one screen and on a session
-view), that seat controls the body, is admitted with no lost capture, the channel
-is live in the mapping the authority last published, an edge the seat sent on it
-(a press, a release or an axis sample) has not had its answer presented, and the
-edge is no older than `leadSeconds`, the phase follows the seat's own folded level
-in place of the cell. The one function is `WorldSeatInput.TryLead`; it writes
-nothing, and the authority never reads `lead`. The answer is
-`WorldInputAnswer` (the epoch, the highest event sequence of the last batch the
-authority took or refused for that owner, and the tick it answered in), delivered
-to that owner alone; the guess ends when that tick is fully presented, at a new
-input epoch, or at `leadSeconds`. A guess is one of the rig's reads
-(`CreationRigReadKind.Lead`): its start, level and end move the wake revision, and
-a registration with a guess in force is never held by a rate tier. `body.rig`
-prints `source=lead` or `source=cell` for a led driver. Refused by name: `lead`
+answer is drawn: a guess, which colours only that seat's own presented picture.
+The guess is a separate pose layer (`WorldCreationInstances.Guess.cs`): the stamp
+pool of the world the seat's body is in (`WorldClient.SeatGuessAt`, offered only
+while the client presents one seat) poses that body a second time with a guessing
+view (`WorldRigReads.ForGuess`) into rows past its own, and only the seat's own view
+reads those rows (`WorldCreationInstances.GuessOverlay`, carried as
+`SdfViewSnapshot.PoseOverlay` and read through `sdfViewPoseSlot`). The shared pose
+every other reader resolves (part anchors and part-anchored cameras, carried
+screens and so the pointer ray, other bodies' effectors, rates, the other views,
+camera screens and session windows) never reads a lead: a pool registration's view
+answers none and refuses a guess (`WorldRigReads.BindGuess`). In the layer, while
+that seat is admitted with no lost capture, the channel is live in the mapping the
+authority last published, and an edge the seat sent on it (a press, a release or
+an axis sample) has not had its answer presented, the phase follows the seat's own
+folded level in place of the cell, for at most `leadSeconds` of presented time
+(the frames' summed delta, so it repeats under lockstep), never the wall clock.
+The outstanding test is `WorldSeatInput.TryLead`, and the authority never reads
+`lead`. The answer is `WorldInputAnswer` (the epoch, the highest event sequence of
+the last batch of the owner's current epoch the authority took or refused, and the
+tick it answered in), written through `WorldInputRuntime.Answer` before any check
+that can refuse the batch and delivered to that owner alone; the client reads it
+under whichever owner the route's authority publishes the body's input as
+(`WorldSessionMirror.TryInputOf`), and marks an edge answered once that tick is
+fully presented, so a later delivery without the answer revives nothing. `body.rig`
+prints the shared pose's drivers, and, to the guessing seat or the operator,
+`guess:<driver> phase=… source=lead|cell` from the layer. Refused by name: `lead`
 on a signal that is not a state cell, `leadSeconds` without `lead`, and (world
 validator) a channel that is not declared, or is relative or text.
 
