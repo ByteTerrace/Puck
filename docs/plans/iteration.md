@@ -33,8 +33,13 @@ Building that instrument is the first step.
   bake's wall time, and the GPU is idle most of the time a job is in flight
   ([the measurement](field-programs/research-measure.md)). Residencies bake the
   same groups twice.
-- **An author's `.puck` edit has no live path** from a saved file to the
-  running World that is measured and fast.
+- **An author's `.puck` edit takes the slow door.** A saved file reaches the
+  running World only as a `world.reload` (by hand, or queued by `world.watch
+  on`), which composes, validates and installs the whole world again for one
+  changed value, while the same value set through `world.row.set` lands in a
+  fraction of a second. [The authoring loop](iteration/authoring-loop.md)
+  maps that path through the compiler, the caches, the CLI, the World, the
+  editor and the save back to source, and designs the loop that replaces it.
 
 Two diagnosis lanes (`bake-trace`, `light-trace`) account for the bake's and
 lighting's time, and one fix lane (`bake-share`) removes the duplicate bakes.
