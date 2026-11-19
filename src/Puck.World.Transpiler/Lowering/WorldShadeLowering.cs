@@ -347,6 +347,7 @@ internal sealed class WorldShadeLowering {
 
         private static ExpressionNode Syntax(JsonNode? value) => value switch {
             JsonArray array => new ArrayExpressionNode(array.Select(selector: Syntax).ToArray()),
+            JsonObject record => new ObjectExpressionNode(record.Select(selector: p => new PropertyNode(p.Key, Syntax(value: p.Value))).ToArray()),
             JsonValue scalar when scalar.TryGetValue<string>(value: out var text) => new LiteralExpressionNode(text),
             JsonValue scalar when scalar.TryGetValue<bool>(value: out var boolean) => new LiteralExpressionNode(boolean),
             null => new LiteralExpressionNode(null),

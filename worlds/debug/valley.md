@@ -20,11 +20,11 @@ cooler than the near ones, and the strata still read as horizontal lines.
 
 The treatment is the standard's terrain program
 ([terrain.puck](../standard/terrain.puck), `terrainMaterial`), laid on every
-sector's rock slot as `valleyRockBands`: a stratum band repeating by altitude, a
-gully band and a ridge band by curvature, and a turf band by slope, all broken
-by the same noise so no edge runs ruler-straight round the ring. The cel
-treatment composes with it: the terrain program writes the surface, cel the
-light response.
+sector's rock slot as `valleyRockBands`: a face that deepens toward the foot, a
+dark and a pale stratum repeating every 23 m of altitude, and turf by slope, all
+broken by the same noise so the strata wander and no edge runs ruler-straight
+round the ring. The cel treatment composes with it: the terrain program writes
+the surface, cel the light response.
 
 ## Outside references
 
@@ -56,7 +56,12 @@ facet or a grain finer than the treatment's brush.
 - The relief bakes at a coarse cell (the terrain pass's
   [what set a sector's cell](../../docs/plans/terrain-pass.md#what-set-a-sectors-cell)),
   so curvature, which the program reads from the baked normals, changes per
-  triangle: the ridge and gully bands follow the 2 to 4 m triangles of a
-  sector's bake. The source tiles lift it.
+  triangle: a ridge or gully band scattered into flecks of the 2 to 4 m
+  triangles, so the walls read no curvature until the source tiles lift the
+  cell. Close in, the wall's foot shows the same triangles as flat facets.
+- The walls are smooth superellipsoid domes under their relief, where Study B
+  has vertical cliff planes and stepped ledges; the bands follow altitude, so
+  they read as strata on any form, but the form is the terrain pass's relief
+  and sets.
 - Nothing past the shadow reach is shadowed (the terrain pass's far shadows),
   so the far walls' gullies hold no cast shadow.
