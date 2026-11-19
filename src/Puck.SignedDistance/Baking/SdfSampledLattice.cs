@@ -49,6 +49,12 @@ public sealed record SdfContour(float[] Positions, float[] Normals, int[] Quads,
     // A lifted chamfer's corner meets its neighboring bevel at 31.4 degrees, although the bevel meets the main face at
     // 45. Leave room below that smaller turn for sampled triangle normals; using 32 blended the corner across its rim.
     private const double CreaseDegrees = 25.0;
+
+    /// <summary>Gets the cosine of the turn between two facings past which they are a crease's two sides.
+    /// <see cref="SplitAtCreases"/> splits a vertex at it, and a later stage that asks whether two normals of the
+    /// finished contour lie across a crease compares against the same value.</summary>
+    public static double CreaseCosine { get; } = Math.Cos(d: double.DegreesToRadians(degrees: CreaseDegrees));
+
     // The longest quad edge Finished welds, in the contour's finest cells: past the few hundredths of a cell a row beside
     // a crease stands off it and the crowding where creases meet, short of moving a surface a fraction of a cell the
     // lattice resolves.
@@ -413,7 +419,7 @@ public sealed record SdfContour(float[] Positions, float[] Normals, int[] Quads,
         var positions = Positions;
         var normals = Normals;
         var vertexCount = (positions.Length / 3);
-        var cosine = Math.Cos(d: double.DegreesToRadians(degrees: CreaseDegrees));
+        var cosine = CreaseCosine;
 
         // A quad at a crease vertex folded across the crease, its two triangles facing apart by more than the crease
         // angle (one on each face, as where a crease is shorter than a cell), shades as its two triangles: as one quad it

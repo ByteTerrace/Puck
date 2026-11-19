@@ -146,8 +146,10 @@ are deleted rather than kept beside the programs.
   the bake read; glass (a pass, a group and raster state, with its contact ramp
   `sdfGlassContact` feeding the stamp and its shadow density with the glass
   data); the paints' shape descriptors (a `shape` op's operand); the lanes; the
-  flow clock as a stamp input; and the cel outline, which reads neighbour depth
-  and normal and so cannot be a per-pixel program, with its style row.
+  flow clock as a stamp input; and the search for edges between neighbouring
+  pixels, which no per-pixel program can make. Today that is the cel outline
+  with its style row. [The ink plan](ink.md#design) replaces it with edge
+  signals in the stamp and an authored ink phase.
 - *The style switch, as built.* The banding is the `cel` program; a palette
   row's `toon` and the world's `render.toon` are the style row beside it (the
   styled mark and the ink), and `render.shade` is the world default's program.
@@ -157,6 +159,11 @@ are deleted rather than kept beside the programs.
   suppresses every style. Cel is the debug world's treatment, chosen by its
   materials
   ([the decision](../decisions/rendering.md#a-light-is-shadowed-wherever-it-lights-and-cel-shading-is-a-style-per-material)).
+  The ink plan's [sixth step](ink.md#build-order) removes the style row, so a
+  case becomes a program alone: `toonSelect` is renamed `shadeSelect`, a state
+  cell and a list of programs, and `world.toon` becomes `world.shade phases`,
+  which names the authored phases that run
+  ([what is deleted](ink.md#what-is-deleted)).
 - *Terrain and weather are programs.* The terrain pass's slope, altitude and
   curvature materials and a weather region's coatings are `shade` templates in
   the standard package over the stamp (`surface.normal`, `surface.position`,
