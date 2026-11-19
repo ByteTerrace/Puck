@@ -159,23 +159,18 @@ public sealed partial class SdfProgram {
                         break;
                     }
                 case SdfOp.ReliefWeight: {
-                        // The region's distance is the mask scope's accumulator times the scope's 1/L, baked here as a pop's
-                        // candidate scale is, so it is 1-Lipschitz as ReliefMaskSlope assumes; the seed, the band's end,
-                        // scales by L with it, so the scope's clamp still sits exactly where the weight reaches its outside.
-                        // The weight then leaves the far distance, a constant (L = 0), so the scope's pop composes nothing
-                        // and stays unpatched. A factor-1 region keeps the builder's words byte-identical.
+                        // The admission door's writer (SdfProgram.ReliefMasks.cs, fact 2): the band's endpoints in the
+                        // region field's own units are the band times the region's bound L, so the region's distance read
+                        // against them is 1-Lipschitz as ReliefMaskSlope assumes, and the push's seed is the band's end, so
+                        // the scope's clamp sits exactly where the weight reaches its outside. All three words are written
+                        // from the band whatever the caller supplied. The weight then leaves the far distance, a constant
+                        // (L = 0), so the scope's canonical pop composes nothing and stays unpatched.
                         var regionLipschitz = MathF.Max(x: accumulator, y: 1.0f);
+                        var (bandStart, bandEnd) = ReliefMaskEndpoints(index: index, regionLipschitz: regionLipschitz, weight: instruction);
+                        var push = pushes[(scopeDepth - 1)];
 
-                        if (!float.IsFinite(f: regionLipschitz)) {
-                            throw new InvalidOperationException(message: $"A relief mask's Lipschitz accumulator became non-finite ({regionLipschitz}) at ReliefWeight instruction {index}.");
-                        }
-                        if (regionLipschitz > 1.0f) {
-                            var push = pushes[(scopeDepth - 1)];
-
-                            instructions[index] = (instruction with { Data1 = instruction.Data1 with { X = (1.0f / regionLipschitz) } });
-                            instructions[push] = (instructions[push] with { Shape = BitConverter.SingleToUInt32Bits(value: ((instruction.Data0.X + instruction.Data0.Y) * regionLipschitz)) });
-                        }
-
+                        instructions[index] = (instruction with { Data1 = new Vector4(x: bandStart, y: bandEnd, z: 0.0f, w: 0.0f) });
+                        instructions[push] = (instructions[push] with { Shape = BitConverter.SingleToUInt32Bits(value: bandEnd) });
                         accumulator = 0.0f;
                         break;
                     }

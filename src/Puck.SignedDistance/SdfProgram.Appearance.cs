@@ -94,7 +94,7 @@ public sealed partial class SdfProgram {
         for (var index = first; (index < end); index++) {
             var instruction = m_instructions[index];
 
-            if (instruction.Op != SdfOp.ShapeBlend) { continue; }
+            if (!IsSurfaceShape(index: index)) { continue; }
             if (!IsGlassMaterial(material: unchecked((int)instruction.Material))) { return false; }
             shapes++;
         }
@@ -103,8 +103,10 @@ public sealed partial class SdfProgram {
     }
 
     private bool MeasureGlass(bool shadows = false) {
-        foreach (var instruction in m_instructions) {
-            if ((instruction.Op == SdfOp.ShapeBlend) && IsGlassMaterial(material: unchecked((int)instruction.Material)) &&
+        for (var index = 0; (index < m_instructions.Length); index++) {
+            var instruction = m_instructions[index];
+
+            if (IsSurfaceShape(index: index) && IsGlassMaterial(material: unchecked((int)instruction.Material)) &&
                 (!shadows || Appearance.Materials[(int)instruction.Material].Glass is { ShadowDensity: > 0f })) {
                 return true;
             }

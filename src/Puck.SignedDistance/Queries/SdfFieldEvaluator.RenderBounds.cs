@@ -143,12 +143,12 @@ public sealed partial class SdfFieldEvaluator {
     }
     // A relief mask's weight over a box whose region distance lies in `region` (ReliefMaskWeight): the weight is monotone
     // in the region's distance, so its interval is the weights at the region's ends.
-    private static FixedInterval ReliefMaskWeightBounds(in CompiledInstruction instruction, FixedInterval region, FixedQ4816 seed) {
+    private static FixedInterval ReliefMaskWeightBounds(in CompiledInstruction instruction, FixedInterval region) {
         if (region.IsUnbounded) {
             return FixedInterval.Hull(first: instruction.Data0Z, second: instruction.Data0W);
         }
 
-        return FixedInterval.Hull(first: ReliefMaskWeight(instruction: in instruction, region: region.Lower, seed: seed), second: ReliefMaskWeight(instruction: in instruction, region: region.Upper, seed: seed));
+        return FixedInterval.Hull(first: ReliefMaskWeight(instruction: in instruction, region: region.Lower), second: ReliefMaskWeight(instruction: in instruction, region: region.Upper));
     }
     // A LaneErode's effect on the next shape over a box: skipped outright, or eroded by any share of its reach.
     private static FixedInterval? LaneErodeBounds(in CompiledInstruction instruction) {

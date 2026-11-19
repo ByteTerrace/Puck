@@ -182,7 +182,7 @@ public sealed partial class SdfProgramBuilder {
         }
     }
     /// <summary>Closes the relief mask <see cref="BeginReliefMask"/> opened: emits its <see cref="SdfOp.ReliefWeight"/>
-    /// (whose 1/L <c>AnalyzeLipschitz</c> bakes) and the scope's union pop, which composes nothing.</summary>
+    /// (whose band endpoints in the region's units <c>AnalyzeLipschitz</c> derives) and the scope's union pop, which composes nothing.</summary>
     /// <returns>This builder.</returns>
     /// <exception cref="InvalidOperationException">No relief mask is open, a scope opened inside it is still open, or
     /// the mask holds no shape.</exception>
@@ -197,7 +197,7 @@ public sealed partial class SdfProgramBuilder {
         m_instructions.Add(item: new SdfInstruction(
             Blend: 0u,
             Data0: mask.Band,
-            Data1: new Vector4(x: 1f, y: 0f, z: 0f, w: 0f),
+            Data1: default,
             Material: 0,
             Op: SdfOp.ReliefWeight,
             Shape: 0u

@@ -452,15 +452,28 @@ dearest:
   (`SdfOp.ReliefWeight`, `SdfProgramBuilder.BeginReliefMask`,
   `SdfProgram.RequireReliefMasks`, `CreationReliefMaskDocument`); the sync
   pair is in the [rendering skill](../../.claude/skills/rendering/references/sync-pairs.md#instruction-semantics-shared-by-both-interpreters).
-  `TerrainRelief` takes over the register's read when it lands. Its checks
+  `TerrainRelief` takes over the register's read when it lands. As built, the
+  lowering above differs in five ways the adversarial review called for, all
+  held by one admission door (`SdfProgram.RequireReliefMasks`, whose header
+  names them): the band's endpoints are written in the region field's own
+  units, with the seed, by `AnalyzeLipschitz` alone, in place of a baked
+  1/L; the mask's pop is canonical, all data zero; a region admits rigid
+  point ops, mirrors and elongation only, so its field is continuous; a mask
+  and its relief share one instruction owner; and the relief starts its own
+  chain. Walkers that ask which shapes draw a surface read one table
+  (`SdfProgram.IsSurfaceShape`). Its checks
   read: outside every band the masked and unmasked fields agree bit for bit,
   and on and inside a region of inside weight zero the masked field is the
   unrelieved one (`SdfReliefMaskLawTests`); `puck creation stats` prints the
   north-west sector's clamp as 3.33×, as B predicts; and the sector's CPU bake
   measured 8.91 million samples with the mask against 9.45 million without,
   inside the 1.5× budget, so the sum formula stays. Still open: the `mask`
-  construct and its spelling pair; the generic value path carries the mask
-  meanwhile.
+  construct and its spelling pair (the generic value path carries the mask
+  meanwhile); and a band narrower than the bake's coarse cell or contact's
+  gradient taps, which neither sees: the band's region should declare a bake
+  part at a quarter of its fade (`WorldShapeDetail.PartsOf`), and the relief
+  field collider's gradient step (`WorldColliderSet.ReliefField`) should
+  include the band's width.
 - **Step B: kernel agreement.** This is step 3's existing target applied to a
   masked sector: a fixed-point CPU bake and a kernel bake agree within the
   bake's tolerance, on Direct3D 12 and on Vulkan. *Check:* `puck mesh audit`

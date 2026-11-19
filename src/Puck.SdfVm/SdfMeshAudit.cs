@@ -337,26 +337,15 @@ public static class SdfMeshAudit {
         var instructions = program.Instructions;
         var shapes = new List<(int Instruction, SdfProgram Field)>();
         var chain = new List<int>();
-        // The scope depth a relief mask opened at (SdfProgram.IsReliefMaskPush), zero outside one: a mask's shapes draw
-        // a region, never a surface, so none is a shape the audit names.
-        var depth = 0;
-        var maskDepth = 0;
+        // A relief mask's shapes draw a region, never a surface (SdfProgram.ReliefMaskInstructions), so none is a shape the
+        // audit names; its point ops still move the chain a later shape may read.
+        var masks = SdfProgram.ReliefMaskInstructions(instructions: instructions);
 
         for (var at = 0; (at < indices.Count); at++) {
             var index = indices[at];
             var op = instructions[index].Op;
 
-            if (op == SdfOp.PushField) {
-                depth++;
-                if ((maskDepth == 0) && SdfProgram.IsReliefMaskPush(instruction: instructions[index])) { maskDepth = depth; }
-                continue;
-            }
-            if (op == SdfOp.PopField) {
-                if (depth == maskDepth) { maskDepth = 0; }
-                depth--;
-                continue;
-            }
-            if (maskDepth > 0) { continue; }
+            if ((op == SdfOp.ShapeBlend) && !SdfProgram.IsSurfaceShape(index: index, instructions: instructions, masks: masks)) { continue; }
             if (op == SdfOp.ResetPoint) {
                 chain.Clear();
                 chain.Add(item: index);
@@ -417,13 +406,15 @@ public static class SdfMeshAudit {
     internal static Dictionary<int, int> SlotWalk(SdfMeshBakeGroup group, IReadOnlyList<int> indices, IReadOnlyList<SdfInstruction> instructions) {
         var slotOf = new Dictionary<int, int>();
         var slot = group.Slot;
+        // A relief mask's shapes draw no surface, so they ride no member (SdfProgram.ReliefMaskInstructions).
+        var masks = SdfProgram.ReliefMaskInstructions(instructions: instructions);
 
         foreach (var index in indices) {
             var op = instructions[index].Op;
 
             if (op == SdfOp.ResetPoint) { slot = group.Slot; }
             if (op == SdfOp.TransformDynamic) { slot = ((int)instructions[index].Data0.X); }
-            if (op == SdfOp.ShapeBlend) { slotOf.Add(key: index, value: slot); }
+            if (SdfProgram.IsSurfaceShape(index: index, instructions: instructions, masks: masks)) { slotOf.Add(key: index, value: slot); }
         }
 
         return slotOf;
@@ -437,10 +428,17 @@ public static class SdfMeshAudit {
         var empty = new Stack<bool>();
         var dropping = false;
         var open = true;
+        // A relief mask stays whole in every part, a field dependency of the relief its part keeps.
+        var masks = SdfProgram.ReliefMaskInstructions(instructions: instructions);
 
         foreach (var index in indices) {
             var op = instructions[index].Op;
 
+            if ((masks is not null) && masks[index]) {
+                dropping = false;
+                kept.Add(item: index);
+                continue;
+            }
             if (op == SdfOp.ShapeBlend) {
                 dropping = ((slotOf[index] != member) && !SdfBoundAlgebra.Carves(blend: ((SdfBlendOp)instructions[index].Blend)));
             } else if (SdfOpRoles.Of(op: op) != SdfOpRole.Field) {

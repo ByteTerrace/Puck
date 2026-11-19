@@ -446,11 +446,7 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
                 Data0Y: FixedQ4816.FromDouble(value: instruction.Data0.Y),
                 Data0Z: FixedQ4816.FromDouble(value: instruction.Data0.Z),
                 Data1W: FixedQ4816.FromDouble(value: instruction.Data1.W),
-                // A relief mask's 1/L is floored, so the region's compiled distance stays 1-Lipschitz as the band's
-                // slope in the step bound assumes (SdfProgram.NoiseDisplaceStepFactor).
-                Data1X: (((instruction.Op == SdfOp.ReliefWeight) && FixedDirectedRounding.TryFloorFromDouble(result: out var floored, value: instruction.Data1.X))
-                    ? floored
-                    : FixedQ4816.FromDouble(value: instruction.Data1.X)),
+                Data1X: FixedQ4816.FromDouble(value: instruction.Data1.X),
                 Data1Y: FixedQ4816.FromDouble(value: instruction.Data1.Y),
                 Data1Z: FixedQ4816.FromDouble(value: instruction.Data1.Z),
                 Detail: instruction.Detail,

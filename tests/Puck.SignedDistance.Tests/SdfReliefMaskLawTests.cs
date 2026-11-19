@@ -111,6 +111,41 @@ public sealed class SdfReliefMaskLawTests {
     }
 
     [Fact]
+    public void AReliefChainedToItsMaskOrAFoldInsideAMaskIsRefused() {
+        // The relief must start its own chain, or the step bound would charge it to the mask's last shape.
+        var chained = new SdfProgramBuilder();
+        var material = chained.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
+
+        chained.ResetPoint().PushField().ResetPoint().Sphere(material: material, radius: 1f)
+            .BeginReliefMask(fade: Fade, start: 0f).ResetPoint().Sphere(material: material, radius: 0.5f).EndReliefMask()
+            .NoiseDisplace(amplitude: Amplitude, frequency: Frequency)
+            .PopField();
+        Assert.Throws<ArgumentException>(testCode: () => chained.Build());
+
+        // A repeat jumps between copies at its seams, which would put a jump in the weight.
+        var folded = new SdfProgramBuilder();
+        var other = folded.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
+
+        folded.ResetPoint().PushField().ResetPoint().Sphere(material: other, radius: 1f)
+            .BeginReliefMask(fade: Fade, start: 0f).ResetPoint().Repeat(spacing: new Vector3(value: 4f)).Sphere(material: other, radius: 0.25f).EndReliefMask()
+            .ResetPoint().NoiseDisplace(amplitude: Amplitude, frequency: Frequency)
+            .PopField();
+        Assert.Throws<ArgumentException>(testCode: () => folded.Build());
+    }
+
+    [Fact]
+    public void TheSeedAndTheBandInTheRegionsUnitsAreDerivedFromTheBand() {
+        var program = Slab(mask: true);
+        var instructions = program.Instructions;
+        var weight = instructions.Single(predicate: instruction => (instruction.Op == SdfOp.ReliefWeight));
+        var push = instructions.Single(predicate: SdfProgram.IsReliefMaskPush);
+
+        Assert.Equal(expected: 0f, actual: weight.Data1.X);
+        Assert.Equal(expected: Fade, actual: weight.Data1.Y);
+        Assert.Equal(expected: BitConverter.SingleToUInt32Bits(value: Fade), actual: push.Shape);
+    }
+
+    [Fact]
     public void AWeightOutsideTheUnitIntervalIsRefusedByName() {
         var builder = new SdfProgramBuilder();
 
