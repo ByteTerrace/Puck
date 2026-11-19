@@ -644,7 +644,15 @@ laws exercise that boundary.
   split sub-millimetre cells as many times as the strokes' cells, spending the
   fine-sample budget (`SdfSampledLattice.MaxFineSamples`) across the slab's
   depth and leaving a long note a coarser split. The tier floors the detail, so a view that
-  resolves no stroke pays for none. A
+  resolves no stroke pays for none, and a group baked at a tier coarser than its glyphs
+  declare thickens them instead of losing strokes: the lettering stroke rule in `sdfGlyph`
+  widens the thinnest stroke to `GlyphStrokeCells` cells and the relief to one cell, or
+  bakes the glyph as its ink box past the atlas's band
+  ([text and glyphs](../../../../docs/rendering/sdf/reference/text-and-glyphs.md#the-lettering-stroke-rule)).
+  Every lattice of a group takes the group's cell and stroke through one door
+  (`SdfMeshPathBake.RequestOf`, `SdfMeshBakeRequest.Glyphs`), so coarse and fine samples
+  read one field; a lattice built around that door bakes the glyph unthickened beside
+  thickened neighbours. A
   glyph's field is its atlas distance only within half the atlas's distance
   range of an edge and a bound past it (a constant band, then its cell's box),
   so a static instance's glyphs (`SdfInstanceRange.Glyphs`, joined into
