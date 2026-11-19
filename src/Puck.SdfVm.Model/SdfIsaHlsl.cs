@@ -146,6 +146,7 @@ public static class SdfIsaHlsl {
         declarations.Members<SdfAxis>(prefix: "SDF_AXIS");
         declarations.Members<SdfPlane>(prefix: "SDF_PLANE");
         declarations.Members<SdfWallpaperGroup>(prefix: "SDF_WPG");
+        declarations.Members<SdfReliefRowKind>(prefix: "SDF_RELIEF_ROW_KIND");
         declarations.Section(title: "The program header, the first vector of the word stream: the vectors before the instruction headers, and each lane's accessor.");
         declarations.Count(name: "SDF_PROGRAM_HEADER_VECTORS", value: SdfProgram.ProgramHeaderVectors);
         declarations.Lane(lane: SdfProgram.ProgramInstructionCountLane, name: "SDF_PROGRAM_INSTRUCTION_COUNT");
@@ -237,6 +238,7 @@ public static class SdfIsaHlsl {
             value: SdfProgramBuilder.ScreenMaterialId
         );
         declarations.Count(name: "SDF_MAX_NOISE_OCTAVES", value: SdfProgramBuilder.MaxNoiseOctaves);
+        declarations.Count(name: "SDF_MAX_RELIEF_ROWS", value: SdfReliefMask.MaxRows);
         declarations.Count(name: "SDF_MAX_SWEEP_STRANDS", value: SdfProgramBuilder.MaxSweepStrands);
         declarations.Count(name: "SDF_MAX_CONVEX_VERTICES", value: SdfPrismProfile.MaxConvexVertices);
         declarations.Count(name: "SDF_CONVEX_COUNT_BITS", value: SdfPrismProfile.ConvexCountBits);

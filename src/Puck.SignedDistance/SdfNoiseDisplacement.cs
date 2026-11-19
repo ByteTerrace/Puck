@@ -30,6 +30,12 @@ public readonly record struct SdfNoiseDisplacement(float Frequency, float Amplit
         octaves: Octaves
     );
 
+    /// <summary>Returns the bound on the relief's slope per unit of the frame it samples once masks weight it: its own
+    /// slope plus its amplitude times the masks' summed slope (<see cref="SdfReliefMask.SlopeOf"/>). A masked relief's
+    /// gradient is <c>a·(w∇n + n∇w)</c> with <c>|n| ≤ 1</c> and <c>0 ≤ w ≤ 1</c>.</summary>
+    /// <param name="maskSlope">The masks' summed slope, per unit of the frame the relief samples; zero for none.</param>
+    /// <returns>The slope bound.</returns>
+    public float MaskedSlope(float maskSlope) => ((maskSlope > 0.0f) ? (ReliefSlope + (MathF.Abs(x: Amplitude) * maskSlope)) : ReliefSlope);
     /// <summary>Returns the bound on a noise relief's slope per unit of the frame it samples:
     /// <c>amplitude · frequency · (15/4)·√3 · Σ(gain·lacunarity)ᵏ / Σ gainᵏ</c>. One octave of quintic-blended trilinear
     /// value noise over corner values in <c>[-1, 1]</c> changes by at most <c>(15/8)·2</c> per unit cell on each axis;
@@ -57,8 +63,8 @@ public readonly record struct SdfNoiseDisplacement(float Frequency, float Amplit
     }
     /// <summary>Decodes a noise relief from its instruction and checks every lane against the domain
     /// <see cref="SdfProgramBuilder.NoiseDisplace"/> enforces: the frequency and amplitude finite, the gain and lacunarity
-    /// finite and above zero, the octave count in range, the normalization the derived one bit for bit, and the unused
-    /// lanes zero.</summary>
+    /// finite and above zero, the octave count in range, the normalization the derived one bit for bit, the mask row
+    /// count in range (the program door checks it against the rows before the relief), and the unused lanes zero.</summary>
     /// <param name="instruction">The <see cref="SdfOp.NoiseDisplace"/> instruction.</param>
     /// <returns>The relief.</returns>
     /// <exception cref="ArgumentException"><paramref name="instruction"/> is not a noise relief, or a lane lies outside
@@ -85,8 +91,11 @@ public readonly record struct SdfNoiseDisplacement(float Frequency, float Amplit
         if (BitConverter.SingleToUInt32Bits(value: instruction.Data1.X) != BitConverter.SingleToUInt32Bits(value: relief.Normalization)) {
             throw new ArgumentException(message: $"A noise relief carries normalization {instruction.Data1.X} in Data1.x, but its {relief.Octaves} octaves of gain {relief.Gain} derive {relief.Normalization}: a larger one lets the relief reach past its amplitude and steeper than its step bound.", paramName: nameof(instruction));
         }
-        if ((instruction.Material != 0u) || (instruction.Data1 with { X = 0f }) != Vector4.Zero) {
-            throw new ArgumentException(message: "A noise relief carries a nonzero Material, Data1.y, Data1.z or Data1.w lane; its operation leaves them zero.", paramName: nameof(instruction));
+        if (instruction.Material > ((uint)SdfReliefMask.MaxRows)) {
+            throw new ArgumentException(message: $"A noise relief counts {instruction.Material} mask rows before it in its Material lane; a relief reads at most {SdfReliefMask.MaxRows}.", paramName: nameof(instruction));
+        }
+        if ((instruction.Data1 with { X = 0f }) != Vector4.Zero) {
+            throw new ArgumentException(message: "A noise relief carries a nonzero Data1.y, Data1.z or Data1.w lane; its operation leaves them zero.", paramName: nameof(instruction));
         }
 
         return relief;
@@ -103,12 +112,15 @@ public readonly record struct SdfNoiseDisplacement(float Frequency, float Amplit
         if (!float.IsFinite(f: ReliefSlope)) { throw new ArgumentOutOfRangeException(paramName: nameof(Amplitude), message: "A noise relief's slope bound must be finite."); }
     }
     /// <summary>Returns the instruction this relief packs as.</summary>
+    /// <param name="rows">The count of mask rows directly before the relief (<see cref="SdfReliefMask.RowCount"/>), which
+    /// its Material lane carries; zero for an unmasked relief.</param>
     /// <returns>The instruction.</returns>
-    public SdfInstruction ToInstruction() => new(
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="rows"/> lies outside 0..<see cref="SdfReliefMask.MaxRows"/>.</exception>
+    public SdfInstruction ToInstruction(int rows = 0) => new(
         Blend: ((uint)Octaves),
         Data0: new Vector4(x: Frequency, y: Amplitude, z: Gain, w: Lacunarity),
         Data1: new Vector4(x: Normalization, y: 0f, z: 0f, w: 0f),
-        Material: 0u,
+        Material: (((rows >= 0) && (rows <= SdfReliefMask.MaxRows)) ? ((uint)rows) : throw new ArgumentOutOfRangeException(paramName: nameof(rows), message: $"A relief reads 0..{SdfReliefMask.MaxRows} mask rows; got {rows}.")),
         Op: SdfOp.NoiseDisplace,
         Shape: Seed
     );

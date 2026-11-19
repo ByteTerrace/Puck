@@ -288,7 +288,8 @@ public sealed partial class SdfFieldEvaluator {
             switch (instruction.Op) {
                 case SdfOp.ResetPoint:
                 case SdfOp.PushField:
-                case SdfOp.PopField: {
+                case SdfOp.PopField:
+                case SdfOp.ReliefRow: {
                         break;
                     }
                 case SdfOp.Translate: {

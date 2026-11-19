@@ -510,36 +510,12 @@ public static partial class CreationStampEmitter {
         EmitNoise(builder: builder, frame: StampFrame.Of(transform: transform), noise: noise);
     }
 
-    // The relief's masks, then the relief. Each mask is a seeded scope of its region's shapes under the same stamp
-    // (SdfProgramBuilder.BeginReliefMask), its band in world units, so a mirrored, scaled or slot-carried copy carries
-    // its mask with the shapes it masks. Render and contact both reach this one emission, so a body stands on the masked
-    // relief the bake draws. A region shape takes material 0: its scope composes nothing, so no material of it wins.
+    // The relief, after its stamp's prefix, with its masks as the data rows before it (SdfProgramBuilder.NoiseDisplace).
+    // The masks are the document's, compiled once (ReliefMasks) and the same for every stamp: a region is posed in the
+    // creation's frame, which the relief's own point chain reaches, so a mirrored, scaled or slot-carried copy carries its
+    // masks with no scaling here. Render and contact both reach this one emission, so a body stands on the masked relief
+    // the bake draws.
     private static void EmitNoise(SdfProgramBuilder builder, in StampFrame frame, CreationNoiseDocument noise) {
-        foreach (var mask in (noise.Masks ?? [])) {
-            _ = builder.BeginReliefMask(
-                fade: (mask.Fade * frame.FacetScale),
-                inside: (mask.Inside ?? 0f),
-                outside: (mask.Outside ?? 1f),
-                start: ((mask.Start ?? 0f) * frame.FacetScale)
-            );
-
-            foreach (var shape in mask.Shapes) {
-                var (position, rotation) = ReflectedShapeTransformFixed(normal: null, shape: shape);
-                var posed = StampPrefix(builder: builder, frame: frame)
-                    .Translate(offset: position.ToVector3())
-                    .Rotate(rotation: rotation.ToQuaternion());
-
-                _ = ShapeEmission.AppendPrimitive(
-                    chain: ShapePointOps.Apply(chain: posed, elongate: shape.Elongate),
-                    material: 0,
-                    scale: EffectiveScale(value: shape.Scale).ToVector3(),
-                    shape: shape
-                );
-            }
-
-            _ = builder.EndReliefMask();
-        }
-
         _ = StampPrefix(
             builder: builder,
             frame: frame
@@ -550,9 +526,79 @@ public static partial class CreationStampEmitter {
             gain: (noise.Gain ?? 0.5f),
             lacunarity: (noise.Lacunarity ?? 2f),
             octaves: (noise.Octaves ?? 4),
-            seed: (noise.Seed ?? 0u)
+            seed: (noise.Seed ?? 0u),
+            masks: ReliefMasks(noise: noise)
         );
     }
+    /// <summary>Returns a relief's masks compiled from its document: each band snapped to the band's grids
+    /// (<see cref="SdfReliefBand"/>), each region lowered through its primitive's native arm at the region's pose in the
+    /// creation's frame (<see cref="SdfReliefRegion.Lower"/>). The one door from a document's masks to the program's: the
+    /// canonicalizer validates through it and the emitter emits what it answers. Compiled once per document.</summary>
+    /// <param name="noise">The creation's noise facet.</param>
+    /// <returns>The masks; empty for a relief with none.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="noise"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException">A mask's band or region describes none, or the masks pass a relief's caps.</exception>
+    public static IReadOnlyList<SdfReliefMask> ReliefMasks(CreationNoiseDocument noise) {
+        ArgumentNullException.ThrowIfNull(noise);
+
+        if (noise.Masks is not { Count: > 0 } masks) {
+            return [];
+        }
+
+        return CompiledMasks.GetValue(key: noise, createValueCallback: document => {
+            var compiled = new SdfReliefMask[masks.Count];
+
+            for (var index = 0; (index < masks.Count); index++) {
+                compiled[index] = ReliefMask(mask: masks[index]);
+            }
+
+            _ = SdfReliefMask.RowCount(masks: compiled);
+
+            return compiled;
+        });
+    }
+    /// <summary>Returns one relief mask compiled from its document (<see cref="ReliefMasks"/>).</summary>
+    /// <param name="mask">The mask's document.</param>
+    /// <returns>The mask.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="mask"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException">The band or a region describes none.</exception>
+    public static SdfReliefMask ReliefMask(CreationReliefMaskDocument mask) {
+        ArgumentNullException.ThrowIfNull(mask);
+
+        var band = SdfReliefBand.Of(inside: (mask.Inside ?? 0f), outside: (mask.Outside ?? 1f), start: (mask.Start ?? 0f), width: mask.Fade);
+        var regions = new SdfReliefRegion[mask.Shapes.Count];
+
+        for (var index = 0; (index < regions.Length); index++) {
+            regions[index] = ReliefRegion(shape: mask.Shapes[index]);
+        }
+
+        return new SdfReliefMask(band: band, regions: regions);
+    }
+    /// <summary>Returns one region of a relief mask lowered from its shape's document: its primitive through its native
+    /// arm, at the shape's pose in the creation's frame (<see cref="SdfReliefRegion.Lower"/>).</summary>
+    /// <param name="shape">The region's shape.</param>
+    /// <returns>The region.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="shape"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException">The shape lowers to no region: a type off the list, a chamfered box, a capsule
+    /// scaled unlike in X and Z, or a value past a region's limits.</exception>
+    public static SdfReliefRegion ReliefRegion(ShapeDocument shape) {
+        ArgumentNullException.ThrowIfNull(shape);
+
+        var (position, rotation) = ReflectedShapeTransformFixed(normal: null, shape: shape);
+
+        return SdfReliefRegion.Lower(
+            chamfer: (shape.Chamfer ?? 0f),
+            exponent: (shape.Exponent ?? SdfProgramBuilder.MinSuperellipsoidExponent),
+            position: position.ToVector3(),
+            rotation: rotation.ToQuaternion(),
+            rounding: (shape.Rounding ?? 0f),
+            scale: shape.Scale,
+            type: shape.Type
+        );
+    }
+
+    // Each noise document's compiled masks, keyed by the immutable document's identity.
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<CreationNoiseDocument, SdfReliefMask[]> CompiledMasks = new();
 
     /// <summary>Emits ONE shape of a creation under the stamp transform — the per-shape-instance form of
     /// <see cref="Emit"/>, for a stamper that gives each shape its own tight cull bound

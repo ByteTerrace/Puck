@@ -291,8 +291,11 @@ slide. Details, caps, every refusal, and the Moth's driver map are in
 A relief takes `masks`, regions drawn with shapes that scale its displacement down
 (`CreationReliefMaskDocument`: `fade`, `start`, `inside`, `outside`, `shapes`): with `inside: 0` the relief is exactly
 zero on and inside a region, so a carve or pad that is also its own region keeps its authored surface, in the bake and
-in contact alike. Region shapes carry geometry only (no material, blend, group, warp or other facet), and entries'
-weights multiply. They are written through the generic value path (`masks [ { fade: 8, shapes [ { type: "Sphere", … } ] } ]`);
+in contact alike. A region shape is a box (unchamfered), a sphere, an ellipsoid, a superellipsoid, a capsule scaled
+alike in X and Z or a plane, at a pose, carrying geometry only (no material, blend, group, warp, elongation, profile or
+other facet); entries' weights multiply, and a relief takes at most 8 masks and 32 region shapes. The band snaps to a
+2⁻¹² grid and the weights to 2⁻¹⁶, and the canonical document stores the snapped values (`SdfReliefBand`). Every
+sample of a masked creation evaluates each region, so keep the regions few. They are written through the generic value path (`masks [ { fade: 8, shapes [ { type: "Sphere", … } ] } ]`);
 `worlds/standard/terrain.puck`'s `terrainBasinMask` builds one from the rows `terrainBasin` carves.
 
 Creation `noise` can ride whole-creation motion, including `sizeBy`, attached roots and body looks.

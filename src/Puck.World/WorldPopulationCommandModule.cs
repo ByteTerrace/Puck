@@ -327,7 +327,7 @@ public sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPopul
                     provider: CultureInfo.InvariantCulture
                 )}x)"
                 : string.Empty)}{((node.LiveProgramStepScaleBinder is { } binder)
-                ? $" bound by instance {binder.InstanceIndex} ({binder.Shape} x{binder.Factor.ToString(
+                ? $" bound by instance {binder.InstanceIndex} ({(binder.Shape?.ToString() ?? binder.Op.ToString())} x{binder.Factor.ToString(
                     format: "0.###",
                     provider: CultureInfo.InvariantCulture
                 )} at instruction {binder.InstructionIndex}, unscoped)"
