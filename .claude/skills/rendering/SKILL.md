@@ -460,6 +460,8 @@ add the row you found.
 | Add a pipeline variant to a pass | `GpuPassPipelineKey`: a field that changes the pipeline enters the key, or leases share the wrong pipeline | `src/Puck.Shaders/Pipeline` |
 | Let an author program how a surface shades | `SdfShadeProgram` (the op table, admission, cost) | `src/Puck.SignedDistance/Shading`; [authored shading](references/authored-shading.md) |
 | Read how a device can back a large buffer (sparse binding, reserved resources, memory priority, pageable device-local memory, storage-buffer array indexing) | `GpuDeviceCapabilities.Backing` (`GpuBackingSupport`) and its native figures, read at device creation and printed on `world.counters gpu`'s `capabilities` line | `src/Puck.Abstractions/Gpu/Device`; [streaming plan](../../../docs/plans/streaming-and-memory.md#the-prototype-as-built) |
+| Make a kernel variant depend on something only some devices have (ray queries), or withhold it to run the fallback | `GpuOptionalCapabilities`, read into `GpuDeviceCapabilities.Optional` at device creation (Direct3D 12's options 5 tier, Vulkan's optional extensions in `VulkanLogicalDeviceFactory`); a variant names it in `SdfKernelSet.RequiresOf`, `SdfWorldPipelines.Acquire` leases it only where `SdfWorldPipelines.Runs`, its caller asks `SdfWorldPipelines.Leases`, `VulkanShaderCapabilities.Optional` admits its SPIR-V capability on that device alone, and the World's `--withhold-gpu <capability>` leaves it off | `src/Puck.Abstractions/Gpu/Device`, `src/Puck.SdfVm` |
+| Build, compact or bind an acceleration structure the ray hardware walks | `GpuDeviceServices.AccelerationStructures` (`IGpuAccelerationStructures`: size, create, scratch, `GpuAccelerationStructureInstance` records, the descriptor of a `GpuBindingKind.AccelerationStructure` binding) and the recorder's `BuildAccelerationStructure`, `WriteCompactedSize` and `CompactAccelerationStructure`, which carry their own barriers; a buffer a build reads declares `GpuBufferUsage.AccelerationStructureInput`. Both backends refuse every call on a device without `GpuOptionalCapabilities.RayQuery` | `src/Puck.Abstractions/Gpu/Rays`, `DirectXGpuAccelerationStructures`, `VulkanGpuAccelerationStructures` |
 | Read what the device lets the process use per segment (a DXGI segment group, a Vulkan heap), or charge a device allocation to the physical memory it was placed in | `IGpuDeviceContext.MemoryReading` (refreshed by `RefreshMemoryReading` on the frame thread), `GpuMemorySegments` (the one place a segment's pool is decided), `GpuDeviceMemoryWork.CountAllocated`'s segment argument (Direct3D 12's through `DirectXDeviceMemory.SegmentOf`, Vulkan's through `GpuMemorySegments.OfMemoryType`); `MemoryAccount.ReadPools` and `host.memory` print them | `src/Puck.Abstractions/Gpu`, `src/Puck.Hosting/Jobs/MemoryAccount.cs`; [streaming plan](../../../docs/plans/streaming-and-memory.md#step-1-as-a-brief) |
 | Reserve device memory before allocating it, share a pool between residencies, or hold detail to a budget | `MemoryAccount.ReserveDevice` (a holder's peak, under the owner its objects are named for, `GpuObjectName.MemoryOwnerOf`), `GpuDeviceMemoryWork.TryAdmit` (the one door every native allocation asks; `CountAllocated` takes only its `GpuMemoryGrant`), `GpuMemoryAdmissionScope` (opened around the synchronous allocation of a replacement its holder can do without, so a full pool refuses it instead of admitting it past the limit), `SdfResidencySelector` (the one detail bias, each bake's budget, each mesh region's reservation, `SdfGpuWorkBudget`); never a share of `GpuMemoryProfile` | `src/Puck.Hosting/Jobs/MemoryAccount.cs`, `src/Puck.Abstractions/Gpu/Counters`, `src/Puck.SdfVm/SdfResidencySelector.cs`; [streaming plan](../../../docs/plans/streaming-and-memory.md#step-3-one-reservation) |
 | Read where frame time goes | `world.counters gpu`, `world.gpu-timing`, the bake's `gpu-work=[…]` line | [performance and cost](#performance-and-cost) |
@@ -482,7 +484,8 @@ phases with the occlusion kernel between them, `SdfMeshOcclusion`) →
 current camera receivers) → `pyramid` (the ambient occlusion's
 depth pyramid from the mesh target) → `surface` (each pixel's visibility record from the mesh
 target: normal, screen-space AO, the cascades' soft shadows into K;
-`passes/sdf-surface-stage.hlsli`) → `views` (materials and lighting) →
+`passes/sdf-surface-stage.hlsli`) → `views-probes` (the irradiance volume's
+gather once a cell, `passes/sdf-views-probes.hlsli`) → `views` (materials and lighting) →
 `resolve` (reduced or temporal views) → `sky` → `composite`. A view of a
 program with a glass shape (`SdfProgram.HasGlass`) inserts `glass-clear` →
 `glass` (graphics, the glass draws alone) → `glass-shade` after `views`
@@ -629,7 +632,12 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   invocation's own id, and a pixel keeps its window only while its history comes
   from its own pixel (`historyPixel == pixelIndex` in `stationary`). Reading a
   window at a reprojected position would read words another invocation of the
-  same dispatch is writing; a moved pixel restarts its window instead.
+  same dispatch is writing; a moved pixel restarts its window instead. The graph
+  admits such a buffer only when the updater's one mutable input is the only
+  reference any pass makes to it (`ShaderPipelineCompiler.UpdatesInPlace`), so a
+  second reader of the window is refused; a graph replacement keeps the window
+  and the two history rings together or restarts all three
+  (`ShaderPipelineRenderNode.PreserveCarriedStorages`).
   Replacing one phase and summing in fixed order removes periodic newest-phase
   bias and keeps samples the current neighborhood misses. Moving and reactive
   pixels use the clipped resolve while their window fills. A stationary window
@@ -710,8 +718,19 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   exposure for any before/after comparison. A view with no camera sample reads the
   open sky, so a closed room meters as daylight and a display in it reads black:
   `camera=none` names its `wait=` ([mesh GI](references/mesh-gi.md)).
-- **The irradiance volume is read once a pixel** (`sdfMeshProbesAt`), and that
-  gather supplies indirect light, reflections and traced static-light visibility.
+- **The irradiance volume is gathered once a cell and read once a pixel.** The
+  probe lookup pass (`views-probes`) runs `sdfMeshProbesAt` at one representative
+  pixel of each `SdfWorldPackage.ViewsProbeRate`-pixel cell, at its geometric
+  normal; views reuses that gather where the pixel's receiver lies within the
+  normal bias of the representative's, on its tangent plane and facing alike
+  (`sdfViewsProbesAt`), and gathers for itself across a depth or crease edge, so
+  the reuse never steps across a visibility edge the record shows. The cube reads
+  stay per pixel, along its shading normal and mirror direction. The gather
+  supplies indirect light, reflections and traced static-light visibility; glass
+  gathers at its own pane (`passes/sdf-glass-stage.hlsli`), since a pane is lit
+  apart from the surface behind it. `passes/sdf-views-split.hlsli` holds the
+  views pass's compile-out switches for reading each part's share of
+  `sdf.world$views` with a reload.
   Each probe publishes its own measured cubes, without neighbour filtering.
   Visibility uses a 12×12 octahedral first-hit surface map, one bounded ray
   per texel. Each word packs ray distance and two signed normal bytes;
@@ -878,6 +897,13 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   an in-bounds wrong occupant, which `sdf.instances.targets.stale` counts (`SdfWorldPasses.RecordHits`: hit writers note
   the records' revision they recorded under, hit readers compare it). `world.rows force hit-bound [<frames>]` zeroes the
   bound for frames, so every hit is rejected and counted; both counts read zero on an ordinary run.
+- **A probe kernel that traces has two builds of one body.** The trace, relight and camera sample live in
+  `passes/sdf-probe-*-stage.hlsli`; `sdf-probe-*.comp.hlsl` includes it after the software interface and
+  `sdf-probe-*-rays.comp.hlsl` after the ray-query interface with `SDF_PROBE_RAY_QUERY` defined, which swaps
+  `sdfProbeWalk` (`shade/sdf-probe-trace.hlsli`) for an inline `RayQuery` over the scene's top level. Edit the stage or
+  the walk, never one wrapper; a hit's normal and material stay `sdfProbeSurface`'s in both. The client takes the
+  variant per job (`SdfMeshProbeGpuWork.TopFor`), and the structures' lifetime rule is the header of
+  `SdfMeshProbeGpuWork.Rays.cs`: a structure is disposed only through `Retire` and `DrainRetired`.
 - **Mesh words go through one door.** `frame/sdf-mesh-words.hlsli` reads a draw's record through
   `sdfMeshRecordWord` and a mesh's own words (vertices, triangle materials, indices, level table, members) through
   `sdfMeshWord`, and then makes `sdfMeshRegion` an undeclared name, so a read around it does not compile.

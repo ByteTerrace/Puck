@@ -22,4 +22,8 @@ public enum GpuBindingKind {
     StorageImage,
     /// <summary>A sampler: a Vulkan sampler, a Direct3D 12 sampler.</summary>
     Sampler,
+    /// <summary>A top-level acceleration structure a kernel traces with ray queries: a Vulkan
+    /// <c>ACCELERATION_STRUCTURE_KHR</c> descriptor, a Direct3D 12 <c>RAYTRACING_ACCELERATION_STRUCTURE</c> shader resource
+    /// view. Only a device created with <see cref="GpuOptionalCapabilities.RayQuery"/> lays one out.</summary>
+    AccelerationStructure,
 }

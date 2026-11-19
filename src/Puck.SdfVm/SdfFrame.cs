@@ -401,6 +401,11 @@ public sealed record SdfFrame(
     /// <summary>The indirect-light tier the frame asks for, which sizes the irradiance volume
     /// (<see cref="SdfMeshIrradiance"/>). Off reads no volume.</summary>
     public SdfIndirectTier IndirectTier { get; init; }
+    /// <summary>Whether the irradiance volume's background rays (its probe trace, the relight's shadow rays and the camera
+    /// sample) take the device's ray hardware where it runs the probe kernels' ray-query variants, through the scene's
+    /// acceleration structures; elsewhere, and when false, they take the software walk. Both answer the same hits within
+    /// float tolerance. Default <see langword="false"/>.</summary>
+    public bool RayQueries { get; init; }
     /// <summary>Whether presentation uses completed simulation ticks and the frame's own time for exposure adaptation,
     /// rather than the host interval. Lighting convergence is an independent request through
     /// <see cref="ConvergesLighting"/>. Default <see langword="false"/>.</summary>

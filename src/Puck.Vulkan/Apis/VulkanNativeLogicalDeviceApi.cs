@@ -212,7 +212,8 @@ public unsafe sealed class VulkanNativeLogicalDeviceApi : IVulkanLogicalDeviceAp
                         drawIndirectCountEnabled: request.ExtensionNames.Contains(value: VulkanDeviceCommands.DrawIndirectCountExtension),
                         multiDrawIndirectEnabled: request.EnabledFeatureIndices.Contains(value: 9u),
                         memory: m_memory,
-                        procedures: m_procedures
+                        procedures: m_procedures,
+                        rayQueryEnabled: request.ExtensionNames.Contains(value: Factories.VulkanLogicalDeviceFactory.RayQueryExtension)
                     );
                     // The heaps are registered before the device's first counted allocation; its teardown ends them
                     // (VulkanLogicalDevice.Dispose).

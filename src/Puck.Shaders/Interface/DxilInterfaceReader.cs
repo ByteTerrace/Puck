@@ -44,6 +44,8 @@ public sealed unsafe class DxilInterfaceReader : IDisposable {
     private const uint InputAppendStructured = 9;
     private const uint InputConsumeStructured = 10;
     private const uint InputReadWriteStructuredWithCounter = 11;
+    // D3D_SIT_RTACCELERATIONSTRUCTURE (d3dcommon.h, Windows SDK 10.0.26100).
+    private const uint InputAccelerationStructure = 12;
     // D3D_SRV_DIMENSION_BUFFER.
     private const uint DimensionBuffer = 1;
     // D3D_SHADER_VARIABLE_CLASS and D3D_SHADER_VARIABLE_TYPE.
@@ -375,6 +377,7 @@ public sealed unsafe class DxilInterfaceReader : IDisposable {
             ),
             InputTexture => GpuBindingKind.SampledImage,
             InputSampler => GpuBindingKind.Sampler,
+            InputAccelerationStructure => GpuBindingKind.AccelerationStructure,
             InputReadWriteTyped => GpuBindingKind.StorageImage,
             InputTextureBuffer or InputStructured or InputByteAddress => GpuBindingKind.ReadOnlyBuffer,
             InputReadWriteStructured or InputReadWriteByteAddress or InputAppendStructured or InputConsumeStructured or InputReadWriteStructuredWithCounter => GpuBindingKind.ReadWriteBuffer,

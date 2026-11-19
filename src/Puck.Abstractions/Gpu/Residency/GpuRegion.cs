@@ -153,6 +153,8 @@ public sealed unsafe class GpuRegion : IDisposable {
     private GpuObjectName HostName(int slot) => ((Policy == GpuResidencyPolicy.Staged) ? m_stagingName : m_name).At(index: slot);
 
     private readonly GpuBufferUsage m_usage;
+    // What a staged region's own device-local destination declares, at creation, growth and shrink alike.
+    private readonly GpuBufferUsage m_destinationUsage;
 
     // The destination a staged region's copies write; replaced when the region grows.
     private IGpuBuffer? m_destination;
@@ -254,6 +256,9 @@ public sealed unsafe class GpuRegion : IDisposable {
     /// <param name="staging">The name a staged region's staging buffers are created under, when they are another
     /// owner's memory than its destination: transfer storage beside storage that holds what is drawn. Each slot's
     /// buffer takes the slot as its index. <see langword="null"/> names them as the region.</param>
+    /// <param name="destinationUsage">The usages a staged region's device-local destination declares beside
+    /// <see cref="GpuBufferUsage.Storage"/>, at creation and at every growth and shrink: the mesh region's
+    /// <see cref="GpuBufferUsage.AccelerationStructureInput"/>, which acceleration-structure builds read in place.</param>
     /// <exception cref="ArgumentNullException"><paramref name="buffers"/>,
     /// <paramref name="bindings"/> or <paramref name="recorder"/> is <see langword="null"/>, or a staged region has no
     /// <paramref name="copyPipeline"/>.</exception>
@@ -264,7 +269,7 @@ public sealed unsafe class GpuRegion : IDisposable {
     /// uniform region is staged or not a multiple of <see cref="IGpuBindings.ConstantBufferAlignment"/> bytes.</exception>
     /// <exception cref="ArgumentException"><paramref name="copySets"/> holds another number of slots than
     /// <paramref name="slotCount"/>.</exception>
-    public GpuRegion(GpuResidencyPolicy policy, GpuHostVisibleMemory memory, long byteCount, int slotCount, IGpuBufferFactory buffers, IGpuBindings bindings, IGpuRecorder recorder, IGpuComputePipeline? copyPipeline, in GpuObjectName name, GpuRegionCopySets? copySets = null, GpuBufferUsage usage = GpuBufferUsage.Storage, IAllocationObserver? hostCopies = null, GpuObjectName? staging = null) : this(
+    public GpuRegion(GpuResidencyPolicy policy, GpuHostVisibleMemory memory, long byteCount, int slotCount, IGpuBufferFactory buffers, IGpuBindings bindings, IGpuRecorder recorder, IGpuComputePipeline? copyPipeline, in GpuObjectName name, GpuRegionCopySets? copySets = null, GpuBufferUsage usage = GpuBufferUsage.Storage, IAllocationObserver? hostCopies = null, GpuObjectName? staging = null, GpuBufferUsage destinationUsage = GpuBufferUsage.None) : this(
         bindings: bindings,
         buffers: buffers,
         byteCount: byteCount,
@@ -278,7 +283,8 @@ public sealed unsafe class GpuRegion : IDisposable {
         recorder: recorder,
         slotCount: slotCount,
         staging: staging,
-        usage: usage
+        usage: usage,
+        destinationUsage: destinationUsage
     ) { }
     /// <summary>Initializes a new instance of the <see cref="GpuRegion"/> class that chooses its own residency: the
     /// policy <see cref="GpuResidency.Select"/> picks for its size on <paramref name="profile"/>, a ring's buffers in the
@@ -378,7 +384,7 @@ public sealed unsafe class GpuRegion : IDisposable {
         usage: GpuBufferUsage.Storage
     ) { }
 
-    private GpuRegion(GpuResidencyPolicy policy, GpuHostVisibleMemory memory, long byteCount, int slotCount, GpuBufferUsage usage, IGpuBuffer? destination, IGpuBufferFactory buffers, IGpuBindings bindings, IGpuRecorder recorder, IGpuComputePipeline? copyPipeline, in GpuObjectName name, GpuRegionCopySets? copySets, IAllocationObserver? hostCopies, GpuObjectName? staging = null) {
+    private GpuRegion(GpuResidencyPolicy policy, GpuHostVisibleMemory memory, long byteCount, int slotCount, GpuBufferUsage usage, IGpuBuffer? destination, IGpuBufferFactory buffers, IGpuBindings bindings, IGpuRecorder recorder, IGpuComputePipeline? copyPipeline, in GpuObjectName name, GpuRegionCopySets? copySets, IAllocationObserver? hostCopies, GpuObjectName? staging = null, GpuBufferUsage destinationUsage = GpuBufferUsage.None) {
         ArgumentNullException.ThrowIfNull(buffers);
         ArgumentNullException.ThrowIfNull(bindings);
         ArgumentNullException.ThrowIfNull(recorder);
@@ -468,6 +474,7 @@ public sealed unsafe class GpuRegion : IDisposable {
         m_name = name;
         m_stagingName = (staging ?? name);
         m_usage = usage;
+        m_destinationUsage = (GpuBufferUsage.Storage | destinationUsage);
         m_destination = destination;
         m_external = (destination is not null);
         m_reservedCopySets = copySets;
@@ -501,7 +508,7 @@ public sealed unsafe class GpuRegion : IDisposable {
                     m_destination = buffers.CreateDeviceLocal(
                         name: name,
                         sizeBytes: ((ulong)byteCount),
-                        usage: GpuBufferUsage.Storage
+                        usage: m_destinationUsage
                     );
                     m_ownedBuffers.Add(item: m_destination);
                 }
@@ -932,7 +939,7 @@ public sealed unsafe class GpuRegion : IDisposable {
             destination = m_buffers.CreateDeviceLocal(
                 name: m_name,
                 sizeBytes: ((ulong)byteCount),
-                usage: GpuBufferUsage.Storage
+                usage: m_destinationUsage
             );
             pool = ((m_reservedCopySets is null)
                 ? CreateCopyPool()
@@ -1054,7 +1061,7 @@ public sealed unsafe class GpuRegion : IDisposable {
         var replacement = m_buffers.CreateDeviceLocal(
             name: m_name,
             sizeBytes: ((ulong)byteCount),
-            usage: GpuBufferUsage.Storage
+            usage: m_destinationUsage
         );
         var replaced = m_destination!;
 
@@ -1127,7 +1134,7 @@ public sealed unsafe class GpuRegion : IDisposable {
         var replacement = m_buffers.CreateDeviceLocal(
             name: m_name,
             sizeBytes: ((ulong)byteCount),
-            usage: GpuBufferUsage.Storage
+            usage: m_destinationUsage
         );
         var replaced = m_destination!;
         var shadow = Math.Min(

@@ -1,4 +1,7 @@
-// Software traversal of SdfMeshIrradianceScene.ExportGpu. KEEP IN SYNC with the CPU Walk and TriangleLeaves.
+// The probe kernels' rays through SdfMeshIrradianceScene.ExportGpu: the software walk over its hierarchy (KEEP IN SYNC
+// with the CPU Walk and TriangleLeaves), or, in a kernel that defines SDF_PROBE_RAY_QUERY, a ray query through the
+// scene's acceleration structures (SdfMeshProbeGpuWork.Rays). Both answer through sdfProbeWalk, and both read a hit's
+// normal and material from the same instance record and mesh words (sdfProbeSurface).
 #ifndef SDF_PROBE_TRACE_HLSLI
 #define SDF_PROBE_TRACE_HLSLI
 #include "../isa/sdf-render.hlsli"
@@ -8,6 +11,68 @@
 #error Probe traversal requires its entry point's generated result stride.
 #endif
 
+float3 sdfProbeVector(uint word) {
+    return asfloat(uint3(sdfProbeScene[word], sdfProbeScene[word + 1], sdfProbeScene[word + 2]));
+}
+float3 sdfProbeVertex(uint word) {
+    return asfloat(sdfMeshWords3(word));
+}
+void sdfProbeTriangle(uint instance, uint primitive, out float3 v0, out float3 e1, out float3 e2) {
+    uint index = sdfProbeScene[instance + SDF_PROBE_GEOMETRY_WORD] + 3 * primitive;
+    uint vertex = sdfProbeScene[instance + SDF_PROBE_GEOMETRY_WORD + 1];
+    v0 = sdfProbeVertex(vertex + SDF_MESH_VERTEX_WORDS * sdfMeshWord(index));
+    e1 = sdfProbeVertex(vertex + SDF_MESH_VERTEX_WORDS * sdfMeshWord(index + 1)) - v0;
+    e2 = sdfProbeVertex(vertex + SDF_MESH_VERTEX_WORDS * sdfMeshWord(index + 2)) - v0;
+}
+// A hit's identity, world normal (the triangle's winding through the instance's normal matrix) and program material,
+// from the hit instance's record and its mesh's words.
+void sdfProbeSurface(uint hitInstance, uint hitTriangle, out float3 normal, out uint material, out uint2 identity) {
+    identity = uint2(sdfProbeScene[hitInstance + SDF_PROBE_INSTANCE_INDEX_WORD], hitTriangle);
+    float3 v0, e1, e2;
+    sdfProbeTriangle(hitInstance, hitTriangle, v0, e1, e2);
+    precise float3 n = cross(e1, e2);
+    if (sdfProbeScene[hitInstance + SDF_PROBE_IDENTITY_WORD] == 0) {
+        uint matrix = hitInstance + SDF_PROBE_NORMAL_WORD;
+        n = (n.x * sdfProbeVector(matrix) + n.y * sdfProbeVector(matrix + 3)) + n.z * sdfProbeVector(matrix + 6);
+    }
+    precise float length = sqrt(dot(n, n));
+    normal = length > 0 ? n / length : float3(0, 1, 0);
+    uint materials = sdfProbeScene[hitInstance + SDF_PROBE_GEOMETRY_WORD + 2];
+    material = sdfProbeScene[hitInstance + SDF_PROBE_GEOMETRY_WORD + 3] + (materials == 0xffffffffu ? 0 : sdfMeshWord(materials + hitTriangle));
+}
+
+#ifdef SDF_PROBE_RAY_QUERY
+// The software walk's exclusive near bound: a hit closer than this along the ray is the surface the ray left.
+static const float SdfProbeNearest = 1.0e-4;
+
+// One walk for nearest-hit and boolean visibility, through the top level the scene's draws are instances of. Each
+// instance's index is its scene ordinal, so its record lies at the scene's instance base plus that many records. Every
+// instance is opaque and culls no face, as the software walk accepts both windings; the lane is the software walk's.
+bool sdfProbeWalk(float3 origin, float3 direction, float maximum, uint lane, bool anyHit, out float distance, out float3 normal, out uint material, out uint2 identity) {
+    distance = maximum; normal = 0; material = 0;
+    identity = uint2(0xffffffffu, 0xffffffffu);
+    if (sdfProbeScene[0] == 0) { return false; }
+    RayDesc ray;
+    ray.Origin = origin;
+    ray.Direction = direction;
+    ray.TMin = SdfProbeNearest;
+    ray.TMax = maximum;
+    if (anyHit) {
+        RayQuery<RAY_FLAG_FORCE_OPAQUE | RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH> visibility;
+        visibility.TraceRayInline(sdfProbeStructure, RAY_FLAG_NONE, 0xffu, ray);
+        visibility.Proceed();
+        return visibility.CommittedStatus() == COMMITTED_TRIANGLE_HIT;
+    }
+    RayQuery<RAY_FLAG_FORCE_OPAQUE> nearest;
+    nearest.TraceRayInline(sdfProbeStructure, RAY_FLAG_NONE, 0xffu, ray);
+    nearest.Proceed();
+    if (nearest.CommittedStatus() != COMMITTED_TRIANGLE_HIT) { return false; }
+    distance = nearest.CommittedRayT();
+    uint instance = sdfProbeScene[SDF_PROBE_INSTANCE_BASE_WORD] + nearest.CommittedInstanceID() * SDF_PROBE_INSTANCE_WORDS;
+    sdfProbeSurface(instance, nearest.CommittedPrimitiveIndex(), normal, material, identity);
+    return true;
+}
+#else
 // Separate stacks for the top hierarchy and the geometry it enters. Depth-major addressing keeps a wave's
 // pushes adjacent, and avoids dynamically indexed thread-local arrays on Vulkan.
 groupshared uint sdfProbeTopStack[SDF_PROBE_STACK_DEPTH * SDF_PROBE_GROUP_SIZE];
@@ -20,12 +85,6 @@ void sdfProbeTraversalFault() {
     InterlockedAdd(sdfProbeHitsRW[probes * SDF_PROBE_RESULT_STRIDE], 1u);
 }
 
-float3 sdfProbeVector(uint word) {
-    return asfloat(uint3(sdfProbeScene[word], sdfProbeScene[word + 1], sdfProbeScene[word + 2]));
-}
-float3 sdfProbeVertex(uint word) {
-    return asfloat(sdfMeshWords3(word));
-}
 bool sdfProbeSlab(uint node, float3 origin, float3 inverse, float maximum, out float entry) {
     precise float3 a = (sdfProbeVector(node) - origin) * inverse;
     precise float3 b = (sdfProbeVector(node + 3) - origin) * inverse;
@@ -46,18 +105,35 @@ void sdfProbeChildren(uint node, float3 origin, float3 inverse, float maximum, o
     else if (hitA) { first = left; }
     else if (hitB) { first = right; }
 }
+// A geometry node's bounds, packed as 16-bit steps of its braid's frame (SdfMeshIrradianceScene.PackedNode and
+// BraidFrame): low + steps * step, the same float expression the CPU decodes, kept exact by precise.
+bool sdfProbePackedSlab(uint node, float3 frameLow, float3 frameStep, float3 origin, float3 inverse, float maximum, out float entry) {
+    uint3 words = uint3(sdfProbeScene[node], sdfProbeScene[node + 1], sdfProbeScene[node + 2]);
+    precise float3 low = frameLow + float3(words.x & 0xffffu, words.x >> 16, words.y & 0xffffu) * frameStep;
+    precise float3 high = frameLow + float3(words.y >> 16, words.z & 0xffffu, words.z >> 16) * frameStep;
+    precise float3 a = (low - origin) * inverse;
+    precise float3 b = (high - origin) * inverse;
+    float3 near = min(a, b), far = max(a, b);
+    entry = max(max(near.x, near.y), max(near.z, 0.0));
+    float exit = min(min(far.x, far.y), min(far.z, maximum));
+    return entry <= exit;
+}
+void sdfProbePackedChildren(uint node, float3 frameLow, float3 frameStep, float3 origin, float3 inverse, float maximum, out uint first, out uint second) {
+    uint left = sdfProbeScene[node + 3] >> SDF_PROBE_NODE_COUNT_BITS;
+    uint right = left + SDF_PROBE_PACKED_NODE_WORDS;
+    float a, b;
+    bool hitA = sdfProbePackedSlab(left, frameLow, frameStep, origin, inverse, maximum, a);
+    bool hitB = sdfProbePackedSlab(right, frameLow, frameStep, origin, inverse, maximum, b);
+    first = 0; second = 0;
+    if (hitA && hitB) { first = a <= b ? left : right; second = a <= b ? right : left; }
+    else if (hitA) { first = left; }
+    else if (hitB) { first = right; }
+}
 float3 sdfProbeTransform(uint instance, float3 value, bool isPoint) {
     precise float3 result = (value.x * sdfProbeVector(instance)) + (value.y * sdfProbeVector(instance + 4));
     result = result + value.z * sdfProbeVector(instance + 8);
     if (isPoint) { result = result + sdfProbeVector(instance + 12); }
     return result;
-}
-void sdfProbeTriangle(uint instance, uint primitive, out float3 v0, out float3 e1, out float3 e2) {
-    uint index = sdfProbeScene[instance + SDF_PROBE_GEOMETRY_WORD] + 3 * primitive;
-    uint vertex = sdfProbeScene[instance + SDF_PROBE_GEOMETRY_WORD + 1];
-    v0 = sdfProbeVertex(vertex + SDF_MESH_VERTEX_WORDS * sdfMeshWord(index));
-    e1 = sdfProbeVertex(vertex + SDF_MESH_VERTEX_WORDS * sdfMeshWord(index + 1)) - v0;
-    e2 = sdfProbeVertex(vertex + SDF_MESH_VERTEX_WORDS * sdfMeshWord(index + 2)) - v0;
 }
 bool sdfProbeTriangleHit(float3 origin, float3 direction, float3 v0, float3 e1, float3 e2, float maximum, out float distance) {
     distance = 0;
@@ -108,17 +184,20 @@ bool sdfProbeWalk(float3 origin, float3 direction, float maximum, uint lane, boo
             float3 localOrigin = identity ? origin : sdfProbeTransform(instance, origin, true);
             float3 localDirection = identity ? direction : sdfProbeTransform(instance, direction, false);
             float3 localInverse = identity ? inverse : 1.0 / localDirection;
+            uint frame = sdfProbeScene[entry + i * SDF_PROBE_ENTRY_WORDS + 2];
+            float3 frameLow = sdfProbeVector(frame);
+            float3 frameStep = sdfProbeVector(frame + 3);
             uint depth = 1;
             sdfProbeGeometryStack[lane] = sdfProbeScene[entry + i * SDF_PROBE_ENTRY_WORDS + 1];
             [loop] while (depth > 0) {
                 if (++steps > SDF_PROBE_MAX_WALK_STEPS) { sdfProbeTraversalFault(); return anyHit; }
                 uint inner = sdfProbeGeometryStack[(--depth) * SDF_PROBE_GROUP_SIZE + lane];
-                uint innerLink = sdfProbeScene[inner + 6];
+                uint innerLink = sdfProbeScene[inner + 3];
                 uint innerCount = innerLink & ((1u << SDF_PROBE_NODE_COUNT_BITS) - 1u);
                 uint innerFirst = innerLink >> SDF_PROBE_NODE_COUNT_BITS;
                 if (innerCount == 0) {
                     uint first, second;
-                    sdfProbeChildren(inner, localOrigin, localInverse, distance, first, second);
+                    sdfProbePackedChildren(inner, frameLow, frameStep, localOrigin, localInverse, distance, first, second);
                     if (depth + (first != 0 ? 1u : 0u) + (second != 0 ? 1u : 0u) > SDF_PROBE_STACK_DEPTH) {
                         sdfProbeTraversalFault();
                         return anyHit;
@@ -141,20 +220,10 @@ bool sdfProbeWalk(float3 origin, float3 direction, float maximum, uint lane, boo
         }
     }
     if (hitInstance == 0) { return false; }
-    identity = uint2(sdfProbeScene[hitInstance + SDF_PROBE_INSTANCE_INDEX_WORD], hitTriangle);
-    float3 v0, e1, e2;
-    sdfProbeTriangle(hitInstance, hitTriangle, v0, e1, e2);
-    precise float3 n = cross(e1, e2);
-    if (sdfProbeScene[hitInstance + SDF_PROBE_IDENTITY_WORD] == 0) {
-        uint matrix = hitInstance + SDF_PROBE_NORMAL_WORD;
-        n = (n.x * sdfProbeVector(matrix) + n.y * sdfProbeVector(matrix + 3)) + n.z * sdfProbeVector(matrix + 6);
-    }
-    precise float length = sqrt(dot(n, n));
-    normal = length > 0 ? n / length : float3(0, 1, 0);
-    uint materials = sdfProbeScene[hitInstance + SDF_PROBE_GEOMETRY_WORD + 2];
-    material = sdfProbeScene[hitInstance + SDF_PROBE_GEOMETRY_WORD + 3] + (materials == 0xffffffffu ? 0 : sdfMeshWord(materials + hitTriangle));
+    sdfProbeSurface(hitInstance, hitTriangle, normal, material, identity);
     return true;
 }
+#endif
 bool sdfProbeIntersect(float3 origin, float3 direction, float maximum, uint lane, out float distance, out float3 normal, out uint material, out uint2 identity) {
     return sdfProbeWalk(origin, direction, maximum, lane, false, distance, normal, material, identity);
 }

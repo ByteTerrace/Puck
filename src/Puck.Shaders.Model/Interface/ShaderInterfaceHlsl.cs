@@ -224,6 +224,7 @@ public static class ShaderInterfaceHlsl {
                 ? $"RWStructuredBuffer<{element}> {name}"
                 : $"RWByteAddressBuffer {name}")),
             GpuBindingKind.Sampler => ('s', $"SamplerState {member.Name}"),
+            GpuBindingKind.AccelerationStructure => ('t', $"RaytracingAccelerationStructure {member.Name}"),
             _ => throw new ArgumentOutOfRangeException(
                 actualValue: resource.Kind,
                 message: "The binding kind is not generated for an interface member.",

@@ -626,13 +626,19 @@ working set mixes warm-up, caches and garbage. The owner's method:
    regions released, but the process holds them for a while, so a single
    private reading can sit several GB above the floor. Compare the floor
    across samples, never one reading.
-7. Private bytes count the device's own heaps too. A driver can map every
-   device-local heap into the process as write-combined private pages with
-   almost nothing resident: the debug world's mesh-region destination is one
-   such allocation, and gigabytes of a windowed World's private bytes can be
-   these. Read system memory as
-   the working set, and separate a page probe's write-combined pages by their
-   residency before charging them to a host buffer.
+7. Private bytes count the device's own heaps too. NVIDIA's Direct3D 12
+   driver maps every device-local allocation into the process as
+   write-combined private pages that are never in the working set, and
+   charges them to the system commit one for one: a device-local byte costs a
+   private byte and a commit byte but no RAM, so the device's peak is part of
+   the private-byte peak `puck host load` admits a windowed World against.
+   Host-visible buffers are write-combined too, but resident. `host.memory`'s
+   walk prints these views as `driver-mapped` with their resident part and
+   keeps them out of the host rows; read system memory as the working set.
+   The same driver maps its shader disk cache (`NVIDIA/DXCache/*.nvph`)
+   whole into every Direct3D 12 process and touches most of it at device
+   creation, so a few hundred megabytes to a gigabyte of a windowed World's
+   mapped working set is that file's clean pages.
 8. Attribute managed holders by walking the heap, not by a sampled dump:
    `dotnet-gcdump report` samples a multi-GB heap and its per-type totals do
    not add up to it. A scratch ClrMD program (`Microsoft.Diagnostics.Runtime`

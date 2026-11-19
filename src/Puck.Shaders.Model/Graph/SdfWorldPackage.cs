@@ -479,6 +479,8 @@ public static partial class SdfWorldPackage {
         Written(element: ShaderValueType.Uint, name: MeshPyramidWritten),
         Read(element: ShaderValueType.Uint, name: ViewsFilterRecords),
         Written(element: ShaderValueType.Uint, name: ViewsFilterRecordsWritten),
+        Read(element: ShaderValueType.Uint, name: ViewsProbeRecords),
+        Written(element: ShaderValueType.Uint, name: ViewsProbeRecordsWritten),
         Read(element: ShaderValueType.Uint, name: ShadeTiles),
         Written(element: ShaderValueType.Uint, name: ShadeTilesWritten),
         Written(element: ShaderValueType.Uint, name: ShadeArgumentsWritten),
@@ -486,8 +488,9 @@ public static partial class SdfWorldPackage {
     ];
     /// <summary>Gets the fragment a native view runs as: one view's dispatch set, its scratch retained and counted, its
     /// one output the view's color. The cascades and the mesh pass rasterize the frame's mesh
-    /// draws, the pyramid pass reduces the mesh target into the depth pyramid (<see cref="Parts.Pyramid"/>), the surface pass writes every pixel's visibility record from them (<see cref="Parts.Surface"/>), views shades
-    /// the records into the lit image (<see cref="Parts.Lit"/>), the sky evaluates its field runs where the lit image's
+    /// draws, the pyramid pass reduces the mesh target into the depth pyramid (<see cref="Parts.Pyramid"/>), the surface pass writes every pixel's visibility record from them (<see cref="Parts.Surface"/>), the probe
+    /// lookup gathers the irradiance volume once a cell of <see cref="ViewsProbeRate"/> pixels (<see cref="Parts.ViewsProbes"/>),
+    /// views shades the records into the lit image (<see cref="Parts.Lit"/>), the sky evaluates its field runs where the lit image's
     /// coverage is below one (<see cref="Parts.Sky"/>), and the composite writes the color (<see cref="Parts.Composite"/>).
     /// Every pass counts its kernels' work into the work counters (<see cref="RenderGraphFragmentPass.CountsKernelWork"/>):
     /// the raster passes each fragment they write to their target.</summary>
@@ -508,7 +511,8 @@ public static partial class SdfWorldPackage {
                 name: Parts.Surface,
                 outputs: [Parts.Visibility]
             ),
-            Pass(inputs: [Parts.Visibility], name: Parts.Views, outputs: [Parts.Lit]),
+            Pass(inputs: [Parts.Visibility], name: Parts.ViewsProbes, outputs: [Parts.Probes]),
+            Pass(inputs: [Parts.Visibility, Parts.Probes], name: Parts.Views, outputs: [Parts.Lit]),
             Pass(inputs: [Parts.Lit], name: Parts.Sky, outputs: SkyRuns) with { Members = SkyMembers },
             Pass(inputs: [Parts.Lit, Parts.Visibility, .. SkyRuns], name: Parts.Composite, outputs: [Color]) with { Members = SkyMembers },
         ],
@@ -546,6 +550,7 @@ public static partial class SdfWorldPackage {
                 StrideBytes: VisibilityRecordByteLength,
                 Retained: true
             ),
+            ProbeRecords,
         ]
     );
 

@@ -74,4 +74,7 @@ public sealed record WorldBootInputs(
     /// <summary>Gets whether the Direct3D 12 device is created on WARP, the software rasterizer
     /// (<c>--software-gpu</c>).</summary>
     public bool Software { get; init; }
+    /// <summary>Gets the optional capabilities the GPU device is created without (<c>--withhold-gpu</c>);
+    /// <see cref="GpuOptionalCapabilities.None"/> when the flag is absent.</summary>
+    public GpuOptionalCapabilities WithheldGpu { get; init; }
 }

@@ -113,6 +113,7 @@ public sealed class GpuCreationFaults {
         }
 
         return new GpuDeviceServices {
+            AccelerationStructures = services.AccelerationStructures,
             Bindings = new FaultingBindings(
                 faults: faults,
                 inner: Guard(instance: services.Bindings)

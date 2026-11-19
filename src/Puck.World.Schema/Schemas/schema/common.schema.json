@@ -130,6 +130,11 @@
           ],
           "default": "High",
           "title": "BloomQuality"
+        },
+        "rayQueries": {
+          "description": "Whether the preset lets the indirect volume\u0027s background rays take the device\u0027s ray hardware where it has it (world.rays); the software walk answers the same hits elsewhere.",
+          "type": "boolean",
+          "default": false
         }
       },
       "required": [

@@ -1,4 +1,5 @@
 using Puck.Abstractions.Counting;
+using Puck.Abstractions.Gpu;
 using Puck.Shaders;
 
 namespace Puck.SdfVm;
@@ -114,10 +115,14 @@ public sealed class SdfKernelSet {
         SdfKernel.ProbeCameraSample => "sdf-probe-camera-sample",
         SdfKernel.ProbeCache => "sdf-probe-cache",
         SdfKernel.ProbeCompact => "sdf-probe-compact",
+        SdfKernel.ProbeTraceRays => "sdf-probe-trace-rays",
+        SdfKernel.ProbeRelightRays => "sdf-probe-relight-rays",
+        SdfKernel.ProbeCameraSampleRays => "sdf-probe-camera-sample-rays",
         SdfKernel.MeshBakeMask => "sdf-mesh-bake-mask",
         SdfKernel.MeshBake => "sdf-mesh-bake",
         SdfKernel.MeshPyramid => "sdf-mesh-pyramid",
         SdfKernel.Surface => "sdf-world-surface",
+        SdfKernel.ViewsProbes => "sdf-world-views-probes",
         SdfKernel.Views => "sdf-world-views",
         SdfKernel.ViewsPlain => "sdf-world-views-plain",
         SdfKernel.ViewsFilter => "sdf-world-views-filter",
@@ -137,6 +142,26 @@ public sealed class SdfKernelSet {
         SdfKernel.Resolve => "sdf-resolve",
         _ => throw new ArgumentOutOfRangeException(paramName: nameof(kernel), actualValue: kernel, message: "Not an SDF kernel."),
     };
+    /// <summary>Returns the optional device capabilities a kernel variant depends on (<see cref="GpuOptionalCapabilities"/>):
+    /// a pipeline set builds it only on a device created with every one (<see cref="GpuDeviceCapabilities.Has"/>), and
+    /// its caller takes the path it replaces wherever the set lacks it (<see cref="SdfWorldPipelines.Leases"/>). Every
+    /// kernel ships on every machine, since compiling one needs no device.</summary>
+    /// <param name="kernel">The kernel.</param>
+    /// <returns>The capabilities, or <see cref="GpuOptionalCapabilities.None"/> for a kernel every device runs.</returns>
+    public static GpuOptionalCapabilities RequiresOf(SdfKernel kernel) => kernel switch {
+        SdfKernel.ProbeTraceRays or SdfKernel.ProbeRelightRays or SdfKernel.ProbeCameraSampleRays => GpuOptionalCapabilities.RayQuery,
+        _ => GpuOptionalCapabilities.None,
+    };
+    /// <summary>Returns the ray-query variant of a probe kernel that traces rays, the kernel it replaces where the device
+    /// runs it (<see cref="RequiresOf"/>).</summary>
+    /// <param name="kernel">The software kernel.</param>
+    /// <returns>The variant, or <paramref name="kernel"/> itself for a kernel that traces no ray.</returns>
+    public static SdfKernel RaysOf(SdfKernel kernel) => kernel switch {
+        SdfKernel.ProbeTrace => SdfKernel.ProbeTraceRays,
+        SdfKernel.ProbeRelight => SdfKernel.ProbeRelightRays,
+        SdfKernel.ProbeCameraSample => SdfKernel.ProbeCameraSampleRays,
+        _ => kernel,
+    };
     /// <summary>Returns the layout of the interface a kernel reads: reconstruction's
     /// (<see cref="SdfWorldInterfaces.ResolveParameters"/>), the sky's and composite's
     /// (<see cref="SdfWorldInterfaces.SkyParameters"/>), the environment map's and its reduction's
@@ -150,6 +175,8 @@ public sealed class SdfKernelSet {
         kernel switch {
             SdfKernel.ProbeTrace => SdfWorldInterfaces.ProbeTraceLayout,
             SdfKernel.ProbeRelight => SdfWorldInterfaces.ProbeRelightLayout,
+            SdfKernel.ProbeTraceRays => SdfWorldInterfaces.ProbeTraceRaysLayout,
+            SdfKernel.ProbeRelightRays or SdfKernel.ProbeCameraSampleRays => SdfWorldInterfaces.ProbeRelightRaysLayout,
             SdfKernel.ProbeCameraSample or SdfKernel.ProbeSelect or SdfKernel.ProbeCompact or SdfKernel.ProbeCache or SdfKernel.ProbeCombine => SdfWorldInterfaces.ProbeRelightLayout,
             SdfKernel.MeshBakeMask or SdfKernel.MeshBake => SdfWorldInterfaces.MeshBakeLayout,
             SdfKernel.Resolve => SdfWorldInterfaces.ResolveParameters.Layout,
