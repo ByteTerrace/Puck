@@ -105,10 +105,11 @@ The next lead rewrites this section when it hands off in turn.
   ([the register](../decisions/runtime-and-delivery.md#vendor-binaries)); the four engine questions of the
   rendering plan ([what the owner settled](rendering-research.md#what-the-owner-settled-1));
   shared products in the [decision register](../decisions/engine-design.md#a-derived-product-is-a-cache-never-the-truth).
-- **Release rehearsal.** Release Azure dispatched without deploying on
-  `lead/authoring` now builds every artifact. Its last fixes (retrying
-  downloads, the AGB toolchain, the TraceEvent version, the registry) are on
-  the branch; read the latest dispatched run before the owner pushes `main`.
+- **Release rehearsal.** The rehearsal's fixes (retrying downloads, the AGB
+  toolchain, the TraceEvent version, the registry) are on `main`, and each
+  push to `main` runs Release Azure. Read the latest run on `main` before the
+  owner pushes `lead/rendering`'s work there, and fix what it shows on
+  `lead/rendering`.
 - **Before the owner pushes `main`:** the owner deferred the
   [security review](#security-review)'s write-door leaks for this push, as
   AGENTS.md allows for a high finding; they stay high work, ranked first in
@@ -338,8 +339,8 @@ engineering call is the lead's and sits in its packet as a "Decide" line.
 
 Owner-only actions:
 
-- **Pushing `main`**, which deploys to Azure. `lead/authoring` is hundreds of
-  commits ahead. Push once the read-door leaks ([Next](#next), line 1) and the
+- **Pushing `main`**, which deploys to Azure. `lead/rendering` holds the
+  rendering wave's work. Push once the read-door leaks ([Next](#next), line 1) and the
   Azure release's causes ([delivery](#delivery-launcher-and-ci)) are fixed and
   the milestone's riskiest areas have had a fresh fix pass (AGENTS.md); red
   tests hold nothing back while test requirements are suspended.
@@ -1925,16 +1926,10 @@ intent is in its guide.
 Owner: the water feature lane (rendering, puck-world, sdf-authoring) ·
 ordinary · Next: the engine gaps this packet holds, filled first
 ([rendering research](rendering-research.md#engine-gaps-filled-first)): depth
-over the bed driving colour, a flow read for each place, a camera inside
-water, a field row marked as simulation only, and a moving cutter that
-re-carves; the first four are that plan's `water` lane. Then [the plan](water.md#the-lanes)'s lanes A3 to A5 (A2 is built, awaiting its look critic), then R3 and
+over the bed driving colour, a flow following the river’s course, and a moving cutter that re-carves. Then [the plan](water.md#the-lanes)'s lanes A3 to A5 (A2 is built, awaiting its look critic), then R3 and
 P1 last. The plan owns the feature end to end; these are the defects it does not.
 
-- [high] The lake's outlet sill does not carry a faster flow: a flow layer carries one velocity per surface, so the lake's
-  calm drift cannot speed up over the sill that the falls start from (panel 2 wants the water to move only there). It
-  needs a flow whose velocity is read from a field or a course (the river's winding course is the same gap, in
-  [the plan](water.md#the-rivers-channel-as-built)), or a second authored sheet over the sill. Caustics on the
-  submerged stones are not built, and are unverified against the glass pass.
+- [high] Add caustics on the submerged stones and read them through the glass pass.
 - [high] The bake of the north-west wall's relief shows as hard facets on the trough's floor and the moraine ridges
   from the valley floor (`worlds/debug/glacier-site.puck`): the sector's cell at that distance is coarser than the
   trough's grooves. A near cell for the trough, or a creation of its own for the cradle, would carry the detail
@@ -1950,20 +1945,12 @@ P1 last. The plan owns the feature end to end; these are the defects it does not
   1000, though `fly-1` needs rise without jump; suspected, jump reads zero for
   a tick across the hold change. `body.hold` also kept answering `hold=swim`
   on the grass afterwards.
-- [medium] A lattice row that is simulation only still bakes: the water chain
-  (`worlds/standard/hydrology.puck`) needs a `heightScale` above zero for
-  `FieldLattice.StepFlow`, and `WorldFieldEmitter.Shape` draws and bakes every
-  such row, so the chain 90 m under the floor bakes two height fields nobody
-  sees. Separate flow height from geometry; `world.budget` then shows no
-  `hydro` groups.
 - [medium] The carved channel's acceptance gaps: at stage 1 the river is so
   shallow that contact foam covers it white; the river settles well before
   stage 4, so stages 4 and 5 look alike and the stage ticks need revisiting;
   the river groups' vertex count is unshown; a dark strip at the river-pool
   junction is unconfirmed.
-- [high] A flow that follows a course: a palette flow layer carries one
-  velocity over a surface, so a river that winds needs a flow read per place
-  (the course's tangent or a lattice row), a palette-flow and shader change.
+- [high] Let the river’s flow follow bends and piers. The outlet region handles localized acceleration. For a whole course, use the [flow field](water.md#w2s-field-source).
 - [medium] The debug-world arc scenario (`worlds/debug/water-arc-tests.puck`)
   ran for hours without a verdict; the chain-only twin passes in minutes. Run
   the arc at `water.speed` if the chain's numbers are speed-invariant, or

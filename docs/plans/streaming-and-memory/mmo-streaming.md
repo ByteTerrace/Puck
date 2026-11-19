@@ -1,6 +1,6 @@
 # S1 research: MMO world streaming and bounded client memory
 
-Brief: `s1-research-mmo`. Research lane (Codex) on `lead/authoring`.
+Brief: `s1-research-mmo`. Research lane (Codex) on the integration branch of the time.
 
 Scope: research only. No source edits, commits, builds, Worlds, leases or hardware measurements. This report is being written as sources are opened; conclusions below distinguish evidence, inference and proposed work.
 

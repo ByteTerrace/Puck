@@ -212,7 +212,8 @@ internal sealed class SdfMeshOcclusion : IDisposable {
         ToIndirect(commandBuffer: commandBuffer, recorder: recorder);
     }
     // Records one phase's counted indirect draw inside the mesh pass's render pass, its graphics pipeline and set bound.
-    // The pushed index is zero, so the record's identity alone names the draw (sdfMeshRasterDraw).
+    // The pushed index is zero, so the records alone name the draws (sdfMeshRasterDraw); the backend's counted draw sets it
+    // from there.
     public void RecordDraws(IGpuRecorder recorder, nint commandBuffer, IGpuPipeline pipeline, int phase) {
         if (m_count == 0u) {
             return;
