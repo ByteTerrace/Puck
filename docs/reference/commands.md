@@ -771,7 +771,7 @@ A World host publishes a mapping for every pane its render graph's root draws:
 each shown view of the world and each `views.graphs` pane a layout slot places,
 in drawing order, showing the instance's whole image at the extent it last
 rendered at. A lone view covering the whole display is no pane at any render
-scale, tonemapped or not: the display is that view, so a display point there
+scale: the display is that view, so a display point there
 picks no pane and hovers nothing, and the host keeps the view's whole-display
 mapping apart (`WorldViewGraphHost.DisplayView`). The host hands the panes to
 its `SourcePanePicker`, and a pipeline pane's pointer maps through its pane's

@@ -427,7 +427,7 @@ directional's lux) or its luminous intensity (a point's or spot's candela) over
 `emissive`, a sky layer's `luminance` and a display's `luminance` are nits; the
 irradiance volume traces and stores nits. Each view's composite multiplies its
 output by its exposure, the multiplier `1 / (1.2 · 2^EV100)` per nit
-(`SdfPhotometry.ExposureOf`), before the root's tonemap. `render.exposure` holds
+(`SdfPhotometry.ExposureOf`), before its display pass tones and encodes it. `render.exposure` holds
 `EV100` fixed or adapts it. An automatic exposure meters the view's own image:
 the composite bins each output pixel's luminance, at the view's whole exposure,
 into a log histogram weighted toward the centre by `center`
@@ -640,7 +640,7 @@ atmosphere, so existing motion, disocclusion and history clipping apply.
 
 `exposure` is reflected-light compensation in stops. `shoulder` compresses
 the exposed RGB peak with one common multiplier, retaining paint chroma
-before the world's authored tonemap. Emission is added after both this
+before the world's authored tone curve. Emission is added after both this
 compression and ink. Bound displays and portal pictures bypass the cel
 response, and sky stays in its existing pass. A portal's destination shades
 its own surfaces once; the consuming view does not posterise the picture.

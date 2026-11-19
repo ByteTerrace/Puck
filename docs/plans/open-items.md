@@ -3503,9 +3503,9 @@ Looks and rules of play held in engine code:
   `SdfSky.DefaultLuminance` (`WorldEnvironmentResolve.cs`). Make the
   unauthored default neutral, author the atmosphere in each debug-world place
   that leans on it, and look at the places on both backends before and after.
-- [medium] Four looks the rendering research found in engine code, each with
+- [medium] Three looks the rendering research found in engine code, each with
   the authored home [its looks table](rendering-research/step-designs.md#where-each-look-is-authored)
-  names: the filmic curve's constants in `place.comp.hlsl`; the share of its
+  names: the share of its
   own exposure a window's world applies (`SdfPhotometry.WindowAdaptation`);
   the shares of the display at which a nested view's update rate steps down
   (`SdfUpdateRateTiers.ViewHertz`); and what a nested view gives up, held as

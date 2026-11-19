@@ -443,8 +443,10 @@ few facts from it:
 - At most 8 lights. A point light falls off as
   `weight / (1 + (distance/radius)²)` and casts no shadow; an `anchor` lets a
   light ride a body or a placement.
-- `render.tonemap` is `none` (the default) or `filmic`.
-- `world.lighting` echoes the whole lighting, sky, environment and tonemap
+- `render.tone` is absent (no curve) or a `WorldToneCurve` (`filmicTone` in
+  `worlds/standard/tones.puck`). A palette hex is a display colour: an albedo of
+  `#767676` is 18% reflectance, decoded where it enters shading.
+- `world.lighting` echoes the whole lighting, sky, environment and tone
   state in one line each; an unauthored field reads `default`, the engine's
   pinned value for that kind, not zero.
 

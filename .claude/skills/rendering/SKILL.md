@@ -31,19 +31,26 @@ kernel: `[pipeline-statistics]` lines (Vulkan) print `sdf-world-views`,
 
 The [bloom decision](../../../docs/decisions/rendering.md#bloom-is-a-cameras-scatter-applied-once-before-tonemapping)
 owns the design; the [frame handbook](../../../docs/rendering/sdf/handbook/frame-rendering.md#camera-bloom)
-owns authoring and pass order. `SdfWorldPackage.WithBloom` declares the endpoint's
-optional output-relative pyramid; `SdfBloomRecorder` records its down/up passes.
-`SdfWorldPasses.Entry.OpticalBloom` gates transport, diagnostic, full screen
-fidelity and disabled views before allocating. Keep that gate and `world.bloom`'s
-reported bypass reasons aligned. Direct root views export the named `bloom` image
-for `place.bloom`; filmed cameras use `bloom-apply`. The direct image
-`BloomDirect` binds the composite's output member. A named image publication
-must retain its storage through graph replacement and carry its readable layout,
-just as the default image does. Optional absent bloom binds the shared stand-in.
-Keep root placement's optional input stable across enable/disable: a graph still
-rendering while its replacement builds must not lose its per-frame leased binding.
+owns authoring and pass order. `SdfWorldPackage.WithDisplay` is the view's last
+stage: it renames the composite's output to `scene-light`, adds the optional
+output-relative pyramid, and ends in the `display` pass, which sharpens, adds the
+scatter, applies `render.tone`, fades by screen fidelity and encodes on the
+extended sRGB curve into `color` ([the decision](../../../docs/decisions/rendering.md#scene-light-is-converted-to-display-values-once-at-the-end-of-each-views-graph)).
+`SdfOpticsRecorder` records the pyramid and the display pass over one interface
+(`SdfWorldPackage.OpticsMembers`, `isa/sdf-optics.interface.hlsli`).
+`SdfWorldPasses.Entry.Converts` decides which views take the stage: every view
+but one published as a window's light (`Unexposed`) or a sky layer
+(`GeometryOnly`); the screen shading reads the same split by `SdfScreenFace`
+(an opening shows linear light, a display decodes its working image).
+`Entry.OpticalBloom` gates transport, diagnostic, full screen fidelity and
+disabled views before allocating. Keep that gate and `world.bloom`'s reported
+bypass reasons aligned. The display pass's values (tone, sharpness, fidelity,
+scatter) enter its cadence signature (`SdfWorldTables.PassSignature`), or a still
+view keeps its old picture after a `render.tone` edit. Root `place` only places.
 Never bloom portal/window/mirror transport or raw screen textures. Never sharpen
-the scatter. Every diagnostic except the bloom-only view bypasses optical scatter.
+the scatter. Every diagnostic except the bloom-only view bypasses optical scatter,
+and a debug view that is not scene light passes the display pass unencoded
+(`DebugViewModes.ComposesFinal`).
 
 `Shared/bloom-filter.hlsli` uses cell-edge reflection and conservative cell
 integration. Unit-sum taps alone only preserve constants: edge clamping duplicated
@@ -344,7 +351,7 @@ compute samples camera depth, late compute samples light depth, in separate sets
 ## Evidence-preserving diagnostics
 
 `world.debug-view colliders|contacts` uses the beauty path through temporal
-resolve, sky, glass, fog, exposure and the root tonemap/sharpen. Keep
+resolve, sky, glass, fog, exposure and the display pass's sharpen, tone and encode. Keep
 `DebugViewModes.PreservesScene`, `sdfDebugPreservesScene` and the temporal epoch
 key together. Diagnostic marks belong only to `AnnotationWriter.EmitDiagnostics`'s separately
 reserved overlay channel; its masks protect every causal footprint, including
@@ -443,6 +450,8 @@ add the row you found.
 | Compute irradiance, and check it on the CPU | `SdfMeshIrradiance`, whose CPU reference shares one probe lookup with the relight and the views shader | `src/Puck.SdfVm`; [mesh GI](references/mesh-gi.md) |
 | Meter a view's picture for its exposure (histogram, percentiles, dead band, cut snap) | the composite's histogram (`passes/sdf-composite.comp.hlsl`), read back by `SdfSkyRecorder`, reduced by `SdfExposure.Meter`, followed by `SdfViewExposures` | `src/Puck.SdfVm`, `src/Puck.SignedDistance`; [the decision](../../../docs/decisions/rendering.md#lights-screens-and-the-camera-are-photometric) |
 | Convert an image source's color or encode a display output | `ImageSourceConversion` and the display encode, each paired with its HLSL | `src/Puck.Abstractions/Sources`; [sync pairs](references/sync-pairs.md#image-sources) |
+| Encode or decode the sRGB curve, or turn an authored hex colour into light | `SrgbTransfer` (extended, the twin of `Shared/transfer.hlsli`); `HexColor` parses to a `DisplayColor`, whose `ToScene` makes the `SceneColor` shading reads | `src/Puck.Maths` |
+| Convert a view's scene light for the display (sharpen, bloom, tone curve, encode) | `SdfWorldPackage.WithDisplay`, its `display` pass (`passes/sdf-display.comp.hlsl`, `Shared/display-transform.hlsli`) and `SdfOpticsRecorder` | `src/Puck.Shaders.Model/Graph`, `src/Puck.SdfVm` |
 | Share a constant or a layout between C# and HLSL | a generated declaration (`SdfIsaHlsl`, `ShaderDeclarations`) first; a hand pair only where the table lists one | [sync pairs](references/sync-pairs.md) |
 | Add a pipeline variant to a pass | `GpuPassPipelineKey`: a field that changes the pipeline enters the key, or leases share the wrong pipeline | `src/Puck.Shaders/Pipeline` |
 | Let an author program how a surface shades | `SdfShadeProgram` (the op table, admission, cost) | `src/Puck.SignedDistance/Shading`; [authored shading](references/authored-shading.md) |

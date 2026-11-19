@@ -27,7 +27,7 @@ observation left is listed under [deferred checks](#deferred-to-the-end). The
 | P13, hit-to-source mapping and input | [Windows passthrough click](#p13--hit-to-source-mapping-and-input-destinations) |
 | P14, SDF pass package | [Bake quality, glass, submission and routed worlds](#p14--the-sdf-engine-as-a-pass-package) |
 | P15, temporal reconstruction | [The march-step signal and the Steam Deck observation](#p15--temporal-reconstruction) |
-| P16, display output | [HDR display](#deferred-to-the-end) |
+| P16, display output | [HDR display](#deferred-to-the-end); [the colour conversion's remainder](#the-colour-conversion) |
 | P18, sky and atmosphere | [Celestial bodies and infinity-view admission](#p18--sky-and-atmosphere) |
 | P19, wallpaper-fold bounds | [CPU certification and bake lattice](#p19--neighbour-content-bounds-for-wallpaper-folds) |
 | P20, visibility and residency | [Observations](#p20--visibility-areas-and-residency) |
@@ -232,6 +232,31 @@ The [temporal packet](open-items.md#temporal-shimmer-and-cadence-flicker) owns
 remaining image work. Dynamic resolution follows GPU frame timing, with present
 timing as its fallback; without timing or a display period it holds its grid
 ([frame handbook](../rendering/sdf/handbook/frame-rendering.md)).
+
+### The colour conversion
+
+Each view converts its scene light once, in its own display pass
+([decision](../decisions/rendering.md#scene-light-is-converted-to-display-values-once-at-the-end-of-each-views-graph)).
+What remains:
+
+- **A join of two image kinds does not compose.** The kind a view publishes is
+  decided once (`SdfWorldPasses` `Entry.Converts`) and the kind a screen reads
+  once (`SdfScreenFace`), from matching predicates, but nothing refuses a graph
+  or a screen binding that joins a window's light to a working-image reader or
+  the reverse. Declare the kind on a fragment's output and on each consumer's
+  input, and have the runtime refuse a mismatched join by name. Check: a
+  document whose display screen films a `Window`-projection session is refused.
+- **A sky layer reading an image source.** The `disc` and `panorama` sky kinds
+  read their screen source as linear light, which an infinity view publishes; an
+  authored image source there is a working image and needs its decode, chosen by
+  the source's declared kind.
+- **Display-referred constants in shading.** The editor grid, an unbound
+  screen's glass and the curvature ink are display values added in exposed light
+  (`passes/sdf-light-stage.hlsli`); since the encode follows, they now read
+  brighter than authored. Decode each where it is defined.
+- **HDR output's readback.** A presented capture reads the root's working image
+  through the SDR encode; reading the swapchain in its own format waits for an
+  HDR display (P16).
 
 ### P18 — Sky and atmosphere
 

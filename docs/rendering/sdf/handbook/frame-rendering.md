@@ -33,9 +33,11 @@ During a shrinking layout transition the source envelope can remain larger than
 the placed rect. Placement integrates the complete reducing footprint, including
 every overlapping reconstruction basis; its cached tap pairs never limit support.
 
-The view exports `bloom` alongside its direct image. Root `place.bloom` sharpens
-the direct image, then combines `(1 - scatter) * direct + scatter * bloom` before
-tonemapping. A filmed camera without root placement uses `bloom-apply` instead.
+The view's own `display` pass, the last pass of every view a display shows
+(`SdfWorldPackage.WithDisplay`), sharpens the direct image, then combines
+`(1 - scatter) * direct + scatter * bloom`, then applies the world's
+`render.tone` curve and encodes on the extended sRGB curve; seat views and
+filmed cameras take the same pass.
 Panes, letterboxes and overlays never enter this filter. Portals, windows, mirror
 continuations, sky layers and raw machine/video images are transport and bypass it.
 All diagnostics bypass it except `world.debug-view bloom`, which displays the
@@ -52,7 +54,7 @@ For on/off evidence, pin exposure with `world.exposure pin` (the first view's cu
 manual with no local adaptation, as a document's `render.exposure.hold` does, without
 touching the document or its state; `world.exposure pin off` releases it. Pause the
 world with `world.rate pause`, and capture both states at that tick. Record `world.exposure` for each capture. An HDR energy invariant does not
-imply equal PNG means after a nonlinear tonemap, and an adapting exposure is a
+imply equal PNG means after the nonlinear tone curve and encode, and an adapting exposure is a
 different input even when the camera has not moved.
 
 The quality preset's `bloom` is Off, Low or High. Each seat independently scales
@@ -981,16 +983,12 @@ requests that residency's resolve pipeline from the build source the departed
 one used; until it is ready the view holds the departed world's image, as any
 follow it cannot yet make does.
 
-`place` sharpens what a temporal view resolves: where its source has its rect's
-own extent, it applies a contrast-adaptive sharpen of `world.upscale-sharpness`'s
-strength instead of its exact copy (`RenderGraphPlacement.Sharpen`), adding no
-pass and no texel written; at sharpness 0 the copy stays exact. A lone
-whole-display view that sharpens is placed by the root for that pass, as a
-tonemapped one is.
-
-At equal extent the Place kernel's output is predictable from the kernel: flat
-colors pass through unchanged, saturated edges sharpen, and disabling `sharpen`
-at full strength returns the source codes.
+The view's display pass sharpens what a temporal view resolves: a
+contrast-adaptive sharpen of `world.upscale-sharpness`'s strength over its exposed
+scene light at the output's own extent, before the scatter, the tone curve and the
+encode; at sharpness 0 the light passes unsharpened. Flat colours pass through
+unchanged and saturated edges sharpen. `place` then copies the working image
+exactly where its rect has the image's extent.
 
 ## The bake
 
