@@ -1175,7 +1175,7 @@ paths and `place` is on only some of them:
 - A pane is a layout slot drawn by its own shader, not a view of a world.
   It goes through the same placement with an image that is already encoded.
 - A view that a camera in the world films for a screen applies its own bloom
-  and publishes the result directly (`SdfViewSnapshot.BloomStandalone`, the
+  and publishes the result directly (a standalone bloom flag on the view, the
   `bloom-apply` pass of `SdfWorldPackage`).
 
 An encode added to the `place` pass would miss the single view and the
