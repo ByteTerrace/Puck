@@ -101,7 +101,7 @@ public sealed partial class SdfShadeProgram {
                         m_constants.AddRange(collection: [((uint)shape.Type), ((uint)shape.Table.Count), (shape.Bound.IsUnbounded ? 1u : 0u), 0u]);
                         AddVector(vector: shape.Data0At(tableVector: (((int)immediate) + 7)));
                         AddVector(vector: shape.Data1);
-                        AddVector(vector: new(value: shape.Scale, w: MathF.Min(x: shape.Scale.X, y: MathF.Min(x: shape.Scale.Y, y: shape.Scale.Z))));
+                        AddVector(vector: new(value: shape.Scale, w: SdfDerivedLanes.ScaleCorrection(scale: shape.Scale)));
                         AddVector(vector: new(value: shape.Bound.Center, w: 0f));
                         AddVector(vector: new(value: shape.Bound.HalfExtents, w: 0f));
                         AddVector(vector: new(shape.Rotation.X, shape.Rotation.Y, shape.Rotation.Z, shape.Rotation.W));

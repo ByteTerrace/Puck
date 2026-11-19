@@ -79,7 +79,7 @@ public sealed class WorldCreationInstancesAirborneSpeedLawTests {
             Revision: 0,
             StepTicks: 1UL,
             Tick: tick
-        ));
+        ), stream: default);
         client.UpdateRenderPoses(alpha: 1f);
         pool.Tick(deltaSeconds: seconds);
 

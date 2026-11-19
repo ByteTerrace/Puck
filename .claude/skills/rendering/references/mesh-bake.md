@@ -479,7 +479,7 @@ laws exercise that boundary.
   relief's spacing (`CreationNoiseDocument.DetailSpacing`) over the box its
   composed surface lies in (`SdfBoundAlgebra.ComposeBox`), so the group bakes on
   a union's final lattice and a moraine's 9 cm round section refines its own
-  box, not a whole terrain sector. Text declares half a stroke
+  box, not a whole terrain sector. Text declares a third of its thinnest stroke
   (`SdfProgramBuilder.GlyphDetail`). Refinement stops at
   eight cells a coarse axis (a fitted text group's lattice is spaced to reach
   its detail instead, below), and the fine-sample budget
@@ -620,14 +620,22 @@ laws exercise that boundary.
   box cut the first words off the gallery plaques' notes. An emitter that
   knows its surface's box exactly declares it the same way; a box with a
   margin about the surface is not fitted. A stroke about one fine cell wide
-  tears or bridges to its neighbour, so a run asks half its stroke
-  (`SdfProgramBuilder.GlyphDetail`, which `WorldPlacementStamper.TextDetail`
-  declares), and a fitted group whose length-spaced lattice cannot reach that
-  detail within `MaxDetailRefinement` cells takes a lattice that many details
-  apart (`SdfMeshPathBake.OwnFinal`, budgeted as a union's by
-  `BudgetedLattice`). The tier floors the detail, so a view that resolves no
-  stroke pays for none: at the debug world's boot views every plaque bakes at
-  tier 3 to 6, and its cold bake matches a build that asked a whole stroke. A
+  tears or bridges to its neighbour, and one two cells wide is the margin
+  itself: a sans face's arms are thinner than its stems (Inter's are 0.082 em),
+  and the gallery's label-only plaques, at half a 0.1 em stroke, baked no finer
+  than 3.7 mm cells, under two cells across those arms. A run asks a third of
+  its thinnest stroke (`SdfProgramBuilder.GlyphDetail`, from
+  `GlyphStrokeEms`; `WorldPlacementStamper.TextDetail` declares it), and a
+  fitted group whose length-spaced lattice cannot reach that detail within
+  `MaxDetailRefinement` cells takes a lattice that many details apart
+  (`SdfMeshPathBake.OwnFinal`, budgeted as a union's by `BudgetedLattice`). A
+  fitted text group's lattice keeps only three samples across its slab
+  (`TextMinimum`, not `FinalMinimum`): every cell its glyphs can enter refines,
+  and nine samples across a slab a centimetre deep would have the refinement
+  split sub-millimetre cells as many times as the strokes' cells, spending the
+  fine-sample budget (`SdfSampledLattice.MaxFineSamples`) across the slab's
+  depth and leaving a long note a coarser split. The tier floors the detail, so a view that
+  resolves no stroke pays for none. A
   glyph's field is its atlas distance only within half the atlas's distance
   range of an edge and a bound past it (a constant band, then its cell's box),
   so a static instance's glyphs (`SdfInstanceRange.Glyphs`, joined into

@@ -572,9 +572,13 @@ placements {
   }
 }
 
-// A spawn point before each painting, facing it, and one at the doorway facing in: `debug.go portals` and its kin.
+// A spawn point before each painting, facing it, and two that frame several at once for the chase camera, which keeps
+// its place behind the body (4 m back along its heading): `painting-room` just inside the doorway, looking across the
+// room with the garden and night paintings on its left and the east wall's linked painting on its right, and `portals`
+// before the north wall, turned so the garden painting stands left of the body and the night painting right of it.
 spawnPoints [
-  { id: "portals", position [53.5, wingFloor, 26], yawDegrees: 270 }
+  { id: "painting-room", position [55, wingFloor, 26], yawDegrees: 227 }
+  { id: "portals", position [57.5, wingFloor, 31], yawDegrees: 198 }
   { id: "portal-garden", position [57, wingFloor, 36.3], yawDegrees: 180 }
   { id: "portal-night", position [64, wingFloor, 36.3], yawDegrees: 180 }
   { id: "portal-link", position [54.5, wingFloor, 34.5], yawDegrees: 90 }

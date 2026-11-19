@@ -41,7 +41,7 @@ public sealed class CreationLocomotionLawTests {
             Revision: 0,
             StepTicks: 1UL,
             Tick: tick
-        ));
+        ), stream: default);
         client.UpdateRenderPoses(alpha: 1f);
         pool.Tick(deltaSeconds: Frame);
 

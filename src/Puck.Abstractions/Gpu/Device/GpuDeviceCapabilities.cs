@@ -59,9 +59,8 @@ namespace Puck.Abstractions.Gpu;
 /// <param name="StorageBufferOffsetAlignment">Vulkan's <c>minStorageBufferOffsetAlignment</c>, the alignment a buffer
 /// view's offset into its buffer keeps; zero on Direct3D 12, whose view starts at any whole element.</param>
 /// <param name="ExecuteIndirectTier">Direct3D 12's <c>ExecuteIndirectTier</c> as 10 for tier 1.0 and 11 for tier 1.1, which
-/// adds the incrementing root constant a counted draw numbers its commands with
-/// (<see cref="ExecuteIndirectIncrementingConstant"/>); zero where the runtime does not answer the query, and on
-/// Vulkan.</param>
+/// adds the incrementing root constant a command signature may number its commands with; zero where the runtime does not
+/// answer the query, and on Vulkan. Reported only: no command signature reads it.</param>
 /// <param name="Optional">The optional capabilities the device was created with, which a kernel variant may depend on
 /// (<see cref="Has"/>): each one the device reports, less what the host withheld.</param>
 /// <param name="Withheld">The optional capabilities the device reports but was created without, because the host
@@ -107,9 +106,6 @@ public sealed record GpuDeviceCapabilities(
     /// <summary>Direct3D 12's shader-visible sampler heap size (<c>D3D12_MAX_SHADER_VISIBLE_SAMPLER_HEAP_SIZE</c>),
     /// reported for both sampler heap limits when the runtime does not answer options 19.</summary>
     public const uint DirectXMinimumSamplerHeapSize = 2048U;
-    /// <summary>The <see cref="ExecuteIndirectTier"/> at which a command signature may number its commands with an
-    /// incrementing root constant (<c>D3D12_EXECUTE_INDIRECT_TIER_1_1</c>).</summary>
-    public const uint ExecuteIndirectIncrementingConstant = 11U;
     /// <summary>The name of the line and JSON object the capabilities form in a readout.</summary>
     public const string Section = "capabilities";
 

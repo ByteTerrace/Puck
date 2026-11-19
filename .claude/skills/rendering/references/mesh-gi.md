@@ -422,6 +422,21 @@ done line; a nested residency's done line is insufficient.
   the receiver ray. Testing only a tangent/chord plane returned 0.574 visibility
   for an exact-segment-visible receiver in the small-curve witness. An unsupported
   tap casts no blocker; a distinct local hit supports the normal-gradient fit.
+  At the finest level, once a tap blocks the receiver, a tap whose ray (at its hit,
+  or at the receiver's distance for a miss or a farther hit) still stands on the
+  probe's side of that blocker's tangent plane, or on it within
+  `DepthSurfaceJoinGap`, carries no evidence and leaves the coverage in the measure
+  the blocker closes the receiver (`SdfMeshProbeDepth.Unresolved`, the second loop
+  of `sdfMeshProbeDepthVisibility`): it never got past the blocker. A ray that
+  crossed the blocker's plane clear keeps its weight, so a receiver still eases
+  over a texel past a finite block's edge. Counted as clear, an outdoor probe's
+  ground taps in front of a wall's base, and its taps running clear past the end
+  of a wall it sees at grazing, light the inside of the wall's foot and of a room's
+  corner with sky: at Medium, a fifth of the gather of Wonderland's floor along its
+  north wall and a quarter of its west wall's beside the north-west corner. The
+  coarser levels close walls on sheets instead; there the rule would close the far
+  slope of a hill their metres-wide taps see past its bulge
+  (`TheCoarsestLevelKeepsACurvedSurfaceItSeesLit`).
   Curvature zero retains the exact plane intersection. The common-plane fast path
   reduces that same quadratic to one signed gap and reuses the decoded normal,
   avoiding four general fits in CPU bounce reads and pixels. Fade a patch over

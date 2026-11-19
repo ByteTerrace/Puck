@@ -332,17 +332,6 @@ public sealed partial class SdfProgramBuilder {
         m_openInstanceRadius = radius;
         m_openInstanceSlot = slot;
     }
-    // THE ARGUMENT FLOOR. Every float a caller supplies reaches the GPU as a packed word bit-for-bit (SdfProgram's
-    // WriteVector4 reinterprets, it never arithmetically normalizes), so a NaN or infinity is not absorbed anywhere
-    // downstream: it survives into the instruction stream, poisons the program-wide Lipschitz step scale
-    // (SdfProgram.AnalyzeLipschitz folds every shape dimension and warp rate into ONE scalar), and poisons the cull
-    // bounds derived from the same lanes. The host-baked clamps (Vector3.Max, MathF.Max, Math.Clamp) absorb SIGN, never
-    // NaN — MathF.Max(NaN, x) is NaN — which is why finiteness is checked here rather than left to them.
-    private static Vector3 ClampSpacing(Vector3 spacing) =>
-        Vector3.Max(
-            value1: spacing,
-            value2: new Vector3(value: 0.001f)
-        );
     /// <summary>Owns finite-value validation and instruction encoding for signed scalar transforms.</summary>
     private SdfProgramBuilder FiniteScalarTransform(SdfOp op, float value, string paramName, string subject) {
         RequireFinite(

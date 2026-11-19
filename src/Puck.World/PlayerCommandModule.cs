@@ -58,6 +58,8 @@ internal sealed partial class PlayerCommandModule(PlayerRoster roster, WorldPopu
     /// <summary>The look-swap command: turns the seat camera a half-turn about the body.</summary>
     /// <summary>The look-recenter command: turns the seat camera round behind the body.</summary>
     public const string RecenterLookCommand = Puck.World.Client.PlayerCommandNames.RecenterLookCommand;
+    /// <summary>The input latency calibration: <c>player.calibrate &lt;seconds&gt; [seat]</c>.</summary>
+    public const string CalibrateCommand = "player.calibrate";
     /// <summary>The engaged-screen view toggle: <c>player.frame [seat]</c>.</summary>
     public const string FrameCommand = "player.frame";
     /// <summary>The generic sensor-input mode toggle.</summary>
@@ -232,7 +234,7 @@ internal sealed partial class PlayerCommandModule(PlayerRoster roster, WorldPopu
             audience: CommandAudience.Anyone,
             bindability: CommandBindability.Bindable,
             name: "body.pose",
-            description: "Teleports a body to a full 6DOF pose: " + BodyPoseForms.Spelling + " (yaw about world up, pitch about the body right, roll about the body forward; 0/0/0 = level facing -Z). ANY of the six positional values may be - to HOLD that axis at its current value instead of setting it — body.pose - - - 90 - - 0 turns body:0 to face 90° with its position and pitch/roll untouched; body.pose 3 - 5 - - - 0 moves body:0 on the ground plane only. The held axes are read from the SAME live pose this call resolves and folded into ONE atomic SnapPose submission — never a read-then-write pair, so nothing can move the body between the read and the write. A hard teleport (sim snap + previous-pose reset + render-error clear). A grounded entity re-pins Y and levels on its next step. It turns the body alone: a seat camera whose look is world-referenced (views.seatControl.yawReference World, as the moth basis authors) keeps its heading, so after a yaw change a chase camera frames the body from another side, or from in front, where a crossing turns the seat's view with its traveler. The optional trailing body index is 0..4095 (default 0) — 0..3 local seats, 4..4095 simulated entries. The SPAWN form — body.pose spawn:<id> [body] — poses the body at a declared spawnPoints row (its position and yawDegrees, pitch and roll zero), the console mirror of a rule's pose effect naming a spawnPoint; an undeclared id refuses by name. A seat standing in another instance (a painting's destination) poses at that instance's own spawn point, and at an id only the home world declares it is carried home and set down standing there. A trailing instance:<name> token addresses a NAMED running instance's own seat instead — body.pose <x> <y> <z> <yawDeg> <pitchDeg> <rollDeg> <slot> instance:<name> (slot REQUIRED, 1..WorldBodiesLimits.LocalSeatCount) — the SAME hold-current axes apply, read from that instance's own live pose.",
+            description: "Teleports a body to a full 6DOF pose: " + BodyPoseForms.Spelling + " (yaw about world up, pitch about the body right, roll about the body forward; 0/0/0 = level facing -Z). ANY of the six positional values may be - to HOLD that axis at its current value instead of setting it — body.pose - - - 90 - - 0 turns body:0 to face 90° with its position and pitch/roll untouched; body.pose 3 - 5 - - - 0 moves body:0 on the ground plane only. The held axes are read from the SAME live pose this call resolves and folded into ONE atomic SnapPose submission — never a read-then-write pair, so nothing can move the body between the read and the write. A hard teleport (sim snap + previous-pose reset + render-error clear). A grounded entity re-pins Y and levels on its next step. A seat camera whose look is world-referenced (views.seatControl.yawReference World, as the moth basis authors) turns by the heading the body turned by, as a crossing turns it, so a chase camera keeps its place around the posed body: one behind the body stays behind it. The optional trailing body index is 0..4095 (default 0) — 0..3 local seats, 4..4095 simulated entries. The SPAWN form — body.pose spawn:<id> [body] — poses the body at a declared spawnPoints row (its position and yawDegrees, pitch and roll zero), the console mirror of a rule's pose effect naming a spawnPoint; an undeclared id refuses by name. A seat standing in another instance (a painting's destination) poses at that instance's own spawn point, and at an id only the home world declares it is carried home and set down standing there. A trailing instance:<name> token addresses a NAMED running instance's own seat instead — body.pose <x> <y> <z> <yawDeg> <pitchDeg> <rollDeg> <slot> instance:<name> (slot REQUIRED, 1..WorldBodiesLimits.LocalSeatCount) — the SAME hold-current axes apply, read from that instance's own live pose.",
             forms: BodyPoseForms,
             handler: PoseHandler,
             ackOnly: true
@@ -580,6 +582,10 @@ internal sealed partial class PlayerCommandModule(PlayerRoster roster, WorldPopu
         }
 
         foreach (var command in ModeVerbs()) {
+            yield return Route(command: command);
+        }
+
+        foreach (var command in CalibrationVerbs()) {
             yield return Route(command: command);
         }
 

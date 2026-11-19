@@ -85,6 +85,10 @@ same change.
 - **Only a proven contact corrects a carrier.** A sweep that held its body for
   want of proof reports `ContactResolution.Unproved` and hands the carrier
   nothing.
+- A `timedMove` action uses `FixedTimedMove.Sample` for both its yaw and its
+  travel. `WorldBody.ProposeTimedMove` updates the proposal before the contact
+  phase, and the refused-step snapshot includes the move's progress.
+  [Authoring](../puck-world/references/documents-motion.md#timed-moves)
 - **Two snaps share one answer** where the body has not moved between them
   (`BodySupportMemo`, keyed by field, volume derivation, start, orientation, up
   and reach).

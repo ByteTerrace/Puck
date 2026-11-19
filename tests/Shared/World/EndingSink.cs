@@ -23,7 +23,7 @@ internal sealed class EndingSink(int endAfterDefinitions, int endAfterSnapshots)
     }
     public void DeliverComposition(WorldComposition composition) {
     }
-    public void DeliverDefinition(WorldDefinition definition, WorldDocumentVersion version) {
+    public void DeliverDefinition(WorldDefinition definition, WorldDocumentVersion version, in WorldStreamStamp stream) {
         Note();
 
         if (++Definitions == endAfterDefinitions) {
@@ -32,12 +32,13 @@ internal sealed class EndingSink(int endAfterDefinitions, int endAfterSnapshots)
     }
     public void DeliverSessionLever(WorldSessionLever lever) {
     }
-    public void DeliverSnapshot(in WorldSnapshot snapshot) {
+    public void DeliverCut(in WorldStreamStamp stream, bool terminal) { }
+    public void DeliverSnapshot(in WorldSnapshot snapshot, in WorldStreamStamp stream) {
         Note();
 
         if (++Snapshots == endAfterSnapshots) {
             DetachReason = Reason;
         }
     }
-    public void DeliverState(WorldDefinition definition, WorldDocumentVersion version, in WorldStateStamp stamp) => Note();
+    public void DeliverState(WorldDefinition definition, WorldDocumentVersion version, in WorldStateStamp stamp, in WorldStreamStamp stream) => Note();
 }

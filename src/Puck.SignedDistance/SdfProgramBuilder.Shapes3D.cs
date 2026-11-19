@@ -78,7 +78,7 @@ public sealed partial class SdfProgramBuilder {
             // Keep the true reciprocal below a centimetre too. The former 0.0001 floor shortened h for every small
             // capsule. Zero is a sphere; reciprocals beyond float's range (sub-10^-19 endpoints) cap at its finite
             // maximum, keeping the shader's product finite at zero and the geometry below the query grid.
-            derived1: ((dotEndpoint == 0f) ? 0f : ((float)Math.Min(val1: (1.0 / dotEndpoint), val2: float.MaxValue))),
+            derived1: SdfDerivedLanes.CapsuleInverseLengthSquared(endpoint: endpoint),
             dimensions: new Vector4(
                 value: endpoint,
                 w: radius
@@ -200,13 +200,13 @@ public sealed partial class SdfProgramBuilder {
 
         var clamped = Vector3.Max(
             value1: Vector3.Abs(value: radii),
-            value2: new Vector3(value: 0.0001f)
+            value2: new Vector3(value: SdfDerivedLanes.MinSuperellipsoidRadius)
         );
 
         // The degenerate-radius clamp and inverse radii are HOST-BAKED (Data1.yzw) to avoid three divides per
         // evaluation (KEEP IN SYNC with sdfSuperellipsoid in Assets/Shaders/Sdf/field/sdf-shapes.hlsli and
         // SdfFieldEvaluator.SdfSuperellipsoid).
-        var inverse = (Vector3.One / clamped);
+        var inverse = SdfDerivedLanes.Reciprocal(extents: clamped);
 
         return Shape(
             blend: blend,
@@ -271,10 +271,7 @@ public sealed partial class SdfProgramBuilder {
 
         // The slope terms are HOST-BAKED (Data0.w = b, Data1.y = a) to avoid a divide and square root per evaluation
         // (KEEP IN SYNC with sdfRoundCone in Assets/Shaders/Sdf/field/sdf-shapes.hlsli).
-        var slope = ((lowerRadius - upperRadius) / MathF.Max(
-            x: height,
-            y: 0.0001f
-        ));
+        var (slope, cosine) = SdfDerivedLanes.RoundConeSlope(lowerRadius: lowerRadius, upperRadius: upperRadius, height: height);
 
         // The three raw inputs are each individually finite (RequireNonNegative above already refuses NaN/infinity),
         // but their RATIO is not: a huge radius difference over a near-zero height overflows a finite numerator by a
@@ -309,10 +306,7 @@ public sealed partial class SdfProgramBuilder {
 
         return Shape(
             blend: blend,
-            derived1: MathF.Sqrt(x: MathF.Max(
-                x: (1f - (slope * slope)),
-                y: 0f
-            )),
+            derived1: cosine,
             detail: detail,
             dimensions: new Vector4(
                 w: slope,
@@ -779,9 +773,9 @@ public sealed partial class SdfProgramBuilder {
         var r = MathF.Abs(x: radius);
         var d = MathF.Min(
             x: MathF.Abs(x: halfSeparation),
-            y: (r * 0.9999f)
-        ); // d < r keeps b = √(r²−d²) real and positive
-        var b = MathF.Sqrt(x: ((r * r) - (d * d)));
+            y: (r * SdfDerivedLanes.MaxVesicaSeparationShare)
+        );
+        var b = SdfDerivedLanes.VesicaHalfHeight(radius: r, halfSeparation: d);
 
         // r and d are each individually finite, but r*r (and d*d) can overflow past float.MaxValue for a large enough
         // radius even though r itself does not — at radius == halfSeparation == float.MaxValue both squares overflow

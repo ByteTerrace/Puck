@@ -114,6 +114,11 @@ is corrected in the same change.
 - In a scenario, `seat1: player.signal <source> press at:<seconds>` places a
   press at a sub-tick offset; `keyboard.text` commits text as ordered Unicode
   scalar events.
+- Calibration is a per-owner signed offset in seconds that the judgement adds
+  to a press's captured time. `player.calibrate <seconds> [seat]` (bindable,
+  and a scenario step) submits `WorldCommand.CalibrateInput`; the authority
+  bounds it by `inputHistory.calibrationLimitSeconds` (zero when unauthored)
+  and applies it at an epoch boundary. A refusal narrates on `input.refused`.
 
 ## Press, release, tap, hold, chords, sequences and rhythm
 

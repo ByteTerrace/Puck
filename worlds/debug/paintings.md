@@ -22,7 +22,9 @@ switch says, and each canvas, which shows a live view, lights it further. Each p
 the floor before it, and a rail rings the hole in level 1's floor over the
 ceiling painting (below).
 
-`debug.go portals` stands a body at the doorway, facing in. `debug.go
+`debug.go painting-room` stands a body just inside the doorway, looking
+across the room, and `debug.go portals` before the north wall, where the chase
+camera frames the garden and night paintings either side of her. `debug.go
 portal-garden`, `portal-night`, `portal-link` and `portal-fall` stand it before
 each painting, facing it.
 

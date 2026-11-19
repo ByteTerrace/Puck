@@ -19,7 +19,7 @@ public sealed class WorldRigidAssetLawTests {
 
         (SdfProgram Program, SdfMeshInstance Copy) Frame(float x, EntityContinuity continuity, int generation = 1) {
             client.DeliverSnapshot(snapshot: new WorldSnapshot(++tick, 1, 1,
-                new[] { new EntitySnapshot(0, new Vector3(x: x, y: 0, z: 0), Quaternion.Identity, Vector3.One, true, 0, 0, 0, continuity, generation) }, "a"));
+                new[] { new EntitySnapshot(0, new Vector3(x: x, y: 0, z: 0), Quaternion.Identity, Vector3.One, true, 0, 0, 0, continuity, generation) }, "a"), stream: default);
             client.UpdateRenderPoses(alpha: 1);
             var frame = frames.CaptureFrame(deltaSeconds: 0, height: 64, interpolationAlpha: 1, width: 64)!;
 

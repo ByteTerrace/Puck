@@ -3,12 +3,17 @@ using Puck.Networking;
 namespace Puck.World.Protocol;
 
 public static partial class WorldWireCodec {
+    /// <summary>Writes a captured interval with its optional music coordinates, the leaf shared by barriers and records.</summary>
+    public static void WriteInputInterval(WireWriter writer, WorldInputInterval interval) {
+        writer.WriteUInt64(value: interval.Tick); writer.WriteUInt64(value: interval.EngineStart); writer.WriteUInt64(value: interval.EngineDuration);
+        writer.WriteOptional(value: interval.Music, writeValue: static (w, music) => { w.WriteUInt64(value: music.ElapsedTicks); w.WriteInt64(value: music.TicksPerBeat); w.WriteString(value: music.Segment); w.WriteInt32(value: music.BeatsPerBar); });
+    }
+    /// <summary>Reads a captured interval written by <see cref="WriteInputInterval"/>.</summary>
+    public static WorldInputInterval ReadInputInterval(ref WireReader reader) => new(reader.ReadUInt64(), reader.ReadUInt64(), reader.ReadUInt64(),
+        reader.ReadOptional(readValue: static (ref WireReader r) => new WorldInputMusicSegment(r.ReadUInt64(), r.ReadInt64(), r.ReadString("input music segment"), r.ReadInt32())));
     /// <summary>Writes the complete barrier leaf shared by publications and checkpoints.</summary>
     public static void WriteInputSwitch(WireWriter writer, WorldInputSwitch value) {
-        var interval = value.Interval;
-
-        writer.WriteUInt64(value: interval.Tick); writer.WriteUInt64(value: interval.EngineStart); writer.WriteUInt64(value: interval.EngineDuration);
-        writer.WriteOptional(value: interval.Music, writeValue: static (w, music) => { w.WriteUInt64(value: music.ElapsedTicks); w.WriteInt64(value: music.TicksPerBeat); w.WriteString(value: music.Segment); });
+        WriteInputInterval(writer, value.Interval);
         writer.WriteUInt64(value: value.Epoch); writer.WriteUInt16(value: value.From); writer.WriteUInt16(value: value.To);
         if (value.ConsumedActivations.Length > WorldInputSwitch.MaximumConsumedActivations) { throw new ArgumentException(message: "input boundary exceeds its activation budget", paramName: nameof(value)); }
         writer.WriteInt32(value: value.ConsumedActivations.Length);
@@ -23,8 +28,7 @@ public static partial class WorldWireCodec {
     }
     /// <summary>Reads a bounded barrier, preserving each action's reason and original hold.</summary>
     public static WorldInputSwitch ReadInputSwitch(ref WireReader reader) {
-        var interval = new WorldInputInterval(reader.ReadUInt64(), reader.ReadUInt64(), reader.ReadUInt64(),
-            reader.ReadOptional(readValue: static (ref WireReader r) => new WorldInputMusicSegment(r.ReadUInt64(), r.ReadInt64(), r.ReadString("input music segment"))));
+        var interval = ReadInputInterval(ref reader);
         var epoch = reader.ReadUInt64(); var from = reader.ReadUInt16(); var to = reader.ReadUInt16();
         var activations = reader.ReadArray("input transition activations", static (ref WireReader r) => r.ReadUInt64(), WorldInputSwitch.MaximumConsumedActivations);
         var reset = reader.ReadBoolean();

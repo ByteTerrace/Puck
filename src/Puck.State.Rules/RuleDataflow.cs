@@ -8,7 +8,8 @@ public static class RuleDataflow {
     /// savepoints hold.</summary>
     /// <param name="effects">The compiled effects.</param>
     /// <param name="into">The needs being built.</param>
-    public static void CollectEffectFacts(IRuleEffect[] effects, RuleNeedsBuilder into) {
+    /// <param name="includeSources">Whether to include the value and key facts read during preflight.</param>
+    public static void CollectEffectFacts(IRuleEffect[] effects, RuleNeedsBuilder into, bool includeSources = false) {
         ArgumentNullException.ThrowIfNull(argument: effects);
         ArgumentNullException.ThrowIfNull(argument: into);
 
@@ -20,10 +21,18 @@ public static class RuleDataflow {
                     into: into
                 );
             }
+            if (includeSources) {
+                foreach (var source in effect.Sources) {
+                    into.AddFact(source.Operand);
+                    CollectExpressionSchedulingFacts(source.Program, into);
+                    CompiledCellRef.CollectFacts(source.KeyFrom, into);
+                }
+            }
             foreach (var arm in effect.Arms) {
                 CollectEffectFacts(
                     effects: arm,
-                    into: into
+                    into: into,
+                    includeSources: includeSources
                 );
             }
         }

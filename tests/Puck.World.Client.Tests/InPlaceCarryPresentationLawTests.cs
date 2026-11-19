@@ -59,7 +59,7 @@ public sealed class InPlaceCarryPresentationLawTests {
         Revision: 0,
         StepTicks: 1UL,
         Tick: tick
-    ));
+    ), stream: default);
     private static float Pack(WorldClient client, WorldCreationInstances pool, DynamicTransform[] transforms) {
         client.UpdateRenderPoses(alpha: 1f);
         pool.Tick(deltaSeconds: Frame);

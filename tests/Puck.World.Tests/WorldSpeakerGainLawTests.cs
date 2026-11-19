@@ -31,7 +31,7 @@ public sealed class WorldSpeakerGainLawTests {
         var client = ClientFixtures.Client(definition: definition);
         var director = new WorldAudioDirector(client, null);
 
-        client.DeliverDefinition(definition: definition, version: default);
+        client.DeliverDefinition(definition: definition, version: default, stream: default);
         director.ReconcileSpeakers(definition: definition);
         var mixer = new AudioMixer();
         var mixed = new short[400];
@@ -53,7 +53,7 @@ public sealed class WorldSpeakerGainLawTests {
 
         void Present(long raw, int expected) {
             definition = definition.WithWorldState(rows: [StateFixtures.FixedSlot(name: "level", rawBits: raw)]);
-            client.DeliverState(definition, default, new WorldStateStamp(EngineTick: 1680, Everything: true, MovedRows: ReadOnlyMemory<int>.Empty, Tick: 1));
+            client.DeliverState(definition, default, new WorldStateStamp(EngineTick: 1680, Everything: true, MovedRows: ReadOnlyMemory<int>.Empty, Tick: 1), stream: default);
             var published = director.Publish([], []);
 
             Assert.Equal(id, Assert.Single(collection: published.Emitters.ToArray()).Id);
@@ -73,7 +73,7 @@ public sealed class WorldSpeakerGainLawTests {
 
         // A literal edit is also a property change, retaining the same emitter and sustained voice.
         definition = definition with { SpeakersRaw = [speaker with { Feed = feed with { Gain = 0.25f } }] };
-        client.DeliverDefinition(definition: definition, version: default);
+        client.DeliverDefinition(definition: definition, version: default, stream: default);
         director.ReconcileSpeakers(definition: definition);
         var literal = director.Publish([], []);
 

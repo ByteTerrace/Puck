@@ -18,3 +18,31 @@ test "30 Hz judges opposite sides of a half-millisecond beat window" {
     outsideError == 0.0005035400390625
   }
 }
+test "a calibration moves a late press into the beat window" {
+  when {
+    seat1: player.calibrate -0.009765625
+    ticks 4
+    seat1: player.signal keyboard.u press at:0.01025390625
+    ticks 3
+  }
+  expect {
+    hits == 1
+    misses == 0
+    insideError == 0.00048828125
+  }
+}
+test "the beat, bar and beat in bar read the clock and a press" {
+  when {
+    ticks 4
+    seat1: player.signal keyboard.u press at:0.00048828125
+    ticks 3
+  }
+  expect {
+    insideBeat == 12
+    insideBar == 3
+    insideBeatInBar == 0
+    liveBeat == 14
+    liveBar == 3
+    liveBeatInBar == 2
+  }
+}

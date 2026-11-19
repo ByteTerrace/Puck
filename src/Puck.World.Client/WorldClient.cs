@@ -895,7 +895,7 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
         }
     }
     /// <inheritdoc/>
-    public void DeliverDefinition(WorldDefinition definition, WorldDocumentVersion version) {
+    public void DeliverDefinition(WorldDefinition definition, WorldDocumentVersion version, in WorldStreamStamp stream) {
         ArgumentNullException.ThrowIfNull(argument: definition);
 
         // Store the live definition and bump the delivery revision (one component of WriteRevision), so the frame source rebuilds
@@ -914,6 +914,11 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
         );
     }
     /// <inheritdoc/>
+    /// <remarks>A client is fed its own authority's fan-out (<see cref="WorldStreamStamp.Unspanned"/>), whose one span
+    /// never ends, and never a spanned stream, so it receives no cut.</remarks>
+    public void DeliverCut(in WorldStreamStamp stream, bool terminal) {
+    }
+    /// <inheritdoc/>
     public void DeliverSessionLever(WorldSessionLever lever) {
         // Already past the server's Mutate check on the lever's folded-into section (see WorldServer.ApplySessionLever),
         // so this only dispatches the write onto the presentation service the lever names.
@@ -921,12 +926,16 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
     }
 
     private readonly WorldSolidScaleMirror m_solidScales = new();
+    /// <summary>The local rig's delivered one-shot frames.</summary>
+    public WorldPresentationCueFeed CueFrames { get; } = new();
+    /// <summary>Observes the local seat's disclosed presentation events.</summary>
+    public Action<WorldDefinition, WorldPresentationCueTick>? PresentCues { get; set; }
     private float m_solidScaleAlpha = 1f;
 
     /// <inheritdoc/>
     public float? SolidScale(string placementId) => m_solidScales.Read(alpha: m_solidScaleAlpha, placementId: placementId);
     /// <inheritdoc/>
-    public void DeliverSnapshot(in WorldSnapshot snapshot) {
+    public void DeliverSnapshot(in WorldSnapshot snapshot, in WorldStreamStamp stream) {
         m_solidScaleAlpha = 1f;
         m_solidScales.Deliver(sizes: snapshot.SolidScales.Span);
         m_poses.Begin();
@@ -1047,6 +1056,9 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
             // A tick no state delivery refreshed still moves every bound cell whose value-over-time trait has not rested.
             m_stateMirror.Advance(engineTick: m_engineTick, tick: m_tick);
         }
+        var cues = WorldPresentationCueFeed.Capture(snapshot);
+        if (cues.Cues.Length != 0) { CueFrames.Publish(cues); }
+        PresentCues?.Invoke(m_definition, cues);
     }
     /// <inheritdoc/>
     /// <remarks>A value-only mutation cannot have changed channels, target registers, or scene shape: the fresh
@@ -1054,7 +1066,7 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
     /// names. A delivery that moved which creations placements show bumps <see cref="ResponseRevision"/>, so the frame
     /// source composes again, or, when a shown creation derives a face, a camera or a sound,
     /// <see cref="DefinitionRevision"/>, so the presentation reconciles them as well.</remarks>
-    public void DeliverState(WorldDefinition definition, WorldDocumentVersion version, in WorldStateStamp stamp) {
+    public void DeliverState(WorldDefinition definition, WorldDocumentVersion version, in WorldStateStamp stamp, in WorldStreamStamp stream) {
         ArgumentNullException.ThrowIfNull(argument: definition);
 
         switch (WorldPlacementResponse.CompareHoldings(after: definition, before: m_definition)) {
@@ -1088,6 +1100,7 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
     private void BeginVersion(WorldDocumentVersion version) {
         if (version.Activation != m_documentVersion.Activation) {
             m_stateMirror.BeginLifetime();
+            CueFrames.Clear();
         }
 
         m_documentVersion = version;

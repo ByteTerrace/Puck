@@ -13,7 +13,7 @@ namespace Puck.SignedDistance.Tests;
 /// its equality assertions are bitwise, not tolerance-band.
 /// </summary>
 public sealed class SdfNoiseDisplaceLawTests {
-    // KEEP IN SYNC with SdfProgram.NoiseDisplaceLipschitz: (15/4)·√3, the quintic-blend slope bound over the [-1, 1]
+    // KEEP IN SYNC with SdfNoiseDisplacement.Slope: (15/4)·√3, the quintic-blend slope bound over the [-1, 1]
     // corner span, axes combined Euclidean.
     private const float NoiseGradientBound = 6.49519053f;
 
