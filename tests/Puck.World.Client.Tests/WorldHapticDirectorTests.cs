@@ -35,10 +35,24 @@ public sealed class WorldHapticDirectorTests {
     }
 
     private sealed class AcceptingLink : IServerLink {
-        public void Query(WorldQuery query, Principal principal, Action<QueryAnswer> completion) { }
+        public void Query(WorldQuery query, Principal principal, Action<QueryAnswer> completion) {
+            if (query is WorldQuery.GrantAllows) {
+                completion(obj: new QueryAnswer(
+                    Payload: new GrantVerdict(Rule: GrantRule.ConcreteHold),
+                    Text: string.Empty
+                ));
+            }
+        }
         public long SubmitEnvelope(WorldSubmissionPayload payload, Principal principal) => 0L;
         public void SubmitIntent(in IntentSubmission submission) { }
-        public void SubmitSession(SessionRequest request, Action<SessionReply> completion) => completion(obj: SessionReply.Ok);
+        public void SubmitSession(SessionRequest request, Action<SessionReply> completion) => completion(obj: new SessionReply(
+            Accepted: true,
+            AssignedIndex: ((request is SessionRequest.Join join)
+                ? (join.Slot + 1)
+                : 1),
+            Reason: string.Empty,
+            RosterEcho: string.Empty
+        ));
     }
 
     private sealed class Harness {
@@ -47,7 +61,7 @@ public sealed class WorldHapticDirectorTests {
 
         public Harness(WorldDefinition definition, int localSeats = 1) {
             m_definition = definition with {
-                Population = (definition.Population with { LocalSeats = localSeats }),
+                PopulationRaw = (definition.Population with { LocalSeatsRaw = localSeats }),
             };
             SeatBindings = new WorldSeatBindings(definition: m_definition);
             SeatRouter = new WorldSeatAuthorityRouter();
@@ -92,11 +106,12 @@ public sealed class WorldHapticDirectorTests {
             Roster.ObserveDeviceKind(device: deviceId, kind: InputDeviceKind.Gamepad);
             Roster.ObserveDevice(device: deviceId, kind: InputDeviceKind.Gamepad, name: key);
 
-            if (slot == 0) {
-                _ = Roster.Confirm(actingPrincipal: Principal.Console, device: deviceId);
-            } else {
-                _ = Roster.AssignDevice(actingPrincipal: Principal.Console, device: deviceId, slot: slot);
-            }
+            var outcome = Roster.AssignDevice(actingPrincipal: Principal.Console, device: deviceId, targetSlot: slot);
+
+            Assert.True(condition: (outcome is AssignOutcome.JoinedTeam or AssignOutcome.CreatedPending or AssignOutcome.NoOp), userMessage: $"AssignDevice({slot}) -> {outcome}");
+            Assert.True(condition: Roster.IsJoined(slot: slot));
+            Assert.True(condition: Roster.TryGetSeatDevice(device: out var active, kind: InputDeviceKind.Gamepad, slot: slot));
+            Assert.Equal(expected: deviceId, actual: active);
 
             return output;
         }
@@ -117,14 +132,16 @@ public sealed class WorldHapticDirectorTests {
                 MovedRows: ordinals,
                 Tick: tick
             ));
-            SeatBindings.SyncSeat(
-                definition: m_definition,
-                engineTick: (tick * 1680UL),
-                entityIndex: SeatBindings.RoutedEntityIndex(slot: 0),
-                nextInputTick: (tick + 1UL),
-                slot: 0,
-                state: Mirror
-            );
+            for (var slot = 0; (slot < m_definition.Population.LocalSeats); slot++) {
+                SeatBindings.SyncSeat(
+                    definition: m_definition,
+                    engineTick: (tick * 1680UL),
+                    entityIndex: SeatBindings.RoutedEntityIndex(slot: slot),
+                    nextInputTick: (tick + 1UL),
+                    slot: slot,
+                    state: Mirror
+                );
+            }
         }
         public void InstallNext(WorldDefinition next, ulong tick, bool newLifetime = false) {
             m_definition = next;
@@ -134,14 +151,16 @@ public sealed class WorldHapticDirectorTests {
             }
 
             Mirror.Install(engineTick: (tick * 1680UL), tick: tick);
-            SeatBindings.SyncSeat(
-                definition: m_definition,
-                engineTick: (tick * 1680UL),
-                entityIndex: SeatBindings.RoutedEntityIndex(slot: 0),
-                nextInputTick: (tick + 1UL),
-                slot: 0,
-                state: Mirror
-            );
+            for (var slot = 0; (slot < m_definition.Population.LocalSeats); slot++) {
+                SeatBindings.SyncSeat(
+                    definition: m_definition,
+                    engineTick: (tick * 1680UL),
+                    entityIndex: SeatBindings.RoutedEntityIndex(slot: slot),
+                    nextInputTick: (tick + 1UL),
+                    slot: slot,
+                    state: Mirror
+                );
+            }
         }
     }
 
