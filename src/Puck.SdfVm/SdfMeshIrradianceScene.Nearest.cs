@@ -43,7 +43,7 @@ public sealed partial class SdfMeshIrradianceScene {
         var content = m_content;
         var nearest = new NearestSurface { Squared = radius * radius, Instance = -1, Triangle = -1, Accept = accept };
         if (content.NodeCount > 0 && float.IsFinite(nearest.Squared) && radius >= 0 && float.IsFinite(point.LengthSquared())) {
-            NearestNode(content.Nodes, 0, -1, point, ref nearest);
+            NearestNode(new FloatNodes(nodes: content.Nodes), 0, -1, point, ref nearest);
         }
         surface = nearest.Point;
         instance = nearest.Instance;
@@ -62,23 +62,25 @@ public sealed partial class SdfMeshIrradianceScene {
 
     // Reuse both levels of the ray scene's hierarchy. Transform node boxes conservatively, then test triangles in world
     // space: an object-space closest point is not the world-space closest point under a nonuniform scale or shear.
-    private void NearestNode(Node[] nodes, int index, int instanceIndex, Vector3 point, ref NearestSurface nearest) {
-        ref readonly var node = ref nodes[index];
-        if (NearestBox(node, instanceIndex, point) > nearest.Squared) { return; }
-        if (node.Count == 0) {
-            var left = node.First;
+    private void NearestNode<TNodes>(TNodes nodes, int index, int instanceIndex, Vector3 point, ref NearestSurface nearest) where TNodes : struct, INodes {
+        if (NearestBox(nodes, index, instanceIndex, point) > nearest.Squared) { return; }
+        var first = nodes.First(node: index);
+        var count = nodes.Count(node: index);
+        if (count == 0) {
+            var left = first;
             var right = left + 1;
-            if (NearestBox(nodes[left], instanceIndex, point) > NearestBox(nodes[right], instanceIndex, point)) {
+            if (NearestBox(nodes, left, instanceIndex, point) > NearestBox(nodes, right, instanceIndex, point)) {
                 (left, right) = (right, left);
             }
             NearestNode(nodes, left, instanceIndex, point, ref nearest);
             NearestNode(nodes, right, instanceIndex, point, ref nearest);
             return;
         }
-        for (var i = node.First; i < node.First + node.Count; i++) {
+        for (var i = first; i < first + count; i++) {
             if (instanceIndex < 0) {
                 var entry = m_content.Entries[i];
-                NearestNode(m_content.Instances[entry.Instance].Geometry.Nodes, entry.Node, entry.Instance, point, ref nearest);
+                var held = m_content.Instances[entry.Instance].Geometry;
+                NearestNode(new PackedNodes(frame: held.Frames[entry.Braid], nodes: held.Nodes), entry.Node, entry.Instance, point, ref nearest);
                 continue;
             }
             ref readonly var instance = ref m_content.Instances[instanceIndex];
@@ -99,9 +101,10 @@ public sealed partial class SdfMeshIrradianceScene {
         }
     }
 
-    private float NearestBox(in Node node, int instanceIndex, Vector3 point) {
+    private float NearestBox<TNodes>(TNodes nodes, int index, int instanceIndex, Vector3 point) where TNodes : struct, INodes {
+        nodes.Box(node: index, low: out var nodeLow, high: out var nodeHigh);
         var (low, high) = instanceIndex < 0 || m_content.Instances[instanceIndex].Identity
-            ? (node.Low, node.High) : Bounds(m_content.Instances[instanceIndex].ObjectToWorld, node.Low, node.High);
+            ? (nodeLow, nodeHigh) : Bounds(m_content.Instances[instanceIndex].ObjectToWorld, nodeLow, nodeHigh);
         return Vector3.DistanceSquared(point, Vector3.Clamp(point, low, high));
     }
 }

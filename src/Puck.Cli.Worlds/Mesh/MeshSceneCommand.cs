@@ -148,7 +148,7 @@ public static class MeshSceneCommand {
         var seconds = clock.Elapsed.TotalSeconds;
 
         allocated = (GC.GetTotalAllocatedBytes(precise: true) - allocated);
-        output.WriteLine(value: string.Create(provider: CultureInfo.InvariantCulture, handler: $"  {label}: seconds={seconds:0.000} cpu-seconds={(Processor() - cpu):0.000} allocated-bytes={allocated} draws={scene.DrawCount} triangles={scene.TriangleCount} geometries={scene.GeometryCount} built={scene.GeometriesBuilt} built-triangles={scene.TrianglesBuilt} reused={scene.GeometriesReused} retained-triangles={scene.TrianglesRetained} top-depth={scene.TopDepth} geometry-depth={scene.GeometryDepth} median-splits={scene.MedianSplits} prefix-words={scene.PrefixWords}"));
+        output.WriteLine(value: string.Create(provider: CultureInfo.InvariantCulture, handler: $"  {label}: seconds={seconds:0.000} cpu-seconds={(Processor() - cpu):0.000} allocated-bytes={allocated} draws={scene.DrawCount} triangles={scene.TriangleCount} geometries={scene.GeometryCount} built={scene.GeometriesBuilt} built-triangles={scene.TrianglesBuilt} reused={scene.GeometriesReused} retained-triangles={scene.TrianglesRetained} top-depth={scene.TopDepth} geometry-depth={scene.GeometryDepth} median-splits={scene.MedianSplits} prefix-words={scene.PrefixWords} hierarchy-bytes={scene.HierarchyBytes}"));
         return scene;
     }
     // The scene's GPU export over a mesh region planned from the draws: its words, the bytes exporting it allocated beyond
@@ -166,7 +166,7 @@ public static class MeshSceneCommand {
         output.WriteLine(value: string.Create(provider: CultureInfo.InvariantCulture, handler: $"  export: words={words.Length} prefix-words={scene.PrefixWords} allocated-bytes-beyond-words={allocated} tree-hash={TreeHash(words: words):x16}"));
     }
     // The exported tree as the trace walks it from word zero's root, nearer child first, independent of where the export
-    // placed each node: every node's bounds and leaf count, each top-level leaf's instance record and the geometry subtree
+    // placed each node: every node's bounds and leaf count, each top-level leaf's instance record, braid frame and the geometry subtree
     // it names, and each geometry leaf's triangle ordinals. A parallel hierarchy build numbers its nodes in whatever order
     // its tasks reach them, so the words themselves differ between two runs that build the same tree.
     private static ulong TreeHash(uint[] words) {
@@ -175,16 +175,18 @@ public static class MeshSceneCommand {
         if (words[0] != 0u) { Node(word: (int)words[0], top: true); }
         return hash.Value;
 
+        // A top-level node holds float bounds; a geometry node its packed steps (SdfMeshProbeTrace.PackedNodeWords).
         void Node(int word, bool top) {
-            var link = words[(word + 6)];
+            var stride = (top ? SdfMeshProbeTrace.NodeWords : SdfMeshProbeTrace.PackedNodeWords);
+            var link = words[(word + stride - 1)];
             var count = (int)(link & ((1u << SdfMeshProbeTrace.NodeCountBits) - 1u));
             var first = (int)(link >> SdfMeshProbeTrace.NodeCountBits);
 
-            hash.Add(values: System.Runtime.InteropServices.MemoryMarshal.AsBytes(span: words.AsSpan(start: word, length: 6)));
+            hash.Add(values: System.Runtime.InteropServices.MemoryMarshal.AsBytes(span: words.AsSpan(start: word, length: (stride - 1))));
             hash.Add(value: (uint)count);
             if (count == 0) {
                 Node(top: top, word: first);
-                Node(top: top, word: (first + SdfMeshProbeTrace.NodeWords));
+                Node(top: top, word: (first + stride));
                 return;
             }
             for (var leaf = 0; (leaf < count); leaf++) {
@@ -196,6 +198,7 @@ public static class MeshSceneCommand {
                 var entry = (first + (leaf * SdfMeshProbeTrace.EntryWords));
 
                 hash.Add(values: System.Runtime.InteropServices.MemoryMarshal.AsBytes(span: words.AsSpan(start: (int)words[entry], length: SdfMeshProbeTrace.InstanceWords)));
+                hash.Add(values: System.Runtime.InteropServices.MemoryMarshal.AsBytes(span: words.AsSpan(start: (int)words[(entry + 2)], length: SdfMeshProbeTrace.FrameWords)));
                 Node(top: false, word: (int)words[(entry + 1)]);
             }
         }
