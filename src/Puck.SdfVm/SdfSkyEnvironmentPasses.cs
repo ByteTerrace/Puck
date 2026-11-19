@@ -76,16 +76,10 @@ public sealed class SdfSkyEnvironmentPasses(SdfWorldPasses views) : IRenderGraph
     /// <inheritdoc/>
     /// <remarks>Prepares the producer's residency, which its view package shares, once a frame whichever reader asks
     /// first.</remarks>
-    public void PrepareRead(string instance, in FrameContext context) {
-        if (Resolve(instance: instance)?.Residency is not { IsReleased: false } residency) { return; }
-        views.Begin(residency: residency);
-        _ = residency.Prepare(context: context);
-    }
+    public void PrepareRead(string instance, in FrameContext context) => _ = BegunResidencyOf(instance: instance)?.Prepare(context: in context);
     /// <inheritdoc/>
     public bool IsUnchanged(string instance, long unreadFrames, in FrameContext context) {
-        if (Resolve(instance: instance)?.Residency is not { } residency) { return false; }
-        views.Begin(residency: residency);
-        if (!residency.Prepare(context: context)) { return false; }
+        if ((BegunResidencyOf(instance: instance) is not { } residency) || !residency.Prepare(context: context)) { return false; }
         var tables = residency.Tables!;
 
         // Image cadence is decided only after the runtime acquires the same reads that recording would sample.
@@ -95,10 +89,12 @@ public sealed class SdfSkyEnvironmentPasses(SdfWorldPasses views) : IRenderGraph
     /// <inheritdoc/>
     /// <remarks>Stages the producer's residency (<see cref="SdfWorldResidency.Stage"/>), whose upload the projection and
     /// reduction read, before any pass records.</remarks>
-    public void PrepareRender(string instance, in FrameContext context) {
-        if (Resolve(instance: instance)?.Residency is not { IsReleased: false } residency) { return; }
+    public void PrepareRender(string instance, in FrameContext context) => _ = BegunResidencyOf(instance: instance)?.Stage(context: in context);
+    // The producer's residency, its frame started; null for an instance that names none, or a released one.
+    private SdfWorldResidency? BegunResidencyOf(string instance) {
+        if (Resolve(instance: instance)?.Residency is not { IsReleased: false } residency) { return null; }
         views.Begin(residency: residency);
-        _ = residency.Stage(context: in context);
+        return residency;
     }
     /// <inheritdoc/>
     public async ValueTask<IDisposable?> BuildAsync(RenderGraphPackageRecorderContext context, CancellationToken cancellationToken) {

@@ -504,19 +504,17 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
     /// <inheritdoc/>
     /// <remarks>Resolves the instance's view and prepares its residency: captures its frame (a routed residency its host's
     /// first) and packs it, once a frame whichever reader asks first.</remarks>
-    public void PrepareRead(string instance, in FrameContext context) {
-        if (Refresh(instance: instance).View is not { } view) { return; }
-        Begin(residency: view.Residency);
-        _ = view.Residency.Prepare(context: in context);
-    }
+    public void PrepareRead(string instance, in FrameContext context) => _ = BegunResidencyOf(instance: instance)?.Prepare(context: in context);
     /// <inheritdoc/>
     /// <remarks>Stages the residency the instance renders this frame (<see cref="SdfWorldResidency.Stage"/>): its upload
     /// is submitted and its background GPU work pumped here, before any pass records, so no pass's recording pays for
     /// them.</remarks>
-    public void PrepareRender(string instance, in FrameContext context) {
-        if (Refresh(instance: instance).View is not { } view) { return; }
+    public void PrepareRender(string instance, in FrameContext context) => _ = BegunResidencyOf(instance: instance)?.Stage(context: in context);
+    // The residency of the view an instance resolves this frame, its frame started; null for an instance that resolves none.
+    private SdfWorldResidency? BegunResidencyOf(string instance) {
+        if (Refresh(instance: instance).View is not { } view) { return null; }
         Begin(residency: view.Residency);
-        _ = view.Residency.Stage(context: in context);
+        return view.Residency;
     }
 
     // Starts a residency's frame the first time the package meets it in this frame.
