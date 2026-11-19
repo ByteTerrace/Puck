@@ -110,9 +110,9 @@ the GPU at all.
 their depth alone, each draw whose box lies in the cascade's light box and,
 swept along the light, may shadow a receiver the view shows
 (what a raster pass draws, below). A frame with no mesh draw, or whose view has no cascade,
-skips them; `shadow-second` runs only while a second stable shadow slot holds a
-directional light, and a view whose world holds one stable slot has no
-`shadow-second` at all.
+skips them; `shadow-second` runs only while a second slotted directional light
+emits (the secondary shadow role, `SdfLights.RoleSlot`), and a view whose world
+holds one stable slot has no `shadow-second` at all.
 
 **mesh** (`sdf-mesh.vert.hlsl`, `sdf-mesh.frag.hlsl`) rasterizes the frame's mesh draws, one draw call
 each, into the mesh visibility target at the view's extent: per pixel the ray parameter,
@@ -837,8 +837,9 @@ out at `WorldFramePresenter.ViewQuality()`: seat views, the operator pose, and
 layout slots that name a camera alike, so a named-camera slot reconstructs and
 its settled still converges over a jitter period. A camera view a screen films
 never reconstructs (its quality restriction,
-`WorldScreenBinder.CameraViewQuality`, does not ask), and neither does a session
-view (`WorldSessionSceneEmitter.ReducedQuality`).
+`WorldRenderSettings.NestedRestriction`, does not ask), and neither does a session
+view. Beyond that a nested view gives up only what the world's `render.nested`
+table says at its presented share of the display.
 
 Each view's history is its own fragment's: two versions at the output extent,
 two allocations each, the one the next frame reads through
@@ -1465,8 +1466,9 @@ empty, and quads take their neighbours' materials.
 
 ## The shadow cascades
 
-`SdfMeshShadowCascades` fits two orthographic cameras along the key light (the
-frame's first stable shadow slot): the near one around the view frustum's first
+`SdfMeshShadowCascades` is one indexed set of entries, each a light camera for a
+shadow role. It fits two orthographic cameras along the key light (the slotted
+directional light that emits the most, the primary role): the near one around the view frustum's first
 16 metres, the far one to 120 metres or the far distance, each a bounding sphere
 of its slice snapped to whole texels, with casters up to 200 metres past the
 sphere toward the light. A world authors those three reaches as
@@ -1483,9 +1485,10 @@ pass with the cascade's `D32Float` depth alone, cleared to zero and stored. The
 depth is reversed and linear, one at the cascade's near plane and zero at its
 far plane, so the surface pass samples it (`sdfMeshShadowDepth`) and decodes
 the caster's light-space depth as `far - depth · (far - near)`; a texel nothing
-was drawn into reads as the far plane. The second shadow slot's light, when one
-holds it, gets one cascade over the first 40 metres, drawn by `shadow-second`
-and written into K's second slot.
+was drawn into reads as the far plane. The secondary role's light, when one
+emits, gets one entry over the first 40 metres, drawn by `shadow-second`. K holds
+each role's visibility and its cascades' coverage of the point; views takes the
+probes' answer where the coverage falls short of one.
 
 Every cascade is 2048 texels a side at the `high` shadow tier, 1024 at
 `medium` and 512 at `low` (`SdfViewQuality.ShadowResolution`,

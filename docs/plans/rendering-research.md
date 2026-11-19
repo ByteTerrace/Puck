@@ -2879,8 +2879,8 @@ the bar as ruled.**
 - *Owns.* `src/Puck.World.Client/WorldShadowAllocator*.cs`,
   `src/Puck.SdfVm/SdfMeshShadowCascades.cs`, the shadow slots in
   `src/Puck.SignedDistance`, `passes/sdf-surface-stage.hlsli`,
-  `shade/sdf-light.hlsli`, `WorldSessionSceneEmitter.ReducedQuality`,
-  `WorldScreenBinder.CameraViewQuality`, and the nested table's rows in the
+  `shade/sdf-light.hlsli`, the nested views' quality (`WorldRenderSettings.NestedRestriction`),
+  and the nested table's rows in the
   quality presets.
 - *Needs.* Nothing.
 - *Model.* Opus `specialist`.
@@ -3404,13 +3404,10 @@ error for a level, one texel for a shadow map) are the owner's recorded
 rulings. They stay the engine's defaults, and an authored table may
 differ.
 
-One default is not neutral and goes. A directional light with no authored
-angular size takes a soft edge the engine chose
-(`SdfLights.DefaultPenumbraSlope`). That is a look held in the engine. With
-the `shadows` lane, a light with no authored size is a point source, and
-its shadow's edge is as hard as the map's filter allows. The standard
-package authors the soft edge it wants on its own lights, and an author's
-explicit size is honoured as it is today.
+A directional light with no authored angular size is a point source: its
+shadow's edge is as hard as the map's filter allows, and the engine chooses
+no softness. The standard package authors the soft edge it wants on its own
+lights, and an author's explicit size is honoured.
 
 ### What the owner settled
 
