@@ -120,7 +120,7 @@ public sealed class WorldScreenCarryLawTests {
             Revision: 0,
             StepTicks: 1UL,
             Tick: 1UL
-        ));
+        ), stream: default);
         client.UpdateRenderPoses(alpha: 1f);
         pool.Tick(deltaSeconds: (1f / 60f));
 
@@ -286,7 +286,7 @@ public sealed class WorldScreenCarryLawTests {
                 ),
                 seatRouter: routes
             );
-            Client.DeliverDefinition(definition: definition, version: new WorldDocumentVersion(Activation: m_activation, Sequence: m_sequence));
+            Client.DeliverDefinition(definition: definition, version: new WorldDocumentVersion(Activation: m_activation, Sequence: m_sequence), stream: default);
             m_emitter = new WorldSceneEmitter(
                 animator: Pool,
                 audio: new SilentAudio(),
@@ -314,7 +314,7 @@ public sealed class WorldScreenCarryLawTests {
         // Delivers the held cell's new value the way a mutation's definition delivery reaches the client.
         public void Hold(long raw) => Client.DeliverDefinition(
             definition: World(carry: m_carry, held: raw),
-            version: new WorldDocumentVersion(Activation: m_activation, Sequence: ++m_sequence)
+            version: new WorldDocumentVersion(Activation: m_activation, Sequence: ++m_sequence), stream: default
         );
         // Runs frames until the pose the stamp latched and the revision watching it have settled, and returns the last.
         public SdfFrame Run() {
@@ -338,7 +338,7 @@ public sealed class WorldScreenCarryLawTests {
                     Revision: 1,
                     StepTicks: 1UL,
                     Tick: ++m_tick
-                ));
+                ), stream: default);
                 Client.UpdateRenderPoses(alpha: 1f);
                 m_emitter.Tick(deltaSeconds: FrameSeconds);
                 Pool.Tick(deltaSeconds: FrameSeconds);

@@ -27,7 +27,7 @@ public sealed class MovingBlendRestLawTests {
         var rootPosition = new Vector3(x: 2f, y: 3f, z: 4f);
         var rootRotation = Quaternion.CreateFromAxisAngle(Vector3.UnitY, 0.7f);
 
-        client.DeliverSnapshot(snapshot: new(Authority: "a", Revision: 1, Tick: 1, StepTicks: 1, Entries: new EntitySnapshot[] { new(Active: true, Index: 0, Generation: 1, Continuity: EntityContinuity.Continuous, BodyColor: Vector3.One, CatalogRig: 0, Kit: 0, Look: 0, Orientation: rootRotation, Position: rootPosition) }));
+        client.DeliverSnapshot(snapshot: new(Authority: "a", Revision: 1, Tick: 1, StepTicks: 1, Entries: new EntitySnapshot[] { new(Active: true, Index: 0, Generation: 1, Continuity: EntityContinuity.Continuous, BodyColor: Vector3.One, CatalogRig: 0, Kit: 0, Look: 0, Orientation: rootRotation, Position: rootPosition) }), stream: default);
         client.UpdateRenderPoses(alpha: 1f);
         var pool = new WorldCreationInstances();
 

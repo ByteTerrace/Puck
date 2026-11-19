@@ -457,6 +457,7 @@ add the row you found.
 
 | You need to | Existing mechanism | Home |
 |---|---|---|
+| Compute or check a lane the builder derives from others (a scale's correction, a repeat's reciprocal, a noise relief's normalization), or ask how the program door classes a lane | `SdfDerivedLanes` (the one function per derived lane, called by the builder and the door), `SdfNoiseDisplacement` (the decoded noise relief), `SdfProgram.LaneContractOf` | `src/Puck.SignedDistance`; [Lipschitz reference](../../../docs/rendering/sdf/reference/lipschitz-and-field-correctness.md#procedural-detail) |
 | Evaluate the field on the CPU, deterministically (contact, picking, bounds, cull certificates) | `SdfFieldEvaluator`; its GPU partner is `mapCore` | `src/Puck.SignedDistance/Queries`; [sync pairs](references/sync-pairs.md#instruction-semantics-shared-by-both-interpreters) |
 | Bake a mesh from the field, or find the one already baked | `SdfMeshPathBake` (the path), `SdfSampledLattice` and `SdfDualContouring` (the sampling and contouring), `SdfMeshStore` (the shared on-disk cache of baked meshes, one set per bake identity) | `src/Puck.SdfVm`, `src/Puck.SignedDistance/Baking`; [mesh bake](references/mesh-bake.md) |
 | Judge which way a contour's triangle faces, or hold a vertex move to it | `SdfContourFacing` (the lattice edge a quad crosses, then its corners' patches), read through `SdfContour.QuadAxes` and `Patches`; never vertex normals or a triangle's earlier facing | `src/Puck.SignedDistance/Baking`; [mesh bake](references/mesh-bake.md#contouring) |
@@ -607,12 +608,10 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   `puckAddWork` carries each addition into the 64-bit accumulator.
   `CountingRecorder.DrawIndirectCount` counts the API call,
   not its unknown draw/vertex totals. An object `world.cull frustum` brings back is the
-  occlusion's. Direct3D 12 at execute-indirect tier 1.1
-  (`GpuDeviceCapabilities.ExecuteIndirectTier`, printed as `execute-indirect-tier`)
-  numbers a draw's commands with an incrementing root constant and reads the identity from the first
-  phase's record at that number, so every phase must keep writing a candidate's place
-  with the identity first; below the tier a root-constant argument copies the identity
-  (`DirectXPipelineLayout.DrawSignature`). Vulkan reads it
+  occlusion's. The identity is a root-constant argument on Direct3D 12 at every
+  execute-indirect tier (`DirectXPipelineLayout.DrawSignature`): numbering commands with
+  tier 1.1's incrementing constant (`execute-indirect-tier` on the capabilities line) measured
+  no faster on any shadow pass and drew more vertices for the same draws. Vulkan reads it
   from the
   argument buffer through its pushed word base plus `DrawIndex`
   (`sdfMeshRasterIdentity`); first instance stays zero. When
@@ -1021,7 +1020,12 @@ instructions. A real new instruction touches every partner in one change, and a
 GPU parity pass alone does not finish it:
 
 1. **C# model.** The enum, `SdfProgramBuilder` (its `RequireDefined` maximum),
-   `SdfProgram` validation and packing, the Lipschitz analysis, its row in
+   `SdfProgram` validation and packing, its row in the lane contract
+   (`SdfProgram.LaneContract.cs`: every lane authored, derived through a
+   function in `SdfDerivedLanes` that the builder also calls, unit, zero or
+   written by the program; an op or shape with no row is refused), the
+   Lipschitz analysis (a relief is charged at its own instruction through
+   `AnalyzeReliefPointFactors`, which classifies every op), its row in
    `SdfOpRoles.Of`, and the part-program key for a new parameter.
 2. **Cull margins.** `MaxSmoothBlendRadius` (blend halo), `MaxScopedFieldReach`
    or `HasUnmaskableInfluence`.

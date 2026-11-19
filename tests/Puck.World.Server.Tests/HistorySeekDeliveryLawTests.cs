@@ -20,13 +20,14 @@ public sealed class HistorySeekDeliveryLawTests {
 
         public void DeliverAnswer(in QueryAnswer answer) { }
         public void DeliverComposition(WorldComposition composition) => Log.Add(item: "composition");
-        public void DeliverDefinition(WorldDefinition definition, WorldDocumentVersion version) => Log.Add(item: "definition");
+        public void DeliverDefinition(WorldDefinition definition, WorldDocumentVersion version, in WorldStreamStamp stream) => Log.Add(item: "definition");
         public void DeliverSessionLever(WorldSessionLever lever) { }
-        public void DeliverSnapshot(in WorldSnapshot snapshot) {
+        public void DeliverCut(in WorldStreamStamp stream, bool terminal) { }
+        public void DeliverSnapshot(in WorldSnapshot snapshot, in WorldStreamStamp stream) {
             Log.Add(item: "snapshot");
             SnapshotTicks.Add(item: snapshot.Tick);
         }
-        public void DeliverState(WorldDefinition definition, WorldDocumentVersion version, in WorldStateStamp stamp) => Log.Add(item: "state");
+        public void DeliverState(WorldDefinition definition, WorldDocumentVersion version, in WorldStateStamp stamp, in WorldStreamStamp stream) => Log.Add(item: "state");
         public void Clear() {
             Log.Clear();
             SnapshotTicks.Clear();

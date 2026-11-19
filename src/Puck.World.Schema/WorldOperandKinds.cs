@@ -43,16 +43,33 @@ public sealed class PhysicsQuiescentOperand : WorldOperandFact {
     /// <summary>Gets the selected placement ordinals, or null for a body or population census.</summary>
     public IReadOnlyList<int>? PlacementOrdinals { get; private init; }
 }
-/// <summary>The music clock's phase error (<see cref="WorldRuleFacts.ClockPrefix"/>).</summary>
+/// <summary>What a <see cref="ClockOperand"/> reads from the music clock.</summary>
+public enum ClockFacet : byte {
+    /// <summary>The signed distance to the nearest beat.</summary>
+    PhaseError,
+    /// <summary>The beat index since the music began.</summary>
+    Beat,
+    /// <summary>The bar index since the music began.</summary>
+    Bar,
+    /// <summary>The zero-based beat within its bar.</summary>
+    BeatInBar,
+}
+/// <summary>The music clock's position (<see cref="WorldRuleFacts.ClockPrefix"/>): its phase error, beat, bar or beat in
+/// bar, read either at the clock's current position or at an input event's captured time.</summary>
 public sealed class ClockOperand : WorldOperandFact {
-    public static readonly ClockOperand Instance = new();
+    /// <summary>Reads the clock's current position: integer engine ticks for the phase error, an index otherwise.</summary>
+    public ClockOperand(ClockFacet facet) : base(CellKind.Int) => Facet = facet;
 
-    private ClockOperand() : base(CellKind.Int) { }
+    /// <summary>Reads the clock at an input event's historical music segment, captured time and calibration: fixed
+    /// seconds for the phase error, an index otherwise.</summary>
+    public ClockOperand(ClockFacet facet, WorldInputOperand input) : base((facet == ClockFacet.PhaseError) ? CellKind.Fixed : CellKind.Int) {
+        Facet = facet;
+        Input = input;
+    }
 
-    /// <summary>Judges an input event against its historical music segment, returning fixed seconds.</summary>
-    public ClockOperand(WorldInputOperand input) : base(CellKind.Fixed) => Input = input;
-
-    /// <summary>The guarded event, or null for the current integer engine-tick phase.</summary>
+    /// <summary>The value read.</summary>
+    public ClockFacet Facet { get; }
+    /// <summary>The guarded event, or null for the clock's current position.</summary>
     public WorldInputOperand? Input { get; }
 }
 /// <summary>The occupant count of a region placement (<see cref="WorldRuleFacts.RegionPrefix"/>).</summary>

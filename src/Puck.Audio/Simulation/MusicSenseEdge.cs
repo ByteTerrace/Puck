@@ -21,6 +21,8 @@ public enum MusicSenseFamily : byte {
     RouteEngaged,
     /// <summary>A route was dissolved.</summary>
     RouteDisengaged,
+    /// <summary>An authored rule cue delivered to this listener.</summary>
+    RuleCue,
 }
 /// <summary>One projected sense edge for the current tick — the minimal shape <see cref="MusicDirector"/> reads to
 /// evaluate a transition's <c>when</c> condition. Carries no grant-gating fields: music state is never
@@ -29,4 +31,5 @@ public enum MusicSenseFamily : byte {
 /// <param name="Family">The event family.</param>
 /// <param name="A">The first payload lane (a body/seat index).</param>
 /// <param name="B">The second payload lane (a region ordinal or encoded route target); zero when unused.</param>
-public readonly record struct MusicSenseEdge(MusicSenseFamily Family, long A, long B);
+/// <param name="Cue">The delivered cue's name, when the family is <see cref="MusicSenseFamily.RuleCue"/>.</param>
+public readonly record struct MusicSenseEdge(MusicSenseFamily Family, long A, long B, string? Cue = null);

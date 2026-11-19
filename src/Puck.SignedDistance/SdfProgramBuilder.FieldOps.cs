@@ -103,35 +103,19 @@ public sealed partial class SdfProgramBuilder {
             );
         }
 
-        // HOST-BAKED normalization: the shader multiplies the octave sum by 1/Σ gainᵏ so the summed noise stays in
-        // [-1, 1] before amplitude — the invariant every bound channel (Lipschitz clamp, scoped reach, cull margin)
-        // reads |amplitude| against.
-        var gainSum = 0.0f;
-        var gainPower = 1.0f;
+        // The relief derives its normalization (1/Σ gainᵏ, so the summed noise stays in [-1, 1] before amplitude), the
+        // invariant every bound channel (Lipschitz clamp, scoped reach, cull margin) reads |amplitude| against.
+        var relief = new SdfNoiseDisplacement(
+            Amplitude: amplitude,
+            Frequency: frequency,
+            Gain: gain,
+            Lacunarity: lacunarity,
+            Octaves: octaves,
+            Seed: seed
+        );
 
-        for (var octave = 0; (octave < octaves); octave++) {
-            gainSum += gainPower;
-            gainPower *= gain;
-        }
-
-        m_instructions.Add(item: new SdfInstruction(
-            Blend: ((uint)octaves),
-            Data0: new Vector4(
-                w: lacunarity,
-                x: frequency,
-                y: amplitude,
-                z: gain
-            ),
-            Data1: new Vector4(
-                w: 0.0f,
-                x: (1.0f / gainSum),
-                y: 0.0f,
-                z: 0.0f
-            ),
-            Material: 0,
-            Op: SdfOp.NoiseDisplace,
-            Shape: seed
-        ));
+        relief.Validate();
+        m_instructions.Add(item: relief.ToInstruction());
 
         return this;
     }

@@ -23,6 +23,8 @@ public sealed class WorldDisclosureSession : IClientSink, IDisposable {
     public const string OutcomeDoor = "outcome.";
     /// <summary>The door a stream's attach and end are recorded under.</summary>
     public const string LifetimeDoor = "lifetime";
+    /// <summary>The door a stream's cut and end records are recorded under.</summary>
+    public const string CutDoor = "deliver.cut";
 
     /// <summary>The session actions the harness draws, each in the argument forms the fuzzer fills: queries, cell
     /// writes, draws, transforms, phase-guarded transforms, and writes guarded by a cell expectation or a spatial read
@@ -157,26 +159,30 @@ public sealed class WorldDisclosureSession : IClientSink, IDisposable {
     }
 
     /// <inheritdoc/>
-    public void DeliverSnapshot(in WorldSnapshot snapshot) {
+    /// <remarks>Recorded as the federation wire stamps it: the record's stream stamp, then its snapshot leaf.</remarks>
+    public void DeliverSnapshot(in WorldSnapshot snapshot, in WorldStreamStamp stream) {
         byte[] encoded;
 
         try {
             encoded = WorldFederationCodec.EncodeSnapshot(snapshot: in snapshot);
         } catch (ArgumentException exception) {
-            m_transcript.RecordText(door: SnapshotDoor, principal: m_label, text: $"unencodable {exception.Message}");
+            m_transcript.RecordText(door: SnapshotDoor, principal: m_label, text: $"{Spell(stream: stream)}\nunencodable {exception.Message}");
             return;
         }
-        m_transcript.RecordBytes(door: SnapshotDoor, payload: encoded, principal: m_label);
+        m_transcript.RecordBytes(door: SnapshotDoor, payload: WorldFederationCodec.Stamped(body: encoded, stream: Opaque(stream: stream)), principal: m_label);
     }
+    /// <inheritdoc/>
+    public void DeliverCut(in WorldStreamStamp stream, bool terminal) => m_transcript.RecordText(door: CutDoor, principal: m_label,
+        text: string.Create(provider: CultureInfo.InvariantCulture, handler: $"{Spell(stream: stream)} terminal={terminal}"));
     /// <inheritdoc/>
     public void DeliverAnswer(in QueryAnswer answer) => m_transcript.RecordText(door: "deliver.answer", principal: m_label, text: Answer(answer: answer));
     /// <inheritdoc/>
-    public void DeliverDefinition(WorldDefinition definition, WorldDocumentVersion version) => m_transcript.RecordText(door: "deliver.definition", principal: m_label,
-        text: $"version={m_transcript.Spell(version: version)}\n{Document(definition: definition)}");
+    public void DeliverDefinition(WorldDefinition definition, WorldDocumentVersion version, in WorldStreamStamp stream) => m_transcript.RecordText(door: "deliver.definition", principal: m_label,
+        text: $"{Spell(stream: stream)} version={m_transcript.Spell(version: version)}\n{Document(definition: definition)}");
     /// <inheritdoc/>
-    public void DeliverState(WorldDefinition definition, WorldDocumentVersion version, in WorldStateStamp stamp) => m_transcript.RecordText(door: "deliver.state", principal: m_label,
+    public void DeliverState(WorldDefinition definition, WorldDocumentVersion version, in WorldStateStamp stamp, in WorldStreamStamp stream) => m_transcript.RecordText(door: "deliver.state", principal: m_label,
         text: string.Create(provider: CultureInfo.InvariantCulture,
-            handler: $"version={m_transcript.Spell(version: version)} tick={stamp.Tick} engineTick={stamp.EngineTick} moved=[{string.Join(separator: ",", values: stamp.MovedRows.ToArray())}] everything={stamp.Everything} arena={stamp.ArenaValues}\n{Document(definition: definition)}"));
+            handler: $"{Spell(stream: stream)} version={m_transcript.Spell(version: version)} tick={stamp.Tick} engineTick={stamp.EngineTick} moved=[{string.Join(separator: ",", values: stamp.MovedRows.ToArray())}] everything={stamp.Everything} arena={stamp.ArenaValues}\n{Document(definition: definition)}"));
     /// <inheritdoc/>
     public void DeliverComposition(WorldComposition composition) {
         if (WorldSubmissionCodec.TryEncodeComposition(bytes: out var bytes, composition: composition, failure: out var failure)) {
@@ -195,6 +201,24 @@ public sealed class WorldDisclosureSession : IClientSink, IDisposable {
     }
 
     private void Ended(string reason) => Lifetime(text: $"ended {reason}");
+    // A stream's identity is random per stream, so the transcript names each stream the session receives by the order
+    // it first arrived in, and keeps its generation and ordinal, which a variant's hidden state must not move.
+    private readonly List<ulong> m_streams = [];
+    private WorldStreamStamp Opaque(WorldStreamStamp stream) {
+        if (!stream.IsSpanned) { return stream; }
+        var index = m_streams.IndexOf(item: stream.Stream);
+
+        if (index < 0) {
+            m_streams.Add(item: stream.Stream);
+            index = (m_streams.Count - 1);
+        }
+        return stream with { Stream = (ulong)(index + 1) };
+    }
+    private string Spell(WorldStreamStamp stream) {
+        var opaque = Opaque(stream: stream);
+
+        return string.Create(provider: CultureInfo.InvariantCulture, handler: $"stream={opaque.Stream} generation={opaque.Generation} ordinal={opaque.Ordinal}");
+    }
     private void Lifetime(string text) => m_transcript.RecordText(door: LifetimeDoor, principal: m_label, text: text);
     private static string Answer(in QueryAnswer answer) => $"refused={answer.Refused}\n{answer.Text}";
     private static string Document(WorldDefinition definition) => Encoding.UTF8.GetString(bytes: WorldDefinitionSerialization.SerializeCompact(definition: definition));

@@ -28,9 +28,7 @@ public static class MusicDirectorFactory {
 
     /// <summary>Compiles an authored score into a sim-side segment graph. Every non-null <c>when</c> token maps to a
     /// sense family by construction: the world schema validator refuses any token outside
-    /// <see cref="WorldAudioCue.MusicWhenTokens"/>, the single source <see cref="ParseFamily"/> mirrors. Neither a
-    /// layer's authored <c>gainThousandths</c> nor an embellishment's is compiled here — see
-    /// <c>Puck.Assets.Documents.MusicLayerDocument.GainThousandths</c>'s remarks.</summary>
+    /// <see cref="WorldAudioCue.IsMusicWhenToken"/>. The compiled layers carry their mix gains.</summary>
     /// <param name="document">The validated, normalized music document.</param>
     /// <returns>The compiled segment graph.</returns>
     public static MusicSegmentGraph CompileGraph(Puck.World.Authoring.MusicDocument document) {
@@ -43,7 +41,8 @@ public static class MusicDirectorFactory {
                 transitions.Add(item: new MusicTransition(
                     At: CompileBoundary(boundary: (transition.At ?? Puck.World.Authoring.MusicTransitionBoundary.BarEnd)),
                     ToSegmentId: transition.To,
-                    When: ParseFamily(token: transition.When)
+                    When: ParseFamily(token: transition.When),
+                    Cue: WorldAudioCue.MusicCueName(transition.When)
                 ));
             }
 
@@ -53,6 +52,8 @@ public static class MusicDirectorFactory {
                 // A null When is the unconditional case (see MusicLayer's own remarks).
                 layers.Add(item: new MusicLayer(
                     TuneId: layer.TuneId,
+                    GainThousandths: layer.GainThousandths ?? 1000,
+                    Cue: WorldAudioCue.MusicCueName(layer.When),
                     When: ((layer.When is { } when)
                     ? ParseFamily(token: when)
                     : null)
@@ -64,7 +65,8 @@ public static class MusicDirectorFactory {
             foreach (var embellishment in (segment.Embellishments ?? [])) {
                 embellishments.Add(item: new MusicEmbellishment(
                     PatchId: embellishment.PatchId,
-                    When: ParseFamily(token: embellishment.When)
+                    When: ParseFamily(token: embellishment.When),
+                    Cue: WorldAudioCue.MusicCueName(embellishment.When)
                 ));
             }
 
@@ -89,7 +91,8 @@ public static class MusicDirectorFactory {
         WorldAudioCue.RegionEnter => MusicSenseFamily.RegionEnter,
         WorldAudioCue.RegionExit => MusicSenseFamily.RegionExit,
         WorldAudioCue.SeatJoin => MusicSenseFamily.SeatJoin,
-        _ => throw new InvalidOperationException(message: $"'{token}' has no sense-family mapping — extend ParseFamily in the change that grows WorldAudioCue.MusicWhenTokens."),
+        _ when WorldAudioCue.MusicCueName(token) is not null => MusicSenseFamily.RuleCue,
+        _ => throw new InvalidOperationException(message: $"'{token}' has no sense-family mapping."),
     });
     /// <summary>Projects one tick's world-scoped event edges into the audio-owned sense-edge shape, dropping the
     /// grant-gating fields (music state is never addon-observation-filtered).</summary>

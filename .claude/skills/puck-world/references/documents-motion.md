@@ -632,6 +632,25 @@ the boom through with no ease — a different mechanism from
 `WorldAnchor.Group.SmoothRate`'s exponential ease, which is unrelated and
 still authored separately for a group-centroid establishing shot.
 
+## Timed moves
+
+Use `easedTimedMove(duration: 0.4, right: 0.5, yawDegrees: 90)` in a kit
+action's effects list after importing the standard `motion` library. It
+travels half a body-sized world unit to the right and applies a quarter turn.
+Specify `forward` to travel along the launch facing, or leave both travel
+components at zero for a turn in place. Travel is added to ordinary
+locomotion and measured in the contact plane at the start of the move.
+Each proposed step goes through the body sweep. An obstruction can shorten
+the travel. A refused sweep rolls back the turn and its progress too.
+
+The underlying `timedMove` effect takes `right`, `forward`, signed
+`yawDegrees`, and positive `durationSeconds` in exact engine ticks. Set
+`curve` to `Smoothstep` for an eased start and end or use the default
+`Linear`. A nonzero turn owns the heading while the move runs. Starting a
+new move replaces the current one. The recipient must use a yaw-frame
+program with `CommitPose`, such as `walk`. A kit action acts on its own
+body, and a world rule supplies `key`.
+
 ## Timed planar impulses
 
 `planarImpulse` adds an authored-speed displacement for an exact engine-tick

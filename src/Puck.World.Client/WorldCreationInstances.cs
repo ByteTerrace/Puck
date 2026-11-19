@@ -657,6 +657,17 @@ public sealed partial class WorldCreationInstances {
         return false;
     }
 
+    internal void PresentCues(Puck.World.Protocol.WorldPresentationCueFeed feed, IWorldStampSource source) {
+        while (feed.TryTake(out var tick)) {
+            foreach (var delivered in tick.Cues) {
+                var cue = delivered.Cue;
+                if (cue.Body is { } body && source.IsActive(body) && source.EntityAddress(body).Generation == cue.Generation) {
+                    TriggerCue(body, cue.Name);
+                }
+            }
+        }
+    }
+
     private static void FireCue(Registration live, int index) {
         var cue = live.Cues![index];
 

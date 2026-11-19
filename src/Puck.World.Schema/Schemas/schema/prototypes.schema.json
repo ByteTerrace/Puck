@@ -1168,6 +1168,10 @@
                             "null"
                           ],
                           "default": null
+                        },
+                        "pitchFromCueArgument": {
+                          "type": "boolean",
+                          "default": false
                         }
                       },
                       "required": [

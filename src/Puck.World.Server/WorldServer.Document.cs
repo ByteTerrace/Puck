@@ -69,7 +69,13 @@ public sealed partial class WorldServer {
     public void AttachAddons(IWorldAddonHost runtime) => m_document.AttachAddons(runtime: runtime);
     /// <inheritdoc cref="WorldDocument.AttachSink(IClientSink)"/>
     public IDisposable AttachSink(IClientSink sink) => m_document.AttachSink(sink: sink);
-    /// <inheritdoc cref="WorldDocument.AttachSink(IClientSink, in WorldSinkDisclosure)"/>
+
+    /// <summary>Attaches a local seat's presentation through the seat's live read capability.</summary>
+    public IDisposable AttachSeatPresentation(IClientSink sink, Principal seat) {
+        var view = DeliveryView(seat, WorldDisclosureTier.Replica);
+        return m_document.AttachSink(sink, WorldSinkDisclosure.Full, snapshot => PresentCues(snapshot, view, fullBodies: true));
+    }
+    /// <summary>Attaches a sink with the supplied body disclosure policy.</summary>
     public IDisposable AttachSink(IClientSink sink, in WorldSinkDisclosure disclosure) =>
         m_document.AttachSink(
             disclosure: in disclosure,

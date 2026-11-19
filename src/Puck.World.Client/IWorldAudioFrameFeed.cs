@@ -13,6 +13,8 @@ namespace Puck.World.Client;
 /// <see cref="IWorldAudioCueSink"/> rather than re-declaring <c>SubmitCue</c> — a frame source's need is that seam's
 /// need plus these four.</summary>
 public interface IWorldAudioFrameFeed : IWorldAudioCueSink {
+    /// <summary>Selects the first view's routed audio, or returns to the local world.</summary>
+    void PresentRoutedAudio(WorldSessionMirror? mirror) { }
     /// <summary>Gets or sets the per-screen audio-machine source resolver a frame source binds once, at composition,
     /// so a booted/ejected/live-swapped machine self-heals the next published snapshot.</summary>
     Func<string, string, IAudioMachine?>? MachineSourceResolver { get; set; }

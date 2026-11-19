@@ -26,7 +26,7 @@ public sealed class SolidCreationScaleLawTests {
         var transforms = new DynamicTransform[pool.DynamicSlotCount];
 
         void Deliver(double size, ulong tick) => client.DeliverSnapshot(snapshot: new WorldSnapshot(tick, 0, 1680, ReadOnlyMemory<EntitySnapshot>.Empty,
-            SolidScales: new WorldSolidScale[] { new(Placement: "growing", Scale: FixedQ4816.FromDouble(value: size)) }));
+            SolidScales: new WorldSolidScale[] { new(Placement: "growing", Scale: FixedQ4816.FromDouble(value: size)) }), stream: default);
         float Pack(float alpha) {
             client.UpdateRenderPoses(alpha: alpha);
             pool.Tick(deltaSeconds: (1f / 60f));

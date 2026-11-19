@@ -1602,8 +1602,9 @@ Artefacts still to isolate:
   remain around the NOISE and ERODE plinths.
 - Settlement is configured sweeps, not history-independent convergence. Open:
   a general refusal of lighting captures before every bake and the irradiance
-  have settled; grazing marks at the teal vertical corner, the Moth backdrop
-  and the boardroom jamb feet; bright bands in the painting wing and
+  have settled; grazing marks at the Moth backdrop and the boardroom jamb feet
+  (re-read them after the finest probes' blocker-evidence rule, which closed the
+  teal room's wall foot and vertical corner); bright bands in the painting wing and
   camera-bay roof; curved bands on the level-3 stairwell wall; the garden
   portal's dark horizontal strip; the REVOLVED floor's diagonal patches and
   black rectangle; the wing's north-east corner remnants.
@@ -2385,8 +2386,9 @@ findings are answered in decision 3a. Then the researcher brief's priorities
   order with the content, and content travels with the right to show it as one
   value. A design review found sixteen flaws in the first draft, and the memo
   answers each. It orders eight steps, each with a check, and no step deletes a
-  guard before its replacement owns the same paths. Next: its step 1, which
-  tightens the whole-replica test at once and lands the stream's generation.
+  guard before its replacement owns the same paths. Its step 1 is built (the
+  tightened whole-replica test, the stream's generation, ordered ingress), all
+  but the lease an admission grants after a lost connection. Next: step 2.
   This is decision 14's step 5 (results keyed by what each viewer was
   delivered) with the withdrawn picture of decision 2.
 
@@ -3551,6 +3553,14 @@ proves itself with `puck compile` lowering to the same document.
   (`WorldOutputHub`, `WorldSessionSink`, `WorldFederationProjectionSink`).
   They go with the presentation view's last cut
   ([runtime plan](runtime-and-delivery.md#the-presentation-view)).
+- Two recipient streams built side by side: `WorldSessionSink` and
+  `WorldFederationProjectionSink` each own a `WorldDeliveryCursor`,
+  `WorldDeliveryRows`, `WorldSolidScaleDisclosure`, body redaction, input
+  filtering, a presentation feed, and now the same cut announcement and
+  re-priming (`AnnounceCut`, `PrimeAfterCut`), differing only in where a
+  record goes (an `IClientSink` or a wire frame). One stream type writing
+  to a record target would hold each rule once; the withdrawal chokepoint's
+  step 4 (the mirror per span) is the natural place to make it.
 - [low] File-system primitives `AtomicFile` cannot serve yet:
   `ShaderCompiler.Entries.cs` wants a write that refuses to replace;
   `DirectoryObjectBlobStoreBackend` stages through a confined handle; a lock
@@ -3946,6 +3956,13 @@ and calibration, delivered cues, haptics) and the standard package's judge.
 - Its last stage, a crowd of performers at the frame bar, waits on
   [virtual geometry](virtual-geometry.md#d2-bounds-for-skinned-and-multi-slot-draws)'s
   bounds for many-part bodies and on the benchmark's remote route.
+- The pose-clip design removes the rig's caps on swings, slides, drivers and
+  effectors ([the caps](instrument-play/pose-clips.md#9-the-caps-come-off)).
+  A world's own creations then pay a counted cost. A look that arrives with a
+  visiting character is work another player's client must do, and nothing
+  budgets its terms, effectors and transform slots. Admitting a visiting
+  look's rig waits on that budget, which the plan that admits visiting looks
+  owns.
 - It is the first of the [play expressions](play-expressions.md). The other
   two the owner named, play by solving and play by calculating, are open
   explorations: that page holds
@@ -3970,6 +3987,8 @@ reversal brake, then a sitting.
   press reaches the rig a tick late; and no motion operation turns a body
   through an angle or moves it along an eased path over a duration
   (`BodyMotionOp`, `WorldEffect.PlanarImpulse`).
+  [Pose clips, body parts and reach](instrument-play/pose-clips.md) designs
+  the first three, and its steps are the build lane's order.
 
 - A reversal should brake faster than it accelerates: `ShapeWholeVelocityRow`
   converges at the engage rate whenever the stick is deflected, so a full
@@ -4045,12 +4064,6 @@ the model.
   seat's pad, and authored haptics. A pulse on the beat is the first authored
   consumer ([instrument and dance play](instrument-play.md#sound), a lane of
   its first wave).
-- [high] Two timing gaps [instrument and dance play](instrument-play.md#timing)
-  names, one lane of its first wave: the clock operand answers only the
-  distance to the nearest beat, so no rule can read which beat or bar the
-  clock is on (`MusicClock.CurrentBeat` has no operand); and
-  `WorldCommand.CalibrateInput` is applied by the authority and sent by
-  nothing, so a player has no way to set the calibration the judgement adds.
 - The in-world computer runs programs (the owner's direction): the desktop
   share is one and a typing tutor another, switched on the computer itself
   with the screen showing which is live. The tutor is world-native: lessons
@@ -4186,14 +4199,6 @@ Owner: media lane · ordinary · Next: let an unread capture feed idle.
   downscale on the GPU ahead of the readback.
 - [medium] `CaptureSink` is constructed nowhere in `src`: an unreached capture
   capability to wire, not delete (AGENTS.md).
-- [high] Sound gaps [instrument and dance play](instrument-play.md#sound)
-  names, one designed lane of its first wave: a rule's cue reaches the
-  speakers only through `WorldServer.GameplayCueTap`, a callback inside the
-  authority's process that drops the cue's payload, so a remote client hears
-  none and a cue cannot carry a pitch; `WorldCreationInstances.TriggerCue` has
-  no caller; a score arms only on the three events of
-  `WorldAudioCue.MusicWhenTokens`, never on a rule; and `VoiceSynth`'s 32
-  voices have no rule for which sound when more are asked for.
 
 ### Debug world content
 

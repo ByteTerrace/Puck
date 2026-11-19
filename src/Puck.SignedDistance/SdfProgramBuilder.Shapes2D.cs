@@ -229,7 +229,7 @@ public sealed partial class SdfProgramBuilder {
             dimensions: new Vector4(
                 w: clampedLift,
                 x: absRadius,
-                y: (MathF.PI / n),            // an = π/n, host-baked
+                y: SdfDerivedLanes.HalfSector(sides: n),
                 z: 0f                         // ecs.x = 0
             ),
             material: material,
@@ -447,7 +447,7 @@ public sealed partial class SdfProgramBuilder {
             dimensions: new Vector4(
                 w: clampedLift,
                 x: absRadius,
-                y: (MathF.PI / n),            // an = π/n, HOST-BAKED
+                y: SdfDerivedLanes.HalfSector(sides: n),
                 z: MathF.Cos(x: en)             // ecs.x = cos(π/m), HOST-BAKED
             ),
             material: material,

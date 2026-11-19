@@ -99,6 +99,7 @@
     { "name": "player.binding-bar", "bindable": true, "audience": "anyone", "valueKind": "digital", "wireArgs": true },
     { "name": "player.bindings", "bindable": false, "audience": "anyone", "valueKind": "digital", "wireArgs": true },
     { "name": "player.build", "bindable": true, "audience": "anyone", "valueKind": "digital", "wireArgs": true },
+    { "name": "player.calibrate", "bindable": true, "audience": "anyone", "valueKind": "digital", "wireArgs": true },
     { "name": "player.camera", "bindable": true, "audience": "anyone", "valueKind": "digital", "wireArgs": true },
     { "name": "player.camera.automatic", "bindable": true, "audience": "anyone", "valueKind": "digital", "wireArgs": true },
     { "name": "player.camera.boom", "bindable": true, "audience": "anyone", "valueKind": "axis2d", "wireArgs": true },

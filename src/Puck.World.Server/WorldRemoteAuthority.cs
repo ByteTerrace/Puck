@@ -691,7 +691,19 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
             ? WorldFederationLane.Routed
             : WorldFederationLane.Transaction
         );
-    private async Task<bool> ObserveSessionAsync(IClientSink sink, CancellationToken ct) {
+    // The last stamp one observation session delivered, so the span it holds closes when the session ends.
+    private sealed class ObservedStream {
+        public WorldStreamStamp Last;
+    }
+    // A session that ended can no longer tell its reader of a cut, so the span it was showing closes: its reader drops
+    // what that stream delivered and takes the next session's stream as a new admission.
+    private static void CloseObserved(IClientSink sink, ObservedStream observed) {
+        if (observed.Last.IsSpanned) {
+            sink.DeliverCut(stream: observed.Last, terminal: true);
+            observed.Last = default;
+        }
+    }
+    private async Task<bool> ObserveSessionAsync(IClientSink sink, ObservedStream observed, CancellationToken ct) {
         var upstream = (m_submissionAuthority ?? this);
         var observedEndpoint = upstream.m_route.Endpoint;
 
@@ -771,14 +783,26 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
                     }
                     ObserveRoute(route: route);
                     break;
+                case WorldFederationResponse.Cut: {
+                        if (!WorldFederationCodec.TryDecodeCut(body: frame.Body.Span, stream: out var cut, terminal: out var terminal)) {
+                            return false;
+                        }
+                        observed.Last = cut;
+                        sink.DeliverCut(stream: cut, terminal: terminal);
+                        if (terminal) {
+                            observed.Last = default;
+                        }
+                        break;
+                    }
                 case WorldFederationResponse.Definition: {
                         if (
+                            !WorldFederationCodec.TryReadStamped(record: frame.Body.Span, stream: out var definitionStream, body: out var definitionBody, failure: out var definitionFailure) ||
                             !WorldFederationCodec.TryDecodeDocument(
-                            body: frame.Body.Span,
+                            body: definitionBody,
                             definition: out var definition,
                             hold: hold,
                             tier: out var definitionTier,
-                            failure: out var definitionFailure,
+                            failure: out definitionFailure,
                             version: out var definitionVersion
                         ) ||
                             (definition is null) ||
@@ -808,17 +832,19 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
                             location: ref m_definition,
                             value: definition
                         );
+                        observed.Last = definitionStream;
                         sink.DeliverDefinition(
                             definition: definition,
+                            stream: definitionStream,
                             version: definitionVersion
                         );
                         break;
                     }
                 case WorldFederationResponse.ProjectionDelta: {
-                        if (!WorldFederationCodec.TryDecodeProjectionDelta(
-                            body: frame.Body.Span,
+                        if (!WorldFederationCodec.TryReadStamped(record: frame.Body.Span, stream: out var deltaStream, body: out var deltaBody, failure: out var deltaFailure) || !WorldFederationCodec.TryDecodeProjectionDelta(
+                            body: deltaBody,
                             definition: out var merged,
-                            failure: out var deltaFailure,
+                            failure: out deltaFailure,
                             hold: hold,
                             stamp: out var deltaStamp,
                             valuesOnly: out var valuesOnly,
@@ -839,15 +865,18 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
                             value: merged
                         );
 
+                        observed.Last = deltaStream;
                         if (valuesOnly) {
                             sink.DeliverState(
                                 definition: merged,
                                 stamp: in deltaStamp,
+                                stream: deltaStream,
                                 version: deltaVersion
                             );
                         } else {
                             sink.DeliverDefinition(
                                 definition: merged,
+                                stream: deltaStream,
                                 version: deltaVersion
                             );
                         }
@@ -855,10 +884,10 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
                         break;
                     }
                 case WorldFederationResponse.Snapshot: {
-                        if (!WorldFederationCodec.TryDecodeSnapshot(
-                            body: frame.Body.Span,
+                        if (!WorldFederationCodec.TryReadStamped(record: frame.Body.Span, stream: out var snapshotStream, body: out var snapshotBody, failure: out var snapshotFailure) || !WorldFederationCodec.TryDecodeSnapshot(
+                            body: snapshotBody,
                             snapshot: out var snapshot,
-                            failure: out var snapshotFailure
+                            failure: out snapshotFailure
                         )) {
                             if (m_narrationHub is { HasNarrationSink: true }) {
                                 m_narrationHub?.Narrate(
@@ -878,7 +907,8 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
                             location: ref m_authority,
                             value: snapshot.Authority
                         );
-                        sink.DeliverSnapshot(snapshot: in snapshot);
+                        observed.Last = snapshotStream;
+                        sink.DeliverSnapshot(snapshot: in snapshot, stream: snapshotStream);
                         break;
                     }
             }
@@ -887,9 +917,12 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
     }
     // Authority processes may start in any order. An adjacency is durable topology, so its observation channel
     // cannot become permanently CLOSED merely because the neighbour had not bound its socket on the first tick.
-    // Reconnect the same held lease until its owner releases it; the mirror keeps the last delivered revision while
-    // disconnected and the authored unavailable policy remains the crossing-side safety net.
+    // Reconnect the same held lease until its owner releases it. Each session is a stream of its own: when one ends,
+    // by a lost connection, an invalidation or the lease's release, the span it held closes, so the reader shows
+    // nothing of it while disconnected, and the authored unavailable policy remains the crossing-side safety net.
     private async Task ObserveUntilCancelledAsync(IClientSink sink, CancellationToken ct) {
+        var observed = new ObservedStream();
+
         while (!ct.IsCancellationRequested) {
             // The same gate every lane applies: an observer session authenticates too, and a run holding no signing
             // identity would otherwise reconnect and be refused four times a second for the rest of the run. Tested
@@ -902,6 +935,7 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
             try {
                 if (await ObserveSessionAsync(
                     ct: ct,
+                    observed: observed,
                     sink: sink
                 ).ConfigureAwait(continueOnCapturedContext: false)) {
                     continue;
@@ -915,6 +949,8 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
                         text: $"[world.projection: remote observer '{Endpoint}' unavailable ({exception.GetType().Name}: {exception.Message.ReplaceLineEndings(replacementText: " ")}); retrying]"
                     );
                 }
+            } finally {
+                CloseObserved(observed: observed, sink: sink);
             }
 
             try {

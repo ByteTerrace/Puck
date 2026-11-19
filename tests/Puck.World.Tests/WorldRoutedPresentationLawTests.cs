@@ -63,11 +63,11 @@ public sealed partial class WorldRoutedPresentationLawTests {
         identity: identity,
         nextInputTick: static () => 2UL,
         observe: sink => {
-            sink.DeliverDefinition(definition: definition, version: default);
+            sink.DeliverDefinition(definition: definition, version: default, stream: default);
             sink.DeliverSnapshot(snapshot: Snapshot(
                 authority: identity,
                 position: position
-            ));
+            ), stream: default);
 
             return new Lease();
         },
@@ -263,7 +263,7 @@ public sealed partial class WorldRoutedPresentationLawTests {
         var routes = new WorldSeatAuthorityRouter();
 
         Assert.True(condition: client.Roster.OccupySeat(profile: null, slot: 0));
-        client.DeliverSnapshot(snapshot: Snapshot(authority: Home, position: HomePose));
+        client.DeliverSnapshot(snapshot: Snapshot(authority: Home, position: HomePose), stream: default);
         client.UpdateRenderPoses(alpha: 1f);
         using var north = Endpoint(definition: AwayDocument(), identity: Away, position: AwayPose);
 
@@ -279,7 +279,7 @@ public sealed partial class WorldRoutedPresentationLawTests {
         var source = new SdfCompositionFrameSource(dresser: dresser, emitters: [emitter]);
         var withDepartedSeat = Capture(source: source).Program;
 
-        client.DeliverSnapshot(snapshot: (Snapshot(authority: Home, position: HomePose) with { Entries = ReadOnlyMemory<EntitySnapshot>.Empty, Revision = 1 }));
+        client.DeliverSnapshot(snapshot: (Snapshot(authority: Home, position: HomePose) with { Entries = ReadOnlyMemory<EntitySnapshot>.Empty, Revision = 1 }), stream: default);
         client.UpdateRenderPoses(alpha: 1f);
         var withoutDepartedSeat = Capture(source: source).Program;
 
@@ -309,7 +309,7 @@ public sealed partial class WorldRoutedPresentationLawTests {
         client.DeliverSnapshot(snapshot: Snapshot(
             authority: Home,
             position: HomePose
-        ));
+        ), stream: default);
         client.UpdateRenderPoses(alpha: 1f);
 
         using var boot = Endpoint(

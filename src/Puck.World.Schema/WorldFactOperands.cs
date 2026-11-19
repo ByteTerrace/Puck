@@ -68,12 +68,14 @@ public sealed class WorldPhysicsQuiescentOperand : WorldFactOperand {
         return facet.Read(operand: m_operand);
     }
 }
-/// <summary>The music clock's phase error (<see cref="WorldRuleFacts.ClockPrefix"/>).</summary>
+/// <summary>The music clock's current position (<see cref="WorldRuleFacts.ClockPrefix"/>): its phase error, beat, bar or
+/// beat in bar.</summary>
 public sealed class WorldClockOperand : WorldFactOperand {
-    /// <summary>The shared instance.</summary>
-    public static readonly WorldClockOperand Instance = new();
+    private readonly ClockOperand m_operand;
 
-    private WorldClockOperand() : base(valueKind: CellKind.Int) { }
+    /// <summary>Initializes the operand.</summary>
+    /// <param name="facet">The value read from the clock's current position.</param>
+    public WorldClockOperand(ClockFacet facet) : base(valueKind: CellKind.Int) => m_operand = new ClockOperand(facet: facet);
 
     /// <inheritdoc/>
     public override RuleWork Cost(IRuleCostContext context) => 1L;
@@ -81,7 +83,7 @@ public sealed class WorldClockOperand : WorldFactOperand {
     public override Fact Read(IStateReader reader, IWorldFacts facet) {
         ArgumentNullException.ThrowIfNull(argument: facet);
 
-        return facet.Read(operand: ClockOperand.Instance);
+        return facet.Read(operand: m_operand);
     }
 }
 /// <summary>The occupant count of a region placement (<see cref="WorldRuleFacts.RegionPrefix"/>).</summary>

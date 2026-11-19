@@ -163,7 +163,7 @@ public sealed class WorldCreationInstancesLiveRigEditLawTests {
                 ),
                 seatRouter: routes
             );
-            m_client.DeliverDefinition(definition: definition, version: new WorldDocumentVersion(Activation: m_activation, Sequence: m_sequence));
+            m_client.DeliverDefinition(definition: definition, version: new WorldDocumentVersion(Activation: m_activation, Sequence: m_sequence), stream: default);
             m_emitter = new WorldSceneEmitter(
                 animator: Pool,
                 audio: new SilentAudio(),
@@ -189,7 +189,7 @@ public sealed class WorldCreationInstancesLiveRigEditLawTests {
         // Delivers the creation's edit the way a mutation's definition delivery reaches the client.
         public void Edit(WorldPrototype creation) => m_client.DeliverDefinition(
             definition: CreationDomainParentLawTests.Definition(creation: creation),
-            version: new WorldDocumentVersion(Activation: m_activation, Sequence: ++m_sequence)
+            version: new WorldDocumentVersion(Activation: m_activation, Sequence: ++m_sequence), stream: default
         );
         // Runs two seconds of frames and returns the slot's furthest travel from where the first of them drew it. A
         // background composition films nothing until its first program lands, so the frames start once one is filmed.
@@ -233,7 +233,7 @@ public sealed class WorldCreationInstancesLiveRigEditLawTests {
                 Revision: 1,
                 StepTicks: 1UL,
                 Tick: ++m_tick
-            ));
+            ), stream: default);
             m_client.UpdateRenderPoses(alpha: 1f);
             m_emitter.Tick(deltaSeconds: FrameSeconds);
             Pool.Tick(deltaSeconds: FrameSeconds);

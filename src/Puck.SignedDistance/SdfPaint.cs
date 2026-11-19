@@ -88,7 +88,7 @@ public sealed record SdfPaintShape(SdfShapeType Type, Vector4 Data0, Vector4 Dat
     // The primitive's local box: a sweep's control points widened by its thickest reach, a revolved prism's reach on
     // every axis, and otherwise the canonical bounds at the scale.
     private static SdfSolidBounds BoundOf(SdfSolidPrimitive type, Vector3 scale, SdfLift lift, SdfSweepParameters? curve) {
-        var magnitude = Vector3.Max(value1: Vector3.Abs(value: scale), value2: new Vector3(value: SdfSolidGeometry.MinimumScale));
+        var magnitude = SdfSolidGeometry.EffectiveScale(scale: scale);
 
         if ((type == SdfSolidPrimitive.Sweep) && (curve is { } sweep)) {
             var low = Vector3.Min(value1: sweep.A, value2: Vector3.Min(value1: sweep.B, value2: sweep.C));

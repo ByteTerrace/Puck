@@ -171,6 +171,9 @@ public sealed class WorldProjectionSampler {
         Accumulate(snapshot: in snapshot);
         if (
             m_hasDeliveredSnapshot &&
+            snapshot.Cues.IsEmpty &&
+            snapshot.MusicBoundary == 0 &&
+            snapshot.MusicSenses == 0 &&
             (m_updateTicks != 0UL) &&
             (m_accumulatedStepTicks < m_updateTicks)
         ) {
