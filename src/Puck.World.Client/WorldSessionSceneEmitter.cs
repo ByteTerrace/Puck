@@ -535,6 +535,9 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
             // answers, so it is the presenting session's lever (render.rayQueries at its boot, then `world.rays`, a quality
             // preset or a device profile), never the destination document's: a painting world authors no device's cost.
             RayQueries = (Session?.RayQueries ?? m_mirror.Definition.Render.RayQueries),
+            // The distant shadow map's reach, texels and tolerance are a device table's row, so the presenting session's
+            // lever too, as the rays are.
+            DistantShadows = WorldRenderFarDistance.ResolveDistantShadows(authored: ((Session is { } session) ? session.DistantShadows : m_mirror.Definition.Render.DistantShadows)),
             IndirectSources = environment.Indirect.Gains.Sources,
             IndirectGains = environment.Indirect.Gains,
             IndirectBounces = environment.Indirect.Bounces,

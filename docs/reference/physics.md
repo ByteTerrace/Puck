@@ -350,10 +350,12 @@ facts, so a field added to either record is covered without a change. A
 walking body's refused step also withdraws the effects, designations and
 generator firings it emitted, so a tick the body did not take fires nothing.
 An arriving body keeps the pose and velocity it was installed with. A body
-refused this tick is immovable for the rest of it: a body pair resolves the
-other side against it as static (the other side takes the whole correction,
-and a rigid partner meets it with no velocity and no mass), a tether does not
-pull it, and no carrier is corrected through it. A carrier is corrected only by
+refused this tick stays fixed until the tick ends. In a positional pair
+correction, its partner takes the full displacement. In the rigid solver, the
+refused body supplies zero velocity and zero inverse mass and inertia, and
+the authored push-out limit governs the rigid partner's response. A tether
+cannot pull a refused body, and its refusal passes no correction to its carrier.
+A carrier is corrected only by
 a proven contact: a sweep that held its body for want of proof (out of budget,
 or at a box its field could not bound) marks the resolution `Unproved`, and
 hands the carrier nothing either. The population narrates each transition once

@@ -50,15 +50,17 @@ public sealed partial class SdfWorldPasses {
         return hash.Value;
     }
     /// <summary>Returns the cascades a pass of an instance draws and reads this frame: the frame's own fit, its far
-    /// cascade's layers through the cameras they were drawn from.</summary>
+    /// cascade's layers and its distant map through the cameras they were drawn from.</summary>
     /// <param name="instance">The instance's name.</param>
     /// <param name="frame">The frame its residency holds.</param>
     /// <param name="view">The view's index in <see cref="SdfFrame.Views"/>, clamped to the frame's views.</param>
     /// <param name="texels">The texels along each side of the cascade depths the pass binds, or <see langword="null"/>
     /// for the view's quality.</param>
+    /// <param name="distantTexels">The texels along each side of the distant map's depth the pass binds, or
+    /// <see langword="null"/> for the frame's distant map at the view's quality.</param>
     /// <returns>The cascades.</returns>
-    internal SdfMeshShadowCascades CascadesOf(string instance, SdfFrame frame, int view, int? texels = null) {
-        var cascades = SdfMeshShadowCascades.Fit(frame: frame, texels: texels, view: view);
+    internal SdfMeshShadowCascades CascadesOf(string instance, SdfFrame frame, int view, int? texels = null, int? distantTexels = null) {
+        var cascades = SdfMeshShadowCascades.Fit(distantTexels: distantTexels, frame: frame, texels: texels, view: view);
 
         if (cascades.Count == 0) {
             return cascades;
@@ -69,13 +71,18 @@ public sealed partial class SdfWorldPasses {
         if (entry.FarDecided != m_frame) {
             DecideFar(cascades: in cascades, entry: entry, frame: frame, view: view);
         }
+        if (cascades.Holds(index: SdfMeshShadowCascades.DistantEntry) && (entry.DistantDecided != m_frame)) {
+            DecideDistant(cascades: in cascades, entry: entry, frame: frame, view: view);
+        }
 
         var (depth, exit) = FarCamerasOf(entry: entry);
 
         // A layer no frame has drawn yet reads through the frame's own fit.
         depth = ((depth.HalfHeight > 0f) ? depth : cascades[1]);
+        cascades = cascades.WithFar(far: depth, exit: ((exit.HalfHeight > 0f) ? exit : depth));
 
-        return cascades.WithFar(far: depth, exit: ((exit.HalfHeight > 0f) ? exit : depth));
+        // A distant map no recording has drawn and committed yet is read by no receiver.
+        return (cascades.Holds(index: SdfMeshShadowCascades.DistantEntry) ? cascades.WithDistant(camera: DistantCameraOf(entry: entry)) : cascades);
     }
     // The cameras the far layers hold for this frame's readers: those this frame's recording drew from once the recorder
     // has asked (RecordFar), otherwise those the last submitted recording committed.

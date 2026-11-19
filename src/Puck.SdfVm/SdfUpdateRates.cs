@@ -28,8 +28,12 @@ public enum SdfUpdateRates : byte {
     /// <summary>The key light's far shadow cascade refreshed at least 30 times a second, its fit held between
     /// refreshes.</summary>
     ShadowFar = 8,
+    /// <summary>The key light's distant shadow map held while the light turns within its authored tolerance and the eye
+    /// stays inside its cell (<see cref="SdfDistantShadows"/>); off, it is drawn again on every frame the light moves at
+    /// all. Either way it is drawn again when a static draw changes.</summary>
+    ShadowDistant = 16,
     /// <summary>Every lever on, the default.</summary>
-    All = (((Bodies | Views) | Screens) | ShadowFar),
+    All = ((((Bodies | Views) | Screens) | ShadowFar) | ShadowDistant),
 }
 /// <summary>
 /// The size-on-screen thresholds every <see cref="SdfUpdateRates"/> lever switches at, each derived from how far the
@@ -375,6 +379,10 @@ public static class SdfUpdateRateCounts {
     public static readonly WorkKind ShadowFarSplit = new(name: "sdf.rates.shadow-far.split", unit: "frames", workClass: WorkClass.Pacing);
     /// <summary>Counts each frame a view held its far cascade.</summary>
     public static readonly WorkKind ShadowFarHeld = new(name: "sdf.rates.shadow-far.held", unit: "frames", workClass: WorkClass.Pacing);
+    /// <summary>Counts each frame a view drew its distant shadow map.</summary>
+    public static readonly WorkKind ShadowDistantRendered = new(name: "sdf.rates.shadow-distant.rendered", unit: "frames", workClass: WorkClass.Pacing);
+    /// <summary>Counts each frame a view held its distant shadow map.</summary>
+    public static readonly WorkKind ShadowDistantHeld = new(name: "sdf.rates.shadow-distant.held", unit: "frames", workClass: WorkClass.Pacing);
     /// <summary>Counts each frame a nested view was shown at a reduced rate.</summary>
     public static readonly WorkKind ViewsRated = new(name: "sdf.rates.views.rated", unit: "footprints", workClass: WorkClass.Pacing);
     /// <summary>Counts each frame a nested view's glass was shown too small to render (<see cref="SdfUpdateRateTiers.ViewHeldPixels"/>),
@@ -383,7 +391,7 @@ public static class SdfUpdateRateCounts {
     /// <summary>Counts each frame a screen's source was shown at a reduced rate.</summary>
     public static readonly WorkKind ScreensRated = new(name: "sdf.rates.screens.rated", unit: "footprints", workClass: WorkClass.Pacing);
 
-    private static readonly WorkKind[] DeclaredKinds = [BodiesPosed, BodiesHeld, PlacementsPosed, PlacementsHeld, ShadowFarRendered, ShadowFarSplit, ShadowFarHeld, ViewsRated, ViewsHeld, ScreensRated];
+    private static readonly WorkKind[] DeclaredKinds = [BodiesPosed, BodiesHeld, PlacementsPosed, PlacementsHeld, ShadowFarRendered, ShadowFarSplit, ShadowFarHeld, ShadowDistantRendered, ShadowDistantHeld, ViewsRated, ViewsHeld, ScreensRated];
 
     /// <summary>Creates the counters a host's frames count into.</summary>
     /// <returns>A set over every kind this class declares, in report order, every count zero.</returns>

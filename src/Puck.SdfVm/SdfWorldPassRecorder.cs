@@ -55,6 +55,8 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         (SdfWorldPackage.Parts.ShadowNearExit, SdfWorldTables.WorldBinding(member: SdfWorldPackage.MeshShadowNearExit)),
         (SdfWorldPackage.Parts.ShadowFarExit, SdfWorldTables.WorldBinding(member: SdfWorldPackage.MeshShadowFarExit)),
         (SdfWorldPackage.Parts.ShadowSecondExit, SdfWorldTables.WorldBinding(member: SdfWorldPackage.MeshShadowSecondExit)),
+        (SdfWorldPackage.Parts.ShadowDistantDepth, SdfWorldTables.WorldBinding(member: SdfWorldPackage.MeshShadowDistant)),
+        (SdfWorldPackage.Parts.ShadowDistantExit, SdfWorldTables.WorldBinding(member: SdfWorldPackage.MeshShadowDistantExit)),
     ];
     private static readonly uint OutputBinding = SdfWorldTables.WorldBinding(member: SdfWorldPackage.Output);
     private static readonly uint MeshVisibilityBinding = SdfWorldTables.WorldBinding(member: SdfWorldPackage.MeshVisibility);
@@ -382,7 +384,14 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
     private bool IsGlass => (m_part is SdfWorldPackage.Parts.Glass);
     // The interface every compute part's pass set is laid out by.
     private static ShaderInterfaceLayout PassLayout => SdfWorldInterfaces.WorldLayout;
-    private bool IsShadowCascade => (m_part is SdfWorldPackage.Parts.ShadowNear or SdfWorldPackage.Parts.ShadowFar or SdfWorldPackage.Parts.ShadowSecond);
+    private bool IsShadowCascade => (m_part is SdfWorldPackage.Parts.ShadowNear or SdfWorldPackage.Parts.ShadowFar or SdfWorldPackage.Parts.ShadowSecond or SdfWorldPackage.Parts.ShadowDistant);
+    // The cascade entry a shadow part draws (SdfMeshShadowCascades).
+    private int CascadeEntry => m_part switch {
+        SdfWorldPackage.Parts.ShadowNear => SdfMeshShadowCascades.NearEntry,
+        SdfWorldPackage.Parts.ShadowFar => SdfMeshShadowCascades.FarEntry,
+        SdfWorldPackage.Parts.ShadowDistant => SdfMeshShadowCascades.DistantEntry,
+        _ => SdfMeshShadowCascades.SecondEntry,
+    };
 
     // The draws the part rasterizes: the glass draws for the glass pass, the opaque ones for the mesh pass and the cascades.
     private uint PartDrawCount(SdfWorldTables tables) => (IsGlass ? tables.GlassDrawCount : tables.OpaqueDrawCount);
@@ -473,14 +482,14 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
                 }
             case SdfWorldPackage.Parts.ShadowNear:
             case SdfWorldPackage.Parts.ShadowFar:
-            case SdfWorldPackage.Parts.ShadowSecond: {
+            case SdfWorldPackage.Parts.ShadowSecond:
+            case SdfWorldPackage.Parts.ShadowDistant: {
                     Follow();
                     m_owner.Begin(residency: m_view.Residency);
                     var tables = m_view.Residency.Staged(context: in context);
                     var cascades = SdfMeshShadowCascades.Fit(frame: m_view.Residency.Frame!, view: m_view.View);
 
-                    return ((cascades.Count == 0) || ((PartDrawCount(tables: tables) == 0) && TargetsHoldClear) ||
-                        ((m_part == SdfWorldPackage.Parts.ShadowSecond) && (cascades.Count <= SdfMeshShadowCascades.SecondEntry)));
+                    return (!cascades.Holds(index: CascadeEntry) || ((PartDrawCount(tables: tables) == 0) && TargetsHoldClear));
                 }
             default:
                 return false;
@@ -496,6 +505,9 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         if (m_part == SdfWorldPackage.Parts.ShadowFar) {
             m_view.Residency.Frame?.RateCounts?.Count(kind: SdfUpdateRateCounts.ShadowFarHeld);
         }
+        if (m_part == SdfWorldPackage.Parts.ShadowDistant) {
+            m_view.Residency.Frame?.RateCounts?.Count(kind: SdfUpdateRateCounts.ShadowDistantHeld);
+        }
     }
 
     private SdfMeshRowStamp m_previousMeshRows;
@@ -510,6 +522,9 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         }
         if (m_part == SdfWorldPackage.Parts.ShadowFar) {
             m_owner.SubmittedFar(instance: m_context.Instance);
+        }
+        if (m_part == SdfWorldPackage.Parts.ShadowDistant) {
+            m_owner.SubmittedDistant(instance: m_context.Instance);
         }
         if (m_part == SdfWorldPackage.Parts.Views) {
             m_owner.SubmittedTaint(m_context.Instance, m_sourceTaint, m_readsHistory);
@@ -594,7 +609,8 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
 
         SdfFrameBlock.WriteMeshIrradiance(block: recording.PassBlock, volume: residency.MeshIrradianceParameters);
 
-        var boundTexels = BoundCascadeTexels(recording: in recording);
+        var boundTexels = BoundCascadeTexels(recording: in recording, distant: false);
+        var boundDistantTexels = BoundCascadeTexels(recording: in recording, distant: true);
         // The far cascade may draw one layer of a split refresh; asking stages the camera each drawn layer is drawn from,
         // which the cascades below and every later reader this frame read.
         var layers = ((m_part == SdfWorldPackage.Parts.ShadowFar)
@@ -605,43 +621,50 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
                 written: LayersWritten(target: recording.Outputs[0].Owned)
             )
             : SdfFarLayers.Both);
-        var cascades = m_owner.CascadesOf(frame: frame, instance: m_context.Instance, texels: boundTexels, view: view);
+
+        // The distant map is drawn from the camera its signature chose this frame (the fit below decides it); asking
+        // stages that camera for this frame's readers.
+        if (m_part == SdfWorldPackage.Parts.ShadowDistant) {
+            _ = m_owner.CascadesOf(distantTexels: boundDistantTexels, frame: frame, instance: m_context.Instance, texels: boundTexels, view: view);
+            _ = m_owner.RecordDistant(counts: frame.RateCounts, instance: m_context.Instance);
+        }
+
+        var cascades = m_owner.CascadesOf(distantTexels: boundDistantTexels, frame: frame, instance: m_context.Instance, texels: boundTexels, view: view);
 
         SdfFrameBlock.WriteMeshShadows(block: recording.PassBlock, cascades: in cascades);
         if (IsShadowCascade) {
-            SdfFrameBlock.WriteShadowCamera(block: recording.PassBlock, camera: cascades[m_part switch {
-                SdfWorldPackage.Parts.ShadowNear => 0,
-                SdfWorldPackage.Parts.ShadowFar => 1,
-                _ => 2,
-            }], texels: cascades.Texels);
+            SdfFrameBlock.WriteShadowCamera(block: recording.PassBlock, camera: cascades[CascadeEntry], texels: cascades.TexelsOf(index: CascadeEntry));
         }
         if (IsMesh) {
-            var cascade = m_part switch {
-                SdfWorldPackage.Parts.ShadowNear => 0,
-                SdfWorldPackage.Parts.ShadowFar => 1,
-                _ => 2,
-            };
+            var cascade = CascadeEntry;
+            var cascadeTexels = cascades.TexelsOf(index: cascade);
+            var distant = (m_part == SdfWorldPackage.Parts.ShadowDistant);
 
             RecordMesh(
-                cascadeTexels: cascades.Texels,
+                cascadeTexels: cascadeTexels,
                 jitter: temporal.Jitter,
                 occlude: ((frame.MeshCull == SdfMeshCullLevel.Occlusion) || (!IsShadowCascade && (frame.MeshCull == SdfMeshCullLevel.Camera))),
+                // The distant map is held across camera turns and moves, so it keeps every caster in its light's box
+                // rather than those that may shadow what the view shows now.
                 cull: ((frame.MeshCull == SdfMeshCullLevel.Off)
                     ? SdfMeshCull.None
-                    : (IsShadowCascade
-                        ? SdfMeshCull.Of(camera: frame.Views[view].Camera, cascade: cascades[cascade], far: frame.FarDistance, height: recording.RenderHeight, texels: cascades.Texels, width: recording.RenderWidth)
-                        : SdfMeshCull.Of(camera: frame.Views[view].Camera, far: frame.FarDistance, height: height, width: width))),
+                    : (distant
+                        ? SdfMeshCull.OfLightBox(cascade: cascades[cascade])
+                        : (IsShadowCascade
+                            ? SdfMeshCull.Of(camera: frame.Views[view].Camera, cascade: cascades[cascade], far: frame.FarDistance, height: recording.RenderHeight, texels: cascadeTexels, width: recording.RenderWidth)
+                            : SdfMeshCull.Of(camera: frame.Views[view].Camera, far: frame.FarDistance, height: height, width: width)))),
                 // The glass pass's thickness is the sums of its own triangles' ray distances, so glass draws its own.
                 detail: (IsGlass
                     ? SdfMeshDetail.Finest
                     : (frame.MeshDetail switch {
                         SdfMeshDetailLevel.Auto => (IsShadowCascade
-                            ? SdfMeshDetail.Of(cascade: cascades[cascade], texels: cascades.Texels)
+                            ? SdfMeshDetail.Of(cascade: cascades[cascade], texels: cascadeTexels)
                             : SdfMeshDetail.Of(camera: frame.Views[view].Camera, displayHeight: recording.FrameHeight)),
                         _ => SdfMeshDetail.Forced(level: (((int)frame.MeshDetail) - 1)),
                     })),
                 layers: layers,
                 recording: in recording,
+                staticOnly: distant,
                 tables: tables
             );
         } else {
@@ -700,22 +723,23 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
     }
     // The texels a side of the cascade depth the pass binds, a cascade's output or the surface pass's input, which its pass
     // block and its fit follow, so a pass draws and reads the depth its graph allocated while a graph of another shadow
-    // resolution builds; null for a pass that binds none.
-    private int? BoundCascadeTexels(in RenderGraphPackageRecording recording) {
+    // resolution builds; null for a pass that binds none. `distant` asks for the distant map's, whose size is its own.
+    private int? BoundCascadeTexels(in RenderGraphPackageRecording recording, bool distant) {
         for (var port = 0; (port < m_outputs.Length); port++) {
-            if (IsCascadeDepth(version: m_outputs[port])) {
+            if (IsCascadeDepth(version: m_outputs[port], distant: distant)) {
                 return ((int)recording.Outputs[port].Image.Width);
             }
         }
         for (var port = 0; (port < m_inputs.Length); port++) {
-            if (IsCascadeDepth(version: m_inputs[port])) {
+            if (IsCascadeDepth(version: m_inputs[port], distant: distant)) {
                 return ((int)recording.Inputs[port].Image.Width);
             }
         }
 
         return null;
     }
-    private static bool IsCascadeDepth(string version) => (CascadeIndexOf(version: version) >= 0);
+    private static bool IsCascadeDepth(string version, bool distant) => ((CascadeIndexOf(version: version) >= 0) &&
+        (distant == (version is SdfWorldPackage.Parts.ShadowDistantDepth or SdfWorldPackage.Parts.ShadowDistantExit)));
     // The cascade layer a storage is (its index in CascadeBindings), or -1 for any other storage.
     private static int CascadeIndexOf(string version) {
         for (var cascade = 0; (cascade < CascadeBindings.Length); cascade++) {
@@ -889,7 +913,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         ((slot * SdfWorldTables.FrameRingSize) + tables.CurrentSlot);
     // A cascade draws its depth (with the glass extinction that reads it) and its exit layer as `layers` says; a layer it
     // skips keeps what an earlier frame drew into it.
-    private void RecordMesh(in RenderGraphPackageRecording recording, SdfWorldTables tables, int cascadeTexels, in SdfMeshCull cull, in SdfMeshDetail detail, bool occlude, SdfFarLayers layers, System.Numerics.Vector2 jitter) {
+    private void RecordMesh(in RenderGraphPackageRecording recording, SdfWorldTables tables, int cascadeTexels, in SdfMeshCull cull, in SdfMeshDetail detail, bool occlude, SdfFarLayers layers, System.Numerics.Vector2 jitter, bool staticOnly) {
         var drawsDepth = (!IsShadowCascade || ((layers & SdfFarLayers.Depth) != 0));
         var drawsExit = ((layers & SdfFarLayers.Exit) != 0);
         var count = tables.MeshDrawCount;
@@ -969,7 +993,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
                 occlusion.Stage(tables: tables, count: count, height: (IsShadowCascade ? (uint)cascadeTexels : recording.RenderHeight), width: (IsShadowCascade ? (uint)cascadeTexels : recording.RenderWidth), slot: slot, cull: in cull, detail: in detail, held: tables.HoldsFrame, glass: IsGlass, occlude: twoPhase, splitExit: IsShadowCascade, skipsDepth: !drawsDepth, skipsExit: (IsShadowCascade && !drawsExit),
                     camera: frame.Views[Math.Min(val1: m_view.View, val2: (frame.Views.Count - 1))].Camera,
                     receiverWidth: ((IsShadowCascade && twoPhase) ? recording.Inputs[0].Image.Width : 0),
-                    receiverHeight: ((IsShadowCascade && twoPhase) ? recording.Inputs[0].Image.Height : 0), jitter: jitter);
+                    receiverHeight: ((IsShadowCascade && twoPhase) ? recording.Inputs[0].Image.Height : 0), jitter: jitter, staticOnly: staticOnly);
                 occlusion.BindDraws(tables: tables, set: set, bound: m_meshSetOcclusion[meshSet]);
                 for (var phase = 0; (phase < OcclusionSetsPerMesh); phase++) {
                     var index = ((meshSet * OcclusionSetsPerMesh) + phase);

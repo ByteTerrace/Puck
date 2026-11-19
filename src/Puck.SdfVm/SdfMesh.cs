@@ -763,7 +763,8 @@ public static class SdfMeshRegion {
             ? ((selection[3] & 4u) != 0u)
             : draw.EnclosesSolid);
 
-        writer[(SdfMeshRecord.SelectionWord + 3)] = (boxed ? 0u : 1u) | (draw.Glass ? 2u : 0u) | (enclosed ? 4u : 0u);
+        writer[(SdfMeshRecord.SelectionWord + 3)] = (boxed ? 0u : 1u) | (draw.Glass ? 2u : 0u) | (enclosed ? 4u : 0u) |
+            (SdfMeshIrradianceScene.IsStatic(draw: in draw) ? 0u : SdfMeshRecord.DynamicFlag);
         writer[(SdfMeshRecord.SelectionWord + 11)] = generation;
         writer[(SdfMeshRecord.SelectionWord + 15)] = ((uint)mesh.Levels.Count);
 

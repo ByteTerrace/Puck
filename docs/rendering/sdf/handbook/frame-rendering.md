@@ -114,7 +114,9 @@ swept along the light, may shadow a receiver the view shows
 (what a raster pass draws, below). A frame with no mesh draw, or whose view has no cascade,
 skips them; `shadow-second` runs only while a second slotted directional light
 emits (the secondary shadow role, `SdfLights.RoleSlot`), and a view whose world
-holds one stable slot has no `shadow-second` at all.
+holds one stable slot has no `shadow-second` at all. A view whose world draws a
+distant map adds `shadow-distant` ([the distant shadow map](#the-distant-shadow-map)),
+which stands on every frame its inputs do.
 
 **mesh** (`sdf-mesh.vert.hlsl`, `sdf-mesh.frag.hlsl`) rasterizes the frame's mesh draws, one draw call
 each, into the mesh visibility target at the view's extent: per pixel the ray parameter,
@@ -1539,6 +1541,39 @@ a layer of its current graph has never been drawn; the cameras it draws from
 are committed when the frame's submission succeeds (`SubmittedFar`), so each
 layer is always read through the camera it was drawn from. `world.rates`
 counts `shadow-far.rendered` (both layers), `.split` (one) and `.held`.
+
+### The distant shadow map
+
+Past the far cascade, a world or a device's quality row may add a distant
+shadow map (`render.distantShadows { reach, texels, turnDegrees }`, a quality
+preset's `distantShadows`; `SdfDistantShadows` on `SdfFrame.DistantShadows`).
+It is the cascade set's fourth entry (`SdfMeshShadowCascades.DistantEntry`, the
+primary role), so a receiver no near or far cascade holds takes it before the
+probes' answer, and its texels are its own (the pass block's `meshShadowTexels`
+carries a size per entry), so a reach of a kilometre costs the near and far
+cascades no precision. A view's shadow tier halves its texels as it does the
+cascades', down to 256.
+
+The `shadow-distant` pass draws only the static scene
+(`SdfMeshIrradianceScene.IsStatic`; the selection kernel rejects a draw whose
+record carries `SdfMeshRecord.DynamicFlag` when the pass stages `staticOnly`),
+every caster in its light box whichever way the view faces
+(`SdfMeshCull.OfLightBox`), at the coarsest level whose error fits its texel.
+Its camera is a sphere about the cell of a grid the eye stands in
+(`SdfDistantShadows.CellOf`, an eighth of the reach a side), so neither a turn
+nor a step inside the cell moves it. It holds what it drew while the light
+turns less than `turnDegrees`, the eye stays in its cell, its reach, casters and
+texels stand, and no static draw changes (`SdfWorldTables.StaticDrawRevision`:
+a new value when a staging changes what a static draw draws, lands its mesh or
+removes it, never for a pose, a moving body or a relocation). That hold is the
+pass's signature (`SdfWorldPasses.Distant`): the camera the frame chose, the
+static revision, the texels, the cull and detail levers and the instance's
+bindings, so the pass stands whatever forces the frame's other passes. Like the
+far cascade, the camera a recording drew from is staged by
+`SdfWorldPasses.RecordDistant` and committed by `SubmittedDistant`, and readers
+read the committed camera, or no distant entry until one is committed.
+`world.rates shadow-distant off` lets it follow every turn of the light, and
+`world.rates` counts `shadow-distant.rendered` and `.held`.
 
 A shadow handoff (`SdfShadowHandoff`) is a pass value: while one runs, the
 outgoing light fades from its stable slot's cascade by the handoff's weight, and

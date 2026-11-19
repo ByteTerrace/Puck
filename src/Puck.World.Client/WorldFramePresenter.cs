@@ -1610,10 +1610,11 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             var snapshot = m_frameViews[view];
             var viewWidth = ((uint)Math.Max(val1: 1f, val2: (snapshot.Region.Width * width)));
             var viewHeight = ((uint)Math.Max(val1: 1f, val2: (snapshot.Region.Height * height)));
-            var count = cascades.Count;
-
-            for (var cascade = 0; (cascade < count); cascade++) {
-                m_rateShadows.Add(item: (view, SdfMeshCull.Of(camera: snapshot.Camera, cascade: cascades[cascade], far: frame.FarDistance, height: viewHeight, texels: cascades.Texels, width: viewWidth)));
+            // The distant map draws the static scene alone, which holds no body.
+            for (var cascade = 0; (cascade < SdfMeshShadowCascades.DistantEntry); cascade++) {
+                if (cascades.Holds(index: cascade)) {
+                    m_rateShadows.Add(item: (view, SdfMeshCull.Of(camera: snapshot.Camera, cascade: cascades[cascade], far: frame.FarDistance, height: viewHeight, texels: cascades.Texels, width: viewWidth)));
+                }
             }
         }
 
@@ -2185,6 +2186,8 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             // lands on the next frame, like the lighting below), or the engine's pinned default when unauthored.
             FarDistance = WorldRenderFarDistance.Resolve(defaults: m_client.Definition.Render),
             ShadowCoverage = WorldRenderFarDistance.ResolveShadowCoverage(defaults: m_client.Definition.Render),
+            // The distant shadow map: render.distantShadows at boot, then the device table's row a quality preset applies.
+            DistantShadows = WorldRenderFarDistance.ResolveDistantShadows(authored: m_settings.DistantShadows),
             // The lights and the sky: render.lighting, render.sky and render.environment with every keyed value at its
             // clock's presented phase (a world.row.set render lands on the next frame).
             Lights = lighting.Lights,

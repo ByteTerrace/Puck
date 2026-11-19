@@ -1,5 +1,5 @@
 // The standard's graphics presets: `world.quality low|medium|high` applies one, each writing its shadow tier and slot
-// policy, its ambient-occlusion switch, its temporal-reconstruction switch, its dynamic-resolution switch (off in every
+// policy, its distant shadow map, its ambient-occlusion switch, its temporal-reconstruction switch, its dynamic-resolution switch (off in every
 // preset), its scalar render ceiling, its render-scale floor and its sky tier (`world.sky-quality`) into the live render
 // levers. The independently counted sky field stays Full at every tier; Half remains an authored option. The irradiance
 // volume is Medium at Low and Medium and High at High: its probes occlude the traced lights, the reflected sky and, in a
@@ -66,7 +66,17 @@ render {
     renderScale: 0.70980394
     rayQueries: true
   }
+  // The distant shadow map each tier draws past the far cascade: static casters only, within `reach` metres of the eye,
+  // at `texels` a side, held until the sun turns `turnDegrees` (or the eye crosses an eighth of the reach, or a static
+  // draw changes). 1200 m reaches across a caldera of the debug valley's size from its rim; 2048 texels make a texel
+  // about 1.3 m there, and a tenth of a degree moves a shadow cast from a kilometre about a texel, so under the standard's
+  // quarter-degree-a-second day the map is drawn a few times a second and each step is a texel. Low draws no shadows.
   medium {
+    distantShadows {
+      reach: 1200
+      texels: 1024
+      turnDegrees: 0.2
+    }
     bloom: Low
     indirect: Medium
     sky: medium
@@ -84,6 +94,11 @@ render {
     rayQueries: true
   }
   high {
+    distantShadows {
+      reach: 1200
+      texels: 2048
+      turnDegrees: 0.1
+    }
     bloom: High
     indirect: High
     sky: high

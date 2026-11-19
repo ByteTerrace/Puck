@@ -12,6 +12,8 @@
 // Contact follows the drawn rock: a relieved creation collides as one field collider over its masses and their relief,
 // the same fixed-point field the bake draws, so a body stands on the relief, not on the smooth masses under it.
 
+import "shading"
+
 // The placement yaw that points a sector authored along author +Z at a compass bearing.
 let terrainYaw = 180
 
@@ -113,4 +115,141 @@ function terrainCarveMask(basins, cuts = [], fade = 8) = {
       rotation: cut.rotation
     })
   )
+}
+
+// The terrain shading program: up to four bands over a material's own response, each a colour, roughness and specular
+// laid down under a mask the program computes at the hit from three readings:
+//   slope       degrees from up (0 a flat top, 90 a vertical face), from the surface normal
+//   altitude    metres up the creation's own frame (the world's with `world: 1`), repeating every `period` metres when
+//               the period is positive, so a band there is a stratum
+//   curvature   the mean curvature the surface pass derives from the baked normals, in 1/m: positive on a convex ridge,
+//               negative in a concave gully
+// Each reading passes a soft range (shadeRange) and the band's mask is their product times its amount; later bands lay
+// over earlier ones. Breakup is two octaves of solid noise in the same space, so steep faces do not stretch: it jitters
+// each reading by `jitter` (degrees, metres, 1/m) before its range, which breaks every band's edge, and varies the
+// result's brightness by `variation`. Both fade toward their mean where a pixel spans a cell. The band count and which
+// readings each band reads (`use0` to `use3`: 1 slope, 2 altitude, 4 curvature, summed) are structural, so a reading a
+// band leaves open costs nothing; every value is a runtime parameter, so two sets of one shape are one program with
+// different data. Authors write bands with terrainBand and lay them on a palette row with terrainMaterial; this
+// template is the program they lower to.
+function terrainPick(v, i) = i == 0 ? v.x : i == 1 ? v.y : i == 2 ? v.z : v.w
+// Whether a band's structural `use` reads `reading` (1, 2 or 4), as comparisons the compiler folds.
+function terrainReads(use, reading) = reading == 1 ? (use == 1) + (use == 3) + (use == 5) + (use == 7)
+  : reading == 2 ? (use == 2) + (use == 3) + (use == 6) + (use == 7) : 4 <= use
+function terrainWrap(value, period) = period > 0 ? value - period * floor(value / max(period, 0.000001)) : value
+function terrainMask(i, use, slope, altitude, curvature, breakup, jitter, footprint, amount, slopeLo, slopeHi, slopeWidth,
+  altitudeLo, altitudeHi, altitudeWidth, period, curvatureLo, curvatureHi, curvatureWidth) =
+  terrainPick(amount, i) *
+  (terrainReads(use, 1) > 0
+    ? shadeRange(slope + breakup * jitter.x, terrainPick(slopeLo, i), terrainPick(slopeHi, i), max(terrainPick(slopeWidth, i), 0.5))
+    : 1) *
+  (terrainReads(use, 2) > 0
+    ? shadeRange(terrainWrap(altitude + breakup * jitter.y, terrainPick(period, i)), terrainPick(altitudeLo, i),
+      terrainPick(altitudeHi, i), max(terrainPick(altitudeWidth, i), footprint))
+    : 1) *
+  (terrainReads(use, 4) > 0
+    ? shadeRange(curvature + breakup * jitter.z, terrainPick(curvatureLo, i), terrainPick(curvatureHi, i), terrainPick(curvatureWidth, i))
+    : 1)
+
+shade template terrain(color0, color1, color2, color3, amount, roughness, specular, slopeLo, slopeHi, slopeWidth,
+  altitudeLo, altitudeHi, altitudeWidth, period, curvatureLo, curvatureHi, curvatureWidth, scale, jitter, variation,
+  seed, structural count = 4, structural use0 = 7, structural use1 = 7, structural use2 = 7, structural use3 = 7,
+  structural world = 0) {
+  surface {
+    let p = world ? surface.position : surface.layerPosition
+    let n = world ? surface.normal : toLayer(surface.normal)
+    let slope = acos(shadeClamp(n.y, -1, 1)) * 57.29578
+    let q = p * scale
+    let rate = surface.footprint * scale
+    let breakup = (lattice(q, seed) * shadeFade(rate) +
+      0.5 * lattice(q * 2.03 + 17, xor(seed, uint(2654435769))) * shadeFade(rate * 2.03)) * 0.8944
+    let curvature = surface.curvature
+    let footprint = surface.footprint
+    let m0 = terrainMask(0, use0, slope, p.y, curvature, breakup, jitter, footprint, amount, slopeLo, slopeHi, slopeWidth,
+      altitudeLo, altitudeHi, altitudeWidth, period, curvatureLo, curvatureHi, curvatureWidth)
+    let m1 = terrainMask(1, use1, slope, p.y, curvature, breakup, jitter, footprint, amount, slopeLo, slopeHi, slopeWidth,
+      altitudeLo, altitudeHi, altitudeWidth, period, curvatureLo, curvatureHi, curvatureWidth)
+    let m2 = terrainMask(2, use2, slope, p.y, curvature, breakup, jitter, footprint, amount, slopeLo, slopeHi, slopeWidth,
+      altitudeLo, altitudeHi, altitudeWidth, period, curvatureLo, curvatureHi, curvatureWidth)
+    let m3 = terrainMask(3, use3, slope, p.y, curvature, breakup, jitter, footprint, amount, slopeLo, slopeHi, slopeWidth,
+      altitudeLo, altitudeHi, altitudeWidth, period, curvatureLo, curvatureHi, curvatureWidth)
+    let a1 = count > 0 ? mix(material.albedo, color0, m0) : material.albedo
+    let a2 = count > 1 ? mix(a1, color1, m1) : a1
+    let a3 = count > 2 ? mix(a2, color2, m2) : a2
+    let a4 = count > 3 ? mix(a3, color3, m3) : a3
+    let r1 = count > 0 ? mix(material.roughness, roughness.x, m0) : material.roughness
+    let r2 = count > 1 ? mix(r1, roughness.y, m1) : r1
+    let r3 = count > 2 ? mix(r2, roughness.z, m2) : r2
+    let s1 = count > 0 ? mix(material.specular, specular.x, m0) : material.specular
+    let s2 = count > 1 ? mix(s1, specular.y, m1) : s1
+    let s3 = count > 2 ? mix(s2, specular.z, m2) : s2
+    albedo = a4 * max(1 + variation * breakup, 0)
+    roughness = count > 3 ? mix(r3, roughness.w, m3) : r3
+    specular = count > 3 ? mix(s3, specular.w, m3) : s3
+  }
+}
+
+// One band of the terrain program: what it lays down (`color`, `roughness`, `specular`, at `amount` from 0 to 1) and
+// where, as a [lo, hi] range of each reading with the width of its soft edges. Every range is open unless the band
+// names it, so a band names only the masks it uses: `terrainBand("#7A8F3E", slope: [0, 32])` is turf on what lies
+// flatter than 32 degrees.
+let terrainOpen = 1000000
+function terrainBand(color, amount = 1, roughness = 0.95, specular = 0.02, slope = [0 - terrainOpen, terrainOpen],
+  slopeWidth = 6, altitude = [0 - terrainOpen, terrainOpen], altitudeWidth = 2, period = 0,
+  curvature = [0 - terrainOpen, terrainOpen], curvatureWidth = 0.02) = {
+  color: color
+  amount: amount
+  roughness: roughness
+  specular: specular
+  slope: slope
+  slopeWidth: slopeWidth
+  altitude: altitude
+  altitudeWidth: altitudeWidth
+  period: period
+  curvature: curvature
+  curvatureWidth: curvatureWidth
+}
+
+// The breakup every band's edges share: its noise's cells per metre, how far it moves each reading (degrees of slope,
+// metres of altitude, 1/m of curvature), how much it varies the brightness, and its seed.
+let terrainBreakup = { scale: 0.05, jitter [6, 3, 0.02], variation: 0.12, seed: 9127 }
+
+// Lays bands (one to four terrainBand records, the first lowest) and a breakup on a palette row, after whatever program
+// the row already runs: a cel style's light response keeps working, and a surface treatment the row carries is the
+// material the bands lay over. `world: 1` reads slope and altitude in world space instead of the creation's own frame.
+function terrainMaterial(base, bands, breakup = terrainBreakup, world = 0) =
+  terrainProgram(base, terrainColumns(bands), breakup, length(bands), terrainUse(terrainPadded(bands)[0]),
+    terrainUse(terrainPadded(bands)[1]), terrainUse(terrainPadded(bands)[2]), terrainUse(terrainPadded(bands)[3]), world)
+
+// The bands padded to four with empty ones, so every column the program reads has four entries.
+function terrainPadded(bands) = concat(bands, map(range(0, 4 - length(bands)), i => terrainBand("#000000", amount: 0)))
+// The readings a band names a range of (terrain's `use`): 1 slope, 2 altitude, 4 curvature.
+function terrainNamed(range) = range[1] - range[0] < 2 * terrainOpen ? 1 : 0
+function terrainUse(band) = terrainNamed(band.slope) + 2 * terrainNamed(band.altitude) + 4 * terrainNamed(band.curvature)
+function terrainColumns(bands) = {
+  color0: terrainPadded(bands)[0].color
+  color1: terrainPadded(bands)[1].color
+  color2: terrainPadded(bands)[2].color
+  color3: terrainPadded(bands)[3].color
+  amount: map(terrainPadded(bands), band => band.amount)
+  roughness: map(terrainPadded(bands), band => band.roughness)
+  specular: map(terrainPadded(bands), band => band.specular)
+  slopeLo: map(terrainPadded(bands), band => band.slope[0])
+  slopeHi: map(terrainPadded(bands), band => band.slope[1])
+  slopeWidth: map(terrainPadded(bands), band => band.slopeWidth)
+  altitudeLo: map(terrainPadded(bands), band => band.altitude[0])
+  altitudeHi: map(terrainPadded(bands), band => band.altitude[1])
+  altitudeWidth: map(terrainPadded(bands), band => band.altitudeWidth)
+  period: map(terrainPadded(bands), band => band.period)
+  curvatureLo: map(terrainPadded(bands), band => band.curvature[0])
+  curvatureHi: map(terrainPadded(bands), band => band.curvature[1])
+  curvatureWidth: map(terrainPadded(bands), band => band.curvatureWidth)
+}
+// Structural arguments are plain numbers here: a structural argument reaches the program as its expression, which reads
+// a function's scalar parameters but not a member of its record parameters.
+function terrainProgram(base, c, breakup, count, use0, use1, use2, use3, world) = base with {
+  shade [base.shade, terrain(c.color0, c.color1, c.color2, c.color3, c.amount, c.roughness, c.specular, c.slopeLo,
+    c.slopeHi, c.slopeWidth, c.altitudeLo, c.altitudeHi, c.altitudeWidth, c.period, c.curvatureLo, c.curvatureHi,
+    c.curvatureWidth, breakup.scale, breakup.jitter, breakup.variation, breakup.seed, count: count, use0: use0,
+    use1: use1, use2: use2, use3: use3, world: world)]
 }

@@ -27,6 +27,9 @@ public static class SdfMeshRecord {
     /// <summary>The selection flag for a row with no standing mesh. Its other words, including generation and
     /// placement, are zero; selection rejects it before reading them and the hit resolver rejects its empty indices.</summary>
     public const uint AbsentFlag = 8u;
+    /// <summary>The selection flag for a draw outside the static scene (<c>SdfMeshIrradianceScene.IsStatic</c>): one that
+    /// moves or animates, or glass. A pass drawing static casters alone (the distant shadow map) rejects it.</summary>
+    public const uint DynamicFlag = 16u;
     /// <summary>The first of two words: the absolute word of the mesh's shared level table, then its coarser level count.
     /// Each level, zero included, stores its first triangle, vertex count and error as three words.</summary>
     public const int LevelTableWord = 45;

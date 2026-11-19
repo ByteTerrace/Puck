@@ -7302,6 +7302,24 @@ export type WorldDeviceProfile = {
 export type WorldDisclosureTier = "Frames" | "Presentation" | "Replica";
 
 /**
+ * The key light's distant shadow map: one more shadow map past the far cascade, with texels of its own, so ridges shadow walls hundreds of metres off without costing the near cascades precision. It draws only what stands still and holds what it drew while the light turns within TurnDegrees and the eye stays within an eighth of the reach of where it was centred, so it costs a frame nothing between those changes. A device's quality row chooses it (DistantShadows); a view's shadow quality halves its texels as it does the cascades'.
+ */
+export type WorldDistantShadows = {
+  /**
+   * The distance, in metres from the eye in every direction, the map covers: past the far cascade's reach and up to the far distance, within [1, 8192].
+   */
+  reach: number;
+  /**
+   * The texels along each side of the map at full shadow quality: a power of two from 256 through 4096. Its texel is about twice the reach over this.
+   */
+  texels: number;
+  /**
+   * The light turn, in degrees, a held map tolerates before it is drawn again: the most its shadows lag a moving sun by, in (0, 10].
+   */
+  turnDegrees: number;
+};
+
+/**
  * A spatial region composed with the deterministic sequence that fills it.
  */
 export type WorldDistribution = {
@@ -10955,6 +10973,10 @@ export type WorldQualityPreset = {
    * Whether the preset lets the indirect volume's background rays take the device's ray hardware where it has it (world.rays); the software walk answers the same hits elsewhere.
    */
   rayQueries?: boolean;
+  /**
+   * The distant shadow map the device draws past the far cascade (its reach, texels and the light turn a held map tolerates): far shadows by rasterization, which need no ray hardware. Absent draws none.
+   */
+  distantShadows?: WorldDistantShadows | null;
 };
 
 export type WorldReaction = WorldReactionDiffuse | WorldReactionDecay | WorldReactionTransform | WorldReactionEmit | WorldReactionExpose | WorldReactionFlow | null;
@@ -11269,6 +11291,10 @@ export type WorldRenderDefaults = {
    * Whether the indirect volume's background rays (its probe trace, the relight's shadow rays and the camera sample) boot taking the device's ray hardware where it has it, through the scene's acceleration structures (world.rays). The software walk answers the same hits wherever it is off or the device has none. Absent is off.
    */
   rayQueries?: boolean;
+  /**
+   * The distant shadow map the world boots drawing past the far cascade (WorldDistantShadows); a quality preset's row replaces it. Absent draws none.
+   */
+  distantShadows?: WorldDistantShadows | null;
 };
 
 export type WorldRenderEnvironment = {
