@@ -248,6 +248,9 @@ it with `puck_world_stop`, which refuses any World the adapter did not start.
 The World runs from the store's build, which holds it while the World runs and
 leaves your `bin/Release` free to rebuild
 ([references/hosting-and-release.md](references/hosting-and-release.md)).
+Finish staging source files before the start. `WorldArtifactKey` reads Git
+status as well as file contents, so staging during the build-lease wait can
+invalidate the start even when no file bytes change.
 
 Codex discovers these tools through the session's tool inventory (search for
 `puck`); its repository MCP configuration uses the same launcher as Claude.

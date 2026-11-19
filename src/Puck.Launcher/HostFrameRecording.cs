@@ -115,8 +115,8 @@ public readonly record struct HostFrameDistribution(double Mean, double P50, dou
 }
 /// <summary>
 /// A bounded recording of every host iteration over a run: a second sink for the samples <see cref="HostFrameTimeline"/>
-/// takes for its ring, kept past the ring's <see cref="HostFrameTimeline.Capacity"/>. Its storage is allocated when it
-/// is created, so recording allocates nothing; an iteration past its capacity is counted in <see cref="Dropped"/>,
+/// takes for its ring, kept past the ring's <see cref="HostFrameTimeline.Capacity"/>. Iteration storage is allocated
+/// up front. World details are appended for the recorded iterations. An iteration past capacity is counted in <see cref="Dropped"/>,
 /// never stored and never hidden.
 /// </summary>
 /// <remarks>The timeline writes on the host pump; a reader on that thread sees every completed iteration.</remarks>

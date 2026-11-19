@@ -31,7 +31,7 @@ public enum HostFramePhase {
 /// inside it and the bytes every thread allocated in it, beside an independent per-step cost ring. The <c>host.frames</c> verb reads both. Phase 1 runs
 /// both on the host pump thread; counters use atomic operations for the future thread split.
 /// </summary>
-/// <remarks>Recording allocates nothing; only a reading formats text.</remarks>
+/// <remarks>The frame ring uses fixed storage. World-detail buffers grow as needed. Only a reading formats text.</remarks>
 public sealed class HostFrameTimeline {
     /// <summary>The iterations the ring holds.</summary>
     public const int Capacity = 4096;
