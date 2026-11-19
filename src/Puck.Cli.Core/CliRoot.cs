@@ -97,18 +97,24 @@ public static class CliRoot {
     /// <returns>A configuration with the parser's exception handler off and no process-termination deadline.</returns>
     public static InvocationConfiguration Invocation() => new() { EnableDefaultExceptionHandler = false, ProcessTerminationTimeout = Timeout.InfiniteTimeSpan };
 
-    // The parser hands a misspelled option to whichever value slot is still open, so a token that
-    // looks like an option is refused unless it follows "--", is a number, or reaches an argument
-    // that forwards its tokens to another tool (CliOptions.Forwarded).
-    private static IEnumerable<string> TokenErrors(ParseResult result) {
-        var escaped = result.Tokens.SkipWhile(predicate: token => (token.Type != TokenType.DoubleDash)).Skip(count: 1).Select(selector: token => token.Value).ToList();
-        var values = result.CommandResult.Children.Where(predicate: static child => (child is not ArgumentResult { Argument: CliForwardedArgument })).SelectMany(selector: child => child.Tokens).Select(selector: token => token.Value)
-            .Where(predicate: value => (value.StartsWith(value: '-') && (value.Length > 1) && !double.TryParse(
+    // A dashed token is a value, not an option, when it is a number or a negative list such as "-280,352,280": no option
+    // name starts with a digit or a decimal point after its dash.
+    private static bool LeadsWithNumber(string value) => (
+        double.TryParse(
             provider: System.Globalization.CultureInfo.InvariantCulture,
             result: out _,
             s: value,
             style: System.Globalization.NumberStyles.Float
-        )));
+        ) ||
+        (value is ['-', (>= '0' and <= '9') or '.', ..])
+    );
+    // The parser hands a misspelled option to whichever value slot is still open, so a token that
+    // looks like an option is refused unless it follows "--", is a number or a negative list of them, or reaches an
+    // argument that forwards its tokens to another tool (CliOptions.Forwarded).
+    private static IEnumerable<string> TokenErrors(ParseResult result) {
+        var escaped = result.Tokens.SkipWhile(predicate: token => (token.Type != TokenType.DoubleDash)).Skip(count: 1).Select(selector: token => token.Value).ToList();
+        var values = result.CommandResult.Children.Where(predicate: static child => (child is not ArgumentResult { Argument: CliForwardedArgument })).SelectMany(selector: child => child.Tokens).Select(selector: token => token.Value)
+            .Where(predicate: static value => (value.StartsWith(value: '-') && (value.Length > 1) && !LeadsWithNumber(value: value)));
 
         foreach (var value in values) {
             if (!escaped.Remove(item: value)) { yield return $"Unrecognized option '{value}'."; }

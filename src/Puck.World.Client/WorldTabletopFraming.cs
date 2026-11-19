@@ -83,7 +83,7 @@ public sealed class WorldTabletopFraming {
             _ => -Vector3.UnitZ,
         };
         var pitch = MathF.Min(
-            x: (((float)engage.Pitch) * (MathF.PI / 180f)),
+            x: float.DegreesToRadians(degrees: ((float)engage.Pitch)),
             y: MaximumPitchRadians
         );
         var tanHalf = MathF.Tan(x: (fieldOfViewRadians * 0.5f));
