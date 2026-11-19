@@ -427,7 +427,12 @@ of it at the surface. The range is where the light shows
 (`SdfPhotometry.RangeOf`). Each view's pass block carries a mask of the table's
 lights it shades (`SdfLightSelection`): a light whose sphere of range the view's
 frustum cannot see changes none of its pixels and is skipped, so a world holds up
-to 128 lights and a view pays only for those near what it shows.
+to 128 lights and a view pays only for those near what it shows. The views pass
+narrows the mask once more for each 8×8 tile (`sdfViewsTileLights` in
+`passes/sdf-views-lights.hlsli`): it bounds the tile's hit points by two boxes,
+the hits nearer than the middle of the tile's depth range and the rest, and keeps
+a light whose sphere of range meets a box and, for a spot, whose cone meets the
+sphere about it. A pixel then walks only the lights that can reach its tile.
 
 ## Photometric units and exposure
 

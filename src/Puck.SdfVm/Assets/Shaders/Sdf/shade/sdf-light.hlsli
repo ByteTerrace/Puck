@@ -196,25 +196,32 @@ struct SdfLightResponse {
     float attenuation;
 };
 
-// The lights a shading walk visits, in order: the lights table's the view shades, by the set bits of its light mask
-// (SdfLightSelection), then while screen lights are on each screen slot up to the highest bound one. The mask is the
-// pass block's, uniform over a dispatch, so every lane of a wave takes the same steps, and a light the view leaves out
-// costs nothing: the walk never visits it.
+// The lights a shading walk visits, in order: the lights table's, by the set bits of the mask the walk starts with, then
+// while screen lights are on each screen slot up to the highest bound one. The mask is the view's (the pass block's
+// lightMask, SdfLightSelection) or a subset of it no wider than a workgroup (views narrows it to each tile's lights,
+// sdfViewsTileLights), so every lane of a wave takes the same steps, and a light the mask leaves out costs nothing: the
+// walk never visits it. A mask may leave out only a light that adds nothing where the walk's lanes shade.
 struct SdfLightWalk {
+    uint4 mask;
     // The mask word the walk is reading and its bits still to visit; past the last word, the table is done.
     uint word;
     uint bits;
     // The next screen slot.
     uint screen;
 };
-SdfLightWalk sdfLightWalkStart() {
+SdfLightWalk sdfLightWalkStart(uint4 mask) {
     SdfLightWalk walk;
 
+    walk.mask = mask;
     walk.word = 0u;
-    walk.bits = sdfComponent(passGroup.lightMask, 0u);
+    walk.bits = sdfComponent(mask, 0u);
     walk.screen = 0u;
 
     return walk;
+}
+// A walk over every light the view shades.
+SdfLightWalk sdfLightWalkStart() {
+    return sdfLightWalkStart(passGroup.lightMask);
 }
 // The walk's next light in `light`, or false once every light is visited.
 bool sdfLightNext(inout SdfLightWalk walk, out SdfLightSource light) {
@@ -228,7 +235,7 @@ bool sdfLightNext(inout SdfLightWalk walk, out SdfLightSource light) {
     while (walk.word < words) {
         if (walk.bits == 0u) {
             walk.word++;
-            walk.bits = ((walk.word < words) ? sdfComponent(passGroup.lightMask, walk.word) : 0u);
+            walk.bits = ((walk.word < words) ? sdfComponent(walk.mask, walk.word) : 0u);
             continue;
         }
 

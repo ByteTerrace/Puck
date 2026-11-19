@@ -5,6 +5,7 @@
 #define PASSES_SDF_VIEWS_STAGE_HLSLI
 #include "sdf-light-stage.hlsli"
 #include "sdf-views-filter.hlsli"
+#include "sdf-views-lights.hlsli"
 #include "../shade/sdf-transport.hlsli"
 #include "../debug/sdf-debug-views.hlsli"
 
@@ -29,22 +30,28 @@ float3 sdfViewsStage(SdfPixel p, out float coverage, out float reactivity) {
         sdfViewsGatherFilter(p, shadowFilter);
     }
 #endif
-    if (!p.active) {
-        return float3(0.0, 0.0, 0.0);
-    }
 
-    SdfSurfaceSample s = sdfLoadSurfaceSample(worldVisibilityRecord(p.pixel, p.viewIndex));
+    SdfSurfaceSample s = (SdfSurfaceSample)0;
     // The record's hit (every hit the surface pass writes is a mesh's), resolved through the mesh hit door; a hit the door
     // rejects shades as a miss.
     SdfMeshHit meshHit = (SdfMeshHit)0;
-    if (s.hit) {
-        s.hit = sdfMeshResolveHit(s.meshDraw, s.meshTriangle, meshHit);
+    if (p.active) {
+        s = sdfLoadSurfaceSample(worldVisibilityRecord(p.pixel, p.viewIndex));
+        if (s.hit) {
+            s.hit = sdfMeshResolveHit(s.meshDraw, s.meshTriangle, meshHit);
+        }
     }
     bool useFinalShading = worldFinalShadingMode(p.viewMode);
     bool curvatureShading = worldCurvatureShadingEnabled();
     precise float3 rayTravel = p.rayDirection * s.t;
     precise float3 surfacePoint = p.rayOrigin + rayTravel;
     int material = s.material;
+    // The view's mode is uniform across the group, so every lane reaches the tile's barriers or none does.
+    uint4 lights = sdfViewsTileLights(p, useFinalShading, s.hit, surfacePoint, s.t);
+
+    if (!p.active) {
+        return float3(0.0, 0.0, 0.0);
+    }
 
     if ((ambientFilter || shadowFilter) && s.hit) {
         float ambient;
@@ -61,7 +68,7 @@ float3 sdfViewsStage(SdfPixel p, out float coverage, out float reactivity) {
         s.shadows = (shadowFilter ? shadows : s.shadows);
     }
 
-    float3 color = sdfLightStage(p, s, meshHit, surfacePoint, useFinalShading, curvatureShading, material, coverage, reactivity);
+    float3 color = sdfLightStage(p, s, meshHit, surfacePoint, useFinalShading, curvatureShading, material, lights, coverage, reactivity);
     float3 viewColor = sdfDebugView(p, s, color);
 
     if (!sdfDebugComposesFinal((uint)p.viewMode) && (p.viewMode != SDF_DEBUG_VIEW_SKY_COST)) {

@@ -690,9 +690,16 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   that feature even when the live opacity is one.
 - **Every light answers through one interface,** `shade/sdf-light.hlsli`; a new
   light kind is a branch there and nowhere else. Views and glass visit lights
-  through one walk (`sdfLightWalkStart`, `sdfLightNext`): the set bits of the
-  view's light mask, then the bound screens, so a light the view leaves out
-  costs no iteration. Index a vector at run time only through `sdfComponent`.
+  through one walk (`sdfLightWalkStart`, `sdfLightNext`): the set bits of a
+  light mask, then the bound screens, so a light the mask leaves out costs no
+  iteration. Glass walks the view's mask; views walks each 8×8 tile's
+  (`sdfViewsTileLights`, `passes/sdf-views-lights.hlsli`), the view's lights
+  whose range sphere (and spot cone) meets the boxes about the tile's hit
+  points. A mask may leave out only a light that adds nothing at the points its
+  lanes shade, so a new light kind or reach (an authored falloff past
+  `Param`) widens the tile test in the same change, or tiles cut its light
+  off. `SDF_VIEWS_OMIT_LIGHT_TILES` reads the tiles' saving. Index a vector at
+  run time only through `sdfComponent`.
 - **Cel shading is a style per material, not a whole-image filter.** A palette
   row's `toon` (`SdfMaterial.Toon`, material rows 22 to 25) shades that material;
   every other material inherits the world's default (`render.toon`, which

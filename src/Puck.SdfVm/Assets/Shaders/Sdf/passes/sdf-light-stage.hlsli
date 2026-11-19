@@ -51,8 +51,9 @@ float3 sdfScreenImagePoint(SdfPixel p, int material, float3 surfacePoint, out fl
 }
 
 // The stage shades with what the views stage resolved before it (sdfViewsStage): the hit the mesh hit door resolved,
-// the hit's surface point, whether the view shades finally, and the material the pixel shades with.
-float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, SdfMeshHit meshHit, float3 surfacePoint, bool useFinalShading, bool curvatureShading, int material, out float coverage, out float reactivity) {
+// the hit's surface point, whether the view shades finally, the material the pixel shades with, and the mask of the
+// lights its walk visits (sdfViewsTileLights).
+float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, SdfMeshHit meshHit, float3 surfacePoint, bool useFinalShading, bool curvatureShading, int material, uint4 lights, out float coverage, out float reactivity) {
     float3 color = float3(0.0, 0.0, 0.0);
 
     coverage = 0.0;
@@ -213,7 +214,7 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, SdfMeshHit meshHit, float3 
             float3 specular = float3(0.0, 0.0, 0.0);
             float attenuation = 1.0;
 #if !defined(SDF_VIEWS_OMIT_LIGHTS)
-            SdfLightWalk walk = sdfLightWalkStart();
+            SdfLightWalk walk = sdfLightWalkStart(lights);
             SdfLightSource light;
 
             [loop]
