@@ -1,0 +1,8 @@
+// The lead fixture world (`lead-world.puck`) with the `lead` removed from its finger driver. Everything the authority
+// computes is the same, so `lead-plain-tests.puck` plays the run of `lead-tests.puck` on it and the authority hashes agree.
+schema: "puck.world.definition.v1"
+basis: "avatars/moth"
+documentId: "lead-fixture"
+import "lead-world"
+
+leadWorld(led: false)
