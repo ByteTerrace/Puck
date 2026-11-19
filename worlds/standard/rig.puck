@@ -9,3 +9,41 @@ function swing(driver, axis, amplitude, pivot) = {
   amplitude: amplitude
   pivot: pivot
 }
+
+// Turns as unit quaternions [x, y, z, w], the spelling of every `rotation` a shape row carries, right-handed about their
+// axis in the frame the row is authored in.
+// A turn of `degrees` about the unit `axis`.
+function turnAbout(axis, degrees) = [
+  axis[0] * sine(degrees * 0.008726646259971648),
+  axis[1] * sine(degrees * 0.008726646259971648),
+  axis[2] * sine(degrees * 0.008726646259971648),
+  cosine(degrees * 0.008726646259971648)
+]
+// A turn about the unit `axis` by the angle, within a quarter turn either way, whose tangent is `t`: half-angle identities,
+// since the expression vocabulary has no inverse trigonometry.
+function turnByTangent(axis, t) = turnByCosine(axis, 1 / squareRoot(1 + t * t), t < 0 ? -1 : 1)
+// A turn about the unit `axis` by the angle whose cosine is `c`, the angle's sine taking the sign `sense`.
+function turnByCosine(axis, c, sense) = [
+  axis[0] * sense * squareRoot((1 - c) / 2),
+  axis[1] * sense * squareRoot((1 - c) / 2),
+  axis[2] * sense * squareRoot((1 - c) / 2),
+  squareRoot((1 + c) / 2)
+]
+// The turn `b` followed by the turn `a`: the quaternion product a·b.
+function turnAfter(a, b) = [
+  a[3] * b[0] + a[0] * b[3] + a[1] * b[2] - a[2] * b[1],
+  a[3] * b[1] - a[0] * b[2] + a[1] * b[3] + a[2] * b[0],
+  a[3] * b[2] + a[0] * b[1] - a[1] * b[0] + a[2] * b[3],
+  a[3] * b[3] - a[0] * b[0] - a[1] * b[1] - a[2] * b[2]
+]
+// The vector `v` turned by the unit quaternion `q`: v + w·t + u × t, where u is q's vector part and t = 2 u × v.
+function turnedBy(q, v) = turnedWith(q, v, [
+  2 * (q[1] * v[2] - q[2] * v[1]),
+  2 * (q[2] * v[0] - q[0] * v[2]),
+  2 * (q[0] * v[1] - q[1] * v[0])
+])
+function turnedWith(q, v, t) = [
+  v[0] + q[3] * t[0] + q[1] * t[2] - q[2] * t[1],
+  v[1] + q[3] * t[1] + q[2] * t[0] - q[0] * t[2],
+  v[2] + q[3] * t[2] + q[0] * t[1] - q[1] * t[0]
+]

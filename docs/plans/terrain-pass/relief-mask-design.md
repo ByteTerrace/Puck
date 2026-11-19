@@ -944,7 +944,7 @@ here was measured on a GPU.
 
 | Place | Region | Band | Is the region a shape of the creation? |
 |---|---|---|---|
-| The lake's bowl (`valley-north-west`) | Two ellipsoids, the basin and its outlet, built from the rows that carve them (`terrainBasinMask` in `worlds/standard/terrain.puck`) | 8 m, no relief inside | Yes: the carve |
+| The lake's bowl (`valley-north-west`) | Two ellipsoids, the basin and its outlet, built from the rows that carve them (`terrainCarveMask` in `worlds/standard/terrain.puck`) | 8 m, no relief inside | Yes: the carve |
 | The gallery's RELIEF MASK exhibit (`shape-noise-mask` in `worlds/debug/shapes.puck`), its bowl | One sphere | 8 cm, no relief inside | Yes: the carve |
 | The same exhibit, its slab | One box a little larger than the slab | 6 cm, relief inside only | No |
 | The glacier's cradle (planned) | One rounded box | Not authored yet | Yes: the carve |
