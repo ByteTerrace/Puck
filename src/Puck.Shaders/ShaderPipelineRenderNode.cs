@@ -894,6 +894,10 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
     private void Install(GraphBuild built, BuildKey key) {
         var next = key.Pipeline!;
 
+        // An install carries history cursors and replaces the checkpoint a rollback restores, so a frame still owed its
+        // hand-over's result is settled against the installed graph first.
+        SettleHandOver();
+
         // A candidate's descriptor pools are admitted into the device's heaps before it allocates anything; one that
         // does not fit is refused by name, the installed graph keeps presenting, and nothing grows.
         if (
@@ -1641,6 +1645,9 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
     /// <returns>The latest published surface, or an empty surface before the node has published one or once it is
     /// disposed.</returns>
     public Surface ProduceFrame(in FrameContext context) {
+        // A caller that rendered the previous frame inside a batch settles it after the flush; one that did not is settled
+        // here, before anything reads the history that frame committed.
+        SettleHandOver();
         try {
             return Produce(context: in context);
         } catch {
@@ -1757,7 +1764,7 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
                 exported: exported
             );
         } finally {
-            if ((exported is not null) && !OwesExportCompletion) {
+            if ((exported is not null) && (m_exportOwed is null)) {
                 m_export!.EndWrite(
                     image: exported,
                     written: exportWritten,
@@ -1882,7 +1889,7 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
             slot: slotIndex
         );
         if (job.Previewed) { m_preview!.Submitted(slot: slotIndex); }
-        CommitCadenceFrame();
+        CommitCadenceFrame(fence: slot.Fence!);
         m_frame++;
         m_frameLeases.MoveTo(destination: slot.Leases);
         NoteRenderGrid();
@@ -1901,7 +1908,7 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
         SubmitTiming(fence: slot.Fence!, slot: slotIndex);
         if (exported is not null) {
             if (DefersExportCompletion) {
-                OweExportCompletion(copy: slot.Fence!, image: exported);
+                OweExportCompletion(image: exported);
             } else {
                 exportValue = exported.CompleteWrite();
                 exportWritten = true;
