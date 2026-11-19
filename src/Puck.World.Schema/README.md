@@ -138,6 +138,8 @@ Rule operands accept these bounded channels:
 | `$match:<pattern>:<row>:<direction>:distance` | The step count to that cell, or -1 on the same terms |
 | `$phase:<row>` | The row's own generation—the same value a `PhaseGuard` checks against it |
 | `$clock:<music>:phaseError` | Signed tick distance from the world's musical clock's current position to the nearest beat: `elapsed mod ticksPerBeat`, or that minus `ticksPerBeat` past half a beat (tied toward "past"). `music` must name the document's declared `music` row. |
+| `$clock:<music>:beat`, `bar`, `beatInBar` | The clock's current beat and bar index since the music began, and the zero-based beat within its bar |
+| `$clock:<music>:phaseErrorAt\|beatAt\|barAt\|beatInBarAt:<owner>:<channel>:<kind>:<occurrence>` | The same values for one input event, at its captured time plus the owner's calibration: the phase error in fixed seconds, and the nearest beat's index, bar and place in the bar. Absent when the event is not retained or recorded no music coordinates ([clock operands](../../docs/reference/audio.md#clock-operands)) |
 
 A ray's first-blocker cell/distance is a `$match:` facet, not a `$board:`
 channel—the identical ray walk read through the pattern engine, generalized

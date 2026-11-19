@@ -238,9 +238,9 @@ public static partial class WorldDefinitionValidator {
             case null:
                 errors.Add(item: $"{path} is required.");
                 break;
-            case WorldEffect.SetVerticalVelocity or WorldEffect.ScaleVerticalVelocity or WorldEffect.PlanarImpulse or WorldEffect.Designate:
+            case var motionEffect when WorldBodyEffects.IsBodyMotion(motionEffect):
                 if (!WorldBodyEffects.TryLower(
-                    effect: effect,
+                    effect: motionEffect,
                     form: out _,
                     reason: out var bodyMotionReason,
                     refusal: out _,

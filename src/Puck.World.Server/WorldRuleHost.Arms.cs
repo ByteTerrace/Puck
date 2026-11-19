@@ -257,14 +257,25 @@ public sealed partial class WorldRuleHost {
 
         var tick = firing.Tick;
 
+        long? argument = null;
+        if (effect.Argument is not null && firing.Values[effect.Body is null ? 0 : 1].TryFinite(out var value)) {
+            argument = value;
+        }
+        if (effect.Body is not null && body is null) { return true; }
+
         var cue = new WorldGameplayCue(
+            Argument: argument,
             Body: body,
+            Generation: body is { } target ? Host.Population.Generation(index: target) : 0,
             Name: effect.Cue,
             Payload: effect.Payload,
             Tick: tick
         );
 
-        Host.GameplayCueTap?.Invoke(obj: cue);
+        if (ReferenceEquals(Arena, m_cueArena) && ReferenceEquals(m_tickCueReads, m_cueReads) &&
+            m_tickCueReads.TryGetValue(firing.RuleName, out var reads)) {
+            Host.Tick.RecordCue(cue, reads, Arena);
+        }
         if (Host.Output.HasNarrationSink) {
             Host.Output.Narrate(
                 channel: "world.cue",
@@ -346,21 +357,40 @@ public sealed partial class WorldRuleHost {
 
             return true;
         }
-        if (preflight) {
+        var instruction = new CompiledBodyInstruction(
+            Curve: operation.Curve,
+            Direction: operation.Direction,
+            UseMoveDirection: operation.UseMoveDirection,
+            DurationTicks: operation.DurationTicks,
+            Operation: operation.Operation,
+            StateSlot: -1,
+            Value: operation.Value
+        );
+        if (operation.Operation == BodyMotionOp.TimedMove) {
+            if (!body.CanStartTimedMove) {
+                return Refuse(
+                    code: WorldRuleEffectRefusal.BodyTargetInvalid,
+                    reason: $"timedMove requires body:{bodyIndex} to use a yaw-frame program with CommitPose",
+                    refusal: out refusal
+                );
+            }
+            if (!(preflight
+                ? body.CanPrepareTimedMove(in instruction)
+                : body.ApplyTargetedEffect(sourceIndex: -1, instruction: instruction))) {
+                return Refuse(
+                    code: RuleEffectRefusal.Arithmetic,
+                    reason: $"timedMove displacement is unrepresentable for body:{bodyIndex}",
+                    refusal: out refusal
+                );
+            }
             return true;
         }
+        if (preflight) { return true; }
 
         // A world-authored kinematic effect has no affecting body: passing the recipient would mint a false
         // Affected fact on its next action pass.
         _ = body.ApplyTargetedEffect(
-            instruction: new CompiledBodyInstruction(
-                Direction: operation.Direction,
-                UseMoveDirection: operation.UseMoveDirection,
-                DurationTicks: operation.DurationTicks,
-                Operation: operation.Operation,
-                StateSlot: -1,
-                Value: operation.Value
-            ),
+            instruction: instruction,
             sourceIndex: -1
         );
 

@@ -307,16 +307,24 @@ public sealed partial class WorldRuleHost : IStateReader, IEffectHost, IArenaTra
     );
     /// <inheritdoc/>
     public Fact Read(ClockOperand operand) {
-        if (operand.Input is not { } input) { return Fact.Finite(Host.ReadClockPhaseError(), CellKind.Int); }
+        if (operand.Input is not { } input) { return Fact.Finite(Host.ReadClock(facet: operand.Facet), CellKind.Int); }
         if (!TryInputOwner(input.Owner, out _, out var owner) || !TryInputRecord(operand: input, owner: owner!, record: out var record)) {
             return Fact.Absent(kind: CellKind.Fixed);
         }
         var capture = ((Host.Document.Definition.InputHistory?.Judgement ?? WorldInputJudgement.Capture) == WorldInputJudgement.Capture);
         var interval = (capture ? record.Capture : record.Admission);
 
-        return ((interval.Music is { } music)
-            ? Fact.Finite(value: music.PhaseError((capture ? record.Event.Offset : default), (capture ? record.Calibration : default)))
-            : Fact.Absent(kind: CellKind.Fixed));
+        if (interval.Music is not { } music) { return Fact.Absent(kind: operand.ValueKind); }
+
+        var offset = (capture ? record.Event.Offset : default);
+        var calibration = (capture ? record.Calibration : default);
+
+        return operand.Facet switch {
+            ClockFacet.Beat => Fact.Finite(kind: CellKind.Int, value: music.NearestBeat(offset: offset, calibration: calibration)),
+            ClockFacet.Bar => Fact.Finite(kind: CellKind.Int, value: music.NearestBar(offset: offset, calibration: calibration)),
+            ClockFacet.BeatInBar => Fact.Finite(kind: CellKind.Int, value: music.NearestBeatInBar(offset: offset, calibration: calibration)),
+            _ => Fact.Finite(value: music.PhaseError(offset, calibration)),
+        };
     }
     /// <inheritdoc/>
     public Fact Read(RegionOccupancyOperand operand) {
@@ -693,6 +701,7 @@ public sealed partial class WorldRuleHost : IStateReader, IEffectHost, IArenaTra
         m_rules = compilation.Rules;
         m_tables = compilation.Tables;
         m_ungroupedRules = compilation.Ungrouped;
+        CompileCueReads();
 
         AdmitRules(
             rules: m_rules,

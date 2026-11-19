@@ -353,7 +353,7 @@ public sealed class InputOwnerTests {
     [Theory]
     public void HistoricalClockJudgesHalfMillisecondBoundaryAtEitherRate(int rate) {
         var width = (50400UL / ((ulong)rate));
-        var segment = new WorldInputMusicSegment(ElapsedTicks: (50400 - width), Segment: "phrase", TicksPerBeat: 50400);
+        var segment = new WorldInputMusicSegment(BeatsPerBar: 4, ElapsedTicks: (50400 - width), Segment: "phrase", TicksPerBeat: 50400);
         var rawWidth = FixedTickConversion.SecondsOf(ratePerSecond: FixedTickConversion.TicksPerSecond, ticks: width).Value;
 
         Assert.Equal(-33, segment.PhaseError(FixedQ4816.FromRawBits(value: (rawWidth - 33)), default).Value);

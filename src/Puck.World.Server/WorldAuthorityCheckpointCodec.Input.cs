@@ -4,19 +4,13 @@ using Puck.World.Protocol;
 namespace Puck.World.Server;
 
 public static partial class WorldAuthorityCheckpointCodec {
-    private static void WriteInputInterval(WireWriter writer, WorldInputInterval interval) {
-        writer.WriteUInt64(value: interval.Tick); writer.WriteUInt64(value: interval.EngineStart); writer.WriteUInt64(value: interval.EngineDuration);
-        writer.WriteOptional(value: interval.Music, writeValue: static (w, music) => { w.WriteUInt64(value: music.ElapsedTicks); w.WriteInt64(value: music.TicksPerBeat); w.WriteString(value: music.Segment); });
-    }
-    private static WorldInputInterval ReadInputInterval(ref WireReader reader) => new(reader.ReadUInt64(), reader.ReadUInt64(), reader.ReadUInt64(),
-        reader.ReadOptional(readValue: static (ref WireReader r) => new WorldInputMusicSegment(r.ReadUInt64(), r.ReadInt64(), r.ReadString("input music segment"))));
     private static void WriteInputRecord(WireWriter writer, WorldInputRecord record) {
         writer.WriteUInt64(value: record.Id); writer.WriteUInt64(value: record.Epoch); WorldWireCodec.WriteInputEvent(writer, record.Event);
-        WriteInputInterval(writer, record.Capture); WriteInputInterval(writer, record.Admission);
+        WorldWireCodec.WriteInputInterval(writer, record.Capture); WorldWireCodec.WriteInputInterval(writer, record.Admission);
         writer.WriteUInt64(value: record.HoldPress); writer.WriteInt32(value: record.Crossing); writer.WriteFixed(value: record.Calibration);
     }
     private static WorldInputRecord ReadInputRecord(ref WireReader reader) => new(reader.ReadUInt64(), reader.ReadUInt64(),
-        WorldWireCodec.ReadInputEvent(reader: ref reader), ReadInputInterval(reader: ref reader), ReadInputInterval(reader: ref reader), reader.ReadUInt64(), reader.ReadInt32(), reader.ReadFixed());
+        WorldWireCodec.ReadInputEvent(reader: ref reader), WorldWireCodec.ReadInputInterval(reader: ref reader), WorldWireCodec.ReadInputInterval(reader: ref reader), reader.ReadUInt64(), reader.ReadInt32(), reader.ReadFixed());
     private static T[] ReadInputArray<T>(ref WireReader reader, int maximum, int minimumBytes, WireReadItem<T> read) {
         var count = reader.ReadCount(field: "input checkpoint array", maximum: maximum, minimum: 0);
 
@@ -28,8 +22,8 @@ public static partial class WorldAuthorityCheckpointCodec {
         return values;
     }
     private static void WriteInputRuntime(WireWriter writer, WorldInputRuntimeCheckpoint state) {
-        WriteInputInterval(writer, state.Interval);
-        writer.WriteArray(items: state.Intervals, writeItem: WriteInputInterval);
+        WorldWireCodec.WriteInputInterval(writer, state.Interval);
+        writer.WriteArray(items: state.Intervals, writeItem: WorldWireCodec.WriteInputInterval);
         writer.WriteArray(items: state.Owners, writeItem: static (w, participant) => {
             WorldWireCodec.WritePrincipal(w, participant.Principal);
             w.WriteInt32(value: participant.Body); w.WriteInt32(value: participant.Generation);
@@ -45,7 +39,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             WorldWireCodec.WriteIntent(w, input.Image); w.WriteFixed(value: input.Calibration);
             WorldWireCodec.WriteInputSwitch(w, input.LastSwitch);
             w.WriteUInt64(value: input.RefusedBatches); w.WriteUInt32(value: input.Sequence); w.WriteUInt64(value: input.EventId);
-            WriteInputInterval(w, input.LastCapture); w.WriteFixed(value: input.LastOffset); w.WriteUInt64(value: input.Step); w.WriteInt32(value: input.StepEvents);
+            WorldWireCodec.WriteInputInterval(w, input.LastCapture); w.WriteFixed(value: input.LastOffset); w.WriteUInt64(value: input.Step); w.WriteInt32(value: input.StepEvents);
             w.WriteArray(items: input.Sources, writeItem: static (w, source) => {
                 WorldWireCodec.WriteInputSource(w, source.Source);
                 w.WriteInt64(value: source.RawValue); w.WriteUInt64(value: source.Activation); w.WriteBoolean(value: source.AwaitingNeutral);
@@ -60,8 +54,8 @@ public static partial class WorldAuthorityCheckpointCodec {
         });
     }
     private static WorldInputRuntimeCheckpoint ReadInputRuntime(ref WireReader reader) {
-        var interval = ReadInputInterval(reader: ref reader);
-        var intervals = ReadInputArray(maximum: 1_000_000, minimumBytes: 24, read: ReadInputInterval, reader: ref reader);
+        var interval = WorldWireCodec.ReadInputInterval(reader: ref reader);
+        var intervals = ReadInputArray(maximum: 1_000_000, minimumBytes: 24, read: WorldWireCodec.ReadInputInterval, reader: ref reader);
         var owners = ReadInputArray(ref reader, ushort.MaxValue, 64, static (ref WireReader r) => {
             var principal = WorldWireCodec.ReadPrincipal(ref r);
             var body = r.ReadInt32(); var generation = r.ReadInt32();
@@ -73,7 +67,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             var image = WorldWireCodec.ReadIntent(reader: ref r); var calibration = r.ReadFixed();
             var boundary = WorldWireCodec.ReadInputSwitch(reader: ref r);
             var refused = r.ReadUInt64(); var sequence = r.ReadUInt32(); var eventId = r.ReadUInt64();
-            var capture = ReadInputInterval(reader: ref r); var offset = r.ReadFixed(); var step = r.ReadUInt64(); var stepEvents = r.ReadInt32();
+            var capture = WorldWireCodec.ReadInputInterval(reader: ref r); var offset = r.ReadFixed(); var step = r.ReadUInt64(); var stepEvents = r.ReadInt32();
             var sources = ReadInputArray(ref r, ushort.MaxValue, 30, static (ref WireReader r) => new WorldInputSourceState(
                 WorldWireCodec.ReadInputSource(reader: ref r), r.ReadInt64(), r.ReadUInt64(), r.ReadBoolean()));
             var holds = ReadInputArray(ref r, ChannelLimits.MaxChannels, 134, static (ref WireReader r) =>

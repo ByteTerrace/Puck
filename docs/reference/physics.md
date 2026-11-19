@@ -116,6 +116,16 @@ and fixed-point tuning primitives. The World schema owns the gate-bearing host r
 their `Puck.State.Rules.GateToken` programs run through `RuleEvaluation.Decide`, with
 `ActionGateOperand` reading the World's `IActionGateFacts`. The remaining tuning primitives are in Physics (`FixedMotionDefaults`, `FixedMotionScalarEnvelope`, `FixedSpeed`, `FixedTurn`,
 `FixedUpTurnRates`, `FixedObstructionLatch`).
+
+`FixedTimedMove.Sample` reads cumulative displacement and signed yaw at an
+offset in engine ticks. The host takes the difference between successive
+displacement samples and sends it through the ordinary body sweep at the
+sampled orientation. `WorldBody.PredictTimedDisplacement` reads the same
+displacement from the current sample through a requested horizon, before
+contact response. It covers the authored move's translation. The volume
+swept by a rotating collider between samples belongs to
+[predicted sweep and frontier](../plans/readable-interaction.md#build-order).
+
 `ShapeVelocity` reads the one unified velocity-shaping table,
 `FixedMotionTuning.Shaping` (`FixedBodyShaping[]`): the first row whose gate
 opens governs—a row with no `Across` facet shapes the whole vector through
