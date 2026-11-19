@@ -149,7 +149,16 @@ public readonly record struct WorldSnapshot(
     ReadOnlyMemory<WorldGameplayCue> Cues = default,
     byte MusicBoundary = 0,
     byte MusicSenses = 0
-);
+) {
+    /// <summary>Finds an entity incarnation in this snapshot's own delivered body table.</summary>
+    public bool TryFindEntity(int body, int generation, out EntitySnapshot entity) {
+        foreach (ref readonly var entry in Entries.Span) {
+            if (entry.Active && entry.Index == body && entry.Generation == generation) { entity = entry; return true; }
+        }
+        entity = default;
+        return false;
+    }
+}
 /// <summary>One lattice or typed document-cell write carried on a snapshot.</summary>
 /// <param name="Cell">The lattice cell index (z, then layer, then x), or declared document-cell ordinal.</param>
 /// <param name="Field">The field's index within its named region.</param>

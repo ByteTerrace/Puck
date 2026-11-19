@@ -20,16 +20,16 @@ public sealed partial class WorldRuleHost {
             if (!factsByRule.TryGetValue(rule.Name, out var facts)) { factsByRule.Add(rule.Name, facts = new()); }
             var access = RuleDataflow.Reads(rule);
             RuleDataflow.CollectJudgement(rule, access, facts);
-            CollectCueFacts(rule.Effects, facts);
+            RuleDataflow.CollectEffectFacts(rule.Effects, facts, includeSources: true);
             if (rule is CompiledWorldFactsRule world) {
                 if (world.Interaction is not null) { wholePopulation.Add(rule.Name); }
                 if (world.Decision is { } decision) {
                     RuleDataflow.CollectGateFacts(decision.Interrupt ?? [], facts);
-                    CollectCueFacts(decision.OnNoChoice, facts);
+                    RuleDataflow.CollectEffectFacts(decision.OnNoChoice, facts, includeSources: true);
                     foreach (var option in decision.Options) {
                         RuleDataflow.CollectGateFacts(option.Gate, facts);
                         RuleDataflow.CollectExpressionSchedulingFacts(option.Score, facts);
-                        CollectCueFacts(option.Effects, facts);
+                        RuleDataflow.CollectEffectFacts(option.Effects, facts, includeSources: true);
                     }
                 }
             }
@@ -95,18 +95,6 @@ public sealed partial class WorldRuleHost {
 
     private static bool ContainsCue(IRuleEffect[] effects) => effects.Any(effect =>
         effect is WorldCueEffect || effect.Arms.Any(ContainsCue));
-
-    private static void CollectCueFacts(IRuleEffect[] effects, RuleNeedsBuilder facts) {
-        foreach (var effect in effects) {
-            if (effect is IfEffect branch) { RuleDataflow.CollectGateFacts(branch.Condition, facts); }
-            foreach (var source in effect.Sources) {
-                facts.AddFact(source.Operand);
-                RuleDataflow.CollectExpressionSchedulingFacts(source.Program, facts);
-                CompiledCellRef.CollectFacts(source.KeyFrom, facts);
-            }
-            foreach (var arm in effect.Arms) { CollectCueFacts(arm, facts); }
-        }
-    }
 
     private void BeginCueReads() {
         m_tickCueReads = m_cueReads;

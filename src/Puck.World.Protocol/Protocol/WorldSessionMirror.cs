@@ -411,16 +411,7 @@ public sealed class WorldSessionMirror : IClientSink {
             return false;
         }
 
-        foreach (ref readonly var entry in snapshot.Entries.Span) {
-            if (
-                (entry.Index == entity.Index) &&
-                (entry.Generation == entity.Generation) &&
-                entry.Active
-            ) {
-                return true;
-            }
-        }
-        return false;
+        return snapshot.TryFindEntity(entity.Index, entity.Generation, out _);
     }
 
     /// <summary>The durable address of the entity currently occupying a slot.</summary>

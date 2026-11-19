@@ -21,7 +21,7 @@ public sealed partial class WorldTick {
                 (reads.FullBodies && !fullBodies) || !reads.Rows.All(view.ReadsCueDependency)) { continue; }
             if (reads.Placements.Length != 0 && !reads.Placements.All(id => (placements ??= view.Placements).Any(p => p.Id == id))) { continue; }
             if (cue.Body is { } body) {
-                if (!ContainsCueBody(snapshot.Entries.Span, body, cue.Generation)) { continue; }
+                if (!snapshot.TryFindEntity(body, cue.Generation, out _)) { continue; }
             } else if (!fullBodies) { continue; }
 
             (disclosed ??= []).Add(cue);
@@ -36,7 +36,7 @@ public sealed partial class WorldTick {
         IReadOnlyList<WorldPlacement>? placements = null;
         foreach (var edge in Host.Events.Edges) {
             if (edge.Family is not (WorldEventFamily.RegionEnter or WorldEventFamily.RegionExit or WorldEventFamily.SeatJoin)) { continue; }
-            if (!ContainsCueBody(snapshot.Entries.Span, (int)edge.A, Host.Population.Generation((int)edge.A))) { continue; }
+            if (!snapshot.TryFindEntity((int)edge.A, Host.Population.Generation((int)edge.A), out _)) { continue; }
             if (edge.Family is WorldEventFamily.RegionEnter or WorldEventFamily.RegionExit &&
                 !(placements ??= view.Placements).Any(placement => placement.Id == edge.GateA.Id)) { continue; }
             senses |= (byte)(1 << (int)edge.Family);
@@ -44,10 +44,4 @@ public sealed partial class WorldTick {
         return senses;
     }
 
-    private static bool ContainsCueBody(ReadOnlySpan<EntitySnapshot> entries, int body, int generation) {
-        foreach (ref readonly var entry in entries) {
-            if (entry.Index == body && entry.Generation == generation) { return true; }
-        }
-        return false;
-    }
 }

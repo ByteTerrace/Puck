@@ -18,10 +18,8 @@ public sealed class WorldPresentationCueFeed {
         List<WorldPresentationCue>? cues = null;
         foreach (ref readonly var cue in snapshot.Cues.Span) {
             if (cue.Body is not { } body) { (cues ??= []).Add(new(cue, null)); continue; }
-            foreach (ref readonly var entity in snapshot.Entries.Span) {
-                if (entity.Index != body || entity.Generation != cue.Generation) { continue; }
+            if (snapshot.TryFindEntity(body, cue.Generation, out var entity)) {
                 (cues ??= []).Add(new(cue, entity.Position));
-                break;
             }
         }
         return new(snapshot.Tick, snapshot.MusicBoundary, snapshot.MusicSenses, cues?.ToArray() ?? []);
