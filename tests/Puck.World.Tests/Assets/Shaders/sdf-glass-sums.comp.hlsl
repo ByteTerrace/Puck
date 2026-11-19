@@ -25,11 +25,12 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
         uint faceIndex = glassOrders[((id.x * faces) + index)];
         float4 face = glassFaces[faceIndex];
 
-        sdfGlassAccumulate(word, face.x, face.y, (face.z > 0.5), glassAbsorptions[(uint)face.w].xyz, faceIndex, ((3u * faceIndex) + 1u));
+        sdfGlassAccumulate(word, face.x, 0.0, face.y, (face.z > 0.5), glassAbsorptions[(uint)face.w].xyz,
+            (int)face.w, faceIndex, ((3u * faceIndex) + 1u), false);
     }
-    float4 first = glassFaces[glassOrders[(id.x * faces)]];
+    float opaque = glassFaces[0].y;
 
-    glassResults[uint2(id.x, 0u)] = float4(sdfGlassOpticalDepthAt(word), sdfGlassThicknessAt(word, first.x, first.y));
+    glassResults[uint2(id.x, 0u)] = float4(sdfGlassOpticalDepthAt(word), sdfGlassThicknessAt(word, 0.0, opaque));
     for (uint texel = 0u; (texel < ((SDF_GLASS_SUM_WORDS + 1u) / 2u)); texel++) {
         uint low = sdfGlassSumsRW[(word + (2u * texel))];
         uint high = (((2u * texel) + 1u) < SDF_GLASS_SUM_WORDS) ? sdfGlassSumsRW[(word + (2u * texel) + 1u)] : 0u;
