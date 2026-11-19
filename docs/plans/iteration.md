@@ -71,7 +71,7 @@ table with their own readings.
 | Shader reload | a constant in `sdf-composite.comp.hlsl`, then `world.shaders.reload` of the source tree | 3.2 | 3.2 | 48.6 | not reached |
 | Restart, store reused | World restarted after an SdfVm edit the bake identity does not read | 47.0 | 55.0 | 55.2 | not reached |
 | Boot, every mesh missed | first boot after an edit to `SdfMeshPathBake`, which the bake identity reads | 53.2 | 322.0 | 322.3 | not reached |
-| Cold boot, empty cache | fresh `--cache-dir` | not measured | | | |
+| Cold boot, empty cache | fresh `--cache-dir`, on the merged tip | 51.0 | 314.3 | 314.5 | not reached |
 
 What the baseline shows:
 
@@ -96,6 +96,10 @@ What the baseline shows:
 - **A kernel reload shows in 3 seconds and finishes in 49.** The first changed
   pipeline installs quickly; the request stays pending until every carried
   source in the tree has compiled.
+- **A cold boot shows the whole world after five minutes.** With an empty
+  cache the bake ran 268 seconds (`[sdf.mesh-bake] done … loaded=0 …
+  seconds=268.045`, GPU busy 241 s at an occupancy of 0.03), on top of the
+  51 seconds to the first frame.
 - **A restart spends 47 seconds before its first frame** even with every mesh
   in the store (`loaded=2`, no dispatches), and the World's own build after
   the engine edit ran for more than two minutes before that (the store build
