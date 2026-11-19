@@ -9728,6 +9728,10 @@ export type WorldNestedViewQuality = {
    * Whether the view keeps ambient occlusion: false drops it. Absent keeps the world's.
    */
   ambientOcclusion?: boolean | null;
+  /**
+   * How many of the viewed world's irradiance-volume levels the view reads, counted from the coarsest, at least one: that world traces, relights and publishes those alone, so a world seen through a small glass measures only its coarse light. Absent, or at least the volume's level count, reads every level.
+   */
+  indirectLevels?: number | null;
 };
 
 export type WorldObserverDisclosure = {

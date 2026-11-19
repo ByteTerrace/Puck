@@ -343,6 +343,10 @@ public sealed partial class SdfWorldTables {
             estimatedSeconds = 0d;
             return false;
         }
+        // While a staged draw waits for its mesh (DrawsAwaitMeshes) the landing fills a hole the frame shows, so it is
+        // taken under the owed allowance as the bake's lattice of a hole is; landing orders no hole's mesh first, so it
+        // lands all it owes then.
+        public bool OwesAll => tables.DrawsAwaitMeshes;
         public int UploadBytes(object job) => (((LandingJob)job).Words * sizeof(uint));
         public void Record(object job, in SdfGpuWorkRecording recording) => tables.RecordLanding(job: ((LandingJob)job), recording: in recording);
         public void Complete(object job, SdfGpuWorkReadback readback) {

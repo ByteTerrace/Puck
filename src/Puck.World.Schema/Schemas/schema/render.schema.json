@@ -847,6 +847,14 @@
               "null"
             ],
             "default": null
+          },
+          "indirectLevels": {
+            "description": "How many of the viewed world\u0027s irradiance-volume levels the view reads, counted from the coarsest, at least one: that world traces, relights and publishes those alone, so a world seen through a small glass measures only its coarse light. Absent, or at least the volume\u0027s level count, reads every level.",
+            "type": [
+              "integer",
+              "null"
+            ],
+            "default": null
           }
         },
         "required": [

@@ -195,6 +195,21 @@ the volume first owed work (`SdfMeshIrradiance.Owe`), not from the hold. A
 settled PNG must have a capture completion line after the main residency's
 done line; a nested residency's done line is insufficient.
 
+An unheld frame meters the volume's work on the presentation's one budget,
+ordered across residencies by what the player sees. A residency's service draws
+by its frame's share of the display's pixels (`SdfFrame.DisplayShare`, a turn
+in `SdfGpuWorkBudget.Takes`); a residency nothing read last frame takes
+`SdfGpuWorkBudget.LeastWeight`. While a seen frame's views read a level that
+has not published (`SdfMeshIrradiance.OwesFirstLight`, `first-light-owed=` on
+the `[sdf.mesh-gi]` line), the probe service's jobs are owed work: they take
+the owed allowance the bake's holes take and the coordinator cuts them to it.
+A glass's world measures only the levels its frame reads
+(`SdfFrame.IndirectLevels`, from the presenting world's `render.nested`
+`indirectLevels`; `measured-from=` on the `[sdf.mesh-gi]` line names the
+finest): a finer level keeps its slots but is never listed, refilled or
+published, the relight reads it at zero spacing, and a level the frame comes to
+read again is refilled and republished whole.
+
 | Part | Owner |
 |---|---|
 | Static scene and ray visibility | `SdfMeshIrradianceScene` |

@@ -167,6 +167,19 @@ public sealed partial class WorldViewGraphHost {
     public double? DisplayShareOf(string instance) => ((m_presentedShares.Count == 0)
         ? null
         : m_presentedShares.GetValueOrDefault(key: instance).Height);
+    /// <summary>Returns the latest measured share of the display's pixels an instance reaches through footprints: its
+    /// share of the display's width times its share of the height, measured as <see cref="DisplayShareOf"/> measures the
+    /// height.</summary>
+    /// <param name="instance">The instance's name.</param>
+    /// <returns>The share, zero for an instance no footprint showed, or <see langword="null"/> before the first
+    /// measurement.</returns>
+    public double? DisplayAreaOf(string instance) {
+        if (m_presentedShares.Count == 0) { return null; }
+
+        var (width, height) = m_presentedShares.GetValueOrDefault(key: instance);
+
+        return (width * height);
+    }
     // The refresh a footprint showing a nested view asks for: every frame unless the views lever is on and the view covers
     // few enough pixels of the display (SdfUpdateRateTiers.ViewHertz).
     private RenderGraphRefresh ViewRefresh(string consumer, string producer, double coverage, int glass, SdfUpdateRates rates) {

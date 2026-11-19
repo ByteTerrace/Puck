@@ -2324,7 +2324,10 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
         m_animator = animator;
         m_sdfDocuments = sdfDocuments;
         m_graphs = graphs;
-        if (graphs is not null) { settings.DisplayShare = name => graphs.DisplayShareOf(instance: name); }
+        if (graphs is not null) {
+            settings.DisplayShare = name => graphs.DisplayShareOf(instance: name);
+            settings.DisplayArea = name => graphs.DisplayAreaOf(instance: name);
+        }
 
         // Resolve the primer snapshot's render poses once so the capacity probe and the camera anchors are live before
         // the first frame. Alpha 0 is immaterial — a freshly spawned entity has previous == current pose.

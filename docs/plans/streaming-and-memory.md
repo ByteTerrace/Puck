@@ -3055,6 +3055,15 @@ a reserved scene build.
 **Replaces.** The second demand derivation; retention in cells and triangles;
 a volume per world nothing demands; the CPU hierarchy as placement's input.
 
+**Built so far.** A glass's world measures only the levels the presenting
+world's nested-view table keeps at the glass's presented height
+(`render.nested`'s `indirectLevels`, `SdfFrame.IndirectLevels`), still in a
+window per residency rather than levels allocated on demand; its service draws
+on the one background budget by the glass's share of the display's pixels
+(`SdfGpuWorkBudget.Takes`); and a seen volume's first light is owed work under
+the owed allowance (`SdfMeshIrradiance.OwesFirstLight`), though its debt is not
+yet counted apart from geometry's holes: both are the budget's `owed-jobs`.
+
 **Check.** Exists: `probe-cache-bytes`, `trace-scene-cpu-array-bytes`,
 `probe-cache-blocks`. Adds: the trace tier installed and pending, scene
 builds with their bytes and peak, lighting owed in frames a view shows, and

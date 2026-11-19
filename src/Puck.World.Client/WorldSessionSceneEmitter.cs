@@ -542,6 +542,10 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
             IndirectGains = environment.Indirect.Gains,
             IndirectBounces = environment.Indirect.Bounces,
             IndirectBudget = environment.Indirect.Budget,
+            // What the presenting session's nested-view table keeps of the volume at the glass's presented size, and the
+            // share of the display the glass covers, which weighs this world's background work against the others'.
+            IndirectLevels = (Session?.NestedIndirectLevels(view: ViewName) ?? 0),
+            DisplayShare = (Session?.NestedDisplayShare(view: ViewName) ?? 1f),
             IndirectLightingGrid = environment.Indirect.LightingGrid,
             IndirectApply = environment.Indirect.Apply,
             Lights = environment.Lights,

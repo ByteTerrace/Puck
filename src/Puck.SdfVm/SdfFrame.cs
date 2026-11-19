@@ -464,6 +464,16 @@ public sealed record SdfFrame(
     /// <summary>Gets the irradiance work each frame grants the volume and the lighting age it reports past; the default
     /// bounds nothing.</summary>
     public SdfIndirectBudget IndirectBudget { get; init; }
+    /// <summary>Gets how many of the irradiance volume's levels the frame's views read, counted from the coarsest
+    /// (<see cref="SdfMeshIrradiance.LevelsOf"/>): the volume traces, relights and publishes those alone, so a world seen
+    /// through a small glass measures only its coarse light. Zero, the default, reads every level.</summary>
+    public int IndirectLevels { get; init; }
+    /// <summary>Gets the share of the display's pixels the frame's views are presented over, in [0, 1]: one for a frame
+    /// the presentation shows whole (the default), a glass's share for a world seen through it, zero for one no view
+    /// showed on the latest measured frame. It weighs the residency's draw on the presentation's one background budget
+    /// (<see cref="SdfGpuWork.Weigh"/>), and a frame no view shows owes no first light
+    /// (<see cref="SdfMeshIrradiance.OwesFirstLight"/>). Presentation only.</summary>
+    public float DisplayShare { get; init; } = 1f;
     /// <summary>The fixed angular and radiometric grids used by indirect captures. Zero leaves values continuous.</summary>
     public SdfIndirectLightingGrid IndirectLightingGrid { get; init; }
 

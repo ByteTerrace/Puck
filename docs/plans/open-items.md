@@ -1474,8 +1474,14 @@ The volume's cost and convergence:
   session residency with its own copy of the world's meshes, the shared
   detail bias climbs (to 6 on Direct3D 12, 14 on Vulkan), every coarsening
   wave rebuilds both irradiance scenes past the 64-draw union rule, the
-  batches in flight are dropped, and the session's full volume takes most of
-  a 1 ms-a-frame grant first come. It ranks the fixes.
+  batches in flight are dropped, and the session's full volume took most of
+  a 1 ms-a-frame grant first come. It ranks the fixes. Its fixes 1 and 7 are
+  built: the residencies' services divide the one budget by their display
+  share (`SdfGpuWorkBudget.Takes`), a glass's world measures only the volume
+  levels the nested-view table keeps (`SdfFrame.IndirectLevels`), a seen
+  volume's first light takes the owed allowance the bake's holes take
+  (`SdfMeshIrradiance.OwesFirstLight`), and structure compactions are cut to
+  the allowance. The rebuild churn (its fixes 2 to 6 and 8) is still open.
 - [medium] A held frame's hold stops at the instance. A view withheld for its
   lighting records no pass (`IRenderGraphPackageFactory.WithheldOf`), but an
   instance that reads it is only marked stale and still records its passes,

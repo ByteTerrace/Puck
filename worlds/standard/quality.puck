@@ -47,10 +47,14 @@ render {
   // display's height it is presented at, the same at every tier until a device table chooses per device. A view the
   // size of a postcard on screen keeps every term but draws its cascades at half resolution; one smaller than that
   // drops its cascades and ambient occlusion, and its lights take the probes' answer, as a point past every cascade does.
-  // A view filling a third of the display or more gives up nothing, so a portal walked up to is lit as the room behind it.
+  // The world behind a view up to half the display's height measures only the irradiance volume's storey and far levels
+  // (`indirectLevels: 2`), and behind a view smaller than a postcard only the far level, so a painting's world lights
+  // itself at a fraction of the probes the world the player stands in traces. A view filling half the display or more
+  // gives up nothing, so a portal walked up to is lit as the room behind it.
   nested [
-    { share: 0.125, shadows: Off, ambientOcclusion: false }
-    { share: 0.33, shadows: Medium }
+    { share: 0.125, shadows: Off, ambientOcclusion: false, indirectLevels: 1 }
+    { share: 0.33, shadows: Medium, indirectLevels: 2 }
+    { share: 0.5, indirectLevels: 2 }
   ]
   low {
     bloom: Off

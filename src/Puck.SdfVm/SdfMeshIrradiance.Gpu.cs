@@ -63,9 +63,14 @@ public sealed partial class SdfMeshIrradiance {
     private void RepublishAll() {
         m_republishOwed = false;
         for (var level = 0; level < m_levels.Length; level++) {
-            var first = m_layout.OffsetOf(level: level);
-            for (var slot = first; slot < first + m_layout.CountOf(level: level); slot++) { _ = m_levels[level].Changed.Add(index: slot); }
+            if (m_layout.Measures(level: level)) { OweSlots(level: level); }
         }
+    }
+    // Under the gate: owes every slot of a level to its next publication.
+    private void OweSlots(int level) {
+        var first = m_layout.OffsetOf(level: level);
+
+        for (var slot = first; slot < first + m_layout.CountOf(level: level); slot++) { _ = m_levels[level].Changed.Add(index: slot); }
     }
 
     // Allocation tokens never repeat. Selection validates both words on the device, so a cached CPU description
@@ -173,7 +178,7 @@ public sealed partial class SdfMeshIrradiance {
                         var bound = SdfMeshProbeRelight.AgeBoundOf(level, snapshot.AgeTarget);
                         candidates.Add(new Candidate(Cell: (x, y, z), Band: priority.Band, Morton: priority.Morton, Level: level, LitAt: present ? probe.LitAt : 0, Trace: false,
                             Overdue: bound > 0 && age >= bound, Stale: present && probe.Lighting != snapshot.Lighting.Version, Urgency: AgePriority(age, bound, InAnyView(center, in snapshot), probe.Moved)));
-                        if (present) { RecordAge(ages, level, age); }
+                        if (present && layout.Measures(level: level)) { RecordAge(ages, level, age); }
                     }
                 }
             }
@@ -195,7 +200,9 @@ public sealed partial class SdfMeshIrradiance {
         m_gpuAnswer = selected;
         var take = 0;
         var stale = false;
+        // The selection answers every slot, so the slots keep one layout; a level the views do not read takes no work.
         for (var i = 0; i < layout.TotalCount; i++) {
+            if (!layout.Measures(level: candidates[i].Level)) { continue; }
             stale |= (selected[i] & 4) != 0;
             if ((selected[i] & 2) != 0) { candidates[take++] = candidates[i] with { Trace = (selected[i] & 1) != 0 }; }
         }
@@ -226,7 +233,8 @@ public sealed partial class SdfMeshIrradiance {
             var low = snapshot.Lows[level];
             var dims = snapshot.Layout.DimsOf(level);
             rows[3 + 2 * level] = new(low.X, low.Y, low.Z, dims.X | (dims.Y << 10) | (dims.Z << 20));
-            rows[4 + 2 * level] = new(snapshot.Layout.SpacingOf(level), 0);
+            // A level the volume does not measure reads as unpublished, as the views read it (PublishedOf).
+            rows[4 + 2 * level] = new(snapshot.Layout.Measures(level) ? snapshot.Layout.SpacingOf(level) : Vector3.Zero, 0);
         }
         rows[9] = new(AxisTotals[0], AxisTotals[1], AxisTotals[2], AxisTotals[3]);
         rows[10] = new(AxisTotals[4], AxisTotals[5], 0, 0);

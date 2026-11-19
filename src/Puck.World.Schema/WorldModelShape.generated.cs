@@ -4586,6 +4586,7 @@ public static partial class WorldModelShape {
                 M("share", typeof(global::System.Single), typeof(global::Puck.World.WorldNestedViewQuality), "Share", Read | Write | Required, static value => ((global::Puck.World.WorldNestedViewQuality)value).Share),
                 M("shadows", typeof(global::System.Nullable<global::Puck.World.ShadowTier>), typeof(global::Puck.World.WorldNestedViewQuality), "Shadows", Read | Write, static value => ((global::Puck.World.WorldNestedViewQuality)value).Shadows),
                 M("ambientOcclusion", typeof(global::System.Nullable<global::System.Boolean>), typeof(global::Puck.World.WorldNestedViewQuality), "AmbientOcclusion", Read | Write, static value => ((global::Puck.World.WorldNestedViewQuality)value).AmbientOcclusion),
+                M("indirectLevels", typeof(global::System.Nullable<global::System.Int32>), typeof(global::Puck.World.WorldNestedViewQuality), "IndirectLevels", Read | Write, static value => ((global::Puck.World.WorldNestedViewQuality)value).IndirectLevels),
             ],
             []),
         T(typeof(global::Puck.World.WorldObserverDisclosure), true, JsonTypeInfoKind.Object, null,
