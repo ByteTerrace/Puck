@@ -280,6 +280,7 @@ public static class SdfIsaHlsl {
         declarations.Count(name: "SDF_PROBE_UNKNOWN_MATERIAL", value: SdfMeshProbeTrace.UnknownMaterial);
         declarations.Count(name: "SDF_PROBE_NODE_COUNT_BITS", value: SdfMeshProbeTrace.NodeCountBits);
         declarations.Count(name: "SDF_PROBE_NODE_WORDS", value: SdfMeshProbeTrace.NodeWords);
+        declarations.Count(name: "SDF_PROBE_PACKED_NODE_WORDS", value: SdfMeshProbeTrace.PackedNodeWords);
         declarations.Count(name: "SDF_PROBE_ENTRY_WORDS", value: SdfMeshProbeTrace.EntryWords);
         declarations.Count(name: "SDF_PROBE_NORMAL_WORD", value: SdfMeshProbeTrace.NormalWord);
         declarations.Count(name: "SDF_PROBE_GEOMETRY_WORD", value: SdfMeshProbeTrace.GeometryWord);

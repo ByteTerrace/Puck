@@ -67,12 +67,19 @@ public sealed class SdfMeshIrradianceTraceDeviceLawTests(ITestOutputHelper outpu
         words[0] = 1;
         Box(1, -1, 1);
         if (geometry) {
+            // One entry naming an instance at 32, a packed geometry node at 16 and its braid frame at 24: low corner -1,
+            // one unit a step. Node 16 spans steps 0 to 2 (-1 to 1) and names itself as its first child; its second, at
+            // 20, spans steps 1001 to 1002 (1000 to 1001), which no ray from the origin reaches.
             words[7] = (8u << SdfMeshProbeTrace.NodeCountBits) | 1u;
-            words[8] = 32; words[9] = 16;
+            words[8] = 32; words[9] = 16; words[10] = 24;
             words[32 + SdfMeshProbeTrace.IdentityWord] = 1;
-            Box(16, -1, 1);
-            Box(23, 1000, 1001);
-            words[22] = 16u << SdfMeshProbeTrace.NodeCountBits;
+            Packed(16, 0, 2);
+            Packed(20, 1001, 1002);
+            words[19] = 16u << SdfMeshProbeTrace.NodeCountBits;
+            for (var axis = 0; axis < 3; axis++) {
+                words[24 + axis] = BitConverter.SingleToUInt32Bits(-1);
+                words[27 + axis] = BitConverter.SingleToUInt32Bits(1);
+            }
         } else {
             words[7] = 1u << SdfMeshProbeTrace.NodeCountBits;
             Box(8, 1000, 1001);
@@ -84,6 +91,12 @@ public sealed class SdfMeshIrradianceTraceDeviceLawTests(ITestOutputHelper outpu
                 words[node + axis] = BitConverter.SingleToUInt32Bits(low);
                 words[node + 3 + axis] = BitConverter.SingleToUInt32Bits(high);
             }
+        }
+        // A packed node whose three axes span the same steps (SdfMeshProbeTrace.PackedNodeWords).
+        void Packed(int node, uint low, uint high) {
+            words[node] = low | (low << 16);
+            words[node + 1] = low | (high << 16);
+            words[node + 2] = high | (high << 16);
         }
     }
 

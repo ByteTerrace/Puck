@@ -175,11 +175,80 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
         public readonly int First => (m_firstAndCount >> CountBits);
         // A leaf's primitive count; zero for an inner node.
         public readonly int Count => m_firstAndCount & ((1 << CountBits) - 1);
+        // The first index and count as one word, as a packed node keeps them.
+        public readonly int LinkWord => m_firstAndCount;
 
         // The most primitives a leaf can hold.
         public const int MaxCount = ((1 << CountBits) - 1);
 
         public void Link(int first, int count) => m_firstAndCount = (first << CountBits) | count;
+    }
+    // 16 bytes: a geometry node's bounds as steps of its braid's frame (BraidFrame), then the link Node holds. The GPU
+    // record is the same words (SdfMeshProbeTrace.PackedNodeWords), decoded by sdfProbePackedSlab.
+    internal struct PackedNode {
+        private ushort m_lowX, m_lowY, m_lowZ, m_highX, m_highY, m_highZ;
+        private int m_firstAndCount;
+
+        public readonly int First => (m_firstAndCount >> SdfMeshProbeTrace.NodeCountBits);
+        public readonly int Count => m_firstAndCount & Node.MaxCount;
+        public readonly uint Link => unchecked((uint)m_firstAndCount);
+
+        public static PackedNode Of(in Node node, in BraidFrame frame) => new() {
+            m_lowX = BraidFrame.Below(value: node.Low.X, low: frame.Low.X, step: frame.Step.X),
+            m_lowY = BraidFrame.Below(value: node.Low.Y, low: frame.Low.Y, step: frame.Step.Y),
+            m_lowZ = BraidFrame.Below(value: node.Low.Z, low: frame.Low.Z, step: frame.Step.Z),
+            m_highX = BraidFrame.Above(value: node.High.X, low: frame.Low.X, step: frame.Step.X),
+            m_highY = BraidFrame.Above(value: node.High.Y, low: frame.Low.Y, step: frame.Step.Y),
+            m_highZ = BraidFrame.Above(value: node.High.Z, low: frame.Low.Z, step: frame.Step.Z),
+            m_firstAndCount = node.LinkWord,
+        };
+
+        // The record's first three words, each two steps with the first in the low half.
+        public readonly uint Word(int index) => index switch {
+            0 => (m_lowX | ((uint)m_lowY << 16)),
+            1 => (m_lowZ | ((uint)m_highX << 16)),
+            _ => (m_highY | ((uint)m_highZ << 16)),
+        };
+        public readonly Vector3 LowIn(in BraidFrame frame) => frame.Decode(steps: new Vector3(x: m_lowX, y: m_lowY, z: m_lowZ));
+        public readonly Vector3 HighIn(in BraidFrame frame) => frame.Decode(steps: new Vector3(x: m_highX, y: m_highY, z: m_highZ));
+    }
+    // A braid subtree's frame: its root's low corner and a step per axis such that PackedSteps steps reach at least its
+    // root's high corner. A bound decodes to low + steps * step, the same float expression on the GPU (sdfProbePackedSlab,
+    // marked precise), so both walks read one box.
+    //
+    // Invariant: a decoded low is at most the node's true low and a decoded high at least its true high, so a packed
+    // node never admits less than the float node it packs; Below and Above, the only encoders, check each step against
+    // that same decode.
+    internal readonly record struct BraidFrame(Vector3 Low, Vector3 Step) {
+        public static BraidFrame Over(Vector3 low, Vector3 high) {
+            var step = Vector3.Max(value1: ((high - low) / SdfMeshProbeTrace.PackedSteps), value2: Vector3.Zero);
+
+            return new(Low: low, Step: new Vector3(x: Reaching(high: high.X, low: low.X, step: step.X), y: Reaching(high: high.Y, low: low.Y, step: step.Y), z: Reaching(high: high.Z, low: low.Z, step: step.Z)));
+        }
+        public Vector3 Decode(Vector3 steps) => (Low + (steps * Step));
+        public Vector3 High => Decode(steps: new Vector3(value: SdfMeshProbeTrace.PackedSteps));
+
+        // One axis's step, raised until the last step reaches the high bound in the decode's own float arithmetic.
+        private static float Reaching(float low, float high, float step) {
+            while ((low + (SdfMeshProbeTrace.PackedSteps * step)) < high) { step = MathF.BitIncrement(x: step); }
+            return step;
+        }
+        // The largest step count whose decode lies at or below the value.
+        public static ushort Below(float value, float low, float step) {
+            if (!(step > 0f)) { return 0; }
+            var steps = Math.Clamp(value: (int)MathF.Floor(x: ((value - low) / step)), min: 0, max: SdfMeshProbeTrace.PackedSteps);
+
+            while ((steps > 0) && ((low + (steps * step)) > value)) { steps--; }
+            return (ushort)steps;
+        }
+        // The smallest step count whose decode lies at or above the value.
+        public static ushort Above(float value, float low, float step) {
+            if (!(step > 0f)) { return 0; }
+            var steps = Math.Clamp(value: (int)MathF.Ceiling(x: ((value - low) / step)), min: 0, max: SdfMeshProbeTrace.PackedSteps);
+
+            while ((steps < SdfMeshProbeTrace.PackedSteps) && ((low + (steps * step)) < value)) { steps++; }
+            return (ushort)steps;
+        }
     }
 
     /// <summary>Builds the scene of a frame's static mesh draws: every draw that is not dynamic.</summary>
@@ -317,11 +386,14 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
                 ref readonly var instance = ref instances[index];
 
                 triangles += instance.Geometry.Count;
-                foreach (var braid in instance.Geometry.Braids) {
-                    ref readonly var node = ref instance.Geometry.Nodes[braid];
+                var braids = instance.Geometry.Braids;
 
-                    (lows[at], highs[at]) = (instance.Identity ? (node.Low, node.High) : Bounds(high: node.High, low: node.Low, matrix: instance.ObjectToWorld));
-                    entries[at++] = new Entry(Instance: index, Node: braid);
+                for (var braid = 0; (braid < braids.Length); braid++) {
+                    ref readonly var frame = ref instance.Geometry.Frames[braid];
+                    var (low, high) = (frame.Low, frame.High);
+
+                    (lows[at], highs[at]) = (instance.Identity ? (low, high) : Bounds(high: high, low: low, matrix: instance.ObjectToWorld));
+                    entries[at++] = new Entry(Instance: index, Node: braids[braid], Braid: braid);
                 }
             }
             if (count > 0) {
@@ -414,7 +486,7 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
         distance = maximum;
         bakeHalfDiagonal = 0;
         if ((content.NodeCount > 0) && Slab(low: content.Nodes[0].Low, high: content.Nodes[0].High, origin: origin, inverse: inverse, maximum: distance, entry: out _)) {
-            Walk(distance: ref distance, inverse: inverse, leaves: ref nearest, nodes: content.Nodes, origin: origin, start: 0, counters: Counters);
+            Walk(distance: ref distance, inverse: inverse, leaves: ref nearest, nodes: new FloatNodes(nodes: content.Nodes), origin: origin, start: 0, counters: Counters);
         }
         instance = nearest.Instance;
         triangle = instance < 0 ? -1 : content.Instances[instance].Geometry.Triangles[nearest.Triangle];
@@ -443,7 +515,7 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
         var distance = maximum;
 
         if ((content.NodeCount > 0) && Slab(low: content.Nodes[0].Low, high: content.Nodes[0].High, origin: origin, inverse: inverse, maximum: distance, entry: out _)) {
-            Walk(distance: ref distance, inverse: inverse, leaves: ref any, nodes: content.Nodes, origin: origin, start: 0, counters: Counters);
+            Walk(distance: ref distance, inverse: inverse, leaves: ref any, nodes: new FloatNodes(nodes: content.Nodes), origin: origin, start: 0, counters: Counters);
         }
         return (any.Instance < 0);
     }
@@ -452,24 +524,27 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
     // answers true ends the walk. A hit shortens distance, which prunes the nodes behind it. The caller has admitted
     // start: the top level's root by its own test, a braid subtree by the top-level leaf that names it.
     [SkipLocalsInit]
-    private static void Walk<TLeaves>(Node[] nodes, int start, Vector3 origin, Vector3 inverse, ref float distance, ref TLeaves leaves, WorkCounterSet counters) where TLeaves : struct, ILeaves {
+    private static void Walk<TNodes, TLeaves>(TNodes nodes, int start, Vector3 origin, Vector3 inverse, ref float distance, ref TLeaves leaves, WorkCounterSet counters) where TNodes : struct, INodes where TLeaves : struct, ILeaves {
         Span<int> stack = stackalloc int[StackDepth];
         var top = 0;
 
         stack[top++] = start;
 
         while (top > 0) {
-            ref readonly var node = ref nodes[stack[--top]];
+            var node = stack[--top];
+            var count = nodes.Count(node: node);
 
-            if (node.Count > 0) {
-                if (leaves.Visit(first: node.First, count: node.Count, distance: ref distance)) { return; }
+            if (count > 0) {
+                if (leaves.Visit(first: nodes.First(node: node), count: count, distance: ref distance)) { return; }
                 continue;
             }
 
-            var left = node.First;
+            var left = nodes.First(node: node);
             var right = (left + 1);
-            var hitLeft = Slab(low: nodes[left].Low, high: nodes[left].High, origin: origin, inverse: inverse, maximum: distance, entry: out var leftEntry);
-            var hitRight = Slab(low: nodes[right].Low, high: nodes[right].High, origin: origin, inverse: inverse, maximum: distance, entry: out var rightEntry);
+            nodes.Box(high: out var leftHigh, low: out var leftLow, node: left);
+            nodes.Box(high: out var rightHigh, low: out var rightLow, node: right);
+            var hitLeft = Slab(low: leftLow, high: leftHigh, origin: origin, inverse: inverse, maximum: distance, entry: out var leftEntry);
+            var hitRight = Slab(low: rightLow, high: rightHigh, origin: origin, inverse: inverse, maximum: distance, entry: out var rightEntry);
 
             if (top + (hitLeft ? 1 : 0) + (hitRight ? 1 : 0) > stack.Length) {
                 counters.Count(SdfMeshIrradiance.TraversalFaults);
@@ -512,6 +587,30 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
     private interface ILeaves {
         bool Visit(int first, int count, ref float distance);
     }
+    // The nodes a walk reads: the top level's float nodes, or one braid of a geometry's packed nodes in its frame.
+    private interface INodes {
+        int Count(int node);
+        int First(int node);
+        void Box(int node, out Vector3 low, out Vector3 high);
+    }
+    private readonly struct FloatNodes(Node[] nodes) : INodes {
+        public int Count(int node) => nodes[node].Count;
+        public int First(int node) => nodes[node].First;
+        public void Box(int node, out Vector3 low, out Vector3 high) {
+            ref readonly var at = ref nodes[node];
+
+            (low, high) = (at.Low, at.High);
+        }
+    }
+    private readonly struct PackedNodes(PackedNode[] nodes, BraidFrame frame) : INodes {
+        public int Count(int node) => nodes[node].Count;
+        public int First(int node) => nodes[node].First;
+        public void Box(int node, out Vector3 low, out Vector3 high) {
+            ref readonly var at = ref nodes[node];
+
+            (low, high) = (at.LowIn(frame: in frame), at.HighIn(frame: in frame));
+        }
+    }
     // The top level's leaves: a braid subtree of a draw's geometry each, walked by the ray in the geometry's frame. A ray
     // carried through an affine transform keeps its parameter, so distances compare across draws.
     private struct DrawLeaves(Entry[] entries, Instance[] instances, Vector3 origin, Vector3 direction, Vector3 inverse, bool any, WorkCounterSet counters) : ILeaves {
@@ -525,7 +624,7 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
                 var local = (instance.Identity ? direction : Vector3.TransformNormal(normal: direction, matrix: instance.WorldToObject));
                 var triangles = new TriangleLeaves(any: any, direction: local, geometry: instance.Geometry, origin: (instance.Identity ? origin : Vector3.Transform(position: origin, matrix: instance.WorldToObject)));
 
-                Walk(distance: ref distance, inverse: (instance.Identity ? inverse : Reciprocal(direction: local)), leaves: ref triangles, nodes: instance.Geometry.Nodes, origin: triangles.Origin, start: entry.Node, counters: counters);
+                Walk(distance: ref distance, inverse: (instance.Identity ? inverse : Reciprocal(direction: local)), leaves: ref triangles, nodes: new PackedNodes(frame: instance.Geometry.Frames[entry.Braid], nodes: instance.Geometry.Nodes), origin: triangles.Origin, start: entry.Node, counters: counters);
                 if (triangles.Hit >= 0) {
                     Instance = entry.Instance;
                     Triangle = triangles.Hit;
@@ -613,7 +712,8 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
     }
 
     // A top-level primitive: one braid subtree (its root node) of one draw's geometry.
-    private readonly record struct Entry(int Instance, int Node);
+    // A top-level leaf: a draw, the root node of one of its geometry's braids, and that braid's ordinal (its frame).
+    private readonly record struct Entry(int Instance, int Node, int Braid);
     // One draw: its geometry, its transform and the transform's inverse (world to the mesh's frame), the matrix that
     // carries a normal of the mesh's frame to world space with the winding the transform gives it, its program material
     // base and its mesh's triangle materials.
@@ -672,13 +772,17 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
     // triangle whose box is loose about it (a long thin one a merged polygon leaves, SdfMeshPlanarMerge) holds several
     // leaf positions, each bounded by a piece of it, so a ray tests it only where it passes near.
     internal sealed class Geometry {
-        public long HierarchyBytes => Nodes.LongLength * System.Runtime.CompilerServices.Unsafe.SizeOf<Node>() +
-            (Triangles.LongLength + Braids.LongLength) * sizeof(int);
+        public long HierarchyBytes => Nodes.LongLength * System.Runtime.CompilerServices.Unsafe.SizeOf<PackedNode>() +
+            Frames.LongLength * System.Runtime.CompilerServices.Unsafe.SizeOf<BraidFrame>() + (Triangles.LongLength + Braids.LongLength) * sizeof(int);
+        // The words the geometry's GPU block holds: its packed nodes, its triangle ordinals, then its braids' frames.
+        public int GpuWords => checked(Nodes.Length * SdfMeshProbeTrace.PackedNodeWords + Triangles.Length + Frames.Length * SdfMeshProbeTrace.FrameWords);
         public required int[] Braids { get; init; }
+        // Each braid's frame, in the order of Braids; every node of a braid's subtree is packed in it.
+        public required BraidFrame[] Frames { get; init; }
         public int Count => (Indices.Length / 3);
         public required ReadOnlyMemory<uint> Indices { get; init; }
         public required SdfMesh Mesh { get; init; }
-        public required Node[] Nodes { get; init; }
+        public required PackedNode[] Nodes { get; init; }
         public required ReadOnlyMemory<Vector3> Positions { get; init; }
         public required int[] Triangles { get; init; }
         public int Depth { get; init; }
@@ -726,7 +830,7 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
                     at += piece.Count;
                 }
 
-                var (nodes, _, order, braids, depth, medians) = Hierarchy.Build(braid: BraidTriangles, count: total, highs: highs, leaf: LeafTriangles, lows: lows, name: $"mesh GI geometry ({count} triangles)", rent: false);
+                var (nodes, frames, order, braids, depth, medians) = Hierarchy.BuildPacked(braid: BraidTriangles, count: total, highs: highs, leaf: LeafTriangles, lows: lows, name: $"mesh GI geometry ({count} triangles)");
 
                 try {
                     var triangles = new int[total];
@@ -735,7 +839,7 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
                         triangles[index] = owners[order[index]];
                     }
 
-                    return new Geometry { Braids = braids, Indices = mesh.Indices, Mesh = mesh, Nodes = nodes, Positions = mesh.Positions, Triangles = triangles, Depth = depth, MedianSplits = medians };
+                    return new Geometry { Braids = braids, Frames = frames, Indices = mesh.Indices, Mesh = mesh, Nodes = nodes, Positions = mesh.Positions, Triangles = triangles, Depth = depth, MedianSplits = medians };
                 } finally {
                     RentedArrays.Return(array: order);
                 }
@@ -869,6 +973,20 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
         // wide, over the first count primitives of the bounds. The nodes are rented for the caller to return when rent
         // says so, and exactly as long as their count otherwise.
         public static (Node[] Nodes, int NodeCount, int[] Order, int[] Braids, int Depth, int MedianSplits) Build(Vector3[] lows, Vector3[] highs, int count, int leaf, int braid, string name, bool rent) {
+            Node[] nodes = [];
+            var (nodeCount, order, braids, depth, medians) = Build(braid: braid, count: count, highs: highs, leaf: leaf, lows: lows, name: name, take: hierarchy => nodes = hierarchy.CopyNodes(rent: rent));
+
+            return (nodes, nodeCount, order, braids, depth, medians);
+        }
+        // As Build, with each braid's subtree packed in that braid's frame straight from the build's chunks.
+        public static (PackedNode[] Nodes, BraidFrame[] Frames, int[] Order, int[] Braids, int Depth, int MedianSplits) BuildPacked(Vector3[] lows, Vector3[] highs, int count, int leaf, int braid, string name) {
+            PackedNode[] nodes = [];
+            BraidFrame[] frames = [];
+            var (_, order, braids, depth, medians) = Build(braid: braid, count: count, highs: highs, leaf: leaf, lows: lows, name: name, take: hierarchy => (nodes, frames) = hierarchy.Pack());
+
+            return (nodes, frames, order, braids, depth, medians);
+        }
+        private static (int NodeCount, int[] Order, int[] Braids, int Depth, int MedianSplits) Build(Vector3[] lows, Vector3[] highs, int count, int leaf, int braid, string name, Action<Hierarchy> take) {
             ArgumentOutOfRangeException.ThrowIfGreaterThan(value: leaf, other: Node.MaxCount);
             ArgumentOutOfRangeException.ThrowIfGreaterThan(value: count, other: Math.Min(val1: lows.Length, val2: highs.Length));
 
@@ -877,19 +995,54 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
 
             try {
                 var depth = hierarchy.BuildNode(count: count, first: 0, node: 0, wide: true, depth: 0);
-                var braids = new int[hierarchy.m_braids.Count];
 
                 hierarchy.m_braids.Sort();
-                for (var index = 0; (index < braids.Length); index++) { braids[index] = hierarchy.m_braids[index].Node; }
-
-                var nodes = hierarchy.CopyNodes(rent: rent);
-
+                take(hierarchy);
                 handed = true;
-                return (nodes, hierarchy.m_nodeCount, hierarchy.m_order, braids, depth, hierarchy.m_medianSplits);
+                return (hierarchy.m_nodeCount, hierarchy.m_order, hierarchy.Braids, depth, hierarchy.m_medianSplits);
             } finally {
                 hierarchy.ReturnWorkspace();
                 if (!handed) { RentedArrays.Return(array: hierarchy.m_order); }
             }
+        }
+        // The braids' root nodes, in the order of their first leaf positions.
+        private int[] Braids {
+            get {
+                var braids = new int[m_braids.Count];
+
+                for (var index = 0; (index < braids.Length); index++) { braids[index] = m_braids[index].Node; }
+                return braids;
+            }
+        }
+        // Packs each braid's subtree in that braid's frame (its root's box); the nodes above the braids, which no walk
+        // reads (the top level enters a geometry at its braids), are packed in the root's frame.
+        private (PackedNode[] Nodes, BraidFrame[] Frames) Pack() {
+            var packed = new PackedNode[m_nodeCount];
+            var frames = new BraidFrame[m_braids.Count];
+            Span<int> stack = stackalloc int[StackDepth];
+            var whole = BraidFrame.Over(high: At(node: 0).High, low: At(node: 0).Low);
+
+            for (var index = 0; (index < m_nodeCount); index++) { packed[index] = PackedNode.Of(frame: in whole, node: in At(node: index)); }
+            for (var braid = 0; (braid < frames.Length); braid++) {
+                var root = m_braids[braid].Node;
+                var frame = frames[braid] = BraidFrame.Over(high: At(node: root).High, low: At(node: root).Low);
+                var top = 0;
+
+                stack[top++] = root;
+                while (top > 0) {
+                    var index = stack[--top];
+                    ref readonly var node = ref At(node: index);
+
+                    packed[index] = PackedNode.Of(frame: in frame, node: in node);
+                    // Children follow their parent; an empty geometry's root is a leaf of no primitives.
+                    if ((node.Count == 0) && (node.First > index)) {
+                        stack[top++] = node.First;
+                        stack[top++] = (node.First + 1);
+                    }
+                }
+            }
+
+            return (packed, frames);
         }
 
         // A node's storage, its chunk rented by the first build task to reach it.
