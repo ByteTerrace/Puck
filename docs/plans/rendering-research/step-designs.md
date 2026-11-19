@@ -3374,15 +3374,14 @@ else waits for one.
 Owning plan: [runtime and delivery](../runtime-and-delivery.md#the-presentation-view),
 which is where produce stops reading server state.
 
-*The first step.* A memo that lists what `SdfWorldResidency.Prepare` reads
-on the client. For each input it names the client record that covers it:
-the state mirror's revision (`WorldStateMirror`, refreshed from
-`WorldStateStamp.MovedRows`), the scene's revision vector
-(`ISdfSceneEmitter.WriteRevision`), the tick's snapshot, the clock phase
-evaluated for the presented tick, or the camera. For each record it says
-what the record proves and for how long. Inputs with no record are listed
-as gaps. Then a prototype that closes those gaps in the existing revision
-vector and lets a still view stand on it.
+*The first step* is written: [the memo](bet1-client-records.md) lists what
+`SdfWorldResidency.Prepare` reads on the client, names the client record
+that covers each input and what it proves, and lists the inputs with none.
+It recommends that the shortcut skip the capture and leave alone the
+decision of whether the picture stands, and it gives the prototype's
+steps with a check for each. The first of them counts the captures that
+change nothing. The later ones add the missing records, then build the
+shortcut in a second vector kept beside the revision vector.
 
 Two limits are stated with it. A quiet network is not a still picture:
 a sky moving along a proved clock span sends nothing, so a result that
@@ -3400,9 +3399,9 @@ gap. The savings are read in a separate pass with the audit off, from the
 same named queue of background work in both runs, as rays traced and bytes
 uploaded and not as a count of jobs.
 
-*When it starts.* The memo starts now. The prototype starts only if the
-breakdown of produce shows that capturing a shown, unchanged world is a
-real cost.
+*When it starts.* The count can start now. The rest of the prototype
+starts only if the breakdown of produce shows that capturing a shown,
+unchanged world is a real cost.
 
 *What it shows in the debug world.* At a settled view in the gallery whose
 inputs are stable, produce falls to upkeep while the audit counts no
@@ -3912,7 +3911,7 @@ The SDR outputs do not.
   `transmit-plane`.
 - Decision 11's receiver masks as a conservative union, and boxes for
   rigidly skinned draws.
-- The first bet's memo and prototype
+- The first bet's count and prototype
   ([the bets](../rendering-research.md#the-bets)), before decision 2's last
   step is considered.
 - The split image history (decision 13), in the plan's first wave because
@@ -4024,11 +4023,11 @@ independent of each other.
   is judged by the casters it admits and the shadow that results. A
   rigidly skinned draw is culled when it cannot show and still shadows a
   visible receiver.
-- **The first bet.** The memo lists every input `SdfWorldResidency.Prepare`
-  reads on the client with the client record that covers it, or says it
-  has none, and what each record proves and for how long. In the prototype,
-  a settled view in the gallery whose inputs are stable stands on that
-  record, and produce there falls to the residencies' upkeep. Captures are
+- **The first bet.** In the prototype, a world shown through a window or
+  on a screen skips its capture while its own scene is still, and produce
+  for it falls to the residency's upkeep.
+  [The memo](bet1-client-records.md) says why the boot world's own
+  capture stays. Captures are
   counted by residency and by cause, with each consumer's changed inputs
   recorded, so a root capture owed to scheduling is told apart from a
   missed change. The audit compares each skip with the full decision and
@@ -4489,10 +4488,11 @@ Each item names the work that needs it. Research holds only that work.
 - **Nested views in shipped engines**, and transparency with bounded
   memory, if decision 14 still leaves a portal-crossing frame costing close
   to two views.
-- **Change propagation in incremental systems**, with the first bet's
-  memo. How build systems and incremental compilers (Salsa
-  among them) track what a result read, what tracking costs against the
-  work it saves, and how they recover from a dependency they missed.
+- **Change propagation in incremental systems**, before the first bet's
+  prototype. [The memo](bet1-client-records.md#how-this-compares-with-incremental-build-systems)
+  read how Salsa records what a result read, reuses it and orders its
+  checks. Still to read: *Build systems à la carte*, and what tracking
+  costs against the work it saves.
 - **Light through openings**, before the sixth bet's prototype. Light
   fields sampled on a plane (Levoy and Hanrahan), how shipped engines light
   a room through a portal, and how a published sample's age and scope are
