@@ -62,85 +62,114 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
             m_inputDefinitions[slot] = route.Endpoint.Definition;
             if (replace) { seat.Input!.Admit(route.Endpoint, principal, route.EntityIndex, freshAttachment); }
         }
-        if (route.Endpoint.Mirror.TryInput(owner: principal, publication: out var publication)) { _ = seat.Input!.Reconcile(publication: publication, router: m_inputRouter, seat: seat, slot: slot); } else { seat.Input!.Admit(route.Endpoint, principal, route.EntityIndex, freshAttachment: false); }
+        if (TryRouteInput(principal: principal, publication: out var publication, route: route)) { _ = seat.Input!.Reconcile(publication: publication, router: m_inputRouter, seat: seat, slot: slot); } else { seat.Input!.Admit(route.Endpoint, principal, route.EntityIndex, freshAttachment: false); }
         if (m_inputRouter is { } router) { seat.Input!.AcknowledgeReleasedButtons(router: router, slot: slot); }
     }
+    // The one door a seat's input publication at its route's authority is read through: under the seat's own principal,
+    // else under whichever owner that authority answers the routed body's input as (a forwarded authority stamps a
+    // traveler as its peer, a principal this client never names).
+    private static bool TryRouteInput(WorldAuthorityRoute route, Principal principal, out WorldInputPublication publication) =>
+        (route.Endpoint.Mirror.TryInput(owner: principal, publication: out publication) || route.Endpoint.Mirror.TryInputOf(entity: route.Entity, publication: out publication));
+
     private readonly SeatGuessView m_seatGuess = new();
 
     /// <inheritdoc/>
-    /// <remarks>The audience is decided here, once: the guess exists only while exactly one seat is live on this client,
-    /// and only for the body its route drives. With two or more seats on one screen every guess is off.</remarks>
-    public IWorldSeatGuess? SeatGuess => (BindGuessAudience(slot: out _) is null) ? m_seatGuess : null;
+    /// <remarks>This client's own world's scene asks here: <see cref="SeatGuessAt"/> with no endpoint.</remarks>
+    public IWorldSeatGuess? SeatGuess => SeatGuessAt(endpoint: null);
 
-    /// <summary>Reads the guess a driver's lead would draw for a seat: whether this client offers the seat a guess at all
-    /// and, when it does, the guess's state and the figures it rests on. It writes nothing.</summary>
+    /// <summary>Returns the presenting seat's guess on its own input for the scene of one world: offered only while this
+    /// client presents exactly one seat, and only to the scene of the world whose authority the seat's route names, for
+    /// the body the route drives there.</summary>
+    /// <param name="endpoint">The authority whose world the asking scene draws, or <see langword="null"/> for this
+    /// client's own world.</param>
+    /// <returns>The guess, or <see langword="null"/> when no guess is offered (<see cref="DescribeGuess"/> names why) or
+    /// the seat's route names another world than the asking scene's.</returns>
+    /// <remarks>The guess is drawn in that seat's own view alone (<see cref="WorldCreationInstances.GuessOverlay"/>),
+    /// whatever else renders the scene, so the audience test counts every joined seat, pending ones included, only
+    /// because a scene holds one guess layer.</remarks>
+    public IWorldSeatGuess? SeatGuessAt(WorldAuthorityEndpoint? endpoint) {
+        if ((BindGuessAudience(slot: out _) is not null) || (m_seatGuess.Route is not { } route)) { return null; }
+        // The body index names a body of the route's world only, so no other world's scene is offered it.
+        var here = ((endpoint is null)
+            ? string.Equals(a: route.Endpoint.Authority, b: m_authority, comparisonType: StringComparison.Ordinal)
+            : ReferenceEquals(objA: route.Endpoint, objB: endpoint));
+
+        return (here ? m_seatGuess : null);
+    }
+    /// <summary>Reads whether this client offers a seat a guess and, when it does, the state of the seat's latest edge
+    /// on a led channel and the figures it rests on. It writes nothing.</summary>
     /// <param name="slot">The 0-based seat slot.</param>
     /// <param name="channel">The led channel's name.</param>
-    /// <param name="leadSeconds">How long, in seconds, an unanswered guess may show.</param>
     /// <returns>A one-line reading: <c>off(reason)</c> when no guess is offered to the seat, else the state, the seat's
-    /// outstanding event sequence, the authority's answer (epoch, sequence, tick), the presented tick and fraction, and the
-    /// edge's age.</returns>
-    public string DescribeGuess(int slot, string channel, float leadSeconds) {
+    /// outstanding event sequence, the authority's answer (epoch, sequence, tick) and the presented tick and fraction.
+    /// How long an outstanding edge shows is the guess layer's (<c>body.rig</c>'s <c>layer:</c> readings).</returns>
+    public string DescribeGuess(int slot, string channel) {
         if (BindGuessAudience(slot: out var audience) is { } refusal) { return $"off({refusal})"; }
         if (audience != slot) { return "off(another seat presents)"; }
 
-        return m_seatGuess.Describe(channel: channel, leadSeconds: leadSeconds);
+        return m_seatGuess.Describe(channel: channel);
     }
-    // Decides the guess's audience once for a frame and binds the one seat's view to it: null when exactly one seat is
-    // live on this client and it is admitted and routed to a body, else why not.
+    // Decides the guess's audience once for a frame and binds the one seat's guess to it: null when exactly one seat is
+    // joined on this client and it is admitted and routed to a body, else why not.
     private string? BindGuessAudience(out int slot) {
         var found = -1;
 
         slot = -1;
         for (var candidate = 0; (candidate < PlayerRoster.MaxSlots); candidate++) {
-            if (m_roster.IsPending(slot: candidate) || (m_roster.Seat(slot: candidate) is not { Source.IsLive: true })) { continue; }
-            if (found >= 0) { return "two or more live seats"; }
+            if (m_roster.Seat(slot: candidate) is null) { continue; }
+            if (found >= 0) { return "two or more seats"; }
             found = candidate;
         }
-        if (found < 0) { return "no live seat"; }
+        if (found < 0) { return "no seat"; }
+        if (m_roster.IsPending(slot: found)) { return "seat pending"; }
         if (m_roster.Seat(slot: found)!.Input is not { Admitted: true } input) { return "seat input not admitted"; }
         if ((m_seatRouter.TryRoute(slot: found) is not { } route) || (route.EntityIndex < 0)) { return "seat routes to no body"; }
-        m_seatGuess.Bind(answers: route.Endpoint.Mirror, body: route.EntityIndex, input: input, owner: m_roster.PrincipalOf(slot: found), presented: StateMirrorFor(endpoint: route.Endpoint));
+        m_seatGuess.Bind(body: route.EntityIndex, input: input, presented: StateMirrorFor(endpoint: route.Endpoint), principal: m_roster.PrincipalOf(slot: found), route: route, slot: found);
         slot = found;
 
         return null;
     }
 
-    // The one seat's guess for a frame: its producer, the authority's answers to it and the mirror its picture presents.
+    // The one seat's guess for a frame: its producer, its route (whose authority answers it) and the mirror its picture
+    // presents.
     private sealed class SeatGuessView : IWorldSeatGuess {
         private WorldSeatInput? m_input;
-        private WorldSessionMirror? m_answers;
         private WorldStateMirror? m_presented;
-        private Principal m_owner;
+        private Principal m_principal;
 
         public int Body { get; private set; } = -1;
+        public int Slot { get; private set; } = -1;
+        public WorldAuthorityRoute? Route { get; private set; }
 
-        public void Bind(WorldSeatInput input, WorldSessionMirror answers, WorldStateMirror presented, Principal owner, int body) {
-            (m_input, m_answers, m_presented, m_owner, Body) = (input, answers, presented, owner, body);
+        public void Bind(WorldSeatInput input, WorldAuthorityRoute route, WorldStateMirror presented, Principal principal, int body, int slot) {
+            (m_input, Route, m_presented, m_principal, Body, Slot) = (input, route, presented, principal, body, slot);
         }
-        public bool TryLead(string channel, float leadSeconds, out float level) {
+        public bool TryLead(string channel, out float level, out ulong edge) {
             level = 0f;
+            edge = 0UL;
             if ((m_input is not { } input) || (m_presented is not { } presented)) { return false; }
 
             return input.TryLead(
                 answer: Answer(),
                 channel: channel,
-                leadSeconds: leadSeconds,
+                edge: out edge,
                 level: out level,
                 presentedFraction: presented.PresentationFraction,
                 presentedTick: presented.Tick
             );
         }
-        public string Describe(string channel, float leadSeconds) {
+        public string Describe(string channel) {
             if ((m_input is not { } input) || (m_presented is not { } presented)) { return "off(unbound)"; }
 
             var answer = Answer();
-            var reading = input.ReadGuess(answer: answer, channel: channel, leadSeconds: leadSeconds, presentedFraction: presented.PresentationFraction, presentedTick: presented.Tick);
+            var reading = input.ReadGuess(answer: answer, channel: channel, presentedFraction: presented.PresentationFraction, presentedTick: presented.Tick);
             var answered = ((answer is { } given) ? $"{given.Epoch}/{given.Sequence}@{given.Tick}" : "none");
 
-            return string.Create(provider: System.Globalization.CultureInfo.InvariantCulture, handler: $"{(reading.State == WorldGuessState.InForce ? "lead" : "cell")}({reading.State}) level={reading.Level:0.##} outstanding={reading.Outstanding} epoch={reading.Epoch} answer={answered} presented={presented.Tick}+{presented.PresentationFraction:0.##} age={reading.AgeSeconds:0.###}s");
+            return string.Create(provider: System.Globalization.CultureInfo.InvariantCulture, handler: $"{(reading.State == WorldGuessState.InForce ? "lead" : "cell")}({reading.State}) level={reading.Level:0.##} outstanding={reading.Outstanding} epoch={reading.Epoch} answer={answered} presented={presented.Tick}+{presented.PresentationFraction:0.##}");
         }
-        private WorldInputAnswer? Answer() => ((m_answers?.TryInputAnswer(answer: out var answer, owner: m_owner) ?? false) ? answer : null);
+        // The answer is read under the owner the route's authority publishes this body's input as.
+        private WorldInputAnswer? Answer() => (((Route is { } route) && TryRouteInput(principal: m_principal, publication: out var publication, route: route) &&
+            route.Endpoint.Mirror.TryInputAnswer(answer: out var answer, owner: publication.Owner)) ? answer : null);
     }
     /// <summary>Delivers committed text to the admitted input owner at its authority's next input tick.</summary>
     public void ObserveText(CommittedTextInput input) {

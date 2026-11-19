@@ -4019,9 +4019,9 @@ reversal brake, then a sitting.
   the first three, and its steps are the build lane's order; steps 1 to 8 (the
   compiled rig, its reads, the caps, parts as sets, adding clips, masks and
   replacing, reach and influence, and the guess) are built, so step 9, the
-  Moth's hand, is next. Step 8's headless readings (the press log, one and two
-  seats, a refusing rule, a delayed answer, the hold bypass) wait on a fixture
-  world that binds a channel to a led driver.
+  Moth's hand, is next. Step 8's guess is a pose layer the guessing seat's own
+  view alone reads; its windowed reading (the press drawn early in that view and
+  in no other view, camera screen or session window) waits on the lead's batch.
 
 - A reversal should brake faster than it accelerates: `ShapeWholeVelocityRow`
   converges at the engage rate whenever the stick is deflected, so a full

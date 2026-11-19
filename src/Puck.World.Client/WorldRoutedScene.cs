@@ -37,6 +37,8 @@ public sealed class WorldRoutedScene : ISdfFrameDresser, IDisposable {
     public WorldCreationInstances BodyStamps => m_emitter.BodyStamps;
     private readonly Func<SdfFrame?> m_hostFrame;
     private readonly List<SdfViewSnapshot> m_views = [];
+    // The roster slot each latched seat view belongs to (-1 for none), which decides the one view the guess overlay reaches.
+    private readonly List<int> m_viewSeats = [];
     private readonly List<WorldRoutedWindow> m_windows = [];
     // The seats and windows the presenter latched last (EndViews), which membership changes wait for, and the views the
     // last dressed frame rendered, kept for a frame with neither: a frame always carries a view.
@@ -151,14 +153,27 @@ public sealed class WorldRoutedScene : ISdfFrameDresser, IDisposable {
     /// <see langword="null"/> (<see cref="WorldSessionSceneEmitter.TextFault"/>).</summary>
     public string? TextFault => m_emitter.TextFault;
 
+    /// <summary>Gets or sets what offers the presenting client's guess to this scene's guess layer: the guess for this
+    /// scene's endpoint (<see cref="WorldClient.SeatGuessAt"/>), drawn in the guessing seat's own view alone
+    /// (<see cref="Dress"/>). <see langword="null"/>, the default and a shared session scene's, offers none.</summary>
+    public Func<IWorldSeatGuess?>? SeatGuess {
+        get => m_emitter.SeatGuess;
+        set => m_emitter.SeatGuess = value;
+    }
     /// <summary>Clears the views the presenter latched, before it latches this frame's.</summary>
-    public void BeginViews() => m_views.Clear();
+    public void BeginViews() {
+        m_views.Clear();
+        m_viewSeats.Clear();
+    }
     /// <summary>Latches a seat's view of this world for the frame.</summary>
     /// <param name="view">The seat's view, framed in this world's own coordinates; this scene's residency renders it,
     /// whatever its boot frame's copy says (<see cref="SdfViewSnapshot.Elsewhere"/>).</param>
+    /// <param name="seat">The roster slot whose view it is, which takes this scene's guess overlay when the guess is that
+    /// seat's (<see cref="WorldCreationInstances.GuessSlot"/>); -1 for none.</param>
     /// <returns>The view's index in the scene's frames.</returns>
-    public int AddView(in SdfViewSnapshot view) {
+    public int AddView(in SdfViewSnapshot view, int seat = -1) {
         m_views.Add(item: (view with { Elsewhere = false }));
+        m_viewSeats.Add(item: seat);
 
         return (m_views.Count - 1);
     }
@@ -191,8 +206,14 @@ public sealed class WorldRoutedScene : ISdfFrameDresser, IDisposable {
         if ((m_latchedSeatCount + m_latchedWindows.Count) != 0) {
             m_dressedViews.Clear();
 
+            // The pool packed before this dress, so its guess overlay is this frame's; only the guessing seat's own view
+            // reads it, and every window, filmed camera and other seat reads the shared pose.
+            var guessSlot = m_emitter.BodyStamps.GuessSlot;
+
             for (var seat = 0; (seat < m_latchedSeatCount); seat++) {
-                m_dressedViews.Add(item: m_views[seat]);
+                m_dressedViews.Add(item: (((guessSlot >= 0) && (m_viewSeats[seat] == guessSlot))
+                    ? (m_views[seat] with { PoseOverlay = m_emitter.BodyStamps.GuessOverlay })
+                    : m_views[seat]));
             }
 
             // The emitter's own view frames the world's default projection at a session screen's quality.

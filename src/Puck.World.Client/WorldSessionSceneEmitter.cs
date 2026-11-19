@@ -850,6 +850,16 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
     private int m_preparedSnapshot = int.MinValue;
 
     public void PrepareFrame() {
+        PrepareRegistrations();
+        m_pool.PrepareGuess(source: m_source);
+    }
+    /// <summary>Gets or sets what offers the presenting client's guess to this scene's guess layer
+    /// (<see cref="WorldSessionStampSource.Guess"/>): set only on the scene a seat may be presented in.</summary>
+    public Func<IWorldSeatGuess?>? SeatGuess {
+        get => m_source.Guess;
+        set => m_source.Guess = value;
+    }
+    private void PrepareRegistrations() {
         if ((m_preparedDefinition == m_mirror.DefinitionRevision) && (m_preparedSnapshot == m_mirror.SnapshotRevision) && !m_census.TryTakeMove()) { return; }
         m_preparedDefinition = m_mirror.DefinitionRevision;
         m_preparedSnapshot = m_mirror.SnapshotRevision;

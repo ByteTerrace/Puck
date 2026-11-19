@@ -429,6 +429,7 @@ public sealed partial class WorldGrants {
 
         var entry = m_sessions[submission.Principal.Index];
 
+        Host.Input.Answer(batch: submission.Input, bodyIndex: -1, principal: submission.Principal);
         if (!Host.Input.TryAdmit(submission.Principal, submission.Input, out var reason, -1)) {
             Host.Output.Narrate(channel: "input.refused", text: reason);
             return false;

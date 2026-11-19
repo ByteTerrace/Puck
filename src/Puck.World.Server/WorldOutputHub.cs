@@ -157,11 +157,21 @@ public sealed partial class WorldOutputHub {
         return true;
     }
     private static WorldSnapshot Redact(Subscription subscription, in WorldSnapshot snapshot) =>
-        Redact(
+        Observed(
             disclosure: in subscription.DisclosureRef,
             snapshot: in snapshot,
             scratch: ref subscription.Redacted
         );
+    /// <summary>Builds a body-disclosure observer's view of a tick: the snapshot redacted by its body policy
+    /// (<see cref="Redact(in WorldSinkDisclosure, in WorldSnapshot, ref EntitySnapshot[])"/>) with no owner's input publications or answers, since such an observer is no input owner. A
+    /// sink that delivers to a recipient redacts and then keeps that recipient's own records
+    /// (<see cref="WorldOwnedRecords.ForOwner"/>) instead.</summary>
+    /// <param name="disclosure">What the observer is delivered.</param>
+    /// <param name="snapshot">The tick's full snapshot.</param>
+    /// <param name="scratch">The caller-owned destination array, grown as needed.</param>
+    /// <returns>The observer's snapshot, wrapping <paramref name="scratch"/>.</returns>
+    public static WorldSnapshot Observed(in WorldSinkDisclosure disclosure, in WorldSnapshot snapshot, ref EntitySnapshot[] scratch) =>
+        (Redact(disclosure: in disclosure, scratch: ref scratch, snapshot: in snapshot) with { Inputs = default, InputAnswers = default });
 
     /// <summary>Fans a composed query answer out to every typed subscriber. A faulting sink is isolated and
     /// detached — see the class remarks.</summary>

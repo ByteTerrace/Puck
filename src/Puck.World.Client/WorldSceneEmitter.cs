@@ -386,6 +386,10 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
     private int m_preparedCode;
 
     public void PrepareFrame() {
+        PrepareRegistrations();
+        m_animator.PrepareGuess(source: m_client);
+    }
+    private void PrepareRegistrations() {
         Span<int> revision = stackalloc int[WorldClient.RevisionComponentCount];
 
         m_client.WriteRevision(destination: revision);

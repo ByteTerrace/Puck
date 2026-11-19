@@ -714,6 +714,19 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   receive no fade. Vulkan requires `shaderDemoteToHelperInvocation` at device
   creation and capability 5379 in `VulkanShaderCapabilities`; `clip` compiles to
   that feature even when the live opacity is one.
+- **A view can pose one stamp its own way.** `SdfViewSnapshot.PoseOverlay`
+  (`SdfPoseOverlay`: first slot, slot count, first overlay row) makes that view
+  read a stamp's dynamic-transform slots from other rows of the same table: the
+  pass block's `poseOverlay`, applied by `sdfViewPoseSlot` (`frame/sdf-mesh.hlsli`)
+  to every skin member read (`sdfMeshSkinSlotsOf`), to the draw's own frame slot
+  through `sdfViewPoseCarry` in `sdfMeshWorldVertex` and `sdfMeshPreviousPosition`
+  (a draw's matrix is its frame slot's own row), and to a hit's shading frame
+  (`sdfMeshHitFrameSlot`, `sdfMeshSurfaceNormal`). Only a seat's own view carries
+  one, for its guess layer (`WorldCreationInstances.GuessOverlay`); a new reader of
+  a mesh vertex's or a hit's slot goes through `sdfViewPoseSlot`, or that view draws
+  the shared pose there. A light anchored to a slot, a mirror's or portal's own
+  view and the host's anchors read the shared rows, and a rigid draw is culled by
+  its shared pose's box.
 - **Every light answers through one interface,** `shade/sdf-light.hlsli`; a new
   light kind is a branch there and nowhere else. Views and glass visit lights
   through one walk (`sdfLightWalkStart`, `sdfLightNext`) over two masks

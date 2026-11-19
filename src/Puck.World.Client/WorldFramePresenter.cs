@@ -1906,6 +1906,10 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
                 StampFade = (((presentedElsewhere is null) && m_animator.TryBodyTransformSlot(bodyIndex: m_anchor.PerceivedBody(slot: slot), transformSlot: out var fadeSlot, slotCount: out var fadeSlots))
                     ? new SdfStampFade(fadeSlot, fadeSlots, m_roster.Seat(slot: slot)!.View.BodyOpacity)
                     : default),
+                // The seat's own guess layer, drawn in this view alone: every other view, camera, anchor and pointer ray
+                // reads the shared pose (WorldCreationInstances.Guess.cs). A seat presented elsewhere takes its routed
+                // scene's (WorldRoutedScene.Dress).
+                PoseOverlay = (((presentedElsewhere is null) && (m_animator.GuessSlot == slot)) ? m_animator.GuessOverlay : default),
                 CutRevision = ViewCut(index: m_views.Count, source: m_seatCameraRigs[slot]!, revision: m_roster.Seat(slot: slot)!.View.CutRevision),
                 Elsewhere = (presentedElsewhere is not null),
                 Grid = SeatGrid(slot: slot),
@@ -1933,6 +1937,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             if (m_continuum.PresentedElsewhere(slot: slot) is { } elsewhere) {
                 RouteView(
                     endpoint: elsewhere,
+                    seat: slot,
                     view: (m_views.Count - 1)
                 );
                 m_seatRoutes[slot] = m_viewRoutes[(m_views.Count - 1)];
