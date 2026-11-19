@@ -19,9 +19,6 @@
 // (SdfMeshOcclusion, SdfMeshSelectionMarks).
 // The controls' header holds the draw count and pyramid levels; each phase writes one GpuDrawIndirectCommand a
 // candidate at the candidate's place, empty where it draws nothing, with the identity first and first instance zero.
-// A candidate's identity is the same in every phase, and the early step writes every candidate's first-phase record, so
-// a draw's command number (its place in its phase) names its identity there: Direct3D 12 at execute-indirect tier 1.1
-// reads it that way (sdfMeshRasterIdentity). A phase must keep writing a candidate's place with the identity first.
 // KEEP IN SYNC with SdfMeshOcclusion. Bounds, levels and mesh identity come from the retained mesh region.
 #include "../isa/sdf-mesh.interface.hlsli"
 #include "../frame/sdf-viewport.hlsli"
