@@ -105,8 +105,9 @@ collided runs, while the same expensive work ran eight times).
 ## Spend verification, not writing
 
 **Lanes code; the lead merges, builds and tests in bulk (the owner's ruling).**
-A lane writes the code, builds what it touched, runs the checks that only read
-its tree, and hands back: it takes no windowed leg, timing or capture of its own
+The lead is the central builder and tester (the owner's ruling). A lane writes
+the code, compiles only the projects it changed, runs the checks that only read
+its tree, and hands back; it runs no full build, test suite or boot: it takes no windowed leg, timing or capture of its own
 change, except a look lane, for which seeing is the work. Freed of the GPU, more
 lanes run at once, bounded by build CPU and memory. The lead runs a bulk window
 on the merged tip every few hours or every eight to ten merges: the full build,
