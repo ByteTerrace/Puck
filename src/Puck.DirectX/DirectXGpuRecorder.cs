@@ -377,7 +377,7 @@ public sealed unsafe partial class DirectXGpuRecorder(DirectXDeviceContext devic
         GpuStage sourceStageMask,
         GpuStage destinationStageMask
     ) {
-        if (DirectXBarriers.Layout(layout: oldLayout) == DirectXBarriers.Layout(layout: ((newLayout == GpuImageLayout.Undefined) ? GpuImageLayout.External : newLayout))) {
+        if (!DirectXBarriers.ChangesLayout(newLayout: newLayout, oldLayout: oldLayout)) {
             return;
         }
 
@@ -387,19 +387,15 @@ public sealed unsafe partial class DirectXGpuRecorder(DirectXDeviceContext devic
         if ((resource->GetDesc().Flags & D3D12_RESOURCE_FLAGS.D3D12_RESOURCE_FLAG_ALLOW_SIMULTANEOUS_ACCESS) != 0) {
             FlushTextureBarriers(state);
 
-            var fixedBarrier = DirectXBarriers.Fixed(
-                destinationStages: destinationStageMask,
-                newLayout: newLayout,
-                oldLayout: oldLayout,
-                sourceStages: sourceStageMask
+            DirectXBarriers.Record(
+                barrier: DirectXBarriers.Fixed(
+                    destinationStages: destinationStageMask,
+                    newLayout: newLayout,
+                    oldLayout: oldLayout,
+                    sourceStages: sourceStageMask
+                ),
+                commandList: ((ID3D12GraphicsCommandList7*)state.EnhancedCommandList)
             );
-            var fixedGroup = new D3D12_BARRIER_GROUP {
-                NumBarriers = 1,
-                Type = D3D12_BARRIER_TYPE.D3D12_BARRIER_TYPE_GLOBAL,
-            };
-
-            fixedGroup.Anonymous.pGlobalBarriers = &fixedBarrier;
-            ((ID3D12GraphicsCommandList7*)state.EnhancedCommandList)->Barrier(1, &fixedGroup);
 
             return;
         }
@@ -423,11 +419,15 @@ public sealed unsafe partial class DirectXGpuRecorder(DirectXDeviceContext devic
         GpuStage sourceStageMask,
         GpuStage destinationStageMask
     ) {
-        GlobalBarrier(state: DecodeState(commandBufferHandle),
-            accessAfter: DirectXBarriers.Access(destinationAccessMask, destinationStageMask, buffer: false),
-            accessBefore: DirectXBarriers.Access(sourceAccessMask, sourceStageMask, buffer: false),
-            syncAfter: DirectXBarriers.Sync(destinationStageMask, destinationAccessMask),
-            syncBefore: DirectXBarriers.Sync(sourceStageMask, sourceAccessMask));
+        GlobalBarrier(
+            barrier: DirectXBarriers.Global(
+                destinationAccess: destinationAccessMask,
+                destinationStages: destinationStageMask,
+                sourceAccess: sourceAccessMask,
+                sourceStages: sourceStageMask
+            ),
+            state: DecodeState(commandBufferHandle: commandBufferHandle)
+        );
     }
     /// <inheritdoc/>
     public void TransitionBuffer(
@@ -447,36 +447,21 @@ public sealed unsafe partial class DirectXGpuRecorder(DirectXDeviceContext devic
             MemoryBarrier(commandBufferHandle, sourceAccessMask, destinationAccessMask, sourceStageMask, destinationStageMask);
             return;
         }
-        // A host-owned read-only buffer's broad prior mask cannot include UAV accesses on this allocation.
-        var description = ((ID3D12Resource*)bufferHandle)->GetDesc();
-        if ((description.Flags & D3D12_RESOURCE_FLAGS.D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS) == 0) {
-            sourceAccessMask &= ~(GpuAccess.ShaderWrite | GpuAccess.TransferWrite);
-        }
-        var state = DecodeState(commandBufferHandle);
+        var resource = ((ID3D12Resource*)bufferHandle);
+        var state = DecodeState(commandBufferHandle: commandBufferHandle);
+
         FlushTextureBarriers(state);
-        // Host/first-use declarations can follow an earlier list in the same ExecuteCommandLists.
-        // NONE would promise no prior GPU access in that execution scope; retain a conservative
-        // dependency instead. Buffers have no layout to recover or track across those lists.
-        var beforeSync = DirectXBarriers.Sync(sourceStageMask, sourceAccessMask, buffer: true);
-        var beforeAccess = DirectXBarriers.Access(sourceAccessMask, sourceStageMask, buffer: true);
-        if (beforeSync == D3D12_BARRIER_SYNC.D3D12_BARRIER_SYNC_NONE) {
-            beforeSync = D3D12_BARRIER_SYNC.D3D12_BARRIER_SYNC_ALL;
-            beforeAccess = D3D12_BARRIER_ACCESS.D3D12_BARRIER_ACCESS_COMMON;
-        }
-        var barrier = new D3D12_BUFFER_BARRIER {
-            SyncBefore = beforeSync,
-            SyncAfter = DirectXBarriers.Sync(destinationStageMask, destinationAccessMask, buffer: true),
-            AccessBefore = beforeAccess,
-            AccessAfter = DirectXBarriers.Access(destinationAccessMask, destinationStageMask, buffer: true),
-            pResource = (ID3D12Resource*)bufferHandle,
-            Size = ulong.MaxValue,
-        };
-        var group = new D3D12_BARRIER_GROUP {
-            Type = D3D12_BARRIER_TYPE.D3D12_BARRIER_TYPE_BUFFER,
-            NumBarriers = 1,
-        };
-        group.Anonymous.pBufferBarriers = &barrier;
-        ((ID3D12GraphicsCommandList7*)state.EnhancedCommandList)->Barrier(1, &group);
+        DirectXBarriers.Record(
+            barrier: DirectXBarriers.Buffer(
+                destinationAccess: destinationAccessMask,
+                destinationStages: destinationStageMask,
+                resource: resource,
+                sourceAccess: sourceAccessMask,
+                sourceStages: sourceStageMask,
+                unorderedAccess: ((resource->GetDesc().Flags & D3D12_RESOURCE_FLAGS.D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS) != 0)
+            ),
+            commandList: ((ID3D12GraphicsCommandList7*)state.EnhancedCommandList)
+        );
     }
     /// <inheritdoc/>
     /// <remarks>Adjacent texture transitions record as one barrier group. A buffer or global barrier flushes the
