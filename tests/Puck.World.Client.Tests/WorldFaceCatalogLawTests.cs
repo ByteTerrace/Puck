@@ -858,13 +858,13 @@ public sealed class WorldFaceCatalogLawTests {
         var session = new WorldSessionMirror(placeholder: before);
         var stamp = new Puck.World.Protocol.WorldStateStamp(EngineTick: 1UL, Everything: false, MovedRows: default, Tick: 1UL);
 
-        session.DeliverDefinition(definition: before, version: default);
+        session.DeliverDefinition(definition: before, version: default, stream: default);
 
         var revision = session.DefinitionRevision;
 
-        session.DeliverState(definition: (before with { }), stamp: in stamp, version: default);
+        session.DeliverState(definition: (before with { }), stamp: in stamp, version: default, stream: default);
         Assert.Equal(expected: revision, actual: session.DefinitionRevision);
-        session.DeliverState(definition: before.WithPlacementHoldings(holdings: [(1, 1)]), stamp: in stamp, version: default);
+        session.DeliverState(definition: before.WithPlacementHoldings(holdings: [(1, 1)]), stamp: in stamp, version: default, stream: default);
         Assert.Equal(expected: (revision + 1), actual: session.DefinitionRevision);
         Assert.Equal(expected: 2, actual: WorldPlacementStamper.PrepareResponses(definition: before));
         Assert.Equal(expected: 0, actual: WorldPlacementStamper.PrepareResponses(definition: door));

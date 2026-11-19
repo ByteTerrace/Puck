@@ -3,7 +3,7 @@ using System.Numerics;
 namespace Puck.SignedDistance;
 
 // The rigid-leaf execution plan (see the packed layout in SdfProgram.cs): segments whose chains reduce to direct poses,
-// optionally around one fold run, compiled for mapCore's and mapGradCore's rigid walks.
+// optionally around one fold run, compiled for mapCore's rigid walk.
 public sealed partial class SdfProgram {
     // Lowers the overwhelmingly common authored shape of animated geometry into a GPU execution plan without changing
     // the public ISA. A compiled segment may contain any number of Reset-delimited rigid leaves and any primitive/blend/

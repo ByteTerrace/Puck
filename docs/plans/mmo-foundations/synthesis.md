@@ -95,7 +95,7 @@ the memo:
    ```
 
    and `WorldFederationCodec.TryDecodeReservation`
-   (`src/Puck.World.Server/WorldFederationCodec.cs:1350`):
+   (`src/Puck.World.Server/WorldFederationCodec.cs:1430`):
 
    ```csharp
            PeerAdmission: true,

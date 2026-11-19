@@ -2381,8 +2381,9 @@ findings are answered in decision 3a. Then the researcher brief's priorities
   order with the content, and content travels with the right to show it as one
   value. A design review found sixteen flaws in the first draft, and the memo
   answers each. It orders eight steps, each with a check, and no step deletes a
-  guard before its replacement owns the same paths. Next: its step 1, which
-  tightens the whole-replica test at once and lands the stream's generation.
+  guard before its replacement owns the same paths. Its step 1 is built (the
+  tightened whole-replica test, the stream's generation, ordered ingress), all
+  but the lease an admission grants after a lost connection. Next: step 2.
   This is decision 14's step 5 (results keyed by what each viewer was
   delivered) with the withdrawn picture of decision 2.
 
@@ -3547,6 +3548,14 @@ proves itself with `puck compile` lowering to the same document.
   (`WorldOutputHub`, `WorldSessionSink`, `WorldFederationProjectionSink`).
   They go with the presentation view's last cut
   ([runtime plan](runtime-and-delivery.md#the-presentation-view)).
+- Two recipient streams built side by side: `WorldSessionSink` and
+  `WorldFederationProjectionSink` each own a `WorldDeliveryCursor`,
+  `WorldDeliveryRows`, `WorldSolidScaleDisclosure`, body redaction, input
+  filtering, a presentation feed, and now the same cut announcement and
+  re-priming (`AnnounceCut`, `PrimeAfterCut`), differing only in where a
+  record goes (an `IClientSink` or a wire frame). One stream type writing
+  to a record target would hold each rule once; the withdrawal chokepoint's
+  step 4 (the mirror per span) is the natural place to make it.
 - [low] File-system primitives `AtomicFile` cannot serve yet:
   `ShaderCompiler.Entries.cs` wants a write that refuses to replace;
   `DirectoryObjectBlobStoreBackend` stages through a confined handle; a lock

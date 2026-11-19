@@ -146,19 +146,24 @@ public sealed partial class SdfProgramBuilder {
         return correction;
     }
 
-    /// <summary>A regular weight's stroke, in ems: the width <see cref="GlyphDetail"/> takes a run's letters' strokes to
-    /// be.</summary>
-    public const float GlyphStrokeEms = 0.1f;
+    /// <summary>A regular weight's thinnest stroke, in ems: the width <see cref="GlyphDetail"/> takes a run's letters'
+    /// thinnest strokes to be. A sans face's horizontals are thinner than its stems (Inter Regular's are 168 and 190 of
+    /// 2048 units, 0.082 and 0.093 em), so a letter's arms are the strokes its bake must hold.</summary>
+    public const float GlyphStrokeEms = 0.08f;
 
-    /// <summary>Returns the spacing a run's glyphs ask of the mesh bake, by the rule for any thin feature, its half
-    /// thickness: the lesser of half the slab each glyph extrudes and half its stroke (<see cref="GlyphStrokeEms"/>). A
-    /// stroke two cells wide keeps a sample inside it wherever the lattice falls; one about a cell wide loses
-    /// letters.</summary>
+    /// <summary>The fine cells <see cref="GlyphDetail"/> asks across a run's thinnest stroke.</summary>
+    public const float GlyphStrokeCells = 3f;
+
+    /// <summary>Returns the spacing a run's glyphs ask of the mesh bake: the lesser of the half slab each glyph extrudes
+    /// and a third of its thinnest stroke (<see cref="GlyphStrokeEms"/>, <see cref="GlyphStrokeCells"/>). A plate's two
+    /// faces need only a sample between them, but a stroke is a ribbon whose crossings the contour joins along its
+    /// length: a stroke two cells across breaks into pieces wherever the lattice falls on both its edges, and one three
+    /// cells across keeps a run of inside samples down its length.</summary>
     /// <param name="worldEmHeight">The world height of one em.</param>
     /// <param name="extrudeHalfDepth">The half depth each glyph extrudes along its plane's normal.</param>
     /// <returns>The spacing, in world units.</returns>
     public static float GlyphDetail(float worldEmHeight, float extrudeHalfDepth) =>
-        MathF.Min(x: MathF.Abs(x: extrudeHalfDepth), y: ((0.5f * GlyphStrokeEms) * worldEmHeight));
+        MathF.Min(x: MathF.Abs(x: extrudeHalfDepth), y: ((GlyphStrokeEms / GlyphStrokeCells) * worldEmHeight));
 
     /// <summary>Lays <paramref name="text"/> out against <paramref name="atlas"/> and emits one <see cref="Glyph"/> cell
     /// per drawn character, positioned on the plane spanned by <paramref name="right"/>/<paramref name="up"/> at

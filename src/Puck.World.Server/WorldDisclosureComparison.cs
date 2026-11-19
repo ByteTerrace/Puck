@@ -82,9 +82,11 @@ public static class WorldDisclosureComparison {
     public static string Render(WorldDisclosureEvent entry) {
         ArgumentNullException.ThrowIfNull(argument: entry);
         if (entry.Text) { return Encoding.UTF8.GetString(bytes: entry.Payload); }
-        if ((entry.Door == WorldDisclosureSession.SnapshotDoor) && WorldFederationCodec.TryDecodeSnapshot(body: entry.Payload, failure: out _, snapshot: out var snapshot)) {
+        if ((entry.Door == WorldDisclosureSession.SnapshotDoor) &&
+            WorldFederationCodec.TryReadStamped(body: out var snapshotBody, failure: out _, record: entry.Payload, stream: out var stream) &&
+            WorldFederationCodec.TryDecodeSnapshot(body: snapshotBody, failure: out _, snapshot: out var snapshot)) {
             try {
-                return RenderSnapshot(snapshot: in snapshot);
+                return string.Create(provider: CultureInfo.InvariantCulture, handler: $"stream={stream.Stream} generation={stream.Generation} ordinal={stream.Ordinal}\n{RenderSnapshot(snapshot: in snapshot)}");
             } catch (InvalidOperationException) {
                 return Convert.ToHexStringLower(inArray: entry.Payload);
             }

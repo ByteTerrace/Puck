@@ -33,9 +33,10 @@ public sealed class AdministrativeReplicaLawTests {
     private sealed class Replica : IClientSink {
         public long Value;
 
-        public void DeliverDefinition(WorldDefinition definition, WorldDocumentVersion version) => Value = definition.State[0].Cells![0].Value.Raw;
-        public void DeliverState(WorldDefinition definition, WorldDocumentVersion version, in WorldStateStamp stamp) => DeliverDefinition(definition: definition, version: version);
-        public void DeliverSnapshot(in WorldSnapshot snapshot) {
+        public void DeliverDefinition(WorldDefinition definition, WorldDocumentVersion version, in WorldStreamStamp stream) => Value = definition.State[0].Cells![0].Value.Raw;
+        public void DeliverState(WorldDefinition definition, WorldDocumentVersion version, in WorldStateStamp stamp, in WorldStreamStamp stream) => DeliverDefinition(definition: definition, version: version, stream: default);
+        public void DeliverCut(in WorldStreamStamp stream, bool terminal) { }
+        public void DeliverSnapshot(in WorldSnapshot snapshot, in WorldStreamStamp stream) {
             foreach (var delta in snapshot.FieldCells.Span) {
                 if ((delta.Row == 0) && (delta.Cell >= 0)) { Value = delta.Image!.Value.Raw; }
             }

@@ -995,11 +995,13 @@ stream detaches, without waiting for the socket to drain.
 
 A portal window renders its destination from its own disclosed mirror unless its session is delivered
 everything the destination holds: a live session admitted at `Replica`, holding `observe all`,
-in a world whose observer disclosure redacts no body (`WorldSessionObservation.DisclosesEverything`).
+in a world whose observer disclosure redacts no body and none of whose rows, cells or zones can withhold
+from the session (`WorldSessionObservation.DisclosesEverything`, over `WorldRecipientView.ReadsEverything`).
 Only then does the window join the scene the presentation keeps for the destination's endpoint and
 render the endpoint's mirror, the destination's whole replica, since that shows it nothing its own
 delivery would not. A `Presentation` or `Frames` window, or one onto a world whose observer
-disclosure redacts, never renders the endpoint's mirror, and disclosure is never traded for the
+disclosure redacts or that declares any restriction the session does not pass, never renders the
+endpoint's mirror, and disclosure is never traded for the
 memory the shared residency saves. The session stays the gate: once it no longer discloses
 everything, the window leaves the scene and shows its own session again, and its input stays on the
 session either way.

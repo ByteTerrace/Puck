@@ -19,9 +19,9 @@ public sealed class ShadowBootDefaultLawTests {
             actual: WorldShadowSettings.From(render: definition.Render));
         var client = ClientFixtures.Client(definition: definition);
 
-        client.DeliverDefinition(definition: definition, version: default);
+        client.DeliverDefinition(definition: definition, version: default, stream: default);
         client.DeliverSnapshot(snapshot: new WorldSnapshot(Tick: 0, EngineTick: 0, Revision: 0, StepTicks: 1,
-            Entries: ReadOnlyMemory<EntitySnapshot>.Empty));
+            Entries: ReadOnlyMemory<EntitySnapshot>.Empty), stream: default);
         using var resolver = new WorldEnvironmentResolve(domains: new WorldValueDomainGuard());
         var frame = resolver.Resolve(definition: definition, revision: 0, mirror: client.StateMirror);
         var slots = new WorldShadowSlot[WorldShadowAllocator.MaxSlots];

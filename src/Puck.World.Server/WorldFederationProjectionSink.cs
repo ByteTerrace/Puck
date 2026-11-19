@@ -95,7 +95,7 @@ public sealed class WorldFederationProjectionSink(WorldDisclosureTier tier, stri
     private void Present(WorldProjectionDelivery delivery, WorldDocumentVersion version, ulong tick, ulong engineTick) {
         switch (delivery.Kind) {
             case WorldProjectionDeliveryKind.Document:
-                Write(
+                WriteRecord(
                     WorldFederationResponse.Definition,
                     WorldFederationCodec.DocumentLeaf(
                         payload: delivery.Payload,
@@ -105,7 +105,7 @@ public sealed class WorldFederationProjectionSink(WorldDisclosureTier tier, stri
                 );
                 break;
             case WorldProjectionDeliveryKind.Delta:
-                Write(
+                WriteRecord(
                     WorldFederationResponse.ProjectionDelta,
                     WorldFederationCodec.EncodeProjectionDelta(
                         delta: delivery.Payload,
@@ -115,6 +115,48 @@ public sealed class WorldFederationProjectionSink(WorldDisclosureTier tier, stri
                     )
                 );
                 break;
+        }
+    }
+    // Queues one observation record behind the stream stamp it takes, so the peer's ingress orders it.
+    private void WriteRecord(WorldFederationResponse kind, byte[] body) {
+        if (m_invalidated) {
+            return;
+        }
+        Write(kind, WorldFederationCodec.Stamped(body: body, stream: m_cursor.Stamp()));
+    }
+    // Queues the record a cut the cursor decided owes, once: the new generation, with no content. True when one was
+    // queued, after which the stream owes its whole disclosed document and a primer before anything newer.
+    private bool AnnounceCut() {
+        if (!m_cursor.TakeCut()) {
+            return false;
+        }
+        Write(WorldFederationResponse.Cut, WorldFederationCodec.EncodeCut(stream: m_cursor.Stamp(), terminal: false));
+
+        return true;
+    }
+    // After a cut, the whole disclosed document under the new generation; the next snapshot this stream sends
+    // completes it as the primer.
+    private void PrimeAfterCut() {
+        if (m_view is null) {
+            return;
+        }
+        if (m_feed is not null) {
+            var time = server!.DeliveryTime;
+
+            m_feed.Release();
+            Present(
+                delivery: m_feed.Compose(cursor: m_cursor, view: m_view),
+                engineTick: time.EngineTick,
+                tick: time.Tick,
+                version: Version
+            );
+
+            return;
+        }
+        m_cursor.ForgetDocument();
+        if (m_cursor.DeliverDefinition(view: m_view) is { } whole) {
+            WriteRecord(WorldFederationResponse.Definition, WorldFederationCodec.DocumentLeaf(
+                payload: WorldDefinitionSerialization.SerializeCompact(definition: WorldAssetRowLoader.EmbedAudio(whole)), tier: tier, version: Version));
         }
     }
     private void Write(WorldFederationResponse kind, byte[] body) {
@@ -132,7 +174,10 @@ public sealed class WorldFederationProjectionSink(WorldDisclosureTier tier, stri
 
     public void DeliverAnswer(in QueryAnswer answer) { }
     public void DeliverComposition(WorldComposition composition) { }
-    public void DeliverDefinition(WorldDefinition definition, WorldDocumentVersion version) {
+    public void DeliverCut(in WorldStreamStamp stream, bool terminal) {
+        // The hub's fan-out has one span that never ends; this stream decides its own cuts.
+    }
+    public void DeliverDefinition(WorldDefinition definition, WorldDocumentVersion version, in WorldStreamStamp stream) {
         if (!Current()) {
             return;
         }
@@ -145,8 +190,14 @@ public sealed class WorldFederationProjectionSink(WorldDisclosureTier tier, stri
             // Only a disclosure refusal ends the stream by name; any other failure to compose is a fault, which the
             // hub detaches the sink for.
             try {
+                var delivery = m_feed.Compose(cursor: m_cursor, view: m_view);
+
+                if (AnnounceCut()) {
+                    m_feed.Release();
+                    delivery = m_feed.Compose(cursor: m_cursor, view: m_view);
+                }
                 Present(
-                    delivery: m_feed.Compose(cursor: m_cursor, view: m_view),
+                    delivery: delivery,
                     engineTick: time.EngineTick,
                     tick: time.Tick,
                     version: Version
@@ -159,15 +210,18 @@ public sealed class WorldFederationProjectionSink(WorldDisclosureTier tier, stri
         }
 
         if (m_cursor.DeliverDefinition(view: m_view) is { } delivered) {
-            Write(WorldFederationResponse.Definition, WorldFederationCodec.DocumentLeaf(
+            _ = AnnounceCut();
+            WriteRecord(WorldFederationResponse.Definition, WorldFederationCodec.DocumentLeaf(
                 payload: WorldDefinitionSerialization.SerializeCompact(definition: WorldAssetRowLoader.EmbedAudio(delivered)), tier: tier, version: Version));
+        } else if (AnnounceCut()) {
+            PrimeAfterCut();
         }
     }
     public void DeliverSessionLever(WorldSessionLever lever) { }
 
     private WorldInputPublication[] m_inputDisclosure = [];
 
-    public void DeliverSnapshot(in WorldSnapshot snapshot) {
+    public void DeliverSnapshot(in WorldSnapshot snapshot, in WorldStreamStamp stream) {
         if (!Current()) {
             return;
         }
@@ -198,21 +252,26 @@ public sealed class WorldFederationProjectionSink(WorldDisclosureTier tier, stri
         var atCadence = snapshot with { Cues = projected.Cues, MusicBoundary = projected.MusicBoundary, MusicSenses = projected.MusicSenses };
         m_sampler.SetUpdateSeconds(updateSeconds: currentDisclosure.Policy.UpdateSeconds);
         if (!m_sampler.TryProject(atCadence, out projected)) { return; }
+        m_cursor.ObserveBodies(mode: currentDisclosure.Policy.Mode, radius: currentDisclosure.Policy.Radius);
         if (!currentDisclosure.IsFull) {
             projected = WorldOutputHub.Redact(currentDisclosure, projected, ref m_redacted);
         }
         if (m_view is not null) { projected = projected with { FieldCells = m_rows.Advance(m_view, m_cursor, projected.FieldCells, (tier == WorldDisclosureTier.Replica)) }; } else if (!projected.FieldCells.IsEmpty) { throw new InvalidOperationException(message: "A state change delivery requires its authority view."); }
         projected = projected with { Revision = checked((int)m_cursor.Sequence), SolidScales = ((m_view is null) ? default : m_scales.Filter(m_view, projected.SolidScales)) };
         projected = projected with { Inputs = ((recipient is { } inputOwner) ? WorldInputPublication.ForOwner(projected.Inputs, inputOwner, ref m_inputDisclosure) : default) };
-        Write(
+        // A cut the rows or the body policy decided primes the peer alone, and this snapshot completes it.
+        if (AnnounceCut()) {
+            PrimeAfterCut();
+        }
+        WriteRecord(
             WorldFederationResponse.Snapshot,
             WorldFederationCodec.EncodeSnapshot(snapshot: in projected)
         );
     }
     // The replica wire carries one definition-frame kind, so a value-only delivery rides the same encode; a
     // presentation-tier peer is owed only the members of its projection that the values moved.
-    public void DeliverState(WorldDefinition definition, WorldDocumentVersion version, in WorldStateStamp stamp) {
-        if ((m_feed is not null) || !stamp.ArenaValues || ((m_view is not null) && m_cursor.FrameMoved(view: m_view))) { DeliverDefinition(definition: definition, version: version); }
+    public void DeliverState(WorldDefinition definition, WorldDocumentVersion version, in WorldStateStamp stamp, in WorldStreamStamp stream) {
+        if ((m_feed is not null) || !stamp.ArenaValues || ((m_view is not null) && m_cursor.FrameMoved(view: m_view))) { DeliverDefinition(definition: definition, stream: in stream, version: version); }
     }
     public void PrimeRoute(in WorldAuthorityRouteDescription route) => Write(
         WorldFederationResponse.Route,

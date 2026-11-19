@@ -418,7 +418,7 @@ public sealed class WorldStateReadRoutingLawTests {
             Revision: 0,
             StepTicks: 1680UL,
             Tick: 1UL
-        ));
+        ), stream: default);
 
         using var endpoint = new WorldAuthorityEndpoint(
             adjacencies: static () => null,
@@ -428,7 +428,7 @@ public sealed class WorldStateReadRoutingLawTests {
             nextInputTick: static () => 6UL,
             observe: sink => {
                 remoteSink = sink;
-                sink.DeliverDefinition(definition: remote, version: default);
+                sink.DeliverDefinition(definition: remote, version: default, stream: default);
                 sink.DeliverSnapshot(snapshot: new WorldSnapshot(
                     Authority: "north",
                     EngineTick: (5UL * 1680UL),
@@ -436,7 +436,7 @@ public sealed class WorldStateReadRoutingLawTests {
                     Revision: 0,
                     StepTicks: 1680UL,
                     Tick: 5UL
-                ));
+                ), stream: default);
 
                 return new Lease();
             },
@@ -449,14 +449,14 @@ public sealed class WorldStateReadRoutingLawTests {
             identity: "boot",
             nextInputTick: static () => 2UL,
             observe: sink => {
-                sink.DeliverDefinition(definition: local, version: default);
+                sink.DeliverDefinition(definition: local, version: default, stream: default);
                 sink.DeliverSnapshot(snapshot: new WorldSnapshot(
                     Authority: "boot",
                     Entries: ReadOnlyMemory<EntitySnapshot>.Empty,
                     Revision: 0,
                     StepTicks: 1680UL,
                     Tick: 1UL
-                ));
+                ), stream: default);
 
                 return new Lease();
             },
@@ -559,7 +559,7 @@ public sealed class WorldStateReadRoutingLawTests {
                 MovedRows: new[] { 1 },
                 Tick: 5UL
             ),
-            version: default
+            version: default, stream: default
         );
         Assert.Same(
             actual: client.StateMirrorFor(endpoint: endpoint),
@@ -588,7 +588,7 @@ public sealed class WorldStateReadRoutingLawTests {
         var definition = Fixtures.BuildDocument().WithWorldState(rows: rows);
         var session = new WorldSessionMirror(placeholder: definition);
 
-        session.DeliverDefinition(definition: definition, version: default);
+        session.DeliverDefinition(definition: definition, version: default, stream: default);
 
         var state = session.FollowState();
         var view = new WorldDocumentStateView(definition: () => definition);
@@ -634,7 +634,7 @@ public sealed class WorldStateReadRoutingLawTests {
                 moved: [moved],
                 tick: tick
             ),
-            version: default
+            version: default, stream: default
             );
             before = Reads(mirror: state);
             _ = session.FollowState();
@@ -659,7 +659,7 @@ public sealed class WorldStateReadRoutingLawTests {
             moved: [moved],
             tick: 5UL
         ),
-        version: default
+        version: default, stream: default
         );
         session.DeliverState(
             definition: definition,
@@ -667,7 +667,7 @@ public sealed class WorldStateReadRoutingLawTests {
             moved: [moved],
             tick: 6UL
         ),
-        version: default
+        version: default, stream: default
         );
         before = Reads(mirror: state);
         _ = session.FollowState();
@@ -684,7 +684,7 @@ public sealed class WorldStateReadRoutingLawTests {
         )]);
         var session = new WorldSessionMirror(placeholder: definition);
 
-        session.DeliverDefinition(definition: definition, version: default);
+        session.DeliverDefinition(definition: definition, version: default, stream: default);
 
         var state = session.FollowState();
 
@@ -707,7 +707,7 @@ public sealed class WorldStateReadRoutingLawTests {
                         MovedRows: moved,
                         Tick: tick
                     ),
-                    version: default
+                    version: default, stream: default
                 );
                 _ = session.FollowState();
             }
