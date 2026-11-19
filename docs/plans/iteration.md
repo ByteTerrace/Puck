@@ -15,6 +15,11 @@ makes each slow today, and the order of the work that makes them fast.
 | Engine code | A C# or HLSL edit | Shaders reload live; a restart reuses every baked mesh and settled light the edit did not invalidate |
 | A cold machine | An empty store | About a minute per backend to bake the debug world's meshes, lighting settled soon after |
 
+A reload keeps the live value of every state row the edited source did not
+change, and re-seeds the rows it did, so an author keeps their place on a save
+(following from the rapid-iteration ruling); `world.reset` and `world.load`
+restart state from the file.
+
 ## How each is measured
 
 The World times every loop itself (`WorldIterationClock`, read with
