@@ -345,10 +345,12 @@ bool sdfLightNext(inout SdfLightWalk walk, out SdfLightSource light) {
 // a light the irradiance volume traced (its Shadows flag, SdfLight.IsTraced; the probes record every shadowing directional
 // too) takes the share of the probes about the surface that see it (sdfMeshLightVisibility), which resolves only the
 // probes' spacing, times the surface's ambient occlusion; an untraced one takes the ambient occlusion alone. One for every
-// other kind. The authored stamp requests every term; ordinary shading requests only the terms its light kind uses,
-// preserving the no-program path's work.
+// other kind. The authored stamp requests every term its program can read: a point light's visibility whether or not it
+// lights, and the probe share of every traced light only for a program that reads `light.probeShare` (`probeShare`,
+// SdfShadeReads.ProbeShare), since a directional's visibility otherwise reads the probes only where no cascade holds the
+// point. Ordinary shading requests only the terms its light kind uses, preserving the no-program path's work.
 struct SdfLightInputs { float3 direction; float reach; float probeShare; float visibility; };
-SdfLightInputs sdfLightInputs(SdfLightSource light, SdfShadeSurface surface, bool authored) {
+SdfLightInputs sdfLightInputs(SdfLightSource light, SdfShadeSurface surface, bool authored, bool probeShare) {
     SdfLightInputs inputs;
     inputs.direction = light.position;
     inputs.reach = 1.0;
@@ -366,7 +368,7 @@ SdfLightInputs sdfLightInputs(SdfLightSource light, SdfShadeSurface surface, boo
     bool lit = (light.weight * inputs.reach > 0.0);
     // The probes' share read here, or negative where it was not, so a directional's visibility reads the probes once.
     float known = -1.0;
-    if (traced && (authored || ((light.kind == SDF_LIGHT_POINT) && lit))) {
+    if (traced && (probeShare || ((light.kind == SDF_LIGHT_POINT) && (lit || authored)))) {
         inputs.probeShare = sdfMeshLightVisibility(surface.probes, (uint)light.index);
         known = inputs.probeShare;
     }
@@ -429,7 +431,7 @@ SdfLightResponse sdfLightResponse(SdfLightSource light, SdfShadeSurface surface,
     return response;
 }
 SdfLightResponse sdfLightResponse(SdfLightSource light, SdfShadeSurface surface) {
-    return sdfLightResponse(light, surface, sdfLightInputs(light, surface, false), 0u);
+    return sdfLightResponse(light, surface, sdfLightInputs(light, surface, false, false), 0u);
 }
 
 #endif

@@ -16,6 +16,10 @@ public enum SdfShadeReads : uint {
     World0 = 128, World1 = 256, World2 = 512, World3 = 1024,
     WorldLanes = World0 | World1 | World2 | World3,
     PaintCoverage = 2048,
+    /// <summary>The light phase reads <c>light.probeShare</c>, which the stage then gathers for every traced light; a
+    /// program that does not read it leaves a directional's probe share to its visibility, which reads the probes only
+    /// where no cascade holds the point.</summary>
+    ProbeShare = 4096,
 }
 /// <summary>An expression supplied to shade admission, never executable words. The compiler validates every field.</summary>
 /// <param name="Op">An op-table spelling, or constant, parameter, or input.</param>

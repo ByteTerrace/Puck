@@ -70,8 +70,13 @@ are `precise`; no contraction or reassociation is permitted. Host folding is
 limited to exact IEEE arithmetic, comparisons and literal vector construction;
 transcendentals stay on the device. Integer conversion is explicit: `quantize`
 floors then bitcasts, and `hash` consumes unsigned bits. The shared stage
-sanitizers replace non-finite outputs with defaults, clamp domains and normalize
-normals. `SdfShadeHlsl.Invocation` generates the surface, light and compose doors
+sanitizers replace non-finite outputs with the value the stage holds for that
+output, clamp domains and normalize normals. A light phase's assigned outputs
+(`SdfShadeProgram.AssignedOutputs`, the light and compose phases' fourth header
+word, a constant per arm in a specialized kernel: `sdfShadeAssigned`) are terms
+the default response never computes (`sdfLightResponse`'s `replaced`), so a cel
+band pays for no GGX lobe it discards, and a non-finite authored light term falls
+back to no light. `SdfShadeHlsl.Invocation` generates the surface, light and compose doors
 used by both the views and glass kernels. Glass supplies contact and thickness;
 authored roughness drives both its light response and its optical frost and
 environment. The standard water program keeps the underlying glass smooth while
@@ -113,7 +118,16 @@ checks the allocated phases' `PixelWork` at `MaxLights` for a complete 8x8 group
 including both glass interfaces, against `MaxWork`. This admission bound is provisional;
 it is not a measured timeout margin. `SdfShadeDispatch.Plan` partitions the full
 padded extent into whole groups under that bound and the backend group-count
-limit. Its `Record` door pushes each job's first group; both recorders use it.
+limit, pricing a pixel's walk at the lights its view's mask holds
+(`SdfLightSelection`, which every tile's walk narrows) and the bound screens, and
+pricing the tier that records it: a specialized selection's straight-line arms
+(`SdfShadeProgram.StraightCosts`, the same instructions without the interpreter's
+`SdfShadeOps.DispatchWork`), the interpreter otherwise. `SdfShadeSlots.RecordSelection`
+refuses a straight-priced plan with the interpreter's kernels. A binned views pass
+records the plan its bins pass last committed (`SdfWorldPasses.CommitShadePlan`,
+`ShadePlanOf`), so it advances by the widths its arguments hold while the bins pass
+stands, as when a publication moves the pricing without re-rendering either.
+Its `Record` door pushes each job's first group; both recorders use it.
 The shared pixel entry remaps that ordinal to the original grid, preserving the
 views filter's local lanes and barrier. `SdfWorldResidency.InFlightShadeIdentities`
 holds each submission's identities on the residency that recorded it, until a

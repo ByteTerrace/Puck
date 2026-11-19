@@ -352,6 +352,10 @@ public sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPopul
 
             render += string.Create(CultureInfo.InvariantCulture, $", worst shadow demand {worstDemand.Program.Demand.Cosine(baseWrap: worstDemand.Wrap):G6} ({worstDemand.Program.Name})");
             render += $", authors [{string.Join(separator: ", ", values: shadeMaterials.Select(selector: static material => material.Program.Name).Distinct(comparer: StringComparer.Ordinal))}]";
+            // Each program's canonical values against the instructions its bounded registers execute, rematerialization
+            // included: what the interpreter runs and what a specialized arm computes once.
+            render += $", shade values/instructions [{string.Join(separator: ", ", values: shades.Select(selector: static program =>
+                string.Create(CultureInfo.InvariantCulture, $"{program.Name} {program.Definition.Values?.Count ?? 0}/{program.Phases.Sum(selector: static phase => phase.Count)}")))}]";
             var emissive = shadeMaterials.Where(predicate: static material => material.Program.Outputs.Any(predicate: static output =>
                 ((output.Phase == Puck.SignedDistance.SdfShadePhase.Surface) && (output.Name == "emissive"))))
                 .Select(selector: static material => material.Program.Name).Distinct(comparer: StringComparer.Ordinal).ToArray();

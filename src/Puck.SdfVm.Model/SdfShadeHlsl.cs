@@ -45,6 +45,7 @@ public static partial class SdfShadeHlsl {
         text.Append(value: "#define SDF_SHADE_MAX_OPS ").Append(value: SdfShadeProgram.MaxOps).Append(value: "u\n");
         text.Append("#define SDF_SHADE_MAX_PHASE_WORK ").Append(SdfShadeProgram.MaxPhaseWork).Append("u\n");
         text.Append("#define SDF_SHADE_READ_PAINT ").Append((uint)SdfShadeReads.PaintCoverage).Append("u\n");
+        text.Append("#define SDF_SHADE_READ_PROBE_SHARE ").Append((uint)SdfShadeReads.ProbeShare).Append("u\n");
         foreach (var op in SdfShadeOps.Table) { text.Append(value: "#define SDF_SHADE_").Append(value: op.Op.ToString().ToUpperInvariant()).Append(value: ' ').Append(value: ((uint)op.Op)).Append(value: "u\n"); }
         text.Append(value: "struct SdfShadeStamp { ");
         for (var i = 0; (i < SdfShadeOps.Inputs.Count); i++) { text.Append(value: "uint4 i").Append(value: i).Append(value: "; "); }
