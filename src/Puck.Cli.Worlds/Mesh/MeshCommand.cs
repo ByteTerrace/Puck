@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.CommandLine;
 using System.Globalization;
 using System.Numerics;
@@ -6,6 +7,7 @@ using System.Text;
 using Puck.Cli.Host;
 using Puck.Maths;
 using Puck.SdfVm;
+using Puck.SignedDistance.Baking;
 using Puck.SignedDistance.Queries;
 using Puck.World.Client;
 
@@ -167,13 +169,15 @@ public static class MeshCommand {
         var selected = groups.Where(predicate: group => Selected(group: group, request: request, scene: scene)).ToArray();
         var evaluations = new Dictionary<int, long>();
         var taps = new Dictionary<int, MeshCpuTaps>();
-        var baked = (request.Cpu ? MeshCpuBake.Bake(evaluations: evaluations, farDistance: farDistance, groups: selected, scene: scene, taps: taps, tier: tier) : null);
+        var refinements = new ConcurrentDictionary<int, SdfRefinementMap>();
+        var baked = (request.Cpu ? MeshCpuBake.Bake(evaluations: evaluations, farDistance: farDistance, groups: selected, refinements: refinements, scene: scene, taps: taps, tier: tier) : null);
 
         _ = Parallel.For(fromInclusive: 0, toExclusive: groups.Count, body: ordinal => {
             var group = groups[ordinal];
 
             if (!selected.Contains(value: group)) { return; }
-            results[ordinal] = Audit(baked: baked, group: group, options: options, owner: scene.Owner(group: group), scene: scene, store: store, identity: identity, poses: poses);
+            // A posed mesh is no longer in the lattice's frame, so no map reads its cells.
+            results[ordinal] = Audit(baked: baked, group: group, options: options, owner: scene.Owner(group: group), poses: poses, refinement: ((poses.Count == 0) && refinements.TryGetValue(key: group.Selector, value: out var map) ? map : null), scene: scene, store: store, identity: identity);
         });
 
         var audited = results.Count(predicate: static result => (result?.Report is not null));
@@ -194,13 +198,14 @@ public static class MeshCommand {
             .ToArray();
 
         foreach (var ordinal in ordered) {
-            Write(ordinal: ordinal, outcome: results[ordinal]!, output: output, taps: taps.GetValueOrDefault(key: groups[ordinal].Selector, defaultValue: MeshCpuTaps.None), top: request.Top);
+            Write(ordinal: ordinal, outcome: results[ordinal]!, output: output, taps: taps.GetValueOrDefault(key: groups[ordinal].Selector, defaultValue: MeshCpuTaps.None), top: request.Top, refinement: ((poses.Count == 0) && refinements.TryGetValue(key: groups[ordinal].Selector, value: out var map) ? map : null));
             if (request.History && (results[ordinal]!.Field is { } field)) {
                 History(field: field, group: groups[ordinal], options: options, output: output, store: store);
             }
         }
 
         WriteWorst(images: request.Images, level: request.Level, ordered: ordered, output: output, results: results, worst: request.Worst);
+        WriteDefects(ordered: ordered, output: output, results: results);
         if (request.FieldLevels) {
             FieldLevels(evaluations: evaluations, groups: groups, options: new SdfMeshFieldLevelOptions { LocalAim = request.LocalAim }, output: output, results: results, scene: scene);
         }
@@ -252,7 +257,7 @@ public static class MeshCommand {
             && ((request.Group is null) || scene.Label(group: group, owner: owner).Contains(value: request.Group, comparisonType: StringComparison.Ordinal)));
     }
     // One group's audit: its stored mesh, or with baked its offline bake, measured against its field, or why it was not.
-    private static Outcome Audit(SdfMeshBakeGroup group, RestScene scene, RestBody? owner, SdfMeshStore store, UInt128 identity, SdfMeshAuditOptions options, Dictionary<int, SdfMesh>? baked, IReadOnlyDictionary<int, Puck.SignedDistance.DynamicTransform> poses) {
+    private static Outcome Audit(SdfMeshBakeGroup group, RestScene scene, RestBody? owner, SdfMeshStore store, UInt128 identity, SdfMeshAuditOptions options, Dictionary<int, SdfMesh>? baked, IReadOnlyDictionary<int, Puck.SignedDistance.DynamicTransform> poses, SdfRefinementMap? refinement) {
         var label = MeshAuditLines.Label(geometry: group.Sealed.Hash, posed: (poses.Count > 0), prototype: scene.Prototype(group: group), scene: scene.Label(group: group, owner: owner));
         var toWorld = scene.ToWorld(group: group);
 
@@ -279,7 +284,7 @@ public static class MeshCommand {
 
             if ((own is not null) && (poses.Count > 0)) { own = SdfMeshSkin.Pose(mesh: own, poses: poses); }
 
-            return new Outcome(Field: field, Label: label, Mesh: own, Owner: owner, Refusal: ((own is null) ? "no surface baked" : null), Report: ((own is null) ? null : SdfMeshAudit.Audit(field: field, mesh: own, options: options, shapes: shapes)), Stored: (own is not null), ToWorld: toWorld);
+            return new Outcome(Field: field, Label: label, Mesh: own, Owner: owner, Refusal: ((own is null) ? "no surface baked" : null), Report: ((own is null) ? null : SdfMeshAudit.Audit(field: field, mesh: own, options: options, refinement: refinement, shapes: shapes)), Stored: (own is not null), ToWorld: toWorld);
         }
         if (!store.TryPeek(geometry: group.Sealed, identity: identity, materials: out _, mesh: out var mesh, refusal: out var refusal)) {
             return new Outcome(Field: field, Label: label, Mesh: null, Owner: owner, Refusal: (refusal ?? "no stored mesh"), Report: null, Stored: (refusal is not null), ToWorld: toWorld);
@@ -320,7 +325,7 @@ public static class MeshCommand {
 
         return (near >= (HistoryShare * count));
     }
-    private static void Write(int ordinal, Outcome outcome, StringBuilder output, MeshCpuTaps taps, int top) {
+    private static void Write(int ordinal, Outcome outcome, StringBuilder output, MeshCpuTaps taps, int top, SdfRefinementMap? refinement) {
         if (outcome.Report is not { } report) {
             output.Append(provider: CultureInfo.InvariantCulture, handler: $"group {ordinal} {outcome.Label}: {outcome.Refusal}\n");
             return;
@@ -331,6 +336,12 @@ public static class MeshCommand {
         output.Append(provider: CultureInfo.InvariantCulture, handler: $"  normal (deg): face {Statistic(statistic: report.NormalError, scale: 1f)} | shading {Statistic(statistic: report.ShadingError, scale: 1f)} | rough {Statistic(statistic: report.RoughError, scale: 1f)}\n");
         output.Append(provider: CultureInfo.InvariantCulture, handler: $"  field slope deficit: {Statistic(statistic: report.SlopeDeficit, scale: 1f)}{((report.LooseShapes.Count == 0) ? string.Empty : $"; loose near {string.Join(separator: ", ", values: report.LooseShapes.Select(selector: static shape => $"{shape.Name} {shape.Count}"))}")}\n");
         output.Append(value: MeshAuditLines.TopologyLine(report: report)).Append(value: '\n');
+        if (MeshAuditLines.DefectText(tallies: report.Defects) is { } defects) {
+            output.Append(provider: CultureInfo.InvariantCulture, handler: $"  defects: {defects}\n");
+        }
+        if (refinement is not null) {
+            output.Append(provider: CultureInfo.InvariantCulture, handler: $"  refinement: lattice cell {Millimetres(metres: MathF.Max(x: refinement.Cell.X, y: MathF.Max(x: refinement.Cell.Y, y: refinement.Cell.Z)))} mm, scan asked {refinement.Asked}, split {refinement.Factor}, {refinement.Measured} cells measured, {refinement.Refined} contoured fine, {refinement.Thin} thin\n");
+        }
         // Taps the evaluator could not place where the kernel does straddle a crease the device's do not, so the crease
         // normals near them, and the folds and flips they place, are not what a World bakes.
         if (taps.Widened > 0L) {
@@ -447,6 +458,33 @@ public static class MeshCommand {
                 output.Append(provider: CultureInfo.InvariantCulture, handler: $"      image {CliPaths.ToDisplay(fullPath: path)}\n");
             }
         }
+    }
+    // Every failing group with its defect classes and where the refinement stood at each, then the classes' totals: for
+    // each failing shape, which defect it shows and whether its cells were ever flagged for finer samples.
+    private static void WriteDefects(int[] ordered, Outcome?[] results, StringBuilder output) {
+        var failing = ordered
+            .Where(predicate: ordinal => (results[ordinal]!.Report is { } report) && report.Defects.Any(predicate: static tally => (tally.Count > 0)))
+            .ToArray();
+
+        output.Append(provider: CultureInfo.InvariantCulture, handler: $"defects by group: {failing.Length} group(s) with a defect (cells: not-scanned, scanned-nothing-flagged, unflagged, ring, measured; no-map when the mesh was stored; thin cells beside):\n");
+        foreach (var ordinal in failing) {
+            output.Append(provider: CultureInfo.InvariantCulture, handler: $"  group {ordinal} {results[ordinal]!.Label}: {MeshAuditLines.DefectText(tallies: results[ordinal]!.Report!.Defects)}\n");
+        }
+
+        var totals = Enum.GetValues<SdfMeshDefectClass>()
+            .Select(selector: defect => new SdfMeshDefectTally(
+                Class: defect,
+                Count: failing.Sum(selector: ordinal => results[ordinal]!.Report!.Defects[((int)defect)].Count),
+                NotScanned: failing.Sum(selector: ordinal => results[ordinal]!.Report!.Defects[((int)defect)].NotScanned),
+                LatticeUnrefined: failing.Sum(selector: ordinal => results[ordinal]!.Report!.Defects[((int)defect)].LatticeUnrefined),
+                Measured: failing.Sum(selector: ordinal => results[ordinal]!.Report!.Defects[((int)defect)].Measured),
+                Ring: failing.Sum(selector: ordinal => results[ordinal]!.Report!.Defects[((int)defect)].Ring),
+                Unflagged: failing.Sum(selector: ordinal => results[ordinal]!.Report!.Defects[((int)defect)].Unflagged),
+                Unknown: failing.Sum(selector: ordinal => results[ordinal]!.Report!.Defects[((int)defect)].Unknown)
+            ) { Thin = failing.Sum(selector: ordinal => results[ordinal]!.Report!.Defects[((int)defect)].Thin) })
+            .ToArray();
+
+        output.Append(provider: CultureInfo.InvariantCulture, handler: $"defects total: {(MeshAuditLines.DefectText(tallies: totals) ?? "none")}\n");
     }
     private static string Describe(SdfMeshAuditCluster cluster, Outcome outcome) {
         var world = outcome.ToWorld(arg: cluster.Center);
