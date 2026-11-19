@@ -24,6 +24,47 @@ public sealed class GpuSubmissionBatchLawTests {
     }
 
     [Fact]
+    public void ABackgroundJobDeferredAheadOfFrameWorkIsAnsweredByASignalOfItsOwn() {
+        var batch = new Batch();
+        using var upload = new Fence();
+        using var bake = new Fence();
+        using var probe = new Fence();
+        using var frame = new Fence();
+        batch.Begin();
+        batch.TryDefer([1], 1, upload);
+        using (GpuQueueWork.Attribute(GpuQueueCategory.Bake)) { batch.TryDefer([2], 1, bake); }
+        using (GpuQueueWork.Attribute(GpuQueueCategory.Probe)) { batch.TryDefer([3], 1, probe); }
+        // A run of jobs ends at the first work that is not a job's: one hand-over, owned by the run's last job.
+        Assert.Empty(batch.HandOffs);
+        batch.TryDefer([4], 1, frame);
+        Assert.Equal([1, 2, 3], batch.HandOffs[0]);
+        Assert.Same(probe, batch.Owners[0]);
+        batch.TryDefer([5], 1, null);
+        batch.Flush();
+        Assert.Equal([4, 5], batch.HandOffs[1]);
+        Assert.Same(frame, batch.Owners[1]);
+        // The jobs and what was deferred before them answer from the jobs' signal while the frame's work still runs.
+        probe.Complete();
+        Assert.True(bake.IsSignaled);
+        Assert.True(upload.IsSignaled);
+        Assert.False(frame.IsSignaled);
+    }
+
+    [Fact]
+    public void AFrameSubmissionWhoseJobHandOverFailsIsAbandonedWithTheJob() {
+        var batch = new Batch();
+        using var bake = new Fence();
+        using var frame = new Fence();
+        batch.Begin();
+        using (GpuQueueWork.Attribute(GpuQueueCategory.Bake)) { batch.TryDefer([1], 1, bake); }
+        batch.FailBeforeArm = true;
+        Assert.Throws<InvalidOperationException>(() => batch.TryDefer([2], 1, frame));
+        Assert.Throws<GpuSubmissionAbandonedException>(() => _ = bake.IsSignaled);
+        Assert.Throws<GpuSubmissionAbandonedException>(() => _ = frame.IsSignaled);
+        Assert.True(batch.IsOpen);
+    }
+
+    [Fact]
     public void AnAbandonedFenceTakesNoSubmissionUntilAWaitReportsItAndItsAliasCannotAttachToTheNext() {
         var batch = new Batch { FailBeforeArm = true };
         using var alias = new Fence();
@@ -252,9 +293,14 @@ public sealed class GpuSubmissionBatchLawTests {
         public bool RefuseDrain { get; init; }
         public int Drains { get; private set; }
         public List<int> Submitted { get; } = [];
+        // Each hand-over's entries and owner, in order.
+        public List<int[]> HandOffs { get; } = [];
+        public List<GpuBatchedSubmissionFence?> Owners { get; } = [];
         protected override void Submit(ReadOnlySpan<int> entries, GpuBatchedSubmissionFence? owner) {
             if (FailBeforeArm) { throw new InvalidOperationException("the queue refused the hand-off"); }
             foreach (var entry in entries) { Submitted.Add(entry); }
+            HandOffs.Add(entries.ToArray());
+            Owners.Add(owner);
             if (owner is Fence fence) {
                 if (RefuseSignal) {
                     fence.ArmRefused(drain: () => {
