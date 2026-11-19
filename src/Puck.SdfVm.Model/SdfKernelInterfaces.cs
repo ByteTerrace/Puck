@@ -102,7 +102,8 @@ public sealed class SdfKernelInterfaces {
     /// <summary>The mesh pass occlusion's indirect draws: the first phase's records, then the second's, each
     /// <c>GpuDrawIndirectCommand</c> records long.</summary>
     public const string MeshOcclusionDrawsWritten = "sdfMeshOcclusionDrawsRW";
-    /// <summary>The indirect commands read by Vulkan vertex stages through their draw index, including the fixed-count fallback.</summary>
+    /// <summary>The indirect commands read by the vertex stages for each draw's identity: through the draw index on Vulkan,
+    /// including the fixed-count fallback, and through the command number at Direct3D 12's execute-indirect tier 1.1.</summary>
     public const string MeshIndirectCommands = "sdfMeshIndirectCommands";
     /// <summary>The raster selection's counts: early entry, late entry, solid exit, thin exit and optical,
     /// followed by portal sight verdicts.</summary>
