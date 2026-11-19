@@ -37,32 +37,20 @@ public sealed class ReloadDeltaLawTests {
         Console.WriteLine($"reload-delta parity: whole={expected:x16} delta={actual:x16} payload={bytes.Length}");
     }
 
-    // A creation a mutation upserted is installed normalized, with members its source leaves null written out. The
-    // reload back to the source has to set those members to null again, which a member-wise delta cannot say (a null
-    // removes), so the diff replaces the object.
-    [Fact]
-    public void AReloadAfterALiveCreationEditReturnsToTheSource() {
-        var world = Fixtures.BuildGradientUpDocument(gradientUp: false);
-        var original = world.Creations[0];
+    // A null in a delta removes the member on merge, so a member that becomes an explicit null cannot be reached
+    // member by member: the diff replaces the object that holds it. A creation a mutation upserted is installed with
+    // members its source holds as null written out, and the reload back to that source is such a change.
+    [Theory]
+    [InlineData("""{"shapes":[{"name":"a","blend":"Union","smooth":0}]}""", """{"shapes":[{"name":"a","blend":null,"smooth":null}]}""")]
+    [InlineData("""{"look":{"wrap":0.5}}""", """{"look":{"wrap":null}}""")]
+    [InlineData("""{"look":{}}""", """{"look":{"wrap":null}}""")]
+    public void ADeltaReachesATargetThatHoldsAMemberAsNull(string basisJson, string targetJson) {
+        var basis = System.Text.Json.Nodes.JsonNode.Parse(basisJson)!.AsObject();
+        var target = System.Text.Json.Nodes.JsonNode.Parse(targetJson)!.AsObject();
+        var delta = WorldDocumentBasis.Diff(basis, target);
 
-        original = CreationFixtures.Prototype(original.Document with { Palette = CreationFixtures.Grey }, original.Id);
-        world = world with { CreationsRaw = [original, .. world.Creations.Skip(1)] };
-        using var fixture = Fixtures.FreshServer(world);
-        var server = fixture.Server;
-
-        fixture.Step();
-        server.EnqueueMutation(mutation: new WorldMutation.UpsertCreation(
-            Creation: CreationFixtures.Prototype(original.Document with { Palette = [new("#6B8299", null, null, null)] }, original.Id),
-            Principal: Principal.Console
-        ));
-        fixture.Step();
-        Assert.Equal("#6B8299", server.Definition.Creations[0].Document.Palette![0].Color);
-
-        var delta = WorldReloadDelta.Create(server.Definition, server.DocumentVersion, world);
-
-        server.EnqueueRebuild(new(WorldRebuildKind.Reload, null, new WorldRebuildOrigin.File("palette.world.json"), false, "source", delta), Principal.Console);
-        fixture.Step();
-        Assert.Equal(WorldDefinitionFingerprint.Compute(world), WorldDefinitionFingerprint.Compute(server.Definition));
+        Assert.True(WorldDocumentBasis.TryMerge(basis, delta, out var merged, out var reason), reason);
+        Assert.Equal(target.ToJsonString(), merged!.ToJsonString());
     }
 
     [Theory]
