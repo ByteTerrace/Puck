@@ -122,6 +122,10 @@ DXGI_MEMORY_SEGMENT_GROUP
 D3D12_FEATURE_DATA_D3D12_OPTIONS
 D3D12_FEATURE_DATA_ROOT_SIGNATURE
 D3D12_FEATURE_DATA_D3D12_OPTIONS19
+// Options 21's ExecuteIndirectTier: tier 1.1 numbers the commands of a counted draw with an incrementing root constant
+// (D3D12_INDIRECT_ARGUMENT_TYPE_INCREMENTING_CONSTANT).
+D3D12_FEATURE_DATA_D3D12_OPTIONS21
+D3D12_EXECUTE_INDIRECT_TIER
 // And how it backs memory (GpuBackingSupport): options' tiled resources tier, how much address one reserved resource
 // spans, and whether the device implements ID3D12Device1 (SetResidencyPriority) and ID3D12Device3 (EnqueueMakeResident).
 D3D12_FEATURE_DATA_GPU_VIRTUAL_ADDRESS_SUPPORT

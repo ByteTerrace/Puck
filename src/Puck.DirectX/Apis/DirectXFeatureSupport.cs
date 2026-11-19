@@ -106,7 +106,8 @@ public static unsafe class DirectXFeatureReads {
     /// <summary>Reads what a device can bind: options' resource binding tier, the highest root signature version and
     /// shader model, and options 19's shader-visible heap sizes. A runtime that does not answer options 19 reports the
     /// heap sizes every binding tier guarantees; one that knows no root signature version or shader model the query
-    /// asks reports that field empty.
+    /// asks reports that field empty. And options 21's execute-indirect tier, which a runtime that does not answer
+    /// reports as zero.
     /// <para>And how it backs memory (<see cref="GpuDeviceCapabilities.WithDirectXBacking"/>): options' tiled resources
     /// tier, the virtual address support query's per-resource address bits (zero when the runtime does not answer it),
     /// and the two interfaces the caller probed.</para></summary>
@@ -119,6 +120,7 @@ public static unsafe class DirectXFeatureReads {
     public static GpuDeviceCapabilities Capabilities<TSupport>(TSupport support, bool residencyPriority = false, bool enqueueMakeResident = false) where TSupport : IDirectXFeatureSupport {
         var options = new D3D12_FEATURE_DATA_D3D12_OPTIONS();
         var options19 = new D3D12_FEATURE_DATA_D3D12_OPTIONS19();
+        var options21 = new D3D12_FEATURE_DATA_D3D12_OPTIONS21();
         var addresses = new D3D12_FEATURE_DATA_GPU_VIRTUAL_ADDRESS_SUPPORT();
 
         support.CheckFeatureSupport(
@@ -137,8 +139,16 @@ public static unsafe class DirectXFeatureReads {
         if (!TryCheck(data: ref addresses, feature: D3D12_FEATURE.D3D12_FEATURE_GPU_VIRTUAL_ADDRESS_SUPPORT, support: support)) {
             addresses = default;
         }
+        if (!TryCheck(
+            data: ref options21,
+            feature: D3D12_FEATURE.D3D12_FEATURE_D3D12_OPTIONS21,
+            support: support
+        )) {
+            options21 = default;
+        }
 
         return GpuDeviceCapabilities.FromDirectX(
+            executeIndirectTier: ((uint)options21.ExecuteIndirectTier),
             resourceBindingTier: ((uint)options.ResourceBindingTier),
             rootSignatureVersion: HighestRootSignatureVersion(support: support),
             samplerHeapSize: options19.MaxSamplerDescriptorHeapSize,

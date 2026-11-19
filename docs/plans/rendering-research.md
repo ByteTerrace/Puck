@@ -2494,7 +2494,7 @@ CPU thread reads to learn that work on a queue has finished.
 - *What it speeds up.* A barrier tells the GPU that a resource changes
   use between two passes. Direct3D 12 has an older and a newer form. Puck
   requires the newer one and uses it for buffers, but every texture still
-  goes through the older one (`DirectXBarriers.Transition`), which makes
+  goes through the older one (a legacy resource barrier), which makes
   the driver assume the worst case. The frame is a chain of compute passes
   over images, so it pays that between most of them.
 - *Evidence.* The specification: "Mixing legacy and enhanced barriers on
