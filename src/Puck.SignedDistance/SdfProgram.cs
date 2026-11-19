@@ -123,6 +123,14 @@ public sealed partial class SdfProgram {
     /// the same UVs bake again. One texture binds for every glyph of a program (<c>SdfWorldTables.SetGlyphAtlas</c>), so
     /// the builder refuses glyphs of two atlas images in one program.</summary>
     public ulong GlyphAtlas { get; }
+    /// <summary>Gets the thinnest stroke the program's <see cref="SdfShapeType.Glyph"/> shapes are taken to have, in units
+    /// of a glyph's distance scale (its lane <c>Data0.Z</c>): <see cref="SdfProgramBuilder.GlyphStrokeEms"/> times the em
+    /// one distance scale spans (the atlas's <see cref="Puck.Text.FontAtlas.Size"/> over its
+    /// <see cref="Puck.Text.FontAtlas.DistanceRange"/>), the least over the atlases its glyphs were laid out against;
+    /// zero when it holds no glyph. The mesh bake's lettering stroke rule reads it to thicken a glyph baked at a cell
+    /// its strokes are too thin for (<c>sdfGlyph</c>), so a glyph group keys its geometry by it beside
+    /// <see cref="GlyphAtlas"/>.</summary>
+    public float GlyphStroke { get; }
 
     /// <summary>Initializes a new instance of the <see cref="SdfProgram"/> class: the field derivation, from the field's
     /// own inputs and its appearance's <see cref="SdfAppearanceOutline"/> alone. It is the root of the mesh bake's
@@ -140,11 +148,16 @@ public sealed partial class SdfProgram {
     /// <param name="reservedPathWords">Extra uint words reserved by a capacity probe for future path tables; never executed.</param>
     /// <param name="sampledBindings">Each sampled instruction's field (<see cref="SampledFields"/>).</param>
     /// <param name="glyphAtlas">The content identity of the atlas pixels the glyph shapes sample (<see cref="GlyphAtlas"/>).</param>
-    private SdfProgram(IReadOnlyList<SdfInstruction> instructions, SdfAppearanceOutline appearance, IReadOnlyList<SdfInstanceRange>? instances, IReadOnlyList<(int InstructionIndex, Vector2[] Vertices)>? convexPolygonProfiles, IReadOnlyList<SdfSweepCurve>? sweepCurves, IReadOnlyList<SdfCompiledPath>? paths, int reservedPathWords, IReadOnlyList<SdfSampledBinding>? sampledBindings, ulong glyphAtlas) {
+    /// <param name="glyphStroke">The thinnest stroke the glyph shapes are taken to have (<see cref="GlyphStroke"/>).</param>
+    private SdfProgram(IReadOnlyList<SdfInstruction> instructions, SdfAppearanceOutline appearance, IReadOnlyList<SdfInstanceRange>? instances, IReadOnlyList<(int InstructionIndex, Vector2[] Vertices)>? convexPolygonProfiles, IReadOnlyList<SdfSweepCurve>? sweepCurves, IReadOnlyList<SdfCompiledPath>? paths, int reservedPathWords, IReadOnlyList<SdfSampledBinding>? sampledBindings, ulong glyphAtlas, float glyphStroke) {
         ArgumentNullException.ThrowIfNull(instructions);
         ArgumentOutOfRangeException.ThrowIfNegative(reservedPathWords);
+        if (!float.IsFinite(f: glyphStroke) || (glyphStroke < 0f)) {
+            throw new ArgumentOutOfRangeException(paramName: nameof(glyphStroke), actualValue: glyphStroke, message: "A program's glyph stroke is finite and non-negative.");
+        }
 
         GlyphAtlas = glyphAtlas;
+        GlyphStroke = glyphStroke;
 
         // EVERY input is snapshotted before anything reads it, and every later read goes through the snapshot. The
         // parameters are IReadOnlyList, so a caller's list can answer two reads differently (a mutation between them,

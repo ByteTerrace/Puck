@@ -86,6 +86,7 @@ public sealed partial class SdfProgram {
             appearance: m_outline,
             convexPolygonProfiles: polygons,
             glyphAtlas: GlyphAtlas,
+            glyphStroke: GlyphStroke,
             instances: null,
             instructions: instructions,
             paths: paths,

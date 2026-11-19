@@ -126,6 +126,9 @@ public sealed partial class SdfProgramBuilder {
     // The content identity of the one atlas image the emitted glyphs sample (SdfProgram.GlyphAtlas), default until a glyph
     // of an atlas with pixels is emitted.
     private Puck.Assets.AssetContentHash m_glyphAtlas;
+    // The thinnest stroke the emitted glyphs are taken to have in units of a glyph's distance scale (SdfProgram.GlyphStroke):
+    // the least over their atlases, infinity until a glyph is emitted.
+    private float m_glyphStroke = float.PositiveInfinity;
 
     /// <summary>Creates a builder, optionally pre-sizing its instruction/instance/material/screen-surface lists so a
     /// repeat-construction caller (a live composition rebuild) that already knows roughly how big the next program
@@ -178,6 +181,7 @@ public sealed partial class SdfProgramBuilder {
         m_fieldScopes?.Clear();
         m_reservedPathWords = 0;
         m_glyphAtlas = default;
+        m_glyphStroke = float.PositiveInfinity;
         m_materialRecolor = null;
         m_positionalFold = null;
         ResetOpenInstance();
@@ -1216,6 +1220,7 @@ public sealed partial class SdfProgramBuilder {
             appearance: new SdfAppearance(materials: m_materials, screenSurfaces: m_screenSurfaces),
             convexPolygonProfiles: m_convexPolygonProfiles,
             glyphAtlas: m_glyphAtlas.Value,
+            glyphStroke: (float.IsFinite(f: m_glyphStroke) ? m_glyphStroke : 0f),
             instances: m_instances,
             instructions: m_instructions,
             paths: m_paths,

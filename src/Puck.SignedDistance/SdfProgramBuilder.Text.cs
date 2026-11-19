@@ -72,6 +72,7 @@ public sealed partial class SdfProgramBuilder {
             subject: "A glyph distance scale"
         );
         if (atlas.ImageData is { } pixels) { SampleGlyphAtlas(atlas: pixels.ContentHash); }
+        m_glyphStroke = MathF.Min(x: m_glyphStroke, y: GlyphStrokeScale(atlas: atlas));
 
         return Shape(
             blend: blend,
@@ -153,6 +154,37 @@ public sealed partial class SdfProgramBuilder {
 
     /// <summary>The fine cells <see cref="GlyphDetail"/> asks across a run's thinnest stroke.</summary>
     public const float GlyphStrokeCells = 3f;
+
+    /// <summary>The cells the mesh bake's lettering stroke rule widens a glyph's thinnest stroke to where its group's tier
+    /// cell is coarser than its strokes allow (<c>sdfGlyph</c>, <see cref="SdfProgram.GlyphStroke"/>): more than two, so
+    /// every lattice line across the stroke holds at least two inside samples, and fewer than
+    /// <see cref="GlyphStrokeCells"/>, which a faithful bake asks, so a coarse tier's letters thicken no more than they
+    /// must.</summary>
+    public const float GlyphThickenCells = 2.5f;
+
+    /// <summary>The fewest cells the lettering stroke rule lets a widened stroke span before it bakes the glyph as its ink
+    /// box instead: two, so every lattice line across the stroke still holds an inside sample.</summary>
+    public const float GlyphHoldCells = 2f;
+
+    /// <summary>The share of a glyph's distance band (half its atlas's distance range, past which the encoded field
+    /// saturates) the lettering stroke rule widens a stroke by at most.</summary>
+    public const float GlyphWidenShare = 0.9f;
+
+    /// <summary>Returns the thinnest stroke an atlas's glyphs are taken to have, in units of a glyph's distance scale as
+    /// <see cref="Text(FontAtlas, string, Vector3, Vector3, Vector3, float, int, SdfBlendOp, float, float, TextLayoutOptions, int?, TextLayoutResult?)"/>
+    /// lays it out (the atlas's <see cref="FontAtlas.DistanceRange"/> texels of the world size of one texel, one em being
+    /// <see cref="FontAtlas.Size"/> texels): <see cref="GlyphStrokeEms"/> ems.</summary>
+    /// <param name="atlas">The atlas.</param>
+    /// <returns>The stroke over the distance scale; infinity for an atlas with no positive size or distance range,
+    /// whose glyphs are never thickened.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="atlas"/> is <see langword="null"/>.</exception>
+    public static float GlyphStrokeScale(FontAtlas atlas) {
+        ArgumentNullException.ThrowIfNull(atlas);
+
+        var scale = ((GlyphStrokeEms * atlas.Size) / atlas.DistanceRange);
+
+        return ((float.IsFinite(f: scale) && (scale > 0f)) ? scale : float.PositiveInfinity);
+    }
 
     /// <summary>Returns the spacing a run's glyphs ask of the mesh bake: the lesser of the half slab each glyph extrudes
     /// and a third of its thinnest stroke (<see cref="GlyphStrokeEms"/>, <see cref="GlyphStrokeCells"/>). A plate's two

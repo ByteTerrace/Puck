@@ -435,26 +435,56 @@ precise float sdfGlyphSampleFieldMedian(float2 uv) {
 
     return puckMsdfReconstruct(s00, s10, s01, s11, f);
 }
+// The lettering stroke rule. The mesh bake sets both values for each lattice from its group (SdfMeshBakeRequest.Glyphs):
+// the cell its group's tier floors the sampling at, and the thinnest stroke the glyphs are taken to have in units of a
+// glyph's distance scale (SdfProgram.GlyphStroke). Every other kernel leaves the cell zero, which thickens nothing.
+static float sdfGlyphCell = 0.0;
+static float sdfGlyphStroke = 0.0;
+
 precise float sdfGlyph(float3 p, float4 data0, float4 data1) {
     float2 halfSize = float2(data1.y, data1.z);
     float dQuad = puckBoxDistance2(abs(p.xy) - halfSize);
     float distanceScale = data0.z;
-    float dPlane = dQuad;
+    float band = (0.5 * distanceScale);
+    float halfDepth = data0.w;
+    float widen = 0.0;
+
+    // A glyph baked at a cell its strokes or relief are too thin for loses them between samples. Its thinnest stroke
+    // widens toward SDF_GLYPH_THICKEN_CELLS cells, as far as the encoded band measures, and its relief to a cell, so the
+    // bake drawing it at any tier keeps every stroke. Where that widening leaves the stroke under SDF_GLYPH_HOLD_CELLS
+    // cells the glyph bakes as its ink box instead: the cell less the band (the atlas pads each cell by at least the
+    // band, so the box holds every stroke), widened to SDF_GLYPH_THICKEN_CELLS cells inside the cell. The group's box
+    // grows by the cell to hold the raised relief (SdfMeshBakeGroup.GlyphCell).
+    if (sdfGlyphCell > 0.0) {
+        float stroke = (sdfGlyphStroke * distanceScale);
+
+        widen = clamp((0.5 * ((SDF_GLYPH_THICKEN_CELLS * sdfGlyphCell) - stroke)), 0.0, (SDF_GLYPH_WIDEN_SHARE * band));
+        halfDepth = max(halfDepth, sdfGlyphCell);
+        if ((stroke + (2.0 * widen)) < (SDF_GLYPH_HOLD_CELLS * sdfGlyphCell)) {
+            float2 ink = max((halfSize - band), 0.0);
+            float grow = min(max(((0.5 * SDF_GLYPH_THICKEN_CELLS * sdfGlyphCell) - min(ink.x, ink.y)), 0.0), band);
+
+            return sdfExtrude2D((puckBoxDistance2(abs(p.xy) - ink) - grow), p.z, halfDepth);
+        }
+    }
+
+    float dPlane = (dQuad - widen);
 
     // Band cull: beyond ±distanceRange/2 of an edge the encoded field saturates, so a tap there tells us nothing the
     // exact quad distance dQuad does not already bound — skip the texture read entirely (the whole perf trick, and the
     // conservative far-field at once). Inside the band, refine to the letter's true distance. The max() with dQuad
     // keeps the band→proxy seam a valid UNDERESTIMATE: the saturated atlas UNDER-reports, so the exact quad wins there.
-    if (dQuad < (0.5 * distanceScale)) {
+    // A widening is taken from the true distance before its derivative correction, so the correction still bounds it.
+    if (dQuad < band) {
         float2 uvMin = sdfGlyphUnpackUv(data0.x);
         float2 uvMax = sdfGlyphUnpackUv(data0.y);
         float2 uv = lerp(uvMin, uvMax, clamp((((p.xy / halfSize) * 0.5) + 0.5), 0.0, 1.0));
         float encoded = sdfGlyphSampleField(uv);   // true single-channel distance; 0.5 = edge, > 0.5 inside the glyph
 
-        dPlane = max(((0.5 - encoded) * distanceScale * data1.w), dQuad);
+        dPlane = max(((((0.5 - encoded) * distanceScale) - widen) * data1.w), (dQuad - widen));
     }
 
-    return sdfExtrude2D(dPlane, p.z, data0.w);
+    return sdfExtrude2D(dPlane, p.z, halfDepth);
 }
 #endif
 // === end SDF_SHAPE_GLYPH ============================================================================================

@@ -66,6 +66,35 @@ from the surface it returns the conservative quad field, which keeps culling
 and marching safe. Glyph geometry can be unioned, subtracted, embossed, or
 engraved like other shapes.
 
+### The lettering stroke rule
+
+A baked glyph never loses a stroke at the tier it is drawn at. A run asks the
+bake for a third of its thinnest stroke and its half relief
+(`SdfProgramBuilder.GlyphDetail`), and a group whose tier cell
+(`SdfMeshTier.Cell`) is coarser than that, because the view is far or the mesh
+region's budget raised the detail bias, would otherwise lose strokes and faces
+between samples. The bake kernel thickens each glyph instead (`sdfGlyph`): its
+thinnest stroke, `SdfProgram.GlyphStroke` distance scales wide
+(`GlyphStrokeEms` ems of its atlas), widens toward `GlyphThickenCells` cells,
+and its relief rises to one cell. The widening reaches at most
+`GlyphWidenShare` of the atlas's distance band (half its distance range, past
+which the encoded field saturates). Where the stroke still spans fewer than
+`GlyphHoldCells` cells, so a lattice line across it could miss it, the glyph
+bakes as its ink box instead: the cell less half the distance range, which
+holds every stroke because the atlas pads each cell by at least that, widened
+to `GlyphThickenCells` cells. Text reads bolder as it coarsens and becomes bars
+of letter boxes where letters are a few cells tall, rather than breaking into
+fragments. At the tier a run declares, or finer, nothing changes.
+
+Every lattice of a group carries the group's cell and stroke
+(`SdfMeshBakeRequest.Glyphs`, written through the one request door
+`RequestOf`), so coarse samples, fine samples, gradient taps and material reads
+sample one field, and the group's box grows by the cell to hold the raised
+relief (`SdfMeshBakeGroup.GlyphCell`). The stroke is a program fact keyed into
+every glyph group's geometry beside the atlas identity. A program laying out
+fonts of different em-to-range ratios takes the least, so a font with thicker
+strokes per distance scale is thickened a little more than it needs.
+
 Do not march the median of RGB channels. Median reconstruction is continuous
 enough for coverage but is not guaranteed to be a conservative signed-distance
 field at channel conflicts.

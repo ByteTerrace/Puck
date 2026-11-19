@@ -25,10 +25,11 @@ public static class SdfMeshBakeBlock {
     public const int MaxSlabPlanes = (1 << 14);
     /// <summary>Writes the mesh bake's pass block (<see cref="SdfWorldInterfaces.MeshBakeParameters"/>), all its mask
     /// and sampler read beside the extent the node writes: the live program's instance-mask width, the pass's rows of the
-    /// work counters, and the lattices one bake dispatch samples and the instances each selects, four rows a lattice
-    /// (<see cref="SdfWorldPackage.MeshBakeLattices"/>), the lattices' samples back to back; the fourth names the point
-    /// table entry its group's poses start at, their first slot and how many slots they cover
-    /// (<see cref="SdfMeshBakeBatch.Poses"/>).</summary>
+    /// work counters, and the lattices one bake dispatch samples and the instances each selects,
+    /// <see cref="SdfWorldPackage.MeshBakeLatticeRows"/> rows a lattice (<see cref="SdfWorldPackage.MeshBakeLattices"/>),
+    /// the lattices' samples back to back; the fourth names the point table entry its group's poses start at, their first
+    /// slot and how many slots they cover (<see cref="SdfMeshBakeBatch.Poses"/>), and the fifth its glyphs' thickening
+    /// (<see cref="SdfMeshBakeRequest.Glyphs"/>).</summary>
     /// <param name="block">The bake's pass block, at least <see cref="SizeBytes"/> bytes.</param>
     /// <param name="batch">The batch.</param>
     /// <param name="instanceMaskWordCount">The live program's instance-mask width, in words
@@ -79,6 +80,8 @@ public static class SdfMeshBakeBlock {
             WriteUInt32(block: block, offset: (row + 52), value: ((uint)poseFirst));
             WriteUInt32(block: block, offset: (row + 56), value: ((uint)(poseRows.Length / 3)));
             WriteUInt32(block: block, offset: (row + 60), value: unchecked((uint)lattice.FrameSlot));
+            // The lettering stroke rule's cell and stroke (sdfGlyph), the group's for every lattice of it.
+            WriteVector4(block: block, offset: (row + 64), value: new Vector4(x: lattice.Glyphs.Cell, y: lattice.Glyphs.Stroke, z: 0f, w: 0f));
             first += ((uint)lattice.Samples);
         }
     }

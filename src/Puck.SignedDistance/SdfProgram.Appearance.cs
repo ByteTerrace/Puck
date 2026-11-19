@@ -29,6 +29,8 @@ public sealed partial class SdfProgram {
     /// <param name="sampledBindings">Each sampled instruction's field (<see cref="SampledFields"/>).</param>
     /// <param name="glyphAtlas">The content identity of the atlas pixels the glyph shapes sample (<see cref="GlyphAtlas"/>);
     /// zero when no glyph names an atlas that carries pixels.</param>
+    /// <param name="glyphStroke">The thinnest stroke the glyph shapes are taken to have, in units of a glyph's distance
+    /// scale (<see cref="GlyphStroke"/>); zero when there is no glyph.</param>
     /// <returns>The program.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="instructions"/> or <paramref name="appearance"/> is
     /// <see langword="null"/>.</exception>
@@ -37,15 +39,16 @@ public sealed partial class SdfProgram {
     /// is not a reinterpreted integer field is not finite; field scopes are unbalanced, empty, nested beyond the
     /// supported depth, or cross an instance boundary; an instance range does not lie within the instruction stream; or
     /// two instance ranges claim one instruction.</exception>
-    /// <exception cref="ArgumentOutOfRangeException">An instance bound is not finite and non-negative, or a trapezoid's
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="glyphStroke"/> or an instance bound is not finite and non-negative, or a trapezoid's
     /// profile slant vanishes in the deterministic field's representation.</exception>
-    public static SdfProgram Of(IReadOnlyList<SdfInstruction> instructions, SdfAppearance appearance, IReadOnlyList<SdfInstanceRange>? instances = null, IReadOnlyList<(int InstructionIndex, Vector2[] Vertices)>? convexPolygonProfiles = null, IReadOnlyList<SdfSweepCurve>? sweepCurves = null, IReadOnlyList<SdfCompiledPath>? paths = null, int reservedPathWords = 0, IReadOnlyList<SdfSampledBinding>? sampledBindings = null, ulong glyphAtlas = 0) {
+    public static SdfProgram Of(IReadOnlyList<SdfInstruction> instructions, SdfAppearance appearance, IReadOnlyList<SdfInstanceRange>? instances = null, IReadOnlyList<(int InstructionIndex, Vector2[] Vertices)>? convexPolygonProfiles = null, IReadOnlyList<SdfSweepCurve>? sweepCurves = null, IReadOnlyList<SdfCompiledPath>? paths = null, int reservedPathWords = 0, IReadOnlyList<SdfSampledBinding>? sampledBindings = null, ulong glyphAtlas = 0, float glyphStroke = 0f) {
         ArgumentNullException.ThrowIfNull(argument: appearance);
 
         var program = new SdfProgram(
             appearance: appearance.Outline,
             convexPolygonProfiles: convexPolygonProfiles,
             glyphAtlas: glyphAtlas,
+            glyphStroke: glyphStroke,
             instances: instances,
             instructions: instructions,
             paths: paths,

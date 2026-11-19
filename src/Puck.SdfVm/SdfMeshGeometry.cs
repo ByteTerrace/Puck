@@ -286,6 +286,9 @@ public sealed class SdfMeshGeometryBuilder(bool dynamic) {
     /// material-edge error budget at every distance to protect counters and thin strokes while simplifying face
     /// interiors.</summary>
     public bool ContainsGlyph { get; private set; }
+    /// <summary>Gets the thinnest stroke the group's glyphs are taken to have, in units of a glyph's distance scale
+    /// (<see cref="SdfProgram.GlyphStroke"/>), which the geometry holds; zero for a group with no glyph.</summary>
+    public float GlyphStroke { get; private set; }
     /// <summary>Gets the geometry of everything appended so far.</summary>
     public SdfMeshGeometry Geometry => new(Dynamic: dynamic, Hash: ((m_hash is { } hash) ? hash.GetCurrentHashAsUInt128() : m_sealedHash));
     /// <summary>Gets the form of everything appended so far: the geometry without the poses of the slots besides the
@@ -422,12 +425,15 @@ public sealed class SdfMeshGeometryBuilder(bool dynamic) {
     // sampled field's snapshot for its handle.
     private void Append(SdfProgram program, int index, SdfInstruction instruction, int ownSlot, IReadOnlyList<DynamicTransform> transforms, SdfSampledSet sampled) {
         // A glyph's instruction holds its cell's UVs; the pixels under them are the program's one bound atlas, keyed once a
-        // group by their content.
+        // group by their content, and so is the stroke the bake's lettering stroke rule takes its glyphs to have.
         if ((instruction.Op == SdfOp.ShapeBlend) && (instruction.Shape == ((uint)SdfShapeType.Glyph)) && !ContainsGlyph) {
             var atlas = program.GlyphAtlas;
+            var stroke = program.GlyphStroke;
 
             ContainsGlyph = true;
+            GlyphStroke = stroke;
             Hash(fact: Fact.GlyphAtlas, source: MemoryMarshal.AsBytes(span: new ReadOnlySpan<ulong>(reference: in atlas)));
+            Hash(fact: Fact.GlyphStroke, source: MemoryMarshal.AsBytes(span: new ReadOnlySpan<float>(reference: in stroke)));
         }
         switch (instruction.Op) {
             case SdfOp.ResetPoint:
@@ -591,6 +597,7 @@ public sealed class SdfMeshGeometryBuilder(bool dynamic) {
         SlotLocalBound,
         OperandOffset,
         OperandPose,
+        GlyphStroke,
     }
     // An operand's key as the bytes the geometry hashes: its slot's offset from the group's own, the steps its pose
     // rounds to, and that pose rounded.

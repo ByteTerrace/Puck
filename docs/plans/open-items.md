@@ -1331,12 +1331,6 @@ and every memory owner are its steps. This packet holds the defects beside it.
   check is a settled Direct3D 12 debug world reading `region-refused=0` with a
   raised `detail-bias` in `world.residency`, and the lake drawn from the
   `glacier` place.
-- [high] A raised detail bias drops strokes from the gallery's plaque lettering
-  ("RO ND CONE", "ELLIPSO D" on Vulkan at `detail-bias=1`). Once Direct3D 12
-  coarsens too (above), the lettering is at risk there as well. A coarser tier
-  of engraved text should keep every stroke legible: find which tier loses the
-  thin strokes and why tier selection does not hold them; the check is every
-  shape plaque in the gallery reading whole on both backends.
 - [medium] Before sparse external targets are used, retain the exact host-word
   coverage of disjoint writes across remapping. `GpuRegion.StageOwed`
   (`src/Puck.Abstractions/Gpu/Residency/GpuRegion.cs`) re-owes the known prefix;
