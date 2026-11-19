@@ -186,16 +186,16 @@ public static class MeshCommand {
         var taps = new Dictionary<int, MeshCpuTaps>();
         var refinements = new ConcurrentDictionary<int, SdfRefinementMap>();
         var baked = (request.Cpu ? MeshCpuBake.Bake(evaluations: evaluations, farDistance: farDistance, groups: selected, refinements: refinements, scene: scene, taps: taps, tier: tier) : null);
+        // An operand's pose was planned into its group's geometry, so that group's mesh is posed by no member pose.
+        IReadOnlyDictionary<int, Puck.SignedDistance.DynamicTransform> MemberPoses(SdfMeshBakeGroup group) => (group.Geometry.ReadsOperands ? NoPoses : poses);
+        // A posed mesh is no longer in the lattice's frame, so no map reads its cells.
+        SdfRefinementMap? RefinementOf(SdfMeshBakeGroup group) => (((MemberPoses(group: group).Count == 0) && refinements.TryGetValue(key: group.Selector, value: out var map)) ? map : null);
 
         _ = Parallel.For(fromInclusive: 0, toExclusive: groups.Count, body: ordinal => {
             var group = groups[ordinal];
 
             if (!selected.Contains(value: group)) { return; }
-            // An operand's pose was planned into the group's geometry, so its mesh is posed by no member pose.
-            var memberPoses = (group.Geometry.ReadsOperands ? NoPoses : poses);
-
-            // A posed mesh is no longer in the lattice's frame, so no map reads its cells.
-            results[ordinal] = Audit(baked: baked, group: group, options: options, owner: scene.Owner(group: group), poses: memberPoses, refinement: ((memberPoses.Count == 0) && refinements.TryGetValue(key: group.Selector, value: out var map) ? map : null), scene: scene, store: store, identity: identity) with { Operands = Operands(group: group) };
+            results[ordinal] = Audit(baked: baked, group: group, options: options, owner: scene.Owner(group: group), poses: MemberPoses(group: group), refinement: RefinementOf(group: group), scene: scene, store: store, identity: identity) with { Operands = Operands(group: group) };
         });
 
         var audited = results.Count(predicate: static result => (result?.Report is not null));
@@ -216,7 +216,7 @@ public static class MeshCommand {
             .ToArray();
 
         foreach (var ordinal in ordered) {
-            Write(ordinal: ordinal, outcome: results[ordinal]!, output: output, taps: taps.GetValueOrDefault(key: groups[ordinal].Selector, defaultValue: MeshCpuTaps.None), top: request.Top, refinement: ((poses.Count == 0) && refinements.TryGetValue(key: groups[ordinal].Selector, value: out var map) ? map : null));
+            Write(ordinal: ordinal, outcome: results[ordinal]!, output: output, taps: taps.GetValueOrDefault(key: groups[ordinal].Selector, defaultValue: MeshCpuTaps.None), top: request.Top, refinement: RefinementOf(group: groups[ordinal]));
             if (request.History && (results[ordinal]!.Field is { } field)) {
                 History(field: field, group: groups[ordinal], options: options, output: output, store: store);
             }
