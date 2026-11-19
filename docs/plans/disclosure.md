@@ -2201,12 +2201,13 @@ invariant and land beside the rendering work that uses them:
    and `WorldScreenBinder.ContentAccess` releases a source, its residency and
    its background jobs when they hold wider content than the viewer may now
    see. An adversarial review found ways around each of those guards, and a
-   narrowing inside "disclosed" moves no level at all.
+   loss inside "disclosed" moves no level at all.
    [The withdrawal chokepoint](disclosure/withdrawal-chokepoint.md) checks the
    review's findings against the code and designs the one door that replaces
-   the guards: the stream stamps each delivery with the span of access it was
-   made under, and the render graph carries that span on every output. Its
-   build order owns the work, and [the security packet](open-items.md#security-review)
+   the guards: the authority decides a cut from what a stream was delivered and
+   can no longer read, the cut reaches the viewer in order with the content,
+   and content travels with the right to show it as one value. Its build order
+   owns the work, and [the security packet](open-items.md#security-review)
    lists it. Keep reuse keyed by
    the content of the delivered inputs it read (`WorldDisclosureImages`) so
    viewers delivered the same static rows still share a probe volume while
