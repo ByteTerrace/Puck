@@ -731,5 +731,8 @@ public static partial class SdfWorldPackage {
         /// <summary>The history surface: each output pixel's identity, ray distance, gathered weight and accumulated
         /// transport, read by the next frame.</summary>
         public const string HistorySurface = "historySurface";
+        /// <summary>The stationary window: each output pixel's phase mask and per-phase samples, one retained allocation
+        /// the resolve updates in place (<see cref="SdfWorldPackage.HistoryWindowWritten"/>).</summary>
+        public const string HistoryWindow = "historyWindow";
     }
 }

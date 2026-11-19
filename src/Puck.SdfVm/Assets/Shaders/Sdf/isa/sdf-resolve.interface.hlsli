@@ -1,4 +1,4 @@
-// Generated from shader interface 'sdf-resolve' (sha256/7e5132a830652f8b4a8f6658ea9f0a55154da05fd4345324f195209368da350e). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'sdf-resolve' (sha256/57633143552e6fef737cb0a32e5bd4e2e2c6109dae68843d2825ea7bb83c097a). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SDF_RESOLVE
 #define PUCK_SHADER_INTERFACE_SDF_RESOLVE
 
@@ -251,8 +251,8 @@ struct SdfResolvePass {
     [[vk::offset(1340)]] uint _pad1340;
     [[vk::offset(1344)]] float4 worldLanes;
 };
-[[vk::binding(0, 3)]] ConstantBuffer<SdfResolvePass> passGroupIsaE59D6AB1 : register(b0, space3);
-#define passGroup passGroupIsaE59D6AB1
+[[vk::binding(0, 3)]] ConstantBuffer<SdfResolvePass> passGroupIsa2E1FEDA9 : register(b0, space3);
+#define passGroup passGroupIsa2E1FEDA9
 [[vk::binding(1, 3)]] Texture2D<float4> currentColor : register(t1, space3);
 [[vk::binding(2, 3)]] [[vk::image_format("rgba16f")]] RWTexture2D<float4> output : register(u2, space3);
 [[vk::binding(3, 3)]] StructuredBuffer<uint> sdfVisibilityRecords : register(t3, space3);
@@ -262,7 +262,8 @@ struct SdfResolvePass {
 [[vk::binding(7, 3)]] StructuredBuffer<uint> historySurface : register(t7, space3);
 [[vk::binding(8, 3)]] [[vk::image_format("rgba16f")]] RWTexture2D<float4> historyColorRW : register(u8, space3);
 [[vk::binding(9, 3)]] RWStructuredBuffer<uint> historySurfaceRW : register(u9, space3);
-[[vk::binding(10, 3)]] RWStructuredBuffer<uint> workCounters : register(u10, space3);
+[[vk::binding(10, 3)]] RWStructuredBuffer<uint> historyWindowRW : register(u10, space3);
+[[vk::binding(11, 3)]] RWStructuredBuffer<uint> workCounters : register(u11, space3);
 
 // The pass's own work, added to its row of the node's kernel counters (GpuKernelCounters, which reads the rows
 // back): each counted kind in GpuWork.KernelKinds order, march steps, texels written, sky evaluations, sky hashes,
