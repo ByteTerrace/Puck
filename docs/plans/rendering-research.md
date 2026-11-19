@@ -2322,8 +2322,8 @@ CPU thread reads to learn that work on a queue has finished.
   must submit on the frame's queue today (`SdfGpuWork.Enter` refuses
   anything else). That queue runs in order, so a job waits behind the frame
   ahead of it, and a long job delays the frame behind it. That delay is the
-  only reason every job is cut to a frame's share, about 4.2 ms
-  (`SdfGpuWork.FrameShareSeconds`). On its own queue a job reaches the GPU
+  only reason every job is cut to one frame's allowance, at most about 4.2 ms
+  (`SdfGpuWorkBudget.FrameAllowanceSeconds`). On its own queue a job reaches the GPU
   when it is submitted and is answered when it finishes. The bake's full
   batch, about 32 ms of GPU work, could then run as a few jobs sized to
   stay safely inside the driver's timeout. The same slots would carry more

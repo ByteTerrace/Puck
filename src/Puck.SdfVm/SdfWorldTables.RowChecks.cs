@@ -97,7 +97,7 @@ public sealed partial class SdfWorldTables {
         public GpuQueueCategory Category => GpuQueueCategory.Upload;
         public GpuMemoryBytes OwnedBytes => default;
 
-        public bool TryTake(SdfWorldTables current, int uploadBytes,
+        public bool TryTake(SdfWorldTables current, int uploadBytes, double allowanceSeconds,
             [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out object? job, out double estimatedSeconds) {
             estimatedSeconds = 0;
             job = null;

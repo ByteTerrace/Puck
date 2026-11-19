@@ -1992,7 +1992,7 @@ first is built.
   form is confined to the time the frame thread is busy or blocked in a
   driver call, which is under a frame.
 - A second queue would let the driver's scheduler interleave a long job with
-  the frame, in place of cutting jobs to `SdfGpuWork.FrameShareSeconds`. That
+  the frame, in place of cutting jobs to `SdfGpuWorkBudget.FrameAllowanceSeconds`. That
   is a rendering gain, not a servicing one, and it is what would justify the
   cost above; the leases are what such a queue needs, so it moves the
   service's submit and keeps the rest.
