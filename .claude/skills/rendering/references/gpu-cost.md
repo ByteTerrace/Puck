@@ -490,7 +490,7 @@ Vulkan fence or timeline signal rides its `vkQueueSubmit`, so Vulkan's
   (`GpuExternalWait.IsReached`), and `waits` / `waits-reached` count both.
   An export's completion signal reads the queue door, which would split the
   batch, so the runtime completes exports after `FlushBatch`
-  (`RenderGraphRuntime.CompleteOwedExports`): `transfer.door` stays zero, and the
+  (`RenderGraphRuntime.SettleHandOvers`): `transfer.door` stays zero, and the
   reader's wait ends when the whole batch has run rather than after the exporting
   node's lists. Each export is published only when its own copy's submission
   reached the queue (`IGpuSubmissionFence.ReachedQueue`), never on the flush's

@@ -64,6 +64,33 @@ public sealed partial class RenderGraphCadenceLawTests {
         // abandoned submission carried (RenderGraphSlotResults below).
         Assert.Equal($"abandoned {abandoned}", aboutAbandoned[0]);
     }
+    // A frame whose submission was taken for later and then never reached the queue committed its history before the
+    // hand-over failed; the node rolls it back before its next frame reads that history, so the frame counter (which
+    // indexes a graphics history writer's framebuffer ring) steps back with the cursors and the next frame takes its place.
+    [Fact]
+    public void AFrameWhoseSubmissionNeverReachedTheQueueIsRolledBackBeforeTheNextFrame() {
+        var gpu = new FakePipelineGpu { Recording = true };
+        var factory = new ArmingFactory();
+        var packages = new RenderGraphPackageRecorders();
+
+        foreach (var package in new[] { Writer, Shade, Composite }) { packages.Register(factory: factory, package: package); }
+        using var node = new ShaderPipelineRenderNode(name: "hand-over-rollback", deviceContext: gpu, pipelines: new GpuPassPipelineCache(),
+            hostsOnDirectX: false, width: 32, height: 32, packages: packages);
+
+        node.Swap(pipeline: new CompiledShaderPipeline(plan: new RenderGraphCompiler(Catalog()).Compile(definition: Graph()).Pipeline,
+            shaders: new Dictionary<string, CompiledShader>()));
+        node.ProduceUntilInstalled();
+
+        var before = node.FrameCounter;
+
+        gpu.AbandonNextSubmission = true;
+        _ = node.ProduceFrame(context: default);
+        Assert.Equal(before + 1, node.FrameCounter);
+        _ = node.ProduceFrame(context: default);
+        Assert.Equal(before + 1, node.FrameCounter);
+        _ = node.ProduceFrame(context: default);
+        Assert.Equal(before + 2, node.FrameCounter);
+    }
     [Fact]
     public void AnAbandonedSlotsResultIsDroppedAndALaterCompletionDeliversNothing() {
         var completed = new List<int>();

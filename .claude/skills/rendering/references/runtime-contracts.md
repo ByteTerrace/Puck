@@ -76,9 +76,20 @@ a hand-over of their own (`GpuSubmissionBatch.Admit`, cause `job-end`), so
 their fences, and any deferred before them, such as a residency's upload,
 answer before the frame's renders finish. Because one batch can reach the queue
 in several hand-overs, code acting for a deferred submission after the flush
-(an export's shared signal and publication) asks that submission's own fence
-whether it reached the queue (`IGpuSubmissionFence.ReachedQueue`), never
-whether the flush succeeded. Anything
+asks that submission's own fence whether it reached the queue
+(`IGpuSubmissionFence.ReachedQueue`), never whether the flush succeeded. A node
+rendered inside the batch commits its frame (history cursors, initialization,
+publication) while its submission is deferred; those commits stand only once
+`ShaderPipelineRenderNode.SettleHandOver` finds the submission reached the
+queue. The runtime settles every node it rendered after the flush
+(`RenderGraphRuntime.SettleHandOvers`), and the node settles itself at the start
+of its next frame, before an install and when an abandoned slot's wait reports
+it. A submission that never reached the queue rolls the frame back to its
+recording checkpoint (cursors, instance states, content versions,
+initialization, and the frame counter a graphics history writer's framebuffer
+ring is indexed by), withdraws its publication and ends its export unwritten. A
+new commit made for a deferred submission belongs in that checkpoint, or it
+outlives a failed hand-over. Anything
 that must see deferred work first splits the batch (the deferred work goes to the
 queue and the batch stays open): a wait on a deferred fence, `SubmitAndWait`, the
 device's wait for idle, an external wait on Direct3D 12, and every other native
