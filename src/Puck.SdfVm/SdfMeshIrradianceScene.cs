@@ -270,7 +270,7 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
         for (var index = 0; (index < draws.Count); index++) {
             var draw = draws[index];
 
-            if (!IsStatic(draw: in draw)) { continue; }
+            if (!draw.IsStatic) { continue; }
             statics++;
 
             var key = GeometryKey.Of(mesh: draw.Mesh);
@@ -307,7 +307,7 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
             for (var index = 0; (index < draws.Count); index++) {
                 var draw = draws[index];
 
-                if (!IsStatic(draw: in draw)) { continue; }
+                if (!draw.IsStatic) { continue; }
                 if (Instance.TryCreate(draw: in draw, geometry: geometries[GeometryKey.Of(mesh: draw.Mesh)], instance: out var instance)) {
                     content.Instances[content.InstanceCount++] = instance;
                     if (materialRuns.Add(item: (draw.Mesh.TriangleMaterials, draw.Material))) {
@@ -354,12 +354,6 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
             _ = materials.Add(item: (draw.Material + ((int)material)));
         }
     }
-
-    /// <summary>Returns whether a draw belongs to the static scene: one neither dynamic nor glass. Glass neither blocks
-    /// nor bounces the probes' rays: light reaches what lies behind it untinted.</summary>
-    /// <param name="draw">The draw.</param>
-    /// <returns><see langword="true"/> for a static, opaque mesh draw.</returns>
-    public static bool IsStatic(in SdfMeshDraw draw) => (!draw.IsDynamic && !draw.Glass);
 
     // Takes the content, whose draws Build filled, and fills its entries and nodes; Build releases it if this throws.
     private SdfMeshIrradianceScene(Content content, Dictionary<GeometryKey, Geometry> geometries, IReadOnlyList<SdfMeshDraw> draws, List<KeyValuePair<GeometryKey, Geometry>> retained, int geometriesBuilt, long trianglesBuilt) {
@@ -421,7 +415,7 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
         TriangleCount = triangles;
         TrianglesBuilt = trianglesBuilt;
         TrianglesRetained = retained.Sum(selector: static entry => ((long)entry.Value.Count));
-        m_meshClaims = new SdfMeshClaims(meshes: draws.Where(predicate: static draw => IsStatic(draw: draw)).Select(selector: static draw => draw.Mesh)
+        m_meshClaims = new SdfMeshClaims(meshes: draws.Where(predicate: static draw => draw.IsStatic).Select(selector: static draw => draw.Mesh)
             .Concat(second: geometries.Values.Select(selector: static geometry => geometry.Mesh)));
         m_cachedMeshClaims = new(retained.Select(selector: static entry => entry.Value.Mesh), cached: true);
     }

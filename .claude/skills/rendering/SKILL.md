@@ -376,11 +376,13 @@ far cascade, authored per device row (`WorldQualityPreset.DistantShadows`) and a
 carried on `SdfFrame.DistantShadows`; the [handbook](../../../docs/rendering/sdf/handbook/frame-rendering.md#the-distant-shadow-map)
 owns the behaviour. Its invariant is that a held map draws only what cannot move while it stands: the
 `shadow-distant` pass stages `staticOnly`, so the selection kernel rejects every record carrying
-`SdfMeshRecord.DynamicFlag` (set from `SdfMeshIrradianceScene.IsStatic` in `SdfMeshRegion.WriteDraw`), and its
+`SdfMeshRecord.DynamicFlag` (set from `SdfMeshDraw.IsStatic` in `SdfMeshRegion.WriteDraw`, derived so a skinned or
+displaced draw, which moves without its record changing, is never static), and its
 signature (`SdfWorldPasses.DistantSignatureOf`) folds `SdfWorldTables.StaticDrawRevision`, which only
 `StageChangedDraws` and `Unname` advance. A new path that changes a static draw's record outside those two leaves a
 stale map standing. Readers take the camera through `CascadesOf`, which reads the committed one
-(`SubmittedDistant`) or none; an entry without a committed camera writes no role (`SdfFrameBlock.WriteMeshShadows`
+(`SubmittedDistant`, which like every package commit runs only once the frame's submission reached the queue:
+`ShaderPipelineRenderNode.CommitPackages`) or none; an entry without a committed camera writes no role (`SdfFrameBlock.WriteMeshShadows`
 through `SdfMeshShadowCascades.Holds`), and the surface pass reads no optical term for it. Because its count makes
 the set four long while the secondary entry may be empty, test entries with `Holds`, never `index < Count`.
 

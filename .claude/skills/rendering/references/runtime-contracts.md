@@ -384,7 +384,11 @@ only frames outside displayed outputs, including held consumer outputs, in
 the history ring. `ShaderPipelineRenderNode` reserves a ring instance for a
 recording writer and commits its cursor at submission; its recovery restores
 the existing access tracker on failure. `IRenderGraphPackageRecorder.Submitted`
-commits the temporal sample metadata, and `SdfResolveRecorder` caches history
+commits the temporal sample metadata, and only once the frame's submission
+reached the queue: a submission the frame's batch defers commits when its
+hand-over takes it, and one that never ran commits nothing
+(`ShaderPipelineRenderNode.CommitPackages` is the one caller), since a
+package's commits have no checkpoint to roll back. `SdfResolveRecorder` caches history
 descriptors by their bound handles as well as their slot and tables.
 `SdfWorldPasses` marks an instance's history tainted when a views render read
 an unfilled external source or tainted history (`SubmittedTaint`), and

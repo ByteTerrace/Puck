@@ -1555,7 +1555,9 @@ cascades no precision. A view's shadow tier halves its texels as it does the
 cascades', down to 256.
 
 The `shadow-distant` pass draws only the static scene
-(`SdfMeshIrradianceScene.IsStatic`; the selection kernel rejects a draw whose
+(`SdfMeshDraw.IsStatic`, derived from the draw: never a skinned or displaced
+draw, which moves without its record changing, whatever its `IsDynamic` says;
+the selection kernel rejects a draw whose
 record carries `SdfMeshRecord.DynamicFlag` when the pass stages `staticOnly`),
 every caster in its light box whichever way the view faces
 (`SdfMeshCull.OfLightBox`), at the coarsest level whose error fits its texel.
@@ -1570,8 +1572,11 @@ pass's signature (`SdfWorldPasses.Distant`): the camera the frame chose, the
 static revision, the texels, the cull and detail levers and the instance's
 bindings, so the pass stands whatever forces the frame's other passes. Like the
 far cascade, the camera a recording drew from is staged by
-`SdfWorldPasses.RecordDistant` and committed by `SubmittedDistant`, and readers
-read the committed camera, or no distant entry until one is committed.
+`SdfWorldPasses.RecordDistant` and committed by `SubmittedDistant` once the
+frame's submission has reached the queue, and readers read the committed
+camera, or no distant entry until one is committed. A change to the map's reach
+or any other input of the cascade fit changes the view's signature, since the
+cadence signs the fitted cascade set (`SdfWorldTables.ViewSignature`).
 `world.rates shadow-distant off` lets it follow every turn of the light, and
 `world.rates` counts `shadow-distant.rendered` and `.held`.
 

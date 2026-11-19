@@ -10,7 +10,7 @@ namespace Puck.SdfVm;
 // signature equals the one it last rendered at and nothing unhashed forces a render (ForcesRender).
 //
 // The whole-view signature folds every packed table and the frame block. PassSignature partitions the same inputs:
-// geometry owns the field, poses, mesh, screen mappings and camera; shadow owns directions and reach; lighting owns
+// geometry owns the field, poses, mesh, screen mappings and camera; shadow owns directions and the fitted cascades; lighting owns
 // colors, surface fog and analytic environment; visual owns sky and media. A generated offset table separates pass-block
 // members without spelling HLSL offsets. Temporal sampling is the instance's, and graph versions check last writes.
 // Whole-view coverage:
@@ -19,7 +19,8 @@ namespace Puck.SdfVm;
 //   - the world values    : the bound screen count and the mesh draws' count.
 //   - the pass block      : the view's camera basis, fov/aspect, off-axis offset, far distance and debug view mode, every
 //                          lever, the light count, the shadow slots and the curvature shading (SdfFrameBlock), less the
-//                          render extent, which the scheduler renders a view again for when it moves.
+//                          render extent, which the scheduler renders a view again for when it moves, and the cascade
+//                          set the frame fits for the view, which stands for every input of the fit (SignatureBlockOf).
 //   - m_lightRegion, m_skyRegion, m_skyLayerRegion : the lights, sky gains, layer stack and its clock bakes.
 //   - shadow owner names : exact names invalidate shadow history even when replacement lights pack identical values.
 //   - the flow clock     : a lighting value of the pass block, moved by the presented tick only for a program with a
@@ -68,8 +69,24 @@ public sealed partial class SdfWorldTables {
     ]);
     private static readonly (int Offset, int Length)[] ShadowValues = Members(members: [
         SdfWorldPackage.ShadowSlots, SdfWorldPackage.ShadowRoles, SdfWorldPackage.ShadowSlotCount, SdfWorldPackage.ShadowFadeCount,
-        SdfWorldPackage.DisableSoftShadows,
+        SdfWorldPackage.DisableSoftShadows, SdfWorldPackage.MeshShadowCascades, SdfWorldPackage.MeshShadowCount,
+        SdfWorldPackage.MeshShadowParameters, SdfWorldPackage.MeshShadowTexels, SdfWorldPackage.MeshShadowSlopes,
+        SdfWorldPackage.MeshShadowRoles,
     ]);
+
+    // Fills the signature block with what a view's passes read of the frame: its pass block (SdfFrameBlock.Write) with the
+    // render extent left out, and the cascade set the frame fits for the view (SdfMeshShadowCascades.Fit). The fit's
+    // cameras stand for every input of the fit (the shadow coverage, the distant map's reach and texels, the view's
+    // shadow resolution) without naming them, so an input a later fit reads cannot be left out of a signature.
+    private Span<byte> SignatureBlockOf(SdfFrame frame, int view) {
+        var block = m_signatureBlock.AsSpan();
+
+        block.Clear();
+        SdfFrameBlock.Write(block: block, frame: frame, height: 0u, tables: PassValues, view: view, width: 0u);
+        SdfFrameBlock.WriteMeshShadows(block: block, cascades: SdfMeshShadowCascades.Fit(frame: frame, view: view));
+
+        return block;
+    }
 
     /// <summary>Returns the package-owned inputs of a pass group, independent of temporal sampling and graph versions.
     /// Geometry covers the field and camera, shadow covers selected directions and reach, lighting covers hit shading,
@@ -79,10 +96,7 @@ public sealed partial class SdfWorldTables {
     /// <param name="part">The fragment pass name.</param>
     /// <returns>The pass group's input identity.</returns>
     public ulong PassSignature(SdfFrame frame, int view, string part) {
-        var block = m_signatureBlock.AsSpan();
-
-        block.Clear();
-        SdfFrameBlock.Write(block: block, frame: frame, height: 0, tables: PassValues, view: view, width: 0);
+        var block = SignatureBlockOf(frame: frame, view: view);
         var composite = Fnv1aHash.Create();
 
         AddMembers(block: block, hash: ref composite, members: CompositeValues);
@@ -233,7 +247,8 @@ public sealed partial class SdfWorldTables {
 
     /// <summary>Returns the 64-bit FNV-1a signature of what one view renders from in the frame the tables hold: the
     /// tables' signature (<see cref="UpdateTablesSignature"/>) folded with the view's pass block
-    /// (<see cref="SdfFrameBlock"/>), written with no render extent, and its separate sky field fraction. A collision would need a
+    /// (<see cref="SdfFrameBlock"/>), written with no render extent and with the cascade set the frame fits for the view
+    /// (<see cref="SdfMeshShadowCascades.Fit"/>), and its separate sky field fraction. A collision would need a
     /// 64-bit hash clash across two genuinely different input sets — negligible, and still only presentation, never
     /// simulation.</summary>
     /// <param name="frame">The frame the tables packed.</param>
@@ -241,18 +256,9 @@ public sealed partial class SdfWorldTables {
     /// <returns>The signature.</returns>
     public ulong ViewSignature(SdfFrame frame, int view) {
         var hash = Fnv1aHash.Create();
-        var block = m_signatureBlock.AsSpan();
+        var block = SignatureBlockOf(frame: frame, view: view);
         Span<byte> tables = stackalloc byte[sizeof(ulong)];
 
-        block.Clear();
-        SdfFrameBlock.Write(
-            block: block,
-            frame: frame,
-            height: 0u,
-            tables: PassValues,
-            view: view,
-            width: 0u
-        );
         MemoryMarshal.Write(
             destination: tables,
             value: in m_tablesSignature

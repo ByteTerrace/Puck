@@ -101,7 +101,7 @@ internal sealed class WorldDiagnostics(WorldServer server, WorldRenderProbe? ren
         var frame = render?.Residency?.Frame;
         var scene = (((frame is not null) && Equals(objA: frame.DiagnosticSource, objB: server.DocumentVersion) &&
             (render?.Residency?.MeshPathBake.Pending == false)) ? render.Residency.MeshIrradiance.DiagnosticScene(frame: frame) : null);
-        var bakeError = ((scene is null) ? 0 : frame!.MeshDraws.Where(predicate: static d => SdfMeshIrradianceScene.IsStatic(draw: d))
+        var bakeError = ((scene is null) ? 0 : frame!.MeshDraws.Where(predicate: static d => d.IsStatic)
             .Select(selector: static d => (Vector3.TransformNormal(d.Mesh.BakeCell, d.ObjectToWorld).Length() * 0.5)).DefaultIfEmpty(defaultValue: 0).Max());
         var frameNumber = render?.Root?.FramesProduced;
         var meshRevision = frame?.DrawRowsRevision;
