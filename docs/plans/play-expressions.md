@@ -50,8 +50,8 @@ avatar doing it, and the gameplay follows once the engine can express it.
 The bard goes first because most of what it needs is built. Its first wave
 writes designs for the rig and for sound that the other two will lean on,
 whatever they become: a hand that reaches a chosen thing, a press that moves
-the hand before the next tick, more shading values a body can drive, and a
-rule's cue that reaches every client
+the hand before the authority's answer is shown, more shading values a body
+can drive, and a rule's cue that reaches every client
 ([the engine gaps](instrument-play.md#the-engine-gaps)). Those designs are
 written for hands in general and carry no instrument's vocabulary.
 
@@ -365,7 +365,7 @@ answer from the owner, which the row or the questions name.
 
 | Order | Concept | What it forces | Why here |
 |---|---|---|---|
-| 1 | The bard, with a dance step that truly strikes | Rig layers that can be masked by body part, a hand that reaches a point on its own body, a press that moves a finger before the next tick, a rule's sound that crosses the wire, and a limb whose sweep the simulation knows | Every memo puts it first, most of its timing machinery exists, and every later tool stands on its hands and its clock |
+| 1 | The bard, with a dance step that truly strikes | Rig layers that can be masked by body part, a hand that reaches a point on its own body, a press that moves a finger before the authority's answer is shown, a rule's sound that crosses the wire, and a limb whose sweep the simulation knows | Every memo puts it first, most of its timing machinery exists, and every later tool stands on its hands and its clock |
 | 2 | The mender, on a structure first and then on a body | Geometry that changes during a fight at a cost that follows the size of the change, contact that reads the change, a hand that reaches a body chosen a moment ago, and a measure of fit between two fields | All three memos chose a geometry class second. It puts the engine's most distinctive claim, that every shape is a field, onto characters. A structure first (Astra's gate hinge, Fable's breach in a wall) is one instance, and the cutter that exists may draw it, though contact would not yet feel the fit (gap 5). Forty bodies with forty different wounds need the new design |
 | 2, beside it | Action alchemy on the ground | Lattices under many moving bodies at fight pace, state for each player in pools, and the hand-off | It shares no gap with the mender, so it does not wait. It is nearly all authored data, it is the owner's example, and it is the first test of slots and calls on something other than the bard |
 | 3 | The Dealer, if table play leaves the table (question 4) | Views that differ by recipient for forty moving players, a picture drawn for one viewer only, and a hand-off of something hidden | An MMO needs hidden things everywhere, and the cards exist. It waits on the [disclosure plan](disclosure.md)'s open work |
