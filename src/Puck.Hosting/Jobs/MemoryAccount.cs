@@ -427,10 +427,11 @@ public sealed class MemoryAccount {
                 Row(backing: MemoryBacking.Managed, bytes: sample?.ManagedCommitted, measured: true, name: "managed", pool: PhysicalMemory.Host),
             };
             // What the walk's private bytes hold beyond the rows that lie in them: the runtime's code and loader heaps,
-            // stacks and the driver's private memory. Device blocks are left in it: whether a driver maps them into the
-            // process's private bytes is the driver's, which the walk cannot tell.
+            // stacks and the driver's private memory. The host's write-combined and uncached views of graphics
+            // allocations are left out: the ledgers count those blocks in the device-blocks rows, and a driver that maps
+            // device memory into the process would otherwise charge the device's blocks to host memory a second time.
             long? runtime = (((sample?.Walk is { } walk) && (sample.AllocatorCommitted is { } allocator))
-                ? (walk.PrivateBytes - ((allocator + direct) + sample.ManagedCommitted))
+                ? ((walk.PrivateBytes - walk.DriverMappedBytes) - ((allocator + direct) + sample.ManagedCommitted))
                 : null);
 
             if (runtime is < 0) { m_negativeResiduals++; runtime = 0; }

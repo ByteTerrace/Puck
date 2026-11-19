@@ -112,43 +112,101 @@ public static partial class HostMemory {
     private const uint MemImage = 0x1000000;
     private const uint MemMapped = 0x40000;
     private const uint MemPrivate = 0x20000;
+    // The protection modifiers a graphics driver maps its allocations with for the host to write: uncached and
+    // write-combined. Ordinary heaps, stacks and the collector's regions carry neither.
+    private const uint PageNoCache = 0x200;
+    private const uint PageWriteCombine = 0x400;
+
+    [StructLayout(layoutKind: LayoutKind.Sequential)]
+    private struct WorkingSetExInformation {
+        public nint VirtualAddress;
+        public nuint VirtualAttributes;
+    }
 
     [LibraryImport(libraryName: "kernel32.dll")]
     private static partial nuint VirtualQuery(nint address, out MemoryBasicInformation buffer, nuint length);
+    [LibraryImport(libraryName: "kernel32.dll", EntryPoint = "K32QueryWorkingSetEx")]
+    [return: MarshalAs(unmanagedType: UnmanagedType.Bool)]
+    private static unsafe partial bool QueryWorkingSetEx(nint process, WorkingSetExInformation* buffer, uint length);
+
+    // The pages QueryWorkingSetEx answers in one call: a quarter of a gibibyte of address space, in a 1 MiB buffer.
+    private const int ResidencyBatch = 65536;
+
+    // How many bytes of a committed region are in the process's working set, asked of QueryWorkingSetEx a batch of pages
+    // at a time; null once the system refuses the query, so a reading never passes a guess for a count.
+    private static unsafe long? ResidentBytes(nint start, long length, WorkingSetExInformation* batch, long pageSize) {
+        var pages = (length / pageSize);
+        var resident = 0L;
+
+        for (var first = 0L; (first < pages); first += ResidencyBatch) {
+            var count = ((int)Math.Min(val1: ResidencyBatch, val2: (pages - first)));
+
+            for (var index = 0; (index < count); index++) {
+                batch[index] = new WorkingSetExInformation { VirtualAddress = (start + ((nint)((first + index) * pageSize))) };
+            }
+            if (!QueryWorkingSetEx(buffer: batch, length: ((uint)(count * sizeof(WorkingSetExInformation))), process: -1)) { return null; }
+            for (var index = 0; (index < count); index++) {
+                // Bit 0 is Valid: the page is in the working set.
+                if ((batch[index].VirtualAttributes & 1) != 0) { resident += pageSize; }
+            }
+        }
+
+        return resident;
+    }
 
     /// <summary>Walks this process's address space and sums its memory by kind: on Windows every committed region's bytes
-    /// by its type (private, a mapped section, an image), read with <c>VirtualQuery</c> over the whole address space; on
-    /// Linux <c>/proc/self/smaps_rollup</c>'s resident anonymous memory and swap as the private bytes and its other resident
-    /// bytes as the mapped ones, since Linux commits anonymous memory as it is touched. The walk reads the address space
-    /// as each region is reached while the process runs on, so regions that change during it are read at different
-    /// instants. It costs a system call per region (thousands), so it is taken on request, never per frame.</summary>
+    /// by its type (private, a mapped section, an image), with the private regions a driver mapped write-combined or
+    /// uncached apart, and how much of each kind is in the working set, read with <c>VirtualQuery</c> and
+    /// <c>QueryWorkingSetEx</c> over the whole address space; on Linux <c>/proc/self/smaps_rollup</c>'s resident anonymous
+    /// memory and swap as the private bytes and its other resident bytes as the mapped ones, since Linux commits anonymous
+    /// memory as it is touched. The walk reads the address space as each region is reached while the process runs on, so
+    /// regions that change during it are read at different instants. It costs a system call per region (thousands) and one
+    /// per quarter gibibyte committed, so it is taken on request, never per frame.</summary>
     /// <returns>The walk, or <see langword="null"/> when this platform cannot be walked.</returns>
-    public static ProcessMemoryWalk? WalkProcess() {
+    public static unsafe ProcessMemoryWalk? WalkProcess() {
         if (OperatingSystem.IsWindows()) {
-            long privateBytes = 0, mappedBytes = 0, imageBytes = 0;
+            long privateBytes = 0, driverBytes = 0, mappedBytes = 0, imageBytes = 0;
+            long? privateResident = 0, driverResident = 0, mappedResident = 0, imageResident = 0;
             var regions = 0;
             var address = ((nint)0);
             var size = ((nuint)Marshal.SizeOf<MemoryBasicInformation>());
+            var pageSize = ((long)Environment.SystemPageSize);
+            var batch = ((WorkingSetExInformation*)NativeMemory.Alloc(byteCount: ((nuint)(ResidencyBatch * sizeof(WorkingSetExInformation)))));
 
-            while (VirtualQuery(address: address, buffer: out var region, length: size) != 0) {
-                regions++;
-                if (region.State == MemCommit) {
-                    var bytes = ((long)region.RegionSize);
+            try {
+                while (VirtualQuery(address: address, buffer: out var region, length: size) != 0) {
+                    regions++;
+                    if (region.State == MemCommit) {
+                        var bytes = ((long)region.RegionSize);
+                        var resident = ResidentBytes(batch: batch, length: bytes, pageSize: pageSize, start: region.BaseAddress);
 
-                    switch (region.Type) {
-                        case MemPrivate: privateBytes += bytes; break;
-                        case MemMapped: mappedBytes += bytes; break;
-                        case MemImage: imageBytes += bytes; break;
+                        switch (region.Type) {
+                            case MemPrivate when ((region.Protect & (PageNoCache | PageWriteCombine)) != 0):
+                                driverBytes += bytes;
+                                driverResident += resident;
+                                break;
+                            case MemPrivate: privateBytes += bytes; privateResident += resident; break;
+                            case MemMapped: mappedBytes += bytes; mappedResident += resident; break;
+                            case MemImage: imageBytes += bytes; imageResident += resident; break;
+                        }
                     }
+
+                    var next = (region.BaseAddress + ((nint)region.RegionSize));
+
+                    if (next <= address) { break; }
+                    address = next;
                 }
-
-                var next = (region.BaseAddress + ((nint)region.RegionSize));
-
-                if (next <= address) { break; }
-                address = next;
+            } finally {
+                NativeMemory.Free(ptr: batch);
             }
 
-            return new(ImageBytes: imageBytes, MappedBytes: mappedBytes, PrivateBytes: privateBytes, PrivateCommitted: true, Regions: regions);
+            return new(ImageBytes: imageBytes, MappedBytes: mappedBytes, PrivateBytes: (privateBytes + driverBytes), PrivateCommitted: true, Regions: regions) {
+                DriverMappedBytes = driverBytes,
+                DriverMappedResident = driverResident,
+                ImageResident = imageResident,
+                MappedResident = mappedResident,
+                PrivateResident = (privateResident + driverResident),
+            };
         }
         if (OperatingSystem.IsLinux()) {
             try {
@@ -165,7 +223,10 @@ public static partial class HostMemory {
                     }
                 }
 
-                return new(ImageBytes: 0, MappedBytes: Math.Max(val1: 0, val2: (rss - anonymous)), PrivateBytes: (anonymous + swap), PrivateCommitted: false, Regions: 0);
+                return new(ImageBytes: 0, MappedBytes: Math.Max(val1: 0, val2: (rss - anonymous)), PrivateBytes: (anonymous + swap), PrivateCommitted: false, Regions: 0) {
+                    MappedResident = Math.Max(val1: 0, val2: (rss - anonymous)),
+                    PrivateResident = anonymous,
+                };
             } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
                 return null;
             }
@@ -185,4 +246,22 @@ public static partial class HostMemory {
 /// <param name="PrivateCommitted">Whether <paramref name="PrivateBytes"/> is committed memory (Windows) rather than
 /// resident memory (Linux).</param>
 /// <param name="Regions">The regions the walk read; zero on Linux, whose kernel sums them.</param>
-public sealed record ProcessMemoryWalk(long PrivateBytes, long MappedBytes, long ImageBytes, bool PrivateCommitted, int Regions);
+public sealed record ProcessMemoryWalk(long PrivateBytes, long MappedBytes, long ImageBytes, bool PrivateCommitted, int Regions) {
+    /// <summary>Gets the part of <see cref="PrivateBytes"/> mapped write-combined or uncached: the host's views of
+    /// graphics allocations (upload and readback heaps, and on a driver that maps device memory into the process, its
+    /// device-local blocks), which the backend's ledgers already count as device blocks. Zero where the platform cannot
+    /// tell (Linux).</summary>
+    public long DriverMappedBytes { get; init; }
+    /// <summary>Gets how much of <see cref="PrivateBytes"/> is in the working set, or <see langword="null"/> when the
+    /// system refused the query.</summary>
+    public long? PrivateResident { get; init; }
+    /// <summary>Gets how much of <see cref="DriverMappedBytes"/> is in the working set, or <see langword="null"/> when
+    /// the system refused the query. Device memory a driver maps is never in it.</summary>
+    public long? DriverMappedResident { get; init; }
+    /// <summary>Gets how much of <see cref="MappedBytes"/> is in the working set, or <see langword="null"/> when the
+    /// system refused the query.</summary>
+    public long? MappedResident { get; init; }
+    /// <summary>Gets how much of <see cref="ImageBytes"/> is in the working set, or <see langword="null"/> when the
+    /// system refused the query.</summary>
+    public long? ImageResident { get; init; }
+}
