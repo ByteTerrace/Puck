@@ -65,30 +65,24 @@ public sealed class WorldSessionMirror : IClientSink {
     /// <param name="owner">The principal whose answer to read.</param>
     /// <param name="answer">The owner's answer, when the latest image carries one.</param>
     /// <returns><see langword="true"/> when the latest image carries an answer for <paramref name="owner"/>.</returns>
-    public bool TryInputAnswer(Principal owner, out WorldInputAnswer answer) {
-        var result = m_images.Read(state: owner, read: static (in SnapshotImage image, long version, Principal principal) => {
-            var found = image.Answers.TryGetValue(key: principal, value: out var value);
-
-            return (Found: found, Value: value);
-        });
-
-        answer = result.Value;
-        return result.Found;
-    }
+    public bool TryInputAnswer(Principal owner, out WorldInputAnswer answer) => TryOwned(owner: owner, records: static image => image.Answers, value: out answer);
 
     /// <summary>Reads an authority-issued input epoch and its immutable source decisions from the latest complete
     /// image, never waiting on a delivery in progress.</summary>
     /// <param name="owner">The principal whose input publication to read.</param>
     /// <param name="publication">The owner's publication, when the latest image carries one.</param>
     /// <returns><see langword="true"/> when the latest image carries a publication for <paramref name="owner"/>.</returns>
-    public bool TryInput(Principal owner, out WorldInputPublication publication) {
-        var result = m_images.Read(state: owner, read: static (in SnapshotImage image, long version, Principal principal) => {
-            var found = image.Inputs.TryGetValue(key: principal, value: out var value);
+    public bool TryInput(Principal owner, out WorldInputPublication publication) => TryOwned(owner: owner, records: static image => image.Inputs, value: out publication);
 
-            return (Found: found, Value: value);
+    // Reads one owner's record from one of the latest complete image's owner-scoped tables.
+    private bool TryOwned<T>(Principal owner, Func<SnapshotImage, Dictionary<Principal, T>> records, out T value) {
+        var result = m_images.Read(state: (Owner: owner, Records: records), read: static (in SnapshotImage image, long version, (Principal Owner, Func<SnapshotImage, Dictionary<Principal, T>> Records) state) => {
+            var found = state.Records(arg: image).TryGetValue(key: state.Owner, value: out var record);
+
+            return (Found: found, Value: record);
         });
 
-        publication = result.Value;
+        value = result.Value!;
         return result.Found;
     }
     /// <summary>Reads one body from the latest complete image: both pose endpoints, the facts and the tick of one
