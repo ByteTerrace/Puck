@@ -33,17 +33,7 @@ public static class GpuOptionalCapabilitiesSpelling {
     /// <c>none</c>.</summary>
     /// <param name="capabilities">The flags.</param>
     /// <returns>The spelling.</returns>
-    public static string Of(GpuOptionalCapabilities capabilities) {
-        if (capabilities == GpuOptionalCapabilities.None) { return "none"; }
-
-        var names = new List<string>();
-
-        foreach (var (flag, name) in Names) {
-            if ((capabilities & flag) != 0) { names.Add(item: name); }
-        }
-
-        return string.Join(separator: '+', values: names);
-    }
+    public static string Of(GpuOptionalCapabilities capabilities) => FlagSpelling.Of(flags: capabilities, names: Names);
     /// <summary>Reads one flag's spelling.</summary>
     /// <param name="name">The spelling, such as <c>ray-query</c>.</param>
     /// <param name="capability">The flag it names.</param>

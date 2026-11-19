@@ -184,17 +184,7 @@ public sealed record GpuDeviceCapabilities(
     /// <c>none</c>.</summary>
     /// <param name="backing">The flags.</param>
     /// <returns>The spelling.</returns>
-    public static string BackingSpelling(GpuBackingSupport backing) {
-        if (backing == GpuBackingSupport.None) { return "none"; }
-
-        var names = new List<string>();
-
-        foreach (var (flag, name) in BackingNames) {
-            if ((backing & flag) != 0) { names.Add(item: name); }
-        }
-
-        return string.Join(separator: '+', values: names);
-    }
+    public static string BackingSpelling(GpuBackingSupport backing) => FlagSpelling.Of(flags: backing, names: BackingNames);
 
     // Each backing flag's one spelling, in declaration order.
     private static readonly (GpuBackingSupport Flag, string Name)[] BackingNames = [

@@ -1,4 +1,4 @@
-using System.Numerics;
+using Puck.Maths;
 using Puck.Vulkan.Bindings;
 using Puck.Vulkan.Interfaces;
 using Puck.Vulkan.Interop;
@@ -49,8 +49,6 @@ public sealed unsafe class VulkanGpuAccelerationStructures(IVulkanDeviceContext 
     private VulkanDeviceCommands Device => deviceContext.LogicalDevice.Commands;
     private VulkanRayCommands Rays => (Device.Rays ?? throw new NotSupportedException(message: "This Vulkan device was created without ray queries (GpuOptionalCapabilities.RayQuery)."));
 
-    /// <inheritdoc/>
-    public int InstanceBytes => GpuAccelerationStructureInstance.Bytes;
 
     /// <inheritdoc/>
     public GpuAccelerationStructureSizes Size(in GpuAccelerationStructureInputs inputs) {
@@ -91,15 +89,7 @@ public sealed unsafe class VulkanGpuAccelerationStructures(IVulkanDeviceContext 
         }
     }
 
-    /// <inheritdoc/>
-    public void WriteInstance(Span<byte> destination, in Matrix4x4 objectToWorld, uint index, IGpuAccelerationStructure bottom) {
-        ArgumentNullException.ThrowIfNull(argument: bottom);
-        if (bottom.Level != GpuAccelerationStructureLevel.Bottom) {
-            throw new ArgumentException(message: "An instance record names a bottom level.", paramName: nameof(bottom));
-        }
 
-        GpuAccelerationStructureInstance.Write(bottomAddress: bottom.Address, destination: destination, index: index, objectToWorld: in objectToWorld);
-    }
     /// <inheritdoc/>
     public void WriteDescriptor(nint descriptorSetHandle, uint binding, IGpuAccelerationStructure structure) {
         var top = Of(structure: structure);
@@ -139,7 +129,7 @@ public sealed unsafe class VulkanGpuAccelerationStructures(IVulkanDeviceContext 
         var rays = (device.Rays ?? throw new NotSupportedException(message: "This Vulkan device was created without ray queries."));
         var structure = Of(structure: destination);
         var geometry = Geometry(device: device, inputs: in inputs);
-        var scratchAddress = (BufferAddress(device: device, buffer: scratch.BufferHandle) + (ScratchAlignment - 1UL)) & ~(ScratchAlignment - 1UL);
+        var scratchAddress = BufferAddress(device: device, buffer: scratch.BufferHandle).AlignUp(alignment: ScratchAlignment);
         var info = BuildInfo(inputs: in inputs, geometry: &geometry, destination: structure.Handle, scratchAddress: scratchAddress);
         var range = new VkAccelerationStructureBuildRangeInfoKhr { PrimitiveCount = inputs.Count };
         var ranges = ((nint)(&range));

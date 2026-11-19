@@ -65,8 +65,12 @@ internal sealed partial class SdfMeshProbeGpuWork {
             ? top
             : null;
     }
-    private static SdfKernel KernelOf(Job query) =>
-        query.CameraSample ? SdfKernel.ProbeCameraSample : query.Selection ? SdfKernel.ProbeSelect : (query.Lighting is not null) ? SdfKernel.ProbeRelight : SdfKernel.ProbeTrace;
+    private static SdfKernel KernelOf(Job query) => KindOf(query: query) switch {
+        JobKind.CameraSample => SdfKernel.ProbeCameraSample,
+        JobKind.Select => SdfKernel.ProbeSelect,
+        JobKind.Relight => SdfKernel.ProbeRelight,
+        _ => SdfKernel.ProbeTrace,
+    };
 
     // Admits a job under the gate: its serial joins the flying set, so nothing it may read is disposed before its answer.
     private long Admit() {
@@ -225,8 +229,8 @@ internal sealed partial class SdfMeshProbeGpuWork {
                 break;
             default: {
                 var bottoms = job.Instances!;
-                var recordBytes = m_structures!.InstanceBytes;
-                var instanceBytes = (ulong)Math.Max(val1: 1, val2: bottoms.Length) * (ulong)recordBytes;
+                const int RecordBytes = GpuAccelerationStructureInstance.Bytes;
+                var instanceBytes = (ulong)Math.Max(val1: 1, val2: bottoms.Length) * (ulong)RecordBytes;
                 var instances = recording.HostBuffer(part: "structure-instances", bytes: instanceBytes, sizing: SdfGpuWorkSizing.Fit, usage: (GpuBufferUsage.Storage | GpuBufferUsage.AccelerationStructureInput));
                 var inputs = GpuAccelerationStructureInputs.Instances(instanceCount: 0U, instanceOffsetBytes: 0UL, source: instances);
                 var records = ArrayPool<byte>.Shared.Rent(minimumLength: (int)instanceBytes);
@@ -237,16 +241,16 @@ internal sealed partial class SdfMeshProbeGpuWork {
                         if (bottoms[index] is not { Structure: { } bottom }) { continue; }
                         var transform = job.Scene!.GpuInstance(index: index).ObjectToWorld;
 
-                        m_structures.WriteInstance(bottom: bottom, destination: records.AsSpan(start: (int)(written * (uint)recordBytes), length: recordBytes), index: (uint)index, objectToWorld: in transform);
+                        GpuAccelerationStructureInstance.Write(bottom: bottom, destination: records.AsSpan(start: (int)(written * (uint)RecordBytes), length: RecordBytes), index: (uint)index, objectToWorld: in transform);
                         written++;
                     }
-                    instances.Write<byte>(data: records.AsSpan(start: 0, length: (int)(written * (uint)recordBytes)));
+                    instances.Write<byte>(data: records.AsSpan(start: 0, length: (int)(written * (uint)RecordBytes)));
                 } finally {
                     ArrayPool<byte>.Shared.Return(array: records);
                 }
 
                 inputs = inputs with { Count = written };
-                var sizes = m_structures.Size(inputs: in inputs);
+                var sizes = m_structures!.Size(inputs: in inputs);
                 var scratch = recording.DeviceBuffer(part: "structure-scratch", bytes: Math.Max(val1: 1UL, val2: sizes.ScratchBytes), sizing: SdfGpuWorkSizing.Fit, usage: (GpuBufferUsage.Storage | GpuBufferUsage.AccelerationStructureInput));
                 var structure = CreateStructure(bytes: Math.Max(val1: 1UL, val2: sizes.StructureBytes), level: GpuAccelerationStructureLevel.Top, part: "top");
 

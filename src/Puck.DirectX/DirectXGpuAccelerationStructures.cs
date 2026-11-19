@@ -1,6 +1,6 @@
-using System.Numerics;
 using System.Runtime.Versioning;
 using Puck.DirectX.Interop;
+using Puck.Maths;
 using Windows.Win32.Graphics.Direct3D12;
 using Windows.Win32.Graphics.Dxgi.Common;
 using Windows.Win32.System.Com;
@@ -20,8 +20,6 @@ public sealed unsafe class DirectXGpuAccelerationStructures(DirectXDeviceContext
     // address is aligned to its 64 KiB placement, a committed one's to its 64 KiB resource alignment.
     private const ulong StructureAlignment = 256UL;
 
-    /// <inheritdoc/>
-    public int InstanceBytes => GpuAccelerationStructureInstance.Bytes;
 
     /// <inheritdoc/>
     public GpuAccelerationStructureSizes Size(in GpuAccelerationStructureInputs inputs) {
@@ -73,15 +71,7 @@ public sealed unsafe class DirectXGpuAccelerationStructures(DirectXDeviceContext
         return new Structure(level: level, storage: storage, address: buffer->GetGPUVirtualAddress());
     }
 
-    /// <inheritdoc/>
-    public void WriteInstance(Span<byte> destination, in Matrix4x4 objectToWorld, uint index, IGpuAccelerationStructure bottom) {
-        ArgumentNullException.ThrowIfNull(argument: bottom);
-        if (bottom.Level != GpuAccelerationStructureLevel.Bottom) {
-            throw new ArgumentException(message: "An instance record names a bottom level.", paramName: nameof(bottom));
-        }
 
-        GpuAccelerationStructureInstance.Write(bottomAddress: bottom.Address, destination: destination, index: index, objectToWorld: in objectToWorld);
-    }
     /// <inheritdoc/>
     public void WriteDescriptor(nint descriptorSetHandle, uint binding, IGpuAccelerationStructure structure) {
         var top = Of(structure: structure);
@@ -152,7 +142,7 @@ public sealed unsafe class DirectXGpuAccelerationStructures(DirectXDeviceContext
         }
     }
 
-    private static ulong AlignUp(ulong value) => ((value + (StructureAlignment - 1UL)) & ~(StructureAlignment - 1UL));
+    private static ulong AlignUp(ulong value) => value.AlignUp(alignment: StructureAlignment);
     private static Structure Of(IGpuAccelerationStructure structure) {
         ArgumentNullException.ThrowIfNull(argument: structure);
 

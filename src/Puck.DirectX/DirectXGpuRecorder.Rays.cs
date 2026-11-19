@@ -71,6 +71,8 @@ public sealed unsafe partial class DirectXGpuRecorder {
             syncAfter: (D3D12_BARRIER_SYNC.D3D12_BARRIER_SYNC_BUILD_RAYTRACING_ACCELERATION_STRUCTURE | D3D12_BARRIER_SYNC.D3D12_BARRIER_SYNC_COPY_RAYTRACING_ACCELERATION_STRUCTURE |
                 D3D12_BARRIER_SYNC.D3D12_BARRIER_SYNC_EMIT_RAYTRACING_ACCELERATION_STRUCTURE_POSTBUILD_INFO | D3D12_BARRIER_SYNC.D3D12_BARRIER_SYNC_COMPUTE_SHADING),
             syncBefore: (D3D12_BARRIER_SYNC.D3D12_BARRIER_SYNC_BUILD_RAYTRACING_ACCELERATION_STRUCTURE | D3D12_BARRIER_SYNC.D3D12_BARRIER_SYNC_COPY_RAYTRACING_ACCELERATION_STRUCTURE));
+    // Records one global barrier after the texture transitions queued before it: the one door a global barrier takes,
+    // MemoryBarrier's included.
     private static void GlobalBarrier(DirectXCommandBufferState state, D3D12_BARRIER_SYNC syncBefore, D3D12_BARRIER_SYNC syncAfter, D3D12_BARRIER_ACCESS accessBefore, D3D12_BARRIER_ACCESS accessAfter) {
         FlushTextureBarriers(state);
         var barrier = new D3D12_GLOBAL_BARRIER {

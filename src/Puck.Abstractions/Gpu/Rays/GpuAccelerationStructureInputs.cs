@@ -14,7 +14,7 @@ public enum GpuAccelerationStructureLevel {
 /// one geometry of 32-bit float positions and 32-bit indices, read in place from buffers created with
 /// <see cref="GpuBufferUsage.AccelerationStructureInput"/>, and is built for fast tracing and compaction, since a baked
 /// geometry never changes. A top level is built for fast tracing from instance records
-/// <see cref="IGpuAccelerationStructures.WriteInstance"/> wrote, rebuilt whole when its scene changes.
+/// <see cref="GpuAccelerationStructureInstance.Write"/> wrote, rebuilt whole when its scene changes.
 /// </summary>
 /// <param name="Level">The level built.</param>
 /// <param name="Source">The buffer the build reads: the vertices and indices of a bottom level, the instance records of

@@ -19,19 +19,29 @@ public static class GpuAccelerationStructureInstance {
     // TRIANGLE_CULL_DISABLE | FORCE_OPAQUE: both faces answer, and no any-hit work runs.
     private const uint Flags = (0x1U | 0x4U);
 
-    /// <summary>Writes one record: visible to every ray (mask 0xFF), opaque, culling no face.</summary>
+    /// <summary>Writes one record naming a bottom level under a transform, with the index a ray query reads back for a hit
+    /// on it (<c>CommittedInstanceID</c>): visible to every ray (mask 0xFF), opaque, culling no face.</summary>
     /// <param name="destination">The record's bytes, at least <see cref="Bytes"/> long.</param>
     /// <param name="objectToWorld">The bottom level's transform to the world, in the row-vector convention of
     /// <see cref="Matrix4x4"/>; its fourth column is ignored.</param>
     /// <param name="index">The index a hit reads back, at most <see cref="MaxIndex"/>.</param>
-    /// <param name="bottomAddress">The bottom level's device address.</param>
-    /// <exception cref="ArgumentException"><paramref name="destination"/> is shorter than <see cref="Bytes"/>.</exception>
+    /// <param name="bottom">The bottom level the record names; it must outlive every trace of a top level built from the
+    /// record.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="bottom"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException"><paramref name="destination"/> is shorter than <see cref="Bytes"/>, or
+    /// <paramref name="bottom"/> is not a bottom level.</exception>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="index"/> is above <see cref="MaxIndex"/>.</exception>
-    public static void Write(Span<byte> destination, in Matrix4x4 objectToWorld, uint index, ulong bottomAddress) {
+    public static void Write(Span<byte> destination, in Matrix4x4 objectToWorld, uint index, IGpuAccelerationStructure bottom) {
+        ArgumentNullException.ThrowIfNull(argument: bottom);
+        if (bottom.Level != GpuAccelerationStructureLevel.Bottom) {
+            throw new ArgumentException(message: "An instance record names a bottom level.", paramName: nameof(bottom));
+        }
         if (destination.Length < Bytes) {
             throw new ArgumentException(message: $"An instance record is {Bytes} bytes.", paramName: nameof(destination));
         }
         ArgumentOutOfRangeException.ThrowIfGreaterThan(value: index, other: MaxIndex);
+
+        var bottomAddress = bottom.Address;
 
         var m = objectToWorld;
         var transform = MemoryMarshal.Cast<byte, float>(destination[..48]);
@@ -63,16 +73,14 @@ public interface IGpuAccelerationStructure : IDisposable {
 
 /// <summary>
 /// A device's acceleration structures (<see cref="GpuOptionalCapabilities.RayQuery"/>): sizing a build, creating a
-/// structure, writing a top level's instance records, and binding a top level to a kernel. Building, compacting and
+/// structure and binding a top level to a kernel; a top level's instance records are
+/// <see cref="GpuAccelerationStructureInstance"/>'s, the same on both backends. Building, compacting and
 /// copying are commands on the frame's recorder (<see cref="IGpuRecorder"/>); a build's scratch is any device-local
 /// buffer of <see cref="GpuBufferUsage.Storage"/> and <see cref="GpuBufferUsage.AccelerationStructureInput"/> the size
 /// <see cref="Size"/> reports, which carries any alignment slack the backend needs. Every member refuses on a device
 /// created without ray queries.
 /// </summary>
 public interface IGpuAccelerationStructures {
-    /// <summary>Gets the bytes one instance record occupies, the same on both backends (64).</summary>
-    int InstanceBytes { get; }
-
     /// <summary>Returns what building a structure over some inputs needs, as the driver reports it. Reads the inputs'
     /// counts and formats, never their contents.</summary>
     /// <param name="inputs">The inputs; their buffers are not read.</param>
@@ -89,18 +97,7 @@ public interface IGpuAccelerationStructures {
     /// <exception cref="NotSupportedException">The device was created without ray queries.</exception>
     IGpuAccelerationStructure Create(GpuAccelerationStructureLevel level, ulong sizeBytes, in GpuObjectName name);
 
-    /// <summary>Writes one top-level instance record: a bottom level under a transform, with the index a ray query reads
-    /// back for a hit on it (<c>CommittedInstanceID</c>). The record is opaque, visible to every ray and culls no face.</summary>
-    /// <param name="destination">The record's bytes, <see cref="InstanceBytes"/> long.</param>
-    /// <param name="objectToWorld">The transform from the bottom level's frame to the world, in the row-vector convention
-    /// of <see cref="Matrix4x4"/> (translation in its fourth row); its fourth column is ignored.</param>
-    /// <param name="index">The instance's index, below 2^24.</param>
-    /// <param name="bottom">The bottom level the record names; it must outlive every trace of a top level built from the
-    /// record.</param>
-    /// <exception cref="ArgumentException"><paramref name="destination"/> is shorter than <see cref="InstanceBytes"/>, or
-    /// <paramref name="bottom"/> is not a bottom level.</exception>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="index"/> is 2^24 or above.</exception>
-    void WriteInstance(Span<byte> destination, in Matrix4x4 objectToWorld, uint index, IGpuAccelerationStructure bottom);
+
     /// <summary>Points one binding of a descriptor set at a top level, which a kernel then traces
     /// (<c>RaytracingAccelerationStructure</c>).</summary>
     /// <param name="descriptorSetHandle">The descriptor set.</param>
