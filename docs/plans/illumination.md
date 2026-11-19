@@ -434,7 +434,8 @@ job slots (`SdfGpuWork.SlotCount`). The GPU is not short of time; the work
 waits on round trips.
 
 - *The lighting.* One windowed run measured each probe job at about 25 ms out
-  and back. The service reported an occupancy of 0.05, which is GPU time
+  and back (step 5 names the cause since removed, a job answering from the
+  frame's last signal). The service reported an occupancy of 0.05, which is GPU time
   divided by the time some job was in flight (`SdfGpuWork.Describe`): the GPU
   worked a twentieth of the time a job was out. It is not a share of the
   allowance, and nothing reports how much of the allowance is used. After a
@@ -559,7 +560,14 @@ Six steps run in order:
    (`SdfGpuWork.Drive`). Extend that hand-off to ordinary frames in
    `SdfGpuWork.Pump`, so a wait names the exact queue position it needs and a
    job is answered at the next step, not the next frame; keep it only if
-   measured to beat its extra submit cost.
+   measured to beat its extra submit cost. One cause of the slow answer is
+   built away: a job submitted inside the frame's open batch used to answer
+   from the frame's last signal, about 25 ms after its 1 to 2 ms of GPU work,
+   and now the first frame submission deferred behind a run of background jobs
+   hands the batch to the queue first (`GpuSubmissionBatch.Admit`), so the
+   run's last job owns that hand-over's signal. `gpu.queue.jobs.late` counts
+   job fences still answered behind frame work and should read zero; this
+   step is judged against that reading and the probe round trip it leaves.
 6. **Price every consumer in one unit**: nested views, uploads, lighting and
    bake. The scheduler already honours a ceiling on passes times pixels that
    no caller sets (`RenderGraphFrame.PassPixelBudget`), and that is where
@@ -618,11 +626,36 @@ The shadow a surface receives depends on which shadow map happens to answer
 and on what kind of view asks. The outcome: a light is shadowed by the cascade
 that contains the point, and by the probes where no cascade does, per pixel, in
 every view and on glass; a soft edge's width depends only on the light and the
-gap between blocker and receiver. Build step 1 below carries roles and the
-fallback; the metre-sized filter is [transmission](transmission.md#implementation-steps)'s
+gap between blocker and receiver. Build step 1 below carries what remains of
+it; the metre-sized filter is [transmission](transmission.md#implementation-steps)'s
 `transmit-plane`, and caster culling is [visibility](visibility.md#v5-multi-view-and-shadow-work)'s.
 
-**What a player sees today.**
+**What the shadows lane fixed.** Three defects were the reason for roles and
+the fallback, and the first wave's `shadows` lane has built the answer to
+them; its checks in build step 1 are owed to a GPU leg.
+
+- *Past the shadow maps everything was sunlit*, and *glass and nested views got
+  no shadow maps* (one flag per view decided whether cascades were read). Now
+  the surface pass writes each role's cascade visibility and its coverage,
+  falling to zero over a band one widest filter wide at the edge of the role's
+  outermost entry, and `sdfShadowRoleAnswer` blends the probes' answer in by
+  coverage, so a point past the cascades, glass and a view with no cascade all
+  take the probes' record of that light.
+- *The wrong light held the maps.* `WorldShadowAllocator` compared the shadow
+  mode before the brightness, so an unlit moon (`illuminance: 0lx, shadow:
+  auto`) could hold the second slot by day and an unlit key light the near and
+  far cascades at night, and `SdfMeshShadowCascades.Fit` returned no cascades
+  when slot 0 held no directional light. Now a light that emits nothing
+  competes for no slot (`WorldShadowAllocator.Admitted`), the slots keep light
+  identities, and `SdfLights.RoleSlot` derives the roles from the slot owners
+  and what each emits in the frame: primary is the brightest slotted
+  directional light (near and far cascades, and the key light), secondary the
+  next (one cascade). The roles are computed on read and stored nowhere, so no
+  writer can leave them stale. An incoming handoff light takes the probes'
+  answer and an outgoing one eases to ambient occlusion. The noon reading that
+  shows the second slot empty is part of step 1's checks.
+
+**What remains.**
 
 - *Softness jumps at a cascade boundary.* The first cascade that contains a
   point answers, with no blend, and the blocker search and blur are sized in
@@ -632,24 +665,8 @@ fallback; the metre-sized filter is [transmission](transmission.md#implementatio
 - *Soft edges are cut short.* The search offsets lie on the shadow map's plane
   (`sdfMeshShadowGap`), so 26 cm is a sideways reach: a blocker whose edge lies
   further to the side is not found, which removes the outer part of every soft
-  edge wider than that.
-- *Past the shadow maps everything is sunlit.* A point no cascade contains
-  returns fully lit, as if measured.
-- *Glass and nested views get no shadow maps.* Whether cascades are read is one
-  flag per view; glass sets it false, and session and camera views draw no
-  cascades.
-- *The wrong light holds the maps.* Every directional light whose shadow mode is
-  `Always` or `Auto` competes for a slot ranked at `max(0, lux)`, but
-  `WorldShadowAllocator` compares the mode before the brightness, and
-  `SdfMeshShadowCascades.Fit` checks only that a slot holds a directional light.
-  The day cycle's moon is authored `illuminance: 0lx, shadow: auto` and the
-  debug key light `shadow: always`, so by day an unlit moon holds the second
-  slot and its 40 m cascade, and at night the unlit key light holds the near
-  and far ones (the noon measurement that confirms it is owed). A slot is not a
-  role: the allocator keeps a selected light in its slot
-  (`WorldShadowAllocator.AssignTargets`), and `Fit` returns no cascades when
-  slot 0 holds no directional light, so in a handover with both lights lit the
-  moon can keep slot 1 while slot 0 empties and every cascade disappears.
+  edge wider than that. Both are [transmission](transmission.md#implementation-steps)'s
+  metre-sized filter.
 - Two smaller costs: each cascade's bounding sphere sits on the view's forward
   axis, so a camera turn moves the far cascade's centre and forces a redraw
   that could have been held; and a program with glass shadows holds three
@@ -657,49 +674,31 @@ fallback; the metre-sized filter is [transmission](transmission.md#implementatio
   (`SdfWorldPackage.WithShadows`), 144 MB of the 252 MB such a view holds at
   the highest tier, with a whole-buffer clear on every cascade draw.
 
-**The design.**
+**The design, and what each part still owes.**
 
-1. *Cascades go to lights by role, and a light is admitted by what it
-   contributes.* A light with zero luminance is admitted to nothing. The primary
-   role, the near and far cascades, goes to the brightest admitted directional
-   light whichever slot it holds. The allocator's ranking is only printed today;
-   carrying it to the fit is more than one edit, because the slot table holds no
-   role (`SdfShadowSlots`) and fades are kept per slot. A role change fades as a
-   slot change does: two lit lights can swap brightness while each keeps its
-   slot, which starts no fade, so without this the cascades would jump between
-   lights in one frame. The outgoing light keeps its last cascades, tied to the
-   light that drew them, while the incoming light's are drawn, blended over the
-   authored fade time; with no spare storage for both sets, the incoming light
-   takes the cascades at once and the outgoing one is answered by the probes for
-   the fade.
-2. *The data model comes first.* Step 4 replaces three named cascades (132
-   references in the code) with one indexed set, so the set's shape (a list of
-   entries, each a light, a role and a radius) is fixed in step 4's memo before
-   the resolver is built; a resolver written against the three names would be
-   written twice.
-3. *The probes answer where no cascade contains a point*, per pixel and per
-   slot. The shared light shader already takes the probes' record of whether a
-   directional light reaches a surface when its view reads no cascades
-   (`shade/sdf-light.hlsli`), and glass always asks that way
-   (`passes/sdf-glass-stage.hlsli`). The uncovered case is a receiver in a view
-   that reads cascades whose point falls outside every one, so the decision
-   becomes "asked, and no cascade holds it", with a band from the last cascade
-   into the probes' answer. Roles and the fallback are one piece of work,
-   because the probes' answer must follow the same light identity as the role.
-   The promise is limited: past the far cascade only the coarsest probe level
-   answers, 32 m apart. A probe not yet measured keeps today's lit answer and
-   fades to the measured one over an authored time, never dark, or a camera cut
-   would land in darkness until its probes fill. Until the far shadow maps exist
-   the valley's far view is shadowed in 32 m steps, so the fallback is kept there
-   only if presented captures from the rim read better than today's sunlit
-   answer. A residency has one set of probe windows; they follow the first view
-   when the views do not fit inside a level (`SdfMeshIrradiance.WindowLow`), so
-   a second view far from the first is answered only by the coarsest level that
-   covers it.
+1. *Roles.* Built as above. What the checks must show: two lit lights that swap
+   which is brighter while each keeps its slot cross without a jump in either
+   direction, a light that keeps its slot through a handover still takes the
+   primary role when the other goes dark, and the exchange at the horizon does
+   not flicker between lights.
+2. *One indexed cascade set.* Built: `SdfMeshShadowCascades` is one list of
+   entries (camera, role, slope), primary near, primary far, secondary, then
+   the far exit camera, whose count is the rendered prefix. Step 4's memo adds
+   radii to the entries rather than starting a second set.
+3. *The probes' answer where no entry covers a point.* Built as above. The
+   promise is limited: past the far cascade only the coarsest probe level
+   answers, 32 m apart, and an unmeasured probe answers lit (never dark, or a
+   camera cut would land in darkness until its probes fill). Until the far
+   shadow maps exist the valley's far view is shadowed in 32 m steps, so the
+   fallback is judged there by presented captures from the rim against the
+   sunlit answer it replaced. A residency has one set of probe windows; they
+   follow the first view when the views do not fit inside a level
+   (`SdfMeshIrradiance.WindowLow`), so a second view far from the first is
+   answered only by the coarsest level that covers it.
 4. *Eye-centred cascades as one authored set of radii*, with entries beyond
    120 m held between refreshes, after visibility's caster culling and behind a
-   memo that states the data model and what centring costs in texels at each
-   field of view. Centring stops a camera turn from ending the far cascade's
+   memo that states the radii the indexed set's entries gain and what centring
+   costs in texels at each field of view. Centring stops a camera turn from ending the far cascade's
    hold, and the terrain's far shadow map becomes one more entry. Narrow views
    get coarser texels, and a far entry needs either a refresh spread over several
    frames or a stated lag at the authored day speed. A borrowed figure does not
@@ -726,8 +725,6 @@ night; a shipped game runs sun and moon as one global shadow system (Cyberpunk
 visibility from the probe volume, and that a light is shadowed wherever it
 lights
 ([register](../decisions/rendering.md#a-light-is-shadowed-wherever-it-lights-and-cel-shading-is-a-style-per-material)).
-The exchange at the horizon must not flicker: a light that keeps its slot
-through a handover still takes the primary role when the other goes dark.
 
 **Options not taken.** Cached or sparse virtual shadow maps, refitting the
 projection every frame, and moment shadow maps each fail on the moving sun or
@@ -740,10 +737,10 @@ widest soft edge, the blend bands and a far entry's refresh are authored values
 with neutral defaults
 ([where each look is authored](rendering-research/step-designs.md#where-each-look-is-authored)).
 Point and spot lights keep the probes' answer until step 5 builds local shadow
-maps. Not checked: the cascade spheres on the view axis, the 144 of 252 MB and
-the 132 references (a research map); the probe windows' rule and the existing
-pyramid's one pixel per block (a reviewer's reading); the texel sizes, the
-26 cm and 1.95 m caps and which light holds which cascade (reasoned).
+maps. Not checked: the cascade spheres on the view axis and the 144 of 252 MB
+(a research map); the probe windows' rule and the existing pyramid's one pixel
+per block (a reviewer's reading); the texel sizes and the 26 cm and 1.95 m caps
+(reasoned).
 
 ## Lighting proportional to change
 
@@ -871,7 +868,7 @@ and the job system supplies the policy
 | Step | Lane | Lands | Check on `worlds/debug` |
 |---|---|---|---|
 | 0. Background headroom and device leg | rendering | [Background GPU work and headroom](#background-gpu-work-and-headroom) steps 1 and 3–6 on the RTX 4070 (both backends); the RTX 2060 and Steam Deck High legs run once the RTX 4070 meets both bars | The headroom and background checks above on the RTX 4070; later, Deck `[sdf.mesh-gi] done … seconds=` at High and the frame bar at `debug.go overlook` alongside an unloaded resolve-pass repeat |
-| 1. Direct light's remainder | rendering | [Direct light: roles, the probe fallback and one cascade set](#direct-light-roles-the-probe-fallback-and-one-cascade-set): admission by contribution and cascades by role, with role changes fading (one piece of work with the per-pixel probe fallback, built against the indexed cascade set's data model); then, after [visibility's caster culling](visibility.md#v5-multi-view-and-shadow-work), the eye-centred cascade memo, whose set includes [the terrain pass](terrain-pass.md#distance)'s far shadow map as one entry; the glass shadow clear by tile. Plus scale-following shading lengths (cascade bias, AO and shadow tap radii, `NormalBias`). The metre-sized shadow filter and per-body depth layers are [transmission](transmission.md#implementation-steps)'s | At High: noon `world.counters gpu pass sdf.world$shadow-second` shows zero draws; through a continuous sun/moon exchange forward and reversed no frame loses cascades; two lit lights swapping brightness fade a far receiver without a jump and the brighter light ends with primary cascades; shadow beyond 40 m holds while slot 0 empties; both exchange ends match cold jumps; no hard line at 120 m; post-cut unfilled probes read lit and fade in; `valley-rim` captures read no worse than sunlit fallback; distant second views get an answer; glass, cascades-off views and beyond-cascade points each checked independently; receiver in front of, between and behind two glass panes checks the glass optical-depth sum limit; quarter-size Moth back-plate lines gone; once the terrain's far shadow map lands, `valley-rim` shows ridge shadows on the far walls and the frame bar holds there under a moving sun; the frame bar again with the sun moving; dawn leg on the `day` row with the sun near the horizon |
+| 1. Direct light's remainder | rendering | [Direct light: roles, the probe fallback and one cascade set](#direct-light-roles-the-probe-fallback-and-one-cascade-set). Built: admission by contribution, roles derived from the slots (`SdfLights.RoleSlot`), the indexed cascade set (`SdfMeshShadowCascades`) and the probes' answer wherever no entry covers a point (`sdfShadowRoleAnswer`); the checks below are what that build still owes a GPU leg. Remaining: after [visibility's caster culling](visibility.md#v5-multi-view-and-shadow-work), the eye-centred cascade memo, whose set includes [the terrain pass](terrain-pass.md#distance)'s far shadow map as one entry of the primary role (stretching the far cascade over the valley costs more than an order of magnitude in draws, vertices and GPU time); the glass shadow clear by tile; scale-following shading lengths (cascade bias, AO and shadow tap radii, `NormalBias`). The metre-sized shadow filter and per-body depth layers are [transmission](transmission.md#implementation-steps)'s | At High: noon `world.counters gpu pass sdf.world$shadow-second` shows zero draws; through a continuous sun/moon exchange forward and reversed no frame loses cascades; two lit lights swapping brightness fade a far receiver without a jump and the brighter light ends with primary cascades; shadow beyond 40 m holds while slot 0 empties; both exchange ends match cold jumps; no hard line at 120 m; post-cut unfilled probes read lit and fade in; `valley-rim` captures read no worse than sunlit fallback; distant second views get an answer; glass, cascades-off views and beyond-cascade points each checked independently; receiver in front of, between and behind two glass panes checks the glass optical-depth sum limit; quarter-size Moth back-plate lines gone; once the terrain's far shadow map lands, `valley-rim` shows ridge shadows on the far walls and the frame bar holds there under a moving sun; the frame bar again with the sun moving; dawn leg on the `day` row with the sun near the horizon |
 | 2. Lighting proportional to change | rendering | [Lighting proportional to change](#lighting-proportional-to-change), after background steps 1 and 3: **one GPU sky**, deleting the two CPU sky renderers (`SdfSkyEnvironmentRefresh.Owes` and the frame-thread capture render); **the per-source store**, combined at publication, with memory priced first (a world can bind up to `SdfProgramBuilder.MaxScreenSurfaces` screens), the rounding grid moved to the combined result with the reference drain, and a local light's brightness multiply-only only after the measured register change; **the rescale of unreached probes** by the mean sun and sky change while a non-multiply edit (a moving sun) relights the grid, a bridge a relight replaces (about 0.49 of the true light for a window low in a wall). Also the lockstep relight under a moving sun, which relights the whole window every tick ([open items](open-items.md#lighting-and-gi)) | A panoramic sky picture moving under unchanged parameters refreshes the sky; an unchanged procedural sky under camera motion does not. Per-source storage matches a from-scratch drain within `ConvergedShare` with zero probes relit across seven cases: colour-only directional change, one of two lamps changed, light from zero to on, receiver at old range boundary of a brightened lamp, non-power-of-two sky gain with a rounding grid, live screen changing its picture, and two coloured lamps plus an emitter and bounce-only wall with one lamp turned off after bounces. Day cycle at `debug.go gallery` and `overlook`: indirect light follows the sun with the age under its authored bound and no `[sdf.mesh-gi] behind`; continuous `world.exposure` across the atrium's arch; the frame bar across the cycle; a lockstep still of one tick repeats across two Worlds within the noise |
 | 3. The GPU trace's acceptance | rendering, GPU leg on both backends | What [the GPU trace still owes](#after-the-gpu-trace) (shared surface lighting, geometry visibility bits, stable trace mesh, coarse-to-fine check, slot-by-slot window publish, ray query, and field-tracing comparison); moving bodies casting into the volume remains separate future work | Rays per second from `world.counters sdf.mesh-gi` against trace dispatch GPU time; moving-sun lockstep drain split into kernel time, round trips and host work; thin-wall stills (teal corner, stairwell flight B) compared tolerantly; executed shadow queries, hit-light pairs tested, distinct live pairs and max dispatch work reported; when bodies cast, a body posed under a lamp darkens the floor in `world.debug-view indirect` |
 | 4. Bitmask AO and bent normal | rendering | The bitmask march over the depth pyramid; the bent normal in the visibility record and in the gather | `meadow.puck` blades without dark halos and thin crevices closed in `world.debug-view ao`; `world.gpu-timing` of `surface` against the build before it; stills at the gather stops compared tolerantly |
@@ -883,10 +880,13 @@ and the job system supplies the policy
 [rendering plan's list](rendering-research.md#engine-gaps-filled-first) touch
 these steps. Gap 3, that nothing casts a shadow past 120 m, is step 1's terrain
 cascade, whose one home is the terrain pass's far-shadow step, and that step
-starts when shadow maps are assigned by light role (step 1 above). Gap 12, that
-a frame holds at most 128 lights (`SdfLights.MaxLights`), blocks no place today,
-so it keeps its place in step 5: step 5's list measurement runs as soon as a
-place authors more lights than the cap.
+builds on the shadow roles of the rendering plan's decision 6
+(`SdfLights.RoleSlot`): the far map joins the indexed cascade set
+(`SdfMeshShadowCascades`) as one more entry of the primary role, and a point past
+it already takes the probes' answer (`sdfShadowRoleAnswer`).
+Gap 12, that a frame holds at most 128 lights (`SdfLights.MaxLights`), blocks no
+place today, so it keeps its place in step 5: step 5's list measurement runs
+as soon as a place authors more lights than the cap.
 
 Steps 4 and 5 share no files with the others and run beside them; step 6 waits
 on steps 2 and 5; step 7 on the terrain pass's steps 1 and 7 and on step 6. What

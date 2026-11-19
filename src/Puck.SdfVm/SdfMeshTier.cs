@@ -9,7 +9,8 @@ namespace Puck.SdfVm;
 /// geometry (<see cref="SdfMeshGeometryBuilder.AppendTier"/>): each tier of a geometry is its own cache entry, identified
 /// from inputs alone. A residency's bake plans each group at the coarsest tier whose cell stays under half a display pixel
 /// at the nearest demand point (<see cref="SdfMeshDemand.PixelAt(SdfMeshBakeGroup, IReadOnlyList{Puck.SignedDistance.DynamicTransform})"/>), clamped to the rungs that change the group's mesh
-/// (<see cref="Clamp"/>); an offline plan takes each group's finest.
+/// (<see cref="Clamp"/>); an offline plan takes each group's finest. A group arriving with nothing to draw plans its
+/// coarsest rung first, its floor, and its demanded tier once the floor has landed (<see cref="SdfMeshPathBake"/>).
 /// </summary>
 public static class SdfMeshTier {
     /// <summary>The cell of tier zero, in metres: a millimetre, under the finest spacing any shape declares.</summary>

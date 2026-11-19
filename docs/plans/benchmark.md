@@ -509,9 +509,10 @@ the device's authored quality table, the memory cap, the topology (in-process or
 remote authority, with the endpoint named when remote), whether it ran uncapped,
 the budget an iteration is judged against, the start tick, the loops, the
 operating system and the logical processor count. Any difference refuses the
-comparison. The overlay joins them when stage 2 lands; the GPU adapter is not
-read today, so two machines with one operating system and one processor count
-are not told apart.
+comparison. The overlay joins them when stage 2 lands. Device profiles
+(`render.devices` rows, chosen by adapter and named by `world.device-profile`)
+select the quality table and memory bars, and `puck benchmark --profile`
+writes the profile and the topology into the run report.
 
 **How the frame-rate bar is read.** Every benchmark check that claims the frame
 bar uses one reading:
@@ -556,7 +557,9 @@ bar uses one reading:
   says so and is not a remote reading. Check: a headless route against an
   authority in a second process arrives in every chapter, and the same chapters
   in process arrive in the ticks they took before; the run on the Azure
-  deployment is the lead's.
+  deployment is the lead's. The driver is not built: the first wave's `bench`
+  lane stopped at a design call, and what the endpoint delivers in place of
+  each thing the driver reads is in [the benchmark's packet](open-items.md#the-benchmark).
 - *Where sharing is claimed, the arrangement of worlds is stated.* Every world
   of the debug world admits every viewer at full disclosure, so a check run
   there shares as much as can be shared. A check that claims work is shared

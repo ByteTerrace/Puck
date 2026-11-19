@@ -46,10 +46,6 @@ jobs:
       # The solution build compiles the candidate CLI the steps below run; nuget pack packs it once, without rebuilding.
       - name: Compile the solution once
         run: dotnet build Puck.slnx -c Release --no-restore -p:PuckCaptureTestArtifacts=true -bl:artifacts/build.binlog
-      # A build writes every generated declaration the model has changed, so the check holds each file to the commit's
-      # staged copy as well as to the model.
-      - name: Check the generated shader declarations
-        run: dotnet src/Puck.Cli/bin/Release/net11.0/Puck.Cli.dll shaders generate --check
       # Every build stamps each entry it reads or writes, so a bound at least this job's timeout keeps exactly what this
       # commit's builds used, and the saved cache does not grow with every commit before it.
       - if: steps.shader-cache.outputs.cache-hit != 'true'

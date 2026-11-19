@@ -110,9 +110,9 @@ the GPU at all.
 their depth alone, each draw whose box lies in the cascade's light box and,
 swept along the light, may shadow a receiver the view shows
 (what a raster pass draws, below). A frame with no mesh draw, or whose view has no cascade,
-skips them; `shadow-second` runs only while a second stable shadow slot holds a
-directional light, and a view whose world holds one stable slot has no
-`shadow-second` at all.
+skips them; `shadow-second` runs only while a second slotted directional light
+emits (the secondary shadow role, `SdfLights.RoleSlot`), and a view whose world
+holds one stable slot has no `shadow-second` at all.
 
 **mesh** (`sdf-mesh.vert.hlsl`, `sdf-mesh.frag.hlsl`) rasterizes the frame's mesh draws, one draw call
 each, into the mesh visibility target at the view's extent: per pixel the ray parameter,
@@ -837,8 +837,9 @@ out at `WorldFramePresenter.ViewQuality()`: seat views, the operator pose, and
 layout slots that name a camera alike, so a named-camera slot reconstructs and
 its settled still converges over a jitter period. A camera view a screen films
 never reconstructs (its quality restriction,
-`WorldScreenBinder.CameraViewQuality`, does not ask), and neither does a session
-view (`WorldSessionSceneEmitter.ReducedQuality`).
+`WorldRenderSettings.NestedRestriction`, does not ask), and neither does a session
+view. Beyond that a nested view gives up only what the world's `render.nested`
+table says at its presented share of the display.
 
 Each view's history is its own fragment's: two versions at the output extent,
 two allocations each, the one the next frame reads through
@@ -851,7 +852,7 @@ demands nothing of its writer, and device loss starts from none.
 - The **history color** holds, per output pixel, the weighted mean of every sample
   the pixel has gathered: the lit color in its RGB and the coverage in its alpha,
   premultiplied as the lit image is.
-- The **history surface** holds 47 words per output pixel
+- The **history surface** holds the words that follow a pixel's motion
   (`SdfWorldPackage.HistorySurfaceWords`): the visibility identity of the
   pixel's receiver, the nearest of the render samples the resolve read that is
   not a sub-pixel feature; that sample's ray distance and the samples' summed
@@ -859,11 +860,20 @@ demands nothing of its writer, and device loss starts from none.
   while the pixel carries a feature), as two half floats; the weighted mean of
   the samples' surface transport, two words; and the feature the pixel's
   footprint last showed, its YCoCg as three half floats with the frames the
-  memory has left, zero for none. A phase mask follows, then eight phase samples,
-  each holding color/coverage and transport as halves and its Gaussian weight.
-  The words lie in planes, one word of every pixel per plane (`sdfHistoryWord`),
-  so a wave reads or writes one word of adjacent pixels in one transaction. A
-  complete stationary window shows its own mean and reads no reprojected history.
+  memory has left, zero for none. The words lie in planes, one word of every
+  pixel per plane (`sdfHistoryWord`), so a wave reads or writes one word of
+  adjacent pixels in one transaction.
+- The **stationary window** (`SdfWorldPackage.HistoryWindowWritten`,
+  `SdfWorldPackage.HistoryWindowWords` words a pixel in the same planes) holds a
+  phase mask and eight phase samples, each holding color/coverage and transport
+  as halves and its Gaussian weight. It is not history: it is one retained
+  buffer the resolve updates in place, zeroed once. A pixel reads and writes
+  only its own window words, and keeps its window only while its history comes
+  from its own position, so no invocation reads what another writes in the same
+  dispatch; a pixel whose history comes from anywhere else restarts its window
+  at this frame's phase. Each frame writes only the current phase's samples and
+  the mask, rather than copying the whole window into a second copy. A complete
+  stationary window shows its own mean and reads no reprojected history.
 
 The views pass also writes a one-channel **reactivity** buffer at the render
 extent, which only the resolve reads: one where a display screen's picture covers the
@@ -1465,8 +1475,9 @@ empty, and quads take their neighbours' materials.
 
 ## The shadow cascades
 
-`SdfMeshShadowCascades` fits two orthographic cameras along the key light (the
-frame's first stable shadow slot): the near one around the view frustum's first
+`SdfMeshShadowCascades` is one indexed set of entries, each a light camera for a
+shadow role. It fits two orthographic cameras along the key light (the slotted
+directional light that emits the most, the primary role): the near one around the view frustum's first
 16 metres, the far one to 120 metres or the far distance, each a bounding sphere
 of its slice snapped to whole texels, with casters up to 200 metres past the
 sphere toward the light. A world authors those three reaches as
@@ -1483,9 +1494,10 @@ pass with the cascade's `D32Float` depth alone, cleared to zero and stored. The
 depth is reversed and linear, one at the cascade's near plane and zero at its
 far plane, so the surface pass samples it (`sdfMeshShadowDepth`) and decodes
 the caster's light-space depth as `far - depth · (far - near)`; a texel nothing
-was drawn into reads as the far plane. The second shadow slot's light, when one
-holds it, gets one cascade over the first 40 metres, drawn by `shadow-second`
-and written into K's second slot.
+was drawn into reads as the far plane. The secondary role's light, when one
+emits, gets one entry over the first 40 metres, drawn by `shadow-second`. K holds
+each role's visibility and its cascades' coverage of the point; views takes the
+probes' answer where the coverage falls short of one.
 
 Every cascade is 2048 texels a side at the `high` shadow tier, 1024 at
 `medium` and 512 at `low` (`SdfViewQuality.ShadowResolution`,

@@ -1,6 +1,9 @@
 name: Verify runtime behavior
 run-name: Runtime verification — ${{ github.ref_name }}
 
+# None of these jobs holds the Azure deploy: azure.yml runs this workflow beside the deploy path and leaves it out of the
+# deploy job's needs, so a red job here reports without skipping a release.
+#
 # The emulator matrix. HGB runs on every change: the Humble GamingBrick battery's self-contained stages plus every
 # corpus ROM, against the corpora pinned in src/Puck.HumbleGamingBrick.Post/corpora.json; no file records an expected
 # outcome, so the step goes red and the job summary names every ROM that does not pass, but the step is informational

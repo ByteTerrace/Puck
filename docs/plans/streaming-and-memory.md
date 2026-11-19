@@ -822,7 +822,12 @@ staging and capture to demand in this order:
    bodies. Check disclosure again both when an image is bound to a reader
    (covering previous-frame reads, aliases, composites and `SdfWorldPasses.Refresh`)
    and when an in-flight GPU job installs its result; on mismatch, fall back
-   immediately to a permitted picture or authored fallback. Built together with
+   immediately to a permitted picture or authored fallback. The binding and
+   install checks are built for a narrowing between the access levels none,
+   disclosed and everything (`WorldViewGraphHost.BindAccess`,
+   `IRenderGraphInstances.Withdraw`, `WorldScreenBinder.ContentAccess`); what
+   remains, a narrowing inside "disclosed" and results keyed by what each
+   viewer was delivered, is in
    [the disclosure plan](disclosure.md#presentation-and-derived-product-disclosure).
 10. **Optional: let a shown view stand without capturing.** Only if the
     [produce breakdown](engine-job-system.md#frame-thread-measurements-owed)
@@ -903,27 +908,32 @@ reduced mode. After consumer minimums and pixel-share demand are in place:
    multi-viewer sharing (one covering image or separate ones), picking and next
    frame's reprojection all agree, including when the window crosses the near
    plane.
-2. **Replace hardcoded reduced quality with an authored table.** Delete
-   `WorldSessionSceneEmitter.ReducedQuality` and
-   `WorldScreenBinder.CameraViewQuality` and read an authored quality table
-   whose neutral engine default restricts nothing, while `worlds/standard/`
-   authors what a nested view drops by presented size (overridable per world).
-   Place table thresholds on existing window extent steps or add hysteresis so
-   views do not oscillate; if a full memory pool refuses a replacement render
-   graph, keep the existing graph and quality. Once per-pixel shadow fallback
-   lands ([illumination](illumination.md)), add smooth transitions across table
-   thresholds.
+2. **An authored table for what a nested view gives up.** The first half is
+   built: the two engine constants are deleted, and `render.nested`
+   (`WorldNestedViewQuality` rows by presented share of the display height,
+   read by `WorldRenderSettings.NestedRestriction`) says what a nested view
+   gives up, with a neutral default that restricts nothing and two rows
+   authored in `worlds/standard/quality.puck`. What remains: a threshold has a
+   cost of its own, because whether a view has shadows is part of its render
+   graph, so crossing one builds a replacement graph beside the one in use and
+   the view shows its last image until it is ready. Place the thresholds on the
+   window's existing extent steps or give them a band so views do not flip at
+   the edge; if a full memory pool refuses the replacement, keep the existing
+   graph and quality. Now that the probes answer per pixel where no cascade
+   covers a point ([illumination](illumination.md#direct-light-roles-the-probe-fallback-and-one-cascade-set)),
+   add smooth transitions across the thresholds.
 3. **Let still feeds stand.** Diagnose why a named still feed renders today
    despite `RenderGraphRuntime.WithUnchanged`, fix that cause and count
    renders, verifying that an external frame, an exposure change and
    re-converging lighting still wake the feed.
 
-Today two identical constants turn ambient occlusion and every cascade off for
-all session and camera views, so a portal that fills the screen is lit
-differently from the room behind it, and a window's image is sized by its
-slab's projected bounds and becomes full size if any corner is at or behind the
-near plane (`WorldPortalVisibility`). A merged constant would keep a visible
-choice in engine code for every author, so the table replaces both.
+Two identical constants used to turn ambient occlusion and every cascade off
+for all session and camera views, so a portal that filled the screen was lit
+differently from the room behind it; a merged constant would have kept a
+visible choice in engine code for every author, which is why a table replaced
+both. A window's image is still sized by its slab's projected bounds and
+becomes full size if any corner is at or behind the near plane
+(`WorldPortalVisibility`).
 
 **Why.** The authored table removes a pop in lighting and antialiasing at every
 portal crossing and a look built into the engine twice: the owner has ruled
@@ -1497,7 +1507,7 @@ line is the build and a headless run. Evidence goes in the landing commit.
 | [2. Every gigabyte has an owner](#step-2-every-gigabyte-has-an-owner) | The physical rows, their owners and their residuals | Beside 1 |
 | [7. Backing prototype and design](#step-7-the-backing) | Sparse design after the prototype's first reading; contiguous fallback retained | Step 3's admission stands; qualification readings need a GPU grant |
 | [3. One reservation](#step-3-one-reservation) | Admission before allocation; growth that stops at the limit; background work serviced on completion. Built; its windowed readings are owed | 1, 2 |
-| [5. The floor and eviction](#step-5-the-floor-and-eviction) | Floors, the order of what gives way, relocation within the device. The floor is an engine gap, first among the rows that remain | 3; 7 before it claims relief |
+| [5. The floor and eviction](#step-5-the-floor-and-eviction) | Floors, the order of what gives way, relocation within the device. The selection counters and the coarsest-rung floor are built; the coverage check, eviction by priority, the rungs and relocation remain | 3; 7 before it claims relief |
 | [4. Staged by demand](#step-4-staged-by-demand) | Arrival without a render | Nothing; shares its budget once 3 lands |
 | [7. The backing](#step-7-the-backing) | Memory given back without a replacement | The prototype, 3 |
 | [6. CPU copies](#step-6-cpu-copies) | The library, the documents and the widened restore; the static rows after 9 | 2; 5 and 9 for the static rows |
@@ -2096,9 +2106,8 @@ publication, reuse and job install), followed by
 
 **Replaces.** `WorldViewGraphHost.ReserveArrivals` and its reach and kept sets,
 the three `WorldPortalVisibility.ArrivalShare` cases, the arriving-world query,
-the pane-mapping law that pins them, and the hardcoded
-`WorldSessionSceneEmitter.ReducedQuality` and
-`WorldScreenBinder.CameraViewQuality` constants.
+and the pane-mapping law that pins them. (The two hardcoded nested-view
+quality constants are already gone, replaced by `render.nested`.)
 
 **Check.** Exists: the region line's `owed`, the background work's `unbound`,
 `late-stagings`, the render graph's record counts (`render.record`). Do not
@@ -2158,8 +2167,7 @@ real picture without counting a fallback). Verify each path directly:
 - *Nested quality.* One lit exhibit seen through a full-size portal matches the
   root view from the same pose; a camera's feed matches a root view placed at
   the camera's pose; an author's override of the table changes the nested views
-  alone; `puck search` finds neither `ReducedQuality` nor `CameraViewQuality`;
-  a walk across each of the table's thresholds, on both backends, is read for
+  alone; a walk across each of the table's thresholds, on both backends, is read for
   its slowest frame, its peak GPU memory and any refused replacement.
 
 ### Step 7: the backing
@@ -2929,6 +2937,26 @@ authored fallback and is counted when its floor cannot bake). A cut to a place
 whose meshes are not stored shows the last complete scene or the fallback image
 until the place's floors and lighting stand, and the same holds when a mesh
 cannot be derived at all.
+
+**As built, and what remains.** The rendering plan's decision 8 counters come
+first: every eighth stage of a raster pass marks the draws it selects with the
+level each draws, read back with the portal sight verdicts
+(`SdfWorldTables.ObserveSelectionMarks`), and `world.residency`'s selection
+line prints the triangles each pass draws by level and by tier and the placed
+mesh bytes no pass selected. The floor is the coarsest rung: a group arriving
+with nothing to draw plans it first, starts its demanded tier once it lands,
+keeps it while detail draws (named ahead so its words stay), and falls back to
+it at once when the region refuses its detail (`SdfMeshPathBake.Floor.cs`).
+The floor line prints floors shown, pending, empty and kept, groups with none,
+evictions and their bytes, holes in reach and the frames that had any, and
+floor bytes by class, in logical words. Still to build, in order: a coverage
+check and a finer rung for a floor that meshes nothing or misses what its
+detail covers; a floor for a group taken whole from the library or replanned
+while it drew; placing floors in the arena before detail, so pressure refuses
+detail first; eviction by the selector's priority under a lowered budget, with
+the rungs of what gives way counted; a residency's tables built on demand; and
+relocation by a copy within the device. The readings above are owed to a GPU
+leg.
 
 ### Step 6: CPU copies
 

@@ -2188,11 +2188,20 @@ read from the code. Three presentation and caching boundaries carry the same vie
 invariant and land beside the rendering work that uses them:
 
 1. **Withdrawn pictures and reused GPU results.** Changing a route makes a
-   view's package report not fresh, but today nothing withdraws a picture
-   already published: a rate-held view, a budget-deferred render, an unscheduled
-   screen read, or a paused node returning its last surface can keep showing
-   withdrawn pixels (also tracked in
-   [the security packet](open-items.md#security-review)). Keep reuse keyed by
+   view's package report not fresh, and on its own nothing withdrew a picture
+   already published: a rate-held view, a budget-deferred render, an
+   unscheduled screen read, or a paused node returning its last surface could
+   keep showing withdrawn pixels. For a narrowing between the access levels
+   none, disclosed and everything this is built: a session screen's access is
+   settled once a frame before any view of it binds (`WorldViewerAccess`),
+   `WorldViewGraphHost.BindAccess` withdraws an instance whose access epoch
+   moved and every instance that read it (`IRenderGraphInstances.Withdraw`),
+   and `WorldScreenBinder.ContentAccess` releases a source, its residency and
+   its background jobs when they hold wider content than the viewer may now
+   see. What remains is in [the security packet](open-items.md#security-review):
+   a narrowing inside "disclosed" moves no level, and an infinity layer, an
+   external producer's output and a copied export are outside the withdrawal.
+   Keep reuse keyed by
    the content of the delivered inputs it read (`WorldDisclosureImages`) so
    viewers delivered the same static rows still share a probe volume while
    differing on bodies, and include recipient identity whenever a result read

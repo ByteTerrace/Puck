@@ -1109,16 +1109,20 @@ Owner: specialist (rendering, sdf-authoring) · high, it blocks authoring ·
 Next: fill the engine gaps first
 ([rendering research](rendering-research.md#engine-gaps-filled-first)):
 
-1. **Contour rule for unresolvable cells (gap 7).** First count, for every
-   failing group, which of the four defects it shows (vertex off the surface at
-   a crease, sliver beside a crease, face narrower than the cell, or thin tip
-   stopping short) and whether its failing cell was ever flagged for finer
-   sampling (`SdfSampledLattice.Refine`). If never flagged, fix the trigger
-   first. Then implement the contour rule inside existing
-   `SdfSampledLattice.Refine` and `SdfDualContouring.ExtractRefined` (never a
-   second mesher): a crossing whose gradient blends two faces contributes no
-   plane, a near-crease row takes the crease's vertices, and a sub-cell face
-   either closes to one crease or refines.
+1. **Contour rule for unresolvable cells (gap 7): a feature thinner than a bake
+   cell is lost or faceted.** The count is in: `puck mesh audit --cpu` prints
+   each failing shape's defect class (vertex off the surface at a crease,
+   sliver beside a crease, face narrower than the cell, or thin tip stopping
+   short) and whether its cell was flagged for finer sampling
+   (`SdfSampledLattice.Refine`). The failing cells of the blend exhibits and
+   nearly all of the Moth's were flagged and measured, so the fix is the
+   contour rule, not a trigger; only the swallow's streamers were never
+   examined, a lattice at its tier's floor on which the refinement scan never
+   runs. Implement the rule inside the existing `SdfSampledLattice.Refine` and
+   `SdfDualContouring.ExtractRefined` (never a second mesher): a crossing whose
+   gradient blends two faces contributes no plane, a near-crease row takes the
+   crease's vertices, and a sub-cell face either closes to one crease or
+   refines.
    - *Whole-world stored-mesh audit check:* audit every stored mesh of the
      world at the tier each group was stored at on both backends (fixing the
      238-of-6544 tier-0 audit gap below). Count groups the audit cannot judge
@@ -1143,8 +1147,9 @@ Next: fill the engine gaps first
      silently (a reviewer's reading).
 2. **Non-uniform scale bounds (gap 11,** [rendering](rendering.md#bake-quality))
    and **[moving blends](moving-blends.md#engine-gaps-first) step 4 (gap 10)**
-   beside it. Then the remaining triangle-facing items shared by the tour reds
-   and the Moth's shin groups below.
+   beside it. Then the three kinds of triangle the lattice's facing does not
+   judge, which the tour's remaining reds and the Moth's shin groups share
+   (below).
 
 - [medium] `SdfMeshLattice.Dims` reports two samples along a million-metre
   axis requested at 0.1 mm. The cell count saturates to `int.MaxValue` and
@@ -2347,23 +2352,26 @@ the single disclosure build table; the rd2-review
 findings are answered in decision 3a. Then the researcher brief's priorities
 ([security review](../development/security-review.md)).
 
-- [high, unconfirmed] A route change does not withdraw a picture already
-  published. When a viewer's disclosure narrows (a full replica becomes a
-  private view, or observation is revoked while a second viewer keeps the
-  shared residency alive), route settlement leaves the shared scene and
-  package freshness goes false, but nothing withdraws the published image. A
-  cadence hold, a budget deferral, an unscheduled screen read, or a paused
-  node returning its last surface can show the old pixels
-  (`WorldSessionRoute`, `SdfWorldPasses`, `RenderGraphScheduler`,
-  `WorldScreenBinder`, `WorldViewGraphHost`, `ShaderPipelineRenderNode`).
-  Enforce the current viewer's disclosure at publication and reuse,
-  previous-frame reads, aliases and retained composites included. Invalidate
-  that viewer's old output at once, and show an authorized replacement or an
-  authored fallback while the private graph builds. The other viewer's
-  publication stays usable. Verify on the first delivered frame of both cases
-  with a detail visible only in the full replica. Found by the rendering
-  research's decision-2 review; the code paths are cited there and not yet
-  reproduced.
+- [high] A narrowing a session's access cannot see. A viewer's access is
+  settled from its observation as none, disclosed or everything
+  (`WorldViewerAccess`, `WorldScreenBinder.AccessOf`), and a narrowing between
+  those levels withdraws every picture the view published
+  (`IRenderGraphInstances.Withdraw`) and releases the private residency built
+  from wider content (`WorldScreenBinder.ContentAccess`). A narrowing inside
+  "disclosed" (a cell visibility or audience the session loses while it still
+  observes) moves no level, so the old private picture stands until the view
+  next renders, and a cadence hold keeps it. The observation needs a
+  disclosure generation the authority moves whenever what it delivers this
+  session narrows, settled into the same epoch. This is the first half of
+  decision 14's step 5 (results keyed by what each viewer was delivered).
+- [medium] What a withdrawal does not reach. An infinity layer keeps its
+  frame source across a narrowing, so a program composed from the wider
+  content can reach the layer's next residency until the source composes
+  again (`WorldScreenBinder.WithdrawInfinityResidency`). An external producer
+  keeps its own latest output, and an export already copied out of the
+  runtime keeps its copy. A residency's screen emission and sky environment
+  derived from a withdrawn screen image are not shown to be derived again
+  (`SdfWorldTables.ProjectTaintedSourcesAgain` re-derives only tainted ones).
 
 - [high] Authored search must plan over what its actor is disclosed. Today an
   actor-less job reads true state under the audience check (an AI can read a
@@ -3265,8 +3273,9 @@ runs.
   timing and boot and work counts.
 - The temporal reconstruction's quiet-machine frame and memory qualification:
   rerun the integrated tour, standing and walking frame readings and the
-  gallery and lift body patrol; history is 47 words per output pixel
-  (`HistorySurfaceWords`), so measure the view and slot allocation.
+  gallery and lift body patrol; history is `HistorySurfaceWords` words per
+  output pixel in two copies and `HistoryWindowWords` in one, so measure the
+  view and slot allocation.
 - [medium] The sweep compares no per-tick allocation: `SweepSignals.ReadFrames`
   keeps `host.frames`' header and phases and drops its frame thread allocated
   line, and the `memory` signal reads after a collection. Keep that line as
@@ -3324,6 +3333,17 @@ the stages; this packet holds what a stage does not.
   the client. The rendering plan's `bench` lane rebuilds it on what the
   seat's client was delivered
   ([its decision 1](rendering-research.md#1-measure-beside-the-work)).
+  What the driver reads, and what the endpoint delivers instead: the body's
+  pose (`WorldAuthorityEndpoint.Mirror`, presentation floats where the driver
+  reads fixed point), the delivered definition (`WorldAuthorityEndpoint.Definition`,
+  from which places and spawn points follow), and a navigation planner that
+  exists only as `WorldPopulation.PlanSteering`, which needs a resolved
+  population with its contact field and the seat kit's collider. The driver
+  also fails a chapter on `WorldBody.LastObstructionNormal`, a witness no
+  snapshot carries. The report separates the in-process and remote topology
+  (`topology` in the run report) but a run against `--connect` still cannot
+  drive its seat: the driver holds its controls and reports a `seat` failure
+  when the chapter's time limit passes.
 - [medium] A fresh run's first chapter opens on the boot's settling, not on
   its pose: on a headless World armed `at 10` after a `--paused` boot, the
   chapter's first two iterations (ticks 10 and 11) still simulate for
@@ -3619,14 +3639,12 @@ Looks and rules of play held in engine code:
   `SdfSky.DefaultLuminance` (`WorldEnvironmentResolve.cs`). Make the
   unauthored default neutral, author the atmosphere in each debug-world place
   that leans on it, and look at the places on both backends before and after.
-- [medium] Four looks the rendering research found in engine code, each with
+- [medium] Three looks the rendering research found in engine code, each with
   the authored home [its looks table](rendering-research/step-designs.md#where-each-look-is-authored)
   names: the filmic curve's constants in `place.comp.hlsl`; the share of its
   own exposure a window's world applies (`SdfPhotometry.WindowAdaptation`);
-  the shares of the display at which a nested view's update rate steps down
-  (`SdfUpdateRateTiers.ViewHertz`); and what a nested view gives up, held as
-  two constants (`WorldSessionSceneEmitter.ReducedQuality`,
-  `WorldScreenBinder.CameraViewQuality`).
+  and the shares of the display at which a nested view's update rate steps
+  down (`SdfUpdateRateTiers.ViewHertz`).
 - [medium] The opening ripple's feel and look are engine constants: reach,
   margin and strengths in `WorldOpeningRipples`, the lifetime and clock period
   mirrored in C# and HLSL (`SdfScreenRipple`), and the amplitudes, speeds,

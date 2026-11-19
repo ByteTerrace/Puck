@@ -187,25 +187,24 @@ are deleted rather than kept beside the programs.
 
 Beside the shader migration, four memory and bandwidth cuts target the
 largest passes (`views` at ~3.7 ms and 255 registers on RTX 4070 Vulkan;
-temporal resolve at ~3 ms and 392 B/px):
+temporal resolve at ~3 ms, with 392 B/px of history before its split):
 
-1. **Split the temporal image history** (high priority at 1440p; designed and
-   reviewed before coding). Today `SdfWorldPackage.HistorySurfaceWords` (47
-   words = 188 B, of which 40 words = 160 B are an 8-frame jittered window)
-   plus 8 B of colour history are double-buffered (`ShaderPipelineRenderNode`),
-   totalling 392 B/px (~1.4 GB at 2560 by 1440) while copying 35 of 40 window
-   words every frame. Move the 8-frame 160 B window into one in-place buffer
-   updated only where previous and current pixel positions are equal,
-   restarting the window on motion; keep only the 7 reprojected words (28 B)
-   and 8 B colour double-buffered (232 B/px, ~0.86 GB at 1440p, saving ~0.6 GB
-   on the main view). Because an in-place history needs a cross-frame barrier
-   and cannot race two pixels inside one pass, complete a design review and
-   read temporal-supersampling literature before changing window layout or
-   sample count. Report how many nested views keep temporal history; if
-   restarting on motion degrades quality in presented motion, keep only
-   resolve-time savings and report why.
-   - *Check:* holds through camera motion, newly revealed surfaces, view cuts
-     and freshly allocated history.
+1. **Split the temporal image history** (built by the first wave's `history`
+   lane). The history surface held 47 words (188 B) a pixel, 40 of them an
+   8-frame jittered window, plus 8 B of colour, all double-buffered: 392 B/px
+   (~1.45 GB at 2560 by 1440), copying the whole window every frame. Now the
+   surface keeps only the six words that follow motion in two copies
+   (`HistorySurfaceWords`), and the phase mask and eight-phase window
+   (`HistoryWindowWords`) live in one retained buffer the resolve updates in
+   place where the pixel's history position equals its own, restarting the
+   window for a pixel whose history comes from elsewhere: 228 B/px, about
+   0.84 GB for the main view. What remains: read temporal-supersampling
+   literature before the window's layout or sample count changes again; report
+   how many nested views keep temporal history, since each pays the same bytes
+   per pixel; and, if restarting on motion costs quality in presented motion,
+   keep only the resolve-time saving and report why.
+   - *Check (owed to a GPU leg):* holds through camera motion, newly revealed
+     surfaces, view cuts and freshly allocated history.
 2. **Planar per-pixel visibility record** (measured). Test storing visibility
    record fields plane by plane (removing strided reads in resolve, filter and
    composite); keep whichever layout measurement favours since `views` reads
@@ -224,8 +223,7 @@ temporal resolve at ~3 ms and 392 B/px):
    and an evenly dim picture can have the same mean and very different
    percentiles.
 
-The 35 copied words are the most the split saves each frame: a window still
-filling, or reset by motion, holds fewer samples and copies fewer. A probe
+A probe
 lookup at a lower rate shows stair-stepping at visibility edges, and we found
 no system that shades below full rate without also filtering (not checked).
 Nothing here has been measured off the RTX 4070. Not checked: the history's

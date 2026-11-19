@@ -85,12 +85,6 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
 
     private IReadOnlyList<WorldScreen> m_textRows = [];
 
-    /// <summary>Gets the quality a session screen's view renders at: a budgeted panel image skips shadows and ambient
-    /// occlusion, whose cost buys little in a small screen-space result.</summary>
-    public static SdfViewQuality ReducedQuality { get; } = new() {
-        DisableAmbientOcclusion = true,
-        DisableSoftShadows = true,
-    };
 
     private readonly Vector3[]? m_bodyColors;
 
@@ -495,7 +489,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
                 ? 0f
                 : WorldWindowFrustumFit.ShownHeight(fitted: in camera, viewerPixelsPerMetre: (ViewerPixelsPerMetre?.Invoke() ?? 0f))),
             DemandWithinView = (fitted is not null),
-            Quality = ReducedQuality,
+            Quality = (Session?.NestedViewQuality(view: null) ?? default),
             // A window shows the luminance beyond its glass, which the view looking through it exposes.
             Unexposed = (m_windowFit is not null),
         });

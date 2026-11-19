@@ -2278,8 +2278,8 @@ The world's own views are every view the presentation lays out: seat views, the
 operator pose, and layout slots that name a camera alike, so a named-camera slot
 reconstructs too and its settled still converges over a jitter period. The
 camera views a screen films and session views never reconstruct over time: their
-reduced quality (`WorldScreenBinder.CameraViewQuality`,
-`WorldSessionSceneEmitter.ReducedQuality`) does not ask. The render section's `temporal`
+nested quality (`WorldRenderSettings.NestedRestriction`) does not ask, and gives up
+only what the world's `render.nested` table says at the view's presented size. The render section's `temporal`
 member sets it at boot, and `world.save` folds it back.
 `world.shadows off|low|medium|high` selects the shadow tier: `off` renders and
 holds no cascade, and `low`, `medium` and `high` render every cascade at 512,

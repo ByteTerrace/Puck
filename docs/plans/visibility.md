@@ -137,7 +137,8 @@ V-step would otherwise assume:
 
 - **Residency and view nodes.** One node per residency and one per view of it
   (`world.counters gpu node`: candidates, selection dispatches, pixel passes),
-  naming the residency each view reads. Sessions and residencies do not map one
+  naming the residency each view reads and whether a session's view draws
+  cascades under the nested-view table (`render.nested`). Sessions and residencies do not map one
   to one in either direction: the boot world's sessions share its one residency
   (`WorldScreenBinder.FilmHomeViews`), every seat and window presented in one
   other world share that world's one residency (`WorldFramePresenter.AttachWindow`),
@@ -228,7 +229,8 @@ prototype's "indexed read" is a different thing: buffers reached through a
 descriptor array, not an index buffer.
 
 **The vertex-stage ABI.** A command's identity word, which R2 already pushes
-(the Direct3D 12 command signature's root constant; on Vulkan read through
+(the Direct3D 12 command signature's root constant below execute-indirect tier 1.1, and at it the
+first-phase record the incrementing command number names; on Vulkan read through
 `DrawIndex` from the command array), names the bucket's range base and level.
 `SV_InstanceID` is the local instance, 0 to `instanceCount - 1`, with the first
 instance zero on both backends, so the two agree without Vulkan's optional

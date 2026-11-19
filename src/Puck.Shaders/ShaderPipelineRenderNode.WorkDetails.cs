@@ -43,18 +43,31 @@ public sealed partial class ShaderPipelineRenderNode {
         if (counters is null) { return; }
         var rows = checked((m_passes.Length + count));
 
-        if (rows <= counters.RowsOf(slot: slot)) { return; }
-        var replacementBytes = checked((GpuKernelCounters.SlotBytesOf(rows: rows) * 2UL));
-        var peak = checked((OwnedBytes + replacementBytes));
+        if ((rows <= counters.RowsOf(slot: slot)) || TryGrowWorkDetails(counters: counters, rows: rows, slot: slot)) { return; }
+        // The frame keeps the rows the slot has. A pass whose named rows lie past them reads detail row zero, which the
+        // generated puckCountDetail treats as no details, so no kernel writes past the buffer; its named work goes
+        // uncounted this frame, the ledger reads its rows as zero, and the next frame asks to grow again.
+        var physical = ((uint)counters.RowsOf(slot: slot));
 
-        if ((peak > BudgetBytes) || !TryReserveMore(bytes: replacementBytes)) {
-            throw new InvalidOperationException(message: $"Instance '{m_name}' kernel work details need {peak} peak bytes; budget is {BudgetBytes}.");
+        foreach (var pass in m_passes) {
+            if ((pass.WorkDetailRow != 0u) && ((pass.WorkDetailRow + ((uint)pass.WorkDetails.Count)) > physical)) { pass.WorkDetailRow = 0u; }
         }
+        m_work.CountDetailsRefused();
+    }
+    // Grows a completed slot's counters to rows, reserving the replacement pair beside everything the instance owns
+    // first. False, with the slot's buffers and the reservation unchanged, when the budget or the device pool has no room.
+    private bool TryGrowWorkDetails(GpuKernelCounters counters, int rows, int slot) {
+        var replacementBytes = checked((GpuKernelCounters.SlotBytesOf(rows: rows) * 2UL));
+
+        if ((checked((OwnedBytes + replacementBytes)) > BudgetBytes) || !TryReserveMore(bytes: replacementBytes)) { return false; }
         var before = counters.TotalBytes;
 
         try {
             counters.EnsureRows(rows: rows, slot: slot);
             m_allocationBytes = checked(((m_allocationBytes + counters.TotalBytes) - before));
+            return true;
+        } catch (GpuMemoryRefusedException) {
+            return false;
         } finally {
             SettleReservation();
         }

@@ -147,10 +147,13 @@ be baked on demand and cached where a triangle asset cannot.
   posing while any rate view's `camera.MaySee` or any cascade's `cull.Keeps`
   keeps its sphere, and the occlusion result the kernel writes
   per draw (`sdfMeshOcclusionVisibleRW[draw]`, `state.x`) is read back by
-  nothing. What is read back is `SdfPortalSight`'s own queries:
+  nothing. The selection marks (one stage in eight records which draws a
+  phase emitted and at which level, `SdfWorldTables.ObserveSelectionMarks`)
+  are per-draw submission evidence, read only as counters so far, and late
+  by a few frames. What else is read back is `SdfPortalSight`'s own queries:
   the kernel's sight step tests "Four rows per screen" against the same
   pyramid through `sdfOcclusionMaySee` and writes one word per query at
-  `SDF_SIGHT_COUNT_BASE + id.x`; `SdfMeshOcclusion.ReadSight` hands that range
+  `SDF_SIGHT_COUNT_BASE + id.x`; `SdfMeshOcclusion.ReadCounts` hands that range
   back once the slot completes, and `SdfPortalSight` applies a result only to
   the query and camera it was captured for ("Unknown, changed and retired
   observations always keep demand"). It is a reusable per-query box test with
@@ -944,12 +947,14 @@ maps; the recorded one-pixel and one-texel rulings stay the engine defaults and
 authored quality tables may choose others, the one look value whose default is
 a ruling and not a neutral value) in five steps:
 
-1. **Count drawn triangles per level and tier, and unselected-level bytes**:
-   triangles drawn per level and per tier relative to the tier asked for, in
-   `world.counters gpu`, and bytes held by each level no pass selected, in
-   `world.residency`. The first wave's `floor` lane builds them, because they
-   size a floor and a detail tier. Two records disagree on what the levels
-   save (the mesh-bake reference and the handbook say 11% and 6% of the stored
+1. **Count drawn triangles per level and tier, and unselected-level bytes.**
+   Built by the first wave's `floor` lane, because they size a floor and a
+   detail tier: one stage in eight of each raster pass marks the draws it
+   selects with their level (`SdfWorldTables.ObserveSelectionMarks`), and
+   `world.residency`'s selection line prints the triangles each pass draws by
+   level and by tier and the placed mesh bytes no pass selected. Its first
+   readings are owed to a GPU leg. Two records disagree on what the levels save
+   (the mesh-bake reference and the handbook say 11% and 6% of the stored
    triangles; a later cold bake read 29% and 19%), and the counter settles it.
 2. **Unify screen-size projection in one function.** Replace all four separate
    screen-size calculations (`SdfMeshDemand.PixelAt`, `SdfMeshDetail.Of`,
