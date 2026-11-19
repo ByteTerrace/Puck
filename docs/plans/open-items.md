@@ -363,9 +363,6 @@ Sittings, each the owner's eye on a running World:
 - The Moth and the swallow, in a pair session; its agenda is
   [the visual bar](#the-visual-bar)'s pair-session item. Within it: gloves or
   bare hands on the off-suit pilot (sheet 04 draws gloves).
-- The exposure calibration: gallery level 0 holds near EV 9 to 10 and the lawn
-  near EV 14.3 at compensation 2; and how indoor rooms read against daylight
-  now that the image meters exposure ([lighting](#lighting-and-gi)).
 - The outdoor lighting direction: sky colour and fill, sun colour and height,
   shadow softness and haze ([lighting](#lighting-and-gi)).
 - Feel: the Moth's walk, run, turn and lean values, the dash, first person in
@@ -374,8 +371,7 @@ Sittings, each the owner's eye on a running World:
   included; the lift panel and reach boxes; the gallery inspection lever's
   values; the glass exhibit on both backends; whether `motion-pulse` reads
   right now that its petals and core blend in their own groups; the bloom's
-  scatter of 0.04 and radius of 0.08; the terrain pass's exposure
-  compensation and how strongly distance fades toward blue
+  scatter of 0.04 and radius of 0.08; how strongly distance fades toward blue
   ([terrain pass](terrain-pass.md#risks-and-owner-calls)).
 
 Open calls, each with its sides:
@@ -3575,6 +3571,14 @@ proves itself with `puck compile` lowering to the same document.
   record goes (an `IClientSink` or a wire frame). One stream type writing
   to a record target would hold each rule once; the withdrawal chokepoint's
   step 4 (the mirror per span) is the natural place to make it.
+- [low] Two tone curves in one cel pixel: the standard's `cel` shade program
+  (`worlds/standard/shading.puck`) exposes its colour by `exposureStops` and
+  rolls it off with its own `shoulder` inside the material, and the view's
+  display pass then applies `render.tone`'s shoulder again. The program's
+  compose stage predates `render.tone`; it should hand the display pass scene
+  light and drop its own exposure and shoulder, with the `toon` row's
+  `exposure` and `shoulder` members going with it. Cel is parked, so this
+  waits for it ([the ruling](../decisions/rendering.md#a-light-is-shadowed-wherever-it-lights-and-cel-shading-is-a-style-per-material)).
 - [low] File-system primitives `AtomicFile` cannot serve yet:
   `ShaderCompiler.Entries.cs` wants a write that refuses to replace;
   `DirectoryObjectBlobStoreBackend` stages through a confined handle; a lock
