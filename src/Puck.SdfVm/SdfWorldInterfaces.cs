@@ -19,6 +19,12 @@ public static class SdfWorldInterfaces {
     public static ShaderInterfaceLayout ProbeTraceLayout { get; } = new(Recorded.ProbeTrace);
     /// <summary>The background relight's resources.</summary>
     public static ShaderInterfaceLayout ProbeRelightLayout { get; } = new(Recorded.ProbeRelight);
+    /// <summary>The ray-query probe trace's resources: <see cref="ProbeTraceLayout"/>'s at the same bindings, and the
+    /// scene's top level.</summary>
+    public static ShaderInterfaceLayout ProbeTraceRaysLayout { get; } = new(Recorded.ProbeTraceRays);
+    /// <summary>The ray-query relight's and camera sample's resources: <see cref="ProbeRelightLayout"/>'s at the same
+    /// bindings, and the scene's top level.</summary>
+    public static ShaderInterfaceLayout ProbeRelightRaysLayout { get; } = new(Recorded.ProbeRelightRays);
 
     /// <summary>Gets the stamp the SDF kernels' interfaces carry for this build's instruction set:
     /// <see cref="SdfIsaHlsl.StampOf"/> of <see cref="SdfIsaFingerprint.Value"/>.</summary>

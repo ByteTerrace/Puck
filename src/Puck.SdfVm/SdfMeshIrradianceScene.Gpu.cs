@@ -32,8 +32,18 @@ public sealed partial class SdfMeshIrradianceScene {
     /// what each scene change uploads whatever geometry it shares with the scene before it.</summary>
     public int PrefixWords => checked(m_content.NodeCount * SdfMeshProbeTrace.NodeWords + m_content.EntryCount * SdfMeshProbeTrace.EntryWords + m_content.InstanceCount * SdfMeshProbeTrace.InstanceWords);
 
+    // The draws as a top level's instances, in the order the export writes their records, so an instance's index is its
+    // record's (SdfMeshProbeGpuWork.Rays): each draw's geometry, the mesh whose placement holds the geometry's words, and
+    // its transform. A reader holds a scene claim.
+    internal int GpuInstanceCount => m_content.InstanceCount;
+    internal (Geometry Geometry, SdfMesh Mesh, Matrix4x4 ObjectToWorld) GpuInstance(int index) {
+        ref readonly var instance = ref Draws[index];
+
+        return (instance.Geometry, instance.Mesh, instance.ObjectToWorld);
+    }
     /// <summary>Exports the existing hierarchy in traversal order, referencing triangles in an already placed mesh
-    /// region. Word zero is the top root's address, or zero for an empty scene. No triangles or hierarchy are rebuilt.
+    /// region. Word zero is the top root's address, or zero for an empty scene, and word one the first instance record's
+    /// (<see cref="SdfMeshProbeTrace.InstanceBaseWord"/>). No triangles or hierarchy are rebuilt.
     /// The caller retains this scene and the region's placements until the GPU submission completes.</summary>
     /// <param name="placements">The mesh placements of the upload the trace will bind.</param>
     /// <returns>Nodes, leaf indices, braid entries and instance records with absolute word addresses.</returns>
@@ -86,9 +96,9 @@ public sealed partial class SdfMeshIrradianceScene {
         var root = content.NodeCount == 0 ? 0u : (uint)prefix;
         segments.Add(new(prefix, prefixCount, GpuSegmentKind.Prefix, null, 0));
         changed.Add((prefix, prefixCount));
-        segments.Add(new(0, 1, GpuSegmentKind.Root, null, 0));
+        segments.Add(new(0, SdfMeshProbeTrace.RootWords, GpuSegmentKind.Root, null, 0));
         segments.Sort(static (a, b) => a.Word.CompareTo(b.Word));
-        return new GpuExport(arena.Words, Read) { Changed = changed, Root = root, Prefix = prefix, Geometries = geometries };
+        return new GpuExport(arena.Words, Read) { Changed = changed, Root = root, Instances = (uint)instances, Prefix = prefix, Geometries = geometries };
 
         void Read(int word, Span<uint> destination) {
             var low = 0;
@@ -114,7 +124,11 @@ public sealed partial class SdfMeshIrradianceScene {
                 var take = Math.Min(destination.Length, segment.Count - offset);
                 var target = destination[..take];
                 switch (segment.Kind) {
-                    case GpuSegmentKind.Root: target.Fill(root); break;
+                    case GpuSegmentKind.Root:
+                        for (var index = 0; (index < target.Length); index++) {
+                            target[index] = (((offset + index) == SdfMeshProbeTrace.InstanceBaseWord) ? (uint)instances : root);
+                        }
+                        break;
                     case GpuSegmentKind.Triangles: MemoryMarshal.Cast<int, uint>(segment.Geometry!.Triangles.AsSpan(offset, take)).CopyTo(target); break;
                     default:
                         // Fixed-size records: each one the run reaches is written whole and the part it covers copied.
@@ -190,7 +204,7 @@ public sealed partial class SdfMeshIrradianceScene {
         private int m_words;
         internal Dictionary<Geometry, GpuPlacement> Geometries { get; } = [];
         internal int Words => m_words;
-        internal GpuArena() => Allocate(1);
+        internal GpuArena() => Allocate(SdfMeshProbeTrace.RootWords);
         internal int Allocate(int words) {
             if (!m_ranges.TryAllocate(count: (ulong)words, start: out var start)) {
                 throw new InvalidOperationException("The probe scene exceeds its packed node address space.");
@@ -238,6 +252,8 @@ public sealed partial class SdfMeshIrradianceScene {
         public int Words { get; } = words;
         internal required List<(int Word, int Count)> Changed { get; init; }
         internal required uint Root { get; init; }
+        // The first instance record's address, the scene's InstanceBaseWord.
+        internal required uint Instances { get; init; }
         internal required int Prefix { get; init; }
         // Each geometry the export names, with its node and triangle words' addresses.
         internal required IReadOnlyDictionary<Geometry, (int Nodes, int Triangles)> Geometries { get; init; }

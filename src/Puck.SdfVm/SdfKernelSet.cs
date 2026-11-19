@@ -115,6 +115,9 @@ public sealed class SdfKernelSet {
         SdfKernel.ProbeCameraSample => "sdf-probe-camera-sample",
         SdfKernel.ProbeCache => "sdf-probe-cache",
         SdfKernel.ProbeCompact => "sdf-probe-compact",
+        SdfKernel.ProbeTraceRays => "sdf-probe-trace-rays",
+        SdfKernel.ProbeRelightRays => "sdf-probe-relight-rays",
+        SdfKernel.ProbeCameraSampleRays => "sdf-probe-camera-sample-rays",
         SdfKernel.MeshBakeMask => "sdf-mesh-bake-mask",
         SdfKernel.MeshBake => "sdf-mesh-bake",
         SdfKernel.MeshPyramid => "sdf-mesh-pyramid",
@@ -145,7 +148,18 @@ public sealed class SdfKernelSet {
     /// <param name="kernel">The kernel.</param>
     /// <returns>The capabilities, or <see cref="GpuOptionalCapabilities.None"/> for a kernel every device runs.</returns>
     public static GpuOptionalCapabilities RequiresOf(SdfKernel kernel) => kernel switch {
+        SdfKernel.ProbeTraceRays or SdfKernel.ProbeRelightRays or SdfKernel.ProbeCameraSampleRays => GpuOptionalCapabilities.RayQuery,
         _ => GpuOptionalCapabilities.None,
+    };
+    /// <summary>Returns the ray-query variant of a probe kernel that traces rays, the kernel it replaces where the device
+    /// runs it (<see cref="RequiresOf"/>).</summary>
+    /// <param name="kernel">The software kernel.</param>
+    /// <returns>The variant, or <paramref name="kernel"/> itself for a kernel that traces no ray.</returns>
+    public static SdfKernel RaysOf(SdfKernel kernel) => kernel switch {
+        SdfKernel.ProbeTrace => SdfKernel.ProbeTraceRays,
+        SdfKernel.ProbeRelight => SdfKernel.ProbeRelightRays,
+        SdfKernel.ProbeCameraSample => SdfKernel.ProbeCameraSampleRays,
+        _ => kernel,
     };
     /// <summary>Returns the layout of the interface a kernel reads: reconstruction's
     /// (<see cref="SdfWorldInterfaces.ResolveParameters"/>), the sky's and composite's
@@ -160,6 +174,8 @@ public sealed class SdfKernelSet {
         kernel switch {
             SdfKernel.ProbeTrace => SdfWorldInterfaces.ProbeTraceLayout,
             SdfKernel.ProbeRelight => SdfWorldInterfaces.ProbeRelightLayout,
+            SdfKernel.ProbeTraceRays => SdfWorldInterfaces.ProbeTraceRaysLayout,
+            SdfKernel.ProbeRelightRays or SdfKernel.ProbeCameraSampleRays => SdfWorldInterfaces.ProbeRelightRaysLayout,
             SdfKernel.ProbeCameraSample or SdfKernel.ProbeSelect or SdfKernel.ProbeCompact or SdfKernel.ProbeCache or SdfKernel.ProbeCombine => SdfWorldInterfaces.ProbeRelightLayout,
             SdfKernel.MeshBakeMask or SdfKernel.MeshBake => SdfWorldInterfaces.MeshBakeLayout,
             SdfKernel.Resolve => SdfWorldInterfaces.ResolveParameters.Layout,
