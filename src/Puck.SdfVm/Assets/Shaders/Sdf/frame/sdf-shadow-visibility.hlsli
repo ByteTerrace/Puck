@@ -1,10 +1,15 @@
-// The K row's four independent eight-bit visibilities. A queried slot holds its visibility as a code of zero through
-// SDF_SHADOW_SCALE; a slot the surface pass did not query holds SDF_SHADOW_UNQUERIED, which decodes as fully visible and
-// which the views filter leaves out of its averages (sdfViewsFilter). No CPU code reads the word; SdfVisibility.ShadowBits
-// and ShadowMask generate its lane constants.
+// The K row's four independent eight-bit lanes: shadow role r's cascade visibility in lane r and its cascade coverage in
+// lane r + SDF_SHADOW_ROLES (sdfMeshShadow). A queried lane holds its value as a code of zero through SDF_SHADOW_SCALE; a
+// lane the surface pass did not query holds SDF_SHADOW_UNQUERIED, which decodes as one and which the views filter leaves
+// out of its averages (sdfViewsFilter), so a role's coverage averages over the same pixels as its visibility. No CPU code
+// reads the word; SdfVisibility.ShadowBits and ShadowMask generate its lane constants.
 #ifndef FRAME_SDF_SHADOW_VISIBILITY_HLSLI
 #define FRAME_SDF_SHADOW_VISIBILITY_HLSLI
 #include "../isa/sdf-render.hlsli"
+
+#if ((2 * SDF_SHADOW_ROLES) > 4)
+#error The K row holds a visibility and a coverage lane for each shadow role in its four lanes.
+#endif
 
 #define SDF_SHADOW_UNQUERIED SDF_SHADOW_MASK
 #define SDF_SHADOW_SCALE (SDF_SHADOW_MASK - 1u)

@@ -1,7 +1,8 @@
 // The surface pass's stage (SDF_SURFACE_PASS), which reads no field. From the mesh target the mesh pass rasterized it
 // writes every pixel's whole visibility record (frame/sdf-visibility.hlsli), misses included: the mesh hit, the frame
-// slot of the shape that won there (its draw's, or the member slot a skinned vertex rides) and its normal, the screen-space ambient occlusion, and the key light's and the second shadow slot's
-// visibility from the shadow cascades into K's first two slots. Views then shades the record.
+// slot of the shape that won there (its draw's, or the member slot a skinned vertex rides) and its normal, the
+// screen-space ambient occlusion, and each shadow role's visibility and cascade coverage into K's lanes (role r's
+// visibility in lane r, its coverage in lane r + SDF_SHADOW_ROLES). Views then shades the record.
 #ifndef PASSES_SDF_SURFACE_STAGE_HLSLI
 #define PASSES_SDF_SURFACE_STAGE_HLSLI
 #ifdef SDF_SURFACE_PASS
@@ -27,6 +28,10 @@ static const uint SdfMeshAoPyramidShift = 3u;
 static const uint SdfMeshShadowSearchTaps = 12u;
 static const uint SdfMeshShadowFilterTaps = 16u;
 static const float SdfMeshShadowMaxTexels = 14.0;
+// The band, in texels, at the edge of a role's outermost cascade over which its coverage falls from one to zero and the
+// probes' answer takes over (sdfMeshShadow): one widest filter footprint, so the hand-over is never narrower than the
+// softest edge the cascade draws.
+static const float SdfMeshShadowBandTexels = SdfMeshShadowMaxTexels;
 // The filter's least clearance per texel a caster lies beside the receiver, and the lateral distance, in texels, past
 // which the light's cone governs instead (sdfMeshShadowGap).
 static const float SdfMeshShadowSlopeBias = 2.5;
@@ -201,8 +206,8 @@ float3 sdfMeshShadowGap(bool opticalPresent, uint cascade, SdfMeshCascade c, flo
     }
     return float3(gap, 1.0);
 }
-// A shadowed light's visibility at a surface point from the first of its cascades [first, end) that holds it: a blocker
-// search sizes the penumbra from the light's penumbra slope and the gap to the nearest blocker inside the light's cone
+// A shadow role's visibility at a surface point, in `x`, from the first of its cascade entries that holds it: a blocker
+// search sizes the penumbra from the entry's penumbra slope and the gap to the nearest blocker inside the light's cone
 // over the point (the nearest outside it when the search finds none in the cone), and a percentage-closer filter of
 // that width answers. Both disks follow the pixel's pattern (sdfMeshPattern), and views averages the answer over the
 // pattern's window (sdfViewsFilter). `face` is the hit triangle's own normal: the cascade holds the triangle, not the
@@ -215,35 +220,43 @@ float3 sdfMeshShadowGap(bool opticalPresent, uint cascade, SdfMeshCascade c, flo
 // into the exit layer too (SdfMeshDraw.EnclosesSolid), so it shadows a wrapped side behind it as a thin caster. The depth
 // would hold the body's own lit side, and a wall's foot would leak light beside it in the exit layer, so each receiver
 // reads the one layer its facing calls for.
-float sdfMeshShadow(SdfPixel p, float3 surfacePoint, float3 face, uint first, uint end, float slope) {
+// `y` is the cascades' coverage of the point: one well inside an entry, falling to zero across SdfMeshShadowBandTexels at
+// the edge of the outermost entry that holds it, and zero where none does. The views pass takes the probes' answer for
+// the rest (sdfShadowRoleAnswer), so no receiver past the cascades reads as lit by default.
+float2 sdfMeshShadow(SdfPixel p, float3 surfacePoint, float3 face, uint role) {
     float2 pattern = sdfMeshPattern(p.pixel);
     float rotation = (pattern.x * 6.2831853);
     float4 parameters = passGroup.meshShadowParameters;
-    float cone = (1.0 / slope);
     float texels = float(passGroup.meshShadowTexels);
+    float coverage = 0.0;
+    float visibility = 1.0;
+    bool answered = false;
 
     [loop]
-    for (uint cascade = first; (cascade < end); cascade++) {
-        uint opticalWords, opticalStride;
-        if (cascade == 0u) { meshShadowNearOptical.GetDimensions(opticalWords, opticalStride); }
-        else if (cascade == 1u) { meshShadowFarOptical.GetDimensions(opticalWords, opticalStride); }
-        else { meshShadowSecondOptical.GetDimensions(opticalWords, opticalStride); }
-        bool opticalPresent = opticalWords >= 3u * passGroup.meshShadowTexels * passGroup.meshShadowTexels;
+    for (uint cascade = 0u; (cascade < min(passGroup.meshShadowCount, SDF_MESH_SHADOW_ENTRIES)); cascade++) {
+        if (sdfComponent(passGroup.meshShadowRoles, cascade) != role) {
+            continue;
+        }
+        float slope = sdfComponent(passGroup.meshShadowSlopes, cascade);
+        // A point source's cone has no width; its inverse stays finite so a caster beside the ray reads outside it.
+        float cone = (1.0 / max(slope, 1.0e-4));
         SdfMeshCascade c = sdfMeshCascadeAt(cascade);
         bool exit = (dot(face, c.forward) > 0.0);
+        bool heldExit = false;
         // The far cascade's exit layer may hold the camera of the refresh before (its two layers redraw on consecutive
-        // frames, SdfWorldPasses.Rates): the receiver reads it through that camera, the pass block's fourth. The glass
-        // extinction belongs to the depth's camera, so a receiver reading an exit layer from another camera reads none.
+        // frames, SdfWorldPasses.Rates): the receiver reads it through that camera, the pass block's last
+        // (SdfMeshShadowCascades.FarExitCamera). The glass extinction belongs to the depth's camera, so a receiver reading
+        // an exit layer from another camera reads none.
         if (exit && (cascade == 1u)) {
-            SdfMeshCascade drawn = sdfMeshCascadeAt(3u);
-            opticalPresent = (opticalPresent && all(drawn.position == c.position) && all(drawn.forward == c.forward));
+            SdfMeshCascade drawn = sdfMeshCascadeAt(SDF_MESH_SHADOW_ENTRIES);
+            heldExit = (any(drawn.position != c.position) || any(drawn.forward != c.forward));
             c = drawn;
         }
         float texelWorld = ((2.0 * c.halfHeight) / texels);
         // A receiver facing the light offsets along its face's normal; one turned from it offsets straight toward the
         // light, which moves it off its own exit by the offset alone. Along its face's reversed normal the offset would
         // reach 1 / (n·l) times as far toward the light at a grazing angle and pass a blocker standing that close.
-        float3 biased = (surfacePoint + ((exit ? -c.forward : face) * (parameters.z * texelWorld)));
+        float3 biased = (surfacePoint + ((exit ? -c.forward : face) * (parameters.y * texelWorld)));
         float3 relative = (biased - c.position);
         float2 plane = float2((dot(relative, c.right) / (c.aspect * c.halfHeight)), (dot(relative, c.up) / c.halfHeight));
 
@@ -255,8 +268,20 @@ float sdfMeshShadow(SdfPixel p, float3 surfacePoint, float3 face, uint first, ui
             continue;
         }
 
+        coverage = max(coverage, saturate(((0.97 - max(abs(plane.x), abs(plane.y))) * (0.5 * texels)) / SdfMeshShadowBandTexels));
+        if (answered) {
+            continue;
+        }
+        answered = true;
+
+        uint opticalWords, opticalStride;
+        if (cascade == 0u) { meshShadowNearOptical.GetDimensions(opticalWords, opticalStride); }
+        else if (cascade == 1u) { meshShadowFarOptical.GetDimensions(opticalWords, opticalStride); }
+        else { meshShadowSecondOptical.GetDimensions(opticalWords, opticalStride); }
+        bool opticalPresent = (!heldExit && (opticalWords >= 3u * passGroup.meshShadowTexels * passGroup.meshShadowTexels));
+
         float2 texel = (float2(((plane.x * 0.5) + 0.5), (0.5 - (plane.y * 0.5))) * texels);
-        float receiver = (depth - parameters.y);
+        float receiver = (depth - parameters.x);
         // The receiver's plane in the cascade: its depth change per texel along the target's x and y, from the normal in
         // light space (x along right, y down the target's rows), so each tap compares against the receiver's own surface
         // at that tap's texel centre rather than the depth at the pixel. A receiver near edge-on to the light keeps its
@@ -285,7 +310,7 @@ float sdfMeshShadow(SdfPixel p, float3 surfacePoint, float3 face, uint first, ui
         }
 
         if (nearest >= 3.402823e38) {
-            return 1.0;
+            continue;
         }
 
         float sizing = ((nearestInCone < 3.402823e38) ? nearestInCone : nearest);
@@ -310,10 +335,10 @@ float sdfMeshShadow(SdfPixel p, float3 surfacePoint, float3 face, uint first, ui
             known += (open + (caster * saturate(gap.y / soft)));
         }
 
-        return ((known > 0.0) ? (lit / known) : 1.0);
+        visibility = ((known > 0.0) ? (lit / known) : 1.0);
     }
 
-    return 1.0;
+    return float2(visibility, coverage);
 }
 
 void sdfSurfaceStage(SdfPixel p) {
@@ -349,21 +374,28 @@ void sdfSurfaceStage(SdfPixel p) {
             value.ambient = sdfMeshAmbient(p, surfacePoint, normal, meshHit.t);
         }
         if (!worldSoftShadowsDisabled() && (passGroup.meshShadowCount > 0u)) {
-            // The cascades look along the key light. A side the light's diffuse response reaches queries them: one
+            // Each role's entries look along its light. A side the light's diffuse response reaches queries them: one
             // facing it, and a wrapped material's side past the terminator as far as its wrap carries light
             // (sdfWrapDiffuse is positive while the cosine exceeds -wrap), which would otherwise take that light under a
-            // roof. A side the response does not reach is dark whatever the cascades say and leaves the slot unqueried
-            // (a negative visibility, SDF_SHADOW_UNQUERIED in the record): it measured nothing, so the views filter
-            // keeps it out of its neighbours' averages.
-            float4 parameters = passGroup.meshShadowParameters;
+            // roof. A side the response does not reach is dark whatever the cascades say and leaves both its role's
+            // lanes unqueried (a negative value, SDF_SHADOW_UNQUERIED in the record): it measured nothing, so the views
+            // filter keeps it out of its neighbours' averages.
             float demand = sdfMaterialShadowDemand(value.visibility.material);
-            float key = dot(normal, -sdfMeshCascadeAt(0u).forward);
             value.shadows = float4(-1.0, -1.0, -1.0, -1.0);
-            value.shadows.x = (((demand <= -1.0) || (key > demand)) ? sdfMeshShadow(p, surfacePoint, face, 0u, passGroup.meshShadowCount, parameters.x) : -1.0);
-            // The second shadow slot's light, from its one cascade.
-            if (parameters.w > 0.0) {
-                float fill = dot(normal, -sdfMeshCascadeAt(2u).forward);
-                value.shadows.y = (((demand <= -1.0) || (fill > demand)) ? sdfMeshShadow(p, surfacePoint, face, 2u, 3u, parameters.w) : -1.0);
+            [unroll]
+            for (uint role = 0u; (role < SDF_SHADOW_ROLES); role++) {
+                uint first = SDF_MESH_SHADOW_ENTRIES;
+                [unroll]
+                for (uint entry = 0u; (entry < SDF_MESH_SHADOW_ENTRIES); entry++) {
+                    if ((first == SDF_MESH_SHADOW_ENTRIES) && (entry < passGroup.meshShadowCount) && (sdfComponent(passGroup.meshShadowRoles, entry) == role)) {
+                        first = entry;
+                    }
+                }
+                if ((first < SDF_MESH_SHADOW_ENTRIES) && ((demand <= -1.0) || (dot(normal, -sdfMeshCascadeAt(first).forward) > demand))) {
+                    float2 answer = sdfMeshShadow(p, surfacePoint, face, role);
+                    if (role == 0u) { value.shadows.x = answer.x; value.shadows.z = answer.y; }
+                    else { value.shadows.y = answer.x; value.shadows.w = answer.y; }
+                }
             }
         }
     }

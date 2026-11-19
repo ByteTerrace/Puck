@@ -529,8 +529,8 @@ public sealed class SdfSky {
                     // The silver lining shows the light's colour at the cloud's own luminance.
                     var lining = SdfPhotometry.LuminanceOf(color: clouds.Color);
 
-                    if (lights.ShadowSlots[0] >= 0) {
-                        var key = lights[lights.ShadowSlots[0]];
+                    if (lights.Key >= 0) {
+                        var key = lights[lights.Key];
 
                         clouds.LightDirection = SdfLights.UnitDirection(direction: key.Direction);
                         clouds.LightColor = (key.Color * lining);

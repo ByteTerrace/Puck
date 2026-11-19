@@ -1073,9 +1073,10 @@ A joined-world projection renders the destination from the destination's own del
 its own measured clock, never through the host's presentation clock—independently scheduled or
 remote worlds do not share a presentation coordinate. It lights the destination under the
 destination's own sky and lighting, its keys read on the destination's own clocks, and its sky clock
-(star twinkle, cloud drift) is the destination's delivered engine tick. Its view renders at a
-session screen's reduced quality (`WorldSessionSceneEmitter.ReducedQuality`: no soft shadows, no
-ambient occlusion, no far bound).
+(star twinkle, cloud drift) is the destination's delivered engine tick. Its view renders at the
+viewer's quality, giving up only what the viewer's nested-view table (`render.nested`) says at the
+share of the display the view is presented at (`WorldRenderSettings.NestedViewQuality`), and with no
+far bound.
 
 A projected destination draws its own screens wherever it is rendered, as the boot world does: a
 portal inside it shows its own destination, whose portals show theirs, recursively, to the

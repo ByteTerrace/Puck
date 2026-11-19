@@ -3,7 +3,9 @@ using Puck.Abstractions.Documents;
 
 namespace Puck.World;
 
-/// <summary>How a named light competes for the quality row's bounded shadow slots.</summary>
+/// <summary>How a named light competes for the quality row's bounded shadow slots. A light competes only while it emits
+/// (its tick-resolved illuminance above zero), and among the slotted lights the brightest holds the near and far cascades
+/// whatever its mode (<c>SdfShadowSlots.Primary</c>).</summary>
 [JsonConverter(typeof(StrictEnumConverter<WorldShadowMode>))]
 public enum WorldShadowMode {
     /// <summary>Selected before automatic candidates, in authored list order.</summary>

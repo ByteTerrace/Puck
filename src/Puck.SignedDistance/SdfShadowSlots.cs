@@ -1,11 +1,21 @@
 namespace Puck.SignedDistance;
 
-/// <summary>A frame's stable shadow owners and active incoming handoffs, bounded by its configured policy.</summary>
+/// <summary>A frame's stable shadow owners and active incoming handoffs, bounded by its configured policy. A slot is a
+/// light's identity across frames; a role is what the slot's light is shadowed with (<see cref="SdfLights.RoleSlot"/>).
+/// The primary role (<see cref="Primary"/>) carries the near and far cascades and is the frame's key light, the secondary
+/// one cascade; every other slotted light takes the probes' answer.</summary>
 public sealed class SdfShadowSlots {
-    /// <summary>The number of stable visibility bytes in the visibility record.</summary>
+    /// <summary>The number of stable slots a frame can hold.</summary>
     public const int MaxSlots = 4;
     /// <summary>The most incoming visibility channels the frame can reserve.</summary>
     public const int MaxFadeSlots = 2;
+    /// <summary>The shadow roles a frame's cascades serve: the visibility record holds each role's cascade visibility and
+    /// its cascade coverage, two of its four lanes a role.</summary>
+    public const int Roles = 2;
+    /// <summary>The role that carries the near and far cascades: the brightest lit slotted light, the frame's key.</summary>
+    public const int Primary = 0;
+    /// <summary>The role that carries the one second cascade.</summary>
+    public const int Secondary = 1;
 
     private readonly int[] m_slots = [-1, -1, -1, -1];
     private readonly string?[] m_owners = new string?[MaxSlots];

@@ -138,7 +138,7 @@ V-step would otherwise assume:
 - **Session and nested nodes.** One screen or portal session node and one
   nested-view node per pass (`world.counters gpu node`: candidates, selection
   dispatches, pixel passes), whether session nodes draw cascades under
-  `ReducedQuality`, and which sessions are residencies of their own. Each
+  the nested-view table (`render.nested`), and which sessions are residencies of their own. Each
   session is a separate residency, so V5's shared classification reaches only
   the nested views, while V1a's compaction and the job system's burst spreading
   reach the sessions.
