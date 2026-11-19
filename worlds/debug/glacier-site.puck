@@ -7,9 +7,12 @@ import "../standard/water"
 import "valley-form"
 import "water-site"
 
-let rampAngle = 40
-let rampSin = sine(rampAngle * 0.017453292519943295)
-let rampCos = cosine(rampAngle * 0.017453292519943295)
+let degree = 0.017453292519943295
+// The ramp climbs at the ridge's own mean slope, so the trough cut along it stays about as deep under the ridge's top from the
+// lake to the head, and the ice lies in a cradle the whole way rather than standing proud of the ridge's crest.
+let rampAngle = 30
+let rampSin = sine(rampAngle * degree)
+let rampCos = cosine(rampAngle * degree)
 // Where the ramp's foot touches the lake's surface, out from the ring's centre.
 let rampRadial = 474
 function rampPoint(s, x, n) = [
@@ -47,17 +50,21 @@ let wallPalette = [
 ]
 
 // The trough: the rock cut away along the ramp in a U, `troughHalf` either side of its axis and rounded at the floor by
-// `troughRound`, its cut face the polished floor; and three grooves down its floor that run on to the lake, each
-// { sector, label, position, half, rotation, rounding, material }.
+// `troughRound`, its cut face the polished floor, from just under the lake's surface at the toe to a rounded headwall
+// at `troughHeadS` that closes the cirque the ice fills; and two grooves down its floor that run on to the lake. Each is a
+// `terrainCut` row { sector, label, position, half, rotation, rounding, material }, and the sector's relief stays out of
+// every one (`terrainCarveMask`), so the ice lies on the floor and against the walls the cut puts there.
 let troughHalf = 18
 let troughRound = 14
+let troughFootS = -6
+let troughHeadS = 98
 let valleyCuts = concat(
   [
     {
       sector: "north-west"
       label: "glacier-trough"
-      position: rampPoint(40, 0, 20)
-      half [troughHalf, 20, 56]
+      position: rampPoint((troughFootS + troughHeadS) / 2, 0, 20)
+      half [troughHalf, 20, (troughHeadS - troughFootS) / 2]
       rotation: onSlope(rampCos, 0)
       rounding: troughRound
       material: 1
@@ -67,7 +74,7 @@ let valleyCuts = concat(
     sector: "north-west"
     label: $"glacier-groove-{g}"
     position: rampPoint(46, (g * 2 - 1) * 7.5, 0.6)
-    half [2.4, 2.2, 46]
+    half [2.4, 2.2, 44]
     rotation: onSlope(rampCos, 0)
     rounding: 1.2
     material: 1
@@ -103,69 +110,125 @@ let valleyMounds = flatMap(
   })
 )
 
-// The ice: one tongue of overlapped lumps lying in the trough, widest at the head's basin and narrowing to a lobed toe at the
-// lake, its section convex across (the crown stands over the margins). Each lump is { s, x, n, hx, hn, hs, yaw }: its centre
-// `s` up the ramp, `x` across and `n` off it, and its half extents across, off the ramp and along it; its bottom is sunk into
-// the trough's floor. The glacier's origin is its head on the bed, so the toe retreats as the ice shrinks.
-let iceExponent = 2
-let glacierHeadS = 92
+// The ice, after the references (docs/game/art/caldera-water-pack panel 2, and the glacier references its guide names): a
+// tongue of chunky, bevelled serac blocks filling the trough from wall to wall, stepped down the ramp in rows like a
+// staircase, each block's top tipped back toward level so it catches the sun as a white plane and its down-glacier face
+// stands as a blue cliff. Snow lies only on the tops, as a cap a little wider than its block, so its lip reads as a pale
+// edge. The rows open into crevasses between them, wide where the névé bends over into the icefall and pressed shut at
+// the toe, and their floor is the bed ice, the deep cobalt the slots show. The toe's front row stands in the lake, its
+// foot under the water, so the ice meets the water and no gap opens under it. Up the trough the rows give way to the
+// névé, broad snow-capped slabs that fill the cirque to its headwall, with a few lens-shaped crevasses opening where
+// it bends.
+//
+// Every block bottoms out `iceBed` under the trough's floor, so the ice is held by the rock along every margin. The
+// glacier's origin is its head on the bed, so the toe retreats as the ice shrinks.
+let glacierHeadS = troughHeadS - 4
 let glacierOrigin = rampPoint(glacierHeadS, 0, 0)
-let iceShape = [
-  { s: 77, x: 2, n: 3.0, hx: 20, hn: 5.5, hs: 15 * 1.45, yaw: 3 }
-  { s: 62, x: -2, n: 4.5, hx: 19.5, hn: 6.5, hs: 20 * 1.45, yaw: -2 }
-  { s: 43, x: 1, n: 5.5, hx: 18.5, hn: 7.0, hs: 19 * 1.45, yaw: 2 }
-  { s: 25, x: -1.5, n: 5.0, hx: 17, hn: 6.5, hs: 18 * 1.45, yaw: -3 }
-  { s: 9, x: 0.5, n: 3.4, hx: 14, hn: 5.0, hs: 13 * 1.45, yaw: 2 }
-  { s: 4, x: -8, n: 2.4, hx: 8, hn: 3.6, hs: 6 * 1.45, yaw: 8 }
-  { s: 2, x: 8.5, n: 2.2, hx: 7.5, hn: 3.4, hs: 6 * 1.45, yaw: -10 }
+let iceBed = -3
+let iceCrack = 0.7
+let snowLip = 0.12
+let snowDepth = 0.6
+// A serac row: its centre `s` up the ramp, half depth `hz` along the flow, the height `top` of its blocks' tops over the
+// ramp, how far `tilt` (degrees) their tops climb, how far `bow` its middle leads its margins down the ice, and the `cuts`
+// across the trough (x) that split it into blocks; the outer cuts reach into the walls.
+let seracRows = [
+  { s: 1.2, hz: 3.0, top: 5.6, tilt: 8, bow: 0.6, cuts [-21, -11.5, -3, 5.5, 13, 21] }
+  { s: 7.9, hz: 3.3, top: 7.4, tilt: 12, bow: 0.8, cuts [-21, -14, -6, 2, 10, 21] }
+  { s: 15.2, hz: 3.4, top: 8.6, tilt: 10, bow: 1.0, cuts [-21, -10, -1.5, 7.5, 21] }
+  { s: 23.4, hz: 3.5, top: 9.4, tilt: 14, bow: 1.2, cuts [-21, -13.5, -4.5, 4, 12.5, 21] }
+  { s: 32.6, hz: 3.4, top: 10.0, tilt: 12, bow: 1.4, cuts [-21, -9, 0.5, 9.5, 21] }
+  { s: 42.4, hz: 3.5, top: 10.5, tilt: 16, bow: 1.6, cuts [-21, -12.5, -3.5, 5, 13.5, 21] }
+  { s: 52.4, hz: 3.6, top: 11.0, tilt: 14, bow: 1.6, cuts [-21, -8, 2, 21] }
 ]
-// Each lump reaches 1.5 m further into the floor than its crown requires, since the trough floor undulates under the rock relief.
-let iceBody = map(iceShape, l => l with { n: l.n - 1.5, hn: l.hn + 1.5 })
-let glacierLumps = map(iceBody, l => {
-  position: rampPoint(l.s, l.x, l.n)
-  half [l.hx, l.hn, l.hs]
-  cosine: rampCos
-  yaw: l.yaw
-  exponent: iceExponent
+// The névé's slabs above the icefall: the same rows, deeper, wider and tipped nearer the ramp, so they lie as a broad
+// snowfield; the last meets the headwall.
+let neveRows = [
+  { s: 65, hz: 7.6, top: 11.6, tilt: 22, bow: 1.2, cuts [-21, -2.5, 21] }
+  { s: 84, hz: 10, top: 12.2, tilt: 25, bow: 0.8, cuts [-21, 6, 21] }
+]
+let iceRows = concat(seracRows, neveRows)
+// One block of row `i`, column `j`: its depth, place along the flow, top's height and tilt jittered so no two blocks
+// match and no two tops lie in one plane, its yaw turned to follow the row's bow, and its half height reaching from its
+// top to `iceBed` under its lowest corner.
+function seracBlock(row, i, j) = seracPlaced(
+  (row.cuts[j] + row.cuts[j + 1]) / 2,
+  (row.cuts[j + 1] - row.cuts[j]) / 2 - iceCrack / 2,
+  row.hz * (0.85 + 0.25 * siteScatter(i * 7 + j, 0.236068)),
+  row.tilt + 8 * (siteScatter(i * 7 + j, 0.381966) - 0.5),
+  row.top + 2.4 * (siteScatter(i * 7 + j, 0.618034) - 0.5),
+  row.s + 1.6 * (siteScatter(i * 7 + j, 0.145898) - 0.5) -
+    row.bow * (1 - ((row.cuts[j] + row.cuts[j + 1]) / 42) * ((row.cuts[j] + row.cuts[j + 1]) / 42)),
+  0 - 5.5 * row.bow * (row.cuts[j] + row.cuts[j + 1]) / 42 + 14 * (siteScatter(i * 7 + j, 0.754878) - 0.5)
+)
+// A block's up axis leans (rampAngle - tilt) back from the ramp's normal, so in the ramp's (s, n) it is
+// (sine, cosine) of that lean; `seracHalfHeight` reaches from the top to `iceBed` under the block's front lower corner.
+function seracLeanSine(tilt) = sine((rampAngle - tilt) * degree)
+function seracLeanCosine(tilt) = cosine((rampAngle - tilt) * degree)
+function seracHalfHeight(top, hz, tilt) = (top - iceBed + hz * seracLeanSine(tilt)) / (2 * seracLeanCosine(tilt))
+function seracPlaced(x, hx, hz, tilt, top, s, yaw) = {
+  x: x
+  hx: hx
+  hz: hz
+  tilt: tilt
+  top: top
+  s: s
+  yaw: yaw
+  hy: seracHalfHeight(top, hz, tilt)
+}
+let iceBlocks = flatMap(range(0, length(iceRows)), i => map(range(0, length(iceRows[i].cuts) - 1), j => seracBlock(iceRows[i], i, j)))
+// A block as a glacierMass block: the ice itself, and its snow cap, a slab centred on the ice's top that stands
+// `snowDepth` over it and is wider by `snowLip` all round.
+function iceBody(b) = {
+  position: rampPoint(b.s - b.hy * seracLeanSine(b.tilt), b.x, b.top - b.hy * seracLeanCosine(b.tilt))
+  half [b.hx, b.hy, b.hz]
+  rotation: onSlope(cosine(b.tilt * degree), b.yaw)
+  rounding: 1.2
   material: 0
-})
-// The height over the ramp of the ice's crown at ramp distance `s` and `x` across (each lump an ellipsoid, the union their
-// highest), for laying a furrow on it.
-function lumpCrown(l, s, x) = 1 - ((x - l.x) / l.hx) * ((x - l.x) / l.hx) - ((s - l.s) / l.hs) * ((s - l.s) / l.hs) > 0 ?
-  l.n + l.hn * squareRoot(1 - ((x - l.x) / l.hx) * ((x - l.x) / l.hx) - ((s - l.s) / l.hs) * ((s - l.s) / l.hs)) :
+}
+function iceCap(b) = {
+  position: rampPoint(b.s, b.x, b.top)
+  half [b.hx + snowLip, snowDepth, b.hz + snowLip]
+  rotation: onSlope(cosine(b.tilt * degree), b.yaw)
+  rounding: 0.55
+  material: 1
+}
+// The bed ice the rows stand on: a slab filling the trough's floor between the toe's row and the headwall, its top the
+// floor of every crevasse.
+let iceBedSlab = {
+  position: rampPoint((4 + glacierHeadS) / 2, 0, (iceBed + 3.5) / 2)
+  half [troughHalf - 0.5, (3.5 - iceBed) / 2, (glacierHeadS - 4) / 2]
+  rotation: onSlope(rampCos, 0)
+  rounding: 0.5
+  material: 2
+}
+let glacierBlocks = concat([iceBedSlab], map(iceBlocks, b => iceBody(b)), map(iceBlocks, b => iceCap(b)))
+// The height over the ramp of the snow's top at ramp distance `s` and `x` across: the top of whichever block's cap covers
+// that point (a block's yaw is a few degrees and is not followed), for laying a crevasse on it.
+function capTopAt(b, s, x) = (x - b.x) * (x - b.x) < b.hx * b.hx and (s - b.s) * (s - b.s) < b.hz * b.hz ?
+  b.top + snowDepth - (s - b.s) * seracLeanSine(b.tilt) / seracLeanCosine(b.tilt) :
   -100
-function iceCrown(s, x) = reduce(iceBody, -100, (top, l) => maximum(top, lumpCrown(l, s, x)))
-// A furrow from ramp point [s0, x0] to [s1, x1], sunk `d` metres under the crown along it and bowed `bow` = [across, along]
-// at its middle: a tube of `radius` whose middle swells by `bulge`.
-function furrowBetween(p0, p1, bow, d, radius, bulge) = {
-  position: rampPoint(p0[0], p0[1], iceCrown(p0[0], p0[1]) - d)
+function iceTop(s, x) = reduce(iceBlocks, -100, (top, b) => maximum(top, capTopAt(b, s, x)))
+// Lens-shaped crevasses across the névé where it bends over into the icefall: each a tube from [s, x] to [s, x] centred
+// `d` under the snow's top, bowed down-glacier by `bow`, that swells by `bulge` at its middle and closes at its ends, so it
+// opens as a lens with the ice's blue under the snow's lip. Each lies within one slab, so its ends follow one top.
+function crevasseBetween(p0, p1, d, bow, bulge) = {
+  position: rampPoint(p0[0], p0[1], iceTop(p0[0], p0[1]) - d)
   b [
-    (p1[1] - p0[1]) / 2 + 2 * bow[0],
-    2 * (iceCrown((p0[0] + p1[0]) / 2, (p0[1] + p1[1]) / 2) - iceCrown(p0[0], p0[1])) - (iceCrown(p1[0], p1[1]) - iceCrown(p0[0], p0[1])) / 2,
-    (p1[0] - p0[0]) / 2 + 2 * bow[1]
+    (p1[1] - p0[1]) / 2,
+    2 * (iceTop((p0[0] + p1[0]) / 2, (p0[1] + p1[1]) / 2) - iceTop(p0[0], p0[1])) - (iceTop(p1[0], p1[1]) - iceTop(p0[0], p0[1])) / 2,
+    (p1[0] - p0[0]) / 2 - 2 * bow
   ]
-  c [p1[1] - p0[1], iceCrown(p1[0], p1[1]) - iceCrown(p0[0], p0[1]), p1[0] - p0[0]]
-  cosine: rampCos
-  yaw: 0
-  radius: radius
+  c [p1[1] - p0[1], iceTop(p1[0], p1[1]) - iceTop(p0[0], p0[1]), p1[0] - p0[0]]
+  rotation: onSlope(rampCos, 0)
+  radius: 0.25
   bulge: bulge
   material: 2
 }
-// Crevasses open across the ice in belts where the bed steepens, each an arc bowed down-glacier (from [s, x] to [s, x]), and a
-// melt channel winds down the ice's right side to the toe.
-let glacierFurrows = concat(
-  map(
-    [
-      { p0 [22, -9], p1 [25, 5], bow [0, -2.5], radius: 1.2 }
-      { p0 [31, -2], p1 [29, 6], bow [0, -1.5], radius: 1.0 }
-      { p0 [47, -14], p1 [50, -1], bow [0, -3], radius: 1.5 }
-      { p0 [51, 3], p1 [46, 15], bow [0, -2.5], radius: 1.3 }
-      { p0 [57, -11], p1 [61, 4], bow [0, -3.5], radius: 1.6 }
-      { p0 [66, -6], p1 [65, 12], bow [0, -2], radius: 1.1 }
-      { p0 [75, -12], p1 [78, -1], bow [0, -2.5], radius: 1.4 }
-      { p0 [83, 2], p1 [81, 13], bow [0, -2], radius: 1.0 }
-    ],
-    f => furrowBetween(f.p0, f.p1, f.bow, 0.3, 0.35, f.radius * 1.4)
-  ),
-  [furrowBetween([44, 9], [4, 10], [3, 0], 0.5, 0.3, 0.9)]
-)
+let glacierCrevasses = [
+  crevasseBetween([66, -16.5], [67, -6], 0.4, 1.0, 1.7)
+  crevasseBetween([60.5, -13], [61, -7], 0.3, 0.6, 1.0)
+  crevasseBetween([67, 1.5], [66, 13.5], 0.4, 1.2, 2.1)
+  crevasseBetween([61, 5.5], [62, 15.5], 0.3, 0.8, 1.3)
+  crevasseBetween([78, -12], [79, 1.5], 0.4, 1.0, 1.6)
+  crevasseBetween([86, -15], [87, -3], 0.3, 0.7, 1.1)
+]

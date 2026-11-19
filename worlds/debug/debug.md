@@ -205,7 +205,15 @@ Look intent ([the visual bar](../../docs/game/art/README.md#the-visual-bar)): th
 [caldera water pack](../../docs/game/art/caldera-water-pack/README.md) is the
 reference, panel by panel. The glacier is a grounded blue-white ice tongue in a
 warm rock cradle, with cobalt crevasses, ivory sun planes and a wet scalloped toe
-whose melt channels visibly reach the lake (panel 2); the lake is flat and
+whose melt channels visibly reach the lake (panel 2). Outside references widen
+it: the Aletsch Glacier from the Jungfraujoch (Wikimedia Commons, Marie-Lan
+Nguyen) for the value bands, ice brightest between dark rock walls, and
+crevasses clustered where the ice bends; Raven Glacier's crevasses (Wikimedia
+Commons, Frank Kovalchek) for white sun planes, saturated blue shade faces and
+navy slots, and dirt where the ice meets rock; Overwatch 2's Antarctic
+Peninsula (Blizzard, Xbox Wire) for ice built of chunky bevelled blocks with
+snow only on their up-facing planes. The ice holds still: nothing on it flows
+like water; the lake is flat and
 reflective, clear over its near stones, turquoise in the middle and teal deep
 (panel 2); the falls are a continuous sheet with a transparent core, white
 edges, spray at the impact and foam carried downstream (panel 3); the river and

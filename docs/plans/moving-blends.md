@@ -395,8 +395,8 @@ the surface the cutter actually reaches, and resolves the conflict with step 5.
 The gap was first written up as a glacier that melts by sinking and carries
 no relief. Neither holds today. The glacier is the standard
 template `glacierMass` (`worlds/standard/water.puck`), placed by
-`worlds/debug/water-scenery.puck`. Its ice is overlapping superellipsoid lumps
-with swept furrows cut out of them, under a `noise` relief, and it shrinks by
+`worlds/debug/water-scenery.puck`. Its ice is rounded serac blocks and snow
+caps with swept crevasses cut out of them, and it shrinks by
 `sizeBy: state.glacierLength` about its head, so the toe retreats as the whole
 creation scales. Relief on a creation that moves as a whole already works: the
 pooled emitter bakes such a creation as one composed field in the root's units

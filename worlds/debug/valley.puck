@@ -111,12 +111,13 @@ prototypes {
           [{ color: "#7D7366", roughness: 0.95, specular: 0.02 }],
           sector.name == "north-west" ? wallPalette : []
         )
-        // The relief stays out of the bowls the sector carves (water-site.puck's valleyBasins), so the lake's water,
-        // lining and stones, placed from the analytic bowl, sit on the rock the bake draws and contact reads.
+        // The relief stays out of the bowls and cuts the sector carves (water-site.puck's valleyBasins, glacier-site.puck's
+        // valleyCuts), so the lake's water, lining and stones and the glacier's ice, placed from the analytic carves, sit
+        // on the rock the bake draws and contact reads.
         terrainRelief(
           seed: sector.seed,
-          masks: length(filter(valleyBasins, b => b.sector == sector.name)) > 0
-            ? [terrainBasinMask(filter(valleyBasins, b => b.sector == sector.name))]
+          masks: length(filter(valleyBasins, b => b.sector == sector.name)) + length(filter(valleyCuts, c => c.sector == sector.name)) > 0
+            ? [terrainCarveMask(filter(valleyBasins, b => b.sector == sector.name), filter(valleyCuts, c => c.sector == sector.name))]
             : []
         )
         terrainMass(
@@ -164,14 +165,7 @@ prototypes {
           terrainBasin(label: basin.label, lateral: basin.lateral, radial: basin.radial, y: basin.y, radii: basin.radii)
         }
         for cut in filter(valleyCuts, c => c.sector == sector.name) {
-          shape Box $"{cut.label}" {
-            blend: Subtraction
-            material: cut.material
-            rounding: cut.rounding
-            position: cut.position
-            scale: cut.half
-            rotation: cut.rotation
-          }
+          terrainCut(cut: cut)
         }
         for mound in filter(valleyMounds, m => m.sector == sector.name) {
           shape Ellipsoid $"{mound.label}" {

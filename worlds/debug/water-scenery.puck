@@ -98,8 +98,8 @@ prototypes {
   )
   glacierMass(
     id: "glacier",
-    lumps: glacierLumps,
-    furrows: glacierFurrows,
+    blocks: glacierBlocks,
+    crevasses: glacierCrevasses,
     origin: glacierOrigin
   )
   lakeStones(

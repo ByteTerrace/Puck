@@ -164,26 +164,30 @@ let lakeFlowLayer = {
 // A lake's depth runs to metres, so it scatters less per metre than a stream: a shallow margin stays clear over the stones,
 // the middle depth turns turquoise and the deep water teal. Its contact reaches less than a stream's.
 let lakeGlass = waterGlass with { scatter: "#1FA5AD", scattering: 0.24, contact { reach: 0.5, coverage: 0.9 } }
-// Glacier ice creeps: a slow world-space drift whose pattern is the weathered, matt surface of old ice against the blue
-// beneath, broad and not stretched so it follows no face's slope.
-let iceFlowLayer = {
-  frame: World
-  velocity [0.01, -0.02, 0.01]
-  scale: 0.13
-  stretch: 1.2
-  cycle: 4
-  tilt: 0.25
-  coverage: 0.28
-  softness: 0.5
-  surface { color: "#C9DDEA", roughness: 0.6, metal: 0 }
-  seed: 31
-}
-// Glacier ice: a blue body and a paler weathered face, each broken by the creep's pattern, and the cobalt of a crevasse's or
-// a channel's walls.
+// Glacier ice, which holds still: a saturated blue body whose faces are streaked down their fall with paler, matt weathered
+// ice (a lattice stretched along the vertical, two octaves so its threshold follows no axis), a warm white snow, and the
+// cobalt of a crevasse's floor and walls.
 let icePalette = [
-  flowed({ color: "#4F8DBB", roughness: 0.3, specular: 0.2, wrap: 0.05 }, iceFlowLayer)
-  flowed({ color: "#8DB6D1", roughness: 0.45, specular: 0.15, wrap: 0.05 }, iceFlowLayer)
-  { color: "#16477F", roughness: 0.25, specular: 0.3, wrap: 0.05 }
+  {
+    color: "#4A9AD6"
+    roughness: 0.3
+    specular: 0.25
+    wrap: 0.1
+    weathering {
+      noise: 0.7
+      scale: 0.3
+      patternScale [1, 0.18, 1]
+      octaves: 2
+      octaveRatio: 2.03
+      octaveGain: 0.6
+      softness: 0.2
+      floor: 1
+      seed: 31
+      under [{ threshold: 0.58, surface { color: "#8CC8EC", roughness: 0.55, metal: 0 } }]
+    }
+  }
+  { color: "#F4EFE4", roughness: 0.85, specular: 0.04, wrap: 0.2 }
+  { color: "#174C8C", roughness: 0.25, specular: 0.3, wrap: 0.05 }
 ]
 // Stone for a bridge and its banks.
 let stonePalette = [
@@ -306,70 +310,60 @@ function onSlope(c, yaw) = [
   halfTurnCosine(c) * cosine(yaw * 0.008726646259971648)
 ]
 
-// A glacier is a tongue of ice lying in a trough: `lumps` overlapped into one body (each a superellipsoid, blended with the
-// neighbours it overlaps by `smooth` metres, so the surface runs on across them and the relief noise hides the seams), the
-// `furrows` swept out of its surface (crevasses and melt channels, each a tube of `radius` that swells by `bulge` along its
-// length, so it opens in the middle and closes at its ends), and fBm `relief` over the composed ice. The ice melts by shrinking
-// with the gauge `state.<gauge>` (the linear fraction of the melt clock left, so the volume is its cube) about `origin`: put
-// the origin at the glacier's head on its bed and the toe retreats up the valley as the ice thins. The relief keeps its size
-// under that scale. A lump is { position, half, cosine, yaw, exponent, material }, a furrow { position, b, c, cosine, yaw,
-// radius, bulge, material } whose tube runs from `position` by the Bezier controls `b` and `c` (relative to it, in the
-// furrow's own frame). Positions are in the wall frame, `cosine` and `yaw` as `onSlope` reads them.
-template glacierMass(id, lumps, furrows, gauge = "glacierLength", origin = [0, 0, 0], palette = icePalette, smooth = 0.5, relief = { frequency: 0.12, amplitude: 0.5, octaves: 4, seed: 31 }) {
+// A glacier is a body of ice lying in a trough: `blocks` unioned into one mass (each a rounded box, so the ice is built of
+// chunky bevelled blocks with flat planes the sun lights and edges that catch it, and a snow cap is a block of its own with
+// the snow's material), and the `crevasses` swept out of it (each a tube of `radius` that swells by `bulge` along its length,
+// so it opens in the middle and closes at its ends, as a lens). The ice melts by shrinking with the gauge `state.<gauge>`
+// (the linear fraction of the melt clock left, so the volume is its cube) about `origin`: put the origin at the glacier's head
+// on its bed and the toe retreats up the valley as the ice thins. A block is { position, half, rotation, rounding, material },
+// a crevasse { position, b, c, rotation, radius, bulge, material } whose tube runs from `position` by the Bezier controls `b`
+// and `c` (relative to it, in the crevasse's own frame). Positions are in the wall frame and rotations quaternions in it.
+template glacierMass(id, blocks, crevasses, gauge = "glacierLength", origin = [0, 0, 0], palette = icePalette) {
   prototype $"{id}" {
     document {
       schema: "puck.creation.v1"
       name: id
       palette: palette
       sizeBy: $"state.{gauge}"
-      noise {
-        frequency: relief.frequency
-        amplitude: relief.amplitude
-        octaves: relief.octaves
-        gain: 0.5
-        lacunarity: 2
-        seed: relief.seed
-      }
-      for (lump, i) in lumps {
-        shape Superellipsoid $"ice-{i}" {
-          material: lump.material
-          blend: i == 0 ? Union : SmoothUnion
-          smooth: smooth
-          exponent: lump.exponent
+      for (block, i) in blocks {
+        shape Box $"ice-{i}" {
+          material: block.material
+          rounding: block.rounding
           position [
-            lump.position[0] - origin[0],
-            lump.position[1] - origin[1],
-            lump.position[2] - origin[2]
+            block.position[0] - origin[0],
+            block.position[1] - origin[1],
+            block.position[2] - origin[2]
           ]
-          scale: lump.half
-          rotation: onSlope(lump.cosine, lump.yaw)
+          scale: block.half
+          rotation: block.rotation
           group: 1
         }
       }
-      for (furrow, i) in furrows {
-        shape Sweep $"furrow-{i}" {
+      for (crevasse, i) in crevasses {
+        shape Sweep $"crevasse-{i}" {
           blend: Subtraction
-          material: furrow.material
+          material: crevasse.material
           position [
-            furrow.position[0] - origin[0],
-            furrow.position[1] - origin[1],
-            furrow.position[2] - origin[2]
+            crevasse.position[0] - origin[0],
+            crevasse.position[1] - origin[1],
+            crevasse.position[2] - origin[2]
           ]
-          rotation: onSlope(furrow.cosine, furrow.yaw)
+          rotation: crevasse.rotation
           group: 1
           curve {
             a [0, 0, 0]
-            b: furrow.b
-            c: furrow.c
-            radiusStart: furrow.radius
-            radiusEnd: furrow.radius
-            bulge: furrow.bulge
+            b: crevasse.b
+            c: crevasse.c
+            radiusStart: crevasse.radius
+            radiusEnd: crevasse.radius
+            bulge: crevasse.bulge
           }
         }
       }
     }
   }
 }
+
 
 // Stones lying in a lake's bowl and on its bank, in the lake's own frame: each { position, radii, yaw, tilt, material } is a
 // rounded block (a superellipsoid of `exponent`) turned about the vertical by `yaw` degrees and rocked off level by `tilt`,
