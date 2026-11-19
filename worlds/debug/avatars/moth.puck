@@ -3,6 +3,7 @@ import "../../standard/inputs"
 import "../../standard/quality"
 import "../../standard/motion"
 import "../../standard/styles"
+import "../../standard/tones"
 import "../../standard/kits"
 import "../../standard/camera"
 import "../../standard/mirror"
@@ -4005,14 +4006,13 @@ render {
   // display does and a room lit only by it stays dark. The meter averages the middle four fifths of the picture's
   // brightness, leaving out its darkest corners and its light fittings and sun, weights the centre over the edges, and
   // holds while the picture stays within half a stop of what it settled on, so walking through an evenly lit room never
-  // moves it. It exposes two and a half stops over the meter's middle grey, the pale, bright look the world was drawn
-  // for, and adapts halfway to each surface's own surroundings, so a room beside its sunlit windows reads as the eye
-  // sees it rather than as a photograph's dark interior.
+  // moves it. It exposes at the meter's middle grey, which each view's display pass encodes for the display, and adapts
+  // halfway to each surface's own surroundings, so a room beside its sunlit windows reads as the eye sees it rather than
+  // as a photograph's dark interior.
   exposure {
     mode: Auto
     minimum: 7
     maximum: 16
-    compensation: 2.5
     adaptation: 0.75
     local: 0.5
     band: 0.75
@@ -4074,7 +4074,7 @@ render {
     }
   }
   upscaleSharpness: 0
-  tonemap: Filmic
+  tone: filmicTone
   environment {
     ambient: 0.40625
     reflection: 1

@@ -13,8 +13,11 @@ namespace Puck.SignedDistance;
 /// </summary>
 public static class SdfPhotometry {
     /// <summary>The share of full brightness below which a point or spot light's contribution ends: a light's range is
-    /// the distance at which a white surface it lights faces it head on and reaches this share of display white at the
-    /// darkest exposure the world adapts to (<see cref="RangeOf"/>).</summary>
+    /// the distance at which a white surface it lights faces it head on and reaches this share of display white, in
+    /// linear exposed light, at the darkest exposure the world adapts to (<see cref="RangeOf"/>). The display pass encodes
+    /// that share to about a twentieth of the code range, where the falloff's window (<see cref="Falloff"/>) has already
+    /// eased the light smoothly to zero, so no edge shows; the share is kept in linear light so that a range costs the
+    /// relight what it always has.</summary>
     public const float RangeThreshold = (1f / 256f);
     /// <summary>The nearest a point light's distance is taken as, in world units: the radius of a bulb, inside which its
     /// inverse square would grow without bound.</summary>

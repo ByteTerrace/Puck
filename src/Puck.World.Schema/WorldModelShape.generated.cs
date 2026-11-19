@@ -6580,6 +6580,17 @@ public static partial class WorldModelShape {
                 M("clocks", typeof(global::System.Collections.Generic.IReadOnlyList<global::Puck.World.WorldClock>), typeof(global::Puck.World.WorldTimelineSection), "Clocks", Read | Write, static value => ((global::Puck.World.WorldTimelineSection)value).Clocks),
             ],
             []),
+        T(typeof(global::Puck.World.WorldToneCurve), true, JsonTypeInfoKind.Object, null,
+            [],
+            [
+                M("peak", typeof(global::System.Single), typeof(global::Puck.World.WorldToneCurve), "Peak", Read | Write | Required, static value => ((global::Puck.World.WorldToneCurve)value).Peak),
+                M("contrast", typeof(global::System.Single), typeof(global::Puck.World.WorldToneCurve), "Contrast", Read | Write | Required, static value => ((global::Puck.World.WorldToneCurve)value).Contrast),
+                M("linearStart", typeof(global::System.Single), typeof(global::Puck.World.WorldToneCurve), "LinearStart", Read | Write | Required, static value => ((global::Puck.World.WorldToneCurve)value).LinearStart),
+                M("linearLength", typeof(global::System.Single), typeof(global::Puck.World.WorldToneCurve), "LinearLength", Read | Write | Required, static value => ((global::Puck.World.WorldToneCurve)value).LinearLength),
+                M("toe", typeof(global::System.Single), typeof(global::Puck.World.WorldToneCurve), "Toe", Read | Write | Required, static value => ((global::Puck.World.WorldToneCurve)value).Toe),
+                M("isValid", typeof(global::System.Boolean), typeof(global::Puck.World.WorldToneCurve), "IsValid", None),
+            ],
+            []),
         T(typeof(global::Puck.World.WorldTune), true, JsonTypeInfoKind.Object, null,
             [],
             [

@@ -10824,9 +10824,9 @@ export type WorldRenderDefaults = {
    */
   atmosphere?: WorldRenderAtmosphere | null;
   /**
-   * The tonemap the root graph applies to the SDF scene: each view, as its place pass reconstructs it. The letterbox color, every pane (display-referred) and the HUD are never tonemapped. Optional; absent is None — the stylized shaded color, unchanged.
+   * The display transform every view of the world puts its exposed scene light through before the view's display pass encodes it for the display (WorldToneCurve). The letterbox color, every pane (display-referred) and the HUD are never toned. Optional; absent applies no curve.
    */
-  tonemap?: WorldTonemap | null;
+  tone?: WorldToneCurve | null;
   /**
    * The far distance in world units: the depth at which every view's geometry ends — the mesh raster's far plane, the reach of the bake and the indirect volume, and the depth the fog and depth ramps are measured against. Geometry beyond it is never drawn, so an infinite plane ends on a visible horizon curve at this depth unless the atmosphere absorbs it (render.atmosphere). Optional; absent resolves to the engine's pinned 40. Must lie within [MinFarDistance, MaxFarDistance]. Re-read on every definition revision (a world.row.set render lands on the next frame); world.budget echoes it with its derived costs.
    */
@@ -14431,7 +14431,28 @@ export type WorldTimelineSection = {
   clocks?: (WorldClock | null)[] | null;
 };
 
-export type WorldTonemap = "None" | "Filmic";
+export type WorldToneCurve = {
+  /**
+   * The value the shoulder rolls into.
+   */
+  peak: number;
+  /**
+   * The linear section's slope.
+   */
+  contrast: number;
+  /**
+   * The exposed value where the toe gives way to the linear section.
+   */
+  linearStart: number;
+  /**
+   * The share of the range above LinearStart the linear section spans.
+   */
+  linearLength: number;
+  /**
+   * The toe's power: above one it darkens the shadows, below one it lifts them.
+   */
+  toe: number;
+};
 
 export type WorldTransferFullPolicy = "Retry" | "Refuse";
 

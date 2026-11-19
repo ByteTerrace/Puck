@@ -76,6 +76,10 @@ an importing world overrides those fields in its own collision section.
 as its own (`toon: celStyle`) and a world names one as the default every other material inherits
 (`render { toon: celStyle }`), which `world.toon` switches live.
 
+`tones.puck` is a library of display transforms (`filmicTone`): a world names one as its `render.tone`, the curve each
+view's exposed light goes through before its display pass encodes it, and a world with none shows its exposed light as
+it is.
+
 `sealed.puck` is a library of sealed inboxes (`sealedInbox`): a row per seat that only that seat and the world's rules
 read, through which a seat hands a game a value no other seat may read (a sealed bid, a vote, a whisper, an order),
 and which a game's own rule collects. The games in [`../games/`](../games/README.md) use it.

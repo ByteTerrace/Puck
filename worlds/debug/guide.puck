@@ -166,6 +166,7 @@ let guideCopy = {
   "shape-state-color" { title: "STATE COLOR", note: "A colour bound to state: galleryInputs.tint." }
   "shape-cel" { title: "CEL STYLE", note: "Left: a cel style with its shadow kept under the band; right: continuous." }
   "shape-cel-hard" { title: "CEL HARD", note: "Left: the band over light and shadow together; right: continuous." }
+  "shape-grey-card" { title: "GREY CARD", note: "Matte patches of 3 to 90% reflectance over red, green and blue: the 18% patch reads as middle grey." }
   "shape-glass" { title: "GLASS", note: "Tinted, thin, thick and frosted glass." }
 }
 let guideRadius = 1.29

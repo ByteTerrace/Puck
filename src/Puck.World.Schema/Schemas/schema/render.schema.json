@@ -353,15 +353,44 @@
       "default": null,
       "title": "WorldRenderAtmosphere"
     },
-    "tonemap": {
-      "description": "The tonemap the root graph applies to the SDF scene: each view, as its place pass reconstructs it. The letterbox color, every pane (display-referred) and the HUD are never tonemapped. Optional; absent is None \u2014 the stylized shaded color, unchanged.",
-      "enum": [
-        "None",
-        "Filmic",
-        null
+    "tone": {
+      "description": "The display transform every view of the world puts its exposed scene light through before the view\u0027s display pass encodes it for the display (WorldToneCurve). The letterbox color, every pane (display-referred) and the HUD are never toned. Optional; absent applies no curve.",
+      "type": [
+        "object",
+        "null"
       ],
+      "properties": {
+        "peak": {
+          "description": "The value the shoulder rolls into.",
+          "type": "number"
+        },
+        "contrast": {
+          "description": "The linear section\u0027s slope.",
+          "type": "number"
+        },
+        "linearStart": {
+          "description": "The exposed value where the toe gives way to the linear section.",
+          "type": "number"
+        },
+        "linearLength": {
+          "description": "The share of the range above LinearStart the linear section spans.",
+          "type": "number"
+        },
+        "toe": {
+          "description": "The toe\u0027s power: above one it darkens the shadows, below one it lifts them.",
+          "type": "number"
+        }
+      },
+      "required": [
+        "peak",
+        "contrast",
+        "linearStart",
+        "linearLength",
+        "toe"
+      ],
+      "additionalProperties": false,
       "default": null,
-      "title": "WorldTonemap"
+      "title": "WorldToneCurve"
     },
     "farDistance": {
       "description": "The far distance in world units: the depth at which every view\u0027s geometry ends \u2014 the mesh raster\u0027s far plane, the reach of the bake and the indirect volume, and the depth the fog and depth ramps are measured against. Geometry beyond it is never drawn, so an infinite plane ends on a visible horizon curve at this depth unless the atmosphere absorbs it (render.atmosphere). Optional; absent resolves to the engine\u0027s pinned 40. Must lie within [MinFarDistance, MaxFarDistance]. Re-read on every definition revision (a world.row.set render lands on the next frame); world.budget echoes it with its derived costs.",

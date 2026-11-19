@@ -1077,7 +1077,8 @@ public sealed record WorldRenderMedium(
 /// <param name="LinearLength">The share of the range above <paramref name="LinearStart"/> the linear section spans.</param>
 /// <param name="Toe">The toe's power: above one it darkens the shadows, below one it lifts them.</param>
 public sealed record WorldToneCurve(float Peak, float Contrast, float LinearStart, float LinearLength, float Toe) {
-    /// <summary>Returns whether every value lies in its range.</summary>
+    /// <summary>Gets whether every value lies in its range.</summary>
+    [JsonIgnore]
     public bool IsValid => float.IsFinite(f: Peak) && float.IsFinite(f: Contrast) && float.IsFinite(f: LinearStart) &&
         float.IsFinite(f: LinearLength) && float.IsFinite(f: Toe) && (Peak > 0f) && (Contrast > 0f) && (Toe > 0f) &&
         (LinearStart > 0f) && (LinearStart < Peak) && (LinearLength >= 0f) && (LinearLength < 1f);

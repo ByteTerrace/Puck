@@ -113,6 +113,43 @@ public sealed record PresentedFrameDelta(long Changed, long Pixels, double MeanL
         );
     }
 }
+/// <summary>The mean display values of a presented frame over the burst's region or the whole frame: each channel's
+/// 8-bit value as it was read back (0 to 255), the code an SDR display was sent. A grey card's middle patch, 18%
+/// reflectance exposed to its own share of white, reads 118 in every channel (the sRGB code of 0.18).</summary>
+/// <param name="Red">The mean red value.</param>
+/// <param name="Green">The mean green value.</param>
+/// <param name="Blue">The mean blue value.</param>
+public sealed record PresentedFrameLevel(double Red, double Green, double Blue) {
+    /// <summary>Measures an RGBA8 frame over a region, or over the whole frame.</summary>
+    /// <param name="rgba">The frame's pixels, four bytes a pixel, rows top to bottom.</param>
+    /// <param name="width">The frame's width, in pixels.</param>
+    /// <param name="height">The frame's height, in pixels.</param>
+    /// <param name="region">The region measured, or <see langword="null"/> for the whole frame.</param>
+    /// <returns>The mean values.</returns>
+    /// <exception cref="ArgumentException">The frame holds fewer than four bytes for each pixel of the extent.</exception>
+    public static PresentedFrameLevel Of(ReadOnlySpan<byte> rgba, int width, int height, FrameCaptureRegion? region) {
+        if (rgba.Length < (((long)width) * height * 4L)) {
+            throw new ArgumentException(message: "The frame must hold four bytes for each pixel of the extent.");
+        }
+
+        var (left, top, columns, rows) = (region?.PixelsOf(height: height, width: width) ?? (0, 0, width, height));
+        var (red, green, blue) = (0L, 0L, 0L);
+
+        for (var row = top; (row < (top + rows)); row++) {
+            var span = rgba.Slice(length: (columns * 4), start: (((row * width) + left) * 4));
+
+            for (var offset = 0; (offset < span.Length); offset += 4) {
+                red += span[offset];
+                green += span[(offset + 1)];
+                blue += span[(offset + 2)];
+            }
+        }
+
+        var pixels = (double)(((long)columns) * rows);
+
+        return new PresentedFrameLevel(Blue: (blue / pixels), Green: (green / pixels), Red: (red / pixels));
+    }
+}
 /// <summary>One frame of a presented capture, as the display showed it.</summary>
 /// <param name="Index">The frame's position in the burst, from zero.</param>
 /// <param name="Path">The PNG the frame was written to.</param>
@@ -126,7 +163,9 @@ public sealed record PresentedFrameDelta(long Changed, long Pixels, double MeanL
 /// <param name="Height">The frame's height, in pixels.</param>
 /// <param name="Delta">How the frame differs from the one before it, or <see langword="null"/> for the first frame and for
 /// a frame of another extent than the one before it.</param>
-public sealed record PresentedFrame(int Index, string Path, long Presentation, long Rendered, ulong? Tick, int Width, int Height, PresentedFrameDelta? Delta);
+/// <param name="Level">The frame's mean display values over the burst's region or the whole frame, or
+/// <see langword="null"/> when none was measured.</param>
+public sealed record PresentedFrame(int Index, string Path, long Presentation, long Rendered, ulong? Tick, int Width, int Height, PresentedFrameDelta? Delta, PresentedFrameLevel? Level = null);
 /// <summary>Writes the report of a presented capture's frames: one line for the burst, one for each frame and one
 /// summing the differences, the text <c>world.screenshot … presented</c> prints and <c>puck_capture_frame</c>
 /// answers.</summary>
@@ -169,6 +208,9 @@ public static class PresentedFrameReport {
                 maximumChanged = Math.Max(val1: maximumChanged, val2: delta.Changed);
                 maximumMean = Math.Max(val1: maximumMean, val2: delta.MeanLumaDelta);
                 _ = text.Append(culture, $" changed {delta.Changed} px ({((100d * delta.Changed) / delta.Pixels):0.###}%) mean |dY| {delta.MeanLumaDelta:0.####} max |dY| {delta.MaxLumaDelta:0.##}");
+            }
+            if (frame.Level is { } level) {
+                _ = text.Append(culture, $" level {level.Red:0.#}/{level.Green:0.#}/{level.Blue:0.#}");
             }
             if (frame.Index > 0) {
                 gaps += Math.Max(val1: 0L, val2: (frame.Presentation - frames[(frame.Index - 1)].Presentation - 1L));
