@@ -312,7 +312,7 @@ void sdfShadeExecute(SdfShadeBinding binding, uint phase, SdfShadeStamp stamp, S
             }
         }
         foreach (var output in program.Straight.Outputs.Where(predicate: o => (o.Phase == phase))) {
-            var index = OutputIndexOf(phase: phase, name: output.Name);
+            var index = (int)SdfShadeProgram.OutputIndex(name: output.Name, phase: phase);
 
             text.Append(System.Globalization.CultureInfo.InvariantCulture, $"outputs.assigned |= {1u << index}u;\noutputs.o{index} = {Encode($"v{output.Value.Index}", output.Value.Type)};\n");
         }
@@ -332,8 +332,6 @@ void sdfShadeExecute(SdfShadeBinding binding, uint phase, SdfShadeStamp stamp, S
 
         text.Append(System.Globalization.CultureInfo.InvariantCulture, $"precise {Type(result.Type)} v{result.Index} = {expression};\nsdfWorkSteps++;\n");
     }
-    private static int OutputIndexOf(SdfShadePhase phase, string name) => (int)SdfShadeProgram.OutputIndex(name: name, phase: phase);
-
     private static string Function(SdfShadeOp op, SdfShadeType[] types) => $"sdfShade_{op}_{Signature(types: types)}";
     private static uint Signature(SdfShadeType[] types) { var value = 0U; for (var i = 0; (i < types.Length); i++) { value |= (((uint)types[i]) << (4 * i)); } return value; }
     private static string Type(SdfShadeType type) => ((SdfShadeOps.IsUInt(type: type) ? "uint" : "float") + ((SdfShadeOps.Width(type: type) == 1) ? "" : SdfShadeOps.Width(type: type).ToString(provider: System.Globalization.CultureInfo.InvariantCulture)));
