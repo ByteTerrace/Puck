@@ -54,8 +54,11 @@ build's seconds beside it.
 The debug world on Direct3D 12, windowed, `--devices none`, each loop run once
 with a scripted edit on the RTX 4070 lead machine. Seconds from the edit
 (from process start for a boot) to each stage; the commit that adds this table
-carries the commands and the World's own lines. Later lanes improve on these
-figures and replace the table with their own readings.
+carries the commands and the World's own lines. The readings predate the
+live edit path's reload install, the faster whole-world compile and the shared
+in-flight bake, which landed beside them, so the saved-edit and boot rows are
+the first to re-read. Later lanes improve on these figures and replace the
+table with their own readings.
 
 | Loop | The edit | frame | shown | meshes | lit |
 |---|---|---|---|---|---|
@@ -76,7 +79,7 @@ What the baseline shows:
   every frame, and the irradiance volume's relight falls behind it: it relit
   about 1,500 to 1,900 probes a second where its age bound needs about 2,500
   (`[sdf.mesh-gi] behind level=0 … needed-per-second=2496`), over ten minutes
-  of watching. Lighting from a stable proxy, relit incrementally (step 3), is
+  of watching. Lighting from a stable proxy, relit incrementally (step 4), is
   the fix this figure waits on.
 - **Every look value costs a program build and about a second.** An exposure
   or light edit, read live off the definition each frame, still rebuilt the
@@ -85,11 +88,11 @@ What the baseline shows:
   with 15 groups baking and one loading
   (`[sdf.mesh-bake] start … baking=15 loading=1 … cause=program`), so the
   colour took 21 seconds to show whole: colour is in the bake's input, not an
-  appearance upload (step 2).
+  appearance upload (step 3).
 - **A saved edit spends most of its time before the first frame.** Each
   `world.reload` took 9 to 15 seconds to reach a frame, though the rebake after
   it took 0 to 3: compiling, admitting, diffing and installing the document is
-  the live edit path's first cost (step 2).
+  the live edit path's first cost (step 3).
 - **A kernel reload shows in 3 seconds and finishes in 49.** The first changed
   pipeline installs quickly; the request stays pending until every carried
   source in the tree has compiled.
@@ -97,10 +100,6 @@ What the baseline shows:
   in the store (`loaded=2`, no dispatches), and the World's own build after
   the engine edit ran for more than two minutes before that (the store build
   was still running at 124 seconds).
-- **After a live row edit, `world.reload` refuses every later reload** with
-  `world.reload.delta-unrepresentable` and no reason, even once the edited
-  values are restored, so live tweaking and saved edits cannot be mixed in one
-  session.
 
 ## What makes the loops slow today
 
@@ -127,14 +126,16 @@ lighting's time, and one fix lane (`bake-share`) removes the duplicate bakes.
 
 ## Order of work
 
-1. Keys by stage: each bake stage keyed on what it reads, so an engine edit
+Step 1, the instrument, is built: [how each loop is measured](#how-each-is-measured).
+
+2. Keys by stage: each bake stage keyed on what it reads, so an engine edit
    outside the field and its kernel reuses every stored mesh.
-2. The live edit path: a saved `.puck` reaches the running World as the
+3. The live edit path: a saved `.puck` reaches the running World as the
    smallest change it is, with look values as appearance uploads and form
    edits as a progressive rebake of only the creations touched.
-3. Lighting from a stable proxy, relit incrementally, settled at boot with the
+4. Lighting from a stable proxy, relit incrementally, settled at boot with the
    whole GPU.
-4. The cold bake fed: in-flight work shared, groups in flight bounded by the
+5. The cold bake fed: in-flight work shared, groups in flight bounded by the
    GPU rather than round trips, a load mode that gives boot the whole GPU.
 
 The missing look tools, authored large terrain form and a stylized surface
