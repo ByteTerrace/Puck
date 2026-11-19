@@ -13,8 +13,11 @@ design round.
   (`sdf-mesh-bake.comp.hlsl`). Cold debug-world bakes take minutes against the
   iteration loop's target of about a minute per backend, and a creation whose
   relief, bends or bumps bound its distance rather than give it exactly takes
-  many more samples (the glacier's `stepScale 0.168`). How much of the bake is
-  interpreter overhead and how much is sample count is unmeasured.
+  more refinement (the glacier's one scope-wide clamp, `stepScale 0.159`).
+  [The measurement](field-programs/research-measure.md) puts the bake kernel
+  at a few seconds of GPU time in a cold bake of minutes, splits a heavy
+  program's per-sample cost between walking and arithmetic, and prices the
+  clamp.
 - **Two readers and many walkers.** Every op is interpreted on the CPU and on
   the GPU, and the CPU side switches over it in roughly ten analyses (point
   walk, bounds, lane contract, cells, Lipschitz, cull, skip spheres, rigid
