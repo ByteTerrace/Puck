@@ -483,7 +483,7 @@ public sealed class SdfAppearance {
         var shape = paint.Shape;
         var data0 = shape.Data0At(tableVector: tableVector);
         var rotation = Quaternion.Normalize(value: paint.Rotation);
-        var minimumScale = MathF.Min(x: shape.Scale.X, y: MathF.Min(x: shape.Scale.Y, y: shape.Scale.Z));
+        var minimumScale = SdfDerivedLanes.ScaleCorrection(scale: shape.Scale);
 
         void Row(int row, Vector4 value) => SdfProgram.WriteVector4(
             baseIndex: ((paintVector + row) * WordsPerVector),

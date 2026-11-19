@@ -122,7 +122,7 @@ public sealed class WorldSharedGeometryRegressionLawTests {
             Client = ClientFixtures.Client(definition);
             if (session) {
                 m_session = new WorldSessionMirror(definition);
-                m_session.DeliverDefinition(definition, default);
+                m_session.DeliverDefinition(definition, default, stream: default);
                 var emitter = new WorldSessionSceneEmitter(domains: new WorldValueDomainGuard(), mirror: m_session, effectiveCameraName: null);
 
                 m_frames = new SdfCompositionFrameSource([emitter], emitter);
@@ -137,9 +137,9 @@ public sealed class WorldSharedGeometryRegressionLawTests {
         public void Deliver(byte look, ulong tick, string? placement = null, Vector3 position = default, EntityContinuity? continuity = null, Quaternion? orientation = null) {
             var snapshot = new WorldSnapshot(tick, ((int)tick), 1, new[] { new EntitySnapshot(8, position, (orientation ?? Quaternion.Identity), Vector3.One, true, 0, look, 0, (continuity ?? EntityContinuity.Continuous), 1, placement) }, "a");
 
-            Client.DeliverSnapshot(snapshot);
+            Client.DeliverSnapshot(snapshot, stream: default);
             Client.UpdateRenderPoses(1);
-            m_session?.DeliverSnapshot(snapshot);
+            m_session?.DeliverSnapshot(snapshot, stream: default);
         }
         public SdfFrame Frame() { m_local?.Tick((1f / 60)); return m_frames.CaptureFrame(64, 64, (1f / 60), 1)!; }
     }

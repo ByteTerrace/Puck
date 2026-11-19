@@ -53,7 +53,7 @@ public sealed class WorldSceneMovedTransformsLawTests {
             Revision: 1,
             StepTicks: 1UL,
             Tick: tick
-        ));
+        ), stream: default);
     }
     private static Vector3 Rest(int body) => new(
         x: (body * 3f),

@@ -55,7 +55,7 @@ public sealed class CreationEffectorLawTests {
             Revision: 0,
             StepTicks: 1UL,
             Tick: tick
-        ));
+        ), stream: default);
         client.UpdateRenderPoses(alpha: 1f);
         pool.Tick(deltaSeconds: (1f / 60f));
         var moved = new SdfMovedTransforms();

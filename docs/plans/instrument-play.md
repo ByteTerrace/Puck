@@ -124,6 +124,11 @@ controls keep both:
 - **Fingering** is four buttons under one thumb. Each button is one vent, and
   one finger stops it.
 
+The standard's trigger pages (View, Debug) already hold each trigger alone, so
+the standard's instrument page opens on the squeeze of both, with the right
+trigger as the breath, and a world whose squeezes are taken moves it (the debug
+world's Go and Tour pages hold them, so its breath is Y on the keyboard).
+
 The left stick stays free, so the avatar walks, runs and strafes while it
 plays. Because each button is one finger and the trigger is the breath, the
 motion a press produces is the motion a player expects, which is the owner's
@@ -253,10 +258,14 @@ the debug world's 30 Hz) and a frame after the press, and a network round trip
 later with a remote authority. The combat decision records that prediction is
 new work
 ([combat](../decisions/engine-design.md#combat-is-world-content-on-generic-queries-fields-and-input)).
-[The design](instrument-play/pose-clips.md#7-the-owning-seat-sees-its-own-press-early)
-answers that the seat's own presentation may read its own routed input early,
-as a lead on a driver whose truth stays a state cell, and does not wait for
-prediction.
+[The design](instrument-play/pose-clips.md#8-the-owning-seat-sees-its-own-press-early-as-a-guess)
+answers with a guess that does not wait for prediction. While one of a seat's
+own inputs has been taken in by a tick and not yet answered on screen, that
+seat's client may draw the driver at the level the input asks for. The guess
+runs only on a client that presents for one seat, and it ends at the
+authority's answer. It removes the presentation's tick and the round trip. It
+leaves the wait from the press to the tick that takes it in, which a later
+step closes only if a sitting finds it is felt.
 
 **Four body lanes, three in use (gap D).** A body's look fills four render
 lanes, and the Moth's jets, flight mode and boot flame use three
@@ -402,7 +411,7 @@ by 1440 on Direct3D 12, with a Vulkan boot of the same stops.
 | 0. Grounding | The research round's synthesis, the concept pack, and the two reviewed designs (pose clips with gaps A to C; the delivered cue with gaps I and J). | The documents | Each design names its invariant and enforcement and has one cross-family review answered. The pack passes the [concept art review](../game/art/README.md#concept-art-review). |
 | 1. The beat and the judge | The debug world has a score. The standard package has the breath and vent channels, the instrument input mode, the phrase rows and the grading rules. No body moves yet. | State | A scripted phrase with presses at stated offsets (`player.signal … press at:`) reads the authored grade for each step, the phrase's strength and its completion from state rows. Presses 1 ms inside and 1 ms outside a window grade differently. The run reproduces at 30 Hz and at 60 Hz. A second seat's phrase is graded independently in the same ticks. |
 | | | Counter | `world.counters state` shows the rules' work for an idle seat unchanged from the build before, and the phrase's cost per pressing seat is reported. |
-| 2. The hands play | The instrument is on the Moth. Breath raises it. Each vent button moves its finger onto its vent, standing, walking and running. | Close: hand cameras the lane adds to the Moth's inspection layouts (she has none today), from front, both sides, back and above | `puck motion` sheets for play-idle, play-walk, play-run and a four-note phrase: every fingertip is on its vent in the frame after its press, and off it after release. `body.rig` reads each finger shape's delta. `puck mesh audit` on the hand groups reports no split tuples and no torn seam. |
+| 2. The hands play | The instrument is on the Moth. Breath raises it. Each vent button moves its finger onto its vent, standing, walking and running. | Close: hand cameras the lane adds to the Moth's inspection layouts (she has none today), from front, both sides, back and above | `puck motion` sheets for play-idle, play-walk, play-run and a four-note phrase: every fingertip is on its vent in the first frame presented after the tick that takes its press in, and off it after release. `body.rig` reads each finger shape's delta. `puck mesh audit` on the hand groups reports no split tuples and no torn seam. |
 | | | Chase: the default boom | The stance reads as playing in silhouette from behind and from three-quarter view, and the gait's leg cycle is unchanged against the build before. |
 | | | In motion | An eight-frame presented burst of a fast phrase shows the fingers with no trail behind them and no flicker on the still hand. `world.debug-view shadow` shows each finger's shadow on the gauntlet at the close camera. |
 | | | Counter | Draws, vertices and transform rows for one Moth before and after, from `world.counters gpu` and `sdf.instances`. |
@@ -461,7 +470,7 @@ stop at a gap.
 | Delivered cues and music that follows rules (gaps I, J, K) | A design memo, reviewed, then: rule cues in the delivered tick, with a numeric argument a patch reads as pitch; one lane feeding sound and pose cues; score conditions on rule cues; layer gain in the mix; a voice-stealing rule | Design and build: Sol at `high`. Review: an Opus `specialist`. | It changes what crosses the wire, which is a disclosure question; another family reviews | Now |
 | Body lanes (gap D) | More per-body carriers for shading-time values, or a second carrier, as the design finds | An Opus `specialist` | A C# and HLSL layout pair with a generated side | After the rendering wave's lanes that edit the same pass block land |
 | Haptics (gap L) | A world-authored pulse on a seat's pad, driven by state | Hydrogen | A specified wiring of an existing output interface | Now |
-| Standard package: the judge | Stage 1's channels, mode, bindings, phrase rows and rules in `worlds/standard/`, with the debug world's score | `implementer` | The mechanisms exist and the fixture shows the shape | Now |
+| Standard package: the judge | Stage 1's channels, mode, bindings, phrase rows and rules in `worlds/standard/` (`rhythm.puck`, `instrument.puck`), with the debug world's score and `bard.puck` | `implementer` | The mechanisms exist and the fixture shows the shape | Built. The idle-seat and per-seat counter readings are the lead's |
 | The instrument and the hands | Stage 2: the creation, the segmented fingers, the playing stance and the fingering poses on the Moth | An Opus `specialist`, as a look lane with the probe rule | A creation built to push the rig; it stops at gaps A, B and E | After the pack's instrument panels; it meets the pose-clip lane |
 | Sound and score | Stage 3's patches, cues, tunes and score layers | `implementer` | Authored data once the cue lane lands | After the delivered-cue lane |
 | The dance | Stage 4's moves: kit actions, footwork, strikes and their clips | An Opus `specialist`, as a look lane | Whole-body motion judged on sheets from every side | After the pose-clip lane |

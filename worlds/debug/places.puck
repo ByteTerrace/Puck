@@ -1,8 +1,10 @@
 // The debug world's named places and the console command that goes to them. Each place is a spawn point a few metres
-// from one of the world's features, facing it; `debug.go <place>` poses a body there and hands the view back to the
-// seat's chase camera, so one line reaches any feature from anywhere. The debug world imports this file whole, and
-// debug.md beside it lists the places. The painting wing's own places (portals, portal-garden, portal-night,
-// portal-link, portal-fall) are authored beside the paintings (paintings.puck).
+// from one of the world's features, standing so the seat's chase camera, which keeps its place behind the body, frames
+// the feature beside her rather than behind her; `debug.go <place>` poses a body there and hands the view back to that
+// camera, so one line reaches any feature from anywhere. The debug world imports this file whole, and
+// debug.md beside it lists the places. The painting wing's own places (painting-room, portals, portal-garden,
+// portal-night, portal-link, portal-fall) are authored beside the paintings (paintings.puck), and the valley's (overlook,
+// glacier, valley-<sector>) beside the valley (valley.puck).
 //
 // `debug.go` is an authored command: a `commands` row composing existing verbs, which the console answers beside the
 // engine's own (help, help --names, a binding row or wheel sector naming it). It runs each line under the caller's
@@ -117,7 +119,7 @@ spawnPoints [
 commands [
   {
     name: "debug.go"
-    help: "Poses a body at one of the debug world's places (stage, devices, boardroom, chess, go, reversi, alchemy, granaries, cards, auction, shedding, deduction, skirmish, desktop, portals, portal-garden, portal-night, portal-link, portal-fall, gallery, wonderland, the camera tests lift, stairs, camera-course, camera-tunnel, camera-colonnade and camera-bays, the valley's overlook and valley-<sector> floor spots, the pool, forest and forest-inside, or any spawn point) and returns the view to the play layout's chase camera."
+    help: "Poses a body at one of the debug world's places (stage, devices, boardroom, chess, go, reversi, alchemy, granaries, cards, auction, shedding, deduction, skirmish, desktop, painting-room, portals, portal-garden, portal-night, portal-link, portal-fall, gallery, wonderland, the camera tests lift, stairs, camera-course, camera-tunnel, camera-colonnade and camera-bays, the valley's overlook, glacier and valley-<sector> floor spots, the pool, forest and forest-inside, or any spawn point) and returns the view to the play layout's chase camera."
     parameters [
       { name: "place", kind: Spawn, default: "stage" }
       { name: "body", kind: Body, default: "0" }

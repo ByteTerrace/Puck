@@ -230,14 +230,31 @@ bound (`frequency·(15/4)·√3` per normalized octave sum) folded by
 relaxed parity envelope (isolated silhouette winner flips only). The
 sine-product `Displace` remains the hash-free periodic sibling.
 
-A field op emitted in a SHAPE-FREE chain (its own `ResetPoint` + transform
-prefix, no shape—the spelling the creation-level `noise` facet's stamp
-emission uses) never reaches a `ShapeBlend` compose, so the chain-product path
-alone drops its factor. `AnalyzeLipschitz` pass 2 therefore folds a shape-free
-chain's `Displace`/`NoiseDisplace` factor additively at the op's own
-instruction site (`|∇(f + g)| ≤ L_f + L_g`), inside the scope the op acts on —
-a `Union` pop then keeps the addition instance-local (max across instances)
-instead of summing it across every stamped copy.
+A relief (`Displace`, `NoiseDisplace`, `CellDisplace`) edits the accumulator
+exactly where it executes, so `AnalyzeLipschitz` charges it there, additively
+(`|∇(f + g)| ≤ L_f + L_g`), inside the scope it acts on, whatever its chain
+holds before or after it: a later shape in the same chain composes against the
+edited accumulator and never carries the relief's charge. The charge is the
+relief's own slope in the frame it samples (`SdfNoiseDisplacement.ReliefSlope`,
+the sine product's `amplitude · max|frequency|`, `SdfCellDisplacement.ReliefSlope`)
+times its chain's point factor (`SdfProgram.AnalyzeReliefPointFactors`): one
+over the smallest axis of each `Scale` before it, times each globally bounded
+warp's factor. A creation's relief samples its stamp's scaled frame with its
+amplitude scaled by the stamp, so the charge is the same at every stamp scale
+and equals `CreationNoiseDocument.StepFactor`. A relief after an operation with
+no global continuous derivative bound (a fold that jumps at a seam, a
+reach-dependent warp) is refused by name, since no step bound covers the jump.
+A `Union` pop keeps the addition instance-local (max across instances) instead
+of summing it across every stamped copy.
+
+The program door decodes each relief's numbers once and refuses a lane the
+builder would not write. Every operation and shape type has a row in the lane
+contract (`SdfProgram.LaneContractOf`, `SdfLaneContract`): a lane is authored
+(checked against the builder's domain), derived (recomputed by the function the
+builder calls, `SdfDerivedLanes` or `SdfNoiseDisplacement`, and compared bit for
+bit: a scale's distance correction, a noise relief's normalization, a repeat's
+reciprocal spacing), unit (a rotation's quaternion or a normal) or zero. So the
+step analysis, which trusts those lanes, never reads a forged one.
 
 Two further consequences of scoping the analysis:
 

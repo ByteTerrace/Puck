@@ -912,10 +912,11 @@ public sealed partial class SessionObservationLawTests {
     private sealed class FaultingSink : IClientSink {
         public void DeliverAnswer(in QueryAnswer answer) => throw new InvalidOperationException(message: "faulting observer");
         public void DeliverComposition(WorldComposition composition) => throw new InvalidOperationException(message: "faulting observer");
-        public void DeliverDefinition(WorldDefinition definition, WorldDocumentVersion version) => throw new InvalidOperationException(message: "faulting observer");
+        public void DeliverDefinition(WorldDefinition definition, WorldDocumentVersion version, in WorldStreamStamp stream) => throw new InvalidOperationException(message: "faulting observer");
         public void DeliverSessionLever(WorldSessionLever lever) => throw new InvalidOperationException(message: "faulting observer");
-        public void DeliverSnapshot(in WorldSnapshot snapshot) => throw new InvalidOperationException(message: "faulting observer");
-        public void DeliverState(WorldDefinition definition, WorldDocumentVersion version, in WorldStateStamp stamp) => throw new InvalidOperationException(message: "faulting observer");
+        public void DeliverCut(in WorldStreamStamp stream, bool terminal) { }
+        public void DeliverSnapshot(in WorldSnapshot snapshot, in WorldStreamStamp stream) => throw new InvalidOperationException(message: "faulting observer");
+        public void DeliverState(WorldDefinition definition, WorldDocumentVersion version, in WorldStateStamp stamp, in WorldStreamStamp stream) => throw new InvalidOperationException(message: "faulting observer");
     }
     // A sink that, on its first tick delivery (its attach primer is not a fan-out), tries to observe the same world as a
     // session from inside the delivery.
@@ -930,11 +931,12 @@ public sealed partial class SessionObservationLawTests {
         }
         public void DeliverComposition(WorldComposition composition) {
         }
-        public void DeliverDefinition(WorldDefinition definition, WorldDocumentVersion version) {
+        public void DeliverDefinition(WorldDefinition definition, WorldDocumentVersion version, in WorldStreamStamp stream) {
         }
         public void DeliverSessionLever(WorldSessionLever lever) {
         }
-        public void DeliverSnapshot(in WorldSnapshot snapshot) {
+        public void DeliverCut(in WorldStreamStamp stream, bool terminal) { }
+        public void DeliverSnapshot(in WorldSnapshot snapshot, in WorldStreamStamp stream) {
             if (!m_primed) {
                 m_primed = true;
 
@@ -953,7 +955,7 @@ public sealed partial class SessionObservationLawTests {
             );
             Refusal = refusal;
         }
-        public void DeliverState(WorldDefinition definition, WorldDocumentVersion version, in WorldStateStamp stamp) {
+        public void DeliverState(WorldDefinition definition, WorldDocumentVersion version, in WorldStateStamp stamp, in WorldStreamStamp stream) {
         }
     }
     // An observer that takes its attach primer, then throws on the first tick it is delivered.
@@ -964,16 +966,17 @@ public sealed partial class SessionObservationLawTests {
         }
         public void DeliverComposition(WorldComposition composition) {
         }
-        public void DeliverDefinition(WorldDefinition definition, WorldDocumentVersion version) {
+        public void DeliverDefinition(WorldDefinition definition, WorldDocumentVersion version, in WorldStreamStamp stream) {
         }
         public void DeliverSessionLever(WorldSessionLever lever) {
         }
-        public void DeliverSnapshot(in WorldSnapshot snapshot) {
+        public void DeliverCut(in WorldStreamStamp stream, bool terminal) { }
+        public void DeliverSnapshot(in WorldSnapshot snapshot, in WorldStreamStamp stream) {
             if (++m_snapshots > 1) {
                 throw new InvalidOperationException(message: "faulting observer");
             }
         }
-        public void DeliverState(WorldDefinition definition, WorldDocumentVersion version, in WorldStateStamp stamp) {
+        public void DeliverState(WorldDefinition definition, WorldDocumentVersion version, in WorldStateStamp stamp, in WorldStreamStamp stream) {
         }
     }
     // An observer that takes its attach primer, then throws on the next definition it is delivered.
@@ -984,16 +987,17 @@ public sealed partial class SessionObservationLawTests {
         }
         public void DeliverComposition(WorldComposition composition) {
         }
-        public void DeliverDefinition(WorldDefinition definition, WorldDocumentVersion version) {
+        public void DeliverDefinition(WorldDefinition definition, WorldDocumentVersion version, in WorldStreamStamp stream) {
             if (++m_definitions > 1) {
                 throw new InvalidOperationException(message: "faulting observer");
             }
         }
         public void DeliverSessionLever(WorldSessionLever lever) {
         }
-        public void DeliverSnapshot(in WorldSnapshot snapshot) {
+        public void DeliverCut(in WorldStreamStamp stream, bool terminal) { }
+        public void DeliverSnapshot(in WorldSnapshot snapshot, in WorldStreamStamp stream) {
         }
-        public void DeliverState(WorldDefinition definition, WorldDocumentVersion version, in WorldStateStamp stamp) {
+        public void DeliverState(WorldDefinition definition, WorldDocumentVersion version, in WorldStateStamp stamp, in WorldStreamStamp stream) {
         }
     }
 }

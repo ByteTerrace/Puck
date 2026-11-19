@@ -49,8 +49,8 @@ let deviceLabel = { color: "#F2EEE4", roughness: 0.6 }
 let devicePlinthKick = { color: "#25292F", roughness: 0.7 }
 
 // The stands' names, at a size their bake keeps. An embossed run bakes as a group of its own, refined toward its
-// declared detail, the thinner of its relief and half its stroke (a stroke is about a tenth of its em), so each stroke
-// spans two cells. At a 40 mm em a stroke is about 4 mm and the 2 mm relief declares the same 2 mm detail.
+// declared detail, the thinner of its relief and a third of its thinnest stroke (SdfProgramBuilder.GlyphDetail), so
+// each stroke spans three cells. At a 40 mm em the thinnest stroke is about 3.2 mm, a detail of about 1.1 mm.
 let labelEm = 0.04
 let labelDepth = 0.002
 

@@ -1,0 +1,12 @@
+// The debug world's instrument on a world with nothing else: the standard's controls and the instrument, with the
+// instrument family the only input policy. The scenarios beside it play phrases at stated offsets inside a tick.
+schema: "puck.world.definition.v1"
+basis: "avatars/moth"
+import "../standard/standard"
+import "../standard/instrument"
+import "bard"
+
+inputModes {
+  global []
+  families [instrumentFamily()]
+}

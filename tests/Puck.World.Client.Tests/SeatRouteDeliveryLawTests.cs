@@ -62,7 +62,7 @@ public sealed class SeatRouteDeliveryLawTests {
         client.DeliverSnapshot(snapshot: Snapshot(
             authority: "boot",
             tick: 1UL
-        ));
+        ), stream: default);
 
         using var boot = new WorldAuthorityEndpoint(
             adjacencies: static () => null,
@@ -71,11 +71,11 @@ public sealed class SeatRouteDeliveryLawTests {
             identity: "boot",
             nextInputTick: static () => 2UL,
             observe: sink => {
-                sink.DeliverDefinition(definition: local, version: default);
+                sink.DeliverDefinition(definition: local, version: default, stream: default);
                 sink.DeliverSnapshot(snapshot: Snapshot(
                     authority: "boot",
                     tick: 1UL
-                ));
+                ), stream: default);
 
                 return new Lease();
             },
@@ -89,11 +89,11 @@ public sealed class SeatRouteDeliveryLawTests {
             nextInputTick: static () => 6UL,
             observe: sink => {
                 remoteSink = sink;
-                sink.DeliverDefinition(definition: remote, version: default);
+                sink.DeliverDefinition(definition: remote, version: default, stream: default);
                 sink.DeliverSnapshot(snapshot: Snapshot(
                     authority: "north",
                     tick: 5UL
-                ));
+                ), stream: default);
 
                 return new Lease();
             },
@@ -145,7 +145,7 @@ public sealed class SeatRouteDeliveryLawTests {
                 MovedRows: new[] { 0 },
                 Tick: 5UL
             ),
-            version: default
+            version: default, stream: default
         );
 
         var readsBefore = Reads(mirror: routed);

@@ -102,6 +102,17 @@ a rigid piece the physics settles, `heldKit` for a cursor the rules pose).
 press in a seat row's `<button>Edge` and `<button>Down` cells (`seatPress`), which a game's presses rule calls in a
 `for` over its buttons.
 
+`rhythm.puck` is a library: `rhythmJudge(...)` grades each seat's presses against its world's score and tracks the
+phrase they play (a list of steps, each a note on a beat; a press is a channel that means one note), with windows, a
+strength that a miss lowers by one, a run of misses that ends the phrase and a miss for a beat that passes unplayed,
+all as rows and rules a world refines by id. It names no
+instrument, so a dance's moves are the same call with different presses. `instrument.puck` is a library built on it:
+`instrumentPlay(...)` authors the breath and four vent channels, the binding page that opens while both triggers are
+squeezed, the rules that raise and lower the instrument, and the judge over the vents, and `instrumentFamily(...)` is
+the input family a world lists in its `inputModes` so the vents are accepted only while the instrument is up. The debug
+world's [`bard.puck`](../debug/bard.puck) expands it against its [score](../debug/score.puck), with the breath on Y
+because its trigger pages are all spoken for.
+
 `terrain.puck` and `foliage.puck` are optional libraries. Foliage supplies
 `broadleafTree`, `mossyRock`, `grassTuft`, `sceneryPatch`, `sceneryScatter` and
 `windMeadowTile`; import it with `import "../standard/foliage"` and expand its

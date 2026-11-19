@@ -56,11 +56,11 @@ public sealed class BodyStampScaleLawTests {
     public void AScaleRegisterWriteChangesTheCopyMatrixWithoutRebuildingTheProgram() {
         var session = new WorldSessionMirror(placeholder: Document());
 
-        session.DeliverDefinition(definition: Document(), version: default);
+        session.DeliverDefinition(definition: Document(), version: default, stream: default);
         session.DeliverSnapshot(snapshot: Snapshot(
             scale: 1d,
             tick: 1UL
-        ));
+        ), stream: default);
 
         var emitter = new WorldSessionSceneEmitter(domains: new WorldValueDomainGuard(),
             effectiveCameraName: null,
@@ -96,7 +96,7 @@ public sealed class BodyStampScaleLawTests {
         session.DeliverSnapshot(snapshot: Snapshot(
             scale: 0.5d,
             tick: 2UL
-        ));
+        ), stream: default);
 
         var moved = Revision(emitter: emitter);
 

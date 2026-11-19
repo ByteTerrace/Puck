@@ -73,8 +73,8 @@ public sealed class BodyStampLookLawTests {
         var definition = Document();
         var session = new WorldSessionMirror(placeholder: definition);
 
-        session.DeliverDefinition(definition: definition, version: default);
-        session.DeliverSnapshot(snapshot: Snapshot(look: 0, revision: 1, tick: 1UL));
+        session.DeliverDefinition(definition: definition, version: default, stream: default);
+        session.DeliverSnapshot(snapshot: Snapshot(look: 0, revision: 1, tick: 1UL), stream: default);
 
         var emitter = new WorldSessionSceneEmitter(domains: new WorldValueDomainGuard(),
             effectiveCameraName: null,
@@ -99,7 +99,7 @@ public sealed class BodyStampLookLawTests {
         );
         Assert.Equal(1, source.ProgramBuilds);
 
-        session.DeliverSnapshot(snapshot: Snapshot(look: 1, revision: 2, tick: 2UL));
+        session.DeliverSnapshot(snapshot: Snapshot(look: 1, revision: 2, tick: 2UL), stream: default);
 
         Assert.Equal(
             actual: ShapeHeight(frame: Frame()),
@@ -108,7 +108,7 @@ public sealed class BodyStampLookLawTests {
         );
 
         // And back, as the cell flips again.
-        session.DeliverSnapshot(snapshot: Snapshot(look: 0, revision: 3, tick: 3UL));
+        session.DeliverSnapshot(snapshot: Snapshot(look: 0, revision: 3, tick: 3UL), stream: default);
 
         Assert.Equal(
             actual: ShapeHeight(frame: Frame()),

@@ -339,7 +339,7 @@ public sealed class PrototypeMeshLawTests {
             Revision: 1,
             StepTicks: 1UL,
             Tick: tick
-        ));
+        ), stream: default);
         public IReadOnlyList<SdfMeshDraw> Frame() {
             m_emitter.Tick(deltaSeconds: FrameSeconds);
             _ = m_frames.CaptureFrame(
