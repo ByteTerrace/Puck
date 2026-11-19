@@ -22,4 +22,13 @@ public static class VulkanBufferUsageFlags {
     public const uint UniformBuffer = 0x00000010;
     /// <summary>The <c>VK_BUFFER_USAGE_VERTEX_BUFFER_BIT</c> value.</summary>
     public const uint VertexBuffer = 0x00000080;
+    /// <summary><c>VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT</c> (vulkan_core.h, SDK 1.4.363): the buffer has a device
+    /// address, on a device created with <c>bufferDeviceAddress</c>.</summary>
+    public const uint ShaderDeviceAddress = 0x00020000;
+    /// <summary><c>VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR</c>: a build reads the buffer's
+    /// vertices, indices or instance records.</summary>
+    public const uint AccelerationStructureBuildInput = 0x00080000;
+    /// <summary><c>VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR</c>: an acceleration structure lives in the
+    /// buffer.</summary>
+    public const uint AccelerationStructureStorage = 0x00100000;
 }

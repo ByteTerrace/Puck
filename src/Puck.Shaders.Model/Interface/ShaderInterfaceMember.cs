@@ -91,6 +91,17 @@ public sealed record ShaderInterfaceMember(
             Length: length,
             Name: name
         );
+    /// <summary>Creates a top-level acceleration structure member, which a pass traces with ray queries; only an
+    /// interface a capability-dependent kernel reads declares one.</summary>
+    /// <param name="name">The member's name.</param>
+    /// <param name="group">The member's frequency group.</param>
+    /// <returns>The member.</returns>
+    public static ShaderInterfaceMember AccelerationStructure(string name, ShaderInterfaceGroup group) =>
+        new(
+            Group: group,
+            Kind: ShaderInterfaceMemberKind.AccelerationStructure,
+            Name: name
+        );
     /// <summary>Creates a storage image member.</summary>
     /// <param name="name">The member's name.</param>
     /// <param name="group">The member's frequency group.</param>

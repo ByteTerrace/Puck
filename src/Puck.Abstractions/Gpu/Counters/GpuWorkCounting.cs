@@ -27,6 +27,7 @@ public static class GpuWorkCounting {
         ArgumentNullException.ThrowIfNull(services);
 
         return new GpuDeviceServices {
+            AccelerationStructures = services.AccelerationStructures,
             Bindings = Wrap(
                 bindings: services.Bindings,
                 ledger: ledger
@@ -383,6 +384,12 @@ file sealed class CountingRecorder(IGpuRecorder inner, GpuWorkLedger ledger) : C
         Tally(column: GpuWork.CopiesColumn);
         Tally(amount: checked((long)sizeBytes), column: GpuWork.BufferCopyBytesColumn);
     }
+    public void BuildAccelerationStructure(nint commandBufferHandle, in GpuAccelerationStructureInputs inputs, IGpuAccelerationStructure destination, IGpuBuffer scratch) =>
+        inner.BuildAccelerationStructure(commandBufferHandle: commandBufferHandle, destination: destination, inputs: in inputs, scratch: scratch);
+    public void WriteCompactedSize(nint commandBufferHandle, IGpuAccelerationStructure source, IGpuBuffer destination, ulong destinationOffsetBytes) =>
+        inner.WriteCompactedSize(commandBufferHandle: commandBufferHandle, destination: destination, destinationOffsetBytes: destinationOffsetBytes, source: source);
+    public void CompactAccelerationStructure(nint commandBufferHandle, IGpuAccelerationStructure source, IGpuAccelerationStructure destination) =>
+        inner.CompactAccelerationStructure(commandBufferHandle: commandBufferHandle, destination: destination, source: source);
     public void ClearStorageBuffer(nint commandBufferHandle, nint bufferHandle, ulong sizeBytes) {
         inner.ClearStorageBuffer(
             bufferHandle: bufferHandle,

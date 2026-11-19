@@ -10655,6 +10655,10 @@ export type WorldQualityPreset = {
    * The optical scatter cost gate.
    */
   bloom?: BloomQuality;
+  /**
+   * Whether the preset lets the indirect volume's background rays take the device's ray hardware where it has it (world.rays); the software walk answers the same hits elsewhere.
+   */
+  rayQueries?: boolean;
 };
 
 export type WorldReaction = WorldReactionDiffuse | WorldReactionDecay | WorldReactionTransform | WorldReactionEmit | WorldReactionExpose | WorldReactionFlow | null;
@@ -10965,6 +10969,10 @@ export type WorldRenderDefaults = {
    * What a nested view gives up at each presented size (WorldNestedViewQuality). Absent gives up nothing.
    */
   nested?: (WorldNestedViewQuality | null)[] | null;
+  /**
+   * Whether the indirect volume's background rays (its probe trace, the relight's shadow rays and the camera sample) boot taking the device's ray hardware where it has it, through the scene's acceleration structures (world.rays). The software walk answers the same hits wherever it is off or the device has none. Absent is off.
+   */
+  rayQueries?: boolean;
 };
 
 export type WorldRenderEnvironment = {

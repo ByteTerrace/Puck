@@ -28,6 +28,7 @@ public sealed class VulkanGpuBindings(IVulkanDeviceContext deviceContext, Vulkan
             (sizes.ConstantBufferCount, VulkanDescriptorType.UniformBuffer),
             (sizes.SampledImageCount, VulkanDescriptorType.SampledImage),
             (sizes.SamplerCount, VulkanDescriptorType.Sampler),
+            (sizes.AccelerationStructureCount, VulkanDescriptorType.AccelerationStructure),
         ])) {
             if (count > 0) {
                 poolSizes.Add(item: new VulkanDescriptorPoolSize(

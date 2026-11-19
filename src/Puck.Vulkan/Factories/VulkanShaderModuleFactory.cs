@@ -33,6 +33,7 @@ public sealed class VulkanShaderModuleFactory : IVulkanShaderModuleFactory {
 
         VulkanShaderCapabilities.Require(
             module: stageInfo.Path,
+            optional: (logicalDevice.Capabilities?.Optional ?? GpuOptionalCapabilities.None),
             spirv: spirVBytes.Span
         );
         var request = new VulkanShaderModuleCreateRequest(

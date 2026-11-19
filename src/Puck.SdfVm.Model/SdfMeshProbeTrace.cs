@@ -10,10 +10,19 @@ public static class SdfMeshProbeTrace {
     public const int UnknownMaterial = ushort.MaxValue;
     /// <summary>Low bits of a node link holding its leaf count; zero names two children.</summary>
     public const int NodeCountBits = 3;
-    /// <summary>A node's low and high bounds, then its packed link.</summary>
+    /// <summary>A top-level node's low and high bounds as floats, then its packed link.</summary>
     public const int NodeWords = 7;
-    /// <summary>One instance address and one geometry subtree address per top-level leaf.</summary>
-    public const int EntryWords = 2;
+    /// <summary>A geometry node's low and high bounds as six 16-bit steps of its braid's frame, two to a word (low x and
+    /// y, low z and high x, high y and z, each first value in the low half), then its packed link.</summary>
+    public const int PackedNodeWords = 4;
+    /// <summary>The steps a packed bound counts across its braid's frame: a bound decodes to the frame's low corner plus
+    /// its step count times the frame's step, per axis.</summary>
+    public const int PackedSteps = ushort.MaxValue;
+    /// <summary>A braid's frame: its low corner, then its step per axis, as floats.</summary>
+    public const int FrameWords = 6;
+    /// <summary>One instance address, one geometry subtree address and the subtree's frame address per top-level
+    /// leaf.</summary>
+    public const int EntryWords = 3;
     /// <summary>Inverse matrix, normal matrix, then geometry and material addresses.</summary>
     public const int InstanceWords = 32;
     /// <summary>First word of the instance's winding-aware normal matrix.</summary>
@@ -24,6 +33,12 @@ public static class SdfMeshProbeTrace {
     public const int IdentityWord = 29;
     /// <summary>The scene instance ordinal, for hit identity diagnostics.</summary>
     public const int InstanceIndexWord = 30;
+    /// <summary>The words an uploaded scene starts with, written last as one: the top root's address, then
+    /// <see cref="InstanceBaseWord"/>.</summary>
+    public const int RootWords = 2;
+    /// <summary>The scene word holding the first instance record's address, from which a ray query reaches a hit
+    /// instance's record by its index.</summary>
+    public const int InstanceBaseWord = 1;
     /// <summary>Traversal stack capacity shared with the CPU walk.</summary>
     public const int StackDepth = 64;
     /// <summary>The most node visits in one ray, across both hierarchy levels; corrupt links cannot cycle forever.</summary>

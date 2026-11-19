@@ -191,6 +191,46 @@ public sealed class VulkanGpuRecorder(IVulkanDeviceContext deviceContext, IVulka
             );
         }
     }
+    // vkCmdPipelineBarrier scopes around acceleration-structure commands (vulkan_core.h, SDK 1.4.363): the transfer,
+    // compute and build stages, and their shader, transfer and structure accesses.
+    private const uint StageTransfer = 0x00001000;
+    private const uint StageCompute = 0x00000800;
+    private const uint StageBuild = 0x02000000;
+    private const uint AccessShaderRead = 0x00000020;
+    private const uint AccessShaderWrite = 0x00000040;
+    private const uint AccessTransferRead = 0x00000800;
+    private const uint AccessTransferWrite = 0x00001000;
+    private const uint AccessStructureRead = 0x00200000;
+    private const uint AccessStructureWrite = 0x00400000;
+
+    /// <inheritdoc/>
+    public void BuildAccelerationStructure(nint commandBufferHandle, in GpuAccelerationStructureInputs inputs, IGpuAccelerationStructure destination, IGpuBuffer scratch) {
+        recordingApi.PipelineMemoryBarrier(commandBufferHandle: commandBufferHandle, device: Device,
+            destinationAccessMask: (AccessShaderRead | AccessStructureRead | AccessStructureWrite), destinationStageMask: StageBuild,
+            sourceAccessMask: (AccessTransferWrite | AccessShaderWrite | AccessStructureWrite), sourceStageMask: (StageTransfer | StageCompute | StageBuild));
+        VulkanGpuAccelerationStructures.RecordBuild(commandBufferHandle: commandBufferHandle, destination: destination, device: Device, inputs: in inputs, scratch: scratch);
+        StructureWritten(commandBufferHandle: commandBufferHandle);
+    }
+    /// <inheritdoc/>
+    public void WriteCompactedSize(nint commandBufferHandle, IGpuAccelerationStructure source, IGpuBuffer destination, ulong destinationOffsetBytes) {
+        recordingApi.PipelineMemoryBarrier(commandBufferHandle: commandBufferHandle, device: Device,
+            destinationAccessMask: AccessTransferWrite, destinationStageMask: StageTransfer,
+            sourceAccessMask: 0U, sourceStageMask: StageTransfer);
+        VulkanGpuAccelerationStructures.RecordCompactedSize(commandBufferHandle: commandBufferHandle, destination: destination, destinationOffsetBytes: destinationOffsetBytes, device: Device, source: source);
+        recordingApi.PipelineMemoryBarrier(commandBufferHandle: commandBufferHandle, device: Device,
+            destinationAccessMask: AccessTransferRead, destinationStageMask: StageTransfer,
+            sourceAccessMask: AccessTransferWrite, sourceStageMask: StageTransfer);
+    }
+    /// <inheritdoc/>
+    public void CompactAccelerationStructure(nint commandBufferHandle, IGpuAccelerationStructure source, IGpuAccelerationStructure destination) {
+        VulkanGpuAccelerationStructures.RecordCompact(commandBufferHandle: commandBufferHandle, destination: destination, device: Device, source: source);
+        StructureWritten(commandBufferHandle: commandBufferHandle);
+    }
+    // Makes a build's or copy's structure write, and its scratch write, visible to every later build, copy and kernel.
+    private void StructureWritten(nint commandBufferHandle) =>
+        recordingApi.PipelineMemoryBarrier(commandBufferHandle: commandBufferHandle, device: Device,
+            destinationAccessMask: (AccessStructureRead | AccessStructureWrite), destinationStageMask: (StageBuild | StageCompute),
+            sourceAccessMask: AccessStructureWrite, sourceStageMask: StageBuild);
     /// <inheritdoc/>
     public void ClearStorageBuffer(nint commandBufferHandle, nint bufferHandle, ulong sizeBytes) {
         ArgumentOutOfRangeException.ThrowIfZero(commandBufferHandle);

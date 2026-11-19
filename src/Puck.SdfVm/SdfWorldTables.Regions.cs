@@ -90,7 +90,9 @@ public sealed partial class SdfWorldTables {
             recorder: m_gpu.Recorder,
             slotCount: MeshRegionSlotCount,
             hostCopies: m_regionHostCopies,
-            staging: new GpuObjectName(owner: SdfResidencySelector.RegionStagingOwner, part: "mesh-region")
+            staging: new GpuObjectName(owner: SdfResidencySelector.RegionStagingOwner, part: "mesh-region"),
+            // The probe scene's bottom levels read their triangles from the region in place (SdfMeshProbeGpuWork.Rays).
+            destinationUsage: ((m_deviceContext.Capabilities?.Has(required: GpuOptionalCapabilities.RayQuery) ?? false) ? GpuBufferUsage.AccelerationStructureInput : GpuBufferUsage.None)
         )
         : new GpuRegion(
             bindings: m_gpu.Bindings,
