@@ -72,12 +72,23 @@ public sealed partial class WorldCreationInstances {
 
         if (ownInstance) {
             // Each shown member declares its own part, so the group bakes on a union's final lattice as a static copy's run
-            // of the same shapes does (SdfMeshBakeGroup.Members), each part refined over its own box.
+            // of the same shapes does (SdfMeshBakeGroup.Members), each part refined over its own box. A moving cutter is an
+            // operand instead (CreationMotionPlan.IsOperand): the bake reads it where its slot stands, and its cut face
+            // refines with the surface it cuts.
             var parts = new List<SdfInstancePart>();
+            var operands = new List<SdfInstancePart>();
             var detail = 0f;
 
             for (var member = fromIndex; (member < shapes.Count); member++) {
-                if (((shapes[member].Group ?? 0) != groupId) || ((hidden is not null) && hidden[member])) { continue; }
+                if ((hidden is not null) && hidden[member]) { continue; }
+                if (motion.IsOperand(shape: member)) {
+                    if (((shapes[member].Group ?? 0) == groupId) || motion.Borrows(renderGroup: groupId, shape: member, slot: out _)) {
+                        operands.Add(item: PartOf(document: document, index: member, scale: 1f, slot: (rootSlot + motion.ShapeSlots[member])));
+                    }
+                    continue;
+                }
+                if ((shapes[member].Group ?? 0) != groupId) { continue; }
+
                 var part = PartOf(document: document, index: member, scale: 1f, slot: (rootSlot + motion.ShapeSlots[member]));
 
                 parts.Add(item: part);
@@ -91,7 +102,8 @@ public sealed partial class WorldCreationInstances {
                 boundOffset: boundOffset,
                 boundRadius: boundRadius,
                 detail: detail,
-                parts: parts
+                parts: parts,
+                operands: operands
             );
         }
 
@@ -310,7 +322,8 @@ public sealed partial class WorldCreationInstances {
 
             emittedGroups[emittedCount++] = groupId;
 
-            if (!AnyKept(fromIndex: index, groupId: groupId, hidden: hidden, shapes: shapes)) {
+            // A group of operands alone was partitioned away from the surfaces it cuts, each of which takes the operands.
+            if (!live.Motion.HoldsSurface(renderGroup: groupId) || !AnyKept(fromIndex: index, groupId: groupId, hidden: hidden, shapes: shapes)) {
                 continue;
             }
 
@@ -322,6 +335,13 @@ public sealed partial class WorldCreationInstances {
                 boundSlot = (rootSlot + live.Motion.ShapeSlots[index]);
                 boundOffset = shapes[index].Position.Value;
                 boundRadius = localRadius;
+            }
+            // A group an operand cuts bakes in its one surface owner's slot, so no vertex rides another slot; the cut never
+            // grows the surface, so the surface's bound holds it.
+            if (live.Motion.TryCutSlot(renderGroup: groupId, slot: out var cutSlot) && (boundSlot != (rootSlot + cutSlot))) {
+                boundSlot = (rootSlot + cutSlot);
+                boundOffset = Vector3.Zero;
+                boundRadius = rootRadius;
             }
             EmitGroup(
                 boundOffset: boundOffset,

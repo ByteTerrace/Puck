@@ -617,7 +617,11 @@ alone, a measurement request.
    two tiles meet are the streaming plan's
    ([the source tile and its seam rule](streaming-and-memory.md#the-source-tile-and-its-seam-rule):
    neighbours overlap and each tile is closed on its own), built in its step
-   10; terrain consumes it and does not take it early for itself.
+   10; terrain consumes it and does not take it early for itself. Before
+   building terrain tiles at scale, run a dedicated **terrain research round**
+   to settle the dual-contouring seam rule versus overlap, tile scaling and the
+   cost of a height-field hybrid (Lengyel's transition cells join 2:1 grids and
+   were not verified for Puck's dual contouring).
 3. **The finest tile spacing is the relief's geometric cut**, so contact and
    the nearest drawn mesh agree within the bake's error.
 
@@ -727,7 +731,7 @@ the same window as its after, never from a recorded figure.
 | Step | Lane | Needs | Target |
 |---|---|---|---|
 | 0. Baseline | lead, GPU | GPU free | Six stills on both backends; the frame and per-pass GPU time at each pose; `world.exposure` at each stop after two tour orders on one World. |
-| 1. Image meter's checks | rendering A | 0 | The grey card reads 118/255 ±3 under its manual EV. Under 0.5% of rock pixels clip in any channel at `valley-rim` and `valley-slope`. A stop's EV agrees within 0.05 whichever stop preceded it (a cut snaps, so the band leaves no history). The composite's added cost with the meter is stated beside the composite alone. |
+| 1. Image meter's checks | rendering A | 0; [colour conversion](rendering.md#colour-conversion--scene-light-to-display-values-once) | The grey card reads 118/255 ±3 under its manual EV through every view path. Under 0.5% of rock pixels clip in any channel at `valley-rim` and `valley-slope`. A stop's EV agrees within 0.05 whichever stop preceded it (a cut snaps, so the band leaves no history). The composite's added cost with the meter is stated beside the composite alone. |
 | 4. Relative caps, shape bound (gap 1) | authoring/bake D | The bound fix none, and its first action is the triangle count of a bound about the shapes; 3 for relief | A sector bakes at its declared spacing. Warm boot's counted bake work is unchanged. |
 | 3. `TerrainRelief` op, with a mask over a region (gap 4) | field/maths C | The kernel edit lands in the [bake fundamental](open-items.md#bake-proportional-to-change)'s batch of kernel edits; the CPU side and the mask's design start now | A fixed-point CPU bake and a kernel bake of one sector, both derived in the run, agree within the bake's tolerance. The exact noise result is pinned by one Maths law. A sector's CPU bake at the same cell costs at most 1.5× its `NoiseDisplace` bake in counted samples. With the mask over the lake's bowl, the bowl's floor and walls stand where their shapes put them ([its checks](#the-proof-exhibit)). |
 | 6. Terrain programs (gap 2) | rendering/shading F | The colour conversion (step 1's grey card reads it); the RTX 4070's shading columns ([the shader plan's matrix](author-shaders.md#the-decision-matrix)), which are read | The terrain template with its slope, altitude, curvature and breakup masks, and the weathering's up-facing deposit expressed through it. The frame bar holds at `valley-slope` with the program on every wall; the stills read as the two sets' references. |
@@ -775,9 +779,11 @@ Risks:
 Owner calls:
 
 - The valley wears the painterly set; step 8 demonstrates the ruled direction.
-- Whether the "pale, bright" exposure compensation stays once the meter reads
-  the image.
-- How strongly distance fades toward blue (each set's haze is a proposal).
+- Settled by [colour conversion](rendering.md#colour-conversion--scene-light-to-display-values-once):
+  the debug world's `compensation: 2` stood in for the missing display encode
+  and is removed when the conversion and retuned world land together; haze
+  strength and per-place exposures are authored looks in `worlds/standard/` and
+  `worlds/debug/`, not engine defaults.
 - Decided by the owner: the time of day varies and the sun's direction is
   authored. The valley's light runs through an authored cycle, never one fixed
   sun, so the image meter, GI proportional to change and the far cascade are

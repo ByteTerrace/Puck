@@ -2023,8 +2023,8 @@ template motionPrototypes() {
       exhibit(label: "STATE BLEND", extra: [accent])
     }
   }
-  // A cutter sliding across the face of a still box through a smooth subtraction, inside the envelope: the bowl's
-  // floor rides the cutter and its soft rim blends the two motions, so the cut follows the tool.
+  // A cutter sliding across the face of a still box through a smooth subtraction: it moves alone, so it cuts as an
+  // operand of the box's group, which bakes again each time the cutter moves a step, and the bowl follows the tool.
   prototype "motion-carve" {
     document {
       clockDriver(key: "carve", cadence: 1.2)
@@ -2052,7 +2052,7 @@ template motionPrototypes() {
       exhibit(
         label: "MOVING CUT",
         extra: [accent],
-        note: "a smooth cut by a sliding tool: the orange bowl follows the cutter and its soft rim stretches, never tearing"
+        note: "a smooth cut by a sliding tool: the box bakes again as the cutter moves, so the orange bowl and its soft rim follow it"
       )
     }
   }

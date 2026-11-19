@@ -793,9 +793,20 @@ public sealed partial record WorldDefinition(
         WorldSpatialQueryCompilation.CarryAcrossHolding(source: section, target: placements);
         WorldStateDocumentValues.CarryReferencedRows(source: this, target: updated);
         WorldFaceCatalog.CarryAcrossHolding(holdings: holdings, source: this, target: updated);
+        HoldingMoves.Add(updated, new HoldingMove(new WeakReference<WorldDefinition>(this), [.. holdings]));
 
         return updated;
     }
+
+    private sealed record HoldingMove(WeakReference<WorldDefinition> Previous, (int Row, int Holding)[] Rows);
+    private static readonly ConditionalWeakTable<WorldDefinition, HoldingMove> HoldingMoves = new();
+
+    /// <summary>Gets the exact placement changes when this definition came directly from a holding-only edit of
+    /// <paramref name="previous"/>. An empty span makes no claim about how the definitions differ.</summary>
+    public ReadOnlySpan<(int Row, int Holding)> HoldingsFrom(WorldDefinition previous) =>
+        HoldingMoves.TryGetValue(this, out var move) && move.Previous.TryGetTarget(out var source) && ReferenceEquals(previous, source)
+            ? move.Rows
+            : default;
     /// <summary>Returns a copy with its declared state spaces replaced.</summary>
     public WorldDefinition WithWorldSpaces(IReadOnlyList<StateSpace>? spaces) {
         var updated = this with {

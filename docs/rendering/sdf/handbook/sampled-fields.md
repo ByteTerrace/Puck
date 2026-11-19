@@ -45,7 +45,7 @@ instruction samples (`SdfProgram.BakedSampledFields`), and compares their own
 identity, `SdfSampledSet.Baked`, which stands while those snapshots stand: a
 height field's heights handle, which only a draw reads, can move every frame and
 cost the bake nothing. A frame whose baked set moved resamples
-(`SdfMeshPathBake.Resample`): it walks only the groups that read a sampled field
+(`SdfMeshPathBake.Revisit`, the one door for every frame input, operand poses too): it walks only the groups that read a sampled field
 and plans again those whose geometry hashed a snapshot the set no longer holds
 (`SdfMeshBakeGroup.Refresh`, from each group's planned box); every other group,
 its mesh and any lattice in flight stand. A group still baking an older snapshot

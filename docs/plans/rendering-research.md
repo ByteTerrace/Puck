@@ -21,11 +21,12 @@ It measured nothing either.
 
 Three things live elsewhere:
 
-- **The step designs.** Each decision here gives the problem, the proposal,
-  the reason, the cost and what is unknown. The steps in full, with their
-  checks, are in [the step designs](rendering-research/step-designs.md).
-  A lane that takes up a decision moves its steps into the plan that owns
-  them, which every decision names.
+- **The steps and cross-cutting tables.** Each decision's and bet's steps
+  and checks live in the owning plan each decision names. Cross-cutting
+  tables that belong to no single owning plan (the missing measurements, the
+  properties the order rests on, where each look is authored, outside
+  techniques not taken, research still owed, and the sources) stay in
+  [the cross-cutting reference](rendering-research/step-designs.md).
 - **The review history.** Each review's findings and the answer to each
   are in this file's history (`git log --follow
   docs/plans/rendering-research.md`).
@@ -837,8 +838,9 @@ with what was checked, and with the plan that owns its steps. "Checked"
 means the code or the source was opened for this page and says what the
 text says. "Not checked" covers three weaker kinds of claim, and the note
 says which: a reader's report that was not reopened, a single measurement
-on the lead machine that was not repeated, or arithmetic. The steps in
-full are in [the step designs](rendering-research/step-designs.md).
+on the lead machine that was not repeated, or arithmetic. Each decision's
+steps and checks live in the owning plan it names, routed from
+[the cross-cutting reference](rendering-research/step-designs.md).
 
 ### 1. Measure beside the work
 
@@ -3508,9 +3510,10 @@ full list is in [the step designs](rendering-research/step-designs.md#what-would
 
 ## Where the rest is
 
-[The step designs](rendering-research/step-designs.md) hold, for each
-decision, the steps with their order, the options that were not taken,
-and the reasoning in full. They also hold the table of missing
-measurements, what each item's run should show, the properties the order rests
-on and what enforces each, the outside techniques that were considered
-and not taken, the research still owed, and the sources.
+Every decision's and bet's steps, options and checks now live in the owning
+plan it names. [The cross-cutting reference](rendering-research/step-designs.md)
+holds the routing table plus what belongs to no single owning plan: the table
+of missing measurements, the properties the order rests on, where each look is
+authored, what would change the answer, outside techniques not taken, research
+still owed, existing systems extended, duplicated work across areas, and the
+sources.

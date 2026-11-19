@@ -189,7 +189,7 @@ public class SdfMeshBakeGroup(int selector, bool dynamic) {
         sampled ??= program.Sampled;
         return Ordered(
             create: create,
-            groups: PlanGroups(create: create, farDistance: farDistance, program: program, sampled: sampled, slots: null, snap: null, tier: tier, transforms: transforms),
+            groups: PlanGroups(create: create, farDistance: farDistance, program: program, sampled: sampled, slots: null, tier: tier, transforms: transforms),
             program: program,
             reach: Reach(farDistance: farDistance),
             sampled: sampled,
@@ -247,7 +247,7 @@ public class SdfMeshBakeGroup(int selector, bool dynamic) {
 
         if (slots is null) { return refreshed; }
 
-        var planned = PlanGroups(create: create, farDistance: farDistance, program: program, sampled: sampled, slots: slots, snap: null, tier: tier, transforms: transforms);
+        var planned = PlanGroups(create: create, farDistance: farDistance, program: program, sampled: sampled, slots: slots, tier: tier, transforms: transforms);
         var bySlot = new Dictionary<int, T>(capacity: planned.Count);
 
         foreach (var group in planned) { bySlot[group.Selector] = group; }
@@ -287,48 +287,15 @@ public class SdfMeshBakeGroup(int selector, bool dynamic) {
         }
 
         if (replanned.Clamped) { replanned.Geometry.AppendReach(reach: reach); }
-        replanned.Seal(program: program, tier: tier);
+        replanned.Seal(program: program, tier: tier, transforms: transforms);
 
         return replanned;
     }
 
-    /// <summary>Plans the group of one dynamic slot of a program as <see cref="Plan{T}"/> plans it, with every other slot
-    /// its instances read keyed at its pose rounded to the given steps (<see cref="SdfMeshGeometryBuilder.Snap"/>): the
-    /// settled pose a skinned group bakes again at (<see cref="SdfMeshPathBake"/>).</summary>
-    /// <typeparam name="T">The group type the caller keeps.</typeparam>
-    /// <param name="program">The program.</param>
-    /// <param name="transforms">The frame's dynamic transforms.</param>
-    /// <param name="farDistance">The frame's far distance, which clamps a bound past it.</param>
-    /// <param name="slot">The dynamic slot whose group is planned.</param>
-    /// <param name="positionSteps">The steps a metre another slot's position rounds to.</param>
-    /// <param name="orientationSteps">The steps a unit another slot's orientation components round to.</param>
-    /// <param name="create">Makes a group of a selector and whether it is dynamic.</param>
-    /// <returns>The group, or <see langword="null"/> when no active instance rides the slot.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="program"/>, <paramref name="transforms"/> or
-    /// <paramref name="create"/> is <see langword="null"/>.</exception>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="slot"/> is negative, or a step count is not
-    /// positive.</exception>
-    /// <param name="instance">The particular instance on a shared motion slot, or null for its first group.</param>
-    /// <param name="sampled">The frame's sampled set; the program's own (<see cref="SdfProgram.Sampled"/>) when
-    /// <see langword="null"/>.</param>
-    /// <param name="tier">The tier the group bakes at, as <see cref="Plan{T}"/> takes it.</param>
-    public static T? PlanSlot<T>(SdfProgram program, IReadOnlyList<DynamicTransform> transforms, float farDistance, int slot, float positionSteps, float orientationSteps, Func<int, bool, T> create, int? instance = null, SdfSampledSet? sampled = null, Func<SdfMeshBakeGroup, int>? tier = null) where T : SdfMeshBakeGroup {
-        ArgumentNullException.ThrowIfNull(argument: program);
-        ArgumentNullException.ThrowIfNull(argument: transforms);
-        ArgumentNullException.ThrowIfNull(argument: create);
-        ArgumentOutOfRangeException.ThrowIfNegative(value: slot);
-        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(value: positionSteps);
-        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(value: orientationSteps);
-
-        var groups = PlanGroups(create: create, farDistance: farDistance, program: program, sampled: (sampled ?? program.Sampled), slots: new HashSet<int> { slot }, snap: (positionSteps, orientationSteps), tier: tier, transforms: transforms);
-
-        return ((instance is { } first) ? groups.FirstOrDefault(group => (group.FirstInstance == first)) : groups.FirstOrDefault());
-    }
-
     private static float Reach(float farDistance) => MathF.Max(x: 1f, y: farDistance);
-    // Plans every group, or with `slots` the groups of those dynamic slots alone, other slots' poses snapped to `snap`'s
-    // steps when it is given, each sealed and listed at its first instance.
-    private static List<T> PlanGroups<T>(SdfProgram program, IReadOnlyList<DynamicTransform> transforms, SdfSampledSet sampled, float farDistance, IReadOnlySet<int>? slots, (float Position, float Orientation)? snap, Func<int, bool, T> create, Func<SdfMeshBakeGroup, int>? tier) where T : SdfMeshBakeGroup {
+    // Plans every group, or with `slots` the groups of those dynamic slots alone, each sealed and listed at its first
+    // instance.
+    private static List<T> PlanGroups<T>(SdfProgram program, IReadOnlyList<DynamicTransform> transforms, SdfSampledSet sampled, float farDistance, IReadOnlySet<int>? slots, Func<int, bool, T> create, Func<SdfMeshBakeGroup, int>? tier) where T : SdfMeshBakeGroup {
         var groups = new List<T>();
         var bySlot = new Dictionary<int, T>();
         var instances = program.Instances;
@@ -357,7 +324,6 @@ public class SdfMeshBakeGroup(int selector, bool dynamic) {
             if (instance.IsDynamic && instance.BakesSeparately) {
                 group = create(-(index + 1), true);
                 group.Slot = instance.Slot;
-                if (snap is { } steps) { group.Geometry.Snap(orientationSteps: steps.Orientation, positionSteps: steps.Position); }
                 group.Low = (center - new Vector3(radius));
                 group.High = (center + new Vector3(radius));
                 group.Glass = glass;
@@ -365,7 +331,6 @@ public class SdfMeshBakeGroup(int selector, bool dynamic) {
             } else if (instance.IsDynamic) {
                 if (!bySlot.TryGetValue(key: instance.Slot, value: out group!)) {
                     group = create(arg1: instance.Slot, arg2: true);
-                    if (snap is { } steps) { group.Geometry.Snap(orientationSteps: steps.Orientation, positionSteps: steps.Position); }
                     group.Low = (center - new Vector3(value: radius));
                     group.High = (center + new Vector3(value: radius));
                     group.Glass = glass;
@@ -426,7 +391,7 @@ public class SdfMeshBakeGroup(int selector, bool dynamic) {
         foreach (var group in groups) {
             if (group.Clamped) { group.Geometry.AppendReach(reach: reach); }
             group.Fit(program: program);
-            group.Seal(program: program, tier: tier);
+            group.Seal(program: program, tier: tier, transforms: transforms);
         }
 
         return groups;
@@ -533,15 +498,20 @@ public class SdfMeshBakeGroup(int selector, bool dynamic) {
         return indices;
     }
 
-    // Seals the group: its tier, its geometry, its materials, the pose rows its lattices read, the snapshots they sample
-    // and, for a skinned group, the instructions its CPU readings read, taken from the program it was planned from. The
-    // tier is asked of the planner here, with the box and members set, and held to the rungs that change the mesh; every
-    // sealed geometry holds one.
-    private void Seal(SdfProgram program, Func<SdfMeshBakeGroup, int>? tier) {
+    // Seals the group: its tier, its operands' poses snapped to that tier's cell, its geometry, its materials, the pose
+    // rows its lattices read, the snapshots they sample and, for a skinned group, the instructions its CPU readings read,
+    // taken from the program it was planned from. The tier is asked of the planner here, with the box and members set,
+    // and held to the rungs that change the mesh; every sealed geometry holds one.
+    private void Seal(SdfProgram program, Func<SdfMeshBakeGroup, int>? tier, IReadOnlyList<DynamicTransform> transforms) {
+        // Counted before AppendOperands keeps the operands' poses: an operand is never a skin member.
         var members = (Dynamic ? Geometry.Poses.Keys.Count(slot => (slot != Slot)) : 0);
 
         if (members > SdfMesh.MaxMembers) {
             throw new InvalidOperationException($"Mesh group at instance {FirstInstance} needs {members} skin members; the representation holds {SdfMesh.MaxMembers}.");
+        }
+        // Every vertex of an operand's cut face lies on the group's own slot; a skin member's would ride away from the cut.
+        if ((members > 0) && Geometry.ReadsOperands) {
+            throw new InvalidOperationException($"Mesh group at instance {FirstInstance} reads an operand beside {members} skin members; a group that reads an operand rides its own slot alone.");
         }
         Skin = ((members > 0) ? new SdfMeshSkinSource(group: this, program: program) : null);
         // A glass group lands whole and uncollapsed, so its mesh differs from the same shapes' opaque mesh.
@@ -559,6 +529,7 @@ public class SdfMeshBakeGroup(int selector, bool dynamic) {
         FinestTier = SdfMeshTier.Finest(spacing: finest);
         CoarsestTier = SdfMeshTier.Coarsest(longestExtent: MathF.Max(x: extent.X, y: MathF.Max(x: extent.Y, y: extent.Z)));
         Tier = SdfMeshTier.Clamp(coarsest: CoarsestTier, finest: FinestTier, tier: (tier?.Invoke(arg: this) ?? 0));
+        Geometry.AppendOperands(cell: SdfMeshTier.Cell(tier: Tier), transforms: transforms);
         Geometry.AppendTier(tier: Tier);
         Geometry.Seal();
         PlannedLow = Low;
@@ -627,7 +598,7 @@ public class SdfMeshBakeGroup(int selector, bool dynamic) {
         world.Geometry.AppendReach(reach: reach);
         world.High = new Vector3(value: reach);
         world.Low = new Vector3(value: -reach);
-        world.Seal(program: program, tier: tier);
+        world.Seal(program: program, tier: tier, transforms: transforms);
 
         return world;
     }

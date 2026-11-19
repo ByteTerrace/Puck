@@ -1,6 +1,7 @@
 using System.IO.Hashing;
 using System.Numerics;
 using System.Runtime.InteropServices;
+using Puck.Maths;
 using Puck.SignedDistance;
 
 namespace Puck.SdfVm;
@@ -26,12 +27,15 @@ public readonly record struct SdfMeshGeometry(bool Dynamic, UInt128 Hash);
 /// assigns;</item>
 /// <item>a transform into any other slot by that slot's pose in the group's frame (its own slot's, in that slot's own
 /// units (<see cref="DynamicTransform.Scale"/>), so a body drawn at another size keys its geometry alike; or world
-/// space), rounded to <see cref="PositionSteps"/> and <see cref="OrientationSteps"/> (or the coarser steps <see cref="Snap"/>
-/// sets), and, under a slot of the group's own, by
+/// space), rounded to <see cref="PositionSteps"/> and <see cref="OrientationSteps"/>, and, under a slot of the group's own, by
 /// that slot's offset from it, which names the member a vertex of the mesh rides (<see cref="SdfMesh.Members"/>). The bake samples such an instruction
 /// through that slot's transform in the frame, so the shapes of a stamp-pool blend group, each riding its own slot inside
 /// the group's instance, take their places and turns from the frame's transforms rather than from the
 /// instructions;</item>
+/// <item>a transform into an operand's slot (<see cref="SdfInstanceRange.Operands"/>) by its offset from the group's
+/// slot and, once the group's tier is known (<see cref="AppendOperands"/>), by its pose in the group's frame snapped to
+/// a step of that tier's cell, in the geometry and its form alike: an operand is a cutter no vertex rides, so the
+/// mesh is a function of where it stands;</item>
 /// <item>the lanes (<see cref="DynamicTransform.Lanes"/>) a lane erosion or a morph reads from the slot its chain
 /// rides.</item>
 /// </list>
@@ -47,9 +51,11 @@ public sealed class SdfMeshGeometryBuilder(bool dynamic) {
     /// <summary>The steps a unit a slot's orientation quaternion's components round to.</summary>
     public const float OrientationSteps = 16384f;
 
-    // What a transform's slot lane hashes as: the group's own slot, or any other, whose pose is hashed beside it.
+    // What a transform's slot lane hashes as: the group's own slot, any other, whose pose is hashed beside it, or an
+    // operand's, whose snapped pose AppendOperands hashes.
     private const float OwnSlot = -1f;
     private const float OtherSlot = -2f;
+    private const float OperandSlot = -3f;
     // The bytes before each fact's payload: its kind, then the payload's length in bytes.
     private const int FactHeaderBytes = (sizeof(byte) + sizeof(int));
     // The most hashers sealed builders keep for later ones: every group of a plan takes two, and a program restart plans
@@ -61,7 +67,7 @@ public sealed class SdfMeshGeometryBuilder(bool dynamic) {
     private static int SpareHasherCount;
 
     private XxHash128? m_hash = RentHasher();
-    // Everything m_hash takes but the poses of other slots and the steps they round to.
+    // Everything m_hash takes but the poses of the slots skin members ride.
     private XxHash128? m_form = RentHasher();
 
     // The geometry and form Seal fixed.
@@ -85,27 +91,83 @@ public sealed class SdfMeshGeometryBuilder(bool dynamic) {
     /// <summary>Gets whether this group freezes its delta-frame slots at authored rest.</summary>
     public bool RestPoseSkin { get; private set; }
 
-    // The steps another slot's pose rounds to: PositionSteps and OrientationSteps unless Snap coarsened them.
-    private float m_positionSteps = PositionSteps;
-    private float m_orientationSteps = OrientationSteps;
+    // The group's own slot, -1 for a group in world space.
+    private int m_ownSlot = -1;
+    // The operands the instance being appended declares, each slot with the reach of its cutters from the slot's origin
+    // in that slot's units; null under none.
+    private Dictionary<int, float>? m_instanceOperands;
+    // Each operand slot the appended instructions read, with its cutters' reach, until AppendOperands keys its pose.
+    private SortedDictionary<int, float>? m_operandReads;
+    // Each operand AppendOperands keyed: its slot, and the steps and rounded pose its geometry hashed.
+    private int[] m_operandSlots = [];
+    private OperandKey[] m_operandKeys = [];
 
-    /// <summary>Rounds every other slot's pose this builder appends to coarser steps than <see cref="PositionSteps"/> and
-    /// <see cref="OrientationSteps"/>, so poses that settle near one another key one geometry and share its mesh
-    /// (<see cref="SdfMeshPathBake"/>'s settle rebake). The steps join the hash, so a snapped geometry never keys alike
-    /// with one rounded at the defaults. Call before the first append.</summary>
-    /// <param name="positionSteps">The steps a metre a position rounds to; positive.</param>
-    /// <param name="orientationSteps">The steps a unit an orientation quaternion's components round to; positive.</param>
-    /// <exception cref="ArgumentOutOfRangeException">A step count is not positive.</exception>
-    public void Snap(float positionSteps, float orientationSteps) {
-        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(value: positionSteps);
-        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(value: orientationSteps);
+    /// <summary>Gets whether an appended instruction reads an operand's slot (<see cref="SdfInstanceRange.Operands"/>),
+    /// so the geometry depends on where that slot stands in the frame.</summary>
+    public bool ReadsOperands => (m_operandReads is not null);
 
-        m_positionSteps = positionSteps;
-        m_orientationSteps = orientationSteps;
+    /// <summary>Keys each operand the appended instructions read at its slot's pose in the group's frame, in the group's
+    /// units, snapped to the group's step: a position to <paramref name="cell"/>, and an orientation to the turn that moves
+    /// the farthest point of the operand's cutters from its slot's origin by about one cell. The snapped pose joins the
+    /// geometry and its form and is kept with the poses the bake samples through (<see cref="Poses"/>), so the mesh shows
+    /// the cut where the operand stood, at most one step behind it. Call once, after the last append and before
+    /// <see cref="Seal"/>; a geometry reading no operand appends nothing.</summary>
+    /// <param name="cell">The group's step, in the group's units: its tier's cell (<see cref="SdfMeshTier.Cell"/>);
+    /// positive.</param>
+    /// <param name="transforms">The frame's dynamic transforms the instances were appended from.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="transforms"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="cell"/> is not positive.</exception>
+    public void AppendOperands(float cell, IReadOnlyList<DynamicTransform> transforms) {
+        ArgumentNullException.ThrowIfNull(argument: transforms);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(value: cell);
 
-        var steps = new Vector2(x: positionSteps, y: orientationSteps);
+        if (m_operandReads is null) { return; }
 
-        HashGeometry(fact: Fact.Snap, source: MemoryMarshal.AsBytes(span: new ReadOnlySpan<Vector2>(reference: in steps)));
+        m_operandSlots = new int[m_operandReads.Count];
+        m_operandKeys = new OperandKey[m_operandReads.Count];
+
+        var at = 0;
+
+        foreach (var (slot, reach) in m_operandReads) {
+            var positionSteps = (1f / cell);
+            var orientationSteps = Math.Clamp(value: ((2f * reach) / cell), min: 1f, max: OrientationSteps);
+            var pose = RelativePose(orientationSteps: orientationSteps, ownSlot: m_ownSlot, positionSteps: positionSteps, slot: slot, transforms: transforms);
+            var key = new OperandKey(offset: (slot - m_ownSlot), orientationSteps: orientationSteps, pose: pose, positionSteps: positionSteps);
+
+            Hash(fact: Fact.OperandPose, source: MemoryMarshal.AsBytes(span: new ReadOnlySpan<OperandKey>(reference: in key)));
+            Keep(orientationSteps: orientationSteps, pose: pose, positionSteps: positionSteps, slot: slot, transforms: transforms);
+            m_operandSlots[at] = slot;
+            m_operandKeys[at++] = key;
+        }
+    }
+    /// <summary>Returns whether every operand the geometry keyed (<see cref="AppendOperands"/>) still snaps to the pose it
+    /// keyed at a frame's transforms: one snap and compare an operand, the door the bake plans a group again by when one
+    /// moves a step.</summary>
+    /// <param name="transforms">The frame's dynamic transforms.</param>
+    /// <returns><see langword="true"/> when the geometry reads no operand or each stands at its keyed step.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="transforms"/> is <see langword="null"/>.</exception>
+    public bool OperandsMatch(IReadOnlyList<DynamicTransform> transforms) {
+        ArgumentNullException.ThrowIfNull(argument: transforms);
+
+        for (var at = 0; (at < m_operandSlots.Length); at++) {
+            var key = m_operandKeys[at];
+            var pose = RelativePose(orientationSteps: key.OrientationSteps, ownSlot: m_ownSlot, positionSteps: key.PositionSteps, slot: m_operandSlots[at], transforms: transforms);
+
+            if (!key.Holds(pose: pose)) { return false; }
+        }
+
+        return true;
+    }
+    /// <summary>Gets each operand slot the geometry keyed (<see cref="AppendOperands"/>), ascending, with its pose in the
+    /// group's frame as snapped and the cell its position snapped to.</summary>
+    public IEnumerable<(int Slot, DynamicTransform Pose, float Cell)> Operands {
+        get {
+            for (var at = 0; (at < m_operandSlots.Length); at++) {
+                if ((m_poses is not null) && m_poses.TryGetValue(key: m_operandSlots[at], value: out var pose)) {
+                    yield return (m_operandSlots[at], pose, (1f / m_operandKeys[at].PositionSteps));
+                }
+            }
+        }
     }
     /// <summary>Fixes the geometry and form appended so far, which <see cref="Geometry"/> and <see cref="Form"/> then
     /// answer, and hands the hashers they were taken with to the builders made after it. Nothing is appended after it;
@@ -155,7 +217,7 @@ public sealed class SdfMeshGeometryBuilder(bool dynamic) {
         hasher.Append(source: header);
         hasher.Append(source: source);
     }
-    // Appends a fact to the geometry alone: another slot's pose and the steps it rounds to, which the form leaves out.
+    // Appends a fact to the geometry alone: a skin member slot's pose, which the form leaves out.
     private void HashGeometry(Fact fact, ReadOnlySpan<byte> source) => AppendFact(fact: fact, hasher: Hashing(), source: source);
 
     /// <summary>Gets the materials the appended instances' shapes carry, in the order the geometry numbers them.</summary>
@@ -227,7 +289,7 @@ public sealed class SdfMeshGeometryBuilder(bool dynamic) {
     /// <summary>Gets the geometry of everything appended so far.</summary>
     public SdfMeshGeometry Geometry => new(Dynamic: dynamic, Hash: ((m_hash is { } hash) ? hash.GetCurrentHashAsUInt128() : m_sealedHash));
     /// <summary>Gets the form of everything appended so far: the geometry without the poses of the slots besides the
-    /// group's own, or the steps they round to. Two groups of one form are one creation's shapes standing in different
+    /// group's own that skin members ride; an operand's snapped pose stays in it. Two groups of one form are one creation's shapes standing in different
     /// relative poses, whose skinned mesh carries each member through its own slot (<see cref="SdfMesh.Members"/>).</summary>
     public UInt128 Form => ((m_form is { } form) ? form.GetCurrentHashAsUInt128() : m_sealedForm);
 
@@ -285,8 +347,16 @@ public sealed class SdfMeshGeometryBuilder(bool dynamic) {
             Hash(fact: Fact.Part, source: MemoryMarshal.AsBytes(span: new ReadOnlySpan<PartWords>(reference: in words)));
         }
         m_chainSlot = -1;
+        m_instanceOperands = null;
         // The bake carries each sample into the group's frame through its own slot, which is that frame.
         if (ownSlot >= 0) {
+            m_ownSlot = ownSlot;
+            foreach (var operand in range.Operands) {
+                var reach = Vector3.Max(value1: Vector3.Abs(value: operand.Low), value2: Vector3.Abs(value: operand.High)).Length();
+
+                m_instanceOperands ??= [];
+                m_instanceOperands[operand.Slot] = MathF.Max(x: reach, y: m_instanceOperands.GetValueOrDefault(key: operand.Slot));
+            }
             Keep(orientationSteps: OrientationSteps, pose: Pose.Identity, positionSteps: PositionSteps, slot: ownSlot, transforms: transforms);
             BoundTurn = BoundTurnOf(slot: ownSlot, transforms: transforms);
             if (range.Center != Vector3.Zero) {
@@ -371,14 +441,23 @@ public sealed class SdfMeshGeometryBuilder(bool dynamic) {
                     if (slot == ownSlot) {
                         instruction = (instruction with { Data0 = (instruction.Data0 with { X = OwnSlot }) });
                         Keep(orientationSteps: OrientationSteps, pose: Pose.Identity, positionSteps: PositionSteps, slot: slot, transforms: transforms);
+                    } else if ((m_instanceOperands is { } operands) && operands.TryGetValue(key: slot, value: out var reach)) {
+                        // An operand's pose waits for the group's tier, whose cell it snaps to (AppendOperands); a rest-pose
+                        // skin never freezes it.
+                        var offset = (slot - ownSlot);
+
+                        instruction = (instruction with { Data0 = (instruction.Data0 with { X = OperandSlot }) });
+                        Hash(fact: Fact.OperandOffset, source: MemoryMarshal.AsBytes(span: new ReadOnlySpan<int>(reference: in offset)));
+                        m_operandReads ??= [];
+                        m_operandReads[slot] = MathF.Max(x: reach, y: m_operandReads.GetValueOrDefault(key: slot));
                     } else {
-                        var pose = (m_restPoseSkin ? Pose.Identity : RelativePose(orientationSteps: m_orientationSteps, ownSlot: ownSlot, positionSteps: m_positionSteps, slot: slot, transforms: transforms));
+                        var pose = (m_restPoseSkin ? Pose.Identity : RelativePose(orientationSteps: OrientationSteps, ownSlot: ownSlot, positionSteps: PositionSteps, slot: slot, transforms: transforms));
                         var offset = ((ownSlot >= 0) ? (slot - ownSlot) : 0);
 
                         instruction = (instruction with { Data0 = (instruction.Data0 with { X = OtherSlot }) });
                         HashGeometry(fact: Fact.OtherPose, source: MemoryMarshal.AsBytes(span: new ReadOnlySpan<Pose>(reference: in pose)));
                         Hash(fact: Fact.MemberOffset, source: MemoryMarshal.AsBytes(span: new ReadOnlySpan<int>(reference: in offset)));
-                        Keep(orientationSteps: m_orientationSteps, pose: pose, positionSteps: m_positionSteps, slot: slot, transforms: transforms);
+                        Keep(orientationSteps: OrientationSteps, pose: pose, positionSteps: PositionSteps, slot: slot, transforms: transforms);
                     }
                     break;
                 }
@@ -489,8 +568,7 @@ public sealed class SdfMeshGeometryBuilder(bool dynamic) {
     // What each fact appended to the geometry hash is; its tag leads its payload (AppendFact).
     private enum Fact : byte {
         RestPoseSkin = 255,
-        Snap = 1,
-        Bound,
+        Bound = 1,
         Count,
         Detail,
         BoxLow,
@@ -511,6 +589,21 @@ public sealed class SdfMeshGeometryBuilder(bool dynamic) {
         Glyphs,
         BoundTurn,
         SlotLocalBound,
+        OperandOffset,
+        OperandPose,
+    }
+    // An operand's key as the bytes the geometry hashes: its slot's offset from the group's own, the steps its pose
+    // rounds to, and that pose rounded.
+    [StructLayout(LayoutKind.Sequential)]
+    private readonly struct OperandKey(int offset, float positionSteps, float orientationSteps, Pose pose) {
+        private readonly int m_offset = offset;
+        private readonly Pose m_pose = pose;
+
+        public float PositionSteps { get; } = positionSteps;
+        public float OrientationSteps { get; } = orientationSteps;
+
+        // Whether a pose rounded at this key's steps is the one it holds, compared by its rounded components.
+        public bool Holds(Pose pose) => Bitwise.Equal(left: in m_pose, right: in pose);
     }
     // A declared part's fields as the bytes the geometry hashes: its slot as an offset from the instance's own.
     [StructLayout(LayoutKind.Sequential)]

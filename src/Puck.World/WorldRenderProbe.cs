@@ -38,15 +38,16 @@ public sealed partial class WorldRenderProbe : IGpuWorkRegistry, IWorldEngineRea
         kinds: SdfMovedTransforms.Kinds,
         name: SdfMovedTransforms.SourceName
     );
-    /// <summary>The <c>sdf.mesh-settle</c> counters as <c>world.counters</c> reads them (<see cref="SdfMeshSettle"/>):
-    /// registered with the probe before the screen binder exists, and pointed at its mesh library's counts when the
-    /// binder is built, so they read every residency sharing that library.</summary>
-    public ForwardingWorkCounterSource MeshSettle { get; } = new(
-        kinds: SdfMeshSettle.Kinds,
-        name: SdfMeshSettle.SourceName
+    /// <summary>The <c>sdf.mesh-inputs</c> counters as <c>world.counters</c> reads them (<see cref="SdfMeshInputs"/>): the
+    /// groups planned again as a sampled field or an operand moved, registered with the probe before the screen binder
+    /// exists, and pointed at its mesh library's counts when the binder is built, so they read every residency sharing
+    /// that library.</summary>
+    public ForwardingWorkCounterSource MeshInputs { get; } = new(
+        kinds: SdfMeshInputs.Kinds,
+        name: SdfMeshInputs.SourceName
     );
     /// <summary>The <c>sdf.mesh-skin</c> counters as <c>world.counters</c> reads them (<see cref="SdfMeshSkin"/>),
-    /// pointed at the screen binder's mesh library's counts as <see cref="MeshSettle"/> is.</summary>
+    /// pointed at the screen binder's mesh library's counts as <see cref="MeshInputs"/> is.</summary>
     public ForwardingWorkCounterSource MeshSkin { get; } = new(
         kinds: SdfMeshSkin.Kinds,
         name: SdfMeshSkin.SourceName

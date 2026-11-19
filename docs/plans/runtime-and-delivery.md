@@ -289,6 +289,38 @@ garden and back with no throw; `puck sweep` exits 0 over the debug world; frame
 time and steady-state allocation at the colocated seam unregressed over one
 authored workload.
 
+**Still views standing on client change records (memo first, prototype gated on
+produce breakdown).** Once produce reads only client records, a shown view
+whose inputs did not change need not capture and pack every frame to discover
+that nothing moved. Start with a memo listing every input
+`SdfWorldResidency.Prepare` reads on the client and which client record covers
+it (`WorldStateMirror` refreshed from `WorldStateStamp.MovedRows`,
+`ISdfSceneEmitter.WriteRevision`, the tick's snapshot, the clock phase
+evaluated at the presented tick, or the camera), stating what each record
+proves and for how long, and listing uncovered inputs as gaps. Two limits bind
+the design: a quiet network is not a still picture (clock-driven skies advance
+without network messages, so clock-dependent results invalidate from the phase
+at the presented tick), and `GpuChangedRows` is written during packing (so it
+tells downstream consumers what moved, not whether to pack). Build the
+prototype closing those gaps in the revision vector only if the
+[produce breakdown](engine-job-system.md#frame-thread-measurements-owed) shows
+capturing a shown, unchanged world is a real cost (carrying the refusal and
+audit rules in
+[streaming decision 4](streaming-and-memory.md#decision-4-a-residency-is-staged-by-its-demand-not-by-a-render)).
+The audit compares every skip with the full decision the residency makes today
+and records why that decision would have redrawn. Check: at a settled gallery
+view with stable inputs, produce falls to upkeep with zero audit disagreements
+over the route (covering a running cartridge with a still camera, settling
+lighting, a sky over a quiet network, a state value easing on a quiet delivery,
+and a view resumed after a long gap); captures are counted by residency and by
+cause with each consumer's changed inputs recorded, so a root capture owed to
+scheduling is told apart from a missed change; a settled view that captures
+for no recorded cause, or a skip the full decision would have redrawn, shows
+the claim false. One lever pulled costs what it reaches, and a screen running
+a cartridge keeps redrawing. Read savings with the audit off as rays traced and
+bytes uploaded from the same named queue, not as a count of jobs, and verify
+displayed output via replay or visual checks.
+
 ### Release pairs
 
 Frozen until the first shipped release. A qualified pair protects a deployed
