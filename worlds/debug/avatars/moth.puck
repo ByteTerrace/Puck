@@ -26,10 +26,10 @@ let lavenderSeam = "#5E3468"
 let ventSlot = "#2B2630"
 
 // Her look, swapped live by `moth.style` for playtesting: every palette slot shades plain or with the standard's cel
-// style by the mothStyle row, which changes only her materials' style rows and bakes nothing.
+// look by the mothStyle row, which changes only her materials' style rows and programs and bakes nothing.
 let mothStyles = {
   state: "state.mothStyle"
-  cases [continuousStyle, celStyle]
+  cases [plainLook, celLook(celStyle)]
 }
 
 // The palette, by role. A slot number says nothing; a name says what the surface IS.

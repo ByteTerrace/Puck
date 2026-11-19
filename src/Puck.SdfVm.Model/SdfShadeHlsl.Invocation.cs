@@ -4,13 +4,16 @@ public static partial class SdfShadeHlsl {
     // Generated once with the interpreter. Both opaque and glass callers supply this same stamp and use these
     // phase doors; neither can omit sanitization or invent a second register/stamp convention.
     // A plain kernel (SDF_SHADE_EMPTY) runs only for a frame with no active program, so its binding is none by
-    // construction and folds to a constant.
+    // construction and folds to a constant. While the live world.toon off suppresses every cel style, a styled
+    // material binds none either (sdfToonAuthored, shade/sdf-toon.hlsli, which every includer reaches first): its style's
+    // look is its program, so it shades continuously, and the views filter bins it with the same rule.
     private const string Invocation = """
 SdfShadeBinding sdfShadeBinding(int material) {
     SdfShadeBinding binding = (SdfShadeBinding)0;
 #ifndef SDF_SHADE_EMPTY
     uint address;
     if (passGroup.shadePrograms == 0u || !sdfMaterialBase(material, address)) return binding;
+    if (sdfToonSuppressed() && sdfToonAuthored(asfloat(sdfWords[address + 22u]).x)) return binding;
     uint4 own = asuint(sdfWords[address + 32u]);
     binding.range = own.y != 0u ? own : passGroup.shadeDefault;
     if (binding.range.y != 0u) binding.arm = sdfShadeArm(binding.range.xy);

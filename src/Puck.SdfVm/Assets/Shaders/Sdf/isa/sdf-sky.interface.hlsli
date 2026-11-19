@@ -1,4 +1,4 @@
-// Generated from shader interface 'sdf-sky' (sha256/1bebf4680364134c59f5377b39d72f290940a7ac4cf12edb9258b3a495c9e2b5). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'sdf-sky' (sha256/871d8483ac18e85d8706ef66c06d89c2a9b077347aa325f08f486ced3cefba51). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SDF_SKY
 #define PUCK_SHADER_INTERFACE_SDF_SKY
 
@@ -233,30 +233,28 @@ struct SdfSkyPass {
     [[vk::offset(1828)]] uint _pad1828;
     [[vk::offset(1832)]] uint _pad1832;
     [[vk::offset(1836)]] uint _pad1836;
-    [[vk::offset(1840)]] float4 toonBands;
-    [[vk::offset(1856)]] float4 toonInk;
-    [[vk::offset(1872)]] float4 toonOutline;
-    [[vk::offset(1888)]] float4 toonShadow;
-    [[vk::offset(1904)]] uint viewBase;
-    [[vk::offset(1908)]] uint _pad1908;
-    [[vk::offset(1912)]] uint _pad1912;
+    [[vk::offset(1840)]] float4 toonInk;
+    [[vk::offset(1856)]] float4 toonOutline;
+    [[vk::offset(1872)]] uint viewBase;
+    [[vk::offset(1876)]] uint _pad1876;
+    [[vk::offset(1880)]] uint _pad1880;
+    [[vk::offset(1884)]] uint _pad1884;
+    [[vk::offset(1888)]] float3 viewForward;
+    [[vk::offset(1900)]] uint _pad1900;
+    [[vk::offset(1904)]] float3 viewPosition;
     [[vk::offset(1916)]] uint _pad1916;
-    [[vk::offset(1920)]] float3 viewForward;
+    [[vk::offset(1920)]] float3 viewRight;
     [[vk::offset(1932)]] uint _pad1932;
-    [[vk::offset(1936)]] float3 viewPosition;
-    [[vk::offset(1948)]] uint _pad1948;
-    [[vk::offset(1952)]] float3 viewRight;
+    [[vk::offset(1936)]] float3 viewUp;
+    [[vk::offset(1948)]] uint viewportCount;
+    [[vk::offset(1952)]] uint workCounterRow;
+    [[vk::offset(1956)]] uint workCounterRowDetail;
+    [[vk::offset(1960)]] uint _pad1960;
     [[vk::offset(1964)]] uint _pad1964;
-    [[vk::offset(1968)]] float3 viewUp;
-    [[vk::offset(1980)]] uint viewportCount;
-    [[vk::offset(1984)]] uint workCounterRow;
-    [[vk::offset(1988)]] uint workCounterRowDetail;
-    [[vk::offset(1992)]] uint _pad1992;
-    [[vk::offset(1996)]] uint _pad1996;
-    [[vk::offset(2000)]] float4 worldLanes;
+    [[vk::offset(1968)]] float4 worldLanes;
 };
-[[vk::binding(0, 3)]] ConstantBuffer<SdfSkyPass> passGroupIsaC565D827 : register(b0, space3);
-#define passGroup passGroupIsaC565D827
+[[vk::binding(0, 3)]] ConstantBuffer<SdfSkyPass> passGroupIsa6A590B1F : register(b0, space3);
+#define passGroup passGroupIsa6A590B1F
 [[vk::binding(1, 3)]] Texture2D<float4> skyViewImages[8] : register(t1, space3);
 [[vk::binding(9, 3)]] Texture2D<float4> lit : register(t9, space3);
 [[vk::binding(10, 3)]] StructuredBuffer<uint> sdfVisibilityRecords : register(t10, space3);

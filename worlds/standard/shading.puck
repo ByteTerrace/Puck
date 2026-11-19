@@ -8,8 +8,13 @@ shade template plain() { surface { albedo = material.albedo } }
 shade template paint(color) { surface { albedo = mix(material.albedo, color, paint.coverage) } }
 
 function celStep(value, threshold, softness) = smoothstep(threshold - max(softness * 0.5, 0.0005), threshold + max(softness * 0.5, 0.0005), saturate(value))
-function celBand(cosine, visibility, threshold, softness, combined) = combined ? celStep(saturate(cosine) * saturate(visibility), threshold, softness) : celStep(cosine, threshold, softness) * saturate(visibility)
-shade template cel(threshold, softness, shadowTint, specularSize, exposureStops, shoulder, structural combined = 0) {
+function celBand(cosine, visibility, threshold, softness, combined) = mix(celStep(cosine, threshold, softness) * saturate(visibility), celStep(saturate(cosine) * saturate(visibility), threshold, softness), combined)
+// The cel response, the one implementation of banding. Each light's cosine (wrapped by the material) steps at
+// `threshold` over `softness`, its visibility multiplying after the band; `combined` (0 to 1) blends toward banding the
+// cosine and the visibility together, the harder look in which a penumbra snaps to the band. The lit paint is flat (metals included), the sky and bounce take `shadowTint`, and the
+// highlight is a bounded disc of `specularSize`. The result is scene light: the view's display pass tones it, so a cel
+// pixel passes one tone curve.
+shade template cel(threshold, softness, shadowTint, specularSize, combined = 0) {
   light {
     let direct = (light.kind == uint(0)) + (light.kind == uint(2))
     let cosine = max((light.cosine + surface.wrap) / (1 + surface.wrap), 0)
@@ -23,10 +28,7 @@ shade template cel(threshold, softness, shadowTint, specularSize, exposureStops,
     specular = direct ? light.color * reflectance * (highlight * (1 - 0.75 * surface.roughness) * 2 * light.weight * light.reach * celBand(light.cosine, light.visibility, threshold, softness, combined)) : [0,0,0]
   }
   compose {
-    let reflected = (surface.albedo * (compose.radiance + compose.indirect * shadowTint) + compose.environment + compose.rim + compose.specular) * compose.attenuation * compose.adaptation
-    let exposed = max(reflected, 0) * (compose.exposure * pow(2, exposureStops))
-    let peak = max(exposed.x, max(exposed.y, exposed.z))
-    color = exposed / ((1 + peak * shoulder) * max(compose.exposure, 0.000000000001)) + surface.albedo * surface.emissive
+    color = max((surface.albedo * (compose.radiance + compose.indirect * shadowTint) + compose.environment + compose.rim + compose.specular) * compose.attenuation * compose.adaptation, 0) + surface.albedo * surface.emissive
   }
 }
 

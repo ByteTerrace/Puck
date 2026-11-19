@@ -585,10 +585,65 @@
                     "cases": {
                       "type": "array",
                       "items": {
-                        "$ref": "./common.schema.json#/$defs/ShapeNullable10",
-                        "description": "A cel style on the wire (SdfToon): the world\u0027s default style (render.toon, which the live world.toon lever overrides) and a palette row\u0027s own (Toon) are this one shape, so a style authored once (the standard\u0027s styles.puck) serves both. The engine holds no look of its own: a style that bands authors every value, and one that says enabled: false needs none. Presentation only; no field enters simulation state or the bake."
+                        "type": [
+                          "object",
+                          "null"
+                        ],
+                        "properties": {
+                          "toon": {
+                            "$ref": "./common.schema.json#/$defs/ShapeNullable10",
+                            "description": "The case\u0027s style (ToonStyleDocument), or null for none.",
+                            "default": null
+                          },
+                          "shade": {
+                            "type": [
+                              "object",
+                              "null"
+                            ],
+                            "properties": {
+                              "name": {
+                                "type": "string"
+                              },
+                              "parameters": {
+                                "type": "array",
+                                "items": {
+                                  "$ref": "./common.schema.json#/$defs/ShapeNullable11",
+                                  "description": "A runtime slot\u0027s type and initial data. Names bind source references and do not enter program identity."
+                                }
+                              },
+                              "outputs": {
+                                "type": "array",
+                                "items": {
+                                  "$ref": "./common.schema.json#/$defs/ShapeNullable16",
+                                  "description": "An output expression; omitted outputs retain the stage\u0027s default."
+                                }
+                              },
+                              "values": {
+                                "type": [
+                                  "array",
+                                  "null"
+                                ],
+                                "items": {
+                                  "$ref": "./common.schema.json#/$defs/ShapeNullable16",
+                                  "description": "A dependency-ordered value in the canonical document. Reads may name only earlier values of this phase."
+                                },
+                                "default": null
+                              }
+                            },
+                            "required": [
+                              "name",
+                              "parameters",
+                              "outputs"
+                            ],
+                            "additionalProperties": false,
+                            "default": null,
+                            "description": "The case\u0027s program, or null for none."
+                          }
+                        },
+                        "additionalProperties": false,
+                        "description": "One look a PaletteToonSelectDocument chooses: the slot\u0027s cel style and its shade program while the case is selected. A case that leaves either out shades the slot without it: no style of its own (the world\u0027s default style) and no program of its own (the world\u0027s render.shade)."
                       },
-                      "description": "The styles, the first for the value zero; each is a whole style (ToonStyleDocument), enabled: false keeping the slot continuous."
+                      "description": "The looks, the first for the value zero (PaletteToonCaseDocument)."
                     }
                   },
                   "required": [
@@ -747,37 +802,14 @@
                     "parameters": {
                       "type": "array",
                       "items": {
-                        "type": [
-                          "object",
-                          "null"
-                        ],
-                        "properties": {
-                          "name": {
-                            "type": "string"
-                          },
-                          "type": {
-                            "$ref": "./common.schema.json#/$defs/ShapeNonNullable53"
-                          },
-                          "bits": {
-                            "type": "array",
-                            "items": {
-                              "type": "integer"
-                            }
-                          }
-                        },
-                        "required": [
-                          "name",
-                          "type",
-                          "bits"
-                        ],
-                        "additionalProperties": false,
+                        "$ref": "./common.schema.json#/$defs/ShapeNullable11",
                         "description": "A runtime slot\u0027s type and initial data. Names bind source references and do not enter program identity."
                       }
                     },
                     "outputs": {
                       "type": "array",
                       "items": {
-                        "$ref": "./common.schema.json#/$defs/ShapeNullable15",
+                        "$ref": "./common.schema.json#/$defs/ShapeNullable18",
                         "description": "An output expression; omitted outputs retain the stage\u0027s default."
                       }
                     },
@@ -787,7 +819,7 @@
                         "null"
                       ],
                       "items": {
-                        "$ref": "./common.schema.json#/$defs/ShapeNullable15",
+                        "$ref": "./common.schema.json#/$defs/ShapeNullable18",
                         "description": "A dependency-ordered value in the canonical document. Reads may name only earlier values of this phase."
                       },
                       "default": null
@@ -817,7 +849,7 @@
               "null"
             ],
             "items": {
-              "$ref": "./common.schema.json#/$defs/ShapeNullable33",
+              "$ref": "./common.schema.json#/$defs/ShapeNullable36",
               "description": "The persisted form of a placed shape. Position and Rotation are authored in the creation\u0027s author frame \u2014 see CreationFrame \u2014 and Scale is the primitive\u0027s size directly: see CreationGeometry\u0027s unit table."
             }
           },
@@ -1418,14 +1450,14 @@
                     "shapes": {
                       "type": "array",
                       "items": {
-                        "$ref": "./common.schema.json#/$defs/ShapeNullable33",
+                        "$ref": "./common.schema.json#/$defs/ShapeNullable36",
                         "description": "The persisted form of a placed shape. Position and Rotation are authored in the creation\u0027s author frame \u2014 see CreationFrame \u2014 and Scale is the primitive\u0027s size directly: see CreationGeometry\u0027s unit table."
                       },
-                      "description": "The region\u0027s shapes, at least one: geometry only (type, name, pose, scale, exponent, rounding, chamfer, elongate, a prism\u0027s profile and lift), of a type contact admits."
+                      "description": "The region\u0027s shapes, at least one: geometry only (type, name, pose, scale, exponent, rounding), each a box, a sphere, an ellipsoid, a superellipsoid, a capsule scaled alike in X and Z or a plane (Lower). A relief\u0027s masks hold at most MaxRegions shapes in all."
                     },
                     "fade": {
                       "type": "number",
-                      "description": "The band\u0027s width, in creation units, above zero."
+                      "description": "The band\u0027s width, in creation units, at least 2\u207B\u00B9\u00B2; snapped to a multiple of 2\u207B\u00B9\u00B2 (SdfReliefBand)."
                     },
                     "start": {
                       "type": [
@@ -1433,7 +1465,7 @@
                         "null"
                       ],
                       "default": null,
-                      "description": "Where the band starts, as a distance in creation units from the region\u0027s surface; negative starts it inside the region (null = 0)."
+                      "description": "Where the band starts, as a distance in creation units from the region\u0027s surface; negative starts it inside the region (null = 0). Snapped to a multiple of 2\u207B\u00B9\u00B2; the start, the fade and their sum lie within Limit units."
                     },
                     "inside": {
                       "type": [
@@ -1441,7 +1473,7 @@
                         "null"
                       ],
                       "default": null,
-                      "description": "The weight on and inside the region, in [0, 1] (null = 0)."
+                      "description": "The weight on and inside the region, in [0, 1] (null = 0), snapped to a multiple of 2\u207B\u00B9\u2076."
                     },
                     "outside": {
                       "type": [
@@ -1449,7 +1481,7 @@
                         "null"
                       ],
                       "default": null,
-                      "description": "The weight past the band, in [0, 1] (null = 1)."
+                      "description": "The weight past the band, in [0, 1] (null = 1), snapped to a multiple of 2\u207B\u00B9\u2076."
                     }
                   },
                   "required": [
@@ -1533,12 +1565,12 @@
                   "description": "The containing world\u0027s dynamics row (natural frequency, damping, initial response) an instantaneous signal\u0027s phase follows through, or null to track the signal exactly. A hip that trails a turn and overshoots as it settles, a lean that builds and relaxes, and a pose that eases toward a new level are one signal read through a second-order response. Refused on an integrating signal and on a SignalDriverPrefix signal, whose phase is a running cycle rather than a level; the world validator refuses a name its dynamics section does not declare."
                 },
                 "cadenceBy": {
-                  "$ref": "./common.schema.json#/$defs/ShapeNullable34",
+                  "$ref": "./common.schema.json#/$defs/ShapeNullable37",
                   "description": "Scales Cadence each frame by a curve of an earlier driver\u0027s phase, or null to keep it fixed. A stride on planar travel that takes its radians per metre from a curve of the body\u0027s speed lengthens its stride as the body speeds up, so its step rate rises less than its speed does.",
                   "default": null
                 },
                 "weightBy": {
-                  "$ref": "./common.schema.json#/$defs/ShapeNullable34",
+                  "$ref": "./common.schema.json#/$defs/ShapeNullable37",
                   "description": "Sets the level the weight eases toward while the gate holds, from a curve of an earlier driver\u0027s phase clamped to [0, 1], or null for 1. Two drivers reading one stride\u0027s phase through SignalDriverPrefix, one weighted by a falling curve of speed and one by a rising one, cross-fade a walk into a run without their legs ever leaving step.",
                   "default": null
                 }

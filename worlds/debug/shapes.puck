@@ -1557,7 +1557,7 @@ template surfacePrototypes() {
       exhibit(
         label: "CEL HARD",
         extra: [
-          celMaterial({ color: "#C9A27E", roughness: 0.6, specular: 0.04, wrap: 0.35 }, celHardStyle, combined: 1)
+          celMaterial({ color: "#C9A27E", roughness: 0.6, specular: 0.04, wrap: 0.35 }, celHardStyle)
           { color: "#C9A27E", roughness: 0.6, specular: 0.04, wrap: 0.35 }
         ],
         note: "left: the band over light and shadow together; right: continuous"

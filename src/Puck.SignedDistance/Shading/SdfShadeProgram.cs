@@ -77,6 +77,12 @@ public sealed partial class SdfShadeProgram {
     public ReadOnlyCollection<SdfShadeType> ParameterLayout { get; }
     /// <summary>Gets the immutable instructions per phase.</summary>
     public ReadOnlyCollection<ReadOnlyCollection<SdfShadeInstruction>> Phases { get; }
+    /// <summary>Returns whether the program authors a phase: whether it holds an instruction there, as the kernels'
+    /// <c>sdfShadeHas</c> reads the phase's header. An omitted phase takes the engine's default; an omitted surface phase
+    /// keeps the material's layers.</summary>
+    /// <param name="phase">The phase.</param>
+    /// <returns><see langword="true"/> when the phase holds an instruction.</returns>
+    public bool Authors(SdfShadePhase phase) => (Phases[(int)phase].Count != 0);
     /// <summary>Gets output-to-register bindings.</summary>
     public ReadOnlyCollection<SdfShadeBinding> Outputs { get; }
     /// <summary>Gets explicit per-phase work, excluding the default phases.</summary>

@@ -10954,58 +10954,22 @@
           "title": "WorldRenderExposure"
         },
         "toon": {
-          "description": "The world\u0027s default cel style, which every material that authors no style of its own shades with (ToonStyleDocument), on unless it says enabled: false, and which the live world.toon lever turns on or off. Absent is off.",
+          "description": "The world\u0027s default cel style (ToonStyleDocument), which every material that authors no style of its own takes: its ink, and the styled mark the live world.toon off suppresses with the Shade default it inks. On unless it says enabled: false; absent is off.",
           "type": [
             "object",
             "null"
           ],
           "properties": {
             "enabled": {
-              "description": "Whether the style bands; absent is on. False on a palette row keeps that material continuous whatever the world\u0027s default is; false on render.toon boots the world\u0027s default off until the lever turns it on, which a style with every value then bands with.",
+              "description": "Whether the style is on; absent is on. False on a palette row keeps that material unstyled whatever the world\u0027s default is; false on render.toon leaves the world\u0027s default off.",
               "type": [
                 "boolean",
                 "null"
               ],
               "default": null
             },
-            "threshold": {
-              "description": "Diffuse band threshold in [0, 1].",
-              "type": [
-                "number",
-                "null"
-              ],
-              "default": null
-            },
-            "softness": {
-              "description": "Full terminator width in [0.001, 0.5].",
-              "type": [
-                "number",
-                "null"
-              ],
-              "default": null
-            },
-            "shadowTint": {
-              "description": "Shadow-band reflectance, three linear RGB values in [0, 1].",
-              "default": null,
-              "title": "DocumentVector3",
-              "anyOf": [
-                {
-                  "type": "array",
-                  "items": {
-                    "type": "number"
-                  },
-                  "minItems": 3,
-                  "maxItems": 3
-                },
-                {
-                  "type": "string",
-                  "minLength": 1,
-                  "description": "A state.\u003Crow\u003E[.\u003Ckey\u003E] reference the containing document resolves from a cell."
-                }
-              ]
-            },
             "outlineWidth": {
-              "description": "Close outline radius in output pixels, in [0, 4]; zero disables outlines.",
+              "description": "The close outline radius in output pixels, in [0, 4]; zero disables outlines.",
               "type": [
                 "number",
                 "null"
@@ -11013,7 +10977,7 @@
               "default": null
             },
             "outlineDistance": {
-              "description": "Distance in metres at which the outline radius halves, in [0.1, 1000].",
+              "description": "The distance in metres at which the outline radius halves, in [0.1, 1000].",
               "type": [
                 "number",
                 "null"
@@ -11021,7 +10985,7 @@
               "default": null
             },
             "outlineNormal": {
-              "description": "Crease normal cosine in [0, 0.95].",
+              "description": "The crease normal cosine, in [0, 0.95].",
               "type": [
                 "number",
                 "null"
@@ -11029,7 +10993,7 @@
               "default": null
             },
             "outlineTint": {
-              "description": "Outline multiplier, three linear RGB values in [0, 1].",
+              "description": "The outline multiplier, three linear RGB values in [0, 1].",
               "default": null,
               "title": "DocumentVector3",
               "anyOf": [
@@ -11047,39 +11011,6 @@
                   "description": "A state.\u003Crow\u003E[.\u003Ckey\u003E] reference the containing document resolves from a cell."
                 }
               ]
-            },
-            "specularSize": {
-              "description": "Highlight size as one minus the half-vector cosine, in [0.001, 0.25].",
-              "type": [
-                "number",
-                "null"
-              ],
-              "default": null
-            },
-            "exposure": {
-              "description": "Reflected-light exposure compensation in stops, in [-4, 4].",
-              "type": [
-                "number",
-                "null"
-              ],
-              "default": null
-            },
-            "shoulder": {
-              "description": "Hue-preserving highlight compression in [0, 2]; zero disables it.",
-              "type": [
-                "number",
-                "null"
-              ],
-              "default": null
-            },
-            "band": {
-              "description": "How the band treats a light\u0027s shadow visibility: Visibility (the default) keeps the penumbra, Combined snaps it to the band\u0027s edge.",
-              "enum": [
-                "Visibility",
-                "Combined"
-              ],
-              "default": "Visibility",
-              "title": "SdfToonBand"
             }
           },
           "additionalProperties": false,
@@ -33185,51 +33116,15 @@
                       ],
                       "properties": {
                         "enabled": {
-                          "description": "Whether the style bands; absent is on. False on a palette row keeps that material continuous whatever the world\u0027s default is; false on render.toon boots the world\u0027s default off until the lever turns it on, which a style with every value then bands with.",
+                          "description": "Whether the style is on; absent is on. False on a palette row keeps that material unstyled whatever the world\u0027s default is; false on render.toon leaves the world\u0027s default off.",
                           "type": [
                             "boolean",
                             "null"
                           ],
                           "default": null
                         },
-                        "threshold": {
-                          "description": "Diffuse band threshold in [0, 1].",
-                          "type": [
-                            "number",
-                            "null"
-                          ],
-                          "default": null
-                        },
-                        "softness": {
-                          "description": "Full terminator width in [0.001, 0.5].",
-                          "type": [
-                            "number",
-                            "null"
-                          ],
-                          "default": null
-                        },
-                        "shadowTint": {
-                          "description": "Shadow-band reflectance, three linear RGB values in [0, 1].",
-                          "default": null,
-                          "title": "DocumentVector3",
-                          "anyOf": [
-                            {
-                              "type": "array",
-                              "items": {
-                                "type": "number"
-                              },
-                              "minItems": 3,
-                              "maxItems": 3
-                            },
-                            {
-                              "type": "string",
-                              "minLength": 1,
-                              "description": "A state.\u003Crow\u003E[.\u003Ckey\u003E] reference the containing document resolves from a cell."
-                            }
-                          ]
-                        },
                         "outlineWidth": {
-                          "description": "Close outline radius in output pixels, in [0, 4]; zero disables outlines.",
+                          "description": "The close outline radius in output pixels, in [0, 4]; zero disables outlines.",
                           "type": [
                             "number",
                             "null"
@@ -33237,7 +33132,7 @@
                           "default": null
                         },
                         "outlineDistance": {
-                          "description": "Distance in metres at which the outline radius halves, in [0.1, 1000].",
+                          "description": "The distance in metres at which the outline radius halves, in [0.1, 1000].",
                           "type": [
                             "number",
                             "null"
@@ -33245,7 +33140,7 @@
                           "default": null
                         },
                         "outlineNormal": {
-                          "description": "Crease normal cosine in [0, 0.95].",
+                          "description": "The crease normal cosine, in [0, 0.95].",
                           "type": [
                             "number",
                             "null"
@@ -33253,7 +33148,7 @@
                           "default": null
                         },
                         "outlineTint": {
-                          "description": "Outline multiplier, three linear RGB values in [0, 1].",
+                          "description": "The outline multiplier, three linear RGB values in [0, 1].",
                           "default": null,
                           "title": "DocumentVector3",
                           "anyOf": [
@@ -33271,39 +33166,6 @@
                               "description": "A state.\u003Crow\u003E[.\u003Ckey\u003E] reference the containing document resolves from a cell."
                             }
                           ]
-                        },
-                        "specularSize": {
-                          "description": "Highlight size as one minus the half-vector cosine, in [0.001, 0.25].",
-                          "type": [
-                            "number",
-                            "null"
-                          ],
-                          "default": null
-                        },
-                        "exposure": {
-                          "description": "Reflected-light exposure compensation in stops, in [-4, 4].",
-                          "type": [
-                            "number",
-                            "null"
-                          ],
-                          "default": null
-                        },
-                        "shoulder": {
-                          "description": "Hue-preserving highlight compression in [0, 2]; zero disables it.",
-                          "type": [
-                            "number",
-                            "null"
-                          ],
-                          "default": null
-                        },
-                        "band": {
-                          "description": "How the band treats a light\u0027s shadow visibility: Visibility (the default) keeps the penumbra, Combined snaps it to the band\u0027s edge.",
-                          "enum": [
-                            "Visibility",
-                            "Combined"
-                          ],
-                          "default": "Visibility",
-                          "title": "SdfToonBand"
                         }
                       },
                       "additionalProperties": false,
@@ -33322,139 +33184,112 @@
                           "type": "string"
                         },
                         "cases": {
-                          "description": "The styles, the first for the value zero; each is a whole style (ToonStyleDocument), enabled: false keeping the slot continuous.",
+                          "description": "The looks, the first for the value zero (PaletteToonCaseDocument).",
                           "type": "array",
                           "items": {
-                            "description": "A cel style on the wire (SdfToon): the world\u0027s default style (render.toon, which the live world.toon lever overrides) and a palette row\u0027s own (Toon) are this one shape, so a style authored once (the standard\u0027s styles.puck) serves both. The engine holds no look of its own: a style that bands authors every value, and one that says enabled: false needs none. Presentation only; no field enters simulation state or the bake.",
+                            "description": "One look a PaletteToonSelectDocument chooses: the slot\u0027s cel style and its shade program while the case is selected. A case that leaves either out shades the slot without it: no style of its own (the world\u0027s default style) and no program of its own (the world\u0027s render.shade).",
                             "type": [
                               "object",
                               "null"
                             ],
                             "properties": {
-                              "enabled": {
-                                "description": "Whether the style bands; absent is on. False on a palette row keeps that material continuous whatever the world\u0027s default is; false on render.toon boots the world\u0027s default off until the lever turns it on, which a style with every value then bands with.",
+                              "toon": {
+                                "description": "The case\u0027s style (ToonStyleDocument), or null for none.",
                                 "type": [
-                                  "boolean",
+                                  "object",
                                   "null"
                                 ],
-                                "default": null
-                              },
-                              "threshold": {
-                                "description": "Diffuse band threshold in [0, 1].",
-                                "type": [
-                                  "number",
-                                  "null"
-                                ],
-                                "default": null
-                              },
-                              "softness": {
-                                "description": "Full terminator width in [0.001, 0.5].",
-                                "type": [
-                                  "number",
-                                  "null"
-                                ],
-                                "default": null
-                              },
-                              "shadowTint": {
-                                "description": "Shadow-band reflectance, three linear RGB values in [0, 1].",
-                                "default": null,
-                                "title": "DocumentVector3",
-                                "anyOf": [
-                                  {
-                                    "type": "array",
-                                    "items": {
-                                      "type": "number"
-                                    },
-                                    "minItems": 3,
-                                    "maxItems": 3
+                                "properties": {
+                                  "enabled": {
+                                    "description": "Whether the style is on; absent is on. False on a palette row keeps that material unstyled whatever the world\u0027s default is; false on render.toon leaves the world\u0027s default off.",
+                                    "type": [
+                                      "boolean",
+                                      "null"
+                                    ],
+                                    "default": null
                                   },
-                                  {
-                                    "type": "string",
-                                    "minLength": 1,
-                                    "description": "A state.\u003Crow\u003E[.\u003Ckey\u003E] reference the containing document resolves from a cell."
-                                  }
-                                ]
-                              },
-                              "outlineWidth": {
-                                "description": "Close outline radius in output pixels, in [0, 4]; zero disables outlines.",
-                                "type": [
-                                  "number",
-                                  "null"
-                                ],
-                                "default": null
-                              },
-                              "outlineDistance": {
-                                "description": "Distance in metres at which the outline radius halves, in [0.1, 1000].",
-                                "type": [
-                                  "number",
-                                  "null"
-                                ],
-                                "default": null
-                              },
-                              "outlineNormal": {
-                                "description": "Crease normal cosine in [0, 0.95].",
-                                "type": [
-                                  "number",
-                                  "null"
-                                ],
-                                "default": null
-                              },
-                              "outlineTint": {
-                                "description": "Outline multiplier, three linear RGB values in [0, 1].",
-                                "default": null,
-                                "title": "DocumentVector3",
-                                "anyOf": [
-                                  {
-                                    "type": "array",
-                                    "items": {
-                                      "type": "number"
-                                    },
-                                    "minItems": 3,
-                                    "maxItems": 3
+                                  "outlineWidth": {
+                                    "description": "The close outline radius in output pixels, in [0, 4]; zero disables outlines.",
+                                    "type": [
+                                      "number",
+                                      "null"
+                                    ],
+                                    "default": null
                                   },
-                                  {
-                                    "type": "string",
-                                    "minLength": 1,
-                                    "description": "A state.\u003Crow\u003E[.\u003Ckey\u003E] reference the containing document resolves from a cell."
+                                  "outlineDistance": {
+                                    "description": "The distance in metres at which the outline radius halves, in [0.1, 1000].",
+                                    "type": [
+                                      "number",
+                                      "null"
+                                    ],
+                                    "default": null
+                                  },
+                                  "outlineNormal": {
+                                    "description": "The crease normal cosine, in [0, 0.95].",
+                                    "type": [
+                                      "number",
+                                      "null"
+                                    ],
+                                    "default": null
+                                  },
+                                  "outlineTint": {
+                                    "description": "The outline multiplier, three linear RGB values in [0, 1].",
+                                    "default": null,
+                                    "title": "DocumentVector3",
+                                    "anyOf": [
+                                      {
+                                        "type": "array",
+                                        "items": {
+                                          "type": "number"
+                                        },
+                                        "minItems": 3,
+                                        "maxItems": 3
+                                      },
+                                      {
+                                        "type": "string",
+                                        "minLength": 1,
+                                        "description": "A state.\u003Crow\u003E[.\u003Ckey\u003E] reference the containing document resolves from a cell."
+                                      }
+                                    ]
                                   }
-                                ]
+                                },
+                                "additionalProperties": false,
+                                "default": null,
+                                "title": "ToonStyleDocument"
                               },
-                              "specularSize": {
-                                "description": "Highlight size as one minus the half-vector cosine, in [0.001, 0.25].",
+                              "shade": {
+                                "description": "The case\u0027s program, or null for none.",
                                 "type": [
-                                  "number",
+                                  "object",
                                   "null"
                                 ],
-                                "default": null
-                              },
-                              "exposure": {
-                                "description": "Reflected-light exposure compensation in stops, in [-4, 4].",
-                                "type": [
-                                  "number",
-                                  "null"
+                                "properties": {
+                                  "name": {
+                                    "type": "string"
+                                  },
+                                  "parameters": {
+                                    "$ref": "#/properties/render/properties/shade/properties/parameters"
+                                  },
+                                  "outputs": {
+                                    "$ref": "#/properties/render/properties/shade/properties/outputs"
+                                  },
+                                  "values": {
+                                    "$ref": "#/properties/render/properties/shade/properties/values",
+                                    "default": null
+                                  }
+                                },
+                                "required": [
+                                  "name",
+                                  "parameters",
+                                  "outputs"
                                 ],
-                                "default": null
-                              },
-                              "shoulder": {
-                                "description": "Hue-preserving highlight compression in [0, 2]; zero disables it.",
-                                "type": [
-                                  "number",
-                                  "null"
-                                ],
-                                "default": null
-                              },
-                              "band": {
-                                "description": "How the band treats a light\u0027s shadow visibility: Visibility (the default) keeps the penumbra, Combined snaps it to the band\u0027s edge.",
-                                "enum": [
-                                  "Visibility",
-                                  "Combined"
-                                ],
-                                "default": "Visibility",
-                                "title": "SdfToonBand"
+                                "additionalProperties": false,
+                                "default": null,
+                                "title": "SdfShadeDefinition"
                               }
                             },
                             "additionalProperties": false,
-                            "title": "ToonStyleDocument"
+                            "title": "PaletteToonCaseDocument"
                           }
                         }
                       },

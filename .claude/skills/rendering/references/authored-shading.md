@@ -68,8 +68,12 @@ conventions. Each executed instruction increments `sdfWorkSteps`.
 
 The standard programs live in `worlds/standard/shading.puck`, called by the
 foliage, water and styles libraries and the debug world's exhibits.
-`world.shade programs|layers` selects interpreted programs or the old layers for
-comparison. A material with no program inherits `WorldRenderDefaults.Shade`
+`world.shade programs|layers` selects programs (the default) or the old layers
+for comparison. A program that omits the surface phase keeps the material's
+layers as its surface (`sdfShadeHas(binding, 0u)` in the views and glass stages,
+`SdfShadeProgram.Authors` on the CPU); the standard's `cel` relies on it. While
+`world.toon off` suppresses every cel style, `sdfShadeBinding` binds none for a
+styled material (`sdfToonAuthored`). A material with no program inherits `WorldRenderDefaults.Shade`
 (`render.shade`); `world.shade default <program|document>` selects an admitted
 named scene program or restores that document default. `SdfFrameBlock.WriteShadeDefault`
 carries its identity and parameter range; `SdfWorldTables.PackShadeDefault`

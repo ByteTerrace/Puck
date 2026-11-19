@@ -496,10 +496,10 @@ public sealed partial class WorldRenderLeverCommandModule(WorldRenderSettings se
             audience: CommandAudience.Anyone,
             bindability: CommandBindability.Bindable,
             name: "world.toon",
-            description: $"Cel shading, live: {WorldToonForms.Spelling}. No argument echoes the mode. Switches each world's default style, render.toon (the standard's styles.puck authors celStyle); a world that authors none has no style to band with, and a material with a style of its own keeps it. Screens, portals and sky are not posterised. Presentation only, under the render grant.",
+            description: $"Cel shading, live: {WorldToonForms.Spelling}. No argument echoes the mode. Off suppresses every cel style, a material's own and each world's default (render.toon) alike: every styled material shades continuously, without its program and its ink, so one view compares continuous against cel. On shows every style as authored (the standard's styles.puck authors celStyle and celMaterial). Screens, portals and sky are never posterised. Presentation only, under the render grant.",
             forms: WorldToonForms,
             handler: (context, args) => {
-                CommandResult Echo() => new(Output: $"[world.toon: {(settings.Toon ? "on" : "off")}{(settings.ToonStyled ? string.Empty : " (render.toon authors no complete style, so this world's default stays continuous)")}]");
+                CommandResult Echo() => new(Output: $"[world.toon: {(settings.Toon ? "on" : "off")}]");
                 if (args.Count == 0) { return Echo(); }
                 if (args.Count != 1) { return WorldToonForms.Refuse(); }
                 var on = (args.Is(index: 0, value: "toggle") ? !settings.Toon : ParseOnOff(token: args[0]));

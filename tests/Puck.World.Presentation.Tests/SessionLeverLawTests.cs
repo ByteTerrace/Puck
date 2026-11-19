@@ -20,16 +20,17 @@ public sealed class SessionLeverLawTests {
     private const string KnobName = "law-knob";
 
     [Fact]
-    public void ToonReloadFollowsTheDocumentUntilTheSessionOverridesIt_AndTuningStillReloads() {
+    public void ToonOffSuppressesEveryStyleWhileTheDefaultAndItsTuningFollowTheDocument() {
         var render = Fixtures.BuildDocument().Render with { Toon = null };
         var settings = new WorldRenderSettings(defaults: render);
 
-        Assert.False(condition: settings.Toon);
-        Assert.Null(@object: settings.ToonOverride);
-
-        render = render with { Toon = new ToonStyleDocument(Enabled: true, OutlineWidth: 2f) };
-        Assert.True(condition: settings.ResolveToon(render: render).Enabled);
         Assert.True(condition: settings.Toon);
+        Assert.Null(@object: settings.ToonOverride);
+        Assert.False(condition: settings.ResolveToon(render: render).Suppressed);
+
+        render = render with { Toon = new ToonStyleDocument(Enabled: true, OutlineWidth: 2f, OutlineDistance: 12f, OutlineNormal: .6f, OutlineTint: new(x: .1f, y: .1f, z: .1f)) };
+        Assert.True(condition: settings.ResolveToon(render: render).Enabled);
+        Assert.Equal(expected: 1f, actual: settings.ResolveToon(render: render).Mode);
 
         var sink = WorldSessionLevers.Compose(
             audio: new RecordingAudioLever(),
@@ -42,13 +43,16 @@ public sealed class SessionLeverLawTests {
         render = render with { Toon = render.Toon with { OutlineWidth = 3f } };
         var resolved = settings.ResolveToon(render: render);
 
-        Assert.False(condition: resolved.Enabled);
+        // Off keeps the document's default and tuning and suppresses every style, the authored-on default included.
+        Assert.True(condition: resolved.Enabled);
+        Assert.True(condition: resolved.Suppressed);
+        Assert.Equal(expected: -2f, actual: resolved.Mode);
         Assert.False(condition: settings.ToonOverride);
         Assert.Equal(expected: 3f, actual: resolved.OutlineWidth);
 
-        // A nested world keeps its own tuning and document default until the same live override reaches it.
-        Assert.True(condition: ToonStyleDocument.ResolveDefault(toon: render.Toon).Enabled);
-        Assert.False(condition: ToonStyleDocument.ResolveDefault(toon: render.Toon, enabled: settings.ToonOverride).Enabled);
+        // A nested world shows its own styles until the same live override reaches it.
+        Assert.False(condition: ToonStyleDocument.ResolveDefault(toon: render.Toon).Suppressed);
+        Assert.True(condition: ToonStyleDocument.ResolveDefault(toon: render.Toon, shown: settings.ToonOverride).Suppressed);
     }
 
     private static WorldSessionLever BarLever(double a, int seat) => new(
