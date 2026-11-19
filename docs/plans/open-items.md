@@ -1598,8 +1598,9 @@ Artefacts still to isolate:
   remain around the NOISE and ERODE plinths.
 - Settlement is configured sweeps, not history-independent convergence. Open:
   a general refusal of lighting captures before every bake and the irradiance
-  have settled; grazing marks at the teal vertical corner, the Moth backdrop
-  and the boardroom jamb feet; bright bands in the painting wing and
+  have settled; grazing marks at the Moth backdrop and the boardroom jamb feet
+  (re-read them after the finest probes' blocker-evidence rule, which closed the
+  teal room's wall foot and vertical corner); bright bands in the painting wing and
   camera-bay roof; curved bands on the level-3 stairwell wall; the garden
   portal's dark horizontal strip; the REVOLVED floor's diagonal patches and
   black rectangle; the wing's north-east corner remnants.
@@ -3951,6 +3952,13 @@ and calibration, delivered cues, haptics) and the standard package's judge.
 - Its last stage, a crowd of performers at the frame bar, waits on
   [virtual geometry](virtual-geometry.md#d2-bounds-for-skinned-and-multi-slot-draws)'s
   bounds for many-part bodies and on the benchmark's remote route.
+- The pose-clip design removes the rig's caps on swings, slides, drivers and
+  effectors ([the caps](instrument-play/pose-clips.md#9-the-caps-come-off)).
+  A world's own creations then pay a counted cost. A look that arrives with a
+  visiting character is work another player's client must do, and nothing
+  budgets its terms, effectors and transform slots. Admitting a visiting
+  look's rig waits on that budget, which the plan that admits visiting looks
+  owns.
 - It is the first of the [play expressions](play-expressions.md). The other
   two the owner named, play by solving and play by calculating, are open
   explorations: that page holds
@@ -4187,6 +4195,23 @@ Owner: media lane · ordinary · Next: let an unread capture feed idle.
   downscale on the GPU ahead of the readback.
 - [medium] `CaptureSink` is constructed nowhere in `src`: an unreached capture
   capability to wire, not delete (AGENTS.md).
+- [low] The authority's score and a listener's score can diverge. `WorldTick`
+  steps its `MusicDirector` (`StepCore`, beside `MusicClock.Advance`) on every
+  authority edge before the rules run, and never on `MusicSenseFamily.RuleCue`,
+  while each listener's director (`WorldAudioDirector.PresentDeliveredCues`)
+  steps on its disclosed senses and its delivered cues. A rhythm rule judging
+  `$clock:` against the authority's segment can therefore judge a segment the
+  player is not hearing, and a segment moved by an edge the player cannot see
+  reaches input owners through the captured segment id. The fix decides which
+  score the authority judges against (a per-owner director, or a score whose
+  conditions read only what every listener is told) and steps rule cues on the
+  same tick the listener does.
+- [low] A delivered cue, beat or bar boundary defeats a projection's
+  `UpdateSeconds` throttle: `WorldProjectionSampler.TryProject` delivers any
+  snapshot that carries one, so a score's beat forces a full snapshot on a
+  throttled presentation stream. Carry one-shot events across throttled ticks
+  (cues queued, boundaries folded with their beat count) and deliver them at
+  the stream's cadence, or on a lane of their own.
 
 ### Debug world content
 

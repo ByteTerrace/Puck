@@ -68,7 +68,8 @@ public sealed partial class WorldRenderSettings {
     /// <see cref="Puck.SdfVm.SdfViewQuality.DisableAmbientOcclusion"/> lane, so no rebuild).</summary>
     public bool AmbientOcclusion { get => m_ambientOcclusion; set { m_ambientOcclusion = value; m_revision++; } }
     /// <summary>Whether the indirect volume's background rays take the device's ray hardware where it has it
-    /// (<see cref="Puck.SdfVm.SdfFrame.RayQueries"/>). Boots at <c>render.rayQueries</c>; the <c>world.rays</c> verb and a
+    /// (<see cref="Puck.SdfVm.SdfFrame.RayQueries"/>), for every residency the session presents, routed worlds' included
+    /// (<see cref="Client.WorldSessionSceneEmitter"/>). Boots at <c>render.rayQueries</c>; the <c>world.rays</c> verb and a
     /// quality preset's row move it live.</summary>
     public bool RayQueries { get => m_rayQueries; set { m_rayQueries = value; m_revision++; } }
     /// <summary>The exposure pin (<c>world.exposure pin</c>): an <c>EV100</c> every view the session presents renders

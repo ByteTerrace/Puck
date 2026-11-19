@@ -845,6 +845,10 @@ public static class WorldProjection {
             return false;
         }
 
+        if (!WorldDefinitionValidator.TryValidateDeliveredAudio(definition: hydrated, reason: out reason)) {
+            return false;
+        }
+
         if (!WorldStateDocumentValues.TryResolve(
             definition: hydrated,
             reason: out reason,

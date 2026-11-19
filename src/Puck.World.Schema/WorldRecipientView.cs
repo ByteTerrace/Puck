@@ -57,9 +57,53 @@ public sealed partial class WorldRecipientView(Func<WorldDefinition> definition,
         }
     }
     /// <summary>Admits a transient derived from a whole row under a stable audience.</summary>
-    public bool ReadsCueDependency(int row) {
-        if (!ReadsWhole(row)) { return false; }
+    /// <param name="row">The row's catalog ordinal.</param>
+    /// <returns><see langword="true"/> when the row is carried whole at this ceiling and no audience on its path
+    /// follows another row's members.</returns>
+    public bool ReadsCueDependency(int row) => ReadsWhole(row) && (Unrestricted || ReadsUnderStableAudience(row));
+    /// <summary>Admits a transient derived from the physical field regions: every field row of every region, and every
+    /// row a region's travel resistance reads, is read whole under a stable audience, as the field projection carries
+    /// a field only when its row reads whole.</summary>
+    /// <returns><see langword="true"/> when the recipient reads every field region whole.</returns>
+    public bool ReadsEveryFieldRegion() {
+        if (!Observes) { return false; }
         if (Unrestricted) { return true; }
+        var arena = Arena;
+        var observer = Observer;
+        bool Reads(string name) => arena.Catalog.TryResolve(StateLane.Document, name, out var handle) &&
+            observer.ReadsWhole(handle.Ordinal) && ReadsUnderStableAudience(handle.Ordinal);
+        foreach (var region in Source.FieldRegions) {
+            foreach (var field in region.Fields) {
+                if (!Reads(field.Name)) { return false; }
+            }
+            if (region.TravelResistance?.Row is { } resistance && !Reads(resistance)) { return false; }
+        }
+        return true;
+    }
+    /// <summary>Admits a transient derived from a screen's machine memory: the recipient holds the machine (the replica
+    /// document carries machines; a presentation projection does not) and reads whole every row the machine's memory
+    /// bindings exchange with its hardware.</summary>
+    /// <param name="screen">The screen index.</param>
+    /// <returns><see langword="true"/> when the recipient holds the screen's machine and every bound row.</returns>
+    public bool HoldsMachine(int screen) {
+        if (!Observes) { return false; }
+        if (Unrestricted) { return true; }
+        if (ceiling != WorldDisclosureTier.Replica) { return false; }
+        var source = Source;
+        WorldScreen? row = null;
+        foreach (var candidate in source.Screens) {
+            if (candidate.Index == screen) { row = candidate; break; }
+        }
+        if ((row?.Source is not WorldScreenSource.Machine machineSource) ||
+            (WorldDefinitionRows.FindMachine(source.Machines, machineSource.Instance) is not { } machine)) { return false; }
+        foreach (var binding in machine.Memory ?? []) {
+            if ((binding?.Row is { } bound) &&
+                !(Arena.Catalog.TryResolve(StateLane.Document, bound, out var handle) && ReadsCueDependency(handle.Ordinal))) { return false; }
+        }
+        return true;
+    }
+    // Whether no audience on the row's path follows another row's members, which a transient cannot track as they move.
+    private bool ReadsUnderStableAudience(int row) {
         var arena = Arena;
         if (arena.Rows[row].Visibility?.ReadersFrom is not null) { return false; }
         foreach (var zone in arena.Catalog.ContainingZones(row)) {

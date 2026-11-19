@@ -11,7 +11,7 @@ namespace Puck.World;
 /// <param name="glide">Whether the body moves there as continuous motion rather than a teleport.</param>
 /// <param name="roll">The roll, in radians, a teleport stands the body at.</param>
 /// <param name="pitch">The pitch, in radians, a teleport stands the body at.</param>
-public sealed class WorldPoseCellEffect(WorldBodyRef body, string topology, CompiledExpressionToken[] expression, FixedVector3 offset, bool glide = false, FixedQ4816 roll = default, FixedQ4816 pitch = default) : WorldFactEffect(describe: $"poseCell {topology}") {
+public sealed class WorldPoseCellEffect(WorldBodyRef body, string topology, CompiledExpressionToken[] expression, FixedVector3 offset, bool glide = false, FixedQ4816 roll = default, FixedQ4816 pitch = default) : WorldFactEffect(describe: $"poseCell {topology}", reach: WorldDisclosureReach.Bodies) {
     /// <summary>The position of the cell ordinal among the sources.</summary>
     public const int CellSource = 0;
 
@@ -35,6 +35,7 @@ public sealed class WorldPoseCellEffect(WorldBodyRef body, string topology, Comp
 
     /// <inheritdoc/>
     public override bool SubmitsMutation => false;
+
 
     /// <inheritdoc/>
     public override void CollectReads(List<CellAccess> into) {

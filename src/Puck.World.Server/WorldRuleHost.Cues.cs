@@ -5,88 +5,63 @@ public sealed partial class WorldRuleHost {
     private Dictionary<string, CueReads> m_tickCueReads = new(StringComparer.Ordinal);
     private StateArena? m_cueArena;
 
-    internal sealed record CueReads(int[] Rows, string[] Placements, bool FullBodies, bool AuthorityOnly);
+    /// <summary>What a rule's cue depends on, as a recipient must hold it to be told the cue fired.</summary>
+    /// <param name="RuleName">The emitting rule.</param>
+    /// <param name="Rows">The rows a recipient must read whole under a stable audience.</param>
+    /// <param name="Placements">The placements a recipient's projection must carry.</param>
+    /// <param name="Screens">The screens whose machine a recipient must hold.</param>
+    /// <param name="FullBodies">Whether a recipient's delivery must carry every body.</param>
+    /// <param name="Fields">Whether a recipient must read every field region whole.</param>
+    /// <param name="Undeclared">The host facts that declare no disclosure, joined, or <see langword="null"/>; any
+    /// withholds the cue from every recipient but the authority.</param>
+    internal sealed record CueReads(string RuleName, int[] Rows, string[] Placements, int[] Screens, bool FullBodies, bool Fields, string? Undeclared);
 
+    // The one place a cue's dependencies are classified: WorldRuleDisclosure reads each fact's own declaration, so a
+    // fact type with none withholds the cue from every recipient but the authority instead of reaching them by omission.
+    // A group's members fire as one cascade, so each member's cue depends on everything the group reads.
     private void CompileCueReads() {
         if (!m_rules.Any(HasCue) && !m_interactions.Any(HasCue)) {
             m_cueReads = new(StringComparer.Ordinal);
             return;
         }
-        var reads = new Dictionary<string, HashSet<int>>(StringComparer.Ordinal);
-        var factsByRule = new Dictionary<string, RuleNeedsBuilder>(StringComparer.Ordinal);
-        var wholePopulation = new HashSet<string>(StringComparer.Ordinal);
+        var needs = new Dictionary<string, WorldDisclosureNeeds>(StringComparer.Ordinal);
         foreach (var rule in m_rules.Concat(m_interactions)) {
-            if (!reads.TryGetValue(rule.Name, out var rows)) { reads.Add(rule.Name, rows = []); }
-            if (!factsByRule.TryGetValue(rule.Name, out var facts)) { factsByRule.Add(rule.Name, facts = new()); }
-            var access = RuleDataflow.Reads(rule);
-            RuleDataflow.CollectJudgement(rule, access, facts);
-            RuleDataflow.CollectEffectFacts(rule.Effects, facts, includeSources: true);
-            if (rule is CompiledWorldFactsRule world) {
-                if (world.Interaction is not null) { wholePopulation.Add(rule.Name); }
-                if (world.Decision is { } decision) {
-                    RuleDataflow.CollectGateFacts(decision.Interrupt ?? [], facts);
-                    RuleDataflow.CollectEffectFacts(decision.OnNoChoice, facts, includeSources: true);
-                    foreach (var option in decision.Options) {
-                        RuleDataflow.CollectGateFacts(option.Gate, facts);
-                        RuleDataflow.CollectExpressionSchedulingFacts(option.Score, facts);
-                        RuleDataflow.CollectEffectFacts(option.Effects, facts, includeSources: true);
-                    }
-                }
-            }
-            rule.CollectWrites(access);
-            foreach (var item in access) { if (item.RowOrdinal >= 0) { rows.Add(item.RowOrdinal); } }
-            rows.UnionWith(rule.Needs.HostOwnedRows);
+            if (!needs.TryGetValue(rule.Name, out var ruleNeeds)) { needs.Add(rule.Name, ruleNeeds = new()); }
+            WorldRuleDisclosure.Collect(rule: rule, into: ruleNeeds);
         }
         foreach (var group in m_groups) {
-            var groupRows = new HashSet<int>();
+            var groupNeeds = new WorldDisclosureNeeds();
             var access = new List<CellAccess>();
             var groupFacts = new RuleNeedsBuilder();
             RuleDataflow.CollectGate(group.Trigger, access);
-            RuleDataflow.CollectGateFacts(group.Trigger, groupFacts);
+            RuleDataflow.CollectGateSchedulingFacts(group.Trigger, groupFacts);
             foreach (var local in group.Locals) {
                 RuleDataflow.CollectExpression(local.Expression, access);
                 RuleDataflow.CollectExpressionSchedulingFacts(local.Expression, groupFacts);
             }
-            foreach (var item in access) { if (item.RowOrdinal >= 0) { groupRows.Add(item.RowOrdinal); } }
-            groupRows.UnionWith(group.Needs.HostOwnedRows);
-            foreach (var member in group.Members) {
-                var name = m_rules[member].Name;
-                groupRows.UnionWith(reads[name]);
-                foreach (var fact in factsByRule[name].FacetFacts) { groupFacts.AddFact(fact); }
-            }
-            foreach (var member in group.Members) {
-                var name = m_rules[member].Name;
-                reads[name].UnionWith(groupRows);
-                foreach (var fact in groupFacts.FacetFacts) { factsByRule[name].AddFact(fact); }
-            }
+            groupNeeds.AddRows(access);
+            foreach (var row in group.Needs.HostOwnedRows) { groupNeeds.AddRow(row); }
+            foreach (var fact in groupFacts.FacetFacts) { WorldRuleDisclosure.Classify(fact, groupNeeds); }
+            foreach (var member in group.Members) { groupNeeds.UnionWith(needs[m_rules[member].Name]); }
+            foreach (var member in group.Members) { needs[m_rules[member].Name].UnionWith(groupNeeds); }
         }
         m_cueReads = new(StringComparer.Ordinal);
-        foreach (var (name, rows) in reads) {
-            var placements = new HashSet<string>(StringComparer.Ordinal);
-            var fullBodies = wholePopulation.Contains(name);
-            var authorityOnly = false;
-            foreach (var fact in factsByRule[name].FacetFacts) {
-                switch (fact) {
-                    case WorldRegionOccupancyOperand region:
-                        placements.Add(region.PlacementId);
-                        fullBodies = true;
-                        break;
-                    case WorldPlacementInfluenceOperand influence:
-                        placements.Add(influence.PlacementId);
-                        fullBodies = true;
-                        break;
-                    case WorldPopulationOperand or WorldPhysicsQuiescentOperand or WorldBodyFactOperand:
-                        fullBodies = true;
-                        break;
-                    case WorldClockOperand or WorldHostOwnedCellOperand or WorldArgBodyOperand or IRuleEffect:
-                        break;
-                    case IRuleOperand:
-                        authorityOnly = true;
-                        break;
-                }
-            }
-            m_cueReads.Add(name, new(rows.ToArray(), placements.ToArray(), fullBodies, authorityOnly));
+        m_withheldNarrated.Clear();
+        foreach (var (name, ruleNeeds) in needs) {
+            m_cueReads.Add(name, new(name, [.. ruleNeeds.Rows], [.. ruleNeeds.Placements], [.. ruleNeeds.Screens],
+                (ruleNeeds.Reach & WorldDisclosureReach.Bodies) != 0, (ruleNeeds.Reach & WorldDisclosureReach.Fields) != 0,
+                ruleNeeds.Undeclared.Count == 0 ? null : string.Join(", ", ruleNeeds.Undeclared)));
         }
+    }
+
+    private readonly HashSet<string> m_withheldNarrated = new(StringComparer.Ordinal);
+
+    // A cue withheld from a recipient only because a fact under it declares nothing is narrated once per rule per
+    // compile, so an author sees which rule lost its audience and why.
+    internal void NarrateUndeclaredCue(CueReads reads) {
+        if (reads.Undeclared is not { } facts || !m_withheldNarrated.Add(reads.RuleName) || !Host.Output.HasNarrationSink) { return; }
+        Host.Output.Narrate(channel: "world.cue",
+            text: $"[world.cue: rule '{reads.RuleName}' cues reach only the authority: {facts} declare no disclosure]");
     }
 
     private static bool HasCue(CompiledRule rule) => ContainsCue(rule.Effects) ||

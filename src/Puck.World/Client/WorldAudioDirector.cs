@@ -140,6 +140,9 @@ public sealed partial class WorldAudioDirector : IWorldAudioLever, IWorldAudioFr
     private int m_nextEmitterId = 1;
     private FixedQ4816 m_defaultCueRadius = FixedQ4816.FromInteger(value: 8L);
     private FixedComplex m_lastListenerYaw = FixedComplex.MultiplicativeIdentity;
+    // The seat slot the listener last resolved to, or -1 when it follows a camera or no seat: a delivered cue is heard
+    // only when that seat's own view admitted it (WorldGameplayCue.AdmitsSeat).
+    private int m_listenerSeat = -1;
     // The most recently tapped active-layer tune id set (WorldServer.MusicLayerTap) — re-reconciled against whenever
     // it changes so the derived layer-bed plan tracks it without waiting for the next definition delivery.
     private IReadOnlyList<MusicLayer> m_activeMusicLayers = [];
@@ -380,6 +383,7 @@ public sealed partial class WorldAudioDirector : IWorldAudioLever, IWorldAudioFr
         // The referenced-tune set: acquire a headless host per tune some plan row taps; release orphans; a hash
         // change restarts the host honestly, the same release+recreate approach the placement animator uses.
         List<string>? orphaned = null;
+        List<string>? unloadable = null;
 
         foreach (var (tuneId, host) in m_tuneHosts) {
             if (FindReferencedTune(
@@ -393,17 +397,21 @@ public sealed partial class WorldAudioDirector : IWorldAudioLever, IWorldAudioFr
                 comparisonType: StringComparison.Ordinal
             )) {
                 host.Source.Dispose();
-                m_tuneHosts[tuneId] = CreateTuneHost(
-                    documentDirectory: definition.DocumentDirectory,
-                    mixer: mixer,
-                    tune: tune
-                );
+                if (CreateTuneHost(documentDirectory: definition.DocumentDirectory, mixer: mixer, tune: tune) is { } replacement) {
+                    m_tuneHosts[tuneId] = replacement;
+                } else {
+                    (unloadable ??= new List<string>()).Add(item: tuneId);
+                }
             }
         }
 
         foreach (var tuneId in (orphaned ?? [])) {
             mixer.RemoveSource(key: AudioSourceKey.Tune(id: tuneId));
             m_tuneHosts[tuneId].Source.Dispose();
+            _ = m_tuneHosts.Remove(key: tuneId);
+        }
+        foreach (var tuneId in (unloadable ?? [])) {
+            mixer.RemoveSource(key: AudioSourceKey.Tune(id: tuneId));
             _ = m_tuneHosts.Remove(key: tuneId);
         }
 
@@ -415,13 +423,10 @@ public sealed partial class WorldAudioDirector : IWorldAudioLever, IWorldAudioFr
                 (FindTune(
                 definition: definition,
                 tuneId: tuneId
-            ) is { } tune)
+            ) is { } tune) &&
+                (CreateTuneHost(documentDirectory: definition.DocumentDirectory, mixer: mixer, tune: tune) is { } created)
             ) {
-                m_tuneHosts[tuneId] = CreateTuneHost(
-                    documentDirectory: definition.DocumentDirectory,
-                    mixer: mixer,
-                    tune: tune
-                );
+                m_tuneHosts[tuneId] = created;
             }
         }
     }
@@ -1048,6 +1053,8 @@ public sealed partial class WorldAudioDirector : IWorldAudioLever, IWorldAudioFr
             (((uint)slot) < ((uint)seats.Length)) &&
             seats[slot].Joined
         ) {
+            m_listenerSeat = slot;
+
             return (Eye: seats[slot].Eye, Forward: seats[slot].Forward);
         }
 
@@ -1066,14 +1073,20 @@ public sealed partial class WorldAudioDirector : IWorldAudioLever, IWorldAudioFr
             transforms: transforms
         ) is { } pinned)
         ) {
+            m_listenerSeat = -1;
+
             return pinned;
         }
 
         for (var candidateSlot = 0; (candidateSlot < seats.Length); candidateSlot++) {
             if (seats[candidateSlot].Joined) {
+                m_listenerSeat = candidateSlot;
+
                 return (Eye: seats[candidateSlot].Eye, Forward: seats[candidateSlot].Forward);
             }
         }
+
+        m_listenerSeat = -1;
 
         return (Eye: Vector3.Zero, Forward: new Vector3(
             x: 0f,
@@ -1731,15 +1744,17 @@ public sealed partial class WorldAudioDirector : IWorldAudioLever, IWorldAudioFr
             BuildCueTable(audio: audio);
 
             foreach (var patch in definition.Patches) {
-                // The row's Source/Hash were already proven to load, canonicalize, and pin-verify by
-                // WorldDefinitionValidator — this load is expected to succeed by construction.
+                // The row passed a validating door, but its file can change on disk after validation and reconcile
+                // runs on the frame thread: a row that no longer loads plays silent and is reported, never thrown.
                 if (!WorldAssetRowLoader.TryLoadPatch(
                     document: out var document,
                     documentDirectory: definition.DocumentDirectory,
                     error: out var loadError,
                     row: patch
                 )) {
-                    throw new InvalidOperationException(message: $"patch[{patch.Name}]: {loadError} (a validated document must still resolve at reconcile)");
+                    Console.Error.WriteLine(value: $"[world.audio: patch[{patch.Name}] skipped: {loadError}]");
+
+                    continue;
                 }
 
                 m_patchSet.Add(item: (Id: patch.Name, Patch: WorldVoicePatchFactory.FromDocument(document: document!)));

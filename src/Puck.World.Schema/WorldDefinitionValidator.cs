@@ -261,6 +261,78 @@ public static partial class WorldDefinitionValidator {
             Violations: [.. violations]
         );
     }
+    /// <summary>Validates the audio rows a delivered document carries before anything plays them: every patch, tune and
+    /// score must carry its canonical content inline, and that content must load, pass its family's validation (a
+    /// score's cross-references and when tokens included) and match its pin. The audio rows of a document received from
+    /// another process are untrusted, so a recipient hydrates them only through this door.</summary>
+    /// <param name="definition">The delivered document.</param>
+    /// <param name="reason">The refusal naming the first bad row, or empty when every row is valid.</param>
+    /// <returns><see langword="true"/> when every audio row is valid.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="definition"/> is <see langword="null"/>.</exception>
+    public static bool TryValidateDeliveredAudio(WorldDefinition definition, out string reason) {
+        ArgumentNullException.ThrowIfNull(argument: definition);
+
+        var tuneIds = new HashSet<string>(comparer: StringComparer.Ordinal);
+        var patchIds = new HashSet<string>(comparer: StringComparer.Ordinal);
+
+        foreach (var tune in definition.Tunes) {
+            if (!DeliveredAsset(tune, WorldAssetRowLoader.AudioFamily.Tune, "tunes", static row => row.Name, static row => row.Source, static row => row.Hash,
+                row => CheckTune(documentDirectory: null, tune: row), out reason)) { return false; }
+            _ = tuneIds.Add(item: tune.Name);
+        }
+        foreach (var patch in definition.Patches) {
+            if (!DeliveredAsset(patch, WorldAssetRowLoader.AudioFamily.Patch, "patches", static row => row.Name, static row => row.Source, static row => row.Hash,
+                row => CheckPatch(documentDirectory: null, patch: row), out reason)) { return false; }
+            _ = patchIds.Add(item: patch.Name);
+        }
+        foreach (var score in (definition.Music ?? [])) {
+            if (!DeliveredAsset(score, WorldAssetRowLoader.AudioFamily.Music, "music", static row => row.Name, static row => row.Source, static row => row.Hash,
+                row => CheckMusic(documentDirectory: null, patchIds: patchIds, row: row, tuneIds: tuneIds), out reason)) { return false; }
+        }
+        reason = string.Empty;
+
+        return true;
+    }
+    // One delivered audio row: inline content that this process already validated for its pin passes; anything else is
+    // loaded and checked as the authoring validator checks it, then remembered by pin.
+    private static bool DeliveredAsset<TRow>(TRow? row, WorldAssetRowLoader.AudioFamily family, string section, Func<TRow, string> name, Func<TRow, string> source, Func<TRow, string> hash, Func<TRow, AssetCheck?> check, out string reason) where TRow : class {
+        if (row is null) {
+            reason = $"{section} carries an empty row.";
+
+            return false;
+        }
+
+        var rowName = name(row);
+        var rowSource = source(row);
+        var rowHash = hash(row);
+
+        if (!WorldAssetRowLoader.IsEmbeddedAudio(source: rowSource)) {
+            reason = $"{section}['{rowName}'] does not carry its content inline; a delivered audio row never names a path.";
+
+            return false;
+        }
+        if (!WorldAssetRowLoader.IsKnownEmbedding(family: family, hash: rowHash, source: rowSource)) {
+            if (check(row) is not { } result) {
+                reason = $"{section}['{rowName}'] carries no document.";
+
+                return false;
+            }
+            if (result.Violations.Length > 0) {
+                reason = $"{section}['{rowName}'].{result.Violations[0].Path}: {result.Violations[0].Message}";
+
+                return false;
+            }
+            if (!string.Equals(a: result.CanonicalHash, b: rowHash, comparisonType: StringComparison.Ordinal)) {
+                reason = $"{section}['{rowName}'] content does not match its pin '{rowHash}'.";
+
+                return false;
+            }
+            WorldAssetRowLoader.RememberEmbedding(family: family, hash: rowHash, source: rowSource);
+        }
+        reason = string.Empty;
+
+        return true;
+    }
     private static AssetCheck? CheckTune(string? documentDirectory, WorldTune tune) => CheckCanonicalAsset<WorldTune, AudioDocument>(
         documentDirectory: documentDirectory,
         canonicalize: AudioCanonicalizer.Canonicalize,
