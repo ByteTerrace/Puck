@@ -3182,8 +3182,11 @@ the stages; this packet holds what a stage does not.
   The partial navigation bake now runs on a worker, and response swaps keep the
   attached door's sampled pose so its new collider does not wake remote rigid
   bodies. Profile the remaining spikes with `puck benchmark --headless --route
-  debug --chapter "the lift"` and make the remaining contact install and recipient
-  delivery cost follow the changed rows.
+  debug --chapter "the lift"` using its `frameThread` report. The frame digest
+  now reuses unchanged placement rows, and analytic contact installs reuse
+  compiled variants of the changed doors. Isolate cold rigid contact work
+  from the remaining delivery hitches. The replica wire still encodes the
+  whole definition when an observable frame changes.
 - [low] A route chapter's control-line refusals are counted when the chapter
   ends (`WorldSeatDriver.Refused`), so a line still settling then is not
   counted; count each line's verdict as it arrives.
