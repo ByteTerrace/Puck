@@ -12,7 +12,8 @@
 //
 // A sign hangs over the west end of each row naming the row, a map board in the lobby by the entrance lists the levels
 // and rows, a board over the lift door names each level, and every plinth's plaque says what the exhibit demos and what
-// to look for. Each exhibit has a spawn point 2.8 m in front of its plinth, named after it, and the gallery.* commands
+// to look for. Each exhibit has a spawn point 2.8 m in front of its plinth, named after it (gallerySpawns says how she
+// stands there so the chase camera frames the exhibit), and the gallery.* commands
 // (galleryCommands) walk, frame, inspect and flag exhibits through them. shapes.md beside this file holds the levels,
 // the coverage table, the operator camera line that frames each exhibit and the console controls the motion rows answer
 // to. This file is a library: debug.puck and hall.puck expand its templates and lets.
@@ -171,8 +172,14 @@ let galleryRows = [
   }
 ]
 
-// A spawn point per exhibit, named after it, 2.8 m in front of the plinth facing it (yaw 180 faces +Z), so
-// `body.pose spawn:<exhibit>` and `gallery.go <exhibit>` walk to any exhibit by name.
+// A spawn point per exhibit, named after it, 2.8 m in front of the plinth, so `body.pose spawn:<exhibit>` and
+// `gallery.go <exhibit>` walk to any exhibit by name. She stands turned `gallerySpawnTurn` degrees east of the exhibit
+// (yaw 180 faces +Z, and a larger yaw turns her toward +X), because the chase camera keeps its place behind her: square
+// to the exhibit, her body stands between the camera and the exhibit at 1.2 m and hides it. Turned, the camera (4 m back
+// along her heading, 1.2 m over her pivot) sees the exhibit about 16 degrees left of her, its plaque 24 degrees off
+// square, with the next exhibit east behind her. A first-person check that wants her square to the row turns her with
+// `body.pose - - - 180 - - <body>`.
+let gallerySpawnTurn = 40
 let gallerySpawns = flatMap(
   galleryRows,
   row => map(
@@ -180,7 +187,7 @@ let gallerySpawns = flatMap(
     (name, index) => {
       id: name
       position [(galleryX + (gallerySpacing * index)), galleryFloor[row.level], (row.z - 2.8)]
-      yawDegrees: 180
+      yawDegrees: (180 + gallerySpawnTurn)
     }
   )
 )
@@ -1558,7 +1565,8 @@ template surfacePrototypes() {
     }
   }
   // The grey card the display transform is read against: a matte wedge of reflectances (3, 9, 18, 36, 59 and 90%) over
-  // the three primaries, on a near-black board, facing the spawn point. Each patch's hex is the sRGB code of its
+  // the three primaries, on a near-black board, each patch proud of the board's front (+Z in the author frame, the
+  // label's side) so it faces the spawn point. Each patch's hex is the sRGB code of its
   // reflectance, so at an exposure that maps a white surface's light to display white, each patch reads back as its own
   // code; the 18% patch reads 118 (the presented burst's `level` over a region of it). The primaries catch a display
   // transform that converts its primaries wrongly, which a grey alone passes.
@@ -1571,47 +1579,47 @@ template surfacePrototypes() {
       }
       shape Box "grey-03" {
         material: 4
-        position [-0.375, 1.32, -0.015]
+        position [-0.375, 1.32, 0.015]
         scale [0.065, 0.065, 0.01]
       }
       shape Box "grey-09" {
         material: 5
-        position [-0.225, 1.32, -0.015]
+        position [-0.225, 1.32, 0.015]
         scale [0.065, 0.065, 0.01]
       }
       shape Box "grey-18" {
         material: 6
-        position [-0.075, 1.32, -0.015]
+        position [-0.075, 1.32, 0.015]
         scale [0.065, 0.065, 0.01]
       }
       shape Box "grey-36" {
         material: 7
-        position [0.075, 1.32, -0.015]
+        position [0.075, 1.32, 0.015]
         scale [0.065, 0.065, 0.01]
       }
       shape Box "grey-59" {
         material: 8
-        position [0.225, 1.32, -0.015]
+        position [0.225, 1.32, 0.015]
         scale [0.065, 0.065, 0.01]
       }
       shape Box "grey-90" {
         material: 9
-        position [0.375, 1.32, -0.015]
+        position [0.375, 1.32, 0.015]
         scale [0.065, 0.065, 0.01]
       }
       shape Box "red" {
         material: 10
-        position [-0.15, 1.08, -0.015]
+        position [-0.15, 1.08, 0.015]
         scale [0.065, 0.065, 0.01]
       }
       shape Box "green" {
         material: 11
-        position [0, 1.08, -0.015]
+        position [0, 1.08, 0.015]
         scale [0.065, 0.065, 0.01]
       }
       shape Box "blue" {
         material: 12
-        position [0.15, 1.08, -0.015]
+        position [0.15, 1.08, 0.015]
         scale [0.065, 0.065, 0.01]
       }
       exhibit(
