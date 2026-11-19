@@ -182,12 +182,22 @@ public static partial class CreationCommand {
             }
         }
 
-        foreach (var blend in CreationMotion.MovingBlends(document: document)) {
-            var label = (CreationMotion.Creases(blend: blend, document: document) ? $"warning {PuckDiagnosticCodes.MovingBlend}" : "skin");
+        var rig = CreationRig.Of(document: document);
 
-            Console.Out.WriteLine(value: $"  {label}: '{id}' {CreationMotion.Describe(blend: blend, document: document)}");
+        if (rig.Animates) {
+            var owners = Enumerable.Range(start: 0, count: shapes.Count).Where(predicate: index => (rig.Owner(shape: index) == index)).ToArray();
+
+            Console.Out.WriteLine(value: $"  rig: drivers {rig.Drivers.Count}, effectors {rig.Effectors.Count}, terms {rig.AllTerms.Length} (most on one shape {rig.MostTerms}), moving slots {owners.Length}, reach {(float.IsFinite(f: rig.Reach) ? rig.Reach.ToString(format: "G6", provider: System.Globalization.CultureInfo.InvariantCulture) : $"unbounded: {rig.ReachRefusal}")}, reads {string.Join(separator: ", ", values: rig.Reads.Select(selector: static read => read.ToString()))}");
+            foreach (var owner in owners) {
+                Console.Out.WriteLine(value: $"    slot: {CreationMotion.NameOf(document: document, index: owner)} ({rig.Writers(shape: owner).ToString().ToLowerInvariant()})");
+            }
         }
-        foreach (var shape in CreationMotion.UngroupedBlends(document: document)) {
+        foreach (var blend in CreationMotion.MovingBlends(rig: rig)) {
+            var label = (CreationMotion.Creases(blend: blend, rig: rig) ? $"warning {PuckDiagnosticCodes.MovingBlend}" : "skin");
+
+            Console.Out.WriteLine(value: $"  {label}: '{id}' {CreationMotion.Describe(blend: blend, rig: rig)}");
+        }
+        foreach (var shape in CreationMotion.UngroupedBlends(rig: rig)) {
             Console.Out.WriteLine(value: $"  warning {PuckDiagnosticCodes.UngroupedBlend}: '{id}' {CreationMotion.DescribeUngrouped(document: document, shape: shape)}");
         }
 

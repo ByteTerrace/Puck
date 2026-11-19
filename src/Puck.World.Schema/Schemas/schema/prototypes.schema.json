@@ -64,7 +64,7 @@
         "title": "WorldPrototypeMesh"
       },
       "document": {
-        "description": "Gets the creation document as it arrived: normalized when a mutation upserted it (the compose boundary canonicalizes), the author\u0027s own bytes when the world loaded it. Consumers read EngineDocument, which is normalized whichever way the row arrived.",
+        "description": "Gets the creation document as it arrived: normalized when a mutation upserted it (the compose boundary canonicalizes), the author\u0027s own bytes when the world loaded it. Consumers read EngineDocument and Rig, which are normalized whichever way the row arrived.",
         "title": "CreationDocument",
         "type": [
           "object",
@@ -1471,7 +1471,7 @@
             "title": "CreationNoiseDocument"
           },
           "drivers": {
-            "description": "The named animation drivers (null = none), at most MaxDrivers \u2014 see CreationDriverDocument. A shape\u0027s Swings/Slides name one of these. Presentation-only, like the facets that read them.",
+            "description": "The named animation drivers (null = none), any number \u2014 see CreationDriverDocument. A shape\u0027s Swings/Slides name one of these. Presentation-only, like the facets that read them.",
             "type": [
               "array",
               "null"
@@ -1554,7 +1554,7 @@
             "default": null
           },
           "effectors": {
-            "description": "The inverse-kinematics effectors (null = none), at most MaxEffectors \u2014 see CreationEffectorDocument. Each corrects a chain of this creation\u0027s own shapes so its tip reaches a target, composing after the drivers and the parent chain. Presentation-only, like the drivers.",
+            "description": "The inverse-kinematics effectors (null = none), any number \u2014 see CreationEffectorDocument. Each corrects a chain of this creation\u0027s own shapes so its tip reaches a target, composing after the drivers and the parent chain. Presentation-only, like the drivers.",
             "type": [
               "array",
               "null"

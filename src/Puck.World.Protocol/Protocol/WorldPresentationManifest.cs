@@ -19,8 +19,8 @@ public readonly record struct WorldPresentationBinding(StateBinding Binding, Wor
 /// clock's row (read eased, as every keyed value on it reads it), every color a signed-distance program bakes (a creation palette's surface, fill, bleed,
 /// weathering and inset colors, a height field's color, a text screen's ink), and each height field's row read whole,
 /// which its brick is baked from. <see cref="BodyBindings"/> are templates a body reads through its own
-/// <c>WorldStateLease</c>: the population's scale row, a look's pose references and lane operands, a creation
-/// driver's state signal, gate tokens and scalar expressions, and an effector's gate tokens and state target. A template keeps its
+/// <c>WorldStateLease</c>: the population's scale row, a look's pose references and lane operands, every state cell a
+/// creation's rig reads (<see cref="CreationRig.Reads"/>), and its scalar expressions. A template keeps its
 /// <see cref="StateBinding.BodyKey"/> key as authored; a body's lease resolves that key to the body's index when it
 /// acquires the template, so every body reads its own slot of one table, and the slot is released when the body leaves.
 /// Each template is also recorded under the document object that carries it (<see cref="TemplatesOf"/>): the
@@ -51,9 +51,8 @@ public sealed class WorldPresentationManifest {
         typeof(BindableAngle),
         typeof(BindableColor),
         typeof(BindableScalar),
-        typeof(CreationDriverDocument),
+        typeof(CreationDocument),
         typeof(DocumentScalar),
-        typeof(CreationEffectorDocument),
         typeof(CreationEffectorTargetDocument),
         typeof(OverlayPredicate.State),
         typeof(PaletteEntryDocument),
@@ -478,17 +477,6 @@ public sealed class WorldPresentationManifest {
                 AddBody(binding: (binding with { Target = (truth || binding.Target) }));
             }
         }
-        // A driver's or an effector's gate reads each state token's truth (WorldGaitDrivers.HoldsGate).
-        public void AddGate(IReadOnlyList<string>? gate) {
-            foreach (var token in (gate ?? [])) {
-                if (CreationDriverDocument.IsStateSignal(signal: token)) {
-                    AddBodyToken(
-                        token: token,
-                        truth: true
-                    );
-                }
-            }
-        }
         // A look's or a creation's members record their templates under it.
         public bool Enter(object value, WorldDocumentSite site) {
             if (!Collect(value: value)) {
@@ -627,37 +615,20 @@ public sealed class WorldPresentationManifest {
 
                     return true;
                 case CreationDocument creation:
-                    AddBodyToken(token: creation.SizeBy, truth: true);
-                    return true;
-                case CreationDriverDocument driver:
-                    if (CreationDriverDocument.IsStateSignal(signal: driver.Signal)) {
-                        AddBodyToken(
-                            token: driver.Signal,
-                            truth: false
-                        );
+                    // Every state cell the creation's pose reads is in its rig's compiled reads (CreationRig.Reads), which
+                    // the pose pass can only read through, so registering them registers every one: drivers' signals
+                    // and gates, effectors' gates and targets, and the size binding, each as truth or eased as read.
+                    if (!creation.Lowered) {
+                        foreach (var read in CreationRig.Of(document: creation).Reads) {
+                            if (read.Kind == CreationRigReadKind.State) {
+                                AddBodyToken(token: read.Reference, truth: read.Truth);
+                            }
+                        }
                     }
 
-                    AddGate(gate: driver.When);
-
-                    // Scalar expressions are surfaces too, wherever a driver carries them.
+                    // Scalar expressions are surfaces too, wherever a member carries them.
                     return true;
-                case CreationEffectorDocument effector:
-                    // The walk continues into the effector's target.
-                    AddGate(gate: effector.When);
-
-                    return true;
-                case CreationEffectorTargetDocument target:
-                    if (string.Equals(
-                        a: target.Kind,
-                        b: CreationEffectorTargetDocument.KindState,
-                        comparisonType: StringComparison.Ordinal
-                    )) {
-                        AddBodyToken(
-                            token: target.Reference,
-                            truth: false
-                        );
-                    }
-
+                case CreationEffectorTargetDocument:
                     return false;
                 default:
                     return true;

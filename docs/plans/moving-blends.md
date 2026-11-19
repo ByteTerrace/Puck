@@ -745,6 +745,6 @@ and rounding (`SdfMeshGeometryBuilder.RelativePose` and its rounded pose
 record), used at the tier's cell; its declaration reuses the instance part
 (`SdfInstancePart`) rather than a new type or an instruction flag; and its
 classification reuses `SdfBoundAlgebra.Carves` and the motion owners
-(`CreationMotion.Owner`), keyed so the validator and the pooled plan share one
+(`CreationRig.Owner`), keyed so the validator and the pooled plan share one
 rule (`CreationMotion.OperandShapes`, `SharedOperandGroups`). The replacement
 path the settle rebake shared with the tiers stays the tiers'.

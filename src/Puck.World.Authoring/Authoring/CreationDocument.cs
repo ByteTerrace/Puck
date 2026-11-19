@@ -69,10 +69,10 @@ public sealed record PaletteEntryDocument(string Color, float? Emissive, float? 
 /// point in creation space, before its own translate/rotate/scale (null = none). Every op the copy expansion covers
 /// reaches contact as well as render; <c>wallpaper</c> does not expand, and a solid placement carrying one is refused
 /// at validation.</param>
-/// <param name="Swings">The driver-fed rotations this shape rides (<see cref="ShapeSwingDocument"/>), at most
-/// <see cref="MaxSwings"/> (null = none).</param>
-/// <param name="Slides">The driver-fed translations this shape rides (<see cref="ShapeSlideDocument"/>), at most
-/// <see cref="MaxSlides"/> (null = none). Applied after every swing, along the authored axis.
+/// <param name="Swings">The driver-fed rotations this shape rides (<see cref="ShapeSwingDocument"/>), any number (null =
+/// none), composed in the order written.</param>
+/// <param name="Slides">The driver-fed translations this shape rides (<see cref="ShapeSlideDocument"/>), any number
+/// (null = none). Applied after every swing, along the authored axis.
 /// <para>Both facets are presentation-only — composed onto the shape's per-frame dynamic transform and read nowhere
 /// else, so the SDF program, the colliders, the solid field, and simulation state are all blind to them. A shape
 /// carrying <paramref name="Domain"/> rides its own slot packed with its <paramref name="Parent"/> chain's rigid
@@ -82,10 +82,9 @@ public sealed record PaletteEntryDocument(string Color, float? Emissive, float? 
 /// parent's animated motion carries this shape and its own pivots with it, so a forearm swung at the elbow also rides
 /// the upper arm's swing at the shoulder. The parent must be declared earlier in <c>shapes</c> (so a chain resolves
 /// in one pass and can never cycle); presentation-only on the same terms as the swings it composes with.</param>
-/// <param name="Joint">The point this shape hinges about when it acts as a bone of a
-/// <see cref="CreationEffectorDocument"/> chain and declares no <paramref name="Swings"/> (null = the pivot of the
-/// first swing, or the shape's own position when it has neither). Author-frame, like every other point here. Read only
-/// by the effector solve, so it changes no pose on its own.</param>
+/// <param name="Joint">The point this shape turns about (null = the pivot of its first swing, or its own position when
+/// it has neither): an effector's solve turns a bone about it (<see cref="CreationRig.Joint"/>). Author-frame, like every
+/// other point here. It changes no pose on its own.</param>
 /// <param name="Taper">Only for Prism: top width divided by bottom width, finite in [0, 1].
 /// Null uses 0.5; zero makes a triangular profile and one a rectangular profile. Scale holds bottom half-width,
 /// half-height and extrusion half-depth. Rotate the prism to reverse its taper.</param>
@@ -221,14 +220,8 @@ public sealed record ShapeDocument(
     public const float MaxOnion = 0.2f;
     /// <summary>The largest authored magnitude of <see cref="Shear"/>'s X (linear) or Y (quadratic) component.</summary>
     public const float MaxShear = 4f;
-    /// <summary>The most entries <see cref="Slides"/> carries.</summary>
-    public const int MaxSlides = 4;
     /// <summary>The largest smooth-blend radius a shape's clamp normalizes to.</summary>
     public const float MaxSmooth = 0.5f;
-    /// <summary>The most entries <see cref="Swings"/> carries — one shape is one limb segment, and eight covers a
-    /// stride swing steered into the travel direction (a yaw in, the swing, the yaw back out, each against the hip's
-    /// own turn) beside a second driver's pose.</summary>
-    public const int MaxSwings = 8;
     /// <summary>The largest twist rate, in radians per unit of local Y (not an isometry, so this stays moderate —
     /// see <see cref="SdfProgramBuilder.TwistY"/>).</summary>
     public const float MaxTwist = 3.0f;
@@ -610,10 +603,10 @@ public sealed record CreationBehaviorDocument(
 /// <param name="Noise">The creation-level noise-relief facet (null = none) — see
 /// <see cref="CreationNoiseDocument"/>. Omitted from the wire when null, so a creation authored without it
 /// serializes to unchanged bytes.</param>
-/// <param name="Drivers">The named animation drivers (null = none), at most <see cref="MaxDrivers"/> — see
+/// <param name="Drivers">The named animation drivers (null = none), any number — see
 /// <see cref="CreationDriverDocument"/>. A shape's <see cref="ShapeDocument.Swings"/>/<see cref="ShapeDocument.Slides"/>
 /// name one of these. Presentation-only, like the facets that read them.</param>
-/// <param name="Effectors">The inverse-kinematics effectors (null = none), at most <see cref="MaxEffectors"/> — see
+/// <param name="Effectors">The inverse-kinematics effectors (null = none), any number — see
 /// <see cref="CreationEffectorDocument"/>. Each corrects a chain of this creation's own shapes so its tip reaches a
 /// target, composing after the drivers and the parent chain. Presentation-only, like the drivers.</param>
 /// <param name="Volumes">The bounded participating volumes (null = none), at most
@@ -648,12 +641,6 @@ public sealed record CreationDocument(
 ) {
     /// <summary>The version tag every saved document carries.</summary>
     public const string CurrentSchema = "puck.creation.v1";
-    /// <summary>The most entries <see cref="Drivers"/> carries — the width of the per-body phase/weight table a
-    /// consuming client keeps per stamped creation.</summary>
-    public const int MaxDrivers = 32;
-    /// <summary>The most entries <see cref="Effectors"/> carries — the width of the per-body effector weight/latch
-    /// table a consuming client keeps per stamped creation. Eight covers a spider's legs.</summary>
-    public const int MaxEffectors = 8;
     /// <summary>The material palette's slot count — <see cref="ShapeDocument.Material"/>/<see cref="TextRunDocument.Material"/>
     /// clamp into <c>[0, PaletteSize)</c> at normalization.</summary>
     public const int PaletteSize = 32;
@@ -665,6 +652,12 @@ public sealed record CreationDocument(
     /// accessor is required: System.Text.Json appends to it during deserialization.</summary>
     [System.Text.Json.Serialization.JsonExtensionData]
     public IDictionary<string, JsonElement>? Extensions { get; set; }
+
+    /// <summary>Gets whether this is a rig's lowered document (<see cref="CreationRig.Document"/>): its shapes' swings
+    /// and slides are removed because the rig plays them, so <see cref="CreationRig.Compile"/> refuses it. Only a rig
+    /// sets it, and it never crosses the wire.</summary>
+    [JsonIgnore]
+    public bool Lowered { get; internal init; }
 
     /// <summary>Returns whether a shape's palette slot is glass (<see cref="PaletteEntryDocument.Glass"/>): the shape
     /// bakes and draws apart from the creation's opaque shapes. A shape naming no slot, or one past the palette, reads
