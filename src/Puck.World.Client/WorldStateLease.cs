@@ -275,7 +275,21 @@ public sealed class WorldStateLease {
     /// <see cref="Slot(string, bool)"/>; -1 reads nothing.</param>
     /// <param name="value">The presented number; zero when the slot is -1 or its cell holds no number.</param>
     /// <returns><see langword="true"/> when the cell holds a number.</returns>
-    public bool TryNumber(int slot, out float value) {
+    public bool TryNumber(int slot, out float value) => TrySlotNumber(
+        delivered: false,
+        slot: slot,
+        value: out value
+    );
+    /// <summary>Reads a slot of this lease's mirror at its latest delivered tick without presentation interpolation.</summary>
+    /// <param name="slot">The slot, from one of the <c>Slot</c> overloads; -1 reads nothing.</param>
+    /// <param name="value">The delivered number; zero when the slot is -1 or its cell holds no number.</param>
+    /// <returns><see langword="true"/> when the cell holds a number.</returns>
+    public bool TryDeliveredNumber(int slot, out float value) => TrySlotNumber(
+        delivered: true,
+        slot: slot,
+        value: out value
+    );
+    private bool TrySlotNumber(int slot, bool delivered, out float value) {
         if (
             (slot < 0) ||
             (m_mirror is not { } mirror)
@@ -285,10 +299,15 @@ public sealed class WorldStateLease {
             return false;
         }
 
-        return mirror.TryNumber(
-            slot: slot,
-            value: out value
-        );
+        return (delivered
+            ? mirror.TryDeliveredNumber(
+                slot: slot,
+                value: out value
+            )
+            : mirror.TryNumber(
+                slot: slot,
+                value: out value
+            ));
     }
     /// <summary>Returns a slot's current sample through this lease's mirror.</summary>
     /// <param name="slot">The slot, from one of the <c>Slot</c> overloads; -1 reads nothing.</param>

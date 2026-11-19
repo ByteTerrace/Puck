@@ -90,6 +90,11 @@ public class RuleCompileContext : IRuleCostContext {
     /// <summary>Gets or sets the rule-scoped bound values the rule being compiled has declared so far — a binding's
     /// own expression sees only the bindings declared before it; the gate and effects see all of them.</summary>
     public List<CompiledRuleLocal>? RuleLocals { get; set; }
+    /// <summary>Gets or sets the set that records the ordinal of every local the program being compiled reads, or
+    /// <see langword="null"/> when nothing records. Every <c>$local:</c> spelling resolves through one door, which
+    /// adds to it, so the set is complete for whatever compiled while it was installed (<see cref="CompiledRule.Deferred"/>
+    /// is derived from it).</summary>
+    public HashSet<int>? LocalReads { get; set; }
     /// <summary>Gets the per-compile scratch a family may cache into, cleared when the compile ends.</summary>
     public IDictionary<string, object> Scope => m_scope;
     /// <summary>Gets the authored simulation rate, in ticks per second.</summary>
@@ -158,7 +163,8 @@ public class RuleCompileContext : IRuleCostContext {
     }
 
     // Scope identity keeps pattern-local token bindings separate from the enclosing rule's bindings.
-    internal Dictionary<(string Text, BoundKey[]? Scope), CompiledCellRef> KeyExpressions { get; } = [];
+    // Each entry keeps the locals its program read, so a reuse records them as a fresh compile would (LocalReads).
+    internal Dictionary<(string Text, BoundKey[]? Scope), (CompiledCellRef Reference, int[] Locals)> KeyExpressions { get; } = [];
 
     /// <summary>Resets the per-compile scope between rules.</summary>
     public void ClearScope() {
@@ -168,6 +174,7 @@ public class RuleCompileContext : IRuleCostContext {
         m_instanceBindings.Clear();
         m_releasedInstanceSlots.Clear();
         RuleLocals = null;
+        LocalReads = null;
         Zones = null;
 
         KeyExpressions.Clear();

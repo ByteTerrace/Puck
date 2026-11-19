@@ -825,10 +825,9 @@ Owner calls:
 
 - The valley wears the painterly set; step 8 demonstrates the ruled direction.
 - Settled by [colour conversion](rendering.md#colour-conversion--scene-light-to-display-values-once):
-  the debug world's `compensation: 2` stood in for the missing display encode
-  and is removed when the conversion and retuned world land together; haze
-  strength and per-place exposures are authored looks in `worlds/standard/` and
-  `worlds/debug/`, not engine defaults.
+  the debug world's exposure compensation is its authored key, not a stand-in
+  for the display encode; haze strength and per-place exposures are authored
+  looks in `worlds/standard/` and `worlds/debug/`, not engine defaults.
 - Decided by the owner: the time of day varies and the sun's direction is
   authored. The valley's light runs through an authored cycle, never one fixed
   sun, so the image meter, GI proportional to change and the far cascade are

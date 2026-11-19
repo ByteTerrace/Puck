@@ -2351,7 +2351,19 @@ and the switch stay, so the comparison can be read again.
 
 **Status and scope.** The sm7b continuations answer the review below and land
 the contiguous fallback, one device retirement timeline and destination page
-generation proofs (pieces 1 and 2 below). No sparse backend is enabled yet. The
+generation proofs (pieces 1 and 2 below). Direct3D 12 has a mapped destination
+(`IGpuMappedBuffer`, `DirectXGpuMappedBuffer`, created through
+`IGpuBufferFactory.TryCreateMapped` at reserved resources tier 2 or above): one
+reserved buffer of `GpuRegion.MaxByteCount` whose 1 MiB chunks map to tile runs
+of the heap arena's tile-only heaps (`DirectXHeapArena.PlaceTiles`), each run
+admitted and counted like any heap range. A `GpuRegion` created `mapped` grows
+by mapping chunks and shrinks by unmapping them, with no carry and no
+replacement; the mesh region fits its chunks to its placements
+(`SdfWorldTables.CoverMeshRegion`), so a forgotten mesh's chunk leaves the pool
+wherever it lay, and the probe scene grows in place. The page authority has one
+page a chunk. Reservation credit still counts the whole tile heap a new run
+opens (M2's page-only credit is not built), and nothing compacts physical
+pages. On Vulkan the
 capabilities are support
 readings, not an enabled allocation path: `VulkanLogicalDeviceFactory.BackingOf`
 reads sparse features, but `FeatureIndicesOf` does not enable them and
@@ -2791,14 +2803,16 @@ specialization and its measurement remain with native resource integration.
 This follows the semaphore ordering in the Vulkan reference and the independent
 vkd3d-proton implementation cited in the backend contract above.
 
-**Pieces still to build, in dependency order.** Add native reserved/sparse
-resource ownership, Direct3D 12 tile mapping, page-only residency admission
-with pool-owned slack (M2), sparse arena placement policy (M5), and fenced
-unmapping plus physical compaction (M6). Vulkan's binding door and both pools'
-empty-block trim exist; mesh regions still choose contiguous storage. No
-current piece claims a sparse path chosen or budget-drop sparse relief. Both
-backends must stay bootable at each piece, and the final hardware check below
-still gates any claim that sparse relief works.
+**Pieces still to build, in dependency order.** Direct3D 12's reserved
+destination, its tile mapping through the queue door, and fenced unmapping
+(a released chunk's tiles return to the arena only after the buffer's own
+fence passes the queued unmapping, `DirectXGpuMappedBuffer`) exist, and the
+mesh region and the probe scene use them. Still to build: Vulkan sparse
+resource ownership behind `IGpuMappedBuffer` through its binding door,
+page-only residency admission with pool-owned slack (M2), sparse arena
+placement policy (M5), and physical compaction (M6). Both backends must stay
+bootable at each piece, and the final hardware check below still gates any
+claim that budget-drop relief works.
 
 **Code review disposition (continuation 3, findings on 2ad5ac190a).**
 

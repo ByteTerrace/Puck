@@ -227,11 +227,10 @@ stops authoring around it.
 **Poses do not blend, and layers cannot be masked (gap A).** A creation's
 `frames` are whole poses that replace one another with no interpolation
 ([frames](../../.claude/skills/sdf-authoring/references/rig.md#frames)). The
-blended alternative is a swing under a driver's weight, and a creation holds
-32 drivers and a shape 8 swings (`CreationDocument.MaxDrivers`,
-`ShapeDocument.MaxSwings`). The Moth uses 18 drivers. Her thighs and pelvis
-use all 8 of their swings, her upper arms and torso 7, and her forearms 5. A fingering chart and a set of dance moves, written as one
-driver a pose, do not fit. A driver's weight also applies to every shape it
+blended alternative is a swing under a driver's weight. The caps on drivers,
+swings, slides and effectors are removed and every table is sized from the
+compiled rig (`CreationRig`), but a fingering chart and a set of dance moves
+written as one driver and one swing a pose is still the clumsy form. A driver's weight also applies to every shape it
 moves, so "the gait keeps the legs and gives up the arms while she plays"
 needs a second gait driver for the arms. An author would write a clumsier
 form to fit the caps, which "Ergonomic is optimal" calls an engine defect. The
@@ -321,10 +320,12 @@ its tune emitter.
 **Thirty-two voices (gap K).** `VoiceSynth` uses the current envelope and
 authored gain to select the voice it replaces when all slots are occupied.
 
-**Nothing drives a controller's motors (gap L).** No world code calls
-`IGamepadOutput` ([input packet](open-items.md#input-channels)). A beat felt in
-the hands is the clearest non-visual metronome a pad offers, and it is an
-unreached capability to wire.
+**Nothing drives a controller's motors (gap L).** Built: `WorldHapticRow` (the
+`haptics` section), `WorldHapticDirector` (wiring `IGamepadOutput.Rumble`
+through `PlayerRoster.TryGetSeatDevice` and `GamepadManager.TryGetOutput` from
+each seat's routed state), `haptics.state` read-back, and the standard's
+`instrument-beat-{seat}` row in `worlds/standard/instrument.puck`. Physical-pad
+feel awaits a windowed hardware verification pass ([input packet](open-items.md#input-channels)).
 
 #### Delivered cues and music design
 
@@ -469,7 +470,7 @@ stop at a gap.
 | Pose clips (gaps A, B, C) | [A design memo](instrument-play/pose-clips.md), reviewed, then the mechanism: interpolated key poses played by a driver with a weight and a shape mask; an effector target on the creation's own shape; the decision on a presentation-side input signal | Design: `principal`. Review: Astra. Build: an Opus `specialist`. | The rig's layering is invariant-heavy (the skin envelope and the bounds read swings), and a wrong design costs every later stage | Now |
 | Delivered cues and music that follows rules (gaps I, J, K) | A design memo, reviewed, then: rule cues in the delivered tick, with a numeric argument a patch reads as pitch; one lane feeding sound and pose cues; score conditions on rule cues; layer gain in the mix; a voice-stealing rule | Design and build: Sol at `high`. Review: an Opus `specialist`. | It changes what crosses the wire, which is a disclosure question; another family reviews | Now |
 | Body lanes (gap D) | More per-body carriers for shading-time values, or a second carrier, as the design finds | An Opus `specialist` | A C# and HLSL layout pair with a generated side | After the rendering wave's lanes that edit the same pass block land |
-| Haptics (gap L) | A world-authored pulse on a seat's pad, driven by state | Hydrogen | A specified wiring of an existing output interface | Now |
+| Haptics (gap L) | A world-authored pulse on a seat's pad, driven by state (`haptics`, `WorldHapticDirector`, `haptics.state`, and `instrument-beat-{seat}` in `worlds/standard/instrument.puck`) | Hydrogen | A specified wiring of an existing output interface | Built; windowed physical-pad check is the lead's |
 | Standard package: the judge | Stage 1's channels, mode, bindings, phrase rows and rules in `worlds/standard/` (`rhythm.puck`, `instrument.puck`), with the debug world's score and `bard.puck` | `implementer` | The mechanisms exist and the fixture shows the shape | Built. The idle-seat and per-seat counter readings are the lead's |
 | The instrument and the hands | Stage 2: the creation, the segmented fingers, the playing stance and the fingering poses on the Moth | An Opus `specialist`, as a look lane with the probe rule | A creation built to push the rig; it stops at gaps A, B and E | After the pack's instrument panels; it meets the pose-clip lane |
 | Sound and score | Stage 3's patches, cues, tunes and score layers | `implementer` | Authored data once the cue lane lands | After the delivered-cue lane |

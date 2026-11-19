@@ -27,7 +27,7 @@ Every rule has a name and at least one effect. The rest is optional:
 | Part | What it does | In the example |
 |---|---|---|
 | Name | Identifies the rule for compilation, tracing, latching, and group membership. It's unique in the document, and a leading `$` is refused. | `buyCard` |
-| Locals | Values computed once per evaluation, in declared order, before the gate. The gate and every effect can read them. A local is never stored; it lives for one evaluation. | `price` |
+| Locals | Values computed once per evaluation, in declared order. The gate and every effect can read them. The ones the gate reads, directly or through another local, are computed before the gate; the rest only when the evaluation fires. A local is never stored; it lives for one evaluation. | `price` |
 | Gate | The predicate that must hold. A rule with no gate always holds. | `coins >= price` |
 | Mode | Whether a holding gate fires on every evaluation (`Level`, the default) or only when it opens (`Edge`). | `Edge` |
 | Iteration | `forEach: row` evaluates the rule once per key of a keyed row, `forEach: $zones` once per entry of the rule's zone table, `forEach: $bodies` once per live body, and `rule name for each x in pool` once per live pool instance. `maxFirings: n` ends an iterating sweep once `n` bindings have fired. | none |
@@ -231,7 +231,7 @@ happens for one rule, or for one key of a rule that iterates.
 
 ```mermaid
 flowchart TD
-    Start["Next rule, or next snapshotted key"] --> Locals["Evaluate locals in order"]
+    Start["Next rule, or next snapshotted key"] --> Locals["Evaluate the gate's locals in order"]
     Locals -->|a local is absent| Idle["Report it; skip this evaluation"]
     Locals -->|anything faults| Hold["Report it; the latch keeps its last verdict"]
     Locals --> Zones{"Every live zone selects a row?"}
@@ -240,17 +240,23 @@ flowchart TD
     Gate -- No --> Closed
     Gate -- Yes --> Mode{"Level, or a new Edge crossing?"}
     Mode -- No --> Held["Record held; don't fire"]
-    Mode -- Yes --> Fire["Fire effects in one journal scope"]
+    Mode -- Yes --> Deferred["Evaluate the other locals in order"]
+    Deferred -->|a local is absent| Idle
+    Deferred -->|anything faults| Hold
+    Deferred --> Fire["Fire effects in one journal scope"]
 ```
 
 Step by step:
 
 1. **Bind.** For an iterating rule, the evaluator binds the next key it
    snapshotted before the sweep began.
-1. **Evaluate locals.** Each local runs in declared order and can read the ones
-   before it. A local that can't evaluate (overflow, division by zero, an absent
-   read) is reported as `RuleEffectRefusal.Arithmetic`, and this evaluation
-   stops. A local can fail even when the gate would have been closed.
+1. **Evaluate the gate's locals.** Each local the gate reads, directly or
+   through another local, runs in declared order and can read the ones before
+   it. A local that can't evaluate (overflow, division by zero, an absent read)
+   is reported as `RuleEffectRefusal.Arithmetic`, and this evaluation stops. A
+   local the gate reads can fail even when the gate would have been closed. The
+   compiler records which locals the gate reads (`CompiledRule.Deferred` holds
+   the rest), since every `$local:` spelling resolves through one door.
 1. **Select live zones.** Every `$zones[…]` spelling in the rule resolves to a
    row. If any selects nothing, the gate reads closed without being consulted
    and nothing is reported. An index whose arithmetic faults is reported.
@@ -266,6 +272,12 @@ Step by step:
    on a fault tick. A group trigger that faults likewise leaves its group's
    progress as it was, and a world's `decision` keeps its choice and runs no
    `onNoChoice`.
+1. **Evaluate the other locals.** When the evaluation fires, the locals only
+   the effects read run in declared order, with the same refusals as the gate's:
+   one that can't evaluate stops the evaluation before any effect runs. A
+   closed gate or a held `Edge` never computes them, so a local only the
+   effects read never faults a closed gate. A world's `decision` binds every
+   local before its gates and scores, which read them.
 1. **Fire.** The effects run in authored order inside one journal scope, as
    described in [Make a firing atomic](#make-a-firing-atomic).
 

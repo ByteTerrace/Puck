@@ -170,8 +170,8 @@ public sealed class CreationLocomotionLawTests {
         return state!;
     }
     private static float Phase(IReadOnlyList<CreationDriverDocument> drivers, Func<int, (Vector3 Position, float Yaw)> pose, int frames, WorldGaitKinematics? kinematics = null) {
-        var phases = new float[CreationDocument.MaxDrivers];
-        var weights = new float[CreationDocument.MaxDrivers];
+        var phases = new float[64];
+        var weights = new float[64];
         var lastPosition = Vector3.Zero;
         var lastOrientation = Quaternion.Identity;
         var seeded = false;
@@ -184,7 +184,7 @@ public sealed class CreationLocomotionLawTests {
             WorldGaitDrivers.Advance(
                 address: Body,
                 deltaSeconds: Frame,
-                drivers: drivers,
+                rig: ClientFixtures.DriverRig(drivers: drivers),
                 easedSpeed: ref speed,
                 facts: BodyFacts.Grounded,
                 kinematics: kinematics,
@@ -292,8 +292,8 @@ public sealed class CreationLocomotionLawTests {
         IReadOnlyList<CreationDriverDocument> followed = [Driver(dynamics: "turn", signal: CreationDriverDocument.SignalTurnRate)];
         var kinematics = new WorldGaitKinematics();
 
-        kinematics.Resolve(drivers: followed, rows: rows);
-        kinematics.Resolve(drivers: followed, rows: rows);
+        kinematics.Resolve(drivers: ClientFixtures.DriverRig(drivers: followed).Drivers, rows: rows);
+        kinematics.Resolve(drivers: ClientFixtures.DriverRig(drivers: followed).Drivers, rows: rows);
 
         (Vector3, float) Turning(int frame) => (Vector3.Zero, (Math.Max(val1: 0, val2: (frame - 10)) * Frame));
 
@@ -305,12 +305,12 @@ public sealed class CreationLocomotionLawTests {
 
         var settled = new WorldGaitKinematics();
 
-        settled.Resolve(drivers: followed, rows: rows);
+        settled.Resolve(drivers: ClientFixtures.DriverRig(drivers: followed).Drivers, rows: rows);
         Assert.Equal(expected: 1f, actual: Phase(drivers: followed, frames: 240, kinematics: settled, pose: Turning), precision: 2);
 
         var seam = new WorldGaitKinematics();
 
-        seam.Resolve(drivers: followed, rows: rows);
+        seam.Resolve(drivers: ClientFixtures.DriverRig(drivers: followed).Drivers, rows: rows);
         _ = seam.Follow(deltaSeconds: Frame, index: 0, period: (2f * MathF.PI), target: 3.1f);
         Assert.Equal(expected: 3.1f, actual: seam.Follow(deltaSeconds: 0f, index: 0, period: (2f * MathF.PI), target: -3.1f));
 
@@ -320,7 +320,7 @@ public sealed class CreationLocomotionLawTests {
         Assert.Equal(expected: (4f * MathF.PI), actual: WorldGaitKinematics.Period(cadence: -2f, signal: CreationDriverDocument.SignalTravelDirection), precision: 4);
         Assert.Equal(expected: 0f, actual: WorldGaitKinematics.Period(cadence: 2f, signal: CreationDriverDocument.SignalTurnRate));
         // An unresolved row, and a frame with no time, leave the eased motion where it was.
-        seam.Resolve(drivers: [Driver(dynamics: "absent", signal: CreationDriverDocument.SignalTurnRate)], rows: rows);
+        seam.Resolve(drivers: ClientFixtures.DriverRig(drivers: [Driver(dynamics: "absent", signal: CreationDriverDocument.SignalTurnRate)]).Drivers, rows: rows);
         Assert.Equal(expected: 0.25f, actual: seam.Follow(deltaSeconds: Frame, index: 0, period: 0f, target: 0.25f));
         seam.Observe(blend: 1f, deltaSeconds: 0f, travel: Vector3.UnitX, yaw: 0f);
         Assert.Equal(expected: 0f, actual: seam.ForwardAcceleration);

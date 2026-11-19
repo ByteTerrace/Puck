@@ -99,8 +99,8 @@ public sealed class CreationAnimationLawTests {
                 Driver: "absent",
                 Pivot: Vector3.Zero
             )]);
-        var phases = new float[CreationDocument.MaxDrivers];
-        var weights = new float[CreationDocument.MaxDrivers];
+        var phases = new float[64];
+        var weights = new float[64];
 
         phases[0] = (MathF.PI / 2f);
         weights[0] = 1f;
@@ -109,11 +109,10 @@ public sealed class CreationAnimationLawTests {
         var rotation = shape.Rotation.Value;
 
         WorldGaitDrivers.Compose(
-            drivers: [Stride()],
+            terms: ClientFixtures.Terms(shape: shape, drivers: [Stride()]),
             phases: phases,
             position: ref position,
             rotation: ref rotation,
-            shape: shape,
             weights: weights
         );
 
@@ -134,11 +133,10 @@ public sealed class CreationAnimationLawTests {
         var namedRotation = named.Rotation.Value;
 
         WorldGaitDrivers.Compose(
-            drivers: [Stride()],
+            terms: ClientFixtures.Terms(shape: named, drivers: [Stride()]),
             phases: phases,
             position: ref namedPosition,
             rotation: ref namedRotation,
-            shape: named,
             weights: weights
         );
 
@@ -154,15 +152,15 @@ public sealed class CreationAnimationLawTests {
     public void AMovingGateReleasesWhenTheBodyStopsWhileAFactOnlyGateDoesNot() {
         var moving = new[] { Stride(when: ["Grounded", CreationDriverDocument.TokenMoving]) };
         var factOnly = new[] { Stride(when: ["Grounded"]) };
-        var movingPhases = new float[CreationDocument.MaxDrivers];
-        var movingWeights = new float[CreationDocument.MaxDrivers];
+        var movingPhases = new float[64];
+        var movingWeights = new float[64];
         var movingPosition = Vector3.Zero;
         var movingOrientation = Quaternion.Identity;
         var movingSeeded = false;
         var movingSpeed = 0f;
         var movingAddress = FirstBody;
-        var factPhases = new float[CreationDocument.MaxDrivers];
-        var factWeights = new float[CreationDocument.MaxDrivers];
+        var factPhases = new float[64];
+        var factWeights = new float[64];
         var factPosition = Vector3.Zero;
         var factOrientation = Quaternion.Identity;
         var factSeeded = false;
@@ -174,7 +172,7 @@ public sealed class CreationAnimationLawTests {
             WorldGaitDrivers.Advance(
                 address: FirstBody,
                 deltaSeconds: (1f / 60f),
-                drivers: moving,
+                rig: ClientFixtures.DriverRig(drivers: moving),
                 facts: BodyFacts.Grounded,
                 easedSpeed: ref movingSpeed,
                 lastAddress: ref movingAddress,
@@ -189,7 +187,7 @@ public sealed class CreationAnimationLawTests {
             WorldGaitDrivers.Advance(
                 address: FirstBody,
                 deltaSeconds: (1f / 60f),
-                drivers: factOnly,
+                rig: ClientFixtures.DriverRig(drivers: factOnly),
                 facts: BodyFacts.Grounded,
                 easedSpeed: ref factSpeed,
                 lastAddress: ref factAddress,
@@ -268,8 +266,8 @@ public sealed class CreationAnimationLawTests {
             signal: CreationDriverDocument.SignalTime,
             when: [CreationDriverDocument.WhenAlways]
         ) };
-        var phases = new float[CreationDocument.MaxDrivers];
-        var weights = new float[CreationDocument.MaxDrivers];
+        var phases = new float[64];
+        var weights = new float[64];
         var lastPosition = Vector3.Zero;
         var lastOrientation = Quaternion.Identity;
         var seeded = false;
@@ -280,7 +278,7 @@ public sealed class CreationAnimationLawTests {
             WorldGaitDrivers.Advance(
                 address: FirstBody,
                 deltaSeconds: 0.05f,
-                drivers: drivers,
+                rig: ClientFixtures.DriverRig(drivers: drivers),
                 facts: BodyFacts.None,
                 easedSpeed: ref easedSpeed,
                 lastAddress: ref address,
@@ -303,8 +301,8 @@ public sealed class CreationAnimationLawTests {
             userMessage: "a time-driven ungated driver did not advance while the body stood still"
         );
         // The control: the identical driver gated on a fact the body does not carry stays at rest.
-        var gatedPhases = new float[CreationDocument.MaxDrivers];
-        var gatedWeights = new float[CreationDocument.MaxDrivers];
+        var gatedPhases = new float[64];
+        var gatedWeights = new float[64];
         var gatedPosition = Vector3.Zero;
         var gatedOrientation = Quaternion.Identity;
         var gatedSeeded = false;
@@ -320,7 +318,7 @@ public sealed class CreationAnimationLawTests {
             WorldGaitDrivers.Advance(
                 address: FirstBody,
                 deltaSeconds: 0.05f,
-                drivers: gated,
+                rig: ClientFixtures.DriverRig(drivers: gated),
                 facts: BodyFacts.None,
                 easedSpeed: ref gatedSpeed,
                 lastAddress: ref gatedAddress,
@@ -348,8 +346,8 @@ public sealed class CreationAnimationLawTests {
     [Fact]
     public void AnAddressChangeReseedsPhaseAndWeight() {
         var drivers = new[] { Stride(when: [CreationDriverDocument.WhenAlways]) };
-        var phases = new float[CreationDocument.MaxDrivers];
-        var weights = new float[CreationDocument.MaxDrivers];
+        var phases = new float[64];
+        var weights = new float[64];
         var lastPosition = Vector3.Zero;
         var lastOrientation = Quaternion.Identity;
         var seeded = false;
@@ -359,7 +357,7 @@ public sealed class CreationAnimationLawTests {
         void Step(WorldEntityAddress at, Vector3 position) => WorldGaitDrivers.Advance(
             address: at,
             deltaSeconds: (1f / 60f),
-            drivers: drivers,
+            rig: ClientFixtures.DriverRig(drivers: drivers),
             facts: BodyFacts.Grounded,
             easedSpeed: ref easedSpeed,
             lastAddress: ref address,
@@ -716,7 +714,7 @@ public sealed class CreationAnimationLawTests {
             var address = FirstBody;
 
             void Step(BodyFacts facts) => WorldGaitDrivers.Advance(
-                drivers,
+                ClientFixtures.DriverRig(drivers: drivers),
                 phases,
                 weights,
                 (1f / rate),
@@ -873,8 +871,8 @@ public sealed class CreationAnimationLawTests {
             When: [CreationDriverDocument.WhenAlways]
         ),
         };
-        var phases = new float[CreationDocument.MaxDrivers];
-        var weights = new float[CreationDocument.MaxDrivers];
+        var phases = new float[64];
+        var weights = new float[64];
         var lastPosition = Vector3.Zero;
         var lastOrientation = Quaternion.Identity;
         var seeded = false;
@@ -890,7 +888,7 @@ public sealed class CreationAnimationLawTests {
             WorldGaitDrivers.Advance(
                 address: FirstBody,
                 deltaSeconds: 0.5f,
-                drivers: drivers,
+                rig: ClientFixtures.DriverRig(drivers: drivers),
                 facts: BodyFacts.Grounded,
                 easedSpeed: ref easedSpeed,
                 lastAddress: ref address,
@@ -1024,8 +1022,8 @@ public sealed class CreationAnimationLawTests {
             signal: CreationDriverDocument.SignalTravel,
             when: [CreationDriverDocument.WhenAlways]
         ) };
-        var phases = new float[CreationDocument.MaxDrivers];
-        var weights = new float[CreationDocument.MaxDrivers];
+        var phases = new float[64];
+        var weights = new float[64];
         var lastPosition = Vector3.Zero;
         var lastOrientation = Quaternion.Identity;
         var seeded = false;
@@ -1035,7 +1033,7 @@ public sealed class CreationAnimationLawTests {
         void Step(Vector3 position) => WorldGaitDrivers.Advance(
             address: FirstBody,
             deltaSeconds: (1f / 60f),
-            drivers: drivers,
+            rig: ClientFixtures.DriverRig(drivers: drivers),
             facts: BodyFacts.Grounded,
             easedSpeed: ref easedSpeed,
             lastAddress: ref address,
@@ -1087,8 +1085,8 @@ public sealed class CreationAnimationLawTests {
     [Fact]
     public void PlanarTravelDriverChargesOnlyHorizontalTravelUnderItsGate() {
         var drivers = new[] { Stride() };
-        var phases = new float[CreationDocument.MaxDrivers];
-        var weights = new float[CreationDocument.MaxDrivers];
+        var phases = new float[64];
+        var weights = new float[64];
         var lastPosition = Vector3.Zero;
         var lastOrientation = Quaternion.Identity;
         var seeded = false;
@@ -1098,7 +1096,7 @@ public sealed class CreationAnimationLawTests {
         void Step(Vector3 position, BodyFacts facts) => WorldGaitDrivers.Advance(
             address: FirstBody,
             deltaSeconds: (1f / 60f),
-            drivers: drivers,
+            rig: ClientFixtures.DriverRig(drivers: drivers),
             facts: facts,
             easedSpeed: ref easedSpeed,
             lastAddress: ref address,
@@ -1498,16 +1496,16 @@ public sealed class CreationAnimationLawTests {
             comparisonType: StringComparison.Ordinal,
             expectedSubstring: $"amplitude 40 is outside ±{ShapeSlideDocument.MaxAmplitude} creation units."
         );
-        Assert.Contains(
+        Assert.DoesNotContain(
             actualString: Refusal(document: Rig(
                 drivers: [.. Enumerable.Range(
-                        count: (CreationDocument.MaxDrivers + 1),
+                        count: 40,
                         start: 0
                     ).Select(selector: index => Stride() with { Name = $"d{index}" })],
                 shape: Limb()
             )),
             comparisonType: StringComparison.Ordinal,
-            expectedSubstring: $"exceeds the {CreationDocument.MaxDrivers}-driver list."
+            expectedSubstring: "exceeds"
         );
         Assert.Contains(
             actualString: Refusal(document: Rig(
@@ -1517,11 +1515,11 @@ public sealed class CreationAnimationLawTests {
             comparisonType: StringComparison.Ordinal,
             expectedSubstring: "duplicate driver name 'stride'."
         );
-        Assert.Contains(
+        Assert.DoesNotContain(
             actualString: Refusal(document: Rig(
                 drivers: [Stride()],
                 shape: Limb(swings: [.. Enumerable.Repeat(
-                        count: (ShapeDocument.MaxSwings + 1),
+                        count: 12,
                         element: new ShapeSwingDocument(
                             Amplitude: 0.6f,
                             Axis: Vector3.UnitX,
@@ -1531,13 +1529,13 @@ public sealed class CreationAnimationLawTests {
                     )])
             )),
             comparisonType: StringComparison.Ordinal,
-            expectedSubstring: $"exceeds the {ShapeDocument.MaxSwings}-swing list."
+            expectedSubstring: "exceeds"
         );
-        Assert.Contains(
+        Assert.DoesNotContain(
             actualString: Refusal(document: Rig(
                 drivers: [Stride()],
                 shape: Limb(slides: [.. Enumerable.Repeat(
-                        count: (ShapeDocument.MaxSlides + 1),
+                        count: 5,
                         element: new ShapeSlideDocument(
                             Amplitude: 0.2f,
                             Axis: Vector3.UnitY,
@@ -1546,7 +1544,7 @@ public sealed class CreationAnimationLawTests {
                     )])
             )),
             comparisonType: StringComparison.Ordinal,
-            expectedSubstring: $"exceeds the {ShapeDocument.MaxSlides}-slide list."
+            expectedSubstring: "exceeds"
         );
         Assert.Contains(
             actualString: Refusal(document: Rig(

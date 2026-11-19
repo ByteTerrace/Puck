@@ -337,6 +337,9 @@ public sealed partial class SdfWorldTables : IDisposable {
             byteCount: SdfMeshRegion.DrawBytes,
             region: MeshRegionIndex
         ));
+        // A mapped region's first chunk is backing beyond its draw record.
+        m_meshGrant.Mapped = m_meshRegion.Mapped;
+        m_meshGrant.Created(capacityBytes: ((long)m_meshRegion.DestinationBytes));
         m_lightRegion = scope.Own(created: CreateRegion(byteCount: RecordBytes(records: m_lightRecords), region: LightRegionIndex));
         m_skyRegion = scope.Own(created: CreateRegion(byteCount: RecordBytes(records: m_skyRecord), region: SkyRegionIndex));
         m_skyLayerRegion = scope.Own(created: CreateRegion(byteCount: RecordBytes(records: m_skyLayerRecords), region: SkyLayerRegionIndex));

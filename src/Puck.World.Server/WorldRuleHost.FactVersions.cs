@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using Puck.Maths;
 using Puck.Physics.Motion;
 
@@ -11,6 +12,27 @@ public sealed partial class WorldRuleHost {
     private const int BodyFactsSource = 1;
     private const int LiveBodiesSource = 2;
     private const int PlacementPoseSource = 3;
+    private const int InputSource = 4;
+    private const int ClockSource = 5;
+
+    // What an input-history read can observe of one owner: which owner object answers, its epoch (a switch, a reset,
+    // a calibration), the ring's occupancy and newest identity (an admission, an expiry), its folded image and mapping
+    // (a hold's continuation), and its restores (after which identities can repeat). Identities only grow between
+    // restores, so a read of an event, its time, value or tick, a hold, or the music clock at an event is a function
+    // of these alone.
+    private readonly record struct InputSeen(WorldInputOwner? Owner, ulong Restores, ulong Epoch, int Count, ulong Newest, Puck.World.Protocol.PlayerIntent Image, WorldInputMapping? Mapping) {
+        public static InputSeen Of(WorldInputOwner? owner) => ((owner is null)
+            ? default
+            : new InputSeen(Count: owner.Count, Epoch: owner.Epoch, Image: owner.Image, Mapping: owner.Mapping, Newest: ((owner.Count > 0) ? owner.Record(index: (owner.Count - 1)).Id : 0UL), Owner: owner, Restores: owner.Restores));
+    }
+
+    private readonly List<Puck.Commands.Principal> m_inputPrincipals = [];
+    private readonly List<InputSeen> m_seenInputs = [];
+    private readonly List<ulong> m_inputVersions = [];
+    private bool m_inputsStale = true;
+    private readonly long[] m_seenClocks = new long[4];
+    private readonly ulong[] m_clockVersions = new ulong[4];
+    private readonly bool[] m_watchClocks = new bool[4];
 
     // What a pose read answers of one population slot: its position, orientation and up, every input of
     // Read(BodyPositionOperand), Read(BoardCellOfOperand) and Read(UprightOperand); zero, identity and +Y with no body
@@ -56,11 +78,25 @@ public sealed partial class WorldRuleHost {
         ArgumentNullException.ThrowIfNull(argument: rows);
         ArgumentNullException.ThrowIfNull(argument: facts);
 
+        if (fact is WorldClockOperand clock) {
+            WatchClock(facet: clock.Reading);
+            facts.Add(item: new FactRead(Body: (int)clock.Reading, Source: ClockSource));
+
+            return true;
+        }
         if (fact is not WorldBodyFactOperand { Payload: { } payload }) {
             return false;
         }
 
         switch (payload) {
+            case WorldInputOperand input when TryInputScope(input: input, scope: out var inputScope):
+                facts.Add(item: new FactRead(Body: inputScope, Source: InputSource));
+
+                return true;
+            case ClockOperand { Input: { } input } when TryInputScope(input: input, scope: out var clockScope):
+                facts.Add(item: new FactRead(Body: clockScope, Source: InputSource));
+
+                return true;
             case BodyStateOperand state when TryBodyScope(body: state.Body, scope: out _):
                 var row = Host.Population.ActionStateLane.RowOrdinal(slot: state.Slot);
 
@@ -121,6 +157,22 @@ public sealed partial class WorldRuleHost {
     public bool TryFactVersion(int source, int body, out ulong version) {
         version = 0UL;
         DeriveFacts();
+        if (source == InputSource) {
+            if (((uint)body) >= ((uint)m_inputVersions.Count)) {
+                return false;
+            }
+            version = m_inputVersions[body];
+
+            return true;
+        }
+        if (source == ClockSource) {
+            if ((((uint)body) >= ((uint)m_watchClocks.Length)) || !m_watchClocks[body]) {
+                return false;
+            }
+            version = m_clockVersions[body];
+
+            return true;
+        }
         if (source == PlacementPoseSource) {
             var ordinal = ((body == FactRead.EachBody) ? EachPlacementOrdinal() : body);
 
@@ -160,6 +212,8 @@ public sealed partial class WorldRuleHost {
         BodyFactsSource => "fact",
         LiveBodiesSource => "bodies",
         PlacementPoseSource => "placementPose",
+        InputSource => "input",
+        ClockSource => "clock",
         _ => $"source {source}",
     });
 
@@ -170,7 +224,10 @@ public sealed partial class WorldRuleHost {
     /// <inheritdoc/>
     /// <remarks>Marks the derived versions stale; they are derived again before the next version read or drain
     /// (<see cref="DeriveFacts"/>), so several firings with arms in a row cost one comparison, not one each.</remarks>
-    public void RefreshFacts() => m_factsStale = true;
+    public void RefreshFacts() {
+        m_factsStale = true;
+        m_inputsStale = true;
+    }
 
     // Whether host state may have moved since the versions were last derived.
     private bool m_factsStale = true;
@@ -180,10 +237,12 @@ public sealed partial class WorldRuleHost {
     // Read(UprightOperand) and Read(BodyFactOperand) answer them. Every reader of a version or of the moved feed
     // passes through here first, so a version is current wherever it is read.
     private void DeriveFacts() {
+        DeriveInputs();
         if (!m_factsStale) {
             return;
         }
         m_factsStale = false;
+        DeriveClocks();
 
         var population = Host.Population;
         var capacity = population.Capacity;
@@ -208,42 +267,92 @@ public sealed partial class WorldRuleHost {
         }
 
         for (var index = 0; (index < capacity); index++) {
-            var live = population.IsActive(index: index);
-
-            if (live != m_seenLive[index]) {
-                m_seenLive[index] = live;
-                m_liveVersion++;
-                m_factMoves.Add(item: new FactRead(Body: index, Source: LiveBodiesSource));
-            }
+            _ = See(move: new FactRead(Body: index, Source: LiveBodiesSource), now: population.IsActive(index: index), seen: ref m_seenLive[index], version: ref m_liveVersion);
             if (!m_watchPoses && !m_watchFacts) {
                 continue;
             }
 
             var body = Host.Body(index: index);
 
-            if (m_watchPoses) {
-                var pose = BodyPose.Of(body: body);
-
-                if (pose != m_seenPose[index]) {
-                    m_seenPose[index] = pose;
-                    m_poseVersions[index]++;
-                    m_factMoves.Add(item: new FactRead(Body: index, Source: BodyPoseSource));
-                    placementMoved |= (m_watchPlacements && (index < m_inhabitant.Length) && m_inhabitant[index]);
-                }
+            if (m_watchPoses && See(move: new FactRead(Body: index, Source: BodyPoseSource), now: BodyPose.Of(body: body), seen: ref m_seenPose[index], version: ref m_poseVersions[index])) {
+                placementMoved |= (m_watchPlacements && (index < m_inhabitant.Length) && m_inhabitant[index]);
             }
             if (m_watchFacts) {
-                var facts = ((body is not null) ? body.Facts : BodyFacts.None);
-
-                if (facts != m_seenFacts[index]) {
-                    m_seenFacts[index] = facts;
-                    m_factsVersions[index]++;
-                    m_factMoves.Add(item: new FactRead(Body: index, Source: BodyFactsSource));
-                }
+                _ = See(move: new FactRead(Body: index, Source: BodyFactsSource), now: ((body is not null) ? body.Facts : BodyFacts.None), seen: ref m_seenFacts[index], version: ref m_factsVersions[index]);
             }
         }
         if (placementMoved) {
             m_factMoves.Add(item: new FactRead(Body: FactRead.Whole, Source: PlacementPoseSource));
         }
+    }
+    // An input-history read is versioned when its owner is a literal identity (a seat or a session, never a body whose
+    // owner the population and grants resolve) and it reads only what InputSeen covers: an event, its time, value or
+    // tick, a hold, or the clock at an event. A pattern's match and an event's age move with time, and stay volatile.
+    private bool TryInputScope(WorldInputOperand input, out int scope) {
+        scope = -1;
+        if ((input.Owner.Body is not null) || (input.Pattern >= 0) || (input.Facet == WorldInputFacet.Age)) {
+            return false;
+        }
+
+        scope = m_inputPrincipals.IndexOf(item: input.Owner.Principal);
+        if (scope < 0) {
+            scope = m_inputPrincipals.Count;
+            m_inputPrincipals.Add(item: input.Owner.Principal);
+            m_seenInputs.Add(item: InputSeen.Of(owner: InputOwner(principal: input.Owner.Principal)));
+            m_inputVersions.Add(item: 1UL);
+            m_factMovesAll = true;
+        }
+
+        return true;
+    }
+    private WorldInputOwner? InputOwner(Puck.Commands.Principal principal) => (Host.Input.TryGet(input: out var owner, principal: principal) ? owner : null);
+    // Compares every watched owner with what it answered when the versions were last derived. An admission, an expiry,
+    // a switch or an owner replaced moves its version whichever door made the change.
+    private void DeriveInputs() {
+        if (!m_inputsStale) {
+            return;
+        }
+        m_inputsStale = false;
+
+        var seen = CollectionsMarshal.AsSpan(list: m_seenInputs);
+        var versions = CollectionsMarshal.AsSpan(list: m_inputVersions);
+
+        for (var index = 0; (index < seen.Length); index++) {
+            _ = See(move: new FactRead(Body: index, Source: InputSource), now: InputSeen.Of(owner: InputOwner(principal: m_inputPrincipals[index])), seen: ref seen[index], version: ref versions[index]);
+        }
+    }
+    // A clock read names the clock's current position, which moves once a step: its beat, bar and beat in bar only on a
+    // beat's edge, its phase error every tick.
+    private void WatchClock(ClockFacet facet) {
+        var index = (int)facet;
+
+        if (m_watchClocks[index]) {
+            return;
+        }
+        m_watchClocks[index] = true;
+        m_seenClocks[index] = Host.ReadClock(facet: facet);
+        m_clockVersions[index]++;
+        m_factMovesAll = true;
+    }
+    private void DeriveClocks() {
+        for (var index = 0; (index < m_watchClocks.Length); index++) {
+            if (m_watchClocks[index]) {
+                _ = See(move: new FactRead(Body: index, Source: ClockSource), now: Host.ReadClock(facet: (ClockFacet)index), seen: ref m_seenClocks[index], version: ref m_clockVersions[index]);
+            }
+        }
+    }
+    // The one comparison every derived version rests on: what a source answers now against what it answered when the
+    // versions were last derived. A difference takes the new answer as seen, moves the version and hands the due list
+    // the move.
+    private bool See<T>(ref T seen, T now, ref ulong version, FactRead move) {
+        if (EqualityComparer<T>.Default.Equals(x: seen, y: now)) {
+            return false;
+        }
+        seen = now;
+        version++;
+        m_factMoves.Add(item: move);
+
+        return true;
     }
     // Rebuilds which bodies inhabit a placement when the population's table moved, reporting whether it did.
     private bool SeeInhabitants() {

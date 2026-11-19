@@ -66,6 +66,10 @@ public sealed record CompiledWorldFactsRule : CompiledRule {
     public CompiledWorldFactsRule(CompiledRule original, CompiledWorldFactsDecision? decision, CompiledInteraction? interaction = null) : base(original: original) {
         Decision = decision;
         Interaction = interaction;
+        // A decision binds every local before its interrupt, gate and scores read them, so none waits for a firing.
+        if (decision is not null) {
+            Deferred = null;
+        }
     }
 
     /// <summary>Gets the compiled choice policy, or <see langword="null"/>.</summary>

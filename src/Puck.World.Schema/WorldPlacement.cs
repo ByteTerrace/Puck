@@ -34,28 +34,33 @@ public sealed record WorldPrototype(
 ) {
     // Both caches derive from Document alone. A `with` copies them, so Document's init clears them; a `with` that
     // keeps Document keeps caches that still hold.
-    private CreationDocument? m_engineDocument;
+    private CreationRig? m_rig;
     private string? m_canonicalHash;
 
     /// <summary>Gets the creation document as it arrived: normalized when a mutation upserted it (the compose boundary
-    /// canonicalizes), the author's own bytes when the world loaded it. Consumers read <see cref="EngineDocument"/>,
-    /// which is normalized whichever way the row arrived.</summary>
+    /// canonicalizes), the author's own bytes when the world loaded it. Consumers read <see cref="EngineDocument"/>
+    /// and <see cref="Rig"/>, which are normalized whichever way the row arrived.</summary>
     public CreationDocument Document {
         get;
         init {
             field = value;
-            m_engineDocument = null;
+            m_rig = null;
             m_canonicalHash = null;
         }
     } = Document;
-    /// <summary>Gets <see cref="Document"/> normalized (<see cref="CreationCanonicalizer.Normalize"/>: unit swing and
-    /// slide axes, explicit gates, clamped amplitudes) and converted once from the author frame to the engine frame
-    /// (<see cref="Puck.World.Authoring.CreationFrame.ToEngine"/>) — every render, collision, and anchor consumer
-    /// reads this, never <see cref="Document"/>, so a loaded row and an upserted one animate alike. Normalizing is
-    /// idempotent, so an upserted row's already normalized document passes through unchanged. Cached on first read
-    /// since <see cref="WorldPrototype"/> rows are replaced, not mutated, on edit.</summary>
+    /// <summary>Gets the creation's rig (<see cref="CreationRig"/>), compiled once from <see cref="Document"/> normalized
+    /// (<see cref="CreationCanonicalizer.Normalize"/>: unit swing and slide axes, explicit gates, clamped amplitudes) and
+    /// converted from the author frame to the engine frame (<see cref="Puck.World.Authoring.CreationFrame.ToEngine"/>):
+    /// every writer of each shape's pose, what the pose reads, and its reach. Every consumer of motion reads this. Cached
+    /// on first read since <see cref="WorldPrototype"/> rows are replaced, not mutated, on edit.</summary>
     [JsonIgnore]
-    public CreationDocument EngineDocument => (m_engineDocument ??= Puck.World.Authoring.CreationFrame.ToEngine(document: CreationCanonicalizer.Normalize(document: Document)));
+    public CreationRig Rig => (m_rig ??= CreationRig.Compile(document: Puck.World.Authoring.CreationFrame.ToEngine(document: CreationCanonicalizer.Normalize(document: Document))));
+    /// <summary>Gets the creation as every render, collision, and anchor consumer reads it, never
+    /// <see cref="Document"/>: normalized, in the engine frame, with its shapes' swings and slides removed because
+    /// <see cref="Rig"/> plays them (<see cref="CreationRig.Document"/>), so a loaded row and an upserted one animate
+    /// alike and no reader can move a shape around the rig.</summary>
+    [JsonIgnore]
+    public CreationDocument EngineDocument => Rig.Document;
     /// <summary>Gets the SHA-256 hex64 of <see cref="Document"/>'s canonical bytes, computed through
     /// <see cref="Puck.World.Authoring.CreationCanonicalizer"/> on first read and cached on this instance: the hash
     /// is a function of <see cref="Document"/> alone, so an edit, which builds a new row or document, reads a fresh
@@ -78,9 +83,9 @@ public sealed record WorldPrototype(
     /// <summary>Returns whether <paramref name="other"/> differs from this row only in what shading reads: its
     /// palette's colours and materials, with the palette keeping its length and every slot its glass, so nothing a
     /// simulation, a collider, a contact field or a bake's geometry reads differs.</summary>
-    /// <remarks>Every member but the palette is compared by the bytes of its normalized engine-frame form
-    /// (<see cref="EngineDocument"/>), with the mesh and identifier, so a row a field edit rebuilt from JSON compares
-    /// equal to the one it replaced. A document the normalizer refuses differs.</remarks>
+    /// <remarks>Every member but the palette is compared by the bytes of its normalized form, motion included, with the
+    /// mesh and identifier, so a row a field edit rebuilt from JSON compares equal to the one it replaced. A document the
+    /// normalizer refuses differs.</remarks>
     /// <param name="other">The replacement row.</param>
     /// <returns><see langword="true"/> when only shading differs.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="other"/> is <see langword="null"/>.</exception>
@@ -117,7 +122,7 @@ public sealed record WorldPrototype(
         try {
             return [System.Security.Cryptography.SHA256.HashData(source: JsonSerializer.SerializeToUtf8Bytes(
                 jsonTypeInfo: WorldJsonContext.Default.WorldPrototype,
-                value: (row with { Document = (row.EngineDocument with { Palette = null }), HashRaw = null })
+                value: (row with { Document = (CreationCanonicalizer.Normalize(document: row.Document) with { Palette = null }), HashRaw = null })
             ))];
         } catch (Exception exception) when (exception is DocumentValidationException or InvalidOperationException) {
             return [null];

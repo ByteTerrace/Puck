@@ -747,9 +747,11 @@ public static class WorldSearchCompilation {
         ArgumentNullException.ThrowIfNull(argument: context);
 
         var contributors = new List<Puck.State.Rules.RuleWorkContributor>(capacity: judge.Length);
-        var multiplied = new List<(CompiledRule Rule, long Multiplier)>(capacity: judge.Length);
+        var multiplied = new List<(CompiledRule Rule, long Multiplier, long Order)>(capacity: judge.Length);
 
-        foreach (var rule in judge) {
+        // A judge run evaluates its rules in one pass in array order (RuleArenaSearchJudge), so each runs at its index.
+        for (var index = 0; (index < judge.Length); index++) {
+            var rule = judge[index];
             var multiplier = RuleWorkBudget.ForEachCount(
                 context: context,
                 rule: rule
@@ -759,9 +761,10 @@ public static class WorldSearchCompilation {
                 context: context,
                 isInteraction: false,
                 multiplier: multiplier,
+                order: index,
                 rule: rule
             ));
-            multiplied.Add(item: (rule, multiplier));
+            multiplied.Add(item: (rule, multiplier, index));
         }
 
         var (_, work) = RuleWorkBudget.Tally(

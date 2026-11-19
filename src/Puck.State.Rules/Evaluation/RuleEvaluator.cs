@@ -651,12 +651,16 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
     // decided nothing.
     private readonly record struct Judgement(bool Open, bool Decided, bool Faulted, ulong WakeTick);
 
-    // Runs the bindings, the live-row selection and the gate. Judging fires nothing, so nothing in it can replace the
-    // arena; what each step answered is what the judgement decides from.
-    private Judgement Judge(CompiledRule rule, RuleLatch.RuleState state, RuleLatch.BindingSchedule scheduling, RuleSchedule? schedule, ulong tick, RuleTraceEvaluation? trace) {
+    // Runs the judged bindings, the live-row selection and the gate, then, when the open gate fires, the bindings
+    // deferred to the firing (CompiledRule.Deferred). Judging fires nothing, so nothing in it can replace the arena;
+    // what each step answered is what the judgement decides from. A deferred binding that cannot evaluate decides
+    // nothing, exactly as it would have before the gate.
+    private Judgement Judge(CompiledRule rule, RuleLatch.RuleState state, RuleLatch.BindingSchedule scheduling, RuleSchedule? schedule, ulong tick, RuleTraceEvaluation? trace, bool firesWhenOpen) {
+        var memos = ((schedule is not null) ? Memos(scheduling: scheduling, count: (rule.Locals?.Length ?? 0)) : null);
         var bound = EvaluateBindings(
+            deferred: false,
             rule: rule,
-            memos: ((schedule is not null) ? Memos(scheduling: scheduling, count: (rule.Locals?.Length ?? 0)) : null),
+            memos: memos,
             localSchedules: state.LocalSchedules,
             tick: tick,
             trace: trace
@@ -682,23 +686,46 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
         });
         var faulted = (verdict == Verdict.Faulted);
 
+        var opens = (verdict switch {
+            Verdict.Open => true,
+            Verdict.Closed => false,
+            Verdict.Faulted => false,
+            _ => throw new System.Diagnostics.UnreachableException(),
+        });
+
+        if (opens && firesWhenOpen && (rule.Deferred is not null)) {
+            var firing = EvaluateBindings(
+                deferred: true,
+                rule: rule,
+                memos: memos,
+                localSchedules: state.LocalSchedules,
+                tick: tick,
+                trace: trace
+            );
+
+            if (firing != BindingsResult.Bound) {
+                return new Judgement(Decided: false, Faulted: (firing == BindingsResult.Faulted), Open: false, WakeTick: 0UL);
+            }
+        }
+
         return new Judgement(
             Decided: !faulted,
             Faulted: faulted,
-            Open: (verdict switch {
-                Verdict.Open => true,
-                Verdict.Closed => false,
-                Verdict.Faulted => false,
-                _ => throw new System.Diagnostics.UnreachableException(),
-            }),
-            WakeTick: ((!faulted && (schedule?.Deadline is { } deadline)) ? WakeTick(deadline: deadline, gate: rule.Gate, tick: tick) : ulong.MaxValue)
+            Open: opens,
+            WakeTick: ((!faulted && (schedule?.Deadline is { } deadline)) ? WakeTick(deadline: deadline, gate: rule.Gate, open: opens, tick: tick) : ulong.MaxValue)
         );
     }
-    // The first tick a verdict judged now may no longer hold while every other read holds: never once the deadline has
-    // passed (the tick only grows), else the first tick its comparison holds. X is read on its own, since the gate may
-    // have closed before reading it, and a fault in it is its whole answer; a fault, or a tick side that does not read
-    // as the deadline expects, gives tick 0, which no skip trusts.
-    private ulong WakeTick(RuleDeadline deadline, GateToken[] gate, ulong tick) {
+    // The first tick a verdict judged now may no longer hold while every other read holds. A closed verdict: never once
+    // the deadline has passed (the tick only grows), else the first tick its comparison holds. An open one (an Edge held
+    // across ticks): the next tick for an equality, which stops holding as the tick leaves X, and never for an ordering,
+    // which keeps holding. X is read on its own, since the gate may have closed before reading it, and a fault in it is
+    // its whole answer; a fault, or a tick side that does not read as the deadline expects, gives tick 0, which no skip
+    // trusts.
+    private ulong WakeTick(RuleDeadline deadline, GateToken[] gate, bool open, ulong tick) {
+        if (open) {
+            return (deadline.Exact ? (tick + 1UL) : ulong.MaxValue);
+        }
+
         var token = gate[deadline.Token];
         var frame = new EvaluationFrame(reader: m_host);
         var x = RuleEvaluation.ReadSource(frame: ref frame, kind: token.ValueKind, source: (deadline.TickOnLeft ? token.RightSource : token.LeftSource));
@@ -766,6 +793,7 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
         }
 
         var judged = Judge(
+            firesWhenOpen: ((rule.Mode != ActionTriggerMode.Edge) || !wasOpen),
             rule: rule,
             schedule: schedule,
             scheduling: scheduling,
@@ -995,8 +1023,15 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
     /// <param name="rule">The compiled rule whose locals are evaluated in declaration order.</param>
     /// <returns>What the bindings answered; a binding that did not evaluate is reported and closes this
     /// evaluation.</returns>
-    public BindingsResult EvaluateBindings(CompiledRule rule) =>
-        EvaluateBindings(rule: rule, memos: null, localSchedules: [], tick: m_host.Tick, trace: null);
+    public BindingsResult EvaluateBindings(CompiledRule rule) {
+        ArgumentNullException.ThrowIfNull(argument: rule);
+
+        var judged = EvaluateBindings(deferred: false, rule: rule, memos: null, localSchedules: [], tick: m_host.Tick, trace: null);
+
+        return (((judged != BindingsResult.Bound) || (rule.Deferred is null))
+            ? judged
+            : EvaluateBindings(deferred: true, rule: rule, memos: null, localSchedules: [], tick: m_host.Tick, trace: null));
+    }
 
     // One binding's memo array, sized to the rule's current local count; a stale array (a recompile changed the
     // count) is replaced, discarding its cached values.
@@ -1035,10 +1070,11 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
 
         return BindingsResult.Bound;
     }
-    // Bound values first, in declared order, each visible to the ones after it and to the gate and effects. A
-    // binding that cannot evaluate closes the gate for this evaluation and is reported once per category like any
-    // effect's arithmetic refusal. With memos, localSchedules holds each local's read schedule.
-    private BindingsResult EvaluateBindings(CompiledRule rule, RuleLatch.BindingMemo?[]? memos, RuleSchedule[] localSchedules, ulong tick, RuleTraceEvaluation? trace) {
+    // Bound values in declared order, each visible to the ones after it and to the gate and effects: the judged ones
+    // (deferred false), or the ones deferred to the firing (deferred true), which read only judged ones and earlier
+    // deferred ones. A binding that cannot evaluate closes the gate for this evaluation and is reported once per
+    // category like any effect's arithmetic refusal. With memos, localSchedules holds each local's read schedule.
+    private BindingsResult EvaluateBindings(CompiledRule rule, bool deferred, RuleLatch.BindingMemo?[]? memos, RuleSchedule[] localSchedules, ulong tick, RuleTraceEvaluation? trace) {
         var declared = (rule.Locals ?? []);
 
         if (declared.Length == 0) {
@@ -1046,6 +1082,10 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
         }
 
         for (var ordinal = 0; (ordinal < declared.Length); ordinal++) {
+            if (rule.IsDeferred(ordinal: ordinal) != deferred) {
+                continue;
+            }
+
             var bound = declared[ordinal];
 
             if (memos is { } cached) {

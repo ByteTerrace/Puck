@@ -118,18 +118,16 @@ public sealed class CreationSkeletonLawTests {
         float[] weights = [1f];
 
         WorldGaitDrivers.ComposeDelta(
-            drivers: document.Drivers,
+            terms: ClientFixtures.Terms(shape: upper, drivers: document.Drivers),
             phases: phases,
             rotation: out var parentRotation,
-            shape: upper,
             translation: out var parentTranslation,
             weights: weights
         );
         WorldGaitDrivers.ComposeDelta(
-            drivers: document.Drivers,
+            terms: ClientFixtures.Terms(shape: carried, drivers: document.Drivers),
             phases: phases,
             rotation: out var childRotation,
-            shape: carried,
             translation: out var childTranslation,
             weights: weights
         );
@@ -164,10 +162,9 @@ public sealed class CreationSkeletonLawTests {
         var controlRotation = Quaternion.Identity;
 
         WorldGaitDrivers.ComposeDelta(
-            drivers: document.Drivers,
+            terms: ClientFixtures.Terms(shape: loose, drivers: document.Drivers),
             phases: phases,
             rotation: out var looseRotation,
-            shape: loose,
             translation: out var looseTranslation,
             weights: weights
         );
@@ -220,18 +217,16 @@ public sealed class CreationSkeletonLawTests {
         float[] weights = [1f];
 
         WorldGaitDrivers.ComposeDelta(
-            drivers: document.Drivers,
+            terms: ClientFixtures.Terms(shape: upper, drivers: document.Drivers),
             phases: phases,
             rotation: out var parentRotation,
-            shape: upper,
             translation: out var parentTranslation,
             weights: weights
         );
         WorldGaitDrivers.ComposeDelta(
-            drivers: document.Drivers,
+            terms: ClientFixtures.Terms(shape: fore, drivers: document.Drivers),
             phases: phases,
             rotation: out var childRotation,
-            shape: fore,
             translation: out var childTranslation,
             weights: weights
         );

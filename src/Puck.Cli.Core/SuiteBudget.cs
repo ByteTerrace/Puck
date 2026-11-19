@@ -55,7 +55,7 @@ public sealed class SuiteBudget : IDisposable {
                 m_cancellation.CancelAfter(delay: Timeout.InfiniteTimeSpan);
             }
         }
-        return new Resume(onDispose: () => {
+        return new Puck.Abstractions.DisposeOnce(action: () => {
             lock (m_gate) {
                 if (--m_pauses == 0) {
                     if (m_wasRunning) { m_clock.Start(); }
@@ -66,10 +66,4 @@ public sealed class SuiteBudget : IDisposable {
     }
     /// <inheritdoc/>
     public void Dispose() => m_cancellation.Dispose();
-
-    private sealed class Resume(Action onDispose) : IDisposable {
-        private Action? m_onDispose = onDispose;
-
-        public void Dispose() => Interlocked.Exchange(location1: ref m_onDispose, value: null)?.Invoke();
-    }
 }

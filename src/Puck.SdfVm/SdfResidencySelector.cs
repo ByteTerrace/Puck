@@ -25,8 +25,8 @@ public readonly record struct SdfDetailReport(bool Over, bool AnySpare, bool Can
 /// <para>
 /// The sum it holds is the process account's (<see cref="MemoryAccount"/>): in the pool the mesh regions lie in, what
 /// every class holds and has promised stays under the pool's limit. What the limit leaves the regions, less room for the
-/// largest one's replacement, since a region grows by copy and holds both buffers until the old one's readers finish,
-/// is the elastic budget; <see cref="SdfMeshTier.BudgetEighths"/> of it is what the bakes fill. A residency's budget is
+/// largest replacement a region that grows by copy holds beside its buffer until the old one's readers finish (a mapped
+/// region, <see cref="GpuRegion.Mapped"/>, grows and shrinks in place and holds none), is the elastic budget; <see cref="SdfMeshTier.BudgetEighths"/> of it is what the bakes fill. A residency's budget is
 /// what its own draws name and its finer tiers in flight are expected to add, with an equal part of the room left, so
 /// the budgets together are the whole and no two residencies are promised the same room; when the residencies together
 /// name more than the budget, each gives up its part of the excess. The bias rises half a rung when the budget has
@@ -34,8 +34,8 @@ public readonly record struct SdfDetailReport(bool Over, bool AnySpare, bool Can
 /// a rung finer: one bias, so an over-budget picture is coarser by the same number of pixels in every world it shows.
 /// </para>
 /// <para>
-/// Bytes are enforced by the account, never here: a region grows only after its grant reserved the old and the new
-/// buffer together (<see cref="SdfResidencyGrant.ReserveGrowth"/>), and the device's ledger admits the allocation
+/// Bytes are enforced by the account, never here: a region grows only after its grant reserved what it holds once grown,
+/// the old and the new buffer together for a region that grows by copy (<see cref="SdfResidencyGrant.ReserveGrowth"/>), and the device's ledger admits the allocation
 /// against that reservation. The selector's budgets steer detail so that a reservation is rarely refused. With no
 /// device reading the pool has no limit and every budget is unbounded.
 /// </para>
@@ -229,9 +229,9 @@ public sealed class SdfResidencySelector {
         }
     }
 
-    // Under m_gate: what the limit leaves every mesh region together, less room for the largest one's replacement;
-    // null where nothing bounds the pool. What the regions have reserved is theirs already, so it is taken back out of
-    // what the pool holds and has promised.
+    // Under m_gate: what the limit leaves every mesh region together, less room for the largest replacement a region
+    // that grows by copy would hold beside itself (a mapped region holds none); null where nothing bounds the pool. What
+    // the regions have reserved is theirs already, so it is taken back out of what the pool holds and has promised.
     private long? UsableOf(MemoryAdmissionReading admission) => ((admission.Limit is { } limit)
         ? UsableOf(held: admission.Held, limit: limit, promised: admission.Promised)
         : null);
@@ -241,7 +241,7 @@ public sealed class SdfResidencySelector {
 
         foreach (var grant in m_grants) {
             reserved += grant.Reserved;
-            largest = Math.Max(val1: largest, val2: grant.Capacity);
+            if (!grant.Mapped) { largest = Math.Max(val1: largest, val2: grant.Capacity); }
         }
 
         return Math.Max(val1: 0L, val2: ((limit - Math.Max(val1: 0L, val2: ((held + promised) - reserved))) - largest));
@@ -340,10 +340,10 @@ public sealed class SdfResidencySelector {
 /// One residency's part of its presentation's selector (<see cref="SdfResidencySelector.Register"/>): the reservation
 /// its mesh region grows under, and the budget and bias its bake holds its detail to.
 /// <para>
-/// Invariant: the region's buffers are allocated only under the grant's reservation. A growth reserves the buffer that
-/// stands and the one that replaces it together before the replacement is created (<see cref="ReserveGrowth"/>,
-/// <see cref="Grown"/>), and the reservation falls to the standing buffer once the replaced one's readers finish
-/// (<see cref="Released"/>). The region's staging is another owner's memory
+/// Invariant: the region's buffers are allocated only under the grant's reservation. A growth reserves what the region
+/// holds once grown before any of it is allocated (<see cref="ReserveGrowth"/>, <see cref="Grown"/>): a mapped region's
+/// chunks (<see cref="Mapped"/>), or the buffer that stands and the one that replaces it together. The reservation falls
+/// to what stands once the replaced buffer's or the unmapped chunks' readers finish (<see cref="Released"/>). The region's staging is another owner's memory
 /// (<see cref="SdfResidencySelector.RegionStagingOwner"/>), outside the reservation on every device.
 /// </para>
 /// Called on the frame thread, apart from the reads the selector's line makes.
@@ -370,6 +370,10 @@ public sealed class SdfResidencyGrant : IDisposable {
     public string Name { get; set; }
     /// <summary>Gets the selector the grant belongs to.</summary>
     public SdfResidencySelector Selector => m_selector;
+    /// <summary>Gets or sets whether the residency's region is mapped (<see cref="GpuRegion.Mapped"/>): it grows and
+    /// shrinks in place, so its reservation covers its own chunks alone and the selector leaves no room for a replacement
+    /// beside it. Set once the region exists, before its first growth.</summary>
+    public bool Mapped { get; set; }
 
     // The bytes the region's standing buffer holds, those of replaced buffers waiting on their readers, and the peak
     // reserved for both and the staging. Read by the selector under its gate.
@@ -412,9 +416,10 @@ public sealed class SdfResidencyGrant : IDisposable {
         Volatile.Write(location: ref m_capacity, value: capacityBytes);
 
         var room = m_reservation.Room;
-        var limit = Math.Min(val1: mostBytes, val2: ((room == long.MaxValue) ? mostBytes : room));
+        // A mapped region grows by the room alone; any other region's replacement takes the room beside what stands.
+        var limit = Math.Min(val1: mostBytes, val2: ((room == long.MaxValue) ? mostBytes : (Mapped ? (capacityBytes + room) : room)));
 
-        if ((limit > capacityBytes) && Reserve(floor: Standing, peak: (Standing + limit))) { return limit; }
+        if ((limit > capacityBytes) && Reserve(floor: Standing, peak: Beside(bytes: limit))) { return limit; }
         ReserveStanding();
 
         return capacityBytes;
@@ -442,12 +447,12 @@ public sealed class SdfResidencyGrant : IDisposable {
     /// <param name="newBytes">The bytes of the smaller buffer.</param>
     /// <returns><see langword="true"/> when the replacement may be created; <see langword="false"/> leaves the region as
     /// it is.</returns>
-    public bool TryReserveReplacement(long newBytes) => Reserve(floor: Standing, peak: (Standing + newBytes));
-    /// <summary>Reserves a replacement of <paramref name="newBytes"/> beside the standing buffer as the reservation's
-    /// floor, whatever the pool holds: the growth the region's draw records need, which a residency cannot draw
-    /// without. The ledger admits the replacement past a limit and counts it.</summary>
-    /// <param name="newBytes">The bytes of the buffer the draw records need.</param>
-    public void ReserveFloorGrowth(long newBytes) => _ = Reserve(floor: (Standing + newBytes), peak: (Standing + newBytes));
+    public bool TryReserveReplacement(long newBytes) => Reserve(floor: Standing, peak: Beside(bytes: newBytes));
+    /// <summary>Reserves a region of <paramref name="newBytes"/> as the reservation's floor, whatever the pool holds: the
+    /// growth the region's draw records need, which a residency cannot draw without; for a region that grows by
+    /// replacement, beside the standing buffer. The ledger admits the growth past a limit and counts it.</summary>
+    /// <param name="newBytes">The bytes of the region the draw records need.</param>
+    public void ReserveFloorGrowth(long newBytes) => _ = Reserve(floor: Beside(bytes: newBytes), peak: Beside(bytes: newBytes));
     /// <summary>Records that a replaced buffer's readers finished and it was released: its bytes leave the
     /// reservation.</summary>
     /// <param name="bytes">The bytes of the released buffer.</param>
@@ -472,6 +477,10 @@ public sealed class SdfResidencyGrant : IDisposable {
     // What the region holds whatever the pool says: its standing buffer and the replaced ones waiting on their
     // readers. Reserved as the reservation's floor, so a full pool reads over its limit and the residency draws.
     private long Standing => (Capacity + Retiring);
+
+    // What a region of the given bytes holds at once with what stands: a mapped region's chunks are its whole, beside the
+    // chunks still waiting on their readers; any other region's replacement stands beside the buffer it replaces.
+    private long Beside(long bytes) => (Mapped ? Math.Max(val1: Standing, val2: (Retiring + bytes)) : (Standing + bytes));
 
     private void ReserveStanding() => _ = Reserve(floor: Standing, peak: Standing);
     // Sets the reservation's peak; a raise past the floor that the pool has no room for changes nothing.

@@ -1277,6 +1277,11 @@ public static partial class WorldDefinitionValidator {
             iconNames: iconNames,
             iconsAuthored: iconsAuthored
         );
+        ValidateHaptics(
+            definition: definition,
+            errors: errors,
+            localSeats: localSeats
+        );
 
         ValidateStorage(
             storage: definition.Storage,

@@ -29,6 +29,11 @@ public sealed partial class WorldInputOwner {
             m_lastCapture, m_lastOffset, m_step, m_stepEvents, ((WorldInputSourceState[])m_sources.Clone()),
             m_holds.Where(predicate: static hold => (hold.Press != 0)).OrderBy(keySelector: static hold => hold.Channel).ToArray(), history, ((bool[])m_crossingHeld.Clone()), claims.ToArray(), switches);
     }
+    /// <summary>Gets how many restores this owner has taken in this process. A restore can bring back event identities
+    /// that later admissions reuse, so a reader that recognises the owner's state by its identities pairs them with
+    /// this count; it is never checkpointed or hashed.</summary>
+    public ulong Restores { get; private set; }
+
     /// <summary>Restores an admitted image, without attaching devices or synthesizing edges.</summary>
     public void Restore(WorldInputOwnerCheckpoint checkpoint) {
         ArgumentNullException.ThrowIfNull(checkpoint);
@@ -43,6 +48,7 @@ public sealed partial class WorldInputOwner {
         for (var index = 0; (index < m_sources.Length); index++) {
             if (checkpoint.Sources[index].Source != m_sources[index].Source) { throw new ArgumentException(message: "input checkpoint source registry differs", paramName: nameof(checkpoint)); }
         }
+        Restores++;
         Array.Clear(array: m_holdScratch);
         foreach (var hold in checkpoint.Holds) {
             if ((hold.Channel >= m_catalog.Channels.Length) || (mapping.Address(logicalId: hold.Channel) < 0) || (hold.Press == 0) ||
