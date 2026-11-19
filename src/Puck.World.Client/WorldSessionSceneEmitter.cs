@@ -58,10 +58,12 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
         m_shadowObservation.Dispose();
         m_environment.Dispose();
     }
-    /// <summary>Reads the last presented slot census of this session.</summary>
-    /// <param name="definition">The queried authority's definition.</param>
-    /// <returns>The census, or null before a matching frame.</returns>
-    public string? DescribeShadowSlots(WorldDefinition definition) => m_environment.DescribeShadowSlots(definition: definition);
+    /// <summary>Reads the last presented slot census of this session when it presents the queried authority, matched by
+    /// the delivered version's activation.</summary>
+    /// <param name="authority">The queried authority's document version.</param>
+    /// <returns>The census, or <see langword="null"/> for another authority or before a frame.</returns>
+    public string? DescribeShadowSlots(Puck.World.Protocol.WorldDocumentVersion authority) =>
+        ((m_mirror.Document.Version.Activation == authority.Activation) ? m_environment.DescribeShadowSlots() : null);
 
     // The BIND-time resolved camera choice: a validated, currently-present camera NAME, or null for "use the
     // destination's default projection" (its first declared camera, else the spawn-centroid overview) — see this
@@ -525,7 +527,10 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
             // The destination's own authored tier: its views read its own irradiance volume, which also meters its
             // exposure and occludes its fixtures, as a seat presented there would.
             IndirectTier = (m_mirror.Definition.Render.Indirect?.Tier ?? SdfIndirectTier.Medium),
-            RayQueries = m_mirror.Definition.Render.RayQueries,
+            // Whether the volume's rays take the ray hardware changes what the trace costs on this device, not what it
+            // answers, so it is the presenting session's lever (render.rayQueries at its boot, then `world.rays`, a quality
+            // preset or a device profile), never the destination document's: a painting world authors no device's cost.
+            RayQueries = (Session?.RayQueries ?? m_mirror.Definition.Render.RayQueries),
             IndirectSources = environment.Indirect.Gains.Sources,
             IndirectGains = environment.Indirect.Gains,
             IndirectBounces = environment.Indirect.Bounces,
@@ -686,6 +691,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
 
         // The pool packs after the avatar catalog, whose reserved slots it sits past: animated placements ride their
         // static pose, attached and body-rooted stamps the destination's interpolated body pose.
+        if (m_onlyPrototypes is null) { m_pool.PresentCues(m_mirror.CueFrames, m_source); }
         m_pool.PackTransforms(
             client: m_source,
             moved: moved,

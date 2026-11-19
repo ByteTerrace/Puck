@@ -60,7 +60,7 @@ public sealed class WorldEditorEditQueueLawTests {
         // Delivers the away world's document with its crate1 at a position, at the link's current version.
         public void Deliver(Vector3 crate) => Endpoint.Mirror.DeliverDefinition(
             definition: At(crate: crate, definition: Away),
-            version: Link.Version
+            version: Link.Version, stream: default
         );
         public CommandResult Submit(string line) {
             var result = Registry.Submit(line: line);

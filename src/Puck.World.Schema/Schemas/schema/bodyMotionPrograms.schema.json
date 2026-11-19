@@ -56,7 +56,8 @@
             "AddState",
             "StartTimer",
             "Designate",
-            "Generate"
+            "Generate",
+            "TimedMove"
           ],
           "title": "BodyMotionOp"
         }

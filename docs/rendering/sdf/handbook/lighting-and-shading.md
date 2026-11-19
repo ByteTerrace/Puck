@@ -232,7 +232,11 @@ in the frame.
   their surfaces. This keeps flat and curved receivers visible, including grazing angles,
   where interpolating radial distances incorrectly shadowed it. Misses never
   inflate a blocker. Blocked angular coverage closes smoothly; a minority hit
-  tap cannot extend a finite block over the opening. There are no whole-sphere
+  tap cannot extend a finite block over the opening. At the finest level, once a
+  tap blocks, a tap whose ray never got past that blocker's surface (the ground
+  outside a wall, in front of its base, or a ray running clear past the wall's
+  end) counts neither way: only taps that saw past the blocker share the
+  coverage with it. There are no whole-sphere
   lattice-ray planes, front/back fallback or neighbour separation vetoes.
   Gather multiplies visibility by trilinear share and a smooth distance fade from
   zero on/behind the receiver's tangent plane to one half the cell's extent along

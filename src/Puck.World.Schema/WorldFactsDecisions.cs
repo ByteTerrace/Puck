@@ -16,10 +16,21 @@ namespace Puck.World;
 /// <param name="Source">The authored parameters.</param>
 /// <param name="Range">The inclusive spherical radius.</param>
 /// <param name="MinimumDot">The cosine of the forward cone's half-angle.</param>
-public sealed record CompiledWorldFactsDecisionNeighbors(WorldDecisionNeighbors Source, FixedQ4816 Range, FixedQ4816 MinimumDot) {
+public sealed record CompiledWorldFactsDecisionNeighbors(WorldDecisionNeighbors Source, FixedQ4816 Range, FixedQ4816 MinimumDot) : IWorldDisclosedFact {
     /// <summary>Gets the power-of-two raw grid width shared by ranges of the same scale, which bounds each query to
     /// 27 cells.</summary>
     public FixedQ4816 CellWidth => FixedQ4816.FromRawBits(value: checked((long)((ulong)Range.Value).NextPowerOfTwo()));
+
+    /// <summary>Declares the bodies the perception query finds by position, and the field regions a sight test reaches
+    /// when the option requires line of sight.</summary>
+    /// <param name="into">The dependencies being collected.</param>
+    public void CollectDisclosure(WorldDisclosureNeeds into) {
+        ArgumentNullException.ThrowIfNull(argument: into);
+
+        into.Add(reach: (Source.RequiresLineOfSight
+            ? (WorldDisclosureReach.Bodies | WorldDisclosureReach.Fields)
+            : WorldDisclosureReach.Bodies));
+    }
 }
 /// <summary>One decision option compiled through the arena-addressed gate, expression, and effect compilers.</summary>
 /// <param name="Name">The option's authored name.</param>

@@ -56,8 +56,8 @@ public static partial class WorldFactsVocabulary {
             $"{WorldRuleFacts.ChannelPrefix}<seat>:<channelName>",
             $"{WorldRuleFacts.PointerPrefix}<seat>|any:<screenIndex>:x|y|on|press:<channelName>",
             $"{WorldRuleFacts.NearestPrefix}<bodyRef>:<row>",
-            $"{WorldRuleFacts.ClockPrefix}<music>:phaseError",
-            $"{WorldRuleFacts.ClockPrefix}<music>:phaseErrorAt:<owner>:<channel>:<kind>:<occurrence>",
+            $"{WorldRuleFacts.ClockPrefix}<music>:phaseError|beat|bar|beatInBar",
+            $"{WorldRuleFacts.ClockPrefix}<music>:phaseErrorAt|beatAt|barAt|beatInBarAt:<owner>:<channel>:<kind>:<occurrence>",
             $"{BoardCellOfPrefix}<row>:<bodyRef>",
             "$board:engaged|pointer|side:<row>:<seat>",
         ];
@@ -269,18 +269,20 @@ public static partial class WorldFactsVocabulary {
                 bodyB: default,
                 cost: 1L,
                 describe: name,
+                reach: WorldDisclosureReach.Bodies,
                 read: facet => facet.Read(operand: operand),
                 rowOrdinal: -1,
                 valueKind: operand.ValueKind,
                 world: world
             );
         }
-        private static WorldBodyFactOperand BodyFact(CellKind valueKind, WorldFactsCompileContext world, CompiledBodyRef bodyA, CompiledBodyRef bodyB, int rowOrdinal, long cost, Func<IWorldFacts, Fact> read, string describe, WorldOperandFact? payload = null) => new(
+        private static WorldBodyFactOperand BodyFact(CellKind valueKind, WorldFactsCompileContext world, CompiledBodyRef bodyA, CompiledBodyRef bodyB, int rowOrdinal, long cost, Func<IWorldFacts, Fact> read, string describe, WorldDisclosureReach reach, WorldOperandFact? payload = null) => new(
             bodyA: world.Ordinals(body: in bodyA),
             bodyB: world.Ordinals(body: in bodyB),
             cost: cost,
             describe: describe,
             payload: payload,
+            reach: reach,
             read: read,
             rowOrdinal: rowOrdinal,
             valueKind: valueKind
@@ -373,7 +375,7 @@ public static partial class WorldFactsVocabulary {
                 var capacity = (world.Definition.InputHistory?.EventCapacity ?? 256);
 
                 fact = BodyFact(input.ValueKind, world, (input.Owner.Body ?? default), default, -1,
-                    ((input.Pattern < 0) ? WorldInputCatalog.For(definition: world.Definition).HistoryCapacity(ingressCapacity: capacity) : WorldInputCatalog.For(definition: world.Definition).PatternWork(input.Pattern, capacity)), facet => facet.Read(operand: input), name);
+                    ((input.Pattern < 0) ? WorldInputCatalog.For(definition: world.Definition).HistoryCapacity(ingressCapacity: capacity) : WorldInputCatalog.For(definition: world.Definition).PatternWork(input.Pattern, capacity)), facet => facet.Read(operand: input), name, WorldDisclosureReach.Bodies);
                 return true;
             }
             if (string.Equals(
@@ -429,6 +431,7 @@ public static partial class WorldFactsVocabulary {
                     bodyB: default,
                     cost: Math.Max(val1: 1, val2: ordinals.Length),
                     describe: name,
+                    reach: WorldDisclosureReach.Bodies,
                     payload: operand,
                     read: facet => facet.Read(operand: operand),
                     rowOrdinal: RuleCompiler.ResolveRowOrdinal(context: world, name: row.Name.Value),
@@ -669,6 +672,7 @@ public static partial class WorldFactsVocabulary {
                         bodyB: bodyB,
                         cost: 1L,
                         describe: name,
+                        reach: WorldDisclosureReach.Bodies,
                         read: facet => facet.Read(operand: operand),
                         rowOrdinal: -1,
                         valueKind: CellKind.Fixed,
@@ -685,6 +689,7 @@ public static partial class WorldFactsVocabulary {
                         bodyB: bodyB,
                         cost: WorldRuleCapacity.SightTestWork,
                         describe: name,
+                        reach: WorldDisclosureReach.Fields,
                         read: facet => facet.Read(operand: operand),
                         rowOrdinal: -1,
                         valueKind: CellKind.Bool,
@@ -728,6 +733,7 @@ public static partial class WorldFactsVocabulary {
                     bodyB: default,
                     cost: 1L,
                     describe: name,
+                    reach: WorldDisclosureReach.Bodies,
                     payload: operand,
                     read: facet => facet.Read(operand: operand),
                     rowOrdinal: -1,
@@ -782,6 +788,7 @@ public static partial class WorldFactsVocabulary {
                     bodyB: default,
                     cost: 1L,
                     describe: name,
+                    reach: WorldDisclosureReach.Bodies,
                     payload: operand,
                     read: facet => facet.Read(operand: operand),
                     rowOrdinal: -1,
@@ -838,6 +845,7 @@ public static partial class WorldFactsVocabulary {
                     bodyB: default,
                     cost: 1L,
                     describe: name,
+                    reach: WorldDisclosureReach.Bodies,
                     payload: operand,
                     read: facet => facet.Read(operand: operand),
                     rowOrdinal: -1,
@@ -897,6 +905,7 @@ public static partial class WorldFactsVocabulary {
                     bodyB: default,
                     cost: 1L,
                     describe: name,
+                    reach: WorldDisclosureReach.Bodies,
                     payload: operand,
                     read: facet => facet.Read(operand: operand),
                     rowOrdinal: -1,
@@ -953,6 +962,7 @@ public static partial class WorldFactsVocabulary {
                     bodyB: default,
                     cost: 1L,
                     describe: name,
+                    reach: WorldDisclosureReach.Bodies,
                     payload: operand,
                     read: facet => facet.Read(operand: operand),
                     rowOrdinal: -1,
@@ -1040,6 +1050,7 @@ public static partial class WorldFactsVocabulary {
                     bodyB: default,
                     cost: 1L,
                     describe: name,
+                    reach: WorldDisclosureReach.Bodies,
                     payload: operand,
                     read: facet => facet.Read(operand: operand),
                     rowOrdinal: -1,
@@ -1104,6 +1115,7 @@ public static partial class WorldFactsVocabulary {
                     bodyB: default,
                     cost: 1L,
                     describe: name,
+                    reach: WorldDisclosureReach.Bodies,
                     payload: operand,
                     read: facet => facet.Read(operand: operand),
                     rowOrdinal: -1,
@@ -1160,6 +1172,7 @@ public static partial class WorldFactsVocabulary {
                     bodyB: default,
                     cost: 1L,
                     describe: name,
+                    reach: WorldDisclosureReach.Bodies,
                     payload: operand,
                     read: facet => facet.Read(operand: operand),
                     rowOrdinal: -1,
@@ -1210,6 +1223,7 @@ public static partial class WorldFactsVocabulary {
                     bodyB: default,
                     cost: 1L,
                     describe: name,
+                    reach: WorldDisclosureReach.Fields,
                     payload: operand,
                     read: facet => facet.Read(operand: operand),
                     rowOrdinal: -1,
@@ -1272,6 +1286,7 @@ public static partial class WorldFactsVocabulary {
                     bodyB: default,
                     cost: world.Definition.Population.Capacity,
                     describe: name,
+                    reach: WorldDisclosureReach.Bodies,
                     payload: operand,
                     read: facet => facet.Read(operand: operand),
                     rowOrdinal: rowOrdinal,
@@ -1284,18 +1299,34 @@ public static partial class WorldFactsVocabulary {
             )) {
                 var tokens = call!.Tokens();
 
+                // The facet word names the value; an "At" suffix reads it at an input event's captured time, which
+                // takes the same owner, channel, kind and occurrence arguments as an inputTime read.
+                var facetWord = ((tokens.Length >= 3) ? tokens[2] : "");
+                var atInput = facetWord.EndsWith(
+                    comparisonType: StringComparison.Ordinal,
+                    value: "At"
+                );
+                var clockFacet = (atInput ? facetWord[..^2] : facetWord) switch {
+                    "phaseError" => ClockFacet.PhaseError,
+                    "beat" => ClockFacet.Beat,
+                    "bar" => ClockFacet.Bar,
+                    "beatInBar" => ClockFacet.BeatInBar,
+                    _ => ((ClockFacet?)null),
+                };
+
                 if (
-                    !(((tokens.Length == 3) && (tokens[2] == "phaseError")) || ((tokens.Length >= 7) && (tokens[2] == "phaseErrorAt")))
+                    (clockFacet is null) ||
+                    (atInput ? (tokens.Length < 7) : (tokens.Length != 3))
                 ) {
                     throw new RuleException(
-                        detail: "clock read requires $clock:<music>:phaseError",
+                        detail: "clock read requires $clock:<music>:phaseError|beat|bar|beatInBar, or the same name with At and an input owner, channel, kind and occurrence",
                         refusal: RuleRefusal.StateCellUnaddressable,
                         ruleName: ruleName
                     );
                 }
                 if (key is not null) {
                     throw new RuleException(
-                        detail: "phaseError does not accept key",
+                        detail: $"{facetWord} does not accept key",
                         refusal: RuleRefusal.StateCellUnaddressable,
                         ruleName: ruleName
                     );
@@ -1311,13 +1342,13 @@ public static partial class WorldFactsVocabulary {
                     );
                 }
 
-                if (tokens.Length >= 7) {
+                if (atInput) {
                     var input = CompileInput(new ChannelCall("inputTime", call.Arguments.Skip(count: 2).ToArray()), world, ruleName);
-                    var clock = new ClockOperand(input: input);
+                    var clock = new ClockOperand(facet: clockFacet!.Value, input: input);
 
-                    fact = BodyFact(CellKind.Fixed, world, (input.Owner.Body ?? default), default, -1, WorldInputCatalog.For(definition: world.Definition).HistoryCapacity(ingressCapacity: (world.Definition.InputHistory?.EventCapacity ?? 256)),
-                        facet => facet.Read(operand: clock), name);
-                } else { fact = WorldClockOperand.Instance; }
+                    fact = BodyFact(clock.ValueKind, world, (input.Owner.Body ?? default), default, -1, WorldInputCatalog.For(definition: world.Definition).HistoryCapacity(ingressCapacity: (world.Definition.InputHistory?.EventCapacity ?? 256)),
+                        facet => facet.Read(operand: clock), name, WorldDisclosureReach.Bodies);
+                } else { fact = new WorldClockOperand(facet: clockFacet!.Value); }
             } else if (name.StartsWith(
                 comparisonType: StringComparison.Ordinal,
                 value: BoardCellOfPrefix
@@ -1375,6 +1406,7 @@ public static partial class WorldFactsVocabulary {
                     // Grid, box and hex resolve directly; only authored/generated graph centres are scanned.
                     cost: ((topology.Kind is TopologyKind.Graph or TopologyKind.Tiling) ? topology.CellCount : 1L),
                     describe: name,
+                    reach: WorldDisclosureReach.Bodies,
                     payload: operand,
                     read: facet => facet.Read(operand: operand),
                     rowOrdinal: RuleCompiler.ResolveRowOrdinal(
@@ -1501,6 +1533,7 @@ public static partial class WorldFactsVocabulary {
                 bodyB: default,
                 cost: 1L,
                 describe: name,
+                reach: WorldDisclosureReach.Bodies,
                 read: reader => reader.Read(operand: operand),
                 rowOrdinal: -1,
                 valueKind: CellKind.Int,

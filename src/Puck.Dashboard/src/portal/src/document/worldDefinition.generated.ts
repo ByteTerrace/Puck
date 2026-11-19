@@ -107,7 +107,7 @@ export type WorldDefinition = {
 /**
  * An authored effect row a rule fires when its gate holds. The arms declared here are the ones this library owns — every one addresses a state row and nothing else; a document project appends its own derived arms (a participant's kinematics, a presentation cue, a whole-row document upsert) through its own rule vocabulary (RuleVocabulary.ExtendJson) rather than by editing this list.
  */
-export type ActionEffect = ActionEffectSetState | ActionEffectAddState | ActionEffectPushState | ActionEffectTransformState | ActionEffectGenerate | ActionEffectRemoveStateCell | ActionEffectScheduleState | ActionEffectTransaction | ActionEffectIf | ActionEffectClaim | ActionEffectRelease | ActionEffectForEachPool | ActionEffectClaimPair | ActionEffectRewindGroup | WorldEffectConsumeInput | WorldEffectSetVerticalVelocity | WorldEffectScaleVerticalVelocity | WorldEffectPlanarImpulse | WorldEffectStartTimer | WorldEffectDesignate | WorldEffectEmitCue | WorldEffectApplyRigidImpulse | WorldEffectPaintField | WorldEffectUpsertHudPanel | WorldEffectRemoveHudPanel | WorldEffectUpsertPlacement | WorldEffectRemovePlacement | WorldEffectSave | WorldEffectPoseCell | WorldEffectPose | WorldEffectSetIdentityFact | WorldEffectSetBodyState | null;
+export type ActionEffect = ActionEffectSetState | ActionEffectAddState | ActionEffectPushState | ActionEffectTransformState | ActionEffectGenerate | ActionEffectRemoveStateCell | ActionEffectScheduleState | ActionEffectTransaction | ActionEffectIf | ActionEffectClaim | ActionEffectRelease | ActionEffectForEachPool | ActionEffectClaimPair | ActionEffectRewindGroup | WorldEffectConsumeInput | WorldEffectSetVerticalVelocity | WorldEffectScaleVerticalVelocity | WorldEffectPlanarImpulse | WorldEffectTimedMove | WorldEffectStartTimer | WorldEffectDesignate | WorldEffectEmitCue | WorldEffectApplyRigidImpulse | WorldEffectPaintField | WorldEffectUpsertHudPanel | WorldEffectRemoveHudPanel | WorldEffectUpsertPlacement | WorldEffectRemovePlacement | WorldEffectSave | WorldEffectPoseCell | WorldEffectPose | WorldEffectSetIdentityFact | WorldEffectSetBodyState | null;
 
 /**
  * Adds to a named state cell — the same shape as SetState, here the source is the addend rather than the replacement.
@@ -810,7 +810,9 @@ export type BodyHoldForward = "Heading" | "Intent" | "Velocity";
 
 export type BodyHoldKind = "None" | "Gravity" | "Pull" | "Lift";
 
-export type BodyMotionOp = "SenseNearestInCone" | "ProduceSteeringIntent" | "FaceSensorTarget" | "ProduceFlockIntent" | "ResolveYawAttitudeAndPlanarFrame" | "IntegrateLocalAttitude" | "ComputePlanarTargetVelocity" | "ComputeLocalTargetVelocity" | "ShapeVelocity" | "SnapYawToPlanarIntent" | "ResolveDriveFrame" | "ResolveHold" | "RunActionTriggers" | "ApplyHold" | "IntegratePlanarAndVerticalVelocity" | "IntegrateScratchVelocity" | "CommitPose" | "SetVerticalVelocity" | "ScaleVerticalVelocity" | "PlanarImpulse" | "SetState" | "AddState" | "StartTimer" | "Designate" | "Generate";
+export type BodyMotionCurve = "Linear" | "Smoothstep";
+
+export type BodyMotionOp = "SenseNearestInCone" | "ProduceSteeringIntent" | "FaceSensorTarget" | "ProduceFlockIntent" | "ResolveYawAttitudeAndPlanarFrame" | "IntegrateLocalAttitude" | "ComputePlanarTargetVelocity" | "ComputeLocalTargetVelocity" | "ShapeVelocity" | "SnapYawToPlanarIntent" | "ResolveDriveFrame" | "ResolveHold" | "RunActionTriggers" | "ApplyHold" | "IntegratePlanarAndVerticalVelocity" | "IntegrateScratchVelocity" | "CommitPose" | "SetVerticalVelocity" | "ScaleVerticalVelocity" | "PlanarImpulse" | "SetState" | "AddState" | "StartTimer" | "Designate" | "Generate" | "TimedMove";
 
 export type BodyMotionProgram = {
   /**
@@ -1200,6 +1202,7 @@ export type CreationBehaviorDocument = {
       vibratoDepthMillihertz?: number | null;
       vibratoRateMillihertz?: number | null;
       durationFrames?: number | null;
+      pitchFromCueArgument?: boolean;
     };
     /**
      * The emitter level (null = 1 — unity).
@@ -7466,6 +7469,10 @@ export type WorldEffectEmitCue = {
    * The body the cue is about — a body index, a $cell: indirection, or a bound key.
    */
   key?: StateChannelRefNonNullable;
+  /**
+   * An optional integer expression, interpreted by the cue's consumer.
+   */
+  argument?: ExpressionProgramNonNullable2;
 };
 
 /**
@@ -7679,6 +7686,37 @@ export type WorldEffectStartTimer = {
   state: string;
   seconds: number;
   target?: ActionTarget;
+};
+
+/**
+ * Moves a body along its launch plane and turns it through a signed relative yaw over time.
+ */
+export type WorldEffectTimedMove = {
+  $type?: "timedMove";
+  /**
+   * Travel to the right in body-sized world units.
+   */
+  right: number;
+  /**
+   * Travel forward in body-sized world units.
+   */
+  forward: number;
+  /**
+   * Signed relative turn in degrees, in Puck's yaw convention.
+   */
+  yawDegrees: number;
+  /**
+   * Positive duration in exact engine ticks, expressed in seconds.
+   */
+  durationSeconds: number;
+  /**
+   * How both travel and yaw are distributed over the duration.
+   */
+  curve?: BodyMotionCurve;
+  /**
+   * The recipient of a world rule. A kit action supplies its own body.
+   */
+  key?: StateChannelRefNonNullable;
 };
 
 /**
@@ -9554,7 +9592,7 @@ export type WorldMusicRow = {
    */
   name: string;
   /**
-   * The referenced document's file path, relative to the authoring document's directory or absolute.
+   * The authored document path or the embedded canonical score in a recipient projection.
    */
   source: string;
   /**

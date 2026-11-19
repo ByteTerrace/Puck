@@ -1050,7 +1050,10 @@ words through `sdfProbeSurface`, so it is never a second relight. As built:
   client's landed job serials are the queue's completion points); that is how a
   bottom retired with its mesh tier outlives every queued trace of it.
 - *Switch.* `render.rayQueries`, each quality preset's `rayQueries` row and
-  `world.rays` turn it on; a query takes the variant only once the top level
+  `world.rays` turn it on, for every residency the session presents: a routed
+  painting world follows the presenting session's lever
+  (`WorldSessionSceneEmitter`), since the row is a device's cost, not a look
+  its document authors. A query takes the variant only once the top level
   stands for the published scene, and the software walk otherwise. Turning it
   off, or publishing another scene, retires the structures the publication no
   longer uses, and a structure job the background service hands back (no
@@ -1058,12 +1061,22 @@ words through `sdfProbeSurface`, so it is never a second relight. As built:
 - *Reading.* `sdf.mesh-gi.gpu-query-rays` and `gpu-query-trace-nanoseconds`
   are the hardware's share of `gpu-rays` and `gpu-trace-nanoseconds`, so rays
   per second read both ways from one run; `world.residency`'s `trace-structure-*`
-  fields give the bytes the structures hold.
+  fields give the bytes the structures hold, retired ones included
+  (`device-bytes`), and the bottoms' bytes beside the triangles they cover
+  (`bottom-bytes`, `bottom-triangles`). Their ratio is the driver's, so it
+  compares backends apart from the scene: two readings of the whole bytes at
+  different scene states (a different resident tier, structures retired but
+  not yet released) differ by the scene, not the backend.
 
-What is owed: rays per second on the RTX 4070 on both backends, the same hits
-within the device law's tolerance, no light through a thin wall at the teal
-corner or the stairwell, and the structures' bytes at the hero spawn, the
-painting wing and the garden; then the RTX 2060 and the Deck. If the hardware
+What is owed: the same hits within the device law's tolerance on both
+backends, no light through a thin wall at the teal corner or the stairwell,
+and the structures' bytes at the hero spawn, the painting wing and the garden;
+then the RTX 2060 and the Deck. On the RTX 4070, over structures whose bytes
+agree geometry for geometry on both backends, Direct3D 12's ray-query trace
+answers at about a quarter of Vulkan's rate, while the two software walks
+agree; why is owed, from one trace job of each backend under Nsight Graphics
+or PIX (the traversal's own time against the hit's reads), before the
+Direct3D 12 rate is judged against the software walk's. If the hardware
 walk does not beat the software walk for probe rays on a device, that device's
 table turns the row off and the structures stay for shadows by ray.
 

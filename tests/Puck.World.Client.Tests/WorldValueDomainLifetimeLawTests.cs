@@ -113,14 +113,14 @@ public sealed class WorldValueDomainLifetimeLawTests {
         var client = ClientFixtures.Client(definition: a);
 
         domains.Report = reports.Add;
-        client.DeliverDefinition(definition: a, version: new WorldDocumentVersion(Activation: first, Sequence: 0L));
+        client.DeliverDefinition(definition: a, version: new WorldDocumentVersion(Activation: first, Sequence: 0L), stream: default);
 
         Assert.Equal(expected: 0.5f, actual: Fov(definition: a, mirror: client.StateMirror, domains: domains));
 
         // An ordinary update of the same world keeps what the binding last presented from a valid input.
         var written = FieldOfView(program: "probe-rig", value: 4d);
 
-        client.DeliverDefinition(definition: written, version: new WorldDocumentVersion(Activation: first, Sequence: 1L));
+        client.DeliverDefinition(definition: written, version: new WorldDocumentVersion(Activation: first, Sequence: 1L), stream: default);
 
         Assert.Equal(expected: 0.5f, actual: Fov(definition: written, mirror: client.StateMirror, domains: domains));
 
@@ -128,7 +128,7 @@ public sealed class WorldValueDomainLifetimeLawTests {
         // valid value of its own yet, so it presents the field's engine default, not the other world's 0.5.
         var b = FieldOfView(program: "probe-rig", value: 4d);
 
-        client.DeliverDefinition(definition: b, version: new WorldDocumentVersion(Activation: second, Sequence: 0L));
+        client.DeliverDefinition(definition: b, version: new WorldDocumentVersion(Activation: second, Sequence: 0L), stream: default);
 
         Assert.Equal(expected: OrbitRig.DefaultFieldOfViewRadians, actual: Fov(definition: b, mirror: client.StateMirror, domains: domains));
         Assert.Equal(expected: 2, actual: reports.Count);

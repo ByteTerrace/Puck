@@ -31,8 +31,8 @@ public sealed class SessionShadowDeliveryLawTests {
         Tick: tick, EngineTick: tick, Revision: 0, StepTicks: 1,
         Entries: ReadOnlyMemory<EntitySnapshot>.Empty, FieldCells: (fields ?? []));
     private static void Deliver(WorldSessionMirror session, WorldDefinition definition, ulong tick, FieldCellDelta[]? fields = null) {
-        session.DeliverState(definition, default, new WorldStateStamp(EngineTick: tick, Everything: true, MovedRows: default, Tick: tick));
-        session.DeliverSnapshot(snapshot: Snapshot(fields: fields, tick: tick));
+        session.DeliverState(definition, default, new WorldStateStamp(EngineTick: tick, Everything: true, MovedRows: default, Tick: tick), stream: default);
+        session.DeliverSnapshot(snapshot: Snapshot(fields: fields, tick: tick), stream: default);
     }
     private static string[] Names(WorldShadowSelection selection, ulong tick, double fraction = 0) {
         var slots = new WorldShadowSlot[WorldShadowAllocator.MaxSlots];
@@ -75,7 +75,7 @@ public sealed class SessionShadowDeliveryLawTests {
         using var observer = session.ObserveDeliveredState(observer: selection.Advance);
 
         static FieldCellDelta[] Power(double power) => [new FieldCellDelta(Region: "world", FieldName: "power", Cell: 0, Field: 0, Raw: Puck.Maths.FixedQ4816.FromDouble(value: power).Value)];
-        session.DeliverDefinition(definition: definition, version: default);
+        session.DeliverDefinition(definition: definition, version: default, stream: default);
         Deliver(session, definition, 0, Power(power: 2));
         Assert.Equal(new[] { "field" }, Names(selection, 0));
         Deliver(session, definition, 1, Power(power: 0));
@@ -88,8 +88,8 @@ public sealed class SessionShadowDeliveryLawTests {
         Assert.Equal("field", stable[0].Candidate.Name);
         Assert.Equal("steady", handoffs[0].Incoming.Name);
         Assert.Equal(0.0625, handoffs[0].Weight);
-        session.DeliverDefinition(definition: definition with { }, version: default);
-        session.DeliverSnapshot(snapshot: Snapshot(1, Power(power: 3)));
+        session.DeliverDefinition(definition: definition with { }, version: default, stream: default);
+        session.DeliverSnapshot(snapshot: Snapshot(1, Power(power: 3)), stream: default);
         Assert.Equal(new[] { "field" }, Names(selection, 1));
         Assert.Equal(new[] { "field" }, Names(selection, 0));
     }
@@ -133,9 +133,9 @@ public sealed class SessionShadowDeliveryLawTests {
         Assert.Equal(new[] { "steady" }, Names(selection, 10));
         var before = callbacks;
 
-        session.DeliverState(definition, default, new WorldStateStamp(EngineTick: 11, Everything: true, MovedRows: default, Tick: 11));
+        session.DeliverState(definition, default, new WorldStateStamp(EngineTick: 11, Everything: true, MovedRows: default, Tick: 11), stream: default);
         Assert.Equal(actual: callbacks, expected: before);
-        session.DeliverSnapshot(snapshot: Snapshot(11, [new FieldCellDelta(Region: "world", FieldName: "power", Cell: 0, Field: 0, Raw: (2L * 65536L))]));
+        session.DeliverSnapshot(snapshot: Snapshot(11, [new FieldCellDelta(Region: "world", FieldName: "power", Cell: 0, Field: 0, Raw: (2L * 65536L))]), stream: default);
 
         Assert.Equal(actual: callbacks, expected: (before + 1));
         Assert.Equal(new[] { "field" }, Names(selection, 11));
@@ -198,11 +198,11 @@ public sealed class SessionShadowDeliveryLawTests {
         Deliver(session, original, 10);
         Assert.Equal(new[] { "retired" }, Names(selection, 10));
 
-        session.DeliverDefinition(definition: replacement, version: default);
+        session.DeliverDefinition(definition: replacement, version: default, stream: default);
 
         Assert.Equal(new[] { "steady" }, Names(selection, 10));
         Assert.Equal(new[] { "steady" }, Names(selection, 9));
-        session.DeliverSnapshot(snapshot: Snapshot(10, [new FieldCellDelta(Region: "world", FieldName: "power", Cell: 0, Field: 0, Raw: (2L * 65536L))]));
+        session.DeliverSnapshot(snapshot: Snapshot(10, [new FieldCellDelta(Region: "world", FieldName: "power", Cell: 0, Field: 0, Raw: (2L * 65536L))]), stream: default);
         Assert.Equal(new[] { "field" }, Names(selection, 10));
     }
     [Fact]
@@ -223,9 +223,9 @@ public sealed class SessionShadowDeliveryLawTests {
             },
         };
 
-        session.DeliverDefinition(definition: reordered, version: default);
+        session.DeliverDefinition(definition: reordered, version: default, stream: default);
         Assert.Equal(new[] { "first", "second" }, Names(selection, 11));
-        session.DeliverSnapshot(snapshot: Snapshot(11));
+        session.DeliverSnapshot(snapshot: Snapshot(11), stream: default);
         Assert.Equal(new[] { "first", "second" }, Names(selection, 11));
 
         Deliver(session, reordered.WithWorldState([Weights(first: 3, second: 2, third: 1)]), 12);
@@ -261,7 +261,7 @@ public sealed class SessionShadowDeliveryLawTests {
         var frame = resolver.Resolve(delivered, session.DefinitionRevision, presentation, shadowSelection: selection);
 
         Assert.Equal(2, frame.Lights.ShadowSlots[0]);
-        var report = resolver.DescribeShadowSlots(definition: delivered);
+        var report = resolver.DescribeShadowSlots();
 
         Assert.Contains(actualString: report, expectedSubstring: "shadowSlots tick=11+0.5");
         Assert.Contains(actualString: report, expectedSubstring: "shadow[1] light=second");
@@ -271,7 +271,7 @@ public sealed class SessionShadowDeliveryLawTests {
         Assert.Equal(new PresentedTick(Fraction: 0, Whole: 12), tick);
         Assert.Equal(new[] { "third", "first" }, slots[..count.StableCount].Select(selector: slot => slot.Candidate.Name));
         _ = resolver.Resolve(delivered, session.DefinitionRevision, presentation, shadowSelection: selection);
-        report = resolver.DescribeShadowSlots(definition: delivered);
+        report = resolver.DescribeShadowSlots();
         Assert.Contains(actualString: report, expectedSubstring: "shadowSlots tick=12+0");
         Assert.Contains(actualString: report, expectedSubstring: "shadow[1] light=first");
     }

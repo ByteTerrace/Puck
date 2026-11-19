@@ -247,13 +247,13 @@ public sealed partial class FederationTransferLawTests {
             }
 
             Assert.Equal(
-                actual: frame.Body.Span[0],
+                actual: frame.Body.Span[WorldFederationCodec.StreamStampBytes],
                 expected: ((byte)WorldDisclosureTier.Presentation)
             );
             Assert.True(condition: WorldProjection.TryDeserialize(
                 projection: out var projection,
                 reason: out var reason,
-                utf8Json: frame.Body.Span[WorldFederationCodec.DocumentHeaderBytes..]
+                utf8Json: frame.Body.Span[(WorldFederationCodec.StreamStampBytes + WorldFederationCodec.DocumentHeaderBytes)..]
             ), userMessage: reason);
 
             return projection!;
@@ -440,7 +440,7 @@ public sealed partial class FederationTransferLawTests {
             var frame = await RequireFrameAsync(ct: ct, stream: lane);
             Assert.NotEqual((byte)WorldFederationResponse.ProjectionInvalidated, frame.Kind);
             if (frame.Kind == (byte)WorldFederationResponse.Snapshot &&
-                WorldFederationCodec.TryDecodeSnapshot(frame.Body.Span, out var snapshot, out _) &&
+                WorldFederationCodec.TryDecodeSnapshot(frame.Body.Span[WorldFederationCodec.StreamStampBytes..], out var snapshot, out _) &&
                 snapshot.Tick >= fixture.Server.CompletedTick) { break; }
         }
 

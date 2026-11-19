@@ -78,7 +78,7 @@ public sealed partial class WorldAudioDirector : IWorldAudioLever, IWorldAudioFr
     /// engine invariant rather than world data: these slots are reserved off <see cref="AudioSnapshot.DefaultMaxEmitters"/>
     /// (the reconcile overflow warning charges them), so a full derived plan can never starve a cue. A cue arriving
     /// with the pool full evicts the transient nearest its own expiry (its voice releases with the departed emitter).</summary>
-    public const int TransientCueCapacity = 4;
+    public const int TransientCueCapacity = VoiceSynth.VoiceCount + 1;
     /// <summary>How many published snapshots a pending trigger rides (see the type remarks).</summary>
     public const int TriggerPublishRetention = 8;
 
@@ -140,9 +140,12 @@ public sealed partial class WorldAudioDirector : IWorldAudioLever, IWorldAudioFr
     private int m_nextEmitterId = 1;
     private FixedQ4816 m_defaultCueRadius = FixedQ4816.FromInteger(value: 8L);
     private FixedComplex m_lastListenerYaw = FixedComplex.MultiplicativeIdentity;
+    // The seat slot the listener last resolved to, or -1 when it follows a camera or no seat: a delivered cue is heard
+    // only when that seat's own view admitted it (WorldGameplayCue.AdmitsSeat).
+    private int m_listenerSeat = -1;
     // The most recently tapped active-layer tune id set (WorldServer.MusicLayerTap) — re-reconciled against whenever
     // it changes so the derived layer-bed plan tracks it without waiting for the next definition delivery.
-    private IReadOnlyList<string> m_activeMusicLayerTuneIds = [];
+    private IReadOnlyList<MusicLayer> m_activeMusicLayers = [];
 
     /// <summary>The live master gain in Q16 — the value an attached mixer's <c>MasterGainQ16</c> follows: the
     /// document master gain until the <c>world.volume</c> session lever engages, the lever thereafter (see
@@ -380,6 +383,7 @@ public sealed partial class WorldAudioDirector : IWorldAudioLever, IWorldAudioFr
         // The referenced-tune set: acquire a headless host per tune some plan row taps; release orphans; a hash
         // change restarts the host honestly, the same release+recreate approach the placement animator uses.
         List<string>? orphaned = null;
+        List<string>? unloadable = null;
 
         foreach (var (tuneId, host) in m_tuneHosts) {
             if (FindReferencedTune(
@@ -393,17 +397,21 @@ public sealed partial class WorldAudioDirector : IWorldAudioLever, IWorldAudioFr
                 comparisonType: StringComparison.Ordinal
             )) {
                 host.Source.Dispose();
-                m_tuneHosts[tuneId] = CreateTuneHost(
-                    documentDirectory: definition.DocumentDirectory,
-                    mixer: mixer,
-                    tune: tune
-                );
+                if (CreateTuneHost(documentDirectory: definition.DocumentDirectory, mixer: mixer, tune: tune) is { } replacement) {
+                    m_tuneHosts[tuneId] = replacement;
+                } else {
+                    (unloadable ??= new List<string>()).Add(item: tuneId);
+                }
             }
         }
 
         foreach (var tuneId in (orphaned ?? [])) {
             mixer.RemoveSource(key: AudioSourceKey.Tune(id: tuneId));
             m_tuneHosts[tuneId].Source.Dispose();
+            _ = m_tuneHosts.Remove(key: tuneId);
+        }
+        foreach (var tuneId in (unloadable ?? [])) {
+            mixer.RemoveSource(key: AudioSourceKey.Tune(id: tuneId));
             _ = m_tuneHosts.Remove(key: tuneId);
         }
 
@@ -415,13 +423,10 @@ public sealed partial class WorldAudioDirector : IWorldAudioLever, IWorldAudioFr
                 (FindTune(
                 definition: definition,
                 tuneId: tuneId
-            ) is { } tune)
+            ) is { } tune) &&
+                (CreateTuneHost(documentDirectory: definition.DocumentDirectory, mixer: mixer, tune: tune) is { } created)
             ) {
-                m_tuneHosts[tuneId] = CreateTuneHost(
-                    documentDirectory: definition.DocumentDirectory,
-                    mixer: mixer,
-                    tune: tune
-                );
+                m_tuneHosts[tuneId] = created;
             }
         }
     }
@@ -594,7 +599,8 @@ public sealed partial class WorldAudioDirector : IWorldAudioLever, IWorldAudioFr
     // NEXT time the same tune re-activates it re-enters the registry as a fresh id and ramps in from silence — the
     // same "absent this reconcile = departs" contract every other derived row already follows.
     private void DeriveMusicLayers(WorldDefinition definition, WorldAudioDefaults audio) {
-        foreach (var tuneId in m_activeMusicLayerTuneIds) {
+        foreach (var layer in m_activeMusicLayers) {
+            var tuneId = layer.TuneId;
             if (FindTune(
                 definition: definition,
                 tuneId: tuneId
@@ -610,7 +616,7 @@ public sealed partial class WorldAudioDirector : IWorldAudioLever, IWorldAudioFr
                     MinRadius = FixedQ4816.FromInteger(value: MusicLayerBedRadius),
                     MaxRadius = FixedQ4816.FromInteger(value: MusicLayerBedRadius),
                     FadeFrames = FadeFrames(seconds: audio.DefaultBedFadeSeconds),
-                    GainQ16 = 65536,
+                    GainQ16 = GainQ16(layer.GainThousandths / 1000f),
                     Channel = AudioChannel.Mix,
                     Source = AudioSourceKey.Tune(id: tuneId),
                 },
@@ -1047,6 +1053,8 @@ public sealed partial class WorldAudioDirector : IWorldAudioLever, IWorldAudioFr
             (((uint)slot) < ((uint)seats.Length)) &&
             seats[slot].Joined
         ) {
+            m_listenerSeat = slot;
+
             return (Eye: seats[slot].Eye, Forward: seats[slot].Forward);
         }
 
@@ -1065,14 +1073,20 @@ public sealed partial class WorldAudioDirector : IWorldAudioLever, IWorldAudioFr
             transforms: transforms
         ) is { } pinned)
         ) {
+            m_listenerSeat = -1;
+
             return pinned;
         }
 
         for (var candidateSlot = 0; (candidateSlot < seats.Length); candidateSlot++) {
             if (seats[candidateSlot].Joined) {
+                m_listenerSeat = candidateSlot;
+
                 return (Eye: seats[candidateSlot].Eye, Forward: seats[candidateSlot].Forward);
             }
         }
+
+        m_listenerSeat = -1;
 
         return (Eye: Vector3.Zero, Forward: new Vector3(
             x: 0f,
@@ -1676,6 +1690,7 @@ public sealed partial class WorldAudioDirector : IWorldAudioLever, IWorldAudioFr
 
             for (var index = 0; (index < m_pendingTriggers.Count); index++) {
                 var pending = m_pendingTriggers[index];
+                if (pending.Trigger.EmitterId >= 0 && !slab.ContainsEmitter(pending.Trigger.EmitterId)) { continue; }
 
                 if (slab.TryAddTrigger(trigger: pending.Trigger)) {
                     pending.RemainingPublishes--;
@@ -1702,6 +1717,13 @@ public sealed partial class WorldAudioDirector : IWorldAudioLever, IWorldAudioFr
     /// and after the animator's own reconcile (placement anchors read its registrations).</summary>
     /// <param name="definition">The delivered definition.</param>
     public void ReconcileSpeakers(WorldDefinition definition) {
+        lock (m_gate) {
+            m_bootAudioDefinition = definition;
+            if (m_routedAudio is null) { ReconcileDefinition(definition); }
+        }
+    }
+
+    private void ReconcileDefinition(WorldDefinition definition) {
         ArgumentNullException.ThrowIfNull(argument: definition);
 
         lock (m_gate) {
@@ -1722,15 +1744,17 @@ public sealed partial class WorldAudioDirector : IWorldAudioLever, IWorldAudioFr
             BuildCueTable(audio: audio);
 
             foreach (var patch in definition.Patches) {
-                // The row's Source/Hash were already proven to load, canonicalize, and pin-verify by
-                // WorldDefinitionValidator — this load is expected to succeed by construction.
+                // The row passed a validating door, but its file can change on disk after validation and reconcile
+                // runs on the frame thread: a row that no longer loads plays silent and is reported, never thrown.
                 if (!WorldAssetRowLoader.TryLoadPatch(
                     document: out var document,
                     documentDirectory: definition.DocumentDirectory,
                     error: out var loadError,
                     row: patch
                 )) {
-                    throw new InvalidOperationException(message: $"patch[{patch.Name}]: {loadError} (a validated document must still resolve at reconcile)");
+                    Console.Error.WriteLine(value: $"[world.audio: patch[{patch.Name}] skipped: {loadError}]");
+
+                    continue;
                 }
 
                 m_patchSet.Add(item: (Id: patch.Name, Patch: WorldVoicePatchFactory.FromDocument(document: document!)));
@@ -1783,27 +1807,10 @@ public sealed partial class WorldAudioDirector : IWorldAudioLever, IWorldAudioFr
     /// existing Bed presence slew — see <see cref="DeriveMusicLayers"/>), without waiting for the next document
     /// mutation. A no-op before the first <see cref="ReconcileSpeakers"/> call (nothing to re-derive against yet;
     /// the coming first reconcile picks up whatever was last applied here).</summary>
-    /// <param name="tuneIds">The whole new active set, in the director's own declared order.</param>
-    public void SetActiveMusicLayers(IReadOnlyList<string> tuneIds) {
-        ArgumentNullException.ThrowIfNull(argument: tuneIds);
-
-        lock (m_gate) {
-            if (
-                (tuneIds.Count == m_activeMusicLayerTuneIds.Count) &&
-                tuneIds.SequenceEqual(
-                second: m_activeMusicLayerTuneIds,
-                comparer: StringComparer.Ordinal
-            )
-            ) {
-                return;
-            }
-
-            m_activeMusicLayerTuneIds = tuneIds;
-
-            if (m_definition is { } definition) {
-                ReconcileSpeakers(definition: definition);
-            }
-        }
+    private void SetActiveMusicLayers(IReadOnlyList<MusicLayer> layers) {
+        if (layers.SequenceEqual(m_activeMusicLayers)) { return; }
+        m_activeMusicLayers = [.. layers];
+        if (m_definition is { } definition) { ReconcileDefinition(definition); }
     }
     // ---- the master-volume session lever --------------------------------------------------------------------------
 
@@ -1834,7 +1841,9 @@ public sealed partial class WorldAudioDirector : IWorldAudioLever, IWorldAudioFr
     /// <param name="eventToken">The published event token (<see cref="WorldAudioCue.EventTokens"/>).</param>
     /// <param name="site">The event's world position, or <see langword="null"/> when none is derivable — an
     /// <c>at-site</c> row then falls back to the listener placement (documented on <see cref="WorldAudioCue"/>).</param>
-    public void SubmitCue(string eventToken, Vector3? site) {
+    public void SubmitCue(string eventToken, Vector3? site) => SubmitCue(eventToken, site, null);
+
+    internal void SubmitCue(string eventToken, Vector3? site, long? argument) {
         lock (m_gate) {
             if (!m_cueRows.TryGetValue(
                 key: eventToken,
@@ -1872,12 +1881,14 @@ public sealed partial class WorldAudioDirector : IWorldAudioLever, IWorldAudioFr
                     patchId: row.PatchId,
                     seed: Fnv1aHash.Compute(values: eventToken) ^ ++m_cueOrdinal,
                     gainQ16: 65536,
-                    emitterId: id
+                    emitterId: id,
+                    cueArgument: argument,
+                    stealGainQ16: row.GainQ16
                 );
             }
         }
     }
-    /// <summary>Fires a director embellishment — the same transient-cue mechanism <see cref="SubmitCue"/> uses,
+    /// <summary>Fires a director embellishment — the same transient-cue mechanism <see cref="SubmitCue(string, Vector3?)"/> uses,
     /// generalized to a patch chosen at FIRE time (the compiled <c>MusicEmbellishment.PatchId</c>, authored per
     /// embellishment) rather than looked up from a fixed <c>audio.cues</c> row keyed on a shared token: several
     /// embellishments in one world can each voice a different patch, which the token→row cue table cannot express.
@@ -1923,7 +1934,9 @@ public sealed partial class WorldAudioDirector : IWorldAudioLever, IWorldAudioFr
     /// <param name="seed">The noise seed — the same seed reproduces the voice bit for bit.</param>
     /// <param name="gainQ16">The voice gain, Q16 (65536 = unity).</param>
     /// <param name="emitterId">The emitter the voice spatializes through.</param>
-    public void SubmitTrigger(string patchId, ulong seed, int gainQ16, int emitterId) {
+    /// <param name="cueArgument">An optional argument supplied by a delivered cue.</param>
+    /// <param name="stealGainQ16">The authored gain used for stealing when the emitter carries the gain.</param>
+    public void SubmitTrigger(string patchId, ulong seed, int gainQ16, int emitterId, long? cueArgument = null, int? stealGainQ16 = null) {
         lock (m_gate) {
             m_pendingTriggers.Add(item: new PendingTrigger {
                 Trigger = new SynthTrigger(
@@ -1931,7 +1944,9 @@ public sealed partial class WorldAudioDirector : IWorldAudioLever, IWorldAudioFr
                 PatchId: patchId,
                 Seed: seed,
                 GainQ16: gainQ16,
-                EmitterId: emitterId
+                EmitterId: emitterId,
+                CueArgument: cueArgument,
+                StealGainQ16: stealGainQ16
             ),
                 RemainingPublishes = TriggerPublishRetention,
             });

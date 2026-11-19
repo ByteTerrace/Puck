@@ -56,9 +56,9 @@ public sealed partial class ProjectionAnchorLawTests {
             Assert.True(condition: frame.Ok);
 
             if (frame.Kind == ((byte)WorldFederationResponse.Definition)) {
-                Assert.True(condition: WorldFederationCodec.TryDecodeDocument(body: frame.Body.Span, definition: out _, failure: out var failure, hold: hold, tier: out _, version: out _), userMessage: failure.ToString());
+                Assert.True(condition: WorldFederationCodec.TryDecodeDocument(body: frame.Body.Span[WorldFederationCodec.StreamStampBytes..], definition: out _, failure: out var failure, hold: hold, tier: out _, version: out _), userMessage: failure.ToString());
             } else if (frame.Kind == ((byte)WorldFederationResponse.ProjectionDelta)) {
-                Assert.True(condition: WorldFederationCodec.TryDecodeProjectionDelta(body: frame.Body.Span, definition: out var delivered, failure: out var failure, hold: hold, stamp: out _, valuesOnly: out _, version: out _), userMessage: failure.ToString());
+                Assert.True(condition: WorldFederationCodec.TryDecodeProjectionDelta(body: frame.Body.Span[WorldFederationCodec.StreamStampBytes..], definition: out var delivered, failure: out var failure, hold: hold, stamp: out _, valuesOnly: out _, version: out _), userMessage: failure.ToString());
                 stale ??= delivered;
                 deltas++;
             }

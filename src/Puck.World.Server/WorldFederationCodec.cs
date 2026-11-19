@@ -110,6 +110,9 @@ public enum WorldFederationResponse : byte {
     CustodyReply = 17,
     /// <summary>Whether home recorded a hop's settlement and acknowledges the notice.</summary>
     HopSettledAck = 18,
+    /// <summary>A stream's cut or end: its stamp and whether the stream ends, with no content
+    /// (<see cref="WorldFederationCodec.EncodeCut"/>).</summary>
+    Cut = 19,
 }
 /// <summary>The stable names a federation authority refuses under. A refusal frame's text always opens with one of
 /// these, so a peer and a read-back can both count refusals by name rather than by sentence.</summary>
@@ -172,7 +175,7 @@ public static partial class WorldFederationCodec {
     /// <see cref="HandshakeWireFormat.WriteHelloAsync"/> — that is the only hello; the challenge/authenticate exchange
     /// that follows rides ordinary frames. The key's final digit is the contract's version: raise it whenever the
     /// federation wire contract changes.</summary>
-    public const ulong WireKey = 0x334445464B435550UL; // "PUCKFED3"
+    public const ulong WireKey = 0x344445464B435550UL; // "PUCKFED4"
     /// <summary>The length of a document leaf's header, in bytes: the tier byte, then the document version's 16
     /// activation bytes and 8 sequence bytes, both little-endian. The document's payload starts here.</summary>
     public const int DocumentHeaderBytes = 25;
@@ -469,6 +472,82 @@ public static partial class WorldFederationCodec {
             version: version
         );
     }
+    /// <summary>The bytes a stream stamp occupies at the head of a stamped observation record: the stream's identity, its
+    /// generation and the record's ordinal, each eight bytes little-endian.</summary>
+    public const int StreamStampBytes = 24;
+
+    /// <summary>Frames an observation record's body behind its stream stamp: a definition, projection delta or snapshot
+    /// record crosses as <see cref="StreamStampBytes"/> of stamp and then the body its own leaf encodes.</summary>
+    /// <param name="stream">The record's stamp.</param>
+    /// <param name="body">The record's encoded body.</param>
+    /// <returns>The stamped record.</returns>
+    public static byte[] Stamped(in WorldStreamStamp stream, ReadOnlySpan<byte> body) {
+        var bytes = new byte[(StreamStampBytes + body.Length)];
+
+        WriteStamp(destination: bytes, stream: in stream);
+        body.CopyTo(destination: bytes.AsSpan(start: StreamStampBytes));
+
+        return bytes;
+    }
+    /// <summary>Reads a stamped observation record's stamp and the body behind it.</summary>
+    /// <param name="record">The stamped record.</param>
+    /// <param name="stream">The record's stamp on success.</param>
+    /// <param name="body">The body behind the stamp on success.</param>
+    /// <param name="failure">The named refusal when the record is too short to carry a stamp.</param>
+    /// <returns><see langword="true"/> when the record is long enough to carry a stamp.</returns>
+    public static bool TryReadStamped(ReadOnlySpan<byte> record, out WorldStreamStamp stream, out ReadOnlySpan<byte> body, out WireFailure failure) {
+        if (record.Length < StreamStampBytes) {
+            stream = default;
+            body = default;
+            failure = new WireFailure(Detail: "an observation record carries no stream stamp", Refusal: WireRefusal.PayloadTruncated);
+
+            return false;
+        }
+        stream = ReadStamp(source: record);
+        body = record[StreamStampBytes..];
+        failure = default;
+
+        return true;
+    }
+    /// <summary>Encodes a stream's cut or end: its stamp, then one byte that is one when the stream ends.</summary>
+    /// <param name="stream">The record's stamp.</param>
+    /// <param name="terminal">Whether the stream ends.</param>
+    /// <returns>The encoded record.</returns>
+    public static byte[] EncodeCut(in WorldStreamStamp stream, bool terminal) {
+        var bytes = new byte[(StreamStampBytes + 1)];
+
+        WriteStamp(destination: bytes, stream: in stream);
+        bytes[StreamStampBytes] = (terminal ? (byte)1 : (byte)0);
+
+        return bytes;
+    }
+    /// <summary>Decodes a stream's cut or end.</summary>
+    /// <param name="body">The record bytes.</param>
+    /// <param name="stream">The record's stamp on success.</param>
+    /// <param name="terminal">Whether the stream ends, on success.</param>
+    /// <returns><see langword="true"/> when the record is exactly a stamp and a terminal byte of zero or one.</returns>
+    public static bool TryDecodeCut(ReadOnlySpan<byte> body, out WorldStreamStamp stream, out bool terminal) {
+        if ((body.Length != (StreamStampBytes + 1)) || (body[StreamStampBytes] > 1)) {
+            stream = default;
+            terminal = false;
+
+            return false;
+        }
+        stream = ReadStamp(source: body);
+        terminal = (body[StreamStampBytes] == 1);
+
+        return true;
+    }
+    private static void WriteStamp(Span<byte> destination, in WorldStreamStamp stream) {
+        BinaryPrimitives.WriteUInt64LittleEndian(destination: destination, value: stream.Stream);
+        BinaryPrimitives.WriteInt64LittleEndian(destination: destination[8..], value: stream.Generation);
+        BinaryPrimitives.WriteInt64LittleEndian(destination: destination[16..], value: stream.Ordinal);
+    }
+    private static WorldStreamStamp ReadStamp(ReadOnlySpan<byte> source) => new(
+        Generation: BinaryPrimitives.ReadInt64LittleEndian(source: source[8..]),
+        Ordinal: BinaryPrimitives.ReadInt64LittleEndian(source: source[16..]),
+        Stream: BinaryPrimitives.ReadUInt64LittleEndian(source: source)
+    );
     /// <summary>Frames an already serialized document payload as a document leaf: the tier byte, the version, then the
     /// payload (<see cref="DocumentHeaderBytes"/>).</summary>
     /// <param name="payload">The serialized document or projection.</param>
@@ -886,6 +965,18 @@ public static partial class WorldFederationCodec {
         writer.WriteInt32(value: snapshot.SolidScales.Length);
         foreach (var size in snapshot.SolidScales.Span) { writer.WriteString(value: size.Placement); writer.WriteInt64(value: size.Scale.Value); }
         if (!WorldWireCodec.TryWriteInputPublications(writer, snapshot.Inputs.Span)) { throw new ArgumentException(message: "snapshot input publication exceeds wire bounds", paramName: nameof(snapshot)); }
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(snapshot.Cues.Length, WorldRuleCapacity.MaxDeliveredCues);
+        writer.WriteByte(snapshot.MusicBoundary);
+        writer.WriteByte(snapshot.MusicSenses);
+        writer.WriteInt32(snapshot.Cues.Length);
+        foreach (ref readonly var cue in snapshot.Cues.Span) {
+            writer.WriteString(cue.Name);
+            writer.WriteNullableString(cue.Payload);
+            writer.WriteBoolean(cue.Argument.HasValue);
+            if (cue.Argument is { } argument) { writer.WriteInt64(argument); }
+            writer.WriteInt32(cue.Body ?? -1);
+            writer.WriteInt32(cue.Generation);
+        }
 
         return writer.ToArray();
     }
@@ -957,10 +1048,11 @@ public static partial class WorldFederationCodec {
         WorldFederationResponse.Challenge => MaxChallengeBytes,
         WorldFederationResponse.Refusal => WireLimits.MaxStringBytes,
         WorldFederationResponse.Commit => (2 * WireLimits.MaxStringBytes),
-        WorldFederationResponse.Snapshot => ((4 * 1024) * 1024),
+        WorldFederationResponse.Snapshot => (((4 * 1024) * 1024) + StreamStampBytes),
+        WorldFederationResponse.Cut => (StreamStampBytes + 1),
         WorldFederationResponse.Completion => (1024 * 1024),
-        WorldFederationResponse.Definition => WireLimits.MaxDocumentBytes,
-        WorldFederationResponse.ProjectionDelta => (WireLimits.MaxDocumentBytes + ProjectionDeltaHeaderBytes),
+        WorldFederationResponse.Definition => (WireLimits.MaxDocumentBytes + StreamStampBytes),
+        WorldFederationResponse.ProjectionDelta => ((WireLimits.MaxDocumentBytes + ProjectionDeltaHeaderBytes) + StreamStampBytes),
         WorldFederationResponse.Reservation => MaxFrameBytes,
         WorldFederationResponse.Route => MaxFrameBytes,
         _ => 0,
@@ -1696,14 +1788,34 @@ public static partial class WorldFederationCodec {
         var sizes = reader.ReadArray(field: "solid sizes", maximum: (WireLimits.MaxDocumentBytes / 12),
             readItem: static (ref WireReader r) => new WorldSolidScale(Placement: r.ReadString(field: "solid placement"), Scale: Puck.Maths.FixedQ4816.FromRawBits(value: r.ReadInt64())));
         var inputs = WorldWireCodec.ReadInputPublications(reader: ref reader);
+        var musicBoundary = reader.ReadByte();
+        var musicSenses = reader.ReadByte();
+        if ((musicBoundary & ~3) != 0 || (musicSenses & ~7) != 0) { reader.Fail(WireRefusal.EnumValueUnknown, "invalid snapshot music flags"); }
+        var cueCount = reader.ReadCount(field: "snapshot cues", maximum: WorldRuleCapacity.MaxDeliveredCues, minimum: 0);
+        var cues = cueCount == 0 ? [] : new WorldGameplayCue[cueCount];
+        for (var index = 0; index < cueCount; index++) {
+            var name = reader.ReadString(field: "cue name", maxBytes: WorldRuleCapacity.MaxCueNameLength);
+            var payload = reader.ReadNullableString(field: "cue payload", maxBytes: WorldRuleCapacity.MaxCuePayloadLength * 4);
+            long? argument = reader.ReadBoolean() ? reader.ReadInt64() : null;
+            var target = reader.ReadInt32();
+            var generation = reader.ReadInt32();
+            if (!WorldGameplayCue.IsValidName(name) || payload?.Length > WorldRuleCapacity.MaxCuePayloadLength ||
+                target < -1 || target >= WorldBodiesLimits.CapacityCeiling || generation < 0 || (target == -1 && generation != 0)) {
+                reader.Fail(WireRefusal.PayloadMalformed, "invalid snapshot cue");
+            }
+            cues[index] = new(name, payload, target < 0 ? null : target, tick, argument, generation);
+        }
 
         snapshot = new WorldSnapshot(
             Authority: authority,
+            Cues: cues,
             EngineTick: engineTick,
             Entries: entries,
             FieldCells: deltas,
             FieldsFull: fieldsFull,
             Inputs: inputs,
+            MusicBoundary: musicBoundary,
+            MusicSenses: musicSenses,
             Revision: revision,
             SolidScales: sizes,
             StepTicks: stepTicks,

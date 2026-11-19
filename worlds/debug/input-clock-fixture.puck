@@ -14,6 +14,7 @@ channels [
 inputHistory {
   eventCapacity: 8
   maximumEventsPerStep: 8
+  calibrationLimitSeconds: 0.02
 }
 state {
   world {
@@ -34,6 +35,36 @@ state {
     }
     row {
       name: "misses"
+      kind: Int
+      value: 0
+    }
+    row {
+      name: "insideBeat"
+      kind: Int
+      value: 0
+    }
+    row {
+      name: "insideBar"
+      kind: Int
+      value: 0
+    }
+    row {
+      name: "insideBeatInBar"
+      kind: Int
+      value: 0
+    }
+    row {
+      name: "liveBeat"
+      kind: Int
+      value: 0
+    }
+    row {
+      name: "liveBar"
+      kind: Int
+      value: 0
+    }
+    row {
+      name: "liveBeatInBar"
       kind: Int
       value: 0
     }
@@ -59,6 +90,12 @@ rule "inside-window" {
   when inputEdge(1, inside, Press, 0)
   mode: Edge
   insideError = error
+  insideBeat = clock(pulse, beatAt, 1, inside, Press, 0) ?? 0
+  insideBar = clock(pulse, barAt, 1, inside, Press, 0) ?? 0
+  insideBeatInBar = clock(pulse, beatInBarAt, 1, inside, Press, 0) ?? 0
+  liveBeat = clock(pulse, beat)
+  liveBar = clock(pulse, bar)
+  liveBeatInBar = clock(pulse, beatInBar)
   // The first representable value at or above half a millisecond is 33 raw units.
   if error < 0.0005 {
     hits += 1

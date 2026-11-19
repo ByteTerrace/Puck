@@ -160,7 +160,7 @@ public sealed class RestScene {
             ));
         }
 
-        client.DeliverSnapshot(snapshot: new WorldSnapshot(Authority: "rest", Entries: entries.ToArray(), Revision: 1, StepTicks: 1UL, Tick: 1UL));
+        client.DeliverSnapshot(snapshot: new WorldSnapshot(Authority: "rest", Entries: entries.ToArray(), Revision: 1, StepTicks: 1UL, Tick: 1UL), stream: WorldStreamStamp.Unspanned);
         client.UpdateRenderPoses(alpha: 1f);
         ISdfPickMap? picks = null;
         SdfFrame? captured = null;

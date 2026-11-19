@@ -8,7 +8,7 @@ property as one invariant, and designs the structural door that holds it, in
 place of the per-path guards the review kept finding ways around. A design
 review of the first draft found sixteen flaws in that door; this revision
 closes each at its cause and [answers them one by one](#the-design-reviews-findings-answered).
-It is a design. Nothing here is built.
+Step 1 of [the build order](#the-build-order) is built; the rest is a design.
 
 ## Summary
 
@@ -86,27 +86,16 @@ that hold by what a viewer can be shown.
 
 ### A session with restricted rows is drawn from the whole replica
 
-Confirmed. The test that lets a window join its destination's own scene reads
-the tier and the body policy and nothing else:
-
-`src/Puck.World.Server/WorldSessionObservation.cs:55-62`
-
-```csharp
-    public bool DisclosesEverything => (
-        CanObserve &&
-        (Tier == WorldDisclosureTier.Replica) &&
-        new WorldSinkDisclosure(
-            ObserverBodyIndex: -1,
-            Policy: m_server.Definition.Population.ObserverDisclosure
-        ).IsFull
-    );
-```
+Confirmed, and closed by step 1. The test that lets a window join its
+destination's own scene (`WorldSessionObservation.DisclosesEverything`) read
+the tier and the body policy and nothing else; it now also requires
+`WorldRecipientView.ReadsEverything`.
 
 The same session's own stream is filtered by more than that. Its document comes
 from the cursor's disclosed images, and each snapshot's fields, solid sizes and
 inputs are filtered for the recipient:
 
-`src/Puck.World.Server/WorldSessionSink.cs:343-345`
+`src/Puck.World.Server/WorldSessionSink.cs:438-440`
 
 ```csharp
                 FieldCells = m_rows.Advance(m_view, m_cursor, redacted.FieldCells, (Tier == WorldDisclosureTier.Replica)),
@@ -326,14 +315,8 @@ read without the mirror's gate, and one of them is the cursor's delivery count
 (`src/Puck.World.Server/WorldSessionSink.cs:347`), which does not move for a
 snapshot that changes only bodies. And a stream that delivers from another task
 already exists: `WorldRemoteAuthority.AttachSink` runs its observer on a task
-of its own, and keeps what it last delivered across a lost connection:
-
-`src/Puck.World.Server/WorldRemoteAuthority.cs:890-891`
-
-```csharp
-    // Reconnect the same held lease until its owner releases it; the mirror keeps the last delivered revision while
-    // disconnected and the authored unavailable policy remains the crossing-side safety net.
-```
+of its own, and kept what it last delivered across a lost connection (step 1
+now closes the span when the session ends).
 
 The door therefore has to order a cut against frames and against a connection
 that fails before the cut arrives.
@@ -909,6 +892,15 @@ for the display. The second and third kinds are GPU legs the lead schedules.
    leaves an interest radius: none. A law replays a record of an earlier
    generation and a record of another stream into a mirror: both rejected, the
    mirror unchanged. A law drops the connection: the span closes.
+   *Built,* except the authored lease: `WorldDeliveryCursor` decides cuts and
+   issues `WorldStreamStamp`s, `IClientSink` carries them and `DeliverCut`,
+   `WorldStreamIngress` orders a mirror's records, a remote observer closes
+   its span when its session ends, and `WorldRecipientView.ReadsEverything`
+   tightens the whole-replica test. The card and ingress checks are
+   `StreamGenerationLawTests`; the hidden-policy variants are
+   `disclosure-probe`'s `one` (added) and `removed`. The engine's default
+   lease of none is in force; a lease an admission grants is
+   [an open question](#open-questions-and-their-owners).
 2. **The carrying value, the one writer and the filtered read, beside the
    existing withdrawal.** The taint flag becomes the label; content and label
    become one value at external outputs, bindings, holds and package reads; the
@@ -1031,8 +1023,8 @@ Searched before proposing a generation or a key.
 - The session source's `Fallback` colour is the authored answer to "what does a
   screen with nothing to show draw".
 
-No per-stream disclosure generation exists anywhere in the tree, on either
-side. That part is new.
+No per-stream disclosure generation existed on either side; step 1 added it
+as `WorldDeliveryCursor.Generation` and `WorldStreamIngress`.
 
 ## Open questions and their owners
 
@@ -1043,9 +1035,14 @@ side. That part is new.
   can no longer hold, so that a view which stopped showing a screen long ago is
   not restarted when that screen's session is cut. The step 3 lane measures how
   often that restart happens on the benchmark route before adding it.
-- Whether the engine's default lease after a lost connection should be none.
-  It is the strict reading and it blanks a portal on a network hiccup. The step
-  1 lane lands the default and the authored surface together.
+- The lease an admission grants a stream after a lost connection. The default
+  of none is built: a remote observer's span closes as its session ends, which
+  blanks a neighbour's view on a network hiccup. The authored surface is not:
+  a `lease` member on an admission row, carried to the observer when the
+  stream is admitted, holding the closed span showable that long, and closed
+  at once when the next session's first record arrives. Its first consumer is
+  a remote neighbour, which nothing in the debug world runs yet; the lane
+  that next works on remote observation builds it.
 - Whether the scene a mirror hands out can become one type that the proof's
   comparison walks, which would retire review-only item 3. The step 6 lane
   decides when it sees the comparison's size.

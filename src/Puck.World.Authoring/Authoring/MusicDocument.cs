@@ -38,9 +38,7 @@ public sealed record MusicTransitionDocument(string To, string When, MusicTransi
 /// validated one layer up, not here, since this document layer cannot reference that vocabulary's owner).</param>
 /// <param name="GainThousandths">The layer's authored gain in thousandths (1000 = unity), or <see langword="null"/>
 /// for unity; range-checked against the shared audio gain ceiling one layer up, not here (same reason as
-/// <see cref="MusicTransitionDocument.When"/>). Reserved for a future presentation wiring pass — round-trips through
-/// validation/canonicalization but does not yet affect the derived bed's live gain (the same "authored, not yet a
-/// producer" posture <c>WorldAudioCue.PlayerJump</c> already carries).</param>
+/// <see cref="MusicTransitionDocument.When"/>). Applied to the tune's bed emitter while the layer is active.</param>
 /// <param name="When">The event token gating this layer on top of segment membership (same sense-mappable
 /// vocabulary <see cref="MusicTransitionDocument.When"/> already uses — validated one layer up), or
 /// <see langword="null"/> for "active whenever this segment is current" (the base, unconditional case).</param>

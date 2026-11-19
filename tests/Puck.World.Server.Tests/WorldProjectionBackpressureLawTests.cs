@@ -31,7 +31,7 @@ public sealed class WorldProjectionBackpressureLawTests {
             fixture.Step();
             Assert.Null(sink.DetachReason);
             current = false;
-            sink.DeliverDefinition(fixture.Server.Definition, fixture.Server.DocumentVersion);
+            sink.DeliverDefinition(fixture.Server.Definition, fixture.Server.DocumentVersion, stream: default);
             using var wire = new ProjectionWire();
             await sink.StreamAsync(wire, TestContext.Current.CancellationToken);
             // Apply the harness's sole nonce normalization to the actual wire leaves. Preserve all payload bytes,
@@ -43,9 +43,14 @@ public sealed class WorldProjectionBackpressureLawTests {
                 var frame = await WorldFederationCodec.ReadResponseAsync(read, TestContext.Current.CancellationToken);
                 Assert.True(frame.Ok);
                 var body = frame.Body.ToArray();
+                // A stream's identity is random per stream; its generation and ordinals stay.
+                if (frame.Kind is (byte)WorldFederationResponse.Definition or (byte)WorldFederationResponse.ProjectionDelta or (byte)WorldFederationResponse.Snapshot) {
+                    body.AsSpan(0, 8).Clear();
+                }
                 if (frame.Kind is (byte)WorldFederationResponse.Definition or (byte)WorldFederationResponse.ProjectionDelta) {
-                    var version = new WorldDocumentVersion(new Guid(body.AsSpan(1, 16)), BinaryPrimitives.ReadInt64LittleEndian(body.AsSpan(17)));
-                    transcript.Nonce(version).Activation.TryWriteBytes(body.AsSpan(1, 16));
+                    var leaf = body.AsSpan(WorldFederationCodec.StreamStampBytes);
+                    var version = new WorldDocumentVersion(new Guid(leaf.Slice(1, 16)), BinaryPrimitives.ReadInt64LittleEndian(leaf[17..]));
+                    transcript.Nonce(version).Activation.TryWriteBytes(leaf.Slice(1, 16));
                 }
                 await WorldFederationCodec.WriteResponseAsync(normalized, (WorldFederationResponse)frame.Kind, body, TestContext.Current.CancellationToken);
             }
@@ -186,7 +191,7 @@ public sealed class WorldProjectionBackpressureLawTests {
             Tick: 1_000UL
         );
 
-        sink.DeliverSnapshot(snapshot: in laterEpoch);
+        sink.DeliverSnapshot(snapshot: in laterEpoch, stream: default);
         Assert.Equal(
             expected: WorldFederationProjectionSink.PendingDeliveryLimit,
             actual: sink.PendingDeliveries
@@ -210,7 +215,7 @@ public sealed class WorldProjectionBackpressureLawTests {
             Assert.True(condition: frame.Ok);
             Assert.Equal(expected: ((byte)WorldFederationResponse.Snapshot), actual: frame.Kind);
             Assert.True(condition: WorldFederationCodec.TryDecodeSnapshot(
-                body: frame.Body.Span,
+                body: frame.Body.Span[WorldFederationCodec.StreamStampBytes..],
                 failure: out var failure,
                 snapshot: out var decoded
             ), userMessage: failure.ToString());

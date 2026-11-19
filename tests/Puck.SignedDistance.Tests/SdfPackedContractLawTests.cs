@@ -39,6 +39,15 @@ public sealed class SdfPackedContractLawTests {
         ScreenIndex: index,
         Up: (up ?? Vector3.UnitY)
     );
+    // An instruction of an operation whose every lane is zero but those given.
+    private static SdfInstruction Bare(SdfOp op, uint blend = 0u, Vector4 data0 = default, Vector4 data1 = default, uint shape = 0u) => new(
+        Blend: blend,
+        Data0: data0,
+        Data1: data1,
+        Material: 0u,
+        Op: op,
+        Shape: shape
+    );
     private static SdfInstruction Shape(uint shape = ((uint)SdfShapeType.Sphere), uint blend = ((uint)SdfBlendOp.Union), uint material = 0u) => new(
         Blend: blend,
         Data0: new Vector4(
@@ -277,20 +286,27 @@ public sealed class SdfPackedContractLawTests {
                 z: 1f
             ),
         }]);
-        _ = Build(instructions: [Shape(shape: ((uint)SdfShapeType.SampledRegion)) with {
-            Data0 = new Vector4(
-                w: 1f,
-                x: 0f,
-                y: 0f,
-                z: 0f
-            ),
-            Data1 = new Vector4(
-                w: 0f,
-                x: 0f,
-                y: nanBits,
-                z: nanBits
-            ),
-        }]);
+        // A sampled region's handle (Data1.z) is the program's to write, so any bits stand there on the way in.
+        var field = new SdfSampledField(dimX: 2, dimY: 2, dimZ: 2, values: new float[8]);
+
+        _ = TestPrograms.Of(
+            instructions: [Shape(shape: ((uint)SdfShapeType.SampledRegion)) with {
+                Data0 = new Vector4(
+                    w: 1f,
+                    x: 0f,
+                    y: 0f,
+                    z: 0f
+                ),
+                Data1 = new Vector4(
+                    w: 0f,
+                    x: 0f,
+                    y: BitConverter.UInt32BitsToSingle(value: field.PackedDims),
+                    z: nanBits
+                ),
+            }],
+            materials: OneMaterial,
+            sampledBindings: [new SdfSampledBinding(InstructionIndex: 0, Field: field)]
+        );
 
         // Control: the FLOAT lanes of those same shapes are still swept.
         _ = Assert.Throws<ArgumentException>(testCode: () => Build(instructions: [Shape(shape: ((uint)SdfShapeType.Glyph)) with {
@@ -303,7 +319,8 @@ public sealed class SdfPackedContractLawTests {
         }]));
     }
     /// <summary>Every float operand rejects both infinities and NaN, including otherwise unused lanes. Finite
-    /// extremes, subnormals, and signed zero remain admissible on an operation that ignores their magnitude.</summary>
+    /// extremes, subnormals, and signed zero remain admissible in a lane its operation reads as any finite value (a
+    /// translation, a sine relief's amplitude, a blend radius), and an unused lane admits only zero.</summary>
     [Theory]
     [InlineData(0)]
     [InlineData(1)]
@@ -332,11 +349,22 @@ public sealed class SdfPackedContractLawTests {
             var data = Vector4.Zero;
 
             data[(lane % 4)] = value;
-            _ = Build([Shape() with {
-                Op = SdfOp.ResetPoint,
-                Data0 = ((lane < 4) ? data : Vector4.Zero),
-                Data1 = ((lane < 4) ? Vector4.Zero : data),
-            }]);
+
+            // The instruction that reads this lane as any finite value; none reads Data1.y, Data1.z or Data1.w that way.
+            SdfInstruction? free = lane switch {
+                < 3 => Bare(op: SdfOp.Translate, data0: data),
+                3 => Bare(op: SdfOp.Displace, data0: data),
+                4 => Shape() with { Data1 = data },
+                _ => null,
+            };
+
+            if (free is { } admitted) {
+                _ = Build([Shape(), admitted]);
+            } else if (value == 0f) {
+                _ = Build([Bare(op: SdfOp.ResetPoint, data1: data), Shape()]);
+            } else {
+                _ = Assert.Throws<ArgumentException>(testCode: () => Build([Bare(op: SdfOp.ResetPoint, data1: data), Shape()]));
+            }
         }
     }
     /// <summary>The shader divides the hit's projection onto each screen axis by that axis's half-extent, so a zero
@@ -466,8 +494,8 @@ public sealed class SdfPackedContractLawTests {
     /// constructor is the same door and must refuse it too.</summary>
     [Fact]
     public void TheConstructorRefusesAnEmptyFieldScope() {
-        var push = Shape() with { Op = SdfOp.PushField };
-        var pop = Shape() with { Op = SdfOp.PopField, Blend = ((uint)SdfBlendOp.Intersection) };
+        var push = Bare(op: SdfOp.PushField);
+        var pop = Bare(op: SdfOp.PopField, blend: ((uint)SdfBlendOp.Intersection));
 
         var refusal = Assert.Throws<ArgumentException>(testCode: () => Build(instructions: [Shape(), push, pop]));
 
@@ -674,8 +702,8 @@ public sealed class SdfPackedContractLawTests {
     }
     [Fact]
     public void TheConstructorRefusesUnbalancedOrCrossOwnerFieldScopes() {
-        var push = Shape() with { Op = SdfOp.PushField };
-        var pop = Shape() with { Op = SdfOp.PopField };
+        var push = Bare(op: SdfOp.PushField);
+        var pop = Bare(op: SdfOp.PopField);
 
         _ = Assert.Throws<ArgumentException>(testCode: () => Build(instructions: [pop, Shape()]));
         _ = Assert.Throws<ArgumentException>(testCode: () => Build(instructions: [Shape(), push, Shape()]));

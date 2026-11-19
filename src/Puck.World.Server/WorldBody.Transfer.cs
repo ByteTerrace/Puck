@@ -81,6 +81,7 @@ public sealed partial class WorldBody {
             DrivePitch: m_drivePitch,
             OverlayVelocity: m_overlayVelocity,
             OverlayRemainingTicks: m_overlayRemaining,
+            TimedMove: m_timedMove,
             ChannelTimerTicks: CopyInto(buffers: buffers, source: ((ReadOnlySpan<ulong>)Action.TimerTicks)),
             ChannelTimerValues: CopyInto(buffers: buffers, source: ((ReadOnlySpan<FixedQ4816>)Action.TimerValues)),
             RelativeRemainders: CopyInto(buffers: buffers, source: ((m_channels.RelativeMask == 0) ? default : ((ReadOnlySpan<long>)InputReadbacks.RelativeRemainders))),
@@ -338,6 +339,7 @@ public sealed partial class WorldBody {
         m_drivePitch = state.DrivePitch;
         m_overlayVelocity = state.OverlayVelocity;
         m_overlayRemaining = state.OverlayRemainingTicks;
+        m_timedMove = (CanStartTimedMove ? state.TimedMove : default);
         InputImagesEdit.Source = state.Source;
         m_pendingContinuum = state.PendingContinuum;
         m_continuumConsumedThroughEngineTick = state.PendingContinuum?.ConsumedThroughEngineTick;

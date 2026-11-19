@@ -93,6 +93,12 @@ public sealed class CompiledBodyMotionProgram {
     /// <see langword="null"/> for a target at the full move speed in every direction.</summary>
     public FixedPlanarTarget? PlanarTarget { get; }
 
+    /// <summary>Whether this program can apply a timed yaw and commit its contact-resolved pose.</summary>
+    public bool SupportsTimedMove => Contains(operation: BodyMotionOp.ResolveYawAttitudeAndPlanarFrame)
+        && Contains(operation: BodyMotionOp.CommitPose)
+        && !Contains(operation: BodyMotionOp.IntegrateLocalAttitude)
+        && !Contains(operation: BodyMotionOp.ResolveDriveFrame);
+
     private static BodyProgramAdmission AdmissionFor(BodyProgramKind kind) => kind switch {
         BodyProgramKind.Motion => (BodyProgramAdmission.Channels | BodyProgramAdmission.Pose | BodyProgramAdmission.Velocity | BodyProgramAdmission.ActionState),
         BodyProgramKind.Producer => (BodyProgramAdmission.Sensors | BodyProgramAdmission.Channels | BodyProgramAdmission.ActionState),
@@ -139,12 +145,14 @@ public sealed class CompiledBodyMotionProgram {
             or BodyMotionOp.IntegrateScratchVelocity => (BodyProgramAdmission.Pose | BodyProgramAdmission.Velocity),
         BodyMotionOp.CommitPose => BodyProgramAdmission.Pose,
         BodyMotionOp.SetVerticalVelocity or BodyMotionOp.ScaleVerticalVelocity or BodyMotionOp.PlanarImpulse => BodyProgramAdmission.Velocity,
+        BodyMotionOp.TimedMove => (BodyProgramAdmission.Pose | BodyProgramAdmission.Velocity),
         BodyMotionOp.SetState or BodyMotionOp.AddState or BodyMotionOp.StartTimer or BodyMotionOp.Designate or BodyMotionOp.Generate => BodyProgramAdmission.ActionState,
         _ => (BodyProgramAdmission.Channels | BodyProgramAdmission.Pose | BodyProgramAdmission.Velocity | BodyProgramAdmission.ActionState | BodyProgramAdmission.Sensors),
     };
 
     /// <summary>Reports whether this program profile admits an instruction's required registers.</summary>
-    public bool Admits(BodyMotionOp operation) => ((RequiredAdmission(operation: operation) & ~AdmissionMask) == BodyProgramAdmission.None);
+    public bool Admits(BodyMotionOp operation) => ((RequiredAdmission(operation: operation) & ~AdmissionMask) == BodyProgramAdmission.None)
+        && ((operation != BodyMotionOp.TimedMove) || SupportsTimedMove);
     /// <summary>Compiles and validates a program's declared shape in one construction-time walk.</summary>
     /// <param name="name">The stable program name.</param>
     /// <param name="version">The declared instruction-set version; must equal <see cref="SupportedVersion"/>.</param>

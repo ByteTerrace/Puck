@@ -69,7 +69,24 @@ public sealed partial class WorldServer {
     public void AttachAddons(IWorldAddonHost runtime) => m_document.AttachAddons(runtime: runtime);
     /// <inheritdoc cref="WorldDocument.AttachSink(IClientSink)"/>
     public IDisposable AttachSink(IClientSink sink) => m_document.AttachSink(sink: sink);
-    /// <inheritdoc cref="WorldDocument.AttachSink(IClientSink, in WorldSinkDisclosure)"/>
+
+    /// <summary>Attaches the in-process presentation that serves every local seat. Bodies and the document arrive
+    /// whole; each cue is admitted per seat through that seat's live read capability and carries the seats that may
+    /// be told it (<see cref="WorldGameplayCue.Audience"/>).</summary>
+    /// <param name="sink">The local presentation's sink.</param>
+    /// <returns>A lease that detaches <paramref name="sink"/> when disposed.</returns>
+    public IDisposable AttachLocalPresentation(IClientSink sink) {
+        WorldRecipientView[] views = [];
+        return m_document.AttachSink(sink, WorldSinkDisclosure.Full, snapshot => {
+            var seats = Math.Min(Definition.Population.LocalSeats, WorldGameplayCue.MaxAudienceSeats);
+            if (views.Length != seats) {
+                views = new WorldRecipientView[seats];
+                for (var slot = 0; slot < seats; slot++) { views[slot] = DeliveryView(Principal.Seat(slot), WorldDisclosureTier.Replica); }
+            }
+            return Tick.PresentLocalCues(snapshot, views);
+        });
+    }
+    /// <summary>Attaches a sink with the supplied body disclosure policy.</summary>
     public IDisposable AttachSink(IClientSink sink, in WorldSinkDisclosure disclosure) =>
         m_document.AttachSink(
             disclosure: in disclosure,

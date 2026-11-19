@@ -35,7 +35,7 @@ public sealed partial class WorldRoutedPresentationLawTests {
 
         var retained = frame.Sky.Layers.ToArray();
 
-        north.Mirror.DeliverDefinition(definition: AwayDocument(), version: default);
+        north.Mirror.DeliverDefinition(definition: AwayDocument(), version: default, stream: default);
         _ = Capture(source: scene.FrameSource);
         var changed = Capture(source: scene.FrameSource);
 
@@ -64,7 +64,7 @@ public sealed partial class WorldRoutedPresentationLawTests {
 
         Assert.Equal(expected: 0.5f, actual: Capture(source: scene.FrameSource).Sky.First<SdfSkyClouds>().Scale);
 
-        north.Mirror.DeliverDefinition(definition: Scaled(value: 0d), version: default);
+        north.Mirror.DeliverDefinition(definition: Scaled(value: 0d), version: default, stream: default);
         _ = Capture(source: scene.FrameSource);
 
         Assert.Equal(expected: 0.5f, actual: Capture(source: scene.FrameSource).Sky.First<SdfSkyClouds>().Scale);
@@ -93,18 +93,18 @@ public sealed partial class WorldRoutedPresentationLawTests {
         using var north = Endpoint(definition: Scaled(value: 0.5d), identity: Away, position: AwayPose);
         var scene = new WorldRoutedScene(domains: domains, bodyColor: north.Mirror.BodyColor, endpoint: north, hostFrame: static () => null);
 
-        north.Mirror.DeliverDefinition(definition: Scaled(value: 0.5d), version: first);
+        north.Mirror.DeliverDefinition(definition: Scaled(value: 0.5d), version: first, stream: default);
 
         Assert.Equal(expected: 0.5f, actual: Capture(source: scene.FrameSource).Sky.First<SdfSkyClouds>().Scale);
 
         // The same world, written out of range: the view keeps what it last presented.
-        north.Mirror.DeliverDefinition(definition: Scaled(value: 0d), version: new WorldDocumentVersion(Activation: first.Activation, Sequence: 1L));
+        north.Mirror.DeliverDefinition(definition: Scaled(value: 0d), version: new WorldDocumentVersion(Activation: first.Activation, Sequence: 1L), stream: default);
         _ = Capture(source: scene.FrameSource);
 
         Assert.Equal(expected: 0.5f, actual: Capture(source: scene.FrameSource).Sky.First<SdfSkyClouds>().Scale);
 
         // Another world answers at the destination: it has presented nothing yet, so it shows the engine default.
-        north.Mirror.DeliverDefinition(definition: Scaled(value: 0d), version: second);
+        north.Mirror.DeliverDefinition(definition: Scaled(value: 0d), version: second, stream: default);
         _ = Capture(source: scene.FrameSource);
 
         Assert.Equal(expected: SdfSkyClouds.DefaultScale, actual: Capture(source: scene.FrameSource).Sky.First<SdfSkyClouds>().Scale);
@@ -133,7 +133,7 @@ public sealed partial class WorldRoutedPresentationLawTests {
         var samples = 0L;
         var writer = new Thread(start: () => {
             for (var index = 0; (index < activations.Length); index++) {
-                north.Mirror.DeliverDefinition(definition: worlds[index], version: new WorldDocumentVersion(Activation: activations[index], Sequence: 0L));
+                north.Mirror.DeliverDefinition(definition: worlds[index], version: new WorldDocumentVersion(Activation: activations[index], Sequence: 0L), stream: default);
             }
 
             Volatile.Write(location: ref finished, value: 1);
@@ -229,7 +229,7 @@ public sealed partial class WorldRoutedPresentationLawTests {
         north.Mirror.DeliverSnapshot(snapshot: Snapshot(authority: Away, position: AwayPose) with {
             EngineTick = 50400UL,
             Tick = 2UL,
-        });
+        }, stream: default);
         var advanced = scene.FrameSource.CaptureFrame(deltaSeconds: 5f, height: 36U, interpolationAlpha: 1f, width: 64U)!;
 
         Assert.Equal(actual: advanced.Clock, expected: north.FollowState().Presented);

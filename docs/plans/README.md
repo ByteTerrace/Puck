@@ -57,7 +57,7 @@ Decisions: [worlds and federation](../decisions/worlds-and-federation.md), [play
 - [Port the experimental worlds' features](port-experimental.md): what the quarantined worlds have that the debug world lacks, as port lanes.
 - [The debug world as one valley](debug-world-composition.md): where every place sits in the valley, the domain each one forces, and the seams where they compose.
 - [The valley, the moons and the flight between](valley-and-moons.md): the phases from the valley to a round trip to a moon.
-- [The terrain pass](terrain-pass.md): terrain-scale relief, contact on the drawn relief, terrain materials, aerial perspective and far shadows. [The relief mask design](terrain-pass/relief-mask-design.md) replaces the mask's in-stream scope with an operand of its relief and answers both adversarial reviews of the built form.
+- [The terrain pass](terrain-pass.md): terrain-scale relief, contact on the drawn relief, terrain materials, aerial perspective and far shadows. [The relief mask design](terrain-pass/relief-mask-design.md) replaces the mask's in-stream scope with an operand of its relief and answers both adversarial reviews of the built form; [its step back](terrain-pass/relief-mask-design.md#the-step-back) recommends a smaller form after a second review of that design.
 
 ## Rendering, residency and memory
 

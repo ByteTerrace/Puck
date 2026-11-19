@@ -1454,7 +1454,18 @@ and its measured reach. Neighbouring samples fit a cached normal-gradient
 curvature per texel. Four reflected angular taps reconstruct local surface
 patches and test the receiver against them, with a smooth surface-gap and
 coverage fade. A finite blocker affects its sampled angular footprint rather
-than extending an infinite plane through the scene.
+than extending an infinite plane through the scene. At the finest level,
+where a tap blocks the receiver, a tap whose ray never got past that
+blocker's surface by the receiver's distance carries no evidence about the
+receiver and leaves the coverage: the receiver standing in front of the
+surface that tap met says nothing of a view past the blocker. Counting such
+taps as clear lets the ground outside a wall, seen in front of the wall's
+base, and the rays running clear past the end of a wall seen at grazing light
+the inside of the wall's foot and of a room's corner with the outdoor probe's
+sky. A tap whose ray crossed the blocker's plane clear still counts, so a
+receiver eases over a texel past a finite block's edge. Coarser levels close
+walls on sheets instead, since their metres-wide taps would close a hill's far
+slope under this rule.
 
 [`SdfMeshProbeDepth`](../../src/Puck.SdfVm/SdfMeshProbeDepth.cs) and the views
 shader's `sdfMeshProbeDepthVisibility` share that rule. Gather weight is the

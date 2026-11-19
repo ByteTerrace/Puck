@@ -189,13 +189,16 @@ half of that rule is `WorldToastPolicy`, which also withholds the toast from eve
   resolves through a variable of the concrete link type too.
 - `IWorldServerHost` — deliberately 3 members (`AttachSink`, `EnqueueIntent`,
   `Submit`), so the transport never names `WorldServer`.
-- `IClientSink` — 6 deliveries: `DeliverSnapshot`, `DeliverAnswer`,
+- `IClientSink` — 7 deliveries: `DeliverSnapshot`, `DeliverAnswer`,
   `DeliverDefinition` (a shape change), `DeliverState` (a value-only write),
   both carrying the definition's `WorldDocumentVersion` (activation plus install
   ordinal, also on every `WorldMutationOutcome`; a mutation payload composed on a
   read carries that activation as `ExpectedActivation`, refused on mismatch as
-  `world.mutation.activation-mismatch`),
-  `DeliverComposition`, `DeliverSessionLever`.
+  `world.mutation.activation-mismatch`), `DeliverCut` (a stream's cut or end,
+  with no content), `DeliverComposition`, `DeliverSessionLever`. Snapshot,
+  definition and state deliveries carry the `WorldStreamStamp` their stream's
+  cursor issued; the authority's own fan-out passes `WorldStreamStamp.Unspanned`
+  ([the Protocol README](../../../../src/Puck.World.Protocol/README.md)).
 - `AttachSink` is a subscribe (multi-sink via `WorldOutputHub`, with a primer
   snapshot to the newly attached sink only).
 - `LoopbackTransport` carries one replay tap per LOCAL submission kind
