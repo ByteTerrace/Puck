@@ -61,7 +61,9 @@ public sealed class WorldRatesLeverLawTests {
         var result = registry.Submit(line: line);
 
         Assert.True(condition: result.IsError);
-        Assert.Contains(expectedSubstring: "status|on|off|toggle|bodies|views|screens|shadow-far on|off]", actualString: result.Output);
+        // The refusal names the form nearest the words typed (CommandForms.Refuse).
+        Assert.True(condition: (result.Output.Contains(value: "expected [status|on|off|toggle]", comparisonType: StringComparison.Ordinal) ||
+            result.Output.Contains(value: "expected <bodies|views|screens|shadow-far|shadow-distant> on|off", comparisonType: StringComparison.Ordinal)), userMessage: result.Output);
         Assert.Empty(collection: levers);
     }
 }

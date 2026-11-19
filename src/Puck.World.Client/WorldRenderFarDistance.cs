@@ -40,6 +40,6 @@ public static class WorldRenderFarDistance {
     /// <param name="authored">The authored map, or <see langword="null"/> for none.</param>
     /// <returns>The map.</returns>
     public static SdfDistantShadows ResolveDistantShadows(WorldDistantShadows? authored) => ((authored is { } map)
-        ? new SdfDistantShadows(Reach: map.Reach, Texels: map.Texels, TurnRadians: (map.TurnDegrees * (MathF.PI / 180f)))
+        ? new SdfDistantShadows(Reach: map.Reach, Texels: map.Texels, TurnRadians: float.DegreesToRadians(degrees: map.TurnDegrees))
         : default);
 }
