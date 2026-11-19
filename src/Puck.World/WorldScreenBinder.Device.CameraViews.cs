@@ -131,6 +131,7 @@ public sealed partial class WorldScreenBinder {
                 Region: new NormalizedRect(Height: 1f, Width: 1f, X: 0f, Y: 0f)
             ) {
                 CutRevision = registration.CutRevision,
+                Source = registration,
                 Bloom = Settings?.ResolveBloom((BootDefinition()?.Render ?? WorldRenderDefaults.Absent), registration.Row.Rig.Bloom),
                 BloomQuality = (Settings?.BloomQualityOf(view: name) ?? Puck.Hosting.BloomQuality.Off),
                 Quality = NestedQuality(views: views, name: name),

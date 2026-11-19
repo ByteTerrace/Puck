@@ -271,7 +271,7 @@ public sealed partial class WorldPopulation {
             var tuning = domain.Tuning;
             var frame = string.Create(
                 System.Globalization.CultureInfo.InvariantCulture,
-                $" origin=({((double)tuning.Origin.X):0.###},{((double)tuning.Origin.Y):0.###},{((double)tuning.Origin.Z):0.###}) yaw={(((double)tuning.YawRadians) * (180 / Math.PI)):0.###}"
+                $" origin=({((double)tuning.Origin.X):0.###},{((double)tuning.Origin.Y):0.###},{((double)tuning.Origin.Z):0.###}) yaw={double.RadiansToDegrees(radians: ((double)tuning.YawRadians)):0.###}"
             );
             var shared = ((domain.Sharing is { } sharing)
                 ? $",shared={domain.SharedResidentGoals}/{sharing.GoalCapacity},expanded={domain.SharedExpandedLast}/{sharing.ExpandedNodesPerTick},paths={domain.SharedPathsLast},capacityRefusals={domain.SharedCapacityRefusalsLast}"

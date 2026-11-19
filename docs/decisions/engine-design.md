@@ -314,6 +314,16 @@ to the far side before it has reached the glass. A floor door also needs the
 ground under it to give way, or a falling body stops on it in the same step it
 passes through.
 
+**Players place doors in play, onto any world, and a door may move (the
+owner's ruling).** A door is not only an authored placement: a rule can open
+one where a player aims, as a pair within one world or onto another world or
+zone, and a door can ride a moving body or part, with crossings swept against
+the door's motion as well as the body's. Attacks cross a door as bodies do:
+a projectile is a body, and a query that follows a ray (a hit test, a line of
+sight, a beam) follows it through the door. Where doors may open, how many,
+for how long and who may pass are each game's rules, authored, never the
+engine's ([portals in play](../plans/portals-in-play.md)).
+
 ## The engine has no reference body size
 
 A world's length unit is the metre, and content is authored at the size the

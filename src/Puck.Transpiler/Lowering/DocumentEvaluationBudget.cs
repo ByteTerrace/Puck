@@ -23,6 +23,8 @@ public sealed class DocumentEvaluationBudget {
 
     /// <summary>Gets the cancellation signal shared by all evaluations in this compilation.</summary>
     public CancellationToken CancellationToken { get; init; }
+    /// <summary>Gets the work units charged so far, of the <see cref="WorkLimit"/> a compilation may spend.</summary>
+    public int Work => m_work;
 
     /// <summary>Checks and charges a collection before constructing it.</summary>
     /// <param name="count">The requested number of elements.</param>

@@ -36,6 +36,9 @@ public sealed partial class WorldScreenBinder {
         emitter.FitSkyViews = (views, sky, width, height) => FitSessionSky(feed: feed, height: height, sky: sky, views: views, width: width);
         emitter.SetWindowFit(fit: feed.WindowFit);
         emitter.ViewerPixelsPerMetre = () => (m_viewports?.ViewerPixelsPerMetre ?? 0f);
+        // The session's frames take the presentation's levers, and its stamp pool packs by its rates and views.
+        emitter.HostFrame = () => Presenter?.DressedFrame;
+        emitter.PresentStamps = pool => Presenter?.PresentStamps(pool: pool);
 
         // The destination instance's own render envelope is not configured for a session screen by default — an
         // unconfigured envelope admits any document mutation regardless of capacity. Configuring it here closes

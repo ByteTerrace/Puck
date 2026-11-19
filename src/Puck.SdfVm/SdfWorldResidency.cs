@@ -235,6 +235,12 @@ public sealed partial class SdfWorldResidency : IDisposable {
     /// so a residency nobody renders stops landing until one of its views renders again. Read on the frame thread; never
     /// waits.</summary>
     public bool MeshesArriving => (MeshPathBake.Pending || (m_tables?.MeshesArriving ?? false));
+    /// <summary>Gets whether the residency owes work its preparation serves whether or not anything reads it this frame
+    /// (its minimum): its meshes are arriving (<see cref="MeshesArriving"/>), whose bake plans and lands through a prepared
+    /// frame, or its lighting is settling (<see cref="SdfMeshIrradiance.Settling"/>), whose trace a prepared frame stages,
+    /// so a world becomes resident and lit before its glass shows. False once both are done, when only a reader prepares
+    /// it. Read on the frame thread; never waits.</summary>
+    public bool OwesPreparation => (MeshesArriving || MeshIrradiance.Settling);
     /// <summary>Gets whether the latest staging held a draw out of the frame because its mesh had not landed
     /// (<see cref="SdfWorldTables.DrawsAwaitMeshes"/>); <see langword="false"/> before the tables are built.</summary>
     public bool DrawsAwaitMeshes => (m_tables?.DrawsAwaitMeshes ?? false);
@@ -452,12 +458,24 @@ public sealed partial class SdfWorldResidency : IDisposable {
     }
     /// <summary>Starts a frame: forgets the frame captured, packed and uploaded in the previous one, so the frame's first
     /// read of the residency captures the current one. The render graph's package calls it once per produced frame, before
-    /// the frame is scheduled.</summary>
-    public void BeginFrame() {
+    /// the frame is scheduled, for every residency it holds whether or not the frame reads it.</summary>
+    /// <param name="frameSeconds">The presentation interval the frame spans, in seconds, or zero when the caller keeps no
+    /// presentation clock. A frame that captured nothing hands its interval to the next capture, so a residency nothing
+    /// read for several frames advances its source by all of them when it is read again.</param>
+    public void BeginFrame(double frameSeconds = 0) {
+        if (m_begun && !m_captured) { m_skippedSeconds += m_frameSeconds; }
+        m_begun = true;
+        m_frameSeconds = Math.Max(val1: frameSeconds, val2: 0);
         m_captured = false;
         m_packed = false;
         m_submitted = false;
     }
+
+    // Whether a frame has started, the interval the current frame spans, and the intervals of the frames since the last
+    // capture that captured nothing (BeginFrame), which the next capture's source advances by beside its own.
+    private bool m_begun;
+    private double m_frameSeconds;
+    private double m_skippedSeconds;
     /// <summary>Widens the extent the frame source composes its frames at to cover a view's.</summary>
     /// <param name="width">The view's width, in pixels.</param>
     /// <param name="height">The view's height, in pixels.</param>
@@ -533,9 +551,6 @@ public sealed partial class SdfWorldResidency : IDisposable {
         }
 
         var tables = m_tables!;
-
-        // A frame that stands as it was packs nothing, so a trim the account asked for is serviced here, every frame.
-        tables.ServiceMemoryTrim();
 
         ApplyPendingShaderReload();
         ReconcileGlyphAtlas(tables: tables);
@@ -668,7 +683,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
         ));
     }
     /// <summary>Stages the frame: prepares it (<see cref="Prepare"/>), then submits its upload and pumps the tables'
-    /// background GPU work against it (<see cref="PumpGpuWork"/>), or drives it while the graph withholds the frame
+    /// background GPU work against it (<see cref="SdfGpuWork.Pump"/>), or drives it while the graph withholds the frame
     /// (<see cref="FrameWithheld"/>, <see cref="SdfGpuWork.Drive"/>), once a frame, whoever asks first. The render graph's
     /// preparation asks for every scheduled render that reads the residency, inside the frame's open batch and before any
     /// node records (<see cref="SdfWorldPasses.PrepareRender"/>), so no node's recording pays for the frame's shared work.
@@ -713,14 +728,18 @@ public sealed partial class SdfWorldResidency : IDisposable {
     /// (<see cref="Staged"/>); zero while every recording finds the frame's shared work done before it begins.</summary>
     public long LateStagings { get; private set; }
 
-    /// <summary>Pumps the tables' background GPU work (<see cref="SdfGpuWork.Pump"/>): answers the jobs that completed and
-    /// submits the next while the budget allows, among them the bake's sampling; the work of a frame the residency
-    /// withholds (<see cref="FrameWithheld"/>) is that frame's own, which the budget does not meter. Called on the frame
-    /// thread at the top of each frame, before any residency prepares, and after each upload; a residency with no tables
-    /// pumps nothing.</summary>
-    public void PumpGpuWork() {
+    /// <summary>Serves the residency's upkeep, whether or not anything reads it this frame: pumps the tables' background GPU
+    /// work (<see cref="SdfGpuWork.Pump"/>), which answers the jobs that completed and runs their callbacks, then submits
+    /// the next while the budget allows, among them the bake's sampling (the work of a frame the residency withholds,
+    /// <see cref="FrameWithheld"/>, is that frame's own, which the budget does not meter); publishes the uploads whose
+    /// fences have signaled; and polls retired device objects and answers a memory trim the process account asked for.
+    /// Called on the frame thread at the top of each frame, before any residency prepares; a residency with no tables
+    /// keeps nothing to serve.</summary>
+    public void Upkeep() {
         if (m_disposed || (m_tables is not { } tables)) { return; }
         tables.GpuWork.Pump(tables: tables, withheld: FrameWithheld);
+        m_work.Poll();
+        tables.ServiceMemoryTrim();
     }
     /// <summary>Records that a view rendered the frame the residency holds, whose signature it stands for until one it
     /// renders from changes.</summary>
@@ -931,10 +950,16 @@ public sealed partial class SdfWorldResidency : IDisposable {
                 m_frozenFrame = null;
             }
 
+            // A residency read again after frames nothing read advances by those frames too, so a time-keyed timeline
+            // shows the presented time rather than the phase it was last seen at.
+            var deltaSeconds = (converging ? 0f : ((float)(context.FrameDeltaSeconds + m_skippedSeconds)));
+
+            m_skippedSeconds = 0;
+            SdfCaptureWork.ProcessWork.Count(kind: SdfCaptureWork.Run);
             var captured = m_frameSource.CaptureFrame(
                 width: m_width,
                 height: m_height,
-                deltaSeconds: (converging ? 0f : ((float)context.FrameDeltaSeconds)),
+                deltaSeconds: deltaSeconds,
                 interpolationAlpha: ((float)context.InterpolationAlpha)
             );
 

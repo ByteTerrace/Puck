@@ -1172,16 +1172,16 @@ public sealed partial class SdfMeshIrradianceLawTests : IDisposable {
 
         Step(staged: frame);
         Assert.Contains(expectedSubstring: "meter=none source=initial", actualString: exposures.Describe()[0]);
-        exposures.Publish(cut: 0, local: 0f, multiplier: multiplier, reference: float.NaN, view: 0, words: Bins(bin: 80));
+        exposures.Publish(generation: 0, local: 0f, multiplier: multiplier, reference: float.NaN, view: 0, words: Bins(bin: 80));
         Step(staged: frame);
         Assert.Equal(expected: TargetOf(bin: 80), actual: Ev100(), precision: 4);
         // Three bins are three eighths of a stop: within the band, so the exposure holds.
-        exposures.Publish(cut: 0, local: 0f, multiplier: multiplier, reference: float.NaN, view: 0, words: Bins(bin: 83));
+        exposures.Publish(generation: 0, local: 0f, multiplier: multiplier, reference: float.NaN, view: 0, words: Bins(bin: 83));
         Step(staged: frame);
         Assert.Equal(expected: TargetOf(bin: 80), actual: Ev100(), precision: 4);
         Assert.Contains(expectedSubstring: "band=holding", actualString: exposures.Describe()[0]);
         // Eight bins are a stop: past the band, so the exposure follows.
-        exposures.Publish(cut: 0, local: 0f, multiplier: multiplier, reference: float.NaN, view: 0, words: Bins(bin: 88));
+        exposures.Publish(generation: 0, local: 0f, multiplier: multiplier, reference: float.NaN, view: 0, words: Bins(bin: 88));
         Step(staged: frame);
         Assert.InRange(actual: Ev100(), low: (TargetOf(bin: 80) + 0.01f), high: (TargetOf(bin: 88) - 0.01f));
         Assert.Contains(expectedSubstring: "band=following", actualString: exposures.Describe()[0]);
@@ -1189,13 +1189,26 @@ public sealed partial class SdfMeshIrradianceLawTests : IDisposable {
         var beforeCut = Ev100();
 
         // A reading rendered before the cut holds the exposure; the first after it snaps.
-        exposures.Publish(cut: 0, local: 0f, multiplier: multiplier, reference: float.NaN, view: 0, words: Bins(bin: 40));
+        exposures.Publish(generation: 0, local: 0f, multiplier: multiplier, reference: float.NaN, view: 0, words: Bins(bin: 40));
         Step(staged: cutFrame);
         Assert.Equal(expected: beforeCut, actual: Ev100());
         Assert.Contains(expectedSubstring: "source=cut", actualString: exposures.Describe()[0]);
-        exposures.Publish(cut: 1, local: 0f, multiplier: multiplier, reference: float.NaN, view: 0, words: Bins(bin: 40));
+        exposures.Publish(generation: 1, local: 0f, multiplier: multiplier, reference: float.NaN, view: 0, words: Bins(bin: 40));
         Step(staged: cutFrame);
         Assert.Equal(expected: TargetOf(bin: 40), actual: Ev100(), precision: 4);
+        // Another view takes the slot at the same cut: a reading the slot's former view was recorded under lands on
+        // nothing, and the newcomer's first reading snaps.
+        var swapped = cutFrame with { Views = [cutFrame.Views[0] with { Source = new object() }] };
+        var beforeSwap = Ev100();
+
+        Step(staged: swapped);
+        Assert.Equal(expected: 2L, actual: exposures.GenerationOf(view: 0));
+        exposures.Publish(generation: 1, local: 0f, multiplier: multiplier, reference: float.NaN, view: 0, words: Bins(bin: 88));
+        Step(staged: swapped);
+        Assert.Equal(expected: beforeSwap, actual: Ev100());
+        exposures.Publish(generation: 2, local: 0f, multiplier: multiplier, reference: float.NaN, view: 0, words: Bins(bin: 88));
+        Step(staged: swapped);
+        Assert.Equal(expected: TargetOf(bin: 88), actual: Ev100(), precision: 4);
     }
     /// <summary>THE LAW: the image meter averages between its percentiles. Pixels below the low percentile and above the
     /// high one leave the reading, so a bright light fitting in view does not move it.</summary>

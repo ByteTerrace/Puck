@@ -87,8 +87,12 @@ public sealed partial class SdfCompositionFrameSource : ISdfFrameSource {
     private DynamicTransform[] m_transforms;
     private int m_programSlots;
 
+    // The copies and template slots every frame publishes, rewritten in place, and the journal of the copies each pack
+    // changed (another copy at an index, or the copy at an index on another root slot), which the dresser and the bake
+    // read through their own cursors instead of comparing the whole list.
     private readonly List<SdfMeshInstance> m_meshInstances = [];
     private readonly List<int> m_meshAssetSlots = [];
+    private readonly Puck.Abstractions.Gpu.GpuChangedRows m_copyChanges = new();
     private readonly SdfMovedTransforms m_moved = new();
 
     // The table as it stood before a repack, which the repack is compared with; made at the first repack.
@@ -520,24 +524,40 @@ public sealed partial class SdfCompositionFrameSource : ISdfFrameSource {
             );
         }
 
-        m_meshInstances.Clear();
-        m_meshAssetSlots.Clear();
-        var root = m_programSlots;
+        // The template slots first: a frame whose slots moved owes every copy, since a copy's group membership reads them.
+        var slots = 0;
+        var slotsMoved = false;
+        var copyCount = 0;
 
         for (var owner = 0; (owner < m_emitters.Count); owner++) {
-            var emitter = m_emitters[owner];
-            var copies = emitter.MeshInstances;
+            var assets = m_emitters[owner].MeshAssetSlots;
 
-            m_meshAssetSlots.AddRange(collection: emitter.MeshAssetSlots);
-            for (var at = 0; (at < copies.Count); at++) {
+            copyCount += m_emitters[owner].MeshInstances.Count;
+            for (var at = 0; (at < assets.Count); at++, slots++) {
+                if (slots == m_meshAssetSlots.Count) { m_meshAssetSlots.Add(item: assets[at]); slotsMoved = true; }
+                else if (m_meshAssetSlots[slots] != assets[at]) { m_meshAssetSlots[slots] = assets[at]; slotsMoved = true; }
+            }
+        }
+        if (slots < m_meshAssetSlots.Count) { m_meshAssetSlots.RemoveRange(index: slots, count: (m_meshAssetSlots.Count - slots)); slotsMoved = true; }
+        if (copyCount < m_meshInstances.Count) { m_meshInstances.RemoveRange(index: copyCount, count: (m_meshInstances.Count - copyCount)); }
+        m_copyChanges.Begin(everything: slotsMoved, rows: copyCount);
+        var root = m_programSlots;
+        var position = 0;
+
+        for (var owner = 0; (owner < m_emitters.Count); owner++) {
+            var copies = m_emitters[owner].MeshInstances;
+
+            for (var at = 0; (at < copies.Count); at++, position++) {
                 var copy = copies[at];
+                var held = ((position < m_meshInstances.Count) && ReferenceEquals(objA: m_meshInstances[position], objB: copy) && (copy.FrameSlot == root));
 
                 copy.FrameSlot = root;
                 var previous = m_transforms[root];
 
                 m_transforms[root] = copy.Transform;
                 if (previous != copy.Transform) { m_moved.Owe(count: 1, start: root); }
-                m_meshInstances.Add(item: copy);
+                if (position == m_meshInstances.Count) { m_meshInstances.Add(item: copy); } else { m_meshInstances[position] = copy; }
+                if (!held) { m_copyChanges.Owe(count: 1, start: position); }
                 root++;
             }
         }
@@ -696,7 +716,8 @@ public sealed partial class SdfCompositionFrameSource : ISdfFrameSource {
         m_sampled = SdfSampledSet.Capture(program: m_program!, previous: (m_sampled ?? m_program!.Sampled));
         dressed.PickMap = ComposePickMap();
         dressed.SlotClips = ComposeSlotClips();
-        dressed.Compose(meshAssetSlots: m_meshAssetSlots, meshInstances: m_meshInstances, sampled: m_sampled);
+        dressed.Compose(meshAssetSlots: m_meshAssetSlots, meshInstances: m_meshInstances, sampled: m_sampled,
+            copyChanges: m_copyChanges.Reader, copyChangesSerial: m_copyChanges.Serial);
         dressed.ProgramDelta = (ReferenceEquals(objA: m_programDelta?.To, objB: dressed.Program) ? m_programDelta : null);
         if (Frames == 0) { Console.Error.WriteLine(value: $"[world.render] envelope: {m_program!.Instances.Count} instances, {m_program.MaterialCount} materials, {m_program.Words.Length} program words, {m_transforms.Length} dynamic slots, {m_meshAssetSlots.Count} geometry assets, {m_meshInstances.Count} rigid copies"); }
         Frames++;

@@ -36,7 +36,7 @@ public sealed class SteamController : IGamepadParser, IRumbleParser, ILedParser,
     private const int FeatureReportBytes = 65;                 // report id 0 + 64-byte message
     private const int GyroOffset = 34;
     // The gyro spans ±2000 deg/s over int16 (SDL, Linux).
-    private const float GyroRadiansPerSecondPerLsb = ((2000f / 32768f) * (MathF.PI / 180f));
+    private static readonly float GyroRadiansPerSecondPerLsb = float.DegreesToRadians(degrees: (2000f / 32768f));
     // The trackpad actuators are driven by a pulse train: each pulse is on for a share of the period that grows
     // with intensity, and a train spans a little more than one refresh, so refreshing sustains it seamlessly.
     private const float HapticTrainMicroseconds = 60_000f;

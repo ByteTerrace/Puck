@@ -53,7 +53,7 @@ public sealed record SdfContour(float[] Positions, float[] Normals, int[] Quads,
     /// <summary>Gets the cosine of the turn between two facings past which they are a crease's two sides.
     /// <see cref="SplitAtCreases"/> splits a vertex at it, and a later stage that asks whether two normals of the
     /// finished contour lie across a crease compares against the same value.</summary>
-    public static double CreaseCosine { get; } = Math.Cos(d: (CreaseDegrees * (Math.PI / 180.0)));
+    public static double CreaseCosine { get; } = Math.Cos(d: double.DegreesToRadians(degrees: CreaseDegrees));
 
     // The longest quad edge Finished welds, in the contour's finest cells: past the few hundredths of a cell a row beside
     // a crease stands off it and the crowding where creases meet, short of moving a surface a fraction of a cell the
