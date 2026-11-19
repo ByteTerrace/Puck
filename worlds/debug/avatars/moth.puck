@@ -12,6 +12,8 @@ import "moth-head"
 import "moth-dash"
 import "moth-camera"
 
+walkMotion()
+
 // Her real head, about 0.26 m from crown to chin, sits recessed in the unchanged hood with dark lining round it.
 let headScale = 0.7
 let headAt = [0, 1.735, 0.207]

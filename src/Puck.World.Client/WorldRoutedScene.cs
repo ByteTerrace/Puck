@@ -28,9 +28,9 @@ public sealed class WorldRoutedScene : ISdfFrameDresser, IDisposable {
     /// <summary>Releases this scene's delivered-tick subscription.</summary>
     public void Dispose() => m_emitter.Dispose();
     /// <summary>Reads this authority's last presented shadow slots.</summary>
-    /// <param name="definition">The queried definition.</param>
-    /// <returns>The census, or null before a matching frame.</returns>
-    public string? DescribeShadowSlots(WorldDefinition definition) => m_emitter.DescribeShadowSlots(definition: definition);
+    /// <param name="authority">The queried authority's document version.</param>
+    /// <returns>The census, or <see langword="null"/> for another authority or before a frame.</returns>
+    public string? DescribeShadowSlots(Puck.World.Protocol.WorldDocumentVersion authority) => m_emitter.DescribeShadowSlots(authority: authority);
 
     private readonly WorldSessionSceneEmitter m_emitter;
     /// <summary>The body presentation registrations of this routed authority.</summary>

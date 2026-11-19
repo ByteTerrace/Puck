@@ -216,25 +216,14 @@ public sealed partial class WorldBody {
 
         if (!validatedFiring && (m_stateLane?.Input is { } input) && !input.TryValidateEffects(m_stateOrdinal,
             new ReadOnlySpan<CompiledBodyInstruction>(reference: in local), default, out _)) { return false; }
-        // Only an admitted consequence wakes its target.
-        WakeUp();
         var applied = true;
 
         switch (instruction.Operation) {
             case BodyMotionOp.SetVerticalVelocity:
-                m_verticalVelocity = (instruction.Value * m_scale);
-                if (m_verticalVelocity > FixedQ4816.Zero) { m_grounded = false; }
-                m_verticalVelocityAccumulator.Reset();
-                break;
             case BodyMotionOp.ScaleVerticalVelocity:
-                m_verticalVelocity *= instruction.Value;
-                if (m_verticalVelocity > FixedQ4816.Zero) { m_grounded = false; }
-                m_verticalVelocityAccumulator.Reset();
-                break;
             case BodyMotionOp.PlanarImpulse:
-                m_overlayVelocity = (ImpulseDirection(instruction: in instruction, intent: in InputReadbacks.ReadComposed, orientation: m_orientation) * (instruction.Value * m_scale));
-                m_overlayRemaining = instruction.DurationTicks;
-                m_overlayAccumulator.Reset();
+            case BodyMotionOp.TimedMove:
+                applied = TryApplyKinematicEffect(in instruction, in InputReadbacks.ReadComposed, m_orientation, m_up, m_attitudeUp);
                 break;
             case BodyMotionOp.SetState when ((slot >= 0) && (m_actionStateDefinitions[slot].Kind == ActionStateKind.Counter)):
                 ApplyRawState(
@@ -273,6 +262,7 @@ public sealed partial class WorldBody {
                 break;
         }
         if (applied) {
+            WakeUp();
             m_affectingSubject = sourceIndex;
             if (!validatedFiring && (instruction.Operation is BodyMotionOp.SetState or BodyMotionOp.AddState or BodyMotionOp.StartTimer)) {
                 m_stateLane?.Input?.CommitKitEffects(m_stateOrdinal);
@@ -380,6 +370,9 @@ public sealed partial class WorldBody {
         if (resetRotation) {
             m_rotationAccumulator.Reset();
         }
+        if (resetPosition || resetRotation) {
+            m_timedMove = default;
+        }
 
         if (resetVertical) {
             ResetVertical();
@@ -433,6 +426,31 @@ public sealed partial class WorldBody {
             if (direction != FixedVector3.Zero) { return direction.WithLength(length: FixedQ4816.One); }
         }
         return orientation.Rotate(vector: instruction.Direction);
+    }
+    private bool TryApplyKinematicEffect(in CompiledBodyInstruction instruction, in PlayerIntent intent,
+        FixedQuaternion orientation, FixedVector3 up, FixedVector3 attitudeUp) {
+        switch (instruction.Operation) {
+            case BodyMotionOp.SetVerticalVelocity:
+            case BodyMotionOp.ScaleVerticalVelocity:
+                m_verticalVelocity = ((instruction.Operation == BodyMotionOp.SetVerticalVelocity)
+                    ? (instruction.Value * m_scale)
+                    : (m_verticalVelocity * instruction.Value));
+                if (m_verticalVelocity > FixedQ4816.Zero) { m_grounded = false; }
+                m_verticalVelocityAccumulator.Reset();
+                return true;
+            case BodyMotionOp.PlanarImpulse:
+                m_overlayVelocity = (ImpulseDirection(in instruction, in intent, orientation) * (instruction.Value * m_scale));
+                m_overlayRemaining = instruction.DurationTicks;
+                m_overlayAccumulator.Reset();
+                return true;
+            case BodyMotionOp.TimedMove:
+                if (!TryPrepareTimedMove(in instruction, orientation, up, attitudeUp, out var move)) { return false; }
+                m_timedMove = move;
+                if (HasTimedYaw) { m_rotationAccumulator.Reset(); }
+                return true;
+            default:
+                throw new ArgumentOutOfRangeException(nameof(instruction));
+        }
     }
     private void ComputePlanarTargetVelocity(ref BodyMotionScratch scratch) {
         var effectiveMoveSpeed = ApplySpeedHeld(
@@ -627,19 +645,12 @@ public sealed partial class WorldBody {
                 m_orientation = scratch.Orientation;
                 break;
             case BodyMotionOp.SetVerticalVelocity:
-                m_verticalVelocity = (instruction.Value * m_scale);
-                if (m_verticalVelocity > FixedQ4816.Zero) { m_grounded = false; }
-                m_verticalVelocityAccumulator.Reset();
-                break;
             case BodyMotionOp.ScaleVerticalVelocity:
-                m_verticalVelocity *= instruction.Value;
-                if (m_verticalVelocity > FixedQ4816.Zero) { m_grounded = false; }
-                m_verticalVelocityAccumulator.Reset();
-                break;
             case BodyMotionOp.PlanarImpulse:
-                m_overlayVelocity = (ImpulseDirection(instruction: in instruction, intent: in scratch.Intent, orientation: scratch.Orientation) * (instruction.Value * m_scale));
-                m_overlayRemaining = instruction.DurationTicks;
-                m_overlayAccumulator.Reset();
+            case BodyMotionOp.TimedMove:
+                if (!TryApplyKinematicEffect(in instruction, in scratch.Intent, scratch.Orientation, scratch.Up, scratch.AttitudeUp)) {
+                    NoteSweepRefusal(refusal: ContactRefusal.UnrepresentableSweep);
+                }
                 break;
             case BodyMotionOp.SetState:
                 ApplyRawState(
@@ -753,10 +764,13 @@ public sealed partial class WorldBody {
                     instruction: in instruction,
                     scratch: ref scratch
                 );
+                if (m_sweepRefusal != ContactRefusal.None) { return; }
             }
 
             if (phase == 5) {
+                if (!ProposeTimedMove(scratch: ref scratch)) { return; }
                 ResolveProgramContacts(scratch: ref scratch);
+                if (m_sweepRefusal != ContactRefusal.None) { return; }
             }
         }
 
@@ -1529,6 +1543,7 @@ public sealed partial class WorldBody {
             // it moved against. Read from the persisted attitude, no flag: an idle body's attitude was rebuilt from
             // m_yaw last tick, so the two agree within rounding and nothing is adopted.
             if (
+                !HasTimedYaw &&
                 m_tuning.FacingSnap &&
                 (Role(
                 intent: in scratch.Intent,
@@ -1546,19 +1561,7 @@ public sealed partial class WorldBody {
                 }
             }
 
-            var worldAngleStep = m_rotationAccumulator.Integrate(
-                ratePerSecond: new FixedVector3(
-                    X: ((Role(
-                        intent: in scratch.Intent,
-                        role: ChannelRole.Turn
-                    ) * scratch.TurnSpeed) * authority),
-                    Y: FixedQ4816.Zero,
-                    Z: FixedQ4816.Zero
-                ),
-                elapsedTicks: scratch.StepTicks
-            );
-
-            m_yaw += worldAngleStep.X;
+            IntegrateYawInput(scratch: in scratch, authority: authority);
 
             // World-frame movement resolves the TRANSLATION axes from the seat rather than the body's facing; it does
             // not mean the body ignores which way is up. The yaw attitude composes under the same up tilt the local
@@ -1598,6 +1601,23 @@ public sealed partial class WorldBody {
             return;
         }
 
+        IntegrateYawInput(scratch: in scratch, authority: authority);
+        var yawRotation = FixedQuaternion.FromAxisAngle(
+            angle: m_yaw,
+            axis: FixedVector3.UnitY
+        );
+
+        scratch.Orientation = ((scratch.Up == FixedVector3.UnitY)
+            ? yawRotation
+            : (m_frame * yawRotation)
+        );
+        scratch.Facing = scratch.Orientation.Rotate(vector: -FixedVector3.UnitZ);
+        scratch.Right = scratch.Orientation.Rotate(vector: FixedVector3.UnitX);
+    }
+
+    private void IntegrateYawInput(in BodyMotionScratch scratch, FixedQ4816 authority) {
+        if (HasTimedYaw) { return; }
+
         var angleStep = m_rotationAccumulator.Integrate(
             ratePerSecond: new FixedVector3(
                 X: ((Role(
@@ -1611,17 +1631,6 @@ public sealed partial class WorldBody {
         );
 
         m_yaw += angleStep.X;
-        var yawRotation = FixedQuaternion.FromAxisAngle(
-            angle: m_yaw,
-            axis: FixedVector3.UnitY
-        );
-
-        scratch.Orientation = ((scratch.Up == FixedVector3.UnitY)
-            ? yawRotation
-            : (m_frame * yawRotation)
-        );
-        scratch.Facing = scratch.Orientation.Rotate(vector: -FixedVector3.UnitZ);
-        scratch.Right = scratch.Orientation.Rotate(vector: FixedVector3.UnitX);
     }
     private void SenseTarget(BodySensorTarget candidate, ref BodyMotionScratch scratch) {
         var producer = scratch.Producer!;
@@ -1851,6 +1860,8 @@ public sealed partial class WorldBody {
     // yaw = atan2 of a world planar direction, facing (-sin yaw, -cos yaw). FaceY is elevation — no yaw to take
     // from it.
     private void SnapYawToPlanarIntent(ref BodyMotionScratch scratch) {
+        if (HasTimedYaw) { return; }
+
         var faceX = Role(
             intent: in scratch.Intent,
             role: ChannelRole.FaceX

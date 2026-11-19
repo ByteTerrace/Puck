@@ -3,27 +3,32 @@
 // and holds it to the ground or lets it fall. Both the standard walker (walker.puck) and the debug world's Moth
 // (../debug/avatars/moth.puck) import it; a world refines a program by declaring a row of the same name in its own
 // body, and an avatar's speeds, holds and turn stay in its own kit.
-schema: "puck.world.definition.v1"
 
-bodyMotionPrograms [
-  {
-    kind: Motion
-    name: "walk"
-    operations [
-      ResolveYawAttitudeAndPlanarFrame
-      ResolveHold
-      ComputePlanarTargetVelocity
-      ShapeVelocity
-      SnapYawToPlanarIntent
-      RunActionTriggers
-      ApplyHold
-      IntegratePlanarAndVerticalVelocity
-      CommitPose
-    ]
-    planarTarget {
-      backward: 0.7
-      strafe: 0.85
+template walkMotion() {
+  bodyMotionPrograms [
+    {
+      kind: Motion
+      name: "walk"
+      operations [
+        ResolveYawAttitudeAndPlanarFrame
+        ResolveHold
+        ComputePlanarTargetVelocity
+        ShapeVelocity
+        SnapYawToPlanarIntent
+        RunActionTriggers
+        ApplyHold
+        IntegratePlanarAndVerticalVelocity
+        CommitPose
+      ]
+      planarTarget {
+        backward: 0.7
+        strafe: 0.85
+      }
+      version: "puck.body.program.v1"
     }
-    version: "puck.body.program.v1"
-  }
-]
+  ]
+}
+
+// A kit action can use this in an effects list to ease the travel and turn in and out.
+function easedTimedMove(duration, right = 0, forward = 0, yawDegrees = 0) =
+  timedMove(right: right, forward: forward, yawDegrees: yawDegrees, durationSeconds: duration, curve: Smoothstep)

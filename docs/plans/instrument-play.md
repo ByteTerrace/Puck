@@ -223,14 +223,16 @@ stops authoring around it.
 ([frames](../../.claude/skills/sdf-authoring/references/rig.md#frames)). The
 blended alternative is a swing under a driver's weight, and a creation holds
 32 drivers and a shape 8 swings (`CreationDocument.MaxDrivers`,
-`ShapeDocument.MaxSwings`). The Moth uses 18 drivers, and her forearm uses 5
-of its 8 swings. A fingering chart and a set of dance moves, written as one
+`ShapeDocument.MaxSwings`). The Moth uses 18 drivers. Her thighs and pelvis
+use all 8 of their swings, her upper arms and torso 7, and her forearms 5. A fingering chart and a set of dance moves, written as one
 driver a pose, do not fit. A driver's weight also applies to every shape it
 moves, so "the gait keeps the legs and gives up the arms while she plays"
 needs a second gait driver for the arms. An author would write a clumsier
 form to fit the caps, which "Ergonomic is optimal" calls an engine defect. The
 missing mechanism is a pose clip: authored key poses that interpolate, played
 by a driver, weighted, and limited to the shapes the author names.
+[Pose clips, body parts and reach](instrument-play/pose-clips.md) is its
+design.
 
 **An effector cannot aim at the creation's own body (gap B).** An effector's
 target is a surface the field probe finds, another body, or a world point in a
@@ -239,6 +241,8 @@ forearm". Forward poses alone drift: the arm that carries the instrument and
 the hand that fingers it are posed by separate swings on top of gait, lean and
 breath, so a fingertip misses its vent by the sum of their errors. A hand
 placed on a hip in a dance pose has the same problem.
+[The design](instrument-play/pose-clips.md#5-an-effector-reaches-its-own-creation-or-a-body-a-rule-chose)
+adds a target on the creation's own shape and a body read from state.
 
 **A press reaches the rig a tick late (gap C).** A driver reads motion signals
 and state cells (`CreationDriverDocument`'s signal list). Nothing in the rig
@@ -248,9 +252,10 @@ the debug world's 30 Hz) and a frame after the press, and a network round trip
 later with a remote authority. The combat decision records that prediction is
 new work
 ([combat](../decisions/engine-design.md#combat-is-world-content-on-generic-queries-fields-and-input)).
-The design question is whether the seat's own presentation may read its own
-routed input directly, as a signal that never feeds simulation, or whether the
-answer waits for prediction.
+[The design](instrument-play/pose-clips.md#7-the-owning-seat-sees-its-own-press-early)
+answers that the seat's own presentation may read its own routed input early,
+as a lead on a driver whose truth stays a state cell, and does not wait for
+prediction.
 
 **Four body lanes, three in use (gap D).** A body's look fills four render
 lanes, and the Moth's jets, flight mode and boot flame use three
@@ -271,16 +276,10 @@ hand is the probe that measures this gap, in a later stage.
 
 ### The body
 
-**A move cannot turn the body or follow a shaped path (gap F).** A kit action
-and a rule can launch a body, scale its vertical speed and ride one planar
-direction at one speed (`WorldEffect.SetVerticalVelocity`,
-`WorldEffect.PlanarImpulse`). The motion programs have no operation that turns
-a body through an angle over a duration or moves it along an eased path
-(`BodyMotionOp`). A spin that the rig alone performs would leave the
-simulation facing the old way while strikes are judged by facing, which fakes
-the system the move shows. The existing
-[play-feel packet](open-items.md#dual-stick-play-and-the-moths-motion) already
-wants a rate-limited facing operation for another reason.
+Stage 4 can use `easedTimedMove` from [the standard motion library](../../worlds/standard/motion.puck)
+to move the simulated body and turn its facing over the same interval. For a
+leap, combine it with `setVerticalVelocity` for the vertical launch. The usual
+body sweep resolves the requested travel against the floor and obstacles.
 
 **A strike is a distance test (dependency).** `interactions` pair bodies by
 range. A strike that lands where the leg is, a telegraph a target can read
@@ -353,7 +352,7 @@ loads them, and its last stage waits on them.
 | Invariant | What enforces it | Where the guarantee stops |
 |---|---|---|
 | A grade is a function of the input tape. The same presses at the same captured times give the same grades on every machine. | Only the authority's rule host reads input records, through `WorldInputOwner`; captured time, calibration and the clock segment are in the checkpoint and hash; `puck test --reproduce` compares two runs. | A device that reports no event time is stamped when it is read. A remote producer's captured time is a claim the authority bounds by the authored lateness and cannot verify. |
-| Sound and pose decide nothing. A grade, a hit and an effect never depend on what was heard or drawn. | The architecture gate: the client never references the server, and `Puck.Audio`'s closure is exact. Gap C's design must keep any input the rig reads on the presentation side of that line. | A player's eyes and ears. Latency changes what a player does, which is why calibration exists. |
+| Sound and pose decide nothing. A grade, a hit and an effect never depend on what was heard or drawn. | The architecture gate: the client never references the server, and `Puck.Audio`'s closure is exact. [The pose-clip design](instrument-play/pose-clips.md#the-invariants) keeps the input a driver reads early on the presentation side of that line. | A player's eyes and ears. Latency changes what a player does, which is why calibration exists. |
 | A move's travel is simulation. The rig follows the body, and the body never follows the rig. | A body moves only through `WorldBody.SweepContact`, and kit and rule effects are the only writers of a move. | Presentation may add sway and lean that the capsule does not have, as the gait does today. |
 | The engine learns no instrument and no dance. | Nothing structural. The generic-engine rule and review hold it, and the lanes' mechanisms are named for what they do (a pose clip, a timed turn, a delivered cue). | An engine name that leaks the feature's vocabulary is a defect fixed when found. |
 
@@ -427,8 +426,7 @@ stop at a gap.
 |---|---|---|---|---|
 | Research round | The six topics in [research owed](#research-owed), one researcher a topic across the families, one synthesis, one adversarial review | Researchers: Sol, Neon, an Opus `specialist`. Synthesis: `principal`. Review: Astra. | A round wants divergent sources and a reviewer from another family than the author | Now |
 | Concept art | The pack in [the brief](#the-concept-art-brief) | Codex art lane (Sol with `image_generation`), a Claude partner checking constraints | Codex is the primary artist and judge by ruling | Now |
-| Pose clips (gaps A, B, C) | A design memo, reviewed, then the mechanism: interpolated key poses played by a driver with a weight and a shape mask; an effector target on the creation's own shape; the decision on a presentation-side input signal | Design: `principal`. Review: Astra. Build: an Opus `specialist`. | The rig's layering is invariant-heavy (the skin envelope and the bounds read swings), and a wrong design costs every later stage | Now |
-| Timed turn and shaped move (gap F) | A motion operation or effect that turns a body and moves it along an eased path through the one sweep door, with its predicted displacement readable | Sol at `high` | Fixed-point body motion with a refusal path; a Codex slot takes specialist physics work | Now |
+| Pose clips (gaps A, B, C) | [A design memo](instrument-play/pose-clips.md), reviewed, then the mechanism: interpolated key poses played by a driver with a weight and a shape mask; an effector target on the creation's own shape; the decision on a presentation-side input signal | Design: `principal`. Review: Astra. Build: an Opus `specialist`. | The rig's layering is invariant-heavy (the skin envelope and the bounds read swings), and a wrong design costs every later stage | Now |
 | Beat index and calibration (gaps G, H) | Clock operands for the beat and bar; a calibration verb and binding that send `WorldCommand.CalibrateInput` | `implementer` | Both extend an existing operand and wire an existing command | Now |
 | Delivered cues and music that follows rules (gaps I, J, K) | A design memo, reviewed, then: rule cues in the delivered tick, with a numeric argument a patch reads as pitch; one lane feeding sound and pose cues; score conditions on rule cues; layer gain in the mix; a voice-stealing rule | Design and build: Sol at `high`. Review: an Opus `specialist`. | It changes what crosses the wire, which is a disclosure question; another family reviews | Now |
 | Body lanes (gap D) | More per-body carriers for shading-time values, or a second carrier, as the design finds | An Opus `specialist` | A C# and HLSL layout pair with a generated side | After the rendering wave's lanes that edit the same pass block land |
@@ -436,7 +434,7 @@ stop at a gap.
 | Standard package: the judge | Stage 1's channels, mode, bindings, phrase rows and rules in `worlds/standard/`, with the debug world's score | `implementer` | The mechanisms exist and the fixture shows the shape | Now; it meets gap G |
 | The instrument and the hands | Stage 2: the creation, the segmented fingers, the playing stance and the fingering poses on the Moth | An Opus `specialist`, as a look lane with the probe rule | A creation built to push the rig; it stops at gaps A, B and E | After the pack's instrument panels; it meets the pose-clip lane |
 | Sound and score | Stage 3's patches, cues, tunes and score layers | `implementer` | Authored data once the cue lane lands | After the delivered-cue lane |
-| The dance | Stage 4's moves: kit actions, footwork, strikes and their clips | An Opus `specialist`, as a look lane | Whole-body motion judged on sheets from every side | After the timed-turn and pose-clip lanes |
+| The dance | Stage 4's moves: kit actions, footwork, strikes and their clips | An Opus `specialist`, as a look lane | Whole-body motion judged on sheets from every side | After the pose-clip lane |
 | Interplay and effects | Stage 5's mixed phrases, finishers and effects | `implementer` | Rules over state that stages 1 and 4 define | After stages 1 and 4 |
 | The places | Stage 6's gallery exhibit, the valley stage, the route chapter and the guides | `implementer` for the documents, with the feature lead's captures | World authoring on existing families | After stage 5 |
 | The crowd | Stage 7's workloads and its counted report | Sol | A measurement lane whose findings go to the plans that own them | After stage 6 |

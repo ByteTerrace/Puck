@@ -28,14 +28,15 @@ public enum WorldDocumentWrite : byte {
 /// <summary>One compiled body action, addressed by ordinal.</summary>
 /// <param name="Operation">The motion operation.</param>
 /// <param name="Value">The scalar the operation takes.</param>
-/// <param name="Direction">The unit direction a planar impulse takes.</param>
+/// <param name="Direction">The planar impulse's unit direction or the timed move's body-frame displacement.</param>
 /// <param name="DurationTicks">The engine-tick duration a timed operation takes.</param>
 /// <param name="Register">The target register a designation names, or <see langword="null"/>.</param>
 /// <param name="TargetKey">The designated body's literal key, or the invalid default.</param>
 /// <param name="TargetKeyFrom">The designated body's live indirection, or <see langword="null"/>.</param>
 /// <param name="Designation">What a designation writes.</param>
 /// <param name="UseMoveDirection">Whether a planar impulse prefers the normalized current movement command.</param>
-public readonly record struct WorldBodyAction(BodyMotionOp Operation, FixedQ4816 Value, FixedVector3 Direction, ulong DurationTicks, string? Register = null, CellKey TargetKey = default, CompiledCellRef? TargetKeyFrom = null, WorldBodyDesignationKind Designation = WorldBodyDesignationKind.Body, bool UseMoveDirection = false);
+/// <param name="Curve">The timed move's progress curve.</param>
+public readonly record struct WorldBodyAction(BodyMotionOp Operation, FixedQ4816 Value, FixedVector3 Direction, ulong DurationTicks, string? Register = null, CellKey TargetKey = default, CompiledCellRef? TargetKeyFrom = null, WorldBodyDesignationKind Designation = WorldBodyDesignationKind.Body, bool UseMoveDirection = false, BodyMotionCurve Curve = BodyMotionCurve.Linear);
 /// <summary>The effect facts only a world fires. The facet is the type argument, so firing receives
 /// <see cref="IWorldFacts"/> as an argument.</summary>
 /// <remarks>Every world effect but the identity-fact write lands outside the arena, so it declares

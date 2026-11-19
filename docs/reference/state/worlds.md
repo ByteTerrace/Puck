@@ -176,8 +176,8 @@ Puck.World extends the rule compiler the way any host does (see
   0, state: "suit", expression: 1 - bodyState(body, 0, suit))` writes a
   `state.body` Counter of the body it names, the register a kit's own
   `setState` writes; the register crosses to another world with the body, and
-  a kit's action refuses the effect by name. The four body-motion effects —
-  `setVerticalVelocity`, `scaleVerticalVelocity`, `planarImpulse` and
+  a kit's action refuses the effect by name. The body-motion effects —
+  `setVerticalVelocity`, `scaleVerticalVelocity`, `planarImpulse`, `timedMove` and
   `designate` — are one operation in a kit's action and in a rule: a kit's
   action acts on its own body, and a rule names the body with `key`
   (`WorldBodyEffects` is the one check both scopes lower through). Its predicate arms `held`, `now`,

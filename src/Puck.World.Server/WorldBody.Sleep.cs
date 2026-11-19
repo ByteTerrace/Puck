@@ -114,6 +114,7 @@ public sealed partial class WorldBody {
 
         if (
             (sleepAfterTicks == 0UL) ||
+            m_timedMove.IsActive ||
             hadIncomingIntent ||
             moved
         ) {
