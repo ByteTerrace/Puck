@@ -117,13 +117,15 @@ function troughFloorAt(x) = x * x <= (troughHalf - troughRound) * (troughHalf - 
   )
 
 // The lateral moraines banked along both lips of the trough: heaped debris on the ridge's top, a crest of big rounded heaps
-// and an inner row of smaller ones on the slope toward the ice, each a rock of its own size, yaw and lean, all one grit.
-// Each is { sector, label, position, radii, rotation, material } with its length along the slope.
-function moraineHeap(label, k, r, x, radii) = {
+// and an inner row of smaller ones on the slope toward the ice, each a rock of its own size, yaw and lean, all one grit, with
+// blocky boulders strewn over both. Each is { sector, label, position, radii, exponent, rotation, material } with its length
+// along the slope, a superellipsoid of `exponent` (2 a rounded heap, more a squarer boulder).
+function moraineHeap(label, k, r, x, radii, exponent = 2) = {
   sector: "north-west"
   label: label
   position [x, ridgeGround(r, x) - 0.45 * radii[1], r]
   radii: radii
+  exponent: exponent
   rotation: turnAfter(
     onSlope(ridgeClimbCosine(r, x), 50 * (siteScatter(k, 0.430159) - 0.5)),
     turnAbout([0, 0, 1], 24 * (siteScatter(k, 0.896491) - 0.5))
@@ -154,6 +156,18 @@ let valleyMounds = flatMap(
         1.4 + 0.9 * siteScatter(k + side * 31 + 17, 0.236068)
         2.2 + 1.6 * siteScatter(k + side * 31 + 17, 0.754878)
       ]
+    )),
+    map(range(0, 22), k => moraineHeap(
+      $"glacier-moraine-boulder-{side}-{k}",
+      k + side * 31 + 41,
+      474 + 4 * k + 3 * siteScatter(k + side * 31 + 41, 0.569840),
+      (side * 2 - 1) * (troughHalf + 1.2 + 9 * siteScatter(k + side * 31 + 41, 0.381966)),
+      [
+        0.7 + 0.8 * siteScatter(k + side * 31 + 41, 0.618034)
+        0.6 + 0.5 * siteScatter(k + side * 31 + 41, 0.236068)
+        0.8 + 0.9 * siteScatter(k + side * 31 + 41, 0.754878)
+      ],
+      3.5
     ))
   )
 )
@@ -702,8 +716,8 @@ function churn(name, s, x) = concat(
       name: name
       material: 1
       exponent: 2.2
-      position [x, lakeSite.surface + 0.04, rampPoint(s, x, waterlineAt(s))[2]]
-      scale [3, 0.2, 2.6]
+      position [x, lakeSite.surface - 0.45, rampPoint(s, x, waterlineAt(s))[2]]
+      scale [3, 0.6, 2.6]
     }
   ],
   map(range(0, 4), k => {
@@ -712,10 +726,10 @@ function churn(name, s, x) = concat(
     material: 1
     position [
       x + 2.2 * cosine(90 * k * degree + 40 * siteScatter(k, 0.618034) * degree)
-      lakeSite.surface + 0.12
+      lakeSite.surface - 0.15
       rampPoint(s, x, waterlineAt(s))[2] + 1.8 * sine(90 * k * degree + 40 * siteScatter(k, 0.618034) * degree)
     ]
-    scale [0.5 + 0.3 * siteScatter(k, 0.381966), 0.22, 0.45 + 0.3 * siteScatter(k, 0.754878)]
+    scale [0.5 + 0.3 * siteScatter(k, 0.381966), 0.45, 0.45 + 0.3 * siteScatter(k, 0.754878)]
   })
 )
 let meltShapes = concat(

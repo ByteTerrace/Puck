@@ -189,7 +189,8 @@ prototypes {
           terrainCut(cut: cut)
         }
         for mound in filter(valleyMounds, m => m.sector == sector.name) {
-          shape Ellipsoid $"{mound.label}" {
+          shape Superellipsoid $"{mound.label}" {
+            exponent: mound.exponent
             material: mound.material
             position: mound.position
             scale: mound.radii
