@@ -72,8 +72,8 @@ soft area light, the downlights over them as a soft key with a highlight that
 shows roughness. The level aims at inspection lighting (EN 12464-1 asks 750 lux
 for inspection work), which also keeps a lit level above the darkest exposure
 the hall adapts to by day (`render.exposure` in `hall.puck`: its floor of
-`EV100` 7 under 2 stops of compensation clamps a room averaging under about
-64 nits), so a lit room never renders darker than its light. Every lit room of
+`EV100` 7 under its day's stop and a quarter of compensation clamps a room
+averaging under about 38 nits), so a lit room never renders darker than its light. Every lit room of
 the hall is held to that level: one lit more dimly reads as murk at noon,
 since the floor holds it under what its meter asks. The blinds start down, as a gallery keeps
 daylight off its exhibits: with them up, daylight through three window walls
