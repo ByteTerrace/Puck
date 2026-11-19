@@ -43,7 +43,8 @@ public static class MusicDirectorFactory {
                 transitions.Add(item: new MusicTransition(
                     At: CompileBoundary(boundary: (transition.At ?? Puck.World.Authoring.MusicTransitionBoundary.BarEnd)),
                     ToSegmentId: transition.To,
-                    When: ParseFamily(token: transition.When)
+                    When: ParseFamily(token: transition.When),
+                    Cue: WorldAudioCue.MusicCueName(transition.When)
                 ));
             }
 
@@ -53,6 +54,8 @@ public static class MusicDirectorFactory {
                 // A null When is the unconditional case (see MusicLayer's own remarks).
                 layers.Add(item: new MusicLayer(
                     TuneId: layer.TuneId,
+                    GainThousandths: layer.GainThousandths ?? 1000,
+                    Cue: WorldAudioCue.MusicCueName(layer.When),
                     When: ((layer.When is { } when)
                     ? ParseFamily(token: when)
                     : null)
@@ -64,7 +67,8 @@ public static class MusicDirectorFactory {
             foreach (var embellishment in (segment.Embellishments ?? [])) {
                 embellishments.Add(item: new MusicEmbellishment(
                     PatchId: embellishment.PatchId,
-                    When: ParseFamily(token: embellishment.When)
+                    When: ParseFamily(token: embellishment.When),
+                    Cue: WorldAudioCue.MusicCueName(embellishment.When)
                 ));
             }
 
@@ -89,7 +93,8 @@ public static class MusicDirectorFactory {
         WorldAudioCue.RegionEnter => MusicSenseFamily.RegionEnter,
         WorldAudioCue.RegionExit => MusicSenseFamily.RegionExit,
         WorldAudioCue.SeatJoin => MusicSenseFamily.SeatJoin,
-        _ => throw new InvalidOperationException(message: $"'{token}' has no sense-family mapping — extend ParseFamily in the change that grows WorldAudioCue.MusicWhenTokens."),
+        _ when WorldAudioCue.MusicCueName(token) is not null => MusicSenseFamily.RuleCue,
+        _ => throw new InvalidOperationException(message: $"'{token}' has no sense-family mapping."),
     });
     /// <summary>Projects one tick's world-scoped event edges into the audio-owned sense-edge shape, dropping the
     /// grant-gating fields (music state is never addon-observation-filtered).</summary>

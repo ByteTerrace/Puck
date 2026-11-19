@@ -2114,6 +2114,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
         // poses read the packed leaf transforms; the listener reads the seat cameras once per produced
         // frame, from the produce path where render poses are already resolved. The presentation delta ages the
         // transient cue pool (visual-only clock use — audio is presentation).
+        m_audio.PresentRoutedAudio(TryRoutedView(0, out var audioScene, out _) ? audioScene.Endpoint.Mirror : null);
         _ = m_audio.Publish(
             deltaSeconds: deltaSeconds,
             seats: m_seatCameraPoses,

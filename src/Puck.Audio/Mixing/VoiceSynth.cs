@@ -56,6 +56,7 @@ public enum VoiceFilterMode {
 /// <param name="FilterCoefficientQ16">The SVF frequency coefficient <c>f ≈ 2·sin(π·fc/fs)</c>, Q16; stable below
 /// ~fs/6.</param>
 /// <param name="FilterDampingQ16">The SVF damping <c>q = 1/Q</c>, Q16 (65536 = critically plain; smaller rings).</param>
+/// <param name="PitchFromCueArgument">Whether the mixer reads a cue's argument as base pitch.</param>
 public readonly record struct VoicePatch(
     SynthOscillator Oscillator,
     uint DutyThresholdQ32,
@@ -72,7 +73,8 @@ public readonly record struct VoicePatch(
     int DurationFrames,
     VoiceFilterMode FilterMode,
     int FilterCoefficientQ16,
-    int FilterDampingQ16
+    int FilterDampingQ16,
+    bool PitchFromCueArgument = false
 );
 /// <summary>
 /// The world's deterministic voice synth: 32 voices in a fixed struct array, zero steady-state
@@ -84,7 +86,7 @@ public readonly record struct VoicePatch(
 /// Chamberlin state-variable filter: <c>low += f·band; high = x − low − q·band;
 /// band += f·high</c> per sample, tap selected by mode, integer Q16 throughout.
 /// The same pure <see cref="Render"/> executes on the audio thread and the offline proof.
-/// Voice allocation: a free voice first; otherwise steal the quietest (lowest current envelope level), ties
+/// Voice allocation: a free voice first; otherwise steal the quietest (current envelope level weighted by gain), ties
 /// broken oldest-first — the policy that never robs a fresh attack to keep a dying tail.
 /// </summary>
 public sealed class VoiceSynth {
@@ -92,7 +94,7 @@ public sealed class VoiceSynth {
     // overflow ceiling on a pitch already summed from base + sweep + vibrato, owned here so the synth needs no
     // document-layer reference (Puck.Audio parses no document); kept numerically identical by convention, not by
     // a shared constant, since the two live on opposite sides of the layering rank the document validator sits above.
-    private const long MaxPitchMillihertz = 24_000_000L;
+    internal const long MaxPitchMillihertz = 24_000_000L;
     private const long PeakQ32 = (65536L << 16);
     // 2π and the phase→radians bridge in Q16: rotor step angle = phaseIncrementQ32 · 2π >> 32.
     private static readonly long TwoPiRawQ16 = FixedQ4816.Tau.Value;
@@ -120,6 +122,7 @@ public sealed class VoiceSynth {
         public int EmitterId;
         public VoicePatch Patch;
         public int GainQ16;
+        public int StealGainQ16;
         public ulong TriggerOrdinal;
         public long TotalFrames;
         public EnvelopePhase Envelope;
@@ -212,12 +215,13 @@ public sealed class VoiceSynth {
                 return i;
             }
 
+            var level = voice.EnvelopeLevelQ32 * voice.StealGainQ16;
             if (
-                (voice.EnvelopeLevelQ32 < quietestLevel) ||
-                ((voice.EnvelopeLevelQ32 == quietestLevel) && (voice.TriggerOrdinal < quietestOrdinal))
+                (level < quietestLevel) ||
+                ((level == quietestLevel) && (voice.TriggerOrdinal < quietestOrdinal))
             ) {
                 quietest = i;
-                quietestLevel = voice.EnvelopeLevelQ32;
+                quietestLevel = level;
                 quietestOrdinal = voice.TriggerOrdinal;
             }
         }
@@ -475,8 +479,9 @@ public sealed class VoiceSynth {
     /// <param name="seed">The trigger seed — noise voices reproduce bit for bit from it.</param>
     /// <param name="gainQ16">The voice gain, Q16.</param>
     /// <param name="emitterId">The emitter the voice is bound to, or -1 for an unbound (proof-driven) voice.</param>
+    /// <param name="stealGainQ16">The gain used to rank the voice for stealing, when its emitter supplies the gain.</param>
     /// <returns>The voice slot used.</returns>
-    public int Trigger(in VoicePatch patch, ulong seed, int gainQ16, int emitterId = -1) {
+    public int Trigger(in VoicePatch patch, ulong seed, int gainQ16, int emitterId = -1, int? stealGainQ16 = null) {
         var slot = AllocateVoice();
         ref var voice = ref m_voices[slot];
 
@@ -485,6 +490,7 @@ public sealed class VoiceSynth {
         voice.EmitterId = emitterId;
         voice.Patch = patch;
         voice.GainQ16 = gainQ16;
+        voice.StealGainQ16 = stealGainQ16 ?? gainQ16;
         voice.TriggerOrdinal = m_nextTriggerOrdinal++;
         voice.Rotor = FixedComplex.MultiplicativeIdentity;
         // Start the triangle LFO at its zero crossing (quarter turn) so vibrato onsets at the base pitch.

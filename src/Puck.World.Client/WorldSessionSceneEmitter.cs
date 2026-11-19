@@ -686,6 +686,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
 
         // The pool packs after the avatar catalog, whose reserved slots it sits past: animated placements ride their
         // static pose, attached and body-rooted stamps the destination's interpolated body pose.
+        if (m_onlyPrototypes is null) { m_pool.PresentCues(m_mirror.CueFrames, m_source); }
         m_pool.PackTransforms(
             client: m_source,
             moved: moved,

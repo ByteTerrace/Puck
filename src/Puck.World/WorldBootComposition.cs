@@ -340,7 +340,7 @@ public static class WorldBootComposition {
             );
 
             // The local client sink stays attached for the whole process lifetime, so its lease is deliberately never disposed.
-            _ = sp.GetRequiredService<LoopbackTransport>().Bind(sink: client);
+            _ = sp.GetRequiredService<WorldServer>().AttachSeatPresentation(client, Principal.Seat(0));
 
             return client;
         });

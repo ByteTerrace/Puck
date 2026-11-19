@@ -95,10 +95,12 @@ public static class WorldEffect {
     /// <param name="Name">The cue name; see <see cref="WorldGameplayCue.IsValidName"/>.</param>
     /// <param name="Payload">An optional bounded payload.</param>
     /// <param name="Key">The body the cue is about — a body index, a <c>$cell:</c> indirection, or a bound key.</param>
+    /// <param name="Argument">An optional integer expression, interpreted by the cue's consumer.</param>
     public sealed record EmitCue(
         string Name,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Payload = null,
-        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] StateChannelRef? Key = null
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] StateChannelRef? Key = null,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ExpressionProgram? Argument = null
     ) : ActionEffect;
     /// <summary>Applies the same instantaneous world-space rigid impulse <c>body.impulse</c> fires (Δv = impulse /
     /// mass, through the server's rigid-body solver — never a second impulse mechanism) to a
@@ -211,7 +213,9 @@ public enum WorldBodyDesignationKind : byte {
 /// <param name="Payload">An optional bounded payload interpreted by the consumer.</param>
 /// <param name="Body">An optional active-body index associated with the cue.</param>
 /// <param name="Tick">The simulation tick that emitted it.</param>
-public readonly record struct WorldGameplayCue(string Name, string? Payload, int? Body, ulong Tick) {
+/// <param name="Argument">The optional integer argument.</param>
+/// <param name="Generation">The addressed body's generation, or zero when there is no body.</param>
+public readonly record struct WorldGameplayCue(string Name, string? Payload, int? Body, ulong Tick, long? Argument = null, int Generation = 0) {
     /// <summary>Determines whether a cue name is a bounded dot-separated token suitable for a document and log.</summary>
     /// <param name="candidate">The candidate cue name.</param>
     /// <returns><see langword="true"/> when the name is non-empty, bounded, begins and ends with an ASCII letter or

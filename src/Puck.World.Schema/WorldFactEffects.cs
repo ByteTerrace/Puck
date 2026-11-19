@@ -1,5 +1,6 @@
 using Puck.Maths;
 using Puck.Physics.Motion;
+using Puck.State.Rules;
 using CompiledCellRef = Puck.State.Rules.CompiledCellRef;
 using CompiledExpressionToken = Puck.State.Rules.CompiledExpressionToken;
 using CompiledValueSource = Puck.State.Rules.CompiledValueSource;
@@ -128,13 +129,14 @@ public sealed class WorldCueEffect : WorldFactEffect {
     /// <param name="body">The addressed body — its literal key, or the live indirection that computes it — or
     /// <see langword="null"/> for a cue about no body.</param>
     /// <param name="describe">The authored spelling, for the rules read-back.</param>
-    public WorldCueEffect(string cue, string? payload, (CellKey Key, CompiledCellRef? KeyFrom)? body, string describe) : base(describe: describe) {
+    /// <param name="argument">The optional compiled integer argument.</param>
+    public WorldCueEffect(string cue, string? payload, (CellKey Key, CompiledCellRef? KeyFrom)? body, string describe, CompiledExpressionToken[]? argument = null) : base(describe: describe) {
         Body = body;
         Cue = cue;
         Payload = payload;
-        m_sources = ((body is { } address)
-            ? [EffectSource.Key(keyFrom: address.KeyFrom, literal: address.Key)]
-            : []);
+        Argument = argument;
+        m_sources = [.. (body is { } address ? new[] { EffectSource.Key(keyFrom: address.KeyFrom, literal: address.Key) } : []),
+            .. (argument is null ? [] : new[] { EffectSource.Expression(program: argument, kind: CellKind.Int) })];
     }
 
     private readonly EffectSource[] m_sources;
@@ -152,16 +154,19 @@ public sealed class WorldCueEffect : WorldFactEffect {
     public (CellKey Key, CompiledCellRef? KeyFrom)? Body { get; }
     /// <summary>Gets the cue payload, or <see langword="null"/>.</summary>
     public string? Payload { get; }
+    /// <summary>Gets the optional argument program.</summary>
+    public CompiledExpressionToken[]? Argument { get; }
     /// <inheritdoc/>
     public override bool SubmitsMutation => false;
 
     /// <inheritdoc/>
-    public override void CollectReads(List<CellAccess> into) => CompiledCellRef.CollectReference(
-        into: into,
-        reference: Body?.KeyFrom
-    );
+    public override void CollectReads(List<CellAccess> into) {
+        CompiledCellRef.CollectReference(into: into, reference: Body?.KeyFrom);
+        RuleDataflow.CollectExpression(into: into, tokens: Argument);
+    }
     /// <inheritdoc/>
-    public override RuleWork Cost(IRuleCostContext context) => 1L;
+    public override RuleWork Cost(IRuleCostContext context) => Argument is { } argument
+        ? 1L + RuleWorkBudget.ExpressionCost(argument, context) : 1L;
 }
 /// <summary>Teleports a body to a spawn point or a literal pose.</summary>
 public sealed class WorldPoseEffect : WorldFactEffect {

@@ -278,6 +278,8 @@ public static partial class WorldFactsCompiler {
         }
 
         return new WorldCueEffect(
+            argument: effect.Argument is { } argument ? RuleCompiler.CompileExpression(context: context,
+                expression: argument, kind: CellKind.Int, ruleName: ruleName, verb: "emitCue") : null,
             body: body,
             cue: effect.Name,
             describe: $"emitCue {effect.Name}",

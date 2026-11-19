@@ -662,6 +662,10 @@ public sealed class WorldSessionMirror : IClientSink {
     /// <inheritdoc/>
     public void DeliverDefinition(WorldDefinition definition, WorldDocumentVersion version) {
         ArgumentNullException.ThrowIfNull(argument: definition);
+        if (version.Activation != Document.Version.Activation) {
+            CueFrames.Clear();
+            AudioCueFrames.Clear();
+        }
 
         var started = Stopwatch.GetTimestamp();
 
@@ -703,6 +707,10 @@ public sealed class WorldSessionMirror : IClientSink {
     /// <c>WorldClient</c>'s do, except that a <see cref="EntityContinuityKind.Correction"/>, which the boot client
     /// eases with a decaying render-error offset this mirror does not reproduce, is ordinary double-buffering.</remarks>
     private readonly WorldSolidScaleMirror m_solidScales = new();
+    /// <summary>The session's delivered one-shot frames and score conditions.</summary>
+    public WorldPresentationCueFeed CueFrames { get; } = new();
+    /// <summary>The listening seat's copy of the session's presentation events.</summary>
+    public WorldPresentationCueFeed AudioCueFrames { get; } = new();
 
     /// <summary>The authority-sampled root size of a destination solid.</summary>
     public float? SolidScale(string placementId) { lock (m_snapshotWriteGate) { return m_solidScales.Read(placementId, InterpolationAlpha); } }
@@ -713,6 +721,9 @@ public sealed class WorldSessionMirror : IClientSink {
         var started = Stopwatch.GetTimestamp();
 
         ApplySnapshot(snapshot: in snapshot);
+        var cues = WorldPresentationCueFeed.Capture(snapshot);
+        if (cues.Cues.Length != 0) { CueFrames.Publish(cues); }
+        AudioCueFrames.Publish(cues);
         Charge(count: ref m_snapshotsApplied, started: started, ticks: ref m_snapshotApplyTicks);
     }
     private void ApplySnapshot(in WorldSnapshot snapshot) {
