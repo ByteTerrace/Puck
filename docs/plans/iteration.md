@@ -139,8 +139,10 @@ Step 1, the instrument, is built: [how each loop is measured](#how-each-is-measu
    edits as a progressive rebake of only the creations touched.
 4. Lighting from a stable proxy, relit incrementally, settled at boot with the
    whole GPU.
-5. The cold bake fed: in-flight work shared, groups in flight bounded by the
-   GPU rather than round trips, a load mode that gives boot the whole GPU.
+5. The cold bake fed: groups in flight bounded by the GPU rather than round
+   trips. Work that owes the frame a hole already takes the GPU the frame
+   leaves idle ([the bake-time research](field-programs/research-bake-time.md#ranked-fixes),
+   fix 1).
 
 The missing look tools, authored large terrain form and a stylized surface
 detail layer, are built alongside, each judged through these loops.

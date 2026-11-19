@@ -364,7 +364,21 @@ staging drives the jobs outside the share (`SdfGpuWork.Drive`, and its
 top-of-frame pump takes them unmetered too), the view's
 image waits until the hold ends (`IRenderGraphPackageFactory.WaitingOf` and
 `WithheldOf`), and the same line
-counts the drives and where their wall time went. The three cascades and `mesh`
+counts the drives and where their wall time went.
+
+Bake work that owes the frame a hole is frame work, not optional background
+work: a lattice of a group a view may see (`SdfMeshDemand.Sees`) that draws
+nothing yet (`SdfMeshPathBake.OwedHoles`) is taken first on each budgeted step
+(`ISdfGpuWorkClient.TryTakeOwed`) under its own allowance
+(`SdfGpuWorkBudget.OwedAllowance`): what the frames leave idle of the time
+between them, their measured interval short of a tenth less their own GPU time
+(`SdfGpuWorkBudget.OwedFrameSecondsOf`), never less than `SdfGpuWork.GpuShare`
+of the period and never more than one period. Owed jobs join the same queue, so
+the ordinary jobs behind them still fit the frame allowance less everything
+queued, and they never draw on the credit, so landing and lighting keep their
+share beside them. The `work-budget` line prints the frames' `interval`, the
+`owed-allowance` it set and the owed jobs' count and GPU time, and the
+`gpu-work` line counts `owed-jobs`. The three cascades and `mesh`
 scale with the triangles drawn and the fragments they cover. `surface` and
 `views` scale with the render grid's pixels: every pixel runs the same fixed
 occlusion and shadow filter taps, and a hit pixel's lighting scales with the

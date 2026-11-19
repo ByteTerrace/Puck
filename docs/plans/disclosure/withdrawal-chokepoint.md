@@ -222,7 +222,7 @@ not override it:
 The reduced screen light is also not only a graph output. Every world set binds
 the residency's buffer directly:
 
-`src/Puck.SdfVm/SdfWorldTables.Bindings.cs:88`
+`src/Puck.SdfVm/SdfWorldTables.Bindings.cs:97`
 
 ```csharp
         WriteWorldBuffer(buffer: ScreenEmission, member: SdfWorldPackage.ScreenLights, set: set);
