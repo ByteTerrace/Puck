@@ -845,7 +845,7 @@ demands nothing of its writer, and device loss starts from none.
 - The **history color** holds, per output pixel, the weighted mean of every sample
   the pixel has gathered: the lit color in its RGB and the coverage in its alpha,
   premultiplied as the lit image is.
-- The **history surface** holds 47 words per output pixel
+- The **history surface** holds the words that follow a pixel's motion
   (`SdfWorldPackage.HistorySurfaceWords`): the visibility identity of the
   pixel's receiver, the nearest of the render samples the resolve read that is
   not a sub-pixel feature; that sample's ray distance and the samples' summed
@@ -853,11 +853,20 @@ demands nothing of its writer, and device loss starts from none.
   while the pixel carries a feature), as two half floats; the weighted mean of
   the samples' surface transport, two words; and the feature the pixel's
   footprint last showed, its YCoCg as three half floats with the frames the
-  memory has left, zero for none. A phase mask follows, then eight phase samples,
-  each holding color/coverage and transport as halves and its Gaussian weight.
-  The words lie in planes, one word of every pixel per plane (`sdfHistoryWord`),
-  so a wave reads or writes one word of adjacent pixels in one transaction. A
-  complete stationary window shows its own mean and reads no reprojected history.
+  memory has left, zero for none. The words lie in planes, one word of every
+  pixel per plane (`sdfHistoryWord`), so a wave reads or writes one word of
+  adjacent pixels in one transaction.
+- The **stationary window** (`SdfWorldPackage.HistoryWindowWritten`,
+  `SdfWorldPackage.HistoryWindowWords` words a pixel in the same planes) holds a
+  phase mask and eight phase samples, each holding color/coverage and transport
+  as halves and its Gaussian weight. It is not history: it is one retained
+  buffer the resolve updates in place, zeroed once. A pixel reads and writes
+  only its own window words, and keeps its window only while its history comes
+  from its own position, so no invocation reads what another writes in the same
+  dispatch; a pixel whose history comes from anywhere else restarts its window
+  at this frame's phase. Each frame writes only the current phase's samples and
+  the mask, rather than copying the whole window into a second copy. A complete
+  stationary window shows its own mean and reads no reprojected history.
 
 The views pass also writes a one-channel **reactivity** buffer at the render
 extent, which only the resolve reads: one where a display screen's picture covers the

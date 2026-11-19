@@ -305,8 +305,9 @@ splits it.
 - **Done right.** The region copy walks its words grid-stride: thread `i`
   copies word `i`, then `i` plus the dispatch's threads
   (the copy loop in [`region-copy.comp.hlsl`](../../../../src/Puck.Shaders/Assets/Shaders/Residency/region-copy.comp.hlsl)).
-- **Measured here.** The resolve's history surface (47 words an output pixel)
-  lies in planes (`sdfHistoryWord` in
+- **Measured here.** The resolve's history surface and stationary window
+  (`SdfWorldPackage.HistorySurfaceWords` and `HistoryWindowWords` an output
+  pixel) lie in planes (`sdfHistoryWord` in
   [`sdf-resolve.comp.hlsl`](../../../../src/Puck.SdfVm/Assets/Shaders/Sdf/passes/sdf-resolve.comp.hlsl)).
   With each pixel's words adjacent, every lane of every load and store touched
   its own sector: PIX read the resolve at 92 % of L2 throughput, 2.7 GB of L2
