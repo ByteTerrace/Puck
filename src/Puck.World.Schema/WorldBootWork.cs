@@ -50,6 +50,10 @@ public sealed class WorldBootWork : WorkLedger<WorkCounterSet> {
     /// <summary>Gets the kind counting the compositions answered from an image held in memory or on disk
     /// rather than merged again.</summary>
     public static WorkKind CompositionsShared { get; } = Registry.Declare(name: "world.boot.compositions-shared", unit: "count", workClass: WorkClass.Pacing);
+    /// <summary>Gets the kind counting the root members compositions merged from their layers: every member of a
+    /// document composed whole, and only the members a changed layer writes differently when a held composition is
+    /// recomposed by layer.</summary>
+    public static WorkKind CompositionMembers { get; } = Registry.Declare(name: "world.boot.composition-members", unit: "count", workClass: WorkClass.Pacing);
     /// <summary>Gets the documents read while compiling a source, including its inherited basis declarations. A
     /// held compile performs none of this work.</summary>
     public static WorkKind CompileDocumentsRead { get; } = Registry.Declare(name: "world.boot.compile-documents-read", unit: "count", workClass: WorkClass.Pacing);
@@ -178,7 +182,14 @@ public sealed class WorldBootWork : WorkLedger<WorkCounterSet> {
     /// <param name="kind">One of this ledger's kinds.</param>
     /// <exception cref="ArgumentException"><paramref name="kind"/> is not one of <see cref="Kinds"/>.</exception>
     public static void Count(WorkKind kind) =>
-        Current.Add(amount: 1L, kind: (Compiling.Value ? CompilationKind(kind: kind) : kind));
+        Count(amount: 1L, kind: kind);
+    /// <summary>Counts <paramref name="amount"/> units of <paramref name="kind"/> into <see cref="Current"/>.</summary>
+    /// <param name="kind">One of this ledger's kinds.</param>
+    /// <param name="amount">The non-negative amount of work.</param>
+    /// <exception cref="ArgumentException"><paramref name="kind"/> is not one of <see cref="Kinds"/>.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="amount"/> is negative.</exception>
+    public static void Count(WorkKind kind, long amount) =>
+        Current.Add(amount: amount, kind: (Compiling.Value ? CompilationKind(kind: kind) : kind));
 
     private static WorkKind CompilationKind(WorkKind kind) => ((kind == DocumentsRead) ? CompileDocumentsRead
         : ((kind == Compositions) ? CompileCompositions

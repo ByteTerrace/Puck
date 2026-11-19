@@ -9,6 +9,10 @@ public sealed record WorldComposedDocument(IReadOnlyList<WorldComposedLink> Chai
     // Effective scalar provenance is process-local. Older/persisted images without it still serve ordinary reads;
     // a provenance read recomposes once and holds a new image. No mutable JSON node is shared with a caller.
     internal IReadOnlyDictionary<string, WorldDocumentOrigins.Origin>? Origins { get; init; }
+    // The layers a composite image composed from, process-local like Origins: a later composition of the same document
+    // after one layer changed recomposes only what that layer writes (WorldDefinitionFileSource.Layers). A persisted
+    // image carries none and its next recomposition merges whole.
+    internal WorldDefinitionFileSource.ComposedLayers? Layers { get; init; }
 }
 /// <summary>The persistent composition entries of the compile cache.</summary>
 public interface IWorldCompositionStore {

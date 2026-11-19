@@ -16,7 +16,7 @@ public static partial class CompileCommand {
         private static readonly Lock Gate = new();
         // The compile session's counted work: sources compiled and held compiles served, the .puck files parsed (a root
         // and every library the session's parses did not hold), documents a composition read, merges and the ones a
-        // held image answered, and whole-document validations.
+        // held image answered, the root members merged, and whole-document validations.
         private static readonly WorkKind[] SessionWork = [
             WorldBootWork.Compiles,
             WorldBootWork.PuckCacheHits,
@@ -24,6 +24,7 @@ public static partial class CompileCommand {
             WorldBootWork.DocumentsRead,
             WorldBootWork.Compositions,
             WorldBootWork.CompositionsShared,
+            WorldBootWork.CompositionMembers,
             WorldBootWork.Validations,
         ];
         private static CompilationMeasurement? Active;
