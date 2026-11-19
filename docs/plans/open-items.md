@@ -3548,6 +3548,14 @@ proves itself with `puck compile` lowering to the same document.
   (`WorldOutputHub`, `WorldSessionSink`, `WorldFederationProjectionSink`).
   They go with the presentation view's last cut
   ([runtime plan](runtime-and-delivery.md#the-presentation-view)).
+- Two recipient streams built side by side: `WorldSessionSink` and
+  `WorldFederationProjectionSink` each own a `WorldDeliveryCursor`,
+  `WorldDeliveryRows`, `WorldSolidScaleDisclosure`, body redaction, input
+  filtering, a presentation feed, and now the same cut announcement and
+  re-priming (`AnnounceCut`, `PrimeAfterCut`), differing only in where a
+  record goes (an `IClientSink` or a wire frame). One stream type writing
+  to a record target would hold each rule once; the withdrawal chokepoint's
+  step 4 (the mirror per span) is the natural place to make it.
 - [low] File-system primitives `AtomicFile` cannot serve yet:
   `ShaderCompiler.Entries.cs` wants a write that refuses to replace;
   `DirectoryObjectBlobStoreBackend` stages through a confined handle; a lock

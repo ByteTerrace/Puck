@@ -86,27 +86,16 @@ that hold by what a viewer can be shown.
 
 ### A session with restricted rows is drawn from the whole replica
 
-Confirmed. The test that lets a window join its destination's own scene reads
-the tier and the body policy and nothing else:
-
-`src/Puck.World.Server/WorldSessionObservation.cs:55-62`
-
-```csharp
-    public bool DisclosesEverything => (
-        CanObserve &&
-        (Tier == WorldDisclosureTier.Replica) &&
-        new WorldSinkDisclosure(
-            ObserverBodyIndex: -1,
-            Policy: m_server.Definition.Population.ObserverDisclosure
-        ).IsFull
-    );
-```
+Confirmed, and closed by step 1. The test that lets a window join its
+destination's own scene (`WorldSessionObservation.DisclosesEverything`) read
+the tier and the body policy and nothing else; it now also requires
+`WorldRecipientView.ReadsEverything`.
 
 The same session's own stream is filtered by more than that. Its document comes
 from the cursor's disclosed images, and each snapshot's fields, solid sizes and
 inputs are filtered for the recipient:
 
-`src/Puck.World.Server/WorldSessionSink.cs:343-345`
+`src/Puck.World.Server/WorldSessionSink.cs:438-440`
 
 ```csharp
                 FieldCells = m_rows.Advance(m_view, m_cursor, redacted.FieldCells, (Tier == WorldDisclosureTier.Replica)),
@@ -326,14 +315,8 @@ read without the mirror's gate, and one of them is the cursor's delivery count
 (`src/Puck.World.Server/WorldSessionSink.cs:347`), which does not move for a
 snapshot that changes only bodies. And a stream that delivers from another task
 already exists: `WorldRemoteAuthority.AttachSink` runs its observer on a task
-of its own, and keeps what it last delivered across a lost connection:
-
-`src/Puck.World.Server/WorldRemoteAuthority.cs:890-891`
-
-```csharp
-    // Reconnect the same held lease until its owner releases it; the mirror keeps the last delivered revision while
-    // disconnected and the authored unavailable policy remains the crossing-side safety net.
-```
+of its own, and kept what it last delivered across a lost connection (step 1
+now closes the span when the session ends).
 
 The door therefore has to order a cut against frames and against a connection
 that fails before the cut arrives.
