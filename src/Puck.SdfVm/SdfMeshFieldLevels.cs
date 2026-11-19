@@ -904,7 +904,7 @@ public sealed class SdfMeshFieldLevels {
             }
         }
 
-        var sets = new SdfDisjointSet(count: triangles);
+        using var sets = new SdfDisjointSet(count: triangles);
 
         for (var triangle = 0; (triangle < triangles); triangle++) {
             foreach (var neighbour in neighbours[triangle]) { sets.Union(first: triangle, second: neighbour); }

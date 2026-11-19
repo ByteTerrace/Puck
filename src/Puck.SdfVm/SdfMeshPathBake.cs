@@ -2033,13 +2033,13 @@ public sealed partial class SdfMeshPathBake {
     }
     // The vertices a contour's field check measures (AnswerCreases): every vertex no crossing pins to the surface.
     private static int[] CreaseVertices(SdfContour contour) {
-        var found = new List<int>();
+        using var found = new RentedList<int>();
 
         for (var vertex = 0; (vertex < contour.VertexCount); vertex++) {
             if (((vertex < contour.Features.Length) && contour.Features[vertex]) || ((vertex < contour.Solved.Length) && contour.Solved[vertex])) { found.Add(item: vertex); }
         }
 
-        return [.. found];
+        return found.ToArray();
     }
     // The next chunk of the vertices a group's field check measures (gradients at taps the crease spacing apart) or of its
     // material points (values alone), as many as a frame's share of field evaluations takes.
@@ -2084,6 +2084,7 @@ public sealed partial class SdfMeshPathBake {
 
         if (!more) {
             group.Creases = null;
+            group.Projection?.Dispose();
             group.Projection = null;
             group.Points.Resize(0);
         }
@@ -2323,19 +2324,30 @@ public sealed partial class SdfMeshPathBake {
     // the same way to the lattice edge its quad crosses (SdfContour.QuadAxes, SdfContourFacing), which the contour's
     // settle left it facing out along: its own facing can turn edge-on to that direction and past it without reversing
     // against where it began.
-    private sealed class ContourProjection {
-        private readonly int[] m_starts;
-        private readonly int[] m_incident;
-        private readonly Triangle[] m_triangles;
+    // Its tables are rented (RentedArrays) and go back to the pool when it is disposed: the field check disposes it once
+    // its last vertex moves, a retired group's release once its last job ends.
+    private sealed class ContourProjection : IDisposable {
+        private int[] m_starts;
+        private int[] m_incident;
+        private Triangle[] m_triangles;
+        private int m_triangleCount;
+
+        public void Dispose() {
+            RentedArrays.Return(array: m_starts);
+            RentedArrays.Return(array: m_incident);
+            RentedArrays.Return(array: m_triangles);
+            (m_starts, m_incident, m_triangles, m_triangleCount) = ([], [], [], 0);
+        }
 
         // `Axis` is zero where the contour records no lattice edge; `Patches` is the sum of the corners' patch facings
         // (SdfContour.Patches), zero where it records none.
         private readonly record struct Triangle(int A, int B, int C, (double X, double Y, double Z) Reference, sbyte Axis, (double X, double Y, double Z) Patches);
 
         public ContourProjection(SdfContour contour) {
-            var triangles = new List<Triangle>(capacity: (2 * contour.QuadCount));
+            var triangles = (m_triangles = RentedArrays.Rent<Triangle>(minimumLength: (2 * contour.QuadCount)));
 
-            m_starts = new int[(contour.VertexCount + 1)];
+            m_starts = RentedArrays.Rent<int>(minimumLength: (contour.VertexCount + 1));
+            m_starts.AsSpan(start: 0, length: (contour.VertexCount + 1)).Clear();
 
             double Patch(int vertex, int axis) => ((((3 * vertex) + axis) < contour.Patches.Length) ? contour.Patches[((3 * vertex) + axis)] : 0.0);
             void Add(int a, int b, int c, sbyte axis) {
@@ -2349,7 +2361,7 @@ public sealed partial class SdfMeshPathBake {
                 // A collinear triangle has no orientation to retain. Ignoring it lets a neighbouring move open it
                 // into a valid triangle instead of making one degenerate face immobilize the whole fan.
                 if (!(Dot(a: normal, b: normal) > ((1e-12 * longest) * longest))) { return; }
-                triangles.Add(item: new Triangle(A: a, Axis: axis, B: b, C: c, Patches: (((Patch(axis: 0, vertex: a) + Patch(axis: 0, vertex: b)) + Patch(axis: 0, vertex: c)), ((Patch(axis: 1, vertex: a) + Patch(axis: 1, vertex: b)) + Patch(axis: 1, vertex: c)), ((Patch(axis: 2, vertex: a) + Patch(axis: 2, vertex: b)) + Patch(axis: 2, vertex: c))), Reference: normal));
+                triangles[m_triangleCount++] = (new Triangle(A: a, Axis: axis, B: b, C: c, Patches: (((Patch(axis: 0, vertex: a) + Patch(axis: 0, vertex: b)) + Patch(axis: 0, vertex: c)), ((Patch(axis: 1, vertex: a) + Patch(axis: 1, vertex: b)) + Patch(axis: 1, vertex: c)), ((Patch(axis: 2, vertex: a) + Patch(axis: 2, vertex: b)) + Patch(axis: 2, vertex: c))), Reference: normal));
                 m_starts[(a + 1)]++;
                 m_starts[(b + 1)]++;
                 m_starts[(c + 1)]++;
@@ -2365,11 +2377,11 @@ public sealed partial class SdfMeshPathBake {
                 Add(a: a, axis: axis, b: c, c: d);
             }
             for (var vertex = 0; (vertex < contour.VertexCount); vertex++) { m_starts[(vertex + 1)] += m_starts[vertex]; }
-            m_triangles = [.. triangles];
-            m_incident = new int[m_starts[^1]];
-            var filled = new int[contour.VertexCount];
+            m_incident = RentedArrays.Rent<int>(minimumLength: m_starts[contour.VertexCount]);
+            using var filledLease = RentedArrays.Rent<int>(array: out var filled, minimumLength: contour.VertexCount);
 
-            for (var index = 0; (index < m_triangles.Length); index++) {
+            filled.AsSpan(start: 0, length: contour.VertexCount).Clear();
+            for (var index = 0; (index < m_triangleCount); index++) {
                 var triangle = m_triangles[index];
 
                 foreach (var vertex in ((ReadOnlySpan<int>)[triangle.A, triangle.B, triangle.C])) {
@@ -2665,7 +2677,7 @@ public sealed partial class SdfMeshPathBake {
                     Final?.Dispose(); Final = null;
                     m_points?.Dispose();
                     m_pointMaterials?.Dispose();
-                    Contour = null; Cut = null; Creases = null; Projection = null;
+                    Contour = null; Cut = null; Creases = null; Projection?.Dispose(); Projection = null;
                     Next = null; Deferred = null;
                     Skin?.Release();
                     Memory.Dispose();

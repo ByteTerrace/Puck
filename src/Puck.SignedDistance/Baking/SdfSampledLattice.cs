@@ -1,3 +1,4 @@
+using Puck.Abstractions.Collections;
 using Puck.Abstractions.Memory;
 using Puck.Maths;
 using System.Buffers;
@@ -708,7 +709,7 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
     private readonly OwnedBuffer<long> m_pendingCrossings;
 
     // The indices in m_crossingRoots of m_pendingCrossings' edges, in its order.
-    private int[] m_pendingRoots = [];
+    private readonly OwnedBuffer<int> m_pendingRoots;
 
     // Per crossing edge (CrossingKey), the gradient measured at its crossing and the field's value there.
     private readonly Dictionary<long, Vector4> m_crossingGradients = [];
@@ -778,6 +779,7 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
         m_crossingKeys = new(allocator: allocator, observer: observer);
         m_crossedFineCells = new(allocator: allocator, observer: observer);
         m_pendingCrossings = new(allocator: allocator, observer: observer);
+        m_pendingRoots = new(allocator: allocator, observer: observer);
         m_fineValues = new OwnedBuffer<float>(allocator: allocator, observer: observer);
         m_blockSlots = new OwnedBuffer<int>(allocator: allocator, observer: observer);
         m_signInside = new OwnedBuffer<ulong>(allocator: allocator, observer: observer);
@@ -789,7 +791,7 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
     public void Dispose() {
         m_valueHandle.Dispose(); m_materialHandle.Dispose();
         m_measured.Dispose(); m_thin.Dispose(); m_refined.Dispose(); m_strides.Dispose(); m_fineKeys.Dispose();
-        m_gradientKeys.Dispose(); m_points.Dispose(); m_crossingKeys.Dispose(); m_crossedFineCells.Dispose(); m_pendingCrossings.Dispose();
+        m_gradientKeys.Dispose(); m_points.Dispose(); m_crossingKeys.Dispose(); m_crossedFineCells.Dispose(); m_pendingCrossings.Dispose(); m_pendingRoots.Dispose();
         m_gradients.Dispose();
         m_closedValues.Dispose();
         m_signKnown.Dispose();
@@ -1803,7 +1805,7 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
     private void PrepareCrossings() {
         if (m_crossingsPrepared) { return; }
         CloseSheets();
-        m_crossingKeys.CopyFrom(source: CrossingEdges());
+        CrossingEdges();
         m_crossingsPrepared = true;
     }
     private int EdgeEnd(int start, int axis, int length) {
@@ -1828,8 +1830,8 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
     public ReadOnlyMemory<Vector4> CrossingPoints() {
         PrepareCrossings();
         if (!m_rootsPrepared) {
-            var roots = new List<CrossingRoot>(capacity: m_crossingKeys.Length);
-            var keys = new List<long>(capacity: m_crossingKeys.Length);
+            using var roots = new RentedList<CrossingRoot>(capacity: m_crossingKeys.Length);
+            using var keys = new RentedList<long>(capacity: m_crossingKeys.Length);
 
             _ = m_crossingRootIndex.EnsureCapacity(capacity: m_crossingKeys.Length);
             foreach (var key in m_crossingKeys) {
@@ -1850,9 +1852,9 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
             }
             m_rootsPrepared = true;
             // The first round's roots, in the order of their edges; each later round keeps those still searching.
-            m_crossingRoots = [.. roots];
-            m_pendingCrossings.CopyFrom(source: CollectionsMarshal.AsSpan(list: keys));
-            m_pendingRoots = new int[m_crossingRoots.Length];
+            m_crossingRoots = roots.ToArray();
+            m_pendingCrossings.CopyFrom(source: keys.AsSpan());
+            m_pendingRoots.Resize(m_crossingRoots.Length, clear: false, preserve: false);
             for (var index = 0; (index < m_pendingRoots.Length); index++) { m_pendingRoots[index] = index; }
         }
 
@@ -1865,7 +1867,7 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
             kept++;
         }
         m_pendingCrossings.Resize(kept);
-        Array.Resize(array: ref m_pendingRoots, newSize: kept);
+        m_pendingRoots.Resize(kept);
 
         // Two trials a root, the root's first then its second.
         m_points.Resize(clear: false, length: (2 * kept), preserve: false);
@@ -1908,19 +1910,26 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
     public ReadOnlyMemory<Vector4> GradientPoints() {
         PrepareCrossings();
 
-        var keys = new List<int>();
-        var seen = new HashSet<int>();
         var cellsX = (m_samplesX - 1);
         var cellsY = (m_samplesY - 1);
         var cellsZ = (m_samplesZ - 1);
         var factor = m_factor;
         var fineX = ((cellsX * factor) + 1);
         var fineY = ((cellsY * factor) + 1);
+        var fineSamples = (((long)fineX) * fineY * ((cellsZ * factor) + 1));
+        // The samples listed, in the order first listed, and a bit a fine sample marking those already listed.
+        using var keys = new RentedList<int>();
+        using var seenLease = RentedArrays.Rent<ulong>(array: out var seen, minimumLength: ((int)((fineSamples + 63L) >> 6)));
+
+        seen.AsSpan(start: 0, length: ((int)((fineSamples + 63L) >> 6))).Clear();
 
         void Add(int fx, int fy, int fz) {
             var key = (fx + (fineX * (fy + (fineY * fz))));
+            ref var word = ref seen[(key >> 6)];
+            var bit = (1UL << (key & 63));
 
-            if (seen.Add(item: key)) {
+            if ((word & bit) == 0UL) {
+                word |= bit;
                 keys.Add(item: key);
             }
         }
@@ -1972,7 +1981,7 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
             }
         }
 
-        m_gradientKeys.CopyFrom(source: CollectionsMarshal.AsSpan(list: keys));
+        m_gradientKeys.CopyFrom(source: keys.AsSpan());
         // Every answer lands in one of the two: size both once rather than growing them answer by answer.
         _ = m_fineGradients.EnsureCapacity(capacity: keys.Count);
         _ = m_crossingGradients.EnsureCapacity(capacity: m_crossingKeys.Length);
@@ -2421,10 +2430,11 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
     // a coarse cell long, and the fine edges of each crossed fine cell of a refined cell. A crossing's gradient is measured
     // where the edge crosses the surface, since its corners' gradients, inside a solid near a sharp edge, point to the
     // nearer face beyond the edge and tilt the vertex's tangent planes into a chamfer.
-    private long[] CrossingEdges() {
-        var edges = new List<long>();
-        var seen = new HashSet<long>();
-        var crossedFine = new List<SdfCrossedCell>();
+    // Fills the crossing keys and crossed fine cells.
+    private void CrossingEdges() {
+        // Every edge as each cell meets it, repeats included; the distinct ones are kept in the order first met.
+        using var edges = new RentedList<long>();
+        using var crossedFine = new RentedList<SdfCrossedCell>();
         var cellsX = (m_samplesX - 1);
         var cellsY = (m_samplesY - 1);
         var cellsZ = (m_samplesZ - 1);
@@ -2462,9 +2472,7 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
                         var start = ((x + ((a & 1) * stride)) + (fineX * ((y + (((a >> 1) & 1) * stride)) + (fineY * (z + (((a >> 2) & 1) * stride))))));
                         var key = CrossingKey(axis: axis, length: stride, start: start);
 
-                        if (seen.Add(item: key)) {
-                            edges.Add(item: key);
-                        }
+                        edges.Add(item: key);
                     }
                 }
             }
@@ -2501,9 +2509,8 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
                 }
             }
         }
-        m_crossedFineCells.CopyFrom(source: CollectionsMarshal.AsSpan(list: crossedFine));
-
-        return [.. edges];
+        m_crossedFineCells.CopyFrom(source: crossedFine.AsSpan());
+        m_crossingKeys.CopyFrom(source: edges.AsSpan()[..SpanDistinct.InOrder(items: edges.AsSpan())]);
     }
     // A crossing edge's key: its start sample's fine key, its axis and whether it is a coarse cell long.
     private long CrossingKey(int start, int axis, int length) => ((((((long)start) * 3L) + axis) * 2L) + (((length > 1) && (m_factor > 1)) ? 1L : 0L));
@@ -2579,8 +2586,8 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
             materials[quad] = MaterialAt(key: surface.QuadCorners[quad]);
         }
 
-        float[] normals = [.. surface.Normals.Select(selector: static value => ((float)value))];
-        float[] positions = [.. surface.Positions.Select(selector: static value => ((float)value))];
+        var normals = Narrowed(values: surface.Normals);
+        var positions = Narrowed(values: surface.Positions);
         var quads = surface.Quads;
         var axes = surface.QuadAxes;
 
@@ -2594,7 +2601,7 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
         ) {
             Beside = surface.Beside,
             Features = surface.Features,
-            Patches = [.. surface.Patches.Select(selector: static value => ((float)value))],
+            Patches = Narrowed(values: surface.Patches),
             QuadAxes = axes,
             Solved = surface.Solved,
         };
@@ -2602,6 +2609,13 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
         contour.SelectDiagonals();
 
         return contour;
+    }
+    // The values rounded to single precision, in an array of exactly their count.
+    private static float[] Narrowed(ReadOnlySpan<double> values) {
+        var narrowed = new float[values.Length];
+
+        for (var index = 0; (index < values.Length); index++) { narrowed[index] = ((float)values[index]); }
+        return narrowed;
     }
 
     internal static void SelectDiagonals(SdfContour contour) {
@@ -2744,7 +2758,7 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
     private (int[] Quads, int[] Materials, sbyte[] Axes) WithoutSpecks(int[] quads, int[] materials, sbyte[] axes, float[] positions) {
         var quadCount = materials.Length;
         var vertexCount = (positions.Length / 3);
-        var pieceSets = new SdfDisjointSet(count: vertexCount);
+        using var pieceSets = new SdfDisjointSet(count: vertexCount);
 
         int Root(int vertex) => pieceSets.Find(element: vertex);
 

@@ -19,10 +19,29 @@ public static class RentedArrays {
 
         return ((minimumLength == 0) ? [] : ArrayPool<T>.Shared.Rent(minimumLength: minimumLength));
     }
+    /// <summary>Rents an array for the scope of a <see langword="using"/> declaration: disposing the lease returns it.</summary>
+    /// <typeparam name="T">The element.</typeparam>
+    /// <param name="minimumLength">The fewest elements the array holds.</param>
+    /// <param name="array">The rented array, longer than asked for and with unspecified elements; the caller holds no
+    /// reference to it once the lease is disposed.</param>
+    /// <returns>The lease, which returns the array when disposed.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="minimumLength"/> is negative.</exception>
+    public static Lease<T> Rent<T>(int minimumLength, out T[] array) {
+        array = Rent<T>(minimumLength: minimumLength);
+        return new Lease<T>(array: array);
+    }
+
+    /// <summary>One rented array, returned to the pool when the lease is disposed.</summary>
+    /// <typeparam name="T">The element.</typeparam>
+    /// <param name="array">The rented array.</param>
+    public readonly struct Lease<T>(T[] array) : IDisposable {
+        /// <summary>Returns the array to the pool.</summary>
+        public void Dispose() => Return(array: array);
+    }
     /// <summary>Returns a rented array to the shared pool, clearing it first when its elements hold references, so a
     /// pooled array keeps nothing it held alive.</summary>
     /// <typeparam name="T">The element.</typeparam>
-    /// <param name="array">The array <see cref="Rent{T}"/> or <see cref="Grow{T}"/> gave; the caller holds no reference to
+    /// <param name="array">The array <see cref="Rent{T}(int)"/> or <see cref="Grow{T}"/> gave; the caller holds no reference to
     /// it afterward. An empty array is accepted and kept.</param>
     /// <exception cref="ArgumentNullException"><paramref name="array"/> is <see langword="null"/>.</exception>
     public static void Return<T>(T[] array) {
