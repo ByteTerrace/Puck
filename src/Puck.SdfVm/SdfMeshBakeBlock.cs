@@ -6,6 +6,7 @@ namespace Puck.SdfVm;
 
 /// <summary>Writes the mask and sampling parameters of one mesh-bake dispatch, independently of view rendering.</summary>
 public static class SdfMeshBakeBlock {
+    internal const int LatticeBytes = (SdfWorldPackage.MeshBakeLatticeRows * 16);
     // The mesh bake's own pass block, which its mask and sampler read in place of the world interface's.
     private static readonly ShaderPipelineParameterLayout Layout = SdfWorldInterfaces.MeshBakeParameters;
     private static readonly int BakeInstanceMaskWordCountOffset = Offset(member: SdfWorldPackage.InstanceMaskWordCount);
@@ -55,34 +56,36 @@ public static class SdfMeshBakeBlock {
         WriteUInt32(block: block, offset: MeshBakeCountOffset, value: ((uint)batch.Lattices.Length));
         for (var index = 0; (index < batch.Lattices.Length); index++) {
             var lattice = batch.Lattices[index];
-            var row = (MeshBakeLatticesOffset + ((index * SdfWorldPackage.MeshBakeLatticeRows) * 16));
-
-            WriteVector3(block: block, offset: row, value: lattice.Origin);
-            WriteUInt32(block: block, offset: (row + 12), value: first);
-            // A grid's spacing places its samples; a points lattice's samples come from the point table, so its second row
-            // carries the spacing its gradient taps lie at instead, which the kernel reads rather than deriving its own.
-            WriteVector3(block: block, offset: (row + 16), value: (lattice.Points.IsEmpty ? lattice.Cell : new Vector3(value: lattice.TapSpacing)));
-            WriteUInt32(block: block, offset: (row + 28), value: unchecked((uint)lattice.Selector));
-            WriteUInt32(block: block, offset: (row + 32), value: ((uint)lattice.Dims.X));
-            WriteUInt32(block: block, offset: (row + 36), value: ((uint)lattice.Dims.Y));
-            WriteUInt32(block: block, offset: (row + 40), value: ((uint)lattice.Dims.Z));
-            // The lattice's mode in the low two bits (three samples the point table with gradients, two without, zero a
-            // grid), a slab's first plane of its final lattice above them, and, in the high half, the run of instances a
-            // static selector names.
-            if ((lattice.Slab >= MaxSlabPlanes) || (((uint)lattice.Instances) > ushort.MaxValue)) {
-                throw new ArgumentException(message: $"A bake lattice names its first plane in 14 bits and its instance run in 16; this one names plane {lattice.Slab} and {lattice.Instances} instances.", paramName: nameof(batch));
-            }
-            WriteUInt32(block: block, offset: (row + 44), value: (lattice.Points.IsEmpty ? 0u : (lattice.Gradients ? 3u : 2u)) | (((uint)Math.Max(val1: 0, val2: lattice.Slab)) << 2) | (((uint)lattice.Instances) << 16));
-
             var (poseFirst, poseRows) = ((index < batch.Poses.Length) ? batch.Poses[index] : (0, ReadOnlyMemory<Vector4>.Empty));
-
-            WriteUInt32(block: block, offset: (row + 48), value: ((uint)batch.PoseBase(lattice: index)));
-            WriteUInt32(block: block, offset: (row + 52), value: ((uint)poseFirst));
-            WriteUInt32(block: block, offset: (row + 56), value: ((uint)(poseRows.Length / 3)));
-            WriteUInt32(block: block, offset: (row + 60), value: unchecked((uint)lattice.FrameSlot));
-            // The lettering stroke rule's cell and stroke (sdfGlyph), the group's for every lattice of it.
-            WriteVector4(block: block, offset: (row + 64), value: new Vector4(x: lattice.Glyphs.Cell, y: lattice.Glyphs.Stroke, z: 0f, w: 0f));
+            WriteLattice(block.Slice(MeshBakeLatticesOffset + (index * LatticeBytes), LatticeBytes), in lattice,
+                first, batch.PoseBase(lattice: index), poseFirst, poseRows.Length);
             first += ((uint)lattice.Samples);
         }
+    }
+
+    internal static void WriteLattice(Span<byte> block, in SdfMeshBakeRequest lattice, uint first, int poseBase, int poseFirst, int poseRowCount) {
+        WriteVector3(block: block, offset: 0, value: lattice.Origin);
+        WriteUInt32(block: block, offset: 12, value: first);
+        // A grid's spacing places its samples; a points lattice's samples come from the point table, so its second row
+        // carries the spacing its gradient taps lie at instead, which the kernel reads rather than deriving its own.
+        WriteVector3(block: block, offset: 16, value: (lattice.Points.IsEmpty ? lattice.Cell : new Vector3(value: lattice.TapSpacing)));
+        WriteUInt32(block: block, offset: 28, value: unchecked((uint)lattice.Selector));
+        WriteUInt32(block: block, offset: 32, value: ((uint)lattice.Dims.X));
+        WriteUInt32(block: block, offset: 36, value: ((uint)lattice.Dims.Y));
+        WriteUInt32(block: block, offset: 40, value: ((uint)lattice.Dims.Z));
+        // The lattice's mode in the low two bits (three samples the point table with gradients, two without, zero a
+        // grid), a slab's first plane of its final lattice above them, and, in the high half, the run of instances a
+        // static selector names.
+        if ((lattice.Slab >= MaxSlabPlanes) || (((uint)lattice.Instances) > ushort.MaxValue)) {
+            throw new ArgumentException(message: $"A bake lattice names its first plane in 14 bits and its instance run in 16; this one names plane {lattice.Slab} and {lattice.Instances} instances.", paramName: nameof(lattice));
+        }
+        WriteUInt32(block: block, offset: 44, value: (lattice.Points.IsEmpty ? 0u : (lattice.Gradients ? 3u : 2u)) | (((uint)Math.Max(val1: 0, val2: lattice.Slab)) << 2) | (((uint)lattice.Instances) << 16));
+
+        WriteUInt32(block: block, offset: 48, value: ((uint)poseBase));
+        WriteUInt32(block: block, offset: 52, value: ((uint)poseFirst));
+        WriteUInt32(block: block, offset: 56, value: ((uint)(poseRowCount / 3)));
+        WriteUInt32(block: block, offset: 60, value: unchecked((uint)lattice.FrameSlot));
+        // The lettering stroke rule's cell and stroke (sdfGlyph), the group's for every lattice of it.
+        WriteVector4(block: block, offset: 64, value: new Vector4(x: lattice.Glyphs.Cell, y: lattice.Glyphs.Stroke, z: (lattice.LivePoses ? 1f : 0f), w: 0f));
     }
 }

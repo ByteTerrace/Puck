@@ -35,10 +35,10 @@ public interface ISdfGpuWorkClient : IDisposable {
     /// zero.</param>
     /// <returns><see langword="true"/> when the client hands over a job.</returns>
     bool TryTake(SdfWorldTables tables, int uploadBytes, SdfGpuWorkAllowance allowance, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out object? job, out double estimatedSeconds);
-    /// <summary>Takes the client's next job the frame owes a hole (work whose absence a shown view displays: a place it
-    /// sees drawn with nothing, a mesh a draw waits for, or light it reads from the camera sample's stand-in because its
-    /// volume has not published, <see cref="SdfMeshIrradiance.OwesFirstLight"/>), or none, as <see cref="TryTake"/> takes
-    /// a job: only such work, sized and admitted against
+    /// <summary>Takes the client's next job the frame owes (an arrival's work: the meshes a boot, a portal's world or an
+    /// edit has not drawn yet, the landing of a mesh a staged draw waits for, and the first light a shown view reads from
+    /// the camera sample's stand-in, <see cref="SdfMeshIrradiance.OwesFirstLight"/>), or none, as <see cref="TryTake"/>
+    /// takes a job: only such work, sized and admitted against
     /// <paramref name="allowance"/>, the budget's owed allowance (<see cref="SdfGpuWorkBudget.OwedAllowance"/>), and
     /// charged nothing of the background credit. The service asks it before the client's ordinary take on each budgeted
     /// step; a client with no such work takes none. By default a client takes as <see cref="TryTake"/> does while every
@@ -334,7 +334,7 @@ public sealed class SdfGpuWorkDeferredException : Exception {
 /// (<c>over-allowance</c>), as it counts a job a client handed over past what was left while work was queued
 /// (<c>over-deadline</c>, a client defect). Whether the frames behind the work kept their period is counted on the
 /// budget (<see cref="SdfGpuWorkBudget.FramesMissedBehind"/>), from each job's span on the queue's clock.</para>
-/// <para>Work the frame owes a hole (<see cref="ISdfGpuWorkClient.TryTakeOwed"/>) is offered first on each budgeted step,
+/// <para>Work the frame owes (<see cref="ISdfGpuWorkClient.TryTakeOwed"/>) is offered first on each budgeted step,
 /// under the budget's owed allowance (<see cref="SdfGpuWorkBudget.OwedAllowance"/>) in place of the frame allowance and
 /// outside the credit; it enters the same queue, so the ordinary jobs behind it still fit the frame allowance less
 /// everything queued. Only the client's owed take hands such a job over, and the service charges it owed
@@ -459,7 +459,7 @@ public sealed class SdfGpuWork : IDisposable {
     private long m_overDeadline;
     // The steps the service's turn held: other services owed their share of the budget first (SdfGpuWorkBudget.Takes).
     private long m_turnHolds;
-    // The jobs taken as work the frame owes a hole, under the budget's owed allowance.
+    // The jobs taken as work the frame owes, under the budget's owed allowance.
     private long m_owedJobs;
     private double m_mostJobSeconds;
 
@@ -692,7 +692,8 @@ public sealed class SdfGpuWork : IDisposable {
     /// pumps, a drive's and the host wait's among them), the steps taken inside the host's wait and the jobs they
     /// submitted, the drives and the wall time they spent waiting with a job in flight, waiting for a client and
     /// stepping, the steps the World set could not be bound in, those the budget held, those the frame's deadline held,
-    /// those the service's turn held (<see cref="SdfGpuWorkBudget.Takes"/>), the jobs taken as work the frame owes a hole (<see cref="ISdfGpuWorkClient.TryTakeOwed"/>), the jobs handed back
+    /// those the service's turn held (<see cref="SdfGpuWorkBudget.Takes"/>), the jobs taken as work the frame owes
+    /// (<see cref="ISdfGpuWorkClient.TryTakeOwed"/>), the jobs handed back
     /// for want of device room, the waits a lease made the tables take, the budgeted jobs measured past the allowance
     /// they were taken to fit and the jobs a client handed over past what was left.</summary>
     /// <returns>One space-led field.</returns>
@@ -892,7 +893,7 @@ public sealed class SdfGpuWork : IDisposable {
             var slot = m_slots[index];
 
             if (!slot.IsFree) { continue; }
-            // Work the frame owes a hole comes first, under its own allowance and outside the credit: a job that waits
+            // Work the frame owes comes first, under its own allowance and outside the credit: a job that waits
             // for room holds the step as a deadline hold, since the ordinary allowance it would fall back to is smaller.
             if (budgeted) {
                 if (Stopwatch.GetElapsedTime(startingTimestamp: began) >= hostBudget) {

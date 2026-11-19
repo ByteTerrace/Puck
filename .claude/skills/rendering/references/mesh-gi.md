@@ -202,7 +202,7 @@ in `SdfGpuWorkBudget.Takes`); a residency nothing read last frame takes
 `SdfGpuWorkBudget.LeastWeight`. While a seen frame's views read a level that
 has not published (`SdfMeshIrradiance.OwesFirstLight`, `first-light-owed=` on
 the `[sdf.mesh-gi]` line), the probe service's jobs are owed work: they take
-the owed allowance the bake's holes take and the coordinator cuts them to it.
+the owed allowance an arrival's bake work takes and the coordinator cuts them to it.
 A glass's world measures only the levels its frame reads
 (`SdfFrame.IndirectLevels`, from the presenting world's `render.nested`
 `indirectLevels`; `measured-from=` on the `[sdf.mesh-gi]` line names the

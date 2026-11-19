@@ -3062,7 +3062,7 @@ window per residency rather than levels allocated on demand; its service draws
 on the one background budget by the glass's share of the display's pixels
 (`SdfGpuWorkBudget.Takes`); and a seen volume's first light is owed work under
 the owed allowance (`SdfMeshIrradiance.OwesFirstLight`), though its debt is not
-yet counted apart from geometry's holes: both are the budget's `owed-jobs`.
+yet counted apart from an arrival's geometry: both are the budget's `owed-jobs`.
 
 **Check.** Exists: `probe-cache-bytes`, `trace-scene-cpu-array-bytes`,
 `probe-cache-blocks`. Adds: the trace tier installed and pending, scene

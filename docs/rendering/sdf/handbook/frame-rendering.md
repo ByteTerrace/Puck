@@ -366,9 +366,10 @@ image waits until the hold ends (`IRenderGraphPackageFactory.WaitingOf` and
 `WithheldOf`), and the same line
 counts the drives and where their wall time went.
 
-Bake work that owes the frame a hole is frame work, not optional background
-work: a lattice of a group a view may see (`SdfMeshDemand.Sees`) that draws
-nothing yet (`SdfMeshPathBake.OwedHoles`) is taken first on each budgeted step
+An arrival's bake work (a boot's, a world reached through a portal, a form
+edit's) is frame work the frame owes, not optional background work: a lattice
+of a group that draws nothing yet, or of the first detail an arrival bakes over
+the floor it landed first (`SdfMeshPathBake.OwedGroups`), is taken first on each budgeted step
 (`ISdfGpuWorkClient.TryTakeOwed`) under its own allowance
 (`SdfGpuWorkBudget.OwedAllowance`): what the frames leave idle of the time
 between them, their measured interval short of a tenth less their own GPU time
@@ -1491,6 +1492,10 @@ from disk on the thread pool instead of baking, so an unchanged world reboots
 without baking and a changed creation bakes only its own groups; an entry that
 fails its checksum, names another key or is no mesh is refused by name
 (`[sdf.mesh-bake] group … store refused: …`), deleted, and its group bakes.
+The bake can resume from a lossless simplified mesh or contour when only a
+later stage changed. Contouring can also reuse samples for an unchanged
+lattice or point request. Run `puck mesh identity --against <dir>` to compare
+stage identities and read the bake's `checkpoints` counters to see actual reuse.
 The store is presentation's alone: no simulation state reads it.
 Only new geometry bakes. The bake reports its residency, groups,
 dispatches, samples, groups loaded, triangles, vertices and wall time on stderr

@@ -351,7 +351,7 @@ and runs above; none is measured on changed code.
    the allowance rather than admitting a 17 to 19 ms compaction whole. *Saving:* a still-scene settle is 3 to 4 s of
    GPU that the 1 ms floor stretches to minutes; the frames the floor's oversized jobs cost. *Check:* leg 1 repeated:
    level 0 publishes in seconds behind a held first frame, and `most-behind` falls under the frame's headroom.
-   *Built differently:* no frame is held; a seen volume's first light takes the owed allowance the bake's holes take,
+   *Built differently:* no frame is held; a seen volume's first light takes the owed allowance an arrival's bake work takes,
    the GPU time the frame leaves idle (`SdfMeshIrradiance.OwesFirstLight`, `SdfGpuWorkBudget.OwedFrameSecondsOf`), and
    compactions are cut to the allowance by their own measured rate; the check is owed.
 8. **Pace every rebuild by trace progress, not only while the bake owes meshes.** Apply `ScenePendingDue`'s gate

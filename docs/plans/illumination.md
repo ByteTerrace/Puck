@@ -377,7 +377,7 @@ selector line); a residency nothing read last frame takes the least weight
 (`SdfGpuWorkBudget.LeastWeight`) rather than none, so a world being arrived at
 still brings its meshes and light before its glass shows. The minimum is a
 seen volume's first light: while a level the views read has not published,
-the volume's jobs take the owed allowance the bake's holes take
+the volume's jobs take the owed allowance an arrival's bake work takes
 (`SdfMeshIrradiance.OwesFirstLight`, `SdfGpuWorkBudget.OwedAllowance`).
 A glass's world measures only the levels the presenting world's nested-view
 table keeps at the glass's presented height (`render.nested`'s

@@ -66,15 +66,16 @@ namespace Puck.SdfVm;
 /// it.
 /// </para>
 /// <para>
-/// Work the frame owes a hole (a bake lattice of a group in view that draws nothing yet) is frame work, not optional
+/// Work the frame owes (an arrival's bake lattices: a group that draws nothing yet, or the first detail over the floor
+/// it landed first, <see cref="SdfMeshPathBake.OwedGroups"/>) is frame work, not optional
 /// background work, and has its own allowance (<see cref="OwedAllowance"/>): the GPU time the frame does not need, read
 /// from the frames' measured interval less their own GPU time (<see cref="OwedFrameSecondsOf"/>), never less than
 /// <see cref="SdfGpuWork.GpuShare"/> of the period and never more than one period. Owed jobs enter the queue ahead of
 /// the next frame as every charged job does, so the jobs queued ahead of one frame fit the owed allowance and the
 /// ordinary jobs still fit <see cref="FrameAllowanceSeconds"/>; they never draw on the credit, so the ordinary work
-/// (landing, lighting) keeps its share beside them (<see cref="ChargeGpu"/>). The lighting a shown view reads before its
-/// volume first publishes (<see cref="SdfMeshIrradiance.OwesFirstLight"/>) and the landing of a mesh a draw waits for are
-/// such work too: one rule, work whose absence a shown view displays, takes the GPU the frame leaves idle.
+/// (landing, lighting) keeps its share beside them (<see cref="ChargeGpu"/>). The landing of a mesh a staged draw waits for
+/// and the first light a shown view reads before its volume publishes (<see cref="SdfMeshIrradiance.OwesFirstLight"/>) are
+/// an arrival's work too: one rule, the work a shown view displays missing, takes the GPU the frame leaves idle.
 /// </para>
 /// <para>
 /// Invariant: the services draw on the budget in proportion to what the player sees of their residencies, never in the
@@ -258,7 +259,7 @@ public sealed class SdfGpuWorkBudget(Func<long>? clock = null) {
             }
         }
     }
-    /// <summary>Gets what the next job the frame owes a hole may take before the frame's deadline: the owed frame
+    /// <summary>Gets what the next job the frame owes may take before the frame's deadline: the owed frame
     /// allowance (<see cref="OwedFrameSeconds"/>) less the priced length of every charged job in flight, owed or not, and
     /// whether any is. Safe to read from any thread.</summary>
     public SdfGpuWorkAllowance OwedAllowance {
@@ -268,14 +269,14 @@ public sealed class SdfGpuWorkBudget(Func<long>? clock = null) {
             }
         }
     }
-    /// <summary>Gets the GPU time, in seconds, the jobs the frame owes a hole may queue ahead of one frame, as the last
+    /// <summary>Gets the GPU time, in seconds, the jobs the frame owes may queue ahead of one frame, as the last
     /// step of the share set it (<see cref="OwedFrameSecondsOf"/>). Safe to read from any thread.</summary>
     public double OwedFrameSeconds {
         get {
             lock (m_gate) { return m_owedFrame; }
         }
     }
-    /// <summary>Returns the GPU time, in seconds, the work the frame owes a hole may queue ahead of one frame: what the
+    /// <summary>Returns the GPU time, in seconds, the work the frame owes may queue ahead of one frame: what the
     /// frames leave idle of the time between them (their measured interval, no shorter than the display's period, short of
     /// <see cref="HeadroomShare"/> of it, less their own GPU time), never less than <see cref="SdfGpuWork.GpuShare"/> of the
     /// period, which ordinary background work takes beside an unloaded frame, and never more than one period, so a frame
@@ -527,9 +528,9 @@ public sealed class SdfGpuWorkBudget(Func<long>? clock = null) {
     }
     /// <summary>Charges a submitted job's estimated GPU time and enters it among the jobs queued ahead of the next frame
     /// (<see cref="Allowance"/>, <see cref="OwedAllowance"/>) until its charge leaves (<see cref="Leave"/>). A job the
-    /// frame owes a hole enters the queue alone and debits nothing: it is held to the owed allowance, not the credit.</summary>
+    /// frame owes enters the queue alone and debits nothing: it is held to the owed allowance, not the credit.</summary>
     /// <param name="seconds">The estimate, in seconds.</param>
-    /// <param name="owed">Whether the job is work the frame owes a hole, taken under <see cref="OwedAllowance"/>.</param>
+    /// <param name="owed">Whether the job is work the frame owes, taken under <see cref="OwedAllowance"/>.</param>
     /// <param name="turn">The submitting service's turn (<see cref="Join"/>), whose virtual time the job moves by its
     /// estimate over the turn's weight, and which counts as having taken work now; <see langword="null"/> for none.</param>
     /// <returns>The charge: the seconds it debited (the estimate, less what the debt's floor dropped; zero for an owed
@@ -723,7 +724,7 @@ public sealed class SdfGpuWorkBudget(Func<long>? clock = null) {
 public readonly record struct SdfGpuWorkCharge(double Debited, double Queued) {
     // Only a charge the budget made has a job in the queue: the default charge (a slot with no charged job) has not.
     internal bool Entered { get; } = true;
-    // Whether the job is work the frame owes a hole, whose time the credit never carries (SdfGpuWorkBudget.ChargeGpu).
+    // Whether the job is work the frame owes, whose time the credit never carries (SdfGpuWorkBudget.ChargeGpu).
     internal bool Owed { get; init; }
     // The turn the job moved and the weight it moved it at, which its settlement moves it at again.
     internal SdfGpuWorkTurn? Turn { get; init; }

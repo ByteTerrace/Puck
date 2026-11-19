@@ -27,6 +27,10 @@ lead answers and waits; it launches lanes on that direction only when the owner
 says to (the owner's correction, after three lanes started on a plan the owner
 had only asked an opinion of). A standing mandate to keep velocity covers the
 plan the owner already agreed, not a new direction offered for discussion.
+A question the owner's rulings already answer is never put to the owner (the
+owner's correction): the lead decides it, names the ruling it follows from, and
+records it where the plan or decision lives. Only a question no ruling reaches,
+about what the engine should do, goes to the owner.
 
 **A feature the owner asks for has one owner and a definition of done before
 any mechanism lane starts** (the owner's ruling, after water shipped as a string

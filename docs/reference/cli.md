@@ -124,7 +124,7 @@ half of these rules on every command, with no exemptions.
 | [`puck lsp`](#the-puck-dsl-verbs) | the `.puck` language server over stdio: completion, hover, document symbols, formatting, semantic tokens, and diagnostics published once the input goes quiet. |
 | [`puck mcp`](../../src/Puck.Mcp/README.md) | Puck Console tools over local stdio (`--profile operator [--attach <attachment file\|latest>]`, attaching to a World that ran `world.control start` or was launched with `--control`, and starting and stopping Worlds of its own with `puck_world_start` and `puck_world_stop`) or OAuth-protected HTTP (`--silo <silo.json> --http <configuration.json>`), the two shapes exclusive; the hosted shape runs the silo with the installed `Puck.Mcp` [extension](extensions.md) as its hosted control, and standalone silo and World have no MCP dependency. Both shapes speak MCP protocol version `2026-07-28`. |
 | [`puck measure`](#puck-measurequeued-measurement-windows) | queue frozen before/after builds and timing questions with `request`, inspect them with `list`, and drain them under one priority quiet lease with `run`, reporting median, IQR and paired differences from the existing bench or sweep reports. |
-| [`puck mesh`](#puck-mesh-auditbaked-mesh-audit) | `mesh audit` measures the meshes a World's bake stored against the fields they were baked from and reports each group's defects, worst first, located and named by shape; `mesh preview` bakes a creation on the CPU and draws it from many views with no device; `mesh scene` times the irradiance volume's trace scene over them, built whole and updated for one draw's change; `mesh identity` prints the bake identity a build keys them by and what differs from another build's. |
+| [`puck mesh`](#puck-mesh-auditbaked-mesh-audit) | `mesh audit` measures stored meshes against their fields and reports defects by shape. `mesh preview` bakes and draws a creation on the CPU. `mesh scene` times building and updating the irradiance trace scene. `mesh identity` reports which bake stages can reuse their products across builds. |
 | [`puck migrate`](#the-puck-dsl-verbs) | applies one named syntax-tree rewrite to every `.puck` source under a path, proving each rewritten source still compiles to the document it did apart from the members the migration declares. |
 | [`puck motion`](#puck-motiontick-pinned-motion-stills-and-contact-sheets) | judges how the Moth moves: boots the debug world's real `Puck.World`, runs the tick-pinned scenarios of `worlds/debug/motion.scenarios.json` through the `motion` layout's four cameras, and writes per-camera stills, labelled contact sheets and a manifest; `--reproduce` runs everything twice in fresh Worlds and compares pose hashes and pixels. |
 | [`puck nuget`](../development/ci.md#publish) | pack, select, verify, and push shared-version NuGet package batches, and the GitHub side of a release: `gate`, `tag`, `release`, `verify-published`, `smoke`. |
@@ -3928,7 +3928,8 @@ usage error.
 
 `puck mesh identity [--build <dir>] [--backend directx|vulkan] [--against
 <dir>] [--members] [--why <member-text>]` prints the bake identity a build keys its stored meshes by
-(`SdfMeshBakeIdentity`): its value, the store's entry format version
+(`SdfMeshBakeIdentity`): its value, the identities of sampling, contouring,
+simplification and landing, the store's entry format version
 (`SdfMeshStore.EntryVersion`), the code the bake runs
 (`SdfMeshBakeClosure`, its members counted by assembly) and the hashes of the
 mask and bake kernels' bytecode, read from the build's assemblies and kernels
@@ -3939,9 +3940,8 @@ target's inspection API, managed dependencies and complete deployed kernel set;
 missing files are refused, without borrowing the CLI's application assemblies
 or loading native libraries. `--build` names the World build's directory (absent,
 this CLI's own); `--against <dir>` names another build and lists each code member that
-changed, was added or was removed between them, and whether the entry version or
-each kernel differs, so an edit can be checked to keep or move the stored meshes before a
-boot; `--members` prints every member with its hash, and `--why` prints matching
+changed, was added or was removed between them. It also reports which stages
+can reuse their stored products. `--members` prints every member with its hash, and `--why` prints matching
 members' dependency chains under that target's policy. The value is the key a
 saved copy of the store is restored under. Exit codes: 0 printed; 1 a build
 could not be read; 2 a usage error.

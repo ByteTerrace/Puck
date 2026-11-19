@@ -1209,19 +1209,19 @@ laws exercise that boundary.
   its program, baking again the groups whose meshes were lost (`Keeps`). A write the store refuses publishes the
   baked mesh, which keeps its parts.
 - **The World's library persists across runs** (`SdfMeshStore`, the `meshes`
-  device cache), keyed by geometry and the bake's identity
-  (`SdfMeshBakeIdentity`): the hashes of the mask and bake kernels' bytecode,
-  the code the bake runs (`SdfMeshBakeClosure`) and the entry format's version
-  (`SdfMeshStore.EntryVersion`, the codec's `SdfMeshStoreCodec.Magic`, folded by
-  `SdfMeshStore.BuildIdentityOf`). The identity covers what decides a stored
-  mesh's content and nothing that reads or copies one back: code that runs again
-  on every load (the decode, `SdfMesh.NativeCopy`, renumbering, a mesh's claims)
-  can never serve a stale product, so it stays out, and what an entry's bytes
-  mean belongs to the format. A decode edit that keeps that meaning moves no
-  identity; one that changes it changes `SdfMeshStoreCodec.Magic`, which starts a
-  new set, and `TryDecode` refuses any entry of another tag. The encoder stays in,
-  because its quantization (`PositionWidth`, the octahedral normals) decides what
-  every later run draws: a cold bake publishes the mesh the store answers. The
+  device cache). `SdfMeshBakeIdentity` derives keys for sampling, contouring,
+  simplification and landing. The final mesh is tried first. On a miss,
+  `SdfMeshPathBake.ResumeCheckpoint` looks for the simplified mesh or the
+  finished contour, including material cuts and skinning. Both use the
+  lossless path in `SdfMeshStoreCodec.EncodeExact`. An earlier miss drives
+  contouring normally, and it may reuse individual samples for any unchanged
+  lattice or point request. The sample lookup uses the dispatch's packed
+  lattice and immutable group inputs. All products share the store's byte
+  budget. The bake's done line prints hit/miss counts for the three intermediate
+  stages beside its actual GPU dispatch count.
+
+  The final codec's quantization (`PositionWidth`, the octahedral normals)
+  decides what every later run draws. The
   encoder's fit check, the decode and `Conform` share one expansion (`SdfMeshStoreCodec.OnGrid`, `Expand`),
   so the encoder's budget holds for what the decode writes and what a cold bake publishes. An edit to what a decode
   answers for the two lossy planes changes `Conform` in the same change as the decode. The kernels' source
@@ -1239,10 +1239,10 @@ laws exercise that boundary.
   the build's assemblies through the shared `Puck.Assets.CodeClosure` walker;
   `SdfMeshBakeClosure` supplies the bake's roots and transport boundaries, while
   compiled-world chunks and generated machine images use the same walker with their own roots.
-  Positive production entry methods in `SdfMeshBakeClosure.BakeRoots` include
-  the bake's constructor/defaults, `PrepareFrame`, planning, batch taking (`TryTake`), the point and sampled
-  tables' layout (`SdfMeshBakeBatch.PointRuns`, `WriteSampled`), the sample answer (`Complete`), `SdfMeshBakeBlock.Write`
-  and the store's encoder (`SdfMeshStoreCodec.Encode`). Their graph reaches group/geometry planning, lattice refinement,
+  The closure starts from production entry methods. The contour walk stops at
+  `SdfMeshPathBake.SimplificationStage.Run` and the simplification walk starts
+  there. The sampling walk starts from the production dispatch rather than
+  the contour's request scheduler. The final closure reaches group/geometry planning, lattice refinement,
   contours, material cuts, skin and levels. It follows every call, delegate, override of a type the bake constructs
   and implementation of an abstract member it calls across the `Puck` assemblies `Puck.SdfVm`
   references, and hashes each method's IL with its tokens written as the
@@ -1266,11 +1266,9 @@ laws exercise that boundary.
   writes text itself, so an edit to a line's words, or a new counter, leaves the identity as it was. A new line or
   counter goes in that type. What the bake stores for a line's later use (a group's `Outcome` text) is still
   its own code. The
-  background GPU work (`SdfGpuWork`, `SdfMeshBakeGpuWork`), which carries a batch's rows to the device and its samples
-  back rather than choosing them, is outside it: no root reaches it. An edit to `Puck.Maths` code the
-  contour calls re-bakes. The standalone `SdfMeshDresser`, `SdfMeshHistory`, `SdfWorldPassRecorder`, `SdfWorldTables`,
-  `SdfFrameBlock` and `SdfMeshRegion` are outside the CPU closure, including type-granular applied updates;
-  `SdfMeshBakeBlock` and the shared `ShaderParameterWriter` remain inside. Comments and checkout paths do not
+  background GPU dispatch enters the sampling closure along with the tables
+  it binds. An edit to `Puck.Maths` code the contour calls moves the contour
+  key and its downstream stages. Comments and checkout paths do not
   change the key, and worktrees of one bake share one set. Appearance is outside the key by construction: the
   closure's program root is `SdfProgram`'s only constructor, the field derivation, which takes no material or screen
   value, only an `SdfAppearanceOutline` (material count, glass materials, declared screens, the appearance section's
