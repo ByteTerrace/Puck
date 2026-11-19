@@ -1492,6 +1492,14 @@ distinct looks, and scale evidence needs both as places
 
 ## The build order
 
+**Source tiles come first** ([the source tile](#the-source-tile-and-its-seam-rule),
+part of step 10). They are a named engine gap: the valley's north-west wall
+cannot reach the 1.56 m spacing its relief declares inside one lattice's
+fine-sample budget (`SdfSampledLattice.MaxFineSamples`), and splitting the
+sector across lattices is the fix at the cause, not a larger budget
+([what set a sector's cell](terrain-pass.md#what-set-a-sectors-cell)). So the
+tile and its seam rule go ahead of the rows below.
+
 A step's number is its name, which other pages cite, and it stays when the
 order changes. The rows are in landing order. Each step lands on its own
 check, taken in one window under [the recipe](#how-the-bars-are-read) on both
