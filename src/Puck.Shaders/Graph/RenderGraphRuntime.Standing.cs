@@ -153,12 +153,18 @@ public sealed partial class RenderGraphRuntime {
             Producer: -1
         );
     }
-    // Whether an instance's latest output must render again to stay shown: it resolves to nothing, or stands for a
-    // one-frame image, which resolves to nothing once the frame it was bound in has passed.
+    // Whether an instance's latest output must render again to stay shown: its outputs were withdrawn
+    // (RenderGraphRuntime.Withdrawal.cs), it resolves to nothing, or it stands for a one-frame image, which resolves to
+    // nothing once the frame it was bound in has passed.
     private bool RendersToStayShown(int index) => (
         (m_sources[index] is null) &&
-        !m_current[index].StandsFor.IsOwn &&
-        (m_current[index].StandsFor.IsOneFrame || (LatestOf(index: index).Frame < 0))
+        (
+            IsWithdrawing(index: index) ||
+            (
+                !m_current[index].StandsFor.IsOwn &&
+                (m_current[index].StandsFor.IsOneFrame || (LatestOf(index: index).Frame < 0))
+            )
+        )
     );
     // Collects every instance whose latest output must render again to stay shown, returning whether there is any.
     private bool CollectStanding() {

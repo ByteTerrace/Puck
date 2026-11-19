@@ -74,7 +74,7 @@ public sealed class WorldObservationSession {
     /// edit of its destination opens a new session instead.</summary>
     public WorldScreenSource.Session Source { get; internal set; }
 
-    // Set once a destination that ended the session refused another: the observer holds its last image.
+    // Set once a destination that ended the session refused another: the observer's picture is withdrawn.
     internal bool ReadmissionRefused { get; set; }
     // Whether the last settle forwarded input through this screen, so a stop sends one cancellation boundary.
     internal bool WasForwarding { get; set; }
@@ -586,7 +586,7 @@ public sealed partial class WorldInstanceHost {
         }
 
         // A destination that ended a session (a rebuild ends every one) is asked once to admit the observer again,
-        // observing into the same mirror; a refusal holds the last image.
+        // observing into the same mirror; after a refusal the observer's picture stays withdrawn.
         for (var index = 0; (index < owned.Rows.Count); index++) {
             var screen = owned.Rows.Keys[index];
             var session = owned.Rows.Values[index];
@@ -616,7 +616,7 @@ public sealed partial class WorldInstanceHost {
             } else {
                 session.ReadmissionRefused = true;
                 session.Refusal = refusal;
-                NarrateScreenSession(text: $"[world.screen: {instance.Name} session {screen} -> destination '{session.Source.Destination}' ended its session and refuses another ({refusal}) — holding last image]");
+                NarrateScreenSession(text: $"[world.screen: {instance.Name} session {screen} -> destination '{session.Source.Destination}' ended its session and refuses another ({refusal}) — its picture is withdrawn]");
             }
         }
 

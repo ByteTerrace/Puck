@@ -2221,23 +2221,26 @@ the single disclosure build table; the rd2-review
 findings are answered in decision 3a. Then the researcher brief's priorities
 ([security review](../development/security-review.md)).
 
-- [high, unconfirmed] A route change does not withdraw a picture already
-  published. When a viewer's disclosure narrows (a full replica becomes a
-  private view, or observation is revoked while a second viewer keeps the
-  shared residency alive), route settlement leaves the shared scene and
-  package freshness goes false, but nothing withdraws the published image. A
-  cadence hold, a budget deferral, an unscheduled screen read, or a paused
-  node returning its last surface can show the old pixels
-  (`WorldSessionRoute`, `SdfWorldPasses`, `RenderGraphScheduler`,
-  `WorldScreenBinder`, `WorldViewGraphHost`, `ShaderPipelineRenderNode`).
-  Enforce the current viewer's disclosure at publication and reuse,
-  previous-frame reads, aliases and retained composites included. Invalidate
-  that viewer's old output at once, and show an authorized replacement or an
-  authored fallback while the private graph builds. The other viewer's
-  publication stays usable. Verify on the first delivered frame of both cases
-  with a detail visible only in the full replica. Found by the rendering
-  research's decision-2 review; the code paths are cited there and not yet
-  reproduced.
+- [high] A narrowing a session's access cannot see. A viewer's access is
+  settled from its observation as none, disclosed or everything
+  (`WorldViewerAccess`, `WorldScreenBinder.AccessOf`), and a narrowing between
+  those levels withdraws every picture the view published
+  (`IRenderGraphInstances.Withdraw`) and releases the private residency built
+  from wider content (`WorldScreenBinder.ContentAccess`). A narrowing inside
+  "disclosed" (a cell visibility or audience the session loses while it still
+  observes) moves no level, so the old private picture stands until the view
+  next renders, and a cadence hold keeps it. The observation needs a
+  disclosure generation the authority moves whenever what it delivers this
+  session narrows, settled into the same epoch. This is the first half of
+  decision 14's step 5 (results keyed by what each viewer was delivered).
+- [medium] What a withdrawal does not reach. An infinity layer keeps its
+  frame source across a narrowing, so a program composed from the wider
+  content can reach the layer's next residency until the source composes
+  again (`WorldScreenBinder.WithdrawInfinityResidency`). An external producer
+  keeps its own latest output, and an export already copied out of the
+  runtime keeps its copy. A residency's screen emission and sky environment
+  derived from a withdrawn screen image are not shown to be derived again
+  (`SdfWorldTables.ProjectTaintedSourcesAgain` re-derives only tainted ones).
 
 - [high] Authored search must plan over what its actor is disclosed. Today an
   actor-less job reads true state under the audience check (an AI can read a

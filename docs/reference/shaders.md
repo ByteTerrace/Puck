@@ -675,7 +675,12 @@ its readers bind the stand-in. An output of another instance that stands for
 the released instance's output (a pass that drew nothing, below) goes with it:
 that frame is scheduled again with the standing output's instance named in
 `RenderGraphFrame.Rerender`, so a shown reader renders over the stand-in in the
-same frame and the display is never handed a released image. An instance that is named but not shown this
+same frame and the display is never handed a released image. A host withdraws
+an instance whose pictures its viewer may no longer see
+(`IRenderGraphInstances.Withdraw`): before the next frame schedules, that
+instance and every instance that read it lose their completed outputs, their
+published images and their packages' history, readers bind the stand-in, and
+each renders again before anything shows it. An instance that is named but not shown this
 frame, such as a screen out of view, is unread and keeps everything, so it shows
 its last image the moment it is shown again; so does one a frame only skips,
 because its refresh is not due, the budget defers it or every consumer that
