@@ -1,8 +1,10 @@
 using System.Buffers.Binary;
+using System.Collections.Concurrent;
 
 using Puck.SdfVm;
 using Puck.Shaders;
 using Puck.SignedDistance;
+using Puck.SignedDistance.Baking;
 using Puck.SignedDistance.Queries;
 
 namespace Puck.Cli.Mesh;
@@ -43,10 +45,12 @@ public static class MeshCpuBake {
     /// <see langword="null"/> to count none.</param>
     /// <param name="tier">The tier each group bakes at (<see cref="SdfMeshPathBake.PlannedTier"/>); <see langword="null"/>
     /// bakes each at its finest, the geometry's own detail.</param>
+    /// <param name="refinements">Receives each group's refinement map by its selector, or <see langword="null"/> to keep
+    /// none.</param>
     /// <returns>Each baked group's mesh by its selector; a group with no surface is absent.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="scene"/> or <paramref name="groups"/> is
     /// <see langword="null"/>.</exception>
-    public static Dictionary<int, SdfMesh> Bake(RestScene scene, float farDistance, IEnumerable<SdfMeshBakeGroup> groups, Dictionary<int, long>? evaluations = null, Dictionary<int, MeshCpuTaps>? taps = null, Func<SdfMeshBakeGroup, int>? tier = null) {
+    public static Dictionary<int, SdfMesh> Bake(RestScene scene, float farDistance, IEnumerable<SdfMeshBakeGroup> groups, Dictionary<int, long>? evaluations = null, Dictionary<int, MeshCpuTaps>? taps = null, Func<SdfMeshBakeGroup, int>? tier = null, ConcurrentDictionary<int, SdfRefinementMap>? refinements = null) {
         ArgumentNullException.ThrowIfNull(argument: scene);
         ArgumentNullException.ThrowIfNull(argument: groups);
 
@@ -57,6 +61,7 @@ public static class MeshCpuBake {
                 .Where(predicate: static entry => SdfMeshAudit.TryEvaluator(field: out _, program: entry.Field, refusal: out _))
                 .ToDictionary(keySelector: static entry => entry.Group.Selector, elementSelector: static entry => entry.Field),
             frame: new SdfFrame(Program: scene.Program, ProgramChanged: true, Time: 0f, Views: []) { DynamicTransforms = scene.Transforms, FarDistance = farDistance },
+            refinements: refinements,
             taps: taps,
             tier: tier
         );
@@ -69,16 +74,25 @@ public static class MeshCpuBake {
     /// <param name="taps">Receives how each group's gradient taps were answered by its selector, or
     /// <see langword="null"/> to count none.</param>
     /// <param name="tier">The tier each group bakes at; <see langword="null"/> bakes each at its finest.</param>
+    /// <param name="refinements">Receives the map of which cells each group's final lattice flagged for finer sampling
+    /// (<see cref="SdfRefinementMap"/>) by its selector, or <see langword="null"/> to keep none. A group taking another
+    /// selected group's mesh (shared geometry) has none.</param>
     /// <returns>Each selected group's mesh by its selector; a group whose bake found no surface is absent.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="frame"/> or <paramref name="fields"/> is
     /// <see langword="null"/>.</exception>
-    public static Dictionary<int, SdfMesh> Bake(SdfFrame frame, IReadOnlyDictionary<int, SdfProgram> fields, Dictionary<int, long>? evaluations = null, Dictionary<int, MeshCpuTaps>? taps = null, Func<SdfMeshBakeGroup, int>? tier = null) {
+    public static Dictionary<int, SdfMesh> Bake(SdfFrame frame, IReadOnlyDictionary<int, SdfProgram> fields, Dictionary<int, long>? evaluations = null, Dictionary<int, MeshCpuTaps>? taps = null, Func<SdfMeshBakeGroup, int>? tier = null, ConcurrentDictionary<int, SdfRefinementMap>? refinements = null) {
         ArgumentNullException.ThrowIfNull(argument: frame);
         ArgumentNullException.ThrowIfNull(argument: fields);
 
         using var library = new SdfMeshLibrary();
         // With no view the bake would plan every group at its coarsest tier; offline it bakes the tier asked, else the finest.
-        var bake = new SdfMeshPathBake { Library = library, PlannedTier = (tier ?? (static _ => 0)), Residency = "cpu", Selection = fields.Keys.ToHashSet() };
+        var bake = new SdfMeshPathBake {
+            Library = library,
+            PlannedTier = (tier ?? (static _ => 0)),
+            RefinementObserver = ((refinements is null) ? null : ((selector, map) => refinements[selector] = map)),
+            Residency = "cpu",
+            Selection = fields.Keys.ToHashSet(),
+        };
         using var dresser = new SdfMeshDresser(bake: bake);
 
         try {

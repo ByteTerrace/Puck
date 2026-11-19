@@ -66,9 +66,15 @@ opens a batch around its renders (`IGpuQueueSubmitter.BeginBatch`,
 `FlushBatch`). Both backends defer through one implementation,
 `GpuSubmissionBatch<TEntry>` with its fences' shared states in
 `GpuBatchedSubmissionFence`: the nodes' submissions reach the queue in one
-`vkQueueSubmit` or one `ExecuteCommandLists`, and every fence they arm signals
-only once the whole batch retires, so a lease, a retirement or a readback keyed
-on a node's fence completes no earlier than the frame's last submission. Anything
+`vkQueueSubmit` or one `ExecuteCommandLists`, and every fence of a hand-over
+answers from its last fenced submission's signal. A fence proves its own
+submission and every submission before it, never one made after it: a lease, a
+retirement or a readback is keyed on the fence of the submission that last uses
+what it guards, never on an earlier fence that happens to share a hand-over.
+Background jobs (`GpuQueueWork.IsBackground`) deferred ahead of frame work take
+a hand-over of their own (`GpuSubmissionBatch.Admit`, cause `job-end`), so
+their fences, and any deferred before them, such as a residency's upload,
+answer before the frame's renders finish. Anything
 that must see deferred work first splits the batch (the deferred work goes to the
 queue and the batch stays open): a wait on a deferred fence, `SubmitAndWait`, the
 device's wait for idle, an external wait on Direct3D 12, and every other native
