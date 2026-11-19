@@ -1250,6 +1250,7 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
         RebuildDriftedSources();
         PollOwedReadbacks();
         DisposeDrainedRetiring();
+        ApplyWithdrawals();
         m_captureFootprints = frame.Footprints;
         PackagesBeginFrame(context: in context);
         // Preparation can rebuild a host's live footprints; capture and scheduling must read the same demand.
@@ -1547,6 +1548,7 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
                     // was scheduled for is spent, so its refresh, and the demand it passes to its producers, keep their cadence.
                     if (Stands(index: index)) {
                         m_historySucceeded[index] = true;
+                        SettleWithdrawal(index: index);
                     }
 
                     // A source whose conversion has not built yet is asked again, since its cadence may never ask twice.

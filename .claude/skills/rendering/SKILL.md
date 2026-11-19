@@ -450,6 +450,8 @@ add the row you found.
 | Read what the device lets the process use per segment (a DXGI segment group, a Vulkan heap), or charge a device allocation to the physical memory it was placed in | `IGpuDeviceContext.MemoryReading` (refreshed by `RefreshMemoryReading` on the frame thread), `GpuMemorySegments` (the one place a segment's pool is decided), `GpuDeviceMemoryWork.CountAllocated`'s segment argument (Direct3D 12's through `DirectXDeviceMemory.SegmentOf`, Vulkan's through `GpuMemorySegments.OfMemoryType`); `MemoryAccount.ReadPools` and `host.memory` print them | `src/Puck.Abstractions/Gpu`, `src/Puck.Hosting/Jobs/MemoryAccount.cs`; [streaming plan](../../../docs/plans/streaming-and-memory.md#step-1-as-a-brief) |
 | Reserve device memory before allocating it, share a pool between residencies, or hold detail to a budget | `MemoryAccount.ReserveDevice` (a holder's peak, under the owner its objects are named for, `GpuObjectName.MemoryOwnerOf`), `GpuDeviceMemoryWork.TryAdmit` (the one door every native allocation asks; `CountAllocated` takes only its `GpuMemoryGrant`), `GpuMemoryAdmissionScope` (opened around the synchronous allocation of a replacement its holder can do without, so a full pool refuses it instead of admitting it past the limit), `SdfResidencySelector` (the one detail bias, each bake's budget, each mesh region's reservation, `SdfGpuWorkBudget`); never a share of `GpuMemoryProfile` | `src/Puck.Hosting/Jobs/MemoryAccount.cs`, `src/Puck.Abstractions/Gpu/Counters`, `src/Puck.SdfVm/SdfResidencySelector.cs`; [streaming plan](../../../docs/plans/streaming-and-memory.md#step-3-one-reservation) |
 | Read where frame time goes | `world.counters gpu`, `world.gpu-timing`, the bake's `gpu-work=[…]` line | [performance and cost](#performance-and-cost) |
+| Know which draws a raster pass selected and at which level (triangles drawn by level and tier, mesh bytes no pass selected) | The occlusion kernel's selection marks, one stage in `SdfWorldTables.SelectionMarkFrames`, read back with the portal sight verdicts through the slot's one readback (`SdfMeshOcclusion`) and read against the row epoch (`SdfWorldTables.ObserveSelectionMarks`); `world.residency`'s selection line | `src/Puck.SdfVm` |
+| Show something where a group's detail has not landed or was refused | The group's floor: planned first on arrival, kept while detail draws, evicted to on refusal (`SdfMeshPathBake.Floor.cs`, `Group.KeptFloor`); `world.residency`'s floor line | [mesh bake](references/mesh-bake.md#groups-poses-and-materials) |
 | Name a backend's compiled-kernel extension, or its target from an extension or some bytecode | `ShaderBytecode.FileExtension` (the extension), `ShaderTargets` (`Of` a backend or bytecode, `FileExtension` and `DeployedPath` of a `ShaderTarget`); never a `.dxil`/`.spv` ternary or string compare. A kernel-loading API (`SdfKernelSet.Load`, `SdfWorldPipelineCatalog.LoadDeployed`, `GpuRegionCopyPass`, `SdfMeshRasterPass`) takes a `ShaderTarget`, never an extension string | `src/Puck.Abstractions/Gpu/Shaders`, `src/Puck.Shaders.Model/Compiler/ShaderTarget.cs` |
 | Build a render-graph package's one cached pass pipeline and recover it in `Create` | `PassPipelineBuild.AcquireAsync` and `Of` | `src/Puck.Shaders/Graph` |
 | Keep a graph replacement from holding two whole graphs, or decide whether the budget may refuse it | `ShaderPipelineRenderNode.CarriedStoragesOf` (the one door a replacement takes over the installed graph's storage through, matched against the instances' own extents and sizes), `ReplacementGivesWay` (a graph whose counts moved cannot render, so its replacement is the instance's least and only a cap refuses it), `InstancesOf` (history only compute touches keeps two instances); `pipeline.inspect <instance>` reads the result | `src/Puck.Shaders`; [memory budget](../../../docs/reference/shaders.md#memory-budget) |
@@ -607,7 +609,14 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   relative depth tolerance stay unchanged. The reprojection device witness
   maps two samples at distances 64 and 32 onto the same receiver depth 128.
 - **Stationary reconstruction keeps a complete jitter window.** The resolve's
-  history surface retains each phase's color, coverage, transport and weight.
+  stationary window retains each phase's color, coverage, transport and weight.
+  It is one retained buffer the resolve updates in place (a mutable input of the
+  fragment's own, `SdfWorldPackage.HistoryWindowWritten`), not two-copy history:
+  every access to it goes through `sdfHistoryWindowWord`, which takes the
+  invocation's own id, and a pixel keeps its window only while its history comes
+  from its own pixel (`historyPixel == pixelIndex` in `stationary`). Reading a
+  window at a reprojected position would read words another invocation of the
+  same dispatch is writing; a moved pixel restarts its window instead.
   Replacing one phase and summing in fixed order removes periodic newest-phase
   bias and keeps samples the current neighborhood misses. Moving and reactive
   pixels use the clipped resolve while their window fills. A stationary window
@@ -621,11 +630,12 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   runs only for rejected footprints. A displaced camera keeps ordinary receiver
   rejection; a stationary current receiver alone does not prove no disocclusion.
   The package owns
-  `TemporalPeriod` and `HistorySurfaceWords`; the generator carries both into
-  HLSL. A layout change needs a host with the matching history allocation before
-  loading its kernels. Account for this output-sized history in GPU memory.
-  Keep the surface planar, every access through `sdfHistoryWord`: interleaved,
-  its 47 words a pixel put each lane of each access on its own sector and held
+  `TemporalPeriod`, `HistorySurfaceWords` and `HistoryWindowWords`; the generator
+  carries them into HLSL. A layout change needs a host with the matching history
+  allocation before loading its kernels. Account for this output-sized history in
+  GPU memory: the surface and the color in two copies, the window in one.
+  Keep the surface and window planar, every access through `sdfHistoryWord`:
+  interleaved, a pixel's words put each lane of each access on its own sector and held
   the resolve at L2 bandwidth. A complete window shows its own mean, so only an
   incomplete one reads the reprojected Catmull-Rom history.
   Preserve a constant coverage component exactly before half packing and after

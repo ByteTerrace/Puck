@@ -1177,6 +1177,12 @@ observation of the destination. A session of the boot world joins no scene: it r
 World's own residency, filmed after the World's camera views, so the boot world is resident once however
 many windows show it. The rule holds at every depth: a destination shown at two depths, or by a window and
 a seat, shares its one residency while each session discloses everything.
+A session's access (none, what it discloses, or everything) is settled once a frame before any view of it
+is bound (`WorldViewerAccess`). When it narrows, the screen shows nothing it was shown before: every picture
+its view published, and every picture rendered over one, is withdrawn from the render graph
+(`IRenderGraphInstances.Withdraw`), and its own residency, if built from content delivered under the wider
+access, goes with every background job it submitted. A view its viewer may not see resolves to no residency
+at all. Another session showing the same world keeps its picture.
 Each view of a shared residency binds the screens of the level it renders, so one world seen at two
 depths shows each level's own images. Every level is an instance of its own, with its own temporal
 history and its own resets, so no level's history carries another level's frames. A seat presented
