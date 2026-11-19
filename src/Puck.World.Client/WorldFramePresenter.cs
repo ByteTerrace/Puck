@@ -2169,6 +2169,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             SlotRateCodes = (m_settings.RateTints ? m_animator.SlotRateCodes.ToArray() : ReadOnlyMemory<byte>.Empty),
             ScreenRateCodes = (m_settings.RateTints ? ScreenRateCodes() : ReadOnlyMemory<byte>.Empty),
             IndirectTier = m_settings.IndirectTier,
+            RayQueries = m_settings.RayQueries,
             IndirectSources = lighting.Indirect.Gains.Sources,
             IndirectGains = lighting.Indirect.Gains,
             IndirectBounces = lighting.Indirect.Bounces,

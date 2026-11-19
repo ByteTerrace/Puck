@@ -31,6 +31,7 @@ public sealed partial class WorldRenderLeverCommandModule(WorldRenderSettings se
     private static readonly CommandForms WorldSkyLayerForms = CommandForms.Of(verb: "world.sky-layer", "[solo <index>|solo off|mute <index> on|off]");
     private static readonly CommandForms WorldShadowsForms = CommandForms.Of(verb: "world.shadows", "[off|low|medium|high]");
     private static readonly CommandForms WorldAoForms = CommandForms.Of(verb: "world.ao", "[on|off]");
+    private static readonly CommandForms WorldRaysForms = CommandForms.Of(verb: "world.rays", "[on|off]");
     private static readonly CommandForms WorldCadenceForms = CommandForms.Of(verb: "world.cadence", "[on|off|status]");
     private static readonly CommandForms WorldCullForms = CommandForms.Of(verb: "world.cull", "[occlusion|camera|frustum|off|status]");
     private static readonly CommandForms WorldDetailForms = CommandForms.Of(verb: "world.detail", "[auto|0|1|2|status]");
@@ -403,6 +404,30 @@ public sealed partial class WorldRenderLeverCommandModule(WorldRenderSettings se
                     formatEcho: () => new CommandResult(Output: $"[world.ao: {(settings.AmbientOcclusion
                     ? "on"
                     : "off")}]")
+                );
+            }
+        );
+        yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
+            bindability: CommandBindability.Bindable,
+            name: "world.rays",
+            forms: WorldRaysForms,
+            description: $"Switches whether the indirect volume's background rays (the probe trace, the relight's shadow rays and the camera sample) take the GPU's ray hardware, live: {WorldRaysForms.Spelling} — no argument echoes the state and whether the device has ray queries (world.counters gpu's capabilities line, optional=). Off, or on a device without them, they take the software walk, which answers the same hits; sdf.mesh-gi's gpu-query-* counters read the hardware's share.",
+            handler: (context, args) => {
+                if (args.Count == 0) {
+                    return new CommandResult(Output: $"[world.rays: {(settings.RayQueries ? "on" : "off")}]");
+                }
+
+                if (ParseOnOff(token: args[0]) is not { } resolved) {
+                    return WorldRaysForms.Refuse(args: in args, got: args[0].ToString());
+                }
+
+                return SubmitLever(
+                    link: link,
+                    principal: context.Principal,
+                    name: WorldSessionLevers.RayQueries,
+                    a: (resolved ? 1.0 : 0.0),
+                    formatEcho: () => new CommandResult(Output: $"[world.rays: {(settings.RayQueries ? "on" : "off")}]")
                 );
             }
         );
@@ -899,6 +924,7 @@ public sealed partial class WorldRenderLeverCommandModule(WorldRenderSettings se
                 );
                 SubmitLever(link, context.Principal, WorldSessionLevers.SkyFieldScale, preset.SkyFieldScale);
                 SubmitLever(link, context.Principal, WorldSessionLevers.BloomQuality, ((double)preset.Bloom));
+                SubmitLever(link, context.Principal, WorldSessionLevers.RayQueries, (preset.RayQueries ? 1.0 : 0.0));
                 SubmitLever(link, context.Principal, WorldSessionLevers.Indirect, ((double)(preset.Indirect ?? (tier switch {
                     QualityTier.Low or QualityTier.Medium => SdfIndirectTier.Medium,
                     _ => SdfIndirectTier.High,

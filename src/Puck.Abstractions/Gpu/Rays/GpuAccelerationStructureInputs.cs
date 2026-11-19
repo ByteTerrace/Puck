@@ -61,5 +61,6 @@ public readonly record struct GpuAccelerationStructureInputs(
 /// <summary>What a build needs, as its driver reports it before the build: the structure's size and the scratch the
 /// build works in.</summary>
 /// <param name="StructureBytes">The bytes the built structure may occupy; a compacted copy is usually smaller.</param>
-/// <param name="ScratchBytes">The bytes of scratch the build writes.</param>
+/// <param name="ScratchBytes">The bytes of scratch the build writes, with any slack the backend rounds the scratch's
+/// address up within.</param>
 public readonly record struct GpuAccelerationStructureSizes(ulong StructureBytes, ulong ScratchBytes);

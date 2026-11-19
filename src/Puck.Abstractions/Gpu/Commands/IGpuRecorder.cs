@@ -230,8 +230,8 @@ public interface IGpuRecorder {
     /// <param name="commandBufferHandle">The command buffer being recorded.</param>
     /// <param name="inputs">What the build reads.</param>
     /// <param name="destination">The structure written; of the inputs' level, at least as large as their sizes say.</param>
-    /// <param name="scratch">The scratch the build writes (<see cref="IGpuAccelerationStructures.CreateScratch"/>), at
-    /// least as large as the inputs' sizes say.</param>
+    /// <param name="scratch">The scratch the build writes: a device-local buffer of <see cref="GpuBufferUsage.Storage"/>
+    /// and <see cref="GpuBufferUsage.AccelerationStructureInput"/>, at least as large as the inputs' sizes say.</param>
     /// <exception cref="NotSupportedException">The device was created without ray queries.</exception>
     void BuildAccelerationStructure(nint commandBufferHandle, in GpuAccelerationStructureInputs inputs, IGpuAccelerationStructure destination, IGpuBuffer scratch) =>
         throw new NotSupportedException(message: "This recorder builds no acceleration structures.");

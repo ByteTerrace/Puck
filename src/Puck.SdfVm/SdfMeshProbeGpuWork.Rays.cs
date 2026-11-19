@@ -2,7 +2,6 @@ using System.Buffers;
 using System.Buffers.Binary;
 using System.Diagnostics.CodeAnalysis;
 using Puck.Abstractions.Gpu;
-using Puck.Shaders;
 
 namespace Puck.SdfVm;
 
@@ -205,10 +204,11 @@ internal sealed partial class SdfMeshProbeGpuWork {
                 recording.ReserveReadback(bytes: sizeBytes);
                 for (var index = 0; (index < builds.Length); index++) {
                     var build = builds[index];
+                    var inputs = build.Inputs;
                     var structure = CreateStructure(bytes: build.Sizes.StructureBytes, level: GpuAccelerationStructureLevel.Bottom, part: "bottom");
 
                     job.Created.Add(item: structure);
-                    recorder.BuildAccelerationStructure(commandBufferHandle: command, destination: structure, inputs: in build.Inputs, scratch: scratch);
+                    recorder.BuildAccelerationStructure(commandBufferHandle: command, destination: structure, inputs: in inputs, scratch: scratch);
                     recorder.WriteCompactedSize(commandBufferHandle: command, destination: sizes, destinationOffsetBytes: (ulong)index * sizeof(ulong), source: structure);
                 }
                 recording.CopyToReadback(bytes: sizeBytes, source: sizes);

@@ -85,6 +85,8 @@ public static class WorldApplicationDefaults {
 /// <param name="Indirect">The indirect tier override. Absent selects Off for Low, Medium for Medium and High for High.</param>
 /// <param name="SkyFieldScale">The independent sky field grid fraction, one or one half.</param>
 /// <param name="Bloom">The optical scatter cost gate.</param>
+/// <param name="RayQueries">Whether the preset lets the indirect volume's background rays take the device's ray hardware
+/// where it has it (<c>world.rays</c>); the software walk answers the same hits elsewhere.</param>
 [method: JsonConstructor]
 public readonly record struct WorldQualityPreset(
     ShadowTier Shadows,
@@ -100,7 +102,8 @@ public readonly record struct WorldQualityPreset(
     WorldSkyTier Sky = WorldSkyTier.High,
     [property: JsonConverter(typeof(StrictEnumConverter<SdfIndirectTier>)), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] SdfIndirectTier? Indirect = null,
     float SkyFieldScale = 1f,
-    Puck.Hosting.BloomQuality Bloom = Puck.Hosting.BloomQuality.High
+    Puck.Hosting.BloomQuality Bloom = Puck.Hosting.BloomQuality.High,
+    bool RayQueries = false
 );
 /// <summary>The world's render-lever defaults — the boot values <c>Puck.World.WorldRenderSettings</c> wakes on and the
 /// <c>world.quality</c> preset table. Session state, not identity: these are engine-wide levers (shadows, AO, render
@@ -161,6 +164,10 @@ public readonly record struct WorldQualityPreset(
 /// binding, or keys on a clock), resolved at each frame's presented tick and read by every surface and volume as
 /// render lanes 4 to 7 (<c>SdfLanes</c>), so a static placement sharing one baked mesh follows world state without a
 /// slot. Absent or a missing entry reads zero; <c>world.lighting</c> echoes them as authored.</param>
+/// <param name="RayQueries">Whether the indirect volume's background rays (its probe trace, the relight's shadow rays
+/// and the camera sample) boot taking the device's ray hardware where it has it, through the scene's acceleration
+/// structures (<c>world.rays</c>). The software walk answers the same hits wherever it is off or the device has none.
+/// Absent is off.</param>
 public sealed record WorldRenderDefaults(
     ShadowTier Shadows = ShadowTier.Off,
     bool AmbientOcclusion = false,
@@ -189,7 +196,8 @@ public sealed record WorldRenderDefaults(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] Puck.Hosting.CameraBloom? Bloom = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldRenderShadowCoverage? ShadowCoverage = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<BindableScalar>? Lanes = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] SdfShadeDefinition? Shade = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] SdfShadeDefinition? Shade = null,
+    bool RayQueries = false
 ) {
     /// <summary>The most world lanes <see cref="Lanes"/> holds (<c>SdfLanes.WorldCount</c>).</summary>
     public const int MaxLanes = SdfLanes.WorldCount;

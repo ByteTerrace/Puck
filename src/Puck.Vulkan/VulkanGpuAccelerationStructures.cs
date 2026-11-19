@@ -42,8 +42,8 @@ public sealed unsafe class VulkanGpuAccelerationStructures(IVulkanDeviceContext 
     private const uint CopyModeCompact = 1;
     private const uint QueryTypeCompactedSize = 1000150000;
     private const uint QueryResult64BitWait = (0x1 | 0x2);
-    // The largest minAccelerationStructureScratchOffsetAlignment any driver reports is well under this; a scratch buffer
-    // carries this much slack and its address is rounded up to it.
+    // The largest minAccelerationStructureScratchOffsetAlignment any driver reports is well under this; the scratch size
+    // Size reports carries this much slack, and RecordBuild rounds the scratch's address up to it.
     private const ulong ScratchAlignment = 256UL;
 
     private VulkanDeviceCommands Device => deviceContext.LogicalDevice.Commands;
@@ -62,7 +62,7 @@ public sealed unsafe class VulkanGpuAccelerationStructures(IVulkanDeviceContext 
 
         rays.GetBuildSizes(Device.Handle, BuildTypeDevice, in info, in count, ref sizes);
 
-        return new GpuAccelerationStructureSizes(ScratchBytes: sizes.BuildScratchSize, StructureBytes: sizes.AccelerationStructureSize);
+        return new GpuAccelerationStructureSizes(ScratchBytes: (sizes.BuildScratchSize + ScratchAlignment), StructureBytes: sizes.AccelerationStructureSize);
     }
     /// <inheritdoc/>
     public IGpuAccelerationStructure Create(GpuAccelerationStructureLevel level, ulong sizeBytes, in GpuObjectName name) {
@@ -90,17 +90,7 @@ public sealed unsafe class VulkanGpuAccelerationStructures(IVulkanDeviceContext 
             throw;
         }
     }
-    /// <inheritdoc/>
-    public IGpuBuffer CreateScratch(ulong sizeBytes, in GpuObjectName name) {
-        ArgumentOutOfRangeException.ThrowIfZero(value: sizeBytes);
-        _ = Rays;
-        var scratch = VulkanBuffer.Create(bufferApi: bufferApi, device: deviceContext, family: name.MemoryFamily(), memory: VulkanBufferMemory.DeviceLocal,
-            sizeBytes: checked(sizeBytes + ScratchAlignment), usage: (VulkanBufferUsageFlags.StorageBuffer | VulkanBufferUsageFlags.ShaderDeviceAddress));
 
-        naming.Name(handle: scratch.BufferHandle, kind: GpuObjectKind.Buffer, name: in name);
-
-        return scratch;
-    }
     /// <inheritdoc/>
     public void WriteInstance(Span<byte> destination, in Matrix4x4 objectToWorld, uint index, IGpuAccelerationStructure bottom) {
         ArgumentNullException.ThrowIfNull(argument: bottom);

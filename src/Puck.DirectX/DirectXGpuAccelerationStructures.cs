@@ -72,13 +72,7 @@ public sealed unsafe class DirectXGpuAccelerationStructures(DirectXDeviceContext
 
         return new Structure(level: level, storage: storage, address: buffer->GetGPUVirtualAddress());
     }
-    /// <inheritdoc/>
-    public IGpuBuffer CreateScratch(ulong sizeBytes, in GpuObjectName name) {
-        ArgumentOutOfRangeException.ThrowIfZero(value: sizeBytes);
-        RequireRayQuery();
 
-        return deviceContext.Services.BufferFactory.CreateDeviceLocal(name: in name, sizeBytes: AlignUp(value: sizeBytes), usage: GpuBufferUsage.Storage);
-    }
     /// <inheritdoc/>
     public void WriteInstance(Span<byte> destination, in Matrix4x4 objectToWorld, uint index, IGpuAccelerationStructure bottom) {
         ArgumentNullException.ThrowIfNull(argument: bottom);

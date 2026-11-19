@@ -531,6 +531,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
             // The destination's own authored tier: its views read its own irradiance volume, which also meters its
             // exposure and occludes its fixtures, as a seat presented there would.
             IndirectTier = (m_mirror.Definition.Render.Indirect?.Tier ?? SdfIndirectTier.Medium),
+            RayQueries = m_mirror.Definition.Render.RayQueries,
             IndirectSources = environment.Indirect.Gains.Sources,
             IndirectGains = environment.Indirect.Gains,
             IndirectBounces = environment.Indirect.Bounces,

@@ -63,9 +63,11 @@ public interface IGpuAccelerationStructure : IDisposable {
 
 /// <summary>
 /// A device's acceleration structures (<see cref="GpuOptionalCapabilities.RayQuery"/>): sizing a build, creating a
-/// structure and the scratch its build writes, writing a top level's instance records, and binding a top level to a
-/// kernel. Building, compacting and copying are commands on the frame's recorder (<see cref="IGpuRecorder"/>). Every
-/// member refuses on a device created without ray queries.
+/// structure, writing a top level's instance records, and binding a top level to a kernel. Building, compacting and
+/// copying are commands on the frame's recorder (<see cref="IGpuRecorder"/>); a build's scratch is any device-local
+/// buffer of <see cref="GpuBufferUsage.Storage"/> and <see cref="GpuBufferUsage.AccelerationStructureInput"/> the size
+/// <see cref="Size"/> reports, which carries any alignment slack the backend needs. Every member refuses on a device
+/// created without ray queries.
 /// </summary>
 public interface IGpuAccelerationStructures {
     /// <summary>Gets the bytes one instance record occupies, the same on both backends (64).</summary>
@@ -86,13 +88,7 @@ public interface IGpuAccelerationStructures {
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="sizeBytes"/> is zero.</exception>
     /// <exception cref="NotSupportedException">The device was created without ray queries.</exception>
     IGpuAccelerationStructure Create(GpuAccelerationStructureLevel level, ulong sizeBytes, in GpuObjectName name);
-    /// <summary>Creates a device-local buffer a build may write as its scratch, aligned as the device requires.</summary>
-    /// <param name="sizeBytes">The bytes; positive.</param>
-    /// <param name="name">The buffer's name.</param>
-    /// <returns>The buffer, owned by the caller, which keeps it until every build that writes it has completed.</returns>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="sizeBytes"/> is zero.</exception>
-    /// <exception cref="NotSupportedException">The device was created without ray queries.</exception>
-    IGpuBuffer CreateScratch(ulong sizeBytes, in GpuObjectName name);
+
     /// <summary>Writes one top-level instance record: a bottom level under a transform, with the index a ray query reads
     /// back for a hit on it (<c>CommittedInstanceID</c>). The record is opaque, visible to every ray and culls no face.</summary>
     /// <param name="destination">The record's bytes, <see cref="InstanceBytes"/> long.</param>

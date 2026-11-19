@@ -854,6 +854,13 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   an in-bounds wrong occupant, which `sdf.instances.targets.stale` counts (`SdfWorldPasses.RecordHits`: hit writers note
   the records' revision they recorded under, hit readers compare it). `world.rows force hit-bound [<frames>]` zeroes the
   bound for frames, so every hit is rejected and counted; both counts read zero on an ordinary run.
+- **A probe kernel that traces has two builds of one body.** The trace, relight and camera sample live in
+  `passes/sdf-probe-*-stage.hlsli`; `sdf-probe-*.comp.hlsl` includes it after the software interface and
+  `sdf-probe-*-rays.comp.hlsl` after the ray-query interface with `SDF_PROBE_RAY_QUERY` defined, which swaps
+  `sdfProbeWalk` (`shade/sdf-probe-trace.hlsli`) for an inline `RayQuery` over the scene's top level. Edit the stage or
+  the walk, never one wrapper; a hit's normal and material stay `sdfProbeSurface`'s in both. The client takes the
+  variant per job (`SdfMeshProbeGpuWork.TopFor`), and the structures' lifetime rule is the header of
+  `SdfMeshProbeGpuWork.Rays.cs`: a structure is disposed only through `Retire` and `DrainRetired`.
 - **Mesh words go through one door.** `frame/sdf-mesh-words.hlsli` reads a draw's record through
   `sdfMeshRecordWord` and a mesh's own words (vertices, triangle materials, indices, level table, members) through
   `sdfMeshWord`, and then makes `sdfMeshRegion` an undeclared name, so a read around it does not compile.
