@@ -58,12 +58,31 @@ public sealed class WorldDeviceProfileState {
     /// <param name="table">The quality tier the caller applied for the profile's table, or <see langword="null"/>.</param>
     /// <returns>The recorded selection.</returns>
     public Selection Apply(WorldDeviceProfile? profile, string source, string? adapter, QualityTier? table) {
+        lock (m_gate) { return ApplyLocked(adapter: adapter, profile: profile, source: source, table: table); }
+    }
+    /// <summary>Applies the profile a boot selects by its adapter once the device has named it: its memory bars alone,
+    /// as <see cref="Apply"/> applies them with the source <c>auto</c>, unless a selection was already made, which a boot
+    /// never overrides.</summary>
+    /// <param name="profile">The profile the world authors for the adapter, or <see langword="null"/> for none.</param>
+    /// <param name="adapter">The adapter's name.</param>
+    /// <returns>The selection that stands.</returns>
+    public Selection ApplyAtBoot(WorldDeviceProfile? profile, string? adapter) {
+        lock (m_gate) {
+            return (m_current == Selection.None)
+                ? ApplyLocked(adapter: adapter, profile: profile, source: "auto", table: null)
+                : m_current;
+        }
+    }
+
+    // Under m_gate, so a boot's selection and a command's are applied one at a time and the recorded selection is the
+    // one whose bars the account holds.
+    private Selection ApplyLocked(WorldDeviceProfile? profile, string source, string? adapter, QualityTier? table) {
         MemoryAccount.Shared.SetBudget(bytes: profile?.DeviceMemoryBytes, pool: PhysicalMemory.Device);
         MemoryAccount.Shared.SetBudget(bytes: profile?.HostMemoryBytes, pool: PhysicalMemory.Host);
 
         var selection = new Selection(Profile: profile?.Name, Source: source, Adapter: adapter, Table: table, DeviceMemoryBytes: profile?.DeviceMemoryBytes, HostMemoryBytes: profile?.HostMemoryBytes);
 
-        lock (m_gate) { m_current = selection; }
+        m_current = selection;
 
         return selection;
     }
@@ -72,7 +91,7 @@ public sealed class WorldDeviceProfileState {
 /// <c>world.device-profile</c>: selects the device profile (<see cref="WorldDeviceProfile"/>) the world authors for the
 /// adapter the process runs on, or the one named, and applies it: the quality table through the render levers where a
 /// renderer is composed, and the memory bars to the process account. A windowed or offscreen boot selects by adapter once
-/// its device opens (<see cref="WorldDeviceProfileState.Apply"/>, memory only: the world keeps its own render levers until
+/// its device opens and names its adapter (<see cref="WorldDeviceProfileState.ApplyAtBoot"/>, memory only: the world keeps its own render levers until
 /// a table is chosen); a benchmark run applies its named profile before its first chapter.
 /// </summary>
 internal sealed class WorldDeviceProfileCommandModule(WorldServer server, WorldDeviceProfileState state, WorldRenderProbe? renderProbe = null, IWorldQualityPresets? presets = null) : ICommandModule {

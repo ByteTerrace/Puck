@@ -261,6 +261,26 @@ public static class WorldBootComposition {
             speech: sp.GetRequiredService<WorldSpeechClock>(),
             evaluator: sp.GetRequiredService<IOverlayPredicateEvaluator>()
         ));
+        services.AddSingleton(implementationFactory: static sp => {
+            var gamepads = sp.GetService<GamepadManager>();
+
+            return new WorldHapticDirector(
+                domains: sp.GetRequiredService<WorldValueDomainGuard>(),
+                outputResolver: (gamepads is not null
+                    ? deviceId => (gamepads.TryGetOutput(
+                        deviceId: deviceId,
+                        output: out var output
+                    )
+                        ? output
+                        : null)
+                    : null),
+                perception: sp.GetRequiredService<WorldPerceptionAnchor>(),
+                roster: sp.GetRequiredService<PlayerRoster>(),
+                seatBindings: sp.GetRequiredService<WorldSeatBindings>(),
+                seatRouter: sp.GetRequiredService<WorldSeatAuthorityRouter>()
+            );
+        });
+        services.AddSingleton<ICommandModule, WorldHapticsCommandModule>();
 
         // The server's entity table — the four local seats plus up to 124 network stand-ins the world.population verb
         // activates — the one body system the snapshot reports (up to 4096 bodies, rendered through the hybrid avatar/crowd representation).
@@ -1217,6 +1237,7 @@ public static class WorldBootComposition {
         var server = sp.GetRequiredService<WorldServer>();
         var anchor = sp.GetRequiredService<WorldPerceptionAnchor>();
         var composer = sp.GetRequiredService<WorldViewComposer>();
+        var haptics = sp.GetRequiredService<WorldHapticDirector>();
 
         return () => {
             for (var slot = 0; (slot < WorldSeatBindings.SeatCount); slot++) {
@@ -1237,6 +1258,7 @@ public static class WorldBootComposition {
                 activeLayout: composer.ActiveLayoutName,
                 screens: server.Definition.Screens
             );
+            haptics.Tick(tick: client.Tick);
         };
     }
     /// <summary>Registers the boot shape the resolved host settings select over the authoritative core: the headless

@@ -163,9 +163,9 @@ public sealed partial record SdfMesh {
     /// <summary>The most triangles a mesh holds: the mesh pass writes a covered pixel's triangle as a float, which holds
     /// every whole number up to 2^24 exactly, so the last triangle is 2^24 - 1.</summary>
     public const int MaxTriangles = (1 << 24);
-    /// <summary>The most members a mesh's vertices ride: a vertex names its member in a byte, and this value is
-    /// <see cref="NoMember"/>.</summary>
-    public const int MaxMembers = byte.MaxValue;
+    /// <summary>The most members a mesh's vertices ride (<see cref="SdfSkinLimits.MaxMembers"/>): a vertex names its
+    /// member in a byte, and this value is <see cref="NoMember"/>.</summary>
+    public const int MaxMembers = SdfSkinLimits.MaxMembers;
     /// <summary>The vertex member of a vertex that rides its draw rather than a member.</summary>
     public const byte NoMember = byte.MaxValue;
 

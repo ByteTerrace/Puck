@@ -22,6 +22,20 @@ public interface IGpuBufferFactory {
     /// <exception cref="ArgumentException"><paramref name="sizeBytes"/> is zero.</exception>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="usage"/> is empty or undefined.</exception>
     IGpuBuffer CreateDeviceLocal(ulong sizeBytes, GpuBufferUsage usage, in GpuObjectName name);
+    /// <summary>Creates a device-local buffer whose address range is reserved whole and backed one chunk at a time
+    /// (<see cref="IGpuMappedBuffer"/>), mapping nothing yet, where the device can: a Direct3D 12 device at reserved
+    /// resources tier 2 or above. A device that cannot answers <see langword="null"/>, and its caller keeps a buffer
+    /// <see cref="CreateDeviceLocal"/> creates.</summary>
+    /// <param name="reservedBytes">The bytes of address range to reserve; not zero. Reserving backs nothing: only
+    /// <see cref="IGpuMappedBuffer.Map"/> holds device memory.</param>
+    /// <param name="usage">The usages; <see cref="GpuBufferUsages.Validate"/> states the rules.</param>
+    /// <param name="name">The object's debug name, from its creator's identity (<see cref="GpuObjectName"/>); its family
+    /// names the backing each mapped chunk holds.</param>
+    /// <returns>A new, owning buffer with no chunk mapped, or <see langword="null"/> where the device has no such
+    /// buffer.</returns>
+    /// <exception cref="ArgumentException"><paramref name="reservedBytes"/> is zero.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="usage"/> is empty or undefined.</exception>
+    IGpuMappedBuffer? TryCreateMapped(ulong reservedBytes, GpuBufferUsage usage, in GpuObjectName name) => null;
     /// <summary>Creates a host-visible buffer.</summary>
     /// <param name="sizeBytes">The size, in bytes, of the buffer; not zero.</param>
     /// <param name="usage">The usages; <see cref="GpuBufferUsages.Validate"/> states the rules.</param>

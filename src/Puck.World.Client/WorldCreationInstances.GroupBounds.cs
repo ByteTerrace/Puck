@@ -124,6 +124,6 @@ public sealed partial class WorldCreationInstances {
 
         return null;
     }
-    private static int GroupMotionOwner(Registration live, CreationDocument document, int index) =>
-        CreationMotion.Owner(document: document, index: index, parents: live.PartParent);
+    // The slot a shape rides (CreationMotionPlan.ShapeSlots): two shapes of one slot share one rigid delta.
+    private static int GroupMotionOwner(Registration live, CreationDocument document, int index) => live.Motion.ShapeSlots[index];
 }

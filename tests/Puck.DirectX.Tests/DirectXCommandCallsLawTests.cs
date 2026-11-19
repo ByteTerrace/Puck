@@ -291,6 +291,8 @@ public sealed unsafe class DirectXCommandCallsLawTests {
         public D3D12_HEAP_PROPERTIES CustomHeapProperties(D3D12_HEAP_TYPE heapType) => throw new NotSupportedException();
         public HRESULT CreateHeap(D3D12_HEAP_DESC* description, ID3D12Heap** heap) => throw new NotSupportedException();
         public HRESULT CreatePlacedResource(ID3D12Heap* heap, ulong offset, D3D12_RESOURCE_DESC* description, D3D12_RESOURCE_STATES initialState, D3D12_CLEAR_VALUE* clearValue, ID3D12Resource** resource) => throw new NotSupportedException();
+        public HRESULT CreateReservedResource(D3D12_RESOURCE_DESC* description, D3D12_RESOURCE_STATES initialState, ID3D12Resource** resource) => throw new NotSupportedException();
+        public void UpdateTileMappings(ID3D12CommandQueue* queue, ID3D12Resource* resource, uint firstTile, uint tileCount, ID3D12Heap* heap, uint heapFirstTile) => throw new NotSupportedException();
         public void ReleaseHeap(ID3D12Heap* heap) => throw new NotSupportedException();
         public void ReleaseResource(ID3D12Resource* resource) => throw new NotSupportedException();
         public HRESULT Tag(ID3D12Resource* resource, Guid key, long value) => throw new NotSupportedException();

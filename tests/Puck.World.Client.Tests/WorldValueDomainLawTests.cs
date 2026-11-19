@@ -224,6 +224,8 @@ public sealed class WorldValueDomainLawTests {
         [WorldValueFields.ClearanceRetractionSkin] = Clear(member: "retractionSkin", author: static (c, s) => c with { RetractionSkin = s }),
         [WorldValueFields.ClearanceObstructedTargetSkin] = Clear(member: "obstructedTargetSkin", author: static (c, s) => c with { ObstructedTargetSkin = s }),
         [WorldValueFields.MarkerRingAlpha] = Marker(author: s => new WorldMarkerStyle(ChipAlpha: 0.9f, Size: 12f, RingAlpha: s, RingColor: new BindableColor(Raw: "#9BA3AB")), present: static a => a.Ring, member: "ringAlpha"),
+        [WorldValueFields.HapticLow] = Haptic(author: s => new WorldHapticRow(Id: "beat", Low: s, High: 0.25f, DurationSeconds: 0.1f), field: WorldValueFields.HapticLow, member: "low", read: static row => row.Low),
+        [WorldValueFields.HapticHigh] = Haptic(author: s => new WorldHapticRow(Id: "beat", Low: 0.25f, High: s, DurationSeconds: 0.1f), field: WorldValueFields.HapticHigh, member: "high", read: static row => row.High),
     };
 
     public static TheoryData<string> Bindable => [.. Cases.Where(predicate: static pair => (pair.Value.Present is not null)).Select(selector: static pair => Key(field: pair.Key))];
@@ -374,6 +376,23 @@ public sealed class WorldValueDomainLawTests {
         },
         Path: $"markers[0].style.{member}",
         Present: (definition, mirror, domains) => present(arg: WorldMarkerAlphas.Resolve(domains: domains, index: 0, marker: definition.Markers[0], mirror: mirror))
+    );
+    private static Case Haptic(Func<BindableScalar, WorldHapticRow> author, Func<WorldHapticRow, BindableScalar> read, WorldValueField field, string member) => new(
+        Author: s => Fixtures.BuildDocument() with { HapticsRaw = [author(arg: s)] },
+        Path: $"haptics[0].{member}",
+        Present: (definition, mirror, domains) => {
+            var scalar = read(arg: definition.Haptics[0]);
+            var site = new WorldValueSite(Index: 0, Inner: null, Section: "haptics");
+
+            return domains.Resolve(
+                fallback: 0f,
+                field: field,
+                mirror: mirror,
+                scalar: in scalar,
+                site: in site,
+                value: mirror.Scalar(delivered: true, fallback: 0f, scalar: in scalar)
+            );
+        }
     );
     // The number a presentation reads the bound row as.
     private static float Presented(double value) {

@@ -1510,8 +1510,10 @@ render {
   // The exposure's floor follows the day (day.puck's `day` clock): EV 7 from dawn to dusk, the hall's lit rooms
   // and the sunlit valley, down to EV 2 at night, so the moonlit valley reads deep blue and dark rather than black. A
   // lit room meters above the floor (its fixtures are sized for it, shapes.md), so the floor holds only an unlit room
-  // dark. It exposes at the meter's middle grey, as the basis does, and the tone curve's shoulder (render.tone) keeps a
-  // lit level's white walls and exhibits from clipping flat. The meter reads the picture as the basis's does (its band,
+  // dark. By day it keys the picture a stop and a quarter above the meter's average, as the basis does, so the
+  // glacier's snow and a lit level's white walls read white rather than the grey an averaging meter makes of a bright
+  // scene, and the tone curve's shoulder (render.tone) keeps them from clipping flat; the key eases back to the meter's
+  // own over dusk, so the night keeps its deep blue. The meter reads the picture as the basis's does (its band,
   // percentiles and centre weight restated, since this section replaces the basis's whole).
   exposure {
     mode: Auto
@@ -1523,6 +1525,16 @@ render {
         { at: 23400, value: 7 }
         { at: 63000, value: 7 }
         { at: 67500, value: 2 }
+      ]
+    }
+    compensation {
+      clock: day
+      keys [
+        { at: 0, value: 0 }
+        { at: 18900, value: 0 }
+        { at: 23400, value: 1.25 }
+        { at: 63000, value: 1.25 }
+        { at: 67500, value: 0 }
       ]
     }
     maximum: 16

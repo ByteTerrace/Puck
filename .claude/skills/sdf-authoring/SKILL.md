@@ -216,9 +216,8 @@ saves contact work; its render field still bakes normally. Edit-to-running stays
 under 30 seconds, checked on a quiet machine by the lead.
 
 The limits retained protect representations or per-pixel work: 255 skin members
-per bake group (a group past it throws when its mesh is sealed, during the
-bake, naming its first instance: `SdfMeshBakeGroup`; no document check reports
-it), 24-bit GPU indices, the material sentinel, 64 bounded volumes and 32
+per bake group (`SdfSkinLimits.MaxMembers`; validation refuses a group whose
+skinned seams ride more, naming the group, before any bake), 24-bit GPU indices, the material sentinel, 64 bounded volumes and 32
 screen bindings. Scopes nest to 4.
 Derived faces follow the world's highest authored screen index.
 
@@ -276,7 +275,7 @@ backwards.
 
 `parent` is the skeleton: it names an **earlier** shape whose animated motion
 carries this one, so chains resolve in one pass and can never cycle. On top of
-that, `swings` (up to 8) rotate about a pivot and `slides` (up to 4) translate,
+that, `swings` rotate about a pivot and `slides` translate,
 both driven by a named `driver` reading a signal or a state row (`state.hp`).
 Directional locomotion reads `travelDirection` and the planar accelerations,
 and a driver naming a world `dynamics` row trails and settles instead of

@@ -259,6 +259,11 @@ public sealed unsafe class GpuRegion : IDisposable {
     /// <param name="destinationUsage">The usages a staged region's device-local destination declares beside
     /// <see cref="GpuBufferUsage.Storage"/>, at creation and at every growth and shrink: the mesh region's
     /// <see cref="GpuBufferUsage.AccelerationStructureInput"/>, which acceleration-structure builds read in place.</param>
+    /// <param name="mapped">Whether a staged region's destination reserves the most a region holds
+    /// (<see cref="MaxByteCount"/>) and backs only the chunks its size reaches
+    /// (<see cref="IGpuBufferFactory.TryCreateMapped"/>), so <see cref="Grow"/> maps chunks in place and
+    /// <see cref="Shrink"/> gives them back without a replacement. A device that has no such buffer gives the region an
+    /// ordinary destination; <see cref="Mapped"/> reads which it has.</param>
     /// <exception cref="ArgumentNullException"><paramref name="buffers"/>,
     /// <paramref name="bindings"/> or <paramref name="recorder"/> is <see langword="null"/>, or a staged region has no
     /// <paramref name="copyPipeline"/>.</exception>
@@ -269,7 +274,7 @@ public sealed unsafe class GpuRegion : IDisposable {
     /// uniform region is staged or not a multiple of <see cref="IGpuBindings.ConstantBufferAlignment"/> bytes.</exception>
     /// <exception cref="ArgumentException"><paramref name="copySets"/> holds another number of slots than
     /// <paramref name="slotCount"/>.</exception>
-    public GpuRegion(GpuResidencyPolicy policy, GpuHostVisibleMemory memory, long byteCount, int slotCount, IGpuBufferFactory buffers, IGpuBindings bindings, IGpuRecorder recorder, IGpuComputePipeline? copyPipeline, in GpuObjectName name, GpuRegionCopySets? copySets = null, GpuBufferUsage usage = GpuBufferUsage.Storage, IAllocationObserver? hostCopies = null, GpuObjectName? staging = null, GpuBufferUsage destinationUsage = GpuBufferUsage.None) : this(
+    public GpuRegion(GpuResidencyPolicy policy, GpuHostVisibleMemory memory, long byteCount, int slotCount, IGpuBufferFactory buffers, IGpuBindings bindings, IGpuRecorder recorder, IGpuComputePipeline? copyPipeline, in GpuObjectName name, GpuRegionCopySets? copySets = null, GpuBufferUsage usage = GpuBufferUsage.Storage, IAllocationObserver? hostCopies = null, GpuObjectName? staging = null, GpuBufferUsage destinationUsage = GpuBufferUsage.None, bool mapped = false) : this(
         bindings: bindings,
         buffers: buffers,
         byteCount: byteCount,
@@ -284,7 +289,8 @@ public sealed unsafe class GpuRegion : IDisposable {
         slotCount: slotCount,
         staging: staging,
         usage: usage,
-        destinationUsage: destinationUsage
+        destinationUsage: destinationUsage,
+        mapped: mapped
     ) { }
     /// <summary>Initializes a new instance of the <see cref="GpuRegion"/> class that chooses its own residency: the
     /// policy <see cref="GpuResidency.Select"/> picks for its size on <paramref name="profile"/>, a ring's buffers in the
@@ -384,7 +390,7 @@ public sealed unsafe class GpuRegion : IDisposable {
         usage: GpuBufferUsage.Storage
     ) { }
 
-    private GpuRegion(GpuResidencyPolicy policy, GpuHostVisibleMemory memory, long byteCount, int slotCount, GpuBufferUsage usage, IGpuBuffer? destination, IGpuBufferFactory buffers, IGpuBindings bindings, IGpuRecorder recorder, IGpuComputePipeline? copyPipeline, in GpuObjectName name, GpuRegionCopySets? copySets, IAllocationObserver? hostCopies, GpuObjectName? staging = null, GpuBufferUsage destinationUsage = GpuBufferUsage.None) {
+    private GpuRegion(GpuResidencyPolicy policy, GpuHostVisibleMemory memory, long byteCount, int slotCount, GpuBufferUsage usage, IGpuBuffer? destination, IGpuBufferFactory buffers, IGpuBindings bindings, IGpuRecorder recorder, IGpuComputePipeline? copyPipeline, in GpuObjectName name, GpuRegionCopySets? copySets, IAllocationObserver? hostCopies, GpuObjectName? staging = null, GpuBufferUsage destinationUsage = GpuBufferUsage.None, bool mapped = false) {
         ArgumentNullException.ThrowIfNull(buffers);
         ArgumentNullException.ThrowIfNull(bindings);
         ArgumentNullException.ThrowIfNull(recorder);
@@ -505,7 +511,7 @@ public sealed unsafe class GpuRegion : IDisposable {
 
             if (policy == GpuResidencyPolicy.Staged) {
                 if (!m_external) {
-                    m_destination = buffers.CreateDeviceLocal(
+                    m_destination = (mapped ? CreateMapped(byteCount: byteCount) : null) ?? buffers.CreateDeviceLocal(
                         name: name,
                         sizeBytes: ((ulong)byteCount),
                         usage: m_destinationUsage
@@ -595,6 +601,22 @@ public sealed unsafe class GpuRegion : IDisposable {
             foreach (var buffer in created) {
                 buffer?.Dispose();
             }
+
+            throw;
+        }
+
+        return created;
+    }
+    // Reserves a mapped destination of the most a region holds and backs its first byteCount bytes, or answers null where
+    // the device has none. A refused backing releases the reservation before the refusal leaves.
+    private IGpuMappedBuffer? CreateMapped(long byteCount) {
+        if (m_buffers.TryCreateMapped(name: m_name, reservedBytes: ((ulong)MaxByteCount), usage: m_destinationUsage) is not { } created) {
+            return null;
+        }
+        try {
+            created.Map(bytes: ((ulong)byteCount), offset: 0UL);
+        } catch {
+            created.Dispose();
 
             throw;
         }
@@ -701,8 +723,9 @@ public sealed unsafe class GpuRegion : IDisposable {
                 host = checked((host + buffer.SizeBytes));
             }
 
+            // A mapped destination holds its backed chunks, not the address range it reserves.
             var destination = (((Policy == GpuResidencyPolicy.Staged) && !m_external)
-                ? ((ulong)ByteCount)
+                ? (Mapped ? DestinationBytes : ((ulong)ByteCount))
                 : 0UL
             );
 
@@ -774,6 +797,14 @@ public sealed unsafe class GpuRegion : IDisposable {
     /// <summary>Gets the pending-use predicate a retirement queue keeps for this region's replaced destinations.
     /// It stays true until a carry is recorded or cancelled. Poll retirement only after recording is submitted.</summary>
     public Func<bool> PendingCarry => (m_pendingCarry ??= () => OwesCarry);
+    /// <summary>Gets whether the region's destination is mapped (<see cref="IGpuMappedBuffer"/>): it grows and shrinks in
+    /// place, never holding a replacement beside it.</summary>
+    public bool Mapped => (m_destination is IGpuMappedBuffer);
+    /// <summary>Gets the device bytes the region's destination holds: a mapped destination's backed chunks, or an
+    /// ordinary destination's size; zero for a region with no device-local destination of its own.</summary>
+    public ulong DestinationBytes => ((m_destination is IGpuMappedBuffer mapped)
+        ? mapped.MappedBytes
+        : ((m_external || (m_destination is null)) ? 0UL : m_destination.SizeBytes));
 
     private Func<bool>? m_pendingCarry;
 
@@ -858,7 +889,9 @@ public sealed unsafe class GpuRegion : IDisposable {
     /// submission, and extends <see cref="Contents"/> with zeros. A region that chooses its own residency chooses again
     /// for the new size: past a ring's share of the aperture a ring or in-place region becomes staged, creating its
     /// staging buffers, destination and (unless its owner reserved its sets) copy pool, owing every word, and returning
-    /// its host-visible buffers as a ring's grow does. Any other region keeps its policy. A staged region
+    /// its host-visible buffers as a ring's grow does. Any other region keeps its policy. A staged region with a mapped
+    /// destination (<see cref="Mapped"/>) backs the chunks the new size reaches and replaces nothing: every word stays
+    /// where it stands, and a region with no source owes its new tail. Any other staged region
     /// creates a destination of the new size and owes its next copy recording a carry (<see cref="RecordCarry"/>) that
     /// clears the new destination and copies the old one's bytes into it on the GPU, so no word the region held is staged
     /// again; owed words stay owed, the copy sets are written again before each slot's next copy, and no staging buffer is
@@ -868,8 +901,8 @@ public sealed unsafe class GpuRegion : IDisposable {
     /// <param name="byteCount">The new size in bytes; larger than <see cref="ByteCount"/>, a whole number of uints, at
     /// most <see cref="MaxByteCount"/>, and for a uniform region a multiple of
     /// <see cref="IGpuBindings.ConstantBufferAlignment"/>.</param>
-    /// <returns>What the region replaced, which the caller now owns: a staged region's destination, or a ring's or
-    /// in-place region's host-visible buffers. GPU work recorded before the grow may still read it, and a staged region's
+    /// <returns>What the region replaced, which the caller now owns: a staged region's destination (nothing, for a mapped
+    /// one), or a ring's or in-place region's host-visible buffers. GPU work recorded before the grow may still read it, and a staged region's
     /// next copy recording reads its old destination once more, so the caller disposes it only once every such
     /// submission has completed. A staged region that grows again before a copy recording carries from the destination
     /// it held at its last recording and returns the one it never wrote.</returns>
@@ -1056,8 +1089,29 @@ public sealed unsafe class GpuRegion : IDisposable {
         m_contents = contents;
         m_shadowBytes = byteCount;
     }
-    // Grows a staged region's own destination, carrying the old one's bytes into it on the GPU (RecordCarry).
-    private IGpuBuffer GrowDestination(long byteCount) {
+    // Grows a staged region's own destination: a mapped one backs the chunks the new size reaches and keeps every word
+    // where it stands, replacing nothing; any other is replaced by a larger one, which carries the old one's bytes on the
+    // GPU (RecordCarry).
+    private IDisposable GrowDestination(long byteCount) {
+        if (m_destination is IGpuMappedBuffer mapped) {
+            // Backing first: a refusal leaves the region as it was.
+            mapped.Map(bytes: ((ulong)(byteCount - ByteCount)), offset: ((ulong)ByteCount));
+            if (m_source is null) {
+                var known = ((int)(ByteCount / sizeof(uint)));
+
+                // A newly backed chunk holds nothing defined, so the zeroed tail of the host copy is owed to it.
+                GrowContents(byteCount: byteCount);
+                Owe(endWord: ((int)(byteCount / sizeof(uint))), startWord: known);
+                m_stagedSlot = -1;
+            }
+            ByteCount = byteCount;
+
+            return GpuMappedRelease.None;
+        }
+
+        return GrowReplacing(byteCount: byteCount);
+    }
+    private IGpuBuffer GrowReplacing(long byteCount) {
         var replacement = m_buffers.CreateDeviceLocal(
             name: m_name,
             sizeBytes: ((ulong)byteCount),
@@ -1101,13 +1155,15 @@ public sealed unsafe class GpuRegion : IDisposable {
     /// (<see cref="StagingFloorBytes"/>).</summary>
     /// <param name="byteCount">The new size in bytes; positive, smaller than <see cref="ByteCount"/> and a whole number of
     /// uints.</param>
-    /// <returns>The destination the region replaced, which the caller now owns and disposes once every submission
-    /// recorded before the shrink has completed.</returns>
+    /// <returns>What the region gave up, which the caller now owns and disposes once every submission recorded before the
+    /// shrink has completed: the destination it replaced, or a mapped destination's chunks past the new size
+    /// (<see cref="IGpuMappedBuffer.Unmap"/>). A mapped region keeps its destination and every word below the new size, so
+    /// it owes nothing.</returns>
     /// <exception cref="InvalidOperationException">The region is not staged, or its destination is external.</exception>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="byteCount"/> is not positive, not smaller than
     /// <see cref="ByteCount"/> or not a whole number of uints.</exception>
     /// <exception cref="ObjectDisposedException">The region has been disposed.</exception>
-    public IGpuBuffer Shrink(long byteCount) {
+    public IDisposable Shrink(long byteCount) {
         ObjectDisposedException.ThrowIf(
             condition: m_disposed,
             instance: this
@@ -1129,6 +1185,9 @@ public sealed unsafe class GpuRegion : IDisposable {
                 message: $"A region shrinks to a positive whole number of uints below its {ByteCount} bytes.",
                 paramName: nameof(byteCount)
             );
+        }
+        if (m_destination is IGpuMappedBuffer mapped) {
+            return ShrinkMapped(byteCount: byteCount, mapped: mapped);
         }
 
         var replacement = m_buffers.CreateDeviceLocal(
@@ -1161,6 +1220,105 @@ public sealed unsafe class GpuRegion : IDisposable {
         m_stagedSlot = -1;
 
         return replaced;
+    }
+    /// <summary>Gets the bytes one mapping of a mapped region covers (<see cref="IGpuMappedBuffer.ChunkBytes"/>); zero for a
+    /// region whose destination is not mapped.</summary>
+    public long MappedChunkBytes => ((m_destination is IGpuMappedBuffer mapped) ? ((long)mapped.ChunkBytes) : 0L);
+
+    /// <summary>Returns whether every chunk a range of a mapped region touches holds backing.</summary>
+    /// <param name="offset">The range's first byte.</param>
+    /// <param name="bytes">The range's bytes; positive.</param>
+    /// <returns><see langword="true"/> when the range is backed; <see langword="false"/> for a range past
+    /// <see cref="ByteCount"/> or a region that is not mapped.</returns>
+    public bool IsBacked(long offset, long bytes) => (Mapped && (TryLease(bytes: bytes, offset: offset) is not null));
+    /// <summary>Backs every chunk a range of a mapped region touches that holds none, in place (<see cref="IGpuMappedBuffer.Map"/>):
+    /// the chunks a placement inside <see cref="ByteCount"/> needs once an earlier <see cref="UnmapRange"/> gave them
+    /// back.</summary>
+    /// <param name="offset">The range's first byte.</param>
+    /// <param name="bytes">The range's bytes, within <see cref="ByteCount"/>.</param>
+    /// <exception cref="InvalidOperationException">The region is not mapped.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">The range passes <see cref="ByteCount"/>.</exception>
+    /// <exception cref="GpuMemoryRefusedException">The account or the device refused the backing; nothing was mapped.</exception>
+    /// <exception cref="ObjectDisposedException">The region has been disposed.</exception>
+    public void MapRange(long offset, long bytes) => MappedOf(bytes: bytes, offset: offset).Map(bytes: ((ulong)bytes), offset: ((ulong)offset));
+    /// <summary>Gives back every mapped chunk that lies wholly inside a range of a mapped region, keeping its size: the
+    /// chunks are revoked now, the words they held are owed no more (no reader may need them), and the release returned
+    /// frees their backing once the caller has retired it behind their readers.</summary>
+    /// <param name="offset">The range's first byte.</param>
+    /// <param name="bytes">The range's bytes, within <see cref="ByteCount"/>.</param>
+    /// <returns>The release (<see cref="IGpuMappedBuffer.Unmap"/>).</returns>
+    /// <exception cref="InvalidOperationException">The region is not mapped.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">The range passes <see cref="ByteCount"/>.</exception>
+    /// <exception cref="ObjectDisposedException">The region has been disposed.</exception>
+    public GpuMappedRelease UnmapRange(long offset, long bytes) {
+        var release = MappedOf(bytes: bytes, offset: offset).Unmap(bytes: ((ulong)bytes), offset: ((ulong)offset));
+
+        if (release.Bytes != 0UL) {
+            var chunk = MappedChunkBytes;
+            var first = ((((offset + chunk) - 1L) / chunk) * chunk);
+            var end = Math.Min(val1: ((((offset + bytes) / chunk) * chunk)), val2: ByteCount);
+
+            DropOwed(endWord: ((int)(end / sizeof(uint))), startWord: ((int)(first / sizeof(uint))));
+        }
+
+        return release;
+    }
+    // The mapped destination a range of the region lies in.
+    private IGpuMappedBuffer MappedOf(long offset, long bytes) {
+        ObjectDisposedException.ThrowIf(condition: m_disposed, instance: this);
+        if (m_destination is not IGpuMappedBuffer mapped) {
+            throw new InvalidOperationException(message: "Only a region with a mapped destination maps or unmaps a range in place.");
+        }
+        if ((offset < 0L) || (bytes < 0L) || (offset > ByteCount) || (bytes > (ByteCount - offset))) {
+            throw new ArgumentOutOfRangeException(paramName: nameof(bytes), message: $"The range of {bytes} bytes at {offset} passes the region's {ByteCount}.");
+        }
+
+        return mapped;
+    }
+    // Owes no word of [startWord, endWord) any more: the staged policy's one owed list keeps every run outside it.
+    private void DropOwed(int startWord, int endWord) {
+        if (endWord <= startWord) { return; }
+
+        var owed = m_owed[0];
+        var kept = new GpuUploadRuns(
+            capacity: MaxCopyRuns,
+            mergeGap: StagedMergeGapWords
+        );
+
+        for (var run = 0; (run < owed.Count); run++) {
+            var start = owed.Start(index: run);
+            var stop = (start + owed.Length(index: run));
+
+            kept.Add(length: (Math.Min(val1: stop, val2: startWord) - start), start: start);
+            kept.Add(length: (stop - Math.Max(val1: start, val2: endWord)), start: Math.Max(val1: start, val2: endWord));
+        }
+        owed.Clear();
+        owed.Append(source: kept);
+        m_stagedSlot = -1;
+    }
+    // Shrinks a mapped destination in place: the chunks wholly past the new size are revoked now and released behind
+    // their readers, every word below it stays where it stands, and only the debt past the new size is dropped.
+    private GpuMappedRelease ShrinkMapped(long byteCount, IGpuMappedBuffer mapped) {
+        var release = mapped.Unmap(bytes: (mapped.SizeBytes - ((ulong)byteCount)), offset: ((ulong)byteCount));
+        var words = ((int)(byteCount / sizeof(uint)));
+        var shadow = Math.Min(
+            val1: m_shadowBytes,
+            val2: byteCount
+        );
+        var kept = new GpuUploadRuns(
+            capacity: MaxCopyRuns,
+            mergeGap: StagedMergeGapWords
+        );
+
+        ReplaceContents(byteCount: shadow, zero: false);
+        kept.Append(limit: words, source: m_owed[0]);
+        m_owed[0].Clear();
+        m_owed[0].Append(source: kept);
+        m_knownWords = Math.Min(val1: m_knownWords, val2: ((int)(shadow / sizeof(uint))));
+        ByteCount = byteCount;
+        m_stagedSlot = -1;
+
+        return release;
     }
     /// <summary>Records a grown region's carry: the clear of its destination, then the copy of the bytes the destination
     /// it replaced held, each ordered after the last, and the barrier handing the destination to the next access, the

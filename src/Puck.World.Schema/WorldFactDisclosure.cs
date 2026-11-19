@@ -112,6 +112,10 @@ public static class WorldRuleDisclosure {
         var facts = new RuleNeedsBuilder();
 
         RuleDataflow.CollectJudgement(facts: facts, reads: access, rule: rule);
+        // A firing also reads the locals deferred to it (CompiledRule.Deferred), which a judgement leaves out.
+        foreach (var local in (rule.Locals ?? [])) {
+            RuleDataflow.CollectExpressionSchedulingFacts(into: facts, tokens: local.Expression);
+        }
         RuleDataflow.CollectEffectFacts(effects: rule.Effects, includeSources: true, into: facts);
         if (rule is CompiledWorldFactsRule world) {
             if (world.Interaction is not null) {

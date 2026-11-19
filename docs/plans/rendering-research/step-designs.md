@@ -201,9 +201,9 @@ is the mechanism and its neutral default, never the value.
 
 No step of the build order waits for a look to be chosen. A mechanism lands
 with its neutral default and with the standard package's value beside it.
-After decision 5, every place is judged again against its reference. The
-exposure compensation that each place authors today stands in for the
-missing encode.
+After decision 5, every place is judged again against its reference. An
+exposure compensation a world authors is its key, a look, and no longer a
+stand-in for the encode.
 
 Open items listed several of these values among the owner's sittings and
 calls. That page now matches this section: its owner's list holds engine

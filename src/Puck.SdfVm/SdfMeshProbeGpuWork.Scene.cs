@@ -37,7 +37,8 @@ internal sealed partial class SdfMeshProbeGpuWork {
     private void RecordSceneUpload(SceneChunk chunk, in SdfGpuWorkRecording recording) {
         var upload = m_sceneUpload!;
         var export = upload.Export!;
-        m_sceneRegion ??= m_tables.CreateProbeSceneRegion(RootBytes, SdfGpuWork.SlotCount);
+        // Mapped, so a scene that outgrows the region never holds two copies of it while the carry runs.
+        m_sceneRegion ??= m_tables.CreateProbeSceneRegion(RootBytes, SdfGpuWork.SlotCount, mapped: true);
         m_sceneRegion.Shadow(chunk, RootBytes);
         if (export.Words * 4L > m_sceneRegion.ByteCount) {
             m_sceneCarry = m_sceneRegion.Grow(sizeof(uint) * GpuCapacity.Headroom(required: export.Words, ceiling: (GpuRegion.MaxByteCount / sizeof(uint)), divisor: 8));

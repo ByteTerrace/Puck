@@ -90,6 +90,17 @@ public record CompiledRule(string Name, ActionTriggerMode Mode, GateToken[] Gate
     /// <summary>Gets the most bindings of one sweep that may fire (<see cref="Rule.MaxFirings"/>), or 0 when every
     /// binding the sweep visits may.</summary>
     public int MaxFirings { get; init; }
+    /// <summary>Gets, per local in declared order, whether the local is evaluated only once the gate has opened on an
+    /// evaluation that fires, because the gate reads it neither directly nor through another local; or
+    /// <see langword="null"/> when every local is evaluated before the gate. The evaluator judges a binding by the
+    /// locals this leaves undeferred and its gate, and the work sheet prices the deferred ones with the firing, so a
+    /// binding whose gate stays closed costs its gate and nothing its effects alone need.</summary>
+    public bool[]? Deferred { get; init; }
+
+    /// <summary>Returns whether a local is evaluated only when the rule fires (<see cref="Deferred"/>).</summary>
+    /// <param name="ordinal">The local's ordinal.</param>
+    /// <returns><see langword="true"/> when the local waits for the firing.</returns>
+    public bool IsDeferred(int ordinal) => ((Deferred is { } deferred) && (((uint)ordinal) < ((uint)deferred.Length)) && deferred[ordinal]);
 
     /// <summary>Appends every state cell one evaluation reads: the gate, the locals, and the effects. A document
     /// project's rule appends the branches it alone carries.</summary>
@@ -141,21 +152,29 @@ public record CompiledRule(string Name, ActionTriggerMode Mode, GateToken[] Gate
             context: context,
             tokens: Gate
         ));
+        var effects = RuleWorkBudget.EffectsCost(
+            context: context,
+            effects: Effects
+        );
+        var locals = (Locals ?? []);
 
-        foreach (var local in (Locals ?? [])) {
-            check += RuleWorkBudget.ExpressionCost(
+        for (var ordinal = 0; (ordinal < locals.Length); ordinal++) {
+            var cost = RuleWorkBudget.ExpressionCost(
                 context: context,
-                kind: local.Kind,
-                tokens: local.Expression
+                kind: locals[ordinal].Kind,
+                tokens: locals[ordinal].Expression
             );
+
+            if (IsDeferred(ordinal: ordinal)) {
+                effects += cost;
+            } else {
+                check += cost;
+            }
         }
 
         return new RuleCost(
             Check: check,
-            Effects: RuleWorkBudget.EffectsCost(
-                context: context,
-                effects: Effects
-            ),
+            Effects: effects,
             Setup: RuleWorkBudget.ForEachSetup(
                 context: context,
                 rule: this
@@ -165,7 +184,8 @@ public record CompiledRule(string Name, ActionTriggerMode Mode, GateToken[] Gate
 }
 /// <summary>The orthogonal cost components of one compiled rule.</summary>
 /// <param name="Check">What one evaluation costs before any effect fires.</param>
-/// <param name="Effects">What one firing's effects cost.</param>
+/// <param name="Effects">What one firing costs beyond its check: the locals deferred to it
+/// (<see cref="CompiledRule.Deferred"/>) and its effects.</param>
 /// <param name="Setup">What one sweep of the rule costs before its first evaluation, whatever the evaluations
 /// number.</param>
 public readonly record struct RuleCost(RuleWork Check, RuleWork Effects, RuleWork Setup) {

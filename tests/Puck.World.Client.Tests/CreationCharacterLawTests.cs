@@ -198,8 +198,8 @@ public sealed class CreationCharacterLawTests {
         CreationDriverDocument[] advanced = [.. Drivers(), new CreationDriverDocument(Name: "ghost", Signal: "driver.nobody", Cadence: 1f, When: ["always"])];
 
         (float[] Phases, float[] Weights) Run(WorldDefinition? definition) {
-            var phases = new float[CreationDocument.MaxDrivers];
-            var weights = new float[CreationDocument.MaxDrivers];
+            var phases = new float[64];
+            var weights = new float[64];
             var address = new Protocol.WorldEntityAddress(Authority: "a", Generation: 1, Index: 0);
             var last = Vector3.Zero;
             var lastRotation = Quaternion.Identity;
@@ -209,7 +209,7 @@ public sealed class CreationCharacterLawTests {
 
             for (var frame = 0; (frame <= 30); frame++) {
                 WorldGaitDrivers.Advance(
-                    drivers: advanced,
+                    rig: ClientFixtures.DriverRig(drivers: advanced),
                     phases: phases,
                     weights: weights,
                     deltaSeconds: (1f / 60f),
@@ -343,8 +343,8 @@ public sealed class CreationCharacterLawTests {
             userMessage: Refusal(definition: world)
         );
 
-        var phases = new float[CreationDocument.MaxDrivers];
-        var weights = new float[CreationDocument.MaxDrivers];
+        var phases = new float[64];
+        var weights = new float[64];
         var address = new Protocol.WorldEntityAddress(
             Authority: "a",
             Generation: 1,
@@ -358,7 +358,7 @@ public sealed class CreationCharacterLawTests {
 
         for (var frame = 0; (frame < 2); frame++) {
             WorldGaitDrivers.Advance(
-                drivers: creation.Drivers,
+                rig: ClientFixtures.DriverRig(drivers: creation.Drivers),
                 phases: phases,
                 weights: weights,
                 deltaSeconds: (1f / 60f),
@@ -371,11 +371,11 @@ public sealed class CreationCharacterLawTests {
                 lastAddress: ref lastAddress,
                 easedSpeed: ref speed,
                 address: address,
-                reads: ClientFixtures.StateReads(
+                reads: ClientFixtures.DriverReads(drivers: creation.Drivers, lease: ClientFixtures.StateReads(
                     bodyIndex: address.Index,
                     definition: world,
                     tick: 10UL
-                )
+                ))
             );
         }
         Assert.Equal(
@@ -385,7 +385,7 @@ public sealed class CreationCharacterLawTests {
         );
 
         WorldGaitDrivers.Advance(
-            drivers: creation.Drivers,
+            rig: ClientFixtures.DriverRig(drivers: creation.Drivers),
             phases: phases,
             weights: weights,
             deltaSeconds: (1f / 60f),
@@ -398,11 +398,11 @@ public sealed class CreationCharacterLawTests {
             lastAddress: ref lastAddress,
             easedSpeed: ref speed,
             address: address,
-            reads: ClientFixtures.StateReads(
+            reads: ClientFixtures.DriverReads(drivers: creation.Drivers, lease: ClientFixtures.StateReads(
                 bodyIndex: address.Index,
                 definition: zero,
                 tick: 10UL
-            )
+            ))
         );
         Assert.Equal(
             expected: 0f,

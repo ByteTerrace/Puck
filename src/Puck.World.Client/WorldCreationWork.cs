@@ -28,11 +28,17 @@ public static class WorldCreationWork {
     public static WorkKind DriverPhaseChanges { get; } = new(name: "sdf.creations.drivers.phase-changes", unit: "count", workClass: WorkClass.Pacing);
     /// <summary>Evaluated registrations with ongoing authored driver work.</summary>
     public static WorkKind DriverContinuations { get; } = new(name: "sdf.creations.drivers.continuations", unit: "count", workClass: WorkClass.Pacing);
+    /// <summary>Rig terms (swings and slides) evaluated: a term whose driver's weight is zero is skipped and not
+    /// counted.</summary>
+    public static WorkKind TermsEvaluated { get; } = new(name: "sdf.creations.terms.evaluated", unit: "count", workClass: WorkClass.Pacing);
+    /// <summary>Effector solves run: an effector whose applied weight is zero or which resolved no target is not
+    /// counted.</summary>
+    public static WorkKind EffectorSolves { get; } = new(name: "sdf.creations.effectors.solves", unit: "count", workClass: WorkClass.Pacing);
     /// <summary>Local static geometry variants emitted or replayed during a visual program build.</summary>
     public static WorkKind StaticTemplates { get; } = new(name: "sdf.creations.static.templates", unit: "count", workClass: WorkClass.Pacing);
     /// <summary>Retained static occurrences published during a visual program build.</summary>
     public static WorkKind StaticCopies { get; } = new(name: "sdf.creations.static.copies", unit: "count", workClass: WorkClass.Pacing);
     /// <summary>Process totals; read twice to measure a window. Posed, retained and rate-held partition visited registrations;
     /// the bodies and placements among the posed and held count in <see cref="Puck.SdfVm.SdfUpdateRateCounts"/>.</summary>
-    public static WorkCounterSet ProcessWork { get; } = new(name: "sdf.creations", kinds: [Visited, Posed, Retained, RateHeld, SlotsPosed, SlotsRetained, DriverInitializations, DriverEvaluations, DriverIntegrations, DriverPhaseChanges, DriverContinuations, StaticTemplates, StaticCopies, Packs]);
+    public static WorkCounterSet ProcessWork { get; } = new(name: "sdf.creations", kinds: [Visited, Posed, Retained, RateHeld, SlotsPosed, SlotsRetained, DriverInitializations, DriverEvaluations, DriverIntegrations, DriverPhaseChanges, DriverContinuations, TermsEvaluated, EffectorSolves, StaticTemplates, StaticCopies, Packs]);
 }

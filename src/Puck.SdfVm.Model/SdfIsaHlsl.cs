@@ -338,6 +338,7 @@ public static class SdfIsaHlsl {
         declarations.Count(name: "SDF_MAX_DISPATCH_GROUPS", value: checked((int)GpuRegion.CopyMaxGroupsPerDimension));
         declarations.Count(name: "SDF_SCREEN_EMISSION_EDGE", value: SdfScreenEmission.Edge);
         declarations.Tuning(name: "SDF_LIGHT_MINIMUM_DISTANCE", value: SdfPhotometry.MinimumDistance);
+        declarations.Real(name: "SDF_LIGHT_OCCLUDER_REACH", value: SdfLightSelection.OccluderReach);
         declarations.Tuning(name: "SDF_LUMINANCE_CEILING", value: SdfPhotometry.LuminanceCeiling);
         declarations.Real(name: "SDF_WINDOW_ADAPTATION", value: SdfPhotometry.WindowAdaptation);
         declarations.Tuning(name: "SDF_LOCAL_ADAPTATION_RANGE", value: SdfExposure.LocalRange);

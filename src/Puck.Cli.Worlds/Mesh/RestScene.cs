@@ -181,7 +181,7 @@ public sealed class RestScene {
             var prototype = ((WorldLookSource.Creation)look.Source).PrototypeId.Value;
 
             if (definition.Creations.FirstOrDefault(predicate: creation => string.Equals(a: creation.Id, b: prototype, comparisonType: StringComparison.Ordinal)) is not { } creation) { continue; }
-            bodies.Add(item: new RestBody(BodyIndex: entry.Index, Creation: creation, Origin: entry.Position, RootSlot: root, Scale: look.Scale, SlotCount: slots) { ShapeSlots = new CreationMotionPlan(creation.EngineDocument, look.Motion.PartDynamics).ShapeSlots });
+            bodies.Add(item: new RestBody(BodyIndex: entry.Index, Creation: creation, Origin: entry.Position, RootSlot: root, Scale: look.Scale, SlotCount: slots) { ShapeSlots = new CreationMotionPlan(rig: creation.Rig.Follow(partDynamics: look.Motion.PartDynamics)).ShapeSlots });
         }
 
         return new RestScene(bodies: bodies, picks: picks, program: dresser.Program!, transforms: dresser.Transforms, copies: captured!.MeshInstances);
