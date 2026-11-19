@@ -9,10 +9,13 @@ namespace Puck.World.Authoring;
 /// or a creature: the probe direction is body-relative and the field answers whatever geometry is there, so a hand
 /// reaching for a wall, a foot for ground, and a tarsus for a ceiling are the same three numbers.
 /// </summary>
-/// <param name="Kind">One of <see cref="KindSurface"/>, <see cref="KindBody"/>, or <see cref="KindState"/>.</param>
+/// <param name="Kind">One of <see cref="KindSurface"/>, <see cref="KindBody"/>, <see cref="KindState"/> or
+/// <see cref="KindShape"/>.</param>
 /// <param name="Direction"><see cref="KindSurface"/>: the probe direction in the creation's author frame (see
 /// <see cref="CreationFrame"/>), so it turns with the body — <c>[0, -1, 0]</c> is "below the body", which on a wall-held
-/// body points at the wall's own down. Normalized at canonicalization; zero names no direction and is refused.</param>
+/// body points at the wall's own down. <see cref="KindShape"/> (optional): the way the tip approaches the point, carried
+/// by <see cref="Shape"/>'s motion; its reverse is the normal an effector's align turns the tip onto. Normalized at
+/// canonicalization; zero names no direction and is refused.</param>
 /// <param name="Reach"><see cref="KindSurface"/>: how far along <see cref="Direction"/> the probe searches, in creation
 /// units: world units at the body's scale of one, and multiplied by its scale, as its shapes are. Beyond
 /// <see cref="MaxReach"/>, or at zero or less, is refused. A probe that finds nothing eases the correction out rather
@@ -20,12 +23,23 @@ namespace Puck.World.Authoring;
 /// <param name="Standoff"><see cref="KindSurface"/>: how far off the hit surface, along its normal, the tip is placed,
 /// in creation units as <paramref name="Reach"/> is (null = 0 — the tip lands on the surface). The thickness of a
 /// boot's sole or the gap a claw keeps.</param>
-/// <param name="Index"><see cref="KindBody"/>: the population entity index whose root pose is the target.</param>
-/// <param name="Offset"><see cref="KindBody"/>: the offset from that body's root, in the creation's author frame
-/// (null = its root exactly).</param>
+/// <param name="Index"><see cref="KindBody"/>: the population entity index whose pose is the target, fixed in the
+/// document. A body target names this or <paramref name="Reference"/>, never both.</param>
+/// <param name="Offset"><see cref="KindBody"/>: the offset from that body's root (or its <see cref="Part"/>), in the
+/// creation's author frame, riding the target's attitude (null = the point exactly). <see cref="KindShape"/>: a point
+/// in the creation at rest, author frame, that rides <see cref="Shape"/>'s motion (null = the shape's own
+/// origin).</param>
 /// <param name="Reference"><see cref="KindState"/>: a <c>state.&lt;row&gt;[.&lt;key&gt;]</c> reference to a text cell
 /// spelling a world-space <c>[x, y, z]</c>, read at the frame's tick — a target a rule, a console write, or another
-/// system publishes. The containing world refuses a row it does not declare.</param>
+/// system publishes. <see cref="KindBody"/>: a reference to a numeric cell holding the target body's population index,
+/// read as stored truth each frame: a whole number naming an active body selects it, and any other value or none
+/// selects none, so a rule clears the target by clearing the cell or writing -1. The containing world refuses a row it
+/// does not declare.</param>
+/// <param name="Shape"><see cref="KindShape"/>: the name of a shape of the same creation the point rides. It may not be
+/// a bone or the tip of the effector's own chain, nor hang from one, and no effector declared later may write it or a
+/// shape it hangs from, so the solve reads the shape's final pose for the frame.</param>
+/// <param name="Part"><see cref="KindBody"/> (optional): a part id the target body's look publishes; the point is that
+/// part's anchor as last drawn, and the body's root when its look publishes no such part.</param>
 public sealed record CreationEffectorTargetDocument(
     string Kind,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] DocumentVector3? Direction = null,
@@ -33,11 +47,16 @@ public sealed record CreationEffectorTargetDocument(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] DocumentScalar? Standoff = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? Index = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] DocumentVector3? Offset = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Reference = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Reference = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Shape = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Part = null
 ) {
-    /// <summary>Another body's root pose, offset by <see cref="Offset"/> — a hand on a carried crate, a mouth on a
-    /// prey body, a tow arm on a hauled kart.</summary>
+    /// <summary>Another body's root or part pose, offset by <see cref="Offset"/> — a hand on a carried crate, a mouth on
+    /// a prey body, a tow arm on a hauled kart, a hand on the shoulder of a body a rule chose.</summary>
     public const string KindBody = "body";
+    /// <summary>A point riding a shape of the reaching creation itself, read in the same frame after every driver and
+    /// every earlier effector: a fingertip on a vent of the instrument the other arm holds, a hand on a hip.</summary>
+    public const string KindShape = "shape";
     /// <summary>A world-space point published in a state cell.</summary>
     public const string KindState = "state";
     /// <summary>The field surface the probe finds along <see cref="Direction"/> within <see cref="Reach"/>.</summary>
@@ -53,7 +72,7 @@ public sealed record CreationEffectorTargetDocument(
 
     /// <summary>Returns whether a target kind name is one this engine resolves.</summary>
     /// <param name="kind">The kind name.</param>
-    public static bool IsKind(string? kind) => (kind is (KindSurface or KindBody or KindState));
+    public static bool IsKind(string? kind) => (kind is (KindSurface or KindBody or KindState or KindShape));
 }
 /// <summary>
 /// The contact latch: while the named driver's phase is inside <see cref="Window"/>, the effector's world target is
@@ -123,7 +142,7 @@ public sealed record CreationReplantDocument(float Distance, float Seconds, floa
 /// <see cref="CreationDriverDocument.When"/> uses: the correction blends in while every token holds and back out
 /// otherwise, so a released effector returns the limb to its driver-posed pose instead of dropping it.</param>
 /// <param name="Weight">A constant ceiling on the correction, in [0, 1] (null = 1 — full correction). Multiplied by the
-/// gate's eased weight, so a half-weight effector suggests rather than commands.</param>
+/// eased weight and the layer share, so a half-weight effector suggests rather than commands.</param>
 /// <param name="Plant">The contact latch (null = none) — see <see cref="CreationPlantDocument"/>.</param>
 /// <param name="Align">How much of the tip's tilt the contact takes out, in [0, 1] (null = 0: the tip keeps whatever
 /// orientation the solved chain hands it). At 1 the tip's rest orientation is re-aligned to the contact normal: the
@@ -135,6 +154,15 @@ public sealed record CreationReplantDocument(float Distance, float Seconds, floa
 /// swing off the ground. A boot whose sole is flat at rest keeps it flat when the chain bends to reach a target off its
 /// rest offset, and a <see cref="CreationEffectorTargetDocument.Standoff"/> equal to the tip origin's rest height then
 /// puts the whole sole on the surface.</param>
+/// <param name="WeightBy">The level the effector's weight eases toward while its gate holds, from a curve of a driver's
+/// phase clamped to [0, 1], read as a driver's <see cref="CreationDriverDocument.WeightBy"/> reads one (null = 1). The
+/// driver it names owns the effector: the effector's layer share is that driver's share over every shape the effector
+/// writes (<see cref="CreationRig.EffectorShare"/>), and a driver with no <see cref="CreationDriverDocument.Parts"/>
+/// covers what its effectors write. Any declared driver may own one, since every driver advances before any effector
+/// solves.</param>
+/// <param name="BlendInSeconds">The exponential time constant the weight rises over, as a driver's
+/// (null = <see cref="CreationDriverDocument.WeightSeconds"/>; zero is immediate).</param>
+/// <param name="BlendOutSeconds">The exponential time constant the weight falls over, on the same terms.</param>
 public sealed record CreationEffectorDocument(
     string Name,
     IReadOnlyList<string> Chain,
@@ -143,7 +171,10 @@ public sealed record CreationEffectorDocument(
     [property: JsonConverter(typeof(DriverGateJsonConverter)), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<string>? When = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] DocumentScalar? Weight = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] CreationPlantDocument? Plant = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? Align = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? Align = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] CreationDriverCurveDocument? WeightBy = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? BlendInSeconds = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? BlendOutSeconds = null
 ) {
     /// <summary>The cyclic-coordinate-descent sweep CEILING for a chain of three or more bones. The sweep stops early
     /// once the tip is within <c>Puck.World.Client.WorldEffectorSolver.ReachedTolerance</c>, so this bounds the worst

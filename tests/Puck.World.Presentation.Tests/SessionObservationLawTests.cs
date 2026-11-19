@@ -42,6 +42,7 @@ public sealed partial class SessionObservationLawTests {
                 )]
                 : []),
             GrantsRaw = [new WorldGrant(
+                Budget: 64,
                 Capability: WorldCapability.Observe,
                 Exclusive: false,
                 Grantee: Principal.Seat(slot: 0),
@@ -271,6 +272,11 @@ public sealed partial class SessionObservationLawTests {
         Assert.True(fixture.Server.TryAdmitSession(Viewer, out var restored, out _, out reason), reason);
         Assert.Equal(observation.Session, restored);
         Assert.True(observation.CanObserve);
+        // The restore's own delivery cut the withheld stream and closed its proof. A proof covers deliveries, so the
+        // returning principal holds none until its stream is handed the world again, and its next delivery issues a
+        // fresh one.
+        Assert.Null(observation.SceneProof);
+        fixture.Step();
         Assert.True((observation.SceneProof?.SharesAuthority == true));
     }
     [Fact]

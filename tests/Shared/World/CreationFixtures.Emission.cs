@@ -1,3 +1,4 @@
+using System.Numerics;
 
 using Puck.SignedDistance;
 using Puck.World.Authoring;
@@ -6,6 +7,42 @@ using Puck.World.Client;
 namespace Puck.World.Testing;
 
 internal static partial class CreationFixtures {
+    /// <summary>Gives a stationary creation part motion, so its body is pooled rather than rigid
+    /// (<see cref="WorldRigidAssets.IsRigid(WorldPrototype, WorldLook?)"/>): a driver writes nothing on its own, so a frame
+    /// poses a shape a hair off its rest position. A creation that already moves a part is returned as it is.</summary>
+    /// <param name="creation">The canonical prototype.</param>
+    /// <returns>The prototype, or one whose first shape without domain operators (a fold's frame pose is never read) a
+    /// frame moves; a creation of folds alone gains a tiny shape to move.</returns>
+    public static WorldPrototype Articulated(WorldPrototype creation) {
+        if (!WorldRigidAssets.IsRigid(creation)) {
+            return creation;
+        }
+
+        var shapes = (creation.Document.Shapes ?? []);
+        var mover = shapes.FirstOrDefault(predicate: static shape => (shape.Domain is not { Count: > 0 }));
+
+        if (mover is null) {
+            mover = new ShapeDocument(
+                Id: (shapes.Select(selector: static shape => shape.Id).DefaultIfEmpty(defaultValue: -1).Max() + 1),
+                Name: null,
+                Type: SdfSolidPrimitive.Sphere,
+                Position: Vector3.Zero,
+                Rotation: Quaternion.Identity,
+                Scale: new Vector3(value: 1e-3f),
+                Material: 0,
+                Blend: SdfBlendOp.Union,
+                Smooth: 0f,
+                Group: 0
+            );
+            shapes = [.. shapes, mover];
+        }
+
+        return Prototype(id: creation.Id, document: creation.Document with {
+            Drivers = (creation.Document.Drivers is { Count: > 0 } drivers ? drivers : [new CreationDriverDocument(Name: "fixtureClock", Signal: CreationDriverDocument.SignalTime, Cadence: 1f)]),
+            Frames = [.. (creation.Document.Frames ?? []), new FrameDocument(Name: "fixtureStep", Transforms: [new FrameTransformDocument(Id: mover.Id, Position: (mover.Position.Value + new Vector3(x: 1e-3f, y: 0f, z: 0f)), Rotation: mover.Rotation)])],
+            Shapes = shapes,
+        });
+    }
     /// <summary>Emits <paramref name="creation"/> through the animated pool on body 0 at <paramref name="bodyScale"/>,
     /// over the flat code-built document carrying it and one look naming it.</summary>
     /// <param name="creation">The canonical prototype the body wears.</param>
@@ -16,10 +53,8 @@ internal static partial class CreationFixtures {
     public static SdfProgram EmitPool(WorldPrototype creation, float bodyScale, bool articulated = true) {
         // Exercise articulated field emission even when this shape fixture has no moving parts.
         // Rigid template sharing and copy scaling have their own end-to-end tests.
-        if (articulated && WorldRigidAssets.IsRigid(creation)) {
-            creation = Prototype(id: creation.Id, document: creation.Document with {
-                Drivers = [new CreationDriverDocument(Name: "fixtureClock", Signal: CreationDriverDocument.SignalTime, Cadence: 1f)],
-            });
+        if (articulated) {
+            creation = Articulated(creation: creation);
         }
         var definition = (Fixtures.BuildGradientUpDocument(gradientUp: false) with {
             CreationsRaw = [creation],

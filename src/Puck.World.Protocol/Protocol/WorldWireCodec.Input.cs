@@ -72,6 +72,39 @@ public static partial class WorldWireCodec {
         return publications;
     }
 
+    /// <summary>Writes the owner-filtered input answers accompanying a snapshot.</summary>
+    /// <param name="writer">The writer.</param>
+    /// <param name="answers">The answers, at most one an owner.</param>
+    /// <returns><see langword="false"/> when an answer cannot be written within wire bounds.</returns>
+    public static bool TryWriteInputAnswers(WireWriter writer, ReadOnlySpan<WorldInputAnswer> answers) {
+        if (answers.Length > ushort.MaxValue) { return false; }
+        writer.WriteUInt16(value: ((ushort)answers.Length));
+        foreach (var answer in answers) {
+            if (!TryWritePrincipal(writer, answer.Owner)) { return false; }
+            writer.WriteUInt64(value: answer.Epoch); writer.WriteUInt32(value: answer.Sequence); writer.WriteUInt64(value: answer.Tick);
+        }
+        return true;
+    }
+    /// <summary>Reads bounded input answers, checking the count against remaining bytes before allocation.</summary>
+    /// <param name="reader">The reader.</param>
+    /// <returns>The answers.</returns>
+    public static WorldInputAnswer[] ReadInputAnswers(ref WireReader reader) {
+        var count = reader.ReadUInt16();
+
+        if ((((long)count) * 21) > reader.Remaining) { reader.Fail(detail: "input answer count exceeds payload", refusal: WireRefusal.CountOutOfRange); return []; }
+        var answers = ((count == 0) ? [] : new WorldInputAnswer[count]);
+
+        for (var index = 0; ((index < answers.Length) && !reader.Failed); index++) {
+            var owner = ReadPrincipal(ref reader);
+            var epoch = reader.ReadUInt64();
+            var sequence = reader.ReadUInt32();
+            var tick = reader.ReadUInt64();
+
+            answers[index] = new(Epoch: epoch, Owner: owner, Sequence: sequence, Tick: tick);
+        }
+        return answers;
+    }
+
     private const int ContributionBytes = 22;
     private const int InputEventBytes = 39;
     private const int MaximumInputBytes = (((37 + 256) + 48) + (ushort.MaxValue * (ContributionBytes + InputEventBytes)));

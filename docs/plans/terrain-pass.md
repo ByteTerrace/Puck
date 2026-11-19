@@ -154,8 +154,8 @@ corpus.
 
 The standard terrain library gives the debug world its spelling. Its
 `terrainRelief` template gains a `masks` parameter, and a new
-`terrainBasinMask` function returns one mask entry built from the same basin
-rows `terrainBasin` carves. In `worlds/debug/valley.puck` the sector's call
+`terrainCarveMask` function returns one mask entry built from the same basin
+rows `terrainBasin` carves and the cut rows `terrainCut` carves. In `worlds/debug/valley.puck` the sector's call
 becomes `terrainRelief(seed: sector.seed, masks: …)` over
 `filter(valleyBasins, b => b.sector == sector.name)`. The lake's basin and its
 outlet then share one entry, so the bowl and the sill form one region. All of
@@ -165,9 +165,6 @@ the document a hand-written `mask` block would.
 Other places in the debug world that the mask serves, each to be done by its
 own place's lane once the mask lands:
 
-- **The glacier's cradle.** `valleyCuts` in `worlds/debug/glacier-site.puck`
-  carves the trough with a rounded box, and the glacier sits in it. The mask's
-  region is the same box.
 - **The falls.** `fallsProfile` in `worlds/debug/water-site.puck` follows the
   analytic face (`sectorFace`), so the relief moves the rock under the ribbon.
   This is inferred from how the profile is defined; it has not been
@@ -294,7 +291,7 @@ about `-δ + a · w(δ) · n`. If the weight rose faster than the depth, a
 positive relief value could open a hidden pocket under a thin floor. The
 smoothstep's largest ratio of rise to depth, `s(t)/t`, is 9/8, at
 `t = 3/4`. So no pocket can open when `fade ≥ (9/8) · |a| · |outside - inside|`.
-For the lake, 4.5 m is enough. The standard `terrainBasinMask` defaults its
+For the lake, 4.5 m is enough. The standard `terrainCarveMask` defaults its
 fade to twice the relief's amplitude, and the mesh audit flags a sliver if an
 author goes narrower. This is guidance, not a refusal. A region used only as
 a mask (the falls' corridor) does not coincide with a surface, and pockets
@@ -441,7 +438,7 @@ dearest:
   bake's tolerance, on Direct3D 12 and on Vulkan. *Check:* `puck mesh audit`
   against the kernel bake, both backends (a GPU leg).
 - **Step C: the exhibit and the gallery.** The lake's mask is authored
-  (`terrainBasinMask` in `worlds/standard/terrain.puck`, the sector's call in
+  (`terrainCarveMask` in `worlds/standard/terrain.puck`, the sector's call in
   `worlds/debug/valley.puck`), and the gallery's RELIEF MASK exhibit
   (`shape-noise-mask` in `worlds/debug/shapes.puck`) stands before NOISE: a
   relieved slab with a bowl pressed into it, under one mask over the bowl and

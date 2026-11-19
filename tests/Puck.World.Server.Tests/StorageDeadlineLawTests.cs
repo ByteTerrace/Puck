@@ -12,7 +12,7 @@ namespace Puck.World.Server.Tests;
 /// name for a failed read.</summary>
 public sealed class StorageDeadlineLawTests {
     private static readonly Guid Owner = Guid.Parse(input: "0a1b2c3d-0000-4000-8000-000000000001");
-    private static readonly ObjectStorageTarget Target = new DirectoryObjectStorageTarget(rootPath: "fake-store");
+    private static readonly ObjectStorageTarget Target = WorldAuthorityBlobStore.DirectoryTarget(rootPath: "fake-store");
     private static readonly SafeName World = SafeName.Parse(candidate: "amber");
 
     private static CancellationToken TestToken => TestContext.Current.CancellationToken;

@@ -230,7 +230,10 @@ public sealed partial class WorldCreationInstances {
             textLayouts: textLayouts
         );
         var anyPartFollows = (Array.IndexOf(array: live.PartFollows, value: true) >= 0);
-        var rootRadius = ((anyPartFollows ? (2f * reach) : reach) + GroupBoundMargin);
+        // A bound about the root holds every point the rig can carry a part to (CreationRig.Reach: a swing about a distant
+        // pivot, a slide, a frame's pose), which the rest geometry's reach alone does not.
+        var rigReach = ((anyPartFollows || !float.IsFinite(f: live.Rig.Reach)) ? 0f : live.Rig.Reach);
+        var rootRadius = ((anyPartFollows ? (2f * reach) : MathF.Max(x: reach, y: rigReach)) + GroupBoundMargin);
         // Engraved text carves the shapes, so it couples them into one scoped instance; embossed text only adds relief, so
         // the shapes keep their own instances and the text bakes as its own detailed group on a slot of its own (TextSlot),
         // as the static stamper bakes a text group apart: inside a group of shapes its relief falls below their lattice.

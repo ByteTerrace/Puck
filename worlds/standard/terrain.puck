@@ -49,6 +49,20 @@ template terrainBasin(label, lateral, radial, y, radii) {
   }
 }
 
+// A trough or channel cut into the masses composed before it: a box of half-extents `half` at `position` (sector frame),
+// turned by the quaternion `rotation` and rounded by `rounding`, its cut face wearing `material`. A cut is a row
+// { label, position, half, rotation, rounding, material }, the same row `terrainCarveMask` reads for its region.
+template terrainCut(cut) {
+  shape Box $"{cut.label}" {
+    blend: Subtraction
+    material: cut.material
+    rounding: cut.rounding
+    position: cut.position
+    scale: cut.half
+    rotation: cut.rotation
+  }
+}
+
 // The floor plane's cut through a sector: everything composed before it is intersected with the slab from `below` under
 // the floor plane up to `top`, so the masses' buried halves neither bake nor size the sector's lattice. A detail shape:
 // contact keeps colliding each mass whole, and nothing stands under the floor.
@@ -63,8 +77,8 @@ template terrainFloorCut(top, below = 10, reach = 2000) {
 }
 
 // The fBm relief over a sector's union: amplitude in metres, frequency in cells per metre. Six octaves of lacunarity 2
-// put the finest at 32 times the base frequency. `masks` lists the regions the relief stays out of (terrainBasinMask),
-// so a bowl, a pad or a path stands where its shapes put it.
+// put the finest at 32 times the base frequency. `masks` lists the regions the relief stays out of (terrainCarveMask),
+// so a bowl, a trough, a pad or a path stands where its shapes put it.
 template terrainRelief(seed, amplitude = 4, frequency = 0.02, octaves = 6, masks = []) {
   noise {
     frequency: frequency
@@ -77,19 +91,30 @@ template terrainRelief(seed, amplitude = 4, frequency = 0.02, octaves = 6, masks
   }
 }
 
-// One relief mask over the bowls terrainBasin carves, one region for every row, so a basin and the outlet that cuts its
-// lip form one region and the relief is exactly zero on and under their floors. `fade` is the band, in metres, over which
-// the relief returns past the bowls' surfaces; at least 9/8 of the relief's amplitude keeps a hidden pocket from opening
-// under a thin carved floor, and the default is twice the standard relief's 4 m.
-function terrainBasinMask(basins, fade = 8) = {
+// One relief mask over everything a sector carves, one region for every row: the bowls terrainBasin carves and the cuts
+// terrainCut carves, so a basin and the outlet through its lip, or a trough and the grooves in its floor, form one region
+// and the relief is exactly zero on and under their floors and walls. `fade` is the band, in metres, over which the relief
+// returns past the carves' surfaces; at least 9/8 of the relief's amplitude keeps a hidden pocket from opening under a thin
+// carved floor, and the default is twice the standard relief's 4 m.
+function terrainCarveMask(basins, cuts = [], fade = 8) = {
   fade: fade
-  shapes: map(basins, basin => {
-    type: "Superellipsoid"
-    name: basin.label
-    exponent: 2
-    position [basin.lateral, basin.y, basin.radial]
-    scale: basin.radii
-  })
+  shapes: concat(
+    map(basins, basin => {
+      type: "Superellipsoid"
+      name: basin.label
+      exponent: 2
+      position [basin.lateral, basin.y, basin.radial]
+      scale: basin.radii
+    }),
+    map(cuts, cut => {
+      type: "Box"
+      name: cut.label
+      rounding: cut.rounding
+      position: cut.position
+      scale: cut.half
+      rotation: cut.rotation
+    })
+  )
 }
 
 // The terrain shading program: up to four bands over a material's own response, each a colour, roughness and specular

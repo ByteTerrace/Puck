@@ -44,7 +44,8 @@ public sealed class SeatModeControlAuthorityLawTests {
             Grantee: actor,
             Capability: WorldCapability.Drive,
             Subject: GrantSubject.Body(index: TargetBody),
-            Exclusive: false
+            Exclusive: false,
+            Budget: 4
         );
 
         // Both bodies must be live: a local seat's body is minted on Join, not at construction, and the observation

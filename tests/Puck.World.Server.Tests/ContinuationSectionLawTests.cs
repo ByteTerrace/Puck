@@ -2,6 +2,7 @@ using System.Reflection;
 using Puck.Commands;
 using Puck.Maths;
 using Puck.Networking;
+using Puck.Physics.Motion;
 using Puck.World.Protocol;
 using Xunit;
 
@@ -50,9 +51,32 @@ public sealed class ContinuationSectionLawTests {
         : field.Name
     );
 
+    // A timed move writes its fields only while it is active (it has a duration), so its leaves are varied against an
+    // active move; being active at all is its own leaf.
+    private static List<(string Path, object? Baseline, object? Mutated)> TimedMoveVariants() {
+        var active = new WorldTimedBodyMove(
+            Motion: new FixedTimedMove(Displacement: FixedVector3.UnitX, Yaw: FixedQ4816.One, DurationTicks: 10UL, Curve: BodyMotionCurve.Linear),
+            StartYaw: FixedQ4816.One,
+            ElapsedTicks: 1UL
+        );
+
+        return [
+            (".active", default(WorldTimedBodyMove), active),
+            (".Motion.Displacement", active, active with { Motion = active.Motion with { Displacement = FixedVector3.UnitY } }),
+            (".Motion.Yaw", active, active with { Motion = active.Motion with { Yaw = FixedQ4816.Zero } }),
+            (".Motion.DurationTicks", active, active with { Motion = active.Motion with { DurationTicks = 11UL } }),
+            (".Motion.Curve", active, active with { Motion = active.Motion with { Curve = BodyMotionCurve.Smoothstep } }),
+            (".StartYaw", active, active with { StartYaw = FixedQ4816.Zero }),
+            (".ElapsedTicks", active, active with { ElapsedTicks = 2UL }),
+        ];
+    }
+
     // Every way a value of the type can differ from its unset value in one leaf: the path to the leaf, the value
     // without the difference and the value with it.
     private static List<(string Path, object? Baseline, object? Mutated)> Variants(Type type) {
+        if (type == typeof(WorldTimedBodyMove)) {
+            return TimedMoveVariants();
+        }
         if (Samples.TryGetValue(key: type, value: out var sample)) {
             return [(string.Empty, sample.Baseline, sample.Mutated)];
         }

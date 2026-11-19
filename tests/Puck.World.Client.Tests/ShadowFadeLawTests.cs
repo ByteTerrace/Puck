@@ -100,7 +100,7 @@ public sealed class ShadowFadeLawTests {
     public void AStaleQueuedTargetNeverStartsAndASelectedAlwaysLightNeverFadesOut() {
         var allocator = new WorldShadowAllocator();
         var policy = Policy with { Slots = 3 };
-        var pinned = Candidate(luminance: 0, mode: WorldShadowMode.Always, name: "pinned", ordinal: 7);
+        var pinned = Candidate(luminance: 1, mode: WorldShadowMode.Always, name: "pinned", ordinal: 7);
 
         Advance(allocator, 10, [pinned, Candidate("a", 0, 4), Candidate("c", 2, 3)], policy);
         Advance(allocator, 20, [pinned, Candidate("b", 1, 4), Candidate("d", 3, 3)], policy);

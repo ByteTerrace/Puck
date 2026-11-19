@@ -1763,6 +1763,14 @@ export type CreationDocument = {
      * How the driver layers: ModeAdd (null) adds its motion to the drivers before it; ModeReplace also scales every driver declared before it by one minus its weight on the shapes its mask covers, so a stance takes the arms from the gait without the gait knowing (Share).
      */
     mode?: string | null;
+    /**
+     * The name of a world input channel a state-cell signal may be guessed from (null = none). On a client that presents for exactly one seat, which controls the body, while one of that seat's own edges on the channel has been taken in by a tick and its answer has not yet been presented, and for no longer than LeadSeconds, the phase follows the seat's own level on the channel in place of the cell. It changes only that seat's picture, never what the authority computes. The channel must be a button or an axis.
+     */
+    lead?: string | null;
+    /**
+     * How long, in seconds, an unanswered guess may show (null = DefaultLeadSeconds). Finite and positive; meaningful only with Lead.
+     */
+    leadSeconds?: number | null;
   } | null)[] | null;
   /**
    * The inverse-kinematics effectors (null = none), any number — see CreationEffectorDocument. Each corrects a chain of this creation's own shapes so its tip reaches a target, composing after the drivers and the parent chain. Presentation-only, like the drivers.
@@ -1785,11 +1793,11 @@ export type CreationDocument = {
      */
     target: {
       /**
-       * One of KindSurface, KindBody, or KindState.
+       * One of KindSurface, KindBody, KindState or KindShape.
        */
       kind: string;
       /**
-       * KindSurface: the probe direction in the creation's author frame (see CreationFrame), so it turns with the body — [0, -1, 0] is "below the body", which on a wall-held body points at the wall's own down. Normalized at canonicalization; zero names no direction and is refused.
+       * KindSurface: the probe direction in the creation's author frame (see CreationFrame), so it turns with the body — [0, -1, 0] is "below the body", which on a wall-held body points at the wall's own down. KindShape (optional): the way the tip approaches the point, carried by Shape's motion; its reverse is the normal an effector's align turns the tip onto. Normalized at canonicalization; zero names no direction and is refused.
        */
       direction?: unknown;
       /**
@@ -1801,24 +1809,32 @@ export type CreationDocument = {
        */
       standoff?: unknown;
       /**
-       * KindBody: the population entity index whose root pose is the target.
+       * KindBody: the population entity index whose pose is the target, fixed in the document. A body target names this or Reference, never both.
        */
       index?: number | null;
       /**
-       * KindBody: the offset from that body's root, in the creation's author frame (null = its root exactly).
+       * KindBody: the offset from that body's root (or its Part), in the creation's author frame, riding the target's attitude (null = the point exactly). KindShape: a point in the creation at rest, author frame, that rides Shape's motion (null = the shape's own origin).
        */
       offset?: unknown;
       /**
-       * KindState: a state.<row>[.<key>] reference to a text cell spelling a world-space [x, y, z], read at the frame's tick — a target a rule, a console write, or another system publishes. The containing world refuses a row it does not declare.
+       * KindState: a state.<row>[.<key>] reference to a text cell spelling a world-space [x, y, z], read at the frame's tick — a target a rule, a console write, or another system publishes. KindBody: a reference to a numeric cell holding the target body's population index, read as stored truth each frame: a whole number naming an active body selects it, and any other value or none selects none, so a rule clears the target by clearing the cell or writing -1. The containing world refuses a row it does not declare.
        */
       reference?: string | null;
+      /**
+       * KindShape: the name of a shape of the same creation the point rides. It may not be a bone or the tip of the effector's own chain, nor hang from one, and no effector declared later may write it or a shape it hangs from, so the solve reads the shape's final pose for the frame.
+       */
+      shape?: string | null;
+      /**
+       * KindBody (optional): a part id the target body's look publishes; the point is that part's anchor as last drawn, and the body's root when its look publishes no such part.
+       */
+      part?: string | null;
     };
     /**
      * The gate, in the same vocabulary and with the same easing a driver's When uses: the correction blends in while every token holds and back out otherwise, so a released effector returns the limb to its driver-posed pose instead of dropping it.
      */
     when?: (string | null)[] | null;
     /**
-     * A constant ceiling on the correction, in [0, 1] (null = 1 — full correction). Multiplied by the gate's eased weight, so a half-weight effector suggests rather than commands.
+     * A constant ceiling on the correction, in [0, 1] (null = 1 — full correction). Multiplied by the eased weight and the layer share, so a half-weight effector suggests rather than commands.
      */
     weight?: unknown;
     /**
@@ -1859,6 +1875,18 @@ export type CreationDocument = {
      * How much of the tip's tilt the contact takes out, in [0, 1] (null = 0: the tip keeps whatever orientation the solved chain hands it). At 1 the tip's rest orientation is re-aligned to the contact normal: the tip axis that points against the target's probe Direction at rest (creation up for a target that names none) turns onto the surface normal at the target, latched with the plant, or onto world up when the target reports no surface. The turn is the shortest one, about the tip's own origin, so the tip stays on its target and keeps the heading the chain gave it. It is weighted by the eased weight the goal blends by, so a tip a plant releases to its swing (SwingWeight 0) keeps its authored swing off the ground. A boot whose sole is flat at rest keeps it flat when the chain bends to reach a target off its rest offset, and a Standoff equal to the tip origin's rest height then puts the whole sole on the surface.
      */
     align?: number | null;
+    /**
+     * The level the effector's weight eases toward while its gate holds, from a curve of a driver's phase clamped to [0, 1], read as a driver's WeightBy reads one (null = 1). The driver it names owns the effector: the effector's layer share is that driver's share over every shape the effector writes (EffectorShare), and a driver with no Parts covers what its effectors write. Any declared driver may own one, since every driver advances before any effector solves.
+     */
+    weightBy?: ShapeNullable34 | null;
+    /**
+     * The exponential time constant the weight rises over, as a driver's (null = WeightSeconds; zero is immediate).
+     */
+    blendInSeconds?: number | null;
+    /**
+     * The exponential time constant the weight falls over, on the same terms.
+     */
+    blendOutSeconds?: number | null;
   } | null)[] | null;
   /**
    * The bounded participating volumes (null = none), at most MaxVolumes — see VolumeDocument. Each rides the creation root's or a named shape's dynamic slot; a static placement bakes its frame in. Presentation-only: no distance field, no collider.
@@ -1992,23 +2020,23 @@ export type CreationNoiseDocument = {
    */
   masks?: ({
     /**
-     * The region's shapes, at least one: geometry only (type, name, pose, scale, exponent, rounding, chamfer, elongate, a prism's profile and lift), of a type contact admits.
+     * The region's shapes, at least one: geometry only (type, name, pose, scale, exponent, rounding), each a box, a sphere, an ellipsoid, a superellipsoid, a capsule scaled alike in X and Z or a plane (Lower). A relief's masks hold at most MaxRegions shapes in all.
      */
     shapes: (ShapeNullable33 | null)[];
     /**
-     * The band's width, in creation units, above zero.
+     * The band's width, in creation units, at least 2⁻¹²; snapped to a multiple of 2⁻¹² (SdfReliefBand).
      */
     fade: number;
     /**
-     * Where the band starts, as a distance in creation units from the region's surface; negative starts it inside the region (null = 0).
+     * Where the band starts, as a distance in creation units from the region's surface; negative starts it inside the region (null = 0). Snapped to a multiple of 2⁻¹²; the start, the fade and their sum lie within Limit units.
      */
     start?: number | null;
     /**
-     * The weight on and inside the region, in [0, 1] (null = 0).
+     * The weight on and inside the region, in [0, 1] (null = 0), snapped to a multiple of 2⁻¹⁶.
      */
     inside?: number | null;
     /**
-     * The weight past the band, in [0, 1] (null = 1).
+     * The weight past the band, in [0, 1] (null = 1), snapped to a multiple of 2⁻¹⁶.
      */
     outside?: number | null;
   } | null)[] | null;

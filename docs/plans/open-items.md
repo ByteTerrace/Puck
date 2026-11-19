@@ -1995,8 +1995,9 @@ intent is in its guide.
 
 - [high] The caldera water fails its reference
   ([caldera pack](../game/art/caldera-water-pack/README.md), intent in
-  `worlds/debug/debug.md#water`). The glacier (`glacierMass`) is one swept
-  tongue and calved blocks that read as a plain white sausage from the rim; the falls are a flat translucent
+  `worlds/debug/debug.md#water`). The glacier (`glacierMass`) is rebuilt as
+  one convex tongue of arc-bent slabs under snow lenses with layered slots, a
+  lobed scalloped toe and a melt channel, and awaits its look critic; the falls are a flat translucent
   slab with visible tile seams and an opaque white impact disc; the pool is
   flat cyan with a hard rectangular edge; the river runs in a concrete trough.
   Rebuild each to its panel, building the rendering features the panels need
@@ -4006,9 +4007,12 @@ reversal brake, then a sitting.
   through an angle or moves it along an eased path over a duration
   (`BodyMotionOp`, `WorldEffect.PlanarImpulse`).
   [Pose clips, body parts and reach](instrument-play/pose-clips.md) designs
-  the first three, and its steps are the build lane's order; steps 1 to 6 (the
-  compiled rig, its reads, the caps, parts as sets, adding clips, and masks and
-  replacing) are built, so step 7 is next.
+  the first three, and its steps are the build lane's order; steps 1 to 8 (the
+  compiled rig, its reads, the caps, parts as sets, adding clips, masks and
+  replacing, reach and influence, and the guess) are built, so step 9, the
+  Moth's hand, is next. Step 8's headless readings (the press log, one and two
+  seats, a refusing rule, a delayed answer, the hold bypass) wait on a fixture
+  world that binds a channel to a led driver.
 
 - A reversal should brake faster than it accelerates: `ShapeWholeVelocityRow`
   converges at the engage rate whenever the stick is deflected, so a full
