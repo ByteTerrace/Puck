@@ -1321,21 +1321,22 @@ and every memory owner are its steps. This packet holds the defects beside it.
   arriving residency, which is right once windows share. Still to read: the
   residency count, the device pool's held and peak bytes, and the cascade
   families at the hero spawn and in the painting wing.
-- [high] On Direct3D 12 the debug world's mesh region refuses meshes instead of
-  coarsening, so the valley's lake (water, stones, lining), the glacier's ice and
-  the falls do not draw there, while Vulkan draws them. After a settled cold bake
-  on the RTX 4070, `world.residency` on Direct3D 12 read `region-budget=1755015471B
-  region-named=1417497668B region-limit=1286602752B region-refused=398 holes=157
-  detail-bias=0`; on Vulkan `region-limit=1728053248B region-named=1109669796B
-  region-refused=0 detail-bias=1 coarsened=300`. The Direct3D 12 region (mapped,
-  `DirectXGpuMappedBuffer`) stopped growing below its budget and the selector
-  refused placements rather than raising the detail bias
-  (`SdfResidencySelector`, `SdfMeshRegionArena.Clip`). Vulkan's raised bias is
-  not free either: plaque lettering in the gallery drops strokes there ("RO ND
-  CONE", "ELLIPSO D"), which Direct3D 12 draws whole. Find why the mapped
-  region's limit stays under its grant and why refusal wins over the bias; the
-  check is `region-refused=0` and the lake drawn on both backends from the
+- [high] On Direct3D 12 the debug world's mesh region refused meshes instead of
+  coarsening, so the valley's lake, the glacier's ice and the falls did not draw
+  there. The causes are fixed at their source but not yet seen in a windowed run:
+  the bake's budget now never passes the limit the region's grant reserves
+  (`SdfResidencySelector.Budget`, `SdfResidencyGrant.LimitBytes`), a refused mesh
+  presses the detail bias on its own (`SdfMeshPathBake.Retier`), and any
+  residency's pressure raises the one bias, not only the largest one's. The
+  check is a settled Direct3D 12 debug world reading `region-refused=0` with a
+  raised `detail-bias` in `world.residency`, and the lake drawn from the
   `glacier` place.
+- [high] A raised detail bias drops strokes from the gallery's plaque lettering
+  ("RO ND CONE", "ELLIPSO D" on Vulkan at `detail-bias=1`). Once Direct3D 12
+  coarsens too (above), the lettering is at risk there as well. A coarser tier
+  of engraved text should keep every stroke legible: find which tier loses the
+  thin strokes and why tier selection does not hold them; the check is every
+  shape plaque in the gallery reading whole on both backends.
 - [medium] Before sparse external targets are used, retain the exact host-word
   coverage of disjoint writes across remapping. `GpuRegion.StageOwed`
   (`src/Puck.Abstractions/Gpu/Residency/GpuRegion.cs`) re-owes the known prefix;
