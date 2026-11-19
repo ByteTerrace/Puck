@@ -496,7 +496,7 @@ public sealed partial class SdfMeshPathBake {
             return false;
         }
 
-        _ = Begin(group: group);
+        CountStarted(how: Start(group: group));
 
         return true;
     }

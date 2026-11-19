@@ -116,9 +116,15 @@ public sealed partial class SdfMeshPathBake {
 
             group.Priority = MeasureDemand(group, priority: true);
         }
-        // A group baking geometry other groups wait on ranks as the most wanted of them.
+        // A group baking geometry other groups wait on ranks as the most wanted of them: this bake's followers, then the
+        // waiters of any bake holding the library, each of which publishes its own priority for its leader to read.
         foreach (var group in m_groups) {
             if (!group.Done && (group.Leader is { } leader)) { leader.Priority = MathF.Max(x: leader.Priority, y: group.Priority); }
+        }
+        foreach (var group in m_groups) {
+            if (group.Done) { continue; }
+            if (group.Waiter is { } waiter) { waiter.Priority = group.Priority; }
+            if ((group.Share is { HasWaiters: true } share)) { group.Priority = MathF.Max(x: group.Priority, y: Library.MostWanted(share: share)); }
         }
     }
     // Finishes every group waiting on a group that has finished baking the same geometry (Group.Leader): it takes the
@@ -143,23 +149,125 @@ public sealed partial class SdfMeshPathBake {
     }
     // The closure lives here so that Follow's scan of every group allocates none: a lambda capturing the loop variable
     // allocates its closure on entering each iteration, before the skip checks.
-    private void ScheduleFollowed(Group group) => Schedule(group: group, work: () => TakeFollowed(group: group));
-    // Takes the mesh a follower's leader landed, renumbered for the follower's materials; a follower whose mesh the library
-    // no longer holds bakes it itself.
-    private void TakeFollowed(Group group) {
+    private void ScheduleFollowed(Group group) => Schedule(group: group, work: () => TakeLanded(group: group, share: null));
+    // Queues the take of a waiter whose share resolved, on the pool, off the leader's gate; false for a waiter retired since.
+    private bool ScheduleJoined(Group group, SdfMeshBakeShare share) => Schedule(group: group, work: () => TakeLanded(group: group, share: share));
+    // Takes the mesh another group of the group's geometry landed, renumbered for the group's materials, or the empty
+    // result it found: a follower's leader in this bake (no share), or the leader of the share the group waits on. A group
+    // whose leader left nothing in the library (it retired or failed, or the library let its mesh go) starts its geometry
+    // again (Start), waiting on another group that started it meanwhile or leading it itself. On the pool.
+    private void TakeLanded(Group group, SdfMeshBakeShare? share) {
         var taken = Library.TryTake(geometry: group.Sealed, identity: group.Identity, materials: group.MaterialOrder, mesh: out var mesh);
 
         lock (m_gate) {
+            // A waiter that already took, deserted or retired is no longer this share's to finish.
+            if (!m_groups.Contains(item: group) || ((share is not null) && (!ReferenceEquals(objA: group.Joined, objB: share) || group.Done || group.Retired))) { mesh?.Release(); return; }
             group.Contouring = false;
-            if (!m_groups.Contains(item: group)) { mesh?.Release(); return; }
-            if (!taken) {
-                _ = Begin(group: group);
+            group.Joined = null;
+            group.Waiter = null;
+
+            var empty = (!taken && Library.HoldsEmpty(geometry: group.Sealed, identity: group.Identity));
+
+            if (taken || empty) {
+                if (empty) { group.FoundNoSurface(how: ", as another group baked it"); }
+                group.Done = true;
+                group.Stored = taken;
+                Draw(group: group, mesh: mesh);
+                if (share is not null) {
+                    Library.Shares.Count(kind: SdfMeshBakeShare.Landed);
+                    m_accounts.JoinedLanded++;
+                    if (taken) {
+                        Library.Shares.Add(amount: share.Samples, kind: SdfMeshBakeShare.SamplesSaved);
+                        m_accounts.SamplesSaved += share.Samples;
+                    }
+                }
+                Finish();
                 return;
             }
-            group.Done = true;
-            group.Stored = true;
-            Draw(group: group, mesh: mesh);
-            Finish();
+            if (share is not null) {
+                Library.Shares.Count(kind: SdfMeshBakeShare.Abandoned);
+                m_accounts.JoinedAbandoned++;
+            }
+            CountStarted(how: Start(group: group));
+        }
+    }
+    // How a group the library held no mesh of began (Start): a bake, a load from the store, or a wait on another group's
+    // bake of its geometry through the library (SdfMeshLibrary.Share).
+    private enum Started : byte { Baking, Loading, Joined }
+
+    // The groups waiting on a share another group leads (Group.Joined), which DesertStalled watches; an entry no longer
+    // waiting is dropped there. Under the gate.
+    private readonly List<Group> m_joined = [];
+    // The takes asked of the bake with its program bound (TryTake), which a waiter on its share reads to tell a bake its
+    // residency's frames drive from one no frame does.
+    private long m_asks;
+
+    // The takes this bake's waiter sees asked of itself, and the seconds that span at least, while its leader's bake is
+    // asked none, before it deserts that leader: a few frames' pumps, past a hitch that holds every bake alike.
+    private const int StallAsks = 64;
+    private const double StallSeconds = 1.0;
+
+    internal long Asks => Interlocked.Read(location: ref m_asks);
+
+    // Begins a group the library holds no mesh of: it waits on the bake of its geometry another group of any bake holding
+    // the library already runs, or begins that bake itself (Begin) and names it in the library for later groups to wait
+    // on. The one door a group starts its geometry by. Under the gate.
+    private Started Start(Group group) {
+        group.Identity = Identity.Value;
+
+        var share = Library.Share(bake: this, geometry: group.Sealed, group: group, identity: group.Identity, landed: out var landed, waiter: out var waiter);
+
+        if (waiter is null) {
+            group.Share = share;
+            return (Begin(group: group) ? Started.Loading : Started.Baking);
+        }
+        group.Joined = share;
+        group.Waiter = waiter;
+        waiter.Priority = group.Priority;
+        group.LeaderAsks = share.Bake.Asks;
+        group.StillAsks = Asks;
+        group.StillSince = Stopwatch.GetTimestamp();
+        m_joined.Add(item: group);
+        Library.Shares.Count(kind: SdfMeshBakeShare.Joined);
+        // A share that landed between the group's library miss and its start has no leader to hand it back.
+        if (landed) { _ = ScheduleJoined(group: group, share: share); }
+        return Started.Joined;
+    }
+    // Counts a start outside a restart's, resample's or promotion's own counts (PlaceCounts) into the bake's done line.
+    private void CountStarted(Started how) {
+        if (how == Started.Joined) { m_accounts.Joined++; }
+    }
+    // Starts its geometry itself each waiter whose leader's bake has been asked no take while this bake was asked
+    // StallAsks takes over StallSeconds: the leader's residency renders no view, so its background work never binds and
+    // its bake never lands, and a waiter never waits on a bake no frame drives. Deserting closes the share to later
+    // groups, which then wait on the deserter. Under the gate, on the frame's thread, from a take this bake was asked.
+    private void DesertStalled() {
+        var asks = Asks;
+        var now = Stopwatch.GetTimestamp();
+
+        for (var at = (m_joined.Count - 1); (at >= 0); at--) {
+            var group = m_joined[at];
+
+            if ((group.Joined is not { } share) || (group.Waiter is not { } waiter) || group.Done || group.Retired) {
+                m_joined.RemoveAt(index: at);
+                continue;
+            }
+            var leaderAsks = share.Bake.Asks;
+
+            if (leaderAsks != group.LeaderAsks) {
+                group.LeaderAsks = leaderAsks;
+                group.StillAsks = asks;
+                group.StillSince = now;
+                continue;
+            }
+            if (((asks - group.StillAsks) < StallAsks) || (Stopwatch.GetElapsedTime(startingTimestamp: group.StillSince, endingTimestamp: now).TotalSeconds < StallSeconds)) { continue; }
+            m_joined.RemoveAt(index: at);
+            Library.Leave(desert: true, share: share, waiter: waiter);
+            group.Joined = null;
+            group.Waiter = null;
+            Library.Shares.Count(kind: SdfMeshBakeShare.Stalled);
+            m_accounts.JoinedStalled++;
+            CountStarted(how: Start(group: group));
         }
     }
     // Queues a group's work off the frame's thread, taken by priority (TakeWork) or, urgent, before any other in the
