@@ -83,6 +83,15 @@ internal static class SdfMeshBakeReport {
         public long WaitingGroups;
         public long WorkingGroups;
         public long CutEdges;
+        /// <summary>The groups that waited through the library on another group's bake of their geometry
+        /// (<see cref="SdfMeshBakeShare"/>); of them, those that took its mesh or empty result, those whose leader left
+        /// nothing to take and started again, and those that deserted a leader no frame drives; and the samples the
+        /// leaders of those that took a mesh dispatched for it.</summary>
+        public long Joined;
+        public long JoinedLanded;
+        public long JoinedAbandoned;
+        public long JoinedStalled;
+        public long SamplesSaved;
 
         /// <summary>Clears every counter for a new bake.</summary>
         public void Clear() {
@@ -92,6 +101,7 @@ internal static class SdfMeshBakeReport {
             WaitingGroups = FlyingGroups = WorkingGroups = 0;
             FrameGateWaitMax = FrameGateWaitTotal = FrameGateWaitsSlow = 0;
             Dispatches = Samples = Taps = Discarded = RefinedCells = CutEdges = Softened = Merged = Loaded = 0;
+            Joined = JoinedLanded = JoinedAbandoned = JoinedStalled = SamplesSaved = 0;
         }
         /// <summary>Counts one wait for the bake's gate on the frame thread.</summary>
         /// <param name="waited">The wait, in Stopwatch ticks.</param>
@@ -118,7 +128,7 @@ internal static class SdfMeshBakeReport {
             var takes = Math.Max(val1: 1L, val2: Takes);
             var kinds = string.Join(separator: ",", values: Enumerable.Range(start: 0, count: KindNames.Length).Select(selector: kind => string.Create(provider: CultureInfo.InvariantCulture, handler: $"{KindNames[kind]}:{KindSamples[kind]}")));
 
-            return string.Create(provider: CultureInfo.InvariantCulture, handler: $" kinds=[{kinds}] cpu=[{stages}] batches={Batches} takes={Takes} idle={IdleTakes} stop=[taps:{StopTaps},samples:{StopSamples},batch:{StopBatch},drained:{StopDrained}] per-take=[waiting:{(WaitingGroups / ((double)takes)):0.0},flying:{(FlyingGroups / ((double)takes)):0.0},working:{(WorkingGroups / ((double)takes)):0.0}]{dispatches?.Invoke()} frame-gate=[max:{((FrameGateWaitMax * 1000d) / Stopwatch.Frequency):0.00}ms,total:{((FrameGateWaitTotal * 1000d) / Stopwatch.Frequency):0.0}ms,over-1ms:{FrameGateWaitsSlow}]");
+            return string.Create(provider: CultureInfo.InvariantCulture, handler: $" joined=[groups:{Joined},landed:{JoinedLanded},abandoned:{JoinedAbandoned},stalled:{JoinedStalled},samples-saved:{SamplesSaved}] kinds=[{kinds}] cpu=[{stages}] batches={Batches} takes={Takes} idle={IdleTakes} stop=[taps:{StopTaps},samples:{StopSamples},batch:{StopBatch},drained:{StopDrained}] per-take=[waiting:{(WaitingGroups / ((double)takes)):0.0},flying:{(FlyingGroups / ((double)takes)):0.0},working:{(WorkingGroups / ((double)takes)):0.0}]{dispatches?.Invoke()} frame-gate=[max:{((FrameGateWaitMax * 1000d) / Stopwatch.Frequency):0.00}ms,total:{((FrameGateWaitTotal * 1000d) / Stopwatch.Frequency):0.0}ms,over-1ms:{FrameGateWaitsSlow}]");
         }
     }
 
@@ -134,14 +144,16 @@ internal static class SdfMeshBakeReport {
     /// <param name="cause">What began the work: program, resample or promote.</param>
     /// <param name="baking">The groups begun as a bake.</param>
     /// <param name="loading">The groups begun as a load from the store.</param>
-    /// <param name="shared">The groups waiting on another group of their geometry.</param>
+    /// <param name="shared">The groups waiting on another group of their geometry the same restart began.</param>
+    /// <param name="joined">The groups waiting through the library on a bake of their geometry another group already
+    /// runs, in this residency or another (<see cref="SdfMeshBakeShare"/>).</param>
     /// <param name="named">The first groups begun, at most <see cref="NamedMost"/>.</param>
     /// <param name="disk">The library's store, or <see langword="null"/>.</param>
     /// <param name="identity">The identity the bake began under.</param>
-    public static void Start(string residency, string residencyId, int groups, int dynamic, int instances, string cause, int baking, int loading, int shared, IReadOnlyList<Begun>? named, SdfMeshStore? disk, SdfMeshBakeIdentity identity) {
+    public static void Start(string residency, string residencyId, int groups, int dynamic, int instances, string cause, int baking, int loading, int shared, int joined, IReadOnlyList<Begun>? named, SdfMeshStore? disk, SdfMeshBakeIdentity identity) {
         var names = string.Join(separator: ',', values: (named ?? []).Select(selector: static group => string.Create(provider: CultureInfo.InvariantCulture, handler: $"{group.Selector}/{(group.Dynamic ? $"slot{group.Place}" : $"union{group.Place}")}/{(group.Loading ? "load" : "bake")}")));
 
-        Console.Error.WriteLine(value: $"[sdf.mesh-bake] start residency={residency} residency-id={residencyId} groups={groups} baking={baking} loading={loading} shared={shared} dynamic={dynamic} instances={instances} cause={cause} begun=[{names}{(((baking + loading) > NamedMost) ? ",…" : "")}]");
+        Console.Error.WriteLine(value: $"[sdf.mesh-bake] start residency={residency} residency-id={residencyId} groups={groups} baking={baking} loading={loading} shared={shared} joined={joined} dynamic={dynamic} instances={instances} cause={cause} begun=[{names}{(((baking + loading) > NamedMost) ? ",…" : "")}]");
         // The store's account reads its directory, so it runs off the frame's thread.
         if (disk is not null) {
             _ = Task.Run(action: () => {

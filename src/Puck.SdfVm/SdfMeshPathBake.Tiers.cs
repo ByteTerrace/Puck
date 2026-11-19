@@ -84,10 +84,10 @@ public sealed partial class SdfMeshPathBake {
     /// thread under the gate, once the frame's copies are indexed. A plan made on a build's thread passes
     /// <see langword="false"/> and measures every group by its planned box, and the restart that adopts it plans again
     /// each group whose tier the frame's demand moves; such a plan can also read a frame's demand points mid-update.</param>
-    /// <param name="arrives">Whether a selector arrives with nothing to draw (<see cref="Arrives"/>), whose group plans its
-    /// floor first; <see langword="null"/> plans every group at its demanded tier.</param>
+    /// <param name="arrives">Whether a planned group arrives with nothing of its own to draw (<see cref="PlansFloor"/>),
+    /// which plans its floor first; <see langword="null"/> plans every group at its demanded tier.</param>
     /// <returns>The function a plan asks each group's tier of.</returns>
-    private Func<SdfMeshBakeGroup, int> Tiers(IReadOnlyList<DynamicTransform> transforms, bool copies = true, Func<int, bool>? arrives = null) {
+    private Func<SdfMeshBakeGroup, int> Tiers(IReadOnlyList<DynamicTransform> transforms, bool copies = true, Func<SdfMeshBakeGroup, bool>? arrives = null) {
         if (PlannedTier is { } planned) { return planned; }
 
         Func<SdfMeshBakeGroup, int> demanded = (copies
@@ -95,10 +95,10 @@ public sealed partial class SdfMeshPathBake {
             : (group => TierOf(pixel: Demand.PixelAt(group: group, transforms: transforms))));
 
         if (arrives is null) { return demanded; }
-        // A group arriving with nothing to draw plans its floor: the last tier, which the plan holds to the coarsest rung
-        // that changes its mesh. It owes its demanded tier, which Retier starts once the floor stands.
+        // A group arriving with nothing of its own to draw plans its floor: the last tier, which the plan holds to the
+        // coarsest rung that changes its mesh. It owes its demanded tier, which Retier starts once the floor stands.
         return group => {
-            if (!arrives(arg: group.Selector)) { return demanded(arg: group); }
+            if (!arrives(arg: group)) { return demanded(arg: group); }
             ((Group)group).FirstDetailOwed = true;
             return SdfMeshTier.Last;
         };
@@ -106,6 +106,14 @@ public sealed partial class SdfMeshPathBake {
     // Whether a selector arrives with nothing to draw, given the group the bake held at it: none, or one still bringing its
     // floor with nothing shown yet. Such a group plans its floor first (Tiers).
     private static bool Arrives(Group? old) => ((old is null) || ((old.Shown is null) && (old.Tier == old.CoarsestTier)));
+    // Whether a planned group arrives with nothing of its own to draw: its selector does (above), or no group the bake
+    // held has its shape, so an edit made it (a shape moved, resized or added) and whatever its selector draws is the
+    // shape before the edit. Its floor lands first and shows the edit at once; the detail follows. A group whose
+    // selector alone moved (another placement came or went before it) has a shape the bake held, and takes its mesh
+    // from the library at its demanded tier. A static group whose geometry reads a slot's pose takes another shape
+    // whenever that slot moves, which is no edit, so it is judged by its selector alone.
+    private static bool PlansFloor(Group? old, SdfMeshBakeGroup planned, HashSet<UInt128> shapes) => (Arrives(old: old) || NewShape(planned: planned, shapes: shapes));
+    private static bool NewShape(SdfMeshBakeGroup planned, HashSet<UInt128> shapes) => ((planned.Dynamic || !planned.Geometry.ReadsSlots) && !shapes.Contains(item: planned.Shape));
 
     /// <summary>Gets the tier every plan of this bake asks for each group in place of the one its demand points ask
     /// (<see cref="SdfMeshTier"/>), held to the rungs that change the group's mesh; <see langword="null"/>, a residency's
@@ -496,7 +504,7 @@ public sealed partial class SdfMeshPathBake {
             return false;
         }
 
-        _ = Begin(group: group);
+        CountStarted(how: Start(group: group));
 
         return true;
     }

@@ -1,11 +1,17 @@
 using System.Text.Json.Nodes;
 using Puck.Abstractions;
+using Puck.Assets;
 using Puck.Assets.Documents;
 using Puck.Transpiler.Diagnostics;
 using Puck.World.Transpiler.Vocabulary;
 
 namespace Puck.World.Transpiler.Validation;
 
+/// <summary>The same composed world as the one a finding indexes, composed again with the authored origin of every
+/// value it retains.</summary>
+/// <param name="Composed">The composed world, node for node the tree the findings index.</param>
+/// <param name="Origins">The authored origins of <paramref name="Composed"/>'s values.</param>
+internal sealed record WorldFindingProvenance(JsonObject Composed, WorldDocumentOrigins Origins);
 /// <summary>Places a finding against a composed world on the source line that authored what it names, so each finding
 /// reads against one file whichever source composed it. A refusal names a document path first
 /// (<c>prototypes[3].doc.shapes[1].blend: …</c>); the locator reads it in the composed tree and finds its author: the
@@ -18,15 +24,28 @@ namespace Puck.World.Transpiler.Validation;
 /// <paramref name="composed"/> is that document.</param>
 /// <param name="sourceMap">The source map of <paramref name="source"/>, or <see langword="null"/> when none is
 /// known; every finding then reports without a location.</param>
-/// <param name="origins">The authored origins the composition retained, or <see langword="null"/> when it kept none;
-/// a finding no layer of the source authors then reports without a location.</param>
+/// <param name="provenance">Composes the world again with its authored origins, called at most once and only for a
+/// finding no layer of the source authors, or <see langword="null"/> when no origins can be had; such a finding then
+/// reports without a location.</param>
 /// <param name="sourcePath">The compiled source's own file, or <see langword="null"/> for a buffer.</param>
-internal sealed class WorldFindingLocator(JsonObject composed, JsonObject? source, SourceMap? sourceMap, WorldDocumentOrigins? origins, string? sourcePath) {
+internal sealed class WorldFindingLocator(JsonObject composed, JsonObject? source, SourceMap? sourceMap, Func<WorldFindingProvenance?>? provenance, string? sourcePath) {
     private static readonly Lock Gate = new();
     private static readonly Dictionary<string, Authored> AuthoredSources = new(comparer: PuckPaths.Comparer);
 
-    // Another document's compile, kept for as long as its text is unchanged.
-    private sealed record Authored(string Text, SourceMap Map, SourceAcknowledgements Acknowledgements);
+    private bool m_traced;
+    private WorldFindingProvenance? m_provenance;
+
+    // Another document's compile, kept for as long as the digest of its bytes is unchanged.
+    private sealed record Authored(string Digest, SourceMap Map, SourceAcknowledgements Acknowledgements);
+
+    private WorldFindingProvenance? Provenance() {
+        if (!m_traced) {
+            m_traced = true;
+            m_provenance = provenance?.Invoke();
+        }
+
+        return m_provenance;
+    }
 
     private static string PathToken(string message) {
         var colon = message.IndexOf(value: ':');
@@ -37,13 +56,13 @@ internal sealed class WorldFindingLocator(JsonObject composed, JsonObject? sourc
     }
     // The authored origin of `node`: its own when it is a value, or else the shallowest value under it with one, the
     // origin's pointer trimmed back up to `node`.
-    private bool TryAuthor(JsonNode node, out string documentPath, out string documentPointer) {
+    private static bool TryAuthor(WorldDocumentOrigins origins, JsonNode node, out string documentPath, out string documentPointer) {
         var frontier = new Queue<(JsonNode Node, int Depth)>();
 
         frontier.Enqueue(item: (node, 0));
         while (frontier.TryDequeue(result: out var next)) {
             switch (next.Node) {
-                case JsonValue value when origins!.TryGetOrigin(origin: out var origin, value: value): {
+                case JsonValue value when origins.TryGetOrigin(origin: out var origin, value: value): {
                         var pointer = origin.JsonPointer;
 
                         for (var depth = 0; (depth < next.Depth); depth++) {
@@ -76,32 +95,42 @@ internal sealed class WorldFindingLocator(JsonObject composed, JsonObject? sourc
 
         return false;
     }
+    // The authoring source is read through CompileInputs, so a placement rests on that source as the compile it serves
+    // does, and a source whose stamp is unchanged is neither read nor compiled again.
     private static Authored? Compile(string path) {
-        if (!path.EndsWith(value: ".puck", comparisonType: StringComparison.OrdinalIgnoreCase) || !File.Exists(path: path)) {
+        if (!path.EndsWith(value: ".puck", comparisonType: StringComparison.OrdinalIgnoreCase)) {
             return null;
         }
 
-        string text;
+        byte[]? content;
+        string digest;
 
         try {
-            text = File.ReadAllText(path: path);
+            if (CompileInputs.Digest(content: out content, path: path) is not { } current) {
+                return null;
+            }
+            digest = current;
+
+            lock (Gate) {
+                if (AuthoredSources.TryGetValue(key: path, value: out var held) && string.Equals(a: held.Digest, b: digest, comparisonType: StringComparison.Ordinal)) {
+                    return held;
+                }
+            }
+            if (content is null) {
+                content = CompileInputs.ReadAllBytes(path: path);
+                digest = ContentPin.Compute(content: content).Hex;
+            }
         } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
             return null;
         }
 
-        lock (Gate) {
-            if (AuthoredSources.TryGetValue(key: path, value: out var held) && string.Equals(a: held.Text, b: text, comparisonType: StringComparison.Ordinal)) {
-                return held;
-            }
-        }
-
-        var compilation = WorldCompiler.Compile(includeTests: false, source: text, sourceMap: new SourceMap(), sourcePath: path);
+        var compilation = WorldCompiler.Compile(includeTests: false, source: Puck.Confinement.FileContent.Text(content: content), sourceMap: new SourceMap(), sourcePath: path);
 
         if ((compilation.Document is null) || (compilation.Json is null)) {
             return null;
         }
 
-        var authored = new Authored(Acknowledgements: compilation.Acknowledgements, Map: compilation.SourceMap, Text: text);
+        var authored = new Authored(Acknowledgements: compilation.Acknowledgements, Digest: digest, Map: compilation.SourceMap);
 
         lock (Gate) {
             AuthoredSources[path] = authored;
@@ -134,7 +163,8 @@ internal sealed class WorldFindingLocator(JsonObject composed, JsonObject? sourc
         if ((layerPointer is { Length: > 1 }) && (sourceMap.OriginOf(jsonPointer: layerPointer) is { } own)) {
             return (diagnostic with { SourcePath = (IsRoot(path: own.SourcePath) ? null : own.SourcePath), Span = own.Span });
         }
-        if ((origins is null) || (composedPointer.Length <= 1) || (DocumentJsonPointer.Nearest(pointer: composedPointer, root: composed) is not { } node) || !TryAuthor(documentPath: out var documentPath, documentPointer: out var documentPointer, node: node) || IsRoot(path: documentPath)) {
+        // Only now, for a finding the source's own layer does not author, is the world composed again with origins.
+        if ((composedPointer.Length <= 1) || (Provenance() is not { } tracked) || (DocumentJsonPointer.Nearest(pointer: composedPointer, root: tracked.Composed) is not { } node) || !TryAuthor(documentPath: out var documentPath, documentPointer: out var documentPointer, node: node, origins: tracked.Origins) || IsRoot(path: documentPath)) {
             return diagnostic;
         }
         if (Compile(path: documentPath) is not { } authored) {

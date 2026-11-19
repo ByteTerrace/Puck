@@ -282,17 +282,21 @@ public static class ModuleResolver {
     /// <param name="rootDoc">The root source's parsed tree.</param>
     /// <param name="rootPath">The root source's path; its imports resolve beside it.</param>
     /// <param name="diagnostics">The bag the walk reports into.</param>
+    /// <param name="budget">The compile's one evaluation budget, which the walk charges for the declarations it brings
+    /// in and the lowering that follows goes on charging; its cancellation token stops the walk.</param>
     /// <param name="vocabulary">The vocabulary that resolves an import's name; names are libraries when omitted.</param>
-    /// <param name="cancellationToken">Stops the walk.</param>
     /// <returns>The root with the imported declarations, or <see langword="null"/> when the graph does not
     /// resolve.</returns>
     public static DocumentNode? ImportModules(
         DocumentNode rootDoc,
         string rootPath,
         DiagnosticBag diagnostics,
-        IDocumentVocabulary? vocabulary = null,
-        CancellationToken cancellationToken = default
+        DocumentEvaluationBudget budget,
+        IDocumentVocabulary? vocabulary = null
     ) {
+        ArgumentNullException.ThrowIfNull(budget);
+
+        var cancellationToken = budget.CancellationToken;
         var context = new ImportContext(cancellationToken: cancellationToken, vocabulary: vocabulary);
 
         if (!ValidateImportGraph(context: context, diagnostics: diagnostics, rootDoc: rootDoc, rootPath: rootPath)) {
@@ -308,7 +312,7 @@ public static class ModuleResolver {
                 memo: new(comparer: StringComparer.OrdinalIgnoreCase)
             );
 
-            new DocumentEvaluationBudget { CancellationToken = cancellationToken }.Spend(
+            budget.Spend(
                 count: cost.Work,
                 span: SourceSpan.None
             );

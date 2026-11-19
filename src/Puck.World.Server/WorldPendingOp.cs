@@ -32,7 +32,13 @@ public abstract record WorldPendingOp {
     /// admitted it.</param>
     /// <param name="Basis">The installed declarations a reload delta was reconstructed against, whose content
     /// preparation compared with the delta's base pin.</param>
-    public sealed record Rebuild(WorldRebuildRequest Request, Principal Principal, int ConnectionId, long CorrelationId, string? ExpectedContentHash = null, string? PreparationFailure = null, WorldDefinitionAdmission? Admission = null, WorldDefinition? Basis = null) : WorldPendingOp;
+    public sealed record Rebuild(WorldRebuildRequest Request, Principal Principal, int ConnectionId, long CorrelationId, string? ExpectedContentHash = null, string? PreparationFailure = null, WorldDefinitionAdmission? Admission = null, WorldDefinition? Basis = null) : WorldPendingOp {
+        /// <summary>Gets how long the preparation took to reconstruct the candidate from its delta, in
+        /// milliseconds; zero for a request that carried none.</summary>
+        public double ReconstructMilliseconds { get; init; }
+        /// <summary>Gets how long the preparation took to admit the candidate, in milliseconds.</summary>
+        public double AdmitMilliseconds { get; init; }
+    }
     /// <summary>One buffered journal undo.</summary>
     /// <param name="Count">How many journal entries to drop from the tail.</param>
     /// <param name="Principal">The acting principal.</param>

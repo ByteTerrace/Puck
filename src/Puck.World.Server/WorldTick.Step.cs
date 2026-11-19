@@ -160,6 +160,8 @@ public sealed partial class WorldTick {
             derived: (mutate.SourceAddonInstanceId >= 0L)
         ),
             WorldPendingOp.Rebuild rebuild => Host.Document.ApplyRebuild(
+            admitMilliseconds: rebuild.AdmitMilliseconds,
+            reconstructMilliseconds: rebuild.ReconstructMilliseconds,
             request: rebuild.Request,
             principal: rebuild.Principal,
             connectionId: rebuild.ConnectionId,

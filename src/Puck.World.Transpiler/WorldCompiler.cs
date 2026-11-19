@@ -2,6 +2,7 @@ using Puck.Assets;
 using Puck.Confinement;
 using System.Text.Json.Nodes;
 using Puck.Transpiler.Diagnostics;
+using Puck.Transpiler.Lowering;
 using Puck.Transpiler.Modules;
 using Puck.Transpiler.Parsing;
 using Puck.Transpiler.Ast;
@@ -244,10 +245,12 @@ public static class WorldCompiler {
         );
 
         var walkedImports = false;
+        // One budget for the whole compile: the import walk charges it first and the lowering goes on charging it.
+        var budget = new DocumentEvaluationBudget { CancellationToken = cancellationToken };
 
         if (effectiveImports == ImportHandling.Validate) {
             var withModules = ModuleResolver.ImportModules(
-                cancellationToken: cancellationToken,
+                budget: budget,
                 diagnostics: diagnostics,
                 rootDoc: document,
                 rootPath: sourcePath!,
@@ -280,6 +283,7 @@ public static class WorldCompiler {
         var worlds = new List<WorldOutput>();
         var assets = ((sourcePath is null) ? null : new AssetCompilationContext(rootSourcePath: sourcePath, updateLock: updateAssets));
         var loweringResult = WorldDocumentEmitter.LowerWithDiagnostics(
+            budget: budget,
             includeTests: includeTests,
             basePath: (basePath ?? ((sourcePath is null)
                 ? null

@@ -495,11 +495,33 @@ shared candidate, and admits it once (`WorldDefinitionAdmission`, whose programs
 `world.reload.stale-base` names a base the authority cannot name (another activation,
 or replaced declarations nothing holds); `world.reload.base-mismatch` and
 `world.reload.target-mismatch` name disagreeing content. Retry by issuing a fresh
-reload. The success echo prints patch and complete payload bytes. Reload still uses
-the ordinary rebuild's state, input, journal and replay semantics; a wire delta is
-not a presentation-only mutation. What the install itself still costs on the tick
-(state settlement, the in-place arena load, disclosure composition) is the next
-edit-to-running work item.
+reload. A sender in the authority's process (`WorldReloadDelta.Create`) keeps the
+candidate it shared beside the declarations it diffed, and `TryPrepare` over that
+same object reconstructs nothing. The success echo prints patch and complete payload
+bytes and what the install kept of the state; `[world.reload] source` and
+`[world.rebuild]` lines (`host.log category world.re`) split the time into compile,
+admission, text, diff, reconstruction, admission and install.
+
+**A reload installs as the edit it is.** `WorldDocument.ApplyRebuild` seeds again only
+the state rows the source changed (`WorldDocument.NameReloadEdit`, comparing each row
+with the installed one by its serialized bytes) and keeps every other row's live value, the rule latches and the
+lattices' cells (`WorldArenaContinuity.Edit`); `world.reset` and `world.load` install
+a document whole. A reload candidate that was not shared by a delta against the
+installed declarations (a replay drive's re-read) is shared at the top of the apply
+(`WorldReloadDelta.Share`), so the rows a reload seeds are the same on a replay. The
+reload still clears the journal, moves the base, rebuilds the simulation's compiled
+products and deals placements again
+([the live edit path](../../../docs/plans/iteration.md#the-live-edit-path-step-3)).
+
+**A saved file reaches the World only as a reload.** `world.watch on`
+(`WorldSourceWatch`, off by default) polls every file fact the last compile read
+and queues an ordinary `world.reload` after a quiet moment. A reload composes and
+validates the whole world for one changed value and clears the journal; a refusal
+`world.reload.delta-unrepresentable` names the first path where the patch's merge
+differs from the source. A value you only want to try goes
+through `world.row.set`, which installs by kind (`WorldDocument.InstallKindOf`).
+[The authoring loop](../../../docs/plans/iteration/authoring-loop.md) holds the
+measurements and the design that joins the two doors.
 
 **An import names; the named file decides what it brings.** `import "skies"`,
 never `import "skies.puck"` (PUCK121). A module library (a source emitting no

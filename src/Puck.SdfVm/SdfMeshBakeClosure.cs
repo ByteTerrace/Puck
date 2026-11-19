@@ -71,6 +71,9 @@ public sealed class SdfMeshBakeClosure {
         "Puck.SdfVm.SdfMeshBakeClosure",
         "Puck.SdfVm.SdfMeshBakeIdentity",
         "Puck.SdfVm.SdfMeshBakeReport",
+        // Which group bakes a geometry never changes what it meshes: a share is keyed by the geometry and identity.
+        "Puck.SdfVm.SdfMeshBakeShare",
+        "Puck.SdfVm.SdfMeshBakeShare/Waiter",
         "Puck.SdfVm.SdfMeshLibrary",
         "Puck.SdfVm.SdfMeshStore",
         "Puck.SdfVm.SdfWorldInterfaces",
