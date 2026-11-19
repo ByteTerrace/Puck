@@ -60,6 +60,7 @@ let glacierIceStyle = celStyle with {
   specularSize: 0.03
   restore: 0.6
   bleed: 0.4
+  form: 0.4
   ink {
     outlineWidth: 0
     outlineDistance: 12

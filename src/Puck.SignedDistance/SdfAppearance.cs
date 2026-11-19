@@ -66,10 +66,10 @@ public sealed class SdfAppearance {
                 if (IsWorldLane(lane: material.Weathering?.Lane) || IsWorldLane(lane: material.Flow?.Lane) || IsWorldLane(lane: material.Flow?.CoverageLane)) { reads |= SdfShadeReads.WorldLanes; }
                 if (IsWorldLane(lane: material.EmissiveLane)) { emission |= SdfShadeReads.WorldLanes; }
                 layers |= reads;
-                // A program that omits the surface phase keeps the layers (sdfShadeHas in the views and glass stages), and
-                // the live world.toon off shades a styled material by its layers, so both read what the layers read.
+                // A program that omits the surface phase keeps the layers (sdfShadeHas in the views and glass stages), so
+                // it reads what the layers read.
                 if (material.Shade is { } shade) {
-                    authored |= shade.Reads | ((!shade.Authors(phase: SdfShadePhase.Surface) || (material.Toon is { Enabled: true })) ? reads : SdfShadeReads.None);
+                    authored |= shade.Reads | (shade.Authors(phase: SdfShadePhase.Surface) ? SdfShadeReads.None : reads);
                 } else { inherits = true; unshaded |= reads; }
             }
             m_shadeReads = (layers, authored, unshaded, emission, inherits);

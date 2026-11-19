@@ -15,20 +15,22 @@ function celBand(cosine, visibility, threshold, softness, combined) = mix(shadeS
 // The cel response, the one implementation of banding. Each light's cosine (wrapped by the material) steps at
 // `threshold` over `softness`, its visibility multiplying after the band; `combined` (0 to 1) blends toward banding the
 // cosine and the visibility together, the harder look in which a penumbra snaps to the band. The lit paint is flat
-// (metals included) and the highlight is a bounded disc of `specularSize`.
+// (metals included) less `form` (0 to 1), the share of the cosine's falloff it keeps so a lit mass still reads round, and
+// the highlight is a bounded disc of `specularSize`.
 // The shade is a painted colour rather than whatever light happens to fill it: `restore` (0 to 1) gives a light's shade
 // side that share of the light back, over the half-cosine so a face turned away still reads its form, and `bleed` (0 to 1)
 // is how much of the bounce's own hue the sky and bounce keep, the rest their luminance alone; both then take
 // `shadowTint`. So a lawn's green bounce does not turn every shade olive, and a sunlit scene's shade holds a value near
 // `restore × shadowTint` of its lit side. The result is scene light: the view's display pass tones it, so a cel pixel
 // passes one tone curve.
-shade template cel(threshold, softness, shadowTint, specularSize, combined = 0, restore = 0, bleed = 1) {
+shade template cel(threshold, softness, shadowTint, specularSize, combined = 0, restore = 0, bleed = 1, form = 0) {
   light {
     let direct = (light.kind == uint(0)) + (light.kind == uint(2))
     let cosine = max((light.cosine + surface.wrap) / (1 + surface.wrap), 0)
     let band = celBand(cosine, light.visibility, threshold, softness, combined)
     let shadeSide = shadowTint * ((1 - band) * restore * (0.5 + 0.5 * light.cosine))
-    diffuse = direct ? light.color * (light.weight * light.reach) * (shadeSide + [band, band, band]) : (light.kind == uint(256) ? light.color * (light.weight * light.reach * max(light.cosine, 0)) : [0,0,0])
+    let lit = band * mix(1, cosine, form)
+    diffuse = direct ? light.color * (light.weight * light.reach) * (shadeSide + [lit, lit, lit]) : (light.kind == uint(256) ? light.color * (light.weight * light.reach * max(light.cosine, 0)) : [0,0,0])
     let halfway = light.direction - surface.rayDirection
     let halfway = halfway / sqrt(max(dot(halfway, halfway), 0.00000001))
     let size = specularSize * mix(0.5, 1.5, surface.roughness)

@@ -227,8 +227,9 @@ inside the material as well. The cel work the
   package (`worlds/standard/styles.puck`), never an engine default.
 - **One lever suppresses every style.** `world.toon off` shades every styled
   material continuously and uninked, a material's own style included, so one
-  view compares continuous against cel; it binds no program for a styled
-  material rather than rewriting its rows.
+  view compares continuous against cel; a styled material's program keeps its
+  surface phase and loses its light and compose phases, rather than any row
+  being rewritten.
 - **A style can follow state.** A palette row's `toonSelect` binds its look, a
   style row and a program per case, to a state cell, so a command that writes
   the cell swaps the look with no rebake and no compile (every case's program

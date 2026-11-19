@@ -635,9 +635,11 @@ and `moth.style Plain|Cel` swaps her between the two.
 
 `world.toon on|off|toggle` is the live lever over every style. Off shades every
 styled material continuously and uninked, a material's own style and the
-world's default alike: its program does not run (`sdfShadeBinding` binds none
-for it) and its outline is skipped, so one view compares continuous against
-cel. On shows every style as authored. With no argument it echoes the choice.
+world's default alike: its program's light and compose phases read as omitted
+(`sdfShadeBinding` marks the binding unstyled), so the engine's continuous
+response lights it while a surface phase it composes (a terrain or weathered
+surface) still runs, and its outline is skipped, so one view compares
+continuous against cel. On shows every style as authored. With no argument it echoes the choice.
 It uses the same render-section grant and session-lever delivery as
 `world.ao`, reaches the host, routed worlds and nested views, and contributes
 no simulation state. Cel shading needs the programs to run, which is the

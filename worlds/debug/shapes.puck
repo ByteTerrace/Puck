@@ -218,6 +218,7 @@ let galleryStyle = celStyle with {
   specularSize: 0.02
   restore: 0.65
   bleed: 0.2
+  form: 0.25
   ink {
     outlineWidth: 1
     outlineDistance: 10

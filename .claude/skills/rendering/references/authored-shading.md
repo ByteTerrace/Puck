@@ -87,8 +87,9 @@ library in `worlds/standard/terrain.puck`.
 for comparison. A program that omits the surface phase keeps the material's
 layers as its surface (`sdfShadeHas(binding, 0u)` in the views and glass stages,
 `SdfShadeProgram.Authors` on the CPU); the standard's `cel` relies on it. While
-`world.toon off` suppresses every cel style, `sdfShadeBinding` binds none for a
-styled material (`sdfToonAuthored`). A material with no program inherits `WorldRenderDefaults.Shade`
+`world.toon off` suppresses every cel style, `sdfShadeBinding` marks a styled
+material's binding unstyled (`sdfToonAuthored`), and `sdfShadeHas` reads its light
+and compose phases as omitted. A material with no program inherits `WorldRenderDefaults.Shade`
 (`render.shade`); `world.shade default <program|document>` selects an admitted
 named scene program or restores that document default. `SdfFrameBlock.WriteShadeDefault`
 carries its identity and parameter range; `SdfWorldTables.PackShadeDefault`

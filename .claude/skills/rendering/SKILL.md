@@ -735,8 +735,9 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   pass block's `toonOutline` and `toonInk`, both written by `SdfToon.WriteRows`
   and read by `sdfToonStyle` and `sdfToonAuthored` (`shade/sdf-toon.hlsli`):
   keep the row layout and the pass block's alike. `world.toon off` writes a
-  negative default mode, and `sdfShadeBinding` then binds no program for a
-  styled material, so the views filter's bins and the stages fold it alike.
+  negative default mode, and `sdfShadeBinding` then marks a styled material's
+  binding unstyled: `sdfShadeHas` reads its light and compose phases as omitted
+  while its surface phase (a terrain under cel) still runs.
   A program that omits the surface phase keeps the material's layers
   (`sdfShadeHas(binding, 0u)` in both stages; `SdfShadeProgram.Authors` on the
   CPU, which `SdfAppearance.ResolveShadeReads` reads). The program's result is

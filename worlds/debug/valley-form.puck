@@ -9,9 +9,10 @@ import "../standard/styles"
 let valleyRockStyle = celStyle with {
   threshold: 0.15
   softness: 0.3
-  shadowTint [0.78, 0.6, 0.8]
+  shadowTint [0.6, 0.44, 0.68]
   specularSize: 0.02
-  restore: 0.55
+  restore: 0.5
+  form: 0.5
   ink {
     outlineWidth: 0
     outlineDistance: 12
