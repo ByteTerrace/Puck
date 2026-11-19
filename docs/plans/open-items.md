@@ -1466,7 +1466,11 @@ The volume's cost and convergence:
   geometry change, every probe's local cube starts again
   (`SdfMeshIrradiance`'s `reuseLocal`), and a World that converges its
   lighting owes a drain per retier wave and per step of the day's lighting
-  grid; the walkthrough tour pays it at every exhibit. The streaming plan's
+  grid; the walkthrough tour pays it at every exhibit. It also holds back the
+  first fill after a boot: while tiers land the main residency's static scene
+  rebuilds every few seconds, its probes' traces barely advance, and its finest
+  level publishes minutes late, so the gallery hall reads its camera sample's
+  light (`sdfMeshIndirectSeen`) until then. The streaming plan's
   step 9 decides which tier the lighting traces; the tour's drains per still
   on the `[sdf.mesh-gi] done` lines measure whichever lands.
 - [medium] A held frame's hold stops at the instance. A view withheld for its
