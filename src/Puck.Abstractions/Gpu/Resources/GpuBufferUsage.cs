@@ -23,13 +23,18 @@ public enum GpuBufferUsage : uint {
     /// <summary>An indirect dispatch reads its group counts from the buffer (Vulkan <c>INDIRECT_BUFFER</c>; the
     /// Direct3D 12 <c>INDIRECT_ARGUMENT</c> state).</summary>
     Indirect = 0x10,
+    /// <summary>An acceleration-structure build reads the buffer in place by its device address
+    /// (<see cref="GpuAccelerationStructureInputs"/>): Vulkan <c>ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY</c> with
+    /// <c>SHADER_DEVICE_ADDRESS</c>, on a device created with <see cref="GpuOptionalCapabilities.RayQuery"/>; any
+    /// Direct3D 12 buffer's virtual address.</summary>
+    AccelerationStructureInput = 0x20,
 }
 /// <summary>
 /// The rules every buffer factory applies to its request.
 /// </summary>
 public static class GpuBufferUsages {
     /// <summary>Every defined usage.</summary>
-    public const GpuBufferUsage All = ((GpuBufferUsage.Vertex | GpuBufferUsage.Index) | (GpuBufferUsage.Storage | GpuBufferUsage.Uniform)) | GpuBufferUsage.Indirect;
+    public const GpuBufferUsage All = ((GpuBufferUsage.Vertex | GpuBufferUsage.Index) | (GpuBufferUsage.Storage | GpuBufferUsage.Uniform)) | (GpuBufferUsage.Indirect | GpuBufferUsage.AccelerationStructureInput);
 
     /// <summary>Refuses an empty buffer and a usage that is empty or names an undefined bit.</summary>
     /// <param name="sizeBytes">The size, in bytes, of the buffer.</param>

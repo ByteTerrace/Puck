@@ -160,11 +160,16 @@ public sealed unsafe class DirectXNativeDeviceApi : IDirectXDeviceApi {
         var residencyPriority = device->QueryInterface(ppvObject: out ID3D12Device1* device1).Succeeded;
         var enqueueMakeResident = device->QueryInterface(ppvObject: out ID3D12Device3* device3).Succeeded;
 
+        ID3D12Device5* device5 = null;
+        var raytracingInterfaces = (OperatingSystem.IsWindowsVersionAtLeast(major: 10, minor: 0, build: 17763) && device->QueryInterface(ppvObject: out device5).Succeeded);
+
         if (residencyPriority) { _ = ((IUnknown*)device1)->Release(); }
         if (enqueueMakeResident) { _ = ((IUnknown*)device3)->Release(); }
+        if (raytracingInterfaces) { _ = ((IUnknown*)device5)->Release(); }
 
         return DirectXFeatureReads.Capabilities(
             enqueueMakeResident: enqueueMakeResident,
+            raytracingInterfaces: raytracingInterfaces,
             residencyPriority: residencyPriority,
             support: new DirectXDeviceFeatureSupport(device: ((ID3D12Device*)deviceHandle))
         );

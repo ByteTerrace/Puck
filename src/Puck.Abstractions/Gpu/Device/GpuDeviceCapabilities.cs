@@ -62,6 +62,12 @@ namespace Puck.Abstractions.Gpu;
 /// adds the incrementing root constant a counted draw numbers its commands with
 /// (<see cref="ExecuteIndirectIncrementingConstant"/>); zero where the runtime does not answer the query, and on
 /// Vulkan.</param>
+/// <param name="Optional">The optional capabilities the device was created with, which a kernel variant may depend on
+/// (<see cref="Has"/>): each one the device reports, less what the host withheld.</param>
+/// <param name="Withheld">The optional capabilities the device reports but was created without, because the host
+/// withheld them (<see cref="GpuDeviceOptions.Withheld"/>).</param>
+/// <param name="RaytracingTier">Direct3D 12's <c>D3D12_RAYTRACING_TIER</c> as reported (10 for 1.0, 11 for 1.1, 0 for
+/// none); zero on Vulkan.</param>
 public sealed record GpuDeviceCapabilities(
     string Backend,
     uint MaxBoundDescriptorSets,
@@ -85,7 +91,10 @@ public sealed record GpuDeviceCapabilities(
     uint ResourceAddressBits = 0U,
     ulong SparseAddressSpaceBytes = 0UL,
     uint StorageBufferOffsetAlignment = 0U,
-    uint ExecuteIndirectTier = 0U
+    uint ExecuteIndirectTier = 0U,
+    GpuOptionalCapabilities Optional = GpuOptionalCapabilities.None,
+    GpuOptionalCapabilities Withheld = GpuOptionalCapabilities.None,
+    uint RaytracingTier = 0U
 ) {
     /// <summary>Direct3D 12's 4,096 constant-buffer elements, each a 16-byte float4.</summary>
     public const uint DirectXConstantBufferBytes = (4096U * 16U);
@@ -128,6 +137,22 @@ public sealed record GpuDeviceCapabilities(
     private const string SparseAddressSpaceField = "sparse.address-space";
     private const string StorageBufferOffsetAlignmentField = "storage-buffer.offset-alignment";
     private const string ExecuteIndirectTierField = "execute-indirect-tier";
+    private const string OptionalField = "optional";
+    private const string WithheldField = "withheld";
+    private const string RaytracingTierField = "raytracing-tier";
+
+    /// <summary>Returns whether the device was created with every optional capability a kernel variant needs.</summary>
+    /// <param name="required">The capabilities the variant needs; <see cref="GpuOptionalCapabilities.None"/> is always
+    /// met.</param>
+    /// <returns><see langword="true"/> when <see cref="Optional"/> holds every flag of <paramref name="required"/>.</returns>
+    public bool Has(GpuOptionalCapabilities required) => ((Optional & required) == required);
+    /// <summary>Returns these capabilities with the optional capabilities the device reports split into what it is created
+    /// with and what the host withholds. A pure function of its arguments.</summary>
+    /// <param name="reported">The optional capabilities the device reports.</param>
+    /// <param name="withheld">The capabilities the host withholds.</param>
+    /// <returns>The capabilities with <see cref="Optional"/> and <see cref="Withheld"/> filled.</returns>
+    public GpuDeviceCapabilities WithOptional(GpuOptionalCapabilities reported, GpuOptionalCapabilities withheld) =>
+        (this with { Optional = (reported & ~withheld), Withheld = (reported & withheld) });
 
     /// <summary>Returns these capabilities with what a Direct3D 12 device reports about backing. A reserved resource
     /// (<c>CreateReservedResource</c>) at tiled resources tier 1 or above is a buffer whose tiles are mapped and unmapped
@@ -159,17 +184,7 @@ public sealed record GpuDeviceCapabilities(
     /// <c>none</c>.</summary>
     /// <param name="backing">The flags.</param>
     /// <returns>The spelling.</returns>
-    public static string BackingSpelling(GpuBackingSupport backing) {
-        if (backing == GpuBackingSupport.None) { return "none"; }
-
-        var names = new List<string>();
-
-        foreach (var (flag, name) in BackingNames) {
-            if ((backing & flag) != 0) { names.Add(item: name); }
-        }
-
-        return string.Join(separator: '+', values: names);
-    }
+    public static string BackingSpelling(GpuBackingSupport backing) => FlagSpelling.Of(flags: backing, names: BackingNames);
 
     // Each backing flag's one spelling, in declaration order.
     private static readonly (GpuBackingSupport Flag, string Name)[] BackingNames = [
@@ -259,7 +274,8 @@ public sealed record GpuDeviceCapabilities(
     /// and on Direct3D 12 <c>root-signature-words=64 … binding-tier=3 root-signature=1.1 shader-model=6.8 heap.views=… heap.samplers=… heap.samplers-static=…</c>;
     /// then <c>backing=</c> (<see cref="BackingSpelling"/>) once a backend has read it, and the nonzero of <c>reserved.tier</c>,
     /// <c>reserved.address-bits</c>, <c>sparse.address-space</c>, <c>storage-buffer.offset-alignment</c> and
-    /// <c>execute-indirect-tier</c>.</summary>
+    /// <c>execute-indirect-tier</c>; then <c>optional=</c> (<see cref="GpuOptionalCapabilitiesSpelling.Of"/>),
+    /// <c>withheld=</c> when the host withheld any, and a nonzero <c>raytracing-tier</c>.</summary>
     /// <param name="builder">The text to append to.</param>
     /// <returns><paramref name="builder"/>.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="builder"/> is <see langword="null"/>.</exception>
@@ -353,6 +369,11 @@ public sealed record GpuDeviceCapabilities(
         }
         AppendCount(builder: builder, name: StorageBufferOffsetAlignmentField, value: StorageBufferOffsetAlignment);
         AppendCount(builder: builder, name: ExecuteIndirectTierField, value: ExecuteIndirectTier);
+        _ = builder.Append(value: ' ').Append(value: OptionalField).Append(value: '=').Append(value: GpuOptionalCapabilitiesSpelling.Of(capabilities: Optional));
+        if (Withheld != GpuOptionalCapabilities.None) {
+            _ = builder.Append(value: ' ').Append(value: WithheldField).Append(value: '=').Append(value: GpuOptionalCapabilitiesSpelling.Of(capabilities: Withheld));
+        }
+        AppendCount(builder: builder, name: RaytracingTierField, value: RaytracingTier);
 
         return builder;
     }
@@ -439,6 +460,9 @@ public sealed record GpuDeviceCapabilities(
         writer.WriteNumber(propertyName: SparseAddressSpaceField, value: SparseAddressSpaceBytes);
         writer.WriteNumber(propertyName: StorageBufferOffsetAlignmentField, value: StorageBufferOffsetAlignment);
         writer.WriteNumber(propertyName: ExecuteIndirectTierField, value: ExecuteIndirectTier);
+        writer.WriteString(propertyName: OptionalField, value: GpuOptionalCapabilitiesSpelling.Of(capabilities: Optional));
+        writer.WriteString(propertyName: WithheldField, value: GpuOptionalCapabilitiesSpelling.Of(capabilities: Withheld));
+        writer.WriteNumber(propertyName: RaytracingTierField, value: RaytracingTier);
         writer.WriteEndObject();
     }
 

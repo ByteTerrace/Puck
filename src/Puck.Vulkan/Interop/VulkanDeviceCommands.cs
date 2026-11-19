@@ -213,6 +213,10 @@ public sealed unsafe class VulkanDeviceCommands {
 
     /// <summary>Gets the timestamp query commands resolved for this device.</summary>
     public VulkanTimestampCommands Timestamps { get; }
+    /// <summary>Gets the acceleration-structure commands, or <see langword="null"/> unless the device was created with ray
+    /// queries; while they are present every memory block the device allocates carries a device address
+    /// (<see cref="VulkanMemoryArena"/>), so any buffer a build reads or writes can be addressed.</summary>
+    public VulkanRayCommands? Rays { get; }
 
     /// <summary>Resolves every entry point of the device identified by <paramref name="deviceHandle"/> through
     /// <paramref name="procedures"/>.</summary>
@@ -232,7 +236,9 @@ public sealed unsafe class VulkanDeviceCommands {
     /// <param name="addressBindings">The instance's address record, when the device was created with
     /// <see cref="VulkanDeviceAddressBindings.ExtensionName"/>; its loss report names the objects its fault addresses fall
     /// in.</param>
-    public VulkanDeviceCommands(nint deviceHandle, VulkanProcResolver procedures, GpuDeviceMemoryWork? memory = null, bool deviceFaultEnabled = false, bool checkpointsEnabled = false, bool drawIndirectCountEnabled = false, bool multiDrawIndirectEnabled = false, VulkanDeviceAddressBindings? addressBindings = null) {
+    /// <param name="rayQueryEnabled">Whether the device was created with ray queries; <see cref="Rays"/> resolves only
+    /// then.</param>
+    public VulkanDeviceCommands(nint deviceHandle, VulkanProcResolver procedures, GpuDeviceMemoryWork? memory = null, bool deviceFaultEnabled = false, bool checkpointsEnabled = false, bool drawIndirectCountEnabled = false, bool multiDrawIndirectEnabled = false, VulkanDeviceAddressBindings? addressBindings = null, bool rayQueryEnabled = false) {
         ArgumentNullException.ThrowIfNull(argument: procedures);
 
         VulkanArgument.RequireHandle(
@@ -247,6 +253,7 @@ public sealed unsafe class VulkanDeviceCommands {
         AddressBindings = addressBindings;
         Fault = new VulkanDeviceFault(addressBindings: addressBindings, checkpoints: Checkpoints, device: deviceHandle, enabled: deviceFaultEnabled, procedures: procedures);
         Timestamps = new VulkanTimestampCommands(deviceHandle: deviceHandle, procedures: procedures);
+        Rays = (rayQueryEnabled ? new VulkanRayCommands(deviceHandle: deviceHandle, procedures: procedures) : null);
         Memory = memory;
         AcquireNextImageKhr = ((delegate* unmanaged[Cdecl]<nint, nint, ulong, nint, nint, out uint, VkResult>)procedures.ResolveOptionalDeviceProc(
             deviceHandle: deviceHandle,

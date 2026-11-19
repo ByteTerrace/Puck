@@ -39,7 +39,9 @@ public sealed partial class SdfWorldPipelines : IDisposable {
     public SdfKernelSet Kernels => m_kernels;
 
     /// <summary>Takes a lease on the up-front pipelines, each an entry of the pass-pipeline cache, joining the entries
-    /// other holders lease and starting the rest building on the thread pool. Safe on any thread.</summary>
+    /// other holders lease and starting the rest building on the thread pool. A kernel variant that depends on an
+    /// optional capability the device was not created with (<see cref="SdfKernelSet.RequiresOf"/>) is never leased, so
+    /// it never reaches the driver (<see cref="Leases"/>). Safe on any thread.</summary>
     /// <param name="cache">The composition's pass-pipeline cache.</param>
     /// <param name="device">The device the pipelines are created on.</param>
     /// <param name="kernels">The compiled kernel set for the device's backend.</param>
@@ -56,6 +58,10 @@ public sealed partial class SdfWorldPipelines : IDisposable {
 
         try {
             foreach (var kernel in BuildOrder(kernels: kernels)) {
+                if (!Runs(device: device, kernel: kernel)) {
+                    continue;
+                }
+
                 var spec = specs[((int)kernel)];
                 var bytecode = kernels[kernel];
 
@@ -81,6 +87,25 @@ public sealed partial class SdfWorldPipelines : IDisposable {
             slots: slots
         );
     }
+    /// <summary>Returns whether a device runs a kernel: whether it was created with every optional capability the kernel
+    /// depends on (<see cref="SdfKernelSet.RequiresOf"/>).</summary>
+    /// <param name="device">The device.</param>
+    /// <param name="kernel">The kernel.</param>
+    /// <returns><see langword="true"/> when the kernel needs nothing optional or the device has all it needs.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="device"/> is <see langword="null"/>.</exception>
+    public static bool Runs(IGpuDeviceContext device, SdfKernel kernel) {
+        ArgumentNullException.ThrowIfNull(argument: device);
+
+        var required = SdfKernelSet.RequiresOf(kernel: kernel);
+
+        return ((required == GpuOptionalCapabilities.None) || (device.Capabilities?.Has(required: required) ?? false));
+    }
+    /// <summary>Returns whether the set leases a kernel's pipeline: an up-front kernel the device runs
+    /// (<see cref="Runs"/>), or an on-demand one a view has asked for. A caller of a capability-dependent variant reads it
+    /// to choose between the variant and the path it replaces.</summary>
+    /// <param name="kernel">The kernel.</param>
+    /// <returns><see langword="true"/> when the set holds the kernel's slot, built or building.</returns>
+    public bool Leases(SdfKernel kernel) => (Volatile.Read(location: ref m_slots[((int)kernel)]) is not null);
     /// <summary>Orders a kernel set's up-front pipelines by when a set starts building them: longest bytecode first, ties
     /// in <see cref="SdfKernel"/> order. A cold driver's translation grows with the kernel, and a set is ready only once its
     /// slowest pipeline is, so the longest starts while the device's threads are free rather than behind the rest.</summary>

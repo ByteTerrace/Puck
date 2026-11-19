@@ -40,6 +40,10 @@ public sealed class VulkanGpuBufferFactory(IVulkanDeviceContext deviceContext, I
             result |= VulkanBufferUsageFlags.IndirectBuffer;
         }
 
+        if (0 != (usage & GpuBufferUsage.AccelerationStructureInput)) {
+            result |= (VulkanBufferUsageFlags.AccelerationStructureBuildInput | VulkanBufferUsageFlags.ShaderDeviceAddress);
+        }
+
         return result;
     }
     /// <inheritdoc/>
