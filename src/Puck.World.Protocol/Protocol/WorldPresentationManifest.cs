@@ -519,18 +519,22 @@ public sealed class WorldPresentationManifest {
 
                     return false;
                 case BindableScalar scalar:
-                    // A token naming a keyed row with no key binds the whole row, which a pass's array reads.
-                    Add(
-                        binding: scalar.State,
-                        conversion: (((scalar.State is { Key: null } whole) && (Definition is { } document) && WorldBoundRow.TryResolve(
-                            definition: document,
-                            length: out _,
-                            row: out _,
-                            rowName: whole.Row
-                        ))
-                            ? WorldStateConversion.Row
-                            : WorldStateConversion.Number)
-                    );
+                    if (scalar.State is { Key: StateBinding.BodyKey } bodyBinding) {
+                        AddBody(binding: bodyBinding);
+                    } else {
+                        // A token naming a keyed row with no key binds the whole row, which a pass's array reads.
+                        Add(
+                            binding: scalar.State,
+                            conversion: (((scalar.State is { Key: null } whole) && (Definition is { } document) && WorldBoundRow.TryResolve(
+                                definition: document,
+                                length: out _,
+                                row: out _,
+                                rowName: whole.Row
+                            ))
+                                ? WorldStateConversion.Row
+                                : WorldStateConversion.Number)
+                        );
+                    }
 
                     return false;
                 case BindableAngle angle:

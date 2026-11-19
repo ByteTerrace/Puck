@@ -114,6 +114,8 @@ public sealed record WorldProjectionProvenance(string Authority, string? Documen
 /// authored, and each state clock a carried value keys on as an anchored clock holding the anchor of its phase the
 /// recipient was last sent (<see cref="WorldClockAnchorLedger"/>), never the row it reads. A state clock no carried
 /// value keys on does not cross.</param>
+/// <param name="Haptics">The world's authored haptic pulse rows driven by delivered state, evaluated per local
+/// seat by the haptic director.</param>
 public sealed record WorldProjectionDocument(
     WorldProjectionProvenance Provenance,
     WorldMotionDefaults Motion,
@@ -150,7 +152,8 @@ public sealed record WorldProjectionDocument(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldProjectedMetadata? Metadata = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldObservedRow>? Observations = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<StateSpace>? Spaces = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldTimelineSection? Timeline = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldTimelineSection? Timeline = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldHapticRow>? Haptics = null
 ) {
     /// <summary>The document schema version. A reader refuses any other value; the canonical writer always emits it.</summary>
     public const string SchemaVersion = "puck.world.projection.v1";
@@ -342,7 +345,8 @@ public static class WorldProjection {
                 definition: definition,
                 keyed: keyed,
                 time: in time
-            )
+            ),
+            Haptics: definition.HapticsRaw
         );
 
         WorldStateDisclosure.ValidateBindings(
@@ -719,6 +723,7 @@ public static class WorldProjection {
 
         // Nullable annotations do not constrain collection elements on the JSON boundary.
         if ((projection.Kits is null) || projection.Kits.Any(predicate: static kit => (kit is null)) ||
+            (projection.Haptics?.Any(predicate: static row => (row is null)) == true) ||
             (projection.Observations?.Any(predicate: static row => ((row is null) || (row.Cells is null) || row.Cells.Any(predicate: static cell => (cell is null)))) == true)) {
             reason = "projection kits, observations and observed cells must be non-null rows.";
 
@@ -823,7 +828,8 @@ public static class WorldProjection {
                     Description: metadata.Description
                 )
             : null),
-            TimelineRaw: projection.Timeline
+            TimelineRaw: projection.Timeline,
+            HapticsRaw: projection.Haptics
         ) {
             DocumentId = projection.Provenance.DocumentId,
         };

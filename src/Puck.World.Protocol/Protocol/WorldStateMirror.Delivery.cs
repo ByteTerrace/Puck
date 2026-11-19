@@ -13,6 +13,16 @@ public sealed partial class WorldStateMirror {
     /// than seeking or replacing the document. Consumers resample its completed values without resetting identity.</summary>
     public bool LastInstallCompletedDelivery { get; private set; }
 
+    /// <summary>Reads a slot's latest delivered number without presentation interpolation.</summary>
+    /// <param name="slot">The slot's index, or -1, which reads nothing.</param>
+    /// <param name="value">The delivered number, or zero when the cell reads none.</param>
+    /// <returns><see langword="true"/> when the cell reads a number.</returns>
+    public bool TryDeliveredNumber(int slot, out float value) => TryScalarNumber(
+        delivered: true,
+        slot: slot,
+        value: out value
+    );
+
     private bool TryScalarNumber(int slot, out float value, bool delivered) {
         if (!delivered) { return TryNumber(slot: slot, value: out value); }
         var found = TryDeliveredValue(slot: slot, value: out var current);

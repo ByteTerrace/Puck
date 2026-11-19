@@ -290,6 +290,25 @@ public sealed class WorldStateLease {
             value: out value
         );
     }
+    /// <summary>Reads a slot of this lease's mirror at its latest delivered tick without presentation interpolation.</summary>
+    /// <param name="slot">The slot, from one of the <c>Slot</c> overloads; -1 reads nothing.</param>
+    /// <param name="value">The delivered number; zero when the slot is -1 or its cell holds no number.</param>
+    /// <returns><see langword="true"/> when the cell holds a number.</returns>
+    public bool TryDeliveredNumber(int slot, out float value) {
+        if (
+            (slot < 0) ||
+            (m_mirror is not { } mirror)
+        ) {
+            value = 0f;
+
+            return false;
+        }
+
+        return mirror.TryDeliveredNumber(
+            slot: slot,
+            value: out value
+        );
+    }
     /// <summary>Returns a slot's current sample through this lease's mirror.</summary>
     /// <param name="slot">The slot, from one of the <c>Slot</c> overloads; -1 reads nothing.</param>
     /// <returns>The sample; its value holds no case when the slot is -1 or the cell does not resolve.</returns>
