@@ -344,8 +344,9 @@ public sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPopul
         var interpreted = shaderStates.Count(predicate: static p => (p.State == "interpreted"));
         var specialized = shaderStates.Count(predicate: static p => (p.State == "specialized"));
         var pending = shaderStates.Count(predicate: static p => (p.State == "compiling"));
+        var plain = shaderStates.Count(predicate: static p => (p.State == "plain"));
 
-        render += $", shading programs {shades.Count}, interpreted {interpreted}, specialized {specialized}, pending {pending}, quarantined 0";
+        render += $", shading programs {shades.Count}, interpreted {interpreted}, specialized {specialized}, pending {pending}, plain {plain}, quarantined 0";
         if (worstShade is not null) {
             render += $", worst static cost {worstShade.PixelWork(lights: Puck.SignedDistance.SdfShadeProgram.MaxLights)} ({worstShade.Name})";
             var worstDemand = shadeMaterials.MinBy(keySelector: static material => material.Program.Demand.Cosine(baseWrap: material.Wrap));

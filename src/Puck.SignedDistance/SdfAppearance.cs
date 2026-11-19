@@ -551,4 +551,10 @@ public readonly struct SdfAppearanceOutline {
     /// <param name="screenIndex">The screen index.</param>
     /// <returns><see langword="true"/> when a screen surface declares it.</returns>
     public bool DeclaresScreen(int screenIndex) => ((screenIndex >= 0) && (screenIndex < SdfProgramBuilder.MaxScreenSurfaces) && ((Screens & (1u << screenIndex)) != 0u));
+    /// <summary>Returns whether another outline tells a field everything this one does alike: the same glass materials in
+    /// the same palette length, the same declared screens and the same appearance section size.</summary>
+    /// <param name="other">The other outline.</param>
+    /// <returns><see langword="true"/> when the two are interchangeable to a field derivation.</returns>
+    public bool Matches(in SdfAppearanceOutline other) =>
+        ((Screens == other.Screens) && (Vectors == other.Vectors) && (m_glass ?? []).AsSpan().SequenceEqual(other: (other.m_glass ?? [])));
 }

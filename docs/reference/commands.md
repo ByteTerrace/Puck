@@ -843,14 +843,21 @@ describes authoring, endpoint eligibility and the exposed-HDR cutoff option.
 
 `world.iteration` reads how long each edit took to show in the running World
 (`WorldIterationClock`). Every loop is timed from the edit to the first
-produced frame that finds each of four stages true:
+produced frame that finds each of five stages true:
 
 | Stage | The frame that first finds |
 |---|---|
 | `frame` | the edited document (or a reloaded kernel) rendered with the program its content calls for: a look value shows |
+| `shaded` | every shading program the frame runs drawn with its own kernel: an edited or added shading program's look shows once the specialization that holds it publishes, and until then it draws as a material with no program (`SdfWorldResidency.ShadesWhole`) |
 | `shown` | every mesh group drawing its own geometry at some tier, no stand-in from before the edit and no hole: a changed form shows whole |
 | `meshes` | the bakes settled at their demanded detail and standing in the mesh region, the fact `world.wait residency` waits on |
 | `lit` | the irradiance volume no longer tracing or relighting: the settled frame |
+
+Each line also carries `presented` (frames produced since the edit),
+`builds` (composition programs that derived a field; a look value packs its
+appearance into the held program's field and builds none) and `worst-frame`
+(the longest wait between produced frames from the edit until `shaded`, so a
+frame held up by a compile shows there).
 
 The boot is a loop timed from process start, so a restart and a cold boot
 read the same way. `world.reload` (by hand, or from `world.watch` once its

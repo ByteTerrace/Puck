@@ -29,7 +29,7 @@ namespace Puck.World;
 /// masks outside the mutation pipeline (<see cref="WorldDefinition.WithPlacementHoldings"/>), unjournalled and
 /// unvalidated beyond its bits, and reaches every reader as a value delivery. The server recompiles only colliders the
 /// shown creation actually moves, and a client presents the change without rebuilding what a face-free swap cannot
-/// change (<see cref="CompareHoldings"/>). A replay of the same tape reproduces it on the same tick because the
+/// change (<see cref="ComparePlacements"/>). A replay of the same tape reproduces it on the same tick because the
 /// trigger is simulation state, and a checkpoint carries it in the exported rows.
 /// The mask travels as data because a field condition reads the server's lattice, which neither a client's document
 /// nor a projection carries; a reader whose disclosure withholds a cell an entry reads is handed the mask without
@@ -135,42 +135,72 @@ public sealed record WorldPlacementResponse(WorldPlacementResponseCondition When
             ((creation.Document.Behavior?.Faces is { Count: > 0 }) || (creation.Document.Cameras is { Count: > 0 }) || (creation.Document.Behavior?.Sounds is { Count: > 0 }))
         );
     }
-    /// <summary>Classifies what a value delivery moved in a definition's responsive rows: nothing, only which
-    /// creations rows draw and collide as, or a creation that derives a presentation facet
-    /// (<see cref="ShowsFacets"/>).</summary>
+    /// <summary>Classifies what a value delivery moved in a definition's placement rows: nothing, rows that draw and
+    /// collide as something else (a holding swap, a dealt child added, moved or taken away, a contribution), or a row that
+    /// shows or stopped showing a creation deriving a presentation facet (<see cref="ShowsFacets"/>). A value delivery
+    /// carries every placement projection the authority installs between definition deliveries (the response sweep's
+    /// holdings, the deal sweep's children, tenure's contributions), so any row it replaces, adds or removes is a scene
+    /// change to its reader. Rows are matched by id and judged by identity: a projection install keeps every row it did
+    /// not touch as the same object, so a row that is not the reader's own object is one the delivery moved.</summary>
     /// <param name="before">The definition a reader held, or <see langword="null"/> when it held none.</param>
     /// <param name="after">The definition the delivery hands over.</param>
-    /// <returns>The kind of change; <see cref="WorldHoldingChange.None"/> when the rows are the same section, or a
-    /// different number of rows (a shape change, which a definition delivery carries).</returns>
+    /// <param name="solid">Set to whether a moved row is solid before or after, so a consumer of solid geometry alone
+    /// holds across a lamp or a display swapping its creation.</param>
+    /// <returns>The kind of change; <see cref="WorldPlacementChange.None"/> when the rows are the same section or the
+    /// reader held none (a first delivery is a definition delivery).</returns>
     /// <exception cref="ArgumentNullException"><paramref name="after"/> is <see langword="null"/>.</exception>
-    public static WorldHoldingChange CompareHoldings(WorldDefinition? before, WorldDefinition after) {
+    public static WorldPlacementChange ComparePlacements(WorldDefinition? before, WorldDefinition after, out bool solid) {
         ArgumentNullException.ThrowIfNull(argument: after);
 
-        if (
-            (before is null) ||
-            ReferenceEquals(objA: before.PlacementsRaw, objB: after.PlacementsRaw) ||
-            (before.Placements.Count != after.Placements.Count)
-        ) {
-            return WorldHoldingChange.None;
+        solid = false;
+        if ((before is null) || ReferenceEquals(objA: before.PlacementsRaw, objB: after.PlacementsRaw)) {
+            return WorldPlacementChange.None;
         }
 
-        var change = WorldHoldingChange.None;
+        var change = WorldPlacementChange.None;
+        var rows = before.Placements;
+        var next = after.Placements;
+        // Rows keep their order across a projection install, which only replaces in place, appends or removes; the
+        // first row out of step switches the walk to matching by id.
+        Dictionary<string, WorldPlacement>? earlier = null;
 
-        for (var index = 0; (index < after.Placements.Count); index++) {
-            var previous = before.Placements[index];
-            var next = after.Placements[index];
+        for (var index = 0; (index < next.Count); index++) {
+            var row = next[index];
+            WorldPlacement? previous;
 
-            if (ReferenceEquals(objA: previous, objB: next) || (previous.Holding == next.Holding)) {
-                continue;
+            if ((earlier is null) && (index < rows.Count) && string.Equals(a: rows[index].Id, b: row.Id, comparisonType: StringComparison.Ordinal)) {
+                previous = rows[index];
+            } else {
+                earlier ??= ById(rows: rows);
+                previous = earlier.GetValueOrDefault(key: row.Id);
             }
-            if (ShowsFacets(definition: before, placement: previous) || ShowsFacets(definition: after, placement: next)) {
-                return WorldHoldingChange.Facets;
-            }
+            if (ReferenceEquals(objA: previous, objB: row)) { continue; }
+            change = Moved(change: change, definitions: (before, after), next: row, previous: previous, solid: ref solid);
+        }
+        // A row the delivery took away moved as much as one it added.
+        if ((earlier is not null) || (rows.Count > next.Count)) {
+            HashSet<string> kept = [.. next.Select(selector: static row => row.Id)];
 
-            change = WorldHoldingChange.Appearance;
+            foreach (var row in rows) {
+                if (!kept.Contains(item: row.Id)) { change = Moved(change: change, definitions: (before, after), next: null, previous: row, solid: ref solid); }
+            }
         }
 
         return change;
+    }
+    // Folds one moved row into the change so far: a facet anywhere outranks an appearance.
+    private static WorldPlacementChange Moved(WorldPlacementChange change, (WorldDefinition Before, WorldDefinition After) definitions, WorldPlacement? previous, WorldPlacement? next, ref bool solid) {
+        solid |= ((previous?.Solid is not null) || (next?.Solid is not null));
+        if (change == WorldPlacementChange.Facets) { return change; }
+        return ((((previous is not null) && ShowsFacets(definition: definitions.Before, placement: previous)) || ((next is not null) && ShowsFacets(definition: definitions.After, placement: next)))
+            ? WorldPlacementChange.Facets
+            : WorldPlacementChange.Appearance);
+    }
+    private static Dictionary<string, WorldPlacement> ById(IReadOnlyList<WorldPlacement> rows) {
+        var byId = new Dictionary<string, WorldPlacement>(capacity: rows.Count, comparer: StringComparer.Ordinal);
+
+        foreach (var row in rows) { byId[row.Id] = row; }
+        return byId;
     }
     /// <summary>Determines whether any entry of a row's response facet reads one of the named rows — a state
     /// condition's row or comparand row, or a field condition's scalar row.</summary>
@@ -198,12 +228,13 @@ public sealed record WorldPlacementResponse(WorldPlacementResponseCondition When
         return false;
     }
 }
-/// <summary>What a value delivery moved in a definition's responsive rows
-/// (<see cref="WorldPlacementResponse.CompareHoldings"/>).</summary>
-public enum WorldHoldingChange {
-    /// <summary>No row's holding mask moved.</summary>
+/// <summary>What a value delivery moved in a definition's placement rows
+/// (<see cref="WorldPlacementResponse.ComparePlacements"/>).</summary>
+public enum WorldPlacementChange {
+    /// <summary>No placement row moved.</summary>
     None,
-    /// <summary>Rows show other creations, none of which derives a face, a camera or a sound.</summary>
+    /// <summary>Rows were replaced, added or removed, none showing a creation that derives a face, a camera or a
+    /// sound.</summary>
     Appearance,
     /// <summary>A row shows, or stopped showing, a creation that derives a face, a camera or a sound.</summary>
     Facets,

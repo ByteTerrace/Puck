@@ -197,7 +197,8 @@ the exactly opposite face for every-side demand. `sdfLightVisibility` keeps an
 unqueried authored slot at zero even during a shadow handoff. `world.budget` reports admitted program identities,
 author names, static cost and demand. `shade-cost` displays the sum of explicit
 phase work over `MaxPhaseWork`; `shade-tier` shows a pixel's tier: grey for no
-program, cyan interpreted, green specialized. There are no quarantined kernels yet.
+program (a program whose specialization is still compiling included), cyan
+interpreted, green specialized. There are no quarantined kernels yet.
 
 ## The three views and glass kernels
 
@@ -206,10 +207,13 @@ Every views and glass recording takes its kernel from one door,
 
 - **Plain** (`sdf-world-views-plain`, `sdf-glass-plain`, fixed kernels compiled
   with `SDF_SHADE_EMPTY`): a frame with no active program (the lever on layers,
-  or no material and no default with a program). `sdfShadeBinding` folds to none,
+  or no material and no default with a program), and a frame whose programs no
+  specialization has been published for yet. `sdfShadeBinding` folds to none,
   so every program branch of the stages compiles out, not only the interpreter.
-- **Interpreter** (`sdf-world-views`, `sdf-glass`): a frame with active programs
-  that no published specialized set holds, and `world.shaders.tier interpreted`.
+- **Interpreter** (`sdf-world-views`, `sdf-glass`): only under
+  `world.shaders.tier interpreted`. It costs 60 to 420 ms a frame on the debug
+  world, so no edit falls back to it
+  ([the decision](../../../../docs/decisions/rendering.md#authored-shading)).
 - **Specialized** (`sdf-world-views.shade-<set>`, `sdf-glass.shade-<set>`,
   `sdf-world-views-shade.shade-<set>`): `SdfShadeHlsl.Specialize` spliced in as
   `isa/sdf-shade.hlsli`, each program an
@@ -222,9 +226,13 @@ Every views and glass recording takes its kernel from one door,
   (`sdfShadeLightPrologue`, the arm's `Carry` function) and read from an
   `SdfShadeCarry` by every light: DXC leaves loop-invariant work inside a switch arm
   in the walk, which the hoist hand-written shading has removes. There is no interpreter arm:
-  one would keep the interpreter's registers allocated for the whole kernel. A
-  set records only a frame whose active programs it holds
-  (`SdfShadeKernels.Covers`).
+  one would keep the interpreter's registers allocated for the whole kernel. The
+  published set keeps recording while the frame's active programs leave it: a
+  binding whose identity matches no arm binds none (`sdfShadeBinding`, under
+  `SDF_SHADE_ARMS`), so an edited or added program shades as a material with no
+  program, as the plain kernels shade it, until the set that holds every active
+  program (`SdfShadeKernels.Covers`) publishes. A parameter value is no part of
+  an identity, so a parameter edit keeps its arm and shows at once.
 
 A frame with active programs shades its views **in bins** while
 `world.shaders.bins` is on (`SdfWorldPackage.WithBins`; the residency's
@@ -262,8 +270,12 @@ source lacks refuses the plan, and bytecode installed without its source stays
 interpreted. An overtaken or released build is retired to the catalog's
 `RetiredShadeBuilds`, disposed on the pool as it finishes and drained at device
 loss and World root teardown, so neither waits on the frame thread.
-A frame whose active set leaves the published one retires it at once, so the
-interpreter shows an edit on its next frame. A recording pins the set it records
+A frame whose active set leaves the published one keeps it, shading the programs
+it holds and every other as no program, so a frame never drops to the
+interpreter's cost while an edit compiles; only a kernel reload that replaces
+its interpreter key retires it. `world.iteration`'s `shaded` stage holds once
+the frame's programs all have their arms (`SdfWorldResidency.ShadesWhole`).
+A recording pins the set it records
 with; the pin moves to its submission and drops only on a completion proof,
 abandonment before submission or a device loss, and a retired set is freed only
 at zero pins (or at device teardown and the residency's final idle drain).
@@ -283,12 +295,13 @@ kernels' lifetime, publication or binning keeps all nine.
 
 **Publication and specialization.**
 
-1. *A specialized kernel replaces the interpreter only at a frame boundary, and
-   only for a frame whose active programs its set holds.* The one publication
+1. *A specialized set is published only at a frame boundary, and only when it
+   holds every active program; once published it shades the programs it holds
+   and binds none for any other.* The one publication
    door is `SdfWorldResidency.PrepareShade`, which runs once a produced frame
    after the frame is packed and before any pass records, with the frame the
-   passes record. A frame whose active set leaves the published set, or whose
-   kernels a reload replaced, retires it there before any recording; an arrival
+   passes record. A frame whose kernels a reload replaced retires the set there
+   before any recording; an arrival
    publishes only while its identity (the sorted program identities, the op
    fingerprint and `SdfShadeKernels.InterpreterOf`: the kernel set's
    `SdfKernelSet.ContentKey` and the key of each specialized kernel's

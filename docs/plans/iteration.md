@@ -20,10 +20,15 @@ makes each slow today, and the order of the work that makes them fast.
 The World times every loop itself (`WorldIterationClock`, read with
 `world.iteration`; [the reference](../reference/commands.md#edit-loops)). Each
 loop is timed from the edit to the first produced frame that finds each of
-four stages true:
+five stages true:
 
 - `frame`: the frame renders the edited document, or a reloaded kernel, with
   the program its content calls for. A look value shows here.
+- `shaded`: every shading program the frame runs draws with its own kernel
+  (`SdfWorldResidency.ShadesWhole`). An edited or added shading program draws
+  as a material with no program until the specialization that holds it
+  publishes; the frame never falls back to the interpreter
+  ([the decision](../decisions/rendering.md#authored-shading)).
 - `shown`: every mesh group draws its own geometry at some tier, with no
   stand-in left from before the edit and no hole. A changed form shows whole
   here.
@@ -81,14 +86,25 @@ What the baseline shows:
   (`[sdf.mesh-gi] behind level=0 … needed-per-second=2496`), over ten minutes
   of watching. Lighting from a stable proxy, relit incrementally (step 4), is
   the fix this figure waits on.
-- **Every look value costs a program build and about a second.** An exposure
-  or light edit, read live off the definition each frame, still rebuilt the
-  composition's program (`builds=1`) before a frame showed it.
-- **A palette colour rebakes meshes.** The live colour edit restarted the bake
-  with 15 groups baking and one loading
-  (`[sdf.mesh-bake] start … baking=15 loading=1 … cause=program`), so the
-  colour took 21 seconds to show whole: colour is in the bake's input, not an
-  appearance upload (step 3).
+- **Every look value cost a program build.** An exposure or light edit, read
+  live off the definition each frame, still rebuilt the composition's program
+  (`builds=1`) before a frame showed it. A rebuild now hands the builder the
+  program it replaces, and an emission whose field inputs are unchanged takes
+  that program's field derivation (`SdfProgram.Of`, `SdfProgram.SharesField`):
+  the same program for an exposure or light edit, and the held field with the
+  new appearance packed into its tail for a colour or material value. The bake
+  and the dresser keep every group across such a program, and `builds=0` on
+  every look row.
+- **A palette colour seemed to rebake meshes.** The colour itself never
+  reached a bake key: two compositions of the debug world before and after
+  the colour (`puck mesh audit` with an empty identity) plan the same 6,568
+  geometries. The 15 groups that baked were dealt placements the client had
+  never drawn: the deal sweep installs its children through a value delivery,
+  and the client compared only same-length placement lists by holding, so
+  added, removed or moved rows waited for the next whole definition delivery,
+  which the colour edit happened to be. `WorldPlacementResponse.ComparePlacements`
+  now treats any replaced, added or removed row as a scene change, so deals
+  show on their own tick and a colour edit begins no bake.
 - **A saved edit spends most of its time before the first frame.** Each
   `world.reload` took 9 to 15 seconds to reach a frame, though the rebake after
   it took 0 to 3: compiling, admitting, diffing and installing the document is
@@ -301,10 +317,27 @@ population rebuild.
   wait: the authoring loop's steps 1 to 5.
 - **The diff serializes both documents.** It goes when the compile session
   hands over the patch it already knows (authoring loop step 3).
-- **A material change relights the whole window.** The materials key is one
-  key for every material the scene holds. A relight costs far less than a
-  trace and cycles under a moving sun in any case; narrowing it to the probes
-  whose hits carry the changed material belongs to step 4 of this plan.
+- **A material change relights the whole window.** The materials key
+  (`SdfMeshIrradiance.MaterialsKey`) already reads only the materials the
+  static scene's triangles carry, but a change to one of them moves the
+  lighting version, and every relight sweep lists every probe not relit in the
+  current sweep (`SdfMeshIrradiance.List`, and the GPU selection beside it)
+  until no probe moves past its bound. Narrowing the first sweep to the probes
+  whose hits carry the material would change nothing while later sweeps relight
+  the window for the bounce; it needs a relight driven by which probes' inputs
+  moved, which is step 4.
+- **Every edit holds the frame while the server applies it.** A live row set
+  runs the mutation's compose, whole-world validation and the definition's
+  delivery through the recipient's disclosure walk on the step the host pump
+  waits for, and the client receives the whole definition again. A look value
+  reaches nothing the simulation reads; making it a presentation install that
+  delivers only the rows it changed belongs to the authoring loop's steps 3
+  and 4. `world.iteration`'s `worst-frame` reads the hold.
+- **A reload that changes a shading program is refused.** The `shades` table is
+  keyed by program identity, so the edit removes one member and adds another,
+  and `WorldReloadDelta` refuses the patch
+  (`world.reload.delta-unrepresentable: … at $.shades`). An author's shading
+  edit reaches a running World only by restart until the diff expresses it.
 - **A reload deals placements again.** Its document holds no dealt placement,
   so the deal sweep adds them back and the client builds its program a second
   time. It stops when a patch merges over the live document.

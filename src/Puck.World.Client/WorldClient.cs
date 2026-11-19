@@ -221,8 +221,8 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
     /// <summary>The monotonic definition-delivery counter — bumped each time the server delivers a new definition. The
     /// frame source watches it to know a scene/screen change landed (distinct from a population/roster change).</summary>
     public int DefinitionRevision => m_definitionRevision;
-    /// <summary>The monotonic response counter — bumped each time a value delivery moves which creation a placement
-    /// shows without moving a presentation facet (<see cref="WorldHoldingChange.Appearance"/>). The frame source composes
+    /// <summary>The monotonic response counter — bumped each time a value delivery replaces, adds or removes placement
+    /// rows without moving a presentation facet (<see cref="WorldPlacementChange.Appearance"/>). The frame source composes
     /// again on it; nothing derived from the definition's shape reconciles.</summary>
     public int ResponseRevision => m_responseRevision;
     /// <summary>Gets the monotonic solid-response counter: bumped with <see cref="ResponseRevision"/> only when a solid
@@ -1173,19 +1173,20 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
     /// <inheritdoc/>
     /// <remarks>A value-only mutation cannot have changed channels, target registers, or scene shape: the fresh
     /// definition is stored for state-value reads, and the state mirror refreshes the slots bound to the rows the stamp
-    /// names. A delivery that moved which creations placements show bumps <see cref="ResponseRevision"/>, so the frame
-    /// source composes again, or, when a shown creation derives a face, a camera or a sound,
-    /// <see cref="DefinitionRevision"/>, so the presentation reconciles them as well.</remarks>
+    /// names. A delivery that replaced, added or removed placement rows (a holding swap, a dealt child, a contribution)
+    /// bumps <see cref="ResponseRevision"/>, so the frame source composes again, or, when a moved row shows a creation
+    /// that derives a face, a camera or a sound, <see cref="DefinitionRevision"/>, so the presentation reconciles them as
+    /// well (<see cref="WorldPlacementResponse.ComparePlacements"/>).</remarks>
     public void DeliverState(WorldDefinition definition, WorldDocumentVersion version, in WorldStateStamp stamp, in WorldStreamStamp stream) {
         ArgumentNullException.ThrowIfNull(argument: definition);
 
-        switch (WorldPlacementResponse.CompareHoldings(after: definition, before: m_definition)) {
-            case WorldHoldingChange.Appearance:
+        switch (WorldPlacementResponse.ComparePlacements(after: definition, before: m_definition, solid: out var solid)) {
+            case WorldPlacementChange.Appearance:
                 m_responseRevision++;
-                if (MovesSolidHolding(after: definition, before: m_definition)) { m_solidResponseRevision++; }
+                if (solid) { m_solidResponseRevision++; }
 
                 break;
-            case WorldHoldingChange.Facets:
+            case WorldPlacementChange.Facets:
                 m_definitionRevision++;
 
                 break;
@@ -1196,15 +1197,6 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
         m_stateMirror.Refresh(notifyDelivery: false, stamp: in stamp);
     }
 
-    // Only called once CompareHoldings found moved rows, so both definitions hold the same row count.
-    private static bool MovesSolidHolding(WorldDefinition after, WorldDefinition before) {
-        for (var index = 0; (index < after.Placements.Count); index++) {
-            var next = after.Placements[index];
-
-            if ((next.Solid is not null) && (next.Holding != before.Placements[index].Holding)) { return true; }
-        }
-        return false;
-    }
     // Records the version a document was delivered at. A different activation is a different world: the state mirror
     // begins a new lifetime, so what a presentation kept about the previous world's values does not carry over.
     private void BeginVersion(WorldDocumentVersion version) {

@@ -31,6 +31,11 @@ public sealed partial class SdfProgram {
     /// zero when no glyph names an atlas that carries pixels.</param>
     /// <param name="glyphStroke">The thinnest stroke the glyph shapes are taken to have, in units of a glyph's distance
     /// scale (<see cref="GlyphStroke"/>); zero when there is no glyph.</param>
+    /// <param name="replaces">The program this one replaces, or <see langword="null"/>. When the field constructor would
+    /// read the same inputs it read, the result shares its field derivation (<see cref="SharesField"/>): it is
+    /// <paramref name="replaces"/> itself when the appearance is its own in every material and screen surface, and
+    /// otherwise a copy of its words with this appearance packed into their tail, so a look value costs a pack rather than
+    /// a field build.</param>
     /// <returns>The program.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="instructions"/> or <paramref name="appearance"/> is
     /// <see langword="null"/>.</exception>
@@ -41,8 +46,16 @@ public sealed partial class SdfProgram {
     /// two instance ranges claim one instruction.</exception>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="glyphStroke"/> or an instance bound is not finite and non-negative, or a trapezoid's
     /// profile slant vanishes in the deterministic field's representation.</exception>
-    public static SdfProgram Of(IReadOnlyList<SdfInstruction> instructions, SdfAppearance appearance, IReadOnlyList<SdfInstanceRange>? instances = null, IReadOnlyList<(int InstructionIndex, Vector2[] Vertices)>? convexPolygonProfiles = null, IReadOnlyList<SdfSweepCurve>? sweepCurves = null, IReadOnlyList<SdfCompiledPath>? paths = null, int reservedPathWords = 0, IReadOnlyList<SdfSampledBinding>? sampledBindings = null, ulong glyphAtlas = 0, float glyphStroke = 0f) {
+    public static SdfProgram Of(IReadOnlyList<SdfInstruction> instructions, SdfAppearance appearance, IReadOnlyList<SdfInstanceRange>? instances = null, IReadOnlyList<(int InstructionIndex, Vector2[] Vertices)>? convexPolygonProfiles = null, IReadOnlyList<SdfSweepCurve>? sweepCurves = null, IReadOnlyList<SdfCompiledPath>? paths = null, int reservedPathWords = 0, IReadOnlyList<SdfSampledBinding>? sampledBindings = null, ulong glyphAtlas = 0, float glyphStroke = 0f, SdfProgram? replaces = null) {
+        ArgumentNullException.ThrowIfNull(argument: instructions);
         ArgumentNullException.ThrowIfNull(argument: appearance);
+
+        // Read before the constructor patches its own copy of the instructions.
+        var key = InstructionsKey(instructions: instructions);
+
+        if ((replaces is not null) && replaces.FieldInputsMatch(appearance: appearance.Outline, convexPolygonProfiles: convexPolygonProfiles, glyphAtlas: glyphAtlas, glyphStroke: glyphStroke, instances: instances, instructions: instructions, instructionsKey: key, paths: paths, reservedPathWords: reservedPathWords, sampledBindings: sampledBindings, sweepCurves: sweepCurves)) {
+            return (replaces.HasAppearance(appearance: appearance) ? replaces : replaces.WithAppearance(appearance: appearance));
+        }
 
         var program = new SdfProgram(
             appearance: appearance.Outline,
@@ -59,6 +72,8 @@ public sealed partial class SdfProgram {
 
         appearance.Pack(materialVector: ((int)program.m_words[ProgramMaterialOffsetLane]), words: program.m_words);
         program.m_appearance = appearance;
+        program.m_instructionsKey = key;
+        program.m_reservedPathWords = reservedPathWords;
 
         return program;
     }

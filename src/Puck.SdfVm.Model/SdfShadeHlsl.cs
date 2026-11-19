@@ -17,8 +17,9 @@ public static partial class SdfShadeHlsl {
 
     /// <summary>Generates the include a specialized kernel compiles in place of <see cref="Generate"/>: the same
     /// declarations and op functions, then each program of <paramref name="programs"/> as straight-line phases selected by
-    /// its identity, and no interpreter. A binding naming a program outside the set executes nothing, so a caller selects
-    /// the kernel only for a frame whose active programs the set holds.</summary>
+    /// its identity, and no interpreter. A binding naming a program outside the set binds none (<c>sdfShadeBinding</c>),
+    /// so its material shades as one with no program: a frame whose active programs the set holds only in part records
+    /// with it while the set that holds them all compiles.</summary>
     /// <param name="programs">The admitted programs; duplicates by identity are ignored and order is canonical.</param>
     /// <returns>The include's text.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="programs"/> is <see langword="null"/>.</exception>
@@ -44,6 +45,8 @@ public static partial class SdfShadeHlsl {
         text.Append(value: "#define SDF_SHADE_MAX_REGISTERS ").Append(value: SdfShadeProgram.MaxRegisters).Append(value: "u\n");
         text.Append(value: "#define SDF_SHADE_MAX_OPS ").Append(value: SdfShadeProgram.MaxOps).Append(value: "u\n");
         text.Append("#define SDF_SHADE_MAX_PHASE_WORK ").Append(SdfShadeProgram.MaxPhaseWork).Append("u\n");
+        // The straight-line arms the include holds: zero for the interpreter, which shades every bound program.
+        text.Append("#define SDF_SHADE_ARMS ").Append((programs?.Length ?? 0)).Append("u\n");
         text.Append("#define SDF_SHADE_READ_PAINT ").Append((uint)SdfShadeReads.PaintCoverage).Append("u\n");
         text.Append("#define SDF_SHADE_READ_PROBE_SHARE ").Append((uint)SdfShadeReads.ProbeShare).Append("u\n");
         foreach (var op in SdfShadeOps.Table) { text.Append(value: "#define SDF_SHADE_").Append(value: op.Op.ToString().ToUpperInvariant()).Append(value: ' ').Append(value: ((uint)op.Op)).Append(value: "u\n"); }
