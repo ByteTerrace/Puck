@@ -761,10 +761,7 @@ public sealed partial class SdfProgramBuilder {
         // correction for a non-uniform scale — f(S⁻¹p)·min(s) is 1-Lipschitz, so it can only underestimate true
         // distance, never overstep. the floor is
         // SdfSolidGeometry.MinimumScale, the one the authoring reach charges, so the shader reads no floor of its own.
-        var clamped = Vector3.Max(
-            value1: Vector3.Abs(value: scale),
-            value2: new Vector3(value: SdfSolidGeometry.MinimumScale)
-        );
+        var clamped = SdfSolidGeometry.EffectiveScale(scale: scale);
 
         return Transform(
             data0: new Vector4(

@@ -301,8 +301,8 @@ The design rests on five invariants.
    door: contact's program comes from `CreationStampEmitter.EmitContact`, which
    calls the same EmitNoise.
 5. **The step bound includes the band's slope.** The relief adds to its
-   scope's Lipschitz bound additively, as the relief does today in a
-   shape-free chain (`SdfProgram.Lipschitz.cs`). With masks, that contribution
+   scope's Lipschitz bound additively, at its own instruction and through its
+   chain's point factor, as every relief does (`SdfProgram.Lipschitz.cs`). With masks, that contribution
    becomes `|a| · B`, where `a` is the amplitude, `L` is the unmasked relief's
    gradient bound, and
 
@@ -544,6 +544,21 @@ dearest:
   amplitude by the local gradient. It composes with the mask by
   multiplication, and invariant 5's bound still holds, since the plan keeps the
   undamped bound.
+
+#### A relief after a fold
+
+A relief (noise, sine or cellular) after a point operation with no global
+continuous derivative bound, such as a repeat whose cells jump at their seams
+or a reach-dependent warp, is refused: the program names the operation
+(`SdfProgram.AnalyzeReliefPointFactors`), and the `puck.sdf.v1` door refuses a
+`noiseDisplace` or `cellDisplace` that follows a `cellJitter` with no `reset`
+between them (`SdfRefusal.ReliefAfterFold`), a document an addon could write
+before. No creation emits such a chain: a creation's noise rides its stamp's
+rigid prefix and scale, and its sine relief a rigid chain of its own. Letting
+a relief follow a fold again needs a marcher and a bake that handle a seam's
+jump explicitly, with the relief charged inside each cell through the prefix's
+scale. Nothing designs that yet; it waits on a world that wants repeated
+relieved content, which a relief under its own reset already serves.
 
 ### Contact on the drawn relief
 
