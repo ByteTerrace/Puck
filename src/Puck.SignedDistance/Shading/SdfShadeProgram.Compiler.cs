@@ -121,12 +121,19 @@ public sealed partial class SdfShadeProgram {
             }
             var canonicalOutputs = bindings.Select(selector: o => new SdfShadeOutput(o.Phase, o.Name, new("value", Name: $"r{o.Value.Index}"))).ToArray();
 
+            // The straight-line arm a specialized kernel emits runs the same instructions without the interpreter's
+            // per-instruction decode and register selection (SdfShadeOps.DispatchWork).
+            var straightCosts = new uint[3];
+
             for (var phase = 0; (phase < phases.Length); phase++) {
                 phases[phase] = Allocate(phases[phase], ((SdfShadePhase)phase), bindings);
                 costs[phase] = 0;
                 foreach (var instruction in phases[phase]) {
-                    costs[phase] = checked(costs[phase] + SdfShadeOps.Get(instruction.Op).Work + (instruction.Op == SdfShadeOp.Shape
+                    var work = checked(SdfShadeOps.Get(instruction.Op).Work + (instruction.Op == SdfShadeOp.Shape
                         ? SdfShadeCost.Shape(m_shapes.First(s => s.Relative == instruction.Immediate).Shape) : 0u));
+
+                    costs[phase] = checked(costs[phase] + work);
+                    straightCosts[phase] = checked(straightCosts[phase] + (work - SdfShadeOps.DispatchWork));
                 }
             }
             if (costs.Aggregate(0UL, static (sum, cost) => checked(sum + cost)) > MaxPhaseWork) { Fail("PUCK129", $"Shade work exceeds {MaxPhaseWork} after register allocation."); }
@@ -199,7 +206,7 @@ public sealed partial class SdfShadeProgram {
                 Array.AsReadOnly(array: m_canonicalValues.ToArray()));
 
             return new SdfShadeProgram(canonical, words.ToArray(), parameterWords.ToArray(), m_parameters.Select(selector: p => p.Type).ToArray(),
-                phases, bindings.ToArray(), costs, m_reads, new(EverySide: everySide, MaxTiltRadians: tilt, MaxWrap: wrap));
+                phases, bindings.ToArray(), costs, straightCosts, m_reads, new(EverySide: everySide, MaxTiltRadians: tilt, MaxWrap: wrap));
 
             SdfShadeExpression Canonical(Node node, SdfShadeOperand[] args) => new(SdfShadeOps.Get(op: node.Op).Name,
                 ((args.Length == 0) ? null : Array.AsReadOnly(array: args.Select(selector: a => new SdfShadeExpression("value", Name: $"r{a.Index}")).ToArray())),

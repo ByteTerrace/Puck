@@ -790,10 +790,11 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         switch (m_part) {
             case SdfWorldPackage.Parts.Views: {
                     // The views kernels are the residency's shading selection, pinned for this recording's submission. A
-                    // binned graph's plan is the one its filter and bins passes record with this frame (ShadePlanOf).
+                    // binned graph's plan is the one whose arguments its bins pass last wrote (ShadePlanOf).
                     m_shadePlan = (m_binned
                         ? m_owner.ShadePlanOf(instance: m_context.Instance, frame: residency.Frame!, width: recording.Width, height: recording.Height, screens: tables.PassValues.ScreenCount)
-                        : SdfShadeDispatch.For(m_shadePlan, residency.Frame!, recording.Width, recording.Height, tables.PassValues.ScreenCount, glass: false));
+                        : SdfShadeDispatch.For(previous: m_shadePlan, frame: residency.Frame!, view: m_view.View, width: recording.Width, height: recording.Height,
+                            screens: tables.PassValues.ScreenCount, glass: false, straight: (residency.ShadeSelection is not null)));
                     var selection = m_shade.RecordSelection(plan: m_shadePlan, residency: residency, slot: slot);
 
                     if (!m_shadePlan.Binned) {
@@ -835,7 +836,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
             case SdfWorldPackage.Parts.ViewsBins: {
                     // Step zero (one group) turns the counts into offsets and writes every job's arguments at the plan's
                     // widths; step one (an invocation a tile) scatters the tiles once every offset is written.
-                    var plan = m_owner.ShadePlanOf(instance: m_context.Instance, frame: residency.Frame!, width: recording.Width, height: recording.Height, screens: tables.PassValues.ScreenCount);
+                    var plan = m_owner.CommitShadePlan(instance: m_context.Instance, frame: residency.Frame!, width: recording.Width, height: recording.Height, screens: tables.PassValues.ScreenCount);
                     var bins = recording.Outputs[OutputIndexOf(member: SdfWorldPackage.ShadeTilesWritten)].Buffer!;
                     var pipeline = tables.Pipeline(kernel: SdfKernel.ViewsBins);
                     var tiles = (recording.Width.CeilingDivide(divisor: SdfVisibility.GroupEdgePixels) * recording.Height.CeilingDivide(divisor: SdfVisibility.GroupEdgePixels));

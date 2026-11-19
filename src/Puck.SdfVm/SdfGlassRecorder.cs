@@ -81,8 +81,8 @@ internal sealed class SdfGlassRecorder : IRenderGraphPackageRecorder, IRenderGra
 
         m_work.Write(passSet: set, recording: recording);
         BindPorts(recording: in recording, set: set, tables: tables);
-        m_shadePlan = SdfShadeDispatch.For(m_shadePlan, frame, recording.Width, recording.Height,
-            tables.PassValues.ScreenCount, glass: true);
+        m_shadePlan = SdfShadeDispatch.For(previous: m_shadePlan, frame: frame, view: index, width: recording.Width, height: recording.Height,
+            screens: tables.PassValues.ScreenCount, glass: true, straight: (residency.ShadeSelection is not null));
         var pipeline = m_shade.RecordPipeline(recording.Slot, residency, m_shadePlan, SdfKernel.Glass);
 
         recording.Recorder.BindPipeline(bindPoint: GpuBindPoint.Compute, commandBufferHandle: recording.CommandBuffer, pipelineHandle: pipeline.Handle);
