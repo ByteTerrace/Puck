@@ -100,7 +100,7 @@ public sealed partial class WorldRenderLightingSkyLawTests {
             actual: resolved.Lights[0].Direction
         );
         Assert.Equal(
-            expected: SdfLights.DefaultPenumbraSlope,
+            expected: 0f,
             actual: resolved.Lights[0].Param
         );
         Assert.Equal(
@@ -228,7 +228,7 @@ public sealed partial class WorldRenderLightingSkyLawTests {
         );
         Assert.Equal(
             actual: fill.Param,
-            expected: SdfLights.DefaultPenumbraSlope
+            expected: 0f
         );
         Assert.Equal(
             actual: rim.Kind,

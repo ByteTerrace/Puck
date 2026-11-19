@@ -21,6 +21,11 @@ public sealed partial class SdfMeshPathBake {
     private int m_retiersReused;
 
     private readonly List<(float Pixel, int Index, int Tier)> m_retierCandidates = [];
+    // The floors planned on arrival that have landed and start their demanded tier at the next decision; how many such
+    // floors still owe it, which the bake owes the frame (Owes); and the first details that landed.
+    private readonly List<(float Pixel, int Index, int Tier)> m_firstCandidates = [];
+    private int m_firstDetailsOwed;
+    private int m_floorsRaised;
 
     // The measure of every group's demand, spread over SdfMeshTier.MeasureFrames frames (MeasureDemands): the group
     // the next frame's share starts at, the boxes the sweep under way has measured, and those the last whole sweep
@@ -80,11 +85,28 @@ public sealed partial class SdfMeshPathBake {
     /// thread under the gate, once the frame's copies are indexed. A plan made on a build's thread passes
     /// <see langword="false"/> and measures every group by its planned box, and the restart that adopts it plans again
     /// each group whose tier the frame's demand moves; such a plan can also read a frame's demand points mid-update.</param>
+    /// <param name="arrives">Whether a selector arrives with nothing to draw (<see cref="Arrives"/>), whose group plans its
+    /// floor first; <see langword="null"/> plans every group at its demanded tier.</param>
     /// <returns>The function a plan asks each group's tier of.</returns>
-    private Func<SdfMeshBakeGroup, int> Tiers(IReadOnlyList<DynamicTransform> transforms, bool copies = true) =>
-        (PlannedTier ?? (copies
+    private Func<SdfMeshBakeGroup, int> Tiers(IReadOnlyList<DynamicTransform> transforms, bool copies = true, Func<int, bool>? arrives = null) {
+        if (PlannedTier is { } planned) { return planned; }
+
+        Func<SdfMeshBakeGroup, int> demanded = (copies
             ? (group => TierOf(pixel: PlannedPixel(group: group, transforms: transforms)))
-            : (group => TierOf(pixel: Demand.PixelAt(group: group, transforms: transforms)))));
+            : (group => TierOf(pixel: Demand.PixelAt(group: group, transforms: transforms))));
+
+        if (arrives is null) { return demanded; }
+        // A group arriving with nothing to draw plans its floor: the last tier, which the plan holds to the coarsest rung
+        // that changes its mesh. It owes its demanded tier, which Retier starts once the floor stands.
+        return group => {
+            if (!arrives(arg: group.Selector)) { return demanded(arg: group); }
+            ((Group)group).FirstDetailOwed = true;
+            return SdfMeshTier.Last;
+        };
+    }
+    // Whether a selector arrives with nothing to draw, given the group the bake held at it: none, or one still bringing its
+    // floor with nothing shown yet. Such a group plans its floor first (Tiers).
+    private static bool Arrives(Group? old) => ((old is null) || ((old.Shown is null) && (old.Tier == old.CoarsestTier)));
 
     /// <summary>Gets the tier every plan of this bake asks for each group in place of the one its demand points ask
     /// (<see cref="SdfMeshTier"/>), held to the rungs that change the group's mesh; <see langword="null"/>, a residency's
@@ -199,7 +221,8 @@ public sealed partial class SdfMeshPathBake {
             replaced.Retired = true;
             group.Replaces = null;
             if (group.Retiering) {
-                if (group.Tier > replaced.Tier) { m_coarsened++; } else { m_retiers++; }
+                if (group.FirstDetail) { m_floorsRaised++; } else if (group.Tier > replaced.Tier) { m_coarsened++; } else { m_retiers++; }
+                group.FirstDetail = false;
                 if (group.Stored) { m_retiersReused++; }
                 group.RetierDeltaBytes = 0L;
                 m_worstOwedFrames = Math.Max(val1: m_worstOwedFrames, val2: group.OwedFrames);
@@ -255,8 +278,16 @@ public sealed partial class SdfMeshPathBake {
         var filled = named;
         var freed = 0L;
 
+        // A floor's first detail is the arrival's own bake, as a first plan's is: its bytes are what its demand asks,
+        // read from the draws once it lands, and it holds no budgeted replacement back.
+        var firstsInFlight = 0;
+
         foreach (var (group, _) in m_replacing) {
             if (!group.Retiering) { continue; }
+            if (group.FirstDetail) {
+                firstsInFlight++;
+                continue;
+            }
             if (group.Done) { landing++; } else { inFlight++; }
             if (group.RetierDeltaBytes > 0L) {
                 filled = filled.AddSaturating(right: group.RetierDeltaBytes);
@@ -286,8 +317,12 @@ public sealed partial class SdfMeshPathBake {
         // The bytes the draws would name with every demand half a rung finer and every spare group coarsened.
         var finer = 0L;
 
+        var firsts = m_firstCandidates;
+        var firstsOwed = 0;
+
         candidates.Clear();
         spare.Clear();
+        firsts.Clear();
         for (var index = 0; (index < m_groups.Count); index++) {
             var group = m_groups[index];
 
@@ -300,6 +335,17 @@ public sealed partial class SdfMeshPathBake {
             if (demanded != group.DemandedTier) {
                 group.DemandedTier = demanded;
                 group.RetierRefused = false;
+            }
+            // A floor planned on arrival starts its demanded tier once it has landed, with no hold, whatever the budget:
+            // the arrival's detail is what a first plan at the demanded tier would have baked.
+            if (group.FirstDetailOwed) {
+                if (demanded >= group.Tier) {
+                    group.FirstDetailOwed = false;
+                } else {
+                    firstsOwed++;
+                    if (group.Done && (group.Replaces is null) && !group.Ahead) { firsts.Add(item: (pixel, index, demanded)); }
+                    continue;
+                }
             }
             // The tier a frame draws is the replaced group's while a replacement is still to land.
             var shown = (group.Replaces ?? group);
@@ -354,6 +400,16 @@ public sealed partial class SdfMeshPathBake {
         var replaced = false;
         var heldBack = 0;
 
+        foreach (var (_, index, tier) in firsts) {
+            var floor = m_groups[index];
+
+            floor.FirstDetailOwed = false;
+            firstsOwed--;
+            if (Retier(delta: 0L, first: true, frame: frame, index: index, old: floor, tier: tier)) { firstsInFlight++; }
+            replaced = true;
+        }
+        m_firstDetailsOwed = firstsOwed;
+
         foreach (var (_, index, tier) in candidates) {
             var old = m_groups[index];
             var bytes = SdfMeshRegion.PlacedBytesOf(mesh: old.Mesh!);
@@ -394,7 +450,7 @@ public sealed partial class SdfMeshPathBake {
         if (m_detail is { } detail) {
             Volatile.Write(location: ref m_bias, value: detail.Decide(report: new SdfDetailReport(
                 AnySpare: anySpare,
-                CanLower: (!over && (owed == 0) && (inFlight == 0) && (landing == 0) && (finer <= target)),
+                CanLower: (!over && (owed == 0) && (inFlight == 0) && (landing == 0) && (firstsInFlight == 0) && (firstsOwed == 0) && (finer <= target)),
                 Elapsed: elapsed,
                 Over: over
             )));
@@ -402,14 +458,14 @@ public sealed partial class SdfMeshPathBake {
         if (replaced) { m_productRevision++; }
         Volatile.Write(
             location: ref m_detailQuiet,
-            value: ((replaced || (inFlight > 0) || (landing > 0) || (owedWaiting > 0) || pressing) ? 0 : Math.Min(val1: (m_detailQuiet + elapsed), val2: SdfMeshTier.SettleFrames))
+            value: ((replaced || (inFlight > 0) || (landing > 0) || (owedWaiting > 0) || (firstsInFlight > 0) || (firstsOwed > 0) || pressing) ? 0 : Math.Min(val1: (m_detailQuiet + elapsed), val2: SdfMeshTier.SettleFrames))
         );
     }
     // Plans a group again at another tier, as Plan would plan it at this frame, and starts it in the group's place: the
     // library's mesh of that geometry lands at once, and otherwise the group bakes (or loads from the store) while the
     // mesh it replaces keeps drawing; true when the replacement is still to land. The delta is the bytes of mesh region
-    // the replacement is expected to add.
-    private bool Retier(SdfFrame frame, int index, Group old, int tier, long delta) {
+    // the replacement is expected to add; a first detail replaces a floor planned on arrival, outside the budget.
+    private bool Retier(SdfFrame frame, int index, Group old, int tier, long delta, bool first = false) {
         var plans = new List<Group> { old };
 
         _ = SdfMeshBakeGroup.Refresh(
@@ -428,6 +484,7 @@ public sealed partial class SdfMeshPathBake {
         // A dynamic slot no active instance rides any more plans nothing; the next program drops the group.
         if (ReferenceEquals(objA: group, objB: old)) { return false; }
         group.Retiering = true;
+        group.FirstDetail = first;
         group.RetierDeltaBytes = delta;
         group.OwedFrames = old.OwedFrames;
         group.DemandedTier = old.DemandedTier;

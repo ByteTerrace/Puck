@@ -6,7 +6,7 @@ namespace Puck.Abstractions.Gpu;
 /// The kinds of GPU work the counting wrappers of <see cref="GpuWorkCounting"/> record. Submission kinds are counted
 /// per submission and per pass into a <see cref="GpuWorkLedger"/>, and their position in
 /// <see cref="SubmissionKinds"/> is the column a <see cref="GpuWorkSample"/> reads them by. Lifetime kinds count
-/// objects created over the ledger's whole life and are read through its <see cref="IWorkCounterSource"/>.
+/// objects created, and frames refused their detail rows, over the ledger's whole life and are read through its <see cref="IWorkCounterSource"/>.
 /// <para>
 /// Every count but the kernel kinds (<see cref="KernelKinds"/>) is of calls the node makes through a neutral interface,
 /// so it is the same on every backend for the same inputs. A barrier is counted as the node requests it; what a backend
@@ -31,7 +31,7 @@ public static partial class GpuWork {
     internal const int ImageBarriersColumn = 5;
     internal const int ImagesCreatedIndex = 2;
     internal const int IndirectDispatchesColumn = 1;
-    internal const int LifetimeKindCount = 7;
+    internal const int LifetimeKindCount = 8;
     internal const int MarchStepsColumn = 15;
     internal const int MemoryBarriersColumn = 6;
     internal const int PipelineBindsColumn = 8;
@@ -53,6 +53,7 @@ public static partial class GpuWork {
     internal const int SubmissionColumnCount = (MeshHitsRejectedColumn + 1);
     internal const int TexelsWrittenColumn = 16;
     internal const int TimestampPoolsCreatedIndex = 6;
+    internal const int WorkDetailsRefusedIndex = 7;
 
     /// <summary>Gets the number of CPU sky projections used to decide environment refreshes.</summary>
     public static WorkKind EnvironmentProjections { get; } = new(name: "gpu.environment.projections", unit: "count", workClass: WorkClass.Deterministic);
@@ -153,6 +154,12 @@ public static partial class GpuWork {
     /// <summary>Gets the kind counting timestamp query pools created on demand.</summary>
     public static WorkKind TimestampPoolsCreated { get; } = new(name: "gpu.created.timestamp-pools", unit: "count", workClass: WorkClass.PerBackendDeterministic);
 
+    /// <summary>Gets the kind counting the frames whose kernel counters could not grow to the named work-detail rows
+    /// their passes asked for, because the instance's budget or the device pool had no room. Such a frame records and
+    /// presents on the rows it has: a pass whose named rows lie past them counts none of its named work that frame, and
+    /// the next frame asks again. Pacing: it follows what the pool holds, not the inputs.</summary>
+    public static WorkKind WorkDetailsRefused { get; } = new(name: "gpu.refused.work-details", unit: "count", workClass: WorkClass.Pacing);
+
     /// <summary>Gets the kinds a pass's kernels count on the GPU, in the order a counter row holds them
     /// (<see cref="GpuKernelCounters"/>): <see cref="MarchSteps"/>, <see cref="TexelsWritten"/>, then
     /// <see cref="SkyEvaluations"/>, <see cref="SkyHashes"/> and <see cref="SkyTextureLoads"/>, then <see cref="ShapesEvaluated"/>,
@@ -184,6 +191,7 @@ public static partial class GpuWork {
             kinds[DescriptorPoolsCreatedIndex] = DescriptorPoolsCreated;
             kinds[DescriptorSetsCreatedIndex] = DescriptorSetsCreated;
             kinds[TimestampPoolsCreatedIndex] = TimestampPoolsCreated;
+            kinds[WorkDetailsRefusedIndex] = WorkDetailsRefused;
 
             return kinds;
         }

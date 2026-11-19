@@ -86,6 +86,10 @@ public sealed class SdfKernelInterfaces {
     public const int MeshSightRow = 15;
     /// <summary>First portal sight verdict after draw counts.</summary>
     public const int MeshSightCountBase = 5;
+    /// <summary>The first selection mark word in the raster selection's counts, past every portal sight verdict: on a
+    /// marked frame each draw a phase emits a command for ORs its level plus one into two bits, sixteen draws a
+    /// word, the lowest draw in the lowest bits.</summary>
+    public const int MeshMarkBase = 64;
     /// <summary>The selection dispatch's groups per row, within both backends' per-axis limit.</summary>
     public const uint MeshSelectionGroupsPerRow = 65535u;
     /// <summary>The raster pass's GPU selection controls: one header, three level-choice rows, ten cull rows and the
@@ -98,7 +102,8 @@ public sealed class SdfKernelInterfaces {
     /// <summary>The mesh pass occlusion's indirect draws: the first phase's records, then the second's, each
     /// <c>GpuDrawIndirectCommand</c> records long.</summary>
     public const string MeshOcclusionDrawsWritten = "sdfMeshOcclusionDrawsRW";
-    /// <summary>The indirect commands read by Vulkan vertex stages through their draw index, including the fixed-count fallback.</summary>
+    /// <summary>The indirect commands read by the vertex stages for each draw's identity: through the draw index on Vulkan,
+    /// including the fixed-count fallback, and through the command number at Direct3D 12's execute-indirect tier 1.1.</summary>
     public const string MeshIndirectCommands = "sdfMeshIndirectCommands";
     /// <summary>The raster selection's counts: early entry, late entry, solid exit, thin exit and optical,
     /// followed by portal sight verdicts.</summary>

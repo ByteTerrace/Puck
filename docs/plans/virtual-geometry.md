@@ -147,10 +147,13 @@ be baked on demand and cached where a triangle asset cannot.
   posing while any rate view's `camera.MaySee` or any cascade's `cull.Keeps`
   keeps its sphere, and the occlusion result the kernel writes
   per draw (`sdfMeshOcclusionVisibleRW[draw]`, `state.x`) is read back by
-  nothing. What is read back is `SdfPortalSight`'s own queries:
+  nothing. The selection marks (one stage in eight records which draws a
+  phase emitted and at which level, `SdfWorldTables.ObserveSelectionMarks`)
+  are per-draw submission evidence, read only as counters so far, and late
+  by a few frames. What else is read back is `SdfPortalSight`'s own queries:
   the kernel's sight step tests "Four rows per screen" against the same
   pyramid through `sdfOcclusionMaySee` and writes one word per query at
-  `SDF_SIGHT_COUNT_BASE + id.x`; `SdfMeshOcclusion.ReadSight` hands that range
+  `SDF_SIGHT_COUNT_BASE + id.x`; `SdfMeshOcclusion.ReadCounts` hands that range
   back once the slot completes, and `SdfPortalSight` applies a result only to
   the query and camera it was captured for ("Unknown, changed and retired
   observations always keep demand"). It is a reusable per-query box test with

@@ -135,7 +135,47 @@ public sealed record SdfMeshAuditReport(
     int MissingCrossings,
     IReadOnlyList<SdfMeshAuditCluster> Clusters,
     float Score
-);
+) {
+    /// <summary>Gets the flipped triangles, folds, off-surface vertices, open edges and missing crossings sorted into
+    /// <see cref="SdfMeshDefectClass"/>es, each class with what the refinement did with the cells its items lie in; one
+    /// entry per class, in the enum's order.</summary>
+    public IReadOnlyList<SdfMeshDefectTally> Defects { get; init; } = [];
+}
+/// <summary>The classes a mesh's geometric defects are sorted into. The sort reads the mesh and the field alone (an
+/// item's height against the mesh's cell), so a class is a reading of the geometry, not a record of the bake's cause.</summary>
+public enum SdfMeshDefectClass {
+    /// <summary>A vertex off the field's surface past the audit's error threshold, as its crossings' tangent planes put it
+    /// at a crease the field check does not move.</summary>
+    OffSurfaceVertex,
+    /// <summary>A flipped triangle or a fold whose smallest height is under a tenth of the cell: a strip between two rows
+    /// of vertices a few hundredths of a cell apart along a crease.</summary>
+    CreaseSliver,
+    /// <summary>A flipped triangle or a fold whose smallest height is under a whole cell and not a sliver: a face narrower
+    /// than the cell between two creases.</summary>
+    NarrowFace,
+    /// <summary>A crossing of the field's zero set no triangle lies within a cell of: a tip or sheet thinner than the
+    /// cell that stops short or is lost.</summary>
+    ShortTip,
+    /// <summary>A flipped triangle or fold a cell high or more, and every open or non-manifold edge.</summary>
+    Other,
+}
+/// <summary>One class of a mesh's defects and where the bake's refinement stood at each item (<see cref="SdfRefinementMap"/>).</summary>
+/// <param name="Class">The class.</param>
+/// <param name="Count">The items in it.</param>
+/// <param name="NotScanned">The items whose lattice the bake never ran the refinement scan on (<see cref="SdfCellFlag.NotScanned"/>).</param>
+/// <param name="LatticeUnrefined">The items whose lattice the scan ran on and left whole (<see cref="SdfCellFlag.LatticeUnrefined"/>).</param>
+/// <param name="Unflagged">The items in a cell the refinement did not flag and that touched no flagged cell
+/// (<see cref="SdfCellFlag.Unflagged"/>).</param>
+/// <param name="Ring">The items in a cell that contoured fine from interpolated coarse values beside a flagged cell
+/// (<see cref="SdfCellFlag.Ring"/>).</param>
+/// <param name="Measured">The items in a cell the refinement flagged and measured at the fine spacing
+/// (<see cref="SdfCellFlag.Measured"/>).</param>
+/// <param name="Unknown">The items with no flag: the mesh was stored, so no map exists, or the item lies outside the
+/// lattice.</param>
+public sealed record SdfMeshDefectTally(SdfMeshDefectClass Class, int Count, int NotScanned, int LatticeUnrefined, int Unflagged, int Ring, int Measured, int Unknown) {
+    /// <summary>Gets the items in a cell a sheet or gap thinner than a cell crosses an edge of.</summary>
+    public int Thin { get; init; }
+}
 /// <summary>
 /// Measures a baked mesh against the field it was baked from: how far its vertices, centroids and edge midpoints lie off
 /// the field's surface, how far its triangles' normals stray from the field's gradient, where its triangles fold, flip,
@@ -245,6 +285,10 @@ public static class SdfMeshAudit {
     // A triangle is a sliver when twice its area over its longest edge squared falls below this: a height under a
     // twentieth of that edge.
     private const float SliverRatio = 0.05f;
+    // A flipped triangle or a fold whose smallest height is under this share of the mesh's cell lies between two rows of
+    // vertices a few hundredths of a cell apart along a crease; under a whole cell, it lies on a face narrower than the cell.
+    private const float CreaseSliverHeight = 0.1f;
+    private const float NarrowFaceHeight = 1f;
     // A triangle is degenerate when that ratio falls below this, a height under a five-hundredth of its longest edge:
     // its corners are collinear to rounding, so it draws nothing and its facing is noise, judged neither against the
     // gradient nor against its neighbours across an edge.
@@ -428,10 +472,13 @@ public static class SdfMeshAudit {
     /// <param name="accounted">Surface the caller accounts for apart from the mesh (the parts a coarser level vanishes,
     /// whose error records their own extent), in the mesh's frame: a crossing within a cell of it is not missing; or
     /// <see langword="null"/>.</param>
+    /// <param name="refinement">Which cells the bake's refinement flagged for the lattice this mesh was contoured from, in
+    /// the mesh's frame (<see cref="SdfMeshAuditReport.Defects"/> reads each defect's cell through it), or
+    /// <see langword="null"/> when the mesh was stored rather than baked here and no map exists.</param>
     /// <returns>The report.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="mesh"/>, <paramref name="field"/>,
     /// <paramref name="shapes"/> or <paramref name="options"/> is <see langword="null"/>.</exception>
-    public static SdfMeshAuditReport Audit(SdfMesh mesh, SdfFieldEvaluator field, IReadOnlyList<(string Name, SdfFieldEvaluator Field)> shapes, SdfMeshAuditOptions options, SdfMesh? accounted = null) {
+    public static SdfMeshAuditReport Audit(SdfMesh mesh, SdfFieldEvaluator field, IReadOnlyList<(string Name, SdfFieldEvaluator Field)> shapes, SdfMeshAuditOptions options, SdfMesh? accounted = null, SdfRefinementMap? refinement = null) {
         ArgumentNullException.ThrowIfNull(argument: mesh);
         ArgumentNullException.ThrowIfNull(argument: field);
         ArgumentNullException.ThrowIfNull(argument: shapes);
@@ -449,12 +496,16 @@ public static class SdfMeshAudit {
         var cell = ((options.Level == 0) ? MedianEdge(edges: edges, positions: positions) : referenceCell);
         var threshold = (options.ErrorCells * cell);
         var flagged = new List<Sample>();
+        var defects = new List<(SdfMeshDefectClass Class, Vector3 Position)>();
 
         // Vertices, centroids and edge midpoints, each a distance off the surface.
         var vertexErrors = new float[positions.Length];
 
         for (var vertex = 0; (vertex < positions.Length); vertex++) {
             vertexErrors[vertex] = Off(field: field, flagged: flagged, cell: cell, point: positions[vertex], threshold: threshold);
+            if ((vertexErrors[vertex] > threshold) && (welded[vertex] == vertex)) {
+                defects.Add(item: (SdfMeshDefectClass.OffSurfaceVertex, positions[vertex]));
+            }
         }
 
         var centroidErrors = new float[triangles];
@@ -462,6 +513,7 @@ public static class SdfMeshAudit {
         var faceNormals = new Vector3[triangles];
         var gradients = new Vector3[triangles];
         var deficits = new float[triangles];
+        var heights = new float[triangles];
         var loose = new List<Vector3>();
         var slivers = 0;
 
@@ -474,6 +526,7 @@ public static class SdfMeshAudit {
             var ratio = ((longest <= 0f) ? 0f : (cross.Length() / longest));
 
             slivers += ((ratio < SliverRatio) ? 1 : 0);
+            heights[triangle] = ((longest > 0f) ? (cross.Length() / MathF.Sqrt(x: longest)) : 0f);
             faceNormals[triangle] = FaceNormal(a: a, b: b, c: c);
             centroidErrors[triangle] = Off(cell: cell, field: field, flagged: flagged, point: centroid, threshold: threshold);
             var slope = Slope(field: field, point: centroid, step: options.GradientStep);
@@ -527,7 +580,10 @@ public static class SdfMeshAudit {
             var degrees = Angle(first: (winding * faceNormals[triangle]), second: gradients[triangle]);
 
             normalErrors[triangle] = degrees;
-            flipped += (Flips(faceNormal: faceNormals[triangle], gradient: gradients[triangle], winding: winding) ? 1 : 0);
+            if (Flips(faceNormal: faceNormals[triangle], gradient: gradients[triangle], winding: winding)) {
+                flipped++;
+                defects.Add(item: (Narrowness(cell: cell, height: heights[triangle]), (((a + b) + c) / 3f)));
+            }
             if (degrees > options.NormalDegrees) {
                 flagged.Add(item: new Sample(Kind: SampleKind.Turned, Position: (((a + b) + c) / 3f), Severity: (degrees / 90f), Value: degrees) { Facing = (winding * faceNormals[triangle]), Gradient = gradients[triangle] });
             }
@@ -548,16 +604,19 @@ public static class SdfMeshAudit {
             midpointErrors[edge++] = Off(cell: cell, field: field, flagged: flagged, point: midpoint, threshold: threshold);
             if (held.Count == 1) {
                 open++;
+                defects.Add(item: (SdfMeshDefectClass.Other, midpoint));
             } else if (held.Count > 2) {
                 nonManifold++;
                 flagged.Add(item: new Sample(Kind: SampleKind.Folded, Position: midpoint, Severity: 1f, Value: 0f));
+                defects.Add(item: (SdfMeshDefectClass.Other, midpoint));
             } else if ((faceNormals[held.First] != Vector3.Zero) && (faceNormals[held.Second] != Vector3.Zero) && (Vector3.Dot(vector1: faceNormals[held.First], vector2: faceNormals[held.Second]) < FoldDot)) {
                 folds++;
                 flagged.Add(item: new Sample(Kind: SampleKind.Folded, Position: midpoint, Severity: 1f, Value: 0f));
+                defects.Add(item: (Narrowness(cell: cell, height: MathF.Min(x: heights[held.First], y: heights[held.Second])), midpoint));
             }
         }
 
-        var (crossings, missing) = Missing(accounted: accounted, cell: cell, field: field, flagged: flagged, indices: indices, mesh: reference, options: options, positions: positions);
+        var (crossings, missing) = Missing(accounted: accounted, cell: cell, defects: defects, field: field, flagged: flagged, indices: indices, mesh: reference, options: options, positions: positions);
         var clusters = Cluster(cell: cell, flagged: flagged)
             .Take(count: options.Clusters)
             .Select(selector: cluster => cluster with { Shapes = Nearest(count: options.Shapes, probes: cluster.Probes, shapes: shapes) })
@@ -584,8 +643,31 @@ public static class SdfMeshAudit {
             Triangles: triangles,
             VertexError: Statistic(over: threshold, values: vertexErrors),
             Vertices: positions.Length
-        );
+        ) { Defects = Tally(defects: defects, refinement: refinement) };
     }
+    // The class of a flipped triangle or a fold by its smallest height over the mesh's cell.
+    private static SdfMeshDefectClass Narrowness(float cell, float height) {
+        var share = (height / cell);
+
+        return ((share < CreaseSliverHeight) ? SdfMeshDefectClass.CreaseSliver : ((share < NarrowFaceHeight) ? SdfMeshDefectClass.NarrowFace : SdfMeshDefectClass.Other));
+    }
+    // Each class's items, split by what the refinement did with the cell each lies in; every item reads unknown with no map.
+    private static SdfMeshDefectTally[] Tally(List<(SdfMeshDefectClass Class, Vector3 Position)> defects, SdfRefinementMap? refinement) =>
+        [.. Enum.GetValues<SdfMeshDefectClass>().Select(selector: defect => {
+            var of = defects.Where(predicate: item => (item.Class == defect)).ToArray();
+            var flags = of.Select(selector: item => ((refinement is null) ? SdfCellFlag.Outside : refinement.Flag(point: item.Position))).ToArray();
+
+            return new SdfMeshDefectTally(
+                Class: defect,
+                Count: of.Length,
+                NotScanned: flags.Count(predicate: static flag => (flag == SdfCellFlag.NotScanned)),
+                LatticeUnrefined: flags.Count(predicate: static flag => (flag == SdfCellFlag.LatticeUnrefined)),
+                Measured: flags.Count(predicate: static flag => (flag == SdfCellFlag.Measured)),
+                Ring: flags.Count(predicate: static flag => (flag == SdfCellFlag.Ring)),
+                Unflagged: flags.Count(predicate: static flag => (flag == SdfCellFlag.Unflagged)),
+                Unknown: flags.Count(predicate: static flag => (flag == SdfCellFlag.Outside))
+            ) { Thin = ((refinement is null) ? 0 : of.Count(predicate: item => refinement.IsThin(point: item.Position))) };
+        })];
     /// <summary>Builds the evaluator that reads a field as the renderer samples it (<see cref="SdfFieldReading.Render"/>),
     /// or says why none reads it: a program the evaluator refuses by name, or one whose arithmetic faults, which is an
     /// evaluator defect reported against the field rather than thrown through an audit of many.</summary>
@@ -814,7 +896,7 @@ public static class SdfMeshAudit {
 
     // The field's zero set on a lattice over the mesh's box: each lattice edge whose ends differ in sign holds a crossing,
     // refined by bisection and flagged where no triangle, of the mesh or of the accounted surface, lies within a cell of it.
-    private static (int Crossings, int Missing) Missing(SdfFieldEvaluator field, SdfMesh mesh, ReadOnlySpan<Vector3> positions, ReadOnlySpan<uint> indices, float cell, SdfMeshAuditOptions options, List<Sample> flagged, SdfMesh? accounted) {
+    private static (int Crossings, int Missing) Missing(SdfFieldEvaluator field, SdfMesh mesh, ReadOnlySpan<Vector3> positions, ReadOnlySpan<uint> indices, float cell, SdfMeshAuditOptions options, List<Sample> flagged, List<(SdfMeshDefectClass Class, Vector3 Position)> defects, SdfMesh? accounted) {
         if ((positions.Length == 0) || !(cell > 0f)) { return (0, 0); }
 
         var low = (mesh.PositionLow - new Vector3(value: (3f * cell)));
@@ -863,6 +945,7 @@ public static class SdfMeshAudit {
             if ((nearest > cell) && ((excused is null) || (excused.Nearest(indices: accounted!.Indices.Span, point: crossing, positions: accounted.Positions.Span, reach: (4f * cell)) > cell))) {
                 missing++;
                 flagged.Add(item: new Sample(Kind: SampleKind.Missing, Position: crossing, Severity: (nearest / cell), Value: nearest));
+                defects.Add(item: (SdfMeshDefectClass.ShortTip, crossing));
             }
         }
 

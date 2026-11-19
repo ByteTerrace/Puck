@@ -138,7 +138,7 @@ V-step would otherwise assume:
 - **Session and nested nodes.** One screen or portal session node and one
   nested-view node per pass (`world.counters gpu node`: candidates, selection
   dispatches, pixel passes), whether session nodes draw cascades under
-  `ReducedQuality`, and which sessions are residencies of their own. Each
+  the nested-view table (`render.nested`), and which sessions are residencies of their own. Each
   session is a separate residency, so V5's shared classification reaches only
   the nested views, while V1a's compaction and the job system's burst spreading
   reach the sessions.
@@ -196,7 +196,8 @@ Buckets are ordered by geometry, then level, and that order is the same every
 frame and in both phases.
 
 **The vertex-stage ABI.** A command's identity word, which R2 already pushes
-(the Direct3D 12 command signature's root constant; on Vulkan read through
+(the Direct3D 12 command signature's root constant below execute-indirect tier 1.1, and at it the
+first-phase record the incrementing command number names; on Vulkan read through
 `DrawIndex` from the command array), names the bucket's range base and level.
 `SV_InstanceID` is the local instance, 0 to `instanceCount - 1`, with the first
 instance zero on both backends, so the two agree without Vulkan's optional

@@ -54,7 +54,7 @@
 // The appearance section, after every table the field reads (SdfAppearance): the program header's material count and offset, the material and paint strides and the paint limits.
 #define SDF_PROGRAM_MATERIAL_COUNT(v)  ((v).y)
 #define SDF_PROGRAM_MATERIAL_OFFSET(v) ((v).w)
-#define SDF_MATERIAL_VECTORS_PER_ENTRY 34u
+#define SDF_MATERIAL_VECTORS_PER_ENTRY 36u
 #define SDF_PAINT_VECTORS_PER_ENTRY    9u
 #define SDF_MAX_PAINTS_PER_MATERIAL    8u
 #define SDF_PAINT_WINNING_FRAME        0xFFFFFFFFu
@@ -113,6 +113,8 @@
 #define SDF_SHADOW_BITS             8u
 #define SDF_SHADOW_MASK             0x000000FFu
 #define SDF_SHADOW_SLOTS            4u
+#define SDF_SHADOW_ROLES            2u
+#define SDF_MESH_SHADOW_ENTRIES     3u
 #define SDF_SHADOW_FADE_CAPACITY    2u
 
 // The visibility record's normal word (SdfVisibility): its SNORM16 scale and the word of a record with no normal.
@@ -164,6 +166,7 @@
 #define SDF_RECEIVER_ROW                  14u
 #define SDF_SIGHT_ROW                     15u
 #define SDF_SIGHT_COUNT_BASE              5u
+#define SDF_MESH_MARK_BASE                64u
 
 // The irradiance volume's probe record and read (SdfMeshIrradianceProbe).
 #define SDF_MESH_IRRADIANCE_PROBE_WORDS                 244u
@@ -192,16 +195,17 @@
 #define SDF_MESH_IRRADIANCE_DEPTH_SHEET_COVERAGE_START  0.0
 #define SDF_MESH_IRRADIANCE_DEPTH_SHEET_COVERAGE_SCALE  8.0
 
-// The temporal resolve: the history surface's words an output pixel (SdfWorldPackage.HistorySurfaceWords), the jitter period in samples (SdfWorldPackage.TemporalPeriod), the weight a history saturates at, one period, and the weight one carrying a remembered sub-pixel feature saturates at (SdfTemporalSamples.FeaturePeriods periods).
-#define SDF_HISTORY_SURFACE_WORDS      47u
-#define SDF_HISTORY_WINDOW_OFFSET      7u
+// The temporal resolve: the history surface's words an output pixel (SdfWorldPackage.HistorySurfaceWords), the stationary window's (SdfWorldPackage.HistoryWindowWords) and its first sample word after the phase mask, the jitter period in samples (SdfWorldPackage.TemporalPeriod), the weight a history saturates at, one period, and the weight one carrying a remembered sub-pixel feature saturates at (SdfTemporalSamples.FeaturePeriods periods).
+#define SDF_HISTORY_SURFACE_WORDS      6u
+#define SDF_HISTORY_WINDOW_WORDS       41u
+#define SDF_HISTORY_WINDOW_OFFSET      1u
 #define SDF_HISTORY_SAMPLE_WORDS       5u
 #define SDF_TEMPORAL_PERIOD            8u
 #define SDF_HISTORY_WEIGHT_CAP         8.0
 #define SDF_HISTORY_FEATURE_WEIGHT_CAP 32.0
 
 // The glass sums the glass raster pass accumulates and the glass shading pass reads.
-#define SDF_GLASS_SUM_WORDS            16u
+#define SDF_GLASS_SUM_WORDS            17u
 #define SDF_GLASS_SUM_SCALE            4096.0
 #define SDF_GLASS_DEPTH_DISTANCE_SCALE 32768.0
 #define SDF_GLASS_ABSORPTION_SCALE     65536.0

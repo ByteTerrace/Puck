@@ -29,9 +29,19 @@ public sealed class VulkanGpuQueueSubmitter(IVulkanDeviceContext deviceContext, 
     );
 
     // Defers a submission to the device's open batch with the waits it carries, spending them; false when no batch is
-    // open or the submission is empty.
+    // open or the submission is empty. A defer whose hand-over of earlier work fails spends them too, as a failed
+    // submission does.
     private bool Defers(ReadOnlySpan<nint> commandBufferHandles, VulkanGpuSubmissionFence? fence) {
-        if (!deviceContext.LogicalDevice.Batch.TryDefer(commandBuffers: commandBufferHandles, fence: fence, waitSemaphores: WaitSemaphores, waitValues: WaitValues)) {
+        bool deferred;
+
+        try {
+            deferred = deviceContext.LogicalDevice.Batch.TryDefer(commandBuffers: commandBufferHandles, fence: fence, waitSemaphores: WaitSemaphores, waitValues: WaitValues);
+        } catch {
+            m_waitCount = 0;
+
+            throw;
+        }
+        if (!deferred) {
             return false;
         }
         m_waitCount = 0;

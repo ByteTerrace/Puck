@@ -4,7 +4,7 @@ using Puck.SignedDistance;
 
 namespace Puck.World.Client;
 
-/// <summary>Renders a world's field lattice: one height field per height-bearing row (<see cref="SdfHeightField"/>),
+/// <summary>Renders a world's field lattice: one height field per row that draws a surface (<see cref="SdfHeightField"/>),
 /// composed as a union with the row's authored colour. A field's cells reach it the way every presentation read of state
 /// does, through the client's state mirror: the presentation manifest registers each height field's row whole
 /// (<see cref="WorldStateConversion.Row"/>, the same slot a pass's array bound to <c>state.&lt;field&gt;</c> reads), and
@@ -41,7 +41,7 @@ public sealed class WorldFieldEmitter : ISdfSceneEmitter {
     private void Shape(IReadOnlyList<WorldFieldsSection> regions) {
         if (ReferenceEquals(objA: regions, objB: m_uploadedRegions)) { return; }
         var heightFields = regions.SelectMany(selector: static region => region.Fields
-            .Where(predicate: static row => (row.HeightScale > 0f))
+            .Where(predicate: static row => row.DrawsSurface)
             .Select(selector: row => (Region: region, Row: row)))
             .ToArray();
 

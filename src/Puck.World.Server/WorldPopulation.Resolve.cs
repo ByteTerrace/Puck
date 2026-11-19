@@ -258,7 +258,8 @@ public sealed partial class WorldPopulation {
                 Maximum: descriptor.Maximum,
                 HeightScale: descriptor.HeightScale,
                 IsMedium: descriptor.IsMedium,
-                Color: document.Fields[index].Color
+                Color: document.Fields[index].Color,
+                SimulationOnly: document.Fields[index].SimulationOnly
             );
         }
 

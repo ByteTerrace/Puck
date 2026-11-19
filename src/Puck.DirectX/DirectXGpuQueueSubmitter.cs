@@ -18,7 +18,9 @@ namespace Puck.DirectX;
 /// <c>ID3D12Fence</c> + event pair signaled on the queue right after the fenced execute. An external wait is an
 /// <c>ID3D12CommandQueue::Wait</c> issued immediately before the next submission's execute, so that submission and every
 /// later one on the queue wait for the shared fence on the GPU. While a batch is open a submission joins the shared
-/// <see cref="GpuSubmissionBatch{TEntry}"/>, whose lists reach the queue in one <c>ExecuteCommandLists</c>.
+/// <see cref="GpuSubmissionBatch{TEntry}"/>, whose lists reach the queue in one <c>ExecuteCommandLists</c> a hand-over,
+/// each followed by its owner fence's signal; a background job deferred ahead of a frame's work takes a hand-over of its
+/// own, so its signal sits between the two.
 /// </summary>
 [SupportedOSPlatform("windows10.0.10240")]
 public sealed unsafe class DirectXGpuQueueSubmitter : IGpuQueueSubmitter {

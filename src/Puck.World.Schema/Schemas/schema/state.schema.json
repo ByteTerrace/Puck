@@ -1242,6 +1242,35 @@
                           "null"
                         ],
                         "default": null
+                      },
+                      "region": {
+                        "description": "A sphere in world coordinates within which the velocity varies.",
+                        "type": [
+                          "object",
+                          "null"
+                        ],
+                        "properties": {
+                          "center": {
+                            "$ref": "./common.schema.json#/$defs/DocumentVector3",
+                            "description": "Centre in world coordinates."
+                          },
+                          "radius": {
+                            "description": "Radius in world units over which the velocity blends back to the base, finite and positive.",
+                            "type": "number"
+                          },
+                          "velocity": {
+                            "$ref": "./common.schema.json#/$defs/DocumentVector3",
+                            "description": "Velocity at the centre in the flow\u0027s velocity frame, before placement scaling."
+                          }
+                        },
+                        "required": [
+                          "center",
+                          "radius",
+                          "velocity"
+                        ],
+                        "additionalProperties": false,
+                        "default": null,
+                        "title": "PaletteFlowRegionDocument"
                       }
                     },
                     "required": [
@@ -1363,6 +1392,11 @@
                 "additionalProperties": false,
                 "default": null,
                 "title": "PaletteEntryDocument"
+              },
+              "simulationOnly": {
+                "description": "Keep this row in lattice reactions and omit its surface and body coupling.",
+                "type": "boolean",
+                "default": false
               },
               "paint": {
                 "description": "The initial fills, applied in order over Initial.",

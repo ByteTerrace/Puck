@@ -110,9 +110,9 @@ the GPU at all.
 their depth alone, each draw whose box lies in the cascade's light box and,
 swept along the light, may shadow a receiver the view shows
 (what a raster pass draws, below). A frame with no mesh draw, or whose view has no cascade,
-skips them; `shadow-second` runs only while a second stable shadow slot holds a
-directional light, and a view whose world holds one stable slot has no
-`shadow-second` at all.
+skips them; `shadow-second` runs only while a second slotted directional light
+emits (the secondary shadow role, `SdfLights.RoleSlot`), and a view whose world
+holds one stable slot has no `shadow-second` at all.
 
 **mesh** (`sdf-mesh.vert.hlsl`, `sdf-mesh.frag.hlsl`) rasterizes the frame's mesh draws, one draw call
 each, into the mesh visibility target at the view's extent: per pixel the ray parameter,
@@ -734,22 +734,29 @@ place:
 
 | Pass | Does |
 |---|---|
-| `glass-clear` | Zeroes the **glass sums**, sixteen words a render-grid pixel: a signed distance sum, a face count, three 64-bit optical depth sums and the **second glass record** (a front-face count, three front-face entries and the nearest back face). |
-| `glass` | Rasterizes the glass draws through the mesh vertex stage into the **glass target** (the nearest glass front face's ray parameter, draw and triangle, as the mesh target holds a hit) through a reversed-Z depth of its own. Every face, front or back, that lies before the pixel's opaque hit (read from the visibility record) adds its ray distance to the sums, a front face subtracting, a back face adding, its face count, and its own material's absorption times its distance to the opaque hit, a front face adding and a back face subtracting. Every sum is integer arithmetic with atomics, so the sums hold the same words whatever order the faces draw in. Each such front face also counts itself in the second record and, while one of its three entries is free, claims it with its draw and triangle; each back face raises the record's nearest back face, an atomic maximum of its distance's complemented bits. |
-| `glass-shade` | Writes the lit image again, copying every pixel no glass front face lies before, and shading the rest through up to two interfaces, the target's nearest front face and the second-nearest the record names, each by the one loop body: the glass surface's normal and material are resolved from the target as the surface pass resolves an opaque hit; the light behind is the lit image, read once where the ray, bent by Snell's law at each interface and carried through its share of the glass, carries on parallel to the pixel's ray to the opaque hit's depth, and absorbed by Beer–Lambert over the optical depth the sums hold; the far interface composes over that light and the near one over the far one's result; a material's flow layer (`sdfShadeFlow`, the one the light stage runs) tilts the normal it reflects and refracts by; the surroundings reflect by Fresnel as an opaque surface's do (`worldEnvironmentReflection` blurred by the roughness, then `sdfMeshReflection` from the pixel's one probe gather, the sky alone where no probe answers), and each light adds its highlight through the one light interface (`sdfLightResponse`), its shadowing the probes'; the medium and the contact (below) add their light; frost spreads the read over a disc of taps whose radius grows with each interface's roughness and its distance to what lies behind. |
+| `glass-clear` | Zeroes the glass sums, whose stride is `SdfWorldPackage.GlassSumWords`. |
+| `glass` | Rasterizes the glass draws. Its reversed-Z target retains the nearest front face before the opaque hit. Integer sums hold the clipped path length, RGB optical depth, winding, and material key. The second record holds up to three front faces and the nearest back face. |
+| `glass-shade` | Writes the lit image again, shading up to two entrances, the target's nearest front face and the second-nearest the record names, each by the one loop body: the glass surface's normal and material are resolved from the target as the surface pass resolves an opaque hit; the light behind is the lit image, read once where the ray, bent by Snell's law at each interface and carried through its share of the glass, carries on parallel to the pixel's ray to the opaque hit's depth, and absorbed by Beer–Lambert over the optical depth the sums hold; the far interface composes over that light and the near one over the far one's result; a material's flow layer (`sdfShadeFlow`, the one the light stage runs) tilts the normal it reflects and refracts by; the surroundings reflect by Fresnel as an opaque surface's do (`worldEnvironmentReflection` blurred by the roughness, then `sdfMeshReflection` from the pixel's one probe gather, the sky alone where no probe answers), and each light adds its highlight through the one light interface (`sdfLightResponse`), its shadowing the probes'; the medium and the contact (below) add their light; frost spreads the read over a disc of taps whose radius grows with each interface's roughness and its distance to what lies behind. |
 
-The distance through the glass, which the refraction travels, is the sums'
-matched distance plus the opaque hit's distance for each unmatched front face,
-never more than the distance from the nearest front face to the opaque hit: a
-hollow shell absorbs over both its walls, a solid holding an opaque object over
-the glass before it, and a thin pane over its thickness alone. Absorption is
-`exp(−σ · distance)` per channel with `σ = −ln(tint) / depth`, integrated
-through every glass material before the opaque hit, so light through one depth
-of the glass is the tint and light through two is the tint squared: thicker
-reads deeper, never a stacked blend, and water seen through a clear pane keeps
-the water's colour. A pair of faces cancels its shared distance to the opaque hit
-exactly in the integer sums, so glass against the far sky absorbs as it does
-against a near wall (`SdfGlassSumsDeviceLawTests`). With two interfaces the
+For a closed solid each back face adds and each front face subtracts the
+distance from the near plane to that crossing, clipped at the opaque hit.
+The sum integrates exactly the intervals the ray spends in glass, to the
+quantization of the integer endpoints. A separate signed sum weights the
+same intervals by absorption per channel, `σ = −ln(tint) / depth`.
+Absorption over a path of length `d` passes `exp(−σ · d)` of the
+light behind. Paired faces cancel their common origin exactly in integer
+arithmetic. A draw cut by a portal plane retains its receiver-relative
+accumulation, since its crossings can be missing.
+
+If the ray begins inside a closed solid, its back faces outnumber its front
+faces. The winding and material key include faces hidden by the opaque hit,
+so shading can apply the medium between the near plane and the first visible
+surface even when the exit is hidden. A single homogeneous starting medium
+adds scattered light sampled halfway along that segment. Overlapping starting
+media contribute absorption. The starting segment composes in front of the
+surface layers and marks its pixels reactive.
+
+With two interfaces the
 distance splits at the nearest back face: the near interface's share runs from
 it to that back face (never past the far interface) and absorbs by its own
 material, and the far interface takes the rest of the distance and of the
@@ -809,8 +816,7 @@ face's glass absorbs within the far interface's share, and what lies beyond the
 second interface is the opaque image, never shaded as glass; past three front
 faces before the opaque hit the nearest alone is shaded; the sky seen through glass is not refracted and is darkened rather than
 tinted; refraction reads a screen-space neighbour, so what lies off screen or
-behind a nearer surface reads the pixel's own sample; an eye inside a glass
-solid sees no front face, so the pixel passes through untinted; the glass
+behind a nearer surface reads the pixel's own sample; exit refraction and reflection for a submerged camera are open; the glass
 surface reads no screen-space occlusion and no cascade, its shadowing coming
 from the probes alone; and tinted shadows and glass in the
 irradiance volume are open items ([lighting and GI](../../../plans/open-items.md#lighting-and-gi)).
@@ -831,8 +837,9 @@ out at `WorldFramePresenter.ViewQuality()`: seat views, the operator pose, and
 layout slots that name a camera alike, so a named-camera slot reconstructs and
 its settled still converges over a jitter period. A camera view a screen films
 never reconstructs (its quality restriction,
-`WorldScreenBinder.CameraViewQuality`, does not ask), and neither does a session
-view (`WorldSessionSceneEmitter.ReducedQuality`).
+`WorldRenderSettings.NestedRestriction`, does not ask), and neither does a session
+view. Beyond that a nested view gives up only what the world's `render.nested`
+table says at its presented share of the display.
 
 Each view's history is its own fragment's: two versions at the output extent,
 two allocations each, the one the next frame reads through
@@ -845,7 +852,7 @@ demands nothing of its writer, and device loss starts from none.
 - The **history color** holds, per output pixel, the weighted mean of every sample
   the pixel has gathered: the lit color in its RGB and the coverage in its alpha,
   premultiplied as the lit image is.
-- The **history surface** holds 47 words per output pixel
+- The **history surface** holds the words that follow a pixel's motion
   (`SdfWorldPackage.HistorySurfaceWords`): the visibility identity of the
   pixel's receiver, the nearest of the render samples the resolve read that is
   not a sub-pixel feature; that sample's ray distance and the samples' summed
@@ -853,11 +860,20 @@ demands nothing of its writer, and device loss starts from none.
   while the pixel carries a feature), as two half floats; the weighted mean of
   the samples' surface transport, two words; and the feature the pixel's
   footprint last showed, its YCoCg as three half floats with the frames the
-  memory has left, zero for none. A phase mask follows, then eight phase samples,
-  each holding color/coverage and transport as halves and its Gaussian weight.
-  The words lie in planes, one word of every pixel per plane (`sdfHistoryWord`),
-  so a wave reads or writes one word of adjacent pixels in one transaction. A
-  complete stationary window shows its own mean and reads no reprojected history.
+  memory has left, zero for none. The words lie in planes, one word of every
+  pixel per plane (`sdfHistoryWord`), so a wave reads or writes one word of
+  adjacent pixels in one transaction.
+- The **stationary window** (`SdfWorldPackage.HistoryWindowWritten`,
+  `SdfWorldPackage.HistoryWindowWords` words a pixel in the same planes) holds a
+  phase mask and eight phase samples, each holding color/coverage and transport
+  as halves and its Gaussian weight. It is not history: it is one retained
+  buffer the resolve updates in place, zeroed once. A pixel reads and writes
+  only its own window words, and keeps its window only while its history comes
+  from its own position, so no invocation reads what another writes in the same
+  dispatch; a pixel whose history comes from anywhere else restarts its window
+  at this frame's phase. Each frame writes only the current phase's samples and
+  the mask, rather than copying the whole window into a second copy. A complete
+  stationary window shows its own mean and reads no reprojected history.
 
 The views pass also writes a one-channel **reactivity** buffer at the render
 extent, which only the resolve reads: one where a display screen's picture covers the
@@ -1459,8 +1475,9 @@ empty, and quads take their neighbours' materials.
 
 ## The shadow cascades
 
-`SdfMeshShadowCascades` fits two orthographic cameras along the key light (the
-frame's first stable shadow slot): the near one around the view frustum's first
+`SdfMeshShadowCascades` is one indexed set of entries, each a light camera for a
+shadow role. It fits two orthographic cameras along the key light (the slotted
+directional light that emits the most, the primary role): the near one around the view frustum's first
 16 metres, the far one to 120 metres or the far distance, each a bounding sphere
 of its slice snapped to whole texels, with casters up to 200 metres past the
 sphere toward the light. A world authors those three reaches as
@@ -1477,9 +1494,10 @@ pass with the cascade's `D32Float` depth alone, cleared to zero and stored. The
 depth is reversed and linear, one at the cascade's near plane and zero at its
 far plane, so the surface pass samples it (`sdfMeshShadowDepth`) and decodes
 the caster's light-space depth as `far - depth · (far - near)`; a texel nothing
-was drawn into reads as the far plane. The second shadow slot's light, when one
-holds it, gets one cascade over the first 40 metres, drawn by `shadow-second`
-and written into K's second slot.
+was drawn into reads as the far plane. The secondary role's light, when one
+emits, gets one entry over the first 40 metres, drawn by `shadow-second`. K holds
+each role's visibility and its cascades' coverage of the point; views takes the
+probes' answer where the coverage falls short of one.
 
 Every cascade is 2048 texels a side at the `high` shadow tier, 1024 at
 `medium` and 512 at `low` (`SdfViewQuality.ShadowResolution`,

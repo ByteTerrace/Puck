@@ -329,6 +329,18 @@ public static class WorldRenderRoot {
         var probe = sp.GetRequiredService<WorldRenderProbe>();
 
         probe.Device = device;
+        // The memory bars of the profile the world authors for this adapter bind as the device opens; the quality table
+        // waits for `world.device-profile`, since a world boots on its own render levers.
+        if (sp.GetService<WorldDeviceProfileState>() is { } profiles) {
+            var adapter = device.Identity?.AdapterName;
+
+            _ = profiles.Apply(
+                adapter: adapter,
+                profile: WorldDeviceProfiles.Select(adapterName: adapter, render: sp.GetRequiredService<Puck.World.Server.WorldServer>().Definition.Render),
+                source: "auto",
+                table: null
+            );
+        }
         probe.Residency = residency;
         probe.Views = host.Pickers;
         probe.MeshIrradiance.Retarget(target: residency.MeshIrradiance.Counters);

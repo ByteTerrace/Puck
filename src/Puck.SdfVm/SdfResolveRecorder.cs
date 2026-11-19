@@ -8,7 +8,8 @@ namespace Puck.SdfVm;
 // Reconstruction uses the residency's optional reloadable pipeline: native views allocate none of its GPU resources.
 // The pass binds the residency's World set, whose tables sdfReprojection reads, and its pass group: the render-grid
 // color, the visibility records it reads the grid through, the lit image and the surface transport it
-// writes, and, in the temporal fragment, the reactivity and the history of the preceding frame and of this one. A spatial
+// writes, and, in the temporal fragment, the reactivity, the history of the preceding frame and of this one, and the
+// stationary window it updates in place. A spatial
 // resolve binds the tables' fillers at the temporal members. The sky and the composite follow it, so it leaves the render
 // to the composite to complete.
 internal sealed class SdfResolveRecorder : IRenderGraphPackageRecorder {
@@ -19,11 +20,13 @@ internal sealed class SdfResolveRecorder : IRenderGraphPackageRecorder {
     private static readonly string[] Inputs = [
         SdfWorldPackage.VisibilityRecords,
     ];
-    // The temporal fragment's resolve inputs after those, by the member each binds at, in port order.
+    // The temporal fragment's resolve inputs after those, by the member each binds at, in port order. The stationary
+    // window is an input the resolve updates in place, bound read-write.
     private static readonly string[] TemporalInputs = [
         SdfWorldPackage.Reactivity,
         SdfWorldPackage.HistoryColor,
         SdfWorldPackage.HistorySurface,
+        SdfWorldPackage.HistoryWindowWritten,
     ];
     // The temporal fragment's resolve outputs after the lit image and the surface transport, by the member each binds at,
     // in port order.
@@ -39,7 +42,7 @@ internal sealed class SdfResolveRecorder : IRenderGraphPackageRecorder {
     private readonly bool m_temporal;
     // Per frame slot, the tables the slot's pass set was written against.
     private readonly SdfWorldTables?[] m_portTables;
-    private readonly (nint Lit, nint ColorRead, nint SurfaceRead, nint ColorWrite, nint SurfaceWrite)[] m_portHistory;
+    private readonly (nint Lit, nint ColorRead, nint SurfaceRead, nint ColorWrite, nint SurfaceWrite, nint Window)[] m_portHistory;
 
     private SdfWorldView m_view;
     private bool m_disposed;
@@ -50,7 +53,7 @@ internal sealed class SdfResolveRecorder : IRenderGraphPackageRecorder {
         m_view = view;
         m_temporal = owner.FragmentOf(instance: context.Instance)!.Resources.Any(predicate: static resource => resource.History);
         m_portTables = new SdfWorldTables?[context.InFlightFrames];
-        m_portHistory = new (nint, nint, nint, nint, nint)[context.InFlightFrames];
+        m_portHistory = new (nint, nint, nint, nint, nint, nint)[context.InFlightFrames];
         m_sets = new RenderGraphPackageSets(context: context, groups: groups, groupLayoutHandles: view.Residency.Tables!.Pipeline(kernel: SdfKernel.Resolve).GroupLayoutHandles);
         m_work = new RenderGraphPackageWorkCounters(context: context, sets: m_sets);
     }
@@ -107,8 +110,8 @@ internal sealed class SdfResolveRecorder : IRenderGraphPackageRecorder {
         var lit = recording.Inputs[0].Image.ImageViewHandle;
         var history = (m_temporal
             ? (lit, recording.Inputs[(Inputs.Length + 2)].Image.ImageViewHandle, recording.Inputs[(Inputs.Length + 3)].Buffer!.BufferHandle,
-                recording.Outputs[2].Image.ImageViewHandle, recording.Outputs[3].Buffer!.BufferHandle)
-            : (lit, (nint)0, (nint)0, (nint)0, (nint)0));
+                recording.Outputs[2].Image.ImageViewHandle, recording.Outputs[3].Buffer!.BufferHandle, recording.Inputs[(Inputs.Length + 4)].Buffer!.BufferHandle)
+            : (lit, (nint)0, (nint)0, (nint)0, (nint)0, (nint)0));
 
         if (ReferenceEquals(objA: m_portTables[slot], objB: tables) && (m_portHistory[slot] == history)) {
             return;

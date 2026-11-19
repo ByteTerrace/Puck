@@ -1774,7 +1774,12 @@ engine counts:
   look critic is called only when the direction is in doubt. Lanes that
   change looks may land in the same batch.
 
-A lane lands on its build and boot; this evidence is gathered across the batch. Test requirements are lifted for the
+A lane lands on its build and boot; this evidence is gathered across the batch.
+In this wave the readiness boot is the lead's: with sixteen lanes on the lead
+machine the World build lease queued thirteen deep at about five minutes a
+build, so a lane hands back on the build of what it touched, and the lead
+boots each batch's merged tip headless and bisects a failure over the batch.
+A lane still starts a headless World when its reading decides what it builds. Test requirements are lifted for the
 refactoring campaign ([AGENTS.md](../../AGENTS.md#puck-is-pre-release)): no
 suite, coverage figure or recorded baseline is required of a change, and a
 test a change breaks is updated or deleted in that change. Equality with the
@@ -2495,7 +2500,7 @@ CPU thread reads to learn that work on a queue has finished.
 - *What it speeds up.* A barrier tells the GPU that a resource changes
   use between two passes. Direct3D 12 has an older and a newer form. Puck
   requires the newer one and uses it for buffers, but every texture still
-  goes through the older one (`DirectXBarriers.Transition`), which makes
+  goes through the older one (a legacy resource barrier), which makes
   the driver assume the worst case. The frame is a chain of compute passes
   over images, so it pays that between most of them.
 - *Evidence.* The specification: "Mixing legacy and enhanced barriers on
@@ -2875,8 +2880,8 @@ the bar as ruled.**
 - *Owns.* `src/Puck.World.Client/WorldShadowAllocator*.cs`,
   `src/Puck.SdfVm/SdfMeshShadowCascades.cs`, the shadow slots in
   `src/Puck.SignedDistance`, `passes/sdf-surface-stage.hlsli`,
-  `shade/sdf-light.hlsli`, `WorldSessionSceneEmitter.ReducedQuality`,
-  `WorldScreenBinder.CameraViewQuality`, and the nested table's rows in the
+  `shade/sdf-light.hlsli`, the nested views' quality (`WorldRenderSettings.NestedRestriction`),
+  and the nested table's rows in the
   quality presets.
 - *Needs.* Nothing.
 - *Model.* Opus `specialist`.
@@ -3031,8 +3036,9 @@ one barrier model.**
   split of one shadow pass into command processing, vertex work and
   rasterization, and the command change stays only if it removed code. A
   route run on Direct3D 12 with `--debug-layers` prints no barrier message,
-  no texture reaches `DirectXBarriers.Transition`, and presented frames on
-  the route show nothing new.
+  and presented frames on the route show nothing new. (Landed: the legacy
+  transition path is deleted and every texture transition is an enhanced
+  barrier; the windowed reading and the debug-layer route are the lead's.)
 
 **`signal`: a background job is known finished when it finishes.**
 
@@ -3399,13 +3405,10 @@ error for a level, one texel for a shadow map) are the owner's recorded
 rulings. They stay the engine's defaults, and an authored table may
 differ.
 
-One default is not neutral and goes. A directional light with no authored
-angular size takes a soft edge the engine chose
-(`SdfLights.DefaultPenumbraSlope`). That is a look held in the engine. With
-the `shadows` lane, a light with no authored size is a point source, and
-its shadow's edge is as hard as the map's filter allows. The standard
-package authors the soft edge it wants on its own lights, and an author's
-explicit size is honoured as it is today.
+A directional light with no authored angular size is a point source: its
+shadow's edge is as hard as the map's filter allows, and the engine chooses
+no softness. The standard package authors the soft edge it wants on its own
+lights, and an author's explicit size is honoured.
 
 ### What the owner settled
 

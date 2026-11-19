@@ -81,7 +81,7 @@ public sealed partial class WorldShadowAllocator {
     private void Select(ReadOnlySpan<WorldShadowCandidate> candidates, int count) {
         Array.Clear(array: m_selected);
         foreach (var candidate in candidates) {
-            if (candidate.Mode == WorldShadowMode.Never) { continue; }
+            if (!Admitted(candidate: candidate)) { continue; }
             for (var rank = 0; (rank < count); rank++) {
                 if ((m_selected[rank] is { } current) && !Before(left: candidate, right: current.Candidate, source: m_current)) { continue; }
                 for (var move = (count - 1); (move > rank); move--) { m_selected[move] = m_selected[(move - 1)]; }
@@ -93,6 +93,9 @@ public sealed partial class WorldShadowAllocator {
             if (m_selected[rank] is { } selected) { m_selected[rank] = selected with { Rank = (rank + 1) }; }
         }
     }
+    // A light competes for a slot only while it emits: one of no luminance has nothing to shadow, so whatever its mode it
+    // holds no slot and leaves its cascades to a light that does.
+    private static bool Admitted(in WorldShadowCandidate candidate) => ((candidate.Mode != WorldShadowMode.Never) && (candidate.Luminance > 0));
     private static bool Before(in WorldShadowCandidate left, in WorldShadowCandidate right, State source) {
         if (left.Mode != right.Mode) { return (left.Mode == WorldShadowMode.Always); }
         if ((left.Mode == WorldShadowMode.Auto) && (left.Luminance != right.Luminance)) { return (left.Luminance > right.Luminance); }

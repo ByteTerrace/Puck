@@ -254,6 +254,7 @@ static copies included. Shapes and materials read a lane by index:
 | `shapes[].erode` | in the bake, body lanes only: erodes a shape away over a lane range with a ragged front, frozen at the value the bake read |
 | `palette[].weathering.lane` | at shading time, every frame: chips and scratches, with a static floor |
 | `palette[].emissiveLane` | at shading time, every frame: `emissive × saturate(lane)` |
+| `palette[].flow.region` | at shading time: vary the built-in flow velocity near an authored world-space centre |
 | `palette[].flow.lane`, `.coverageLane` | at shading time, every frame: the flow's speed and its revealed coverage |
 | `volumes[].intensityLane` | at shading time, every frame |
 

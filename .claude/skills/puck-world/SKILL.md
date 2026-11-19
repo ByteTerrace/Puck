@@ -766,6 +766,13 @@ check the flag: the owner may be holding the pad.
   standard's `walker` seat program through seat 1's own controls (`WorldSeatDriver`). A chapter fails, naming the kind,
   the tick and the place, on a driven wall contact or a step out of its path's places; `puck benchmark --headless --route
   debug --loops 2` is the headless proof ([the plan](../../../docs/plans/benchmark.md#the-route-is-places-played-by-an-authored-seat-program-stage-4)).
+- **A device profile is data, selected by adapter.** A world's `render.devices` rows (the standard's, in
+  `worlds/standard/quality.puck`) each name a device's quality table and memory bars. A windowed boot selects the row
+  whose `match` the adapter's name contains and caps the device and host pools at its bars
+  (`WorldDeviceProfileState.Apply`, over `MemoryAccount.SetBudget`, which only lowers a limit); `world.device-profile
+  [auto|none|<name>]` selects by name and also writes the table through the `world.quality` levers
+  (`IWorldQualityPresets`). `puck benchmark --profile` sends it before the first chapter, and the run report's
+  `profile` and `topology` objects name what applied. No device name or figure is engine code.
 - `puck test <source>` boots each `.puck` `test` block headless and prints one
   verdict per line ([references/schedules-and-tests.md](references/schedules-and-tests.md)).
   A scenario is for an invariant that running cannot show: a replay or

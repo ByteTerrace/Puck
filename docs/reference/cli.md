@@ -2933,6 +2933,14 @@ puck benchmark compare <baseline report.json or directory> <candidate report.jso
   the one before it ends, from its tick hook; its arrival is its seat program's (`arrived`, or `failed` with the kind,
   the tick and the place: a driven wall contact, a step out of the places its path crosses, a lost path, a pose that did
   not land, its time limit).
+- **Profile.** `--profile <name|auto|none>` (default `auto`) applies a device profile before the first chapter, by
+  sending the World `world.device-profile`: a name of the world's `render.devices` rows, the row whose `match` the
+  adapter's name contains, or none. Applying writes the profile's quality table through the `world.quality` levers
+  (windowed or offscreen) and caps the device and host memory pools at the profile's bars. The run's `profile` object
+  in `run.json` names the profile, how it was selected, the adapter, the table and the caps with the limits the
+  process account admitted against, and its `topology` object names the authority endpoint the seat's body stood in
+  and whether that is `in-process` or `remote`. The profile is one of the report's conditions, so a comparison sets
+  runs under different profiles apart.
 - **Pace.** A run is display-paced with the ordinary lighting budget; nothing in it pauses, settles or waits, and the run
   turns lockstep presentation off at its start and records that it did. `--uncapped` boots with the immediate present mode for a throughput
   trend, and the report records it in the run's conditions; the presentation target itself is the host's own cap (`world.target`
@@ -3799,6 +3807,26 @@ within a cell. Its worst clusters of flagged samples follow, each at its world
 position at rest and in the creation's author frame, with its extent and the
 shapes whose own surfaces lie nearest. The output is a pure function of the
 world, the stored meshes and the options, so a later run proves a fix.
+
+A group with a flipped triangle, a fold, a vertex off the surface, an open or
+non-manifold edge or an uncovered crossing also prints a `defects:` line, and
+the report closes with `defects by group` and `defects total`. Each item is
+sorted into a class by its geometry alone (`SdfMeshDefectClass`): an
+`off-surface-vertex`; a `crease-sliver`, a flipped triangle or fold whose
+smallest height is under a tenth of the mesh's cell (the median edge); a
+`narrow-face`, one under a whole cell; a `short-tip`, an uncovered crossing; and
+`other`, a taller flipped triangle or fold and every open or non-manifold edge.
+The class reads the mesh, so it is an inference about which defect the geometry
+shows, not a record of why the bake made it. Beside each class the line gives
+what the bake's refinement did with the lattice cell holding each item
+(`SdfRefinementMap`): `measured` (flagged for fine samples), `ring` (contoured
+fine from interpolated coarse values beside a flagged cell), `unflagged`,
+`scanned-nothing-flagged` (the scan ran and flagged no cell in the group) or
+`not-scanned` (the bake never ran the scan on that lattice, whose `refinement:`
+line then reads `scan asked 0`), plus `thin`,
+items in a cell a sheet thinner than the cell crosses. The flags exist only with
+`--cpu`, where the bake is this tool's own; a stored mesh reports `no-map`, and a
+posed audit reports it too, since a posed mesh is out of the lattice's frame.
 
 The field is read through `SdfFieldEvaluator`'s render reading
 (`SdfFieldReading.Render`), which admits a non-uniform scale, every warp, fold
