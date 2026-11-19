@@ -218,6 +218,10 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
     /// <summary>The host's live render levers that reach this world (its cel-shading override and exposure pin), or
     /// <see langword="null"/> to follow this world's document alone.</summary>
     public WorldRenderSettings? Session { get; init; }
+    /// <summary>Gets the render-graph instance name the emitter's own view is presented under, whose share of the display
+    /// selects what the nested-view table gives up for it (<see cref="WorldRenderSettings.NestedViewQuality"/>), or
+    /// <see langword="null"/> for a view presented under no name of its own, which counts as filling the display.</summary>
+    public string? ViewName { get; init; }
     /// <summary>Gets or sets what fits the named sky layers to the final consuming views. The callback receives the
     /// destination's resolved sky and the frame dimensions after its cameras have been dressed.</summary>
     public Action<List<SdfViewSnapshot>, SdfSky, uint, uint>? FitSkyViews { get; set; }
@@ -491,7 +495,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
                 ? 0f
                 : WorldWindowFrustumFit.ShownHeight(fitted: in camera, viewerPixelsPerMetre: (ViewerPixelsPerMetre?.Invoke() ?? 0f))),
             DemandWithinView = (fitted is not null),
-            Quality = (Session?.NestedViewQuality(view: null) ?? default),
+            Quality = (Session?.NestedViewQuality(view: ViewName) ?? default),
             // A window shows the luminance beyond its glass, which the view looking through it exposes.
             Unexposed = (m_windowFit is not null),
         });

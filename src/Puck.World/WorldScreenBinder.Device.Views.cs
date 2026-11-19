@@ -36,7 +36,7 @@ public sealed partial class WorldScreenBinder {
             transforms: source.MovedTransforms,
             work: residency.Work
         );
-        Console.Error.WriteLine(value: $"[world.view: {name} renders a residency of its own of '{feed.InstanceName}': its session does not disclose everything that world holds]");
+        Console.Error.WriteLine(value: $"[world.view: {name} renders a residency of its own of '{feed.InstanceName}': no proof lets it share another stream's scene]");
 
         return new ViewResidency(
             Residency: residency,

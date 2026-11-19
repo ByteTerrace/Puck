@@ -246,6 +246,52 @@ public sealed partial class WorldScreenBinder {
     )
         ? boot?.Server.Definition
         : null);
+    // The frame's shared scenes: each feed whose authority proved its stream is handed the same scene inputs as
+    // another feed's of the same world, by the first such feed in feed order (its lead, whose mirror the scene
+    // draws), and each group's first feed by its world and scene identity. A feed alone in its group shares nothing.
+    private readonly Dictionary<SessionFeed, SessionFeed> m_sharedLeads = new(comparer: ReferenceEqualityComparer.Instance);
+    private readonly Dictionary<(string Instance, Puck.Assets.ContentPin Scene), (SessionFeed Lead, int Count)> m_sharedGroups = [];
+
+    // Groups the feeds by the scene their authority proved each is handed, for the frame being prepared.
+    private void GroupSharedScenes() {
+        m_sharedLeads.Clear();
+        m_sharedGroups.Clear();
+        foreach (var feed in m_feeds) {
+            if (SharedProofOf(feed: feed) is not { } proof) { continue; }
+            var key = (feed.InstanceName, proof.Scene);
+            var group = m_sharedGroups.GetValueOrDefault(key: key, defaultValue: (Lead: feed, Count: 0));
+            m_sharedGroups[key] = (group.Lead, (group.Count + 1));
+        }
+        foreach (var feed in m_feeds) {
+            if (
+                (SharedProofOf(feed: feed) is { } proof) &&
+                m_sharedGroups.TryGetValue(key: (feed.InstanceName, proof.Scene), value: out var group) &&
+                (group.Count > 1)
+            ) {
+                m_sharedLeads[feed] = group.Lead;
+            }
+        }
+    }
+    // The authority's current proof about a feed's stream, while the instance that issued it is the one the feed's
+    // session observes.
+    private WorldSceneProof? SharedProofOf(SessionFeed feed) => (
+        !feed.InstanceGone &&
+        (feed.Observation is { SceneProof: { } proof } observation) &&
+        m_instanceHost.TryGet(instance: out var instance, name: feed.InstanceName) &&
+        (instance is not null) &&
+        observation.Observes(server: instance.Server) &&
+        proof.IssuedBy(server: instance.Server)
+            ? proof
+            : null);
+    // The scene a feed shares this frame: its group's, drawn from its lead's mirror, on a frame whose latched delivery
+    // both the feed's proof and its lead's cover, so the scene the frame binds was handed to both streams alike. None
+    // while the feed is alone in its group or the latched delivery falls outside either proof.
+    private WorldSharedScene? SharedSceneOf(SessionFeed feed) {
+        if (!m_sharedLeads.TryGetValue(key: feed, value: out var lead)) { return null; }
+        var tick = lead.Mirror.Tick;
+        if (!(SharedProofOf(feed: feed)?.Covers(tick: tick) ?? false) || !(SharedProofOf(feed: lead)?.Covers(tick: tick) ?? false)) { return null; }
+        return new WorldSharedScene(Authority: feed.InstanceName, Mirror: lead.Mirror, Name: Puck.State.GeneratedName.Append(name: lead.RegistrationName, part: "shared"));
+    }
     // The routed window a session view renders through this frame, once the presenter's latch includes it.
     private WorldRoutedWindow? RoutedWindowOf(SessionFeed feed) => (
         ((feed.Route.Window is { Index: >= 0 } window) &&
