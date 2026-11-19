@@ -117,7 +117,7 @@ The next lead rewrites this section when it hands off in turn.
   owner's.
 - **Restored branches awaiting the owner's word:** `lane/g5` (the
   occlusion-aware rate floor, review answered, needs a merge and its windowed
-  check), `lane/toon-3` (a `world.toon off` fix that lands alone),
+  check), `lane/toon-3` (the third cel model, prior art),
   `lane/companion-v1` (prior art for custody steps 9 and 10), and
   `lane/moth-suit`, `lane/moth-pilot` and `lane/swallow-7` (the owner's pair
   session; their rotation libraries are prior art).
@@ -322,7 +322,7 @@ is filed with `puck measure`.
 | Branch | Holds | Waits for |
 |---|---|---|
 | `lane/g5` | G5, the occlusion-aware rate floor; every review finding answered | a merge of the integration tip, then its windowed recipe |
-| `lane/toon-3` | the third cel model; `world.toon off` suppressing every style | the `world.toon off` fix lands alone; the model resumes with cel, the debug world's treatment ([the visual bar](#the-visual-bar)) |
+| `lane/toon-3` | the third cel model (a form normal per pixel, the shade side restored from the continuous diffuse) | prior art for the cel treatment's shade side ([the visual bar](#the-visual-bar)); its `world.toon off` fix is on the integration branch |
 | `lane/moth-suit` | the suited Moth's rebuild and the shared head | the owner's pair session |
 | `lane/moth-pilot` | the off-suit pilot; `worlds/standard/turns.puck` | the owner's pair session |
 | `lane/swallow-7` | the swallow rebuilt to a cited reference document | the owner's pair session |
@@ -679,17 +679,16 @@ What an arrival and a hand-over still cost the frame:
   of the arrival (store loads, tier hand-overs, the trace scene rebuilt over
   them), which `world.wait bakes` and `world.wait residency` do not wait for.
   Attribute it with a `dotnet-trace` of the frame thread on arrival.
-- [medium] The bake's batches are cut by count (`SdfMeshPathBake.BatchTaps`)
-  and charged at a fixed `SdfMeshPathBake.NanosecondsPerTap`, so a bake during
-  play submits jobs several frames long. Cutting them at the bake's
-  `SdfGpuWorkRate` to `SdfGpuWork.FrameShareSeconds` shrank every batch to its
-  costliest group's rate and cut the groups in flight to a third. Landing it
-  needs a rate that does not do that (per lattice kind, or following the mean)
-  and enough jobs in flight for share-sized jobs, then the cold bake measured
-  against the bar. `SdfMeshPathBake.TryTake` changes move the bake identity.
-- [low] A probe scene upload chunk can still measure past a frame's share
+- [medium] A bake batch in play is cut to the live frame allowance at the
+  bake's mean-following rate (`SdfMeshBakeGpuWork`), but a lattice is never
+  split, so a first lattice of up to `SdfMeshPathBake.LatticeTaps` evaluations
+  still runs past a small allowance (`over-allowance`). Whether allowance-sized
+  batches keep enough groups in flight for a cold arrival in play is not
+  measured: an earlier cut at a rate that rose to the costliest batch cut the
+  groups in flight to a third. Measure a cold arrival in play against the bar.
+- [low] A probe scene upload chunk can still measure past the frame allowance
   against its `SdfGpuWork.UploadSecondsOf` estimate (`world.residency`'s
-  `over-frame-share` and `most-job`).
+  `over-allowance` and `most-job`).
 - [medium] The volume's fill beside many point lights: a fresh probe's relight
   traces every hit texel toward every shadowing point light in range
   (`sdfProbeShade`), so the window beside the teal room's lamps takes minutes
@@ -934,11 +933,11 @@ says how one is reproduced and profiled.
    be attributed to each operation, which nobody has looked at.
    - *Check:* editing Land rebakes with zero GPU sampling dispatches and lowers
      the C# edit-wait reading.
-3. **Cut bake jobs to the live frame allowance.** Today `SdfMeshPathBake.BatchTaps`
-   and fixed `SdfMeshPathBake.NanosecondsPerTap` submit full 8M-sample batches
-   (~32 ms against a 4.2 ms allowance), stalling play frames on RTX 4070. A
-   prior single worst-group rate shrank batches to a third of concurrency; use
-   a per-lattice-kind rate or mean rate instead, and re-measure the cold bake.
+3. **Measure the cold bake under the live frame allowance.** Budgeted batches
+   are cut to the allowance at a mean-following rate (`SdfMeshBakeGpuWork`);
+   held frames keep `SdfMeshPathBake.BatchTaps`. Re-measure the cold bake held
+   and a cold arrival in play, and split a lattice only if `over-allowance`
+   shows the unsplit first lattice matters.
 4. **Rank and build the top cold-bake speed fix.** After stage keys (and
    contour/triangle fixes) land, run one quiet cold bake under the recipe
    recording worker activity, GPU wait per request, GPU timestamps and total
@@ -1321,6 +1320,21 @@ and every memory owner are its steps. This packet holds the defects beside it.
   arriving residency, which is right once windows share. Still to read: the
   residency count, the device pool's held and peak bytes, and the cascade
   families at the hero spawn and in the painting wing.
+- [high] On Direct3D 12 the debug world's mesh region refuses meshes instead of
+  coarsening, so the valley's lake (water, stones, lining), the glacier's ice and
+  the falls do not draw there, while Vulkan draws them. After a settled cold bake
+  on the RTX 4070, `world.residency` on Direct3D 12 read `region-budget=1755015471B
+  region-named=1417497668B region-limit=1286602752B region-refused=398 holes=157
+  detail-bias=0`; on Vulkan `region-limit=1728053248B region-named=1109669796B
+  region-refused=0 detail-bias=1 coarsened=300`. The Direct3D 12 region (mapped,
+  `DirectXGpuMappedBuffer`) stopped growing below its budget and the selector
+  refused placements rather than raising the detail bias
+  (`SdfResidencySelector`, `SdfMeshRegionArena.Clip`). Vulkan's raised bias is
+  not free either: plaque lettering in the gallery drops strokes there ("RO ND
+  CONE", "ELLIPSO D"), which Direct3D 12 draws whole. Find why the mapped
+  region's limit stays under its grant and why refusal wins over the bias; the
+  check is `region-refused=0` and the lake drawn on both backends from the
+  `glacier` place.
 - [medium] Before sparse external targets are used, retain the exact host-word
   coverage of disjoint writes across remapping. `GpuRegion.StageOwed`
   (`src/Puck.Abstractions/Gpu/Residency/GpuRegion.cs`) re-owes the known prefix;
@@ -1494,8 +1508,6 @@ The volume's cost and convergence:
 - [medium] Full relight, selection, metering and hit-cache paths need CPU and
   GPU parity coverage; the trace law covers miss-only directional visibility
   and the gather law receiver lookup.
-- [low] The relight budget is per rendered frame, so at a low frame rate it
-  cannot hold the 8 s age. A rate in probes a second decouples them.
 - [low] A teleport brings cells relit long ago back into the window, and the
   next cycle prints `behind` with their age, which reads as overload.
 - [medium · unmeasured] The debug world's night floor (EV 2, keyed on `day`)
@@ -2004,13 +2016,22 @@ intent is in its guide.
   where they are missing ([water](#water)).
 - [high] Cel is the debug world's treatment
   ([the ruling](../decisions/rendering.md#a-light-is-shadowed-wherever-it-lights-and-cel-shading-is-a-style-per-material)):
-  every place opts in through its materials and is judged under it, with
-  `lane/toon-3`'s fix to `world.toon off` (it suppresses every cel style, a
-  material's own included). Owed with the treatment:
-  which of the Moth's slots band (all 31 do today through `toonSelect`), and
-  the third model's record, which fixed the washed-out shade and then broke
-  shade into blotches, with near-black planes where the direction wants warm
-  mid-value mauve.
+  every place opts in through its materials (`celMaterial`) and is judged
+  under it. The valley's rock, the glacier's ice, the gallery hall and the
+  Moth's painted slots are in. Owed: the exhibits' plinths and labels, held by
+  the gap below; the valley walls' shade reading as mass, which the domes'
+  smooth macro form limits more than the shading does; each place's guide
+  naming its outside references for the treatment; and dawn and night legs.
+- [high] A palette row's shade program is copied whole into every creation
+  document that uses it, as an expression graph of about 15,800 budget units
+  (2,262 nodes) for `cel`: opting the 135 exhibits' plinths and labels into
+  `galleryStyle` (`worlds/debug/shapes.puck`'s `galleryPalette`) took one
+  compilation's work from 2M to 26M units, past `DocumentEvaluationBudget.WorkLimit`
+  (PUCK047), and would add megabytes to the world definition. `WorldShadeLowering`
+  already lowers a template call once per compilation; the copies are the cost.
+  Programs need a shared identity across documents (a document-level program
+  table a row names, or a compact canonical form), so a repeated program costs
+  once (AGENTS.md, "Ergonomic is optimal").
 - [held, the owner's ruling] The Moth and the swallow wait for a pair session
   with the owner, and no lane models either until then. Agent modeling did not
   converge: builders passed views the critic failed with pixel evidence, and
@@ -2664,10 +2685,6 @@ hang, then the cost corpus, then the unreproduced language findings.
   exports after the expansion. Merge repeated blocks or admit `export` in a
   template body, and decide whether an import's surface carries its own
   imports' exports.
-- [medium] `.puck` cannot take an imported value and override one field of it,
-  so a world wanting the standard's `celStyle` as a default that boots off
-  copies all eleven values (`worlds/debug/debug.puck`'s `render.toon`). Add an
-  object update over a `let`, or a merge builtin beside `concat`.
 - [medium] No log of author walls exists, though "Ergonomic is optimal"
   (AGENTS.md) asks for one. The walls sit in S11's audit, this packet and the
   sdf-authoring skill's evals: start the one page those link to.
@@ -3571,14 +3588,6 @@ proves itself with `puck compile` lowering to the same document.
   record goes (an `IClientSink` or a wire frame). One stream type writing
   to a record target would hold each rule once; the withdrawal chokepoint's
   step 4 (the mirror per span) is the natural place to make it.
-- [low] Two tone curves in one cel pixel: the standard's `cel` shade program
-  (`worlds/standard/shading.puck`) exposes its colour by `exposureStops` and
-  rolls it off with its own `shoulder` inside the material, and the view's
-  display pass then applies `render.tone`'s shoulder again. The program's
-  compose stage predates `render.tone`; it should hand the display pass scene
-  light and drop its own exposure and shoulder, with the `toon` row's
-  `exposure` and `shoulder` members going with it. Cel is the debug world's
-  treatment, so this is fixed first ([the ruling](../decisions/rendering.md#a-light-is-shadowed-wherever-it-lights-and-cel-shading-is-a-style-per-material)).
 - [low] File-system primitives `AtomicFile` cannot serve yet:
   `ShaderCompiler.Entries.cs` wants a write that refuses to replace;
   `DirectoryObjectBlobStoreBackend` stages through a confined handle; a lock

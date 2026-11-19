@@ -18,10 +18,34 @@ namespace Puck.Shaders;
 // that reached the queue keeps the commits and completes its export; one that did not rolls the frame back to its
 // recording checkpoint (history cursors, instance states, content versions, initialization), withdraws its publication
 // and ends its export unwritten.
+//
+// A package's own commits (IRenderGraphPackageRecorder.Submitted: a camera a layer was drawn from, a target known clear)
+// have no checkpoint to roll back to, so they wait for the hand-over instead: CommitPackages is the one place that calls
+// Submitted, and it runs only for a submission that reached the queue, at once when it went over unbatched, or from
+// SettleAs once its batch's hand-over took it. A recording whose submission never reached the queue commits nothing.
 public sealed partial class ShaderPipelineRenderNode {
     // The fence of the latest frame whose submission an open batch still deferred when it committed, or null once its
     // hand-over is settled.
     private IGpuSubmissionFence? m_handOverPending;
+    // The recorders of the latest frame's recorded passes, owed Submitted until its submission reaches the queue.
+    private readonly List<IRenderGraphPackageRecorder> m_commitsOwed = [];
+
+    // Owes the frame's recorded passes their commit, and pays it at once when the submission already reached the queue.
+    // Called once the frame's cadence is committed (CommitCadenceFrame), which decides whether its hand-over is pending.
+    private void OwePackageCommits() {
+        m_commitsOwed.Clear();
+        foreach (var pass in m_passes) {
+            if (pass.Recorded && (pass.Package is { } package)) { m_commitsOwed.Add(item: package); }
+        }
+        if (m_handOverPending is null) { CommitPackages(); }
+    }
+    private void CommitPackages() {
+        try {
+            foreach (var package in m_commitsOwed) { package.Submitted(); }
+        } finally {
+            m_commitsOwed.Clear();
+        }
+    }
 
     /// <summary>Gets whether the latest frame's hand-over is still to be settled (<see cref="SettleHandOver"/>): its
     /// submission was deferred in an open batch, or its export's completion was left to the caller.</summary>
@@ -51,7 +75,8 @@ public sealed partial class ShaderPipelineRenderNode {
 
         m_handOverPending = null;
         try {
-            if (pending && !reached) { RollBackHandOver(); }
+            if (pending && reached) { CommitPackages(); }
+            if (pending && !reached) { m_commitsOwed.Clear(); RollBackHandOver(); }
         } finally {
             EndOwedExport(reached: reached);
         }

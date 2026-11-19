@@ -50,11 +50,31 @@ function ridgeClimbCosine(r, x) = 1 / squareRoot(
 )
 let valleyRidges = [glacierRidge]
 
+// The ice's cel look (the standard's glacierPalette under glacierIceStyle): a wide cool shade step, so the ice's rounded
+// crowns turn from sunlit white-blue to a clear blue shade as a painted glacier does, its weathering kept as the ice's
+// surface, and no ink. The grit row (slot 5) takes the rock's look.
+let glacierIceStyle = celStyle with {
+  threshold: 0.15
+  softness: 0.25
+  shadowTint [0.6, 0.75, 1]
+  specularSize: 0.03
+  restore: 0.6
+  bleed: 0.4
+  form: 0.4
+  ink {
+    outlineWidth: 0
+    outlineDistance: 12
+    outlineNormal: 0.65
+    outlineTint [1, 1, 1]
+  }
+}
+let glacierIcePalette = map(glacierPalette, (row, index) => (index == 5) ? celRock(row) : celMaterial(row, glacierIceStyle))
+
 // The wall's rock palette after its own: the trough's polished floor, the moraine's debris (a pale grit speckled dark, one
 // material over every heap so no seam shows between them) and a darker rock.
 let wallPalette = [
-  { color: "#94705A", roughness: 0.55, specular: 0.08 }
-  {
+  celRock({ color: "#94705A", roughness: 0.55, specular: 0.08 })
+  celRock({
     color: "#A8876A"
     roughness: 0.95
     specular: 0.02
@@ -70,8 +90,8 @@ let wallPalette = [
       seed: 23
       under [{ threshold: 0.6, surface { color: "#6B5242", roughness: 0.95, metal: 0 } }]
     }
-  }
-  { color: "#6B5242", roughness: 0.95, specular: 0.02 }
+  })
+  celRock({ color: "#6B5242", roughness: 0.95, specular: 0.02 })
 ]
 
 // The trough: the rock cut away along the ramp in a U, `troughHalf` either side of its axis and rounded at the floor by

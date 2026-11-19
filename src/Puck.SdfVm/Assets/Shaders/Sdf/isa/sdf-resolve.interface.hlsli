@@ -1,4 +1,4 @@
-// Generated from shader interface 'sdf-resolve' (sha256/d1678369b82f4162d3bb845649556dd5bd6d8f5468d2f2d4a52b5abe700d8095). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'sdf-resolve' (sha256/157a0f91d4a26d3b2b7a8779be8d05791f5bc4118d294ccc122ad25e1582d6d9). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SDF_RESOLVE
 #define PUCK_SHADER_INTERFACE_SDF_RESOLVE
 
@@ -228,30 +228,28 @@ struct SdfResolvePass {
     [[vk::offset(1252)]] uint _pad1252;
     [[vk::offset(1256)]] uint _pad1256;
     [[vk::offset(1260)]] uint _pad1260;
-    [[vk::offset(1264)]] float4 toonBands;
-    [[vk::offset(1280)]] float4 toonInk;
-    [[vk::offset(1296)]] float4 toonOutline;
-    [[vk::offset(1312)]] float4 toonShadow;
-    [[vk::offset(1328)]] float upscaleSharpness;
-    [[vk::offset(1332)]] uint viewBase;
-    [[vk::offset(1336)]] uint _pad1336;
+    [[vk::offset(1264)]] float4 toonInk;
+    [[vk::offset(1280)]] float4 toonOutline;
+    [[vk::offset(1296)]] float upscaleSharpness;
+    [[vk::offset(1300)]] uint viewBase;
+    [[vk::offset(1304)]] uint _pad1304;
+    [[vk::offset(1308)]] uint _pad1308;
+    [[vk::offset(1312)]] float3 viewForward;
+    [[vk::offset(1324)]] uint _pad1324;
+    [[vk::offset(1328)]] float3 viewPosition;
     [[vk::offset(1340)]] uint _pad1340;
-    [[vk::offset(1344)]] float3 viewForward;
+    [[vk::offset(1344)]] float3 viewRight;
     [[vk::offset(1356)]] uint _pad1356;
-    [[vk::offset(1360)]] float3 viewPosition;
-    [[vk::offset(1372)]] uint _pad1372;
-    [[vk::offset(1376)]] float3 viewRight;
+    [[vk::offset(1360)]] float3 viewUp;
+    [[vk::offset(1372)]] uint viewportCount;
+    [[vk::offset(1376)]] uint workCounterRow;
+    [[vk::offset(1380)]] uint workCounterRowDetail;
+    [[vk::offset(1384)]] uint _pad1384;
     [[vk::offset(1388)]] uint _pad1388;
-    [[vk::offset(1392)]] float3 viewUp;
-    [[vk::offset(1404)]] uint viewportCount;
-    [[vk::offset(1408)]] uint workCounterRow;
-    [[vk::offset(1412)]] uint workCounterRowDetail;
-    [[vk::offset(1416)]] uint _pad1416;
-    [[vk::offset(1420)]] uint _pad1420;
-    [[vk::offset(1424)]] float4 worldLanes;
+    [[vk::offset(1392)]] float4 worldLanes;
 };
-[[vk::binding(0, 3)]] ConstantBuffer<SdfResolvePass> passGroupIsaF58C340B : register(b0, space3);
-#define passGroup passGroupIsaF58C340B
+[[vk::binding(0, 3)]] ConstantBuffer<SdfResolvePass> passGroupIsa7717842B : register(b0, space3);
+#define passGroup passGroupIsa7717842B
 [[vk::binding(1, 3)]] Texture2D<float4> currentColor : register(t1, space3);
 [[vk::binding(2, 3)]] [[vk::image_format("rgba16f")]] RWTexture2D<float4> output : register(u2, space3);
 [[vk::binding(3, 3)]] StructuredBuffer<uint> sdfVisibilityRecords : register(t3, space3);

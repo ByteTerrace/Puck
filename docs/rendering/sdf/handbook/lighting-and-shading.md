@@ -581,73 +581,77 @@ its face, never behind it.
 
 ### Cel shading
 
-Cel shading is a style per material, not one look per world. A style is one
-`toon` value with the fields below. A palette row that carries one shades its
-material with it; every other material inherits the world's default style,
-`render.toon`. A style is on unless it says `enabled: false`, so a row with
-`toon { enabled: false }` stays continuous under a banded world, and one scene
-mixes cel-styled creations with continuous ones (the gallery's `shape-cel` and
-`shape-cel-hard` exhibits on level 3). The standard package authors styles as
-data in `worlds/standard/styles.puck` (`celStyle`, `celHardStyle`,
-`continuousStyle`): a row names one with `toon: celStyle` and a world with
-`render { toon: celStyle }`. The engine holds no look of its own: a style that
-bands authors every value below, and validation names each one it leaves out;
-a style that says `enabled: false` needs none.
+Cel shading is a style per material, not one look per world, and it has two
+halves. The banding is a shade program, the standard package's `cel`
+(`worlds/standard/shading.puck`): its light phase bands each light and its
+compose phase gathers the result, so no engine code bands anything. Beside the
+program, a material carries a style row, `toon`, which marks it styled and
+holds its ink: the outline that reads neighbouring depth and normals, which a
+per-pixel program cannot express. `celMaterial(base, style)` in
+`worlds/standard/styles.puck` writes both onto a palette row, so one row bands
+and inks while its neighbours keep theirs, and one scene mixes cel-styled
+creations with continuous ones (the gallery's `shape-cel` and `shape-cel-hard`
+exhibits on level 3). The styles (`celStyle`, `celHardStyle`) are data there:
+the program's values (`threshold`, `softness`, `shadowTint`, `specularSize`,
+`combined`, `restore`, `bleed`, `form`) and an `ink` row. `celMaterial` composes
+the program after the row's own (`shade [base.shade, cel(...)]`), so a terrain or
+weathered row keeps its surface under the band. A world that wants every material styled names
+the program as its `render.shade` and the ink as its `render.toon`; a row with
+`toon: continuousStyle` (`enabled: false`) stays unstyled under it. The engine
+holds no look of its own: a style row that is on authors every outline value,
+and validation names each one it leaves out.
 
-A palette row can also choose its style live from a state cell, the way a
+```text
+import "../standard/styles"
+palette [celMaterial({ color: "#C9A27E", roughness: 0.6, wrap: 0.35 }, celStyle)]
+```
+
+The program bands each light's diffuse cosine, wrapped by the material, and
+keeps the light's visibility as a separate factor, `band(cosine) × visibility`,
+so the cascades' filtered penumbra keeps its softness and its colour under the
+band's edge. `combined: 1` bands the cosine and the visibility together,
+`band(cosine × visibility)`, the harder look in which a penumbra snaps to the
+band. A short soft terminator joins the two tones; `threshold` places it and
+`softness` is its full cosine width. The shade is painted rather than left to
+whatever light fills it: `restore` gives each light's shade side that share of
+the light back over the half-cosine, and `bleed` is how much of the sky and
+bounce's own hue survives (the rest is their luminance), both under the linear
+RGB `shadowTint`, with ambient occlusion still affecting them, so a lawn's green
+bounce does not turn every shade olive. `form` keeps that share of the cosine's
+falloff on the lit side, so a lit mass still reads round. Specular
+lobes become bounded discs: `specularSize` is one minus their half-vector
+cosine. The banded lights shade the paint flat, metals included; the rim
+lights, the environment reflection and ambient occlusion stay in the cel
+response as in the continuous one. The program omits the surface phase, so a
+banded material keeps its weathering, inset and flow layers as its surface
+(an omitted surface phase keeps the layers; a program with one replaces them).
+Its result is scene light: the view's display pass applies `render.tone` once,
+so a cel pixel passes one tone curve, the same one every other pixel passes.
+
+A palette row can also choose its look live from a state cell, the way a
 camera case or a binding layout is chosen: `toonSelect { state:
 "state.<row>[.<key>]", cases [ ... ] }` shades the row with the case the cell's
 whole value names (an enum member's ordinal, an integer, or a boolean as zero or
-one), and with its `toon` while the cell names none. A command that writes the
-cell swaps the look; only the material's style rows change, so nothing bakes.
-The debug world's Moth reads her `mothStyle` row this way, and `moth.style
-Plain|Cel` swaps her between continuous shading and the standard's `celStyle`.
+one), and with its own `toon` and `shade` while the cell names none. Each case
+is a style row and a program, `{ toon, shade }`; `celLook(style)` writes the
+cel pair and `plainLook` the continuous one. Every case's program is declared
+by the document, so it is compiled and specialized before a swap; a command
+that writes the cell changes only the material's rows and program reference,
+so nothing bakes. The debug world's Moth reads her `mothStyle` row this way,
+and `moth.style Plain|Cel` swaps her between the two.
 
-`world.toon on|off|toggle` is the live lever over the world's default style.
-With no argument it echoes the choice. It uses the same render-section grant and
-session-lever delivery as `world.ao`, and contributes no simulation state. A
-material with a style of its own keeps it whichever way the lever is set. The
-default starts on when `render.toon` is present and not `enabled: false`. A
-world that authors no `render.toon`, or one without every value, has no default
-style for the lever to switch on. Until
-the live lever is used, reload follows the document default; afterwards the
-session choice applies to the host, routed worlds and nested views, with each
-world's own style. `world.save` folds the live choice into the render settings.
-
-```text
-render {
-  toon {
-    enabled: true
-    band: Visibility
-    threshold: 0.45
-    softness: 0.08
-    shadowTint [0.38, 0.48, 0.65]
-    outlineWidth: 1.5
-    outlineDistance: 12
-    outlineNormal: 0.65
-    outlineTint [0.08, 0.10, 0.16]
-    specularSize: 0.025
-    exposure: 0.5
-    shoulder: 0.65
-  }
-}
-```
-
-The views pass bands each light's diffuse cosine and keeps its shadow
-visibility as a separate factor, `band(cosine) × visibility`, so the cascades'
-filtered penumbra keeps its softness and its colour under the band's edge
-(`band: Visibility`, the default). `band: Combined` bands the cosine and the
-visibility together, `band(cosine × visibility)`, the harder look in which a
-penumbra snaps to the band. Point lights retain their range, cone and probe
-visibility, with a banded diffuse cosine under ambient occlusion. A short soft
-terminator joins the two tones; `threshold` places it and `softness` is its
-full cosine width. Indirect light and sky ambient take the cooler linear RGB
-`shadowTint`, with AO still affecting indirect light. This does not add
-unoccluded sunlight inside a shadowed room. Specular lobes become bounded
-patches: `specularSize` is one minus their half-vector cosine, with a narrow
-soft edge. The banded lights shade the paint flat, metals included; the rim
-lights, the environment reflection and ambient occlusion stay in the cel
-response as they are in the continuous one.
+`world.toon on|off|toggle` is the live lever over every style. Off shades every
+styled material continuously and uninked, a material's own style and the
+world's default alike: its program's light and compose phases read as omitted
+(`sdfShadeBinding` marks the binding unstyled), so the engine's continuous
+response lights it while a surface phase it composes (a terrain or weathered
+surface) still runs, and its outline is skipped, so one view compares
+continuous against cel. On shows every style as authored. With no argument it echoes the choice.
+It uses the same render-section grant and session-lever delivery as
+`world.ao`, reaches the host, routed worlds and nested views, and contributes
+no simulation state. Cel shading needs the programs to run, which is the
+default (`world.shade programs`); `world.shade layers` shades every material
+by its layers alone.
 
 Outlines compare the depth and normals of eight neighbouring visibility
 records, on the foreground side of silhouettes and at sharp creases. The
@@ -655,28 +659,23 @@ tangent-plane depth comparison leaves sloping planes clear. `outlineWidth`
 is the close radius in output pixels, scaled to the current render grid;
 `outlineDistance` is the distance in metres at which it halves. Fractional
 radii interpolate two rings, avoiding integer-width jumps. `outlineNormal`
-is the crease cosine threshold; `outlineTint` multiplies reflected colour.
+is the crease cosine threshold; `outlineTint` multiplies the surface's light.
 The ink is part of the lit surface before temporal reprojection and
 atmosphere, so existing motion, disocclusion and history clipping apply.
-
-`exposure` is reflected-light compensation in stops. `shoulder` compresses
-the exposed RGB peak with one common multiplier, retaining paint chroma
-before the world's authored tone curve. Emission is added after both this
-compression and ink. Bound displays and portal pictures bypass the cel
-response, and sky stays in its existing pass. A portal's destination shades
-its own surfaces once; the consuming view does not posterise the picture.
+Bound displays and portal pictures bypass both halves, and sky stays in its
+existing pass. A portal's destination shades its own surfaces once; the
+consuming view does not posterise the picture.
 
 There is no additional dispatch, image or history allocation: the work is
 in `sdf.world$views` and reported with that pass's counters. An outlined
 opaque hit reads at most eight neighbouring depths and normals at a radius
-of one render pixel or less, sixteen above it. Width zero skips these reads;
-a material shading continuously skips the cel response and all outline reads.
-A material's own style is four rows of its material record (rows 22 to 25,
-laid out as the pass block's `toonBands`, `toonShadow`, `toonOutline` and
-`toonInk`; `SdfToon.WriteRows` writes both), all zero to inherit the world's
-default, so a palette edit restyles one material and changes no mesh. The
-pass-block parameters participate in the lighting cadence signature, so live
-edits request fresh shading and temporal samples without rebuilding geometry.
+of one render pixel or less, sixteen above it. Width zero skips these reads.
+A material's own style row is rows 22 and 25 of its material record, laid out
+as the pass block's `toonOutline` and `toonInk` (`SdfToon.WriteRows` writes
+both), all zero to inherit the world's default, so a palette edit restyles one
+material and changes no mesh. The pass-block parameters participate in the
+lighting cadence signature, so live edits request fresh shading and temporal
+samples without rebuilding geometry.
 
 ### Lighting levers
 

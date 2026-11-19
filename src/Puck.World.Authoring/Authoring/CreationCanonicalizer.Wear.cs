@@ -128,8 +128,9 @@ public static partial class CreationCanonicalizer {
         }
     }
     private static void ValidatePaletteShading(PaletteEntryDocument entry, List<DocumentValidationError> errors, int index) {
-        if (entry.Shade is { } shade) {
-            try { _ = SdfShadeProgram.Compile(definition: shade); } catch (SdfShadeException error) { errors.Add(item: new(Message: $"{error.Code}: {error.Message}", Path: $"palette[{index}].shade")); }
+        Shade(entry.Shade, $"palette[{index}].shade");
+        for (var choice = 0; (choice < (entry.ToonSelect?.Cases?.Count ?? 0)); choice++) {
+            Shade(entry.ToonSelect!.Cases[choice]?.Shade, $"palette[{index}].toonSelect.cases[{choice}].shade");
         }
         ValidateUnitRange(
             value: entry.Wrap,
@@ -169,6 +170,10 @@ public static partial class CreationCanonicalizer {
             if ((value is not null) && !HexColor.TryParse(color: out _, value: value) && !DocumentIdentifier.IsCellReference(value: value)) {
                 errors.Add(item: new(Message: $"{name} must be #RRGGBB or a state.<row>[.<key>] binding.", Path: $"palette[{index}].{name}"));
             }
+        }
+        void Shade(SdfShadeDefinition? shade, string path) {
+            if (shade is null) { return; }
+            try { _ = SdfShadeProgram.Compile(definition: shade); } catch (SdfShadeException error) { errors.Add(item: new(Message: $"{error.Code}: {error.Message}", Path: path)); }
         }
     }
     // Per-shape lane-driven erosion: a defined lane, a finite from/to pair that differ (SdfProgramBuilder.LaneErode

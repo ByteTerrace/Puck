@@ -426,26 +426,27 @@ dearest:
   relief's clamp by exactly the masks' charge (`SdfReliefMaskLawTests`);
   `puck creation stats` prints the north-west sector's clamp as 3.33×. Still
   open: the `mask` construct and its spelling pair (the generic value path
-  carries the mask meanwhile); the kernel's agreement and cost on both
-  backends ([step C](terrain-pass/relief-mask-design.md#c-kernel-agreement-kernel-cost-and-the-look));
+  carries the mask meanwhile); the kernel's cost against the build before
+  the row form ([step C](terrain-pass/relief-mask-design.md#c-kernel-agreement-kernel-cost-and-the-look)),
+  a measurement for a quiet window, its agreement holding on both backends
+  (`SdfFieldDeviceLawTests`' relief-row legs, one region of every listed type,
+  and `puck mesh audit` of the north-west sector's kernel bake);
   and a band narrower than the bake's coarse cell or contact's gradient taps,
   which neither sees, closed by reading the band as one more wavelength in the
   relief's own spacing (`CreationNoiseDocument.DetailSpacing`) and in the
   relief field collider's gradient step
   ([step B](terrain-pass/relief-mask-design.md#b-the-band-as-a-wavelength)).
-- **Step B: kernel agreement.** This is step 3's existing target applied to a
-  masked sector: a fixed-point CPU bake and a kernel bake agree within the
-  bake's tolerance, on Direct3D 12 and on Vulkan. *Check:* `puck mesh audit`
-  against the kernel bake, both backends (a GPU leg).
 - **Step C: the exhibit and the gallery.** The lake's mask is authored
   (`terrainCarveMask` in `worlds/standard/terrain.puck`, the sector's call in
   `worlds/debug/valley.puck`), and the gallery's RELIEF MASK exhibit
   (`shape-noise-mask` in `worlds/debug/shapes.puck`) stands before NOISE: a
   relieved slab with a bowl pressed into it, under one mask over the bowl and
   one that keeps the relief on the slab, so plinth and plaque stay clean in
-  the same creation. Still open: the headless test, and the windowed checks.
-  *Checks:* the proof exhibit's three checks, and the gallery exhibit's
-  capture in the same window.
+  the same creation. The exhibit reads as its plaque says on both backends,
+  and the lake's bowl stays smooth inside the rough sector. Still open: the
+  headless test, and the lake's capture on Direct3D 12, where the lake's water
+  and stones do not land
+  ([residency](open-items.md#residency-and-streaming)).
 - The glacier's cradle, the falls' corridor and the overlook belong to step 8
   and the water plan's place lanes. Each reuses the mask with no engine work.
 

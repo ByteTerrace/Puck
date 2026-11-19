@@ -203,7 +203,7 @@ public sealed partial class SdfMeshIrradianceLawTests : IDisposable {
         Assert.Equal(0f, volume.LightVisibility(new Vector3(x: 0f, y: 2f, z: 0f), Vector3.UnitY, 0));
     }
     /// <summary>A light change relights the probes' cached hits and traces nothing; a budget bounds the relights each
-    /// frame grants.</summary>
+    /// frame's grant makes, at most <see cref="SdfMeshIrradiance.MostGrantSeconds"/> of its rate a second.</summary>
     [Fact]
     public void ALightChangeRelightsWithoutATraceUnderTheFramesBudget() {
         var volume = Volume();
@@ -218,8 +218,11 @@ public sealed partial class SdfMeshIrradianceLawTests : IDisposable {
         lights.Count = 1;
         lights.ShadowSlots.Configure(fadeCapacity: 0, slots: 0);
 
-        var dimmed = frame with { Lights = lights, IndirectBudget = new SdfIndirectBudget(Relight: 100, Trace: 0, Age: 0f) };
+        // Four hundred probes a second, granted after more than a grant's longest span: the grant covers
+        // MostGrantSeconds of the rate, a hundred probes.
+        var dimmed = frame with { Lights = lights, IndirectBudget = new SdfIndirectBudget(RelightPerSecond: 400, TracePerSecond: 0, Age: 0f) };
 
+        Thread.Sleep(millisecondsTimeout: (int)((SdfMeshIrradiance.MostGrantSeconds * 1000.0) + 50.0));
         _ = volume.Stage(bakePending: false, frame: dimmed, tier: SdfIndirectTier.Medium, write: _ => { });
         _ = SpinWait.SpinUntil(condition: () => (volume.Counters.Read(kind: SdfMeshIrradiance.Relit) >= (relit + 100)), millisecondsTimeout: 30_000);
         // One frame's grant bounds the relights before the next frame grants more.

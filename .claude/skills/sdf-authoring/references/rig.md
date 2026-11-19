@@ -167,16 +167,22 @@ authority last published, and an edge the seat sent on it (a press, a release or
 an axis sample) has not had its answer presented, the phase follows the seat's own
 folded level in place of the cell, for at most `leadSeconds` of presented time
 (the frames' summed delta, so it repeats under lockstep), never the wall clock.
-The outstanding test is `WorldSeatInput.TryLead`, and the authority never reads
-`lead`. The answer is `WorldInputAnswer` (the epoch, the highest event sequence of
-the last batch of the owner's current epoch the authority took or refused, and the
-tick it answered in), written through `WorldInputRuntime.Answer` before any check
-that can refuse the batch and delivered to that owner alone; the client reads it
-under whichever owner the route's authority publishes the body's input as
-(`WorldSessionMirror.TryInputOf`), and marks an edge answered once that tick is
-fully presented, so a later delivery without the answer revives nothing. `body.rig`
-prints the shared pose's drivers, and, to the guessing seat or the operator,
-`guess:<driver> phase=… source=lead|cell` from the layer. Refused by name: `lead`
+The outstanding test is `WorldSeatInput.TryLead`, over `WorldSeatInput.ReadGuess`,
+and the authority never reads `lead`. The answer is `WorldInputAnswer` (the epoch,
+the highest event sequence of the last batch of the owner's current epoch the
+authority took or refused, and the tick it answered in), written through
+`WorldInputRuntime.Answer` before any check that can refuse the batch and
+delivered to that owner alone; the client reads it under whichever owner the
+route's authority publishes the body's input as (`WorldSessionMirror.TryInputOf`),
+and marks an edge answered once that tick is fully presented, so a later delivery
+without the answer revives nothing. `body.rig` prints the shared pose's drivers;
+the layer's as `layer:<driver> phase=… source=lead|cell`; and, for a seat's body
+and in a headless World too, a `guess:<creation>.<driver>[<channel>]=` reading of
+the seat side (`WorldClient.DescribeGuess`): `off(<why>)` when this client offers
+the seat no guess, else `lead` or `cell` with the state, the seat's outstanding
+event sequence, the authority's answer (epoch/sequence@tick), and the presented
+tick and fraction. A headless World presents every tick whole, so it never reads
+an edge outstanding, and poses no creation, so it prints no `layer:`. Refused by name: `lead`
 on a signal that is not a state cell, `leadSeconds` without `lead`, and (world
 validator) a channel that is not declared, or is relative or text.
 

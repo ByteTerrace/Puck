@@ -58,9 +58,10 @@ namespace Puck.SignedDistance;
 /// <see cref="SdfGlass.Depth"/> of it, and its <paramref name="Roughness"/> is its frost. A shape carrying one bakes
 /// into a group of its own and draws in the glass pass over the opaque image; inside an opaque group (a mixed dynamic
 /// group) it shades opaque with the tint as albedo.</param>
-/// <param name="Toon">The material's own cel style, or <see langword="null"/> to shade with the world's default style.
-/// A style whose <see cref="SdfToon.Enabled"/> is false keeps the material continuous whatever the default is.
-/// Presentation only: the irradiance trace and every query ignore it.</param>
+/// <param name="Toon">The material's own cel style (its ink, and the mark the live <c>world.toon off</c> reads), or
+/// <see langword="null"/> to take the world's default style. A style whose <see cref="SdfToon.Enabled"/> is false keeps
+/// the material unstyled whatever the default is. The banding is <paramref name="Shade"/>'s. Presentation only: the
+/// irradiance trace and every query ignore it.</param>
 /// <param name="Flow">The flow layer, shading that moves along an authored flow over still geometry, or
 /// <see langword="null"/> for none. Presentation only: the irradiance trace and every query ignore it.</param>
 /// <param name="Shade">The admitted presentation program; never a field or simulation input.</param>

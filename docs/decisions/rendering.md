@@ -171,6 +171,17 @@ cel pixel passes one tone curve (the display pass's `render.tone`), never one
 inside the material as well. The cel work the
 [illumination plan](../plans/illumination.md#cel-shading) had scheduled resumes.
 
+**Ink is edge signals the engine computes and an ink phase authors write (the
+owner's ruling).** Outlines are meant to be performant and expressive. The
+engine computes a view's edge signals once (depth discontinuity, normal crease,
+object and material boundaries, and the distance to the nearest edge) and keeps
+them correct in motion, across dynamic resolution and temporal reprojection.
+What an edge looks like (which edges ink, width, taper, colour, breakup) is an
+authored ink phase of the shade program in the standard package, run only where
+an edge is near. No look's vocabulary names the mechanism: the cel and toon
+names in engine schemas, kernels, levers and verbs are a leak, removed by the
+[ink plan](../plans/ink.md).
+
 - **Shadow where the response is.** The surface pass queries a light's cascades
   wherever that light's diffuse response is non-zero, a wrapped material's side
   past the terminator included, and filters what it queried. A side it skips
@@ -215,27 +226,33 @@ inside the material as well. The cel work the
   colour. `band(cosine × visibility)` stays as an authored shape for the harder
   look. Rim lights, the environment reflection and ambient occlusion stay in the
   cel response as in the continuous one; a style never discards a term.
-- **A style is material data.** One lighting path with a style response per
-  material: a palette row's `toon` opts its material in (or out, with
-  `enabled: false`), every other material inherits the world's default
-  `render.toon`, and `world.toon` is the live lever over that default. One
-  scene mixes cel-styled and continuous creations. The concrete styles are data
-  in the standard package (`worlds/standard/styles.puck`), never an engine
-  default, and the style rows live in the material record beside `wrap`,
-  `fill` and `receive`, the material system there already is.
-- **A style can follow state.** A palette row's `toonSelect` binds its style to
-  a state cell, so a command that writes the cell swaps the look with no
-  rebake. The Moth supports both cel and plain styles this way, swappable live
-  for playtesting as binding layouts are (the owner's ruling): `moth.style
-  Cel|Plain` writes the cell her palette rows read.
-- **The style becomes an authored program.** Under
+- **A style is material data, and its banding is a program.** Under
   [authored shading](#authored-shading) the banding is the standard's `cel`
-  program, the world default is `render.shade` with `world.shade default` as
-  its live lever, and the fixed toon rows, `render.toon`, `world.toon` and
-  `toonSelect` are deleted when the layers migrate
-  ([the plan's step 6](../plans/author-shaders.md#the-remaining-steps), which
-  names the state-bound successor). The outline stays engine code with its
-  style row. This entry is rewritten when that step lands.
+  shade program, the one implementation: no kernel bands. What a per-pixel
+  program cannot express stays engine code with a style row per material, the
+  outline that reads neighbouring depth and normals: a palette row's `toon`
+  opts its material in (or out, with `enabled: false`) and every other material
+  inherits the world's default `render.toon`, whose program is `render.shade`.
+  The standard's `celMaterial` writes both halves. One scene mixes cel-styled
+  and continuous creations. The concrete styles are data in the standard
+  package (`worlds/standard/styles.puck`), never an engine default.
+- **One lever suppresses every style.** `world.toon off` shades every styled
+  material continuously and uninked, a material's own style included, so one
+  view compares continuous against cel; a styled material's program keeps its
+  surface phase and loses its light and compose phases, rather than any row
+  being rewritten.
+- **A style can follow state.** A palette row's `toonSelect` binds its look, a
+  style row and a program per case, to a state cell, so a command that writes
+  the cell swaps the look with no rebake and no compile (every case's program
+  is declared). The Moth supports both cel and plain looks this way, swappable
+  live for playtesting as binding layouts are (the owner's ruling): `moth.style
+  Cel|Plain` writes the cell her palette rows read.
+- **A program that omits the surface phase keeps the material's layers.**
+  `cel` only lights and composes, so a banded material keeps its weathering,
+  inset and flow until the layers themselves migrate
+  ([the plan's step 6](../plans/author-shaders.md#the-remaining-steps)); a
+  program with a surface phase replaces them. Programs run by default
+  (`world.shade programs`), since the cel treatment is one.
 
 
 ## Authored shading

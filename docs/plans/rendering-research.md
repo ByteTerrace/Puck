@@ -64,10 +64,11 @@ its second loop, which starts with every mesh already baked.
   `vkalloc` lane has since landed its fix
   ([lanes in flight](#lanes-in-flight)), and the run has not been taken
   again.
-- **Indirect light follows a lighting change late.** Lighting work is granted
-  for each rendered frame, so at the 20 or so frames a second the route runs
-  at, the lighting gets a third of the work it would get at 60. The automatic exposure
-  meters stale light, so night can be exposed as day.
+- **Indirect light followed a lighting change late.** Lighting work was
+  granted for each rendered frame, so at the 20 or so frames a second the
+  route ran at, the lighting got a third of the work it would get at 60, and
+  the automatic exposure metered stale light. Lighting is now granted work
+  for each second (decision 4); the route reading that confirms it is owed.
 - **Lighting and shadows look wrong almost everywhere, and three causes
   are defects.** Linear light values are shown as if they were already
   encoded for the display. A shadow's softness jumps about seven-fold
@@ -1097,11 +1098,13 @@ the frame: relighting probes, tracing their rays, sampling the field for
 the bake, and uploading meshes. It is slow because it waits on round
 trips, not because the GPU is busy. The lighting now keeps several jobs
 in flight and commits a batch once (`SdfMeshProbeGpuWork.Run`,
-`SdfMeshProbeGpuWork.RecordCommit`), but it is still granted work for each
-rendered frame, so a game presenting 30 frames a second gets half the
-lighting of one presenting 60. A group's bake makes about twenty round trips. A full bake
-batch is about 32 ms of GPU work against an allowance of 4.2 ms, so a
-bake during play already submits jobs several frames long.
+`SdfMeshProbeGpuWork.RecordCommit`), and steps 1 to 3 are built: the share
+follows the GPU time the frame leaves free (`SdfGpuWorkBudget`), budgeted bake
+batches are cut to one frame's allowance, and lighting is granted work for
+each second, so a game presenting 30 frames a second gets the lighting of one
+presenting 60. What remains is admitting each job against the frame's
+deadline, splitting a bake lattice, and counting frames missed behind
+background work.
 
 **What we propose.** In this order:
 
@@ -2322,8 +2325,8 @@ CPU thread reads to learn that work on a queue has finished.
   must submit on the frame's queue today (`SdfGpuWork.Enter` refuses
   anything else). That queue runs in order, so a job waits behind the frame
   ahead of it, and a long job delays the frame behind it. That delay is the
-  only reason every job is cut to a frame's share, about 4.2 ms
-  (`SdfGpuWork.FrameShareSeconds`). On its own queue a job reaches the GPU
+  only reason every job is cut to one frame's allowance, at most about 4.2 ms
+  (`SdfGpuWorkBudget.FrameAllowanceSeconds`). On its own queue a job reaches the GPU
   when it is submitted and is answered when it finishes. The bake's full
   batch, about 32 ms of GPU work, could then run as a few jobs sized to
   stay safely inside the driver's timeout. The same slots would carry more
@@ -3203,11 +3206,11 @@ carries the change, Sonnet where the result is specified.
 
 | Lane | Outcome | Unlocked by | Owning plan | Model |
 |---|---|---|---|---|
-| Far shadows (gap 3) | Ridges cast shadows on the far walls, from a map that is refreshed only when the sun or a static draw changes. It is the path for a device whose table leaves shadows by ray off | `shadows`: the far map is one more entry in its cascade set | [The terrain pass](terrain-pass.md#order-of-work), step 7 | Opus |
+| Far shadows (gap 3) | Built (GPU reading owed): Ridges cast shadows on the far walls, from a map that is refreshed only when the sun or a static draw changes. It is the path for a device whose table leaves shadows by ray off | `shadows`: the far map is one more entry in its cascade set | [The terrain pass](terrain-pass.md#order-of-work), step 7 | Opus |
 | Shadows by ray where no map reaches (gap 3) | On a device with ray queries, a pixel past the last cascade traces one ray toward the sun, and each shadowed local light in reach traces one ([its entry](#the-capability-lanes-of-the-second-wave)) | `rays`, for the structures. `shadows`, which owns the files it changes. `floor`, for the meshes it traces | [Illumination](illumination.md) | Opus, with a look critic |
-| Terrain programs (gap 2) | The terrain template with slope, altitude, curvature and breakup masks on every wall | `colour` | [The terrain pass](terrain-pass.md#slope-altitude-and-curvature-materials), step 6 | Opus, with a look critic |
+| Terrain programs (gap 2) | Built (captures with relief and cel owed): The terrain template with slope, altitude, curvature and breakup masks on every wall | `colour` | [The terrain pass](terrain-pass.md#slope-altitude-and-curvature-materials), step 6 | Opus, with a look critic |
 | The capture order | Decision 2's order: upkeep, the list sealed after the cameras, readers found while captures run, minimums in place of the hidden render, state keyed by view | `withdrawn`, which changes the same binding code. `frame`'s breakdown ranks its smaller cuts and does not hold it | [Streaming and memory](streaming-and-memory.md#decision-4-a-residency-is-staged-by-its-demand-not-by-a-render) | Opus |
-| The background allowance | The allowance follows the GPU time the frame leaves free, bake jobs are cut to it, and lighting is granted work for each second (decision 4, steps 1 to 3) | A free slot. The first to take one: at 20 frames a second the lighting gets a third of its work | [Illumination](illumination.md) | Opus |
+| The background allowance | Built, steps 1 to 3 (GPU reading owed; deadline admission next): The allowance follows the GPU time the frame leaves free, bake jobs are cut to it, and lighting is granted work for each second (decision 4, steps 1 to 3) | A free slot. The first to take one: at 20 frames a second the lighting gets a third of its work | [Illumination](illumination.md) | Opus |
 | The background queue | Background jobs run on a compute queue of their own and are answered when they finish, and mesh uploads' copies move onto it ([its entry](#the-capability-lanes-of-the-second-wave)) | `signal`, which changes the same submitters, and `withdrawn`, which owns where a job's result is installed. It merges after the background allowance, because both change `SdfGpuWork` | [Illumination](illumination.md), with decision 4 | Opus, with an adversarial review |
 | Casters culled by reader | Uploads only for instances that changed, the compacted command list, and shadow casters culled in every map (decision 11, steps 1 to 3). If `direct3d`'s reading shows empty commands are what Direct3D 12 pays for, the compacted list is taken first | `shadows`, for the cascade set, and `floor`, which changes how a draw names its mesh | [Visibility](visibility.md) | Opus |
 | Mesh shaders over meshlets | On a device with mesh shaders, a cascade's casters are transformed once for both of its layers, in meshlets the GPU culls, with no empty commands ([its entry](#the-capability-lanes-of-the-second-wave)) | `direct3d`, whose reading says what a shadow pass's time is made of. `rays`, for a variant that depends on a capability. `shadows` and `floor`, as for casters culled by reader, whose compacted list is the fallback | [Visibility](visibility.md) and [virtual geometry](virtual-geometry.md#d10-hardware-reach) | Opus |

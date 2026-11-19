@@ -1445,9 +1445,23 @@ export type CreationDocument = {
        */
       state: string;
       /**
-       * The styles, the first for the value zero; each is a whole style (ToonStyleDocument), enabled: false keeping the slot continuous.
+       * The looks, the first for the value zero (PaletteToonCaseDocument).
        */
-      cases: (ShapeNullable10 | null)[];
+      cases: ({
+        /**
+         * The case's style (ToonStyleDocument), or null for none.
+         */
+        toon?: ShapeNullable10 | null;
+        /**
+         * The case's program, or null for none.
+         */
+        shade?: {
+          name: string;
+          parameters: (ShapeNullable11 | null)[];
+          outputs: (ShapeNullable16 | null)[];
+          values?: (ShapeNullable16 | null)[] | null;
+        } | null;
+      } | null)[];
     } | null;
     /**
      * The slot's flow layer (PaletteFlowDocument): shading that moves along an authored flow over still geometry; null moves nothing.
@@ -1524,19 +1538,15 @@ export type CreationDocument = {
      */
     shade?: {
       name: string;
-      parameters: ({
-        name: string;
-        type: ShapeNonNullable53;
-        bits: number[];
-      } | null)[];
-      outputs: (ShapeNullable15 | null)[];
-      values?: (ShapeNullable15 | null)[] | null;
+      parameters: (ShapeNullable11 | null)[];
+      outputs: (ShapeNullable18 | null)[];
+      values?: (ShapeNullable18 | null)[] | null;
     } | null;
   } | null)[] | null;
   /**
    * The authored shapes (null = empty).
    */
-  shapes?: (ShapeNullable33 | null)[] | null;
+  shapes?: (ShapeNullable36 | null)[] | null;
   /**
    * The animation timeline frames (null = none).
    */
@@ -1750,11 +1760,11 @@ export type CreationDocument = {
     /**
      * Scales Cadence each frame by a curve of an earlier driver's phase, or null to keep it fixed. A stride on planar travel that takes its radians per metre from a curve of the body's speed lengthens its stride as the body speeds up, so its step rate rises less than its speed does.
      */
-    cadenceBy?: ShapeNullable34 | null;
+    cadenceBy?: ShapeNullable37 | null;
     /**
      * Sets the level the weight eases toward while the gate holds, from a curve of an earlier driver's phase clamped to [0, 1], or null for 1. Two drivers reading one stride's phase through SignalDriverPrefix, one weighted by a falling curve of speed and one by a rising one, cross-fade a walk into a run without their legs ever leaving step.
      */
-    weightBy?: ShapeNullable34 | null;
+    weightBy?: ShapeNullable37 | null;
     /**
      * The driver's mask: ids of the creation's parts (CreationPartDocument). The driver's swings, slides and clip poses play only on shapes those parts cover, and a replacing driver reduces earlier drivers only there. Null is the shapes the driver itself poses.
      */
@@ -1878,7 +1888,7 @@ export type CreationDocument = {
     /**
      * The level the effector's weight eases toward while its gate holds, from a curve of a driver's phase clamped to [0, 1], read as a driver's WeightBy reads one (null = 1). The driver it names owns the effector: the effector's layer share is that driver's share over every shape the effector writes (EffectorShare), and a driver with no Parts covers what its effectors write. Any declared driver may own one, since every driver advances before any effector solves.
      */
-    weightBy?: ShapeNullable34 | null;
+    weightBy?: ShapeNullable37 | null;
     /**
      * The exponential time constant the weight rises over, as a driver's (null = WeightSeconds; zero is immediate).
      */
@@ -2022,7 +2032,7 @@ export type CreationNoiseDocument = {
     /**
      * The region's shapes, at least one: geometry only (type, name, pose, scale, exponent, rounding), each a box, a sphere, an ellipsoid, a superellipsoid, a capsule scaled alike in X and Z or a plane (Lower). A relief's masks hold at most MaxRegions shapes in all.
      */
-    shapes: (ShapeNullable33 | null)[];
+    shapes: (ShapeNullable36 | null)[];
     /**
      * The band's width, in creation units, at least 2⁻¹²; snapped to a multiple of 2⁻¹² (SdfReliefBand).
      */
@@ -2809,7 +2819,7 @@ export type PaletteEntryDocument = {
   /**
    * The authored presentation program and runtime parameters.
    */
-  shade?: SdfShadeDefinitionVariant2 | null;
+  shade?: SdfShadeDefinition | null;
 };
 
 export type PaletteFlowDocument = {
@@ -3014,15 +3024,26 @@ export type PaletteSurfaceDocument = {
   metal: number;
 };
 
+export type PaletteToonCaseDocument = {
+  /**
+   * The case's style (ToonStyleDocument), or null for none.
+   */
+  toon?: ToonStyleDocument | null;
+  /**
+   * The case's program, or null for none.
+   */
+  shade?: SdfShadeDefinition | null;
+};
+
 export type PaletteToonSelectDocument = {
   /**
    * The state.<row>[.<key>] binding naming the cell.
    */
   state: string;
   /**
-   * The styles, the first for the value zero; each is a whole style (ToonStyleDocument), enabled: false keeping the slot continuous.
+   * The looks, the first for the value zero (PaletteToonCaseDocument).
    */
-  cases: ToonStyleDocument[];
+  cases: PaletteToonCaseDocument[];
 };
 
 export type PaletteWeatheringDocument = {
@@ -3438,18 +3459,21 @@ export type SdfPrismProfileNullable = {
   path?: SdfPathProfileNullable | null;
 };
 
+/**
+ * The source-level expression graph serialized in a material. Admission always compiles it afresh.
+ */
 export type SdfShadeDefinition = {
   name: string;
-  parameters: (SdfShadeParameter | null)[];
-  outputs: (SdfShadeOutput | null)[];
-  values?: (SdfShadeValue | null)[] | null;
+  parameters: SdfShadeParameterList;
+  outputs: SdfShadeOutputList;
+  values?: SdfShadeValueList | null;
 };
 
 export type SdfShadeDefinitionVariant2 = {
   name: string;
-  parameters: SdfShadeParameter[];
-  outputs: SdfShadeOutput[];
-  values?: SdfShadeValue[] | null;
+  parameters: (SdfShadeParameter | null)[];
+  outputs: (SdfShadeOutput | null)[];
+  values?: (SdfShadeValue | null)[] | null;
 };
 
 /**
@@ -3540,17 +3564,27 @@ export type SdfShadeExpressionNonNullable2 = {
   shape?: SdfShadeShapeNullable | null;
 };
 
+/**
+ * An output expression; omitted outputs retain the stage's default.
+ */
 export type SdfShadeOutput = {
   phase: SdfShadePhase;
   name: string;
   value: SdfShadeExpressionNonNullable;
 };
 
+export type SdfShadeOutputList = SdfShadeOutput[];
+
+/**
+ * A runtime slot's type and initial data. Names bind source references and do not enter program identity.
+ */
 export type SdfShadeParameter = {
   name: string;
   type: SdfShadeType;
   bits: number[];
 };
+
+export type SdfShadeParameterList = SdfShadeParameter[];
 
 /**
  * The three entry points of a material's presentation program.
@@ -3596,11 +3630,16 @@ export type SdfShadeShapeNullable = {
  */
 export type SdfShadeType = "Float" | "Float2" | "Float3" | "Float4" | "UInt" | "UInt3";
 
+/**
+ * A dependency-ordered value in the canonical document. Reads may name only earlier values of this phase.
+ */
 export type SdfShadeValue = {
   phase: SdfShadePhase;
   name: string;
   value: SdfShadeExpressionNonNullable;
 };
+
+export type SdfShadeValueList = SdfShadeValue[];
 
 /**
  * The solid primitive vocabulary — the shapes carrying a unit-size law (SdfSolidGeometry), a finite local bound, and one rigid-copy spelling every consumer reads the same way: the renderer emitting a program, the contact field evaluating one, and an analytic collider compiler reading world-axis extents off it.
@@ -3645,8 +3684,6 @@ export type SdfSweepParameters = {
    */
   strandOffset?: number;
 };
-
-export type SdfToonBand = "Visibility" | "Combined";
 
 export type SearchMethod = "Negamax" | "MonteCarlo";
 
@@ -3913,11 +3950,36 @@ export type ShapeNonNullable50 = "Sphere" | "Box" | "Torus" | "Cylinder" | "Caps
 
 export type ShapeNonNullable51 = "Trapezoid" | "RoundedRectangle" | "Polygon" | "Ellipse" | "ChamferedRectangle" | "Convex" | "Path";
 
-export type ShapeNonNullable52 = "Visibility" | "Combined";
+export type ShapeNonNullable52 = "Float" | "Float2" | "Float3" | "Float4" | "UInt" | "UInt3";
 
-export type ShapeNonNullable53 = "Float" | "Float2" | "Float3" | "Float4" | "UInt" | "UInt3";
+export type ShapeNonNullable53 = "Revolve" | "Extrude";
 
-export type ShapeNonNullable54 = "Revolve" | "Extrude";
+export type ShapeNonNullable54 = {
+  /**
+   * An op-table spelling, or constant, parameter, or input.
+   */
+  op: string;
+  /**
+   * The expression's operands.
+   */
+  arguments?: (ShapeNullable14 | null)[] | null;
+  /**
+   * A stamp member or runtime parameter name.
+   */
+  name?: string | null;
+  /**
+   * The type of a literal, validated against its bits.
+   */
+  type?: ShapeNonNullable52;
+  /**
+   * 32-bit literal components; integer components are never float converted.
+   */
+  bits?: number[] | null;
+  /**
+   * The structural descriptor of a shape operation.
+   */
+  shape?: ShapeNullable13 | null;
+};
 
 export type ShapeNonNullable55 = {
   /**
@@ -3927,7 +3989,7 @@ export type ShapeNonNullable55 = {
   /**
    * The expression's operands.
    */
-  arguments?: (ShapeNullable13 | null)[] | null;
+  arguments?: (ShapeNullable17 | null)[] | null;
   /**
    * A stamp member or runtime parameter name.
    */
@@ -3935,7 +3997,7 @@ export type ShapeNonNullable55 = {
   /**
    * The type of a literal, validated against its bits.
    */
-  type?: ShapeNonNullable53;
+  type?: ShapeNonNullable52;
   /**
    * 32-bit literal components; integer components are never float converted.
    */
@@ -3943,7 +4005,7 @@ export type ShapeNonNullable55 = {
   /**
    * The structural descriptor of a shape operation.
    */
-  shape?: ShapeNullable12 | null;
+  shape?: ShapeNullable13 | null;
 };
 
 export type ShapeNonNullable56 = {
@@ -3987,7 +4049,7 @@ export type ShapeNonNullable58 = {
   /**
    * The rotation axis (null = Y, the XZ ground plane).
    */
-  axis?: ShapeNullable17 | null;
+  axis?: ShapeNullable20 | null;
   /**
    * Whether adjacent sectors mirror across their shared bisector (null = false).
    */
@@ -4027,7 +4089,7 @@ export type ShapeNonNullable60 = {
   /**
    * The fold plane (null = XZ).
    */
-  plane?: ShapeNullable18 | null;
+  plane?: ShapeNullable21 | null;
   /**
    * The parity-material stride (null = 0, geometric only).
    */
@@ -4059,7 +4121,7 @@ export type ShapeNonNullable61 = {
   /**
    * How the displacement is distributed over the cell (null = White).
    */
-  flavor?: ShapeNullable19 | null;
+  flavor?: ShapeNullable22 | null;
   /**
    * The point the lattice folds around, creation units (null = the creation origin).
    */
@@ -4112,56 +4174,34 @@ export type ShapeNullable = {
 
 export type ShapeNullable10 = {
   /**
-   * Whether the style bands; absent is on. False on a palette row keeps that material continuous whatever the world's default is; false on render.toon boots the world's default off until the lever turns it on, which a style with every value then bands with.
+   * Whether the style is on; absent is on. False on a palette row keeps that material unstyled whatever the world's default is; false on render.toon leaves the world's default off.
    */
   enabled?: boolean | null;
   /**
-   * Diffuse band threshold in [0, 1].
-   */
-  threshold?: number | null;
-  /**
-   * Full terminator width in [0.001, 0.5].
-   */
-  softness?: number | null;
-  /**
-   * Shadow-band reflectance, three linear RGB values in [0, 1].
-   */
-  shadowTint?: unknown;
-  /**
-   * Close outline radius in output pixels, in [0, 4]; zero disables outlines.
+   * The close outline radius in output pixels, in [0, 4]; zero disables outlines.
    */
   outlineWidth?: number | null;
   /**
-   * Distance in metres at which the outline radius halves, in [0.1, 1000].
+   * The distance in metres at which the outline radius halves, in [0.1, 1000].
    */
   outlineDistance?: number | null;
   /**
-   * Crease normal cosine in [0, 0.95].
+   * The crease normal cosine, in [0, 0.95].
    */
   outlineNormal?: number | null;
   /**
-   * Outline multiplier, three linear RGB values in [0, 1].
+   * The outline multiplier, three linear RGB values in [0, 1].
    */
   outlineTint?: unknown;
-  /**
-   * Highlight size as one minus the half-vector cosine, in [0.001, 0.25].
-   */
-  specularSize?: number | null;
-  /**
-   * Reflected-light exposure compensation in stops, in [-4, 4].
-   */
-  exposure?: number | null;
-  /**
-   * Hue-preserving highlight compression in [0, 2]; zero disables it.
-   */
-  shoulder?: number | null;
-  /**
-   * How the band treats a light's shadow visibility: Visibility (the default) keeps the penumbra, Combined snaps it to the band's edge.
-   */
-  band?: ShapeNonNullable52;
 };
 
 export type ShapeNullable11 = {
+  name: string;
+  type: ShapeNonNullable52;
+  bits: number[];
+};
+
+export type ShapeNullable12 = {
   /**
    * The curve's first control point, in creation units.
    */
@@ -4200,21 +4240,21 @@ export type ShapeNullable11 = {
   strandOffset?: number;
 };
 
-export type ShapeNullable12 = {
+export type ShapeNullable13 = {
   type: ShapeNonNullable50;
   x?: number;
   y?: number;
   z?: number;
   taper?: number;
   profile?: ShapeNullable7 | null;
-  lift?: ShapeNonNullable54;
+  lift?: ShapeNonNullable53;
   rounding?: number;
   chamfer?: number;
   exponent?: number;
-  curve?: ShapeNullable11 | null;
+  curve?: ShapeNullable12 | null;
 };
 
-export type ShapeNullable13 = {
+export type ShapeNullable14 = {
   /**
    * An op-table spelling, or constant, parameter, or input.
    */
@@ -4222,7 +4262,7 @@ export type ShapeNullable13 = {
   /**
    * The expression's operands.
    */
-  arguments?: ShapeNullable14 | null;
+  arguments?: ShapeNullable15 | null;
   /**
    * A stamp member or runtime parameter name.
    */
@@ -4230,7 +4270,7 @@ export type ShapeNullable13 = {
   /**
    * The type of a literal, validated against its bits.
    */
-  type?: ShapeNonNullable53;
+  type?: ShapeNonNullable52;
   /**
    * 32-bit literal components; integer components are never float converted.
    */
@@ -4238,24 +4278,51 @@ export type ShapeNullable13 = {
   /**
    * The structural descriptor of a shape operation.
    */
-  shape?: ShapeNullable12 | null;
+  shape?: ShapeNullable13 | null;
 };
 
-export type ShapeNullable14 = (ShapeNullable13 | null)[];
+export type ShapeNullable15 = (ShapeNullable14 | null)[];
 
-export type ShapeNullable15 = {
+export type ShapeNullable16 = {
+  phase: "Surface" | "Light" | "Compose";
+  name: string;
+  value: ShapeNonNullable54;
+};
+
+export type ShapeNullable17 = {
+  /**
+   * An op-table spelling, or constant, parameter, or input.
+   */
+  op: string;
+  /**
+   * The expression's operands.
+   */
+  arguments?: (ShapeNullable14 | null)[] | null;
+  /**
+   * A stamp member or runtime parameter name.
+   */
+  name?: string | null;
+  /**
+   * The type of a literal, validated against its bits.
+   */
+  type?: ShapeNonNullable52;
+  /**
+   * 32-bit literal components; integer components are never float converted.
+   */
+  bits?: number[] | null;
+  /**
+   * The structural descriptor of a shape operation.
+   */
+  shape?: ShapeNullable13 | null;
+};
+
+export type ShapeNullable18 = {
   phase: "Surface" | "Light" | "Compose";
   name: string;
   value: ShapeNonNullable55;
 };
 
-export type ShapeNullable16 = "Union" | "SmoothUnion" | "Subtraction" | "Intersection" | "Xor" | "SmoothIntersection" | "SmoothSubtraction" | "ChamferUnion" | "ChamferIntersection" | "ChamferSubtraction" | "GrooveUnion" | "PipeUnion" | "Morph" | "GrooveSubtraction" | "PipeSubtraction" | "StairsUnion" | "StairsSubtraction";
-
-export type ShapeNullable17 = "X" | "Y" | "Z";
-
-export type ShapeNullable18 = "XZ" | "XY" | "YZ";
-
-export type ShapeNullable19 = "White" | "Blue" | "Gaussian";
+export type ShapeNullable19 = "Union" | "SmoothUnion" | "Subtraction" | "Intersection" | "Xor" | "SmoothIntersection" | "SmoothSubtraction" | "ChamferUnion" | "ChamferIntersection" | "ChamferSubtraction" | "GrooveUnion" | "PipeUnion" | "Morph" | "GrooveSubtraction" | "PipeSubtraction" | "StairsUnion" | "StairsSubtraction";
 
 export type ShapeNullable2 = {
   end: [number, number];
@@ -4265,9 +4332,15 @@ export type ShapeNullable2 = {
   clockwise?: boolean;
 };
 
-export type ShapeNullable20 = ShapeNonNullable56 | ShapeNonNullable57 | ShapeNonNullable58 | ShapeNonNullable60 | ShapeNonNullable61 | ShapeNonNullable62 | null;
+export type ShapeNullable20 = "X" | "Y" | "Z";
 
-export type ShapeNullable21 = {
+export type ShapeNullable21 = "XZ" | "XY" | "YZ";
+
+export type ShapeNullable22 = "White" | "Blue" | "Gaussian";
+
+export type ShapeNullable23 = ShapeNonNullable56 | ShapeNonNullable57 | ShapeNonNullable58 | ShapeNonNullable60 | ShapeNonNullable61 | ShapeNonNullable62 | null;
+
+export type ShapeNullable24 = {
   /**
    * The Name supplying (φ, w). An unresolvable name is refused at canonicalization.
    */
@@ -4294,7 +4367,7 @@ export type ShapeNullable21 = {
   wave?: string | null;
 };
 
-export type ShapeNullable22 = {
+export type ShapeNullable25 = {
   /**
    * The Name supplying (φ, w). An unresolvable name is refused at canonicalization.
    */
@@ -4317,7 +4390,7 @@ export type ShapeNullable22 = {
   wave?: string | null;
 };
 
-export type ShapeNullable23 = {
+export type ShapeNullable26 = {
   /**
    * How far the panel copy shrinks on every local axis before it is placed — the copy's own scale is shape scale − Inset per axis (floored at MinimumScale), a sharp-cornered shrink rather than a rounded Minkowski erosion. The panel recipe changes the copy's primitive dimensions rather than applying Dilate to its field. Creation units. Finite and non-negative; refused by name past the shape's smallest local half-extent (the smallest of HalfExtent over the X, Y, and Z local axes) — past that the eroded copy is empty everywhere.
    */
@@ -4336,7 +4409,7 @@ export type ShapeNullable23 = {
   face?: unknown;
 };
 
-export type ShapeNullable24 = {
+export type ShapeNullable27 = {
   /**
    * The Name of another shape in the same creation, declared EARLIER in shapes (so a chain resolves in one pass and can never cycle — mirrors Parent's own rule). A Subtraction cutter riding the host's own Group is the common case; a plain plane-like Box with blend Union works too. Only the reference's own primitive geometry (type, scale, taper, profile, lift, rounding, chamfer) and pose are re-read; its own blend, domain, panel, and trims play no part in the band.
    */
@@ -4355,7 +4428,7 @@ export type ShapeNullable24 = {
   inset?: number;
 };
 
-export type ShapeNullable25 = {
+export type ShapeNullable28 = {
   /**
    * The linear flare rate at the far end of the span (dimensionless; s(1) = StartScale + Amount). Clamped to [MinAmount, MaxAmount].
    */
@@ -4382,7 +4455,7 @@ export type ShapeNullable25 = {
   startScale?: number;
 };
 
-export type ShapeNullable26 = {
+export type ShapeNullable29 = {
   /**
    * The bump's local center, in creation units.
    */
@@ -4397,7 +4470,13 @@ export type ShapeNullable26 = {
   push: unknown;
 };
 
-export type ShapeNullable27 = {
+export type ShapeNullable3 = {
+  start: [number, number];
+  segments: (ShapeNullable2 | null)[];
+  closed?: boolean;
+};
+
+export type ShapeNullable30 = {
   linear: number;
   quadratic?: number;
   cubic?: number;
@@ -4405,7 +4484,7 @@ export type ShapeNullable27 = {
   driver?: number;
 };
 
-export type ShapeNullable28 = {
+export type ShapeNullable31 = {
   /**
    * Which dynamic-slot lane drives the erosion.
    */
@@ -4424,7 +4503,7 @@ export type ShapeNullable28 = {
   noise?: number | null;
 };
 
-export type ShapeNullable29 = {
+export type ShapeNullable32 = {
   frequency: number;
   amplitude: number;
   seed: number;
@@ -4432,13 +4511,7 @@ export type ShapeNullable29 = {
   randomness: number;
 };
 
-export type ShapeNullable3 = {
-  start: [number, number];
-  segments: (ShapeNullable2 | null)[];
-  closed?: boolean;
-};
-
-export type ShapeNullable30 = {
+export type ShapeNullable33 = {
   /**
    * The per-axis angular frequency, radians per creation unit (each clamped to [-MaxFrequency, MaxFrequency]).
    */
@@ -4453,7 +4526,7 @@ export type ShapeNullable30 = {
   reach?: number;
 };
 
-export type ShapeNullable31 = {
+export type ShapeNullable34 = {
   /**
    * The per-axis angular frequency, radians per creation unit (each clamped to [-MaxFrequency, MaxFrequency]).
    */
@@ -4468,7 +4541,7 @@ export type ShapeNullable31 = {
   reach?: number;
 };
 
-export type ShapeNullable32 = {
+export type ShapeNullable35 = {
   /**
    * Which dynamic-slot lane drives the morph, in [0, 3].
    */
@@ -4483,7 +4556,7 @@ export type ShapeNullable32 = {
   to: number;
 };
 
-export type ShapeNullable33 = {
+export type ShapeNullable36 = {
   /**
    * The shape's stable id.
    */
@@ -4515,7 +4588,7 @@ export type ShapeNullable33 = {
   /**
    * The blend op name (null = Union).
    */
-  blend?: ShapeNullable16 | null;
+  blend?: ShapeNullable19 | null;
   /**
    * The smooth-blend radius (null = 0).
    */
@@ -4543,15 +4616,15 @@ export type ShapeNullable33 = {
   /**
    * The ordered SDF VM domain operators (ShapeDomainOp) applied to the shape's point in creation space, before its own translate/rotate/scale (null = none). Every op the copy expansion covers reaches contact as well as render; wallpaper does not expand, and a solid placement carrying one is refused at validation.
    */
-  domain?: (ShapeNullable20 | null)[] | null;
+  domain?: (ShapeNullable23 | null)[] | null;
   /**
    * The driver-fed rotations this shape rides (ShapeSwingDocument), any number (null = none), composed in the order written.
    */
-  swings?: (ShapeNullable21 | null)[] | null;
+  swings?: (ShapeNullable24 | null)[] | null;
   /**
    * The driver-fed translations this shape rides (ShapeSlideDocument), any number (null = none). Applied after every swing, along the authored axis. Both facets are presentation-only — composed onto the shape's per-frame dynamic transform and read nowhere else, so the SDF program, the colliders, the solid field, and simulation state are all blind to them. A shape carrying Domain rides its own slot packed with its Parent chain's rigid delta (the identity with no parent), leaving nowhere for its OWN swing/slide to compose, so they are refused alongside a domain list at validation.
    */
-  slides?: (ShapeNullable22 | null)[] | null;
+  slides?: (ShapeNullable25 | null)[] | null;
   /**
    * The Name of the shape this one hangs from (null = the creation root): the parent's animated motion carries this shape and its own pivots with it, so a forearm swung at the elbow also rides the upper arm's swing at the shoulder. The parent must be declared earlier in shapes (so a chain resolves in one pass and can never cycle); presentation-only on the same terms as the swings it composes with.
    */
@@ -4579,7 +4652,7 @@ export type ShapeNullable33 = {
   /**
    * The shape's second-material inset face region (null = none) — see ShapePanelDocument. Render-only; refused by name on a Plane, on a shape carrying Domain ops or a non-zero Group, and on a creation that otherwise needs its own field scope.
    */
-  panel?: ShapeNullable23 | null;
+  panel?: ShapeNullable26 | null;
   /**
    * Only for Box, Cylinder and Prism (an extruded prism only — a revolve has no cap seam to bevel): the 45-degree edge-chamfer radius in the creation's own units, finite and non-negative. Refused by name past MaxChamfer, and refused by name alongside a nonzero Rounding on the same shape.
    */
@@ -4587,7 +4660,7 @@ export type ShapeNullable33 = {
   /**
    * The shape's second-material surface bands against other, earlier-declared shapes (null = none), at most MaxTrims — see ShapeTrimDocument. Render-only, like Panel; refused by name on a shape carrying Domain ops, a non-zero Group, or on a creation that otherwise needs its own field scope.
    */
-  trims?: (ShapeNullable24 | null)[] | null;
+  trims?: (ShapeNullable27 | null)[] | null;
   /**
    * Whether this shape is a detail shape (null = false): excluded from contact (it never carves the contact field or the collider) while the baked frame samples it like any other shape, so a seam (a thin subtraction) or a rivet (a small union, its own material) bakes into the mesh and paints its footprint through the bake's point-sampled materials. Refused by name alongside Panel or Trims on the same shape.
    */
@@ -4595,7 +4668,7 @@ export type ShapeNullable33 = {
   /**
    * The shape's radial flare warp (null = none) — see ShapeFlareDocument. Admitted on every primitive; applies to the shape's own local point after Twist/Bend, in that order (twist, then bend, then flare), before the primitive's own scale. Render-only, like Twist/Bend.
    */
-  flare?: ShapeNullable25 | null;
+  flare?: ShapeNullable28 | null;
   /**
    * Only for Superellipsoid: the generalizing exponent, finite in [MinSuperellipsoidExponent, MaxSuperellipsoidExponent] (null = MinSuperellipsoidExponent, the ellipsoid limit — an unauthored Superellipsoid is a plain ellipsoid).
    */
@@ -4603,11 +4676,11 @@ export type ShapeNullable33 = {
   /**
    * The shape's Gaussian domain-push bumps (null = none), at most MaxBumps — see ShapeBumpDocument. Applied to the shape's own local point after Shear, before the primitive's own scale. Render-only, like Twist/Bend/Flare.
    */
-  bumps?: (ShapeNullable26 | null)[] | null;
+  bumps?: (ShapeNullable29 | null)[] | null;
   /**
    * A polynomial point shear with explicit target and driver axes.
    */
-  shear?: ShapeNullable27 | null;
+  shear?: ShapeNullable30 | null;
   /**
    * The shape's swept-curve geometry (null = none) — see ShapeCurveDocument. Admitted only, and required, on Sweep (refused elsewhere, by name; a Sweep with no curve is refused, by name); refused alongside Panel, Trims, Flare, Shear, Bumps, or Domain on the same shape.
    */
@@ -4615,19 +4688,19 @@ export type ShapeNullable33 = {
   /**
    * The shape's per-instance lane-driven erosion (null = none) — see ShapeErodeDocument. Admitted on every primitive; its reach is this shape's own Reach, so it needs no separate authored magnitude.
    */
-  erode?: ShapeNullable28 | null;
+  erode?: ShapeNullable31 | null;
   /**
    * Shape-local cellular relief, evaluated after geometry within its own field scope.
    */
-  cells?: ShapeNullable29 | null;
+  cells?: ShapeNullable32 | null;
   /**
    * The shape's cross-coupled sinusoidal domain warp (null = none) — see ShapeWarpDocument. Applied to the shape's own local point after Bumps, before Elongate. Render-only.
    */
-  warp?: ShapeNullable30 | null;
+  warp?: ShapeNullable33 | null;
   /**
    * The shape's sine relief (null = none) — see ShapeDisplaceDocument. Added to the shape's own field inside its own scope. Render-only.
    */
-  displace?: ShapeNullable31 | null;
+  displace?: ShapeNullable34 | null;
   /**
    * The half-extents the primitive's cross-section is swept over, creation units (null = none): Elongate, the capsule-from-sphere operator, applied last to the shape's own local point. Each component is clamped to [0, MaxElongate]. Render-only.
    */
@@ -4639,10 +4712,10 @@ export type ShapeNullable33 = {
   /**
    * Only with a MorphBlend, and required by it: the lane and range the morph runs over — see ShapeMorphDocument.
    */
-  morph?: ShapeNullable32 | null;
+  morph?: ShapeNullable35 | null;
 };
 
-export type ShapeNullable34 = {
+export type ShapeNullable37 = {
   /**
    * A driver declared before the one this curve modulates.
    */
@@ -5551,57 +5624,29 @@ export type TextFontDefinition = {
 export type TilingFamily = "Triangular" | "Kagome" | "TruncatedSquare" | "Rhombitrihexagonal" | "TruncatedHexagonal" | "ElongatedTriangular" | "TruncatedTrihexagonal" | "Penrose";
 
 /**
- * A cel style on the wire (SdfToon): the world's default style (render.toon, which the live world.toon lever overrides) and a palette row's own (Toon) are this one shape, so a style authored once (the standard's styles.puck) serves both. The engine holds no look of its own: a style that bands authors every value, and one that says enabled: false needs none. Presentation only; no field enters simulation state or the bake.
+ * A cel style on the wire (SdfToon): the world's default style (render.toon) and a palette row's own (Toon) are this one shape, so a style authored once (the standard's styles.puck) serves both. A style marks its material styled and carries its ink; the banding is the material's shade program (the standard's celMaterial writes both), and the live world.toon off shades every styled material continuously and uninked. The engine holds no look of its own: a style that is on authors every value, and one that says enabled: false needs none. Presentation only; no field enters simulation state or the bake.
  */
 export type ToonStyleDocument = {
   /**
-   * Whether the style bands; absent is on. False on a palette row keeps that material continuous whatever the world's default is; false on render.toon boots the world's default off until the lever turns it on, which a style with every value then bands with.
+   * Whether the style is on; absent is on. False on a palette row keeps that material unstyled whatever the world's default is; false on render.toon leaves the world's default off.
    */
   enabled?: boolean | null;
   /**
-   * Diffuse band threshold in [0, 1].
-   */
-  threshold?: number | null;
-  /**
-   * Full terminator width in [0.001, 0.5].
-   */
-  softness?: number | null;
-  /**
-   * Shadow-band reflectance, three linear RGB values in [0, 1].
-   */
-  shadowTint?: DocumentVector3;
-  /**
-   * Close outline radius in output pixels, in [0, 4]; zero disables outlines.
+   * The close outline radius in output pixels, in [0, 4]; zero disables outlines.
    */
   outlineWidth?: number | null;
   /**
-   * Distance in metres at which the outline radius halves, in [0.1, 1000].
+   * The distance in metres at which the outline radius halves, in [0.1, 1000].
    */
   outlineDistance?: number | null;
   /**
-   * Crease normal cosine in [0, 0.95].
+   * The crease normal cosine, in [0, 0.95].
    */
   outlineNormal?: number | null;
   /**
-   * Outline multiplier, three linear RGB values in [0, 1].
+   * The outline multiplier, three linear RGB values in [0, 1].
    */
   outlineTint?: DocumentVector3;
-  /**
-   * Highlight size as one minus the half-vector cosine, in [0.001, 0.25].
-   */
-  specularSize?: number | null;
-  /**
-   * Reflected-light exposure compensation in stops, in [-4, 4].
-   */
-  exposure?: number | null;
-  /**
-   * Hue-preserving highlight compression in [0, 2]; zero disables it.
-   */
-  shoulder?: number | null;
-  /**
-   * How the band treats a light's shadow visibility: Visibility (the default) keeps the penumbra, Combined snaps it to the band's edge.
-   */
-  band?: SdfToonBand;
 };
 
 /**
@@ -11215,7 +11260,7 @@ export type WorldRenderDefaults = {
    */
   exposure?: WorldRenderExposure | null;
   /**
-   * The world's default cel style, which every material that authors no style of its own shades with (ToonStyleDocument), on unless it says enabled: false, and which the live world.toon lever turns on or off. Absent is off.
+   * The world's default cel style (ToonStyleDocument), which every material that authors no style of its own takes: its ink, and the styled mark the live world.toon off suppresses with the Shade default it inks. On unless it says enabled: false; absent is off.
    */
   toon?: ToonStyleDocument | null;
   /**
@@ -11233,7 +11278,7 @@ export type WorldRenderDefaults = {
   /**
    * The default shading program inherited by materials without their own.
    */
-  shade?: SdfShadeDefinition | null;
+  shade?: SdfShadeDefinitionVariant2 | null;
   /**
    * The world's device profiles (WorldDeviceProfile): for each graphics device, the quality table it runs and the memory it may use. The engine selects one by the adapter it runs on and by name (world.device-profile). Absent authors none, and no cap applies.
    */
@@ -11366,7 +11411,7 @@ export type WorldRenderIndirect = {
    */
   tier?: SdfIndirectTier;
   /**
-   * The irradiance work each frame grants the volume and the lighting age it reports past; absent bounds nothing.
+   * The irradiance work each second grants the volume and the lighting age it reports past; absent bounds nothing.
    */
   budget?: WorldRenderIndirectBudget | null;
   /**
@@ -11392,13 +11437,13 @@ export type WorldRenderIndirectApply = {
 
 export type WorldRenderIndirectBudget = {
   /**
-   * The probes relit per frame, at least one.
+   * The probes relit each second, at least one.
    */
-  relight?: number | null;
+  relightPerSecond?: number | null;
   /**
-   * The probes whose hits are traced per frame, at least one.
+   * The probes whose hits are traced each second, at least one.
    */
-  trace?: number | null;
+  tracePerSecond?: number | null;
   /**
    * The lighting age, in seconds, past which the volume reports it is behind; positive.
    */
