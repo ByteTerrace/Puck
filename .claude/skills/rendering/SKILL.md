@@ -571,7 +571,12 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   `puckAddWork` carries each addition into the 64-bit accumulator.
   `CountingRecorder.DrawIndirectCount` counts the API call,
   not its unknown draw/vertex totals. An object `world.cull frustum` brings back is the
-  occlusion's. The identity is a root constant on Direct3D 12. Vulkan reads it
+  occlusion's. Direct3D 12 at execute-indirect tier 1.1
+  (`GpuDeviceCapabilities.ExecuteIndirectTier`, printed as `execute-indirect-tier`)
+  numbers a draw's commands with an incrementing root constant and reads the identity from the first
+  phase's record at that number, so every phase must keep writing a candidate's place
+  with the identity first; below the tier a root-constant argument copies the identity
+  (`DirectXPipelineLayout.DrawSignature`). Vulkan reads it
   from the
   argument buffer through its pushed word base plus `DrawIndex`
   (`sdfMeshRasterIdentity`); first instance stays zero. When
@@ -747,10 +752,7 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   never accumulate a sum in floats, whose rounding follows raster order and whose
   per-face terms cancel badly against the far sky. Transmission integrates every
   glass material before the opaque hit; two interfaces reflect, refract and
-  scatter: the target's nearest front face and the second the sums' second
-  record names (`sdfGlassSecondInterface`, exact up to three front faces), each
-  shaded by the one loop body, the far one composed inside the near one's
-  transmission. `SdfGlassSumsDeviceLawTests` runs the accumulation in many orders on
+  scatter: the target’s nearest front face and the second the sums’ record names (`sdfGlassSecondInterface`, exact up to three front faces). Both use the same loop. Positive winding means a ray starts in glass. Its scatter and absorption compose in front of both entrances, through `sdfGlassTransmission`. The winding includes an exit hidden by opaque geometry. `SdfGlassSumsDeviceLawTests` runs the accumulation in many orders on
   both backends. The glass pass reuses the opaque path's mechanisms, never a copy:
   one probe gather an interface (`sdfMeshProbesAt`) for its reflection (`worldEnvironmentReflection`,
   `shade/sdf-sky-reflection.hlsli`, then `sdfMeshReflection`, the sky alone where
@@ -789,7 +791,7 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   src/Puck.SdfVm/Assets/Shaders/Sdf` finds nothing. An `Object` velocity on a
   draw shading in world space (a static copy) turns by the draw's matrix;
   `World` keeps the velocity and the pattern in world space. On glass the
-  revealed coverage covers the glass as a diffusely lit surface.
+  revealed coverage covers the glass as a diffusely lit surface. `SdfFlow.Region` blends the velocity inside a world-space sphere before its lane multiplier and projection onto the surface.
 - **A shading-time lane is a slot's or the world's.** Lanes 0 to 3 are the
   draw's frame-slot lanes (a body's look lanes; zero on a static copy or an
   animated placement), lanes 4 to 7 the world's `render.lanes`, which

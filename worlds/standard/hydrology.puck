@@ -104,7 +104,7 @@ template hydrology(stages = hydrologyStages, origin = [0, -90, 0], cell = 1, mel
           min: 0
           max: fullHead * unit
           heightScale: 1 / unit
-          color: "#3FB8C4"
+          simulationOnly: true
           paint: map(range(0, length(cells)), i => {
             $type: "rect"
             minX: origin[0] + cell * (i + 0.25)
@@ -124,7 +124,7 @@ template hydrology(stages = hydrologyStages, origin = [0, -90, 0], cell = 1, mel
           min: 0
           max: 4 * unit
           heightScale: 1 / unit
-          color: "#B9A78A"
+          simulationOnly: true
           paint: map(range(0, length(cells)), i => {
             $type: "rect"
             minX: origin[0] + cell * (i + 0.25)

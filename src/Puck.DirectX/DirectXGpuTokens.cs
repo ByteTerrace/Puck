@@ -15,9 +15,9 @@ public sealed class DirectXCommandBufferState {
     /// <summary>The enhanced barrier interface retained by its command pool.</summary>
     public nint EnhancedCommandList;
 
-    /// <summary>Gets the barriers an open run (<c>IGpuRecorder.BeginBarriers</c>) holds for one <c>ResourceBarrier</c>
-    /// call.</summary>
-    internal List<D3D12_RESOURCE_BARRIER> PendingBarriers { get; } = [];
+    /// <summary>Gets the texture barriers an open run (<c>IGpuRecorder.BeginBarriers</c>) holds for one barrier
+    /// group.</summary>
+    internal List<D3D12_TEXTURE_BARRIER> PendingBarriers { get; } = [];
 
     /// <summary>Gets or sets how many runs of barriers are open on the command list.</summary>
     internal int BarrierDepth { get; set; }
@@ -89,8 +89,10 @@ public sealed partial class DirectXPipelineLayout : IDisposable {
         return layout;
     }
 
-    // The layout's draw command signature, created on its first counted indirect draw.
+    // The layout's draw command signature, created on its first counted indirect draw, and whether its commands start at
+    // their draw arguments (DrawSkipsIdentity).
     private nint m_drawSignature;
+    private bool m_drawSkipsIdentity;
 
     private readonly Lock m_drawSignatureLock = new();
 
