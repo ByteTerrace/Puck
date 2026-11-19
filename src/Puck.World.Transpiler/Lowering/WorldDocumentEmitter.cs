@@ -239,7 +239,7 @@ public static partial class WorldDocumentEmitter {
                 .. rootTests,
             ];
             if (worldOutputs is null) { diagnostics.ReportError(code: PuckDiagnosticCodes.InvalidValue, message: "This consumer requires one world; compile the composition to its individual documents first.", span: document.Span); }
-            return new CompilationResult<JsonObject>(Diagnostics: diagnostics, Value: root);
+            return new CompilationResult<JsonObject>(Diagnostics: diagnostics, Value: root) { EvaluationWork = scope.Budget.Work };
         }
         if (composition.Links.Count > 0) { diagnostics.ReportError(code: PuckDiagnosticCodes.InvalidValue, message: "A border or door needs declared worlds.", span: document.Span); }
         root.Remove(propertyName: "$composition");
@@ -263,7 +263,7 @@ public static partial class WorldDocumentEmitter {
         return new CompilationResult<JsonObject>(
             Diagnostics: diagnostics,
             Value: canonicalRoot
-        );
+        ) { EvaluationWork = scope.Budget.Work };
     }
 
     /// <summary>Records an embedded text discovered during lowering for a space.</summary>

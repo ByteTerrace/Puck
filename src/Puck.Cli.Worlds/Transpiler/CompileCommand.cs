@@ -259,7 +259,7 @@ public static partial class CompileCommand {
             return null;
         }
 
-        json =((imports == ImportHandling.Ignore)
+        var lowered = ((imports == ImportHandling.Ignore)
             ? CartridgeDocumentEmitter.LowerWithDiagnostics(
                 diagnostics: diagnostics,
                 document: documentNode,
@@ -270,8 +270,10 @@ public static partial class CompileCommand {
                 document: documentNode,
                 sourceMap: sourceMap,
                 sourcePath: sourcePath
-            )).Value;
+            ));
 
+        CompilationMeasurement.Note(path: sourcePath, work: lowered.EvaluationWork);
+        json = lowered.Value;
         return documentNode;
     }
     private static void PrintDiagnostics(DiagnosticBag diagnostics, string filePath, string sourceText) {
