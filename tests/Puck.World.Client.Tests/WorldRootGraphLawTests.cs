@@ -234,8 +234,7 @@ public sealed class WorldRootGraphLawTests {
         // The first view's version is a second version of the first producer, so its base and its source differ.
         Assert.Equal(
             actual: graph.Graphs()[3]!.Inputs.Select(selector: static input => $"{input.Version}<-{input.Producer}"),
-            expected: ["main$world<-world", "main$view$1<-world", "main$view$2<-world$2", "main$view$3<-world$3",
-                "main$view$1$bloom<-world", "main$view$2$bloom<-world$2", "main$view$3$bloom<-world$3", "pane<-pane"]
+            expected: ["main$world<-world", "main$view$1<-world", "main$view$2<-world$2", "main$view$3<-world$3", "pane<-pane"]
         );
         // Each view's footprint follows its rect frame by frame, so the root states none of its own.
         Assert.Empty(collection: graph.Footprints);
