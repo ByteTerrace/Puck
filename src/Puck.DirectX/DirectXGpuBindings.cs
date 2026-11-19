@@ -446,6 +446,32 @@ public sealed unsafe class DirectXGpuBindings(DirectXDeviceContext deviceContext
             pResource: ((ID3D12Resource*)bufferHandle)
         );
     }
+    /// <summary>Writes a top-level acceleration structure's shader resource view into a group's set: a
+    /// <see cref="GpuBindingKind.AccelerationStructure"/> binding (<see cref="DirectXGpuAccelerationStructures.WriteDescriptor"/>).
+    /// The view names no resource, only the structure's address.</summary>
+    /// <param name="descriptorSetHandle">The set.</param>
+    /// <param name="binding">The binding.</param>
+    /// <param name="address">The structure's virtual address.</param>
+    public void WriteAccelerationStructure(nint descriptorSetHandle, uint binding, ulong address) {
+        var set = ((DirectXDescriptorSet)GCHandle.FromIntPtr(value: descriptorSetHandle).Target!);
+        var slot = set.SlotByBinding[binding];
+        var cpuHandle = new D3D12_CPU_DESCRIPTOR_HANDLE {
+            ptr = (set.CpuBase + ((nuint)(slot * set.DescriptorSize))),
+        };
+        var srvDesc = new D3D12_SHADER_RESOURCE_VIEW_DESC {
+            Format = DXGI_FORMAT.DXGI_FORMAT_UNKNOWN,
+            Shader4ComponentMapping = DefaultShader4ComponentMapping,
+            ViewDimension = D3D12_SRV_DIMENSION.D3D12_SRV_DIMENSION_RAYTRACING_ACCELERATION_STRUCTURE,
+        };
+
+        set.Views[slot] = 0;
+        srvDesc.Anonymous.RaytracingAccelerationStructure = new D3D12_RAYTRACING_ACCELERATION_STRUCTURE_SRV { Location = address };
+        ((ID3D12Device*)deviceContext.Device.Handle)->CreateShaderResourceView(
+            DestDescriptor: cpuHandle,
+            pDesc: &srvDesc,
+            pResource: ((ID3D12Resource*)null)
+        );
+    }
     /// <inheritdoc/>
     /// <remarks>A write of the live view the slot already holds creates nothing.</remarks>
     public void WriteStorageImage(

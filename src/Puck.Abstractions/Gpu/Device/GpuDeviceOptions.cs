@@ -19,4 +19,8 @@ public sealed class GpuDeviceOptions {
     /// WARP on Direct3D 12, which runs on the CPU on a host with or without a GPU. Vulkan has no software device here and
     /// refuses the option. The World sets it from its <c>--software-gpu</c> flag.</summary>
     public bool Software { get; init; }
+    /// <summary>Gets the optional capabilities the device is created without even where it reports them, so the path a
+    /// capability's kernel variant replaces runs instead (<see cref="GpuDeviceCapabilities.Withheld"/> reads what was
+    /// withheld). The World sets it from its <c>--withhold-gpu</c> flag.</summary>
+    public GpuOptionalCapabilities Withheld { get; init; }
 }

@@ -268,6 +268,7 @@ public sealed class ShaderInterfaceLayout {
             ShaderInterfaceMemberKind.ReadOnlyBuffer or ShaderInterfaceMemberKind.Array => GpuBindingKind.ReadOnlyBuffer,
             ShaderInterfaceMemberKind.ReadWriteBuffer => GpuBindingKind.ReadWriteBuffer,
             ShaderInterfaceMemberKind.Sampler => GpuBindingKind.Sampler,
+            ShaderInterfaceMemberKind.AccelerationStructure => GpuBindingKind.AccelerationStructure,
             _ => throw new ArgumentOutOfRangeException(
                 actualValue: kind,
                 message: "The member kind is not a binding of its own.",

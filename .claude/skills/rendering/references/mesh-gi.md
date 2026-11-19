@@ -204,7 +204,12 @@ done line; a nested residency's done line is insufficient.
 | Pixel gather, indirect light, reflections and traced-light visibility | `shade/sdf-mesh-irradiance.hlsli` |
 
 - The scene hierarchy fills its packed seven-primitive leaves before adding
-  another pair of boxes. Bounds and triangle tests keep their original precision.
+  another pair of boxes. Triangle tests keep their original precision. A
+  geometry's nodes are 16 bytes (`PackedNode`): each bound is a 16-bit step
+  count of its braid's frame (`BraidFrame`, the braid root's box), rounded
+  outward by the one encoder, and `sdfProbePackedSlab` decodes it with the
+  CPU's float expression, so both walks read one conservative box. The top
+  level keeps float nodes. An entry names its braid's frame beside its node.
   Compare `puck mesh scene`'s hits, lit hits and mean distance after changing its
   storage or traversal, and walk the settled heap to measure retained arrays;
   working set includes temporary build storage and the mesh arrays as well.

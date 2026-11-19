@@ -6,9 +6,10 @@ namespace Puck.Vulkan;
 /// The SPIR-V capabilities a shader module may declare on a Vulkan device Puck creates, and the check every module
 /// passes before <c>vkCreateShaderModule</c> (<see cref="Factories.VulkanShaderModuleFactory"/>). A capability is
 /// enabled when Vulkan 1.3 core grants it to every device, or when it needs a device feature that
-/// <see cref="Factories.VulkanLogicalDeviceFactory"/> requires at creation and refuses a device without. A module
-/// declaring any other capability is refused by name when it is created, so a shader can never reach a device that was
-/// not created to run it. The view-local character fade's fragment <c>discard</c> compiles to
+/// <see cref="Factories.VulkanLogicalDeviceFactory"/> requires at creation and refuses a device without; or, for an
+/// optional capability (<see cref="Optional"/>), when the device was created with it
+/// (<see cref="GpuDeviceCapabilities.Optional"/>). A module declaring any other capability is refused by name when it is
+/// created, so a shader can never reach a device that was not created to run it. The view-local character fade's fragment <c>discard</c> compiles to
 /// <c>OpDemoteToHelperInvocation</c>, enabled by the required <c>shaderDemoteToHelperInvocation</c> feature.
 /// </summary>
 public static class VulkanShaderCapabilities {
@@ -44,6 +45,10 @@ public static class VulkanShaderCapabilities {
     /// <summary>The SPIR-V <c>StorageBufferArrayNonUniformIndexing</c> capability, with which the slab read indexes its
     /// storage buffers by each lane's own value. Requires <c>shaderStorageBufferArrayNonUniformIndexing</c>.</summary>
     public const uint StorageBufferArrayNonUniformIndexing = 5308u;
+    /// <summary>The SPIR-V <c>RayQueryKHR</c> capability, with which a compute kernel traces an inline ray query
+    /// (SPIR-V headers 1.4.363, <c>SpvCapabilityRayQueryKHR</c>). Requires <c>rayQuery</c>, which a device has only with
+    /// <see cref="GpuOptionalCapabilities.RayQuery"/>.</summary>
+    public const uint RayQuery = 4472u;
 
     // The SPIR-V module's magic number, its first word: the specification's, not a format Puck versions.
     private const uint SpirvMagic = 0x07230203u;
@@ -67,6 +72,12 @@ public static class VulkanShaderCapabilities {
         (DemoteToHelperInvocation, "DemoteToHelperInvocation", "the shaderDemoteToHelperInvocation feature every device is created with"),
         (ShaderNonUniform, "ShaderNonUniform", "Vulkan 1.2 core"),
         (StorageBufferArrayNonUniformIndexing, "StorageBufferArrayNonUniformIndexing", "the shaderStorageBufferArrayNonUniformIndexing feature every device is created with"),
+    ];
+
+    /// <summary>Gets every capability a module may declare only on a device created with an optional capability, each
+    /// with its name and the optional capability that enables it.</summary>
+    public static IReadOnlyList<(uint Capability, string Name, GpuOptionalCapabilities EnabledBy)> Optional { get; } = [
+        (RayQuery, "RayQueryKHR", GpuOptionalCapabilities.RayQuery),
     ];
 
     /// <summary>Returns the capabilities a SPIR-V module declares, in declaration order.</summary>
@@ -98,25 +109,35 @@ public static class VulkanShaderCapabilities {
 
         return declared;
     }
-    /// <summary>Refuses a module that declares a capability no device Puck creates enables.</summary>
+    /// <summary>Refuses a module that declares a capability the device was not created with.</summary>
     /// <param name="spirv">The module's bytes.</param>
     /// <param name="module">The module's name, for the refusal.</param>
+    /// <param name="optional">The optional capabilities the device was created with
+    /// (<see cref="GpuDeviceCapabilities.Optional"/>).</param>
     /// <exception cref="ArgumentException">The bytes are not a SPIR-V module.</exception>
-    /// <exception cref="NotSupportedException">The module declares a capability outside <see cref="Enabled"/>; the
-    /// message names the module and the capability.</exception>
-    public static void Require(ReadOnlySpan<byte> spirv, string module) {
+    /// <exception cref="NotSupportedException">The module declares a capability outside <see cref="Enabled"/> and
+    /// outside what <paramref name="optional"/> enables of <see cref="Optional"/>; the message names the module and the
+    /// capability.</exception>
+    public static void Require(ReadOnlySpan<byte> spirv, string module, GpuOptionalCapabilities optional = GpuOptionalCapabilities.None) {
         foreach (var capability in Declared(spirv: spirv)) {
-            if (!IsEnabled(capability: capability)) {
-                throw new NotSupportedException(message: $"The shader module '{module}' declares the SPIR-V capability {capability}, which no Vulkan device Puck creates enables; require the device feature it needs at device creation and list it in VulkanShaderCapabilities.Enabled.");
+            if (!IsEnabled(capability: capability, optional: optional)) {
+                throw new NotSupportedException(message: $"The shader module '{module}' declares the SPIR-V capability {capability}, which this Vulkan device was not created with; require the device feature it needs at device creation and list it in VulkanShaderCapabilities.Enabled, or build the kernel variant only on a device whose optional capabilities ({GpuOptionalCapabilitiesSpelling.Of(capabilities: optional)}) enable it.");
             }
         }
     }
-    /// <summary>Indicates whether every device Puck creates enables a capability.</summary>
+    /// <summary>Indicates whether a device created with some optional capabilities enables a SPIR-V capability.</summary>
     /// <param name="capability">The SPIR-V capability.</param>
-    /// <returns><see langword="true"/> when the capability is in <see cref="Enabled"/>.</returns>
-    public static bool IsEnabled(uint capability) {
+    /// <param name="optional">The optional capabilities the device was created with.</param>
+    /// <returns><see langword="true"/> when the capability is in <see cref="Enabled"/>, or in <see cref="Optional"/> with
+    /// its enabling capability in <paramref name="optional"/>.</returns>
+    public static bool IsEnabled(uint capability, GpuOptionalCapabilities optional = GpuOptionalCapabilities.None) {
         foreach (var (enabled, _, _) in Enabled) {
             if (enabled == capability) {
+                return true;
+            }
+        }
+        foreach (var (enabled, _, enabledBy) in Optional) {
+            if ((enabled == capability) && ((optional & enabledBy) == enabledBy)) {
                 return true;
             }
         }

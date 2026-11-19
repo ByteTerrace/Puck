@@ -434,7 +434,7 @@ and signs `SignsDirectly` claims valid for `MaximumClaimAge`, five minutes
 ```
 
 The desktop does the same from `--federation-key-file` **[opened]**
-(`src/Puck.World/Program.cs:177-180`):
+(`src/Puck.World/Program.cs:187-190`):
 
 ```csharp
     var federationKeyFileOption = new Option<string?>(name: "--federation-key-file") {

@@ -44,6 +44,10 @@ public sealed class GpuDeviceServices {
     public GpuObjectNaming Naming { get; init; } = GpuObjectNaming.Off;
     /// <summary>Gets the optional timestamp-pool factory. Missing means timing is unavailable; every wrap preserves it.</summary>
     public IGpuTimestampFactory? TimestampFactory { get; init; }
+    /// <summary>Gets the device's acceleration structures, or <see langword="null"/> where the backend has none. A
+    /// backend that has them refuses every call on a device created without
+    /// <see cref="GpuOptionalCapabilities.RayQuery"/>, so a caller asks the device's capabilities first.</summary>
+    public IGpuAccelerationStructures? AccelerationStructures { get; init; }
     /// <summary>Gets the surface-transfer factory (readback, upload and import).</summary>
     public required IGpuSurfaceTransferFactory SurfaceTransferFactory { get; init; }
 }

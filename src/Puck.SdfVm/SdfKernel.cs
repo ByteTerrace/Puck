@@ -19,6 +19,13 @@ public enum SdfKernel {
     ProbeCache,
     /// <summary>Samples the irradiance volume at view cameras, from probes or GPU-cached camera rays.</summary>
     ProbeCameraSample,
+    /// <summary><see cref="ProbeTrace"/> with each ray traced by a ray query through the scene's acceleration structures
+    /// (<see cref="Puck.Abstractions.Gpu.GpuOptionalCapabilities.RayQuery"/>).</summary>
+    ProbeTraceRays,
+    /// <summary><see cref="ProbeRelight"/> with each shadow ray traced by a ray query.</summary>
+    ProbeRelightRays,
+    /// <summary><see cref="ProbeCameraSample"/> with each camera and shadow ray traced by a ray query.</summary>
+    ProbeCameraSampleRays,
     /// <summary>The mesh bake's instance mask, selecting one bake group's instances.</summary>
     MeshBakeMask,
     /// <summary>The mesh bake's field sampler over one group's lattice: the frame's one walk of the SDF program, run

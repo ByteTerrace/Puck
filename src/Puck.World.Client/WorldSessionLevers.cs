@@ -19,6 +19,9 @@ public static partial class WorldSessionLevers {
     public const string SkyMute = "sky-layer.mute";
     /// <summary>The ambient-occlusion toggle (<c>world.ao</c>), folding into <c>render</c>.</summary>
     public const string AmbientOcclusion = "ao";
+    /// <summary>The ray-query toggle for the indirect volume's background rays (<c>world.rays</c>), folding into
+    /// <c>render</c>.</summary>
+    public const string RayQueries = "rays";
     /// <summary>One seat's on-screen binding-bar visibility (<c>world.binding-bar</c>), folding into
     /// <c>bindings</c>. Seat-scoped: <see cref="WorldSessionLever.Seat"/> names the 0-based local seat.</summary>
     public const string BindingBar = "binding-bar";
@@ -114,6 +117,7 @@ public static partial class WorldSessionLevers {
             name: AmbientOcclusion,
             setter: lever => settings.AmbientOcclusion = Flag(lever: lever)
         );
+        sink.Register(name: RayQueries, setter: lever => settings.RayQueries = Flag(lever: lever));
         sink.Register(
             name: CadenceGate,
             setter: lever => settings.CadenceGate = Flag(lever: lever)

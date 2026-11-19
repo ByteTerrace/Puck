@@ -211,9 +211,10 @@ public sealed partial class ShaderInterface {
             throw new InvalidDataException(message: $"{where}: a structure belongs to a buffer and replaces its primitive element type.");
         }
 
+        // A sampler and an acceleration structure are untyped; every other non-buffer member names its type.
         if (
             !isBuffer &&
-            ((member.Kind != ShaderInterfaceMemberKind.Sampler) != member.Type.HasValue)
+            ((member.Kind is not (ShaderInterfaceMemberKind.Sampler or ShaderInterfaceMemberKind.AccelerationStructure)) != member.Type.HasValue)
         ) {
             throw new InvalidDataException(message: (member.Type.HasValue
                 ? $"{where}: a {member.Kind} takes no type."

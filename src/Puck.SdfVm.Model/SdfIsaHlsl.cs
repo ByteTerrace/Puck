@@ -280,11 +280,14 @@ public static class SdfIsaHlsl {
         declarations.Count(name: "SDF_PROBE_UNKNOWN_MATERIAL", value: SdfMeshProbeTrace.UnknownMaterial);
         declarations.Count(name: "SDF_PROBE_NODE_COUNT_BITS", value: SdfMeshProbeTrace.NodeCountBits);
         declarations.Count(name: "SDF_PROBE_NODE_WORDS", value: SdfMeshProbeTrace.NodeWords);
+        declarations.Count(name: "SDF_PROBE_PACKED_NODE_WORDS", value: SdfMeshProbeTrace.PackedNodeWords);
         declarations.Count(name: "SDF_PROBE_ENTRY_WORDS", value: SdfMeshProbeTrace.EntryWords);
         declarations.Count(name: "SDF_PROBE_NORMAL_WORD", value: SdfMeshProbeTrace.NormalWord);
         declarations.Count(name: "SDF_PROBE_GEOMETRY_WORD", value: SdfMeshProbeTrace.GeometryWord);
         declarations.Count(name: "SDF_PROBE_IDENTITY_WORD", value: SdfMeshProbeTrace.IdentityWord);
         declarations.Count(name: "SDF_PROBE_INSTANCE_INDEX_WORD", value: SdfMeshProbeTrace.InstanceIndexWord);
+        declarations.Count(name: "SDF_PROBE_INSTANCE_WORDS", value: SdfMeshProbeTrace.InstanceWords);
+        declarations.Count(name: "SDF_PROBE_INSTANCE_BASE_WORD", value: SdfMeshProbeTrace.InstanceBaseWord);
         declarations.Count(name: "SDF_PROBE_STACK_DEPTH", value: SdfMeshProbeTrace.StackDepth);
         declarations.Count(name: "SDF_PROBE_MAX_WALK_STEPS", value: SdfMeshProbeTrace.MaxWalkSteps);
         declarations.Count(name: "SDF_PROBE_GROUP_SIZE", value: SdfMeshProbeTrace.GroupSize);
