@@ -4072,12 +4072,12 @@ the model.
   camera application start the body at the perceiving pose. The play wheel's four
   rings are full (`debugRings`), so Free Cam is F9 only; a pad control needs a
   ring or a page entry.
-- [medium] Nothing drives controller output: no `Puck.World*` code references
-  `IGamepadOutput`, and cartridge rumble (`IFeedbackMachine.MotorLevel`) has
-  no consumer outside `Puck.Machines`. Wire a machine's motor to the engaged
-  seat's pad, and authored haptics. A pulse on the beat is the first authored
-  consumer ([instrument and dance play](instrument-play.md#sound), a lane of
-  its first wave).
+- [medium] Cartridge rumble is unwired: `WorldHapticDirector` now drives
+  `IGamepadOutput.Rumble` from authored `haptics` rows (with
+  `worlds/standard/instrument.puck`'s beat pulse as the first authored consumer;
+  [instrument and dance play](instrument-play.md#sound)), while cartridge
+  rumble (`IFeedbackMachine.MotorLevel`) still has no consumer outside
+  `Puck.Machines`. Wire a machine's motor to the engaged seat's pad.
 - The in-world computer runs programs (the owner's direction): the desktop
   share is one and a typing tutor another, switched on the computer itself
   with the screen showing which is live. The tutor is world-native: lessons

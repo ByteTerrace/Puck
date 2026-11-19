@@ -108,7 +108,8 @@ strength that a miss lowers by one, a run of misses that ends the phrase and a m
 all as rows and rules a world refines by id. It names no
 instrument, so a dance's moves are the same call with different presses. `instrument.puck` is a library built on it:
 `instrumentPlay(...)` authors the breath and four vent channels, the binding page that opens while both triggers are
-squeezed, the rules that raise and lower the instrument, and the judge over the vents, and `instrumentFamily(...)` is
+squeezed, the rules that raise and lower the instrument, the `instrumentBeat` beat-pulse state and its `haptics` row
+(`instrument-beat-<seat>`) while raised, and the judge over the vents, and `instrumentFamily(...)` is
 the input family a world lists in its `inputModes` so the vents are accepted only while the instrument is up. The debug
 world's [`bard.puck`](../debug/bard.puck) expands it against its [score](../debug/score.puck), with the breath on Y
 because its trigger pages are all spoken for.

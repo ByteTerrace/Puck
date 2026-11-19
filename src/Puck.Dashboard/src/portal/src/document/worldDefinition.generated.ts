@@ -45,6 +45,7 @@ export type WorldDefinition = {
   inputHold?: WorldInputHoldAuthoring | null;
   theme?: WorldThemeSection | null;
   markers?: (WorldMarkerRow | null)[] | null;
+  haptics?: (WorldHapticRow | null)[] | null;
   rules?: (WorldRule | null)[] | null;
   identity?: WorldIdentityDefinition | null;
   groups?: WorldGroupsSection | null;
@@ -8228,6 +8229,39 @@ export type WorldGroupsSection = {
    * The ownership bindings (see WorldOwnership). May be empty.
    */
   ownership: (WorldOwnership | null)[];
+};
+
+export type WorldHapticMode = "Level" | "Rise" | "Change";
+
+export type WorldHapticRow = {
+  /**
+   * The row's stable id, unique within haptics.
+   */
+  id: string;
+  /**
+   * The low-frequency motor intensity, in [0, 1].
+   */
+  low: BindableScalar;
+  /**
+   * The high-frequency motor intensity, in [0, 1].
+   */
+  high: BindableScalar;
+  /**
+   * The finite pulse duration, in seconds ((0, MaxDurationSeconds]).
+   */
+  durationSeconds: number;
+  /**
+   * The state-driven trigger scalar for Rise and Change modes; omitted in Level mode.
+   */
+  signal?: BindableScalar;
+  /**
+   * How the row fires (WorldHapticMode).
+   */
+  mode?: WorldHapticMode;
+  /**
+   * Optional target seat (seat1..seat4), or null for every local joined seat.
+   */
+  seat?: string | null;
 };
 
 export type WorldHold = {

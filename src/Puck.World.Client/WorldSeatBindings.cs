@@ -1154,6 +1154,12 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
         definition = m_definitions[slot];
         state = m_states[slot];
     }
+    /// <summary>Gets the 0-based entity index seat <paramref name="slot"/> currently routes to, or <c>slot</c>
+    /// before its first sync.</summary>
+    public int RoutedEntityIndex(int slot) => ((((uint)slot) < SeatCount)
+        ? m_stateEntityIndices[slot]
+        : 0
+    );
     /// <inheritdoc/>
     public object? ContextToken(int slot) => ((((uint)slot) < SeatCount) ? m_seats[slot].ContextToken(slot: slot) : null);
     /// <inheritdoc/>
