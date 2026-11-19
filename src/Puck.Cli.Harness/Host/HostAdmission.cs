@@ -127,7 +127,7 @@ public static class HostAdmission {
             var demand = starts.Judge(clock: clock, kind: peak, reading: reading, reserve: (reserve && !held), thresholds: thresholds);
 
             // A start the idle machine could not hold is refused by name at once: no wait changes it.
-            if (thresholds.NeverFits(reading: reading, ownGb: demand.OwnGb, residentOwnGb: demand.ResidentOwnGb) is { } never) {
+            if (thresholds.NeverFits(reading: reading, ownGb: demand.LoneOwnGb, residentOwnGb: demand.LoneResidentOwnGb) is { } never) {
                 error.WriteLine(value: $"gate: refused {step}: a {KindName(kind: peak)} can never be admitted on this machine, {never}.");
                 error.Flush();
 

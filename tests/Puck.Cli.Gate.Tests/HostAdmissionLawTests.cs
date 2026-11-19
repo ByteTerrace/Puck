@@ -16,6 +16,9 @@ public sealed class HostAdmissionLawTests {
     // A commit reading is a percentage of a 40 GB commit limit; none is a platform that reports no limit. Free memory
     // defaults to plenty, so a law about commit is not also a law about physical memory.
     private static HostSample Sample(double cpu = 0, double ram = 64, double disk = 100, string? gpu = null, string? heavy = null, double? commit = null, double limit = 40, HostRunningStart[]? starts = null) => new(At: DateTimeOffset.UnixEpoch, CpuPercent: cpu, FreeDiskGb: disk, FreeRamGb: ram, GpuHolder: gpu, HeavyTestHolder: heavy, ReuseNodes: 42, CommitChargeGb: ((commit is { } percent) ? (percent * limit / 100.0) : double.NaN), CommitLimitGb: ((commit is null) ? double.NaN : limit), Starts: starts);
+    // A ready headless World that has stopped growing: the start asked beside it is not alone, so its own learned expectation
+    // judges it, while the World itself adds no growth to the need.
+    private static readonly HostRunningStart Company = new(Id: 900, Kind: HostStartKind.HeadlessWorld, PrivateGb: 0.1, Ready: true, StartTicks: 900);
     private static bool Admits(HostStartKind kind, HostSample reading, HostStartTracker tracker, GateClock clock, int boundSeconds = 25, HostLoadThresholds? on = null) {
         using var error = new StringWriter();
 
@@ -158,8 +161,8 @@ public sealed class HostAdmissionLawTests {
         using var split = new Puck.Testing.TemporaryDirectory();
         using var whole = new Puck.Testing.TemporaryDirectory();
         var clock = new GateClock();
-        var idle = Sample(commit: (100.0 * (64 - 29.5) / 64), limit: 64, ram: 18.9);
-        var crowded = Sample(commit: (100.0 * (64 - 29.5) / 64), limit: 64, ram: 16);
+        var idle = Sample(commit: (100.0 * (64 - 29.5) / 64), limit: 64, ram: 18.9, starts: [Company]);
+        var crowded = Sample(commit: (100.0 * (64 - 29.5) / 64), limit: 64, ram: 16, starts: [Company]);
 
         Observed(split.RootPath, clock, HostStartKind.WindowedWorld, id: 1, privateGb: 20.4, workingSetGb: 15.3, privateResidentGb: 12.8);
         Observed(whole.RootPath, clock, HostStartKind.WindowedWorld, id: 1, privateGb: 20.4, workingSetGb: 15.3);
@@ -234,6 +237,44 @@ public sealed class HostAdmissionLawTests {
         Assert.Equal(expected: 11.0, actual: Resident());
         Assert.Equal(expected: 16.0, actual: longLived.ExpectedPeaks(kind: HostStartKind.WindowedWorld).PrivateGb);
         Assert.Equal(expected: 11.0, actual: new HostStartTracker(directory.RootPath).ExpectedPeaks(kind: HostStartKind.WindowedWorld).ResidentGb);
+    }
+    // One pathological session (33 GB of commit) is the only observation of its kind. On an idle 32 GB desk with 26 GB of
+    // commit headroom and 19.7 GB free, the estimate alone could refuse every later windowed start, and a refused kind runs
+    // nothing that could teach the window a lower figure. A start with nothing admitted beside it is judged by the lesser of
+    // the estimate and the unmeasured fallback, so it goes ahead and its observation brings the estimate down; a start beside
+    // another, or one asked while the first still holds its reservation, is still judged by the whole estimate.
+    [Fact]
+    public void AnInflatedEstimateNeverLocksALoneStartOutSoItsObservationsCanLowerIt() {
+        using var directory = new Puck.Testing.TemporaryDirectory();
+        var clock = new GateClock();
+        var idle = Sample(commit: (100.0 * (64 - 26) / 64), limit: 64, ram: 19.7);
+        var beside = Sample(commit: (100.0 * (64 - 26) / 64), limit: 64, ram: 19.7, starts: [Company]);
+
+        Observed(directory.RootPath, clock, HostStartKind.WindowedWorld, id: 1, privateGb: 33, workingSetGb: 20, privateResidentGb: 15.1);
+        Assert.Equal(expected: 33.0, actual: new HostStartTracker(directory.RootPath).ExpectedPeaks(kind: HostStartKind.WindowedWorld).PrivateGb);
+
+        var lone = new HostStartTracker(directory.RootPath).Judge(reading: idle, kind: HostStartKind.WindowedWorld, thresholds: Desk, clock: clock, reserve: false);
+        var crowded = new HostStartTracker(directory.RootPath).Judge(reading: beside, kind: HostStartKind.WindowedWorld, thresholds: Desk, clock: clock, reserve: false);
+
+        Assert.Equal(expected: (true, true, HostLoadThresholds.WindowedWorldPeakGb, HostLoadThresholds.WindowedWorldPeakGb), actual: (lone.CommitCovered, lone.PhysicalCovered, lone.OwnGb, lone.LoneOwnGb));
+        Assert.Equal(expected: (false, 33.0, HostLoadThresholds.WindowedWorldPeakGb), actual: (crowded.CommitCovered, crowded.OwnGb, crowded.LoneOwnGb));
+        Assert.False(condition: Admits(kind: HostStartKind.WindowedWorld, reading: beside, tracker: new HostStartTracker(directory.RootPath), clock: new GateClock(), on: Desk));
+
+        // The first lone start is admitted and holds its reservation, so a second asked at once is not alone.
+        var asked = new HostStartTracker(directory.RootPath);
+
+        Assert.True(condition: Admits(kind: HostStartKind.WindowedWorld, reading: idle, tracker: asked, clock: new GateClock(), on: Desk));
+        Assert.False(condition: Admits(kind: HostStartKind.WindowedWorld, reading: idle, tracker: asked, clock: new GateClock(), on: Desk));
+
+        // Each admitted lone start runs and exits at an ordinary peak: five of them push the outlier below the percentile, and
+        // the kind is then admitted beside another start by its own learned figure.
+        for (var id = 2; id <= 6; ++id) {
+            Assert.True(condition: Admits(kind: HostStartKind.WindowedWorld, reading: idle, tracker: new HostStartTracker(directory.RootPath), clock: new GateClock(), on: Desk), userMessage: $"start {id}");
+            Observed(directory.RootPath, clock, HostStartKind.WindowedWorld, id: id, privateGb: 16, workingSetGb: 11, privateResidentGb: 11);
+        }
+
+        Assert.Equal(expected: 16.0, actual: new HostStartTracker(directory.RootPath).ExpectedPeaks(kind: HostStartKind.WindowedWorld).PrivateGb);
+        Assert.True(condition: Admits(kind: HostStartKind.WindowedWorld, reading: beside, tracker: new HostStartTracker(directory.RootPath), clock: new GateClock(), on: Desk));
     }
     // A new normal is learned in both directions: three of the last ten starts at 14 GB raise the estimate to it, and ten
     // at 11 GB bring it back.
@@ -790,7 +831,7 @@ public sealed class HostAdmissionLawTests {
         var clock = new GateClock();
         tracker.Judge(Sample(starts: [new(42, HostStartKind.WindowedWorld, 30)]), HostStartKind.Step, Thresholds, clock, false);
         clock.Advance(HostStartTracker.Plateau);
-        var measured = tracker.Judge(Sample(commit: 20, limit: 32), HostStartKind.WindowedWorld, Thresholds, clock, false);
+        var measured = tracker.Judge(Sample(commit: 20, limit: 32, starts: [Company]), HostStartKind.WindowedWorld, Thresholds, clock, false);
         Assert.Equal(30, measured.OwnGb);
         Assert.False(measured.Covered);
         Assert.True(condition: Admits(kind: HostStartKind.WindowedWorld, reading: Sample(commit: (400.0 / 24.0), limit: 24), tracker: new HostStartTracker(), clock: new GateClock()));

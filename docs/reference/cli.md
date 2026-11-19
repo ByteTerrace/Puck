@@ -5069,7 +5069,11 @@ shared lease root, one file per kind under `HostStartTracker.ObservationDirector
 start ticks, process id, private GB, private working-set GB, working-set GB). Every CLI copy on the machine
 rewrites these files, so a change to their lines takes a new directory name and raises `CliLease.Protocol`. An exclusive sibling guard merges each process's own new
 observations into the file, which decides the estimate: a long-lived CLI or MCP session holds nothing the file does not.
-A start whose own expected peak plus the commit reserve exceeds the commit limit, or whose expected private working set plus the
+The estimate arbitrates between starts that run together. A start with no admitted start running (a live World or heavy suite)
+or reserved beside it is judged by the lesser of the estimate and the kind's fallback (below), because a kind whose estimate
+refused every start would run nothing that could lower it: one pathological session would lock its kind out for good.
+Such a start still has to hold the commit reserve and the pressure floor, and the demand reports the figure judged.
+A start whose own expected peak (judged as just described) plus the commit reserve exceeds the commit limit, or whose expected private working set plus the
 pressure floor exceeds the installed memory, is refused by name at once (`gate: refused <step>: a windowed World can
 never be admitted on this machine, ...`) instead of waiting out the bound. Before the first observation, `HostLoadThresholds.DefaultPeakGb`
 provides the private-byte fallback, and `HostLoadThresholds.ResidentFraction` (0.7) of the kind's expected
