@@ -97,7 +97,7 @@ internal sealed partial class PlayerCommandModule {
         _ = line.Append(value: $"[body.rig: body:{index} {input} creation={state.Creation} speed={Scalar(value: state.Speed)} drivers={state.Drivers.Count} effectors={state.Effectors.Count}");
 
         foreach (var driver in state.Drivers) {
-            _ = line.Append(value: $" driver:{driver.Name} phase={Scalar(value: driver.Phase)} weight={Scalar(value: driver.Weight)}");
+            _ = line.Append(value: $" driver:{driver.Name} phase={Scalar(value: driver.Phase)} weight={Scalar(value: driver.Weight)}{((driver.Source is { } source) ? $" source={source}" : string.Empty)}");
         }
 
         foreach (var effector in state.Effectors) {

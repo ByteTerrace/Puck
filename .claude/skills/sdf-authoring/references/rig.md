@@ -109,7 +109,7 @@ query padding and the body's contact skin stay in world units. The local mesh st
 baked. The debug glacier is the standard family's example.
 
 `drivers` is any number of named `{ name, signal, cadence, when, blendInSeconds,
-blendOutSeconds, dynamics, cadenceBy, weightBy, parts, mode }`. Everything
+blendOutSeconds, dynamics, cadenceBy, weightBy, parts, mode, lead, leadSeconds }`. Everything
 animated names one. They advance in declaration order, and a driver reads only
 drivers declared before it, the rule a shape's `parent` follows.
 
@@ -148,6 +148,26 @@ reach from any joint inside it is at least `√3·k`, and a clip turn over about
 `dynamics` names a world `dynamics` row a setting driver's phase follows through
 (second-order: trail, overshoot, settle). An integrating driver and a
 `driver.<name>` driver refuse it; the world validator refuses an undeclared row.
+
+`lead` (an input channel's name) and `leadSeconds` (default 0.25) let a
+state-cell driver show the presenting seat's own press before the authority's
+answer is drawn: a guess. While the client presents for exactly one seat
+(`IWorldStampSource.SeatGuess`, null with two seats on one screen and on a session
+view), that seat controls the body, is admitted with no lost capture, the channel
+is live in the mapping the authority last published, an edge the seat sent on it
+(a press, a release or an axis sample) has not had its answer presented, and the
+edge is no older than `leadSeconds`, the phase follows the seat's own folded level
+in place of the cell. The one function is `WorldSeatInput.TryLead`; it writes
+nothing, and the authority never reads `lead`. The answer is
+`WorldInputAnswer` (the epoch, the highest event sequence of the last batch the
+authority took or refused for that owner, and the tick it answered in), delivered
+to that owner alone; the guess ends when that tick is fully presented, at a new
+input epoch, or at `leadSeconds`. A guess is one of the rig's reads
+(`CreationRigReadKind.Lead`): its start, level and end move the wake revision, and
+a registration with a guess in force is never held by a rate tier. `body.rig`
+prints `source=lead` or `source=cell` for a led driver. Refused by name: `lead`
+on a signal that is not a state cell, `leadSeconds` without `lead`, and (world
+validator) a channel that is not declared, or is relative or text.
 
 `cadenceBy` and `weightBy` are each `{ driver, curve }`: the height (Z) of a
 world `curves` row where its X equals that earlier driver's phase, held at the

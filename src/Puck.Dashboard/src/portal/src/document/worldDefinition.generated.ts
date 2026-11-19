@@ -1763,6 +1763,14 @@ export type CreationDocument = {
      * How the driver layers: ModeAdd (null) adds its motion to the drivers before it; ModeReplace also scales every driver declared before it by one minus its weight on the shapes its mask covers, so a stance takes the arms from the gait without the gait knowing (Share).
      */
     mode?: string | null;
+    /**
+     * The name of a world input channel a state-cell signal may be guessed from (null = none). On a client that presents for exactly one seat, which controls the body, while one of that seat's own edges on the channel has been taken in by a tick and its answer has not yet been presented, and for no longer than LeadSeconds, the phase follows the seat's own level on the channel in place of the cell. It changes only that seat's picture, never what the authority computes. The channel must be a button or an axis.
+     */
+    lead?: string | null;
+    /**
+     * How long, in seconds, an unanswered guess may show (null = DefaultLeadSeconds). Finite and positive; meaningful only with Lead.
+     */
+    leadSeconds?: number | null;
   } | null)[] | null;
   /**
    * The inverse-kinematics effectors (null = none), any number — see CreationEffectorDocument. Each corrects a chain of this creation's own shapes so its tip reaches a target, composing after the drivers and the parent chain. Presentation-only, like the drivers.

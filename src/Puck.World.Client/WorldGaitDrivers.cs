@@ -71,9 +71,11 @@ public static class WorldGaitDrivers {
     /// <param name="definition">The live definition whose <c>curves</c> rows a driver's
     /// <see cref="CreationDriverDocument.CadenceBy"/> and <see cref="CreationDriverDocument.WeightBy"/> read, or
     /// <see langword="null"/>, which leaves both unscaled.</param>
+    /// <param name="led">Set, per driver row, to whether a state-cell driver read the presenting seat's guess on its lead
+    /// this frame in place of its cell; empty records nothing.</param>
     /// <returns>The work performed and whether a later positive-time advance remains eligible, independently of
     /// output pose equality.</returns>
-    public static Activity Advance(CreationRig? rig, Span<float> phases, Span<float> weights, float deltaSeconds, BodyFacts facts, Vector3 position, Quaternion orientation, ref Vector3 lastPosition, ref Quaternion lastOrientation, ref bool seeded, ref WorldEntityAddress lastAddress, ref float easedSpeed, WorldEntityAddress address, WorldRigReads? reads = null, WorldGaitKinematics? kinematics = null, WorldDefinition? definition = null) {
+    public static Activity Advance(CreationRig? rig, Span<float> phases, Span<float> weights, float deltaSeconds, BodyFacts facts, Vector3 position, Quaternion orientation, ref Vector3 lastPosition, ref Quaternion lastOrientation, ref bool seeded, ref WorldEntityAddress lastAddress, ref float easedSpeed, WorldEntityAddress address, WorldRigReads? reads = null, WorldGaitKinematics? kinematics = null, WorldDefinition? definition = null, Span<bool> led = default) {
         var drivers = rig?.Drivers;
 
         if (
@@ -207,14 +209,21 @@ public static class WorldGaitDrivers {
             }
             if (compiled.Signal is { } signal) {
                 // A state cell presented at the frame: a cycle-trait clock, a drawn value, an advancing counter —
-                // the phase is the sim's own number, read through the state mirror like every other binding.
-                var stateTarget = (((reads is not null) && reads.TryNumber(
-                    read: signal,
-                    value: out var stateValue
-                ))
-                    ? (cadence * stateValue)
-                    : 0f
-                );
+                // the phase is the sim's own number, read through the state mirror like every other binding. While the
+                // presenting seat's guess on the driver's lead is in force, its own level stands in for the cell.
+                var guessLevel = 0f;
+                var guessed = ((compiled.Lead is { } lead) && (reads is not null) && reads.TryLead(level: out guessLevel, read: lead, seconds: compiled.LeadSeconds));
+                var stateTarget = (guessed
+                    ? (cadence * guessLevel)
+                    : (((reads is not null) && reads.TryNumber(
+                        read: signal,
+                        value: out var stateValue
+                    ))
+                        ? (cadence * stateValue)
+                        : 0f
+                    ));
+
+                if (((uint)index) < ((uint)led.Length)) { led[index] = guessed; }
 
                 phases[index] = (kinematics?.Follow(
                     deltaSeconds: deltaSeconds,

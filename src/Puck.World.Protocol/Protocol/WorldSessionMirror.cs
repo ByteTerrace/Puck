@@ -57,6 +57,24 @@ public sealed class WorldSessionMirror : IClientSink {
     private readonly Lock m_followGate = new();
     // The latest delivery's input publications, written under m_snapshotWriteGate and read through the published image.
     private readonly Dictionary<Principal, WorldInputPublication> m_inputs = [];
+    // The latest delivery's input answers, kept and published beside the publications.
+    private readonly Dictionary<Principal, WorldInputAnswer> m_answers = [];
+
+    /// <summary>Reads the last input the authority answered for an owner from the latest complete image, never waiting on
+    /// a delivery in progress.</summary>
+    /// <param name="owner">The principal whose answer to read.</param>
+    /// <param name="answer">The owner's answer, when the latest image carries one.</param>
+    /// <returns><see langword="true"/> when the latest image carries an answer for <paramref name="owner"/>.</returns>
+    public bool TryInputAnswer(Principal owner, out WorldInputAnswer answer) {
+        var result = m_images.Read(state: owner, read: static (in SnapshotImage image, long version, Principal principal) => {
+            var found = image.Answers.TryGetValue(key: principal, value: out var value);
+
+            return (Found: found, Value: value);
+        });
+
+        answer = result.Value;
+        return result.Found;
+    }
 
     /// <summary>Reads an authority-issued input epoch and its immutable source decisions from the latest complete
     /// image, never waiting on a delivery in progress.</summary>
@@ -562,6 +580,8 @@ public sealed class WorldSessionMirror : IClientSink {
         image.ArrivalTimestamp = SnapshotArrivalTimestamp;
         image.Inputs.Clear();
         foreach (var (owner, input) in m_inputs) { image.Inputs[owner] = input; }
+        image.Answers.Clear();
+        foreach (var (owner, answer) in m_answers) { image.Answers[owner] = answer; }
         m_arrivals.CopyTo(array: image.Arrivals, index: 0);
         image.ArrivalCount = m_arrivalCount;
     }
@@ -618,6 +638,7 @@ public sealed class WorldSessionMirror : IClientSink {
 
         public long ArrivalTimestamp = arrivalTimestamp;
         public readonly Dictionary<Principal, WorldInputPublication> Inputs = [];
+        public readonly Dictionary<Principal, WorldInputAnswer> Answers = [];
         public readonly long[] Arrivals = new long[ArrivalHistory];
 
         public int ArrivalCount;
@@ -769,6 +790,8 @@ public sealed class WorldSessionMirror : IClientSink {
             m_solidScales.Deliver(sizes: snapshot.SolidScales.Span);
             m_inputs.Clear();
             foreach (ref readonly var input in snapshot.Inputs.Span) { m_inputs[input.Owner] = input; }
+            m_answers.Clear();
+            foreach (ref readonly var answer in snapshot.InputAnswers.Span) { m_answers[answer.Owner] = answer; }
             var seeded = m_seededRouteEntity;
             var containsSeed = ((seeded is { } address) && SnapshotContains(
                 entity: in address,

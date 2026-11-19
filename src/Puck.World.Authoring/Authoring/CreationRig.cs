@@ -47,6 +47,10 @@ public enum CreationRigReadKind : byte {
     Body,
     /// <summary>One of the definition's <c>curves</c> rows, by <see cref="CreationRigRead.Reference"/>.</summary>
     Curve,
+    /// <summary>The presenting seat's guess on an input channel (<see cref="CreationDriverDocument.Lead"/>), by the
+    /// channel's name in <see cref="CreationRigRead.Reference"/>: present only on a client that presents for that one
+    /// seat, and read in place of a state cell while one of the seat's edges on the channel is outstanding.</summary>
+    Lead,
 }
 /// <summary>
 /// One thing a creation's pose reads from outside its rig, compiled once (<see cref="CreationRig.Reads"/>). Only a rig
@@ -86,6 +90,7 @@ public sealed class CreationRigRead {
         CreationRigReadKind.State => $"state {Reference}{(Truth ? " (truth)" : string.Empty)}",
         CreationRigReadKind.Body => $"body {((Reference is null) ? Body.ToString(provider: System.Globalization.CultureInfo.InvariantCulture) : Reference)}{((Part is null) ? string.Empty : $" part {Part}")}",
         CreationRigReadKind.Curve => $"curve {Reference}",
+        CreationRigReadKind.Lead => $"lead {Reference}",
         _ => Kind.ToString().ToLowerInvariant(),
     };
 }
@@ -108,10 +113,11 @@ public enum CreationRigGateTokenKind : byte {
 public readonly record struct CreationRigGateToken(CreationRigGateTokenKind Kind, string Name, CreationRigRead? Read);
 /// <summary>One driver as its rig plays it: the authored row, what it reads and the earlier drivers it rides.</summary>
 public sealed class CreationRigDriver {
-    internal CreationRigDriver(int index, CreationDriverDocument document, CreationRigRead? signal, IReadOnlyList<CreationRigGateToken> gate, int source, int cadenceBy, int weightBy, CreationRigRead? cadenceCurve, CreationRigRead? weightCurve) {
+    internal CreationRigDriver(int index, CreationDriverDocument document, CreationRigRead? signal, IReadOnlyList<CreationRigGateToken> gate, int source, int cadenceBy, int weightBy, CreationRigRead? cadenceCurve, CreationRigRead? weightCurve, CreationRigRead? lead) {
         Index = index;
         Document = document;
         Signal = signal;
+        Lead = lead;
         Gate = gate;
         Source = source;
         CadenceBy = cadenceBy;
@@ -126,6 +132,11 @@ public sealed class CreationRigDriver {
     public CreationDriverDocument Document { get; }
     /// <summary>Gets the state read a state-cell signal reads, else <see langword="null"/>.</summary>
     public CreationRigRead? Signal { get; }
+    /// <summary>Gets the guess a state-cell signal may be read from in place of its cell
+    /// (<see cref="CreationDriverDocument.Lead"/>), else <see langword="null"/>.</summary>
+    public CreationRigRead? Lead { get; }
+    /// <summary>Gets how long, in seconds, an unanswered guess may show (<see cref="CreationDriverDocument.LeadSeconds"/>).</summary>
+    public float LeadSeconds => (Document.LeadSeconds ?? CreationDriverDocument.DefaultLeadSeconds);
     /// <summary>Gets the compiled gate, empty for an ungated driver.</summary>
     public IReadOnlyList<CreationRigGateToken> Gate { get; }
     /// <summary>Gets the earlier driver a <c>driver.&lt;name&gt;</c> signal rides, or -1.</summary>
@@ -512,10 +523,12 @@ public sealed class CreationRig {
         for (var index = 0; (index < driverRows.Count); index++) {
             var row = driverRows[index];
             CreationRigRead? signal = null;
+            CreationRigRead? lead = null;
             var source = -1;
 
             if (CreationDriverDocument.IsStateSignal(signal: row.Signal)) {
                 signal = reads.State(reference: row.Signal, truth: false);
+                if (row.Lead is { Length: > 0 } channel) { lead = reads.Add(kind: CreationRigReadKind.Lead, reference: channel); }
             } else if (CreationDriverDocument.TryDriverSignal(name: out var named, signal: row.Signal)) {
                 source = DriverBefore(name: named, before: index);
             } else if (row.Signal is CreationDriverDocument.SignalTime) {
@@ -530,6 +543,7 @@ public sealed class CreationRig {
                 document: row,
                 gate: CompileGate(gate: row.When, reads: reads),
                 index: index,
+                lead: lead,
                 signal: signal,
                 source: source,
                 weightBy: DriverBefore(name: row.WeightBy?.Driver, before: index),

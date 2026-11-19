@@ -23,6 +23,8 @@ public sealed class WorldRigReads {
     private IWorldStampSource? m_client;
     private int m_body = -1;
     private IWorldBodyPoses? m_poses;
+    private IWorldSeatGuess? m_guess;
+    private readonly CreationRigDriver[] m_leads;
 
     /// <summary>Initializes a new instance of the <see cref="WorldRigReads"/> class over a rig's reads.</summary>
     /// <param name="rig">The rig whose reads the view answers.</param>
@@ -37,7 +39,12 @@ public sealed class WorldRigReads {
         m_rig = rig;
         m_lease = lease;
         m_bodies = [.. rig.Reads.Where(predicate: static read => (read.Kind == CreationRigReadKind.Body))];
+        m_leads = [.. rig.Drivers.Where(predicate: static driver => (driver.Lead is not null))];
     }
+
+    /// <summary>Gets whether a guess was in force for any of the rig's leads when <see cref="Revision"/> was last read: a
+    /// registration with one is evaluated in full that frame, whatever its rate tier.</summary>
+    public bool Guessing { get; private set; }
 
     /// <summary>Gets the rig whose reads the view answers.</summary>
     public CreationRig Rig => m_rig;
@@ -66,6 +73,18 @@ public sealed class WorldRigReads {
                 hash.Add(value: (m_poses?.PoseSerial(body: body) ?? 0));
             }
 
+            // A guess moves the revision when it starts, changes level or ends.
+            var guessing = false;
+
+            foreach (var driver in m_leads) {
+                var guessed = TryLead(level: out var level, read: driver.Lead!, seconds: driver.LeadSeconds);
+
+                guessing |= guessed;
+                hash.Add(value: guessed);
+                hash.Add(value: level);
+            }
+            Guessing = guessing;
+
             return hash.ToHashCode();
         }
     }
@@ -75,10 +94,26 @@ public sealed class WorldRigReads {
     /// <param name="body">The wearing body's population index, or -1 for a registration with none.</param>
     /// <param name="poses">The registrations' drawn poses another body's part and pose serial are read from; or
     /// <see langword="null"/>, which reads every body's serial as zero and every part as its body's root.</param>
-    public void Bind(IWorldStampSource? client, int body, IWorldBodyPoses? poses = null) {
+    /// <param name="guess">The presenting seat's guess (<see cref="IWorldStampSource.SeatGuess"/>), which the view answers
+    /// leads from only when its body is the wearing body; or <see langword="null"/> for none.</param>
+    public void Bind(IWorldStampSource? client, int body, IWorldBodyPoses? poses = null, IWorldSeatGuess? guess = null) {
         m_client = client;
         m_body = body;
         m_poses = poses;
+        m_guess = (((guess is not null) && (body >= 0) && (guess.Body == body)) ? guess : null);
+    }
+    /// <summary>Reads a driver's lead: the presenting seat's own level on the lead's channel, while a guess is in force for
+    /// the wearing body (<see cref="WorldSeatInput.TryLead"/>).</summary>
+    /// <param name="read">One of the rig's <see cref="CreationRigReadKind.Lead"/> reads.</param>
+    /// <param name="seconds">How long, in seconds, an unanswered guess may show.</param>
+    /// <param name="level">The level; zero when there is no guess.</param>
+    /// <returns><see langword="true"/> while a guess is in force; the driver then reads it in place of its cell.</returns>
+    /// <exception cref="ArgumentException"><paramref name="read"/> is not one of the rig's lead reads.</exception>
+    public bool TryLead(CreationRigRead read, float seconds, out float level) {
+        Require(kind: CreationRigReadKind.Lead, read: read);
+        level = 0f;
+
+        return ((m_guess is { } guess) && guess.TryLead(channel: read.Reference!, leadSeconds: seconds, level: out level));
     }
     /// <summary>Resolves which body a body read names this frame: its fixed index, or the index its selecting cell holds
     /// as stored truth. A cell selects a body only when it holds a whole number naming an active body.</summary>
@@ -220,6 +255,18 @@ public sealed class WorldRigReads {
             throw new ArgumentException(message: $"The read '{read}' is not one of this rig's {kind.ToString().ToLowerInvariant()} reads.", paramName: nameof(read));
         }
     }
+}
+/// <summary>The presenting seat's guess on its own input (<c>CreationDriverDocument.Lead</c>): offered only by a client that
+/// presents for exactly one seat, for the body that seat controls, so no other viewer's picture can carry it.</summary>
+public interface IWorldSeatGuess {
+    /// <summary>Gets the population index of the body the seat controls.</summary>
+    int Body { get; }
+    /// <summary>Answers a lead through the seat's one guess function (<see cref="WorldSeatInput.TryLead"/>).</summary>
+    /// <param name="channel">The input channel's name.</param>
+    /// <param name="leadSeconds">How long, in seconds, an unanswered guess may show.</param>
+    /// <param name="level">The seat's own level on the channel; zero when there is no guess.</param>
+    /// <returns><see langword="true"/> while a guess is in force.</returns>
+    bool TryLead(string channel, float leadSeconds, out float level);
 }
 /// <summary>The drawn poses of the bodies a rig may read (<see cref="WorldRigReads.Bind"/>): another body's part and the
 /// serial its registration moves each time its pose changes.</summary>

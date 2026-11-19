@@ -263,6 +263,8 @@ public sealed partial class WorldCreationInstances : IWorldBodyPoses {
 
         public readonly float[] DriverPhase = new float[rig.Drivers.Count];
         public readonly float[] DriverWeight = new float[rig.Drivers.Count];
+        // Whether each driver read the presenting seat's guess on its lead in place of its cell at the last advance.
+        public readonly bool[] DriverLed = new bool[rig.Drivers.Count];
         public readonly WorldGaitKinematics Kinematics = new();
 
         public WorldEntityAddress RootAddress;

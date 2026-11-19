@@ -4007,9 +4007,12 @@ reversal brake, then a sitting.
   through an angle or moves it along an eased path over a duration
   (`BodyMotionOp`, `WorldEffect.PlanarImpulse`).
   [Pose clips, body parts and reach](instrument-play/pose-clips.md) designs
-  the first three, and its steps are the build lane's order; steps 1 to 7 (the
+  the first three, and its steps are the build lane's order; steps 1 to 8 (the
   compiled rig, its reads, the caps, parts as sets, adding clips, masks and
-  replacing, and reach and influence) are built, so step 8 is next.
+  replacing, reach and influence, and the guess) are built, so step 9, the
+  Moth's hand, is next. Step 8's headless readings (the press log, one and two
+  seats, a refusing rule, a delayed answer, the hold bypass) wait on a fixture
+  world that binds a channel to a led driver.
 
 - A reversal should brake faster than it accelerates: `ShapeWholeVelocityRow`
   converges at the engage rate whenever the stick is deflected, so a full

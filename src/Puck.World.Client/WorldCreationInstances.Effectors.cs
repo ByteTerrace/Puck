@@ -792,7 +792,8 @@ public sealed partial class WorldCreationInstances {
             drivers.Add(item: new WorldRigDriver(
                 Name: driverRows[index].Document.Name,
                 Phase: live.DriverPhase[index],
-                Weight: live.DriverWeight[index]
+                Weight: live.DriverWeight[index],
+                Source: ((driverRows[index].Lead is null) ? null : (live.DriverLed[index] ? WorldRigDriver.SourceLead : WorldRigDriver.SourceCell))
             ));
         }
 
@@ -865,7 +866,14 @@ public readonly record struct WorldRigShape(string Name, int Index, string? Pare
 /// <param name="Name">The driver's authored name.</param>
 /// <param name="Phase">Its running phase, radians.</param>
 /// <param name="Weight">Its eased gate weight in [0, 1].</param>
-public readonly record struct WorldRigDriver(string Name, float Phase, float Weight);
+/// <param name="Source">For a driver with a lead, what its phase read at the last advance: <see cref="SourceLead"/> or
+/// <see cref="SourceCell"/>; <see langword="null"/> for a driver with none.</param>
+public readonly record struct WorldRigDriver(string Name, float Phase, float Weight, string? Source = null) {
+    /// <summary>The phase read the presenting seat's guess on the driver's lead.</summary>
+    public const string SourceLead = "lead";
+    /// <summary>The phase read the driver's state cell.</summary>
+    public const string SourceCell = "cell";
+}
 /// <summary>One declared effector's live value in a <see cref="WorldRigState"/>.</summary>
 /// <param name="Name">The effector's authored name.</param>
 /// <param name="Weight">Its eased weight in [0, 1]: the level it eases toward is its gate times its contact weight times

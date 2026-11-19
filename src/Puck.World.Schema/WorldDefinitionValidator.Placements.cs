@@ -474,6 +474,15 @@ public static partial class WorldDefinitionValidator {
                 errors.Add(item: $"{path}.drivers[{index}].dynamics '{dynamics}' names no declared dynamics row.");
             }
 
+            if (drivers[index].Lead is { Length: > 0 } lead) {
+                var channel = definition.Channels.FirstOrDefault(predicate: row => string.Equals(a: row.Name, b: lead, comparisonType: StringComparison.Ordinal));
+
+                if (channel is null) {
+                    errors.Add(item: $"{path}.drivers[{index}].lead '{lead}' names no declared channel.");
+                } else if (channel.Shape is ChannelShape.Relative or ChannelShape.Text) {
+                    errors.Add(item: $"{path}.drivers[{index}].lead '{lead}' names a {channel.Shape.ToString().ToLowerInvariant()} channel, which holds no level a guess could show; lead names a button or an axis.");
+                }
+            }
             RequireFunctionCurveRow(definition: definition, errors: errors, path: $"{path}.drivers[{index}].cadenceBy.curve", curve: drivers[index].CadenceBy?.Curve);
             RequireFunctionCurveRow(definition: definition, errors: errors, path: $"{path}.drivers[{index}].weightBy.curve", curve: drivers[index].WeightBy?.Curve);
             if (Puck.World.Authoring.CreationDriverDocument.IsStateSignal(signal: signal)) {

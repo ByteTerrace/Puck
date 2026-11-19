@@ -65,6 +65,56 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
         if (route.Endpoint.Mirror.TryInput(owner: principal, publication: out var publication)) { _ = seat.Input!.Reconcile(publication: publication, router: m_inputRouter, seat: seat, slot: slot); } else { seat.Input!.Admit(route.Endpoint, principal, route.EntityIndex, freshAttachment: false); }
         if (m_inputRouter is { } router) { seat.Input!.AcknowledgeReleasedButtons(router: router, slot: slot); }
     }
+    private readonly SeatGuessView m_seatGuess = new();
+
+    /// <inheritdoc/>
+    /// <remarks>The audience is decided here, once: the guess exists only while exactly one seat is live on this client,
+    /// and only for the body its route drives. With two or more seats on one screen every guess is off.</remarks>
+    public IWorldSeatGuess? SeatGuess {
+        get {
+            var found = -1;
+
+            for (var slot = 0; (slot < PlayerRoster.MaxSlots); slot++) {
+                if (m_roster.IsPending(slot: slot) || (m_roster.Seat(slot: slot) is not { Source.IsLive: true })) { continue; }
+                if (found >= 0) { return null; }
+                found = slot;
+            }
+            if ((found < 0) || (m_roster.Seat(slot: found)!.Input is not { Admitted: true } input) || (m_seatRouter.TryRoute(slot: found) is not { } route) ||
+                (route.EntityIndex < 0)) {
+                return null;
+            }
+            m_seatGuess.Bind(answers: route.Endpoint.Mirror, body: route.EntityIndex, input: input, owner: m_roster.PrincipalOf(slot: found), presented: StateMirrorFor(endpoint: route.Endpoint));
+
+            return m_seatGuess;
+        }
+    }
+
+    // The one seat's guess for a frame: its producer, the authority's answers to it and the mirror its picture presents.
+    private sealed class SeatGuessView : IWorldSeatGuess {
+        private WorldSeatInput? m_input;
+        private WorldSessionMirror? m_answers;
+        private WorldStateMirror? m_presented;
+        private Principal m_owner;
+
+        public int Body { get; private set; } = -1;
+
+        public void Bind(WorldSeatInput input, WorldSessionMirror answers, WorldStateMirror presented, Principal owner, int body) {
+            (m_input, m_answers, m_presented, m_owner, Body) = (input, answers, presented, owner, body);
+        }
+        public bool TryLead(string channel, float leadSeconds, out float level) {
+            level = 0f;
+            if ((m_input is not { } input) || (m_presented is not { } presented)) { return false; }
+
+            return input.TryLead(
+                answer: ((m_answers?.TryInputAnswer(answer: out var answer, owner: m_owner) ?? false) ? answer : null),
+                channel: channel,
+                leadSeconds: leadSeconds,
+                level: out level,
+                presentedFraction: presented.PresentationFraction,
+                presentedTick: presented.Tick
+            );
+        }
+    }
     /// <summary>Delivers committed text to the admitted input owner at its authority's next input tick.</summary>
     public void ObserveText(CommittedTextInput input) {
         if ((m_roster.PrincipalOf(slot: input.Slot) != input.Principal) || m_roster.IsPending(slot: input.Slot) ||

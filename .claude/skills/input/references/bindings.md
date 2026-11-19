@@ -314,6 +314,14 @@ put epoch, source rearming, or mapping synchronization (`WorldSeatBindings.SyncR
 only in a path a presented host runs: a headless host must receive every boundary too,
 including boundaries which do not change its authority route.
 
+Each owner's snapshot also carries its `WorldInputAnswer` (`WorldInputRuntime.Answers`,
+filtered by `WorldOwnedRecords.ForOwner` like the publication): the epoch, the
+highest event sequence of the last batch the authority took or refused, and the tick
+it answered in, read through `WorldSessionMirror.TryInputAnswer`. It is delivery
+only, never hashed or checkpointed. `WorldSeatInput` records the last edge it sent
+on each channel, and `WorldSeatInput.TryLead` answers a rig driver's `lead` from
+those two facts ([rig](../../sdf-authoring/references/rig.md#drivers)).
+
 Every rendered slot's `Pressed` state reflects the physical source in
 `InputRouter.IsSourcePressed`, independently of a destination's toggle latch.
 `WorldSeatInput.ActionStatus` supplies current-mode eligibility, awaiting-neutral,

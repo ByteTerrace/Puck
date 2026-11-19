@@ -446,6 +446,20 @@ public static partial class CreationCanonicalizer {
                 gate: driver.When,
                 path: $"drivers[{i}].when"
             );
+            if (driver.Lead is { } lead) {
+                if (string.IsNullOrWhiteSpace(value: lead)) {
+                    errors.Add(item: new(Message: "lead is empty; name a world input channel, or omit it.", Path: $"drivers[{i}].lead"));
+                } else if (!CreationDriverDocument.IsStateSignal(signal: driver.Signal)) {
+                    errors.Add(item: new(Message: $"lead '{lead}' needs a state-cell signal: a guess stands in for the cell the seat's input will change, and signal '{driver.Signal}' reads none.", Path: $"drivers[{i}].lead"));
+                }
+            }
+            if (driver.LeadSeconds is { } leadSeconds) {
+                if (driver.Lead is null) {
+                    errors.Add(item: new(Message: "leadSeconds bounds a guess, and this driver names no lead.", Path: $"drivers[{i}].leadSeconds"));
+                } else if (!float.IsFinite(f: leadSeconds) || (leadSeconds <= 0f)) {
+                    errors.Add(item: new(Message: "leadSeconds must be finite and positive.", Path: $"drivers[{i}].leadSeconds"));
+                }
+            }
             if (driver.Mode is not (null or CreationDriverDocument.ModeAdd or CreationDriverDocument.ModeReplace)) {
                 errors.Add(item: new(Message: $"mode '{driver.Mode}' is not recognized; the modes are '{CreationDriverDocument.ModeAdd}' and '{CreationDriverDocument.ModeReplace}'.", Path: $"drivers[{i}].mode"));
             }
