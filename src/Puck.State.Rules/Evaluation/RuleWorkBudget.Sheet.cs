@@ -74,6 +74,8 @@ public readonly record struct RulePinnedCell(int RowOrdinal, CellKey Key, long L
 /// <param name="Discriminators">The literal cells the gate pins, in cell order.</param>
 /// <param name="Firings">The most evaluations per tick that can fire: the multiplier, or the rule's
 /// <see cref="CompiledRule.MaxFirings"/> when that is smaller.</param>
+/// <param name="Order">The line's place in the tick's one evaluation pass, ascending as the pass reaches it, or a
+/// negative value when the line may run anywhere in the tick or more than once (<see cref="RuleCellWriters"/>).</param>
 public readonly record struct RuleWorkContributor(
     string Name,
     bool IsInteraction,
@@ -83,25 +85,91 @@ public readonly record struct RuleWorkContributor(
     RuleWork FiringUnits,
     RuleWork WorkUnits,
     IReadOnlyList<RulePinnedCell> Discriminators,
-    long Firings
+    long Firings,
+    long Order = -1L
 );
+/// <summary>The firings per tick that can write one cell, each at its place in the tick's evaluation pass. A write
+/// changes what the lines after it read and nothing before, so two lines can read different values of the cell only
+/// when a write lands between them: one at or after the earlier line's place and before the later one's. A writer
+/// whose place is negative may run anywhere and counts between every pair.</summary>
+public sealed class RuleCellWriters {
+    private readonly List<(long Order, long Firings)> m_writers = [];
+
+    /// <summary>Gets every firing per tick that can write the cell, wherever it runs.</summary>
+    public long Total { get; private set; }
+
+    /// <summary>Adds the firings of one writer.</summary>
+    /// <param name="order">The writer's place in the pass, or a negative value for anywhere.</param>
+    /// <param name="firings">The firings per tick the writer can make.</param>
+    public void Add(long order, long firings) {
+        m_writers.Add(item: (order, firings));
+        Total = BinaryIntegerFunctions.AddSaturating(left: Total, right: firings);
+    }
+    /// <summary>Adds every writer of another cell's set, such as a write whose key reaches every cell of a row.</summary>
+    /// <param name="other">The writers to add.</param>
+    public void AddAll(RuleCellWriters other) {
+        ArgumentNullException.ThrowIfNull(argument: other);
+
+        foreach (var (order, firings) in other.m_writers) {
+            Add(firings: firings, order: order);
+        }
+    }
+    /// <summary>Returns the firings that can land between lines placed from <paramref name="low"/> through
+    /// <paramref name="high"/>: those at or after the first and before the last, and every one placed anywhere.</summary>
+    /// <param name="low">The earliest line's place.</param>
+    /// <param name="high">The latest line's place.</param>
+    /// <returns>The firings.</returns>
+    public long Between(long low, long high) {
+        var count = 0L;
+
+        foreach (var (order, firings) in m_writers) {
+            if ((order < 0L) || ((low <= order) && (order < high))) {
+                count = BinaryIntegerFunctions.AddSaturating(left: count, right: firings);
+            }
+        }
+
+        return count;
+    }
+}
 public static partial class RuleWorkBudget {
     private sealed class ExclusionNode {
         public Dictionary<(int RowOrdinal, CellKey Key), List<(RulePinnedCell Range, ExclusionNode Child)>> Children { get; } = [];
         public RuleWork Own { get; set; } = RuleWork.Zero;
+        // The places of the lines at or below this node: the earliest and latest, and whether one may run anywhere.
+        public long Low { get; set; } = long.MaxValue;
+        public long High { get; set; } = long.MinValue;
+        public bool Anywhere { get; set; }
+
+        public void Place(long order) {
+            if (order < 0L) {
+                Anywhere = true;
+
+                return;
+            }
+            Low = Math.Min(val1: Low, val2: order);
+            High = Math.Max(val1: High, val2: order);
+        }
     }
 
-    private static RuleWork Worst(ExclusionNode node, IReadOnlyDictionary<(int RowOrdinal, CellKey Key), long> writers) {
+    private static RuleWork Worst(ExclusionNode node, IReadOnlyDictionary<(int RowOrdinal, CellKey Key), RuleCellWriters> writers) {
         var total = node.Own;
 
         foreach (var (cell, ranges) in node.Children) {
             var worsts = new RuleWork[ranges.Count];
+            var low = long.MaxValue;
+            var high = long.MinValue;
+            var anywhere = false;
 
             for (var index = 0; (index < ranges.Count); index++) {
+                var child = ranges[index].Child;
+
                 worsts[index] = Worst(
-                    node: ranges[index].Child,
+                    node: child,
                     writers: writers
                 );
+                low = Math.Min(val1: low, val2: child.Low);
+                high = Math.Max(val1: high, val2: child.High);
+                anywhere |= child.Anywhere;
             }
 
             var sums = new List<RuleWork>(capacity: ranges.Count);
@@ -129,11 +197,16 @@ public static partial class RuleWorkBudget {
                 right: left
             ));
 
+            // The cell reads one value at the first of these lines, and one more for each write that can land between
+            // the first and the last of them.
+            var between = (writers.TryGetValue(key: cell, value: out var cellWriters)
+                ? (anywhere ? cellWriters.Total : cellWriters.Between(high: high, low: low))
+                : 0L);
             var admitted = ((int)Math.Min(
                 val1: sums.Count,
                 val2: BinaryIntegerFunctions.AddSaturating(
                     left: 1L,
-                    right: writers.GetValueOrDefault(key: cell)
+                    right: between
                 )
             ));
 
@@ -152,8 +225,10 @@ public static partial class RuleWorkBudget {
     /// <param name="context">The context the rule was priced against.</param>
     /// <param name="commit">The work the host's commit of one firing spends beyond what the effects price, added to
     /// the line's per-firing effects.</param>
+    /// <param name="order">The line's place in the tick's evaluation pass, or a negative value when it may run anywhere
+    /// or more than once (<see cref="RuleWorkContributor.Order"/>).</param>
     /// <returns>The line.</returns>
-    public static RuleWorkContributor Contributor(CompiledRule rule, long multiplier, bool isInteraction, IRuleCostContext context, long commit = 0L) {
+    public static RuleWorkContributor Contributor(CompiledRule rule, long multiplier, bool isInteraction, IRuleCostContext context, long commit = 0L, long order = -1L) {
         ArgumentNullException.ThrowIfNull(argument: rule);
 
         var breakdown = rule.CostBreakdown(context: context);
@@ -176,6 +251,7 @@ public static partial class RuleWorkBudget {
             IsInteraction: isInteraction,
             Multiplier: multiplier,
             Name: rule.Name,
+            Order: order,
             WorkUnits: (checkUnits + firingUnits)
         );
     }
@@ -192,19 +268,21 @@ public static partial class RuleWorkBudget {
             : multiplier
         );
     }
-    /// <summary>Counts, per cell, how many evaluations per tick can write it: each rule's write set times the firings
-    /// its multiplier allows (<see cref="Firings"/>), where a write addressing a row without a literal key counts
-    /// against every cell of that row, including every cell any gate pins.</summary>
-    /// <param name="rules">The rules with their multipliers.</param>
-    /// <returns>The writer counts, keyed by (row ordinal, key ordinal).</returns>
-    public static Dictionary<(int RowOrdinal, CellKey Key), long> CountWriters(IReadOnlyList<(CompiledRule Rule, long Multiplier)> rules) {
+    /// <summary>Counts, per cell, the evaluations per tick that can write it and where in the pass each runs: each
+    /// rule's write set times the firings its multiplier allows (<see cref="Firings"/>), at the rule's place, where a
+    /// write addressing a row without a literal key counts against every cell of that row, including every cell any
+    /// gate pins.</summary>
+    /// <param name="rules">The rules with their multipliers and their places in the tick's pass (negative for a rule
+    /// that may run anywhere or more than once), as <see cref="RuleWorkContributor.Order"/> places their lines.</param>
+    /// <returns>The writers, keyed by (row ordinal, key ordinal).</returns>
+    public static Dictionary<(int RowOrdinal, CellKey Key), RuleCellWriters> CountWriters(IReadOnlyList<(CompiledRule Rule, long Multiplier, long Order)> rules) {
         ArgumentNullException.ThrowIfNull(argument: rules);
 
-        var byCell = new Dictionary<(int RowOrdinal, CellKey Key), long>();
-        var byRow = new Dictionary<int, long>();
+        var writers = new Dictionary<(int RowOrdinal, CellKey Key), RuleCellWriters>();
+        var byRow = new Dictionary<int, RuleCellWriters>();
         var writes = new List<CellAccess>();
 
-        foreach (var (rule, evaluations) in rules) {
+        foreach (var (rule, evaluations, order) in rules) {
             var multiplier = Firings(multiplier: evaluations, rule: rule);
 
             writes.Clear();
@@ -214,28 +292,19 @@ public static partial class RuleWorkBudget {
                 if (write.Key.IsValid) {
                     var cell = (write.RowOrdinal, write.Key);
 
-                    byCell[cell] = BinaryIntegerFunctions.AddSaturating(
-                        left: byCell.GetValueOrDefault(key: cell),
-                        right: multiplier
-                    );
+                    if (!writers.TryGetValue(key: cell, value: out var cellWriters)) {
+                        writers[cell] = cellWriters = new RuleCellWriters();
+                    }
+                    cellWriters.Add(firings: multiplier, order: order);
                 } else {
-                    byRow[write.RowOrdinal] = BinaryIntegerFunctions.AddSaturating(
-                        left: byRow.GetValueOrDefault(key: write.RowOrdinal),
-                        right: multiplier
-                    );
+                    if (!byRow.TryGetValue(key: write.RowOrdinal, value: out var rowWriters)) {
+                        byRow[write.RowOrdinal] = rowWriters = new RuleCellWriters();
+                    }
+                    rowWriters.Add(firings: multiplier, order: order);
                 }
             }
         }
-
-        var writers = new Dictionary<(int RowOrdinal, CellKey Key), long>();
-
-        foreach (var (cell, count) in byCell) {
-            writers[cell] = BinaryIntegerFunctions.AddSaturating(
-                left: count,
-                right: byRow.GetValueOrDefault(key: cell.RowOrdinal)
-            );
-        }
-        foreach (var (rule, _) in rules) {
+        foreach (var (rule, _, _) in rules) {
             foreach (var pinned in PinnedCells(
                 contradictory: out _,
                 gate: rule.Gate
@@ -243,8 +312,13 @@ public static partial class RuleWorkBudget {
                 var cell = (pinned.RowOrdinal, pinned.Key);
 
                 if (!writers.ContainsKey(key: cell)) {
-                    writers[cell] = byRow.GetValueOrDefault(key: pinned.RowOrdinal);
+                    writers[cell] = new RuleCellWriters();
                 }
+            }
+        }
+        foreach (var (cell, cellWriters) in writers) {
+            if (byRow.TryGetValue(key: cell.RowOrdinal, value: out var rowWriters)) {
+                cellWriters.AddAll(other: rowWriters);
             }
         }
 
@@ -420,12 +494,14 @@ public static partial class RuleWorkBudget {
     /// <summary>Tallies the contributor lines: the evaluation slots and the worst-case work units. Setup and checks
     /// always sum. Each line's firing cost sits at the node of the trie its pinned cells spell; a node's worst case
     /// is its own lines plus, per further cell its children pin, the costliest points of that cell, taken for one
-    /// value plus one more per rule evaluation that can write the cell during the tick. Children pinning different
-    /// cells are not exclusive and sum.</summary>
+    /// value plus one more per evaluation that can write the cell between the first and the last of those lines in
+    /// the tick's pass (every writer, when one of the lines may run anywhere). Children pinning different cells are
+    /// not exclusive and sum.</summary>
     /// <param name="contributors">The lines.</param>
-    /// <param name="writers">Per cell, how many evaluations per tick can write it.</param>
+    /// <param name="writers">Per cell, the evaluations per tick that can write it and their places
+    /// (<see cref="CountWriters"/>).</param>
     /// <returns>The evaluation slots and the worst-case work units.</returns>
-    public static (long Slots, RuleWork Work) Tally(IReadOnlyList<RuleWorkContributor> contributors, IReadOnlyDictionary<(int RowOrdinal, CellKey Key), long> writers) {
+    public static (long Slots, RuleWork Work) Tally(IReadOnlyList<RuleWorkContributor> contributors, IReadOnlyDictionary<(int RowOrdinal, CellKey Key), RuleCellWriters> writers) {
         ArgumentNullException.ThrowIfNull(argument: contributors);
         ArgumentNullException.ThrowIfNull(argument: writers);
 
@@ -442,6 +518,7 @@ public static partial class RuleWorkBudget {
 
             var node = root;
 
+            node.Place(order: contributor.Order);
             foreach (var pinned in contributor.Discriminators) {
                 var cell = (pinned.RowOrdinal, pinned.Key);
 
@@ -472,6 +549,7 @@ public static partial class RuleWorkBudget {
                 }
 
                 node = child;
+                node.Place(order: contributor.Order);
             }
 
             node.Own += contributor.FiringUnits;

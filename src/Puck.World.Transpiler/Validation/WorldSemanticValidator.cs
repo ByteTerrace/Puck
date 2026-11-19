@@ -251,7 +251,11 @@ public static class WorldSemanticValidator {
     /// <exception cref="ArgumentNullException"><paramref name="definition"/> is <see langword="null"/>.</exception>
     public static IReadOnlyList<string> MovingBlends(WorldDefinition definition) => BlendWarnings(
         definition: definition,
-        warn: static document => CreationMotion.MovingBlends(document: document).Where(predicate: blend => (blend.Operand || CreationMotion.Creases(blend: blend, document: document))).Select(selector: blend => (blend.Shape, CreationMotion.Describe(blend: blend, document: document)))
+        warn: static document => {
+            var rig = CreationRig.Of(document: document);
+
+            return CreationMotion.MovingBlends(rig: rig).Where(predicate: blend => (blend.Operand || CreationMotion.Creases(blend: blend, rig: rig))).Select(selector: blend => (blend.Shape, CreationMotion.Describe(blend: blend, rig: rig)));
+        }
     );
     /// <summary>Returns a warning for each ungrouped shape of an animated creation that declares a blend other than
     /// <c>Union</c> (<see cref="CreationMotion.UngroupedBlends"/>), which the pooled bake draws as a hard union, naming
@@ -261,7 +265,7 @@ public static class WorldSemanticValidator {
     /// <exception cref="ArgumentNullException"><paramref name="definition"/> is <see langword="null"/>.</exception>
     public static IReadOnlyList<string> UngroupedBlends(WorldDefinition definition) => BlendWarnings(
         definition: definition,
-        warn: static document => CreationMotion.UngroupedBlends(document: document).Select(selector: shape => (shape, CreationMotion.DescribeUngrouped(document: document, shape: shape)))
+        warn: static document => CreationMotion.UngroupedBlends(rig: CreationRig.Of(document: document)).Select(selector: shape => (shape, CreationMotion.DescribeUngrouped(document: document, shape: shape)))
     );
     // A warning for each shape `warn` names in each creation, its blend's path first as a refusal's is, then the creation
     // and the sentence `warn` gives it.

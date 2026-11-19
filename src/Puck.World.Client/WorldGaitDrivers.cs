@@ -47,8 +47,9 @@ public static class WorldGaitDrivers {
     /// <summary>Advances one registration's driver phases and weights for a frame. Reseeds — every phase and weight to zero,
     /// no signal charged — when the entity address changes or this is the first call for the registration, so a
     /// reused body slot never inherits the previous inhabitant's stride.</summary>
-    /// <param name="drivers">The creation's declared drivers; entries past <paramref name="phases"/>'s length are
-    /// ignored (the registration's table is sized by <see cref="CreationDocument.MaxDrivers"/>).</param>
+    /// <param name="rig">The creation's rig, whose drivers advance in declaration order, or <see langword="null"/> for
+    /// none; drivers past <paramref name="phases"/>'s length are ignored (a registration's table is sized from the
+    /// rig).</param>
     /// <param name="phases">The per-driver running phase, indexed by driver row.</param>
     /// <param name="weights">The per-driver ease weight in [0, 1], same indexing.</param>
     /// <param name="deltaSeconds">The frame delta the weights ease over and the time/rate signals read.</param>
@@ -62,8 +63,8 @@ public static class WorldGaitDrivers {
     /// <param name="easedSpeed">The low-passed rendered ground speed backing the <c>moving</c>/<c>still</c> gate tokens,
     /// metres per second; updated every call and zeroed on a reseed.</param>
     /// <param name="address">This call's entity address; uninhabited placements use index -1 with no body facts.</param>
-    /// <param name="reads">The registration's reads of the state mirror a state-cell signal and a state gate token
-    /// read through, bound to the wearing body; <see langword="null"/> when none can read.</param>
+    /// <param name="reads">The view of the rig's reads a state-cell signal and a state gate token read through, bound to
+    /// the wearing body; <see langword="null"/> when none can read.</param>
     /// <param name="kinematics">The registration's eased motion and driver followers, which the direction and
     /// acceleration signals and a driver's <see cref="CreationDriverDocument.Dynamics"/> read; <see langword="null"/>
     /// reads those signals as zero and tracks every signal exactly.</param>
@@ -72,7 +73,9 @@ public static class WorldGaitDrivers {
     /// <see langword="null"/>, which leaves both unscaled.</param>
     /// <returns>The work performed and whether a later positive-time advance remains eligible, independently of
     /// output pose equality.</returns>
-    public static Activity Advance(IReadOnlyList<CreationDriverDocument>? drivers, Span<float> phases, Span<float> weights, float deltaSeconds, BodyFacts facts, Vector3 position, Quaternion orientation, ref Vector3 lastPosition, ref Quaternion lastOrientation, ref bool seeded, ref WorldEntityAddress lastAddress, ref float easedSpeed, WorldEntityAddress address, WorldStateLease? reads = null, WorldGaitKinematics? kinematics = null, WorldDefinition? definition = null) {
+    public static Activity Advance(CreationRig? rig, Span<float> phases, Span<float> weights, float deltaSeconds, BodyFacts facts, Vector3 position, Quaternion orientation, ref Vector3 lastPosition, ref Quaternion lastOrientation, ref bool seeded, ref WorldEntityAddress lastAddress, ref float easedSpeed, WorldEntityAddress address, WorldRigReads? reads = null, WorldGaitKinematics? kinematics = null, WorldDefinition? definition = null) {
+        var drivers = rig?.Drivers;
+
         if (
             !seeded ||
             (lastAddress != address)
@@ -151,26 +154,25 @@ public static class WorldGaitDrivers {
         var continues = ((previousSpeed != easedSpeed) || ((blend <= 0f) && (easedSpeed != 0f)) || (kinematics?.MotionContinues ?? false));
 
         for (var index = 0; (index < count); index++) {
-            var driver = rows[index];
+            var compiled = rows[index];
+            var driver = compiled.Document;
             var previousPhase = phases[index];
             var previousWeight = weights[index];
             var holds = HoldsGate(
                 facts: facts,
-                gate: driver.When,
+                gate: compiled.Gate,
                 moving: moving,
                 reads: reads
             );
             var level = (holds
-                ? ((driver.WeightBy is { } weightBy)
+                ? ((compiled.WeightCurve is { } weightCurve)
                     ? Math.Clamp(
                         max: 1f,
                         min: 0f,
                         value: CurveOf(
-                            curve: weightBy,
+                            curve: weightCurve,
                             definition: definition,
-                            index: index,
-                            phases: phases,
-                            rows: rows
+                            phase: PhaseOf(driver: compiled.WeightBy, phases: phases)
                         )
                     )
                     : 1f)
@@ -196,37 +198,32 @@ public static class WorldGaitDrivers {
 
             continues |= ((weights[index] != previousWeight) || ((driverBlend <= 0f) && (weights[index] != level)));
 
-            var cadence = (driver.Cadence.Value * ((driver.CadenceBy is { } cadenceBy)
+            var cadence = (driver.Cadence.Value * ((compiled.CadenceCurve is { } cadenceCurve)
                 ? CurveOf(
-                    curve: cadenceBy,
+                    curve: cadenceCurve,
                     definition: definition,
-                    index: index,
-                    phases: phases,
-                    rows: rows
+                    phase: PhaseOf(driver: compiled.CadenceBy, phases: phases)
                 )
                 : 1f
             ));
 
             if (CreationDriverDocument.TryDriverSignalName(
-                name: out var source,
+                name: out _,
                 signal: driver.Signal
             )) {
                 phases[index] = (cadence * PhaseOf(
-                    before: index,
-                    driver: source,
-                    phases: phases,
-                    rows: rows
+                    driver: compiled.Source,
+                    phases: phases
                 ));
 
                 phaseChanges += ((phases[index] != previousPhase) ? 1 : 0);
                 continue;
             }
-            if (CreationDriverDocument.IsStateSignal(signal: driver.Signal)) {
+            if (compiled.Signal is { } signal) {
                 // A state cell presented at the frame: a cycle-trait clock, a drawn value, an advancing counter —
                 // the phase is the sim's own number, read through the state mirror like every other binding.
                 var stateTarget = (((reads is not null) && reads.TryNumber(
-                    reference: driver.Signal!,
-                    truth: false,
+                    read: signal,
                     value: out var stateValue
                 ))
                     ? (cadence * stateValue)
@@ -326,21 +323,18 @@ public static class WorldGaitDrivers {
         ) + parentTranslation);
         rotation = (parentRotation * rotation);
     }
-    /// <summary>Composes every swing and slide a shape declares onto its creation-space rest pose. Swings apply in
-    /// authored order, then slides, so a slide reads as an offset along its own axis rather than one the swings
-    /// have turned.</summary>
-    /// <param name="shape">The shape whose facets are composed.</param>
-    /// <param name="drivers">The creation's declared drivers — a facet naming none composes nothing.</param>
+    /// <summary>Composes a shape's terms onto its creation-space rest pose: its swings in authored order, then its
+    /// slides, so a slide reads as an offset along its own axis rather than one the swings have turned.</summary>
+    /// <param name="terms">The shape's terms (<see cref="CreationRig.Terms"/>).</param>
     /// <param name="phases">The per-driver phases.</param>
     /// <param name="weights">The per-driver weights.</param>
     /// <param name="position">The shape's position; replaced by the animated position.</param>
     /// <param name="rotation">The shape's orientation; replaced by the animated orientation.</param>
-    public static void Compose(ShapeDocument shape, IReadOnlyList<CreationDriverDocument>? drivers, ReadOnlySpan<float> phases, ReadOnlySpan<float> weights, ref Vector3 position, ref Quaternion rotation) {
-        ComposeDelta(
-            drivers: drivers,
+    public static void Compose(ReadOnlySpan<CreationRigTerm> terms, ReadOnlySpan<float> phases, ReadOnlySpan<float> weights, ref Vector3 position, ref Quaternion rotation) {
+        _ = ComposeDelta(
             phases: phases,
             rotation: out var deltaRotation,
-            shape: shape,
+            terms: terms,
             translation: out var deltaTranslation,
             weights: weights
         );
@@ -351,84 +345,60 @@ public static class WorldGaitDrivers {
             rotation: ref rotation
         );
     }
-    /// <summary>Computes the rigid delta (<c>x → R·x + t</c>, engine-frame creation space) a shape's swings and
-    /// slides produce this frame, independent of the shape's own rest pose — what a child shape rides.</summary>
-    /// <param name="shape">The shape whose facets are composed.</param>
-    /// <param name="drivers">The creation's declared drivers — a facet naming none composes nothing.</param>
+    /// <summary>Computes the rigid delta (<c>x → R·x + t</c>, engine-frame creation space) a shape's terms produce this
+    /// frame, independent of the shape's own rest pose — what a child shape rides. A term whose driver's weight is zero
+    /// produces exactly nothing and is skipped.</summary>
+    /// <param name="terms">The shape's terms (<see cref="CreationRig.Terms"/>), in the order they compose.</param>
     /// <param name="phases">The per-driver phases.</param>
     /// <param name="weights">The per-driver weights.</param>
     /// <param name="rotation">The delta's rotation (identity when nothing composes).</param>
     /// <param name="translation">The delta's translation (zero when nothing composes).</param>
     /// <param name="definition">The live definition a curve waveform samples, or null when none can.</param>
-    public static void ComposeDelta(ShapeDocument shape, IReadOnlyList<CreationDriverDocument>? drivers, ReadOnlySpan<float> phases, ReadOnlySpan<float> weights, out Quaternion rotation, out Vector3 translation, WorldDefinition? definition = null) {
-        ArgumentNullException.ThrowIfNull(argument: shape);
-
+    /// <returns>The number of terms evaluated.</returns>
+    public static int ComposeDelta(ReadOnlySpan<CreationRigTerm> terms, ReadOnlySpan<float> phases, ReadOnlySpan<float> weights, out Quaternion rotation, out Vector3 translation, WorldDefinition? definition = null) {
         rotation = Quaternion.Identity;
         translation = Vector3.Zero;
 
-        if (drivers is not { Count: > 0 } rows) {
-            return;
-        }
+        var evaluated = 0;
 
-        if (shape.Swings is { Count: > 0 } swings) {
-            for (var index = 0; (index < swings.Count); index++) {
-                var swing = swings[index];
+        foreach (var term in terms) {
+            var driver = term.DriverIndex;
 
-                if (!TryDriver(
-                    driver: swing.Driver,
-                    phase: out var phase,
-                    phases: phases,
-                    rows: rows,
-                    weight: out var weight,
-                    weights: weights
-                )) {
-                    continue;
-                }
-
-                var turn = Quaternion.CreateFromAxisAngle(
-                    angle: ((swing.Amplitude.Value * Wave(
-                        argument: (phase + (swing.Phase?.Value ?? 0f)),
-                        definition: definition,
-                        wave: swing.Wave
-                    )) * weight),
-                    axis: swing.Axis.Value
-                );
-                var pivot = swing.Pivot.Value;
-
-                Chain(
-                    parentRotation: turn,
-                    parentTranslation: (pivot - Vector3.Transform(
-                        rotation: turn,
-                        value: pivot
-                    )),
-                    rotation: ref rotation,
-                    translation: ref translation
-                );
+            if ((((uint)driver) >= ((uint)phases.Length)) || (((uint)driver) >= ((uint)weights.Length)) || (weights[driver] == 0f)) {
+                continue;
             }
-        }
 
-        if (shape.Slides is { Count: > 0 } slides) {
-            for (var index = 0; (index < slides.Count); index++) {
-                var slide = slides[index];
+            var amount = ((term.Amplitude.Value * Wave(
+                argument: (phases[driver] + (term.Phase?.Value ?? 0f)),
+                definition: definition,
+                wave: term.Wave
+            )) * weights[driver]);
 
-                if (!TryDriver(
-                    driver: slide.Driver,
-                    phase: out var phase,
-                    phases: phases,
-                    rows: rows,
-                    weight: out var weight,
-                    weights: weights
-                )) {
-                    continue;
-                }
+            evaluated++;
+            if (term.Kind == CreationRigTermKind.Slide) {
+                translation += (term.Axis.Value * amount);
 
-                translation += (slide.Axis.Value * ((slide.Amplitude.Value * Wave(
-                    argument: (phase + (slide.Phase?.Value ?? 0f)),
-                    definition: definition,
-                    wave: slide.Wave
-                )) * weight));
+                continue;
             }
+
+            var turn = Quaternion.CreateFromAxisAngle(
+                angle: amount,
+                axis: term.Axis.Value
+            );
+            var pivot = term.Pivot!.Value;
+
+            Chain(
+                parentRotation: turn,
+                parentTranslation: (pivot - Vector3.Transform(
+                    rotation: turn,
+                    value: pivot
+                )),
+                rotation: ref rotation,
+                translation: ref translation
+            );
         }
+
+        return evaluated;
     }
     /// <summary>Returns a <c>curves</c> row's height (Z) where its X equals <paramref name="x"/>, held at the end knots
     /// outside the row's span. The row is one the world validator admits as a driver curve, drawn left to right, so X
@@ -466,103 +436,45 @@ public static class WorldGaitDrivers {
         return ((float)compiled.EvaluateRaw(arcRaw: low).Position.Z);
     }
 
-    // A driver's curve modulator: the height of the named row at the named earlier driver's phase this frame; a row
-    // the definition does not declare (refused at boot, missed only mid-swap) leaves the driver unscaled.
-    private static float CurveOf(CreationDriverCurveDocument curve, IReadOnlyList<CreationDriverDocument> rows, ReadOnlySpan<float> phases, int index, WorldDefinition? definition) => (((definition is not null) && (WorldDefinitionRows.FindCurve(
+    // A driver's curve modulator: the height of the rig's curve read at an earlier driver's phase this frame; a row the
+    // definition does not declare (refused at boot, missed only mid-swap) leaves the driver unscaled.
+    private static float CurveOf(CreationRigRead curve, float phase, WorldDefinition? definition) => (((definition is not null) && (WorldDefinitionRows.FindCurve(
         curves: definition.Curves,
-        name: curve.Curve
+        name: curve.Reference!
     ) is { } row))
         ? CurveHeight(
             row: row,
-            x: PhaseOf(
-                before: index,
-                driver: curve.Driver,
-                phases: phases,
-                rows: rows
-            )
+            x: phase
         )
         : 1f
     );
-    // The phase an earlier driver reached this frame; the canonicalizer refuses a name no earlier driver carries.
-    private static float PhaseOf(IReadOnlyList<CreationDriverDocument> rows, ReadOnlySpan<float> phases, int before, ReadOnlySpan<char> driver) {
-        for (var index = 0; (index < before); index++) {
-            if (rows[index].Name.AsSpan().SequenceEqual(other: driver)) {
-                return phases[index];
-            }
-        }
+    // The phase an earlier driver reached this frame, by the index the rig resolved; zero for none, which the
+    // canonicalizer refuses.
+    private static float PhaseOf(ReadOnlySpan<float> phases, int driver) => ((((uint)driver) < ((uint)phases.Length)) ? phases[driver] : 0f);
 
-        return 0f;
-    }
-
-    /// <summary>Returns whether a driver's gate holds — every token must, and an absent or empty gate is ungated.
-    /// A <c>state.&lt;row&gt;[.&lt;key&gt;]</c> token holds while the cell's STORED value is nonzero (the truth a rule
-    /// reads, never an eased sample). The world validator refuses a token naming no fact or row before a document
-    /// reaches here; one that still arrives fails the conjunction, so the driver rests rather than running
-    /// unconditionally.</summary>
-    /// <param name="gate">The authored gate tokens.</param>
+    /// <summary>Returns whether a compiled gate holds — every token must, and an empty gate is ungated. A state token
+    /// holds while the cell's STORED value is nonzero (the truth a rule reads, never an eased sample). The world validator
+    /// refuses a token naming no fact or row before a document reaches here; one that still arrives fails the
+    /// conjunction, so the driver rests rather than running unconditionally.</summary>
+    /// <param name="gate">The compiled gate (<see cref="CreationRigDriver.Gate"/>, <see cref="CreationRigEffector.Gate"/>).</param>
     /// <param name="facts">The body's sim facts this frame.</param>
     /// <param name="moving">Whether the body's eased speed is above <see cref="MovingSpeed"/>.</param>
-    /// <param name="reads">The holder's reads of the state mirror, bound to the reading body, or
-    /// <see langword="null"/> (a state token then fails).</param>
+    /// <param name="reads">The view of the rig's reads, bound to the reading body, or <see langword="null"/> (a state
+    /// token then fails).</param>
     /// <returns><see langword="true"/> when every token holds.</returns>
-    public static bool HoldsGate(IReadOnlyList<string>? gate, BodyFacts facts, bool moving, WorldStateLease? reads = null) {
-        if (gate is not { Count: > 0 } tokens) {
-            return true;
-        }
+    public static bool HoldsGate(IReadOnlyList<CreationRigGateToken> gate, BodyFacts facts, bool moving, WorldRigReads? reads = null) {
+        ArgumentNullException.ThrowIfNull(argument: gate);
 
-        for (var index = 0; (index < tokens.Count); index++) {
-            var token = tokens[index];
+        for (var index = 0; (index < gate.Count); index++) {
+            var token = gate[index];
+            var holds = token.Kind switch {
+                CreationRigGateTokenKind.State => ((reads is not null) && reads.TryNumber(read: token.Read!, value: out var truth) && (truth != 0f)),
+                CreationRigGateTokenKind.Moving => moving,
+                CreationRigGateTokenKind.Still => !moving,
+                _ => (BodyFactVocabulary.TryResolve(gate: out var bit, name: token.Name) && BodyFactVocabulary.Holds(facts: facts, gate: bit)),
+            };
 
-            if (CreationDriverDocument.IsStateSignal(signal: token)) {
-                if (
-                    (reads is null) ||
-                    !reads.TryNumber(
-                    reference: token,
-                    truth: true,
-                    value: out var truth
-                ) ||
-                    (truth == 0f)
-                ) {
-                    return false;
-                }
-
-                continue;
-            }
-
-            if (string.Equals(
-                a: token,
-                b: CreationDriverDocument.TokenMoving,
-                comparisonType: StringComparison.Ordinal
-            )) {
-                if (!moving) {
-                    return false;
-                }
-
-                continue;
-            }
-
-            if (string.Equals(
-                a: token,
-                b: CreationDriverDocument.TokenStill,
-                comparisonType: StringComparison.Ordinal
-            )) {
-                if (moving) {
-                    return false;
-                }
-
-                continue;
-            }
-
-            if (
-                !BodyFactVocabulary.TryResolve(
-                gate: out var bit,
-                name: token
-            ) ||
-                !BodyFactVocabulary.Holds(
-                facts: facts,
-                gate: bit
-            )
-            ) {
+            if (!holds) {
                 return false;
             }
         }
@@ -599,37 +511,25 @@ public static class WorldGaitDrivers {
             : 1f
         );
     }
-    /// <summary>Reads a named driver's current phase and weight.</summary>
-    /// <param name="rows">The creation's declared drivers.</param>
-    /// <param name="driver">The driver name a facet, or an effector's plant window, resolves against.</param>
+    /// <summary>Reads a driver's current phase and weight by the index its rig resolved.</summary>
+    /// <param name="driver">The driver's index (<see cref="CreationRigEffector.PlantDriver"/>), or -1.</param>
     /// <param name="phases">The per-driver phases.</param>
     /// <param name="weights">The per-driver weights.</param>
-    /// <param name="phase">The driver's phase, radians; zero when the name resolves to no driver.</param>
-    /// <param name="weight">The driver's eased weight in [0, 1]; zero when the name resolves to no driver.</param>
-    /// <returns><see langword="true"/> when the name resolves.</returns>
-    public static bool TryDriver(IReadOnlyList<CreationDriverDocument> rows, string driver, ReadOnlySpan<float> phases, ReadOnlySpan<float> weights, out float phase, out float weight) {
-        var count = Math.Min(
-            val1: rows.Count,
-            val2: phases.Length
-        );
+    /// <param name="phase">The driver's phase, radians; zero when the index names no driver.</param>
+    /// <param name="weight">The driver's eased weight in [0, 1]; zero when the index names no driver.</param>
+    /// <returns><see langword="true"/> when the index names a driver.</returns>
+    public static bool TryDriver(int driver, ReadOnlySpan<float> phases, ReadOnlySpan<float> weights, out float phase, out float weight) {
+        if ((((uint)driver) >= ((uint)phases.Length)) || (((uint)driver) >= ((uint)weights.Length))) {
+            phase = 0f;
+            weight = 0f;
 
-        for (var index = 0; (index < count); index++) {
-            if (string.Equals(
-                a: rows[index].Name,
-                b: driver,
-                comparisonType: StringComparison.Ordinal
-            )) {
-                phase = phases[index];
-                weight = weights[index];
-
-                return true;
-            }
+            return false;
         }
 
-        phase = 0f;
-        weight = 0f;
+        phase = phases[driver];
+        weight = weights[driver];
 
-        return false;
+        return true;
     }
     /// <summary>Reads a <c>state.&lt;row&gt;[.&lt;key&gt;]</c> text cell spelling a world-space <c>[x, y, z]</c>,
     /// through the state mirror slot the holder's lease holds for the reference.</summary>

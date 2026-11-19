@@ -363,9 +363,6 @@ Sittings, each the owner's eye on a running World:
 - The Moth and the swallow, in a pair session; its agenda is
   [the visual bar](#the-visual-bar)'s pair-session item. Within it: gloves or
   bare hands on the off-suit pilot (sheet 04 draws gloves).
-- The exposure calibration: gallery level 0 holds near EV 9 to 10 and the lawn
-  near EV 14.3 at compensation 2; and how indoor rooms read against daylight
-  now that the image meters exposure ([lighting](#lighting-and-gi)).
 - The outdoor lighting direction: sky colour and fill, sun colour and height,
   shadow softness and haze ([lighting](#lighting-and-gi)).
 - Feel: the Moth's walk, run, turn and lean values, the dash, first person in
@@ -374,8 +371,7 @@ Sittings, each the owner's eye on a running World:
   included; the lift panel and reach boxes; the gallery inspection lever's
   values; the glass exhibit on both backends; whether `motion-pulse` reads
   right now that its petals and core blend in their own groups; the bloom's
-  scatter of 0.04 and radius of 0.08; the terrain pass's exposure
-  compensation and how strongly distance fades toward blue
+  scatter of 0.04 and radius of 0.08; how strongly distance fades toward blue
   ([terrain pass](terrain-pass.md#risks-and-owner-calls)).
 
 Open calls, each with its sides:
@@ -3574,6 +3570,14 @@ proves itself with `puck compile` lowering to the same document.
   record goes (an `IClientSink` or a wire frame). One stream type writing
   to a record target would hold each rule once; the withdrawal chokepoint's
   step 4 (the mirror per span) is the natural place to make it.
+- [low] Two tone curves in one cel pixel: the standard's `cel` shade program
+  (`worlds/standard/shading.puck`) exposes its colour by `exposureStops` and
+  rolls it off with its own `shoulder` inside the material, and the view's
+  display pass then applies `render.tone`'s shoulder again. The program's
+  compose stage predates `render.tone`; it should hand the display pass scene
+  light and drop its own exposure and shoulder, with the `toon` row's
+  `exposure` and `shoulder` members going with it. Cel is parked, so this
+  waits for it ([the ruling](../decisions/rendering.md#a-light-is-shadowed-wherever-it-lights-and-cel-shading-is-a-style-per-material)).
 - [low] File-system primitives `AtomicFile` cannot serve yet:
   `ShaderCompiler.Entries.cs` wants a write that refuses to replace;
   `DirectoryObjectBlobStoreBackend` stages through a confined handle; a lock
@@ -3969,9 +3973,10 @@ and calibration, delivered cues, haptics) and the standard package's judge.
 - Its last stage, a crowd of performers at the frame bar, waits on
   [virtual geometry](virtual-geometry.md#d2-bounds-for-skinned-and-multi-slot-draws)'s
   bounds for many-part bodies and on the benchmark's remote route.
-- The pose-clip design removes the rig's caps on swings, slides, drivers and
-  effectors ([the caps](instrument-play/pose-clips.md#9-the-caps-come-off)).
-  A world's own creations then pay a counted cost. A look that arrives with a
+- The rig's caps on swings, slides, drivers and effectors are removed
+  ([the caps](instrument-play/pose-clips.md#9-the-caps-come-off)), and a
+  world's own creations pay a counted cost (`sdf.creations.terms.evaluated`,
+  `sdf.creations.effectors.solves`). A look that arrives with a
   visiting character is work another player's client must do, and nothing
   budgets its terms, effectors and transform slots. Admitting a visiting
   look's rig waits on that budget, which the plan that admits visiting looks
@@ -3994,14 +3999,15 @@ reversal brake, then a sitting.
 - [high] Engine gaps [instrument and dance play](instrument-play.md#the-engine-gaps)
   names, each with a lane in that plan's first wave and ahead of further rig
   or move authoring: a creation's poses do not blend and a driver's weight
-  cannot be limited to some shapes (`FrameDocument`, `CreationDocument.MaxDrivers`);
+  cannot be limited to some shapes (`FrameDocument`, `CreationDriverDocument`);
   an effector cannot aim at a point on its own creation
   (`CreationEffectorTargetDocument`); no driver reads the seat's input, so a
   press reaches the rig a tick late; and no motion operation turns a body
   through an angle or moves it along an eased path over a duration
   (`BodyMotionOp`, `WorldEffect.PlanarImpulse`).
   [Pose clips, body parts and reach](instrument-play/pose-clips.md) designs
-  the first three, and its steps are the build lane's order.
+  the first three, and its steps are the build lane's order; steps 1 to 3 (the
+  compiled rig, its reads and the caps) are built, so step 4 is next.
 
 - A reversal should brake faster than it accelerates: `ShapeWholeVelocityRow`
   converges at the engage rate whenever the stick is deflected, so a full
@@ -4071,12 +4077,12 @@ the model.
   camera application start the body at the perceiving pose. The play wheel's four
   rings are full (`debugRings`), so Free Cam is F9 only; a pad control needs a
   ring or a page entry.
-- [medium] Nothing drives controller output: no `Puck.World*` code references
-  `IGamepadOutput`, and cartridge rumble (`IFeedbackMachine.MotorLevel`) has
-  no consumer outside `Puck.Machines`. Wire a machine's motor to the engaged
-  seat's pad, and authored haptics. A pulse on the beat is the first authored
-  consumer ([instrument and dance play](instrument-play.md#sound), a lane of
-  its first wave).
+- [medium] Cartridge rumble is unwired: `WorldHapticDirector` now drives
+  `IGamepadOutput.Rumble` from authored `haptics` rows (with
+  `worlds/standard/instrument.puck`'s beat pulse as the first authored consumer;
+  [instrument and dance play](instrument-play.md#sound)), while cartridge
+  rumble (`IFeedbackMachine.MotorLevel`) still has no consumer outside
+  `Puck.Machines`. Wire a machine's motor to the engaged seat's pad.
 - The in-world computer runs programs (the owner's direction): the desktop
   share is one and a typing tutor another, switched on the computer itself
   with the screen showing which is live. The tutor is world-native: lessons

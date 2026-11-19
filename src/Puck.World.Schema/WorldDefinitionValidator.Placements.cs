@@ -522,19 +522,8 @@ public static partial class WorldDefinitionValidator {
             }
         }
 
-        var shapes = (document.Shapes ?? []);
-
-        for (var index = 0; (index < shapes.Count); index++) {
-            var shape = shapes[index];
-            var swings = (shape.Swings ?? []);
-            var slides = (shape.Slides ?? []);
-
-            for (var i = 0; (i < swings.Count); i++) {
-                RequireCurveRow(definition: definition, errors: errors, path: $"{path}.shapes[{index}].swings[{i}].wave", wave: swings[i].Wave);
-            }
-            for (var i = 0; (i < slides.Count); i++) {
-                RequireCurveRow(definition: definition, errors: errors, path: $"{path}.shapes[{index}].slides[{i}].wave", wave: slides[i].Wave);
-            }
+        foreach (var term in CreationRig.Of(document: document).AllTerms) {
+            RequireCurveRow(definition: definition, errors: errors, path: $"{path}.shapes[{term.Shape}].{((term.Kind == CreationRigTermKind.Turn) ? "swings" : "slides")}[{term.Source}].wave", wave: term.Wave);
         }
     }
     // The gate vocabulary is split across two assemblies on purpose — the fact names are the simulation's — so the
@@ -723,7 +712,7 @@ public static partial class WorldDefinitionValidator {
             // Relief spans one composed field. Root motion preserves it; independently posed shapes do not.
             if (
                 (creation.Document.Noise is not null) &&
-                CreationMotion.HasPartMotion(document: creation.Document)
+                CreationRig.Of(document: creation.Document).HasPartMotion
             ) {
                 errors.Add(item: $"{path}.doc.noise requires motion of the creation as a whole — frames, shape drivers or effectors that move its parts cannot share one relief field.");
             }

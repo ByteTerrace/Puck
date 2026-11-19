@@ -36,8 +36,8 @@ public sealed class CreationStateRigLawTests {
         ]
     );
     private static float Phase(WorldDefinition world, CreationDocument creation, int bodyIndex, ulong tick) {
-        var phases = new float[CreationDocument.MaxDrivers];
-        var weights = new float[CreationDocument.MaxDrivers];
+        var phases = new float[64];
+        var weights = new float[64];
         var address = new WorldEntityAddress(
             Authority: "a",
             Generation: 1,
@@ -52,7 +52,7 @@ public sealed class CreationStateRigLawTests {
         // The first advance only seeds the address; the second samples.
         for (var frame = 0; (frame < 2); frame++) {
             WorldGaitDrivers.Advance(
-                drivers: creation.Drivers,
+                rig: ClientFixtures.DriverRig(drivers: creation.Drivers),
                 phases: phases,
                 weights: weights,
                 deltaSeconds: (1f / 60f),
@@ -65,11 +65,11 @@ public sealed class CreationStateRigLawTests {
                 lastAddress: ref lastAddress,
                 easedSpeed: ref speed,
                 address: address,
-                reads: ClientFixtures.StateReads(
+                reads: ClientFixtures.DriverReads(drivers: creation.Drivers, lease: ClientFixtures.StateReads(
                     bodyIndex: address.Index,
                     definition: world,
                     tick: tick
-                )
+                ))
             );
         }
 
@@ -279,7 +279,7 @@ public sealed class CreationStateRigLawTests {
         );
 
         // Cell "0" stores 1 while its eased sample is still 0 at the epoch: the gate reads the truth and holds.
-        Assert.True(condition: WorldGaitDrivers.HoldsGate(
+        Assert.True(condition: ClientFixtures.HoldsGate(
             gate: creation.Drivers![0].When,
             facts: Physics.Motion.BodyFacts.Grounded,
             moving: false,
@@ -289,7 +289,7 @@ public sealed class CreationStateRigLawTests {
             )
         ));
         // No cell for body 2, and no definition at all: the token fails the conjunction.
-        Assert.False(condition: WorldGaitDrivers.HoldsGate(
+        Assert.False(condition: ClientFixtures.HoldsGate(
             gate: creation.Drivers![0].When,
             facts: Physics.Motion.BodyFacts.Grounded,
             moving: false,
@@ -298,7 +298,7 @@ public sealed class CreationStateRigLawTests {
                 definition: world
             )
         ));
-        Assert.False(condition: WorldGaitDrivers.HoldsGate(
+        Assert.False(condition: ClientFixtures.HoldsGate(
             gate: creation.Drivers![0].When,
             facts: Physics.Motion.BodyFacts.Grounded,
             moving: false

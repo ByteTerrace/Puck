@@ -28,6 +28,15 @@ public sealed partial class WorldCreationInstances {
 
     private Registration?[] m_pool = [];
 
+    // The pose serial of a body's registration (Registration.PoseSerial), zero for a body with none: what a rig that reads
+    // another body hashes (WorldRigReads.Revision). One delegate, made once.
+    private readonly Func<int, int> m_poseSerialOf;
+
+    /// <summary>Initializes a new instance of the <see cref="WorldCreationInstances"/> class.</summary>
+    public WorldCreationInstances() => m_poseSerialOf = PoseSerialOf;
+
+    private int PoseSerialOf(int body) => (FindBody(bodyIndex: body)?.PoseSerial ?? 0);
+
     public WorldRigidAssets Rigid { get; } = new();
 
     public int ArticulatedSlotCount => RootSlotOffset(index: m_pool.Length);
@@ -85,7 +94,7 @@ public sealed partial class WorldCreationInstances {
 
     // One live registration: the resolved creation, its root source (a placement row — static or attached — OR a body
     // index), and the replay cursor state.
-    private sealed class Registration(CreationDocument document) {
+    private sealed class Registration(CreationRig rig) {
         public CompiledPlacementFrame StaticFrame;
         // The body-rooted stamp's population index, or null for a row-rooted registration. An ATTACHED row leaves this
         // null deliberately: FindBody keys the one-per-body creation-look registration, and an attached row rides a body
@@ -96,12 +105,15 @@ public sealed partial class WorldCreationInstances {
 
         public WorldPickTarget PickTarget => m_pickTarget ??= new WorldPickTarget(Placement: Row?.Id, BodyIndex: BodyIndex) { CreationSlots = Slots, Prototype = Creation.Id };
 
+        // The rig the registration was made for: its tables are sized from it, and every pose read goes through it.
+        public readonly CreationRig Rig = rig;
+
         // The dynamic-transform slots the registration's pool index reserves (SlotsAt), set when it takes the index.
-        public CreationMotionPlan Motion = new(document);
+        public CreationMotionPlan Motion = new(rig: rig);
 
         public int Slots => Motion.SlotCount;
 
-        public readonly DynamicTransform[] ShapeTransforms = new DynamicTransform[(document.Shapes?.Count ?? 0)];
+        public readonly DynamicTransform[] ShapeTransforms = new DynamicTransform[rig.ShapeCount];
 
         public DynamicTransform? PackedRoot;
 
@@ -109,6 +121,16 @@ public sealed partial class WorldCreationInstances {
         // effector reference the look reads, bound to BodyIndex so a $body key names the wearing body. Released when
         // the registration retires, so the mirror stops reading what no body wears any more.
         public readonly WorldStateLease Reads = new();
+
+        private WorldRigReads? m_view;
+
+        // The one view the pose pass reads through: the rig's compiled reads, state cells through Reads.
+        public WorldRigReads View => (m_view ??= new WorldRigReads(lease: Reads, rig: Rig));
+        // Moves each time a full pack changes a slot, so a registration whose rig reads this body wakes (WorldRigReads.Revision).
+        public int PoseSerial;
+        // The view's revision at the last full pack, and at this frame's wake test, which tell a wake from a changed read.
+        public int ReadRevision;
+        public int WakeRevision;
 
         public float Clock;
         public required WorldPrototype Creation;
@@ -242,8 +264,8 @@ public sealed partial class WorldCreationInstances {
 
         public float DriverSpeed;
 
-        public readonly float[] DriverPhase = new float[CreationDocument.MaxDrivers];
-        public readonly float[] DriverWeight = new float[CreationDocument.MaxDrivers];
+        public readonly float[] DriverPhase = new float[rig.Drivers.Count];
+        public readonly float[] DriverWeight = new float[rig.Drivers.Count];
         public readonly WorldGaitKinematics Kinematics = new();
 
         public WorldEntityAddress RootAddress;
@@ -256,55 +278,49 @@ public sealed partial class WorldCreationInstances {
         // Per-shape-slot part position followers, resolved from the look's PartDynamics map through Parts —
         // indexed by shape slot (the same index PackTransforms's per-shape loop and Parts.TryResolve's
         // transformSlot use), sized once to the document's shape count.
-        public readonly bool[] PartFollows = new bool[(document.Shapes?.Count ?? 0)];
+        public readonly bool[] PartFollows = new bool[rig.ShapeCount];
         // The rigid delta each shape's animation produced this frame, kept so a later shape naming it as `parent`
         // rides it and a pose read (LatchedShapePose) answers with what was drawn; PartParent is the resolved parent
         // index per shape (−1 = the root), filled on first pack. The rotations start at identity, so a read before the
         // first pack answers the rest pose.
         public readonly Quaternion[] PartDeltaRotation = Enumerable.Repeat(
-            count: (document.Shapes?.Count ?? 0),
+            count: rig.ShapeCount,
             element: Quaternion.Identity
         ).ToArray();
-        public readonly Vector3[] PartDeltaTranslation = new Vector3[(document.Shapes?.Count ?? 0)];
-        public readonly int[] PartParent = new int[(document.Shapes?.Count ?? 0)];
+        public readonly Vector3[] PartDeltaTranslation = new Vector3[rig.ShapeCount];
+        public readonly int[] PartParent = new int[rig.ShapeCount];
 
         public bool PartParentsResolved;
 
         // Each shape's OWN delta before the parent chain — kept because an effector folds its correction into a
         // bone's own delta and the whole chain then re-chains off these.
-        public readonly Quaternion[] PartOwnRotation = new Quaternion[(document.Shapes?.Count ?? 0)];
-        public readonly Vector3[] PartOwnTranslation = new Vector3[(document.Shapes?.Count ?? 0)];
-        // The per-effector solve state: each effector's eased gate weight, its resolved bone/tip shape slots
-        // (−1 = unresolved, so the effector is inert), and its plant latch. Sized to the document ceilings, resolved
-        // once per registration.
-        public readonly float[] EffectorWeight = new float[CreationDocument.MaxEffectors];
-        public readonly bool[] EffectorPlanted = new bool[CreationDocument.MaxEffectors];
-        public readonly Vector3[] EffectorPlantTarget = new Vector3[CreationDocument.MaxEffectors];
-        public readonly Vector3[] EffectorPlantNormal = new Vector3[CreationDocument.MaxEffectors];
+        public readonly Quaternion[] PartOwnRotation = new Quaternion[rig.ShapeCount];
+        public readonly Vector3[] PartOwnTranslation = new Vector3[rig.ShapeCount];
+        // The per-effector solve state, one entry an effector of the rig (whose bones and tip it resolved): each
+        // effector's eased gate weight and its plant latch.
+        public readonly float[] EffectorWeight = new float[rig.Effectors.Count];
+        public readonly bool[] EffectorPlanted = new bool[rig.Effectors.Count];
+        public readonly Vector3[] EffectorPlantTarget = new Vector3[rig.Effectors.Count];
+        public readonly Vector3[] EffectorPlantNormal = new Vector3[rig.Effectors.Count];
         // The world point and contact normal each effector resolved this frame, and the share of the tip's tilt its
         // align took out, latched purely so `body.rig` can echo the decision the solve acted on; a frame that resolved
         // nothing leaves EffectorHasTarget false.
-        public readonly Vector3[] EffectorTarget = new Vector3[CreationDocument.MaxEffectors];
-        public readonly Vector3[] EffectorNormal = new Vector3[CreationDocument.MaxEffectors];
-        public readonly float[] EffectorAlign = new float[CreationDocument.MaxEffectors];
-        public readonly bool[] EffectorHasTarget = new bool[CreationDocument.MaxEffectors];
+        public readonly Vector3[] EffectorTarget = new Vector3[rig.Effectors.Count];
+        public readonly Vector3[] EffectorNormal = new Vector3[rig.Effectors.Count];
+        public readonly float[] EffectorAlign = new float[rig.Effectors.Count];
+        public readonly bool[] EffectorHasTarget = new bool[rig.Effectors.Count];
         // Each effector's held surface-probe answer, which TryProbeSurface reuses for its bit-identical next question.
-        public readonly WorldFieldAnswer<WorldSurfaceQuery, WorldSurfaceAnswer>[] EffectorProbe = new WorldFieldAnswer<WorldSurfaceQuery, WorldSurfaceAnswer>[CreationDocument.MaxEffectors];
+        public readonly WorldFieldAnswer<WorldSurfaceQuery, WorldSurfaceAnswer>[] EffectorProbe = new WorldFieldAnswer<WorldSurfaceQuery, WorldSurfaceAnswer>[rig.Effectors.Count];
         // A resting plant's step (CreationReplantDocument): whether the tip is mid-step, the latched point it left,
         // the point it is heading for and that point's contact normal, and how far through the step it is, in [0, 1].
-        public readonly bool[] EffectorStepping = new bool[CreationDocument.MaxEffectors];
-        public readonly Vector3[] EffectorStepFrom = new Vector3[CreationDocument.MaxEffectors];
-        public readonly Vector3[] EffectorStepTo = new Vector3[CreationDocument.MaxEffectors];
-        public readonly Vector3[] EffectorStepToNormal = new Vector3[CreationDocument.MaxEffectors];
-        public readonly float[] EffectorStepProgress = new float[CreationDocument.MaxEffectors];
-        public readonly int[] EffectorBoneSlot = new int[(CreationDocument.MaxEffectors * CreationEffectorDocument.MaxChainBones)];
-        public readonly int[] EffectorBoneCount = new int[CreationDocument.MaxEffectors];
-        public readonly int[] EffectorTipSlot = new int[CreationDocument.MaxEffectors];
+        public readonly bool[] EffectorStepping = new bool[rig.Effectors.Count];
+        public readonly Vector3[] EffectorStepFrom = new Vector3[rig.Effectors.Count];
+        public readonly Vector3[] EffectorStepTo = new Vector3[rig.Effectors.Count];
+        public readonly Vector3[] EffectorStepToNormal = new Vector3[rig.Effectors.Count];
+        public readonly float[] EffectorStepProgress = new float[rig.Effectors.Count];
 
-        public bool EffectorsResolved;
-
-        public readonly SecondOrderResponse[] PartResponse = new SecondOrderResponse[(document.Shapes?.Count ?? 0)];
-        public readonly SecondOrderFollower3[] PartFollower = new SecondOrderFollower3[(document.Shapes?.Count ?? 0)];
+        public readonly SecondOrderResponse[] PartResponse = new SecondOrderResponse[rig.ShapeCount];
+        public readonly SecondOrderFollower3[] PartFollower = new SecondOrderFollower3[rig.ShapeCount];
     }
 
     /// <summary>The whole pool's reserved dynamic-transform slot count — the frame source adds this onto the avatar
@@ -465,7 +481,7 @@ public sealed partial class WorldCreationInstances {
     private static bool PoolRooted(WorldPlacement row, WorldPrototype creation) =>
         ((row.Inhabit is null) && (WorldPlacementStamper.IsAnimated(creation: creation) || (row.Attach is not null)));
     private static Registration RegisterBody(BodyStamp stamp) {
-        var registration = new Registration(document: stamp.Creation.EngineDocument) {
+        var registration = new Registration(rig: stamp.Creation.Rig) {
             BodyIndex = stamp.BodyIndex,
             Creation = stamp.Creation,
             Parts = CreationPartCompiler.Compile(document: stamp.Creation.Document),
@@ -486,7 +502,7 @@ public sealed partial class WorldCreationInstances {
     private static void LatchLook(Registration live, BodyStamp stamp) {
         var motion = stamp.Look.Motion;
 
-        live.Motion = new CreationMotionPlan(document: live.Creation.EngineDocument, partDynamics: motion.PartDynamics);
+        live.Motion = new CreationMotionPlan(rig: live.Rig.Follow(partDynamics: motion.PartDynamics));
         var frames = (stamp.Creation.Document.Frames ?? []);
 
         live.Look = stamp.Look;
@@ -680,7 +696,7 @@ public sealed partial class WorldCreationInstances {
             seed: ((uint)(live.BodyIndex ?? 0))
         ));
     }
-    private static Registration RegisterRow(WorldPlacement row, WorldPrototype creation, CompiledPlacementFrame frame) => new(document: creation.EngineDocument) {
+    private static Registration RegisterRow(WorldPlacement row, WorldPrototype creation, CompiledPlacementFrame frame) => new(rig: creation.Rig) {
         Row = row,
         Creation = creation,
         Parts = CreationPartCompiler.Compile(document: creation.Document),
@@ -910,14 +926,32 @@ public sealed partial class WorldCreationInstances {
     // scan of the pool.
     private void IndexBodySlots() {
         Array.Fill(array: m_bodySlots, value: -1);
+        m_bodyReaders.Clear();
         for (var index = 0; (index < m_pool.Length); index++) {
             if ((m_pool[index] is { BodyIndex: { } body }) && (((uint)body) < ((uint)m_bodySlots.Length)) && (m_bodySlots[body] < 0)) {
                 m_bodySlots[body] = index;
+            }
+            if (m_pool[index] is not { } live) {
+                continue;
+            }
+            foreach (var read in live.Rig.Reads) {
+                if (read.Kind != CreationRigReadKind.Body) {
+                    continue;
+                }
+                if (!m_bodyReaders.TryGetValue(key: read.Body, value: out var readers)) {
+                    m_bodyReaders.Add(key: read.Body, value: readers = []);
+                }
+
+                readers.Add(item: live);
             }
         }
 
         m_bodySlotsStale = false;
     }
+
+    // The registrations whose rig reads each body (CreationRigReadKind.Body), by the body read, valid while no reconcile
+    // is running: the rate decision rates a read body no slower than its readers.
+    private readonly Dictionary<int, List<Registration>> m_bodyReaders = [];
 
     // The pool slot of each body's registration, or -1, valid while no reconcile is running.
     private readonly int[] m_bodySlots = NewBodySlots();

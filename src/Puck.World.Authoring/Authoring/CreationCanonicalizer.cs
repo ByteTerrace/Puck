@@ -364,13 +364,6 @@ public static partial class CreationCanonicalizer {
             return;
         }
 
-        if (drivers.Count > CreationDocument.MaxDrivers) {
-            errors.Add(item: new(
-                Message: $"{drivers.Count} entries exceeds the {CreationDocument.MaxDrivers}-driver list.",
-                Path: "drivers"
-            ));
-        }
-
         var names = new HashSet<string>(comparer: StringComparer.Ordinal);
 
         for (var i = 0; (i < drivers.Count); i++) {
@@ -495,7 +488,7 @@ public static partial class CreationCanonicalizer {
     }
     // Whether `descendant` reaches `ancestor` by walking `parent`. A parent is validated to be declared earlier, so
     // the walk strictly decreases and terminates even on a document that bypassed that check.
-    private static bool DescendsFrom(IReadOnlyList<ShapeDocument> shapes, ShapeLookup lookup, int descendant, int ancestor) {
+    private static bool DescendsFrom(IReadOnlyList<ShapeDocument> shapes, CreationShapeLookup lookup, int descendant, int ancestor) {
         var cursor = descendant;
 
         while (cursor > ancestor) {
@@ -510,16 +503,9 @@ public static partial class CreationCanonicalizer {
 
         return (cursor == ancestor);
     }
-    private static void ValidateEffectors(CreationDocument document, ShapeLookup lookup, List<DocumentValidationError> errors) {
+    private static void ValidateEffectors(CreationDocument document, CreationShapeLookup lookup, List<DocumentValidationError> errors) {
         if (document.Effectors is not { Count: > 0 } effectors) {
             return;
-        }
-
-        if (effectors.Count > CreationDocument.MaxEffectors) {
-            errors.Add(item: new(
-                Message: $"{effectors.Count} entries exceeds the {CreationDocument.MaxEffectors}-effector list.",
-                Path: "effectors"
-            ));
         }
 
         var shapes = (document.Shapes ?? []);
@@ -582,7 +568,7 @@ public static partial class CreationCanonicalizer {
             );
         }
     }
-    private static void ValidateEffectorChain(IReadOnlyList<ShapeDocument> shapes, ShapeLookup lookup, CreationEffectorDocument effector, List<DocumentValidationError> errors, string path) {
+    private static void ValidateEffectorChain(IReadOnlyList<ShapeDocument> shapes, CreationShapeLookup lookup, CreationEffectorDocument effector, List<DocumentValidationError> errors, string path) {
         var chain = (effector.Chain ?? []);
 
         if (chain.Count < CreationEffectorDocument.MinChainBones) {
@@ -892,7 +878,7 @@ public static partial class CreationCanonicalizer {
     // (a zero axis is an identity rotation, an unresolvable driver never advances, either facet beside a domain op
     // composes onto a transform nothing reads for that shape's geometry). Each of those is refused rather than folded
     // to a default: a limb that silently never moves reads as a rig defect, not as authored data.
-    private static void ValidateShapeAnimation(CreationDocument document, ShapeLookup lookup, ShapeDocument shape, List<DocumentValidationError> errors, string path) {
+    private static void ValidateShapeAnimation(CreationDocument document, CreationShapeLookup lookup, ShapeDocument shape, List<DocumentValidationError> errors, string path) {
         var swings = (shape.Swings ?? []);
         var slides = (shape.Slides ?? []);
 
@@ -921,18 +907,6 @@ public static partial class CreationCanonicalizer {
             return;
         }
 
-        if (swings.Count > ShapeDocument.MaxSwings) {
-            errors.Add(item: new(
-                Message: $"{swings.Count} entries exceeds the {ShapeDocument.MaxSwings}-swing list.",
-                Path: $"{path}.swings"
-            ));
-        }
-        if (slides.Count > ShapeDocument.MaxSlides) {
-            errors.Add(item: new(
-                Message: $"{slides.Count} entries exceeds the {ShapeDocument.MaxSlides}-slide list.",
-                Path: $"{path}.slides"
-            ));
-        }
         if (shape.Domain is { Count: > 0 }) {
             errors.Add(item: new(
                 Message: "a fold rides its parent's frame, never its own swing — a shape carrying domain operators may not also carry an animated facet of its own.",
@@ -1090,7 +1064,7 @@ public static partial class CreationCanonicalizer {
     // A trim's own scope opens AFTER the host shape's own emission closes, so it never has to nest inside one the
     // host's own emission already opened. Grouped and creation-wide shared emission do not lower independent trim
     // copies, and domain folds own their point/field. Mirrors ValidatePanel's supported authoring recipes.
-    private static void ValidateTrims(CreationDocument document, ShapeLookup lookup, ShapeDocument shape, List<DocumentValidationError> errors, string path) {
+    private static void ValidateTrims(CreationDocument document, CreationShapeLookup lookup, ShapeDocument shape, List<DocumentValidationError> errors, string path) {
         if (shape.Trims is not { Count: > 0 } trims) {
             return;
         }
@@ -1483,7 +1457,7 @@ public static partial class CreationCanonicalizer {
             ));
         }
 
-        var lookup = new ShapeLookup(shapes: shapes);
+        var lookup = new CreationShapeLookup(shapes: shapes);
 
         for (var i = 0; (i < palette.Count); i++) {
             var entry = palette[i];
@@ -2488,7 +2462,7 @@ public static partial class CreationCanonicalizer {
 
         var errors = new List<DocumentValidationError>();
         var shapeIds = new HashSet<int>();
-        var lookup = new ShapeLookup(shapes: (document.Shapes ?? []));
+        var lookup = new CreationShapeLookup(shapes: (document.Shapes ?? []));
 
         for (var i = 0; (i < (document.Shapes?.Count ?? 0)); i++) {
             var shape = document.Shapes![i];
@@ -2742,8 +2716,50 @@ public static partial class CreationCanonicalizer {
             errors: errors,
             lookup: lookup
         );
+        if (errors.Count == 0) {
+            ValidateSkinMembers(
+                document: document,
+                errors: errors
+            );
+        }
 
         return errors;
+    }
+    // A pooled group whose seams skin bakes one mesh whose vertices ride each moving owner of the group as a member, and
+    // the mesh names a member in a byte (SdfSkinLimits.MaxMembers). The rig knows each group's owners, so a group past the
+    // limit is refused here, by name, rather than when its mesh is sealed during a bake. A group that creases bakes one
+    // piece per owner and rides no member.
+    private static void ValidateSkinMembers(CreationDocument document, List<DocumentValidationError> errors) {
+        var shapes = (document.Shapes ?? []);
+
+        if (shapes.Count <= SdfSkinLimits.MaxMembers) { return; }
+        var sizes = new Dictionary<int, int>();
+
+        foreach (var shape in shapes) {
+            if ((shape.Group ?? 0) != 0) { sizes[shape.Group!.Value] = (sizes.GetValueOrDefault(key: shape.Group.Value) + 1); }
+        }
+        if (!sizes.Values.Any(predicate: static size => (size > SdfSkinLimits.MaxMembers))) { return; }
+
+        var rig = CreationRig.Compile(document: document);
+        var creased = CreationMotion.CreasedGroups(rig: rig);
+        var operands = CreationMotion.OperandShapes(rig: rig);
+        var owners = new Dictionary<int, HashSet<int>>();
+
+        for (var index = 0; (index < shapes.Count); index++) {
+            var group = (shapes[index].Group ?? 0);
+
+            if ((group == 0) || creased.Contains(item: group) || operands[index]) { continue; }
+            if (!owners.TryGetValue(key: group, value: out var slots)) { owners.Add(key: group, value: slots = []); }
+            _ = slots.Add(item: rig.Owner(shape: index));
+        }
+        foreach (var (group, slots) in owners.OrderBy(keySelector: static entry => entry.Key)) {
+            if ((slots.Count - 1) > SdfSkinLimits.MaxMembers) {
+                errors.Add(item: new(
+                    Message: $"group {group} skins {slots.Count - 1} moving members past its own slot; a mesh's vertices ride at most {SdfSkinLimits.MaxMembers}. Split the group, give shapes one owner, or let its seams crease.",
+                    Path: "shapes"
+                ));
+            }
+        }
     }
     /// <summary>Runs <see cref="Validate"/> and throws when it finds anything.</summary>
     /// <param name="document">The document to validate.</param>

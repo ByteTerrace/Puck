@@ -8,9 +8,9 @@ moves a collider or the simulation.
 | Field | Meaning |
 |---|---|
 | `parent` | the `name` of a shape declared **earlier**, whose animated motion carries this one, pivots included. This is the skeleton. Null means the creation root |
-| `joint` | a hinge point used only when the shape is an effector bone that declares no swings. Otherwise it poses nothing |
-| `swings` | up to 8 rotations about a pivot |
-| `slides` | up to 4 translations, applied after every swing |
+| `joint` | the point the shape turns about: an effector's solve turns a bone about it. Without one, the pivot of its first swing, else its own position (`CreationRig.Joint`). It poses nothing on its own |
+| `swings` | rotations about a pivot, any number, composed in the order written |
+| `slides` | translations, any number, applied after every swing |
 
 Because a parent must be declared earlier in the list, a chain resolves in one
 pass and can never cycle. The refusals are
@@ -63,6 +63,32 @@ outside the delta chain. A `parts` entry may name it: `TryBodyPartPose` and
 `TryBodyPartAuthoredPose` compose its rest pose onto the carried frame and agree.
 `CreationDomainParentLawTests` pins this.
 
+## The compiled rig
+
+Every reader of motion takes the creation's compiled rig (`CreationRig`,
+`WorldPrototype.Rig`), never the document's facets. It lists each shape's
+writers (`CreationRigWriters`): the terms its drivers play (each swing in order,
+then each slide), an effector's solve on every bone of its chain, an effector's
+`align` on its tip whether or not the tip is a bone, a timeline frame that poses
+it, and, for a look, a part follower (`CreationRig.Follow`). A shape with any
+writer owns a transform slot (`CreationRig.Owner`), and a creation with none is
+rigid. The document every renderer, collider and anchor reads
+(`WorldPrototype.EngineDocument`) carries no swings or slides, and
+`CreationRig.Compile` refuses it, so no reader can move a shape around the rig.
+
+The rig also lists what the pose reads from outside (`CreationRig.Reads`):
+state cells as truth or eased, body facts, the body's motion, time, a surface
+probe, another body and curve rows. The pose pass reads only through
+`WorldRigReads`, which answers those reads and nothing else; its revision is
+what the wake test hashes, so a hand on another body follows that body when only
+the target moves, and the presentation manifest registers exactly the state
+cells in the list. A body another rig reads is rated no slower than its reader.
+`CreationRig.Reach` is how far the rig can carry any point from the root,
+derived from the pivots on each shape's chain and the slides' limits; the rate
+tiers judge a body unseen by it. A slide with an unbounded wave, a state-bound
+pivot or a follower has no finite reach, and `puck creation stats` names which
+(`rig: ... reach unbounded: <why>`), with each moving slot and its writers.
+
 ## Drivers
 
 `sizeBy: "state.<row>[.<key>]"` reads a numeric authority-state value, clamped
@@ -82,7 +108,7 @@ Relief, blend radii and the solid's authored contact margin scale with that root
 query padding and the body's contact skin stay in world units. The local mesh stays
 baked. The debug glacier is the standard family's example.
 
-`drivers` is up to 32 named `{ name, signal, cadence, when, blendInSeconds,
+`drivers` is any number of named `{ name, signal, cadence, when, blendInSeconds,
 blendOutSeconds, dynamics, cadenceBy, weightBy }`. Everything animated names one.
 They advance in declaration order, and a driver reads only drivers declared
 before it, the rule a shape's `parent` follows.
@@ -142,7 +168,7 @@ the new frame that screenshot will compose.
 resolves to `limb` when there are exactly three shapes, and a `limb` with any
 other count demotes to `spine`. A chain naming a missing shape id is dropped.
 
-`effectors` is up to 8 CCD solvers, `{ name, chain, tip, target, when, weight,
+`effectors` is any number of CCD solvers, `{ name, chain, tip, target, when, weight,
 plant, align }`, where `chain` and `tip` name shapes **by name**, 2 to 8 bones, solved
 over 64 iterations.
 

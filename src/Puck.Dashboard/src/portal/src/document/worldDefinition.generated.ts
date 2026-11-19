@@ -45,6 +45,7 @@ export type WorldDefinition = {
   inputHold?: WorldInputHoldAuthoring | null;
   theme?: WorldThemeSection | null;
   markers?: (WorldMarkerRow | null)[] | null;
+  haptics?: (WorldHapticRow | null)[] | null;
   rules?: (WorldRule | null)[] | null;
   identity?: WorldIdentityDefinition | null;
   groups?: WorldGroupsSection | null;
@@ -1707,7 +1708,7 @@ export type CreationDocument = {
    */
   noise?: CreationNoiseDocument | null;
   /**
-   * The named animation drivers (null = none), at most MaxDrivers — see CreationDriverDocument. A shape's Swings/Slides name one of these. Presentation-only, like the facets that read them.
+   * The named animation drivers (null = none), any number — see CreationDriverDocument. A shape's Swings/Slides name one of these. Presentation-only, like the facets that read them.
    */
   drivers?: ({
     /**
@@ -1748,7 +1749,7 @@ export type CreationDocument = {
     weightBy?: ShapeNullable34 | null;
   } | null)[] | null;
   /**
-   * The inverse-kinematics effectors (null = none), at most MaxEffectors — see CreationEffectorDocument. Each corrects a chain of this creation's own shapes so its tip reaches a target, composing after the drivers and the parent chain. Presentation-only, like the drivers.
+   * The inverse-kinematics effectors (null = none), any number — see CreationEffectorDocument. Each corrects a chain of this creation's own shapes so its tip reaches a target, composing after the drivers and the parent chain. Presentation-only, like the drivers.
    */
   effectors?: ({
     /**
@@ -4440,11 +4441,11 @@ export type ShapeNullable33 = {
    */
   domain?: (ShapeNullable20 | null)[] | null;
   /**
-   * The driver-fed rotations this shape rides (ShapeSwingDocument), at most MaxSwings (null = none).
+   * The driver-fed rotations this shape rides (ShapeSwingDocument), any number (null = none), composed in the order written.
    */
   swings?: (ShapeNullable21 | null)[] | null;
   /**
-   * The driver-fed translations this shape rides (ShapeSlideDocument), at most MaxSlides (null = none). Applied after every swing, along the authored axis. Both facets are presentation-only — composed onto the shape's per-frame dynamic transform and read nowhere else, so the SDF program, the colliders, the solid field, and simulation state are all blind to them. A shape carrying Domain rides its own slot packed with its Parent chain's rigid delta (the identity with no parent), leaving nowhere for its OWN swing/slide to compose, so they are refused alongside a domain list at validation.
+   * The driver-fed translations this shape rides (ShapeSlideDocument), any number (null = none). Applied after every swing, along the authored axis. Both facets are presentation-only — composed onto the shape's per-frame dynamic transform and read nowhere else, so the SDF program, the colliders, the solid field, and simulation state are all blind to them. A shape carrying Domain rides its own slot packed with its Parent chain's rigid delta (the identity with no parent), leaving nowhere for its OWN swing/slide to compose, so they are refused alongside a domain list at validation.
    */
   slides?: (ShapeNullable22 | null)[] | null;
   /**
@@ -4452,7 +4453,7 @@ export type ShapeNullable33 = {
    */
   parent?: string | null;
   /**
-   * The point this shape hinges about when it acts as a bone of a CreationEffectorDocument chain and declares no Swings (null = the pivot of the first swing, or the shape's own position when it has neither). Author-frame, like every other point here. Read only by the effector solve, so it changes no pose on its own.
+   * The point this shape turns about (null = the pivot of its first swing, or its own position when it has neither): an effector's solve turns a bone about it (Joint). Author-frame, like every other point here. It changes no pose on its own.
    */
   joint?: unknown;
   /**
@@ -8230,6 +8231,39 @@ export type WorldGroupsSection = {
   ownership: (WorldOwnership | null)[];
 };
 
+export type WorldHapticMode = "Level" | "Rise" | "Change";
+
+export type WorldHapticRow = {
+  /**
+   * The row's stable id, unique within haptics.
+   */
+  id: string;
+  /**
+   * The low-frequency motor intensity, in [0, 1].
+   */
+  low: BindableScalar;
+  /**
+   * The high-frequency motor intensity, in [0, 1].
+   */
+  high: BindableScalar;
+  /**
+   * The finite pulse duration, in seconds ((0, MaxDurationSeconds]).
+   */
+  durationSeconds: number;
+  /**
+   * The state-driven trigger scalar for Rise and Change modes; omitted in Level mode.
+   */
+  signal?: BindableScalar;
+  /**
+   * How the row fires (WorldHapticMode).
+   */
+  mode?: WorldHapticMode;
+  /**
+   * Optional target seat (seat1..seat4), or null for every local joined seat.
+   */
+  seat?: string | null;
+};
+
 export type WorldHold = {
   /**
    * The row's name, unique within the list — the body.hold read-back token.
@@ -10691,7 +10725,7 @@ export type WorldPrototype = {
    */
   mesh?: WorldPrototypeMesh | null;
   /**
-   * Gets the creation document as it arrived: normalized when a mutation upserted it (the compose boundary canonicalizes), the author's own bytes when the world loaded it. Consumers read EngineDocument, which is normalized whichever way the row arrived.
+   * Gets the creation document as it arrived: normalized when a mutation upserted it (the compose boundary canonicalizes), the author's own bytes when the world loaded it. Consumers read EngineDocument and Rig, which are normalized whichever way the row arrived.
    */
   document: CreationDocument | null;
 };

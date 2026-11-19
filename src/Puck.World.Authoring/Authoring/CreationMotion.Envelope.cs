@@ -13,8 +13,17 @@ public readonly record struct CreationBlendEnvelope(float Rotation, float Displa
     public bool Admitted => ((Refusal is null) && (Rotation <= (MathF.PI / 3f)) && (Displacement <= (Smooth / 2f)));
 }
 public static partial class CreationMotion {
-    /// <summary>Bounds a moving blend from authored motion alone. Unbounded or unsupported inputs admit no skin.</summary>
-    public static CreationBlendEnvelope Envelope(CreationDocument document, CreationMovingBlend blend) {
+    /// <summary>Bounds a moving blend from its rig's writers alone: each term in full about its own pivot, and the frames'
+    /// poses. A writer with no bound (an effector's solve or aligned tip, a part follower, an unbounded term, a frame pose
+    /// bound to state) or an unsupported seam admits no skin.</summary>
+    /// <param name="rig">The creation's rig.</param>
+    /// <param name="blend">One of the rig's moving blends (<see cref="MovingBlends"/>).</param>
+    /// <returns>The envelope.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="rig"/> is <see langword="null"/>.</exception>
+    public static CreationBlendEnvelope Envelope(CreationRig rig, CreationMovingBlend blend) {
+        ArgumentNullException.ThrowIfNull(argument: rig);
+
+        var document = rig.Document;
         var shapes = document.Shapes!;
         var k = (shapes[blend.Shape].Smooth ?? 0f);
 
@@ -24,10 +33,7 @@ public static partial class CreationMotion {
         if (!(k > 0f)) { return Refuse(why: "smooth radius is zero"); }
         if ((document.TextRuns ?? []).Any(predicate: static run => run.Engraves)) { return Refuse(why: "CPU field does not read glyphs; engraving follows rigid owner surfaces"); }
         if (shapes.Any(predicate: s => ((s.Group == blend.Group) && (s.Profile is { Kind: SdfPrismProfileKind.Polygon })))) { return Refuse(why: "CPU field does not read regular polygons"); }
-        var parents = new int[shapes.Count];
-
-        ResolveParents(parents: parents, shapes: shapes);
-        var (firstPath, secondPath) = Paths(parents: parents, first: blend.Shape, second: blend.Other);
+        var (firstPath, secondPath) = Paths(parents: rig.Parents, first: blend.Shape, second: blend.Other);
         var chain = firstPath.Concat(second: secondPath).ToArray();
 
         // State-bound authored geometry has no document-only rest or seam box.
@@ -50,10 +56,13 @@ public static partial class CreationMotion {
 
         foreach (var index in chain) {
             var shape = shapes[index];
+            var writers = rig.Writers(shape: index);
 
-            if ((document.Effectors ?? []).Any(predicate: e => ((shape.Name is { } name) && e.Chain.Contains(value: name.Value)))) { return Refuse(why: "effector motion is unbounded"); }
-            if ((shape.Swings ?? []).Any(predicate: swing => ((swing.Amplitude.Reference is not null) || (swing.Pivot.Reference is not null) || (swing.Axis.Reference is not null) || !BoundedWave(wave: swing.Wave)))) { return Refuse(why: "swing is unbounded"); }
-            if ((shape.Slides ?? []).Any(predicate: slide => ((slide.Amplitude.Reference is not null) || (slide.Axis.Reference is not null) || !BoundedWave(wave: slide.Wave)))) { return Refuse(why: "slide is unbounded"); }
+            if ((writers & (CreationRigWriters.Solve | CreationRigWriters.Align)) != 0) { return Refuse(why: "effector motion is unbounded"); }
+            if ((writers & CreationRigWriters.Follower) != 0) { return Refuse(why: "follower motion is unbounded"); }
+            foreach (var term in rig.Terms(shape: index)) {
+                if (!term.Bounded) { return Refuse(why: ((term.Kind == CreationRigTermKind.Turn) ? "swing is unbounded" : "slide is unbounded")); }
+            }
             if ((document.Frames ?? []).Any(predicate: frame => (frame.Transforms ?? []).Any(predicate: t => ((t.Id == shape.Id) && ((t.Position.Reference is not null) || (t.Rotation.Reference is not null)))))) { return Refuse(why: "timeline pose is state bound"); }
         }
         // Frames: each frame carries the two sides by their chains' composed motions; the seam box's points separate by at
@@ -72,15 +81,19 @@ public static partial class CreationMotion {
             theta = MathF.Max(x: theta, y: (2f * MathF.Acos(x: Math.Clamp(MathF.Abs(x: relative.W), 0f, 1f))));
             displacement = MathF.Max(x: displacement, y: separation);
         }
-        // Slides move the seam by their amplitudes. Each swing turns the seam box, already moved by every motion counted
+        // Slides move the seam by their limits. Each turn turns the seam box, already moved by every motion counted
         // before it, about its own pivot, so its reach grows by that displacement: a sound bound for pivots that differ.
-        foreach (var shape in chain.Select(selector: index => shapes[index])) {
-            displacement += (shape.Slides ?? []).Sum(selector: slide => MathF.Abs(x: slide.Amplitude.Value));
+        foreach (var index in chain) {
+            foreach (var term in rig.Terms(shape: index)) {
+                if (term.Kind == CreationRigTermKind.Slide) { displacement += term.Limit; }
+            }
         }
-        foreach (var shape in chain.Select(selector: index => shapes[index])) {
-            foreach (var swing in (shape.Swings ?? [])) {
-                var angle = MathF.Min(x: MathF.Abs(x: swing.Amplitude.Value), y: MathF.PI);
-                var reach = (Vector3.Max(value1: Vector3.Abs(value: (low - swing.Pivot.Value)), value2: Vector3.Abs(value: (high - swing.Pivot.Value))).Length() + displacement);
+        foreach (var index in chain) {
+            foreach (var term in rig.Terms(shape: index)) {
+                if (term.Kind != CreationRigTermKind.Turn) { continue; }
+                var angle = term.Limit;
+                var pivot = term.Pivot!.Value;
+                var reach = (Vector3.Max(value1: Vector3.Abs(value: (low - pivot)), value2: Vector3.Abs(value: (high - pivot))).Length() + displacement);
 
                 theta += angle;
                 displacement += ((2f * reach) * MathF.Sin(x: (angle / 2f)));
@@ -89,9 +102,4 @@ public static partial class CreationMotion {
 
         return new(Displacement: displacement, Refusal: null, Rotation: theta, Smooth: k);
     }
-
-
-    // Curve waveforms require the containing world's curve, absent from a creation-only proof. Driver weights,
-    // including weightBy, are clamped to [0,1] by WorldGaitDrivers before ComposeDelta consumes them.
-    private static bool BoundedWave(string? wave) => (wave is null or CreationWave.Sine or CreationWave.HalfSine or CreationWave.Constant);
 }

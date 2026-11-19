@@ -778,13 +778,34 @@ fallback colour or a front-image mirror. The
 Each view a display shows converts its scene light once, in its own display
 pass, and authored hex colours are display colours decoded where they enter
 shading ([decision](../decisions/rendering.md#scene-light-is-converted-to-display-values-once-at-the-end-of-each-views-graph)).
-The tone curve is authored (`render.tone`, `worlds/standard/tones.puck`), the
-hall's and the Moth's exposure compensations are gone, displays decode their
-pictures in the screen shading and the glow reduction, and the light range
-threshold stays a share of linear exposed light, so lamp ranges are unchanged.
-The gallery's STYLES row holds the grey card (`shape-grey-card`), and a presented
-capture reports each frame's mean display level over its region
-(`PresentedFrameLevel`). What remains:
+The tone curve is authored (`render.tone`, `worlds/standard/tones.puck`),
+displays decode their pictures in the screen shading and the glow reduction, and
+the light range threshold stays a share of linear exposed light, so lamp ranges
+are unchanged. The gallery's STYLES row holds the grey card (`shape-grey-card`),
+and a presented capture reports each frame's mean display level over its region
+(`PresentedFrameLevel`). The debug world keys its picture by day with
+`render.exposure.compensation` (the Moth basis and the hall), a look value: the
+image meter alone lands every picture's log-average near sRGB 90. What remains:
+
+- **The image meter keys every scene to one grey.** An automatic exposure meters
+  the luminance of the view's own image (`SdfExposure.Meter`) and aims the
+  log-average at `SdfPhotometry.MeterCalibration` over the saturation headroom,
+  about 0.104 of display white. The glacier's captures from the valley rim read a
+  log-average of 0.106 to 0.114 display-linear at every day value tried, which is
+  that aim and nothing else: reflected metering makes a frame of snow, a white
+  room or a black-sand beach the same grey, and an authored compensation only
+  shifts the grey. The Puck-native answer is an incident meter: the views stage
+  already computes each surface's arriving light for the local adaptation
+  (`sdfLocalAdaptationGain`'s `incoming`), so the histogram can bin the luminance
+  a reference card would show under that light, and the sky its own luminance,
+  making the exposure follow the light while each surface keeps its albedo.
+  It needs the arriving light carried from views to the composite (a lit-image
+  channel or a views-side histogram across the three views kernels and glass),
+  the local adaptation's reference re-derived from the same reading, and an
+  authored choice between the two meters with image metering as the neutral
+  default. Check: a view filled with the glacier's snow and one filled with the
+  wall's rock under the same sun settle on one EV within a tenth of a stop, and the
+  snow reads above sRGB 230 in both while the rock keeps its own value.
 
 - **A join of two image kinds does not compose.** The kind a view publishes is
   decided once (`SdfWorldPasses` `Entry.Converts`) and the kind a screen reads

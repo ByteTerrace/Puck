@@ -51235,6 +51235,214 @@
       },
       "default": null
     },
+    "haptics": {
+      "description": "The world\u0027s authored haptic pulse rows driven by delivered state, evaluated per local seat by the haptic director.",
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "description": "One row of the haptics document section: a world-authored pad pulse driven by presentation state.",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "id": {
+            "description": "The row\u0027s stable id, unique within haptics.",
+            "type": "string"
+          },
+          "low": {
+            "description": "The low-frequency motor intensity, in [0, 1].",
+            "title": "BindableScalar",
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "clock": {
+                    "type": "string"
+                  },
+                  "keys": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "at": {
+                          "type": "number"
+                        },
+                        "value": {
+                          "type": "number"
+                        },
+                        "ease": {
+                          "type": "string",
+                          "enum": [
+                            "Linear",
+                            "Smooth",
+                            "Step"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "at",
+                        "value"
+                      ],
+                      "additionalProperties": false
+                    }
+                  }
+                },
+                "required": [
+                  "clock",
+                  "keys"
+                ],
+                "additionalProperties": false
+              }
+            ]
+          },
+          "high": {
+            "description": "The high-frequency motor intensity, in [0, 1].",
+            "title": "BindableScalar",
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "clock": {
+                    "type": "string"
+                  },
+                  "keys": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "at": {
+                          "type": "number"
+                        },
+                        "value": {
+                          "type": "number"
+                        },
+                        "ease": {
+                          "type": "string",
+                          "enum": [
+                            "Linear",
+                            "Smooth",
+                            "Step"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "at",
+                        "value"
+                      ],
+                      "additionalProperties": false
+                    }
+                  }
+                },
+                "required": [
+                  "clock",
+                  "keys"
+                ],
+                "additionalProperties": false
+              }
+            ]
+          },
+          "durationSeconds": {
+            "description": "The finite pulse duration, in seconds ((0, MaxDurationSeconds]).",
+            "type": "number"
+          },
+          "signal": {
+            "description": "The state-driven trigger scalar for Rise and Change modes; omitted in Level mode.",
+            "default": null,
+            "title": "BindableScalar",
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "clock": {
+                    "type": "string"
+                  },
+                  "keys": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "at": {
+                          "type": "number"
+                        },
+                        "value": {
+                          "type": "number"
+                        },
+                        "ease": {
+                          "type": "string",
+                          "enum": [
+                            "Linear",
+                            "Smooth",
+                            "Step"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "at",
+                        "value"
+                      ],
+                      "additionalProperties": false
+                    }
+                  }
+                },
+                "required": [
+                  "clock",
+                  "keys"
+                ],
+                "additionalProperties": false
+              }
+            ]
+          },
+          "mode": {
+            "description": "How the row fires (WorldHapticMode).",
+            "enum": [
+              "Level",
+              "Rise",
+              "Change"
+            ],
+            "default": "Level",
+            "title": "WorldHapticMode"
+          },
+          "seat": {
+            "description": "Optional target seat (seat1..seat4), or null for every local joined seat.",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          }
+        },
+        "required": [
+          "id",
+          "low",
+          "high",
+          "durationSeconds"
+        ],
+        "additionalProperties": false,
+        "title": "WorldHapticRow"
+      },
+      "default": null
+    },
     "schema": {
       "description": "Gets the document schema tag \u2014 SchemaVersion for a well-formed projection. A document that omits it is refused: the initializer names what the canonical writer emits, and does not stand in for a tag a peer left out.",
       "type": "string"

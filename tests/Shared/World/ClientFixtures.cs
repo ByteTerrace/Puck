@@ -1,4 +1,5 @@
 using Puck.Commands;
+using Puck.World.Authoring;
 using Puck.World.Client;
 using Puck.World.Protocol;
 
@@ -57,6 +58,36 @@ internal static class ClientFixtures {
 
         return reads;
     }
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<IReadOnlyList<CreationDriverDocument>, CreationRig> DriverRigs = new();
+    /// <summary>Returns the rig of a creation that declares only these drivers, the same rig for the same list.</summary>
+    /// <param name="drivers">The drivers, or <see langword="null"/> for none.</param>
+    /// <returns>The rig.</returns>
+    public static CreationRig DriverRig(IReadOnlyList<CreationDriverDocument>? drivers) => DriverRigs.GetValue(
+        key: (drivers ?? []),
+        createValueCallback: static rows => CreationRig.Compile(document: new CreationDocument(Drivers: rows, Frames: null, Name: null, Palette: null, Schema: CreationDocument.CurrentSchema, Shapes: null))
+    );
+    /// <summary>Returns a view of <see cref="DriverRig"/>'s reads through a lease.</summary>
+    /// <param name="drivers">The drivers.</param>
+    /// <param name="lease">The lease state reads go through.</param>
+    /// <returns>The view.</returns>
+    public static WorldRigReads DriverReads(IReadOnlyList<CreationDriverDocument>? drivers, WorldStateLease lease) => new(lease: lease, rig: DriverRig(drivers: drivers));
+    /// <summary>Returns whether an authored gate holds, compiled as a driver's gate.</summary>
+    /// <param name="gate">The gate tokens.</param>
+    /// <param name="facts">The body's facts.</param>
+    /// <param name="moving">Whether the body is moving.</param>
+    /// <param name="reads">The lease state tokens read through, or <see langword="null"/>.</param>
+    /// <returns><see langword="true"/> when every token holds.</returns>
+    public static bool HoldsGate(IReadOnlyList<string>? gate, Puck.Physics.Motion.BodyFacts facts, bool moving, WorldStateLease? reads = null) {
+        var rig = DriverRig(drivers: [new CreationDriverDocument(Cadence: 0f, Name: "gate", Signal: CreationDriverDocument.SignalTime, When: gate)]);
+
+        return WorldGaitDrivers.HoldsGate(facts: facts, gate: rig.Drivers[0].Gate, moving: moving, reads: ((reads is null) ? null : new WorldRigReads(lease: reads, rig: rig)));
+    }
+    /// <summary>Returns the terms one shape composes under a creation's drivers.</summary>
+    /// <param name="shape">The shape.</param>
+    /// <param name="drivers">The creation's drivers.</param>
+    /// <returns>The shape's terms.</returns>
+    public static CreationRigTerm[] Terms(ShapeDocument shape, IReadOnlyList<CreationDriverDocument>? drivers) =>
+        CreationRig.Compile(document: new CreationDocument(Drivers: drivers, Frames: null, Name: null, Palette: null, Schema: CreationDocument.CurrentSchema, Shapes: [shape])).Terms(shape: 0).ToArray();
 }
 /// <summary>The narrowest link a <see cref="PlayerRoster"/> can be built over: it answers nothing and drops
 /// everything.</summary>
