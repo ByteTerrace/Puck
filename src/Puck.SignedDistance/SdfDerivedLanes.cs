@@ -4,7 +4,7 @@ namespace Puck.SignedDistance;
 
 /// <summary>
 /// The lanes an instruction carries that the builder computes from its other lanes, so the kernels need not: a scale's
-/// distance correction, a repeat's reciprocal spacing, a capsule's inverse squared length, a round cone's slope pair and
+/// distance correction, a repeat's reciprocal spacing, a superellipsoid's inverse radii, a round cone's slope pair and
 /// the rest. Each is one function here, which <see cref="SdfProgramBuilder"/> calls to pack the lane and
 /// <see cref="SdfProgram"/>'s lane contract calls to check it: a program refuses an instruction whose derived lane is not
 /// what this function answers for its other lanes, bit for bit, so a hand-packed program cannot hand the kernels or the
@@ -17,8 +17,9 @@ public static class SdfDerivedLanes {
     /// <summary>The smallest shell ratio a log-spherical fold packs; at a ratio of one there are no shells and the baked
     /// reciprocal of the log cell divides by zero.</summary>
     public const float MinLogSphereRatio = 1.0001f;
-    /// <summary>The smallest radius a superellipsoid packs on each axis, which keeps its inverse radii finite.</summary>
-    public const float MinSuperellipsoidRadius = 0.0001f;
+    /// <summary>The smallest radius a superellipsoid packs on each axis, 2⁻¹³: on the grid both carriers hold
+    /// (<see cref="FixedGrid"/>), and keeps its inverse radii finite.</summary>
+    public const float MinSuperellipsoidRadius = (1f / 8192f);
     /// <summary>The largest share of its radius a vesica's half-separation packs, which keeps its tip half-height real
     /// and positive.</summary>
     public const float MaxVesicaSeparationShare = 0.9999f;
@@ -67,15 +68,13 @@ public static class SdfDerivedLanes {
     /// <returns>The correction.</returns>
     public static float AxialProfileCorrection(float amount, float bulge, float startScale) =>
         (1f / SdfProgram.FlareExtrema(amount: amount, bulge: bulge, startScale: startScale).MaxS);
-    /// <summary>Returns the inverse squared length a capsule packs beside its endpoint, so its projection multiplies
-    /// rather than divides: zero for a zero endpoint (a sphere), and capped at the largest finite float below it.</summary>
-    /// <param name="endpoint">The capsule's endpoint.</param>
-    /// <returns>The inverse squared length.</returns>
-    public static float CapsuleInverseLengthSquared(Vector3 endpoint) {
-        var dot = Vector3.Dot(vector1: endpoint, vector2: endpoint);
-
-        return ((dot == 0f) ? 0f : ((float)Math.Min(val1: (1.0 / dot), val2: float.MaxValue)));
-    }
+    /// <summary>Returns the nearest value to <paramref name="value"/> that Q48.16 and single-precision float both hold
+    /// exactly: a multiple of 2⁻¹⁶, ties to even. Scaling by a power of two is exact in float, and every float of
+    /// magnitude 256 or more is already such a multiple, so the result is exact in both carriers. A lane both readers
+    /// must read alike (a superellipsoid's radii and exponent) packs through this.</summary>
+    /// <param name="value">The finite value.</param>
+    /// <returns>The snapped value.</returns>
+    public static float FixedGrid(float value) => ((MathF.Abs(x: value) >= 256f) ? value : (MathF.Round(x: (value * 65536f)) / 65536f));
     /// <summary>Returns the slope pair a round cone packs: the radius difference over the height (floored), and the
     /// cosine that pairs with it.</summary>
     /// <param name="lowerRadius">The lower radius.</param>

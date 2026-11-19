@@ -131,8 +131,13 @@ public sealed partial class SdfFieldEvaluator {
     // EditField's fBm relief over a box: the point rule's own steps, its lattice point rounded as the point rule rounds
     // it and the sum of octaves enclosed over the box's lattice points (Pcg3dLatticeNoise.Fbm3Bounds), so the relief is
     // charged what it can reach inside this box rather than its whole amplitude.
-    // A relief its masks weighted is charged its relief times the weight's interval, a subset of [0, 1] (WeightedRelief).
+    // A relief its masks weighted is charged its relief times the weight's interval, a subset of [0, 1], and charged nothing
+    // where that interval is exactly zero, where the point rule evaluates no noise (WeightedRelief).
     private static FixedInterval NoiseDisplaceBounds(in CompiledInstruction instruction, IntervalVector3 local, FixedInterval result, FixedInterval? weight = null) {
+        if ((weight is { } zero) && (zero == FixedInterval.FromPoint(value: FixedQ4816.Zero))) {
+            return result;
+        }
+
         var frequency = instruction.Data0X;
         var relief = (Point(value: (instruction.Data0Y * instruction.Data1X)) * Pcg3dLatticeNoise.Fbm3Bounds(gain: instruction.Data0Z, lacunarity: instruction.Data0W, octaves: ((int)instruction.Blend), seed: instruction.Shape,
             x: FixedInterval.RoundedProduct(factor: frequency, value: local.X), y: FixedInterval.RoundedProduct(factor: frequency, value: local.Y),
@@ -141,14 +146,38 @@ public sealed partial class SdfFieldEvaluator {
 
         return (result + (unweighted ? relief : (relief * weight!.Value)));
     }
-    // A relief mask's weight over a box whose region distance lies in `region` (ReliefMaskWeight): the weight is monotone
-    // in the region's distance, so its interval is the weights at the region's ends.
-    private static FixedInterval ReliefMaskWeightBounds(in CompiledInstruction instruction, FixedInterval region) {
-        if (region.IsUnbounded) {
-            return FixedInterval.Hull(first: instruction.Data0Z, second: instruction.Data0W);
+    // A masked relief's weight over a box (MaskProduct): each region's distance through the shape bounds at its pose,
+    // the least of a mask's regions, and the band read at both ends of that interval, since the weight is monotone in the
+    // distance. An unbounded step answers the unbounded interval, so the frame search sees it (FindFrame) rather than
+    // the hull of the weights hiding it. A mask whose distance is certainly at or below its start skips its remaining
+    // regions, and an exactly zero product the remaining masks, as the point rule does.
+    private static FixedInterval MaskProductBounds(ReliefMaskFixed[] masks, IntervalVector3 q) {
+        var weight = Point(value: FixedQ4816.One);
+
+        foreach (var mask in masks) {
+            FixedInterval? distance = null;
+
+            foreach (var region in mask.Regions) {
+                var u = new IntervalVector3(X: (q.X - Point(value: region.Origin.X)), Y: (q.Y - Point(value: region.Origin.Y)), Z: (q.Z - Point(value: region.Origin.Z)));
+
+                if (!region.Identity) {
+                    u = RotateBoundsByInverseQuaternion(p: u, rotation: region.Bounds);
+                }
+
+                var shape = ShapeBounds(instruction: region.Primitive, p: u);
+
+                distance = ((distance is { } held) ? FixedInterval.Min(first: held, second: shape) : shape);
+
+                if (distance.Value.IsUnbounded) { return FixedInterval.Entire; }
+                if (distance.Value.Upper <= mask.Start) { break; }
+            }
+
+            weight *= FixedInterval.Hull(first: BandWeight(distance: distance!.Value.Lower, mask: mask), second: BandWeight(distance: distance.Value.Upper, mask: mask));
+
+            if (weight == Point(value: FixedQ4816.Zero)) { break; }
         }
 
-        return FixedInterval.Hull(first: ReliefMaskWeight(instruction: in instruction, region: region.Lower), second: ReliefMaskWeight(instruction: in instruction, region: region.Upper));
+        return weight;
     }
     // A LaneErode's effect on the next shape over a box: skipped outright, or eroded by any share of its reach.
     private static FixedInterval? LaneErodeBounds(in CompiledInstruction instruction) {

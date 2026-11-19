@@ -515,7 +515,7 @@ public sealed partial class SdfProgram {
             instructionOwners: instructionOwners,
             paramName: instructionsParamName
         );
-        RequireReliefMasks(instructionOwners: instructionOwners, paramName: instructionsParamName);
+        DecodeReliefRuns(instructionOwners: instructionOwners, paramName: instructionsParamName);
         RequireSegmentsStartAtTheWorldPoint(
             instructionOwners: instructionOwners,
             paramName: instructionsParamName

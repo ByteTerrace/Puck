@@ -199,14 +199,15 @@ public sealed partial class SdfProgram {
         // The Lipschitz pass PATCHES scoped PopField instructions in place (Data1.y gains the scope's 1/L candidate
         // scale), so it runs before packing: the packed words and the typed stream describe one program. A warp-free,
         // seam-free program gets exactly 1.0f, and a factor-1 scope stays unpatched (Data1.y = 0 reads as no scale).
-        var stepScale = AnalyzeLipschitz(chainFactors: out var chainFactors, convexPolygonProfiles: m_convexPolygonProfiles, instructions: m_instructions, sweepCurves: m_sweepCurves);
+        var stepScale = AnalyzeLipschitz(chainFactors: out var chainFactors, convexPolygonProfiles: m_convexPolygonProfiles, instructions: m_instructions, maskSlopes: ReliefMaskSlopes(), reliefCharges: out var reliefCharges, sweepCurves: m_sweepCurves);
 
         FieldScopeClamps = ReadFieldScopeClamps(instructionOwners: instructionOwners);
 
         StepScaleBinder = AnalyzeStepScaleBinder(
             chainFactors: chainFactors,
             instances: m_instances,
-            instructions: m_instructions
+            instructions: m_instructions,
+            reliefCharges: reliefCharges
         );
 
         // The bounds analysis runs FIRST: the segment directory's length is part of the packed layout below.
@@ -736,7 +737,7 @@ public sealed partial class SdfProgram {
     }
 
     /// <summary>Returns the conservative step factor of one noise relief, in the units of the frame it samples: one plus
-    /// its slope (<see cref="SdfNoiseDisplacement.Slope"/>) plus its masks' slopes times its amplitude. It is the formula
+    /// its masked slope (<see cref="SdfNoiseDisplacement.MaskedSlope"/>). It is the formula
     /// <c>AnalyzeLipschitz</c> charges, through the relief's point factor, so an authoring door can budget-check a noise
     /// declaration against it instead of mirroring it. A zero amplitude returns exactly 1.</summary>
     /// <param name="frequency">The base lattice frequency (cells per world unit).</param>
@@ -744,15 +745,11 @@ public sealed partial class SdfProgram {
     /// <param name="octaves">The octave count (1..<see cref="SdfProgramBuilder.MaxNoiseOctaves"/>).</param>
     /// <param name="gain">The per-octave amplitude factor.</param>
     /// <param name="lacunarity">The per-octave frequency factor.</param>
-    /// <param name="maskSlope">The summed band slopes, per world unit, of the relief masks that weight the relief
-    /// (<see cref="ReliefMaskSlope"/>); zero for an unmasked relief. A masked relief's gradient is
-    /// <c>a·(w∇n + n∇w)</c> with <c>|n| ≤ 1</c> and <c>0 ≤ w ≤ 1</c>, so the masks add <c>|a|</c> times their slope.</param>
+    /// <param name="maskSlope">The summed slope, per unit of the frame the relief samples, of the masks that weight the
+    /// relief (<see cref="SdfReliefMask.SlopeOf"/>); zero for an unmasked relief.</param>
     /// <returns>The multiplicative step factor (≥ 1 for non-negative inputs).</returns>
-    public static float NoiseDisplaceStepFactor(float frequency, float amplitude, int octaves, float gain, float lacunarity, float maskSlope = 0f) {
-        var unmasked = (1.0f + SdfNoiseDisplacement.Slope(amplitude: amplitude, frequency: frequency, gain: gain, lacunarity: lacunarity, octaves: octaves));
-
-        return ((maskSlope > 0.0f) ? (unmasked + (amplitude * maskSlope)) : unmasked);
-    }
+    public static float NoiseDisplaceStepFactor(float frequency, float amplitude, int octaves, float gain, float lacunarity, float maskSlope = 0f) =>
+        (1.0f + new SdfNoiseDisplacement(Amplitude: amplitude, Frequency: frequency, Gain: gain, Lacunarity: lacunarity, Octaves: octaves, Seed: 0u).MaskedSlope(maskSlope: maskSlope));
 
     private static float DisplaceWarpLipschitz(SdfInstruction instruction) => (1.0f + DisplaceSlope(instruction: instruction));
     // The product of a chain's CellJitter boundary step factors, folded at chain-close against the chain's FINAL max

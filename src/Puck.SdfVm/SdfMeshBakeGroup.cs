@@ -584,7 +584,7 @@ public class SdfMeshBakeGroup(int selector, bool dynamic) {
         var drawn = false;
 
         for (var index = 0; (!drawn && (index < instructions.Count)); index++) {
-            drawn = (!owned[index] && program.IsSurfaceShape(index: index) && !instructions[index].Detail);
+            drawn = (!owned[index] && (instructions[index].Op == SdfOp.ShapeBlend) && !instructions[index].Detail);
         }
 
         if (!drawn) { return null; }

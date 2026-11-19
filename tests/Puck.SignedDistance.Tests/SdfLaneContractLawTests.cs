@@ -155,17 +155,18 @@ public sealed class SdfLaneContractLawTests {
     public void ALaterShapeNoLongerTakesAReliefsCharge() {
         var builder = NewBuilder(material: out var material).ResetPoint().Sphere(material: material, radius: 1f);
 
-        for (var mask = 0; (mask < 5); mask++) {
-            builder.BeginReliefMask(fade: 1f, inside: 0f, outside: 1f, start: 0f).ResetPoint().Sphere(material: material, radius: 0.5f).EndReliefMask()
-                .ResetPoint().NoiseDisplace(amplitude: 0.25f, frequency: 0f, octaves: 1, seed: 0u);
+        var mask = new SdfReliefMask(band: SdfReliefBand.Of(start: 0f, width: 1f), regions: [SdfReliefRegion.Lower(position: Vector3.Zero, rotation: Quaternion.Identity, scale: new Vector3(value: 0.5f), type: SdfSolidPrimitive.Sphere)]);
+
+        for (var relief = 0; (relief < 5); relief++) {
+            builder.ResetPoint().NoiseDisplace(amplitude: 0.25f, frequency: 0f, masks: [mask], octaves: 1, seed: 0u);
         }
 
         var program = builder.Translate(offset: new Vector3(x: 100f, y: 0f, z: 0f)).Sphere(material: material, radius: 1f).Build();
         var bound = (1f / program.StepScale);
         var sampled = SampledSlope(h: (1f / 512f), program: program, points: Box(high: new Vector3(x: 1.4f, y: 0.2f, z: 0.2f), low: new Vector3(x: 0.6f, y: -0.2f, z: -0.2f), steps: 16));
 
-        // Each relief adds 0.25 · 1.5 of mask slope (its noise is constant at frequency zero).
-        Assert.Equal(expected: (1f + (5f * 0.375f)), actual: bound, precision: 4);
+        // Each relief adds 0.25 · 1.5 of mask slope (its noise is constant at frequency zero), times the regions' stretch.
+        Assert.Equal(expected: (1f + (5f * (0.375f * SdfReliefRegion.MaxStretch))), actual: bound, precision: 4);
         Assert.True(sampled > 1.375f, $"the witness reaches past the old bound of 1.375: sampled {sampled}");
         Assert.True(sampled <= bound, $"sampled {sampled} within the bound {bound}");
     }

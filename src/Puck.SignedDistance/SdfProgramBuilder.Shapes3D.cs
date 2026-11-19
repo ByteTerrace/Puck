@@ -51,12 +51,10 @@ public sealed partial class SdfProgramBuilder {
             subject: "A capsule radius"
         );
 
-        // The endpoint's raw components are each individually finite, but dot(endpoint, endpoint) is not: a component
-        // near float's ~1.84e19 sqrt-of-max threshold squares past float.MaxValue and overflows to +Infinity — baking
-        // a silent reciprocal ZERO into derived1 below (poisoning the capsule's own distance field) while
-        // SdfProgram.TryGetLocalBound's endpoint.Length() (the SAME dot, square-rooted) derives an INFINITE cull
-        // bound. Refuse rather than clamp — a clamped dot would silently shorten the capsule to some other length
-        // than authored.
+        // The endpoint's raw components are each individually finite, but dot(endpoint, endpoint) need not be: a
+        // component near float's ~1.84e19 sqrt-of-max threshold squares past float.MaxValue. Both readers project onto
+        // the endpoint by that squared length, and SdfProgram.TryGetLocalBound's endpoint.Length() reads it for the cull
+        // bound, so it is refused rather than clamped, which would silently shorten the capsule.
         var dotEndpoint = Vector3.Dot(
             vector1: endpoint,
             vector2: endpoint
@@ -72,13 +70,6 @@ public sealed partial class SdfProgramBuilder {
         return Shape(
             blend: blend,
             detail: detail,
-            // Data1.y carries the HOST-BAKED 1/dot(endpoint, endpoint): shapes evaluate millions of times per frame
-            // while programs build once, and the shared multiply keeps both backends' shader codegen identical where a
-            // per-eval divide contracted differently (KEEP IN SYNC with sdfCapsule in Assets/Shaders/Sdf/field/sdf-shapes.hlsli).
-            // Keep the true reciprocal below a centimetre too. The former 0.0001 floor shortened h for every small
-            // capsule. Zero is a sphere; reciprocals beyond float's range (sub-10^-19 endpoints) cap at its finite
-            // maximum, keeping the shader's product finite at zero and the geometry below the query grid.
-            derived1: SdfDerivedLanes.CapsuleInverseLengthSquared(endpoint: endpoint),
             dimensions: new Vector4(
                 value: endpoint,
                 w: radius
@@ -167,10 +158,11 @@ public sealed partial class SdfProgramBuilder {
     /// axis carries the whole unit budget (<c>y</c> = that axis's unit vector): <c>|∇d| = min(r)·√(1/min(r)²) = 1</c>
     /// exactly, independent of e and of every other radius. <c>SuperellipsoidLawTests</c> proves this
     /// numerically over a grid of exponents, radius ratios, and surface points, both on- and off-axis.</para></summary>
-    /// <param name="radii">The three semi-axis radii; signs are absorbed (<see cref="MathF.Abs(float)"/>) and each is
-    /// floored at a small positive epsilon (<c>0.0001</c>), which keeps the host-baked reciprocals finite.</param>
+    /// <param name="radii">The three semi-axis radii; signs are absorbed (<see cref="MathF.Abs(float)"/>), each snaps to
+    /// the nearest multiple of 2⁻¹⁶ (<see cref="SdfDerivedLanes.FixedGrid"/>) and is floored at
+    /// <see cref="SdfDerivedLanes.MinSuperellipsoidRadius"/>, which keeps the host-baked reciprocals finite.</param>
     /// <param name="exponent">The generalizing exponent, finite in [<see cref="MinSuperellipsoidExponent"/>,
-    /// <see cref="MaxSuperellipsoidExponent"/>].</param>
+    /// <see cref="MaxSuperellipsoidExponent"/>]; snaps to the nearest multiple of 2⁻¹⁶.</param>
     /// <param name="material">The material index assigned to the shape.</param>
     /// <param name="blend">The operation used to combine the shape with the accumulated field.</param>
     /// <param name="smooth">The blend smoothing radius.</param>
@@ -198,10 +190,18 @@ public sealed partial class SdfProgramBuilder {
             );
         }
 
+        // Each radius and the exponent snap to the grid both carriers hold exactly (SdfDerivedLanes.FixedGrid), so the
+        // kernel and the fixed-point evaluator read one smallest radius, which scales the whole gauge, and one exponent.
         var clamped = Vector3.Max(
-            value1: Vector3.Abs(value: radii),
+            value1: new Vector3(
+                x: SdfDerivedLanes.FixedGrid(value: MathF.Abs(x: radii.X)),
+                y: SdfDerivedLanes.FixedGrid(value: MathF.Abs(x: radii.Y)),
+                z: SdfDerivedLanes.FixedGrid(value: MathF.Abs(x: radii.Z))
+            ),
             value2: new Vector3(value: SdfDerivedLanes.MinSuperellipsoidRadius)
         );
+
+        exponent = SdfDerivedLanes.FixedGrid(value: exponent);
 
         // The degenerate-radius clamp and inverse radii are HOST-BAKED (Data1.yzw) to avoid three divides per
         // evaluation (KEEP IN SYNC with sdfSuperellipsoid in Assets/Shaders/Sdf/field/sdf-shapes.hlsli and

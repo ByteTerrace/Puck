@@ -176,7 +176,6 @@ public sealed partial class SdfProgramBuilder {
         m_sampledBindings.Clear();
         m_sweepCurves.Clear();
         m_fieldScopes?.Clear();
-        m_reliefMask = null;
         m_reservedPathWords = 0;
         m_glyphAtlas = default;
         m_materialRecolor = null;
@@ -187,9 +186,10 @@ public sealed partial class SdfProgramBuilder {
 
     // Allocated only when a scope opens. Each entry owns its pop parameters and empty-scope admission count.
     private Stack<(SdfBlendOp Blend, float Smooth, int ShapeCountAtOpen, Vector4 Data0, float StepCount)>? m_fieldScopes;
-    // The open relief mask (BeginReliefMask): the scope depth it opened at and its band (start, fade, inside, outside),
-    // which EndReliefMask writes onto the mask's ReliefWeight; null while none is open.
-    private (int Depth, Vector4 Band)? m_reliefMask;
+    // What this builder has emitted, for a value that lowers one primitive through a fresh builder and keeps its
+    // instruction (SdfReliefRegion.Lower): the instructions, and whether any side table rides them.
+    internal IReadOnlyList<SdfInstruction> EmittedInstructions => m_instructions;
+    internal bool EmittedSideTables => ((m_convexPolygonProfiles.Count + m_sweepCurves.Count + m_paths.Count + m_sampledBindings.Count) > 0);
     // The SECOND mirror of the shader's parityMaterialDelta slot, and the one the Build()-time refusal below reads.
     // It exists beside m_positionalFold because the two answer different questions: m_positionalFold feeds the
     // material-scope CLAMP, whose repair vocabulary is a fold's per-unit stride, so it deliberately tracks only the two

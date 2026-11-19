@@ -123,9 +123,7 @@ public enum SdfOp : uint {
     /// distanceScale / the wallpaper material delta), so <see cref="ResetPoint"/> semantics are unchanged and per-shape
     /// cull bounds after the Push in the same chain stay sound. Depth is capped at
     /// <see cref="SdfProgramBuilder.MaxFieldScopeDepth"/> (a shader-constant + validator rule, not part of the packed
-    /// layout). Op-unused (scope-free) programs are byte-identical. A Shape lane holding a positive float's bits seeds
-    /// the scope's accumulator with that value instead of the far distance; only a relief mask's scope is seeded
-    /// (<see cref="ReliefWeight"/>).</summary>
+    /// layout). Op-unused (scope-free) programs are byte-identical. Every lane of a push is zero.</summary>
     PushField = 19,
     /// <summary>Closes the scope opened by the matching <see cref="PushField"/> and composes the scope's accumulated
     /// field back into the saved parent accumulator as a single candidate — reusing the shape blend tail (a pop is just
@@ -184,15 +182,12 @@ public enum SdfOp : uint {
     /// Data0=(frequency, amplitude, randomness, 0), Shape=seed, Blend=SdfCellMode.
     /// The 27-cell PCG3D neighborhood is exact within the mode's admitted randomness range.</summary>
     CellDisplace = 26,
-    /// <summary>Closes a relief mask's region: reads the scope's accumulator as the distance <c>m</c> to the region its
-    /// shapes draw, scaled by the scope's own 1/L (<c>Data1.x</c>, baked by <c>AnalyzeLipschitz</c>), multiplies the
-    /// per-sample relief weight by <c>w = inside + (outside − inside)·smoothstep(start, start + fade, m)</c>, and sets
-    /// the accumulator to the far distance, so the scope's pop composes nothing. Data0 = (start, fade, inside,
-    /// outside), with <c>inside</c> and <c>outside</c> in [0, 1] and <c>fade</c> above zero; <c>w</c> is exactly
-    /// <c>inside</c> at or below <c>start</c> and exactly <c>outside</c> at or beyond <c>start + fade</c>. The next
-    /// <see cref="NoiseDisplace"/> in the enclosing scope multiplies its displacement by the weight and resets it to
-    /// one; <c>SdfProgram</c> refuses a mask that is not the last instruction of a scope seeded at its band's end, or
-    /// that any instruction but a further mask scope, a point op or that relief follows
-    /// (<see cref="SdfProgramBuilder.BeginReliefMask"/>).</summary>
-    ReliefWeight = 27,
+    /// <summary>One data row of a relief mask: data the <see cref="NoiseDisplace"/> after its run reads, and nothing
+    /// else. Every other reader of the stream steps over it: it moves no point, writes no field and takes no owner. The
+    /// Blend lane names its kind (<see cref="SdfReliefRowKind"/>): a band (Data0 = start, width, inside, outside), a
+    /// region's pose (Data0.xyz = origin, Data1 = its unit quaternion) or a region's primitive (Shape = its
+    /// <see cref="SdfShapeType"/>, Data0 and Data1 as a <see cref="ShapeBlend"/> packs them, Data1.x zero). A relief's
+    /// Material lane counts the rows directly before it, which <see cref="SdfProgram"/> decodes once into typed masks
+    /// (<see cref="SdfReliefMask"/>) and refuses unless they are bands each followed by pose and primitive pairs.</summary>
+    ReliefRow = 27,
 }

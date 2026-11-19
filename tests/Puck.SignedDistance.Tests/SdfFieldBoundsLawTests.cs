@@ -33,7 +33,7 @@ public sealed class SdfFieldBoundsLawTests {
         "op AxialProfile", "op RotatePlane", "op GaussianPush", "op DomainWarp", "op RepeatPolar", "op RepeatPolar mirrored",
         "op WallpaperFold Pmm", "op WallpaperFold P4M", "op WallpaperFold P3M1", "op WallpaperFold P6M", "op LogSphere",
         "op CellJitter White", "op CellJitter Blue", "op CellJitter Gaussian", "op CellJitter tumbled", "op LaneErode", "op LaneErode skipped",
-        "op Displace", "op NoiseDisplace terrain", "op NoiseDisplace rough", "op ReliefWeight",
+        "op Displace", "op NoiseDisplace terrain", "op NoiseDisplace rough", "op ReliefRow", "op ReliefRow plane",
     ];
 
     public static TheoryData<string> Cases() {
@@ -324,9 +324,17 @@ public sealed class SdfFieldBoundsLawTests {
         Shape(name: "op NoiseDisplace terrain", emit: (b, m) => b.Translate(offset: new Vector3(x: 0f, y: -1f, z: 0f)).Scale(scale: new Vector3(value: 0.8f)).Rotate(rotation: Quaternion.CreateFromYawPitchRoll(yaw: 0.7f, pitch: 0f, roll: 0f))
             .Sphere(material: m, radius: 2f).NoiseDisplace(amplitude: 1.5f, frequency: 0.9f, octaves: 6, seed: 11u));
         // A relief under a mask whose band crosses the sphere's surface, so boxes meet every weight from inside to outside.
-        Shape(name: "op ReliefWeight", emit: (b, m) => b.PushField().Sphere(material: m, radius: 1.1f)
-            .BeginReliefMask(fade: 0.4f, inside: 0.2f, start: -0.1f).ResetPoint().Translate(offset: new Vector3(x: 0.3f, y: 0.5f, z: 0f)).Sphere(material: m, radius: 0.5f).EndReliefMask()
-            .ResetPoint().NoiseDisplace(amplitude: 0.2f, frequency: 2f, octaves: 3, seed: 5u).PopField());
+        Shape(name: "op ReliefRow", emit: (b, m) => b.PushField().Sphere(material: m, radius: 1.1f)
+            .ResetPoint().NoiseDisplace(amplitude: 0.2f, frequency: 2f, octaves: 3, seed: 5u, masks: [new SdfReliefMask(band: SdfReliefBand.Of(inside: 0.2f, start: -0.1f, width: 0.4f), regions: [
+                SdfReliefRegion.Lower(position: new Vector3(x: 0.3f, y: 0.5f, z: 0f), rotation: Quaternion.Identity, scale: new Vector3(value: 0.5f), type: SdfSolidPrimitive.Sphere),
+                SdfReliefRegion.Lower(position: new Vector3(x: -0.4f, y: 0.2f, z: 0.1f), rotation: Quaternion.CreateFromYawPitchRoll(yaw: 0.4f, pitch: 0.3f, roll: 0.2f), scale: new Vector3(x: 0.3f, y: 0.2f, z: 0.25f), type: SdfSolidPrimitive.Box),
+                SdfReliefRegion.Lower(position: new Vector3(x: 0f, y: -0.6f, z: 0.2f), rotation: Quaternion.CreateFromYawPitchRoll(yaw: 0.1f, pitch: 0.9f, roll: 0f), scale: new Vector3(x: 0.2f, y: 0.6f, z: 0.2f), type: SdfSolidPrimitive.Capsule),
+            ])]).PopField());
+        // A plane region ("no relief below this height"), whose box rule must agree with its point rule.
+        Shape(name: "op ReliefRow plane", emit: (b, m) => b.PushField().Sphere(material: m, radius: 1.1f)
+            .ResetPoint().NoiseDisplace(amplitude: 0.2f, frequency: 2f, octaves: 3, seed: 5u, masks: [new SdfReliefMask(band: SdfReliefBand.Of(start: 0f, width: 0.3f), regions: [
+                SdfReliefRegion.Lower(position: new Vector3(x: 0f, y: -0.2f, z: 0f), rotation: Quaternion.CreateFromYawPitchRoll(yaw: 0f, pitch: 0.2f, roll: 0f), scale: Vector3.One, type: SdfSolidPrimitive.Plane),
+            ])]).PopField());
         Shape(name: "op NoiseDisplace rough", emit: (b, m) => b.Plane(material: m, normal: Vector3.UnitY, offset: 0f).NoiseDisplace(amplitude: 0.6f, frequency: 3.3f, gain: 0.9f, lacunarity: 2.7f, octaves: 8, seed: 0xFFFFFFF0u));
 
         // Runs of smooth unions on one accumulator, whose operands crowd within a radius of each other so each blend

@@ -262,6 +262,11 @@ public sealed partial class SdfProgram {
 
                         break;
                     }
+                case SdfOp.ReliefRow: {
+                        // A relief's data row moves no point and writes no field; the relief after it ends the chain's
+                        // sphere and the segment's skip.
+                        break;
+                    }
                 default: {
                         // Repeat/RepeatLimited/SymmetryPlane/WallpaperFold/CellJitter/RepeatPolar
                         // (space folding), Twist/Bend/Elongate/DomainWarp/AxialProfile/Shear/GaussianPush(Data) (non-isometries),

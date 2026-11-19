@@ -39,10 +39,11 @@ public sealed partial class SdfProgram {
     //   * A chamfer PopField is this same composition, not a program-wide multiply. For one pop against an accumulator
     //     dominating both operands the recurrence gives max(L, L, 2L/√2) = √2·L; it additionally counts repeated pops,
     //     including both nested and sequential scopes.
-    // The depth-0 chain with the largest factor: the chain that binds the global step scale below 1 (a scoped chain's
-    // factor is clamped to 1 at its pop, see AnalyzeLipschitz). Null when no unscoped chain carries a factor above 1,
-    // which is every isometric program. A diagnostic, never an input to the packed words.
-    private static SdfStepScaleBinder? AnalyzeStepScaleBinder(SdfInstruction[] instructions, SdfInstanceRange[] instances, List<float> chainFactors) {
+    // What binds the global step scale below 1: the depth-0 chain with the largest factor, or an unscoped relief whose
+    // charge (AnalyzeLipschitz's reliefCharges, read as the factor 1 + charge) is larger. A scoped chain's factor and a
+    // scoped relief's charge are clamped to 1 at their pop, so neither binds it. Null when nothing unscoped carries a
+    // factor above 1, which is every isometric program. A diagnostic, never an input to the packed words.
+    private static SdfStepScaleBinder? AnalyzeStepScaleBinder(SdfInstruction[] instructions, SdfInstanceRange[] instances, List<float> chainFactors, float[]? reliefCharges) {
         // Reuse admission's chain factors: AnalyzeLipschitz only patches PopField.Data1.Y, which the chain
         // analysis ignores. Repeating that analysis here would walk the full capacity-probe program twice.
         SdfStepScaleBinder? best = null;
@@ -83,7 +84,25 @@ public sealed partial class SdfProgram {
                                     instructionIndex: index
                                 ),
                                 InstructionIndex: index,
+                                Op: SdfOp.ShapeBlend,
                                 Shape: ((SdfShapeType)instruction.Shape)
+                            );
+                        }
+
+                        break;
+                    }
+                case SdfOp.Displace:
+                case SdfOp.NoiseDisplace:
+                case SdfOp.CellDisplace: {
+                        var factor = (1.0f + (reliefCharges?[index] ?? 0.0f));
+
+                        if ((depth == 0) && (factor > 1.0f) && ((best is not { } current) || (factor > current.Factor))) {
+                            best = new SdfStepScaleBinder(
+                                Factor: factor,
+                                InstanceIndex: InstanceOwning(instances: instances, instructionIndex: index),
+                                InstructionIndex: index,
+                                Op: instruction.Op,
+                                Shape: null
                             );
                         }
 
@@ -109,10 +128,10 @@ public sealed partial class SdfProgram {
 
         return -1;
     }
-    private static float AnalyzeLipschitz(SdfInstruction[] instructions, (int InstructionIndex, Vector2[] Vertices)[] convexPolygonProfiles, SdfSweepCurve[] sweepCurves, out List<float> chainFactors) {
-        // Each relief's masks widen its step bound by their band slopes (ReliefMaskSlope), already in field units.
-        var maskSlopes = ReliefMaskSlopes(instructions: instructions);
-
+    // maskSlopes: per instruction, the summed slope of a masked relief's masks per unit of the frame it samples (the
+    // door's ReliefMaskSlopes), null when none is masked. reliefCharges: per instruction, what each relief added to its
+    // accumulator, for AnalyzeStepScaleBinder; null for a program with no relief.
+    private static float AnalyzeLipschitz(SdfInstruction[] instructions, (int InstructionIndex, Vector2[] Vertices)[] convexPolygonProfiles, SdfSweepCurve[] sweepCurves, float[]? maskSlopes, out List<float> chainFactors, out float[]? reliefCharges) {
         chainFactors = AnalyzeChainLipschitz(
             convexPolygonProfiles: convexPolygonProfiles,
             instructions: instructions,
@@ -124,11 +143,11 @@ public sealed partial class SdfProgram {
         var accumulator = 0.0f;
         // A push saves the immediate parent's bound before reseeding the child.
         Span<float> savedAccumulators = stackalloc float[SdfProgramBuilder.MaxFieldScopeDepth];
-        // Each open scope's push, so a relief mask's weight can rescale its seed by the scope's bound.
-        Span<int> pushes = stackalloc int[SdfProgramBuilder.MaxFieldScopeDepth];
         var scopeDepth = 0;
         var reliefPointFactors = AnalyzeReliefPointFactors(instructions: instructions);
         var chainIndex = 0;
+
+        reliefCharges = ((reliefPointFactors.Length == 0) ? null : new float[instructions.Length]);
 
         for (var index = 0; (index < instructions.Length); index++) {
             var instruction = instructions[index];
@@ -151,24 +170,7 @@ public sealed partial class SdfProgram {
                         break;
                     }
                 case SdfOp.PushField: {
-                        pushes[scopeDepth] = index;
                         savedAccumulators[scopeDepth++] = accumulator;
-                        accumulator = 0.0f;
-                        break;
-                    }
-                case SdfOp.ReliefWeight: {
-                        // The admission door's writer (SdfProgram.ReliefMasks.cs, fact 2): the band's endpoints in the
-                        // region field's own units are the band times the region's bound L, so the region's distance read
-                        // against them is 1-Lipschitz as ReliefMaskSlope assumes, and the push's seed is the band's end, so
-                        // the scope's clamp sits exactly where the weight reaches its outside. All three words are written
-                        // from the band whatever the caller supplied. The weight then leaves the far distance, a constant
-                        // (L = 0), so the scope's canonical pop composes nothing and stays unpatched.
-                        var regionLipschitz = MathF.Max(x: accumulator, y: 1.0f);
-                        var (bandStart, bandEnd) = ReliefMaskEndpoints(index: index, regionLipschitz: regionLipschitz, weight: instruction);
-                        var push = pushes[(scopeDepth - 1)];
-
-                        instructions[index] = (instruction with { Data1 = new Vector4(x: bandStart, y: bandEnd, z: 0.0f, w: 0.0f) });
-                        instructions[push] = (instructions[push] with { Shape = BitConverter.SingleToUInt32Bits(value: bandEnd) });
                         accumulator = 0.0f;
                         break;
                     }
@@ -176,23 +178,23 @@ public sealed partial class SdfProgram {
                 // or after it, so its bound joins that accumulator HERE (|∇(f + g)| ≤ L_f + L_g), inside the scope it
                 // acts on: its own slope in the frame it samples, times its chain's point factor, which carries the
                 // chain's scales into field units. A later shape in the chain composes against the edited accumulator
-                // and never carries the relief's charge. A mask's band slope is already per field unit.
+                // and never carries the relief's charge. A masked relief's gradient is a·(w∇n + n∇w) with |n| ≤ 1 and
+                // 0 ≤ w ≤ 1, so its masks add |a| times their slopes, which are per unit of the same frame and take the
+                // same point factor (SdfNoiseDisplacement.MaskedSlope). A row charges nothing: its relief reads it.
                 case SdfOp.Displace: {
-                        accumulator += (DisplaceSlope(instruction: instruction) * reliefPointFactors[index]);
+                        reliefCharges![index] = (DisplaceSlope(instruction: instruction) * reliefPointFactors[index]);
+                        accumulator += reliefCharges[index];
                         break;
                     }
                 case SdfOp.NoiseDisplace: {
-                        accumulator += (SdfNoiseDisplacement.Of(instruction: instruction).ReliefSlope * reliefPointFactors[index]);
-
-                        if ((maskSlopes?[index] ?? 0f) is > 0f and var maskSlope) {
-                            accumulator += (MathF.Abs(x: instruction.Data0.Y) * maskSlope);
-                        }
-
+                        reliefCharges![index] = (SdfNoiseDisplacement.Of(instruction: instruction).MaskedSlope(maskSlope: (maskSlopes?[index] ?? 0f)) * reliefPointFactors[index]);
+                        accumulator += reliefCharges[index];
                         break;
                     }
                 case SdfOp.CellDisplace: {
-                        accumulator += (new SdfCellDisplacement(instruction.Data0.X, instruction.Data0.Y, instruction.Shape,
+                        reliefCharges![index] = (new SdfCellDisplacement(instruction.Data0.X, instruction.Data0.Y, instruction.Shape,
                             ((SdfCellMode)instruction.Blend), instruction.Data0.Z).ReliefSlope * reliefPointFactors[index]);
+                        accumulator += reliefCharges[index];
                         break;
                     }
                 case SdfOp.PopField: {
