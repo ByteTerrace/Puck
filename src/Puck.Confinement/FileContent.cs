@@ -26,6 +26,26 @@ public static class FileContent {
     }
     private static byte[] Trim(byte[] buffer, int count) => ((count == buffer.Length) ? buffer : buffer.AsSpan(length: count, start: 0).ToArray());
 
+    /// <summary>Decodes a file's whole content as text exactly as <see cref="File.ReadAllText(string, System.Text.Encoding)"/>
+    /// decodes the file: a byte-order mark selects the encoding and is not part of the text, and
+    /// <paramref name="encoding"/> is assumed otherwise.</summary>
+    /// <param name="content">The file's bytes, whole.</param>
+    /// <param name="encoding">The encoding assumed when the content carries no byte-order mark; UTF-8 when
+    /// <see langword="null"/>.</param>
+    /// <returns>The decoded text.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="content"/> is <see langword="null"/>.</exception>
+    public static string Text(byte[] content, System.Text.Encoding? encoding = null) {
+        ArgumentNullException.ThrowIfNull(argument: content);
+
+        using var reader = new StreamReader(
+            detectEncodingFromByteOrderMarks: true,
+            encoding: (encoding ?? System.Text.Encoding.UTF8),
+            stream: new MemoryStream(buffer: content)
+        );
+
+        return reader.ReadToEnd();
+    }
+
     /// <summary>Reads a stream from its position to its end, refusing to hold more than <paramref name="maximumBytes"/>.
     /// The stream is opened once by the caller and read until end of stream; its length is never trusted as the
     /// answer, so no byte past the ceiling is ever allocated and no file that grew after its length was taken returns a

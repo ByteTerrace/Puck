@@ -29,17 +29,8 @@ public static partial class WorldDefinitionFileSource {
     // differently (the directory source refuses what the composer compiles), so neither answers for the other.
     private static string CacheKey(string path, string fingerprint, IWorldDocumentSource source) =>
         $"{(PuckPaths.FoldsCase ? PuckPaths.Normalize(path: path).ToUpperInvariant() : PuckPaths.Normalize(path: path))}\0{fingerprint}\0{source.GetType().FullName}";
-    // Mirrors File.ReadAllText's own encoding detection (BOM-sniffed, UTF-8 default), so a chain link read through
-    // any IWorldDocumentSource decodes exactly like a load through File.ReadAllText would.
-    private static string DecodeJson(byte[] bytes) {
-        using var reader = new StreamReader(
-            stream: new MemoryStream(buffer: bytes),
-            encoding: Encoding.UTF8,
-            detectEncodingFromByteOrderMarks: true
-        );
-
-        return reader.ReadToEnd();
-    }
+    // A chain link read through any IWorldDocumentSource decodes exactly like a load through File.ReadAllText would.
+    private static string DecodeJson(byte[] bytes) => Puck.Confinement.FileContent.Text(content: bytes);
     // Every document a load or a composition reads comes through here, so the boot ledger counts each read once.
     private static bool TryReadDocument(IWorldDocumentSource source, string name, string referrerName, out string resolvedName, out byte[]? content, out string reason) {
         if (!source.TryRead(

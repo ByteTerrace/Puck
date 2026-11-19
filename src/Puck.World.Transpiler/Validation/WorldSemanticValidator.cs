@@ -50,15 +50,15 @@ public static class WorldSemanticValidator {
     /// <returns>The composed document, validated when it is a root; <see langword="null"/> when the composition was
     /// refused (reported as PUCK035). Whether the validation passed is in <paramref name="diagnostics"/>.</returns>
     public static JsonObject? ValidateComposedWorld(JsonObject loweredJson, SourceMap? sourceMap, DiagnosticBag diagnostics, string sourcePath, IMachineValidationCatalog? machines = null, string catalogFingerprint = "", WorldCompiledSource? sourceCompilation = null) {
-        var origins = new WorldDocumentOrigins();
-
+        // The composition keeps no origins: tracking where every value was written costs a large share of a compose
+        // and is read only to place a finding no layer of the source authors. Such a finding composes again with
+        // origins, once, when the first one asks (WorldFindingLocator).
         if (!TryComposeWorld(
             catalogFingerprint: catalogFingerprint,
             composed: out var composed,
             diagnostics: diagnostics,
             loweredJson: loweredJson,
             machines: machines,
-            origins: origins,
             sourceCompilation: sourceCompilation,
             sourceMap: sourceMap,
             sourcePath: sourcePath
@@ -67,12 +67,26 @@ public static class WorldSemanticValidator {
         }
 
         if (IsRootDocument(loweredJson: loweredJson)) {
-            _ = ValidateWorld(
+            _ = ValidatePlaced(
                 catalogFingerprint: catalogFingerprint,
                 diagnostics: diagnostics,
                 loweredJson: composed,
                 machines: machines,
-                origins: origins,
+                provenance: () => {
+                    var origins = new WorldDocumentOrigins();
+
+                    return (TryComposeWorld(
+                        catalogFingerprint: catalogFingerprint,
+                        composed: out var tracked,
+                        diagnostics: new DiagnosticBag(),
+                        loweredJson: loweredJson,
+                        machines: machines,
+                        origins: origins,
+                        sourceCompilation: sourceCompilation,
+                        sourceMap: sourceMap,
+                        sourcePath: sourcePath
+                    ) ? new WorldFindingProvenance(Composed: tracked, Origins: origins) : null);
+                },
                 source: loweredJson,
                 sourceMap: sourceMap,
                 sourcePath: sourcePath
@@ -157,12 +171,15 @@ public static class WorldSemanticValidator {
     /// (<see cref="WorldDocumentBasis.TraceToLayer"/>), so a basis's or an import's rows cannot shift the line a
     /// refusal lands on. <see langword="null"/> when <paramref name="loweredJson"/> is the source's own document.</param>
     /// <param name="sourcePath">The root document's path, when known, so referenced assets resolve beside it.</param>
-    /// <param name="origins">The authored origins <see cref="TryComposeWorld"/> collected for
-    /// <paramref name="loweredJson"/>, so a finding against a row only a basis or an import authors is placed on that
-    /// source's line, and dropped when that source acknowledges it with an <c>allow</c> line; <see langword="null"/>
-    /// reports such a finding without a location.</param>
     /// <returns>True if the world passed semantic validation without errors.</returns>
-    public static bool ValidateWorld(JsonObject loweredJson, SourceMap? sourceMap, DiagnosticBag diagnostics, IMachineValidationCatalog? machines = null, string catalogFingerprint = "", JsonObject? source = null, string? sourcePath = null, WorldDocumentOrigins? origins = null) {
+    /// <remarks>A finding against a row only a basis or an import authors is reported without a location; the
+    /// compose-and-validate path (<see cref="ValidateComposedWorld"/>) places it on the line that authored it.</remarks>
+    public static bool ValidateWorld(JsonObject loweredJson, SourceMap? sourceMap, DiagnosticBag diagnostics, IMachineValidationCatalog? machines = null, string catalogFingerprint = "", JsonObject? source = null, string? sourcePath = null) =>
+        ValidatePlaced(catalogFingerprint: catalogFingerprint, diagnostics: diagnostics, loweredJson: loweredJson, machines: machines, provenance: null, source: source, sourceMap: sourceMap, sourcePath: sourcePath);
+    // `provenance` composes the world again with its authored origins when a finding no layer of the source authors asks
+    // to be placed on the basis or import line that wrote it, and dropped when that source acknowledges it with an
+    // `allow` line; null reports such a finding without a location.
+    private static bool ValidatePlaced(JsonObject loweredJson, SourceMap? sourceMap, DiagnosticBag diagnostics, IMachineValidationCatalog? machines, string catalogFingerprint, JsonObject? source, string? sourcePath, Func<WorldFindingProvenance?>? provenance) {
         ArgumentNullException.ThrowIfNull(loweredJson);
         ArgumentNullException.ThrowIfNull(diagnostics);
 
@@ -175,7 +192,7 @@ public static class WorldSemanticValidator {
             refusal: out var refusal,
             sourceName: "document"
         )) {
-            Report(diagnostics: diagnostics, finding: new WorldFindingLocator(composed: loweredJson, origins: origins, source: source, sourceMap: sourceMap, sourcePath: sourcePath).Locate(
+            Report(diagnostics: diagnostics, finding: new WorldFindingLocator(composed: loweredJson, provenance: provenance, source: source, sourceMap: sourceMap, sourcePath: sourcePath).Locate(
                 code: PuckDiagnosticCodes.SchemaRejected,
                 message: (refusal?.Authored ?? parseReason),
                 pointer: refusal?.Pointer,
@@ -209,7 +226,7 @@ public static class WorldSemanticValidator {
             out _
         );
 
-        var locator = new WorldFindingLocator(composed: loweredJson, origins: origins, source: source, sourceMap: sourceMap, sourcePath: sourcePath);
+        var locator = new WorldFindingLocator(composed: loweredJson, provenance: provenance, source: source, sourceMap: sourceMap, sourcePath: sourcePath);
 
         foreach (var error in errors) {
             Report(diagnostics: diagnostics, finding: locator.Locate(

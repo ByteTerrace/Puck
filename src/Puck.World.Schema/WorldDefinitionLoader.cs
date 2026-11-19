@@ -1,4 +1,3 @@
-using System.Text;
 using Puck.Abstractions.Machines;
 
 namespace Puck.World;
@@ -51,13 +50,7 @@ public static partial class WorldDefinitionLoader {
         WorldBootWork.Count(kind: WorldBootWork.Loads);
 
         try {
-            using var reader = new StreamReader(
-                stream: new MemoryStream(buffer: utf8.ToArray()),
-                encoding: Encoding.UTF8,
-                detectEncodingFromByteOrderMarks: true
-            );
-
-            json = reader.ReadToEnd();
+            json = Puck.Confinement.FileContent.Text(content: utf8.ToArray());
         } catch (Exception exception) {
             reason = $"cannot decode {sourceName}: {exception.Message.ReplaceLineEndings(replacementText: " ")}";
 
