@@ -550,7 +550,16 @@ done line; a nested residency's done line is insufficient.
   a thin partition when the camera approaches it.
 - When none of the eight probes answers, the sample traces a hit buffer at the
   camera with the same rays as a lattice probe and relights it with the same
-  materials, shadow tests and bounce cache. A small enclosure may contain no
+  materials, shadow tests and bounce cache. A hit no probe answers then reflects
+  the sample's own light about its normal, iterated
+  `SdfMeshIrradianceProbe.CameraSampleClosurePasses` times
+  (`SdfMeshIrradiance.CloseCameraSample`, the closure in
+  `sdf-probe-camera-sample-stage.hlsli`): the sample stands for every surface no
+  probe answers, so its own unanswered hits read it as those surfaces do. An
+  emissive strip reaches a wall only by bounce, so an unclosed sample of a room
+  the volume has not measured holds its walls near black beside a doorway's
+  sunlit ground at full strength, and every unanswered surface in the room takes
+  the doorway's colour (the gallery hall from its lobby reads olive). A small enclosure may contain no
   lattice centre; searching farther or holding the previous room's exposure
   cannot measure its light. The hits are cached by camera cell and geometry,
   with at most one slot per view, and relit when the lighting version changes
