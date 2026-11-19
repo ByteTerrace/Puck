@@ -16,7 +16,7 @@ namespace Puck.World;
 /// <summary>
 /// <c>world.benchmark</c>: plays a route through the running world in real time and reports every host iteration of
 /// it. A route is a <c>routes</c> row of the running document, whose chapters its seat program plays through the seat's
-/// own controls (<see cref="WorldSeatDriver"/>), or the <c>test</c> blocks of one <c>.puck</c> source, each a chapter: its <c>when</c> lines are the
+/// own controls (<see cref="Puck.World.Client.WorldSeatDriver"/>), or the <c>test</c> blocks of one <c>.puck</c> source, each a chapter: its <c>when</c> lines are the
 /// chapter's controller program and its <c>expect</c> lines its arrival. The program is the schedule the compiler
 /// lowers the block to, the rows a headless <c>puck test</c> submits, and each row is armed through the seat's own
 /// ingress (<see cref="WorldTickScript.ArmSeat"/>) at its tick, so the live chapter and the headless test submit the
@@ -39,13 +39,14 @@ namespace Puck.World;
 /// <param name="stateRoot">The run's state root, which reports are written under, or <see langword="null"/>.</param>
 /// <param name="readings">The optional presentation registry the run publishes its live figures into.</param>
 /// <param name="gpuTiming">The optional GPU timestamp owner, whose per-pass readings a run samples through each chapter.</param>
-/// <param name="server">The boot authority whose document's <c>routes</c> a run names, or <see langword="null"/> on a host
-/// that plays only test blocks.</param>
-/// <param name="instances">The instances a route's seat may stand in.</param>
+/// <param name="server">The boot authority, whose document is the one this process was started with: a run names its
+/// <c>routes</c> and its seat programs, which are the client's own. <see langword="null"/> on a host that plays only
+/// test blocks.</param>
 /// <param name="seatRouter">The seats' authority routes.</param>
-/// <param name="client">The presentation client whose seat views hold the cameras' facings.</param>
+/// <param name="senses">What each seat's client was delivered, which a route's seat driver reads; <see langword="null"/>
+/// on a host that composes no seat view.</param>
 /// <param name="deviceProfile">The device profile the process runs under, which the report names; absent reports none.</param>
-public sealed partial class WorldBenchmarkCommandModule(WorldTickScript script, Func<InputRouter> router, WorldDefinitionSource source, HostFrameTimeline? timeline = null, PresentPacingControl? pacing = null, WorldStateRoot? stateRoot = null, PresentationReadings? readings = null, WorldGpuTiming? gpuTiming = null, WorldServer? server = null, WorldInstanceHost? instances = null, Puck.World.Client.WorldSeatAuthorityRouter? seatRouter = null, Puck.World.Client.WorldClient? client = null, WorldDeviceProfileState? deviceProfile = null) : ICommandModule {
+public sealed partial class WorldBenchmarkCommandModule(WorldTickScript script, Func<InputRouter> router, WorldDefinitionSource source, HostFrameTimeline? timeline = null, PresentPacingControl? pacing = null, WorldStateRoot? stateRoot = null, PresentationReadings? readings = null, WorldGpuTiming? gpuTiming = null, WorldServer? server = null, Puck.World.Client.WorldSeatAuthorityRouter? seatRouter = null, Puck.World.Client.WorldSeatSenses? senses = null, WorldDeviceProfileState? deviceProfile = null) : ICommandModule {
     /// <summary>The host work, in milliseconds, past which an iteration is over by default: one 60 Hz period.</summary>
     public const double DefaultBudgetMilliseconds = (1000.0 / 60.0);
     /// <summary>The wall time, in seconds, after which a run that has not finished is ended by default.</summary>
@@ -83,6 +84,10 @@ public sealed partial class WorldBenchmarkCommandModule(WorldTickScript script, 
 
     private sealed record Row(int At, int Slot, string Command, bool Refusal);
 
+    // One reading of the seat's body: the tick it was taken on and its answer, a body.where or body.place line's or, for
+    // a route chapter, what the seat driver read from the seat's own deliveries, spelled as those lines spell it.
+    private sealed record Read(ulong Tick, string Answer);
+
     // A chapter's program: a test block's scheduled rows and arrival gates, or a route chapter's steps (Goals), which a
     // seat program plays and whose length is known only once it ends.
     private sealed record Program(string Name, IReadOnlyList<Row> Rows, int Duration, IReadOnlyList<string> Gates, int Body, string Identity, WorldRouteChapter? Goals = null);
@@ -100,6 +105,15 @@ public sealed partial class WorldBenchmarkCommandModule(WorldTickScript script, 
         public List<WorldTickScript.Line> Places { get; } = [];
         public WorldTickScript.Line? StartPlace { get; set; }
         public WorldTickScript.Line? EndPlace { get; set; }
+        // A route chapter's readings of the seat's body, which its driver takes from the seat's deliveries: no console
+        // line is armed for them, since a line routed to a remote authority holds the pump for its answer.
+        public List<Read> Samples { get; } = [];
+        public Read? StartRead { get; set; }
+        public Read? EndRead { get; set; }
+        // The seat's authority and its mirror's delivery work as the chapter began, and the work it did across it.
+        public Puck.World.Client.WorldAuthorityEndpoint? Endpoint { get; set; }
+        public Puck.World.Client.WorldDeliveryWork DeliveryAtBegin { get; set; }
+        public JsonObject? Delivery { get; set; }
         public List<WorldTickScript.Line> OpenReads { get; } = [];
         public List<WorldTickScript.Line> CloseReads { get; } = [];
         public Dictionary<string, (double Sum, double Max, int Count)> Gpu { get; } = new(comparer: StringComparer.Ordinal);
@@ -122,6 +136,14 @@ public sealed partial class WorldBenchmarkCommandModule(WorldTickScript script, 
         public int ControlRefusals { get; set; }
         public IReadOnlyList<(ulong Tick, string Place)> Visited { get; set; } = [];
         public bool Driven => (Program.Goals is not null);
+        // The body's pose and places where the chapter starts and ends, and each sample between, from either source.
+        public Read? Opening => (Driven ? StartRead : ReadOf(line: StartPlace));
+        public Read? EndPose => (Driven ? EndRead : ReadOf(line: Where));
+        public Read? EndPlaces => (Driven ? EndRead : ReadOf(line: EndPlace));
+        public IEnumerable<Read> PoseSamples => (Driven ? Samples : Poses.Select(selector: ReadOf).OfType<Read>());
+        public IEnumerable<Read> PlaceSamples => (Driven ? Samples : Places.Select(selector: ReadOf).OfType<Read>());
+
+        private static Read? ReadOf(WorldTickScript.Line? line) => ((line is { Outcome: "ran" }) ? new Read(Answer: line.Answer, Tick: line.Tick) : null);
     }
 
     private readonly List<Chapter> m_chapters = [];
@@ -149,7 +171,7 @@ public sealed partial class WorldBenchmarkCommandModule(WorldTickScript script, 
     private bool m_overlayChanged;
     private bool m_registeredReadings;
     // A route run: the seat driver, the simulation rate it reads seconds in, and the chapter it is playing.
-    private WorldSeatDriver? m_driver;
+    private Puck.World.Client.WorldSeatDriver? m_driver;
     private int m_rateHz;
     private Chapter? m_goalChapter;
 
@@ -190,22 +212,33 @@ public sealed partial class WorldBenchmarkCommandModule(WorldTickScript script, 
         }
 
         if ((server?.Definition.Routes.FirstOrDefault(predicate: candidate => string.Equals(a: candidate.Name, b: reference, comparisonType: StringComparison.Ordinal)) is { } route)) {
-            var population = server.Population;
-            if (!population.NavigationBaked && (context.TextSession is { } session) && route.Chapters.Any(predicate: chapter =>
+            if ((senses is null) || (seatRouter is null)) {
+                return CommandResult.Error(output: "[world.benchmark: this host composes no seat routes or seat views, so it plays no route]");
+            }
+            if (seatRouter.TryRoute(slot: (route.Seat - 1)) is not { } seat) {
+                return CommandResult.Error(output: $"[world.benchmark: seat {route.Seat} is routed to no authority, so the route '{reference}' has no world to play in]");
+            }
+
+            // The paths are planned over the document the seat's authority delivered, which bakes off the pump first.
+            var endpoint = seat.Endpoint;
+
+            if ((context.TextSession is { } session) && !senses.Navigation(endpoint: endpoint).Ready && route.Chapters.Any(predicate: chapter =>
                 chapter.Name.StartsWith(value: prefix, comparisonType: StringComparison.Ordinal) && chapter.Steps.Any(predicate: static step => step is WorldRouteStep.Go { Direct: false }))) {
-                population.BeginNavigationBakes();
+                senses.Navigation(endpoint: endpoint).Prepare();
                 session.HoldWhile(
                     hold: () => {
-                        if (population.NavigationBaked) { return false; }
-                        population.BeginNavigationBakes();
+                        var navigation = senses.Navigation(endpoint: endpoint);
+
+                        if (navigation.Ready) { return false; }
+                        navigation.Prepare();
                         return true;
                     },
                     released: deadlinePassed => (deadlinePassed
-                        ? CommandResult.Error(output: $"[world.benchmark: navigation preparation reached the answer deadline; {population.NavigationBakedDomainCount}/{population.NavigationDomainCount} domains baked, the rest bake on]")
+                        ? CommandResult.Error(output: $"[world.benchmark: navigation preparation reached the answer deadline; {senses.Navigation(endpoint: endpoint).Domains.Baked}/{senses.Navigation(endpoint: endpoint).Domains.Declared} domains of the document '{endpoint.Identity}' delivered are baked, the rest bake on]")
                         : Run(at: at, budget: budget, context: context, loops: loops, output: output, prefix: prefix, reference: reference, timeout: timeout)),
                     publishResult: true
                 );
-                return new CommandResult(Output: $"[world.benchmark: preparing navigation for '{reference}' off the tick]");
+                return new CommandResult(Output: $"[world.benchmark: preparing navigation for '{reference}' over the document '{endpoint.Identity}' delivered, off the tick]");
             }
             return RunRoute(at: at, budget: budget, loops: loops, output: output, prefix: prefix, route: route, timeout: timeout);
         }
@@ -290,7 +323,7 @@ public sealed partial class WorldBenchmarkCommandModule(WorldTickScript script, 
     // Plays a route of the running document: each chapter's steps are played by the route's seat program through the
     // seat's own ingress, one chapter after another from the tick hook, since a chapter ends when its steps do.
     private CommandResult RunRoute(WorldRoute route, string prefix, ulong? at, double budget, int timeout, int loops, string? output) {
-        if ((instances is null) || (seatRouter is null) || (client is null) || (server is null)) {
+        if ((seatRouter is null) || (senses is null) || (server is null)) {
             return CommandResult.Error(output: "[world.benchmark: this host composes no seat routes or seat views, so it plays no route]");
         }
 
@@ -304,7 +337,8 @@ public sealed partial class WorldBenchmarkCommandModule(WorldTickScript script, 
             return CommandResult.Error(output: $"[world.benchmark: the route '{route.Name}' has no chapter whose name starts with '{prefix}' (it has {string.Join(separator: ", ", values: route.Chapters.Select(selector: static chapter => $"\"{chapter.Name}\""))})]");
         }
 
-        var description = WorldSeatDriver.Describe(program: program);
+        var description = Puck.World.Client.WorldSeatDriver.Describe(program: program);
+        var slot = (route.Seat - 1);
 
         m_programs.Clear();
         m_programs.AddRange(collection: chapters.Select(selector: chapter => new Program(Body: (route.Seat - 1), Duration: 0, Gates: [], Goals: chapter, Identity: IdentityOf(chapter: chapter, program: description), Name: chapter.Name, Rows: [])));
@@ -313,7 +347,11 @@ public sealed partial class WorldBenchmarkCommandModule(WorldTickScript script, 
         m_raw.Clear();
         m_loops = loops;
         m_rateHz = server.Definition.SimulationRateHz;
-        m_driver = new WorldSeatDriver(client: client, instances: instances, program: program, route: route, router: router, routes: seatRouter, script: script);
+        m_driver = new Puck.World.Client.WorldSeatDriver(program: program, route: route, senses: senses, submit: text => {
+            var line = script.SubmitSeat(router: router, slot: slot, text: text);
+
+            return () => line.Outcome;
+        });
 
         var firstTick = Math.Max(val1: (script.CompletedTick + LeadTicks), val2: (at ?? 0UL));
 
@@ -335,7 +373,7 @@ public sealed partial class WorldBenchmarkCommandModule(WorldTickScript script, 
     }
 
     // Arms a route chapter's start at a tick: its begin mark and opening reads on the tick before, which is also the tick
-    // whose hook starts the seat driver on its first step, and its start place on the tick after its first.
+    // whose hook starts the seat driver on its first step.
     private void ArmGoalChapter(int position, int loop, ulong start) {
         var program = m_programs[position];
         var chapter = new Chapter(loop: loop, program: program, start: start) { LastOfLoop = (position == (m_programs.Count - 1)) };
@@ -346,7 +384,6 @@ public sealed partial class WorldBenchmarkCommandModule(WorldTickScript script, 
         foreach (var read in ChapterReads) {
             chapter.OpenReads.Add(item: Pin(tick: (start - 1UL), line: read, raw: true));
         }
-        chapter.StartPlace = Pin(tick: (start + 1UL), line: $"body.place {program.Body.ToString(provider: CultureInfo.InvariantCulture)}");
         m_goalChapter = chapter;
     }
 
@@ -357,6 +394,8 @@ public sealed partial class WorldBenchmarkCommandModule(WorldTickScript script, 
             return;
         }
         if ((tick + 1UL) == chapter.Start) {
+            chapter.Endpoint = seatRouter?.TryRoute(slot: driver.Seat)?.Endpoint;
+            chapter.DeliveryAtBegin = (chapter.Endpoint?.Mirror.DeliveryWork ?? default);
             driver.Begin(chapter: chapter.Program.Goals!, rateHz: m_rateHz, tick: tick);
             return;
         }
@@ -368,17 +407,25 @@ public sealed partial class WorldBenchmarkCommandModule(WorldTickScript script, 
 
         var next = (tick + 1UL);
         var index = m_chapters.IndexOf(item: chapter);
-        var body = driver.Body.ToString(provider: CultureInfo.InvariantCulture);
+        var read = ReadOf(read: driver.Read, tick: tick);
+
+        // The chapter's first tick poses the body, so its start is read on the tick after.
+        if ((tick == (chapter.Start + 1UL)) || ((chapter.StartRead is null) && (tick > (chapter.Start + 1UL)))) {
+            chapter.StartRead = read;
+        }
 
         try {
             if (!driver.Ended) {
                 if (((next - chapter.Start) % SampleTicks) == 0UL) {
-                    chapter.Poses.Add(item: Pin(tick: next, line: $"body.where {body}"));
-                    chapter.Places.Add(item: Pin(tick: next, line: $"body.place {body}"));
+                    if (read is not null) {
+                        chapter.Samples.Add(item: read);
+                    }
                     _ = Pin(tick: next, line: $"world.benchmark sample {index}");
                 }
                 return;
             }
+
+            var endpoint = seatRouter?.TryRoute(slot: driver.Seat)?.Endpoint;
 
             chapter.Duration = (int)(next - chapter.Start);
             chapter.Arrived = driver.Arrived;
@@ -391,11 +438,13 @@ public sealed partial class WorldBenchmarkCommandModule(WorldTickScript script, 
             chapter.ControlLines = driver.Submitted;
             chapter.ControlRefusals = driver.Refused;
             chapter.Visited = [.. driver.Visited];
-            chapter.Where = Pin(tick: next, line: $"body.where {body}");
-            chapter.EndPlace = Pin(tick: next, line: $"body.place {body}");
-            chapter.Hash = Pin(tick: next, line: "world.state.hash");
-            foreach (var read in ChapterReads) {
-                chapter.CloseReads.Add(item: Pin(tick: next, line: read, raw: true));
+            chapter.EndRead = (read ?? chapter.Samples.LastOrDefault());
+            chapter.Delivery = DescribeDelivery(begin: chapter.Endpoint, end: endpoint, workAtBegin: chapter.DeliveryAtBegin);
+            // The state a client can hash is its own process's. A seat whose authority is another process has none to
+            // read here, and the boot world's hash would describe a world the seat is not in.
+            chapter.Hash = ((endpoint is { ClockOwnedHere: true }) ? Pin(tick: next, line: "world.state.hash") : null);
+            foreach (var reading in ChapterReads) {
+                chapter.CloseReads.Add(item: Pin(tick: next, line: reading, raw: true));
             }
             _ = Pin(tick: next, line: $"world.benchmark mark {index} end");
 
@@ -416,13 +465,63 @@ public sealed partial class WorldBenchmarkCommandModule(WorldTickScript script, 
         }
     }
 
+    // A seat driver's reading spelled as body.where and body.place spell theirs, so one reader serves both sources. The
+    // tick is the host's; the reading says which authority tick it was delivered for.
+    private static Read? ReadOf(Puck.World.Client.WorldSeatSenses.Reading? read, ulong tick) => ((read is { } seat)
+        ? new Read(
+            Answer: string.Create(provider: CultureInfo.InvariantCulture, handler: $"[delivered: body:{seat.Index} of {seat.World} at its tick {seat.Body.Tick} pos=({seat.Body.Position.X:0.00}, {seat.Body.Position.Y:0.00}, {seat.Body.Position.Z:0.00}) facts={((seat.Body.Facts == Puck.Physics.Motion.BodyFacts.None) ? "none" : Puck.Physics.Motion.BodyFactVocabulary.Describe(facts: seat.Body.Facts))} vel=({seat.Body.Velocity.X:0.00}, {seat.Body.Velocity.Y:0.00}, {seat.Body.Velocity.Z:0.00}) places={((seat.Places.Count == 0) ? "none" : string.Join(separator: ',', values: seat.Places))}]"),
+            Tick: tick)
+        : null);
+
+    // What the seat's authority delivered across a chapter and what applying it cost: the change of its mirror's
+    // delivery work, and the evenness of its latest snapshot arrivals. A seat that changed authority inside the chapter
+    // has no one mirror to difference, so the chapter names both and reports no counts.
+    private static JsonObject? DescribeDelivery(Puck.World.Client.WorldAuthorityEndpoint? begin, Puck.World.Client.WorldAuthorityEndpoint? end, Puck.World.Client.WorldDeliveryWork workAtBegin) {
+        if (end is null) {
+            return null;
+        }
+
+        var node = new JsonObject {
+            ["endpoint"] = end.Identity,
+            ["authority"] = end.Authority,
+            ["clockOwnedHere"] = end.ClockOwnedHere,
+        };
+
+        if (!ReferenceEquals(objA: begin, objB: end)) {
+            node["beganAt"] = begin?.Identity;
+            return node;
+        }
+
+        var work = (end.Mirror.DeliveryWork - workAtBegin);
+        Span<double> intervals = stackalloc double[63];
+        var count = end.Mirror.SnapshotArrivalIntervals(milliseconds: intervals);
+
+        node["snapshots"] = work.Snapshots;
+        node["definitions"] = work.Definitions;
+        node["states"] = work.States;
+        node["applyMs"] = work.Milliseconds;
+        node["snapshotApplyMs"] = ((work.SnapshotTicks * 1000.0) / System.Diagnostics.Stopwatch.Frequency);
+        if (count > 0) {
+            var sum = 0.0;
+            var max = 0.0;
+
+            foreach (var interval in intervals[..count]) {
+                sum += interval;
+                max = Math.Max(val1: max, val2: interval);
+            }
+            node["arrivalIntervalMs"] = new JsonObject { ["mean"] = (sum / count), ["max"] = max, ["samples"] = count };
+        }
+
+        return node;
+    }
+
     // A route chapter's identity: the hash of its canonical steps, its time limit and the seat program that plays it, so
     // a chapter that is the same goals played the same way is the same chapter whatever it is named.
     private static string IdentityOf(WorldRouteChapter chapter, string program) {
         var text = new StringBuilder(value: program);
 
         foreach (var step in chapter.Steps) {
-            _ = text.Append(value: WorldSeatDriver.Describe(step: step)).Append(value: '\n');
+            _ = text.Append(value: Puck.World.Client.WorldSeatDriver.Describe(step: step)).Append(value: '\n');
         }
         _ = text.Append(provider: CultureInfo.InvariantCulture, handler: $"timeout {chapter.TimeoutSeconds}\n");
 
@@ -753,7 +852,7 @@ public sealed partial class WorldBenchmarkCommandModule(WorldTickScript script, 
 
     // The gates the body's pose fails, the gates this read cannot judge, and whether the chapter ended at all.
     private static (IReadOnlyList<string> Failed, IReadOnlyList<string> Unjudged, bool Read) Arrival(Chapter chapter) {
-        var where = (chapter.Where?.Answer ?? string.Empty);
+        var where = (chapter.EndPose?.Answer ?? string.Empty);
         var pose = Pose().Match(input: where);
         WorldRoutePose? posed = (pose.Success
             ? new WorldRoutePose(
@@ -778,8 +877,8 @@ public sealed partial class WorldBenchmarkCommandModule(WorldTickScript script, 
             ? (chapter.Arrived ? string.Create(provider: CultureInfo.InvariantCulture, handler: $"arrived in {chapter.Duration} ticks") : $"FAILED: {chapter.Failure}")
             : (!read ? "arrival unmeasured (no body pose was read)" : ((failed.Count > 0) ? $"OFF COURSE: {string.Join(separator: "; ", values: failed)}" : ((unjudged.Count > 0) ? $"arrived ({unjudged.Count} gate(s) only the headless test judges)" : "arrived"))));
 
-        var from = PlacesOf(line: chapter.StartPlace) is { Count: > 0 } start ? start[0]!.GetValue<string>() : "none";
-        var to = PlacesOf(line: chapter.EndPlace) is { Count: > 0 } end ? end[0]!.GetValue<string>() : "none";
+        var from = PlacesOf(read: chapter.Opening) is { Count: > 0 } start ? start[0]!.GetValue<string>() : "none";
+        var to = PlacesOf(read: chapter.EndPlaces) is { Count: > 0 } end ? end[0]!.GetValue<string>() : "none";
 
         return $"{arrival} ({from} to {to}){((disturbed.Count > 0) ? $"; DISTURBED: {string.Join(separator: "; ", values: disturbed)}" : string.Empty)}{((statistics is null) ? string.Empty : $"; {Frames(statistics: statistics)}")}{((chapter.Shed > 0) ? string.Create(provider: CultureInfo.InvariantCulture, handler: $"; {chapter.Shed} tick(s) shed") : string.Empty)}";
     }
@@ -804,7 +903,7 @@ public sealed partial class WorldBenchmarkCommandModule(WorldTickScript script, 
             audience: CommandAudience.Operator,
             bindability: CommandBindability.Unbindable,
             name: "world.benchmark",
-            description: $"Plays a route through the running world in real time and reports every host iteration of it: {WorldBenchmarkForms.Spelling}. A route named by a routes row of the running document is played chapter by chapter by its seat program, which works the seat's own controls each tick toward the chapter's places; a chapter arrives when its steps finish and fails, naming the kind, the tick and the place, on a driven wall contact, on leaving the places its path crosses, on a lost path or past its time limit, and each chapter is armed as the one before it ends. Otherwise a route is the test blocks of a .puck source whose names start with the prefix (every one, with none or '-'), each a chapter played in declaration order: its when lines are armed through the seat's own ingress at their ticks, as a headless puck test submits them, and its expect lines are its arrival. The first line lands {LeadTicks} ticks after the run is armed, or at the tick 'at' names when that is later, and each chapter follows the one before by {GapTicks} ticks. 'loops' plays the route that many times (at most {MaxLoops}), each loop armed from the tick the one before it ends on, so a run is reported as its cold first loop, its warm second and its steady rest. A run armed before the world's first tick (a paused boot) is fresh: every line lands on a tick its caller chose from the boot image, so its state hashes compare with another fresh run's armed at the same tick. Any other run is attached, starts wherever the world stands, and its hashes are informational. Nothing in a run pauses, settles or waits, and lockstep presentation is turned off for its span and restored after. Every host iteration from the first chapter's start is recorded past host.frames' ring, and the host's first iterations through that start are its boot span. Each chapter ends with the body's pose judged against its position and grounded gates (arrived or off course), the authority's state hash, its identity (the hash of its program), and its iterations' statistics: interval and work (the interval less the pacer's wait) as mean, median, 95th, 99th and 99.9th percentile and maximum, the counts whose work passed the budget (default one 60 Hz period), twice it, 50 ms and 100 ms, pacing deviation, collections and ticks shed; the iterations over budget with their tick, the body's last sampled position and their phases; each GPU pass's mean and maximum over samples taken every {SampleTicks} ticks; and the raw answers of world.residency, the render.record, gpu.queue and sdf counters and host.memory at both ends, whose change a reader takes. A chapter is written disturbed, with the reason and its statistics beside it, when presentation was locked to ticks in any iteration, the simulation stepped no tick for {StallMilliseconds:0} ms, or a step did not answer as authored. The run writes run.json (puck.benchmark.run.v2) and frames.csv (one row per iteration) to the output directory, by default benchmarks/<local date and time> under the run's state root. The imported authored HUD panel follows a playing run by default; overlay on|off|auto overrides that visibility on demand. The report records that choice and the closing rolling GPU timestamp window, including the overlay pass when measured. With no argument it reads the running route's chapter and tick, or the last run's summary. Each chapter's first tick releases, ahead of its own lines, every control the chapter before it left held, so a chapter starts from released input whatever came before it. stop ends the run where it stands, drops its armed lines, lets go every control the lines that reached the seat left held and writes the partial report, listing every requested loop; a run that passes its wall-time limit (default {DefaultTimeoutSeconds} s) ends the same way, and so does a run whose World shuts down. Refused while world.at lines are armed: a run owns the pinned lines while it plays. An iteration is the host loop's interval, never the time a frame stood on the display, and a headless host records iterations without a renderer.",
+            description: $"Plays a route through the running world in real time and reports every host iteration of it: {WorldBenchmarkForms.Spelling}. A route named by a routes row of the running document is played chapter by chapter by its seat program, which works the seat's own controls each tick toward the chapter's places; a chapter arrives when its steps finish and fails, naming the kind, the tick and the place, on a stick held while the body goes nowhere, on leaving the places its path crosses, on a lost path or past its time limit; its driver is the seat's client and reads only what the seat's authority delivered, in this process or another, and each chapter is armed as the one before it ends. Otherwise a route is the test blocks of a .puck source whose names start with the prefix (every one, with none or '-'), each a chapter played in declaration order: its when lines are armed through the seat's own ingress at their ticks, as a headless puck test submits them, and its expect lines are its arrival. The first line lands {LeadTicks} ticks after the run is armed, or at the tick 'at' names when that is later, and each chapter follows the one before by {GapTicks} ticks. 'loops' plays the route that many times (at most {MaxLoops}), each loop armed from the tick the one before it ends on, so a run is reported as its cold first loop, its warm second and its steady rest. A run armed before the world's first tick (a paused boot) is fresh: every line lands on a tick its caller chose from the boot image, so its state hashes compare with another fresh run's armed at the same tick. Any other run is attached, starts wherever the world stands, and its hashes are informational. Nothing in a run pauses, settles or waits, and lockstep presentation is turned off for its span and restored after. Every host iteration from the first chapter's start is recorded past host.frames' ring, and the host's first iterations through that start are its boot span. Each chapter ends with the body's pose judged against its position and grounded gates (arrived or off course), the authority's state hash, its identity (the hash of its program), and its iterations' statistics: interval and work (the interval less the pacer's wait) as mean, median, 95th, 99th and 99.9th percentile and maximum, the counts whose work passed the budget (default one 60 Hz period), twice it, 50 ms and 100 ms, pacing deviation, collections and ticks shed; the iterations over budget with their tick, the body's last sampled position and their phases; each GPU pass's mean and maximum over samples taken every {SampleTicks} ticks; and the raw answers of world.residency, the render.record, gpu.queue and sdf counters and host.memory at both ends, whose change a reader takes. A chapter is written disturbed, with the reason and its statistics beside it, when presentation was locked to ticks in any iteration, the simulation stepped no tick for {StallMilliseconds:0} ms, or a step did not answer as authored. The run writes run.json (puck.benchmark.run.v2) and frames.csv (one row per iteration) to the output directory, by default benchmarks/<local date and time> under the run's state root. The imported authored HUD panel follows a playing run by default; overlay on|off|auto overrides that visibility on demand. The report records that choice and the closing rolling GPU timestamp window, including the overlay pass when measured. With no argument it reads the running route's chapter and tick, or the last run's summary. Each chapter's first tick releases, ahead of its own lines, every control the chapter before it left held, so a chapter starts from released input whatever came before it. stop ends the run where it stands, drops its armed lines, lets go every control the lines that reached the seat left held and writes the partial report, listing every requested loop; a run that passes its wall-time limit (default {DefaultTimeoutSeconds} s) ends the same way, and so does a run whose World shuts down. Refused while world.at lines are armed: a run owns the pinned lines while it plays. An iteration is the host loop's interval, never the time a frame stood on the display, and a headless host records iterations without a renderer.",
             forms: WorldBenchmarkForms,
             handler: (context, args) => {
                 if (args.Count == 2 && args.Is(0, "overlay")) {

@@ -118,11 +118,9 @@ public sealed class WorldEventFeed {
 
     private WorldCollisionEvents? m_collisionPolicy;
     private WorldDefinition? m_regionDefinition;
-    // m_regionDefinition's sensing placements in placement order (their region ordinals), each with, for one attached to
-    // nothing, its static volume: functions of the immutable definition, so a tick visits its regions and never every
-    // placement.
-    private RegionRow[] m_regionRows = [];
-    private readonly record struct RegionRow(WorldPlacement Placement, WorldPlacementRegion Region, FixedSpatialShape StaticShape);
+    // m_regionDefinition's sensing placements in placement order (their region ordinals), so a tick visits its regions
+    // and never every placement.
+    private WorldPlaces m_places = WorldPlaces.None;
 
     private readonly ulong[] m_collisionPairKeys;
     private readonly CollisionTransition[] m_collisionTransitions;
@@ -565,11 +563,11 @@ public sealed class WorldEventFeed {
         if (!ReferenceEquals(objA: m_regionDefinition, objB: definition)) {
             m_regionFrames.Clear();
             m_regionDefinition = definition;
-            m_regionRows = RegionRowsOf(definition: definition);
+            m_places = WorldPlaces.Of(definition: definition);
             Array.Fill(array: m_seatPlacesStale, value: true);
         }
 
-        var rows = m_regionRows;
+        var rows = m_places.Rows;
 
         for (var thisOrdinal = 0; (thisOrdinal < rows.Length); thisOrdinal++) {
             var (placement, region, staticShape) = rows[thisOrdinal];
@@ -646,30 +644,6 @@ public sealed class WorldEventFeed {
                 Volatile.Write(location: ref m_seatPlaces[seat], value: ((PlacesOf(body: seat) is { Count: > 0 } places) ? places[0] : null));
             }
         }
-    }
-    private static RegionRow[] RegionRowsOf(WorldDefinition definition) {
-        var rows = new List<RegionRow>();
-        var placements = definition.Placements;
-
-        for (var index = 0; (index < placements.Count); index++) {
-            var placement = placements[index];
-            // A dealt template senses nothing itself; its region facet is what its dealt children carry.
-            if ((placement is null) || (placement.Region is not { } region) || (placement.Deal is not null)) {
-                continue;
-            }
-
-            var frame = ((placement.Attach is null)
-                ? WorldDefinitionRows.ResolvedFrame(definition: definition, placement: placement)
-                : default);
-
-            rows.Add(item: new RegionRow(
-                Placement: placement,
-                Region: region,
-                StaticShape: region.ShapeAt(origin: frame.FixedPosition, yawRadians: frame.FixedYawRadians)
-            ));
-        }
-
-        return [.. rows];
     }
     private void CollectSeats(WorldPopulation population) {
         for (var seat = 0; (seat < WorldBodiesLimits.LocalSeatCount); seat++) {
@@ -796,7 +770,7 @@ public sealed class WorldEventFeed {
     /// wing lists before the wing), ties in placement order.</summary>
     /// <param name="body">The body's 0-based entity index.</param>
     /// <returns>The carrying placements' ids, empty when the body stands in none or the feed has not collected yet.</returns>
-    public IReadOnlyList<string> PlacesOf(int body) => Places(holds: (row, _) => IsOccupant(placementId: row.Placement.Id, body: body));
+    public IReadOnlyList<string> PlacesOf(int body) => m_places.Holding(holds: (row, _) => IsOccupant(placementId: row.Placement.Id, body: body));
     /// <summary>Gets a local seat body's innermost place as of its latest region edge, safe to read from any thread:
     /// the reading a HUD binds (<c>seat.&lt;n&gt;.place</c>).</summary>
     /// <param name="seat">The 0-based local seat, which is its body index.</param>
@@ -806,7 +780,7 @@ public sealed class WorldEventFeed {
     /// in, innermost first as <see cref="PlacesOf"/> orders them.</summary>
     /// <param name="point">The world point.</param>
     /// <returns>The carrying placements' ids, empty when no region holds the point or the feed has not collected yet.</returns>
-    public IReadOnlyList<string> PlacesAt(FixedVector3 point) => Places(holds: (row, _) => (
+    public IReadOnlyList<string> PlacesAt(FixedVector3 point) => m_places.Holding(holds: (row, _) => (
         m_regionFrames.TryGetValue(key: row.Placement.Id, value: out var frame) &&
         frame.HasCenter &&
         frame.Shape.Contains(point: point)
@@ -824,21 +798,6 @@ public sealed class WorldEventFeed {
 
         shape = default;
         return false;
-    }
-    // The regions a predicate holds, smallest volume first, ties in placement order.
-    private string[] Places(Func<RegionRow, int, bool> holds) {
-        var rows = m_regionRows;
-        var places = new List<(double Volume, int Ordinal, string Id)>();
-
-        for (var ordinal = 0; (ordinal < rows.Length); ordinal++) {
-            if (holds(rows[ordinal], ordinal)) {
-                places.Add(item: (rows[ordinal].Region.Volume, ordinal, rows[ordinal].Placement.Id));
-            }
-        }
-
-        places.Sort(comparison: static (left, right) => ((left.Volume != right.Volume) ? left.Volume.CompareTo(value: right.Volume) : left.Ordinal.CompareTo(value: right.Ordinal)));
-
-        return [.. places.Select(selector: static place => place.Id)];
     }
     /// <summary>Reports whether one body is inside a placement's region as of this tick's collection.</summary>
     /// <param name="placementId">The placement carrying the region facet.</param>

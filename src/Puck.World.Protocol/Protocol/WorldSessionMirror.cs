@@ -73,6 +73,60 @@ public sealed class WorldSessionMirror : IClientSink {
         publication = result.Value;
         return result.Found;
     }
+    /// <summary>Reads one body from the latest complete image: both pose endpoints, the facts and the tick of one
+    /// delivery, never a mixture of two and never waiting on a delivery in progress.</summary>
+    /// <param name="index">The 0-based entity index.</param>
+    /// <param name="body">The body as the image holds it, when this returns <see langword="true"/>.</param>
+    /// <returns><see langword="true"/> when the image holds an active body at <paramref name="index"/>.</returns>
+    public bool TryReadBody(int index, out WorldDeliveredBody body) {
+        body = m_images.Read(state: index, read: static (in SnapshotImage image, long version, int index) => {
+            if ((((uint)index) >= ((uint)image.Extent)) || !image.Entries[index].Active) {
+                return default;
+            }
+
+            ref readonly var entry = ref image.Entries[index];
+
+            return new WorldDeliveredBody(
+                Active: true,
+                Facts: entry.Facts,
+                Generation: entry.Generation,
+                Heading: entry.Heading,
+                Kit: entry.Kit,
+                Orientation: entry.CurrentOrientation,
+                PoseEpoch: entry.PoseEpoch,
+                Position: entry.CurrentPosition,
+                PreviousPosition: entry.PreviousPosition,
+                StepSeconds: image.StepSeconds,
+                Tick: image.Tick
+            );
+        });
+
+        return body.Active;
+    }
+    /// <summary>Gets what this mirror's deliveries have cost since it was constructed: each kind's count and the time
+    /// its delivering thread spent applying it. The count of a delivery moves after its time, so a reader sees a
+    /// count only with the time it cost.</summary>
+    public WorldDeliveryWork DeliveryWork => new(
+        DefinitionTicks: Interlocked.Read(location: ref m_definitionApplyTicks),
+        Definitions: Interlocked.Read(location: ref m_definitionsApplied),
+        SnapshotTicks: Interlocked.Read(location: ref m_snapshotApplyTicks),
+        Snapshots: Interlocked.Read(location: ref m_snapshotsApplied),
+        StateTicks: Interlocked.Read(location: ref m_stateApplyTicks),
+        States: Interlocked.Read(location: ref m_statesApplied)
+    );
+
+    private long m_definitionApplyTicks;
+    private long m_definitionsApplied;
+    private long m_snapshotApplyTicks;
+    private long m_snapshotsApplied;
+    private long m_stateApplyTicks;
+    private long m_statesApplied;
+
+    // Charges one delivery to its kind: the time since `started`, then the count.
+    private static void Charge(ref long ticks, ref long count, long started) {
+        _ = Interlocked.Add(location1: ref ticks, value: (Stopwatch.GetTimestamp() - started));
+        _ = Interlocked.Increment(location: ref count);
+    }
 
     private readonly MarkedIndexSet m_pending = new();
 
@@ -489,7 +543,9 @@ public sealed class WorldSessionMirror : IClientSink {
                 Color: m_bodyColor[index],
                 CurrentOrientation: m_poses.CurrentOrientation(index: index),
                 CurrentPosition: m_poses.CurrentPosition(index: index),
+                Facts: m_facts[index],
                 Generation: m_generation[index],
+                Heading: m_heading[index],
                 Kit: m_kit[index],
                 Look: m_look[index],
                 PlacementId: m_poses.PlacementId(index: index),
@@ -527,7 +583,9 @@ public sealed class WorldSessionMirror : IClientSink {
         Vector3 Color,
         byte Look,
         byte CatalogRig,
-        byte Kit
+        byte Kit,
+        float Heading,
+        BodyFacts Facts
     );
     private sealed class SnapshotImage(long arrivalTimestamp) {
         // A slot no writer has touched: as WorldPoseTable and this mirror's arrays are constructed.
@@ -537,7 +595,9 @@ public sealed class WorldSessionMirror : IClientSink {
             Color: Vector3.Zero,
             CurrentOrientation: Quaternion.Identity,
             CurrentPosition: Vector3.Zero,
+            Facts: BodyFacts.None,
             Generation: 0,
+            Heading: 0f,
             Kit: 0,
             Look: 0,
             PlacementId: null,
@@ -603,6 +663,8 @@ public sealed class WorldSessionMirror : IClientSink {
     public void DeliverDefinition(WorldDefinition definition, WorldDocumentVersion version) {
         ArgumentNullException.ThrowIfNull(argument: definition);
 
+        var started = Stopwatch.GetTimestamp();
+
         lock (m_stampGate) {
             m_stateTime = null;
         }
@@ -628,6 +690,7 @@ public sealed class WorldSessionMirror : IClientSink {
             }
         }
         DocumentDelivered?.Invoke(obj: Document);
+        Charge(count: ref m_definitionsApplied, started: started, ticks: ref m_definitionApplyTicks);
     }
     /// <inheritdoc/>
     public void DeliverSessionLever(WorldSessionLever lever) {
@@ -646,6 +709,13 @@ public sealed class WorldSessionMirror : IClientSink {
     /// <inheritdoc/>
     public void DeliverSnapshot(in WorldSnapshot snapshot) {
         if (m_unread) { return; }
+
+        var started = Stopwatch.GetTimestamp();
+
+        ApplySnapshot(snapshot: in snapshot);
+        Charge(count: ref m_snapshotsApplied, started: started, ticks: ref m_snapshotApplyTicks);
+    }
+    private void ApplySnapshot(in WorldSnapshot snapshot) {
         lock (m_snapshotWriteGate) {
             m_solidScales.Deliver(sizes: snapshot.SolidScales.Span);
             m_inputs.Clear();
@@ -798,6 +868,8 @@ public sealed class WorldSessionMirror : IClientSink {
     public void DeliverState(WorldDefinition definition, WorldDocumentVersion version, in WorldStateStamp stamp) {
         ArgumentNullException.ThrowIfNull(argument: definition);
 
+        var started = Stopwatch.GetTimestamp();
+
         // A value-only mutation cannot have changed a kit's collider or body-contact mode: publish the fresh
         // definition for state-value reads without recompiling either table or bumping the rebuild-watch revision.
         // Publish the definition and its stamped clock together with respect to followers, including event readers.
@@ -829,6 +901,7 @@ public sealed class WorldSessionMirror : IClientSink {
         }
 
         if (!stamp.ArenaValues) { DocumentDelivered?.Invoke(obj: Document); }
+        Charge(count: ref m_statesApplied, started: started, ticks: ref m_stateApplyTicks);
     }
 
     // Notes one moved row for the next FollowState to refresh, once however often it moves before then. Called under

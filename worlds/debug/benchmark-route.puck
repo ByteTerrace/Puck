@@ -4,7 +4,7 @@
 // the navigation path, the right stick turning the camera onto the way ahead, Left Shift held to run and the dash tapped on
 // its cooldown, the context button pressed where a step presses `interact`. A step that strays plans its path again from
 // where the body stands, so a shed tick, a Wonderland-sized body or a nudge does not carry the rest of the chapter off
-// course, and a chapter fails, naming the place and the tick, on a driven wall contact or on leaving the places its path
+// course, and a chapter fails, naming the place and the tick, on a stick held against a wall or on leaving the places its path
 // crosses.
 //
 // The walk is the owner's: from the stage into the hall and its lobby, along the east wing into the painting room,

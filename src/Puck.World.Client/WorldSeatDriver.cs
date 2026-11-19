@@ -1,31 +1,29 @@
 using System.Globalization;
 using System.Text;
-using Puck.Commands;
 using Puck.Maths;
-using Puck.Physics.Navigation;
-using Puck.World.Client;
-using Puck.World.Server;
 
-namespace Puck.World;
+namespace Puck.World.Client;
 
 /// <summary>
-/// Plays a route's chapters for one seat with the route's authored seat program (<see cref="WorldSeatProgram"/>):
-/// each tick, in the authority tick-complete hook, it reads the seat body's authoritative pose, places and contact
-/// witness in whichever world the seat stands in, takes the next steering point on the step's path, evaluates the
-/// program's operations into the seat's controls and submits every control that changed through the seat's own
-/// ingress (<see cref="WorldTickScript.SubmitSeat"/>, the door <c>player.signal</c> uses). Load therefore runs through
-/// the router, the bindings and intent composition, and a shed tick, a scale change or a nudge is read back on the
-/// next tick and steered from rather than carried off course.
+/// Plays a route's chapters for one seat with the route's authored seat program (<see cref="WorldSeatProgram"/>), as
+/// that seat's client: each tick it reads what the authority of the world the seat stands in delivered
+/// (<see cref="WorldSeatSenses"/>: the body's pose, speed and places, and a path over the delivered document), takes
+/// the next steering point on the step's path, evaluates the program's operations into the seat's controls and
+/// submits every control that changed through the seat's own command door, the one <c>player.signal</c> uses. Load
+/// therefore runs through the router, the bindings and intent composition, and a shed tick, a scale change or a nudge
+/// is read back on a later tick and steered from rather than carried off course.
 /// </summary>
 /// <remarks>
-/// <para>Deterministic given the same start state: every decision reads the authority's fixed-point state, the seat
-/// view's facing (advanced once per tick) and tick counts, and every control it submits lands in the tick after the one
-/// it read.</para>
-/// <para>A chapter fails where a player would see it fail: on a driven contact with a wall (the body's latched
-/// obstruction witness), by standing in none of the places its path crosses, by losing its path, or by running past
-/// its time. Every member runs on the host pump.</para>
+/// <para>The driver reads its seat's world through the seat's route and nothing else, whether the authority runs in
+/// this process or another: it holds no authority object, and this project cannot name one. A body it reads is
+/// therefore as old as its last delivery, and a control it submits lands when the authority admits it.</para>
+/// <para>Given the same deliveries on the same ticks it submits the same controls: every decision is fixed-point
+/// arithmetic over the delivered values, the seat view's facing (advanced once per tick) and tick counts.</para>
+/// <para>A chapter fails where a player would see it fail: by pushing its stick for <see cref="StallTicks"/> delivered ticks
+/// without the body moving, by standing in none of the places its path crosses, by losing its path, or by running
+/// past its time. Every member runs on the host pump.</para>
 /// </remarks>
-internal sealed class WorldSeatDriver {
+public sealed class WorldSeatDriver {
     /// <summary>The ticks between re-assertions of a held stick, as a player holding it across a crossing presses again.</summary>
     public const int ReassertTicks = 15;
     // The distance from its line, in metres, past which a body that strayed plans its path again; the no-progress span,
@@ -38,26 +36,28 @@ internal sealed class WorldSeatDriver {
     // The heading error, in degrees, a crossing turns inside before it walks, and the ticks it gives the turn.
     private const double AlignDegrees = 3.0;
     private const int AlignTicks = 45;
+    /// <summary>The authority ticks, as its deliveries report them, a deflected move stick may leave the body within
+    /// <see cref="StallMetres"/> of where it stood before the chapter fails as stalled against a wall: long enough for
+    /// a control to cross to a remote authority and its effect to come back. Counted in delivered ticks, so a span the
+    /// client was delivered nothing in says nothing about a wall.</summary>
+    public const int StallTicks = 20;
+    /// <summary>The planar distance, in metres, a body moves to count as moving under a deflected stick.</summary>
+    public const double StallMetres = 0.05;
 
     private enum Phase { Idle, Running, Arrived, Failed }
 
-    private readonly WorldTickScript m_script;
-    private readonly Func<InputRouter> m_router;
-    private readonly WorldInstanceHost m_instances;
-    private readonly WorldSeatAuthorityRouter m_routes;
-    private readonly WorldClient m_client;
-    private readonly WorldRoute m_route;
+    private readonly WorldSeatSenses m_senses;
+    private readonly Func<string, Func<string>> m_submit;
     private readonly WorldSeatProgram m_program;
     private readonly int m_slot;
     private readonly FixedQ4816 m_margin;
     private readonly Dictionary<string, string> m_sent = new(comparer: StringComparer.Ordinal);
-    private readonly List<NavigationRouteNode> m_nodes = [];
-    private readonly List<NavigationRouteNode> m_cornerNodes = [];
+    private readonly List<FixedVector3> m_routeFeet = [];
     private readonly List<FixedVector3> m_corners = [];
     private readonly HashSet<string> m_corridor = new(comparer: StringComparer.Ordinal);
     private readonly List<(ulong Tick, string Place)> m_visited = [];
-    // The chapter's submitted control lines, whose outcomes arrive as their ticks apply.
-    private readonly List<WorldTickScript.Line> m_lines = [];
+    // The chapter's submitted control lines, each a read of its outcome, which arrives as its tick applies.
+    private readonly List<Func<string>> m_lines = [];
 
     private WorldRouteChapter? m_chapter;
     private Phase m_phase;
@@ -84,30 +84,32 @@ internal sealed class WorldSeatDriver {
     private FixedVector3 m_lastPosition;
     private string? m_tap;
     private bool m_driving;
+    // Where the body stood when it last moved under a deflected stick, and the authority tick whose delivery showed it.
+    private FixedVector3 m_stallOrigin;
+    private ulong m_stallTick;
 
     /// <summary>Initializes a new instance of the <see cref="WorldSeatDriver"/> class for one route.</summary>
     /// <param name="route">The route.</param>
     /// <param name="program">The route's seat program.</param>
-    /// <param name="script">The tick script whose seat door the controls enter by.</param>
-    /// <param name="router">Resolves the live seat router.</param>
-    /// <param name="instances">The instances the seat may stand in.</param>
-    /// <param name="routes">The seat's authority routes.</param>
-    /// <param name="client">The presentation client whose seat view holds the camera's facing.</param>
-    public WorldSeatDriver(WorldRoute route, WorldSeatProgram program, WorldTickScript script, Func<InputRouter> router, WorldInstanceHost instances, WorldSeatAuthorityRouter routes, WorldClient client) {
-        m_route = route;
+    /// <param name="senses">What the seat's client was delivered.</param>
+    /// <param name="submit">Submits a console line as the seat, through the seat's ordinary ingress, and returns a
+    /// read of the line's outcome: <c>pending</c> until its tick applies, then <c>ran</c>, <c>refused</c> or
+    /// <c>faulted</c>.</param>
+    /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
+    public WorldSeatDriver(WorldRoute route, WorldSeatProgram program, WorldSeatSenses senses, Func<string, Func<string>> submit) {
+        ArgumentNullException.ThrowIfNull(argument: route);
+        ArgumentNullException.ThrowIfNull(argument: program);
+        ArgumentNullException.ThrowIfNull(argument: senses);
+        ArgumentNullException.ThrowIfNull(argument: submit);
         m_program = program;
-        m_script = script;
-        m_router = router;
-        m_instances = instances;
-        m_routes = routes;
-        m_client = client;
+        m_senses = senses;
+        m_submit = submit;
         m_slot = (route.Seat - 1);
         m_margin = FixedQ4816.FromDouble(value: route.Margin);
     }
 
-    /// <summary>Gets the 0-based body index the seat's body holds in the world it stands in, or the seat's slot when it
-    /// stands in none.</summary>
-    public int Body => ((m_routes.TryRoute(slot: m_slot) is { } route) ? route.EntityIndex : m_slot);
+    /// <summary>Gets the 0-based seat slot the driver plays, the index a seat's own body verbs take.</summary>
+    public int Seat => m_slot;
     /// <summary>Gets the reason the chapter failed, or <see langword="null"/>.</summary>
     public string? Failure { get; private set; }
     /// <summary>Gets the kind of the chapter's failure (<c>wall</c>, <c>corridor</c>, <c>route</c>, <c>stuck</c>,
@@ -122,7 +124,7 @@ internal sealed class WorldSeatDriver {
     /// <summary>Gets the times the chapter planned a path.</summary>
     public int Plans { get; private set; }
     /// <summary>Gets the control lines the seat's ingress refused.</summary>
-    public int Refused => m_lines.Count(predicate: static line => line.Outcome is "refused" or "faulted");
+    public int Refused => m_lines.Count(predicate: static outcome => outcome() is "refused" or "faulted");
     /// <summary>Gets the control lines submitted.</summary>
     public int Submitted => m_lines.Count;
     /// <summary>Gets every innermost place the body entered, in order, each with the tick it was first read in.</summary>
@@ -131,6 +133,9 @@ internal sealed class WorldSeatDriver {
     public bool Ended => (m_phase is Phase.Arrived or Phase.Failed);
     /// <summary>Gets whether the chapter arrived: every step finished and nothing failed it.</summary>
     public bool Arrived => (m_phase == Phase.Arrived);
+    /// <summary>Gets the seat's body as the latest call to <see cref="Advance"/> read it, or <see langword="null"/>
+    /// when the seat had no body to read.</summary>
+    public WorldSeatSenses.Reading? Read { get; private set; }
 
     /// <summary>Starts a chapter on the tick just completed: its first step reads the world in this tick's hook.</summary>
     /// <param name="chapter">The chapter.</param>
@@ -161,18 +166,23 @@ internal sealed class WorldSeatDriver {
         if ((m_phase != Phase.Running) || (m_chapter is null)) {
             return;
         }
-        if (!TryRead(read: out var read)) {
+        if (!m_senses.TryRead(reading: out var read, slot: m_slot)) {
             // A seat between authorities (a crossing in flight) has no body to read for a tick or two; it holds its
             // controls and fails only when that outlasts the chapter.
-            Fail(kind: "seat", place: "none", reason: "the seat has no body in any world", tick: tick, when: (tick >= m_deadline));
+            Read = null;
+            Fail(kind: "seat", place: "none", reason: "the seat's client was delivered no body for it in any world", tick: tick, when: (tick >= m_deadline));
             return;
         }
 
+        Read = read;
         Visit(read: in read, tick: tick);
-        if (m_driving && (read.Body.LastObstructionNormal != FixedVector3.Zero)) {
-            var normal = read.Body.LastObstructionNormal;
-
-            Fail(kind: "wall", place: read.Place, reason: string.Create(provider: CultureInfo.InvariantCulture, handler: $"a driven wall contact at ({Metres(read.Position.X)}, {Metres(read.Position.Y)}, {Metres(read.Position.Z)}), normal ({Metres(normal.X)}, {Metres(normal.Y)}, {Metres(normal.Z)}), on step {m_step} ({Describe(step: m_chapter.Steps[m_step])})"), tick: tick);
+        // A stick held while the body goes nowhere is a wall, as a player meets one. A body that moves, however it is
+        // moved, starts the watch again, and so does an authority whose ticks are not the last one's.
+        if (!m_driving || (read.Body.Tick < m_stallTick) || (Planar(from: m_stallOrigin, to: read.Position) > FixedQ4816.FromDouble(value: StallMetres))) {
+            m_stallOrigin = read.Position;
+            m_stallTick = read.Body.Tick;
+        } else if ((read.Body.Tick - m_stallTick) >= StallTicks) {
+            Fail(kind: "wall", place: read.Place, reason: string.Create(provider: CultureInfo.InvariantCulture, handler: $"the move stick was held across {StallTicks} delivered ticks and the body stayed within {StallMetres:0.##} m of ({Metres(m_stallOrigin.X)}, {Metres(m_stallOrigin.Y)}, {Metres(m_stallOrigin.Z)}), on step {m_step} ({Describe(step: m_chapter.Steps[m_step])})"), tick: tick);
             return;
         }
         if (m_checkCorridor && (m_corridor.Count > 0) && ((read.Places.Count == 0) ? !m_corridor.Contains(item: read.Place) : !read.Places.Any(predicate: m_corridor.Contains))) {
@@ -250,41 +260,12 @@ internal sealed class WorldSeatDriver {
         return text.ToString();
     }
 
-    // What the seat's body is this tick, in the world it stands in.
-    private readonly record struct SeatRead(WorldServer Server, string World, int Index, WorldBody Body, FixedVector3 Position, IReadOnlyList<string> Places, string Place, FixedQ4816 Yaw, FixedQ4816 YawPerTick);
-
     // What the step asks of the controls this tick: a direction to travel (none to stand), whether it ends at a point to
     // stop at and how far that is, the next corner's distance and turn, the facing to turn the camera onto, and the pace.
     private readonly record struct Steer(bool Moves, FixedQ4816 Dx, FixedQ4816 Dz, FixedQ4816 Stop, FixedQ4816 CornerDistance, FixedQ4816 CornerTurn, bool Faces, FixedQ4816 Facing, string Pace);
 
-    private bool TryRead(out SeatRead read) {
-        read = default;
-        if ((m_routes.TryRoute(slot: m_slot) is not { } route) ||
-            !m_instances.TryGet(instance: out var instance, name: route.Endpoint.Identity) ||
-            (instance?.Server is not { } server) ||
-            (server.Population.EntryBody(index: route.EntityIndex) is not { } body) ||
-            !m_client.TrySeatLook(slot: m_slot, yaw: out var yaw, yawPerTick: out var perTick)) {
-            return false;
-        }
-
-        var places = server.Events.PlacesOf(body: route.EntityIndex);
-
-        read = new SeatRead(
-            Body: body,
-            Index: route.EntityIndex,
-            Place: ((places.Count == 0) ? "none" : places[0]),
-            Places: places,
-            Position: body.FixedPosition,
-            Server: server,
-            World: route.Endpoint.Identity,
-            Yaw: FixedQ4816.FromDouble(value: yaw),
-            YawPerTick: FixedQ4816.FromDouble(value: perTick)
-        );
-        return true;
-    }
-
-    private void Visit(in SeatRead read, ulong tick) {
-        var place = ((read.World == WorldInstanceHost.BootInstanceName) ? read.Place : $"{read.World}:{read.Place}");
+    private void Visit(in WorldSeatSenses.Reading read, ulong tick) {
+        var place = ((read.World == WorldDefinitionLoader.BootInstanceName) ? read.Place : $"{read.World}:{read.Place}");
 
         if ((m_visited.Count == 0) || (m_visited[^1].Place != place)) {
             m_visited.Add(item: (tick, place));
@@ -326,8 +307,8 @@ internal sealed class WorldSeatDriver {
         switch (m_chapter.Steps[m_step]) {
             case WorldRouteStep.PoseBody pose:
                 Submit(text: (pose.Spawn is { } spawn)
-                    ? string.Create(provider: CultureInfo.InvariantCulture, handler: $"body.pose spawn:{spawn} {Body}")
-                    : string.Create(provider: CultureInfo.InvariantCulture, handler: $"body.pose {Number(pose.Point!.Value.X)} {Number(pose.Point.Value.Y)} {Number(pose.Point.Value.Z)} {Number(pose.YawDegrees)} 0 0 {Body}"));
+                    ? string.Create(provider: CultureInfo.InvariantCulture, handler: $"body.pose spawn:{spawn} {Seat}")
+                    : string.Create(provider: CultureInfo.InvariantCulture, handler: $"body.pose {Number(pose.Point!.Value.X)} {Number(pose.Point.Value.Y)} {Number(pose.Point.Value.Z)} {Number(pose.YawDegrees)} 0 0 {Seat}"));
                 break;
             case WorldRouteStep.Line line:
                 Submit(text: line.Text);
@@ -340,7 +321,7 @@ internal sealed class WorldSeatDriver {
 
     // Runs the current step from this tick's read and returns what it asks of the controls; a finished step hands on to
     // the next, which reads the world from the next tick.
-    private Steer Step(in SeatRead read, ulong tick, int rateHz) {
+    private Steer Step(in WorldSeatSenses.Reading read, ulong tick, int rateHz) {
         var elapsed = (tick - m_stepStart);
         var step = m_chapter!.Steps[m_step];
         var still = new Steer(Moves: false, Dx: default, Dz: default, Stop: default, CornerDistance: default, CornerTurn: default, Faces: false, Facing: default, Pace: string.Empty);
@@ -350,7 +331,7 @@ internal sealed class WorldSeatDriver {
                 if (elapsed >= LandTicks) {
                     var point = pose.Point;
                     if (pose.Spawn is { } id) {
-                        point = WorldDefinitionRows.FindSpawnPoint(spawnPoints: read.Server.Definition.SpawnPoints, id: id)?.Position;
+                        point = WorldDefinitionRows.FindSpawnPoint(spawnPoints: read.Endpoint.Definition.SpawnPoints, id: id)?.Position;
                     }
 
                     // A pose that did not land (refused, or overtaken by a crossing in flight) leaves the chapter
@@ -384,7 +365,7 @@ internal sealed class WorldSeatDriver {
                 if (elapsed >= 1UL) {
                     m_tap = null;
                 }
-                if ((press.Until is { } until) && read.Server.Events.IsOccupant(body: read.Index, placementId: until)) {
+                if ((press.Until is { } until) && read.Places.Contains(value: until)) {
                     NextStep(tick: tick, rateHz: rateHz);
                 } else if (elapsed >= (ulong)Math.Ceiling(a: (press.Seconds * rateHz))) {
                     if (press.Until is null) {
@@ -405,8 +386,8 @@ internal sealed class WorldSeatDriver {
         }
     }
 
-    private Steer Cross(WorldRouteStep.Cross cross, ulong elapsed, in SeatRead read, Steer still, ulong tick, int rateHz) {
-        if ((cross.Until is { } until) && read.Server.Events.IsOccupant(body: read.Index, placementId: until)) {
+    private Steer Cross(WorldRouteStep.Cross cross, ulong elapsed, in WorldSeatSenses.Reading read, Steer still, ulong tick, int rateHz) {
+        if ((cross.Until is { } until) && read.Places.Contains(value: until)) {
             NextStep(tick: tick, rateHz: rateHz);
             return still;
         }
@@ -446,9 +427,9 @@ internal sealed class WorldSeatDriver {
         return still with { Moves = true, Dx = -sin, Dz = -cos, Stop = FixedQ4816.MaxValue, CornerDistance = FixedQ4816.MaxValue, Pace = cross.Pace };
     }
 
-    private Steer Go(WorldRouteStep.Go go, in SeatRead read, Steer still, ulong tick, int rateHz, bool planned = false) {
+    private Steer Go(WorldRouteStep.Go go, in WorldSeatSenses.Reading read, Steer still, ulong tick, int rateHz, bool planned = false) {
         if (go.Place is { } place) {
-            if (read.Server.Events.IsOccupant(body: read.Index, placementId: place)) {
+            if (read.Places.Contains(value: place)) {
                 NextStep(tick: tick, rateHz: rateHz);
                 return still;
             }
@@ -534,7 +515,7 @@ internal sealed class WorldSeatDriver {
 
     // Plans the step's path from where the body stands: straight at the goal for a direct step, otherwise the navigation
     // domains' route straightened to its corners, with the places its nodes stand in as the corridor.
-    private bool Plan(WorldRouteStep.Go go, in SeatRead read, ulong tick, bool stuck = false) {
+    private bool Plan(WorldRouteStep.Go go, in WorldSeatSenses.Reading read, ulong tick, bool stuck = false) {
         Plans++;
         m_plannedIn = read.World;
         m_corners.Clear();
@@ -555,61 +536,36 @@ internal sealed class WorldSeatDriver {
         // Where the body stands as the path is planned: a step that began on a place's edge may cross back over it.
         _ = m_corridor.Add(item: read.Place);
 
-        var population = read.Server.Population;
         var target = ((go.Point is { } point) ? Point(point) : default);
+        var shape = default(FixedSpatialShape);
 
+        if ((go.Place is { } named) && !m_senses.TryPlaceShape(endpoint: read.Endpoint, placementId: named, shape: out shape)) {
+            Fail(kind: "route", place: read.Place, reason: $"the place {named} is not in the document {read.World} delivered", tick: tick);
+            return false;
+        }
         if (go.Direct) {
-            if (go.Point is null) {
-                if (!read.Server.Events.TryPlaceShape(placementId: go.Place!, shape: out var shape)) {
-                    Fail(kind: "route", place: read.Place, reason: $"the place {go.Place} is not sensed in {read.World}", tick: tick);
-                    return false;
-                }
-                target = shape.Center;
-            }
-            m_corners.Add(item: target);
+            m_corners.Add(item: ((go.Point is null) ? shape.Center : target));
             m_checkCorridor = (go.Corridor is { Count: > 0 });
             return true;
         }
 
-        INavigationRouteGoal destination;
+        var plan = m_senses.Navigation(endpoint: read.Endpoint).Plan(
+            corners: m_corners,
+            goal: new WorldSeatGoal(Place: ((go.Place is null) ? null : shape), Point: target),
+            margin: m_margin,
+            route: m_routeFeet,
+            walker: m_senses.Walker(reading: in read)
+        );
 
-        if (go.Place is { } place) {
-            if (!read.Server.Events.TryPlaceShape(placementId: place, shape: out var shape)) {
-                Fail(kind: "route", place: read.Place, reason: $"the place {place} is not sensed in {read.World}", tick: tick);
-                return false;
-            }
-            destination = new WorldNavigationPlaceGoal(Shape: shape);
-        } else if (population.TrySteeringEndpoint(body: read.Body, cell: out var cell, domain: out var domain, fromPoint: false, point: target)) {
-            destination = new NavigationCellGoal(Cell: cell, Domain: domain, Position: population.NavigationFoot(node: new NavigationRouteNode(Cell: cell, Domain: domain, Position: default)));
-        } else {
-            Fail(kind: "route", place: read.Place, reason: $"no navigation domain holds a walkable cell at {Vector(go.Point)}", tick: tick);
+        if (!plan.Found) {
+            Fail(kind: "route", place: read.Place, reason: $"no route from ({Metres(read.Position.X)}, {Metres(read.Position.Y)}, {Metres(read.Position.Z)}) to {(go.Place ?? Vector(go.Point))} over the document {read.World} delivered: {plan.Refusal}", tick: tick);
             return false;
         }
-
-        var status = population.PlanSteering(body: read.Body, corners: m_cornerNodes, goal: destination, margin: m_margin, route: m_nodes, work: out _);
-
-        if ((status is not (NavigationStatus.Active or NavigationStatus.Arrived)) || (m_cornerNodes.Count == 0)) {
-            Fail(kind: "route", place: read.Place, reason: $"no route from ({Metres(read.Position.X)}, {Metres(read.Position.Y)}, {Metres(read.Position.Z)}) to {(go.Place ?? Vector(go.Point))}: {status.ToString().ToLowerInvariant()}", tick: tick);
-            return false;
-        }
-
-        foreach (var node in m_cornerNodes) {
-            m_corners.Add(item: population.NavigationFoot(node: node));
-        }
-        // The route starts at the cell under the body, or the nearest one to it. A body that can walk straight from where
-        // it stands to the next corner, keeping the margin, steers there at once; one that cannot (standing nearer a wall
-        // than a cell's center may, as a body just out of a door does) steps onto that cell first.
-        if ((m_corners.Count > 1) && (m_cornerNodes[1].Domain == m_cornerNodes[0].Domain) &&
-            population.NavigationDomain(index: m_cornerNodes[0].Domain).IsStraightClear(from: read.Position, margin: m_margin, to: m_corners[1])) {
-            m_corners.RemoveAt(index: 0);
-        } else {
+        if (plan.StartsOnCell) {
             m_firstReach = FixedQ4816.FromDouble(value: 0.1);
         }
-        if (go.Point is not null) {
-            m_corners.Add(item: target);
-        }
-        foreach (var node in m_nodes) {
-            var places = read.Server.Events.PlacesAt(point: population.NavigationFoot(node: node));
+        foreach (var foot in m_routeFeet) {
+            var places = m_senses.PlacesAt(endpoint: read.Endpoint, point: foot);
 
             _ = m_corridor.Add(item: ((places.Count == 0) ? "none" : places[0]));
         }
@@ -619,7 +575,7 @@ internal sealed class WorldSeatDriver {
 
     // Evaluates the program's operations into the seat's controls and submits each one that changed, re-asserting held
     // sticks as a player does and every held control when the seat's world changed under it.
-    private void Drive(in SeatRead read, in Steer steer, ulong tick, int rateHz) {
+    private void Drive(in WorldSeatSenses.Reading read, in Steer steer, ulong tick, int rateHz) {
         var crossed = (!string.Equals(a: m_routeWorld, b: read.World, comparisonType: StringComparison.Ordinal) || (m_routeIndex != read.Index));
         var reassert = (crossed || ((tick - m_lastAssert) >= ReassertTicks));
 
@@ -655,16 +611,15 @@ internal sealed class WorldSeatDriver {
         }
     }
 
-    private string Evaluate(WorldSeatProgramOp operation, in SeatRead read, in Steer steer, FixedQ4816 facing, ulong tick, int rateHz) {
+    private string Evaluate(WorldSeatProgramOp operation, in WorldSeatSenses.Reading read, in Steer steer, FixedQ4816 facing, ulong tick, int rateHz) {
         switch (operation) {
             case WorldSeatProgramOp.Move move: {
                 if (!steer.Moves) {
                     return "0 0";
                 }
 
-                // Slow for a sharp corner, or to stop at a final point, against the speed the body actually has.
-                var velocity = read.Body.FixedPlanarVelocity;
-                var speed = FixedQ4816.Sqrt(value: ((velocity.X * velocity.X) + (velocity.Z * velocity.Z)));
+                // Slow for a sharp corner, or to stop at a final point, against the speed the body was delivered at.
+                var speed = read.PlanarSpeed;
                 var brake = FixedQ4816.FromDouble(value: move.Brake);
                 var allowed = FixedQ4816.MaxValue;
 
@@ -712,7 +667,7 @@ internal sealed class WorldSeatDriver {
     // The X deflection that takes the turn's gain of the way from the camera's facing to the step's, centred inside its
     // deadband and never past full; rounded to the precision a control line carries, so the facing it predicts is the
     // facing the seat turns to.
-    private static FixedQ4816 TurnDeflection(WorldSeatProgramOp.Turn turn, in SeatRead read, in Steer steer) {
+    private static FixedQ4816 TurnDeflection(WorldSeatProgramOp.Turn turn, in WorldSeatSenses.Reading read, in Steer steer) {
         if (!steer.Faces || (read.YawPerTick == FixedQ4816.Zero)) {
             return FixedQ4816.Zero;
         }
@@ -729,7 +684,7 @@ internal sealed class WorldSeatDriver {
     }
 
     private void Submit(string text) {
-        m_lines.Add(item: m_script.SubmitSeat(router: m_router, slot: m_slot, text: text));
+        m_lines.Add(item: m_submit(arg: text));
     }
 
     private static string NeutralOf(WorldSeatProgramOp operation) => ((operation is WorldSeatProgramOp.Move or WorldSeatProgramOp.Turn) ? "0 0" : "release");

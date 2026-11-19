@@ -267,17 +267,18 @@ from them. In this order:
    a period (the dash on its cooldown), and `tap` presses one for an action (the
    context button). The standard authors `walker` in
    `worlds/standard/benchmark.puck`. `WorldSeatDriver` is the engine's one
-   evaluator: each tick, in the authority's tick-complete hook
-   (`WorldTickScript.Ticked`), it reads the seat body's fixed-point pose, planar
-   velocity, places and contact witness in whichever world the seat stands in,
-   and the seat view's facing, runs the step, evaluates the operations in fixed
-   point, and submits each control that changed through the seat's own ingress
-   (`WorldTickScript.SubmitSeat`, the door `player.signal` and test steps use),
-   so the line lands in the next tick. A move is framed against the facing the
-   tick's turn leaves, since the seat turns its camera before it composes its
-   move. Held sticks are asserted again every `ReassertTicks` and every control
-   when the seat's world changes, as a player holding a stick across a crossing
-   presses again. A `go` plans with `WorldPopulation.PlanSteering`: the route
+   evaluator, and it plays as the seat's client
+   ([the ruling](#the-route-against-a-remote-authority)): each tick, in the
+   tick-complete hook (`WorldTickScript.Ticked`), it reads what the authority of
+   the world the seat stands in delivered (`WorldSeatSenses`: the body's pose,
+   speed and places) and the seat view's facing, runs the step, evaluates the
+   operations in fixed point, and submits each control that changed through the
+   seat's own ingress (`WorldTickScript.SubmitSeat`, the door `player.signal` and
+   test steps use). A move is framed against the facing the tick's turn leaves,
+   since the seat turns its camera before it composes its move. Held sticks are
+   asserted again every `ReassertTicks` and every control when the seat's world
+   changes, as a player holding a stick across a crossing presses again. A `go`
+   plans over the delivered document (`WorldDocumentNavigation.Plan`): the route
    across the domains (`NavigationRuntime.FindRoute`, whose step cost charges a
    cell's length for each cell short of `RouteClearanceCells` it stands from the
    edge of the walkable ground, so a route keeps off walls and passes a doorway
@@ -286,16 +287,16 @@ from them. In this order:
    margin). A body that strays a metre from its line, or makes no progress for two
    seconds, plans again from where it stands, so a shed tick, a scale change or a
    nudge is steered from rather than carried off course.
-5. **A chapter fails where a player would see it fail** (built). A driven wall
-   contact (the body's latched obstruction witness while the move stick is
-   deflected), standing in none of the places the step's path crosses (its
-   corridor: the innermost place at each route node, the goal and where the
-   body stood when it planned), a path that cannot be found, a step that makes
-   no progress after three plans, a pose that did not land, and the chapter's
-   time limit each fail the chapter, named with the kind, the tick and the
-   innermost place, and the driver lets go every control. The report keeps every
-   place the body entered with its tick (`visits`, `placesVisited`), the steps
-   reached, the plans made and the control lines submitted.
+5. **A chapter fails where a player would see it fail** (built). A stick held
+   while the body goes nowhere (`WorldSeatDriver.StallTicks`), standing in none
+   of the places the step's path crosses (its corridor: the innermost place at
+   each route node, the goal and where the body stood when it planned), a path
+   that cannot be found, a step that makes no progress after three plans, a pose
+   that did not land, and the chapter's time limit each fail the chapter, named
+   with the kind, the tick and the innermost place, and the driver lets go every
+   control. The report keeps every place the body entered with its tick
+   (`visits`, `placesVisited`), the steps reached, the plans made and the control
+   lines submitted.
 
 The owner's recorded walkthroughs (`replay.record` tapes with a
 `world.view.trace`) are the source of the debug world's goals: recording a
@@ -312,10 +313,10 @@ Each step's check, run headless unless named:
 | Failure | Built: a driven contact fails a chapter naming it (`wall at tick <t> in <place>: a driven wall contact at (x, y, z), normal (…), on step <n> (…)`), and a body that steps out of its path's places fails naming the place it entered |
 | The owner watches | A windowed `puck benchmark --route debug --loops 2`, both backends, every chapter arriving. A lane's windowed Direct3D 12 run played the first five chapters to arrival in the ticks the headless runs take, with 39 to 104 ticks shed in each |
 
-What exists and is reused: the region facet and its occupancy
-(`WorldPlacementRegion`, `WorldEventFeed.IsOccupant`, `WorldEventFeed.TryPlaceShape`),
-navigation domains and their route search (`NavigationRuntime.FindRoute`), the
-latched obstruction witness (`WorldBody.LastObstructionNormal`), the seat view's
+What exists and is reused: the region facet and the places a document declares
+(`WorldPlacementRegion`, `WorldPlaces`, which `WorldEventFeed`'s occupancy
+latches read too), navigation domains and their route search
+(`NavigationRuntime.FindRoute`), the seat view's
 facing (`WorldClient.TrySeatLook`, the yaw intent composition reads), and the
 seat ingress test steps use. A producer program is not the driver: it writes a
 body's intent on the server, which skips the seat's input path the benchmark
@@ -338,6 +339,119 @@ its predecessor's bake and proves again only the cells the changed colliders rea
 partial bake runs on a worker, and searches wait for the current geometry's result.
 And `world.benchmark sample` refused
 every call, so no chapter ever sampled its GPU passes.
+
+### The route against a remote authority
+
+The frame bar is read in two topologies: the world's authority in this
+process, and a remote authority
+([AGENTS.md](../../AGENTS.md#puck-is-pre-release), "Upper hardware
+enhances"). The seat driver used to read the seat's body, its places, the
+shapes of the places it was going to, the navigation mesh and a contact witness
+from the `WorldServer` of the world the seat stood in. A client of a remote
+authority holds no such object: started with `--connect`, the World hands the
+seat's body to the remote authority, the driver found no local instance, and
+the chapter failed.
+
+**The ruling.** The driver plays as a real remote player's client plays, in
+both topologies. It reads only what the seat's client was delivered, through
+the seat's own route (`WorldAuthorityRoute.Endpoint`), and it acts only
+through the seat's commands. There is one driver and one read path, because an
+authority in this process delivers to its client through the same mirror a
+remote one does (`WorldSessionMirror`): the in-process route is the same code
+reading the same interface, with the delivery arriving on the tick thread
+instead of a socket's task. Every delivered-only reading the driver needs is a
+function of two things a client holds: the delivered document
+(`WorldAuthorityEndpoint.Definition`) and the delivered body.
+
+What each need became, with the options weighed. At the scale the engine is
+built for, every zone and server is a world a client is only ever delivered,
+so the question for each was what a client that holds no authority can know.
+
+| The driver needs | Options | Chosen, and why |
+|---|---|---|
+| The body's pose and speed | The authority's fixed-point body; the mirror's two delivered positions | The delivery: one body from the latest complete image (`WorldSessionMirror.TryReadBody`), its speed the displacement between the two delivered positions over the delivered step. The image is published whole, so a read on the pump never mixes two ticks while a socket task writes. A delivered position is single precision; the driver's arithmetic stays fixed point over it |
+| The places the body stands in | The authority's occupancy latches (`WorldEventFeed`); a query to the authority (`body.place` routes one); the delivered document's region placements against the delivered pose | The delivered document. A place is a region placement, and occupancy is "the region's volume holds the foot point", so a client computes it from the document it holds. `WorldPlaces` is the one compilation of a document's places, which the authority's latches and the client's sense (`WorldSeatSenses`) both read. A query was refused: over a federated link it holds the pump for a round trip (`WorldFederatedServerLink.Query` waits for its answer), and the driver reads every tick |
+| A path | A plan asked of the authority; the authority's own navigation runtime; navigation compiled in the client from the delivered document | Compiled in the client (`WorldDocumentNavigation`): the delivered document's navigation domains baked against the static geometry its solid rows compile to (`WorldColliderSet.Build`), with each portal's wall opened as the bodies' field opens it. It is the same kernel the authority runs (`NavigationRuntime`), not a second planner. A plan asked of the authority would make a route search a service any peer can demand, and it is not what a client has. The in-process run compiles its own too and shares nothing with the authority in its process, so the in-process route proves the remote read path on the debug world's real geometry. The cost is a second collider set in that process; the navigation bake it replaces is the one the authority would have run for the route |
+| To know it hit a wall | The authority's latched obstruction witness (`WorldBody.LastObstructionNormal`); the witness added to the delivery as a body fact; a sweep of the client's own geometry; a stall read from the delivered poses | The stall: the move stick held for `StallTicks` while the delivered body stays within `StallMetres` of where it stood. It is what a player sees, and it needs nothing the client lacks. It is weaker than the witness in one named way: a body that slides along a wall still moves, so a scrape is no longer a failure; leaving the path's places, or the time limit, catches where it leads. The witness as a published fact is the stronger answer and is not built here: a fact is the simulation's own predicate vocabulary (`ActionFact`, one bit each in `BodyFacts`), so adding it makes the witness readable by action gates, and its latch then has to travel in the body's checkpoint and transfer sections. That is a motion change with its own determinism review ([open items](open-items.md#the-benchmark)). A sweep of the client's geometry was refused as a second derivation of the authority's contact answer, which would disagree with it at every step the body climbs |
+| The route and its seat program | The delivered document; the document this process was started with | The document this process was started with. A route is the client's program, as a player's macro is the player's, and it names places, spawn points and paces whose meaning is read from the delivery. A presentation-tier delivery carries no `routes` section, and the route still plays where the delivery carries the geometry it needs |
+| The report's pose and place samples | Pinned `body.where` and `body.place` lines; the driver's own readings | The driver's readings, spelled as those lines spell them. A pinned line routed to a remote authority holds the frame thread for a round trip every sample, which would put the instrument's own hitches in a remote reading |
+
+**The invariant** is that the seat driver reads the seat's world only through
+what was delivered to the seat's client. `WorldSeatDriver` and
+`WorldSeatSenses` live in `Puck.World.Client`, which the architecture gate
+forbids from referencing `Puck.World.Server` (`build/Architecture.props`), so
+neither can name an authority's object. The guarantee stops at one seam: the
+navigation the senses are handed is compiled by the composition root
+(`WorldBootComposition`), from the delivered document and nothing else today,
+and a future change there that handed it an authority's own runtime would not
+fail the build.
+
+**What a delivery has to carry.** The driver plans over the delivered
+document, so a disclosure tier that withholds a section withholds what is
+planned from it. A presentation-tier projection carries placements, creations
+and spawn points and no `navigation` or `portals` section
+(`WorldProjectionDocument`): a `go` step that needs a navigation domain then
+fails naming that the delivered document holds none, and a route of direct
+steps and crossings still plays. The debug world admits a federated arrival at
+the replica tier, which carries everything.
+
+**What the report gives apart** (`run.json`):
+
+- `topology`: the endpoint the seat is routed to as the run ends, whether this
+  process advances its clock (`in-process`) or another does (`remote`), the
+  authority it names itself, and the witness that the seat's body is there: the
+  body's index and generation at that authority and whether its latest delivery
+  holds it. A run whose seat is still in a world this process steps is an
+  in-process reading, whatever it was started with.
+- Each route chapter's `delivery`: the snapshots, definitions and value
+  deliveries the seat's authority delivered across it, the time the delivering
+  thread spent applying them (`WorldSessionMirror.DeliveryWork`), and the
+  evenness of the latest snapshot arrivals. In process the applying thread is
+  the tick thread; against a remote authority it is the observer's socket task.
+- Each chapter's `phases`: the mean and longest time an iteration spent taking
+  input, running console lines, stepping the worlds this process simulates
+  (`simulateMs`), and beginning, producing and presenting a frame. Against a
+  remote authority `simulateMs` is what the process still simulates locally,
+  which today is its whole boot world: `--connect` moves the seat's body and
+  stops nothing ([open items](open-items.md#the-benchmark)).
+- `visits` name the world a place was entered in when it is not the boot
+  world, so a remote chapter's places read `<endpoint>:<place>`.
+- A chapter's `stateHash` is absent against a remote authority: a client has
+  no authority state to hash, and the boot world's hash would describe a world
+  the seat is not in.
+
+**Where it stands.** In process, the route plays every chapter of `debug`
+through the delivered-only driver: the Wonderland chapter at a quarter scale,
+the crossing into the garden's own instance and the lift included. That is the
+whole read path a remote run uses, on the debug world's geometry.
+
+Against an authority in a second process the route does not arrive yet, and
+the driver is not what stops it. On a small world built for the check (a
+floor, a doorway, two places, one navigation domain) the pair gets this far:
+the seat's body is handed to the remote authority, its deliveries arrive at
+the replica tier, the driver reads the body and its places from them, its pose
+step lands and is confirmed from the delivered pose, the navigation compiles
+and bakes from the delivered document, and a path is planned. Then the body
+does not move: a `--connect` traveller's seat input does not drive its body on
+the remote authority, with or without the driver (a held `player.signal` stick
+leaves `body.where` unchanged, and neither process names a refusal). The
+chapter fails naming exactly that, a stick held across twenty delivered ticks
+with the body in place.
+
+The debug world does not get that far: its document cannot be handed to a
+remote peer at either tier. Each defect was found by starting the pair and
+reading the refusal, and they are listed in
+[open items](open-items.md#the-benchmark) with the staging a pair of processes
+needs.
+
+| Step | Check |
+|---|---|
+| The driver reads only the delivery | Built. `Puck.World.Client` holds the driver and builds under the architecture gate; a headless in-process `world.benchmark run debug` arrives in every chapter |
+| A remote traveller's input drives its body | Open, federation. A headless World started with `--connect` to a second headless World moves its seat's body with `player.signal gamepad.leftStick 0 1`, read back by `body.where` |
+| The driver against a second process | Open behind the step above. The same pair plays a route to arrival in each chapter, and `run.json`'s `topology.kind` is `remote` with `bodyDelivered` true |
+| The debug world against a second process | Open behind the federation defects in the open items. The same pair on the debug world arrives in every chapter |
+| `puck benchmark` starts the pair | Open. The verb stages the authority's document and key, starts the companion and waits for the seat's route to turn remote before it arms the route; the staging is in the open items |
+| The Azure deployment | The lead's run, once the debug world can be delivered and the deployed document admits a remote player |
 
 ### Where a run starts
 
@@ -544,23 +658,19 @@ bar uses one reading:
   the slowest frame with its cause) beside the time. A single lane run suffices
   to land; timing claims that steer a later choice go to a quiet `puck measure`
   window.
-- *Remote authority route driver.* `WorldSeatDriver.TryRead` currently reads the
-  body, places and navigation mesh from the server of the world the seat stands
-  in, which does not exist on a remote client (and `--connect` still steps the
-  boot world and transfers the body, mixing local simulation, a transfer and a
-  remote world). Rebuild the driver so it reads what the seat's client was
-  delivered: the body's pose from the delivered snapshot, and places and
-  navigation from the client's world document. One driver then serves both
-  topologies, with the in-process route checking that chapters arrive in the
-  same ticks as before. A remote report names the endpoint, splits local
+- *Remote authority route driver.* One driver serves both topologies: it reads
+  what the seat's client was delivered, the body from the delivered snapshot
+  and places and navigation from the delivered document
+  ([the ruling](#the-route-against-a-remote-authority)). The in-process route
+  arrives in every chapter through it. A report names the endpoint, gives local
   simulation, delivery and rendering apart, and carries a witness that the
-  seat's body arrived in the remote world; a run still observing the boot world
-  says so and is not a remote reading. Check: a headless route against an
-  authority in a second process arrives in every chapter, and the same chapters
-  in process arrive in the ticks they took before; the run on the Azure
-  deployment is the lead's. The driver is not built: the first wave's `bench`
-  lane stopped at a design call, and what the endpoint delivers in place of
-  each thing the driver reads is in [the benchmark's packet](open-items.md#the-benchmark).
+  seat's body is at the authority it names; a run still in a world this process
+  steps says so and is not a remote reading. Still open: a headless route
+  against an authority in a second process arriving in every chapter, which
+  waits on the federation defects in
+  [the benchmark's packet](open-items.md#the-benchmark), a remote traveller's
+  input not driving its body first among them; the run on the Azure deployment
+  is the lead's.
 - *Where sharing is claimed, the arrangement of worlds is stated.* Every world
   of the debug world admits every viewer at full disclosure, so a check run
   there shares as much as can be shared. A check that claims work is shared
@@ -789,6 +899,7 @@ a reference only where it is itself correct.
 | **A hash is compared only from a common start.** | The report's `entry` names how the run began, and the comparer reads hashes only from fresh runs armed at the same tick | An attached run and a loop are not restored to an initial state; they are labelled, never compared |
 | **Like is compared with like.** | One comparer: comparable, changed workload or unavailable, decided from chapter identity, coverage, arrival, disturbance and conditions | Presentation is float and frame-paced; the spread between loops of one kind and an A/A pair measure it |
 | **Measuring changes no state.** | Rule 4's boundary; checked by the chapter hash of a fresh run with the overlay on and off | Measuring does change timing; the overlay's pass and the ring's cost are reported |
+| **A seat driver reads only what its seat's client was delivered.** | `WorldSeatDriver` and `WorldSeatSenses` live in `Puck.World.Client`, which the architecture gate forbids from referencing `Puck.World.Server`, so neither can name an authority's object | The navigation the senses are handed is compiled by the composition root, from the delivered document alone; nothing checks that a later change keeps it so |
 | **The same intent at any frame rate.** | `WorldClient.AdvanceSeatViews` integrates look on fixed ticks and `ArmSeat` pins each line to a tick | Pointer look lands between ticks, so a recorded chapter sums pointer motion per tick |
 
 ## The debug world's route
@@ -989,6 +1100,32 @@ the address that opens.
 - **`world.compare`** holds and compares a seat's displayed frame with a
   wipe. It is a viewer's tool for one frame and plays no part in a run.
 - **The HUD** has no plot and no engine-reading binding; both are named gaps.
+- **`WorldSessionMirror`** is the one client-side mirror of an authority,
+  local or remote. It already published a whole image for readers that need
+  one delivery (`CopySnapshotTo`), so the driver's body read
+  (`TryReadBody`) is one more reader of that image and no second mirror, and
+  its delivery counts are taken where the deliveries land.
+- **`WorldEventFeed`'s occupancy latches** are the authority's answer to which
+  places a body stands in. A client cannot read them, and a place is a
+  function of the document, so the rows moved to `WorldPlaces`, which the
+  feed's latches and the client's sense both read.
+- **`WorldPopulation`'s navigation** (`NavigationRuntime` over
+  `WorldColliderSet`'s static field, behind `WorldPortalHoleContactField`) is
+  the planner. `WorldDocumentNavigation` composes the same three from a
+  document with no population, and the population's two body-bound planners,
+  which only the driver called, are gone.
+- **`WorldQuery.PlayerPlace` and `WorldQuery.PlayerWhere`** are the authority's
+  answers a client can already ask for (`body.place`, `body.where`). Over a
+  federated link a query waits for its answer on the calling thread, so
+  neither is a per-tick read.
+- **The obstruction witness** already leaves the authority in two ways: the
+  `world.contacts` read-back, a query, and the addon ABI's body kinematics
+  answer, which carries a bit for it. Neither reaches a client's mirror; a
+  body fact would.
+- **The canary's federated legs** (`CanaryCommand`'s federation half,
+  `AuthorityCompanion`) generate a throwaway federation identity, stage an
+  authority document and start a companion authority. The remote pair for
+  `puck benchmark` is those pieces, not a new launcher.
 
 ## Sources
 

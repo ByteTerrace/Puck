@@ -3339,23 +3339,76 @@ the stages; this packet holds what a stage does not.
   than the world's composite pass; attribute it (the panel's
   two 60-bar plots against the rest of the overlay) and cut it at the cause
   ([rendering research decision 15](rendering-research.md#15-present-frames-the-display-has-room-for-and-know-when-they-showed)).
-- [high] The route cannot be played against a remote authority: its driver
-  reads the seat's body, places and navigation from the server of the
-  seat's world (`WorldSeatDriver`), which a remote world does not have on
-  the client. The rendering plan's `bench` lane rebuilds it on what the
-  seat's client was delivered
-  ([its decision 1](rendering-research.md#1-measure-beside-the-work)).
-  What the driver reads, and what the endpoint delivers instead: the body's
-  pose (`WorldAuthorityEndpoint.Mirror`, presentation floats where the driver
-  reads fixed point), the delivered definition (`WorldAuthorityEndpoint.Definition`,
-  from which places and spawn points follow), and a navigation planner that
-  exists only as `WorldPopulation.PlanSteering`, which needs a resolved
-  population with its contact field and the seat kit's collider. The driver
-  also fails a chapter on `WorldBody.LastObstructionNormal`, a witness no
-  snapshot carries. The report separates the in-process and remote topology
-  (`topology` in the run report) but a run against `--connect` still cannot
-  drive its seat: the driver holds its controls and reports a `seat` failure
-  when the chapter's time limit passes.
+- [high] The route does not arrive against a remote authority, and the
+  driver is no longer the reason: it reads only what the seat's client was
+  delivered ([the ruling](benchmark.md#the-route-against-a-remote-authority))
+  and plays every chapter in process. What stops a remote run is federation.
+  Each defect below was read from a pair of headless Worlds, one listening
+  and one started with `--connect`, both on one staged document and one
+  federation key:
+  - A `--connect` traveller's seat input does not move its body on the remote
+    authority. With the transfer committed and deliveries arriving, a held
+    `player.signal gamepad.leftStick 0 1` leaves `body.where` unchanged for 90
+    ticks and neither process names a refusal. The client submits through
+    `WorldFederatedServerLink.SubmitIntent`, and the authority admits through
+    `WorldTick.PublishFederatedIntent`; where the input is lost between them is
+    not known. This blocks every remote route, on any world.
+  - `--connect` resolves its remote destination from the document the client
+    booted and refuses one that authors no `host.authorityNamespace`
+    (`WorldInstanceHost`'s remote destination resolution). The subject a run
+    expects at its remote authority is a run input, like the endpoint
+    `--connect` already takes, and the debug world authors none.
+  - The debug world admits no remote player: `bodies.networkPlayers` is 0 and
+    its one admission row names no signing peer. Its row grants
+    `Observe` over `all`, which the admission door refuses for an arriving
+    traveller ("observe must name a concrete body"), so an arrival there is
+    delivered nothing; a row with no subject, which resolves to the arrival's
+    own body, is delivered.
+  - A replica travels as one message under `WireLimits.MaxDocumentBytes`. The
+    debug world's replica is 21.9 MB and the cap was 16 MiB; it is 64 MiB now,
+    which moves the limit and does not remove it. A replica's creations should
+    travel by content pin, as the presentation projection's prototypes do.
+  - A replica that names content by relative path fails the receiver's
+    validation, which has no directory to resolve it beside
+    (`patches[0].document.source` and a HUD element's `voice` on the debug
+    world): `WorldFederationCodec` deserializes a delivered definition with no
+    document directory, though the receiver holds its own copy of the document
+    the destination was resolved from.
+  - A replica dealt to a recipient who may not read a cell still carries the
+    rules that read it, and the receiver's validation refuses the document
+    (`StateCellUndeclared` for the auction's `bid`): `WorldStateDisclosure.Disclose`
+    withholds the cell and the rule is sent whole.
+  - At the presentation tier the debug world's authority does not answer
+    `Reserve` inside the lane's deadline (`WorldRemoteAuthority.LaneRequestTimeout`),
+    on each of the client's retries. What composing its projection costs was
+    not measured.
+  - An observer that falls eight records behind is detached and reconnects
+    (`WorldFederationProjectionSink.PendingDeliveryLimit`), which on a loaded
+    machine happened twice in fifteen seconds; each detach is a quarter second
+    and a whole document again. A route's report shows it as a delivery gap.
+  The pair's staging, until `puck benchmark` does it: a delta over the world
+  (`basis` the world's entry by absolute path) authoring
+  `host.authorityNamespace`, `bodies.networkPlayers` and two admission rows, a
+  wildcard `FederatedAuthority` row granting `Drive` and `Observe` with no
+  subject and a `SignsDirectly` row pinning the pair's own key under the same
+  namespace; both processes boot it with one `--federation-key-file`, the
+  authority with `--listen` and the client with `--connect`.
+- [medium] `puck benchmark` cannot start the remote pair. It needs the staging
+  above, the companion the canary already starts (`AuthorityCompanion`), and
+  a wait for the seat's route to turn remote before it arms the route, since a
+  paused boot commits no transfer; `world.benchmark` then needs a read of the
+  seat's topology to wait on.
+- [medium] A seat driver no longer fails a chapter on a wall it scrapes along,
+  only on one it stops against: it reads a stall from the delivered poses,
+  where it read the authority's obstruction witness
+  (`WorldBody.LastObstructionNormal`), which no delivery carries. Publish the
+  witness as a body fact (`ActionFact`, `BodyFacts`) so a client reads the
+  authority's own answer; the latch then travels in the body's checkpoint and
+  transfer sections, since an action gate can read it.
+- [medium] A run started with `--connect` still steps its whole boot world
+  locally: the seat's body leaves and nothing else stops, so a remote
+  reading's `simulateMs` is a world no one is in. A client of a remote
+  authority should simulate nothing it does not present.
 - [medium] A fresh run's first chapter opens on the boot's settling, not on
   its pose: on a headless World armed `at 10` after a `--paused` boot, the
   chapter's first two iterations (ticks 10 and 11) still simulate for

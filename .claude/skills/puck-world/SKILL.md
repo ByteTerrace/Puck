@@ -772,8 +772,9 @@ check the flag: the owner may be holding the pad.
   ([references/replay.md](references/replay.md)).
 - **The benchmark route plays as a player.** `world.benchmark run debug` (or `seams`) plays a `routes` row of the
   document (`worlds/debug/benchmark-route.puck`): each chapter a list of places and how to reach them, played by the
-  standard's `walker` seat program through seat 1's own controls (`WorldSeatDriver`). A chapter fails, naming the kind,
-  the tick and the place, on a driven wall contact or a step out of its path's places; `puck benchmark --headless --route
+  standard's `walker` seat program through seat 1's own controls (`WorldSeatDriver`), which reads only what the seat's
+  authority delivered, so the same driver plays against a remote authority. A chapter fails, naming the kind,
+  the tick and the place, on a stick held while the body goes nowhere or a step out of its path's places; `puck benchmark --headless --route
   debug --loops 2` is the headless proof ([the plan](../../../docs/plans/benchmark.md#the-route-is-places-played-by-an-authored-seat-program-stage-4)).
 - **A device profile is data, selected by adapter.** A world's `render.devices` rows (the standard's, in
   `worlds/standard/quality.puck`) each name a device's quality table and memory bars. A windowed boot selects the row
