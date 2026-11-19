@@ -213,6 +213,20 @@ public sealed partial class SdfWorldTables {
     /// frame thread.</summary>
     public long MeshRevision => m_meshRevision;
 
+    // Every table's static revisions come from one sequence, so tables replaced after a device loss never repeat one an
+    // earlier table published and a held distant map drawn from the old records never stands for the new ones.
+    private static long StaticDrawRevisions;
+    private long m_staticDrawRevision = Interlocked.Increment(location: ref StaticDrawRevisions);
+
+    /// <summary>Gets the revision of the staged records of the static scene (<see cref="SdfMeshIrradianceScene.IsStatic"/>):
+    /// a new value whenever a staging changes what such a draw draws (its mesh, placement, material or clip), lands its
+    /// mesh, leaves it absent, or adds or removes such a draw, and never otherwise, so a moving body, a pose or a mesh the
+    /// arena only relocated leaves it as it was. Unique across every table of the process. A pass that draws static casters
+    /// alone and holds them (the distant shadow map) draws again exactly when it changes. Read on the frame thread.</summary>
+    public long StaticDrawRevision => m_staticDrawRevision;
+
+    private void StaticDrawsChanged() => m_staticDrawRevision = Interlocked.Increment(location: ref StaticDrawRevisions);
+
     internal SdfMeshRowStamp RowStamp => new(m_currentDrawRows.Rows, m_meshSourceRevision);
 
     // An explicit publication cause, or null to classify each staged row as a hand-over, landing or pose (StagingTally).
@@ -436,6 +450,7 @@ public sealed partial class SdfWorldTables {
     }
     private void Unname(int row) {
         RowChanged(row: row);
+        if ((m_stagedDraws[row].Mesh is not null) && SdfMeshIrradianceScene.IsStatic(draw: in m_stagedDraws[row])) { StaticDrawsChanged(); }
         if (m_stagedDraws[row].Mesh is { } mesh) { m_meshClaims!.Release(mesh: mesh); }
         m_rowsByMesh.Remove(row: row); m_absentRows.Remove(item: row); m_glassIndices.Remove(item: row);
         m_stagedDraws[row] = default; m_stagedOccupancies[row] = 0;
@@ -551,6 +566,15 @@ public sealed partial class SdfWorldTables {
                     ((draw.Mesh is not null) && (m_absentRows.Contains(item: index) == MeshStands(mesh: draw.Mesh))) || m_meshArena.Relocated || ((draw.Mesh is not null) && m_meshArena.Moved.Contains(item: draw.Mesh)) ||
                     (m_reseatedDraws.Contains(value: index) && MeshTransformWasReseated(draw: in draw))) {
                     var record = records.Slice(length: SdfMeshRecord.DrawWords, start: (index * SdfMeshRecord.DrawWords));
+                    var previous = m_stagedDraws[index];
+
+                    // What a static draw draws changed: its content, or whether its mesh stands (a landing or an
+                    // eviction). A relocation or an occupancy change alone draws the same triangles.
+                    if ((((draw.Mesh is not null) && SdfMeshIrradianceScene.IsStatic(draw: in draw)) || ((previous.Mesh is not null) && SdfMeshIrradianceScene.IsStatic(draw: in previous))) &&
+                        ((index >= m_stagedCount) || !draw.SameStagedContent(other: in previous) ||
+                            ((draw.Mesh is not null) && (m_absentRows.Contains(item: index) == MeshStands(mesh: draw.Mesh))))) {
+                        StaticDrawsChanged();
+                    }
 
                     var mask = StageMeshDraw(draw: in draw, incremental: true, index: index, old: old, record: record, tally: ref tally);
                     // The grown reserve may occupy old mesh words. Its newly shadowed zeros are not evidence of

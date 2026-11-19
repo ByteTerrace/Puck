@@ -30,10 +30,11 @@ public sealed class WorldRatesLeverLawTests {
     [InlineData("on", SdfUpdateRates.All)]
     [InlineData("off", SdfUpdateRates.None)]
     [InlineData("toggle", SdfUpdateRates.None)]
-    [InlineData("bodies off", (SdfUpdateRates.Views | SdfUpdateRates.Screens | SdfUpdateRates.ShadowFar))]
-    [InlineData("views off", (SdfUpdateRates.Bodies | SdfUpdateRates.Screens | SdfUpdateRates.ShadowFar))]
-    [InlineData("screens off", (SdfUpdateRates.Bodies | SdfUpdateRates.Views | SdfUpdateRates.ShadowFar))]
-    [InlineData("shadow-far off", (SdfUpdateRates.Bodies | SdfUpdateRates.Views | SdfUpdateRates.Screens))]
+    [InlineData("bodies off", (SdfUpdateRates.All & ~SdfUpdateRates.Bodies))]
+    [InlineData("views off", (SdfUpdateRates.All & ~SdfUpdateRates.Views))]
+    [InlineData("screens off", (SdfUpdateRates.All & ~SdfUpdateRates.Screens))]
+    [InlineData("shadow-far off", (SdfUpdateRates.All & ~SdfUpdateRates.ShadowFar))]
+    [InlineData("shadow-distant off", (SdfUpdateRates.All & ~SdfUpdateRates.ShadowDistant))]
     [InlineData("shadow-far on", SdfUpdateRates.All)]
     [Theory]
     public void AChoiceIsSubmittedAsTheRatesLever(string words, SdfUpdateRates rates) {
@@ -60,7 +61,9 @@ public sealed class WorldRatesLeverLawTests {
         var result = registry.Submit(line: line);
 
         Assert.True(condition: result.IsError);
-        Assert.Contains(expectedSubstring: "status|on|off|toggle|bodies|views|screens|shadow-far on|off]", actualString: result.Output);
+        // The refusal names the form nearest the words typed (CommandForms.Refuse).
+        Assert.True(condition: (result.Output.Contains(value: "expected [status|on|off|toggle]", comparisonType: StringComparison.Ordinal) ||
+            result.Output.Contains(value: "expected <bodies|views|screens|shadow-far|shadow-distant> on|off", comparisonType: StringComparison.Ordinal)), userMessage: result.Output);
         Assert.Empty(collection: levers);
     }
 }

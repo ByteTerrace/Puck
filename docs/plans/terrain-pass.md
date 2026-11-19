@@ -19,7 +19,7 @@ the rest.
 | Contact | `WorldColliderSet`, `FixedStaticCollider` (analytic convex kinds and the relief's field collider, `FixedStaticColliderKind.Field`); `FixedFieldContactSolver`, the world-wide field provider the debug world does not select | A relieved copy collides as its fixed-point field, authored blends included; an unrelieved copy keeps analytic primitive unions. Both field paths read one certified surface solve; what remains of it is in [certified field contact](open-items.md#certified-field-contact). |
 | Materials | The fixed weathering layer (`shade/shade-weathering.hlsli`) and the standard's `weathered` program (`worlds/standard/shading.puck`) | No slope or altitude rule, though the weathering's up-facing deposit and its curvature edges are such rules. |
 | Atmosphere | `SdfSky.PackAtmosphere`, `shade/sdf-atmosphere.hlsli`, CPU twin `SdfAir` | Height fog and haze, scalar extinction; haze extinction is `-log(1 - amount) / farDistance`. The valley's fog (`clearDayAir`) fades rock toward a white sky, not toward blue. |
-| Far shadows | `SdfMeshShadowCascades` | Splits at 16 and 120 m: every wall beyond 120 m is fully sunlit, with no ridge shadows. |
+| Far shadows | `SdfMeshShadowCascades`, `SdfDistantShadows` | Cascades split at 16 and 120 m; past them the distant map (static casters within its reach, held between changes) shadows the walls at about 1.3 m a texel in the debug world, unread on a GPU leg. |
 | Exposure | `SdfViewExposures`, `SdfExposure.Meter`, the composite's histogram | Each view meters its own image (the [rendering decision](../decisions/rendering.md#lights-screens-and-the-camera-are-photometric)) under the Moth basis's band, percentiles and compensation; a cut snaps to the first reading rendered after it. |
 | Residency | [residency decision](../decisions/residency.md), `SdfMeshDemand`, `SdfMeshChunks` | Chunks are bins of one contour and do not stream. Terrain tiles are unbuilt. |
 
@@ -582,12 +582,15 @@ alone, a measurement request.
   `HazeAmount` over `farDistance`. Haze leaves draw distance, and rock fades
   toward blue. `SdfAir` and `sdf-atmosphere.hlsli` change together; the valley
   plan's spherical shell replaces this flat model later.
-- **Far shadows:** a terrain cascade from 120 m to the far distance draws static
-  draws at their coarsest level, refreshed only when the sun or a static draw
-  changes, so ridges shadow the walls behind them. Holding it between changes
-  keeps the authored shadow precision; the cascade's snap is never coarsened.
-  This step is the one home of the terrain cascade, and the
-  [illumination plan](illumination.md#the-build-order) waits on it.
+- **Far shadows:** built as the distant shadow map
+  ([the handbook](../rendering/sdf/handbook/frame-rendering.md#the-distant-shadow-map)):
+  the cascade set's fourth entry draws the static scene within an authored reach
+  of the eye at texels of its own, held until the sun turns past an authored
+  tolerance, the eye crosses an eighth of the reach or a static draw changes, so
+  ridges shadow the walls behind them and the near and far cascades keep their
+  precision. The standard's `high` and `medium` rows and the debug world's boot
+  author it. What remains is the step's target, read on a GPU leg; the
+  [illumination plan](illumination.md#the-build-order) waits on that reading.
 
 ### What the bake needs
 
@@ -691,12 +694,13 @@ this plan's, and each is filled before work that sculpts or tunes around it
   card reads) and the RTX 4070's shading columns, which
   [the shader plan](author-shaders.md#the-decision-matrix) already holds. The
   RTX 2060's and the Steam Deck's columns do not hold it back.
-- **Step 7's far shadows (gap 3).** No surface past the standard's 120 m
-  shadow reach is shadowed, and stretching the far map that far would cost
-  precision near the eye. The step has one start: when shadow maps are
-  assigned by light role, which the rendering plan's `shadows` lane builds
-  in its first wave. The far map is one more entry in that lane's cascade
-  set.
+- **Step 7's far shadows (gap 3).** Built: the distant shadow map is one more
+  entry of the cascade set (`SdfMeshShadowCascades.DistantEntry`), with its own
+  texels, so it costs the near cascades no precision. Its reach, texels and
+  light tolerance are each device row's (`WorldQualityPreset.DistantShadows`).
+  The step's target below is still to read on a GPU leg. The other half of the
+  gap, a coarse mesh that stays resident while the fine one arrives, is the
+  rendering plan's `floor` lane's.
 - **Step 2's aerial perspective (gap 13).** Haze's strength is divided by
   the far distance (`SdfSky.PackAtmosphere`), so changing how far the world
   draws changes the haze on everything nearer, and with it the distant rock

@@ -11,22 +11,23 @@ public static partial class SdfFrameBlock {
     private static readonly int MeshShadowTexelsOffset = Offset(member: SdfWorldPackage.MeshShadowTexels);
     private static readonly int MeshShadowSlopesOffset = Offset(member: SdfWorldPackage.MeshShadowSlopes);
     private static readonly int MeshShadowRolesOffset = Offset(member: SdfWorldPackage.MeshShadowRoles);
-    /// <summary>Writes the cascade set the surface pass reads: its entries' cameras, roles and slopes.</summary>
+    /// <summary>Writes the cascade set the surface pass reads: its entries' cameras, roles, slopes and texels. An entry
+    /// the set does not hold (<see cref="SdfMeshShadowCascades.Holds"/>) carries no role, so no receiver reads it.</summary>
     /// <param name="block">The pass block <see cref="Write"/> filled.</param>
     /// <param name="cascades">The view's cascade set.</param>
     public static void WriteMeshShadows(Span<byte> block, in SdfMeshShadowCascades cascades) {
         WriteUInt32(block: block, offset: MeshShadowCountOffset, value: ((uint)cascades.Count));
-        WriteUInt32(block: block, offset: MeshShadowTexelsOffset, value: ((uint)cascades.Texels));
         WriteSingle(block: block, offset: MeshShadowParametersOffset, value: SdfMeshShadowCascades.ConstantBias);
         WriteSingle(block: block, offset: (MeshShadowParametersOffset + sizeof(float)), value: SdfMeshShadowCascades.NormalOffsetTexels);
         WriteSingle(block: block, offset: (MeshShadowParametersOffset + (2 * sizeof(float))), value: 0f);
         WriteSingle(block: block, offset: (MeshShadowParametersOffset + (3 * sizeof(float))), value: 0f);
-        for (var index = 0; (index < 4); index++) {
-            var rendered = (index < cascades.Count);
+        for (var index = 0; (index < SdfMeshShadowCascades.MaxEntries); index++) {
+            var rendered = cascades.Holds(index: index);
             var entry = (rendered ? cascades.Entry(index: index) : default);
 
             WriteSingle(block: block, offset: (MeshShadowSlopesOffset + (index * sizeof(float))), value: entry.Slope);
             WriteUInt32(block: block, offset: (MeshShadowRolesOffset + (index * sizeof(uint))), value: (rendered ? ((uint)entry.Role) : uint.MaxValue));
+            WriteUInt32(block: block, offset: (MeshShadowTexelsOffset + (index * sizeof(uint))), value: (rendered ? ((uint)cascades.TexelsOf(index: index)) : 0u));
         }
 
         for (var index = 0; (index < SdfWorldPackage.MeshShadowCascadeCount); index++) {

@@ -369,6 +369,21 @@ include a moving camera and reduced/temporal render grids. The receiver scratch
 shares the depth allocation and its existing slot-fence retirement; early
 compute samples camera depth, late compute samples light depth, in separate sets.
 
+## The distant shadow map
+
+The cascade set's fourth entry (`SdfMeshShadowCascades.DistantEntry`, primary role) is the far shadows past the
+far cascade, authored per device row (`WorldQualityPreset.DistantShadows`) and at boot (`render.distantShadows`),
+carried on `SdfFrame.DistantShadows`; the [handbook](../../../docs/rendering/sdf/handbook/frame-rendering.md#the-distant-shadow-map)
+owns the behaviour. Its invariant is that a held map draws only what cannot move while it stands: the
+`shadow-distant` pass stages `staticOnly`, so the selection kernel rejects every record carrying
+`SdfMeshRecord.DynamicFlag` (set from `SdfMeshIrradianceScene.IsStatic` in `SdfMeshRegion.WriteDraw`), and its
+signature (`SdfWorldPasses.DistantSignatureOf`) folds `SdfWorldTables.StaticDrawRevision`, which only
+`StageChangedDraws` and `Unname` advance. A new path that changes a static draw's record outside those two leaves a
+stale map standing. Readers take the camera through `CascadesOf`, which reads the committed one
+(`SubmittedDistant`) or none; an entry without a committed camera writes no role (`SdfFrameBlock.WriteMeshShadows`
+through `SdfMeshShadowCascades.Holds`), and the surface pass reads no optical term for it. Because its count makes
+the set four long while the secondary entry may be empty, test entries with `Holds`, never `index < Count`.
+
 ## Evidence-preserving diagnostics
 
 `world.debug-view colliders|contacts` uses the beauty path through temporal
@@ -500,8 +515,8 @@ add the row you found.
 
 A view is a chain of separate dispatches: `mesh` (graphics, in two occlusion
 phases with the occlusion kernel between them, `SdfMeshOcclusion`) →
-`shadow-near`, `shadow-far`, `shadow-second` (graphics, the far cascade reading
-current camera receivers) → `pyramid` (the ambient occlusion's
+`shadow-near`, `shadow-far`, `shadow-second`, `shadow-distant` (graphics, the far cascade reading
+current camera receivers, the distant map held between changes) → `pyramid` (the ambient occlusion's
 depth pyramid from the mesh target) → `surface` (each pixel's visibility record from the mesh
 target: normal, screen-space AO, the cascades' soft shadows into K;
 `passes/sdf-surface-stage.hlsli`) → `views-probes` (the irradiance volume's

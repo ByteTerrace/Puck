@@ -35,7 +35,7 @@ public sealed partial class WorldRenderLeverCommandModule(WorldRenderSettings se
     private static readonly CommandForms WorldCadenceForms = CommandForms.Of(verb: "world.cadence", "[on|off|status]");
     private static readonly CommandForms WorldCullForms = CommandForms.Of(verb: "world.cull", "[occlusion|camera|frustum|off|status]");
     private static readonly CommandForms WorldDetailForms = CommandForms.Of(verb: "world.detail", "[auto|0|1|2|status]");
-    private static readonly CommandForms WorldRatesForms = CommandForms.Of(verb: "world.rates", "[status|on|off|toggle]", "<bodies|views|screens|shadow-far> on|off");
+    private static readonly CommandForms WorldRatesForms = CommandForms.Of(verb: "world.rates", "[status|on|off|toggle]", "<bodies|views|screens|shadow-far|shadow-distant> on|off");
     private static readonly CommandForms WorldRenderScaleForms = CommandForms.Of(verb: "world.render-scale", "[<view>]", "[<view>] <tier|fraction|percent>", "[<view>] floor <tier>", "[<view>] pin <scale>", "[<view>] auto [on|off]");
     private static readonly CommandForms WorldUpscaleSharpnessForms = CommandForms.Of(verb: "world.upscale-sharpness", "[bilinear|balanced|sharp|0..1|0%..100%]");
     private static readonly CommandForms WorldTemporalForms = CommandForms.Of(verb: "world.temporal", "[on|off]");
@@ -57,8 +57,12 @@ public sealed partial class WorldRenderLeverCommandModule(WorldRenderSettings se
             ? "on"
             : "off")} dynamic-resolution={(settings.DynamicResolution
             ? "on"
-            : "off")} render-scale={RenderScaleName(scale: settings.RenderScale)} upscale={UpscaleSharpnessName(sharpness: settings.UpscaleSharpness)} sky={SkyQualityName(tier: settings.SkyQuality)} sky-field-scale={settings.SkyFieldScale.ToString(format: "0.###", provider: CultureInfo.InvariantCulture)} indirect={settings.IndirectTier.ToString().ToLowerInvariant()}]";
+            : "off")} render-scale={RenderScaleName(scale: settings.RenderScale)} upscale={UpscaleSharpnessName(sharpness: settings.UpscaleSharpness)} sky={SkyQualityName(tier: settings.SkyQuality)} sky-field-scale={settings.SkyFieldScale.ToString(format: "0.###", provider: CultureInfo.InvariantCulture)} indirect={settings.IndirectTier.ToString().ToLowerInvariant()} distant-shadows={DistantShadowsName(map: settings.DistantShadows)}]";
     }
+    // The distant shadow map's spelling in an echo: off, or its reach, texels and light tolerance.
+    private static string DistantShadowsName(WorldDistantShadows? map) => ((map is { } value)
+        ? string.Create(provider: CultureInfo.InvariantCulture, handler: $"{value.Reach:0.#}m/{value.Texels}/{value.TurnDegrees:0.###}deg")
+        : "off");
     // A sky tier's spelling, as the document and world.sky-quality spell it.
     private static string SkyQualityName(WorldSkyTier tier) => tier switch {
         WorldSkyTier.Low => "low",
@@ -74,6 +78,7 @@ public sealed partial class WorldRenderLeverCommandModule(WorldRenderSettings se
         "views" => SdfUpdateRates.Views,
         "screens" => SdfUpdateRates.Screens,
         "shadow-far" => SdfUpdateRates.ShadowFar,
+        "shadow-distant" => SdfUpdateRates.ShadowDistant,
         _ => null,
     };
     // The world.rates echo: each lever, what each counted so far, then the presentation rate the levers hold by, each
@@ -90,7 +95,7 @@ public sealed partial class WorldRenderLeverCommandModule(WorldRenderSettings se
         var echo = new System.Text.StringBuilder();
 
         _ = echo.Append(provider: CultureInfo.InvariantCulture,
-            handler: $"[world.rates: bodies={On(lever: SdfUpdateRates.Bodies, rates: rates)} views={On(lever: SdfUpdateRates.Views, rates: rates)} screens={On(lever: SdfUpdateRates.Screens, rates: rates)} shadow-far={On(lever: SdfUpdateRates.ShadowFar, rates: rates)} bodies.posed={counts.Read(kind: SdfUpdateRateCounts.BodiesPosed)} bodies.held={counts.Read(kind: SdfUpdateRateCounts.BodiesHeld)} placements.posed={counts.Read(kind: SdfUpdateRateCounts.PlacementsPosed)} placements.held={counts.Read(kind: SdfUpdateRateCounts.PlacementsHeld)} views.rated={counts.Read(kind: SdfUpdateRateCounts.ViewsRated)} views.held={counts.Read(kind: SdfUpdateRateCounts.ViewsHeld)} screens.rated={counts.Read(kind: SdfUpdateRateCounts.ScreensRated)} shadow-far.rendered={counts.Read(kind: SdfUpdateRateCounts.ShadowFarRendered)} shadow-far.split={counts.Read(kind: SdfUpdateRateCounts.ShadowFarSplit)} shadow-far.held={counts.Read(kind: SdfUpdateRateCounts.ShadowFarHeld)}");
+            handler: $"[world.rates: bodies={On(lever: SdfUpdateRates.Bodies, rates: rates)} views={On(lever: SdfUpdateRates.Views, rates: rates)} screens={On(lever: SdfUpdateRates.Screens, rates: rates)} shadow-far={On(lever: SdfUpdateRates.ShadowFar, rates: rates)} shadow-distant={On(lever: SdfUpdateRates.ShadowDistant, rates: rates)} bodies.posed={counts.Read(kind: SdfUpdateRateCounts.BodiesPosed)} bodies.held={counts.Read(kind: SdfUpdateRateCounts.BodiesHeld)} placements.posed={counts.Read(kind: SdfUpdateRateCounts.PlacementsPosed)} placements.held={counts.Read(kind: SdfUpdateRateCounts.PlacementsHeld)} views.rated={counts.Read(kind: SdfUpdateRateCounts.ViewsRated)} views.held={counts.Read(kind: SdfUpdateRateCounts.ViewsHeld)} screens.rated={counts.Read(kind: SdfUpdateRateCounts.ScreensRated)} shadow-far.rendered={counts.Read(kind: SdfUpdateRateCounts.ShadowFarRendered)} shadow-far.split={counts.Read(kind: SdfUpdateRateCounts.ShadowFarSplit)} shadow-far.held={counts.Read(kind: SdfUpdateRateCounts.ShadowFarHeld)} shadow-distant.rendered={counts.Read(kind: SdfUpdateRateCounts.ShadowDistantRendered)} shadow-distant.held={counts.Read(kind: SdfUpdateRateCounts.ShadowDistantHeld)}");
         _ = echo.Append(provider: CultureInfo.InvariantCulture,
             handler: $" display={rate.DisplayHertz}hz grid={((rate.GridHertz > 0d) ? (rate.GridHertz.ToString(format: "0.###", provider: CultureInfo.InvariantCulture) + "hz") : "none")} period-ms:");
         foreach (var tier in SdfUpdateRateIntervals.Tiers) {
@@ -146,6 +151,7 @@ public sealed partial class WorldRenderLeverCommandModule(WorldRenderSettings se
         SdfUpdateRates.Bodies => "bodies",
         SdfUpdateRates.Views => "views",
         SdfUpdateRates.Screens => "screens",
+        SdfUpdateRates.ShadowDistant => "shadow-distant",
         _ => "shadow-far",
     };
     // The world.cadence echo.
@@ -351,6 +357,7 @@ public sealed partial class WorldRenderLeverCommandModule(WorldRenderSettings se
         );
 
         link.SubmitSessionLever(lever: WorldSessionLevers.ShadowPolicy(preset: preset), principal: context.Principal);
+        link.SubmitSessionLever(lever: WorldSessionLevers.DistantShadowPolicy(preset: preset), principal: context.Principal);
         SubmitLever(
             link: link,
             principal: context.Principal,
@@ -635,7 +642,7 @@ public sealed partial class WorldRenderLeverCommandModule(WorldRenderSettings se
             bindability: CommandBindability.Bindable,
             name: "world.rates",
             forms: WorldRatesForms,
-            description: $"Selects which presentation work updates less often when it is far or small on screen, live (no rebuild): {WorldRatesForms.Spelling} (toggle turns every lever off when all are on, else on), the levers bodies (a body's pose at least 30 times a second at or below 30 pixels per metre and 15 at or below 15 or while only its shadow, an undisplayed view or a reader of its parts may show it, held while nothing may, its root followed every frame), views (a nested portal or session view at least 30 times a second at or below 120 display pixels high and 15 at or below 60), screens (a screen's source upload at least 30 times a second at or below its native height on the display and 15 at or below half of it) and shadow-far (the far shadow cascade refreshed at least 30 times a second, its fit held between). Each tier is a floor held by presentation time, so slow or uneven frames never lower it; on a fixed signal its period is whole refreshes, under lockstep whole ticks. A rated update lands early rather than on a frame that runs a simulation step when a frame without one serves it. Every lever ships on. Presentation only: the simulation ticks every body and every machine runs at its own rate. The echo prints the display and grid the levers hold by, each tier's period (period-ms) and each lever's longest interval between updates at each tier over the last one to two seconds (longest-ms, '-' for none), which stays within a millisecond of the period unless a frame arrives later than the one before it. world.counters sdf.rates counts what each held; world.counters gpu shows the far cascade standing between refreshes.",
+            description: $"Selects which presentation work updates less often when it is far or small on screen, live (no rebuild): {WorldRatesForms.Spelling} (toggle turns every lever off when all are on, else on), the levers bodies (a body's pose at least 30 times a second at or below 30 pixels per metre and 15 at or below 15 or while only its shadow, an undisplayed view or a reader of its parts may show it, held while nothing may, its root followed every frame), views (a nested portal or session view at least 30 times a second at or below 120 display pixels high and 15 at or below 60), screens (a screen's source upload at least 30 times a second at or below its native height on the display and 15 at or below half of it), shadow-far (the far shadow cascade refreshed at least 30 times a second, its fit held between) and shadow-distant (the distant shadow map held while the light turns within its authored tolerance and the eye stays in its cell; off, it is drawn again on every frame the light moves; either way a changed static draw redraws it). Each tier is a floor held by presentation time, so slow or uneven frames never lower it; on a fixed signal its period is whole refreshes, under lockstep whole ticks. A rated update lands early rather than on a frame that runs a simulation step when a frame without one serves it. Every lever ships on. Presentation only: the simulation ticks every body and every machine runs at its own rate. The echo prints the display and grid the levers hold by, each tier's period (period-ms) and each lever's longest interval between updates at each tier over the last one to two seconds (longest-ms, '-' for none), which stays within a millisecond of the period unless a frame arrives later than the one before it. world.counters sdf.rates counts what each held; world.counters gpu shows the far cascade standing between refreshes.",
             handler: (context, args) => {
                 CommandResult Echo() => new(Output: RatesEcho(settings: settings));
 

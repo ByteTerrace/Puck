@@ -967,6 +967,11 @@
       "description": "Whether the indirect volume\u0027s background rays (its probe trace, the relight\u0027s shadow rays and the camera sample) boot taking the device\u0027s ray hardware where it has it, through the scene\u0027s acceleration structures (world.rays). The software walk answers the same hits wherever it is off or the device has none. Absent is off.",
       "type": "boolean",
       "default": false
+    },
+    "distantShadows": {
+      "$ref": "./common.schema.json#/$defs/WorldDistantShadows",
+      "description": "The distant shadow map the world boots drawing past the far cascade (WorldDistantShadows); a quality preset\u0027s row replaces it. Absent draws none.",
+      "default": null
     }
   },
   "additionalProperties": false,

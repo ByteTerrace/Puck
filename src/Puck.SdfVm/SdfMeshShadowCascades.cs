@@ -28,11 +28,14 @@ public readonly record struct SdfMeshShadowEntry(SdfMeshShadowCamera Camera, int
 /// of the view's frustum that starts at its eye, the near one the first <see cref="SdfShadowCoverage.Near"/> metres and
 /// the far one up to <see cref="SdfShadowCoverage.Far"/> metres or the frame's far distance (the frame's
 /// <see cref="SdfFrame.ShadowCoverage"/>); then the secondary role's one entry over the first <see cref="SecondSplit"/>
-/// metres. A receiver takes the first entry of its light's role that holds it, and where none does, the probes' answer.
-/// Each entry is a bounding sphere of its slice, so its extent does not change as the camera turns, and its plane's center
-/// snaps to a whole texel of the view's cascade resolution (<see cref="SdfViewQuality.ShadowResolution"/>), so a still
-/// light's shadow does not crawl as the camera moves. The fit is a pure function of the camera, the lights and the far
-/// distance, so every pass of a frame that fits it agrees.
+/// metres; then, while the frame's distant map is on (<see cref="SdfFrame.DistantShadows"/>), the primary role's distant
+/// entry over every receiver within its reach of the eye, whatever way the camera faces, at texels of its own. A receiver
+/// takes the first entry of its light's role that holds it, and where none does, the probes' answer.
+/// Each cascade is a bounding sphere of its slice, so its extent does not change as the camera turns, and its plane's
+/// center snaps to a whole texel of the view's cascade resolution (<see cref="SdfViewQuality.ShadowResolution"/>), so a
+/// still light's shadow does not crawl as the camera moves. The fit is a pure function of the camera, the lights and the
+/// far distance, so every pass of a frame that fits it agrees; the far and distant entries are read through the cameras
+/// their held layers were drawn from (<see cref="WithFar"/>, <see cref="WithDistant"/>).
 /// </summary>
 public readonly struct SdfMeshShadowCascades {
     /// <summary>The constant depth bias a receiver subtracts, in metres.</summary>
@@ -48,6 +51,9 @@ public readonly struct SdfMeshShadowCascades {
     public const int FarEntry = 1;
     /// <summary>The entry the secondary role holds.</summary>
     public const int SecondEntry = 2;
+    /// <summary>The entry the primary role's distant map holds, whose layers are held between refreshes
+    /// (<see cref="WithDistant"/>).</summary>
+    public const int DistantEntry = 3;
     /// <summary>The camera index the far entry's exit layer reads through, after the entries
     /// (<see cref="this[int]"/>).</summary>
     public const int FarExitCamera = MaxEntries;
@@ -58,40 +64,58 @@ public readonly struct SdfMeshShadowCascades {
     private readonly SdfMeshShadowEntry m_near;
     private readonly SdfMeshShadowEntry m_far;
     private readonly SdfMeshShadowEntry m_second;
+    private readonly SdfMeshShadowEntry m_distant;
     private readonly SdfMeshShadowCamera m_farExit;
 
-    private SdfMeshShadowCascades(SdfMeshShadowEntry near, SdfMeshShadowEntry far, SdfMeshShadowEntry second, SdfMeshShadowCamera farExit, int count, int texels) {
+    private SdfMeshShadowCascades(SdfMeshShadowEntry near, SdfMeshShadowEntry far, SdfMeshShadowEntry second, SdfMeshShadowEntry distant, SdfMeshShadowCamera farExit, int count, int texels, int distantTexels) {
         m_near = near;
         m_far = far;
         m_second = second;
+        m_distant = distant;
         m_farExit = farExit;
         Count = count;
         Texels = texels;
+        DistantTexels = distantTexels;
     }
 
-    /// <summary>Gets the entries the frame renders, a prefix of the set: zero when no slotted light emits or the view
-    /// skips shadows, two for the primary role alone, three with the secondary role.</summary>
+    /// <summary>Gets the entries the pass block carries, a prefix of the set: zero when no slotted light emits or the view
+    /// skips shadows, two for the primary role alone, three with the secondary role, four with the distant map. An entry
+    /// inside the prefix may still be empty (<see cref="Holds"/>): the secondary entry of a set with the distant map and no
+    /// secondary role.</summary>
     public int Count { get; }
-    /// <summary>Gets the texels along each side of every entry's depth, zero when the set is empty.</summary>
+    /// <summary>Gets the texels along each side of the near, far and secondary entries' depths, zero when the set is
+    /// empty.</summary>
     public int Texels { get; }
+    /// <summary>Gets the texels along each side of the distant entry's depth, zero when the set holds no distant map.</summary>
+    public int DistantTexels { get; }
 
     /// <summary>Gets one entry's camera, or past the entries the camera the far entry's exit layer was drawn from.</summary>
-    /// <param name="index">The entry (<see cref="NearEntry"/>, <see cref="FarEntry"/>, <see cref="SecondEntry"/>), or
-    /// <see cref="FarExitCamera"/> (<see cref="WithFar"/>).</param>
+    /// <param name="index">The entry (<see cref="NearEntry"/>, <see cref="FarEntry"/>, <see cref="SecondEntry"/>,
+    /// <see cref="DistantEntry"/>), or <see cref="FarExitCamera"/> (<see cref="WithFar"/>).</param>
     /// <returns>The camera.</returns>
     public SdfMeshShadowCamera this[int index] => ((index == FarExitCamera) ? m_farExit : Entry(index: index).Camera);
 
     /// <summary>Returns one entry of the set.</summary>
-    /// <param name="index">The entry, from zero below <see cref="MaxEntries"/>; one at or past <see cref="Count"/> is
-    /// empty.</param>
+    /// <param name="index">The entry, from zero below <see cref="MaxEntries"/>; one the set does not hold is empty.</param>
     /// <returns>The entry.</returns>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="index"/> is outside the set.</exception>
     public SdfMeshShadowEntry Entry(int index) => index switch {
         NearEntry => m_near,
         FarEntry => m_far,
         SecondEntry => m_second,
+        DistantEntry => m_distant,
         _ => throw new ArgumentOutOfRangeException(paramName: nameof(index)),
     };
+    /// <summary>Returns whether the set holds an entry: one inside <see cref="Count"/> with a camera to be drawn from and
+    /// read through.</summary>
+    /// <param name="index">The entry, from zero below <see cref="MaxEntries"/>.</param>
+    /// <returns><see langword="true"/> for an entry a pass draws and the surface pass reads.</returns>
+    public bool Holds(int index) => ((index >= 0) && (index < Count) && (Entry(index: index).Camera.HalfHeight > 0f));
+    /// <summary>Returns the texels along each side of an entry's depth.</summary>
+    /// <param name="index">The entry, from zero below <see cref="MaxEntries"/>.</param>
+    /// <returns>The texels a side: <see cref="DistantTexels"/> for the distant entry, <see cref="Texels"/> for any
+    /// other.</returns>
+    public int TexelsOf(int index) => ((index == DistantEntry) ? DistantTexels : Texels);
     /// <summary>Returns this set with the far entry's cameras replaced: a far entry held from an earlier frame
     /// (<see cref="SdfUpdateRates.ShadowFar"/>), whose layers were drawn from those cameras and are read through them. The
     /// exit layer's camera differs from the depth's only on the frame a refresh redraws the depth alone.</summary>
@@ -100,8 +124,25 @@ public readonly struct SdfMeshShadowCascades {
     /// <returns>The set, every other member unchanged.</returns>
     public SdfMeshShadowCascades WithFar(in SdfMeshShadowCamera far, in SdfMeshShadowCamera exit) => new(
         count: Count,
+        distant: m_distant,
+        distantTexels: DistantTexels,
         far: m_far with { Camera = far },
         farExit: exit,
+        near: m_near,
+        second: m_second,
+        texels: Texels
+    );
+    /// <summary>Returns this set with the distant entry's camera replaced by the one its held layers were drawn from, or
+    /// with no camera (the entry empty, <see cref="Holds"/> false) while no layer is drawn to read.</summary>
+    /// <param name="camera">The camera the distant entry's layers were drawn from, or <see langword="default"/> for
+    /// none.</param>
+    /// <returns>The set, every other member unchanged.</returns>
+    public SdfMeshShadowCascades WithDistant(in SdfMeshShadowCamera camera) => new(
+        count: Count,
+        distant: m_distant with { Camera = camera },
+        distantTexels: DistantTexels,
+        far: m_far,
+        farExit: m_farExit,
         near: m_near,
         second: m_second,
         texels: Texels
@@ -112,10 +153,13 @@ public readonly struct SdfMeshShadowCascades {
     /// <param name="texels">The texels along each side of the cascade depths the fit is drawn into and read from, or
     /// <see langword="null"/> for the view's <see cref="SdfViewQuality.ShadowResolution"/>: a pass that binds a cascade
     /// depth passes the depth's own size, which differs from the quality's while a graph of the new size builds.</param>
+    /// <param name="distantTexels">The texels along each side of the distant map's depth the fit is drawn into and read
+    /// from, or <see langword="null"/> for the frame's distant map at the view's shadow resolution
+    /// (<see cref="SdfDistantShadows.TexelsAt"/>), for the same reason.</param>
     /// <returns>The set; empty when no slotted directional light emits (no primary role) or the view skips
     /// shadows.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="frame"/> is <see langword="null"/>.</exception>
-    public static SdfMeshShadowCascades Fit(SdfFrame frame, int view, int? texels = null) {
+    public static SdfMeshShadowCascades Fit(SdfFrame frame, int view, int? texels = null, int? distantTexels = null) {
         ArgumentNullException.ThrowIfNull(argument: frame);
 
         var snapshot = frame.Views[Math.Clamp(value: view, min: 0, max: (frame.Views.Count - 1))];
@@ -128,6 +172,7 @@ public readonly struct SdfMeshShadowCascades {
 
         var camera = snapshot.Camera;
         var side = (texels ?? SdfShadowResolutions.Texels(resolution: snapshot.Quality.ShadowResolution));
+        var distantSide = (distantTexels ?? frame.DistantShadows.TexelsAt(resolution: snapshot.Quality.ShadowResolution));
         var coverage = frame.ShadowCoverage;
         var far = MathF.Min(coverage.Far, frame.FarDistance);
         var forward = -SdfLights.UnitDirection(direction: lights[key].Direction);
@@ -140,10 +185,19 @@ public readonly struct SdfMeshShadowCascades {
                 Slope: lights[fill].Param
             )
             : default);
+        var distant = ((frame.DistantShadows.IsOn && (distantSide > 0))
+            ? new SdfMeshShadowEntry(
+                Camera: Distant(casters: coverage.Casters, distant: frame.DistantShadows, eye: camera.Position, forward: forward, texels: distantSide),
+                Role: SdfShadowSlots.Primary,
+                Slope: slope
+            )
+            : default);
         var farCamera = Cascade(camera: camera, casters: coverage.Casters, forward: forward, depth: far, texels: side);
 
         return new SdfMeshShadowCascades(
-            count: ((fill >= 0) ? 3 : 2),
+            count: ((distant.Camera.HalfHeight > 0f) ? 4 : ((fill >= 0) ? 3 : 2)),
+            distant: distant,
+            distantTexels: ((distant.Camera.HalfHeight > 0f) ? distantSide : 0),
             far: new SdfMeshShadowEntry(Camera: farCamera, Role: SdfShadowSlots.Primary, Slope: slope),
             farExit: farCamera,
             near: new SdfMeshShadowEntry(
@@ -164,7 +218,16 @@ public readonly struct SdfMeshShadowCascades {
         var lateral = (camera.TanHalfFieldOfView * camera.TanHalfFieldOfView) * (1f + (camera.AspectRatio * camera.AspectRatio));
         var centerDepth = MathF.Min(depth, ((depth * (1f + lateral)) * 0.5f));
         var radius = SdfShadowCoverage.RadiusOf(aspectRatio: camera.AspectRatio, depth: depth, tanHalfFieldOfView: camera.TanHalfFieldOfView);
-        var center = (camera.Position + (camera.Forward * centerDepth));
+
+        return LightCamera(casters: casters, center: (camera.Position + (camera.Forward * centerDepth)), forward: forward, radius: radius, texels: texels);
+    }
+    // The distant map's camera: the sphere of its half extent about the cell of its grid the eye stands in, whatever way
+    // the camera faces, so neither a turn nor a step inside the cell moves it.
+    private static SdfMeshShadowCamera Distant(SdfDistantShadows distant, Vector3 eye, float casters, Vector3 forward, int texels) =>
+        LightCamera(casters: casters, center: distant.CellOf(eye: eye), forward: forward, radius: distant.HalfExtent, texels: texels);
+    // The orthographic light camera enclosing a sphere seen along the light, its plane's center snapped to a whole one of
+    // its texels, with casters up to `casters` metres toward the light past the sphere.
+    private static SdfMeshShadowCamera LightCamera(Vector3 center, float radius, float casters, Vector3 forward, int texels) {
         var reference = ((MathF.Abs(forward.Y) < 0.99f) ? Vector3.UnitY : Vector3.UnitX);
         // The camera basis keeps the view cameras' handedness (a camera along -Z has +X right and +Y up), so the mesh pass's
         // triangles keep their winding seen from the light.
