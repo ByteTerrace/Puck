@@ -33,6 +33,12 @@ public static class SdfMeshProbeTrace {
     public const int IdentityWord = 29;
     /// <summary>The scene instance ordinal, for hit identity diagnostics.</summary>
     public const int InstanceIndexWord = 30;
+    /// <summary>The words an uploaded scene starts with, written last as one: the top root's address, then
+    /// <see cref="InstanceBaseWord"/>.</summary>
+    public const int RootWords = 2;
+    /// <summary>The scene word holding the first instance record's address, from which a ray query reaches a hit
+    /// instance's record by its index.</summary>
+    public const int InstanceBaseWord = 1;
     /// <summary>Traversal stack capacity shared with the CPU walk.</summary>
     public const int StackDepth = 64;
     /// <summary>The most node visits in one ray, across both hierarchy levels; corrupt links cannot cycle forever.</summary>

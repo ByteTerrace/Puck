@@ -77,6 +77,10 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     private SdfMeshProbeGpuWork? m_nextGpuTrace;
     private bool m_gpuReattach;
 
+    /// <summary>Gets whether the latest staged frame asks the volume's rays to take the ray hardware where the device runs
+    /// the probe kernels' ray-query variants (<see cref="SdfFrame.RayQueries"/>).</summary>
+    public bool RayQueries { get => Volatile.Read(location: ref m_rayQueries); private set => Volatile.Write(location: ref m_rayQueries, value: value); }
+    private bool m_rayQueries;
     internal SdfMeshProbeGpuWork? GpuTrace {
         get => m_gpuTrace;
         set { lock (m_gate) { m_nextGpuTrace = value; m_gpuReattach = true; } }
@@ -205,6 +209,18 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     public static readonly WorkKind GpuTraceNanoseconds = Registry.Declare(name: "sdf.mesh-gi.gpu-trace-nanoseconds", unit: "nanoseconds", workClass: WorkClass.Pacing);
     /// <summary>Measured GPU time of completed relight submissions and feedback updates.</summary>
     public static readonly WorkKind GpuRelightNanoseconds = Registry.Declare(name: "sdf.mesh-gi.gpu-relight-nanoseconds", unit: "nanoseconds", workClass: WorkClass.Pacing);
+    /// <summary>Counts the rays of <see cref="GpuRays"/> a ray query traced through the scene's acceleration structures;
+    /// the rest took the software walk.</summary>
+    public static readonly WorkKind GpuQueryRays = Registry.Declare(name: "sdf.mesh-gi.gpu-query-rays", unit: "rays", workClass: WorkClass.Pacing);
+    /// <summary>The share of <see cref="GpuTraceNanoseconds"/> spent by trace submissions whose rays a ray query traced:
+    /// rays a second for each walk are <see cref="GpuQueryRays"/> over this, and the remainders over the remainder.</summary>
+    public static readonly WorkKind GpuQueryTraceNanoseconds = Registry.Declare(name: "sdf.mesh-gi.gpu-query-trace-nanoseconds", unit: "nanoseconds", workClass: WorkClass.Pacing);
+    /// <summary>The share of <see cref="GpuRelightNanoseconds"/> spent by relights whose shadow rays a ray query traced.</summary>
+    public static readonly WorkKind GpuQueryRelightNanoseconds = Registry.Declare(name: "sdf.mesh-gi.gpu-query-relight-nanoseconds", unit: "nanoseconds", workClass: WorkClass.Pacing);
+    /// <summary>Measured GPU time of the scene's acceleration-structure builds and compactions.</summary>
+    public static readonly WorkKind GpuStructureNanoseconds = Registry.Declare(name: "sdf.mesh-gi.gpu-structure-nanoseconds", unit: "nanoseconds", workClass: WorkClass.Pacing);
+    /// <summary>Counts the bottom-level acceleration structures built, one a geometry each published scene lacked.</summary>
+    public static readonly WorkKind StructuresBuilt = Registry.Declare(name: "sdf.mesh-gi.structures-built", unit: "structures", workClass: WorkClass.Pacing);
     /// <summary>Counts the answered probe jobs of each kind, indexed trace, relight, select, camera sample.</summary>
     public static readonly WorkKind[] GpuJobs = DeclareJobKinds(measure: "jobs", unit: "jobs");
     /// <summary>Counts the units the answered probe jobs of each kind held (a relight's predicted rays,
@@ -654,6 +670,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         ArgumentNullException.ThrowIfNull(argument: frame);
         ArgumentNullException.ThrowIfNull(argument: write);
 
+        RayQueries = frame.RayQueries;
         if (frame.Views.Count == 0) { return default; }
 
         lock (m_gate) {

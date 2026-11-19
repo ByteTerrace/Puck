@@ -24,4 +24,7 @@ public enum ShaderInterfaceMemberKind {
     ReadWriteBuffer,
     /// <summary>A sampler, or an array of them a pass indexes.</summary>
     Sampler,
+    /// <summary>A top-level acceleration structure a pass traces with ray queries
+    /// (<c>RaytracingAccelerationStructure</c>).</summary>
+    AccelerationStructure,
 }

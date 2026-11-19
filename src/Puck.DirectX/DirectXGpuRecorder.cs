@@ -423,21 +423,11 @@ public sealed unsafe partial class DirectXGpuRecorder(DirectXDeviceContext devic
         GpuStage sourceStageMask,
         GpuStage destinationStageMask
     ) {
-        var state = DecodeState(commandBufferHandle);
-        FlushTextureBarriers(state);
-        var barrier = new D3D12_GLOBAL_BARRIER {
-            SyncBefore = DirectXBarriers.Sync(sourceStageMask, sourceAccessMask),
-            SyncAfter = DirectXBarriers.Sync(destinationStageMask, destinationAccessMask),
-            AccessBefore = DirectXBarriers.Access(sourceAccessMask, sourceStageMask, buffer: false),
-            AccessAfter = DirectXBarriers.Access(destinationAccessMask, destinationStageMask, buffer: false),
-
-        };
-        var group = new D3D12_BARRIER_GROUP {
-            Type = D3D12_BARRIER_TYPE.D3D12_BARRIER_TYPE_GLOBAL,
-            NumBarriers = 1,
-        };
-        group.Anonymous.pGlobalBarriers = &barrier;
-        ((ID3D12GraphicsCommandList7*)state.EnhancedCommandList)->Barrier(1, &group);
+        GlobalBarrier(state: DecodeState(commandBufferHandle),
+            accessAfter: DirectXBarriers.Access(destinationAccessMask, destinationStageMask, buffer: false),
+            accessBefore: DirectXBarriers.Access(sourceAccessMask, sourceStageMask, buffer: false),
+            syncAfter: DirectXBarriers.Sync(destinationStageMask, destinationAccessMask),
+            syncBefore: DirectXBarriers.Sync(sourceStageMask, sourceAccessMask));
     }
     /// <inheritdoc/>
     public void TransitionBuffer(

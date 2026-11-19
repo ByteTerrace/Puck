@@ -80,7 +80,7 @@ public sealed class DirectXRootLayout {
     private static D3D12_DESCRIPTOR_RANGE_TYPE RangeType(GpuBindingKind kind) =>
         kind switch {
             GpuBindingKind.ConstantBuffer => D3D12_DESCRIPTOR_RANGE_TYPE.D3D12_DESCRIPTOR_RANGE_TYPE_CBV,
-            GpuBindingKind.ReadOnlyBuffer or GpuBindingKind.SampledImage => D3D12_DESCRIPTOR_RANGE_TYPE.D3D12_DESCRIPTOR_RANGE_TYPE_SRV,
+            GpuBindingKind.ReadOnlyBuffer or GpuBindingKind.SampledImage or GpuBindingKind.AccelerationStructure => D3D12_DESCRIPTOR_RANGE_TYPE.D3D12_DESCRIPTOR_RANGE_TYPE_SRV,
             GpuBindingKind.ReadWriteBuffer or GpuBindingKind.StorageImage => D3D12_DESCRIPTOR_RANGE_TYPE.D3D12_DESCRIPTOR_RANGE_TYPE_UAV,
             GpuBindingKind.Sampler => D3D12_DESCRIPTOR_RANGE_TYPE.D3D12_DESCRIPTOR_RANGE_TYPE_SAMPLER,
             _ => throw new ArgumentOutOfRangeException(

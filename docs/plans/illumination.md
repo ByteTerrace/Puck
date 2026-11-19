@@ -166,8 +166,8 @@ product, kept as a cache under the
 [derived-product decision](../decisions/engine-design.md#a-derived-product-is-a-cache-never-the-truth).
 Either leg lets a moving rigid body cast into the volume and takes the CPU
 trace off the frame's path. The software leg is built
-([the build order](#the-build-order)); the hardware leg is
-[a step after it](#after-the-gpu-trace).
+([the build order](#the-build-order)); the hardware leg is built too and owes
+its reading ([after the GPU trace](#after-the-gpu-trace)).
 
 **Why:** Lumen kept software tracing over SDFs for "60 fps consoles" and for
 heavily overlapping meshes that are slow with hardware RT, and documents the
@@ -1023,15 +1023,46 @@ lighting latency after a camera move and the `unsettled` reads at the window's
 edge. Check: after a camera cut across half the window, the frames until the
 first relit probe publishes, against holding the table.
 
-**Hardware ray query, one kernel with two traversals.** The software walk's
-entry points (`sdfProbeIntersect` and the any-hit `sdfProbeOccluded`) are the
-only ones, and a ray-query build compiles the same kernel with the hardware
-walk in their place, so it never becomes a second relight. It follows the
-visibility plan's geometry and instance split, because an acceleration
-structure's top level is an instance table. It lands only where it is measured
-to pay: rays per second against the software walk on the RTX 4070, the RTX 2060
-and the Deck, with the same hits within the device law's tolerance, and an
-automatic fallback to the software walk.
+**Hardware ray query, one kernel with two traversals (built; its reading is
+owed).** The probe trace, the relight and the camera sample each have one body
+(`passes/sdf-probe-trace-stage.hlsli` and its two siblings) that their
+software build and their ray-query build (`sdf-probe-*-rays.comp.hlsl`, which
+defines `SDF_PROBE_RAY_QUERY`) include. In the ray-query build
+`sdfProbeWalk`, behind both entry points, traces an inline `RayQuery` through
+the scene's top level instead of walking the uploaded hierarchy, and a hit's
+normal, material and identity come from the same instance record and mesh
+words through `sdfProbeSurface`, so it is never a second relight. As built:
+
+- *Capability.* The variants depend on `GpuOptionalCapabilities.RayQuery`
+  (`SdfKernelSet.RequiresOf`): a device reports it at Direct3D 12's raytracing
+  tier 1.1 or with Vulkan's three ray-query extensions, the pipeline set leases
+  the variants only there (`SdfWorldPipelines.Runs`), and `--withhold-gpu
+  ray-query` creates the device without it.
+- *Structures.* `SdfMeshProbeGpuWork.Rays` builds one bottom level a geometry
+  of the published scene, read in place from the mesh region, compacts each,
+  then builds one top level over the scene's draws, each draw an instance
+  whose index is its record's (the scene's word one holds the first record's
+  address, `SdfMeshProbeTrace.InstanceBaseWord`). Each is a background job cut
+  to the frame's share by its measured rate, and a scene change rebuilds the
+  top level and only the bottoms it lacks.
+- *Lifetime.* A structure leaves service only through `Retire`, which holds it
+  in a `GpuRetirementQueue` until every job admitted before it has landed (the
+  client's landed job serials are the queue's completion points); that is how a
+  bottom retired with its mesh tier outlives every queued trace of it.
+- *Switch.* `render.rayQueries`, each quality preset's `rayQueries` row and
+  `world.rays` turn it on; a query takes the variant only once the top level
+  stands for the published scene, and the software walk otherwise.
+- *Reading.* `sdf.mesh-gi.gpu-query-rays` and `gpu-query-trace-nanoseconds`
+  are the hardware's share of `gpu-rays` and `gpu-trace-nanoseconds`, so rays
+  per second read both ways from one run; `world.residency`'s `trace-structure-*`
+  fields give the bytes the structures hold.
+
+What is owed: rays per second on the RTX 4070 on both backends, the same hits
+within the device law's tolerance, no light through a thin wall at the teal
+corner or the stairwell, and the structures' bytes at the hero spawn, the
+painting wing and the garden; then the RTX 2060 and the Deck. If the hardware
+walk does not beat the software walk for probe rays on a device, that device's
+table turns the row off and the structures stay for shadows by ray.
 
 **Coarse-level visibility.** The coarsest level still answers a few corners
 across a slab at the four-storey hall's far end. Two candidates, one

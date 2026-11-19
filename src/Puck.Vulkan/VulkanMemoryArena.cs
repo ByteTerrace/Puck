@@ -20,6 +20,9 @@ public sealed unsafe class VulkanMemoryArena {
     public const ulong BlockBytes = (64UL << 20);
 
     private const uint StructureTypeMemoryAllocateInfo = 5;
+    // VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_FLAGS_INFO and VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT (vulkan_core.h, SDK 1.4.363).
+    private const uint StructureTypeMemoryAllocateFlagsInfo = 1000060000;
+    private const uint MemoryAllocateDeviceAddress = 0x2;
 
     private readonly VulkanDeviceCommands m_device;
 
@@ -144,9 +147,16 @@ public sealed unsafe class VulkanMemoryArena {
         var key = request.Key;
         var bytes = request.Bytes;
         var role = key.Role;
+        // A device created with ray queries reads a build's inputs and writes its structures by device address, which
+        // only memory allocated with one has; every block carries one there, so any buffer may be addressed.
+        var flags = new VkMemoryAllocateFlagsInfo {
+            Flags = MemoryAllocateDeviceAddress,
+            SType = StructureTypeMemoryAllocateFlagsInfo,
+        };
         var allocateInfo = new VkMemoryAllocateInfo {
             AllocationSize = bytes,
             MemoryTypeIndex = key.Type,
+            PNext = ((m_device.Rays is not null) ? ((nint)(&flags)) : 0),
             SType = StructureTypeMemoryAllocateInfo,
         };
         var memory = m_device.AllocateCounted(allocateInfo: in allocateInfo, family: null, payer: request.Payer, payerBytes: request.PayerBytes, role: role);
