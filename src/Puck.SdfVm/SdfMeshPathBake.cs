@@ -71,6 +71,9 @@ public readonly record struct SdfMeshBakeRequest(Vector3 Origin, Vector3 Cell, (
     /// lattice of the group, so its coarse samples, fine samples, gradient taps and material reads read one field. Zero
     /// cell, the default, thickens nothing.</summary>
     public (float Cell, float Stroke) Glyphs { get; init; }
+
+    // Only a field slice observes live frame poses. A persisted bake uses its sealed pose rows.
+    internal bool LivePoses { get; init; }
 }
 /// <summary>The lattices one bake dispatch samples, at most <see cref="SdfWorldPackage.MeshBakeBatch"/> holding at most
 /// <see cref="SdfWorldPackage.MeshBakeMaxSamples"/> samples together, and the group each answers.</summary>
@@ -847,6 +850,7 @@ public sealed partial class SdfMeshPathBake {
                     admitted++;
                     awaiting++;
                 }
+                if (ProbeSamples(group, in next)) { continue; }
                 group.InFlight = true;
                 group.TakenSamples += next.Samples;
                 samples += next.Samples;
@@ -925,7 +929,7 @@ public sealed partial class SdfMeshPathBake {
 
         for (var index = 0; (index < batch.Lattices.Length); index++) {
             var lattice = batch.Lattices[index];
-            var bytes = ((lattice.Samples * SdfWorldPackage.MeshBakeSampleWords) * sizeof(uint));
+            var bytes = SampleBytes(in lattice);
             var slice = samples.Slice(length: bytes, start: offset);
 
             offset += bytes;
@@ -959,8 +963,16 @@ public sealed partial class SdfMeshPathBake {
                     group.EndWork();
                     continue;
                 }
+                var checkpoint = CaptureSamples(group, slice);
                 Enqueue(group: group, urgent: true, work: () => {
-                    using (answer) { AnswerGroup(answer: answer, group: group, request: in lattice); }
+                    using (answer) {
+                        using var captured = checkpoint;
+                        if (captured is not null && CheckpointStore(group) is { } store) {
+                            store.WriteSamples(group.Checkpoints!.Sampling, group.SampleProbe!.Value, captured.GetSpan());
+                        }
+                        group.SampleProbe = null;
+                        AnswerGroup(answer: answer, group: group, request: in lattice);
+                    }
                 });
                 continue;
             }
@@ -1096,7 +1108,7 @@ public sealed partial class SdfMeshPathBake {
                     + (((3L * mesh.TriangleCount) + mesh.TriangleMaterials.Length) * sizeof(uint)));
             }
 
-            return $"[sdf.mesh-bake] residency={Residency} groups={m_groups.Count} meshes={meshes} pending={m_groups.Count(predicate: static group => !group.Done)} dispatches={m_accounts.Dispatches} samples={m_accounts.Samples} discarded={m_accounts.Discarded} taps={m_accounts.Taps} refined={m_accounts.RefinedCells} edges={m_accounts.CutEdges} softened={m_accounts.Softened} merged={m_accounts.Merged} loaded={m_accounts.Loaded} skinned={m_groups.Count(predicate: static group => (group.Mesh is { VertexMembers.IsEmpty: false }))} triangles={triangles} vertices={vertices} bytes={bytes} seconds={(m_reported ? m_seconds : m_clock.Elapsed.TotalSeconds):0.000}";
+            return $"[sdf.mesh-bake] residency={Residency} groups={m_groups.Count} meshes={meshes} pending={m_groups.Count(predicate: static group => !group.Done)} dispatches={m_accounts.Dispatches} samples={m_accounts.Samples} discarded={m_accounts.Discarded} taps={m_accounts.Taps} refined={m_accounts.RefinedCells} edges={m_accounts.CutEdges} softened={m_accounts.Softened} merged={m_accounts.Merged} loaded={m_accounts.Loaded} skinned={m_groups.Count(predicate: static group => (group.Mesh is { VertexMembers.IsEmpty: false }))} triangles={triangles} vertices={vertices} bytes={bytes} seconds={(m_reported ? m_seconds : m_clock.Elapsed.TotalSeconds):0.000} {m_accounts.DescribeCheckpoints()}";
         }
     }
 
@@ -1329,7 +1341,8 @@ public sealed partial class SdfMeshPathBake {
         }
         group.Owner = this;
         group.TakeDemandBox();
-        if ((old is not null) && Keeps(group: group, identity: identity, old: old)) {
+        if ((old is not null) && (old.Done || (old.CheckpointProgram is null) || ReferenceEquals(old.CheckpointProgram, m_program))
+            && Keeps(group: group, identity: identity, old: old)) {
             old.AdoptSampled(planned: group);
             Replace(group: old, index: index);
             if (!old.Done && (old.Leader is null) && (old.Replaces is null)) { _ = leaders.TryAdd(key: old.Sealed, value: old); }
@@ -1495,7 +1508,12 @@ public sealed partial class SdfMeshPathBake {
             group.Next = Lattice(gradients: false, group: group, longest: CoarseSamples, minimum: CoarseSamples);
         }
         group.Identity = Identity.Value;
-        if (!Library.Holds(geometry: group.Sealed, identity: group.Identity)) { return false; }
+        if (Identity.HasParts && Library.Disk is not null) {
+            group.Checkpoints = Identity;
+            group.CheckpointProgram = m_program;
+            group.CheckpointGeometry = CheckpointInput(group, m_program!);
+        }
+        if (!Library.Holds(geometry: group.Sealed, identity: group.Identity) && !HoldsCheckpoint(group)) { return false; }
         group.Deferred = group.Next;
         group.Next = null;
         group.Contouring = true;
@@ -1591,7 +1609,7 @@ public sealed partial class SdfMeshPathBake {
         var empty = !(low.X <= high.X);
 
         // An empty result is a fact about the geometry, stored whether or not the group is still planned.
-        if (empty) { Library.StoreEmpty(geometry: group.Sealed, identity: group.Identity, persist: true); }
+        if (empty) { StoreEmpty(group); }
         lock (m_gate) {
             group.InFlight = false;
             if (!m_groups.Contains(item: group)) { return; }
@@ -1798,7 +1816,7 @@ public sealed partial class SdfMeshPathBake {
                 outside |= (value >= 0f);
             }
             empty = (!(inside && outside) && !SheetBetween(lattice: final.Lattice, values: final.Values));
-            if (empty) { Library.StoreEmpty(geometry: group.Sealed, identity: group.Identity, persist: true); }
+            if (empty) { StoreEmpty(group); }
         }
 
         FinalLattice? emptied = null;
@@ -1867,7 +1885,7 @@ public sealed partial class SdfMeshPathBake {
         var empty = ((refusal is not null) || (points.Length == 0));
 
         if (empty) {
-            if (refusal is not null) { SdfMeshBakeReport.Refused(refusal: refusal, selector: group.Selector); } else { Library.StoreEmpty(geometry: group.Sealed, identity: group.Identity, persist: true); }
+            if (refusal is not null) { SdfMeshBakeReport.Refused(refusal: refusal, selector: group.Selector); } else { StoreEmpty(group); }
         } else {
             // The refinement now names its fine samples, so the admission narrows from their bound to their count.
             _ = group.Memory.TryReserve(peak: PeakOf(final: final, fineSamples: ((final.Stage == FinalStage.Refinement) ? points.Length : 0)));
@@ -2011,7 +2029,7 @@ public sealed partial class SdfMeshPathBake {
         int[] creases = [];
 
         if (empty) {
-            if (contour is not null) { Library.StoreEmpty(geometry: group.Sealed, identity: group.Identity, persist: true); }
+            if (contour is not null) { StoreEmpty(group); }
         } else if (contour is not null) {
             creases = CreaseVertices(contour: contour);
             if (creases.Length > 0) {
@@ -2242,6 +2260,10 @@ public sealed partial class SdfMeshPathBake {
             }
         }
         lock (m_gate) { m_accounts.CutEdges += edges; }
+        if (mesh is not null) {
+            mesh = mesh with { BakeCell = group.DiagnosticCell };
+            KeepCheckpoint(group, mesh, simplified: false);
+        }
         Land(group: group, mesh: mesh);
     }
     // Lands a group's finished mesh, its coplanar triangles merged into the polygons they tile (SdfMeshPlanarMerge) and its
@@ -2254,15 +2276,23 @@ public sealed partial class SdfMeshPathBake {
             var contoured = mesh.TriangleCount;
             var started = Stopwatch.GetTimestamp();
 
-            mesh = mesh with { BakeCell = group.DiagnosticCell };
-            mesh = ((!group.Dynamic && !group.Glass && ((group.Instances > 1) || (mesh.TriangleCount >= SdfMeshChunks.WholeTriangles)))
-                ? SdfMeshChunks.Bake(mesh, preserveFeatures: group.Geometry.ContainsGlyph)
-                : SdfMeshChunks.Merge(levels: !group.Glass, mesh: mesh, preserveFeatures: group.Geometry.ContainsGlyph));
+            mesh = SimplificationStage.Run(mesh, group.Dynamic, group.Glass, group.Instances, group.Geometry.ContainsGlyph);
             merged = (contoured - mesh.TriangleCount);
             Account(detail: new(Count: contoured, Kept: mesh.TriangleCount), group: group, since: started, stage: BakeStage.Land);
-            started = Stopwatch.GetTimestamp();
-            mesh = Library.Store(form: (group.Dynamic ? group.Form : null), geometry: group.Sealed, identity: group.Identity, materials: group.MaterialOrder, mesh: mesh);
+            KeepCheckpoint(group, mesh, simplified: true);
+        }
+        PublishMesh(group, mesh, merged);
+    }
+
+    private void PublishMesh(Group group, SdfMesh? mesh, int merged) {
+        if (mesh is not null) {
+            var started = Stopwatch.GetTimestamp();
+            mesh = StageCodeCurrent(group)
+                ? Library.Store(form: (group.Dynamic ? group.Form : null), geometry: group.Sealed, identity: group.Identity, materials: group.MaterialOrder, mesh: mesh)
+                : mesh.NativeCopy(Library.Allocator, Library.Account);
             Account(since: started, stage: BakeStage.Store);
+        } else if ((group.Outcome is not null) && StageCodeCurrent(group)) {
+            Library.StoreEmpty(geometry: group.Sealed, identity: group.Identity, persist: true);
         }
 
         lock (m_gate) {
@@ -2270,7 +2300,7 @@ public sealed partial class SdfMeshPathBake {
             group.Contouring = false;
             group.Done = true;
             Draw(group: group, mesh: mesh);
-            group.Outcome = ((mesh is null) ? "mesh refused" : null);
+            group.Outcome = ((mesh is null) ? (group.Outcome ?? "mesh refused") : null);
 
             group.Points.Resize(0);
             group.PointMaterials.Resize(0);
@@ -2281,6 +2311,11 @@ public sealed partial class SdfMeshPathBake {
     // its coarse lattice.
     private void Load(Group group) {
         var loaded = Library.TryLoad(form: (group.Dynamic ? group.Form : null), geometry: group.Sealed, identity: group.Identity, materials: group.MaterialOrder, mesh: out var mesh, refusal: out var refusal);
+
+        if (!loaded && ResumeCheckpoint(group)) {
+            lock (m_gate) { m_loadsDone++; m_loadLast = Stopwatch.GetTimestamp(); }
+            return;
+        }
 
         lock (m_gate) {
             group.Contouring = false;
@@ -2618,6 +2653,11 @@ public sealed partial class SdfMeshPathBake {
             Outcome = (Clamped ? $"no surface{how} (bound clamped to the far distance)" : $"no surface{how}");
         // The identity of the bake the group started under, and the coarse lattice it bakes from when its load fails.
         public UInt128 Identity { get; set; }
+        public SdfMeshBakeIdentity? Checkpoints { get; set; }
+        public SdfProgram? CheckpointProgram { get; set; }
+        public SdfMeshGeometry CheckpointGeometry { get; set; }
+        public bool CheckedCheckpoints { get; set; }
+        public UInt128? SampleProbe { get; set; }
         public SdfMeshBakeRequest? Deferred { get; set; }
         // Whether the mesh came from the library or its store rather than a bake of this group.
         public bool Stored { get; set; }

@@ -132,8 +132,10 @@ lighting's time, and one fix lane (`bake-share`) removes the duplicate bakes.
 
 Step 1, the instrument, is built: [how each loop is measured](#how-each-is-measured).
 
-2. Keys by stage: each bake stage keyed on what it reads, so an engine edit
-   outside the field and its kernel reuses every stored mesh.
+2. Bake keys by stage, built. `puck mesh identity --against` reports whether
+   sampling, contouring, simplification and landing can reuse their previous
+   products, so an engine edit outside the field and its kernel reuses every
+   stored mesh.
 3. The live edit path: a saved `.puck` reaches the running World as the
    smallest change it is, with look values as appearance uploads and form
    edits as a progressive rebake of only the creations touched.

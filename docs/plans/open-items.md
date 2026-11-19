@@ -916,24 +916,14 @@ says how one is reproduced and profiled.
    (groups rebaked, kernels recompiled, projects rebuilt) — for three edit
    kinds: `.puck` document (~15 s compile + reload tick stall), shader, and
    C#. This is the wait the owner's ruling puts first.
-2. **Key each bake stage by what it reads.** The bake has three stages: GPU
-   field sampling, contouring, and Land (simplifying and storing; ~34% of bake
-   CPU with collapse at ~28.7%). Today `SdfMeshBakeIdentity` hashes the whole
-   C# closure plus both kernel bytecodes, so one Land or contour edit forces a
-   full cold bake. Build per-stage keys on `SdfMeshBakeClosure` and
-   `SdfMeshStore.ExplainMisses` so a Land edit starts from stored contours
-   without re-sampling on GPU (keeping each stage's key conservative over
-   everything that stage reaches; check stored-contour disk/memory size before
-   splitting a stage; amend
-   [the derived-product decision](../decisions/engine-design.md#a-derived-product-is-a-cache-never-the-truth)
-   in the same change). A key too narrow is the dangerous direction: an edit
-   that should have invalidated a mesh and did not shows as a stale mesh that
-   nothing reports, so the split changes only which stage a part belongs to.
-   Batch bake-kernel edits until stage keys land. Narrower per-operation keys
-   remain a later question: they depend on whether the interpreter's source can
-   be attributed to each operation, which nobody has looked at.
-   - *Check:* editing Land rebakes with zero GPU sampling dispatches and lowers
-     the C# edit-wait reading.
+2. **Measure staged reuse in the debug world.** Start from an empty store,
+   then boot with that store unchanged, with a simplification edit, and with
+   a field-kernel edit. Compare bake time, checkpoint hit and miss counts,
+   GPU sampling dispatches, and disk bytes. A simplification edit should
+   load stored contours and dispatch no sampling. The field-kernel edit
+   should rebake from sampling. The
+   [derived-product decision](../decisions/engine-design.md#a-derived-product-is-a-cache-never-the-truth)
+   describes where the cache resumes.
 3. **Measure the cold bake under the live frame allowance.** Budgeted batches
    are cut to the allowance at a mean-following rate (`SdfMeshBakeGpuWork`);
    held frames keep `SdfMeshPathBake.BatchTaps`. Re-measure the cold bake held

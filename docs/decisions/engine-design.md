@@ -642,17 +642,23 @@ meshes ([the rendering plan](../plans/rendering.md#bake-quality) holds the
 work for that day).
 Mesh derivation and drawing have separate owners. `SdfMeshPathBake` reconciles
 product inputs and derives meshes; `SdfMeshDresser` retains poses, draws and picks;
-`SdfMeshPathBake.Complete` interprets sampler answers, `SdfMeshBakeGpuWork` carries a batch to the device and back as background GPU work outside the closure, and `SdfMeshBakeBlock` owns the
-bake-only parameter offsets and writer. View parameters have their own initializer;
-both writers use the shared `ShaderParameterWriter` primitives. Positive production entry methods
-define the bake's code closure, and a missing named entry is an error. This boundary
-also matters in a running process: the host's metadata-update notification names
-types, so filtering methods on a type that still mixes baking and drawing would
-not keep drawing-only hot reloads out of the persisted identity. Unknown update
-types still invalidate conservatively. The ownership split follows the actual
-dependency and notification boundaries; it adds no frozen identity or exceptions
-for particular counter names. See the [bake procedure](../../.claude/skills/rendering/references/mesh-bake.md)
-for the input, product and invalidation witnesses.
+`SdfMeshBakeGpuWork` carries each batch to the device and back. Each persisted
+stage keys its output from the code reachable from its production entry points.
+The sampler also keys its compiled kernels and uses the same lattice writer
+for dispatch and cache lookup. Contouring requests additional samples for
+creases and material cuts, so a contour change can reuse any request it makes
+unchanged. Its finished surface becomes the simplifier's input. The store keeps
+those surfaces and simplified meshes losslessly so downstream code receives the
+same geometry on a hit as on a miss. The final entry still uses the drawing
+codec's position and normal encoding.
+
+`SdfMeshPathBake` reads the latest usable stage. A simplifier edit starts at a
+stored contour when present. The next stage's identity incorporates its
+predecessor, so a field-kernel edit invalidates all downstream products. Hot
+reload folds applied changes into the closures and a group with work from a
+superseded revision cannot publish a cache entry. See the
+[bake procedure](../../.claude/skills/rendering/references/mesh-bake.md) for the
+input, product and invalidation witnesses.
 
 Appearance has its own boundary of the same kind. `SdfProgram`'s constructor, the
 closure's program root, derives the field from the field's inputs and an

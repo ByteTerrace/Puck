@@ -87,6 +87,7 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
         sdfBakePoseBase = poses.x;
         sdfBakePoseFirst = poses.y;
         sdfBakePoseCount = poses.z;
+        sdfBakeLivePoses = (glyphs.z != 0.0);
 
         float3 slotPosition = float3(0.0, 0.0, 0.0);
         float4 slotOrientation = float4(0.0, 0.0, 0.0, 1.0);
