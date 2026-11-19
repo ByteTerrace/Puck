@@ -1,5 +1,6 @@
 using CompiledExpressionToken = Puck.State.Rules.CompiledExpressionToken;
 using CompiledRule = Puck.State.Rules.CompiledRule;
+using RuleEvaluationOrder = Puck.State.Rules.RuleEvaluationOrder;
 using RuleWorkBudget = Puck.State.Rules.RuleWorkBudget;
 using RuleWorkContributor = Puck.State.Rules.RuleWorkContributor;
 namespace Puck.World;
@@ -63,16 +64,17 @@ public readonly record struct WorldRuleWorkBudget(int RuleRows, int InteractionR
     // The one computation of a tick's work: admission runs it over the rules and groups it validated, and every
     // other reader takes the sheet a compilation of the whole document retained, so no reader prices a rule the
     // document's own groups have not bound.
-    internal static (WorldRuleWorkBudget Budget, IReadOnlyList<RuleWorkContributor> Contributors) Analyze(WorldDefinition definition, CompiledRule[] rules, CompiledRule[] interactions, WorldFactsCompileContext? context = null) {
+    internal static (WorldRuleWorkBudget Budget, IReadOnlyList<RuleWorkContributor> Contributors) Analyze(WorldDefinition definition, RuleEvaluationOrder order, CompiledRule[] interactions, WorldFactsCompileContext? context = null) {
         context ??= WorldFactsCompiler.Context(definition: definition);
-        var lines = Lines(context: context, definition: definition, interactions: interactions, rules: rules);
-        var budget = Measure(context: context, definition: definition, interactions: interactions, lines: lines, rules: rules);
+        var lines = Lines(context: context, definition: definition, interactions: interactions, order: order);
+        var budget = Measure(context: context, definition: definition, interactions: interactions, lines: lines, order: order);
 
         Sort(contributors: lines);
         return (budget, lines.AsReadOnly());
     }
 
-    private static WorldRuleWorkBudget Measure(WorldDefinition definition, CompiledRule[] rules, CompiledRule[] interactions, WorldFactsCompileContext context, List<RuleWorkContributor> lines) {
+    private static WorldRuleWorkBudget Measure(WorldDefinition definition, RuleEvaluationOrder order, CompiledRule[] interactions, WorldFactsCompileContext context, List<RuleWorkContributor> lines) {
+        var rules = order.Rules;
         var decisionScales = new HashSet<long>();
 
         foreach (var rule in rules) {
@@ -89,7 +91,7 @@ public readonly record struct WorldRuleWorkBudget(int RuleRows, int InteractionR
                 context: context,
                 definition: definition,
                 interactions: interactions,
-                rules: rules
+                order: order
             ))
         );
         var flockCost = FlockAffinityCost(
@@ -156,30 +158,13 @@ public readonly record struct WorldRuleWorkBudget(int RuleRows, int InteractionR
     ),
         _ => null,
     };
-    // Where each rule runs in the tick (WorldRuleHost.EvaluateWorldRules): the rules no group claims in one pass in
-    // document order, then every group's passes, then the interactions in theirs. A grouped rule's line may run in any
-    // pass of its group, so it is placed anywhere (-1); as a writer it runs after every ungrouped rule and before every
-    // interaction, so it is placed between them. An interaction runs after both.
-    private static (long Line, long Writer) RulePlace(int index, CompiledRule[] rules, HashSet<string> grouped) => (grouped.Contains(item: rules[index].Name)
-        ? (-1L, rules.Length)
-        : (index, index));
-    private static long InteractionPlace(int index, CompiledRule[] rules) => ((rules.Length + 1L) + index);
-    private static HashSet<string> Grouped(WorldDefinition definition) {
-        var grouped = new HashSet<string>(comparer: StringComparer.Ordinal);
-
-        foreach (var group in definition.RuleGroups) {
-            foreach (var step in group.Steps) {
-                _ = grouped.Add(item: step.Rule.Value);
-            }
-        }
-
-        return grouped;
-    }
-    private static List<RuleWorkContributor> Lines(WorldDefinition definition, WorldFactsCompileContext context, CompiledRule[] rules, CompiledRule[] interactions) {
+    // Each line is placed where the host runs it: RuleEvaluationOrder is the one ordering the host's tick
+    // (WorldRuleHost.EvaluateWorldRules) and this sheet both read.
+    private static List<RuleWorkContributor> Lines(WorldDefinition definition, WorldFactsCompileContext context, RuleEvaluationOrder order, CompiledRule[] interactions) {
+        var rules = order.Rules;
         var contributors = new List<RuleWorkContributor>(capacity: (rules.Length + interactions.Length));
         var gate = GateCommitCost(context: context, definition: definition);
         var writes = new List<Puck.State.CellAccess>();
-        var grouped = Grouped(definition: definition);
 
         for (var index = 0; (index < rules.Length); index++) {
             var rule = rules[index];
@@ -194,7 +179,7 @@ public readonly record struct WorldRuleWorkBudget(int RuleRows, int InteractionR
                 ),
                 isInteraction: false,
                 context: context,
-                order: RulePlace(grouped: grouped, index: index, rules: rules).Line
+                order: order.Place(index: index).Line
             ));
         }
         for (var index = 0; (index < interactions.Length); index++) {
@@ -210,7 +195,7 @@ public readonly record struct WorldRuleWorkBudget(int RuleRows, int InteractionR
                 ),
                 isInteraction: true,
                 context: context,
-                order: InteractionPlace(index: index, rules: rules)
+                order: order.InteractionPlace(index: index)
             ));
         }
 
@@ -235,23 +220,23 @@ public readonly record struct WorldRuleWorkBudget(int RuleRows, int InteractionR
         }
         return false;
     }
-    private static List<(CompiledRule Rule, long Multiplier, long Order)> Multiplied(WorldDefinition definition, WorldFactsCompileContext context, CompiledRule[] rules, CompiledRule[] interactions) {
+    private static List<(CompiledRule Rule, long Multiplier, long Order)> Multiplied(WorldDefinition definition, WorldFactsCompileContext context, RuleEvaluationOrder order, CompiledRule[] interactions) {
+        var rules = order.Rules;
         var result = new List<(CompiledRule, long, long)>(capacity: (rules.Length + interactions.Length));
-        var grouped = Grouped(definition: definition);
 
         for (var index = 0; (index < rules.Length); index++) {
             result.Add(item: (rules[index], Multiplier(
                 context: context,
                 definition: definition,
                 rule: rules[index]
-            ), RulePlace(grouped: grouped, index: index, rules: rules).Writer));
+            ), order.Place(index: index).Writer));
         }
         for (var index = 0; (index < interactions.Length); index++) {
             result.Add(item: (interactions[index], Multiplier(
                 context: context,
                 definition: definition,
                 rule: interactions[index]
-            ), InteractionPlace(index: index, rules: rules)));
+            ), order.InteractionPlace(index: index)));
         }
 
         return result;

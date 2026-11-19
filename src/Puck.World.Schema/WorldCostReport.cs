@@ -206,7 +206,7 @@ public sealed partial record WorldCostReport(
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(rules);
         ArgumentNullException.ThrowIfNull(interactions);
-        var (budget, contributors) = WorldRuleWorkBudget.Analyze(context.Definition, rules, interactions, context);
+        var (budget, contributors) = WorldRuleWorkBudget.Analyze(context.Definition, Puck.State.Rules.RuleEvaluationOrder.Named(rules: rules, groups: context.Definition.RuleGroups), interactions, context);
         return Create(context.Definition, rules, contributors, budget, CostModel.Default);
     }
 

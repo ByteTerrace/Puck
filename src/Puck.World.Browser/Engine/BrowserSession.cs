@@ -6,7 +6,7 @@ using CompiledRule = Puck.State.Rules.CompiledRule;
 using CompiledRuleGroup = Puck.State.Rules.CompiledRuleGroup;
 using RuleCompiler = Puck.State.Rules.RuleCompiler;
 using RuleEvaluation = Puck.State.Rules.RuleEvaluation;
-using RuleGroupDeclaration = Puck.State.Rules.RuleGroupDeclaration;
+using RuleEvaluationOrder = Puck.State.Rules.RuleEvaluationOrder;
 using RuleGroupState = Puck.State.Rules.RuleGroupState;
 using RuleTraceEvaluation = Puck.State.Rules.RuleTraceEvaluation;
 
@@ -293,41 +293,16 @@ public sealed class BrowserSession {
         // drops them by authored name rather than running what the group would have run. KEEP IN SYNC with the
         // server, where the same refusal is a validation line and no part of the document installs.
         m_ungrouped = (refused
-            ? Unclaimed(
+            ? RuleEvaluationOrder.Named(
                 groups: definition.RuleGroups,
                 rules: m_rules
             )
-            : RuleCompiler.Ungrouped(
+            : RuleEvaluationOrder.Of(
                 groups: m_groups,
                 rules: m_rules
             )
-        );
+        ).Ungrouped;
         m_groupState.Prune(compiled: m_groups);
-    }
-    // The compiled rules no AUTHORED group claims, resolved by name rather than by member index, because the groups
-    // that would carry the indices are exactly what failed to compile.
-    private static CompiledRule[] Unclaimed(CompiledRule[] rules, IReadOnlyList<RuleGroupDeclaration>? groups) {
-        if (groups is not { Count: > 0 }) {
-            return rules;
-        }
-
-        var claimed = new HashSet<string>(comparer: StringComparer.Ordinal);
-
-        foreach (var group in groups) {
-            foreach (var step in (group?.Steps ?? [])) {
-                _ = claimed.Add(item: (step?.Rule.Value ?? string.Empty));
-            }
-        }
-
-        var unclaimed = new List<CompiledRule>(capacity: rules.Length);
-
-        foreach (var rule in rules) {
-            if (!claimed.Contains(item: rule.Name)) {
-                unclaimed.Add(item: rule);
-            }
-        }
-
-        return [.. unclaimed];
     }
     private BrowserRuleTrace[] GroupTrace(IReadOnlyList<RuleTraceEvaluation> captured) {
         var order = new List<string>();
