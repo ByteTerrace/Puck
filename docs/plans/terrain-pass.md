@@ -81,6 +81,15 @@ shapes, that scales the relief's displacement by a weight between 0 and 1. A
 region's shapes are evaluated only to measure distance to the region. They
 add no surface, take no material, and are never part of the composed solid.
 
+The mask is built as a field scope in the instruction stream, which
+[how it lowers](#how-it-lowers) and [what stays exact](#what-stays-exact)
+describe. Two adversarial reviews found that this form does not hold its
+invariants, and a round of fixes did not close them.
+[The relief mask design](terrain-pass/relief-mask-design.md) replaces the
+scope with an operand of the relief, held in a program side table, and answers
+every finding of both reviews. Its third step rewrites those two sections; an
+author's document does not change.
+
 #### What an author writes
 
 The relief record (`noise` today, the TerrainRelief op's record after step 3)
@@ -469,11 +478,13 @@ dearest:
   measured 8.91 million samples with the mask against 9.45 million without,
   inside the 1.5× budget, so the sum formula stays. Still open: the `mask`
   construct and its spelling pair (the generic value path carries the mask
-  meanwhile); and a band narrower than the bake's coarse cell or contact's
-  gradient taps, which neither sees: the band's region should declare a bake
-  part at a quarter of its fade (`WorldShapeDetail.PartsOf`), and the relief
-  field collider's gradient step (`WorldColliderSet.ReliefField`) should
-  include the band's width.
+  meanwhile); the mask's change of form, whose steps and checks are in
+  [the relief mask design](terrain-pass/relief-mask-design.md#migration-steps);
+  and a band narrower than the bake's coarse cell or contact's gradient taps,
+  which neither sees and which that design's fourth step closes: the band
+  declares a bake part at a quarter of its width (`WorldShapeDetail.PartsOf`),
+  and the relief field collider's gradient step
+  (`WorldColliderSet.ReliefField`) includes the band's width.
 - **Step B: kernel agreement.** This is step 3's existing target applied to a
   masked sector: a fixed-point CPU bake and a kernel bake agree within the
   bake's tolerance, on Direct3D 12 and on Vulkan. *Check:* `puck mesh audit`
