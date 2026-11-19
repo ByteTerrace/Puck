@@ -183,8 +183,9 @@ direction:
   - Every lane reads around the code it touches and fixes what it finds there,
     scoped by the [`boy-scout`](../boy-scout/SKILL.md) skill; a brief says so.
   - Fresh eyes come as area fix passes: a reader from another family (Codex for
-    Claude-written areas, a Claude `specialist` for Codex-written ones, Argon for
-    security, large-context and UI areas) takes an area as it is now, not a
+    Claude-written areas, a Claude `specialist` for Codex-written ones,
+    Antigravity for security, large-context and UI areas, Carbon where the
+    area is security) takes an area as it is now, not a
     diff, fixes what is local and clear in its own worktree, and proves each fix
     by running or measuring it. The lead schedules them by risk and churn: the
     areas a milestone changed most and those a silent invariant guards.
@@ -414,7 +415,11 @@ is merged, pushed to `origin` as `lane/<id>` while it waits, or deleted once a
 later design supersedes it, so no machine holds a branch whose fate only one
 session knew. Before deleting one, search `docs/` and `.claude/` for its name:
 a search of the code alone misses a plan that keeps a superseded branch as
-prior art for code no other branch holds. A remote branch whose
+prior art for code no other branch holds. The same search comes before
+deleting any branch, a landed integration branch included: `puck docs links`
+fails on every document that names a branch that no longer exists, so the
+deletion retargets those citations in the same change (deleting a landed
+integration branch once failed every running lane's finishing check). A remote branch whose
 work never landed is the owner's to delete (AGENTS.md), so the lead brings the
 search's result to the owner rather than deleting it. The repository's documents,
 `docs/plans/open-items.md` and the plans under `docs/plans` among them, belong
@@ -834,8 +839,8 @@ in those two launches lists none of them, though the project registration is
 enabled (`codex mcp list`), the launcher runs (it installs the worktree's
 `.claude/mcp-install`) and other servers stay visible. A read-only review lane therefore reads sources and cannot drive a World.
 
-An Antigravity lane runs `agy -p "$(cat <brief>)" --output-format stream-json` from
-its worktree, without `--mode`, writing to the lane log: one NDJSON line per step keeps the log growing, so
+An Antigravity lane runs `agy -p "$(cat <brief>)" --model <slug> --effort <level> --output-format stream-json` from
+its worktree ([the models](#select-models-and-route-findings)), without `--mode`, writing to the lane log: one NDJSON line per step keeps the log growing, so
 `puck lanes` sees progress through a long read phase (with `text` the log stays empty until the end and a
 working lane reads as a stall), and the final `result` event's `response` is the hand-back
 (in PowerShell, `Get-Content <log> | Where-Object { $_ -match '"event":"result"' } | ConvertFrom-Json | ForEach-Object { $_.result.response }`). `--mode` stays off because headless flag validation rejects `--mode auto`
@@ -1181,10 +1186,35 @@ Codex review brief asks the lane to write its findings file as it goes, not
 only at the end, and a session the filter ends hands its probes and log to a
 Claude lane rather than a rerun of the same brief.
 
-Antigravity is the third family, running Gemini 4 Argon (Google's flagship;
-an Antigravity lane launches as above). It
-is strong at repository issue fixing, app and UI generation, security
-remediation and large-context analysis.
+Antigravity is the third family, running Google's Gemini 4 models (an
+Antigravity lane launches as above). Every launch names its model and effort
+(`--model <slug> --effort <level>`), so the home default never decides a lane;
+`agy models` lists the slugs the signed-in plan offers. Google's own pages
+position them as follows (blog.google's launch posts for each, and
+antigravity.google/docs/models for tiers, efforts and the Orchestrator):
+
+| Model | Slug stem | Role | Effort |
+|---|---|---|---|
+| Carbon | `gemini-4-carbon` | The frontier model, peer of Fable and Astra: long-horizon coding, security and cyber work (its strongest published results), hard diagnosis, a design critic | `low` to `high` |
+| Neon | `gemini-4-neon` | Antigravity's default, between Carbon and Hydrogen, peer of Opus and Sol: implementation, review, knowledge work and science, a synthesis voice. It costs less than Argon after Argon's introductory price and leads it on Google's published scores, so it takes the work Argon used to | `low` to `xhigh` |
+| Argon | `gemini-4-argon` | The previous default, more efficient per turn than Carbon; Google still calls it a fit for most software engineering. Use it where a lane's measured record favours it | `low` to `high` |
+| Hydrogen | `gemini-4-hydrogen` | The fast execution tier, peer of Sonnet: specified implementation, UI prototyping, computer-use and multimodal work | `low` to `xhigh` |
+
+The Orchestrator models (`gemini-pro-orchestrator-neon`,
+`gemini-pro-orchestrator` for Carbon, `gemini-pro-orchestrator-argon`) keep
+one agent: the named model plans read-only, Hydrogen makes the edits and runs
+the tests, and control returns to the planner when the executor meets
+friction. Antigravity's docs say this mode works headless and takes no
+`--effort`. It is one agent, so it fits a lane; Antigravity's parallel modes
+(`/swarm`, subagents, Boost, Teamwork) start sub-agents, which a lane never
+does, and a brief says so. Whether an Orchestrator lane beats a single model
+on Puck's work is unmeasured: try it on a specified implementation lane and
+compare before routing by it.
+
+Across the family it is strong at repository issue fixing, app and UI
+generation, security remediation and large-context analysis (every model
+above takes a context of about a million tokens through the API; Antigravity's
+docs give Neon up to 512K inside the tool).
 
 **No model is punished for a few failures (the owner's ruling).** Every family
 makes mistakes, Claude's and Codex's lanes included; a failure is first read as
@@ -1244,10 +1274,11 @@ accepting it, as the synthesis author did there.
 Judge the family balance lane by lane. It is not a quota and not a reason to
 reassign work already under way. Owner steering adjusts judgement; do not harden
 a small direction into a quota or an always rule. Using two families is not the
-check: at each batch, ask whether its Argon-fit work (a security pass, an
-independent area audit, portal or UI work, a synthesis voice) went to Argon, and
-name the reason when it did not. A day of GPU and measurement work once left
-Argon unused while the security packet it owns sat untouched.
+check: at each batch, ask whether its Antigravity-fit work (a security pass,
+an independent area audit, portal or UI work, a synthesis voice) went to
+Antigravity, and name the reason when it did not. A day of GPU and measurement
+work once left the family unused while the security packet it owns sat
+untouched.
 
 A finding too large for its pass goes into a
 [work packet](../../../docs/plans/open-items.md#work-packets) in the open items

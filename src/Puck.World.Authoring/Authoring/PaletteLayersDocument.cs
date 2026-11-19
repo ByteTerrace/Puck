@@ -71,6 +71,12 @@ public sealed record PaletteGlassDocument(
 /// behind it, over which the added coverage falls to zero; positive.</param>
 /// <param name="Coverage">The coverage added where the opaque surface touches the glass's, in [0, 1].</param>
 public sealed record PaletteGlassContactDocument(float Reach, float Coverage);
+/// <summary>A localized flow velocity blended into the base velocity.</summary>
+/// <param name="Center">Centre in world coordinates.</param>
+/// <param name="Radius">Radius in world units over which the velocity blends back to the base, finite and positive.</param>
+/// <param name="Velocity">Velocity at the centre in the flow's velocity frame, before placement scaling.</param>
+public sealed record PaletteFlowRegionDocument(DocumentVector3 Center, float Radius, DocumentVector3 Velocity);
+
 /// <summary>A palette slot's flow layer: the slot's shading moves along <paramref name="Velocity"/> while its geometry
 /// stays still. A seeded noise pattern advects with the flow in two layers half a cycle apart, so neither restart shows,
 /// tilting the shading normal by <paramref name="Tilt"/> times its slope and revealing <paramref name="Surface"/> over
@@ -94,6 +100,7 @@ public sealed record PaletteGlassContactDocument(float Reach, float Coverage);
 /// <param name="Frame">The frame the velocity is authored in (null = <c>Object</c>).</param>
 /// <param name="CoverageLane">The render lane, as <paramref name="Lane"/>, whose value saturated to [0, 1] scales
 /// <paramref name="Coverage"/>. Null keeps the coverage constant.</param>
+/// <param name="Region">A sphere in world coordinates within which the velocity varies.</param>
 public sealed record PaletteFlowDocument(
     DocumentVector3 Velocity,
     float? Scale = null,
@@ -106,7 +113,8 @@ public sealed record PaletteFlowDocument(
     uint? Seed = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? Lane = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] SdfFlowFrame? Frame = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? CoverageLane = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? CoverageLane = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] PaletteFlowRegionDocument? Region = null
 ) {
     /// <summary>Resolves the engine flow at a placement scale.</summary>
     /// <param name="resolve">The color resolver.</param>
@@ -125,7 +133,8 @@ public sealed record PaletteFlowDocument(
         Seed: (Seed ?? 0u),
         Lane: Lane,
         Frame: (Frame ?? SdfFlowFrame.Object),
-        CoverageLane: CoverageLane
+        CoverageLane: CoverageLane,
+        Region: ((Region is { } region) ? new SdfFlowRegion(region.Center.Value, region.Radius, (region.Velocity.Value * scale)) : null)
     );
 }
 /// <summary>A paint plane in the winning dynamic frame, or world space when no slot owns the hit.</summary>

@@ -969,8 +969,8 @@ mesh store and each process's initial frame history; the boot metrics are
 read beside the owed interval, not claimed to filter it automatically.
 
 ```text
-puck measure request --name r1a-boot-directx --before-commit lead/authoring --after-commit lane/r1a --metric /metrics/boot.frames.p99/median --metric /metrics/boot.frames.max/median --decides "Report paired cold-boot p99/max in ms beside owed-frame produce-work, collections, allocation, packed rows and seeds; investigate any increase." -- bench frames worlds/debug --backend directx --ticks 120 --samples 1
-puck measure request --name r1a-boot-vulkan --before-commit lead/authoring --after-commit lane/r1a --metric /metrics/boot.frames.p99/median --metric /metrics/boot.frames.max/median --decides "Report paired cold-boot p99/max in ms beside owed-frame produce-work, collections, allocation, packed rows and seeds; investigate any increase." -- bench frames worlds/debug --backend vulkan --ticks 120 --samples 1
+puck measure request --name r1a-boot-directx --before-commit main --after-commit lane/r1a --metric /metrics/boot.frames.p99/median --metric /metrics/boot.frames.max/median --decides "Report paired cold-boot p99/max in ms beside owed-frame produce-work, collections, allocation, packed rows and seeds; investigate any increase." -- bench frames worlds/debug --backend directx --ticks 120 --samples 1
+puck measure request --name r1a-boot-vulkan --before-commit main --after-commit lane/r1a --metric /metrics/boot.frames.p99/median --metric /metrics/boot.frames.max/median --decides "Report paired cold-boot p99/max in ms beside owed-frame produce-work, collections, allocation, packed rows and seeds; investigate any increase." -- bench frames worlds/debug --backend vulkan --ticks 120 --samples 1
 puck measure run <request-ids> --repeats 5 --window-seconds 1200
 ```
 

@@ -1,6 +1,6 @@
 # s1-research-grounding: residency and memory as the code holds them
 
-Read at the integration tip of `lead/authoring` when the round ran; line citations drift, symbols do not. Read-only lane:
+Read at the integration tip when the round ran; line citations drift, symbols do not. Read-only lane:
 no source edited, no commit, no World started (see "What was not read" at the end).
 
 Labels: **[opened]** = read in source at this tree, `file:line` as the Read/Grep output printed it;

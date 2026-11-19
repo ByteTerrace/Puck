@@ -14,7 +14,7 @@ namespace Puck.World.Tests;
 /// <para>Raster order is unspecified, so the sums a pixel's faces leave must not depend on it: every order of one
 /// case's faces leaves identical words, but for the second record's front entries, which hold the same set of front
 /// faces (each case has at most three) in whatever order they claimed them, and its nearest back face is the nearest
-/// back face before the opaque hit. The decoded optical depth of each channel is the exact Beer-Lambert integral,
+/// back face, including an exit behind the opaque hit. The decoded optical depth of each channel is the exact Beer-Lambert integral,
 /// the sum over each solid's interval before the opaque hit of its material's absorption times the interval's length,
 /// to within the encoding's quantization; it carries no error proportional to the opaque hit's distance, so glass seen
 /// against the far sky reads as it does against a near wall.</para></summary>
@@ -30,6 +30,7 @@ public sealed class SdfGlassSumsDeviceLawTests {
     private const int FrontEntryWord = 9;
     private const int FrontEntries = 3;
     private const int NearestBackWord = 15;
+    private const int InsideMaterialWord = 16;
 
     // A face: its ray distance, the opaque hit's distance, whether it faces the camera, and its absorption's index.
     private readonly record struct Face(float T, float Opaque, bool Front, int Absorption);
@@ -63,10 +64,9 @@ public sealed class SdfGlassSumsDeviceLawTests {
         foreach (var (front, back, absorption) in solids) {
             var index = Array.IndexOf(array: absorptions, value: absorption);
 
-            // A face at or behind the opaque hit is never accumulated (the raster's own test).
-            faces.Add(item: new Face(T: front, Opaque: opaque, Front: true, Absorption: index));
-            if (back < opaque) { faces.Add(item: new Face(T: back, Opaque: opaque, Front: false, Absorption: index)); }
-            var length = (Math.Min(val1: back, val2: opaque) - front);
+            if (front >= 0f) { faces.Add(item: new Face(T: front, Opaque: opaque, Front: true, Absorption: index)); }
+            faces.Add(item: new Face(T: back, Opaque: opaque, Front: false, Absorption: index));
+            var length = Math.Max(0f, Math.Min(val1: back, val2: opaque) - Math.Max(0f, front));
 
             expected += (absorption * length);
             thickness += length;
@@ -80,6 +80,8 @@ public sealed class SdfGlassSumsDeviceLawTests {
         Solids("panes against a wall", 50f, (2f, 2.009f, Acrylic), (3f, 3.012f, Window), (40f, 42.5f, Water)),
         // A window into water whose floor stands inside the water: the floor clips the water's interval.
         Solids("window into water", 61.25f, (60f, 60.012f, Window), (61f, 63.5f, Water)),
+        Solids("eye in water, opaque before exit", 1.25f, (-2f, 2.5f, Water), (3f, 3.012f, Window)),
+        Solids("eye in water, window after exit", 5f, (-2f, 2.5f, Water), (3f, 3.012f, Window)),
         // Two acrylic panes far from the camera and the sky.
         Solids("far panes", 6000f, (900f, 900.009f, Acrylic), (902f, 902.009f, Acrylic)),
     ];
@@ -89,7 +91,7 @@ public sealed class SdfGlassSumsDeviceLawTests {
             var results = Run(extension: extension, glassCase: glassCase, orders: orders, services: services);
             var words = Enumerable.Range(start: 0, count: Orders).Select(selector: order => WordsOf(results: results, order: order)).ToArray();
 
-            var fronts = glassCase.Faces.Select(selector: static (face, index) => (face, index)).Where(predicate: static pair => pair.face.Front)
+            var fronts = glassCase.Faces.Select(selector: static (face, index) => (face, index)).Where(predicate: static pair => pair.face.Front && (pair.face.T < pair.face.Opaque))
                 .Select(selector: static pair => (((uint)pair.index + 1u), ((3u * (uint)pair.index) + 1u))).Order().ToArray();
             var backs = glassCase.Faces.Where(predicate: static face => !face.Front).Select(selector: static face => face.T).ToArray();
 
@@ -99,16 +101,16 @@ public sealed class SdfGlassSumsDeviceLawTests {
                     .Select(selector: entry => (held[(FrontEntryWord + (2 * entry))], held[(FrontEntryWord + (2 * entry) + 1)])).Order().ToArray();
 
                 Assert.True(condition: (words[0].AsSpan(start: 0, length: FrontEntryWord).SequenceEqual(other: held.AsSpan(start: 0, length: FrontEntryWord)) &&
-                    (words[0][NearestBackWord] == held[NearestBackWord])),
+                    (words[0][NearestBackWord] == held[NearestBackWord]) && (words[0][InsideMaterialWord] == held[InsideMaterialWord])),
                     userMessage: $"{glassCase.Name}: order {order} left [{string.Join(separator: ' ', values: held)}], order 0 [{string.Join(separator: ' ', values: words[0])}].");
                 Assert.Equal(expected: (uint)fronts.Length, actual: held[FrontCountWord]);
                 Assert.Equal(expected: fronts, actual: entries);
                 Assert.Equal(expected: ((backs.Length == 0) ? 0u : ~BitConverter.SingleToUInt32Bits(value: backs.Min())), actual: held[NearestBackWord]);
             }
             var decoded = results[0];
-            // Each face's distance to the opaque hit is quantized to 2^-15 m and each absorption to 2^-16 per metre.
-            var tolerance = glassCase.Faces.Aggregate(seed: new Vector3(value: 1e-6f), func: (sum, face) =>
-                sum + (glassCase.Absorptions[face.Absorption] * (1f / 32768f)) + new Vector3(value: ((face.Opaque - face.T) / 65536f)));
+            // Paired faces cancel their common start exactly. Coefficient error scales with the total clipped path.
+            var tolerance = glassCase.Faces.Aggregate(seed: new Vector3(value: (1e-6f + (glassCase.Thickness / 65536f))),
+                func: (sum, face) => sum + (glassCase.Absorptions[face.Absorption] * (1f / 32768f)));
 
             for (var channel = 0; (channel < 3); channel++) {
                 Assert.True(condition: (MathF.Abs(x: (decoded[channel] - glassCase.Expected[channel])) <= tolerance[channel]),

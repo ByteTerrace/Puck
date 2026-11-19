@@ -58,6 +58,10 @@ namespace Puck.Abstractions.Gpu;
 /// shares; zero on Direct3D 12.</param>
 /// <param name="StorageBufferOffsetAlignment">Vulkan's <c>minStorageBufferOffsetAlignment</c>, the alignment a buffer
 /// view's offset into its buffer keeps; zero on Direct3D 12, whose view starts at any whole element.</param>
+/// <param name="ExecuteIndirectTier">Direct3D 12's <c>ExecuteIndirectTier</c> as 10 for tier 1.0 and 11 for tier 1.1, which
+/// adds the incrementing root constant a counted draw numbers its commands with
+/// (<see cref="ExecuteIndirectIncrementingConstant"/>); zero where the runtime does not answer the query, and on
+/// Vulkan.</param>
 /// <param name="Optional">The optional capabilities the device was created with, which a kernel variant may depend on
 /// (<see cref="Has"/>): each one the device reports, less what the host withheld.</param>
 /// <param name="Withheld">The optional capabilities the device reports but was created without, because the host
@@ -87,6 +91,7 @@ public sealed record GpuDeviceCapabilities(
     uint ResourceAddressBits = 0U,
     ulong SparseAddressSpaceBytes = 0UL,
     uint StorageBufferOffsetAlignment = 0U,
+    uint ExecuteIndirectTier = 0U,
     GpuOptionalCapabilities Optional = GpuOptionalCapabilities.None,
     GpuOptionalCapabilities Withheld = GpuOptionalCapabilities.None,
     uint RaytracingTier = 0U
@@ -102,6 +107,9 @@ public sealed record GpuDeviceCapabilities(
     /// <summary>Direct3D 12's shader-visible sampler heap size (<c>D3D12_MAX_SHADER_VISIBLE_SAMPLER_HEAP_SIZE</c>),
     /// reported for both sampler heap limits when the runtime does not answer options 19.</summary>
     public const uint DirectXMinimumSamplerHeapSize = 2048U;
+    /// <summary>The <see cref="ExecuteIndirectTier"/> at which a command signature may number its commands with an
+    /// incrementing root constant (<c>D3D12_EXECUTE_INDIRECT_TIER_1_1</c>).</summary>
+    public const uint ExecuteIndirectIncrementingConstant = 11U;
     /// <summary>The name of the line and JSON object the capabilities form in a readout.</summary>
     public const string Section = "capabilities";
 
@@ -128,6 +136,7 @@ public sealed record GpuDeviceCapabilities(
     private const string ResourceAddressBitsField = "reserved.address-bits";
     private const string SparseAddressSpaceField = "sparse.address-space";
     private const string StorageBufferOffsetAlignmentField = "storage-buffer.offset-alignment";
+    private const string ExecuteIndirectTierField = "execute-indirect-tier";
     private const string OptionalField = "optional";
     private const string WithheldField = "withheld";
     private const string RaytracingTierField = "raytracing-tier";
@@ -215,9 +224,11 @@ public sealed record GpuDeviceCapabilities(
     /// answer, which reports <see cref="DirectXMinimumSamplerHeapSize"/>.</param>
     /// <param name="staticSamplerHeapSize">Options 19's <c>MaxSamplerDescriptorHeapSizeWithStaticSamplers</c>, or zero
     /// when the runtime does not answer, which reports <see cref="DirectXMinimumSamplerHeapSize"/>.</param>
+    /// <param name="executeIndirectTier">Options 21's <c>ExecuteIndirectTier</c> (10 or 11), or zero when the runtime does
+    /// not answer.</param>
     /// <returns>The capabilities.</returns>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="resourceBindingTier"/> is not 1, 2 or 3.</exception>
-    public static GpuDeviceCapabilities FromDirectX(uint resourceBindingTier, string rootSignatureVersion, string shaderModel, uint viewHeapSize, uint samplerHeapSize, uint staticSamplerHeapSize) {
+    public static GpuDeviceCapabilities FromDirectX(uint resourceBindingTier, string rootSignatureVersion, string shaderModel, uint viewHeapSize, uint samplerHeapSize, uint staticSamplerHeapSize, uint executeIndirectTier = 0U) {
         ArgumentOutOfRangeException.ThrowIfLessThan(
             other: 1U,
             value: resourceBindingTier
@@ -262,6 +273,7 @@ public sealed record GpuDeviceCapabilities(
             RootSignatureVersion: rootSignatureVersion,
             SamplerHeapSize: samplers,
             ShaderModel: shaderModel,
+            ExecuteIndirectTier: executeIndirectTier,
             StaticSamplerHeapSize: staticSamplers,
             ViewHeapSize: views
         );
@@ -271,9 +283,9 @@ public sealed record GpuDeviceCapabilities(
     /// <c>backend=vulkan descriptor-sets=32 push-constant-bytes=256 stage.samplers=… stage.uniform-buffers=… stage.storage-buffers=… stage.sampled-images=… stage.storage-images=… stage.resources=…</c>,
     /// and on Direct3D 12 <c>root-signature-words=64 … binding-tier=3 root-signature=1.1 shader-model=6.8 heap.views=… heap.samplers=… heap.samplers-static=…</c>;
     /// then <c>backing=</c> (<see cref="BackingSpelling"/>) once a backend has read it, and the nonzero of <c>reserved.tier</c>,
-    /// <c>reserved.address-bits</c>, <c>sparse.address-space</c> and <c>storage-buffer.offset-alignment</c>; then
-/// <c>optional=</c> (<see cref="GpuOptionalCapabilitiesSpelling.Of"/>), <c>withheld=</c> when the host withheld any, and
-/// a nonzero <c>raytracing-tier</c>.</summary>
+    /// <c>reserved.address-bits</c>, <c>sparse.address-space</c>, <c>storage-buffer.offset-alignment</c> and
+    /// <c>execute-indirect-tier</c>; then <c>optional=</c> (<see cref="GpuOptionalCapabilitiesSpelling.Of"/>),
+    /// <c>withheld=</c> when the host withheld any, and a nonzero <c>raytracing-tier</c>.</summary>
     /// <param name="builder">The text to append to.</param>
     /// <returns><paramref name="builder"/>.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="builder"/> is <see langword="null"/>.</exception>
@@ -366,6 +378,7 @@ public sealed record GpuDeviceCapabilities(
             _ = builder.Append(value: ' ').Append(value: SparseAddressSpaceField).Append(value: '=').Append(provider: CultureInfo.InvariantCulture, handler: $"{SparseAddressSpaceBytes}");
         }
         AppendCount(builder: builder, name: StorageBufferOffsetAlignmentField, value: StorageBufferOffsetAlignment);
+        AppendCount(builder: builder, name: ExecuteIndirectTierField, value: ExecuteIndirectTier);
         _ = builder.Append(value: ' ').Append(value: OptionalField).Append(value: '=').Append(value: GpuOptionalCapabilitiesSpelling.Of(capabilities: Optional));
         if (Withheld != GpuOptionalCapabilities.None) {
             _ = builder.Append(value: ' ').Append(value: WithheldField).Append(value: '=').Append(value: GpuOptionalCapabilitiesSpelling.Of(capabilities: Withheld));
@@ -456,6 +469,7 @@ public sealed record GpuDeviceCapabilities(
         writer.WriteNumber(propertyName: ResourceAddressBitsField, value: ResourceAddressBits);
         writer.WriteNumber(propertyName: SparseAddressSpaceField, value: SparseAddressSpaceBytes);
         writer.WriteNumber(propertyName: StorageBufferOffsetAlignmentField, value: StorageBufferOffsetAlignment);
+        writer.WriteNumber(propertyName: ExecuteIndirectTierField, value: ExecuteIndirectTier);
         writer.WriteString(propertyName: OptionalField, value: GpuOptionalCapabilitiesSpelling.Of(capabilities: Optional));
         writer.WriteString(propertyName: WithheldField, value: GpuOptionalCapabilitiesSpelling.Of(capabilities: Withheld));
         writer.WriteNumber(propertyName: RaytracingTierField, value: RaytracingTier);

@@ -53,7 +53,7 @@ public sealed unsafe partial class DirectXGpuRecorder {
     public void CompactAccelerationStructure(nint commandBufferHandle, IGpuAccelerationStructure source, IGpuAccelerationStructure destination) {
         var state = DecodeState(commandBufferHandle: commandBufferHandle);
 
-        FlushLegacyBarriers(state);
+        FlushTextureBarriers(state);
         ((ID3D12GraphicsCommandList4*)state.EnhancedCommandList)->CopyRaytracingAccelerationStructure(
             DirectXGpuAccelerationStructures.AddressOf(structure: destination),
             DirectXGpuAccelerationStructures.AddressOf(structure: source),
@@ -72,7 +72,7 @@ public sealed unsafe partial class DirectXGpuRecorder {
                 D3D12_BARRIER_SYNC.D3D12_BARRIER_SYNC_EMIT_RAYTRACING_ACCELERATION_STRUCTURE_POSTBUILD_INFO | D3D12_BARRIER_SYNC.D3D12_BARRIER_SYNC_COMPUTE_SHADING),
             syncBefore: (D3D12_BARRIER_SYNC.D3D12_BARRIER_SYNC_BUILD_RAYTRACING_ACCELERATION_STRUCTURE | D3D12_BARRIER_SYNC.D3D12_BARRIER_SYNC_COPY_RAYTRACING_ACCELERATION_STRUCTURE));
     private static void GlobalBarrier(DirectXCommandBufferState state, D3D12_BARRIER_SYNC syncBefore, D3D12_BARRIER_SYNC syncAfter, D3D12_BARRIER_ACCESS accessBefore, D3D12_BARRIER_ACCESS accessAfter) {
-        FlushLegacyBarriers(state);
+        FlushTextureBarriers(state);
         var barrier = new D3D12_GLOBAL_BARRIER {
             AccessAfter = accessAfter,
             AccessBefore = accessBefore,
