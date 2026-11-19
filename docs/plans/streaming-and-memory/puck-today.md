@@ -171,7 +171,7 @@ All paths are under `src/` unless stated.
 
 ### 1.12 `WorldViewGraphHost.ReserveArrivals` and the arrival share (Puck.World.Client/WorldViewGraphHost.cs)
 
-- **Driven by:** a walk from the main instance, roots and synthesized footprints through session windows; the first
+- **Driven by:** a walk from the main instance, roots and every producer the root reads this frame (the synthesized footprint, each placed view and pane) through session windows; the first
   hidden window onto an arriving world and every window on the way back are kept (:1614-1654) **[opened]**. The walk
   admits only producers that are portals (`if (!m_portals.Contains(item: producer) || ...) { return; }`, :1648)
   **[opened]**.

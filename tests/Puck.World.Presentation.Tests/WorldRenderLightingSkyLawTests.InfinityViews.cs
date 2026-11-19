@@ -71,9 +71,9 @@ public sealed partial class WorldRenderLightingSkyLawTests {
         Assert.Equal(actual: view.Coverage, expected: 0u);
         Assert.Equal(actual: far.Coverage, expected: 1u);
         Assert.Equal(actual: view.ImageSlot, expected: -1);
-        Assert.Equal(actual: (view.Fallback.X / SdfSky.DefaultLuminance), expected: (0x33 / 255f), precision: 3);
-        Assert.Equal(actual: (view.Fallback.Y / SdfSky.DefaultLuminance), expected: (0x66 / 255f), precision: 3);
-        Assert.Equal(actual: (view.Fallback.Z / SdfSky.DefaultLuminance), expected: (0x99 / 255f), precision: 3);
+        Assert.Equal(actual: (view.Fallback.X / SdfSky.DefaultLuminance), expected: Fixtures.SceneLight(red: 0x33, green: 0x66, blue: 0x99).X, precision: 3);
+        Assert.Equal(actual: (view.Fallback.Y / SdfSky.DefaultLuminance), expected: Fixtures.SceneLight(red: 0x33, green: 0x66, blue: 0x99).Y, precision: 3);
+        Assert.Equal(actual: (view.Fallback.Z / SdfSky.DefaultLuminance), expected: Fixtures.SceneLight(red: 0x33, green: 0x66, blue: 0x99).Z, precision: 3);
     }
     [Fact]
     public void TheSpecsCarryTheLayersConeInTheViewersFrameAndTheirDefaults() {

@@ -551,9 +551,12 @@ public sealed class WorldCaptureHoldLawTests : IDisposable {
 
         var entry = Assert.Single(collection: run.Scheduler.Entries);
 
-        Assert.Equal(
-            expected: (WorldCaptureRefusal.Unserved, "the run ended before any frame served it (last completed tick 10); the engine's pipeline set is building (0 of 14 pipelines created; waiting on sdf-mesh-bake-mask, sdf-mesh-bake, sdf-mesh-pyramid, sdf-world-surface, sdf-world-views, sdf-sky-runs, sdf-composite, sdf-glass, sdf-sky-environment, sdf-sky-environment-reduce, sdf-screen-emission, sdf-bloom-down, sdf-bloom-up, sdf-bloom-apply)"),
-            actual: (entry.Refusal!.Value, entry.Detail!)
+        // The pipeline set's own count and kernel list follow the device's capabilities, so only its state is pinned.
+        Assert.Equal(expected: WorldCaptureRefusal.Unserved, actual: entry.Refusal!.Value);
+        Assert.StartsWith(
+            expectedStartString: "the run ended before any frame served it (last completed tick 10); the engine's pipeline set is building (0 of ",
+            actualString: entry.Detail!,
+            comparisonType: StringComparison.Ordinal
         );
         run.AssertNothingReachedDisposal();
     }

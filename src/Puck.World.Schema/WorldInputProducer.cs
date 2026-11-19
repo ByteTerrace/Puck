@@ -65,6 +65,16 @@ public sealed class WorldInputProducer {
     /// <summary>A capture overflow requires an authority reset; no truncated batch is published.</summary>
     public bool CaptureLost { get; private set; }
 
+    /// <summary>Returns the producer's folded level on a logical channel: its sources folded under the mapping, with the
+    /// channel's quantization, as the next batch's image carries it.</summary>
+    /// <param name="channel">The logical channel id.</param>
+    /// <returns>The level; zero for a channel the mapping does not make live.</returns>
+    public FixedQ4816 Level(int channel) {
+        var address = ((((uint)channel) < ((uint)m_catalog.Channels.Length)) ? Mapping.Address(logicalId: channel) : -1);
+
+        return ((address < 0) ? FixedQ4816.Zero : m_image[address]);
+    }
+
     /// <summary>Retains actual observations when recompiling the same attachment; pending old-epoch events are not copied.</summary>
     public void InheritObservations(WorldInputProducer previous) {
         if (previous.CaptureLost) { return; }

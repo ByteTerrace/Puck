@@ -246,10 +246,12 @@ public sealed class WorldRuleTraceLawTests {
             name: "boot",
             definition: Document()
         );
+        // An operator verb runs only where the registry's authority says the console operates.
+        var authority = new FakeConsoleAuthority(instance: row.Instance);
         var registry = new CommandRegistry(modules: [new WorldStateCommandModule(
-                authority: new FakeConsoleAuthority(instance: row.Instance),
+                authority: authority,
                 echoes: new WorldDeferredVerbEchoes()
-            )]);
+            )], authority: authority);
 
         Assert.Equal(
             "[world.rule.trace: none armed — world.rule.trace <rule> [evaluations] arms one]",

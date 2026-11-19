@@ -1559,9 +1559,10 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
     // its baked meshes land in its region only after such a frame's upload (SdfWorldResidency.MeshesArriving). So each
     // world whose meshes are still arriving needs one rendered view until they are resident, not only until its bake
     // settles, and a window onto it renders only if its consumer does. The search walks outward from the views that
-    // render whatever the windows do (the main instance, the roots, the synthesized footprints), through session
-    // windows only, a pass a level: the first window reached onto an arriving world its consumer does not render is
-    // that world's one window, and it and every window on the way back to a view that renders are kept. So a world
+    // render whatever the windows do (the main instance, the roots, and every producer the root reads this frame: the
+    // synthesized footprint, each placed view and each pane, which m_footprints holds before the screens are decided),
+    // through session windows only, a pass a level: the first window reached onto an arriving world its consumer does
+    // not render is that world's one window, and it and every window on the way back to a view that renders are kept. So a world
     // behind a chain of hidden windows becomes resident, a window no rendered view leads to never takes a world's
     // place, a world many windows show keeps one of them rendering, the nearest, and a resident world keeps none.
     private void ReserveArrivals(in FootprintFrame frame) {
@@ -1574,9 +1575,7 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
 
         _ = m_arrivalReached.TryAdd(key: WorldViewGraphs.MainInstance, value: null);
         foreach (var root in m_viewRoots) { _ = m_arrivalReached.TryAdd(key: root.Instance, value: null); }
-        if (m_synthesized is { } synthesized) {
-            foreach (var footprint in synthesized.Footprints) { _ = m_arrivalReached.TryAdd(key: footprint.Producer, value: null); }
-        }
+        foreach (var footprint in m_footprints) { _ = m_arrivalReached.TryAdd(key: footprint.Producer, value: null); }
         m_arrivalFrontier.UnionWith(other: m_arrivalReached.Keys);
         while (m_arrivalFrontier.Count > 0) {
             foreach (var footprint in m_screenFootprints) {

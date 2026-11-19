@@ -262,17 +262,20 @@ public sealed class InhabitCountLawTests {
         // Warms the memo (first call always resolves and, here, admits) and lets the JIT settle before measuring.
         fixture.Server.Population.ReconcileInhabitCounts(
             definition: definition,
-            tick: fixture.Server.NextInputTick
+            tick: fixture.Server.NextInputTick,
+            arena: fixture.Server.Arena
         );
         fixture.Server.Population.ReconcileInhabitCounts(
             definition: definition,
-            tick: fixture.Server.NextInputTick
+            tick: fixture.Server.NextInputTick,
+            arena: fixture.Server.Arena
         );
 
         Assert.Equal(
             actual: AllocationWindow.Least(window: () => fixture.Server.Population.ReconcileInhabitCounts(
                 definition: definition,
-                tick: fixture.Server.NextInputTick
+                tick: fixture.Server.NextInputTick,
+                arena: fixture.Server.Arena
             )),
             expected: 0L
         );

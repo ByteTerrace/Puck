@@ -236,6 +236,9 @@ public static class WorldSemanticValidator {
         foreach (var warning in UnplayedMotions(definition: definition)) {
             Report(diagnostics: diagnostics, finding: locator.Locate(code: PuckDiagnosticCodes.UnplayedMotion, message: warning, severity: DiagnosticSeverity.Warning));
         }
+        foreach (var warning in EffectorContests(definition: definition)) {
+            Report(diagnostics: diagnostics, finding: locator.Locate(code: PuckDiagnosticCodes.EffectorContest, message: warning, severity: DiagnosticSeverity.Warning));
+        }
 
         return (errors.Count == 0);
     }
@@ -281,6 +284,19 @@ public static class WorldSemanticValidator {
             var rig = CreationRig.Of(document: document);
 
             return rig.Unplayed.Select(selector: unplayed => ($"drivers[{unplayed.Driver}].parts", CreationMotion.DescribeUnplayed(rig: rig, unplayed: unplayed)));
+        }
+    );
+    /// <summary>Returns a warning for each later effector of a creation that writes a shape an earlier effector's tip hangs
+    /// from (<see cref="CreationRig.Contests"/>), its path first as a refusal's is.</summary>
+    /// <param name="definition">The world.</param>
+    /// <returns>The warnings, in prototype order.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="definition"/> is <see langword="null"/>.</exception>
+    public static IReadOnlyList<string> EffectorContests(WorldDefinition definition) => CreationWarnings(
+        definition: definition,
+        warn: static document => {
+            var rig = CreationRig.Of(document: document);
+
+            return rig.Contests.Select(selector: contest => ($"effectors[{contest.Later}].chain", CreationMotion.DescribeContest(contest: contest, rig: rig)));
         }
     );
     // A warning for each member `warn` names in each creation, its path in the creation first as a refusal's is, then the

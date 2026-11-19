@@ -165,13 +165,12 @@ public sealed partial class WorldCreationInstances {
         // A body another registration's rig reads (CreationRigReadKind.Body) is rated no slower than its fastest reader,
         // so a pose it reads is at least as fresh as the reader. The decision above is held first, so a pair that reads
         // each other ends.
-        if ((live.BodyIndex is { } body) && m_bodyReaders.TryGetValue(key: body, value: out var readers)) {
-            foreach (var reader in readers) {
-                if (ReferenceEquals(objA: reader, objB: live) || (reader.PackedRoot is not { } root)) {
-                    continue;
-                }
-
-                hertz = Math.Max(val1: hertz, val2: RateOf(center: root.Position, live: reader, placementScale: root.Scale, radius: RateReach(live: reader, placementScale: root.Scale)).Hertz);
+        if (live.BodyIndex is { } body) {
+            if (m_bodyReaders.TryGetValue(key: body, value: out var readers)) {
+                foreach (var reader in readers) { hertz = Math.Max(val1: hertz, val2: ReaderHertz(live: live, reader: reader)); }
+            }
+            foreach (var (reader, read) in m_selectedBodyReaders) {
+                if (reader.View.TryBodyIndex(index: out var selected, read: read) && (selected == body)) { hertz = Math.Max(val1: hertz, val2: ReaderHertz(live: live, reader: reader)); }
             }
 
             live.RateHertz = hertz;
@@ -179,6 +178,11 @@ public sealed partial class WorldCreationInstances {
 
         return (hertz, pixelsPerMetre);
     }
+    // The rate of a registration whose rig reads a body, which that body is rated no slower than; the body's own
+    // registration and a reader not yet packed count for nothing.
+    private int ReaderHertz(Registration live, Registration reader) => ((ReferenceEquals(objA: reader, objB: live) || (reader.PackedRoot is not { } root))
+        ? SdfUpdateRateTiers.HeldHertz
+        : RateOf(center: root.Position, live: reader, placementScale: root.Scale, radius: RateReach(live: reader, placementScale: root.Scale)).Hertz);
     // Whether a row-rooted registration's author lets it take the reduced tiers.
     private static bool ReducesAtDistance(Registration live) => (live.Creation.EngineDocument.Behavior?.ReducedRateAtDistance == true);
     // Measures a reducing placed creation's part speed after a full pack (the bound RateOf sizes its tiers for): each

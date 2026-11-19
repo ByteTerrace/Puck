@@ -72,36 +72,39 @@ public sealed class WorldRigidAssetLawTests {
         using var library = new SdfMeshLibrary();
 
         library.Store(group.Sealed, mesh, group.MaterialOrder);
-        var bake = new SdfMeshPathBake { Library = library };
+        var bake = new SdfMeshPathBake { Library = library, PlannedTier = static _ => 0 };
         using var dresser = new SdfMeshDresser(bake: bake);
 
         try {
             var drawn = dresser.Dress(frame: crowd);
+            var draws = Dressed(frame: drawn);
 
-            Assert.False(condition: bake.Pending);
-            Assert.Equal(600, drawn.MeshDraws.Count);
-            for (var index = 0; (index < drawn.MeshDraws.Count); index++) {
-                Assert.Same(mesh, drawn.MeshDraws[index].Mesh);
+            Assert.Equal(600, draws.Length);
+            for (var index = 0; (index < draws.Length); index++) {
+                Assert.Same(mesh, draws[index].Mesh);
                 var picked = drawn.PickMap!.Resolve(identity: SdfVisibility.IdentityOf(kind: SdfVisibilityKind.Mesh, source: ((uint)index)));
 
                 Assert.Equal(index, Assert.IsType<WorldPickTarget>(@object: picked).BodyIndex);
-                Assert.Equal((index + 1), drawn.MeshDraws[index].FrameSlot);
-                Assert.Equal(index, drawn.MeshDraws[index].ObjectToWorld.M41);
+                Assert.Equal((index + 1), draws[index].FrameSlot);
+                Assert.Equal(index, draws[index].ObjectToWorld.M41);
             }
 
             emitter.Count = 1;
             var departed = source.CaptureFrame(deltaSeconds: (1f / 60f), height: 720, interpolationAlpha: 0, width: 1280)!;
 
             Assert.Same(first.Program, departed.Program);
-            Assert.Single(collection: dresser.Dress(frame: departed).MeshDraws);
+            Assert.Single(collection: Dressed(frame: dresser.Dress(frame: departed)));
             Assert.Equal(1, source.ProgramBuilds);
             emitter.Count = 0;
             var empty = source.CaptureFrame(deltaSeconds: (1f / 60f), height: 720, interpolationAlpha: 0, width: 1280)!;
 
             Assert.Same(first.Program, empty.Program);
-            Assert.Empty(collection: dresser.Dress(frame: empty).MeshDraws);
+            Assert.Empty(collection: Dressed(frame: dresser.Dress(frame: empty)));
         } finally { dresser.Dispose(); bake.Retire(); }
     }
+
+    // The draws the dresser retains for the frame; the frame's own MeshDraws are the host's input list.
+    private static SdfMeshDraw[] Dressed(SdfFrame frame) => frame.MeshRows!.Live().Select(selector: static pair => pair.Draw).ToArray();
 
     private sealed class RigidEmitter : ISdfSceneEmitter {
         private readonly WorldRigidAssets m_assets = new();
