@@ -181,7 +181,7 @@ public sealed class MeshCommandTests {
         Assert.Contains(expectedSubstring: "baked offline on the CPU", actualString: report);
         Assert.Contains(expectedSubstring: ": 1 audited, 0 with no stored mesh, 0 refused", actualString: report);
         Assert.Matches(expectedRegexPattern: @"\(plain\): \d+ triangles, .* score 0\.0", actualString: report);
-        Assert.Contains(expectedSubstring: "topology: 0 folds, 0 flipped", actualString: report);
+        Assert.Contains(expectedSubstring: "topology: 0 folds (0 on the field's creases), 0 flipped", actualString: report);
 
         var (prism, hexagon) = Invoke("mesh", "audit", "--cpu", "--world", world, "--group", "hexagonal");
 

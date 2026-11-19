@@ -3810,7 +3810,8 @@ never writes the store, so it reads a store a running World owns.
 Per group it prints the distance off the surface at vertices, triangle
 centroids and edge midpoints (p50, p99, max, and how many pass a quarter cell);
 the angle between each triangle's face normal, and its corners' shading normals,
-and the field's gradient at its centroid; `rough`, the angle between each smooth
+and the field's gradient at its centroid, probed an eighth of the mesh's cell out
+(at most a millimetre, at least what the evaluator resolves); `rough`, the angle between each smooth
 vertex's shading normal and the field's gradient at the vertex measured across a
 quarter cell (relief under the cell that shading shows as mottling, such as a
 field whose rounding the bake's gradient taps read; past 10 degrees a vertex is
@@ -3818,7 +3819,10 @@ flagged); how far the field's gradient falls short of a
 distance's (a loose bound such as a stretched ellipsoid's, with the shapes
 that make it loose); folds, flipped triangles, slivers, open and non-manifold
 edges; and the field's zero-set crossings on a sparse lattice no triangle covers
-within a cell. Its worst clusters of flagged samples follow, each at its world
+within a cell. A fold is two triangles across an edge turning past 120 degrees;
+where each faces the field's gradient at its own centroid within 30 degrees, the
+turn is the field's own crease (a carve's rim or a groove's lip meeting a face
+steeply), counted apart as `on the field's creases` and not as a defect. Its worst clusters of flagged samples follow, each at its world
 position at rest and in the creation's author frame, with its extent and the
 shapes whose own surfaces lie nearest. The output is a pure function of the
 world, the stored meshes and the options, so a later run proves a fix.

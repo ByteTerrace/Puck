@@ -1116,13 +1116,23 @@ Next: fill the engine gaps first
    short) and whether its cell was flagged for finer sampling
    (`SdfSampledLattice.Refine`). The failing cells of the blend exhibits and
    nearly all of the Moth's were flagged and measured, so the fix is the
-   contour rule, not a trigger; only the swallow's streamers were never
-   examined, a lattice at its tier's floor on which the refinement scan never
-   runs. Implement the rule inside the existing `SdfSampledLattice.Refine` and
-   `SdfDualContouring.ExtractRefined` (never a second mesher): a crossing whose
-   gradient blends two faces contributes no plane, a near-crease row takes the
-   crease's vertices, and a sub-cell face either closes to one crease or
-   refines.
+   contour rule, not a trigger. Built: a near-crease row takes the crease's
+   vertices, and so does the crowd where creases meet (`SdfContour.Weld`, in
+   `SdfContour.Finished`); a material boundary beside a crease vertex lies at
+   the vertex (`SdfMeshMaterialCut.Boundary`), which closed most of the hard
+   blends' rim folds; the audit counts a fold the field's own crease explains
+   apart (a carve's rim meets a face at up to 125 degrees); and a lattice at its
+   tier's floor still refines the cells it cannot resolve at all
+   (`SdfMeshPathBake.FactorOf`), so the swallow's streamer tips are no longer
+   lost. Still open, each read in the exhibit's own vertices: the junction
+   where a groove's lips meet a box edge (`shape-groove-union`) and where a
+   rounded rim fades into a sharp edge (`shape-smooth-subtraction`), where the
+   field check moves solved vertices up to half a cell or refuses a kinked one;
+   the Moth's shin blades (below); and closed thin sheets (the lawn's blades,
+   the swallow's streamers), whose rims fold against a field the closing
+   deliberately thickens. A crossing whose gradient blends two faces
+   contributing no plane, and a sub-cell face closing to one crease, are the
+   steps left for those.
    - *Whole-world stored-mesh audit check:* audit every stored mesh of the
      world at the tier each group was stored at on both backends (fixing the
      238-of-6544 tier-0 audit gap below). Count groups the audit cannot judge

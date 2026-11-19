@@ -36,6 +36,9 @@ internal sealed class SdfMeshMaterialCut {
     private const float CreaseCosine = 0.848f;
     // The offset, in metres, outside the surface a material point lies, where a field hit would be accepted.
     private const float Lift = 0.0005f;
+    // How far along an edge from a crease vertex, as a share of the edge, a boundary is taken to lie at the vertex
+    // (Boundary): the two rounds next to it.
+    private const float CreaseReach = 0.25f;
 
     // The bilinear coordinates of a quad's quarter centres, in the order the quarter rule reads their materials: a quad's
     // corners (a, b, c, d) sit at (0, 0), (1, 0), (1, 1) and (0, 1).
@@ -240,7 +243,7 @@ internal sealed class SdfMeshMaterialCut {
         // The boundary vertex of the edge between `a` and `b` for the piece on `a`'s side.
         uint On(int a, int b) {
             var edge = m_edgeOf[Key(a: m_site[a], b: m_site[b])];
-            var middle = ((m_from[edge] <= 0f) ? 0f : ((m_to[edge] >= 1f) ? 1f : (0.5f * (m_from[edge] + m_to[edge]))));
+            var middle = Boundary(edge: edge);
 
             var (aNormal, bNormal) = (Vector3.Normalize(value: Normal(vertex: a)), Vector3.Normalize(value: Normal(vertex: b)));
             var creased = (Vector3.Dot(vector1: aNormal, vector2: bNormal) < CreaseCosine);
@@ -377,6 +380,25 @@ internal sealed class SdfMeshMaterialCut {
         return new SdfMesh(indices: indices.ToArray(), normals: normals.ToArray(), positions: positions.ToArray(), triangleMaterials: triangleMaterials.ToArray());
     }
 
+    // Where a searched edge's boundary lies, as a fraction of the way from its lower site: an interval still touching an
+    // end after every round lies at that end, and so does one within CreaseReach of an end whose site lies on a crease
+    // (SdfContour.Features). Two shapes that meet at a crease change material at the crease vertex itself, and a point
+    // lifted off the chord across the crease reads either shape a few rounds out from it: a boundary placed there is a
+    // sliver along the crease, turned out of both faces.
+    private float Boundary(int edge) {
+        var (from, to) = (m_from[edge], m_to[edge]);
+
+        if (from <= 0f) { return 0f; }
+        if (to >= 1f) { return 1f; }
+
+        var (low, high) = m_edges[edge];
+
+        if ((to <= CreaseReach) && OnCrease(site: low)) { return 0f; }
+        if ((from >= (1f - CreaseReach)) && OnCrease(site: high)) { return 1f; }
+
+        return (0.5f * (from + to));
+    }
+    private bool OnCrease(int site) => ((site < m_contour.Features.Length) && m_contour.Features[site]);
     // Whether a quad's vertices report more than one material.
     private bool Mixed(int quad) {
         var corners = m_contour.Quads.AsSpan(length: 4, start: (4 * quad));
@@ -404,8 +426,8 @@ internal sealed class SdfMeshMaterialCut {
 
         return (Vector3.Lerp(value1: Position(vertex: low), value2: Position(vertex: high), amount: t), Vector3.Lerp(value1: Normal(vertex: low), value2: Normal(vertex: high), amount: t));
     }
-    private Vector3 Position(int vertex) => new(x: m_contour.Positions[(3 * vertex)], y: m_contour.Positions[((3 * vertex) + 1)], z: m_contour.Positions[((3 * vertex) + 2)]);
-    private Vector3 Normal(int vertex) => new(x: m_contour.Normals[(3 * vertex)], y: m_contour.Normals[((3 * vertex) + 1)], z: m_contour.Normals[((3 * vertex) + 2)]);
+    private Vector3 Position(int vertex) => m_contour.PositionOf(vertex: vertex);
+    private Vector3 Normal(int vertex) => m_contour.NormalOf(vertex: vertex);
     private static Vector3 Bilinear(Vector3 a, Vector3 b, Vector3 c, Vector3 d, Vector2 at) =>
         Vector3.Lerp(value1: Vector3.Lerp(amount: at.X, value1: a, value2: b), value2: Vector3.Lerp(amount: at.X, value1: d, value2: c), amount: at.Y);
     // A surface point lifted along its normal to where a field hit would read its material.

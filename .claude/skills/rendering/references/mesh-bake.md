@@ -264,6 +264,20 @@ device sampling. Do not infer a GPU race from a whole-store hash alone.
   planes put off the surface where the field check refuses to move it, and a
   face narrower than a cell between two creases (the Moth's shin blades). They
   are [open](../../../../docs/plans/open-items.md#bake-detail).
+- **Vertices a cell cannot tell apart are one vertex.** Once the field check has
+  moved its vertices, a contour is finished in one place, `SdfContour.Finished`,
+  which both the bake's split and `ContourLevel` call: it welds every quad edge
+  shorter than `WeldCells` of the finest cell (`SdfContour.Weld`), shortest first,
+  then selects diagonals and splits creases. A row of cells beside a crease puts
+  its vertices a few hundredths of a cell off the crease's own row, and several
+  cells crowd the point where two creases meet; the strip or web between them is
+  slivers whose facing is rounding. The crease's vertex (`Features` and not
+  `Beside`) keeps its place and takes the other. A weld is refused where it would
+  join a quad's opposite corners, break the link condition (a neighbour the two
+  share that no triangle between them holds), leave a quad that faced out along
+  its lattice edge with no split that does, or turn a surviving quad by more than
+  `WeldTurnCosine` (a small quad beside the move folds against its neighbours,
+  as on a closed sheet's rim). A quad the weld closes becomes a triangle or goes.
 - **A crossing's gradient within a tap of a crease is a blend of the faces
   meeting there**, and its tangent plane is neither face's. A lattice plane that
   falls within a few tenths of a millimetre of a flat face (the narrowed box
@@ -489,7 +503,10 @@ laws exercise that boundary.
   `SdfMeshTier` is one ladder of cells (1 mm times two to the tier). A group's
   tier floors every spacing its refinement aims for (`OwnFinal`, `UnionFinal`
   and `FactorOf` take `SdfMeshTier.Cell(group.Tier)` as the floor of a member's
-  detail, `FineCell` and `MemberCell`), and is a fact of the sealed geometry
+  detail, `FineCell` and `MemberCell`; every factor is still at least two, so a
+  lattice at its floor refines the cells `Refine` finds it cannot resolve at all,
+  a sheet, gap or tip thinner than a cell, which would otherwise lose the feature's
+  whole extent), and is a fact of the sealed geometry
   (`SdfMeshBakeGroup.Seal` appends it, `Fact.Tier`), so each tier of a
   geometry is its own library and store entry. A residency's bake plans each
   group at the coarsest tier whose cell stays under half a display pixel at
@@ -712,7 +729,11 @@ laws exercise that boundary.
   edges that the triangle across the edge splits at too (found by position, so a
   cut's boundary point that landed on an end counts), leaving no T-junction for
   the audit to count as an open edge, and one whose vertices disagree is cut along the
-  boundary its edges' bisection finds (`SdfMeshMaterialCut`). `SdfMeshMaterialCut.Build` holds its lists to
+  boundary its edges' bisection finds (`SdfMeshMaterialCut`). Two shapes that meet at a crease change
+  material at the crease vertex itself, while a point lifted off the chord across the crease reads either
+  shape a round or two out from it, so a boundary within the quarter of an edge next to a crease vertex
+  (`SdfContour.Features`) lies at that vertex (`SdfMeshMaterialCut.Boundary`), or the cut lays a sliver
+  along the rim that turns out of both faces. `SdfMeshMaterialCut.Build` holds its lists to
   `MaxTrianglesPerQuad` and `MaxVerticesPerQuad` for each contour quad, checked in one place (`Within`, after every
   growth); a cut past them throws `InvalidOperationException`, which `SdfMeshPathBake.Build` reports as
   `group <n> refused: the material cut of …` and lands the group as a refused mesh. A material

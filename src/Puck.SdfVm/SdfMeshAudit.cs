@@ -30,7 +30,9 @@ public sealed record SdfMeshAuditOptions {
     public int Clusters { get; init; } = 5;
     /// <summary>Gets the shapes a cluster names, nearest first.</summary>
     public int Shapes { get; init; } = 3;
-    /// <summary>Gets the probe step, in metres, of the field gradient a triangle's normal is measured against.</summary>
+    /// <summary>Gets the widest probe step, in metres, of the field gradient a triangle's normal is measured against: a
+    /// mesh whose cell is finer probes at an eighth of its cell, no finer than the evaluator resolves
+    /// (<see cref="SdfMeshCpuField.ResolutionSpacing"/>).</summary>
     public float GradientStep { get; init; } = 0.001f;
     /// <summary>Gets the length of the field's gradient at a triangle's centroid below which the field there is a loose
     /// bound rather than a distance: the bake's lattice reads values the contour cannot place a surface from, such as a
@@ -105,7 +107,8 @@ public sealed record SdfMeshAuditCluster(Vector3 Center, Vector3 Extent, float S
 /// distance's one: past one less <see cref="SdfMeshAuditOptions.LooseSlope"/>, the field there is a loose bound.</param>
 /// <param name="LooseShapes">The shapes that make the field loose over its triangles, with how many triangles each,
 /// most first: at each loose centroid, the loosest own field among the shapes whose surfaces lie within two cells.</param>
-/// <param name="Folds">The edges whose two triangles turn by more than 120 degrees.</param>
+/// <param name="Folds">The edges whose two triangles turn by more than 120 degrees, other than on the field's own creases
+/// (<see cref="SdfMeshAuditReport.CreaseFolds"/>).</param>
 /// <param name="Flipped">The triangles whose normals face against the field's gradient.</param>
 /// <param name="Slivers">The triangles narrower than a twentieth of their longest edge.</param>
 /// <param name="OpenEdges">The edges one triangle alone holds.</param>
@@ -140,6 +143,10 @@ public sealed record SdfMeshAuditReport(
     /// <see cref="SdfMeshDefectClass"/>es, each class with what the refinement did with the cells its items lie in; one
     /// entry per class, in the enum's order.</summary>
     public IReadOnlyList<SdfMeshDefectTally> Defects { get; init; } = [];
+    /// <summary>Gets the edges whose two triangles turn by more than 120 degrees where each faces the field's gradient at
+    /// its own centroid within <see cref="SdfMeshAuditOptions.NormalDegrees"/>: the field's own sharp creases, which
+    /// <see cref="Folds"/> leaves out.</summary>
+    public int CreaseFolds { get; init; }
 }
 /// <summary>The classes a mesh's geometric defects are sorted into. The sort reads the mesh and the field alone (an
 /// item's height against the mesh's cell), so a class is a reading of the geometry, not a record of the bake's cause.</summary>
@@ -282,6 +289,8 @@ public static class SdfMeshAudit {
     private const int Bisections = 10;
     // Two triangles sharing an edge fold when their normals' dot product falls below this: a turn past 120 degrees.
     private const float FoldDot = -0.5f;
+    // The probe step of a triangle's facing gradient, in the mesh's cells, at most SdfMeshAuditOptions.GradientStep.
+    private const float GradientCells = 0.125f;
     // A triangle is a sliver when twice its area over its longest edge squared falls below this: a height under a
     // twentieth of that edge.
     private const float SliverRatio = 0.05f;
@@ -493,6 +502,9 @@ public static class SdfMeshAudit {
         var edges = Edges(indices: indices, welded: welded);
         var cell = ((options.Level == 0) ? MedianEdge(edges: edges, positions: positions) : referenceCell);
         var threshold = (options.ErrorCells * cell);
+        // A facing is judged against the field within its own triangle: a step much wider than the mesh's cell reads, at a
+        // centroid beside a crease or inside a blade thinner than the step, a blend of faces the triangle does not lie on.
+        var step = Math.Clamp(value: (GradientCells * cell), min: SdfMeshCpuField.ResolutionSpacing, max: MathF.Max(x: SdfMeshCpuField.ResolutionSpacing, y: options.GradientStep));
         var flagged = new List<Sample>();
         var defects = new List<(SdfMeshDefectClass Class, Vector3 Position)>();
 
@@ -527,7 +539,7 @@ public static class SdfMeshAudit {
             heights[triangle] = ((longest > 0f) ? (cross.Length() / MathF.Sqrt(x: longest)) : 0f);
             faceNormals[triangle] = FaceNormal(a: a, b: b, c: c);
             centroidErrors[triangle] = Off(cell: cell, field: field, flagged: flagged, point: centroid, threshold: threshold);
-            var slope = Slope(field: field, point: centroid, step: options.GradientStep);
+            var slope = Slope(field: field, point: centroid, step: step);
             var steepness = slope.Length();
 
             gradients[triangle] = ((steepness > 0f) ? (slope / steepness) : Vector3.Zero);
@@ -592,6 +604,7 @@ public static class SdfMeshAudit {
         // Edges: midpoints off the surface, folds, open and non-manifold edges.
         var midpointErrors = new float[edges.Count];
         var folds = 0;
+        var creaseFolds = 0;
         var open = 0;
         var nonManifold = 0;
         var edge = 0;
@@ -608,6 +621,12 @@ public static class SdfMeshAudit {
                 flagged.Add(item: new Sample(Kind: SampleKind.Folded, Position: midpoint, Severity: 1f, Value: 0f));
                 defects.Add(item: (SdfMeshDefectClass.Other, midpoint));
             } else if ((faceNormals[held.First] != Vector3.Zero) && (faceNormals[held.Second] != Vector3.Zero) && (Vector3.Dot(vector1: faceNormals[held.First], vector2: faceNormals[held.Second]) < FoldDot)) {
+                // A turn the field makes itself is its crease, not a fold: a carve's rim or a groove's lip turns past 120
+                // degrees where the cutting shape meets a face steeply, and both triangles there face the field.
+                if ((normalErrors[held.First] <= options.NormalDegrees) && (normalErrors[held.Second] <= options.NormalDegrees)) {
+                    creaseFolds++;
+                    continue;
+                }
                 folds++;
                 flagged.Add(item: new Sample(Kind: SampleKind.Folded, Position: midpoint, Severity: 1f, Value: 0f));
                 defects.Add(item: (Narrowness(cell: cell, height: MathF.Min(x: heights[held.First], y: heights[held.Second])), midpoint));
@@ -641,7 +660,7 @@ public static class SdfMeshAudit {
             Triangles: triangles,
             VertexError: Statistic(over: threshold, values: vertexErrors),
             Vertices: positions.Length
-        ) { Defects = Tally(defects: defects, refinement: refinement) };
+        ) { CreaseFolds = creaseFolds, Defects = Tally(defects: defects, refinement: refinement) };
     }
     // The class of a flipped triangle or a fold by its smallest height over the mesh's cell.
     private static SdfMeshDefectClass Narrowness(float cell, float height) {
