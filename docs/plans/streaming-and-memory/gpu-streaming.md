@@ -1,6 +1,6 @@
 # s1-research-gpu: GPU-observed residency for Puck
 
-Research lane (Codex) on `lead/authoring`. Research only: no source changes, builds, Worlds, or commits. Implementation and device measurements are proposed below, not performed.
+Research lane (Codex) on the integration branch of the time. Research only: no source changes, builds, Worlds, or commits. Implementation and device measurements are proposed below, not performed.
 
 ## Scope and initial ruling
 

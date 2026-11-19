@@ -1,11 +1,10 @@
 using Puck.Abstractions.Presentation;
-using Windows.Win32.Graphics.Direct3D12;
 using Windows.Win32.Graphics.Dxgi.Common;
 
 namespace Puck.DirectX;
 
 /// <summary>Maps backend-neutral <see cref="GpuPixelFormat"/> values to their <c>DXGI_FORMAT</c> equivalents, a
-/// <see cref="DisplayColorSpace"/> to its <c>DXGI_COLOR_SPACE_TYPE</c>, and image layouts to resource states.</summary>
+/// <see cref="DisplayColorSpace"/> to its <c>DXGI_COLOR_SPACE_TYPE</c>.</summary>
 public static class DirectXGpuFormats {
     /// <summary>Converts a <see cref="DisplayColorSpace"/> to the <c>DXGI_COLOR_SPACE_TYPE</c> a swap chain presents
     /// it in.</summary>
@@ -43,35 +42,4 @@ public static class DirectXGpuFormats {
         paramName: nameof(gpuPixelFormat)
     ),
     };
-
-    // The concrete GpuImageLayout cases share a fixed D3D12_RESOURCE_STATES value. A caller
-    // supplies its own behavior for anything else (Undefined included) — a fallback state or a thrown exception.
-    internal static bool TryToResourceState(GpuImageLayout layout, out D3D12_RESOURCE_STATES resourceState) {
-        switch (layout) {
-            case GpuImageLayout.ShaderReadOnly:
-                resourceState = D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_ALL_SHADER_RESOURCE;
-                return true;
-            case GpuImageLayout.External:
-                resourceState = D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COMMON;
-                return true;
-            case GpuImageLayout.General:
-                resourceState = D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
-                return true;
-            case GpuImageLayout.RenderTarget:
-                resourceState = D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_RENDER_TARGET;
-                return true;
-            case GpuImageLayout.DepthAttachment:
-                resourceState = D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_DEPTH_WRITE;
-                return true;
-            case GpuImageLayout.TransferSource:
-                resourceState = D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COPY_SOURCE;
-                return true;
-            case GpuImageLayout.TransferDestination:
-                resourceState = D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COPY_DEST;
-                return true;
-            default:
-                resourceState = default;
-                return false;
-        }
-    }
 }

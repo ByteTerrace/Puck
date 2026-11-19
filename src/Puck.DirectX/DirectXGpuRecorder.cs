@@ -11,9 +11,9 @@ namespace Puck.DirectX;
 
 /// <summary>
 /// Records compute and graphics work on Direct3D 12 direct command lists, each decoded from a
-/// <see cref="DirectXCommandBufferState"/> token. Images use caller-stated legacy layouts; buffers use enhanced
-/// access barriers with no decay assumption between lists. Global enhanced barriers order repeated writes, including
-/// zero initialization. Every recording binds the device's two shader-visible heaps once, when it begins
+/// <see cref="DirectXCommandBufferState"/> token. Every barrier is an enhanced barrier: a texture moves between the
+/// layouts its caller states, a buffer between the accesses its caller states, with no decay or promotion assumed
+/// between lists. Global enhanced barriers order repeated writes, including zero initialization. Every recording binds the device's two shader-visible heaps once, when it begins
 /// (<see cref="DirectXShaderVisibleHeaps.Bind"/>), so a descriptor set binds only its table; a clear's descriptors are one
 /// of the device's clear slots, which the fenced command buffer holds until it is reused or disposed.
 /// <para>Handles: a pipeline or pipeline layout is a GCHandle token to a <see cref="DirectXPipelineLayout"/>, a
@@ -361,6 +361,12 @@ public sealed unsafe partial class DirectXGpuRecorder(DirectXDeviceContext devic
         // neutral transition remains UAV -> UAV (which correctly elides a state transition).
         // Buffer clear ordering is supplied by the following runtime buffer transition.
     }
+    /// <inheritdoc/>
+    /// <remarks>An enhanced texture barrier over every subresource, stating the accesses the two layouts permit and the
+    /// stages the masks name (<see cref="DirectXBarriers.Texture"/>); the access masks serve Vulkan's finer layouts and are
+    /// not read. A transition between two layouts that map to one enhanced layout records nothing: a barrier that keeps
+    /// the layout is a <see cref="MemoryBarrier"/>. A simultaneous-access texture never changes layout, so its
+    /// transition is a global barrier over the same stages.</remarks>
     public void TransitionImageLayout(
         nint commandBufferHandle,
         nint imageHandle,
@@ -371,23 +377,43 @@ public sealed unsafe partial class DirectXGpuRecorder(DirectXDeviceContext devic
         GpuStage sourceStageMask,
         GpuStage destinationStageMask
     ) {
-        var state = DecodeState(commandBufferHandle: commandBufferHandle);
-
-        var commandList = ((ID3D12GraphicsCommandList*)state.CommandList);
-        var before = ToResourceState(layout: oldLayout);
-        var after = ToResourceState(layout: newLayout);
-
-        if (before == after) {
+        if (DirectXBarriers.Layout(layout: oldLayout) == DirectXBarriers.Layout(layout: ((newLayout == GpuImageLayout.Undefined) ? GpuImageLayout.External : newLayout))) {
             return;
         }
 
-        var barrier = DirectXBarriers.Transition(
-            after: after,
-            before: before,
-            resource: ((ID3D12Resource*)imageHandle)
-        );
+        var state = DecodeState(commandBufferHandle: commandBufferHandle);
+        var resource = ((ID3D12Resource*)imageHandle);
 
-        Emit(barrier: barrier, commandList: commandList, state: state);
+        if ((resource->GetDesc().Flags & D3D12_RESOURCE_FLAGS.D3D12_RESOURCE_FLAG_ALLOW_SIMULTANEOUS_ACCESS) != 0) {
+            FlushTextureBarriers(state);
+
+            var fixedBarrier = DirectXBarriers.Fixed(
+                destinationStages: destinationStageMask,
+                newLayout: newLayout,
+                oldLayout: oldLayout,
+                sourceStages: sourceStageMask
+            );
+            var fixedGroup = new D3D12_BARRIER_GROUP {
+                NumBarriers = 1,
+                Type = D3D12_BARRIER_TYPE.D3D12_BARRIER_TYPE_GLOBAL,
+            };
+
+            fixedGroup.Anonymous.pGlobalBarriers = &fixedBarrier;
+            ((ID3D12GraphicsCommandList7*)state.EnhancedCommandList)->Barrier(1, &fixedGroup);
+
+            return;
+        }
+
+        EmitTexture(
+            barrier: DirectXBarriers.Texture(
+                destinationStages: destinationStageMask,
+                newLayout: newLayout,
+                oldLayout: oldLayout,
+                resource: resource,
+                sourceStages: sourceStageMask
+            ),
+            state: state
+        );
     }
     /// <inheritdoc/>
     public void MemoryBarrier(
@@ -398,7 +424,7 @@ public sealed unsafe partial class DirectXGpuRecorder(DirectXDeviceContext devic
         GpuStage destinationStageMask
     ) {
         var state = DecodeState(commandBufferHandle);
-        FlushLegacyBarriers(state);
+        FlushTextureBarriers(state);
         var barrier = new D3D12_GLOBAL_BARRIER {
             SyncBefore = DirectXBarriers.Sync(sourceStageMask, sourceAccessMask),
             SyncAfter = DirectXBarriers.Sync(destinationStageMask, destinationAccessMask),
@@ -437,7 +463,7 @@ public sealed unsafe partial class DirectXGpuRecorder(DirectXDeviceContext devic
             sourceAccessMask &= ~(GpuAccess.ShaderWrite | GpuAccess.TransferWrite);
         }
         var state = DecodeState(commandBufferHandle);
-        FlushLegacyBarriers(state);
+        FlushTextureBarriers(state);
         // Host/first-use declarations can follow an earlier list in the same ExecuteCommandLists.
         // NONE would promise no prior GPU access in that execution scope; retain a conservative
         // dependency instead. Buffers have no layout to recover or track across those lists.
@@ -463,8 +489,8 @@ public sealed unsafe partial class DirectXGpuRecorder(DirectXDeviceContext devic
         ((ID3D12GraphicsCommandList7*)state.EnhancedCommandList)->Barrier(1, &group);
     }
     /// <inheritdoc/>
-    /// <remarks>Adjacent image transitions record as one <c>ResourceBarrier</c> call. Enhanced access dependencies
-    /// flush pending image transitions first, preserving declaration order.</remarks>
+    /// <remarks>Adjacent texture transitions record as one barrier group. A buffer or global barrier flushes the
+    /// pending texture transitions first, preserving declaration order.</remarks>
     public void BeginBarriers(nint commandBufferHandle) =>
         DecodeState(commandBufferHandle: commandBufferHandle).BarrierDepth++;
     /// <inheritdoc/>
@@ -475,31 +501,30 @@ public sealed unsafe partial class DirectXGpuRecorder(DirectXDeviceContext devic
             return;
         }
 
-        FlushLegacyBarriers(state);
+        FlushTextureBarriers(state);
     }
-    private static void FlushLegacyBarriers(DirectXCommandBufferState state) {
+    private static void FlushTextureBarriers(DirectXCommandBufferState state) {
         if (state.PendingBarriers.Count == 0) { return; }
-        var barriers = CollectionsMarshal.AsSpan(list: state.PendingBarriers);
 
-        fixed (D3D12_RESOURCE_BARRIER* pointer = barriers) {
-            ((ID3D12GraphicsCommandList*)state.CommandList)->ResourceBarrier(
-                NumBarriers: ((uint)barriers.Length),
-                pBarriers: pointer
-            );
-        }
+        DirectXBarriers.Record(
+            barriers: CollectionsMarshal.AsSpan(list: state.PendingBarriers),
+            commandList: ((ID3D12GraphicsCommandList7*)state.EnhancedCommandList)
+        );
         state.PendingBarriers.Clear();
     }
 
-    // Records one barrier, or holds it for its open run's one call.
-    private static void Emit(D3D12_RESOURCE_BARRIER barrier, ID3D12GraphicsCommandList* commandList, DirectXCommandBufferState state) {
+    // Records one texture barrier, or holds it for its open run's one call.
+    private static void EmitTexture(D3D12_TEXTURE_BARRIER barrier, DirectXCommandBufferState state) {
         if (state.BarrierDepth > 0) {
             state.PendingBarriers.Add(item: barrier);
             return;
         }
 
-        commandList->ResourceBarrier(
-            NumBarriers: 1,
-            pBarriers: &barrier
+        DirectXBarriers.Record(
+            barriers: new ReadOnlySpan<D3D12_TEXTURE_BARRIER>(
+                reference: in barrier
+            ),
+            commandList: ((ID3D12GraphicsCommandList7*)state.EnhancedCommandList)
         );
     }
 
@@ -624,10 +649,9 @@ public sealed unsafe partial class DirectXGpuRecorder(DirectXDeviceContext devic
     }
     /// <inheritdoc/>
     /// <remarks>Closes the render pass, so its ending accesses run, then transitions each color attachment the pass
-    /// declares shader-readable into the shader-read state; every other attachment stays in its attachment state.</remarks>
+    /// declares shader-readable into the shader-read layout; every other attachment stays in its attachment layout.</remarks>
     public void EndRenderPass(nint commandBufferHandle) {
         var state = DecodeState(commandBufferHandle: commandBufferHandle);
-        var commandList = ((ID3D12GraphicsCommandList*)state.CommandList);
         var target = (state.CurrentFramebuffer ?? throw new InvalidOperationException(message: "No render pass is being recorded."));
 
         if (OperatingSystem.IsWindowsVersionAtLeast(
@@ -640,11 +664,15 @@ public sealed unsafe partial class DirectXGpuRecorder(DirectXDeviceContext devic
 
         for (var index = 0; (index < target.ColorResources.Count); index++) {
             if (target.Pass.Description.Colors[index].FinalLayout == GpuImageLayout.ShaderReadOnly) {
-                TransitionTo(
-                    before: D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_RENDER_TARGET,
-                    after: D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_ALL_SHADER_RESOURCE,
-                    commandList: commandList,
-                    resource: target.ColorResources[index]
+                TransitionImageLayout(
+                    commandBufferHandle: commandBufferHandle,
+                    destinationAccessMask: GpuAccess.ShaderRead,
+                    destinationStageMask: (GpuStage.ComputeShader | GpuStage.FragmentShader | GpuStage.VertexShader),
+                    imageHandle: target.ColorResources[index],
+                    newLayout: GpuImageLayout.ShaderReadOnly,
+                    oldLayout: GpuImageLayout.RenderTarget,
+                    sourceAccessMask: GpuAccess.ColorAttachmentWrite,
+                    sourceStageMask: GpuStage.ColorAttachmentOutput
                 );
             }
         }
@@ -817,15 +845,6 @@ public sealed unsafe partial class DirectXGpuRecorder(DirectXDeviceContext devic
     }
     private static DirectXCommandBufferState DecodeState(nint commandBufferHandle) =>
         DirectXCommandBufferState.Decode(commandBufferHandle: commandBufferHandle);
-    private static D3D12_RESOURCE_STATES ToResourceState(GpuImageLayout layout) =>
-        // Undefined is the initial COMMON state of private images.
-        (DirectXGpuFormats.TryToResourceState(
-            layout: layout,
-            resourceState: out var resourceState
-        )
-            ? resourceState
-            : D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COMMON
-        );
     private static D3D12_RENDER_PASS_BEGINNING_ACCESS_TYPE BeginningOf(GpuAttachmentLoad load) => (load switch {
         GpuAttachmentLoad.Discard => D3D12_RENDER_PASS_BEGINNING_ACCESS_TYPE.D3D12_RENDER_PASS_BEGINNING_ACCESS_TYPE_DISCARD,
         _ => D3D12_RENDER_PASS_BEGINNING_ACCESS_TYPE.D3D12_RENDER_PASS_BEGINNING_ACCESS_TYPE_PRESERVE,
@@ -834,22 +853,4 @@ public sealed unsafe partial class DirectXGpuRecorder(DirectXDeviceContext devic
         ? D3D12_RENDER_PASS_ENDING_ACCESS_TYPE.D3D12_RENDER_PASS_ENDING_ACCESS_TYPE_PRESERVE
         : D3D12_RENDER_PASS_ENDING_ACCESS_TYPE.D3D12_RENDER_PASS_ENDING_ACCESS_TYPE_DISCARD
     );
-    // Records the transition of an attachment from the state it is tracked in to the one its use needs, and tracks the
-    // new state; nothing is recorded when it is already there.
-    private static void TransitionTo(ID3D12GraphicsCommandList* commandList, nint resource, D3D12_RESOURCE_STATES before, D3D12_RESOURCE_STATES after) {
-        if (before == after) {
-            return;
-        }
-
-        var barrier = DirectXBarriers.Transition(
-            after: after,
-            before: before,
-            resource: ((ID3D12Resource*)resource)
-        );
-
-        commandList->ResourceBarrier(
-            NumBarriers: 1,
-            pBarriers: &barrier
-        );
-    }
 }

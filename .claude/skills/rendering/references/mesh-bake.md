@@ -1272,6 +1272,15 @@ definition carries prepared font assets. Keep this offline scene path aligned wi
   same store proves a fix. `--images <dir>` draws each worst cluster on the
   CPU, shading beside face normals: the offline twin of
   `world.debug-view normals`.
+- **A defect's class and its refinement flag are in the report.** Each flipped
+  triangle, fold, off-surface vertex, open or non-manifold edge and uncovered
+  crossing is sorted by geometry into `SdfMeshDefectClass` (`crease-sliver`,
+  `narrow-face`, `off-surface-vertex`, `short-tip`, `other`), and with `--cpu`
+  each is read through the group's `SdfRefinementMap` (what `SdfSampledLattice.Refine`
+  flagged, `SdfMeshPathBake.RefinementObserver`) into `measured`, `ring`,
+  `unflagged` or `lattice-unrefined`. Run it on a defect before deciding whether
+  the fault is the trigger (items `unflagged`) or the contour (items `measured`
+  or `ring`). The class is the geometry's reading, not the bake's cause.
 - **`--cpu` measures a bake change with no GPU.** It drives `SdfMeshPathBake`
   with each lattice answered through the group's CPU field, so a contour,
   refinement or field change shows in the audit without a boot. Every lattice

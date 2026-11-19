@@ -1,14 +1,6 @@
-// The glass pass's fragment stage, drawn with the mesh pass's vertex stage over the frame's glass draws alone: every face
-// of a glass mesh runs it, front and back, since the pipeline culls nothing and the stage writes its depth, which keeps
-// the depth test after it. A face before the pixel's opaque hit (the visibility record the surface pass wrote) adds its
-// signed ray distance, face count and material's optical depth to the glass sums (frame/sdf-glass.hlsli), so the sums
-// hold the same words whatever order the faces rasterize in. A front face then writes the glass target as the mesh
-// pass writes its target (the ray parameter, the draw plus one, the triangle) through the pass's own reversed-Z depth, so
-// the nearest front face wins; a back face, or a face behind the opaque hit, writes the far plane's depth and fails the
-// test. The sums' second record takes every counted face too (a front face's draw and triangle, a back face's distance),
-// from which the shading pass names the second-nearest front face. Every fragment counts one texel. A face is a front face when its triangle's authored outward normal (the bake's
-// winding, which curvature also reads) faces the camera; the rasterizer's facing is not used, since its sense follows each
-// backend's winding and viewport conventions rather than the mesh.
+// All glass crossings integrate optical depth up to the opaque hit. Front crossings visible to the camera
+// also write the interface target through a reversed-Z depth test. Use the triangle's authored outward winding
+// for entry and exit, since rasterizer facing follows backend viewport conventions.
 #include "../isa/sdf-mesh.interface.hlsli"
 #include "../frame/sdf-viewport.hlsli"
 #include "../frame/sdf-mesh.hlsli"
@@ -38,10 +30,15 @@ GlassFragment PSMain(MeshRasterVertex input) {
     float opaque = (sdfVisibilityHit(visibility) ? visibility.t : worldFarDistance(view));
     bool counts = (t < opaque);
 
-    if (counts && !IsHelperLane()) {
-        SdfMaterialData material = sdfMaterialLoad(sdfMeshRasterMaterial(input.draw, input.triangleIndex));
+    if (!IsHelperLane()) {
+        float3 ray = cameraRayDirection(view, (float2(pixel) + 0.5) / float2(passGroup.imageExtent));
+        float start = worldSurfaceNearDistance(view) / dot(ray, view.forward.xyz);
+        int materialId = sdfMeshRasterMaterial(input.draw, input.triangleIndex);
+        SdfMaterialData material = sdfMaterialLoad(materialId);
+        bool clippedDraw = any(sdfMeshClipPlane(record) != 0.0);
 
-        sdfGlassAccumulate(sdfGlassSumWord(pixel, passGroup.imageExtent), t, opaque, front, material.absorption, input.draw, input.triangleIndex);
+        sdfGlassAccumulate(sdfGlassSumWord(pixel, passGroup.imageExtent), t, start, opaque, front, material.absorption,
+            materialId, input.draw, input.triangleIndex, clippedDraw);
     }
     puckCountFragmentWork(0u, 1u);
 

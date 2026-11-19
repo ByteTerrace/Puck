@@ -58,6 +58,10 @@ namespace Puck.Abstractions.Gpu;
 /// shares; zero on Direct3D 12.</param>
 /// <param name="StorageBufferOffsetAlignment">Vulkan's <c>minStorageBufferOffsetAlignment</c>, the alignment a buffer
 /// view's offset into its buffer keeps; zero on Direct3D 12, whose view starts at any whole element.</param>
+/// <param name="ExecuteIndirectTier">Direct3D 12's <c>ExecuteIndirectTier</c> as 10 for tier 1.0 and 11 for tier 1.1, which
+/// adds the incrementing root constant a counted draw numbers its commands with
+/// (<see cref="ExecuteIndirectIncrementingConstant"/>); zero where the runtime does not answer the query, and on
+/// Vulkan.</param>
 public sealed record GpuDeviceCapabilities(
     string Backend,
     uint MaxBoundDescriptorSets,
@@ -80,7 +84,8 @@ public sealed record GpuDeviceCapabilities(
     uint ReservedResourcesTier = 0U,
     uint ResourceAddressBits = 0U,
     ulong SparseAddressSpaceBytes = 0UL,
-    uint StorageBufferOffsetAlignment = 0U
+    uint StorageBufferOffsetAlignment = 0U,
+    uint ExecuteIndirectTier = 0U
 ) {
     /// <summary>Direct3D 12's 4,096 constant-buffer elements, each a 16-byte float4.</summary>
     public const uint DirectXConstantBufferBytes = (4096U * 16U);
@@ -93,6 +98,9 @@ public sealed record GpuDeviceCapabilities(
     /// <summary>Direct3D 12's shader-visible sampler heap size (<c>D3D12_MAX_SHADER_VISIBLE_SAMPLER_HEAP_SIZE</c>),
     /// reported for both sampler heap limits when the runtime does not answer options 19.</summary>
     public const uint DirectXMinimumSamplerHeapSize = 2048U;
+    /// <summary>The <see cref="ExecuteIndirectTier"/> at which a command signature may number its commands with an
+    /// incrementing root constant (<c>D3D12_EXECUTE_INDIRECT_TIER_1_1</c>).</summary>
+    public const uint ExecuteIndirectIncrementingConstant = 11U;
     /// <summary>The name of the line and JSON object the capabilities form in a readout.</summary>
     public const string Section = "capabilities";
 
@@ -119,6 +127,7 @@ public sealed record GpuDeviceCapabilities(
     private const string ResourceAddressBitsField = "reserved.address-bits";
     private const string SparseAddressSpaceField = "sparse.address-space";
     private const string StorageBufferOffsetAlignmentField = "storage-buffer.offset-alignment";
+    private const string ExecuteIndirectTierField = "execute-indirect-tier";
 
     /// <summary>Returns these capabilities with what a Direct3D 12 device reports about backing. A reserved resource
     /// (<c>CreateReservedResource</c>) at tiled resources tier 1 or above is a buffer whose tiles are mapped and unmapped
@@ -190,9 +199,11 @@ public sealed record GpuDeviceCapabilities(
     /// answer, which reports <see cref="DirectXMinimumSamplerHeapSize"/>.</param>
     /// <param name="staticSamplerHeapSize">Options 19's <c>MaxSamplerDescriptorHeapSizeWithStaticSamplers</c>, or zero
     /// when the runtime does not answer, which reports <see cref="DirectXMinimumSamplerHeapSize"/>.</param>
+    /// <param name="executeIndirectTier">Options 21's <c>ExecuteIndirectTier</c> (10 or 11), or zero when the runtime does
+    /// not answer.</param>
     /// <returns>The capabilities.</returns>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="resourceBindingTier"/> is not 1, 2 or 3.</exception>
-    public static GpuDeviceCapabilities FromDirectX(uint resourceBindingTier, string rootSignatureVersion, string shaderModel, uint viewHeapSize, uint samplerHeapSize, uint staticSamplerHeapSize) {
+    public static GpuDeviceCapabilities FromDirectX(uint resourceBindingTier, string rootSignatureVersion, string shaderModel, uint viewHeapSize, uint samplerHeapSize, uint staticSamplerHeapSize, uint executeIndirectTier = 0U) {
         ArgumentOutOfRangeException.ThrowIfLessThan(
             other: 1U,
             value: resourceBindingTier
@@ -237,6 +248,7 @@ public sealed record GpuDeviceCapabilities(
             RootSignatureVersion: rootSignatureVersion,
             SamplerHeapSize: samplers,
             ShaderModel: shaderModel,
+            ExecuteIndirectTier: executeIndirectTier,
             StaticSamplerHeapSize: staticSamplers,
             ViewHeapSize: views
         );
@@ -246,7 +258,8 @@ public sealed record GpuDeviceCapabilities(
     /// <c>backend=vulkan descriptor-sets=32 push-constant-bytes=256 stage.samplers=… stage.uniform-buffers=… stage.storage-buffers=… stage.sampled-images=… stage.storage-images=… stage.resources=…</c>,
     /// and on Direct3D 12 <c>root-signature-words=64 … binding-tier=3 root-signature=1.1 shader-model=6.8 heap.views=… heap.samplers=… heap.samplers-static=…</c>;
     /// then <c>backing=</c> (<see cref="BackingSpelling"/>) once a backend has read it, and the nonzero of <c>reserved.tier</c>,
-    /// <c>reserved.address-bits</c>, <c>sparse.address-space</c> and <c>storage-buffer.offset-alignment</c>.</summary>
+    /// <c>reserved.address-bits</c>, <c>sparse.address-space</c>, <c>storage-buffer.offset-alignment</c> and
+    /// <c>execute-indirect-tier</c>.</summary>
     /// <param name="builder">The text to append to.</param>
     /// <returns><paramref name="builder"/>.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="builder"/> is <see langword="null"/>.</exception>
@@ -339,6 +352,7 @@ public sealed record GpuDeviceCapabilities(
             _ = builder.Append(value: ' ').Append(value: SparseAddressSpaceField).Append(value: '=').Append(provider: CultureInfo.InvariantCulture, handler: $"{SparseAddressSpaceBytes}");
         }
         AppendCount(builder: builder, name: StorageBufferOffsetAlignmentField, value: StorageBufferOffsetAlignment);
+        AppendCount(builder: builder, name: ExecuteIndirectTierField, value: ExecuteIndirectTier);
 
         return builder;
     }
@@ -424,6 +438,7 @@ public sealed record GpuDeviceCapabilities(
         writer.WriteNumber(propertyName: ResourceAddressBitsField, value: ResourceAddressBits);
         writer.WriteNumber(propertyName: SparseAddressSpaceField, value: SparseAddressSpaceBytes);
         writer.WriteNumber(propertyName: StorageBufferOffsetAlignmentField, value: StorageBufferOffsetAlignment);
+        writer.WriteNumber(propertyName: ExecuteIndirectTierField, value: ExecuteIndirectTier);
         writer.WriteEndObject();
     }
 
