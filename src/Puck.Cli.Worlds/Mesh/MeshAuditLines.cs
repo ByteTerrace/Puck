@@ -73,6 +73,38 @@ public static partial class MeshAuditLines {
         return string.Create(provider: CultureInfo.InvariantCulture, handler: $"  topology: {report.Folds} folds, {report.Flipped} flipped, {report.Slivers} slivers, {report.OpenEdges} open edges, {report.NonManifoldEdges} non-manifold edges; surface: {report.Crossings} crossings, {report.MissingCrossings} uncovered");
     }
 
+    /// <summary>Returns the classes of a measured group's defects, each with the cells' refinement flags its items lie in.</summary>
+    /// <param name="tallies">The report's defect tallies (<see cref="SdfMeshAuditReport.Defects"/>).</param>
+    /// <returns>The classes with items, as text; <see langword="null"/> when no class has an item.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="tallies"/> is <see langword="null"/>.</exception>
+    public static string? DefectText(IReadOnlyList<SdfMeshDefectTally> tallies) {
+        ArgumentNullException.ThrowIfNull(argument: tallies);
+
+        var parts = tallies
+            .Where(predicate: static tally => (tally.Count > 0))
+            .Select(selector: static tally => {
+                var flags = new[] { ("not-scanned", tally.NotScanned), ("scanned-nothing-flagged", tally.LatticeUnrefined), ("unflagged", tally.Unflagged), ("ring", tally.Ring), ("measured", tally.Measured), ("no-map", tally.Unknown), ("thin", tally.Thin) }
+                    .Where(predicate: static flag => (flag.Item2 > 0))
+                    .Select(selector: static flag => $"{flag.Item1} {flag.Item2}");
+
+                return string.Create(provider: CultureInfo.InvariantCulture, handler: $"{ClassName(defect: tally.Class)} {tally.Count} [{string.Join(separator: ", ", values: flags)}]");
+            })
+            .ToArray();
+
+        return ((parts.Length == 0) ? null : string.Join(separator: "; ", values: parts));
+    }
+
+    /// <summary>Returns a class's name as the report prints it.</summary>
+    /// <param name="defect">The class.</param>
+    /// <returns>The name.</returns>
+    public static string ClassName(SdfMeshDefectClass defect) => defect switch {
+        SdfMeshDefectClass.OffSurfaceVertex => "off-surface-vertex",
+        SdfMeshDefectClass.CreaseSliver => "crease-sliver",
+        SdfMeshDefectClass.NarrowFace => "narrow-face",
+        SdfMeshDefectClass.ShortTip => "short-tip",
+        _ => "other",
+    };
+
     /// <summary>Reads a measured group's topology line.</summary>
     /// <param name="line">The line.</param>
     /// <param name="topology">The counts it carries.</param>

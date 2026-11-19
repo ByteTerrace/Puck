@@ -295,6 +295,12 @@ public sealed partial class SdfMeshPathBake {
     /// groups).</summary>
     public IReadOnlySet<int>? Selection { get; init; }
 
+    /// <summary>Gets the observer handed each baked group's selector and the map of which cells its final lattice's refinement
+    /// flagged (<see cref="SdfSampledLattice.RefinementMap"/>), as the group's contour starts, on the thread running that
+    /// stage; <see langword="null"/>, a residency's bake, copies nothing. An offline audit sets it to ask whether a defect's
+    /// cell was ever flagged.</summary>
+    public Action<int, SdfRefinementMap>? RefinementObserver { get; init; }
+
     /// <summary>Gets the library the bake stores each group's mesh in and takes a group of geometry it holds from, rather
     /// than baking the group again: in a later program of the residency, or in another residency holding the same
     /// library.</summary>
@@ -1860,6 +1866,7 @@ public sealed partial class SdfMeshPathBake {
         using var final = group.Final;
 
         group.DiagnosticCell = lattice.ContourCell;
+        RefinementObserver?.Invoke(arg1: group.Selector, arg2: lattice.RefinementMap());
         SdfContour? contour = null;
         var started = Stopwatch.GetTimestamp();
 

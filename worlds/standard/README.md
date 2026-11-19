@@ -42,7 +42,11 @@ under `bindings`, as `skin.puck`, `standard.puck` and `walker.puck` export `crt`
 `inputs.puck` declares the shared semantic channels (`forward`, `strafe`, `turn`, the face axes, `jump`, `run`,
 `flight`, `rise`, `dash`, `interact`, `start`, `select`, `confirm`, `cancel`) the controls and the games bind; a world
 declares its own actions beside them (the debug world's `suit` and `noclip`). `quality.puck` authors the
-`world.quality low|medium|high` presets; until initial development is done every machine runs `high`. `skies.puck` is
+`world.quality low|medium|high` presets; until initial development is done every machine runs `high`. It also authors
+`render.devices`, one profile for each device the standard ships for: the quality table the device runs and the memory
+it may use (`deviceMemoryMiB` caps the device pool, `hostMemoryMiB` the host pool, each only where lower than the pool's
+own limit). The engine selects a profile by the adapter's name, or `world.device-profile <name>` by name; a world
+overrides or replaces the rows like any other. `skies.puck` is
 a library of sky and air presets (`clearDay`, `overcast`, `starryNight`, `polarNight`, `clearDayAir`,
 `overcastAir`) a world expands inside its `render.sky` and `render.atmosphere` blocks, and the day cycle
 (`dayCycle`), which a world expands at the top of a fragment of its own: a state clock whose row holds the day's phase,
