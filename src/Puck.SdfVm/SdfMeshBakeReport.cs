@@ -33,6 +33,32 @@ internal static class SdfMeshBakeReport {
         Land,
         Store,
     }
+    /// <summary>Where the bake's gate is taken: the frame thread's entries (its frame preparation and takes, its
+    /// residency observation, the readers), and each worker stage that publishes its group's next step. The done line
+    /// reports each site's entries, its waits for the gate and how long it held it, so whether the workers wait on the
+    /// gate because a section holds it long, or because many sections take it, reads per site.</summary>
+    public enum Gate {
+        Frame,
+        Take,
+        Observe,
+        Read,
+        Ticket,
+        Slice,
+        Refine,
+        Slab,
+        Prepare,
+        Final,
+        Crossings,
+        Contour,
+        Creases,
+        Split,
+        Points,
+        Advance,
+        Land,
+        Load,
+        Taken,
+        Fail,
+    }
     /// <summary>One group a restart, resample or promotion began, as the start line names it.</summary>
     /// <param name="Selector">The group's selector.</param>
     /// <param name="Dynamic">Whether the group is a dynamic one.</param>
@@ -60,6 +86,22 @@ internal static class SdfMeshBakeReport {
         public readonly long[] KindSamples = new long[8];
         /// <summary>Stopwatch ticks each stage spent, summed over the threads that ran it.</summary>
         public readonly long[] StageTicks = new long[Enum.GetValues<Stage>().Length];
+        /// <summary>Each gate site's entries, the Stopwatch ticks it waited for the gate and held it, and its longest
+        /// hold; written under the gate.</summary>
+        public readonly long[] GateEntries = new long[GateSites];
+        public readonly long[] GateWaitTicks = new long[GateSites];
+        public readonly long[] GateHoldTicks = new long[GateSites];
+        public readonly long[] GateHoldMax = new long[GateSites];
+
+        private static readonly int GateSites = Enum.GetValues<Gate>().Length;
+
+        // The process's managed allocation, collector pause and collections when the bake started, of which the done
+        // line reports the bake's window: every thread's, the bake's workers dominating it while they run.
+        private long m_allocatedAtStart;
+        private TimeSpan m_pausedAtStart;
+        private int m_gen0AtStart;
+        private int m_gen1AtStart;
+        private int m_gen2AtStart;
 
         public long Batches;
         public long Discarded;
@@ -102,6 +144,27 @@ internal static class SdfMeshBakeReport {
             FrameGateWaitMax = FrameGateWaitTotal = FrameGateWaitsSlow = 0;
             Dispatches = Samples = Taps = Discarded = RefinedCells = CutEdges = Softened = Merged = Loaded = 0;
             Joined = JoinedLanded = JoinedAbandoned = JoinedStalled = SamplesSaved = 0;
+            Array.Clear(array: GateEntries);
+            Array.Clear(array: GateWaitTicks);
+            Array.Clear(array: GateHoldTicks);
+            Array.Clear(array: GateHoldMax);
+            m_allocatedAtStart = GC.GetTotalAllocatedBytes(precise: false);
+            m_pausedAtStart = GC.GetTotalPauseDuration();
+            m_gen0AtStart = GC.CollectionCount(generation: 0);
+            m_gen1AtStart = GC.CollectionCount(generation: 1);
+            m_gen2AtStart = GC.CollectionCount(generation: 2);
+        }
+        /// <summary>Counts one entry of the bake's gate, under the gate as the entry leaves it.</summary>
+        /// <param name="site">Where it was taken.</param>
+        /// <param name="waited">The Stopwatch ticks the entry waited for the gate.</param>
+        /// <param name="held">The Stopwatch ticks it held the gate.</param>
+        public void GateHeld(Gate site, long waited, long held) {
+            var index = ((int)site);
+
+            GateEntries[index]++;
+            GateWaitTicks[index] += waited;
+            GateHoldTicks[index] += held;
+            GateHoldMax[index] = Math.Max(val1: GateHoldMax[index], val2: held);
         }
         /// <summary>Counts one wait for the bake's gate on the frame thread.</summary>
         /// <param name="waited">The wait, in Stopwatch ticks.</param>
@@ -128,8 +191,30 @@ internal static class SdfMeshBakeReport {
             var takes = Math.Max(val1: 1L, val2: Takes);
             var kinds = string.Join(separator: ",", values: Enumerable.Range(start: 0, count: KindNames.Length).Select(selector: kind => string.Create(provider: CultureInfo.InvariantCulture, handler: $"{KindNames[kind]}:{KindSamples[kind]}")));
 
-            return string.Create(provider: CultureInfo.InvariantCulture, handler: $" joined=[groups:{Joined},landed:{JoinedLanded},abandoned:{JoinedAbandoned},stalled:{JoinedStalled},samples-saved:{SamplesSaved}] kinds=[{kinds}] cpu=[{stages}] batches={Batches} takes={Takes} idle={IdleTakes} stop=[taps:{StopTaps},samples:{StopSamples},batch:{StopBatch},drained:{StopDrained}] per-take=[waiting:{(WaitingGroups / ((double)takes)):0.0},flying:{(FlyingGroups / ((double)takes)):0.0},working:{(WorkingGroups / ((double)takes)):0.0}]{dispatches?.Invoke()} frame-gate=[max:{((FrameGateWaitMax * 1000d) / Stopwatch.Frequency):0.00}ms,total:{((FrameGateWaitTotal * 1000d) / Stopwatch.Frequency):0.0}ms,over-1ms:{FrameGateWaitsSlow}]");
+            return string.Create(provider: CultureInfo.InvariantCulture, handler: $" joined=[groups:{Joined},landed:{JoinedLanded},abandoned:{JoinedAbandoned},stalled:{JoinedStalled},samples-saved:{SamplesSaved}] kinds=[{kinds}] cpu=[{stages}] batches={Batches} takes={Takes} idle={IdleTakes} stop=[taps:{StopTaps},samples:{StopSamples},batch:{StopBatch},drained:{StopDrained}] per-take=[waiting:{(WaitingGroups / ((double)takes)):0.0},flying:{(FlyingGroups / ((double)takes)):0.0},working:{(WorkingGroups / ((double)takes)):0.0}]{dispatches?.Invoke()} frame-gate=[max:{((FrameGateWaitMax * 1000d) / Stopwatch.Frequency):0.00}ms,total:{((FrameGateWaitTotal * 1000d) / Stopwatch.Frequency):0.0}ms,over-1ms:{FrameGateWaitsSlow}] gate=[{DescribeGate()}] managed=[{DescribeManaged()}] tail={PoolTailSeconds():0.0}s");
         }
+        // Each gate site entered: its entries, the milliseconds it waited and held in all, and its longest hold.
+        private string DescribeGate() {
+            static double Milliseconds(long ticks) => ((ticks * 1000d) / Stopwatch.Frequency);
+
+            return string.Join(separator: ",", values: Enum.GetValues<Gate>().Where(predicate: site => (GateEntries[((int)site)] > 0)).Select(selector: site => string.Create(provider: CultureInfo.InvariantCulture, handler: $"{site.ToString().ToLowerInvariant()}:{GateEntries[((int)site)]}/wait:{Milliseconds(GateWaitTicks[((int)site)]):0.0}ms/hold:{Milliseconds(GateHoldTicks[((int)site)]):0.0}ms/max:{Milliseconds(GateHoldMax[((int)site)]):0.00}ms")));
+        }
+        // The process's managed allocation, collector pause and collections by generation since the bake started.
+        private string DescribeManaged() => string.Create(provider: CultureInfo.InvariantCulture, handler: $"allocated:{((GC.GetTotalAllocatedBytes(precise: false) - m_allocatedAtStart) / 1.0e9):0.00}GB,gc-pause:{(GC.GetTotalPauseDuration() - m_pausedAtStart).TotalSeconds:0.00}s,collections:{(GC.CollectionCount(generation: 0) - m_gen0AtStart)}/{(GC.CollectionCount(generation: 1) - m_gen1AtStart)}/{(GC.CollectionCount(generation: 2) - m_gen2AtStart)}");
+    }
+
+    // When the bake's pool last took work with more still queued behind every worker (PoolSaturated): the done line
+    // reports the seconds from then to the bake's end, the serial tail in which the last groups finish alone.
+    private static long PoolSaturatedAt;
+
+    /// <summary>Records that the bake's pool took work with more still queued, so every worker was busy.</summary>
+    public static void PoolSaturated() => Volatile.Write(location: ref PoolSaturatedAt, value: Stopwatch.GetTimestamp());
+
+    // The seconds since the pool last had work queued behind every worker.
+    private static double PoolTailSeconds() {
+        var at = Volatile.Read(location: ref PoolSaturatedAt);
+
+        return ((at == 0L) ? 0d : Stopwatch.GetElapsedTime(startingTimestamp: at).TotalSeconds);
     }
 
     private static readonly string[] KindNames = ["refine", "slab", "fine", "crossing", "gradient", "crease", "material", "skin"];

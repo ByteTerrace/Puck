@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text;
+using BakeGate = Puck.SdfVm.SdfMeshBakeReport.Gate;
 
 namespace Puck.SdfVm;
 
@@ -130,7 +131,7 @@ public sealed partial class SdfMeshPathBake {
     /// rather than the region's blocks.</summary>
     /// <returns>One line of <c>key=value</c> pairs.</returns>
     public string DescribeFloors() {
-        lock (m_gate) {
+        using (EnterGate(site: BakeGate.Read)) {
             int shown = 0, pending = 0, empty = 0, failed = 0, kept = 0, none = 0;
             Span<long> bytes = stackalloc long[6];
             Span<int> floors = stackalloc int[6];

@@ -4,6 +4,7 @@ using System.Numerics;
 using System.Text;
 using Puck.Maths;
 using Puck.SignedDistance;
+using BakeGate = Puck.SdfVm.SdfMeshBakeReport.Gate;
 using BakeStage = Puck.SdfVm.SdfMeshBakeReport.Stage;
 
 namespace Puck.SdfVm;
@@ -83,13 +84,45 @@ public sealed partial class SdfMeshPathBake {
     private readonly SdfMeshBakeReport.Accounts m_accounts = new();
 
     // Takes the gate on the frame thread, counting the wait.
-    private Lock.Scope EnterFrameGate() {
-        var started = Stopwatch.GetTimestamp();
-        var scope = m_gate.EnterScope();
+    private GateScope EnterFrameGate(SdfMeshBakeReport.Gate site) {
+        var scope = EnterGate(site: site);
 
-        m_accounts.FrameGateWaited(waited: (Stopwatch.GetTimestamp() - started));
+        m_accounts.FrameGateWaited(waited: scope.Waited);
 
         return scope;
+    }
+    // Takes the gate, timing the wait for it and the hold, which the done line reports by site. The one door to m_gate:
+    // a section that publishes a group's step names where it holds the gate.
+    private GateScope EnterGate(SdfMeshBakeReport.Gate site) {
+        var asked = Stopwatch.GetTimestamp();
+        var scope = m_gate.EnterScope();
+
+        return new GateScope(owner: this, scope: scope, site: site, waited: (Stopwatch.GetTimestamp() - asked));
+    }
+
+    // A hold of the bake's gate, which counts its wait and hold into the bake's accounts as it leaves the gate.
+    internal ref struct GateScope {
+        private readonly SdfMeshPathBake m_owner;
+        private readonly SdfMeshBakeReport.Gate m_site;
+        private readonly long m_entered;
+
+        private Lock.Scope m_scope;
+
+        public GateScope(SdfMeshPathBake owner, Lock.Scope scope, SdfMeshBakeReport.Gate site, long waited) {
+            m_owner = owner;
+            m_scope = scope;
+            m_site = site;
+            m_entered = Stopwatch.GetTimestamp();
+            Waited = waited;
+        }
+
+        // The Stopwatch ticks the entry waited for the gate.
+        public long Waited { get; }
+
+        public void Dispose() {
+            m_owner.m_accounts.GateHeld(held: (Stopwatch.GetTimestamp() - m_entered), site: m_site, waited: Waited);
+            m_scope.Dispose();
+        }
     }
     // Adds the time since a timestamp to a stage's account; the report names a stage that held one group's worker for
     // seconds, so the bake's long poles can be found.
@@ -107,7 +140,7 @@ public sealed partial class SdfMeshPathBake {
     private void Prioritize() {
         if (Demand.Count == 0) { return; }
         // With every group done there is nothing to order: the done cursor makes this check constant once the bake ends.
-        lock (m_gate) {
+        using (EnterGate(site: BakeGate.Frame)) {
             while ((m_doneThrough < m_groups.Count) && m_groups[m_doneThrough].Done) { m_doneThrough++; }
             if (m_doneThrough >= m_groups.Count) { return; }
         }
@@ -159,7 +192,7 @@ public sealed partial class SdfMeshPathBake {
     private void TakeLanded(Group group, SdfMeshBakeShare? share) {
         var taken = Library.TryTake(geometry: group.Sealed, identity: group.Identity, materials: group.MaterialOrder, mesh: out var mesh);
 
-        lock (m_gate) {
+        using (EnterGate(site: BakeGate.Taken)) {
             // A waiter that already took, deserted or retired is no longer this share's to finish.
             if (!m_groups.Contains(item: group) || ((share is not null) && (!ReferenceEquals(objA: group.Joined, objB: share) || group.Done || group.Retired))) { mesh?.Release(); return; }
             group.Contouring = false;
@@ -326,7 +359,7 @@ public sealed partial class SdfMeshPathBake {
             residency: Residency,
             selector: group.Selector
         );
-        lock (m_gate) {
+        using (EnterGate(site: BakeGate.Fail)) {
             group.Contouring = false;
             group.InFlight = false;
             if (group.Done || !m_groups.Contains(item: group)) { return; }
@@ -383,7 +416,7 @@ public sealed partial class SdfMeshPathBake {
     /// work is dropped before it runs, a stage running for one queues no further stage, an answer arriving for one is
     /// dropped, and each group frees its workspace when its last running job ends.</summary>
     public void Retire() {
-        lock (m_gate) {
+        using (EnterGate(site: BakeGate.Read)) {
             foreach (var group in m_groups.Concat(second: m_retiredGroups)) {
                 group.Retired = true;
                 group.InFlight = false;
@@ -427,7 +460,10 @@ public sealed partial class SdfMeshPathBake {
     private static Action? TakeWork(out bool stage) {
         stage = false;
         lock (WorkGate) {
-            if (AnswerQueue.TryDequeue(result: out var answer)) { return answer; }
+            if (AnswerQueue.TryDequeue(result: out var answer)) {
+                if ((AnswerQueue.Count + WorkQueue.Count) > 0) { SdfMeshBakeReport.PoolSaturated(); }
+                return answer;
+            }
 
             var best = -1;
 
@@ -442,6 +478,9 @@ public sealed partial class SdfMeshPathBake {
             var work = WorkQueue[best].Work;
 
             WorkQueue.RemoveAt(index: best);
+            // Work still queued behind this take means every worker is busy: the tail the done line reports starts
+            // after the last such take.
+            if (WorkQueue.Count > 0) { SdfMeshBakeReport.PoolSaturated(); }
             stage = true;
             return work;
         }
@@ -489,7 +528,7 @@ public sealed partial class SdfMeshPathBake {
     public void ObserveResidency(SdfWorldTables tables) {
         ArgumentNullException.ThrowIfNull(argument: tables);
 
-        lock (m_gate) {
+        using (EnterGate(site: BakeGate.Observe)) {
             // The grant is the tables', read once: its budget and bias are the selector's from then on (Retier).
             if (!ReferenceEquals(objA: m_detail, objB: tables.Grant)) {
                 m_detail = tables.Grant;
@@ -611,7 +650,7 @@ public sealed partial class SdfMeshPathBake {
     /// <param name="largest">How many of the largest groups to name.</param>
     /// <returns>The description, one part a line.</returns>
     public IReadOnlyList<string> DescribeDemand(int largest = 12) {
-        lock (m_gate) {
+        using (EnterGate(site: BakeGate.Read)) {
             var count = Demand.Count;
             var groups = new int[(count + 1)];
             var triangles = new long[(count + 1)];
@@ -662,7 +701,7 @@ public sealed partial class SdfMeshPathBake {
     /// the group counts as near.</param>
     /// <returns>One line of <c>key=value</c> pairs.</returns>
     public string DescribeResidency(float radius) {
-        lock (m_gate) {
+        using (EnterGate(site: BakeGate.Read)) {
             var start = m_bakeStarted;
             var groups = m_groups.Count;
             int landed = 0, resident = 0, near = 0, nearLanded = 0, nearResident = 0;
