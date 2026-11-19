@@ -251,10 +251,10 @@ public sealed partial class SessionObservationLawTests {
         Assert.Empty(refusal);
         using var release = observation;
         Assert.Equal(tier != WorldDisclosureTier.Frames, observation.CanObserve);
-        Assert.Equal(tier == WorldDisclosureTier.Replica, observation.DisclosesEverything);
+        Assert.Equal(tier == WorldDisclosureTier.Replica, (observation.SceneProof?.SharesAuthority == true));
         observation.Dispose();
         Assert.False(observation.CanObserve);
-        Assert.False(observation.DisclosesEverything);
+        Assert.False((observation.SceneProof?.SharesAuthority == true));
     }
     [Fact]
     public void AReplayStartWithholdsTheExistingObserverUntilItsSamePrincipalReturns() {
@@ -264,15 +264,15 @@ public sealed partial class SessionObservationLawTests {
         Assert.NotNull(observation);
         Assert.Empty(refusal);
         using var release = observation;
-        Assert.True(observation.DisclosesEverything);
+        Assert.True((observation.SceneProof?.SharesAuthority == true));
         fixture.Server.Persistence.RestoreReplayStart(checkpoint!);
         Assert.False(observation.Ended);
         Assert.False(observation.CanObserve);
-        Assert.False(observation.DisclosesEverything);
+        Assert.False((observation.SceneProof?.SharesAuthority == true));
         Assert.True(fixture.Server.TryAdmitSession(Viewer, out var restored, out _, out reason), reason);
         Assert.Equal(observation.Session, restored);
         Assert.True(observation.CanObserve);
-        Assert.True(observation.DisclosesEverything);
+        Assert.True((observation.SceneProof?.SharesAuthority == true));
     }
     [Fact]
     public void AWorldThatAdmitsNoViewer_RefusesTheObservationByName_OneThatDoesAdmitsIt() {

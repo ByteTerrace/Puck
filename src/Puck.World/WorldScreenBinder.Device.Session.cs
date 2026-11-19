@@ -20,7 +20,7 @@ public sealed partial class WorldScreenBinder {
             domains: m_domains,
             mirror: feed.Mirror,
             effectiveCameraName: feed.EffectiveCamera
-        ) { SkyLayers = SkyLayers, Session = Settings };
+        ) { SkyLayers = SkyLayers, Session = Settings, ViewName = feed.RegistrationName };
         var frameSource = new SdfCompositionFrameSource(
             dresser: emitter,
             emitters: [emitter]
@@ -103,8 +103,9 @@ public sealed partial class WorldScreenBinder {
             return;
         }
 
+        GroupSharedScenes();
         foreach (var feed in m_feeds) {
-            // Only the endpoint of the instance the session observes, and only while it discloses everything.
+            // Only the endpoint of the instance the session observes, and only on the authority's proof.
             var endpoint = (((feed.Observation is { } observation) && m_instanceHost.TryWindowEndpoint(
                 endpoint: out var observed,
                 name: feed.InstanceName,
@@ -124,7 +125,8 @@ public sealed partial class WorldScreenBinder {
             feed.Home = home;
             feed.Route.Settle(
                 endpoint: (home ? null : endpoint),
-                presenter: presenter
+                presenter: presenter,
+                shared: ((endpoint is null) ? SharedSceneOf(feed: feed) : null)
             );
         }
     }

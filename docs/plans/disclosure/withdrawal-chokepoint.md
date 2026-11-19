@@ -8,7 +8,8 @@ property as one invariant, and designs the structural door that holds it, in
 place of the per-path guards the review kept finding ways around. A design
 review of the first draft found sixteen flaws in that door; this revision
 closes each at its cause and [answers them one by one](#the-design-reviews-findings-answered).
-Step 1 of [the build order](#the-build-order) is built; the rest is a design.
+Steps 1 and 6 of [the build order](#the-build-order) are built; the rest is a
+design.
 
 ## Summary
 
@@ -86,10 +87,10 @@ that hold by what a viewer can be shown.
 
 ### A session with restricted rows is drawn from the whole replica
 
-Confirmed, and closed by step 1. The test that lets a window join its
-destination's own scene (`WorldSessionObservation.DisclosesEverything`) read
-the tier and the body policy and nothing else; it now also requires
-`WorldRecipientView.ReadsEverything`.
+Confirmed, and closed. The test that let a window join its destination's own
+scene read the tier and the body policy and nothing else. Step 1 tightened it to
+every row read whole; step 6 replaced it with the authority's proof
+(`WorldSceneProof`), which compares the scene inputs themselves.
 
 The same session's own stream is filtered by more than that. Its document comes
 from the cursor's disclosed images, and each snapshot's fields, solid sizes and
@@ -759,7 +760,7 @@ same way.
 | A package's per-instance state ends with its generation | A type: the cell is issued per generation | Gets an empty cell |
 | A late completion cannot publish | One door: the runtime compares the completion's generation | Is dropped |
 | Shared lighting is read through its label | One door: the tables' accessor is the only binder of those buffers | Has no buffer to bind |
-| Sharing needs a proof | A type: a shared view is constructed from a proof and nothing else | Does not compile |
+| Sharing needs a proof | One producer each: `TryWindowEndpoint` for an endpoint and `SharedSceneOf` for a shared scene, each reading the current proof (the client cannot name the server's proof type, so no type carries it) | Has no other producer of what a route attaches to |
 | The display replaces a cut frame | One door: the presenter's owed replacement | Is not asked |
 
 ## What stays review-only
@@ -898,8 +899,8 @@ for the display. The second and third kinds are GPU legs the lead schedules.
    mirror unchanged. A law drops the connection: the span closes.
    *Built,* except the authored lease: `WorldDeliveryCursor` decides cuts and
    issues `WorldStreamStamp`s, `IClientSink` carries them and `DeliverCut`,
-   `WorldStreamIngress` orders a mirror's records, and
-   `WorldRecipientView.ReadsEverything` tightens the whole-replica test. Every
+   `WorldStreamIngress` orders a mirror's records, and the whole-replica test
+   was tightened until step 6's proof replaced it. Every
    accepted cut, terminal or not, withdraws the mirror to the undisclosed
    document with no body, route seed or queued cue, so the new generation fills
    it from empty. A remote observation session passes every record, its route
@@ -977,7 +978,25 @@ for the display. The second and third kinds are GPU legs the lead schedules.
    and a capture of the back buffer agree.
 6. **Sharing by proof.** The authority issues proofs; a shared view is
    constructed from one; the frame bound and each install check it. Deletes
-   `WorldSessionObservation.DisclosesEverything` and step 1's tightened test.
+   the whole-replica test with step 1's tightening of it.
+   *Built, the checks below not yet run:* the session sink issues a
+   `WorldSceneProof` at each `Replica` delivery from
+   `WorldRecipientView.SceneIdentity`, compared with an operator's
+   (`WorldSceneProof.SharesAuthority`), and `WorldInstanceHost.TryWindowEndpoint`
+   lets a window join its destination's scene only on a frame whose endpoint
+   mirror took a delivery the proof covers. Proof by content also lets two
+   sessions share with each other: sessions whose proofs carry one identity for
+   one world render one scene drawn from the first one's mirror, on a frame
+   whose latched delivery both proofs cover
+   (`WorldScreenBinder.SharedSceneOf`). That is the debug world's case: its
+   boot sessions cannot share the boot residency, because the shedding table
+   deals its faces from `sheddingCards`, which withholds from them, but they
+   are one audience and share one scene among themselves. An install needs no
+   separate check: what a job installs reaches a viewer only through the
+   window its route binds, which each frame settles from the current proofs.
+   The door is one producer, not a type: the client may not reference the
+   server, so the shared scene a route attaches to is made only by
+   `SharedSceneOf`, and an endpoint only by `TryWindowEndpoint`.
    *Check, offscreen:* in the debug world the painting wing's windows still
    share (the residency count is what it was), with the positive control that
    each draws. A restricted placement added to the destination by
@@ -1003,8 +1022,8 @@ Steps 1 and 2 are independent. Step 3 needs step 2, step 4 needs steps 1 and
 
 Each item is deleted in the step named for it above, never before.
 
-- On the authority's side: `WorldSessionObservation.DisclosesEverything` and
-  the second policy copy it stands for.
+- On the authority's side: the whole-replica test and the second policy copy
+  it stood for (deleted in step 6).
 - On the viewer's side: `WorldViewerAccess` and `WorldSessionAccess`,
   `WorldViewAccess` with its join and its retired value, the generated-name
   grammar in `WorldScreenBinder.AccessOf`, the binder's `ContentAccess` and
@@ -1064,8 +1083,12 @@ as `WorldDeliveryCursor.Generation` and `WorldStreamIngress`.
   a remote neighbour, which nothing in the debug world runs yet; the lane
   that next works on remote observation builds it.
 - Whether the scene a mirror hands out can become one type that the proof's
-  comparison walks, which would retire review-only item 3. The step 6 lane
-  decides when it sees the comparison's size.
+  comparison walks, which would retire review-only item 3. Decided for now:
+  no. The comparison is small (the frame identity the disclosure table already
+  keeps, and one term per row a scene reads), and its list of rows is one
+  function, `WorldSceneInputs.Rows`, which a new way to read a state row from a
+  scene owes a term. The scene emitter reads its mirror through many paths, so
+  one type would be a wide refactor of the client for a list of four kinds.
 
 ---
 

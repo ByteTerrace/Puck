@@ -66,11 +66,11 @@ public sealed partial class WorldScreenBinder {
     // entry to the scope holding them, and nearly every frame follows no new world.
     private void AddRoutedScreens(WorldRoutedScene scene) {
         var screens = new WorldNestedScreens<SessionFeed>(
-            definition: () => scene.Endpoint.Definition,
+            definition: () => scene.Definition,
             depth: 0,
-            head: WorldViewNames.Routed(authority: scene.Endpoint.Identity),
+            head: WorldViewNames.Routed(authority: scene.Name),
             shares: SharesProducer,
-            world: scene.Endpoint.Identity
+            world: scene.Authority
         );
 
         m_routedScreens.Add(
@@ -84,8 +84,8 @@ public sealed partial class WorldScreenBinder {
                     ? camera.Position
                     : null),
                 Feed: null,
-                Instance: scene.Endpoint.Identity,
-                Local: () => scene.Endpoint.Definition,
+                Instance: scene.Authority,
+                Local: () => scene.Definition,
                 Scene: scene
             )
         );

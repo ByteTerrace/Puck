@@ -47,20 +47,46 @@ public sealed class WorldSessionObservation : IDisposable {
         objB: server
     );
 
-    /// <summary>Gets a value indicating whether the observation is delivered everything its world holds right now: it has
-    /// not ended, it still observes the whole world, its admission discloses a <see cref="WorldDisclosureTier.Replica"/>,
-    /// its world's observer disclosure redacts no body, and its view reads every row whole
-    /// (<see cref="WorldRecipientView.ReadsEverything"/>), so neither its rows, its placements, its fields nor its solid
-    /// sizes are filtered. Only then may a viewer render its world's own whole replica in its place (a portal window
-    /// joining its destination's endpoint scene), since that replica shows it nothing its own delivery would not. Read on
-    /// the thread that steps the observed world.</summary>
-    /// <remarks>The test is declarative and conservative: a world that declares any restricted row, cell or zone the
-    /// session does not pass makes every window onto it keep a residency of its own, whether or not a member is hidden
-    /// now.</remarks>
-    public bool DisclosesEverything => (CanObserve && DisclosesWholeReplica(server: m_server, view: View));
+    /// <summary>Gets the authority's current proof about the scene inputs this observation's stream is handed, or
+    /// <see langword="null"/> while it is handed none a viewer may share: it has ended or stopped observing, or its
+    /// admission discloses less than a <see cref="WorldDisclosureTier.Replica"/>. Issued at each delivery
+    /// (<see cref="WorldSceneProof"/>). Read on the thread that steps the observed world.</summary>
+    public WorldSceneProof? SceneProof => (CanObserve ? m_sceneProof : null);
 
-    // Whether the session is handed the authority's whole replica: no body redacted and no row filtered.
-    internal static bool DisclosesWholeReplica(WorldServer server, WorldRecipientView view) => (RedactsNoBody(server: server) && view.ReadsEverything);
+    private WorldSceneProof? m_sceneProof;
+
+    // Issues the stream's proof for the delivery it has just been handed at an authority tick: the current proof stands
+    // while its identity and its standing beside a whole reader hold, and is closed for a new one otherwise. A row no
+    // scene reads never moves the identity, so it never refuses sharing.
+    internal void SettleSceneProof(ulong tick) {
+        var scene = (CanObserve ? View.SceneIdentity : null);
+        if (scene is not { } identity) {
+            CloseSceneProof(end: tick);
+            return;
+        }
+        var shares = (RedactsNoBody(server: m_server) && (identity == m_server.WholeSceneIdentity()));
+        if ((m_sceneProof is { } held) && (held.Scene == identity) && (held.SharesAuthority == shares)) { return; }
+        var previous = m_sceneProof;
+        m_sceneProof?.Close(end: tick);
+        m_sceneProof = new WorldSceneProof(first: tick, scene: identity, server: m_server, sharesAuthority: shares);
+        if ((previous?.SharesAuthority ?? !shares) != shares) {
+            m_server.Output.Narrate(channel: "world.session", text: (shares
+                ? $"[world.session: {Session.Describe()} is handed its world's whole scene; a window may draw it from that world's residency]"
+                : $"[world.session: {Session.Describe()} is handed less than its world's whole scene ({WhyNotWhole()}); a window draws it from the residency of the sessions handed scene {identity.Hex[..12]}]"));
+        }
+    }
+    // Ends the stream's proof: it stops observing, so nothing it was handed may be shared from now.
+    internal void CloseSceneProof(ulong end) {
+        m_sceneProof?.Close(end: end);
+        m_sceneProof = null;
+    }
+    // Why the stream's scene differs from a whole reader's, for the operator: a body redacted, a scene row withheld, or
+    // the placements as it is dealt them.
+    private string WhyNotWhole() => (!RedactsNoBody(server: m_server)
+        ? "its world's observer disclosure redacts bodies"
+        : ((View.FirstSceneRowWithheld is { } row)
+            ? $"row '{row}', which its scene reads, withholds from it"
+            : "its placements are dealt from rows it does not read whole"));
     // Whether the world's live observer disclosure hands a session every body as the authority holds it.
     internal static bool RedactsNoBody(WorldServer server) => new WorldSinkDisclosure(
         ObserverBodyIndex: -1,

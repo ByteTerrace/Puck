@@ -12,8 +12,8 @@ namespace Puck.World;
 // portal renders its own destination, recursively. Every other screen shows that world's own sources: a machine or a
 // probe its own host's (MachinesOf), a camera its own camera (WorldScreenBinder.NestedCameras), and text its own font
 // catalog's (WorldSessionSceneEmitter). Every feed renders as any session does: its destination's endpoint
-// scene while its session discloses everything, which every seat presented there and every other such feed at any depth
-// shares, or a residency of its own. Each view of a residency binds the screens of the level it renders
+// scene while its session's proof says it is handed the whole scene, which every seat presented there and every other such feed at any depth
+// shares, a scene shared with the feeds proved to be handed the same scene, or a residency of its own. Each view of a residency binds the screens of the level it renders
 // (ISdfScreenSources.ReadOf takes the view), so one world seen at two depths shows each level's own images.
 public sealed partial class WorldScreenBinder {
     // The presentation's nesting depth (the boot world's views.nestingDepth), read each produced frame.
@@ -224,7 +224,7 @@ public sealed partial class WorldScreenBinder {
             var via = (feed.Home
                 ? "world"
                 : ((RoutedWindowOf(feed: feed) is { } window)
-                    ? $"endpoint:{window.Scene.Endpoint.Identity}"
+                    ? ((window.Scene.Endpoint is null) ? $"shared:{window.Scene.Name}" : $"endpoint:{window.Scene.Authority}")
                     : (feed.Registered
                         ? "own"
                         : "unregistered")));

@@ -1308,20 +1308,19 @@ and each step's check, on [the residency decision](../decisions/residency.md):
 the residency wait, background GPU work's budget, the region's budget, staging
 and every memory owner are its steps. This packet holds the defects beside it.
 
-- [high] A debug-world boot whose meshes are not stored (any bake-identity
-  change) builds 55 residencies: each `self` and `wonderland` session screen
-  renders a residency of its own of the boot world
-  (`WorldScreenBinder.CreateSessionResidency`'s `[world.view: … renders a
-  residency of its own …]` line), nested sessions add more, and
-  `WorldViewGraphHost.ReserveArrivals` keeps every one rendering while its
-  meshes arrive. On the RTX 4070 the device pool then held 15.5 GB, 14.3 GB of
-  it fixed (each session's cascades: `session/sdf.world$shadowFarOptical` and
-  `$shadowNearOptical` 2.57 GB each, four depth and exit families 0.86 GB
-  each), the 8 GiB profile cap refused 16,467 workspace admissions, and the
-  world residency had baked 30 of 7,544 groups after 211 s. The fix owes the
-  memory bar: a session screen of the same world either shares the boot
-  residency's meshes or holds no cascades of its own until it is visible, and
-  arrival does not keep nested windows of a world that is still arriving.
+- [high] Measure the session-residency fix on the RTX 4070. A cold debug-world
+  boot built 55 residencies, one for each `self`, `wonderland` and nested
+  session screen of the boot world, and the device pool held 15.5 GB, mostly
+  the sessions' full-resolution cascades. Two causes are fixed: sessions whose
+  scene proofs carry one identity now share one scene
+  (`WorldFramePresenter.AttachSharedWindow`), and a session's own view takes
+  its `render.nested` quality (`WorldSessionSceneEmitter.ViewName`). The
+  boot sessions cannot share the boot world's own residency: the shedding
+  table deals its faces from `sheddingCards`, which withholds from them.
+  `WorldViewGraphHost.ReserveArrivals` keeps one window rendering for each
+  arriving residency, which is right once windows share. Still to read: the
+  residency count, the device pool's held and peak bytes, and the cascade
+  families at the hero spawn and in the painting wing.
 - [medium] Before sparse external targets are used, retain the exact host-word
   coverage of disjoint writes across remapping. `GpuRegion.StageOwed`
   (`src/Puck.Abstractions/Gpu/Residency/GpuRegion.cs`) re-owes the known prefix;
@@ -2380,7 +2379,7 @@ findings are answered in decision 3a. Then the researcher brief's priorities
   access is settled on the viewer's side from its observation
   (`WorldViewerAccess`, `WorldScreenBinder.AccessOf`), and three separate
   guards act on it (`IRenderGraphInstances.Withdraw`,
-  `WorldScreenBinder.ContentAccess`, `WorldSessionObservation.DisclosesEverything`).
+  `WorldScreenBinder.ContentAccess`, and the window sharing test, now `WorldSceneProof`).
   An adversarial review found a way around each, and
   [the withdrawal chokepoint](disclosure/withdrawal-chokepoint.md) checks its
   nine findings against the code and ranks the eight that hold in whole or in

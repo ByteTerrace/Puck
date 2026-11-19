@@ -175,7 +175,7 @@ public sealed partial class WorldScreenBinder {
         )) {
             FilmLevel(
                 level: routed,
-                mirror: scene.Endpoint.Mirror,
+                mirror: scene.Mirror,
                 target: scene,
                 views: views
             );
@@ -192,7 +192,7 @@ public sealed partial class WorldScreenBinder {
             ) {
                 FilmLevel(
                     level: level,
-                    mirror: scene.Endpoint.Mirror,
+                    mirror: scene.Mirror,
                     target: scene,
                     views: views
                 );

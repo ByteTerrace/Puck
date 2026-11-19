@@ -993,18 +993,20 @@ never holds a frozen phase from a future the authority never presented. The anch
 when the recipient leaves or loses disclosure, when its projection stops carrying the clock, or when its
 stream detaches, without waiting for the socket to drain.
 
-A portal window renders its destination from its own disclosed mirror unless its session is delivered
-everything the destination holds: a live session admitted at `Replica`, holding `observe all`,
-in a world whose observer disclosure redacts no body and none of whose rows, cells or zones can withhold
-from the session (`WorldSessionObservation.DisclosesEverything`, over `WorldRecipientView.ReadsEverything`).
-Only then does the window join the scene the presentation keeps for the destination's endpoint and
-render the endpoint's mirror, the destination's whole replica, since that shows it nothing its own
-delivery would not. A `Presentation` or `Frames` window, or one onto a world whose observer
-disclosure redacts or that declares any restriction the session does not pass, never renders the
-endpoint's mirror, and disclosure is never traded for the
-memory the shared residency saves. The session stays the gate: once it no longer discloses
-everything, the window leaves the scene and shows its own session again, and its input stays on the
-session either way.
+A portal window renders its destination from its own disclosed mirror unless the destination's
+authority proves that the window's session is handed the scene a whole reader is handed
+(`WorldSceneProof`). The authority issues the proof as it composes each delivery to a `Replica`
+session: it compares the content identity of the session's scene inputs
+(`WorldRecipientView.SceneIdentity`: the disclosed document less its state rows, and for each row a
+scene reads, `WorldSceneInputs` and the rows the placements read, whether the session reads it whole
+and otherwise its image) with an operator's, and requires an observer disclosure that redacts no body.
+A row no scene reads, such as a sealed inbox, never refuses sharing; a row the scene does read, such
+as the card row the shedding table deals its faces from, does. The proof covers a range of the
+authority's deliveries and closes at the first delivery that differs or when the session stops
+observing. The window joins the scene the presentation keeps for the destination's endpoint only on
+a frame whose endpoint mirror took a delivery the proof covers (`WorldInstanceHost.TryWindowEndpoint`),
+and leaves it otherwise; disclosure is never traded for the memory the shared residency saves, and
+the window's input stays on the session either way.
 
 A world's authority owns the sessions its screens and named infinity layers observe through.
 `WorldInstanceHost` opens one for every screen or placement face whose source is a session and every
@@ -1171,14 +1173,17 @@ same endpoint share one residency, with a view each. A window attached to that w
 seats' views, at its own quality; the scene stays while a seat is presented there or a window is
 attached. The presenter latches membership each frame: attachments enter at the next latch, and
 disposal reserves the window's slot through the current frame. A session screen whose session
-discloses everything joins its destination's scene this way (`WorldSessionRoute`), so every
-seat and every such session presenting one endpoint share exactly one residency, and its GPU node
-(`sdf:routed$<endpoint>`) reports that row: residencies made and released, and the bytes its
-tables hold by memory. Any other session screen renders a residency of its own from its own
-observation of the destination. A session of the boot world joins no scene: it renders as a view of the
-World's own residency, filmed after the World's camera views, so the boot world is resident once however
-many windows show it. The rule holds at every depth: a destination shown at two depths, or by a window and
-a seat, shares its one residency while each session discloses everything.
+shares its world's whole scene (`WorldSceneProof.SharesAuthority`) joins its destination's scene this
+way (`WorldSessionRoute`), so every seat and every such session presenting one endpoint share exactly
+one residency, and its GPU node (`sdf:routed$<endpoint>`) reports that row: residencies made and
+released, and the bytes its tables hold by memory. A session of the boot world that does joins no
+scene: it renders as a view of the World's own residency, filmed after the World's camera views. Sessions
+whose proofs carry one scene identity for one world, but less than the whole scene (a spectator of a
+card table whose faces it may not read), share a scene of their own, drawn from the first such
+session's mirror (`WorldFramePresenter.AttachSharedWindow`), joined on a frame whose latched delivery
+both proofs cover. Only a session alone in its scene renders a residency of its own. The rule holds at
+every depth: a destination shown at two depths, or by a window and a seat, shares one residency while
+each session's proof allows it.
 A session's access (none, what it discloses, or everything) is settled once a frame before any view of it
 is bound (`WorldViewerAccess`). When it narrows, the screen shows nothing it was shown before: every picture
 its view published, and every picture rendered over one, is withdrawn from the render graph
