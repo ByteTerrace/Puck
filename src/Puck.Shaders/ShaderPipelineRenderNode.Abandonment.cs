@@ -116,6 +116,7 @@ public sealed partial class ShaderPipelineRenderNode {
         if (ReferenceEquals(objA: m_handOverPending, objB: fence)) { SettleAs(reached: false); }
 
         m_slots[slot].ReadbacksOwed = false;
+        m_slots[slot].Settled = m_slots[slot].Submission;
         foreach (var pass in m_passes) {
             if (pass?.Package is IRenderGraphPackageReadback readback) {
                 readback.Abandoned(slot: slot);

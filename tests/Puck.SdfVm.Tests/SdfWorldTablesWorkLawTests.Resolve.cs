@@ -13,7 +13,8 @@ public sealed partial class SdfWorldTablesWorkLawTests {
         using var reflector = SdfTestPipelines.Reflector();
 
         Assert.True(condition: rig.Cache.Work.TryRead(kind: GpuWork.PipelinesCreated, value: out var nativePipelines));
-        Assert.Equal(actual: nativePipelines, expected: SdfWorldPipelines.BuildOrder(rig.Pipelines.Kernels).Count);
+        // A variant the fake device lacks the capability for is never leased (SdfWorldPipelines.Runs).
+        Assert.Equal(actual: nativePipelines, expected: SdfWorldPipelines.BuildOrder(rig.Pipelines.Kernels).Count(kernel => SdfWorldPipelines.Runs(device: rig.Gpu, kernel: kernel)));
         var initial = rig.Pipelines.Kernels;
         var bytes = SpirvEdits.WithGenerator(generator: 931, module: initial[SdfKernel.Resolve].Span);
         var changed = initial.With(bytecode: bytes, kernel: SdfKernel.Resolve);
