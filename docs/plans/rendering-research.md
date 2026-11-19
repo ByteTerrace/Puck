@@ -808,8 +808,8 @@ prototype.
 - **The two records are narrower than they look.** The mirror's revision
   does not move when an easing value is presented between two ticks, or
   when the presented tick moves. The revision vector covers only which
-  geometry exists. Eleven inputs have no record that can be read before a
-  capture, and eight of them are small additions to a type that already
+  geometry exists. Ten inputs have no record that can be read before a
+  capture, and seven of them are small additions to a type that already
   knows the answer.
 - **The shortcut should skip the capture and leave alone the decision of
   whether the picture stands.** Everything the residency reads after the

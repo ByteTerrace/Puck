@@ -44,9 +44,9 @@ and the draw list's revision are all written while a frame is captured or
 packed. They tell a consumer afterwards what moved. They cannot decide
 whether to capture.
 
-**Eleven inputs of the capture have no record that can be read before
-it.** [They are listed below](#inputs-with-no-early-record). Eight are
-small additions to a type that already knows the answer. One has an answer
+**Ten inputs of the capture have no record that can be read before it.**
+[They are listed below](#inputs-with-no-early-record). Seven are small
+additions to a type that already knows the answer. One has an answer
 that nothing consults. One, a view's camera, needs no record because
 comparing the few values is the record. The last is elapsed time, which no
 record can cover and a rule closes.
@@ -111,9 +111,10 @@ which runs once a frame (`SdfWorldResidency.IsUnchanged`,
 a capture froze, and not when the source films nothing. The mesh demand
 reads the views' eyes (`SdfMeshDemand.Observe`).
 The mesh dresser then opens the bake's one door from presentation
-(`SdfMeshDresser.Dress`): the bake notices a lost mesh, finishes
-replacements, starts a settle rebake, decides tiers, and hands over the
-baked meshes the frame draws. The dresser is built to dress the same frame
+(`SdfMeshDresser.Dress`): the bake notices a lost mesh, plans again the
+groups a moved input reaches, finishes replacements, gives detail back
+where the tables refused a mesh, decides tiers, and hands over the baked
+meshes the frame draws. The dresser is built to dress the same frame
 again, and answers that same frame when it does.
 
 **The upkeep**, which runs whichever frame is held.
@@ -156,10 +157,12 @@ hold the same frame.
 
 Four things follow from drawing the line there.
 
-- **The dresser's pass is upkeep and keeps running.** It is paced by
-  frames and by time, not by the scene: a tier decision counts frames, and
-  a lost mesh or a finished replacement arrives from outside. A source
-  that films nothing stalls all of it today. Running it on the held frame
+- **The dresser's pass is upkeep and keeps running.** Much of it is paced
+  by frames and by what arrives from outside, not by the scene: a tier
+  decision counts frames, and a lost mesh, a finished replacement or a
+  refused mesh comes from the bake's workers and the memory account. A
+  source that films nothing stalls all of it today. Running it on the held
+  frame
   keeps the bake moving, at the cost of one change in the residency: the
   mesh region is staged again when the dressed rows' revision moved, where
   today that happens only for a new frame object.
@@ -289,7 +292,7 @@ not skip.
 
 | Input | What records its change today | What the shortcut needs |
 |---|---|---|
-| The frame's wall interval (`FrameContext.FrameDeltaSeconds`), handed to the capture. A session measures its own instead | Nothing. It is positive on every presented frame | No record can cover it. The rule is that the capture is skipped only while every reader of elapsed time is at rest. Those readers are rows below: replay cursors, followers, drivers and the bake's settle |
+| The frame's wall interval (`FrameContext.FrameDeltaSeconds`), handed to the capture. A session measures its own instead | Nothing. It is positive on every presented frame | No record can cover it. The rule is that the capture is skipped only while every reader of elapsed time is at rest. Those readers are rows below: replay cursors, followers and drivers |
 | The interpolation fraction, which poses (`WorldClient.UpdateRenderPoses`) and bound values (`WorldStateMirror.Apply`) are presented at | `WorldStateMirror.PresentationFraction` holds the last one. Where it is applied it moves on almost every frame | The fraction matters only while something is between two samples. Two answers are missing: whether any pose is, and whether any slot is |
 | The capture extent (`SdfWorldResidency.RequestExtent`) | The two fields | Compare them |
 | The film gate, a callback given to the residency. A routed scene's takes the boot frame and fits its windows | None; it is code | Keep calling it. What it fits is a camera input, below |
@@ -330,7 +333,7 @@ not skip.
 | The presented tick (`WorldStateMirror.Presented`, carried as `SdfFrame.Clock`) | The value. It moves at least once for each delivery while the world ticks | Knowing whether anything reduces it. Four things do: a rate the environment integrates, a bounded medium's drift and pulse (`SdfVolumeMotion.At`), a flow layer's clock, and a sky layer's clock. The environment records the first. The other three are visible only as packed bytes |
 | Keyed values and state clocks (`WorldStateMirror.TryPhase`) | Each consumer's `WorldClockReads`. Early | Reuse it |
 | A clock scrubbed, held or re-rated from the console (`WorldStateMirror.ControlClock`) | None. A consumer notices only by reading the phase again | A counter the control moves |
-| Lights, sky, atmosphere, exposure settings, render lanes and indirect controls (`WorldEnvironmentResolve.Resolve`) | The resolver's own test of what it read. Early, and cheap | The test as an answer on its own: would it resolve again. Three things are applied after it on every frame and are not covered: a light anchored to a body, which is a pose; the shadow slots; and the sun disc's light, which follows the slots |
+| Lights, sky, atmosphere, exposure settings, render lanes and indirect controls (`WorldEnvironmentResolve.Resolve`) | The resolver's own test of what it read. Early, and cheap | The test as an answer on its own: would it resolve again. Three things are applied after it on every frame and are not covered: a light anchored to a body, which is a pose; the shadow slots; and the sun disc's light, which follows the key light |
 | A shadow slot's hand-off from one light to another (`WorldShadowSelection.CopyPresented`) | None. The selection advances at each delivery on its own, and the fade's weight is computed from the presented tick | Whether a hand-off is in progress. While one is, the presented tick is an input |
 
 ### Views and cameras
@@ -342,6 +345,7 @@ not skip.
 | A window's view (`WorldRoutedWindow.View`, `WorldSessionSceneEmitter.SetWindowFit`) | None; the holder sets it, or a callback fits it to the viewer's eye | Evaluate the fit and compare. This is the commonest reason a routed view moves: a window's frustum follows the viewer's eye, so a walking viewer moves every window in sight |
 | A session's own camera (`WorldSessionSceneEmitter.ResolveCamera`): the destination's camera row, its anchor's pose, its rig, and the destination's tick | None | Resolve it and compare. It is one rig evaluation, and it is the only way to see a rig that reads the tick |
 | Cameras filmed for the world's own screens, and the sky layers fitted to each view (`SdfViewSnapshot.SkyViews`) | None; callbacks add them | Part of the same compare. The views are resolved on every frame, and only the rest of the capture is skipped |
+| A nested view's quality, which follows the share of the display the view reached on the last measured frame (`WorldRenderSettings.NestedViewQuality`) | None for the share. The levers behind it move the settings' revision | Part of the view compare: the quality is a field of the view |
 | Layout, transitions and the render scale | None for the layout. The package compares scale and sharpness itself | Boot only, apart from the scale, which the package already checks |
 
 ### Levers and document values
@@ -354,14 +358,14 @@ not skip.
 
 ### What the dresser's pass reads
 
-The pass keeps running on a held frame, so only one of these needs
-anything.
+The pass keeps running on a held frame, so none of these needs anything
+from the frame source.
 
 | Input | What records its change today | What the shortcut needs |
 |---|---|---|
 | Mesh demand (`SdfMeshDemand.Observe`) | None | Nothing. It is a function of the views, which are compared |
-| The bake's products, a mesh the shared library lost (`SdfMeshLibrary.LostRevision`), and the tier each group is drawn at | The dressed rows' own revision (`SdfFrame.DrawRowsRevision`), moved by the dresser | Nothing from the frame source. The residency stages the mesh region again when that revision moves |
-| A settle rebake: a skinned group that has drifted from the pose it was baked at is baked again once it has been still for `SdfMeshSettle.SettleSeconds` | None before it starts. A group waiting out that time owes nothing, so `SdfMeshPathBake.Pending` is false | Whether a settle is owed. The watch reads the frame's time, which stops on a held frame, so a residency that skipped its captures would never start one |
+| The bake's products, a mesh the shared library lost (`SdfMeshLibrary.LostRevision`), a mesh the tables refused, and the tier each group is drawn at | The dressed rows' own revision (`SdfFrame.DrawRowsRevision`), moved by the dresser | The residency stages the mesh region again when that revision moves |
+| A group whose geometry reads a moving operand or a sampled field, planned again from the frame's transforms and fields | The frame's own transforms and sampled set | Nothing. A held frame carries the same ones |
 
 ### What the upkeep reads
 
@@ -417,9 +421,8 @@ large the addition is.
 9. **A background program build finishing.** The answer exists
    (`SdfCompositionFrameSource.Building`) and nothing consults it for
    freshness.
-10. **A settle rebake that is owed.** An answer on `SdfMeshPathBake`.
-11. **Elapsed time.** No record can exist. It is closed by the rule that
-    every reader of time reports rest, which is what gaps 5 and 10 supply.
+10. **Elapsed time.** No record can exist. It is closed by the rule that
+    every reader of time reports rest, which is what gap 5 supplies.
 
 The boot world's camera inputs (a seat's look, its four eases, the layout's
 transition) and its correction easers also have no record. They are not
@@ -438,8 +441,8 @@ and dresses the frozen frame again.
 
 The shortcut is the second case with another cause. The frame source
 gains one answer: a capture now would produce the frame it produced last.
-The residency asks unless a capture or lockstep holds the frame, or the
-bake owes a settle. On a yes it keeps the frame object it holds, presents
+The residency asks unless a capture or lockstep holds the frame. On a yes
+it keeps the frame object it holds, presents
 it as a converging capture does, and dresses it again. No second freshness
 mechanism is added. The tables see the same frame object and pack nothing,
 and they stage the mesh region only when the dressed rows moved.
@@ -530,20 +533,18 @@ long step.
   interval.
 - **Replay cursors, followers and drivers** are at rest whenever a capture
   is skipped, so there is nothing to catch up.
-- **The bake's settle** is refused for, not caught up: a capture runs
-  while one is owed.
-- **The bake's tiers, exposure and indirect light** never stop. They
-  advance in the dresser's pass and the upkeep.
+- **The bake, exposure and indirect light** never stop. They advance in
+  the dresser's pass and the upkeep.
 
 ## How the plan's rules and limits are met
 
-The plan sets three rules for the shortcut and the step designs add two
-limits. Each is answered here.
+The plan sets three rules for the shortcut, and the step's entry in
+[runtime and delivery](../runtime-and-delivery.md#the-presentation-view)
+adds two limits. Each is answered here.
 
 - **The existing refusals stay outside.** They belong to the decision the
-  shortcut does not touch. The skip adds two conditions of its own, and
-  each is work only a capture can do: a settle owed, and a build in
-  flight.
+  shortcut does not touch. The skip adds one condition of its own, for
+  work only a capture can do: adopting a program whose build is in flight.
 - **The audit compares with the full decision and counts.** For the
   capture, the full decision has a precise form: capture and pack as
   today, and see whether the pack changed any table besides the mesh
@@ -588,8 +589,10 @@ and what it decides.
 1. **Count the captures that changed nothing.** Have the pack report
    whether it changed any table besides the mesh region, and compare each
    view's pass block with the held frame's. Count, by residency, the
-   frames captured and the frames whose capture changed nothing, and time
-   the source's capture, the dresser's pass and the pack apart. No
+   frames captured and the frames whose capture changed nothing. The frame
+   thread's breakdown already times the capture and the pack apart for all
+   residencies together (`HostFrameWork`). Split those times by residency,
+   and time the dresser's pass apart from the source's capture. No
    behaviour changes.
 
    *Check:* on the benchmark's multi-view chapter the report lists each
@@ -605,8 +608,8 @@ and what it decides.
    to zero on the first frame after a tick and to one half on the next.
    The second frame's pack moves the creation's rows, counted as
    `SdfMovedTransforms.OwedRows`. If it moves none, the defect is real.
-3. **Add the early records** for gaps 1 to 6, 8 and 10, and consult the
-   answer of gap 9. Each is a member on the type named in the gap.
+3. **Add the early records** for gaps 1 to 6 and 8, and consult the answer
+   of gap 9. Each is a member on the type named in the gap.
 
    *Check, one for each:* a scenario moves only that input and reads the
    new member before and after. Where the input is state, a law over
@@ -633,8 +636,9 @@ Steps 1 and 2 need no decision about the bet and can start at once. Steps
 
 ## How this compares with incremental build systems
 
-The step designs ask for this reading beside the memo. Two sources were
-read for it, and a third is named for the research round.
+The plan lists this reading as [research still owed](step-designs.md#research-still-owed)
+beside the memo. Two sources were read for it, and a third is named for
+the research round.
 
 Salsa, an incremental computation framework for Rust, keeps one current
 revision and records for each input the revision in which it last changed.
