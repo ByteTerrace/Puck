@@ -750,7 +750,9 @@ check the flag: the owner may be holding the pad.
   `world.iteration begin <name>` before its own edit. Each line gives the
   seconds to the first frame from the edited content (`frame`), every mesh
   drawing its own geometry (`shown`), the bakes settled and resident
-  (`meshes`) and the lighting converged (`lit`); a settled loop also prints
+  (`meshes`) and the lighting converged (`lit`), then the compiles,
+  compositions, root members merged, documents read and validations the edit
+  cost; a settled loop also prints
   `[world.iteration] …` on stderr. `world.wait iteration <seconds>` waits for
   the latest loop. A change that slows a loop says so with these lines
   ([the iteration plan](../../../docs/plans/iteration.md)).
