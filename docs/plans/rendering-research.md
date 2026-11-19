@@ -1773,7 +1773,12 @@ engine counts:
   look critic is called only when the direction is in doubt. Lanes that
   change looks may land in the same batch.
 
-A lane lands on its build and boot; this evidence is gathered across the batch. Test requirements are lifted for the
+A lane lands on its build and boot; this evidence is gathered across the batch.
+In this wave the readiness boot is the lead's: with sixteen lanes on the lead
+machine the World build lease queued thirteen deep at about five minutes a
+build, so a lane hands back on the build of what it touched, and the lead
+boots each batch's merged tip headless and bisects a failure over the batch.
+A lane still starts a headless World when its reading decides what it builds. Test requirements are lifted for the
 refactoring campaign ([AGENTS.md](../../AGENTS.md#puck-is-pre-release)): no
 suite, coverage figure or recorded baseline is required of a change, and a
 test a change breaks is updated or deleted in that change. Equality with the
