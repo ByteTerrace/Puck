@@ -4295,7 +4295,9 @@ content on the owner's call.
   `AddonAbi.MaxChannels` first); the yard itself, `worlds/debug/combat.puck`,
   with a target-and-strike station, an elements station and hazards, the Moth
   casting through her gauntlets; then two clients on one authority with
-  speculative local movement replayed on correction.
+  speculative local movement replayed on correction. The yard also carries the
+  doors station of [portals in play](portals-in-play.md#8-the-debug-world-probe):
+  sentries that sight and fire through doors a player places.
 - Weather, particles and a climate wing
   ([decision](../decisions/engine-design.md#weather-is-a-regions-composition-of-generic-pieces)),
   after the job system: six sealed glass-walled bays east of the hall (calm,
@@ -4363,7 +4365,11 @@ reviews it and says so (the owner's ruling).
   at runtime by a player's action as an authored rule, aim at a surface
   rendered at astronomical distance, and a crossing between worlds with
   different gravity. Whether the moon admits a visitor's portal is the moon's
-  own grant.
+  own grant. The owner has since ruled that players place doors in play, and
+  [portals in play](portals-in-play.md#4-a-door-onto-another-world-opened-in-play)
+  designs the mechanism: the moon offers sockets and grants a visitor's offer.
+  The moon door itself, as debug-world content, still waits for the owner's
+  word.
 - Exposure per place and the tone curve left this list. Both are look values,
   which authors set and the owner is not asked to choose. The mechanisms
   they need, a blend of exposure across a doorway or a portal and the tone
