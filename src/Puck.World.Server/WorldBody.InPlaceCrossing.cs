@@ -57,6 +57,9 @@ public sealed partial class WorldBody {
             m_planarVelocity = Rate(rate: m_planarVelocity);
             m_planarPreviousTarget = Rate(rate: m_planarPreviousTarget);
             m_overlayVelocity = Rate(rate: m_overlayVelocity);
+            m_timedMove = m_timedMove with {
+                Motion = m_timedMove.Motion with { Displacement = Rate(rate: m_timedMove.Motion.Displacement) }
+            };
             m_rigidVelocity = Rate(rate: m_rigidVelocity);
             // A remainder is a per-axis numerator of a rate the pair just turned or scaled, below one raw unit.
             m_positionAccumulator.Reset();
@@ -78,6 +81,9 @@ public sealed partial class WorldBody {
                 source: in from
             );
 
+            if (HasTimedYaw && !TimedYawUsesTransport(m_up, m_attitudeUp)) {
+                m_timedMove = m_timedMove with { StartYaw = FixedQ4816.WrapAngle(radians: (m_timedMove.StartYaw + yawDelta)) };
+            }
             m_angularVelocity = Direction(direction: m_angularVelocity);
             m_obstructionWitness = Direction(direction: m_obstructionWitness);
             m_holdNormal = Direction(direction: m_holdNormal);

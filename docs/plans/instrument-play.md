@@ -272,16 +272,10 @@ hand is the probe that measures this gap, in a later stage.
 
 ### The body
 
-**A move cannot turn the body or follow a shaped path (gap F).** A kit action
-and a rule can launch a body, scale its vertical speed and ride one planar
-direction at one speed (`WorldEffect.SetVerticalVelocity`,
-`WorldEffect.PlanarImpulse`). The motion programs have no operation that turns
-a body through an angle over a duration or moves it along an eased path
-(`BodyMotionOp`). A spin that the rig alone performs would leave the
-simulation facing the old way while strikes are judged by facing, which fakes
-the system the move shows. The existing
-[play-feel packet](open-items.md#dual-stick-play-and-the-moths-motion) already
-wants a rate-limited facing operation for another reason.
+Stage 4 can use `easedTimedMove` from [the standard motion library](../../worlds/standard/motion.puck)
+to move the simulated body and turn its facing over the same interval. For a
+leap, combine it with `setVerticalVelocity` for the vertical launch. The usual
+body sweep resolves the requested travel against the floor and obstacles.
 
 **A strike is a distance test (dependency).** `interactions` pair bodies by
 range. A strike that lands where the leg is, a telegraph a target can read
@@ -423,14 +417,13 @@ stop at a gap.
 | Research round | The six topics in [research owed](#research-owed), one researcher a topic across the families, one synthesis, one adversarial review | Researchers: Sol, Neon, an Opus `specialist`. Synthesis: `principal`. Review: Astra. | A round wants divergent sources and a reviewer from another family than the author | Now |
 | Concept art | The pack in [the brief](#the-concept-art-brief) | Codex art lane (Sol with `image_generation`), a Claude partner checking constraints | Codex is the primary artist and judge by ruling | Now |
 | Pose clips (gaps A, B, C) | A design memo, reviewed, then the mechanism: interpolated key poses played by a driver with a weight and a shape mask; an effector target on the creation's own shape; the decision on a presentation-side input signal | Design: `principal`. Review: Astra. Build: an Opus `specialist`. | The rig's layering is invariant-heavy (the skin envelope and the bounds read swings), and a wrong design costs every later stage | Now |
-| Timed turn and shaped move (gap F) | A motion operation or effect that turns a body and moves it along an eased path through the one sweep door, with its predicted displacement readable | Sol at `high` | Fixed-point body motion with a refusal path; a Codex slot takes specialist physics work | Now |
 | Delivered cues and music that follows rules (gaps I, J, K) | A design memo, reviewed, then: rule cues in the delivered tick, with a numeric argument a patch reads as pitch; one lane feeding sound and pose cues; score conditions on rule cues; layer gain in the mix; a voice-stealing rule | Design and build: Sol at `high`. Review: an Opus `specialist`. | It changes what crosses the wire, which is a disclosure question; another family reviews | Now |
 | Body lanes (gap D) | More per-body carriers for shading-time values, or a second carrier, as the design finds | An Opus `specialist` | A C# and HLSL layout pair with a generated side | After the rendering wave's lanes that edit the same pass block land |
 | Haptics (gap L) | A world-authored pulse on a seat's pad, driven by state | Hydrogen | A specified wiring of an existing output interface | Now |
 | Standard package: the judge | Stage 1's channels, mode, bindings, phrase rows and rules in `worlds/standard/`, with the debug world's score | `implementer` | The mechanisms exist and the fixture shows the shape | Now |
 | The instrument and the hands | Stage 2: the creation, the segmented fingers, the playing stance and the fingering poses on the Moth | An Opus `specialist`, as a look lane with the probe rule | A creation built to push the rig; it stops at gaps A, B and E | After the pack's instrument panels; it meets the pose-clip lane |
 | Sound and score | Stage 3's patches, cues, tunes and score layers | `implementer` | Authored data once the cue lane lands | After the delivered-cue lane |
-| The dance | Stage 4's moves: kit actions, footwork, strikes and their clips | An Opus `specialist`, as a look lane | Whole-body motion judged on sheets from every side | After the timed-turn and pose-clip lanes |
+| The dance | Stage 4's moves: kit actions, footwork, strikes and their clips | An Opus `specialist`, as a look lane | Whole-body motion judged on sheets from every side | After the pose-clip lane |
 | Interplay and effects | Stage 5's mixed phrases, finishers and effects | `implementer` | Rules over state that stages 1 and 4 define | After stages 1 and 4 |
 | The places | Stage 6's gallery exhibit, the valley stage, the route chapter and the guides | `implementer` for the documents, with the feature lead's captures | World authoring on existing families | After stage 5 |
 | The crowd | Stage 7's workloads and its counted report | Sol | A measurement lane whose findings go to the plans that own them | After stage 6 |

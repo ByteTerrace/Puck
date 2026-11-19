@@ -1,5 +1,6 @@
 using Puck.World.Client;
 using Puck.Commands;
+using Puck.World.Protocol;
 using Puck.World.Server;
 
 namespace Puck.World;
@@ -15,13 +16,13 @@ namespace Puck.World;
 /// The sections are authored through <c>world.row.set render</c>; every field is optional and an
 /// absent one reads <c>default</c>, which is the engine's pinned value for that field of that kind, not zero.
 /// </summary>
-public sealed class WorldLightingCommandModule(IWorldConsoleAuthority authority, Func<WorldDefinition, string?>? shadowReport = null) : ICommandModule {
+public sealed class WorldLightingCommandModule(IWorldConsoleAuthority authority, Func<WorldDocumentVersion, string?>? shadowReport = null) : ICommandModule {
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
         yield return authority.CreateServerQueryCommand(
             description: "Reports the render lighting, sky, atmosphere, environment and tone census: lights, named shadow holders, curvature, sky layers, fog, haze, medium, ambient/reflection gains and the world render lanes (render.lanes, lanes 4 to 7). Each keyed value, including a field keyed through a section, reports its clock, key count and cadence class (visual-only, lighting-visible, shadow-direction or geometry-or-camera). Sky fields follow their layer visibility, while discs remain visual-only; environment gains and fog density are lighting-visible. An unauthored field reads 'default'. Immediate; the stdin barrier reads settled state after pending mutations.",
             describe: (server, view) => ((WorldLightingText.Describe(definition: view.Definition) + " | ")
-                + (shadowReport?.Invoke(view.Definition) ?? "shadowSlots unavailable: no presented frame of this authority")),
+                + (shadowReport?.Invoke(server.DocumentVersion) ?? "shadowSlots unavailable: no presented frame of this authority")),
             name: "world.lighting"
         );
     }

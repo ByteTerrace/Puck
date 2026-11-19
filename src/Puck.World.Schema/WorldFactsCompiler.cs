@@ -182,7 +182,7 @@ public static partial class WorldFactsCompiler {
     /// <summary>Checks and lowers one body-motion effect in a world rule through <see cref="WorldBodyEffects"/>, the
     /// check a kit's action lowers through, then resolves the body it names and, for a designation, the body it
     /// designates.</summary>
-    /// <param name="effect">The authored effect; one of the four <see cref="WorldBodyEffects.IsBodyMotion"/> admits.</param>
+    /// <param name="effect">The authored effect, as admitted by <see cref="WorldBodyEffects.IsBodyMotion"/>.</param>
     /// <param name="ruleName">The rule being compiled.</param>
     /// <param name="context">The compile context.</param>
     /// <returns>The compiled effect.</returns>
@@ -229,9 +229,10 @@ public static partial class WorldFactsCompiler {
 
         return new WorldBodyMotionEffect(
             action: new WorldBodyAction(
+                Curve: form.Curve,
                 Designation: form.Designation,
                 Direction: form.Direction,
-            UseMoveDirection: form.UseMoveDirection,
+                UseMoveDirection: form.UseMoveDirection,
                 DurationTicks: form.DurationTicks,
                 Operation: form.Operation,
                 Register: form.Register,
