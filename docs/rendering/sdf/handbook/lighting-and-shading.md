@@ -593,7 +593,9 @@ and inks while its neighbours keep theirs, and one scene mixes cel-styled
 creations with continuous ones (the gallery's `shape-cel` and `shape-cel-hard`
 exhibits on level 3). The styles (`celStyle`, `celHardStyle`) are data there:
 the program's values (`threshold`, `softness`, `shadowTint`, `specularSize`,
-`combined`) and an `ink` row. A world that wants every material styled names
+`combined`, `restore`, `bleed`, `form`) and an `ink` row. `celMaterial` composes
+the program after the row's own (`shade [base.shade, cel(...)]`), so a terrain or
+weathered row keeps its surface under the band. A world that wants every material styled names
 the program as its `render.shade` and the ink as its `render.toon`; a row with
 `toon: continuousStyle` (`enabled: false`) stays unstyled under it. The engine
 holds no look of its own: a style row that is on authors every outline value,
@@ -610,8 +612,13 @@ so the cascades' filtered penumbra keeps its softness and its colour under the
 band's edge. `combined: 1` bands the cosine and the visibility together,
 `band(cosine × visibility)`, the harder look in which a penumbra snaps to the
 band. A short soft terminator joins the two tones; `threshold` places it and
-`softness` is its full cosine width. Indirect light and sky ambient take the
-linear RGB `shadowTint`, with ambient occlusion still affecting them. Specular
+`softness` is its full cosine width. The shade is painted rather than left to
+whatever light fills it: `restore` gives each light's shade side that share of
+the light back over the half-cosine, and `bleed` is how much of the sky and
+bounce's own hue survives (the rest is their luminance), both under the linear
+RGB `shadowTint`, with ambient occlusion still affecting them, so a lawn's green
+bounce does not turn every shade olive. `form` keeps that share of the cosine's
+falloff on the lit side, so a lit mass still reads round. Specular
 lobes become bounded discs: `specularSize` is one minus their half-vector
 cosine. The banded lights shade the paint flat, metals included; the rim
 lights, the environment reflection and ambient occlusion stay in the cel
