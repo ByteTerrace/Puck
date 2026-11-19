@@ -1,4 +1,5 @@
 using Puck.Audio.Simulation;
+using Puck.World.Authoring;
 using Puck.World.Protocol;
 using Puck.World.Server;
 
@@ -9,6 +10,7 @@ public sealed partial class WorldAudioDirector {
     private MusicDirector? m_deliveredMusic;
     private string? m_deliveredScoreHash;
     private WorldDefinition? m_bootAudioDefinition;
+    private WorldDefinition? m_routedAudioDefinition;
     private WorldSessionMirror? m_routedAudio;
 
     internal void PresentLocalCues(WorldDefinition definition, WorldPresentationCueTick tick) {
@@ -25,16 +27,25 @@ public sealed partial class WorldAudioDirector {
         lock (m_gate) {
             if (!ReferenceEquals(mirror, m_routedAudio)) {
                 m_routedAudio = mirror;
+                m_routedAudioDefinition = null;
                 m_deliveredMusic = null;
                 m_deliveredScoreHash = null;
                 m_activeMusicLayers = [];
                 m_transients.Clear();
                 m_pendingTriggers.Clear();
             }
-            var definition = mirror?.Definition ?? m_bootAudioDefinition;
-            if (definition is null) { return; }
-            if (!ReferenceEquals(definition, m_definition)) { ReconcileDefinition(definition); }
-            if (mirror is null) { return; }
+            if (mirror is null) {
+                if (m_bootAudioDefinition is { } local && !ReferenceEquals(local, m_definition)) { ReconcileDefinition(local); }
+                return;
+            }
+            var definition = mirror.Definition;
+            if (!ReferenceEquals(definition, m_routedAudioDefinition)) {
+                m_routedAudioDefinition = definition;
+                ReconcileDefinition(definition with {
+                    PatchesRaw = [.. definition.Patches.Where(patch => WorldAssetRowLoader.IsEmbeddedAudio(patch.Source))],
+                    TunesRaw = [.. definition.Tunes.Where(tune => WorldAssetRowLoader.IsEmbeddedAudio(tune.Source))],
+                });
+            }
             while (mirror.AudioCueFrames.TryTake(out var tick)) { PresentDeliveredCues(definition, tick); }
         }
     }
@@ -42,10 +53,15 @@ public sealed partial class WorldAudioDirector {
     private void PresentDeliveredCues(WorldDefinition definition, WorldPresentationCueTick tick) {
         foreach (var delivered in tick.Cues) { SubmitCue(delivered.Cue.Name, delivered.Site, delivered.Cue.Argument); }
 
-        var score = definition.Music is { Count: > 0 } music ? music[0] : null;
+        var score = definition.Music is { Count: > 0 } music &&
+            (m_routedAudio is null || WorldAssetRowLoader.IsEmbeddedAudio(music[0].Source)) ? music[0] : null;
         if (!string.Equals(score?.Hash, m_deliveredScoreHash, StringComparison.Ordinal)) {
             m_deliveredScoreHash = score?.Hash;
-            m_deliveredMusic = score is not null && WorldAssetRowLoader.TryLoadMusic(definition.DocumentDirectory, score, out var document, out _)
+            m_deliveredMusic = score is not null && WorldAssetRowLoader.TryLoadMusic(definition.DocumentDirectory, score, out var document, out _) &&
+                MusicCanonicalizer.Validate(document!).Count == 0 && document!.Segments.All(segment =>
+                    (segment.Transitions ?? []).All(x => WorldAudioCue.IsMusicWhenToken(x.When)) &&
+                    (segment.Layers ?? []).All(x => x.When is null || WorldAudioCue.IsMusicWhenToken(x.When)) &&
+                    (segment.Embellishments ?? []).All(x => WorldAudioCue.IsMusicWhenToken(x.When)))
                 ? new MusicDirector(MusicDirectorFactory.CompileGraph(document!)) : null;
         }
         if (m_deliveredMusic is not { } director) { SetActiveMusicLayers([]); return; }

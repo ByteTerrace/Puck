@@ -1202,6 +1202,7 @@ export type CreationBehaviorDocument = {
       vibratoDepthMillihertz?: number | null;
       vibratoRateMillihertz?: number | null;
       durationFrames?: number | null;
+      pitchFromCueArgument?: boolean;
     };
     /**
      * The emitter level (null = 1 — unity).
@@ -7468,6 +7469,10 @@ export type WorldEffectEmitCue = {
    * The body the cue is about — a body index, a $cell: indirection, or a bound key.
    */
   key?: StateChannelRefNonNullable;
+  /**
+   * An optional integer expression, interpreted by the cue's consumer.
+   */
+  argument?: ExpressionProgramNonNullable2;
 };
 
 /**
@@ -9587,7 +9592,7 @@ export type WorldMusicRow = {
    */
   name: string;
   /**
-   * The referenced document's file path, relative to the authoring document's directory or absolute.
+   * The authored document path or the embedded canonical score in a recipient projection.
    */
   source: string;
   /**

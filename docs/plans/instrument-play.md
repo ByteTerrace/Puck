@@ -334,8 +334,10 @@ target against the same entity image the recipient receives. The event's
 presence, tick and payload all have the same audience. Authority narration
 stays on the authority. Filter before any cue can affect the projection cadence,
 and do not put cues in the primer or carry withheld events into a later tick.
-The rule read footprint describes direct dependencies. Explicit writes across
-audiences remain authored disclosures under the
+The rule footprint includes its gate, bindings, effects, decision options and
+group trigger. Cells with variable audiences and host facts whose disclosure
+cannot be proved use conservative visibility. Explicit writes across audiences
+remain authored disclosures under the
 [disclosure decision](disclosure.md#where-the-boundary-stands).
 
 Scores match `cue:<name>` alongside the existing world event conditions.
@@ -402,7 +404,7 @@ by 1440 on Direct3D 12, with a Vulkan boot of the same stops.
 | | | Chase: the default boom | The stance reads as playing in silhouette from behind and from three-quarter view, and the gait's leg cycle is unchanged against the build before. |
 | | | In motion | An eight-frame presented burst of a fast phrase shows the fingers with no trail behind them and no flicker on the still hand. `world.debug-view shadow` shows each finger's shadow on the gauntlet at the close camera. |
 | | | Counter | Draws, vertices and transform rows for one Moth before and after, from `world.counters gpu` and `sdf.instances`. |
-| 3. It sounds, and the music answers | A press sounds its pitch at the avatar. The score adds a layer as a phrase gains strength and marks its completion. The pad pulses on the beat. | State and read-back | `speaker.state` shows the cue for each graded note with its pitch. `music.state` shows the layer enter on the tick the phrase's strength crosses its threshold. The tick of each note's cue equals the tick its finger cell changed. |
+| 3. It sounds, and the music answers | A press sounds its pitch at the avatar. The score adds a layer as a phrase gains strength and marks its completion. The pad pulses on the beat. | State and read-back | The delivered note's argument matches the pitch in the audio capture. `speaker.state` shows the note's patch and the layer emitter. The tick of each note's cue equals the tick its finger cell changed. |
 | | | Clip | A `capture.start` clip of an eight-beat phrase, inspected: each note is heard as its finger lands, and no note is doubled or dropped. |
 | | | Topology | The same script against an authority in another process gives the same `speaker.state` cues on the client. |
 | 4. The body dances | The dance input mode, three moves with real travel (a step, a spin, a leap), and strikes on their active ticks. | State | A scripted move on flat ground ends at its authored displacement and facing. The same move into a wall, up a kerb and down a slope ends where contact allows, with no `sweep=refused` in `body.where`. A strike on the beat and one off it write different damage to a target's state. All of it reproduces. |

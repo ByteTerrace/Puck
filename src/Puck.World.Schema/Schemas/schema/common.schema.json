@@ -7463,6 +7463,11 @@
           "$ref": "#/$defs/StateChannelRefNonNullable",
           "description": "The body the cue is about \u2014 a body index, a $cell: indirection, or a bound key.",
           "default": null
+        },
+        "argument": {
+          "$ref": "#/$defs/ExpressionProgramNonNullable2",
+          "description": "An optional integer expression, interpreted by the cue\u0027s consumer.",
+          "default": null
         }
       },
       "required": [

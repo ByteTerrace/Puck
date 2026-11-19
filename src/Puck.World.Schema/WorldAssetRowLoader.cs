@@ -42,12 +42,12 @@ public static class WorldAssetRowLoader {
 
         if (IsEmbeddedAudio(source)) {
             try {
-                var bytes = Convert.FromBase64String(source[InlineJson.Length..]);
-                if (!string.Equals(Puck.Assets.ContentPin.Compute(bytes).Hex, hash, StringComparison.Ordinal)) {
+                var embedded = Convert.FromBase64String(source[InlineJson.Length..]);
+                if (!string.Equals(Puck.Assets.ContentPin.Compute(embedded).Hex, hash, StringComparison.Ordinal)) {
                     error = "embedded audio source does not match its content pin.";
                     return false;
                 }
-                document = JsonSerializer.Deserialize<TDocument>(bytes, DocumentJsonOptions.Shared);
+                document = JsonSerializer.Deserialize<TDocument>(embedded, DocumentJsonOptions.Shared);
                 error = document is null ? "embedded audio source parsed to no document." : null;
                 return document is not null;
             } catch (Exception exception) when (exception is FormatException or JsonException) {

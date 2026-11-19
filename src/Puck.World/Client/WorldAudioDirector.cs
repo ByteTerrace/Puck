@@ -1872,7 +1872,7 @@ public sealed partial class WorldAudioDirector : IWorldAudioLever, IWorldAudioFr
             }
         }
     }
-    /// <summary>Fires a director embellishment — the same transient-cue mechanism <see cref="SubmitCue"/> uses,
+    /// <summary>Fires a director embellishment — the same transient-cue mechanism <see cref="SubmitCue(string, Vector3?)"/> uses,
     /// generalized to a patch chosen at FIRE time (the compiled <c>MusicEmbellishment.PatchId</c>, authored per
     /// embellishment) rather than looked up from a fixed <c>audio.cues</c> row keyed on a shared token: several
     /// embellishments in one world can each voice a different patch, which the token→row cue table cannot express.

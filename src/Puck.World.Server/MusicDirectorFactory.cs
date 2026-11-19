@@ -28,9 +28,7 @@ public static class MusicDirectorFactory {
 
     /// <summary>Compiles an authored score into a sim-side segment graph. Every non-null <c>when</c> token maps to a
     /// sense family by construction: the world schema validator refuses any token outside
-    /// <see cref="WorldAudioCue.MusicWhenTokens"/>, the single source <see cref="ParseFamily"/> mirrors. Neither a
-    /// layer's authored <c>gainThousandths</c> nor an embellishment's is compiled here — see
-    /// <c>Puck.Assets.Documents.MusicLayerDocument.GainThousandths</c>'s remarks.</summary>
+    /// <see cref="WorldAudioCue.IsMusicWhenToken"/>. The compiled layers carry their mix gains.</summary>
     /// <param name="document">The validated, normalized music document.</param>
     /// <returns>The compiled segment graph.</returns>
     public static MusicSegmentGraph CompileGraph(Puck.World.Authoring.MusicDocument document) {

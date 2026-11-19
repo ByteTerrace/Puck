@@ -8,6 +8,10 @@ public sealed partial class WorldRuleHost {
     internal sealed record CueReads(int[] Rows, string[] Placements, bool FullBodies, bool AuthorityOnly);
 
     private void CompileCueReads() {
+        if (!m_rules.Any(HasCue) && !m_interactions.Any(HasCue)) {
+            m_cueReads = new(StringComparer.Ordinal);
+            return;
+        }
         var reads = new Dictionary<string, HashSet<int>>(StringComparer.Ordinal);
         var factsByRule = new Dictionary<string, RuleNeedsBuilder>(StringComparer.Ordinal);
         var wholePopulation = new HashSet<string>(StringComparer.Ordinal);
@@ -84,6 +88,13 @@ public sealed partial class WorldRuleHost {
             m_cueReads.Add(name, new(rows.ToArray(), placements.ToArray(), fullBodies, authorityOnly));
         }
     }
+
+    private static bool HasCue(CompiledRule rule) => ContainsCue(rule.Effects) ||
+        (rule is CompiledWorldFactsRule { Decision: { } decision } &&
+        (ContainsCue(decision.OnNoChoice) || decision.Options.Any(option => ContainsCue(option.Effects))));
+
+    private static bool ContainsCue(IRuleEffect[] effects) => effects.Any(effect =>
+        effect is WorldCueEffect || effect.Arms.Any(ContainsCue));
 
     private static void CollectCueFacts(IRuleEffect[] effects, RuleNeedsBuilder facts) {
         foreach (var effect in effects) {

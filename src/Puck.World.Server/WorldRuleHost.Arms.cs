@@ -272,7 +272,8 @@ public sealed partial class WorldRuleHost {
             Tick: tick
         );
 
-        if (ReferenceEquals(Arena, m_cueArena) && m_tickCueReads.TryGetValue(firing.RuleName, out var reads)) {
+        if (ReferenceEquals(Arena, m_cueArena) && ReferenceEquals(m_tickCueReads, m_cueReads) &&
+            m_tickCueReads.TryGetValue(firing.RuleName, out var reads)) {
             Host.Tick.RecordCue(cue, reads, Arena);
         }
         if (Host.Output.HasNarrationSink) {
