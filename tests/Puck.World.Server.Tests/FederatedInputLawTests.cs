@@ -48,6 +48,9 @@ public sealed class FederatedInputLawTests {
         using var restored = Fixtures.FreshServer(definition);
 
         restored.Server.RestoreCheckpoint(checkpoint: decoded);
+        // A peer's grant rows are minted by its admission and are no part of a checkpoint, so the restored authority is
+        // given the row its admission would mint.
+        restored.Server.Grant(new(actor, WorldCapability.Drive, GrantSubject.Body(index: Body), false, Budget: 8, Reach: new(["tap", "delta"])), Principal.Console);
         fixture.Step(); restored.Step();
         Assert.Equal(WorldStateHashComposition.HashAuthoritative(server: fixture.Server, tick: tick), WorldStateHashComposition.HashAuthoritative(server: restored.Server, tick: tick));
         Assert.True(condition: owner.TryEvent(channel: tap, kind: WorldInputEventKind.Press, occurrence: 0, record: out var first));

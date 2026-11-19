@@ -61,6 +61,6 @@ public sealed partial class ConsoleDisclosureLawTests {
         Assert.True(missingHost.LastEcho!.Value.Denied);
         Assert.True(withheldHost.LastEcho!.Value.Denied);
         Assert.Equal(payload, Assert.IsType<Puck.World.Protocol.WorldMutation.UpsertStateCell>(
-            missingHost.LastEcho.Value.Mutation).RawToken);
+            missingHost.LastEcho.Value.Mutation).CommandTail);
     }
 }

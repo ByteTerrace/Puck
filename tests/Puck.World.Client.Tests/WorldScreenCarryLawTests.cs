@@ -43,9 +43,14 @@ public sealed class WorldScreenCarryLawTests {
             Group = 1,
         })
     ) with {
+        // The pose holds the picture where it rests; the ball it moves a hair, so a part has a writer and the body is pooled
+        // (a creation whose frames move no shape is rigid and has no rig to carry from).
         Frames = [new FrameDocument(
             Name: frame,
-            Transforms: [new FrameTransformDocument(Id: 1, Position: PictureAt, Rotation: Quaternion.Identity)]
+            Transforms: [
+                new FrameTransformDocument(Id: 1, Position: PictureAt, Rotation: Quaternion.Identity),
+                new FrameTransformDocument(Id: 2, Position: new Vector3(x: 0.01f, y: 0f, z: 0f), Rotation: Quaternion.Identity),
+            ]
         )],
     });
     private static WorldLook HolderLook(params string[] poses) => new(

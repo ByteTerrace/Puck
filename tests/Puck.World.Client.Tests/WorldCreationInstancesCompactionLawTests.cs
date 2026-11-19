@@ -33,6 +33,30 @@ public sealed class WorldCreationInstancesCompactionLawTests {
             HashRaw: canonical.Hash
         );
     }
+    // A creation whose frame poses `mover` at `position`: the shape has a writer, so the creation is not rigid and its
+    // body is pooled, the mover riding a slot of its own.
+    private static WorldPrototype MovedByAFrame(ShapeDocument mover, Vector3 position, params ShapeDocument[] shapes) {
+        var creation = Creation(shapes);
+        var canonical = CreationCanonicalizer.Canonicalize(
+            document: creation.Document with {
+                Frames = [new FrameDocument(
+                    Name: "move",
+                    Transforms: [new FrameTransformDocument(
+                        Id: mover.Id,
+                        Position: position,
+                        Rotation: Quaternion.Identity
+                    )]
+                )],
+            },
+            source: "compact"
+        );
+
+        return new WorldPrototype(
+            Id: creation.Id,
+            Document: canonical.Document,
+            HashRaw: canonical.Hash
+        );
+    }
     private static SdfProgram Emit(WorldCreationInstances pool) {
         var builder = new SdfProgramBuilder();
 
@@ -83,33 +107,17 @@ public sealed class WorldCreationInstancesCompactionLawTests {
             id: 1,
             group: 7
         );
-        var creation = Creation(
+        var creation = MovedByAFrame(
+            mover: second,
+            position: new Vector3(
+                x: 2f,
+                y: 0f,
+                z: 0f
+            ),
             first,
             second
         );
-        var canonical = CreationCanonicalizer.Canonicalize(
-            document: creation.Document with {
-                Frames = [new FrameDocument(
-                    Name: "move",
-                    Transforms: [new FrameTransformDocument(
-                            Id: second.Id,
-                            Position: new Vector3(
-                                x: 2f,
-                                y: 0f,
-                                z: 0f
-                            ),
-                            Rotation: Quaternion.Identity
-                        )]
-                )],
-            },
-            source: "compact"
-        );
 
-        creation = new WorldPrototype(
-            Id: creation.Id,
-            Document: canonical.Document,
-            HashRaw: canonical.Hash
-        );
         Reconcile(
             pool,
             creation,
@@ -149,17 +157,29 @@ public sealed class WorldCreationInstancesCompactionLawTests {
             Scale = new Vector3(value: 2f),
         };
 
+        // A third shape on a frame gives the creation part motion, so it is pooled; the solid and the cutter stay on the root.
+        var mover = Shape(
+            id: 2,
+            group: 8
+        );
+
         Reconcile(
             pool,
-            Creation(solid, cutter) with { Document = Creation(solid, cutter).Document with { Frames = [new FrameDocument(Name: "rest", Transforms: [])] } },
+            MovedByAFrame(
+                mover: mover,
+                position: new Vector3(
+                    x: 0f,
+                    y: 0f,
+                    z: 1f
+                ),
+                solid,
+                cutter,
+                mover
+            ),
             0
         );
-        var group = Assert.Single(collection: Emit(pool: pool).Instances);
+        var group = Assert.Single(collection: Emit(pool: pool).Instances, predicate: static instance => (instance.Slot == SlotBase));
 
-        Assert.Equal(
-            SlotBase,
-            group.Slot
-        );
         Assert.InRange(
             group.Radius,
             0.1f,

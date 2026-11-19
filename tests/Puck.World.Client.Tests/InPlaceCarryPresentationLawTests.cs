@@ -135,7 +135,8 @@ public sealed class InPlaceCarryPresentationLawTests {
     // A one-shape creation whose one driver reads the body's vertical speed, ungated and unfollowed; with `shaft`, in a
     // world standing a floor door under its ceiling counterpart.
     private static (WorldClient Client, WorldCreationInstances Pool, DynamicTransform[] Transforms) Stage(bool shaft = false) {
-        var creation = CreationFixtures.Prototype(id: "faller", document: new CreationDocument(
+        // A driver writes no part, so a frame moves the one shape a hair and the body is pooled with a rig to read.
+        var creation = CreationFixtures.Articulated(creation: CreationFixtures.Prototype(id: "faller", document: new CreationDocument(
             Schema: CreationDocument.CurrentSchema,
             Name: "faller",
             Palette: null,
@@ -158,7 +159,7 @@ public sealed class InPlaceCarryPresentationLawTests {
                 Signal: CreationDriverDocument.SignalVerticalSpeed,
                 When: [CreationDriverDocument.WhenAlways]
             )]
-        ));
+        )));
         var definition = (Fixtures.BuildDocument() with {
             CreationsRaw = [creation],
             LookRowsRaw = [new WorldLook(

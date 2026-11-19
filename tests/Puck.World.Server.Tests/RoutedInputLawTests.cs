@@ -26,7 +26,7 @@ public sealed class RoutedInputLawTests {
         fixture.Step();
         var source = Principal.Seat(slot: 0);
 
-        fixture.Server.Grant(new(source, WorldCapability.Drive, GrantSubject.Body(index: 1), false), Principal.Console);
+        fixture.Server.Grant(new(source, WorldCapability.Drive, GrantSubject.Body(index: 1), false, Budget: 8), Principal.Console);
         fixture.Server.Grant(new(source, WorldCapability.Control, GrantSubject.Body(index: 1), false), Principal.Console);
         Assert.True(condition: fixture.Server.Engagement.Compose(0, GrantSubject.Body(index: 1), false, source, source));
         var catalog = fixture.Server.Population.InputCatalog;

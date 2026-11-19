@@ -21,17 +21,14 @@ public sealed class RowScopedGrantLawTests {
     /// <summary>The contribution slot's own row, absent from the fixture document — authoring it is the granted
     /// act.</summary>
     private const string SlotRow = "slot-nw";
-
-    private static readonly Principal Partner = Principal.Peer(
-        generation: 1,
-        index: 4
-    );
+    // A peer acts only while its session lives, so each law admits one (Fixtures.FreshServerWithPeer).
+    private Principal m_partner;
 
     /// <summary>A server over the collider-bearing fixture document — the only code-built document carrying a
     /// creation and a placement row, which is what <see cref="HostRow"/> names.</summary>
-    private static WorldFixture FreshSlottedServer() => Fixtures.FreshServer(definition: Fixtures.BuildGradientUpDocument(gradientUp: false));
-    private static bool GrantAndObserveHeld(WorldFixture fixture, GrantSubject subject, MutationKindMask? kinds, Principal? principal = null) {
-        var holder = (principal ?? Partner);
+    private WorldFixture FreshSlottedServer() => Fixtures.FreshServerWithPeer(Fixtures.BuildGradientUpDocument(gradientUp: false), out m_partner);
+    private bool GrantAndObserveHeld(WorldFixture fixture, GrantSubject subject, MutationKindMask? kinds, Principal? principal = null) {
+        var holder = (principal ?? m_partner);
 
         fixture.Server.Grant(
             actor: Principal.Console,
@@ -51,7 +48,7 @@ public sealed class RowScopedGrantLawTests {
             subject: subject
         );
     }
-    private static void GrantSlot(WorldFixture fixture, string row, MutationKindMask kinds) {
+    private void GrantSlot(WorldFixture fixture, string row, MutationKindMask kinds) {
         fixture.Server.Grant(
             actor: Principal.Console,
             grant: new WorldGrant(
@@ -59,17 +56,17 @@ public sealed class RowScopedGrantLawTests {
                 Capability: WorldCapability.Mutate,
                 Exclusive: false,
                 KindMask: kinds,
-                Grantee: Partner,
+                Grantee: m_partner,
                 Subject: GrantSubject.Placement(id: row)
             )
         );
     }
-    private static bool RemoveAndObserveChange(WorldFixture fixture, string row) {
+    private bool RemoveAndObserveChange(WorldFixture fixture, string row) {
         var before = fixture.DefinitionBytes();
 
         fixture.Server.EnqueueMutation(mutation: new WorldMutation.RemovePlacement(
             Id: row,
-            Principal: Partner
+            Principal: m_partner
         ));
         fixture.Step();
 
@@ -78,7 +75,7 @@ public sealed class RowScopedGrantLawTests {
     /// <summary>The slot's own placement row, at a scale distinct from the host row's authored 1.0 so an ADMITTED
     /// write over <see cref="HostRow"/> would visibly change the document — without that, a denial and an admitted
     /// no-op would look identical and the law could not fail.</summary>
-    private static WorldMutation.UpsertPlacement SlotUpsert(float scale, string row = SlotRow) => new(
+    private WorldMutation.UpsertPlacement SlotUpsert(float scale, string row = SlotRow) => new(
         Placement: new WorldPlacement(
             PrototypeId: HostRow,
             Id: row,
@@ -90,9 +87,9 @@ public sealed class RowScopedGrantLawTests {
             Scale: scale,
             YawDegrees: 0f
         ),
-        Principal: Partner
+        Principal: m_partner
     );
-    private static bool UpsertAndObserveChange(WorldFixture fixture, string row) {
+    private bool UpsertAndObserveChange(WorldFixture fixture, string row) {
         var before = fixture.DefinitionBytes();
 
         fixture.Server.EnqueueMutation(mutation: SlotUpsert(
@@ -234,7 +231,7 @@ public sealed class RowScopedGrantLawTests {
                         Capability: WorldCapability.Mutate,
                         Exclusive: false,
                         KindMask: everyPlacementKind,
-                        Grantee: Partner,
+                        Grantee: m_partner,
                         Subject: GrantSubject.Section(section: WorldSection.Placements)
                     )
                 );

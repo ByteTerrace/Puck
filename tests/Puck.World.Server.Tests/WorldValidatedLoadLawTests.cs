@@ -1,4 +1,3 @@
-using Puck.Storage;
 using Puck.Testing;
 using Puck.World.Machines;
 using Xunit;
@@ -151,7 +150,7 @@ public sealed class WorldValidatedLoadLawTests : IDisposable {
         var catalog = new WorldMachineCatalog(engines: []);
         var store = new WorldAuthorityBlobStore(
             store: new FakeObjectBlobStore(),
-            target: new DirectoryObjectStorageTarget(rootPath: "fake-store"),
+            target: WorldAuthorityBlobStore.DirectoryTarget(rootPath: "fake-store"),
             machines: catalog
         );
         var identity = new WorldAuthorityIdentity(

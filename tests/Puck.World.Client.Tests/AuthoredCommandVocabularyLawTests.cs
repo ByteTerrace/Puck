@@ -64,7 +64,7 @@ public sealed class AuthoredCommandVocabularyLawTests {
         WorldAffordances.ValidateCommandsAgainst(commands: Set(("probe.go", "probe.secret")), errors: errors, registry: registry);
 
         Assert.Contains(collection: errors, filter: error => error.Contains(value: "'probe.go' takes the name of the engine verb", comparisonType: StringComparison.Ordinal));
-        Assert.Contains(collection: errors, filter: error => error.Contains(value: "answers the operator alone", comparisonType: StringComparison.Ordinal));
+        Assert.Contains(collection: errors, filter: error => error.Contains(value: "an operator verb", comparisonType: StringComparison.Ordinal));
     }
     [Fact]
     public void ABindingToAVerbOnlyAnotherShapeRegistersValidatesInAShapeThatLacksItAndATypoIsRefusedOffline() {

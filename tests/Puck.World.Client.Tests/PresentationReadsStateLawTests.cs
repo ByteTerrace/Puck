@@ -1,5 +1,3 @@
-using System.Numerics;
-
 using Puck.Commands;
 using Puck.SignedDistance;
 
@@ -162,11 +160,7 @@ public sealed class PresentationReadsStateLawTests {
         );
 
         Assert.Equal(
-            expected: new Vector3(
-                x: (0x1B / 255f),
-                y: (0x23 / 255f),
-                z: (0x50 / 255f)
-            ),
+            expected: Fixtures.SceneLight(red: 0x1B, green: 0x23, blue: 0x50),
             actual: settings.Sky.First<SdfSkyGradient>().Stop(index: 1).Color
         );
     }
@@ -198,11 +192,7 @@ public sealed class PresentationReadsStateLawTests {
         );
 
         Assert.Equal(
-            expected: new Vector3(
-                x: (0x11 / 255f),
-                y: (0x22 / 255f),
-                z: (0x33 / 255f)
-            ),
+            expected: Fixtures.SceneLight(red: 0x11, green: 0x22, blue: 0x33),
             actual: first.Sky.First<SdfSkyGradient>().Stop(index: 1).Color
         );
 
@@ -223,11 +213,7 @@ public sealed class PresentationReadsStateLawTests {
 
         // No re-bake: the same track instance, told only that the revision moved, reads the new cell straight through.
         Assert.Equal(
-            expected: new Vector3(
-                x: (0xAA / 255f),
-                y: (0xBB / 255f),
-                z: (0xCC / 255f)
-            ),
+            expected: Fixtures.SceneLight(red: 0xAA, green: 0xBB, blue: 0xCC),
             actual: second.Sky.First<SdfSkyGradient>().Stop(index: 1).Color
         );
     }

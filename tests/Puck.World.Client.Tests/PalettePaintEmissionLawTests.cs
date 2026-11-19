@@ -48,9 +48,8 @@ public sealed class PalettePaintEmissionLawTests {
         var creation = Creation();
 
         if (articulated) {
-            creation = CreationFixtures.Prototype(id: creation.Id, document: creation.Document with {
-                Drivers = [new CreationDriverDocument(Name: "clock", Signal: CreationDriverDocument.SignalTime, Cadence: 1f)],
-            });
+            // The first shape moves, so the creation is pooled; the paint's parent, the second shape, stays on the root.
+            creation = CreationFixtures.Articulated(creation: creation);
         }
         var program = CreationDomainParentLawTests.EmitProgram(creation: creation, scale: Scale);
         var material = program.Instructions.First(instruction => (instruction.Op == SdfOp.ShapeBlend)).Material;

@@ -231,7 +231,7 @@ public sealed class WorldValueDomainLawTests {
     public static TheoryData<string> Bindable => [.. Cases.Where(predicate: static pair => (pair.Value.Present is not null)).Select(selector: static pair => Key(field: pair.Key))];
 
     // Rows for plain numbers a creation authors, judged where the creation is canonicalized, not in a world section.
-    private static readonly IReadOnlySet<WorldValueField> LiteralOnly = new HashSet<WorldValueField> { WorldValueFields.VolumeSoftness };
+    private static readonly IReadOnlySet<WorldValueField> LiteralOnly = new HashSet<WorldValueField> { WorldValueFields.VolumeSoftness, WorldValueFields.GlassShadowDensity };
 
     private const float HighFov = 1.5f;
     private const float LowFov = 0.5f;
@@ -416,8 +416,8 @@ public sealed class WorldValueDomainLawTests {
 
         var model = WorldModelShape.Types
             .SelectMany(selector: static shape => shape.Members.Concat(second: shape.Properties))
-            // An angle's own scalar form is the angle's representation, not a field.
-            .Where(predicate: static member => ((member.DeclaringType != typeof(BindableAngle)) && ((Underlying(type: member.Type) == typeof(BindableScalar)) || (Underlying(type: member.Type) == typeof(BindableAngle)))))
+            // An angle's own scalar form is the angle's representation, not a field; a list of scalars (render lanes) has one row.
+            .Where(predicate: static member => ((member.DeclaringType != typeof(BindableAngle)) && ((Underlying(type: member.Type) == typeof(BindableScalar)) || (Underlying(type: member.Type) == typeof(BindableAngle)) || (member.Type == typeof(IReadOnlyList<BindableScalar>)))))
             .Select(selector: static member => (member.DeclaringType, member.Member))
             .ToHashSet();
         var declared = WorldValueFields.All.Select(selector: static field => (field.Owner, field.Member)).ToList();
