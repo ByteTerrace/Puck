@@ -22,18 +22,18 @@ win.
 
 Steps 2 and 4 read this matrix, and step 6 reads it again on the final set.
 
-- **Devices and backends:** the RTX 2060 (Direct3D 12 and Vulkan), the RTX 4070
-  (both), the Steam Deck (Vulkan).
-- **What decides:** the frame bar as
-  [the rendering decision](../decisions/rendering.md#the-pipeline-foundation)
-  states it, the worst frame at the highest quality, read by the one recipe in
-  [how the bars are read](streaming-and-memory.md#how-the-bars-are-read). A
-  column passes when no frame of any run misses the device's bar on any row.
-  `host.frames` percentiles, the median of three runs and `world.gpu-timing`'s
-  root-view `views` (with `views-filter`, every `views-shade` bin and
-  `glass-shade`) stand beside it as diagnostics that say where a column's time
-  goes; they never qualify a column, and a slow outlier is kept with its cause,
-  never dropped.
+- **Devices and backends:** the RTX 4070 (Direct3D 12 and Vulkan) runs first;
+  the RTX 2060 (both) and the Steam Deck (Vulkan) run once the RTX 4070 meets
+  both bars.
+- **What decides:** a column passes when it is no slower than the base column
+  (the fixed layers) on the same device and stop, beyond the base's own
+  run-to-run spread, read by the one recipe in
+  [how the bars are read](streaming-and-memory.md#how-the-bars-are-read).
+  List building, dispatch and shading are measured separately (with one
+  material and with a mix), alongside `host.frames` percentiles, the median of
+  three runs and `world.gpu-timing`'s root-view `views` (`views-filter`, every
+  `views-shade` bin and `glass-shade`), keeping every slow outlier with its
+  cause.
 - **Where:** the sweep's worst stops and the matrix's scratch stops.
 - **Rows:** zero authored programs (the no-program path); one program on every
   surface; the whole standard set on the debug world; a cap-cost program over a
@@ -45,20 +45,19 @@ Steps 2 and 4 read this matrix, and step 6 reads it again on the final set.
 - **Comparing columns:** two columns that both pass are ranked by their
   diagnostics; a difference inside the base's own run-to-run spread is no
   difference.
-- **The rule:** the cheapest passing column is taken. If no column passes on
-  some device, the interpreter is restricted to edit time on that device (a
-  player build ships every program specialized and a runtime miss is reported,
-  not interpreted). That is a quality-versus-bar trade this plan does not make:
-  it goes to the owner with the readings.
-- **A gap in the rule, and how it is read meanwhile.** No device meets its
-  bar yet, so every column fails and
-  the rule chooses nothing. Until this plan is revised the matrix is read as
-  [rendering research decision 13](rendering-research.md#13-shade-through-one-path-and-shrink-the-image-history)
-  restates it: a column passes when it is no slower than the base column on
-  the same device and stop, beyond the base's own spread. A program that
-  arrives with no compiled kernel is derived and counted, never refused. The
-  owner's call is raised only where a device has a workable column that the
-  interpreter alone breaks.
+- **The rule:** take the cheapest passing column per device (adding
+  per-program bins only on a device whose readings require them).
+  - *When a specialized column passes:* measure what a player sees when a
+    program arrives without a compiled kernel yet (derivation time, temporary
+    appearance and install cost). A missing kernel is derived and counted like
+    any cache miss, never refused; until installed, the surface uses the
+    interpreter where readings show it fits, or neutral shading otherwise.
+    Restricting runtime interpretation goes to the owner only when a device
+    has a workable specialized path that the interpreter alone breaks, naming
+    the runtime authoring use lost.
+  - *When base and every specialized column all miss the bar:* shading
+    programs are not the cause; fix the non-shader cause named by the
+    per-phase readings first.
 
 The RTX 4070's columns are read on both backends: the binned path costs less
 than unsplit views at the stops measured, so `world.shaders.bins` stays on by
@@ -119,8 +118,10 @@ injection).
   neutral default, a `world.reload` of an edited program clears its mark and an
   unedited one keeps it across the reload.
 
-**6. The layers migrate** (GPU leg for the stills). Shading has one path: the
-fixed-function layers are deleted rather than kept beside the programs.
+**6. The layers migrate** (GPU leg for the stills; runs after
+[colour conversion](rendering.md#colour-conversion--scene-light-to-display-values-once)
+so captures are judged once). Shading has one path: the fixed-function layers
+are deleted rather than kept beside the programs.
 
 - *What goes.* The lever `world.shade programs|layers`; the C# records
   `SdfWeathering`, `SdfInset`, `SdfRadialPaint`, `SdfFlow` and the toon style's
@@ -181,6 +182,45 @@ fixed-function layers are deleted rather than kept beside the programs.
   other op.
 - *The screen effect hook* (the owner's ruling: deferred). A program over the
   composite's output image, through the post-process package mechanism.
+
+### Image history split and measured shading cuts
+
+Beside the shader migration, four memory and bandwidth cuts target the
+largest passes (`views` at ~3.7 ms and 255 registers on RTX 4070 Vulkan;
+temporal resolve at ~3 ms and 392 B/px):
+
+1. **Split the temporal image history** (high priority at 1440p; designed and
+   reviewed before coding). Today `SdfWorldPackage.HistorySurfaceWords` (47
+   words = 188 B, of which 40 words = 160 B are an 8-frame jittered window)
+   plus 8 B of colour history are double-buffered (`ShaderPipelineRenderNode`),
+   totalling 392 B/px (~1.4 GB at 2560 by 1440) while copying 35 of 40 window
+   words every frame. Move the 8-frame 160 B window into one in-place buffer
+   updated only where previous and current pixel positions are equal,
+   restarting the window on motion; keep only the 7 reprojected words (28 B)
+   and 8 B colour double-buffered (232 B/px, ~0.86 GB at 1440p, saving ~0.6 GB
+   on the main view). Because an in-place history needs a cross-frame barrier
+   and cannot race two pixels inside one pass, complete a design review and
+   read temporal-supersampling literature before changing window layout or
+   sample count. Report how many nested views keep temporal history; if
+   restarting on motion degrades quality in presented motion, keep only
+   resolve-time savings and report why.
+   - *Check:* holds through camera motion, newly revealed surfaces, view cuts
+     and freshly allocated history.
+2. **Planar per-pixel visibility record** (measured). Test storing visibility
+   record fields plane by plane (removing strided reads in resolve, filter and
+   composite); keep whichever layout measurement favours since `views` reads
+   every field.
+3. **Decoupled probe lookup per view** (measured). Probe lookup takes roughly
+   a third of `views`. Measure it separately, then share the lookup mechanism
+   at its own rate per view, reusing results only for receivers at compatible
+   position and facing (glass against sky or in front of a wall gets its own
+   samples; watch for stair-stepping at visibility edges).
+   - *Check:* lit pane over sky, lit pane over a dark wall, and two panes at
+     an angle each shade correctly.
+4. **Exposure meter on a small fixed grid** (measured). Stop meter cost from
+   scaling with resolution; drop on devices where compiling the meter out
+   saves under 0.1 ms. Keep the meter (centre-weighted percentiles) distinct
+   from screen-glow mean colour, sharing sampling only.
 
 ## Unverified premises
 

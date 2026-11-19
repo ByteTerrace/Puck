@@ -505,11 +505,122 @@ What makes a chapter the same workload:
 
 **Conditions.** Each run records what must be alike for two runs' numbers to
 mean the same: the world, the backend, headless or windowed, the window's size,
-whether it ran uncapped, the budget an iteration is judged against, the start
-tick, the loops, the operating system and the logical processor count. Any
-difference refuses the comparison. The overlay joins them when stage 2 lands; the
-GPU adapter is not read today, so two machines with one operating system and one
-processor count are not told apart.
+the device's authored quality table, the memory cap, the topology (in-process or
+remote authority, with the endpoint named when remote), whether it ran uncapped,
+the budget an iteration is judged against, the start tick, the loops, the
+operating system and the logical processor count. Any difference refuses the
+comparison. The overlay joins them when stage 2 lands; the GPU adapter is not
+read today, so two machines with one operating system and one processor count
+are not told apart.
+
+**How the frame-rate bar is read.** Every benchmark check that claims the frame
+bar uses one reading:
+
+- *What is read.* The slowest frame's work: the loop iteration less the time the
+  pacer waited (`HostFrameRecording` keeps both). Where the device reports
+  display outcomes, no present is skipped or dropped.
+- *Quality and size.* The benchmark applies the device's authored quality table
+  before the first chapter, outside the timed span (`world.quality high` on the
+  RTX 4070, with render scale at native and dynamic resolution off). Size is
+  2560 by 1440 on the RTX 4070, 1920 by 1080 on the RTX 2060, and the Steam
+  Deck's own panel in its native configuration. Readings on the RTX 2060 and
+  Steam Deck wait until the RTX 4070 meets both bars; until then each device's
+  authored table runs on the RTX 4070 to verify what it selects and submits, not
+  its frame time.
+- *Backends and topologies.* Direct3D 12 and a windowed Vulkan boot on Windows
+  (Vulkan alone where Direct3D 12 is absent), both with the authority in the
+  same process and against a remote authority on the Azure deployment.
+- *Nothing quietly reduced.* The detail bias stays zero (`SdfMeshTier.Biased`),
+  no refusal is printed beside the reading (such as a render graph that could
+  not be replaced for want of memory), and every chapter still meets its
+  reference in motion in both topologies.
+- *Workload stability and false-claim discipline.* Freeze each chapter's program
+  before its first compared reading, because a changed chapter program is a new
+  workload. A change claiming frame time states the gain it claims and what
+  result would show the claim false on the same moving route, reporting counted
+  work (visible and processed instances, draws and dispatches, bytes held, and
+  the slowest frame with its cause) beside the time. A single lane run suffices
+  to land; timing claims that steer a later choice go to a quiet `puck measure`
+  window.
+- *Remote authority route driver.* `WorldSeatDriver.TryRead` currently reads the
+  body, places and navigation mesh from the server of the world the seat stands
+  in, which does not exist on a remote client (and `--connect` still steps the
+  boot world and transfers the body, mixing local simulation, a transfer and a
+  remote world). Rebuild the driver so it reads what the seat's client was
+  delivered: the body's pose from the delivered snapshot, and places and
+  navigation from the client's world document. One driver then serves both
+  topologies, with the in-process route checking that chapters arrive in the
+  same ticks as before. A remote report names the endpoint, splits local
+  simulation, delivery and rendering apart, and carries a witness that the
+  seat's body arrived in the remote world; a run still observing the boot world
+  says so and is not a remote reading.
+
+### Presentation timing and admission (stage 8)
+
+`host.frames` measures the host loop's interval, not when a frame reached the
+display, and today the engine can render frames the display has no room for: on
+Vulkan, acquiring the next image and waiting on completion happen after produce
+with a zero timeout (`VulkanFramePresenter`), so a full swap chain skips the
+present after paying for the frame, while the two backends pace frames in
+different ways and keep different numbers of frames in flight.
+
+1. **One record for every attempt to present.** Extend `PresentTimingSample` so
+   every present attempt has a record holding the attempt number, whether it was
+   submitted, the display outcome where the host reports one (shown, skipped,
+   dropped or unknown), how long it stood on the display, the signal that said
+   so, and the queue depth. Report three separate counts: frames whose
+   production was avoided, submits accepted, and display drops observed, plus
+   the share of attempts whose outcome is unknown.
+   - *Key by host attempt, not driver present id.* A skipped attempt has no
+     driver id, and Vulkan's present id resets to 1 whenever the swap chain is
+     recreated, which would let a late answer from an old chain be credited to
+     the new one. Store the driver id and swap-chain identity beside the host
+     attempt, and close outstanding answers on a replaced chain as unknown.
+   - *What counts as displayed.* Count a displayed interval only from a stage
+     that marks the first pixel reaching the display (under
+     `VK_EXT_present_timing`, surfaces choose which stages they can time). A
+     host or surface that offers less declares that as a capability, omits the
+     display column, names the follow-up that would supply it, and judges only
+     what the host produced (with skipped and dropped presents still reported).
+   - *Input-to-display latency.* Add a joined column measuring from the earliest
+     input a frame used to its display time (or submit time where no display
+     time exists), reporting tick-integrated motion and between-tick pointer
+     look (`WorldSeatViewState.PresentedLook`) apart. This reading feeds both
+     the job-system question of where the tick runs and the admission rule
+     below.
+2. **One admission rule on both backends** (after demand-driven capture lets
+   frames fit their period). On a valid surface, wait for a swap-chain slot
+   through `ISwapChainPacing.TryWaitForFrame` before producing a frame, closing
+   the fall-through cases that drop back to timer pacing and moving Vulkan's
+   image acquire ahead of produce. Keep the rule only if the latency column does
+   not worsen. Keep three capacities separate, each derived from its actual
+   readers: swap-chain images, CPU frames ahead, and GPU resource lifetime. A
+   wait for a minimized or occluded window stays bounded so ticks, uploads,
+   input and shutdown keep running.
+3. **Fixed-refresh pacing setting.** What a fixed-refresh display shows when the
+   loop misses its rate (a steady whole divisor of the refresh rate, or frames
+   as they arrive) is an authored setting (`PresentPacingPolicy`), never baked
+   into the admission mechanism.
+4. **Linux and Steam Deck display timing.** On Linux, display timing and a
+   precision waiter are absent today (`HostWaits.Until` uses ordinary waits).
+   When a Steam Deck is on hand, measure its current cadence, wait lateness, and
+   input/shutdown response under load first, then add display timing, a
+   precision waiter and a display request only where those readings show an
+   improvement.
+
+*Checks:*
+- On Windows, the present-attempt record agrees with a compositor trace
+  (PresentMon) for the same presents, keeping production avoided, submits
+  accepted and display drops apart.
+- Under sustained backpressure, minimize and restore, and Vulkan swap-chain
+  recreation, a skipped attempt, a replaced swap chain and a first present on
+  the new chain (with an answer for the old chain still outstanding) are each
+  recorded against the right attempt; no frame is rendered without a slot;
+  ticks, input and shutdown keep running; and input-to-display latency is no
+  longer than before.
+- On the Steam Deck, the display line names its timing signal or states there is
+  none, and the timing work shows improvement on the measured cadence, wait
+  lateness and input/shutdown response.
 
 Between two runs of one build the chapter's end hash is also compared, and
 only for fresh runs ([above](#where-a-run-starts)). Across builds the hash
@@ -674,6 +785,16 @@ streaming and seams break, in about four minutes of simulation; each chapter is
 | Night | The lawn's trees and the night field at night, reached the way the debug world authors night | Night lighting, where the owner's walkthrough found the most |
 | Flight | The dash on each cooldown, then free flight back up the valley | Streaming at the fastest travel the standard authors |
 
+In addition to those places (including `valley-rim` and a route-reachable night),
+the route supports taking a capture at a named tick of a chapter, three named
+diagnostic spans (a settled stop with stable inputs, a continuous span of moving
+sun and turning camera, and a painting crossing where two worlds each fill much
+of the screen), and an empty-store cold-arrival run that records both a cold
+bake's time and peak memory and each creation's time from receiving its program
+to its first usable mesh (with timeouts and failures counted, the slowest
+reported, and time to a floor marked unavailable until a qualified floor
+exists).
+
 The streaming plan's conditions for the seam walk (a fresh process per
 crossing) are `--route seams --chapter <name>` on a fresh `puck benchmark` boot;
 a `--fresh` that boots once per chapter is not built.
@@ -742,7 +863,7 @@ closes it:
 | 5. The results panel | UI | The published table and retained series on the UI overhaul's runtime collections | An imported panel shows a newly authored route's chapter names and a variable number of rows with no C# change |
 | 6. Motion and presentation samples | World client | A recording sink on `WorldSeatMotionTrace`; `WorldPresentationProbe` under display pacing with numeric samples | A hitch older than 240 frames is in the report; a smooth authored dash and a rest are not called stalls or jumps; a run at twice and at half the tick rate both read complete coverage |
 | 7. The exhibits route | Debug world authoring and CLI | The walkthrough plan's open steps: coverage derived from the document's exhibits, a rest per exhibit, a presented series judged against the plaque, the inspection pass over every creation, plaque fit and floor light patches made mechanical | Adding an exhibit to the row it is derived from turns coverage amber with its name until a chapter rests at it; each mechanical check lights at a defect the owner flagged by hand |
-| 8. Displayed time | Platform and backends | The interval each frame stood on the display, from the swapchain's own statistics, keyed by present | On a captured run it agrees with PresentMon for the same presents: PresentMon's `MsBetweenDisplayChange` describes the previous displayed frame and `DisplayedTime` the current one, so the comparison is by present and interval, with dropped frames named; where a host gives none the column is absent |
+| 8. Displayed time and presentation admission | Platform and backends | [Per-present-attempt record, input-to-display latency, unified swap-chain admission on both backends, and Linux/Steam Deck display timing](#presentation-timing-and-admission-stage-8) | On a captured Windows run the attempt record agrees with PresentMon by present and interval, with production avoided, submits accepted and display drops kept apart and old-chain answers closed as unknown on Vulkan recreation; admission renders no frame without a slot without increasing input-to-display latency while keeping ticks, input and shutdown alive; where a host gives no display-first-pixel signal the column is absent and named as a capability |
 | 9. Artifacts in motion | Rendering and capture; a GPU leg | The watched pass's ring and triggers; the capture pass; the bounded capture store; the four detectors | Each detector stays quiet on the clean moving and animated controls and flags exactly its own injected defect at its index and tile; a late surface seen only on a cold first crossing is in the watched run's evidence when a warm rerun does not show it; a full capture store refuses and counts, and a timed run's iterations are unchanged by it |
 | 10. The fold | CLI | The deletions of [the table above](#what-the-existing-instruments-become), after stages 3, 4, 7 and 9 | Every tour stop and inspection maps to a chapter, a rest or a recorded decision that it no longer pulls its weight; the boot span is read over the first rendered iterations and a missing reading shows unmeasured; `puck search` for `SweepRoute` and for the retired `sweep --tour` and `bench frames --window` forms finds nothing |
 | 11. A reference metric, if needed | Rendering | FLIP or CGVQM of a mark's presented series against a matched reference | Decided by stage 9's controls and known positives: built when the detectors miss a known artifact or more than half of a route's top candidates are judged false |

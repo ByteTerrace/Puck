@@ -715,6 +715,22 @@ gather, at a tap count the material authors. Lands only when a capture at
 the pool shows the bridge's reflection worth its taps on the 4070 and the
 count holds on the Deck.
 
+### Eye inside a medium
+
+Not built. Today the atmosphere handles a camera below a level surface, while a
+body of water built as glass shows a flat, dim brown-green wash when the camera
+dives inside because the glass pass has no case for an eye inside a medium.
+Detecting whether a view's eye sits inside a glass medium is one field query
+per view, but colouring the picture takes per-ray path length because different
+rays leave the water at different distances or hit the bed first. Start the
+glass pass's existing per-pixel signed distance sum with the medium the eye is
+in, and cut each ray at its own surface or exit so absorption deepens with
+water length and crossing the waterline does not pop.
+
+**Check.** With the eye under water, test two overlapping media and a
+continuous crossing of the waterline, verifying no pop at the boundary and
+colour that deepens with the length of water each ray crosses.
+
 ## The research record
 
 The round's sources, kept as the evidence behind the mechanisms above. A row
