@@ -49,10 +49,15 @@
 // its YCoCg as three half floats, Y low and Co high in the fifth word, Cg low in the sixth with the frames the memory has
 // left above it, zero for none. The weight saturates at SDF_HISTORY_WEIGHT_CAP, one jitter period of full-weight samples
 // (SdfWorldPackage.TemporalPeriod), or at SDF_HISTORY_FEATURE_WEIGHT_CAP while the pixel carries a feature.
-// Word six is the stationary phase mask. From SDF_HISTORY_WINDOW_OFFSET, each phase holds five words: color/coverage
-// as four halves, transport as four halves, then its Gaussian weight as a half. A completed window replaces each phase
-// with that phase's new samples. Its fixed-order sum is invariant when the jitter repeats; an exponential mean capped
-// at one period instead keeps favoring the latest phase, and clipping to its neighborhood destroys unsighted features.
+// The stationary window (historyWindowRW, SDF_HISTORY_WINDOW_WORDS a pixel in the same planar layout) is one buffer the
+// resolve updates in place, not history in two copies: word zero is the phase mask, and from SDF_HISTORY_WINDOW_OFFSET
+// each phase holds five words: color/coverage as four halves, transport as four halves, then its Gaussian weight as a
+// half. A completed window replaces each phase with that phase's new samples. Its fixed-order sum is invariant when the
+// jitter repeats; an exponential mean capped at one period instead keeps favoring the latest phase, and clipping to its
+// neighborhood destroys unsighted features. Every window access names the invocation's own pixel (sdfHistoryWindowWord
+// takes no other), and a pixel keeps its window only while its history comes from that same pixel, so no invocation
+// reads a word another invocation of the dispatch writes; a pixel whose history comes from elsewhere restarts its
+// window at this frame's phase, and the phases its mask leaves out are never read.
 // The falloff of the Gaussian a sample is weighted by, over its squared distance in output pixels from the output
 // pixel's center: 1 / (2 * 0.35^2), a reconstruction about as wide as one output pixel's box.
 static const float SdfResolveFilterFalloff = 4.08;
@@ -73,6 +78,11 @@ uint2 sdfResolveClamp(int2 pixel, uint2 dims) {
 // one place the surface's planar layout is spelled.
 uint sdfHistoryWord(uint pixel, uint word, uint2 extent) {
     return ((word * (extent.x * extent.y)) + pixel);
+}
+// The address of stationary window word `word` of the invocation at `id` in an output of `extent`. The window is
+// updated in place, so it is addressed only by the invocation's own pixel, never a reprojected one.
+uint sdfHistoryWindowWord(uint3 id, uint word, uint2 extent) {
+    return sdfHistoryWord(((id.y * extent.x) + id.x), word, extent);
 }
 float3 sdfToYCoCg(float3 color) {
     return float3(
@@ -424,7 +434,6 @@ void sdfResolveTemporal(uint3 id, uint2 extent, uint2 render, float2 jitter, flo
     // Moving or reactive receivers restart the window and keep the ordinary clipped, reprojected resolve while it fills.
     uint phase = (passGroup.historyFrames % SDF_TEMPORAL_PERIOD);
     uint fullMask = ((1u << SDF_TEMPORAL_PERIOD) - 1u);
-    uint maskWord = (SDF_HISTORY_WINDOW_OFFSET - 1u);
     // The ordinary receiver check already covers the interior. Only a rejected footprint needs the more expensive
     // proof that every tap is stationary before retaining a window across a phase's different receiver selection.
     footprintStill = (footprintStill && !accepted);
@@ -443,7 +452,8 @@ void sdfResolveTemporal(uint3 id, uint2 extent, uint2 render, float2 jitter, flo
             }
         }
     }
-    bool stationary = (footprintStill || (accepted && (travel <= SdfResolveFeatureTravel) && (reactive <= 0.0)));
+    // The window is this pixel's own, updated in place: it carries over only while the history comes from this pixel.
+    bool stationary = ((footprintStill || (accepted && (travel <= SdfResolveFeatureTravel) && (reactive <= 0.0))) && (historyPixel == pixelIndex));
     // Keep the receiver that carries a stationary window while the footprint still sees it. Picking the nearest
     // non-feature anew every phase can switch to a thin adjoining surface that the following phase misses entirely,
     // rejecting a valid window at an otherwise stationary edge.
@@ -452,7 +462,7 @@ void sdfResolveTemporal(uint3 id, uint2 extent, uint2 render, float2 jitter, flo
         centerT = receiverT;
     }
     bool sampleValid = ((reactive <= 0.0) && (weightSum > 1.0e-6) && isfinite(weightSum) && all(isfinite(sum)) && all(isfinite(transportSum)));
-    uint mask = (stationary ? (historySurface[sdfHistoryWord(historyPixel, maskWord, extent)] & fullMask) : 0u);
+    uint mask = (stationary ? (historyWindowRW[sdfHistoryWindowWord(id, 0u, extent)] & fullMask) : 0u);
     mask = (sampleValid ? (mask | (1u << phase)) : 0u);
     float4 windowColor = 0.0;
     float4 windowTransport = 0.0;
@@ -474,9 +484,12 @@ void sdfResolveTemporal(uint3 id, uint2 extent, uint2 render, float2 jitter, flo
             packed[2] = transport.x;
             packed[3] = transport.y;
             packed[4] = f32tof16(weightSum);
+            [unroll] for (uint component = 0u; component < SDF_HISTORY_SAMPLE_WORDS; component++) {
+                historyWindowRW[sdfHistoryWindowWord(id, (offset + component), extent)] = packed[component];
+            }
         } else if (present) {
             [unroll] for (uint component = 0u; component < SDF_HISTORY_SAMPLE_WORDS; component++) {
-                packed[component] = historySurface[sdfHistoryWord(historyPixel, (offset + component), extent)];
+                packed[component] = historyWindowRW[sdfHistoryWindowWord(id, (offset + component), extent)];
             }
         }
         // Decode the new phase too: using its unrounded sum while the other phases use halves would itself pulse.
@@ -489,9 +502,6 @@ void sdfResolveTemporal(uint3 id, uint2 extent, uint2 render, float2 jitter, flo
             windowColor += (weight * color);
             windowTransport += (weight * sdfUnpackTransport(uint2(packed[2], packed[3])));
             windowWeight += weight;
-            [unroll] for (uint component = 0u; component < SDF_HISTORY_SAMPLE_WORDS; component++) {
-                historySurfaceRW[sdfHistoryWord(pixelIndex, (offset + component), extent)] = packed[component];
-            }
         }
     }
     complete = ((mask == fullMask) && (windowWeight > 1.0e-6));
@@ -539,7 +549,7 @@ void sdfResolveTemporal(uint3 id, uint2 extent, uint2 render, float2 jitter, flo
     // The working history is half-float. A non-finite current sample contributes no reusable history, and a finite
     // reconstruction must remain representable when stored, so one bright transient cannot poison later frames.
     bool reusable = (all(isfinite(accumulated)) && all(isfinite(accumulatedTransport)) && isfinite(total));
-    historySurfaceRW[sdfHistoryWord(pixelIndex, maskWord, extent)] = (reusable ? mask : 0u);
+    historyWindowRW[sdfHistoryWindowWord(id, 0u, extent)] = (reusable ? mask : 0u);
     // The feature the pixel carries on: this frame's sighting for a whole period, or the accepted history's with one
     // frame less, which the jitter comes round to before it runs out; a restarted history remembers none.
     float3 writtenFeature = (sighted ? sightedYCoCg : featureYCoCg);

@@ -7,6 +7,7 @@ public sealed partial class SdfProgramBuilder {
     private bool m_openInstanceBoundInSlotFrame;
     private bool m_openInstanceRestPoseSkin;
     private SdfInstancePart[] m_openInstanceParts = [];
+    private SdfInstancePart[] m_openInstanceOperands = [];
     // The slot m_openInstanceGlyphs holds once the open instance's runs have ridden more than one frame.
     private const int GlyphFramesMixed = -2;
 
@@ -201,7 +202,11 @@ public sealed partial class SdfProgramBuilder {
     /// (<see cref="SdfInstanceRange.Parts"/>); <see langword="null"/> or empty for none. A part that is not valid
     /// (<see cref="SdfInstancePart.IsValid"/>) is left out.</param>
     /// <param name="restPoseSkin">Referenced slots carry rigid deltas from authored rest; bake them at identity.</param>
-    public SdfProgramBuilder BeginInstanceDynamic(int slot, Vector3 boundOffset, float boundRadius, bool active = true, float detail = 0f, bool separateBake = false, bool boundInSlotFrame = false, IReadOnlyList<SdfInstancePart>? parts = null, bool restPoseSkin = false) {
+    /// <param name="operands">The cutters the instance holds on slots of their own, each its box in its slot's frame
+    /// (<see cref="SdfInstanceRange.Operands"/>): the bake reads each where its slot stands rather than at rest, and plans
+    /// the group again as it moves; <see langword="null"/> or empty for none. An entry that is not valid
+    /// (<see cref="SdfInstancePart.IsValid"/>) is left out.</param>
+    public SdfProgramBuilder BeginInstanceDynamic(int slot, Vector3 boundOffset, float boundRadius, bool active = true, float detail = 0f, bool separateBake = false, bool boundInSlotFrame = false, IReadOnlyList<SdfInstancePart>? parts = null, bool restPoseSkin = false, IReadOnlyList<SdfInstancePart>? operands = null) {
         RequireInstanceBound(
             center: boundOffset,
             centerParamName: nameof(boundOffset),
@@ -220,6 +225,7 @@ public sealed partial class SdfProgramBuilder {
         m_openInstanceBoundInSlotFrame = boundInSlotFrame;
         m_openInstanceRestPoseSkin = restPoseSkin;
         m_openInstanceParts = ((parts is { Count: > 0 }) ? [.. parts.Where(predicate: static part => part.IsValid)] : []);
+        m_openInstanceOperands = ((operands is { Count: > 0 }) ? [.. operands.Where(predicate: static part => part.IsValid)] : []);
 
         return this;
     }
@@ -317,7 +323,7 @@ public sealed partial class SdfProgramBuilder {
             Active: m_openInstanceActive,
             BakesWithPrevious: m_openInstanceBakesWithPrevious,
             Detail: m_openInstanceDetail
-        ) { BakesSeparately = m_openInstanceBakesSeparately, BoundInSlotFrame = m_openInstanceBoundInSlotFrame, Box = box, Fitted = fitted, Glyphs = glyphSpan, HeightField = m_openInstanceHeightField, Parts = parts, RestPoseSkin = m_openInstanceRestPoseSkin });
+        ) { BakesSeparately = m_openInstanceBakesSeparately, BoundInSlotFrame = m_openInstanceBoundInSlotFrame, Box = box, Fitted = fitted, Glyphs = glyphSpan, HeightField = m_openInstanceHeightField, Operands = m_openInstanceOperands, Parts = parts, RestPoseSkin = m_openInstanceRestPoseSkin });
 
         ResetOpenInstance();
 
@@ -362,6 +368,7 @@ public sealed partial class SdfProgramBuilder {
         m_openInstanceBoundInSlotFrame = false;
         m_openInstanceRestPoseSkin = false;
         m_openInstanceParts = [];
+        m_openInstanceOperands = [];
     }
 
     /// <summary>Declares a static per-object instance with balanced begin/end handling around <paramref name="emit"/>.

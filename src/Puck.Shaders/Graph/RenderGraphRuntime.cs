@@ -1241,6 +1241,7 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
     }
 
     private Surface ProduceFrameCore(in RenderGraphFrame frame, in FrameContext context) {
+        using var work = HostFrameWork.Measure(HostFrameWorkPart.Pump);
         ObjectDisposedException.ThrowIf(
             condition: m_disposed,
             instance: this
@@ -1249,10 +1250,12 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
         RebuildDriftedSources();
         PollOwedReadbacks();
         DisposeDrainedRetiring();
+        ApplyWithdrawals();
         m_captureFootprints = frame.Footprints;
         PackagesBeginFrame(context: in context);
         // Preparation can rebuild a host's live footprints; capture and scheduling must read the same demand.
         RefreshConvergenceDemand(captured: m_captureInstance);
+        work.Next(HostFrameWorkPart.Schedule);
 
         var schedule = m_schedules[m_turn];
         var prior = m_history;
@@ -1310,6 +1313,7 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
         }
 
         var renders = schedule.Renders;
+        HostFrameWork.NoteScheduledRenders(renders.Count);
         // The node that submitted last this frame, whose submission follows the host's presentation of the last frame.
         ShaderPipelineRenderNode? submitter = null;
         // The frame's longest single recording, the critical path its record jobs would keep side by side.
@@ -1323,12 +1327,14 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
         var queue = m_device.Services.QueueSubmitter;
         using var attribution = GpuQueueWork.Attribute(category: GpuQueueCategory.Graph);
 
+        work.Next(HostFrameWorkPart.Prepare);
         queue.BeginBatch();
         try {
             // The packages' shared frame work (an SDF residency's upload and pump) is done before any render records, so no
             // node's recording pays for it; its submissions open the frame's batch, ahead of every render's.
             PackagesPrepareRenders(context: in context, holdingConvergence: holdingConvergence, renders: renders);
 
+            work.Next(HostFrameWorkPart.Record);
             for (var position = 0; (position < renders.Count); position++) {
                 var index = renders[position];
                 var row = schedule.Instances[index];
@@ -1542,6 +1548,7 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
                     // was scheduled for is spent, so its refresh, and the demand it passes to its producers, keep their cadence.
                     if (Stands(index: index)) {
                         m_historySucceeded[index] = true;
+                        SettleWithdrawal(index: index);
                     }
 
                     // A source whose conversion has not built yet is asked again, since its cadence may never ask twice.
@@ -1580,10 +1587,13 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
                 schedule: schedule,
                 tick: frame.Tick
             );
+            work.Next(HostFrameWorkPart.Flush);
             Complete();
         } finally {
+            work.Next(HostFrameWorkPart.Flush);
             CompleteOwedExports(queue: queue);
         }
+        work.Next(HostFrameWorkPart.Pump);
         if (longestRecord >= 0) { RenderRecordWork.Process.Frame(longestRecordTicks: longestRecord); }
 
         // The image the display presents this frame, read back once every node has submitted.

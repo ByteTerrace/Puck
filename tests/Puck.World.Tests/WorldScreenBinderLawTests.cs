@@ -31,7 +31,7 @@ public sealed class WorldScreenBinderLawTests {
     [InlineData(WorldDisclosureTier.Presentation)]
     [InlineData(WorldDisclosureTier.Replica)]
     [Theory]
-    public void AWithheldObservationAllocatesNoPrivateResidencyAndItsNestedCamerasHoldWithIt(WorldDisclosureTier tier) {
+    public void AWithheldObservationResolvesNothingAndItsNextResidencyWaitsForADeliveryMadeSince(WorldDisclosureTier tier) {
         using var scene = new BinderScene(new BinderOptions(GardenDisclosure: tier));
         scene.ConfigureViews();
         var binder = scene.Binder;
@@ -52,11 +52,13 @@ public sealed class WorldScreenBinderLawTests {
         scene.RenderProbe.CopyNodes(nodes);
         Assert.Empty(nodes);
 
+        // Access is what the frame settled: the revocation reaches the views at the next published frame.
         destination.Server.Revoke(grant, Principal.Console);
-        Assert.False(binder.IsAvailable(session));
-        Assert.False(binder.IsAvailable(camera));
+        binder.Publish(in context);
+        Assert.False(binder.AccessOf(session).Available);
+        Assert.False(binder.AccessOf(camera).Available);
         Assert.True(childObservation.CanObserve);
-        Assert.False(binder.IsAvailable(child));
+        Assert.False(binder.AccessOf(child).Available);
         Assert.False(binder.TryResolveView(session, out _));
         Assert.False(binder.TryResolveView(camera, out _));
         Assert.Null(binder.ResolveInstanceView(session, world));
@@ -65,9 +67,11 @@ public sealed class WorldScreenBinderLawTests {
         scene.RenderProbe.CopyNodes(nodes);
         Assert.Empty(nodes);
 
+        // Granted again at the access it had, the session makes its residency from the content it was delivered then.
         destination.Server.Grant(grant, Principal.Console);
-        Assert.True(binder.IsAvailable(session));
-        Assert.True(binder.IsAvailable(camera));
+        binder.Publish(in context);
+        Assert.True(binder.AccessOf(session).Available);
+        Assert.True(binder.AccessOf(camera).Available);
         Assert.True(binder.TryResolveView(session, out var own));
         Assert.NotSame(world, own.Residency);
         Assert.True(binder.TryResolveView(camera, out var filmed));
@@ -76,16 +80,23 @@ public sealed class WorldScreenBinderLawTests {
         var created = nodes.Count;
         Assert.NotEqual(0, created);
 
+        // A second revocation moves the view's epoch, which withdraws what it published, and resolves nothing: no view
+        // is held for a viewer that may not see it. Its residency stays, rendering nothing, and serves it again once the
+        // grant returns at the same access.
+        var epoch = binder.AccessOf(session).Epoch;
         destination.Server.Revoke(grant, Principal.Console);
-        Assert.False(binder.IsAvailable(session));
-        Assert.True(binder.TryResolveView(session, out var held));
-        Assert.Same(own.Residency, held.Residency);
-        Assert.True(binder.TryResolveView(camera, out var heldCamera));
-        Assert.Same(filmed.Residency, heldCamera.Residency);
+        binder.Publish(in context);
+        Assert.False(binder.AccessOf(session).Available);
+        Assert.NotEqual(epoch, binder.AccessOf(session).Epoch);
+        Assert.NotEqual(epoch, binder.AccessOf(camera).Epoch);
+        Assert.False(binder.TryResolveView(session, out _));
+        Assert.False(binder.TryResolveView(camera, out _));
+        Assert.False(own.Residency.IsReleased);
         nodes.Clear();
         scene.RenderProbe.CopyNodes(nodes);
         Assert.Equal(created, nodes.Count);
         destination.Server.Grant(grant, Principal.Console);
+        binder.Publish(in context);
         Assert.True(binder.TryResolveView(session, out var resumed));
         Assert.Same(own.Residency, resumed.Residency);
         Assert.Same(observation, hosted.Observation);
@@ -99,7 +110,7 @@ public sealed class WorldScreenBinderLawTests {
         using var world = scene.Residency("world");
         scene.Binder.ViewHost = world;
         var name = WorldViewNames.Session(BinderScene.Session);
-        Assert.False(scene.Binder.IsAvailable(name));
+        Assert.False(scene.Binder.AccessOf(name).Available);
         Assert.False(scene.Binder.TryResolveView(name, out _));
         Assert.Null(scene.Binder.ResolveInstanceView(name, world));
         var nodes = new List<GpuWorkNode>();
@@ -116,12 +127,12 @@ public sealed class WorldScreenBinderLawTests {
         scene.Binder.ReconcileScreens([], []);
         foreach (var name in new[] { removed, WorldViewNames.Nested(removed, BinderScene.GardenSession), WorldViewNames.NestedCamera(removed, "cam"),
             WorldViewNames.Nested(WorldViewNames.Routed("absent"), 4), WorldViewNames.Sky("absent") }) {
-            Assert.False(scene.Binder.IsAvailable(name));
+            Assert.False(scene.Binder.AccessOf(name).Available);
             Assert.False(scene.Binder.TryResolveView(name, out _));
             Assert.Null(scene.Binder.ResolveInstanceView(name, world));
         }
         // The residency's buffer and a plain unnamed host view are not generated observation images.
-        Assert.True(scene.Binder.IsAvailable(WorldViewNames.Environment(removed)));
+        Assert.True(scene.Binder.AccessOf(WorldViewNames.Environment(removed)).Available);
         Assert.Same(world, scene.Binder.ResolveInstanceView("nothing", world)!.Value.Residency);
         var nodes = new List<GpuWorkNode>();
         scene.RenderProbe.CopyNodes(nodes);
@@ -659,7 +670,7 @@ public sealed class WorldScreenBinderLawTests {
         Assert.Equal(actual: binder.PortalGlass(consumer: gardenCamera, glass: out _, producer: nested), expected: WorldPortalGlass.Found);
         Assert.True(condition: binder.TryPlacements(placements: out _, view: gardenCamera));
 
-        // The garden retires: the screen holds its last image; the screen goes, and every level beneath it.
+        // The garden retires: the screen's picture is withdrawn; the screen goes, and every level beneath it.
         Assert.True(condition: binder.TryDescribeSession(description: out var described, index: BinderScene.Session));
         Assert.True(condition: scene.Host.TryRetire(name: described.InstanceName, reason: out _));
         binder.Publish(context: scene.Frame(device: new FakeGpuDevice()));
@@ -681,7 +692,7 @@ public sealed class WorldScreenBinderLawTests {
         scene.Host.SettleBootScreenSessions(stepped: true);
         Assert.True(condition: binder.TryDescribeSession(description: out _, index: BinderScene.Session));
 
-        // The destination refuses the session the authority now holds, so the screen keeps showing the one it had.
+        // The destination refuses the session the authority now holds, so the screen keeps the session it had.
         binder.Publish(context: scene.Frame(device: new FakeGpuDevice()));
         Assert.True(condition: binder.TryDescribeSession(description: out var described, index: BinderScene.Session));
         Assert.Equal(actual: described.Destination, expected: "garden");

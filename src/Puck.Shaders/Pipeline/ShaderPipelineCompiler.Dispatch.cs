@@ -39,11 +39,21 @@ public sealed partial class ShaderPipelineCompiler {
 
                 if ((resource.Kind == ShaderPipelineResourceKind.Buffer) && resource.IsExternal && !resource.IsHostBuffer &&
                     !resource.History && !input.PreviousFrame) { continue; }
+                if (UpdatesInPlace(resource: resource, packages: packages, resources: resources) && !input.PreviousFrame) { continue; }
                 Add(diagnostics, "SHADERPIPE_MUTABLE_INPUT",
-                    $"Package pass '{package.Name}' updates '{input.Name}' in place; only a current external buffer outside host-upload ports can be a mutable input.", input.Name);
+                    $"Package pass '{package.Name}' updates '{input.Name}' in place; only a current external buffer outside host-upload ports, or an owned retained package buffer zeroed once that no pass writes as a version, can be a mutable input.", input.Name);
             }
         }
     }
+    // An owned buffer a package updates in place across frames: one retained allocation shared by every frame slot, so
+    // successive frames' updates are ordered on the queue by the planned barrier of each frame's first use, zeroed once
+    // when it is new (no pass writes a version of it, so the planner clears every instance on initialization), reached
+    // only by package passes, and neither forwarded nor written as a version, which would discard what it carries.
+    private static bool UpdatesInPlace(ShaderPipelineResource resource, IReadOnlyList<ShaderPipelinePackagePass> packages, IReadOnlyDictionary<string, ShaderPipelineResource> resources) =>
+        (resource.Kind == ShaderPipelineResourceKind.Buffer) && !resource.IsExternal && resource.Retained && !resource.History &&
+        resource.IsPackageStorage && (resource.Initialization == ShaderPipelineInitialization.Zero) && (resource.From is null) &&
+        !resources.Values.Any(predicate: other => (other.From == resource.Name)) &&
+        !packages.Any(predicate: package => package.Outputs.Any(predicate: output => (output.Name == resource.Name)));
     // Everything a pass reads this frame or the previous one: an indirect dispatch's arguments, then its inputs.
     private static IEnumerable<ResourceReference> ReadsOf(ShaderPipelinePass pass) {
         if (pass.DispatchArguments is { } arguments) {

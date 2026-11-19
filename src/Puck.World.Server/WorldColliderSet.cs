@@ -480,7 +480,8 @@ public sealed partial class WorldColliderSet : IContactField {
     /// <see langword="null"/> to compile every row.</param>
     /// <returns>The analytic field.</returns>
     /// <param name="movingOnly">Builds only moving roots as composed fields for the global field provider.</param>
-    public static WorldColliderSet Build(WorldDefinition definition, WorldColliderSet? previous = null, bool movingOnly = false) {
+    /// <param name="previousDefinition">The document the previous set was compiled or carried over against.</param>
+    public static WorldColliderSet Build(WorldDefinition definition, WorldColliderSet? previous = null, bool movingOnly = false, WorldDefinition? previousDefinition = null) {
         var collision = definition.Collision;
         var worldSeed = (definition.Generation?.WorldSeed ?? 0UL);
 
@@ -498,6 +499,7 @@ public sealed partial class WorldColliderSet : IContactField {
         var placementCylinders = 0;
         var placementPlanes = 0;
         var fields = 0;
+        var holdingMove = previousDefinition is not null && !definition.HoldingsFrom(previousDefinition).IsEmpty;
 
         foreach (var screen in definition.Screens) {
             if (movingOnly || (screen.Solid is not { } solid)) {
@@ -526,7 +528,8 @@ public sealed partial class WorldColliderSet : IContactField {
             boxes++;
         }
 
-        foreach (var placement in definition.Placements) {
+        for (var row = 0; row < definition.Placements.Count; row++) {
+            var placement = definition.Placements[row];
             // A dealt template collides with nothing itself; its solid facet is what its dealt children carry.
             if (
                 (placement.Solid is null) ||
@@ -563,11 +566,14 @@ public sealed partial class WorldColliderSet : IContactField {
 
             var stamp = WorldPlacementStamp.Resolve(definition, placement, worldSeed: worldSeed);
 
+            var prior = holdingMove ? previousDefinition!.Placements[row] : placement;
+            var compiled = previous?.m_placements.GetValueOrDefault(prior);
+            if (compiled is not null && !ReferenceEquals(compiled.Creation, creation)) {
+                compiled = compiled.Shows?.GetValueOrDefault(creation);
+            }
             if (
-                (previous is null) ||
-                !previous.m_placements.TryGetValue(key: placement, value: out var compiled) ||
+                (compiled is null) ||
                 !ReferenceEquals(objA: compiled.Stamp, objB: stamp) ||
-                !ReferenceEquals(objA: compiled.Creation, objB: creation) ||
                 (compiled.Frame != resolvedFrame) ||
                 (compiled.WorldSeed != worldSeed) ||
                 (compiled.DefaultGrip != worldDefaultGrip)
@@ -692,13 +698,6 @@ public sealed partial class WorldColliderSet : IContactField {
     /// when a changed row's colliders differ (or it is attached), so the set must be built again, and nothing was
     /// changed.</returns>
     internal bool TryCarryAcrossHolding(WorldDefinition previous, WorldDefinition definition, IReadOnlyList<int> rows) {
-        // A changed contact source can move roots of rows whose own holding did not change.
-        foreach (var projected in definition.Placements) {
-            if (projected.Surface is not { } surface) { continue; }
-            foreach (var row in rows) {
-                if (surface.Targets.Contains(definition.Placements[row].Id, StringComparer.Ordinal)) { return false; }
-            }
-        }
         List<(WorldPlacement Before, WorldPlacement After, PlacementColliders Compiled)>? carried = null;
 
         foreach (var row in rows) {
@@ -767,6 +766,17 @@ public sealed partial class WorldColliderSet : IContactField {
         DiagnosticColliders = diagnostics;
 
         return true;
+    }
+
+    // A changed contact source can move roots of rows whose own holding did not change.
+    internal static bool MovesProjectedSurfaces(WorldDefinition definition, IReadOnlyList<int> rows) {
+        foreach (var projected in definition.Placements) {
+            if (projected.Surface is not { } surface) { continue; }
+            foreach (var row in rows) {
+                if (surface.Targets.Contains(definition.Placements[row].Id, StringComparer.Ordinal)) { return true; }
+            }
+        }
+        return false;
     }
 
     private static PlacementColliders CompilePlacement(WorldPlacement placement, WorldPrototype creation, CompiledPlacementFrame frame, ulong worldSeed, bool defaultGrip, CompiledPlacementStamp stamp) {

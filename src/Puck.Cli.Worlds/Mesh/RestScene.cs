@@ -47,8 +47,11 @@ public sealed class RestScene {
     private readonly ISdfPickMap? m_picks;
     private readonly Dictionary<int, RestBody> m_rigidTemplates = [];
 
+    private readonly IReadOnlyList<SdfMeshInstance> m_copies;
+
     private RestScene(SdfProgram program, IReadOnlyList<DynamicTransform> transforms, IReadOnlyList<RestBody> bodies, ISdfPickMap? picks, IReadOnlyList<SdfMeshInstance> copies) {
         m_picks = picks;
+        m_copies = copies;
         Program = program;
         Transforms = transforms;
         Bodies = bodies;
@@ -65,6 +68,44 @@ public sealed class RestScene {
     public IReadOnlyList<DynamicTransform> Transforms { get; }
     /// <summary>Gets the bodies the scene stands.</summary>
     public IReadOnlyList<RestBody> Bodies { get; }
+
+    /// <summary>Returns the scene with each operand a group reads (<see cref="SdfMeshGeometryBuilder.Operands"/>) moved to
+    /// a pose in that group's frame, so a plan of it keys, and a bake of it cuts, each such group where its operand stands
+    /// there: an operand is part of its group's geometry, never a skin member a mesh is posed by.</summary>
+    /// <param name="groups">The groups planned from this scene whose operands to move.</param>
+    /// <param name="poses">The poses, by an operand slot's offset from its group's slot, in the group's frame and
+    /// units.</param>
+    /// <param name="moved">Receives the selectors of the groups an operand of which moved.</param>
+    /// <returns>The scene with those slots' transforms replaced; this scene when none moved.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="groups"/> or <paramref name="poses"/> is
+    /// <see langword="null"/>.</exception>
+    public RestScene WithOperandPoses(IEnumerable<SdfMeshBakeGroup> groups, IReadOnlyDictionary<int, DynamicTransform> poses, out HashSet<int> moved) {
+        ArgumentNullException.ThrowIfNull(argument: groups);
+        ArgumentNullException.ThrowIfNull(argument: poses);
+
+        moved = [];
+        DynamicTransform[]? transforms = null;
+
+        foreach (var group in groups) {
+            if (!group.Dynamic || (group.Slot >= Transforms.Count)) { continue; }
+            var (framePosition, frameOrientation) = SdfMeshGeometryBuilder.PoseOf(transform: Transforms[group.Slot]);
+            var units = SdfMeshGeometryBuilder.UnitsOf(transform: Transforms[group.Slot]);
+
+            foreach (var (slot, _, _) in group.Geometry.Operands) {
+                if ((slot >= Transforms.Count) || !poses.TryGetValue(key: (slot - group.Slot), value: out var pose)) { continue; }
+
+                transforms ??= [.. Transforms];
+                // The inverse of the geometry's relative pose: the slot's world pose that reads as `pose` in the group's frame.
+                transforms[slot] = (Transforms[slot] with {
+                    Orientation = Quaternion.Normalize(value: (frameOrientation * pose.Orientation)),
+                    Position = (framePosition + Vector3.Transform(rotation: frameOrientation, value: (pose.Position * units))),
+                });
+                _ = moved.Add(item: group.Selector);
+            }
+        }
+
+        return ((transforms is null) ? this : new RestScene(bodies: Bodies, copies: m_copies, picks: m_picks, program: Program, transforms: transforms));
+    }
 
     /// <summary>Composes a world's rest scene.</summary>
     /// <param name="definition">The world.</param>

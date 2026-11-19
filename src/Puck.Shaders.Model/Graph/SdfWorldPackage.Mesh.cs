@@ -1,17 +1,22 @@
 namespace Puck.Shaders;
 
 public static partial class SdfWorldPackage {
-    /// <summary>The pass-block value holding the shadow cascades' orthographic light cameras, four rows each: position and
-    /// half height, right and aspect, up and near distance, forward and far distance (<c>float4[12]</c>): the key light's
-    /// near and far cascades, then the second shadow slot's.</summary>
+    /// <summary>The pass-block value holding the cascade set's orthographic light cameras (<c>SdfMeshShadowCascades</c>),
+    /// four rows each: position and half height, right and aspect, up and near distance, forward and far distance
+    /// (<c>float4[16]</c>): each entry's, then the camera the far entry's exit layer was drawn from.</summary>
     public const string MeshShadowCascades = "meshShadowCascades";
-    /// <summary>The pass-block value holding the key light's cascades the frame rendered this frame, zero when it casts
-    /// no shadow (<c>uint</c>).</summary>
+    /// <summary>The pass-block value holding the cascade set's entries the frame rendered, a prefix of the set; zero when
+    /// no slotted light emits or the view skips shadows (<c>uint</c>).</summary>
     public const string MeshShadowCount = "meshShadowCount";
-    /// <summary>The pass-block value holding the shadows' penumbra slopes and the receiver's depth bias, in world units: x
-    /// the key light's penumbra slope, y the constant bias, z the normal offset per texel, w the second shadow slot's
-    /// penumbra slope, zero when that slot casts no shadow (<c>float4</c>).</summary>
+    /// <summary>The pass-block value holding the receiver's depth bias, in world units: x the constant bias, y the normal
+    /// offset per texel, zw zero (<c>float4</c>).</summary>
     public const string MeshShadowParameters = "meshShadowParameters";
+    /// <summary>The pass-block value holding each cascade entry's penumbra half-slope, its light's; zero past the rendered
+    /// entries (<c>float4</c>).</summary>
+    public const string MeshShadowSlopes = "meshShadowSlopes";
+    /// <summary>The pass-block value holding the shadow role each cascade entry serves (<c>SdfShadowSlots.Primary</c> or
+    /// <c>Secondary</c>), and <c>0xFFFFFFFF</c> past the rendered entries (<c>uint4</c>).</summary>
+    public const string MeshShadowRoles = "meshShadowRoles";
     /// <summary>The pass-block value holding the texels along each side of the view's cascades (<c>uint</c>), which the
     /// view's shadow quality selects (<see cref="WithShadows"/>).</summary>
     public const string MeshShadowTexels = "meshShadowTexels";
@@ -67,12 +72,15 @@ public static partial class SdfWorldPackage {
     /// <summary>The irradiance volume's levels: nested windows about the camera, each coarser than the one inside it, so a
     /// surface past the finest window takes a coarser level's measured light rather than none.</summary>
     public const int MeshIrradianceLevelCount = 3;
-    /// <summary>The second shadow slot's cascade depth, sampled by the surface pass.</summary>
+    /// <summary>The secondary shadow role's cascade depth, sampled by the surface pass.</summary>
     public const string MeshShadowSecond = "meshShadowSecond";
-    /// <summary>The light cameras the pass block carries: the key light's near and far cascades, the second shadow slot's
-    /// one, then the camera the far cascade's exit layer was drawn from, which trails the far camera by a frame while a
-    /// refresh draws the far cascade's two layers on consecutive frames.</summary>
-    public const int MeshShadowCascadeCount = 4;
+    /// <summary>The entries of a view's cascade set (<c>SdfMeshShadowCascades</c>), each with its own depth targets and
+    /// pass: the primary role's near and far, then the secondary role's.</summary>
+    public const int MeshShadowEntries = 3;
+    /// <summary>The light cameras the pass block carries: each cascade entry's, then the camera the far entry's exit layer
+    /// was drawn from, which trails the far camera by a frame while a refresh draws the far entry's two layers on
+    /// consecutive frames.</summary>
+    public const int MeshShadowCascadeCount = (MeshShadowEntries + 1);
     /// <summary>The rows one cascade's light camera takes in <see cref="MeshShadowCascades"/>.</summary>
     public const int MeshShadowCascadeRows = 4;
     /// <summary>The most texels along each side of one shadow cascade's depth, which full shadow quality renders; a lower

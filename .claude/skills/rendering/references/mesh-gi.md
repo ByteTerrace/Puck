@@ -265,10 +265,12 @@ done line; a nested residency's done line is insufficient.
   weight of the lit slots of bounded stages. A shadowing directional (its
   `Shadows` flag) has a bit too, the probe's own ray toward it at the hits' reach,
   marked on every relight (`Relight`, a reused local part included, since a moving
-  sun moves it): `sdfLightResponse` reads it in place of the cascades in a view
-  that draws none (`SdfShadeSurface.cascaded`: `meshShadowCount` zero, or soft
-  shadows disabled, as a session view's `ReducedQuality` and `world.shadows off`
-  are). The gather device law compares the sun's visibility on both backends. `world.probe` prints `level=`,
+  sun moves it): `sdfLightResponse` reads it wherever no cascade holds the point
+  (`sdfShadowRoleAnswer`): past the cascades, blended across the band at their
+  edge by the cascades' coverage, on glass, and in a view that draws none
+  (`SdfShadeSurface.cascaded`: `meshShadowCount` zero, or soft shadows disabled,
+  as `world.shadows off` and a nested view whose `render.nested` row drops its
+  shadows are). The gather device law compares the sun's visibility on both backends. `world.probe` prints `level=`,
   `measured=`, `share=`, `remainder-level=` and `remainder-measured=`, and the
   remainder's eight corners after the chosen eight. An isotropic 8 m level could
   not resolve rooms a few metres tall: it had a probe plane in every other

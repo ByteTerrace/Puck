@@ -77,7 +77,7 @@ public sealed partial class RenderGraphRuntime {
         var factories = m_packages.Factories;
 
         for (var factory = 0; (factory < factories.Count); factory++) {
-            factories[factory].OnGraphReleased(instance: m_set.Instances[index].Name);
+            factories[factory].OnOutputsForgotten(instance: m_set.Instances[index].Name);
         }
     }
     // Forgets the waiting release of every node the frame names again or the runtime no longer runs: a named node keeps
