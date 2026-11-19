@@ -14,14 +14,14 @@ namespace Puck.World.Transpiler.Tests;
 /// <summary>The <c>test</c> construct's own grammar: the spelling the table describes, what each block admits, what
 /// it refuses by name, and the printer reproducing a test exactly.</summary>
 public class TestConstructLawTests {
-    private static WorldCompilation Compile(string source) => WorldCompiler.Compile(
+    private static WorldCompilation Compile(string source) => WorldCompileSession.Shared.Compile(
         cancellationToken: TestContext.Current.CancellationToken,
         source: source
     );
 
     internal static string Doc(string body) => $"schema: \"puck.world.definition.v1\"\ndocumentId: \"probe\"\n\n{TestWorldFixtures.Grants}\n\n{TestWorldFixtures.Rows}\n\n{body}\n";
     internal static string Refusal(string source, string code) {
-        var compilation = WorldCompiler.Compile(
+        var compilation = WorldCompileSession.Shared.Compile(
             cancellationToken: TestContext.Current.CancellationToken,
             source: source
         );

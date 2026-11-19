@@ -256,7 +256,7 @@ public sealed class TreeCompileReportLawTests {
                 path1: output,
                 path2: "games/field.world.json"
             )),
-            expected: CanonicalJsonDocument.Serialize(node: WorldCompiler.CompileFile(
+            expected: CanonicalJsonDocument.Serialize(node: WorldCompileSession.Shared.CompileFile(
                 cancellationToken: TestContext.Current.CancellationToken,
                 path: sources[2]
             ).RequireJson())

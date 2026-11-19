@@ -313,7 +313,7 @@ static async Task<int> RunWorldAsync(string[] args, string? script, WorldTestHos
         meshes: ((cacheRoot is null) ? PuckUserDirectory.Resolve(name: "meshes") : Path.Join(path1: cacheRoot, path2: "meshes"))
     );
     // A world source compiles once across boots.
-    Puck.World.Transpiler.Composition.WorldCompileCache.Shared.Persist(directory: caches.Compilations);
+    Puck.World.Transpiler.WorldCompileSession.Shared.Persist(directory: caches.Compilations);
     // Parse the nullable host CLI overrides at the boundary, keeping World's loud typo hard-exits for --backend / --present-
     // mode. A null override means "the document decides" (WorldHostSettings.Resolve coalesces to the authored defaults).
     WorldBackendPreference? backendOverride = null;

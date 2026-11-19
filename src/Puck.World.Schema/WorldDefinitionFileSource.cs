@@ -717,16 +717,8 @@ public static partial class WorldDefinitionFileSource {
         string json;
 
         try {
-            // Mirrors File.ReadAllText's own encoding detection (BOM-sniffed, UTF-8 default) so a load through this
-            // path and a load through File.ReadAllText decode identically — the hash below is over the RAW bytes
-            // regardless, but the parsed document must still match what the console has always loaded.
-            using var reader = new StreamReader(
-                stream: new MemoryStream(buffer: bytes),
-                encoding: Encoding.UTF8,
-                detectEncodingFromByteOrderMarks: true
-            );
-
-            json = reader.ReadToEnd();
+            // The hash below is over the raw bytes; the text is decoded as File.ReadAllText decodes the file.
+            json = DecodeJson(bytes: bytes);
         } catch (Exception exception) {
             reason = $"cannot decode {shown}: {exception.Message.ReplaceLineEndings(replacementText: " ")}";
 

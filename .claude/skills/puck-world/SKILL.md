@@ -347,7 +347,7 @@ echo results, and the on-screen console is only a mirror of that pipe.
 A world is authored in `.puck` source. `Puck.World.Transpiler` (the world
 vocabulary, a peer of the cartridge vocabulary over the `Puck.Transpiler` core)
 lowers it to the same JSON. `PuckWorldLoader.TryResolveWorld` compiles a
-`--world <x>.puck` path in memory through `WorldCompileCache` before composing
+`--world <x>.puck` path in memory through `WorldCompileSession` before composing
 and validating it exactly like a JSON boot, and `world.reload` recompiles it
 from disk. A world source has no committed JSON beside it; the build compiles it
 into its output. Every construct of the world vocabulary is described once in
@@ -407,7 +407,7 @@ rule. Grammar, units and the compile/lint verbs belong to `puck-dsl`.
 | `src/Puck.World.Machines` | The engine-neutral screen-machine host (`WorldMachineHost`, `WorldMachineCatalog`) |
 | `src/Puck.World.Client` | The presentation seam: `WorldClient`, `SeatController`, `WorldSeatBindings` (over `Puck.World.Vocabulary`'s `WorldAffordances`), `WorldCameraRigCompiler`, `WorldFramePresenter`, the stamp pool. References Protocol, never Server |
 | `src/Puck.World.Vocabulary` | The input vocabulary a world document is validated against (`WorldAffordances`), below Client |
-| `src/Puck.World.Transpiler` | The world `.puck` vocabulary: `WorldCompiler`, `WorldCompileCache`, `Vocabulary/` |
+| `src/Puck.World.Transpiler` | The world `.puck` vocabulary: `WorldCompileSession` (the one door into `WorldCompiler`), `Vocabulary/` |
 | `src/Puck.World.Authoring` | The embedded content families (`puck.creation.v1` `CreationDocument`/`CreationCanonicalizer`) and the sculpting library |
 | `src/Puck.World` | The sole composition root: `Program.cs` (every host flag), `PuckWorldLoader`, audio, the screen binder; it ships no world (the debug world is the package `worlds/debug/`) |
 | `src/Puck.World.Silo` | The hosted multi-world silo (Orleans activation lifecycle only; game traffic rides the World's own wire) |
@@ -495,11 +495,33 @@ shared candidate, and admits it once (`WorldDefinitionAdmission`, whose programs
 `world.reload.stale-base` names a base the authority cannot name (another activation,
 or replaced declarations nothing holds); `world.reload.base-mismatch` and
 `world.reload.target-mismatch` name disagreeing content. Retry by issuing a fresh
-reload. The success echo prints patch and complete payload bytes. Reload still uses
-the ordinary rebuild's state, input, journal and replay semantics; a wire delta is
-not a presentation-only mutation. What the install itself still costs on the tick
-(state settlement, the in-place arena load, disclosure composition) is the next
-edit-to-running work item.
+reload. A sender in the authority's process (`WorldReloadDelta.Create`) keeps the
+candidate it shared beside the declarations it diffed, and `TryPrepare` over that
+same object reconstructs nothing. The success echo prints patch and complete payload
+bytes and what the install kept of the state; `[world.reload] source` and
+`[world.rebuild]` lines (`host.log category world.re`) split the time into compile,
+admission, text, diff, reconstruction, admission and install.
+
+**A reload installs as the edit it is.** `WorldDocument.ApplyRebuild` seeds again only
+the state rows the source changed (`WorldDocument.NameReloadEdit`, comparing each row
+with the installed one by its serialized bytes) and keeps every other row's live value, the rule latches and the
+lattices' cells (`WorldArenaContinuity.Edit`); `world.reset` and `world.load` install
+a document whole. A reload candidate that was not shared by a delta against the
+installed declarations (a replay drive's re-read) is shared at the top of the apply
+(`WorldReloadDelta.Share`), so the rows a reload seeds are the same on a replay. The
+reload still clears the journal, moves the base, rebuilds the simulation's compiled
+products and deals placements again
+([the live edit path](../../../docs/plans/iteration.md#the-live-edit-path-step-3)).
+
+**A saved file reaches the World only as a reload.** `world.watch on`
+(`WorldSourceWatch`, off by default) polls every file fact the last compile read
+and queues an ordinary `world.reload` after a quiet moment. A reload composes and
+validates the whole world for one changed value and clears the journal; a refusal
+`world.reload.delta-unrepresentable` names the first path where the patch's merge
+differs from the source. A value you only want to try goes
+through `world.row.set`, which installs by kind (`WorldDocument.InstallKindOf`).
+[The authoring loop](../../../docs/plans/iteration/authoring-loop.md) holds the
+measurements and the design that joins the two doors.
 
 **An import names; the named file decides what it brings.** `import "skies"`,
 never `import "skies.puck"` (PUCK121). A module library (a source emitting no
@@ -722,6 +744,16 @@ check the flag: the owner may be holding the pad.
   bare `world.wait ready` is refused as not a tick count, and the script then
   runs on without waiting. End a script with `quit`. Blank lines and `#`
   comments are skipped.
+- **Time the edit loop.** `world.iteration` reads every edit loop the World
+  has timed (`WorldIterationClock`): the boot from process start, each
+  `world.reload` and `world.shaders.reload`, and a loop a script begins with
+  `world.iteration begin <name>` before its own edit. Each line gives the
+  seconds to the first frame from the edited content (`frame`), every mesh
+  drawing its own geometry (`shown`), the bakes settled and resident
+  (`meshes`) and the lighting converged (`lit`); a settled loop also prints
+  `[world.iteration] …` on stderr. `world.wait iteration <seconds>` waits for
+  the latest loop. A change that slows a loop says so with these lines
+  ([the iteration plan](../../../docs/plans/iteration.md)).
 - **Encoding.** Pin `[Console]::OutputEncoding` and `$OutputEncoding` to UTF-8
   without a BOM (`[System.Text.UTF8Encoding]::new($false)`): a BOM written into
   piped stdin corrupts the first command.

@@ -115,7 +115,7 @@ public sealed class GeneratedNameLawTests {
     private sealed record Minted(string Site, string Name, Form Form = Form.Document);
 
     private static WorldCompilation Green(string source, bool allowMultiple = false, string? sourcePath = null) {
-        var compilation = WorldCompiler.Compile(
+        var compilation = WorldCompileSession.Shared.Compile(
             allowMultiple: allowMultiple,
             cancellationToken: TestContext.Current.CancellationToken,
             defaultSchema: "puck.world.definition.v1",
@@ -270,7 +270,7 @@ public sealed class GeneratedNameLawTests {
     ];
     private static readonly IReadOnlyList<string> FileCorpus = ["a~b", "rulepush~push-block", "a~", "west~east~north"];
 
-    private static DiagnosticBag Diagnose(Door door, string name) => WorldCompiler.Compile(
+    private static DiagnosticBag Diagnose(Door door, string name) => WorldCompileSession.Shared.Compile(
         allowMultiple: door.Multiple,
         cancellationToken: TestContext.Current.CancellationToken,
         defaultSchema: "puck.world.definition.v1",

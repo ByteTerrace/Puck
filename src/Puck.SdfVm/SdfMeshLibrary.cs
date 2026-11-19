@@ -67,6 +67,100 @@ public sealed class SdfMeshLibrary(SdfMeshStore? store = null, long? byteBudget 
     /// <summary>Gets the skinned meshes' counts (<see cref="SdfMeshSkin"/>) every bake holding the library counts into:
     /// each skinned mesh a group starts drawing, and its vertices by vertex-stage path.</summary>
     public WorkCounterSet Skins { get; } = SdfMeshSkin.Counters();
+    /// <summary>Gets the counts of the groups that waited on a bake of their geometry another group already ran
+    /// (<see cref="SdfMeshBakeShare"/>) every bake holding the library counts into: the groups joined, those that took
+    /// the leader's mesh, the samples that saved, and those whose leader left them to start again.</summary>
+    public WorkCounterSet Shares { get; } = SdfMeshBakeShare.Counters();
+
+    // The bake running each geometry under a bake identity, which a group of any bake holding the library waits on rather
+    // than bake it again (Share). Under m_gate, which is also the one gate a share is joined, left and resolved under.
+    // Never trimmed: an entry is work in flight, not a cache, and leaves when its leader resolves it or a waiter deserts it.
+    private readonly Dictionary<(UInt128 Identity, SdfMeshGeometry Geometry), SdfMeshBakeShare> m_baking = [];
+
+    /// <summary>Returns the bake of a geometry a group waits on, joining it, or opens one the group leads when no bake of
+    /// the geometry runs under the identity: the one door a group starting a bake passes, so two residencies that plan
+    /// the same geometry before either lands it bake it once. A geometry the library came to hold since the group last
+    /// asked (a leader landed between) answers a share already resolved, which the group takes from at once.</summary>
+    /// <param name="identity">The bake identity the group bakes under.</param>
+    /// <param name="geometry">The group's sealed geometry.</param>
+    /// <param name="bake">The group's bake.</param>
+    /// <param name="group">The group.</param>
+    /// <param name="waiter">The group's place among the share's waiters when it joins a running or landed bake, or
+    /// <see langword="null"/> when it leads the share returned.</param>
+    /// <param name="landed">Whether the share returned has already landed, so no leader hands the group back.</param>
+    /// <returns>The share the group waits on or leads.</returns>
+    internal SdfMeshBakeShare Share(UInt128 identity, SdfMeshGeometry geometry, SdfMeshPathBake bake, object group, out SdfMeshBakeShare.Waiter? waiter, out bool landed) {
+        lock (m_gate) {
+            landed = false;
+            if (m_baking.TryGetValue(key: (identity, geometry), value: out var running)) {
+                waiter = new SdfMeshBakeShare.Waiter(bake: bake, group: group);
+                running.Waiters.Add(item: waiter);
+                running.Recount();
+                return running;
+            }
+            if (m_held.Contains(hash: (identity, geometry))) {
+                waiter = new SdfMeshBakeShare.Waiter(bake: bake, group: group);
+                landed = true;
+                return new SdfMeshBakeShare(bake: bake, geometry: geometry, identity: identity) { Resolved = true };
+            }
+
+            var share = new SdfMeshBakeShare(bake: bake, geometry: geometry, identity: identity);
+
+            m_baking.Add(key: (identity, geometry), value: share);
+            waiter = null;
+            return share;
+        }
+    }
+    /// <summary>Resolves a share whose leader is done or retired: no group joins it after this, and every group that
+    /// waited is handed back to take the leader's mesh from the library or start the geometry again.</summary>
+    /// <param name="share">The share.</param>
+    /// <param name="samples">The samples the leader dispatched for the geometry.</param>
+    /// <returns>The groups that waited, each exactly once; empty for a share resolved before.</returns>
+    internal SdfMeshBakeShare.Waiter[] Resolve(SdfMeshBakeShare share, long samples) {
+        lock (m_gate) {
+            if (share.Resolved) { return []; }
+            share.Resolved = true;
+            share.Samples = samples;
+            Unlist(share: share);
+
+            var waiters = share.Waiters.ToArray();
+
+            share.Waiters.Clear();
+            share.Recount();
+            return waiters;
+        }
+    }
+    /// <summary>Takes a waiting group off a share: a group retired while it waited, or one deserting a leader no frame
+    /// drives, which also closes the share to later groups so the next to start leads a bake of its own.</summary>
+    /// <param name="share">The share.</param>
+    /// <param name="waiter">The group's place among its waiters.</param>
+    /// <param name="desert">Whether later groups stop joining the share.</param>
+    internal void Leave(SdfMeshBakeShare share, SdfMeshBakeShare.Waiter waiter, bool desert) {
+        lock (m_gate) {
+            _ = share.Waiters.Remove(item: waiter);
+            share.Recount();
+            if (desert) { Unlist(share: share); }
+        }
+    }
+    /// <summary>Returns the highest priority a share's waiters were last measured at, which its leader ranks by when that
+    /// is higher than its own.</summary>
+    /// <param name="share">The share.</param>
+    /// <returns>The priority; zero with no waiter.</returns>
+    internal float MostWanted(SdfMeshBakeShare share) {
+        if (!share.HasWaiters) { return 0f; }
+        lock (m_gate) {
+            var most = 0f;
+
+            foreach (var waiter in share.Waiters) { most = MathF.Max(x: most, y: waiter.Priority); }
+            return most;
+        }
+    }
+    // Removes a share from the registry while it is the one listed for its geometry, under the gate.
+    private void Unlist(SdfMeshBakeShare share) {
+        var key = (share.Identity, share.Geometry);
+
+        if (m_baking.TryGetValue(key: key, value: out var listed) && ReferenceEquals(objA: listed, objB: share)) { _ = m_baking.Remove(key: key); }
+    }
 
     /// <summary>Gets how many geometries the library holds.</summary>
     public int Count {

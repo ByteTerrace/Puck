@@ -170,7 +170,7 @@ section describes the second.
 - **One canonical timed program.** The compiler lowers a `test` block to a
   `schedule` (`WorldScheduleRow`: a tick, a seat and a command line). A
   headless `puck test` submits those rows, and `world.benchmark` reads the
-  same lowered rows from `WorldCompileCache` and plays them. No second
+  same lowered rows from `WorldCompileSession` and plays them. No second
   translator exists.
 - **One door.** Each row is armed through `WorldTickScript.ArmSeat`, the seat
   ingress `WorldTestRun` uses: the line is submitted as its seat, under the
@@ -894,7 +894,7 @@ a reference only where it is itself correct.
 
 | Invariant | What enforces it | Where the guarantee stops |
 |---|---|---|
-| **One program, one door.** A chapter's lines exist once and enter as their seat | The compiler lowers the block once, and `WorldBenchmarkCommandModule` arms only what `WorldCompileCache` returns, only through `WorldTickScript.ArmSeat` | A mark's tick is chosen by hand against the program; the captured pose beside the place it names shows a drift |
+| **One program, one door.** A chapter's lines exist once and enter as their seat | The compiler lowers the block once, and `WorldBenchmarkCommandModule` arms only what `WorldCompileSession` returns, only through `WorldTickScript.ArmSeat` | A mark's tick is chosen by hand against the program; the captured pose beside the place it names shows a drift |
 | **A timed span is established, then watched.** | The run sets display pacing at entry and records what it found; every iteration carries the lockstep flag and the statistics carry the longest unstepped span, so a span that began or became invalid is disturbed from the data, whoever caused it. Nothing is refused | Load from outside the process; `puck lease quiet` and the recorded host load cover it |
 | **A hash is compared only from a common start.** | The report's `entry` names how the run began, and the comparer reads hashes only from fresh runs armed at the same tick | An attached run and a loop are not restored to an initial state; they are labelled, never compared |
 | **Like is compared with like.** | One comparer: comparable, changed workload or unavailable, decided from chapter identity, coverage, arrival, disturbance and conditions | Presentation is float and frame-paced; the spread between loops of one kind and an A/A pair measure it |

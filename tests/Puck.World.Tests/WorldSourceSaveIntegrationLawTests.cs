@@ -6,7 +6,6 @@ using Puck.Testing;
 using Puck.World.Client;
 using Puck.World.Server;
 using Puck.World.Transpiler;
-using Puck.World.Transpiler.Composition;
 using Puck.World.Transpiler.Decompiler;
 using Xunit;
 
@@ -34,9 +33,9 @@ public sealed class WorldSourceSaveIntegrationLawTests {
 
         Assert.StartsWith(actualString: saved, expectedStartString: "// Keep this authored heading.\n");
         Assert.EndsWith(actualString: saved, expectedEndString: "\n// Keep this constant and its spacing.\nlet retained = 3\n");
-        var compiled = WorldCompiler.Compile(source: saved, sourcePath: path, cancellationToken: TestContext.Current.CancellationToken);
+        var compiled = WorldCompileSession.Shared.Compile(source: saved, sourcePath: path, cancellationToken: TestContext.Current.CancellationToken);
 
-        Assert.True(condition: WorldSourceLoader.TryReadAuthored(path: path, document: Encoding.UTF8.GetBytes(s: compiled.RequireJson().ToJsonString()), authored: out var reloaded, reason: out reason), userMessage: reason);
+        Assert.True(condition: WorldCompileSession.Shared.TryReadAuthored(path: path, document: Encoding.UTF8.GetBytes(s: compiled.RequireJson().ToJsonString()), authored: out var reloaded, reason: out reason), userMessage: reason);
         Assert.True(condition: JsonNode.DeepEquals(node1: JsonNode.Parse(utf8Json: WorldDefinitionSerialization.SerializeBeside(definition: row.Server.Definition, path: path)), node2: JsonNode.Parse(utf8Json: WorldDefinitionSerialization.Serialize(definition: reloaded!))));
     }
     [Fact]

@@ -89,7 +89,7 @@ public sealed class WasmModuleInspectorLawTests {
                 hash: auto
             }
             """;
-        var missing = WorldCompiler.Compile(source: Source, basePath: directory.RootPath,
+        var missing = WorldCompileSession.Shared.Compile(source: Source, basePath: directory.RootPath,
             cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Contains(collection: missing.Diagnostics, filter: diagnostic => ((diagnostic.Code == PuckDiagnosticCodes.AddonHash) &&
@@ -98,7 +98,7 @@ public sealed class WasmModuleInspectorLawTests {
         // WebAssembly text pins its source bytes, the bytes the loader checks before converting them.
         foreach (var bytes in new[] { Header, Module(Section(id: 0, payload: [1, ((byte)'x'), 42])), "(module)"u8.ToArray() }) {
             _ = directory.WriteBytes(bytes: bytes, name: "security-content-producer.wasm");
-            var compiled = WorldCompiler.Compile(source: Source, basePath: directory.RootPath,
+            var compiled = WorldCompileSession.Shared.Compile(source: Source, basePath: directory.RootPath,
                 cancellationToken: TestContext.Current.CancellationToken);
 
             Assert.Equal(ContentPin.Compute(content: bytes).ToString(), compiled.RequireJson()["addons"]![0]!["hash"]!.GetValue<string>());
@@ -110,7 +110,7 @@ public sealed class WasmModuleInspectorLawTests {
     [InlineData("\"sha256/ABCDEF0123456789abcdef0123456789abcdef0123456789abcdef0123456789\"")]
     [Theory]
     public void AuthoredHashesRefuseOtherSpellingsByName(string spelling) {
-        var compiled = WorldCompiler.Compile(source: $"addon \"guest\" {{ hash: {spelling} }}",
+        var compiled = WorldCompileSession.Shared.Compile(source: $"addon \"guest\" {{ hash: {spelling} }}",
             cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.False(condition: compiled.Success);

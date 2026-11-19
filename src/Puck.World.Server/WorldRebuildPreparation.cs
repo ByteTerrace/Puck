@@ -32,6 +32,7 @@ internal sealed record WorldRebuildPreparation(WorldRebuildRequest Request, Prin
         var request = Request;
         string? failure = null;
         WorldDefinitionAdmission? admission = null;
+        var started = System.Diagnostics.Stopwatch.GetTimestamp();
 
         // Only this authority reconstructs the wire delta. Its pins stay on the request, so ApplyRebuild rechecks the
         // base against whatever is installed when the op drains.
@@ -45,12 +46,17 @@ internal sealed record WorldRebuildPreparation(WorldRebuildRequest Request, Prin
             }
         }
 
+        var reconstructed = System.Diagnostics.Stopwatch.GetTimestamp();
+
         if ((failure is null) && (request.Definition is { } supplied) &&
             !WorldDefinitionValidator.TryAdmit(supplied, Machines, Neighbours, out admission, out var proofReason)) {
             failure = $"cross-document load proof failed before enqueue — {proofReason}";
         }
 
-        return Op(request: request, failure: failure, admission: admission);
+        return Op(request: request, failure: failure, admission: admission) with {
+            AdmitMilliseconds = System.Diagnostics.Stopwatch.GetElapsedTime(startingTimestamp: reconstructed).TotalMilliseconds,
+            ReconstructMilliseconds = System.Diagnostics.Stopwatch.GetElapsedTime(startingTimestamp: started, endingTimestamp: reconstructed).TotalMilliseconds,
+        };
     }
     /// <summary>The buffered op for a preparation that could not complete.</summary>
     /// <param name="failure">Why it did not.</param>

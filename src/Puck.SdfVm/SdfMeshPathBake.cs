@@ -418,6 +418,23 @@ public sealed partial class SdfMeshPathBake {
         }
     }
 
+    /// <summary>Gets whether every group of the bake's program draws a mesh of its own geometry at some tier, or has
+    /// finished with none: no group draws nothing while it bakes, and none still draws the mesh it took from the group it
+    /// replaced, which shows the geometry before a change. The first frame that finds it true after a change shows the
+    /// changed form whole, though finer tiers may still land. <see langword="false"/> before the first program. It walks
+    /// every group under the bake's lock, so a caller reads it to measure, not every frame.</summary>
+    public bool DrawsOwn {
+        get {
+            lock (m_gate) {
+                if (m_program is null) { return false; }
+                foreach (var group in m_groups) {
+                    if (!group.DrawsOwn) { return false; }
+                }
+                return true;
+            }
+        }
+    }
+
     // Whether the bake still owes the dressed frame a mesh, a slice, a successor or the demanded tier of a floor planned
     // on arrival. Under the gate.
     private bool Owes() {
@@ -708,6 +725,10 @@ public sealed partial class SdfMeshPathBake {
             if ((field is null) || !ReferenceEquals(objA: field, objB: m_program)) { return false; }
             // Work that finishes from here on offers the next take.
             Volatile.Write(location: ref m_offered, value: 0);
+            // A take asked with the program bound is what tells a waiter on this bake's shares that a frame drives it; a
+            // waiter of this bake on one no frame drives starts its geometry here, where the take can then take it.
+            _ = Interlocked.Increment(location: ref m_asks);
+            if (m_joined.Count > 0) { DesertStalled(); }
 
             var lattices = m_takenLattices;
             var tickets = m_takenTickets;
@@ -827,6 +848,7 @@ public sealed partial class SdfMeshPathBake {
                     awaiting++;
                 }
                 group.InFlight = true;
+                group.TakenSamples += next.Samples;
                 samples += next.Samples;
                 taps += next.Taps;
                 lattices.Add(item: next);
@@ -1098,17 +1120,22 @@ public sealed partial class SdfMeshPathBake {
         ArgumentNullException.ThrowIfNull(argument: transforms);
 
         var planned = Stopwatch.GetTimestamp();
-        // The selectors whose groups draw something, as the frame's thread left them: every other selector arrives and
-        // plans its floor first, as the restart that adopts this plan decides from the same groups (Arrives).
+        // The selectors whose groups draw something and the shapes the bake holds, as the frame's thread left them:
+        // every other selector, and every group of another shape, arrives and plans its floor first, as the restart
+        // that adopts this plan decides from the same groups (Arrives).
         HashSet<int> drawing;
+        HashSet<UInt128> shapes;
 
-        lock (m_gate) { drawing = [.. m_groups.Where(predicate: static group => !Arrives(old: group)).Select(selector: static group => group.Selector)]; }
+        lock (m_gate) {
+            drawing = [.. m_groups.Where(predicate: static group => !Arrives(old: group)).Select(selector: static group => group.Selector)];
+            shapes = [.. m_groups.Select(selector: static group => group.Shape)];
+        }
 
         var groups = SdfMeshBakeGroup.Plan(
             create: static (selector, dynamic) => new Group(dynamic: dynamic, selector: selector),
             farDistance: farDistance,
             program: program,
-            tier: Tiers(arrives: selector => !drawing.Contains(item: selector), copies: false, transforms: transforms),
+            tier: Tiers(arrives: group => (!drawing.Contains(item: group.Selector) || NewShape(planned: group, shapes: shapes)), copies: false, transforms: transforms),
             transforms: transforms
         );
 
@@ -1160,7 +1187,8 @@ public sealed partial class SdfMeshPathBake {
 
         // A new program takes the plan a build already made off the frame's thread (PlanAhead), with each group this restart
         // cannot keep that read the transforms or a moved field planned again at the frame's; otherwise the whole plan.
-        var tiers = Tiers(arrives: selector => Arrives(old: previous.GetValueOrDefault(key: selector)), transforms: frame.DynamicTransforms);
+        var shapes = previous.Values.Select(selector: static group => group.Shape).ToHashSet();
+        var tiers = Tiers(arrives: group => PlansFloor(old: previous.GetValueOrDefault(key: group.Selector), planned: group, shapes: shapes), transforms: frame.DynamicTransforms);
 
         if (plan is not null) {
             // A group that read a transform is planned again unless the previous program keeps it; a static group that
@@ -1262,16 +1290,24 @@ public sealed partial class SdfMeshPathBake {
         return leaders;
     }
 
-    // What the groups a restart, resample or promotion placed began: a bake, a load from the store, or a wait on another
-    // group of the same geometry (Place).
+    // What the groups a restart, resample or promotion placed began: a bake, a load from the store, a wait on another
+    // group of the same geometry in this restart (Shared, Place), or a wait through the library on a group outside it
+    // (Joined, Start).
     private struct PlaceCounts {
         public int Baking;
         public int Loading;
         public int Shared;
+        public int Joined;
         // The first groups begun, which the start line names.
         public List<SdfMeshBakeReport.Begun>? Named;
 
-        public void Begun(Group group, bool loading) {
+        public void Begun(Group group, Started how) {
+            if (how == Started.Joined) {
+                Joined++;
+                return;
+            }
+            var loading = (how == Started.Loading);
+
             if (loading) { Loading++; } else { Baking++; }
             if ((Named ??= []).Count < SdfMeshBakeReport.NamedMost) {
                 Named.Add(item: new(Selector: group.Selector, Dynamic: group.Dynamic, Place: (group.Dynamic ? group.Slot : group.Instances), Loading: loading));
@@ -1358,7 +1394,7 @@ public sealed partial class SdfMeshPathBake {
             return true;
         }
         leaders.Add(key: group.Sealed, value: group);
-        started.Begun(group: group, loading: Begin(group: group));
+        started.Begun(group: group, how: Start(group: group));
         return true;
     }
     // Has a group newly put in a landed group's place draw what that group draws until its own mesh takes the draws
@@ -1369,10 +1405,13 @@ public sealed partial class SdfMeshPathBake {
     private static void ShowReplaced(Group group, Group? old) {
         if ((old is null) || (old.Dynamic != group.Dynamic)) { return; }
         group.KeepFloorOf(old: old);
-        if (old.Shown is { } shown) { group.Mesh = shown.Acquire(); }
+        if (old.Shown is { } shown) {
+            group.Mesh = shown.Acquire();
+            group.MarkStandIn();
+        }
     }
-    // Begins each group, of the listed indices or every one, still waiting on a leader the bake has retired: it bakes its
-    // geometry itself.
+    // Starts each group, of the listed indices or every one, still waiting on a leader the bake has retired: it starts its
+    // geometry itself (Start).
     private void BeginOrphans(IReadOnlyList<int>? indices, ref PlaceCounts started) {
         var count = (indices?.Count ?? m_groups.Count);
 
@@ -1381,17 +1420,18 @@ public sealed partial class SdfMeshPathBake {
 
             if (group.Done || (group.Leader is not { Retired: true })) { continue; }
             group.Leader = null;
-            started.Begun(group: group, loading: Begin(group: group));
+            started.Begun(group: group, how: Start(group: group));
         }
     }
     // Opens the accounts and the start line of the work a restart, resample or promotion began, if any: a new program's, or
     // any once the bake before it reported, whose counts and clock start again; otherwise work added to the bake still
     // running, whose done line then covers it. A bake that began nothing and has every group done reports here or never.
     private void BeginAccounts(string cause, bool fresh, int instances, long restarted, PlaceCounts started) {
-        var begun = ((started.Baking + started.Loading) + started.Shared);
+        var begun = (((started.Baking + started.Loading) + started.Shared) + started.Joined);
 
         if ((begun > 0) && (fresh || m_reported || !m_clock.IsRunning)) {
             m_accounts.Clear();
+            m_accounts.Joined = started.Joined;
             m_reported = false;
             m_clock.Restart();
             m_bakeStarted = restarted;
@@ -1399,8 +1439,9 @@ public sealed partial class SdfMeshPathBake {
             m_loadsDone = 0;
             m_loadFirst = ((started.Loading > 0) ? restarted : 0);
             m_loadLast = 0;
-            SdfMeshBakeReport.Start(baking: started.Baking, cause: cause, disk: Library.Disk, dynamic: m_groups.Count(predicate: static group => group.Dynamic), groups: m_groups.Count, identity: Identity, instances: instances, loading: started.Loading, named: started.Named, residency: Residency, residencyId: ResidencyId, shared: started.Shared);
+            SdfMeshBakeReport.Start(baking: started.Baking, cause: cause, disk: Library.Disk, dynamic: m_groups.Count(predicate: static group => group.Dynamic), groups: m_groups.Count, identity: Identity, instances: instances, joined: started.Joined, loading: started.Loading, named: started.Named, residency: Residency, residencyId: ResidencyId, shared: started.Shared);
         } else if (begun > 0) {
+            m_accounts.Joined += started.Joined;
             m_loadsQueued += started.Loading;
             if ((started.Loading > 0) && (m_loadFirst == 0)) { m_loadFirst = restarted; }
         }
@@ -2459,7 +2500,7 @@ public sealed partial class SdfMeshPathBake {
         private bool m_inFlight;
 
         public IAllocator? Allocator { get; set; }
-        public bool Done { get => m_done; set { m_done = value; if (value) { Memory.ReleaseReservation(); } TryRelease(); } }
+        public bool Done { get => m_done; set { m_done = value; if (value) { Memory.ReleaseReservation(); EndShare(); } TryRelease(); } }
         public bool InFlight { get => m_inFlight; set { m_inFlight = value; TryRelease(); } }
 
         public MemoryAccount.Owner Memory { get; } = MemoryAccount.Shared.CreateOwner(memoryClass: MemoryClass.Workspace, name: "mesh-bake-group");
@@ -2507,6 +2548,7 @@ public sealed partial class SdfMeshPathBake {
                     m_shown = null;
                     shown.Release();
                 }
+                if (!ReferenceEquals(objA: next, objB: m_standIn)) { m_standIn = null; }
                 if (owner is not null) {
                     owner.m_productRevision++;
                     if (next is not null) { SdfMeshSkin.Count(counters: owner.Library.Skins, mesh: next); }
@@ -2526,10 +2568,20 @@ public sealed partial class SdfMeshPathBake {
             if (m_shown is not { } shown) { return; }
             m_shown = null;
             shown.Release();
+            if (ReferenceEquals(objA: shown, objB: m_standIn)) { m_standIn = null; }
             if (Owner is { } owner) { owner.m_productRevision++; }
         }
+        // Marks the mesh the group draws as the stand-in it took from the group it replaced (ShowReplaced), which shows
+        // the geometry before the change rather than its own.
+        public void MarkStandIn() => m_standIn = Shown;
+        // Whether the group draws a mesh of its own geometry at some tier, or has finished with none: not the stand-in
+        // it took from the group it replaced, and not nothing while it bakes.
+        public bool DrawsOwn => ((Shown is { } shown) ? !ReferenceEquals(objA: shown, objB: m_standIn) : Done);
 
         private SdfMesh? m_shown;
+        // The replaced group's mesh the group draws until a product of its own takes the draws; held only for that
+        // comparison and cleared once the stand-in no longer draws, so it never keeps a released mesh reachable.
+        private SdfMesh? m_standIn;
 
         public SdfMeshBakeRequest? Next { get; set; }
         public int Refinements { get; set; }
@@ -2586,10 +2638,37 @@ public sealed partial class SdfMeshPathBake {
         // pool drops its queued work. Written under the bake's gate, read under the pool's.
         public bool Retired {
             get => Volatile.Read(location: ref m_retired);
-            set { Volatile.Write(location: ref m_retired, value: value); if (value) { Memory.Classify(category: MemoryCategory.Retirement); } TryRelease(); }
+            set { Volatile.Write(location: ref m_retired, value: value); if (value) { Memory.Classify(category: MemoryCategory.Retirement); EndShare(); } TryRelease(); }
         }
 
         private bool m_retired;
+
+        // The share of the group's geometry the group leads (SdfMeshLibrary.Share), until it is done or retired; the
+        // share it waits on instead, with its place among the waiters, until it takes the leader's mesh, starts again or
+        // retires (Joined, Waiter: written under the bake's gate). While it waits it holds no lattice (Next is null).
+        private SdfMeshBakeShare? m_share;
+
+        public SdfMeshBakeShare? Share { get => Volatile.Read(location: ref m_share); set => Volatile.Write(location: ref m_share, value: value); }
+        public SdfMeshBakeShare? Joined { get; set; }
+        public SdfMeshBakeShare.Waiter? Waiter { get; set; }
+        // The samples the group's lattices dispatched, which a waiter on its share saves.
+        public long TakenSamples { get; set; }
+        // While the group waits: the leader's bake's asks when they last moved, and this bake's asks and the time then
+        // (DesertStalled).
+        public long LeaderAsks { get; set; }
+        public long StillAsks { get; set; }
+        public long StillSince { get; set; }
+
+        // The one door a share leaves its leader by: a group done (landed, empty, failed or taken whole) or retired resolves
+        // the share it leads, handing each waiter back to its own bake, and a retired waiter leaves the share it waits on.
+        private void EndShare() {
+            if (Interlocked.Exchange(location1: ref m_share, value: null) is { } led) {
+                foreach (var waiter in led.Bake.Library.Resolve(samples: TakenSamples, share: led)) {
+                    _ = waiter.Bake.ScheduleJoined(group: ((Group)waiter.Group), share: led);
+                }
+            }
+            if (Retired && (Joined is { } joined) && (Waiter is { } place)) { joined.Bake.Library.Leave(desert: false, share: joined, waiter: place); }
+        }
 
         private readonly Lock m_lifecycle = new();
 

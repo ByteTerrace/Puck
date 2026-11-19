@@ -10,7 +10,7 @@ namespace Puck.World.Transpiler.Tests;
 public sealed class CompositionArithmeticTests {
     [Fact]
     public void PointAndAngleArgumentsAcceptUnitsAndPreserveExactVectorArithmetic() {
-        var compilation = WorldCompiler.Compile(
+        var compilation = WorldCompileSession.Shared.Compile(
             allowMultiple: true,
             cancellationToken: TestContext.Current.CancellationToken,
             defaultSchema: "puck.world.definition.v1",
@@ -48,7 +48,7 @@ public sealed class CompositionArithmeticTests {
     [InlineData("[1m, 2m, 3m] - [4m, 5m]")]
     [Theory]
     public void PointArgumentsRefuseMismatchedVectorLengths(string expression) {
-        var compilation = WorldCompiler.Compile(
+        var compilation = WorldCompileSession.Shared.Compile(
             cancellationToken: TestContext.Current.CancellationToken,
             source: $$"""
                 module region(origin: Point) { spawn arrival { at: origin } }

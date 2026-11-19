@@ -3,6 +3,7 @@ using System.Text.Json.Nodes;
 using Puck.Abstractions;
 using Puck.World;
 using Puck.World.Transpiler.Composition;
+using Puck.World.Transpiler;
 
 namespace Puck.Cli.Canary;
 
@@ -185,7 +186,7 @@ public static partial class CanaryCommand {
     // declares is staged together, through the staging a composition boot does for itself, and the world the leg
     // enters — its `entry`, else the source's declared entry — is the document the authority boots.
     internal static string StageFederatedComposition(string source, string? entry, string directory) {
-        _ = WorldCompileCache.Shared.TryCompile(
+        _ = WorldCompileSession.Shared.TryCompile(
             compiled: out var compiled,
             failure: out var failure,
             path: source

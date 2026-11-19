@@ -657,22 +657,27 @@ public static class CartridgeDocumentEmitter {
     /// </summary>
     /// <param name="document">The parsed source.</param>
     /// <param name="sourcePath">The source's file path, which its imports resolve against.</param>
+    /// <param name="sources">The compile session's parses, which every imported module is read through.</param>
     /// <param name="diagnostics">The bag refusals are reported into, or <see langword="null"/> for a fresh one.</param>
     /// <param name="sourceMap">The JSON-pointer-to-span map to fill, or <see langword="null"/>.</param>
     /// <param name="cancellationToken">Cancels import traversal, evaluation and expansion.</param>
     /// <returns>The canonical object, or a <see langword="null"/> value when an import does not resolve, paired with
     /// the diagnostics raised.</returns>
-    public static CompilationResult<JsonObject> LowerSource(DocumentNode document, string sourcePath, DiagnosticBag? diagnostics = null, SourceMap? sourceMap = null, CancellationToken cancellationToken = default) {
+    public static CompilationResult<JsonObject> LowerSource(DocumentNode document, string sourcePath, PuckSourceTable sources, DiagnosticBag? diagnostics = null, SourceMap? sourceMap = null, CancellationToken cancellationToken = default) {
         ArgumentNullException.ThrowIfNull(document);
         ArgumentException.ThrowIfNullOrEmpty(sourcePath);
 
         diagnostics ??= new DiagnosticBag();
 
+        // One budget for the whole compile: the import walk charges it first and the lowering goes on charging it.
+        var budget = new DocumentEvaluationBudget { CancellationToken = cancellationToken };
         var withModules = ModuleResolver.ImportModules(
-            cancellationToken: cancellationToken,
+            budget: budget,
             diagnostics: diagnostics,
+            parsed: out _,
             rootDoc: document,
             rootPath: sourcePath,
+            sources: sources,
             vocabulary: CartridgeVocabulary.Instance
         );
 
@@ -681,8 +686,8 @@ public static class CartridgeDocumentEmitter {
                 null,
                 diagnostics
             )
-            : LowerWithDiagnostics(
-                cancellationToken: cancellationToken,
+            : Lower(
+                budget: budget,
                 diagnostics: diagnostics,
                 document: withModules,
                 sourceMap: sourceMap
@@ -697,15 +702,22 @@ public static class CartridgeDocumentEmitter {
     public static CompilationResult<JsonObject> LowerWithDiagnostics(DocumentNode document, DiagnosticBag? diagnostics = null, SourceMap? sourceMap = null, CancellationToken cancellationToken = default) {
         ArgumentNullException.ThrowIfNull(document);
 
-        diagnostics ??= new DiagnosticBag();
-
+        return Lower(
+            budget: new DocumentEvaluationBudget { CancellationToken = cancellationToken },
+            diagnostics: (diagnostics ?? new DiagnosticBag()),
+            document: document,
+            sourceMap: sourceMap
+        );
+    }
+    // Lowers under `budget`, which the compile's import walk may already have charged.
+    private static CompilationResult<JsonObject> Lower(DocumentNode document, DiagnosticBag diagnostics, SourceMap? sourceMap, DocumentEvaluationBudget budget) {
         var root = new JsonObject();
         var scope = new DocumentScope(
             vocabulary: CartridgeVocabulary.Instance,
             sourceMap: sourceMap,
             diagnostics: diagnostics,
             schema: (document.Schema ?? CartridgeDocument.SchemaId)
-        ) { Budget = new DocumentEvaluationBudget { CancellationToken = cancellationToken } };
+        ) { Budget = budget };
 
         if (document.Schema is not null) {
             root["schema"] = document.Schema;

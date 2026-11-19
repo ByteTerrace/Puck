@@ -39,10 +39,11 @@ public sealed record OperatorWorldLaunch(
 /// <param name="Paused">Whether the World boots paused.</param>
 /// <param name="Lockstep">Whether the World boots in lockstep.</param>
 /// <param name="StateDirectory">The World's own state directory.</param>
+/// <param name="Wait">How long the start waits for its turn (the GPU lease queue and the host's headroom) before it is refused, the start's own timeout.</param>
 /// <param name="TemporaryDirectory">The temporary directory the World publishes its attachment in, the one the adapter
 /// follows.</param>
 public sealed record OperatorWorldRequest(string Checkout, string Document, Puck.World.WorldBackendPreference? Backend, string? CacheDirectory, string? CaptureTool, string Holder, string? Lane,
-    bool Windowed, bool OwnerPlay, bool Paused, bool Lockstep, string StateDirectory, string TemporaryDirectory);
+    bool Windowed, bool OwnerPlay, bool Paused, bool Lockstep, string StateDirectory, string TemporaryDirectory, TimeSpan Wait);
 /// <summary>A started World, or why none started.</summary>
 /// <param name="Process">The started World, its streams redirected and unread, or <see langword="null"/> when none started.</param>
 /// <param name="Build">The full path of the <c>Puck.World.dll</c> it runs, or <see langword="null"/>.</param>
@@ -291,7 +292,7 @@ internal sealed class OperatorWorlds(OperatorWorldLaunch? launch, TimeProvider c
         try {
             start = await launch!.Start(
                 new OperatorWorldRequest(Backend: backend, CacheDirectory: cacheDirectory, CaptureTool: captureTool, Checkout: checkout, Document: path, Holder: holder, Lane: lane,
-                    Lockstep: lockstep, OwnerPlay: ownerPlay, Paused: paused, StateDirectory: state, TemporaryDirectory: attachment.Target, Windowed: windowed),
+                    Lockstep: lockstep, OwnerPlay: ownerPlay, Paused: paused, StateDirectory: state, TemporaryDirectory: attachment.Target, Wait: budget, Windowed: windowed),
                 text => progress.Stage = text,
                 cancellationToken
             ).ConfigureAwait(continueOnCapturedContext: false);

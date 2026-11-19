@@ -1,14 +1,15 @@
 using System.Text;
 using Puck.Abstractions.Machines;
 using Puck.Assets;
+using Puck.World.Transpiler.Composition;
 
-namespace Puck.World.Transpiler.Composition;
+namespace Puck.World.Transpiler;
 
-/// <summary>Admits a single-document <c>.puck</c> world source the way the game boots one: its compiled document's
-/// basis-and-imports graph composed beside the source, then one load and admission that proves its adjacency claims
-/// against the documents beside it. The game's boot loader and the laws that pin a boot's work both go through
-/// here.</summary>
-public static class WorldSourceLoader {
+// Admitting a single-document `.puck` world source the way the game boots one: its compiled document's
+// basis-and-imports graph composed beside the source through the session, then one load and admission that proves its
+// adjacency claims against the documents beside it. The game's boot loader and the laws that pin a boot's work both go
+// through here.
+public sealed partial class WorldCompileSession {
     /// <summary>Composes and admits <paramref name="document"/>, the document <paramref name="path"/> compiled to.</summary>
     /// <param name="path">The full path of the <c>.puck</c> source; its basis, imports and neighbours resolve beside
     /// it.</param>
@@ -28,14 +29,14 @@ public static class WorldSourceLoader {
     /// <exception cref="ArgumentException"><paramref name="path"/> is <see langword="null"/>, empty or white space.</exception>
     /// <exception cref="ArgumentNullException"><paramref name="document"/> is <see langword="null"/>.</exception>
     /// <param name="keys">The installed world sampler, or null for an authoring preview.</param>
-    public static bool TryLoadForAdmission(string path, byte[] document, out WorldDefinitionAdmission? admission, out string reason, string catalogFingerprint = "",
+    public bool TryLoadForAdmission(string path, byte[] document, out WorldDefinitionAdmission? admission, out string reason, string catalogFingerprint = "",
         IMachineValidationCatalog? catalog = null, Func<WorldDefinition, WorldDefinition>? overrides = null, CompiledWorldRequest? compiled = null, WorldCompiledSource? sourceCompilation = null, WorldDrawSampler? keys = null) {
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: path);
         ArgumentNullException.ThrowIfNull(argument: document);
 
         admission = null;
 
-        if (!TryCompose(
+        if (!TryComposeSource(
             catalog: catalog,
             catalogFingerprint: catalogFingerprint,
             document: document,
@@ -82,14 +83,14 @@ public static class WorldSourceLoader {
     /// <returns><see langword="true"/> when the document composed and parsed.</returns>
     /// <exception cref="ArgumentException"><paramref name="path"/> is <see langword="null"/>, empty or white space.</exception>
     /// <exception cref="ArgumentNullException"><paramref name="document"/> is <see langword="null"/>.</exception>
-    public static bool TryReadAuthored(string path, byte[] document, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out WorldDefinition? authored, out string reason,
+    public bool TryReadAuthored(string path, byte[] document, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out WorldDefinition? authored, out string reason,
         string catalogFingerprint = "", IMachineValidationCatalog? catalog = null, WorldCompiledSource? sourceCompilation = null) {
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: path);
         ArgumentNullException.ThrowIfNull(argument: document);
 
         authored = null;
 
-        if (!TryCompose(
+        if (!TryComposeSource(
             catalog: catalog,
             catalogFingerprint: catalogFingerprint,
             document: document,
@@ -122,7 +123,7 @@ public static class WorldSourceLoader {
     /// <returns><see langword="true"/> when the document composed, parsed, drew, and every chunk derived.</returns>
     /// <exception cref="ArgumentException"><paramref name="path"/> is <see langword="null"/>, empty or white space.</exception>
     /// <exception cref="ArgumentNullException"><paramref name="document"/> is <see langword="null"/>.</exception>
-    public static bool TryCompileWorld(string path, byte[] document, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out byte[]? compiledWorld, out string reason,
+    public bool TryCompileWorld(string path, byte[] document, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out byte[]? compiledWorld, out string reason,
         string catalogFingerprint = "", IMachineValidationCatalog? catalog = null, WorldCompiledSource? sourceCompilation = null) {
         ArgumentNullException.ThrowIfNull(argument: document);
 
@@ -130,7 +131,7 @@ public static class WorldSourceLoader {
 
         // The header records the composed bytes' hash, which a boot composing the same bytes keys the compiled world by
         // before it parses anything.
-        return (TryCompose(
+        return (TryComposeSource(
             catalog: catalog,
             catalogFingerprint: catalogFingerprint,
             document: document,
@@ -155,10 +156,10 @@ public static class WorldSourceLoader {
         ));
     }
 
-    private static bool TryCompose(string path, byte[] document, out byte[] json, out string reason, string catalogFingerprint, IMachineValidationCatalog? catalog, WorldCompiledSource? sourceCompilation) {
+    private bool TryComposeSource(string path, byte[] document, out byte[] json, out string reason, string catalogFingerprint, IMachineValidationCatalog? catalog, WorldCompiledSource? sourceCompilation) {
         json = document;
 
-        if (!PuckDocumentComposer.TryComposeWorldDocument(
+        if (!TryCompose(
             catalog: catalog,
             catalogFingerprint: catalogFingerprint,
             chainBytes: out _,

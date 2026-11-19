@@ -22,7 +22,8 @@ namespace Puck.World;
 /// <param name="definitionSource">The source the running world was loaded from.</param>
 /// <param name="machineCatalog">The machine catalog admission validates against.</param>
 /// <param name="sourceWatch">The source watch that follows the reload's compiler inputs.</param>
-internal sealed class WorldReload(WorldServer server, IServerLink link, WorldDeferredVerbEchoes echoes, WorldDefinitionSource definitionSource, WorldMachineCatalog machineCatalog, WorldSourceWatch sourceWatch) {
+/// <param name="iterations">The edit-loop clock each reload begins a loop on.</param>
+internal sealed class WorldReload(WorldServer server, IServerLink link, WorldDeferredVerbEchoes echoes, WorldDefinitionSource definitionSource, WorldMachineCatalog machineCatalog, WorldSourceWatch sourceWatch, WorldIterationClock iterations) {
     private const string Verb = "world.reload";
 
     // The preparations' text catalog: its font cache is not thread-safe, so preparations take turns on it.
@@ -32,7 +33,14 @@ internal sealed class WorldReload(WorldServer server, IServerLink link, WorldDef
     private readonly List<Pending> m_preparing = [];
 
     // A compiled, admitted, text-checked and diffed source, or the refusal preparation reached.
-    private sealed record Prepared(string ContentHash, WorldReloadDelta? Delta, string? Refusal);
+    private sealed record Prepared(string ContentHash, WorldReloadDelta? Delta, string? Refusal) {
+        // Where the preparation's time went, in milliseconds: compiling the source, composing and admitting the
+        // compiled document, checking its text assets, and diffing it against the installed declarations.
+        public double CompileMilliseconds { get; init; }
+        public double AdmitMilliseconds { get; init; }
+        public double TextMilliseconds { get; init; }
+        public double DiffMilliseconds { get; init; }
+    }
 
     // One reload in flight: the preparation the pump takes, then the authority's verdict it waits for.
     private sealed class Pending(WorldReload owner, CommandContext context, string path, WorldSourceWatch.Reads? reads) {
@@ -74,6 +82,7 @@ internal sealed class WorldReload(WorldServer server, IServerLink link, WorldDef
     /// <param name="context">The issuing line's context.</param>
     /// <returns>A result settling with the authority's verdict, or with the refusal preparation reached.</returns>
     public CommandResult Run(CommandContext context) {
+        var loop = iterations.Begin(name: Verb, named: false);
         var path = definitionSource.SourcePath;
         var reads = sourceWatch.RecordReads(path: path);
         var pending = new Pending(owner: this, context: context, path: path, reads: reads);
@@ -85,6 +94,9 @@ internal sealed class WorldReload(WorldServer server, IServerLink link, WorldDef
 
         pending.Start(prepare: () => Prepare(basis: basis, documents: documents, instanceIdentity: instanceIdentity, neighbours: neighbours, path: path, reads: reads, version: version));
         m_preparing.Add(item: pending);
+        pending.Verdict.OnSettled(continuation: verdict => {
+            if (verdict.IsError) { iterations.Refuse(number: loop, refusal: verdict.Output); }
+        });
         // The session's hold and the host step (Poll) both take the preparation, so it submits even once a caller's
         // answer deadline has ended the hold.
         context.TextSession?.HoldWhile(
@@ -114,15 +126,32 @@ internal sealed class WorldReload(WorldServer server, IServerLink link, WorldDef
             path: path,
             reason: out reason
         );
+        // The source's compile, apart from the load that composes and admits what it compiled: the load reads the
+        // same compile from the shared cache, so the two phases are timed apart and nothing compiles twice.
+        void Compile() {
+            if (path.EndsWith(value: ".puck", comparisonType: StringComparison.OrdinalIgnoreCase)) {
+                try {
+                    _ = Puck.World.Transpiler.WorldCompileSession.Shared.TryCompile(compiled: out _, failure: out _, path: path);
+                } catch (Exception error) when ((error is IOException or UnauthorizedAccessException)) {
+                    // The load reports what it cannot read.
+                }
+            }
+        }
         WorldDefinitionAdmission? admission;
         string contentHash;
         string reason;
         bool loadedSource;
+        var started = System.Diagnostics.Stopwatch.GetTimestamp();
+        long compiled;
 
         if (reads is null) {
+            Compile();
+            compiled = System.Diagnostics.Stopwatch.GetTimestamp();
             loadedSource = Load(admission: out admission, contentHash: out contentHash, reason: out reason);
         } else {
             using (CompileInputs.Record(log: reads.Log)) {
+                Compile();
+                compiled = System.Diagnostics.Stopwatch.GetTimestamp();
                 loadedSource = Load(admission: out admission, contentHash: out contentHash, reason: out reason);
             }
         }
@@ -131,16 +160,26 @@ internal sealed class WorldReload(WorldServer server, IServerLink link, WorldDef
         }
 
         var loaded = admission!.Definition;
+        var admitted = System.Diagnostics.Stopwatch.GetTimestamp();
 
         lock (m_textGate) {
             if (!m_textCatalog.TryValidate(definition: loaded, origin: path, reason: out reason)) {
                 return new Prepared(ContentHash: contentHash, Delta: null, Refusal: $"text assets refused: {reason}");
             }
         }
+        var texted = System.Diagnostics.Stopwatch.GetTimestamp();
+
         try {
             // The delta names installed declarations. A recipient export contains tick values instead, which are
             // neither this base nor what a reload installs. This verb is operator-only.
-            return new Prepared(ContentHash: contentHash, Delta: WorldReloadDelta.Create(basis, version, loaded), Refusal: null);
+            var delta = WorldReloadDelta.Create(basis, version, loaded);
+
+            return new Prepared(ContentHash: contentHash, Delta: delta, Refusal: null) {
+                AdmitMilliseconds = System.Diagnostics.Stopwatch.GetElapsedTime(startingTimestamp: compiled, endingTimestamp: admitted).TotalMilliseconds,
+                CompileMilliseconds = System.Diagnostics.Stopwatch.GetElapsedTime(startingTimestamp: started, endingTimestamp: compiled).TotalMilliseconds,
+                DiffMilliseconds = System.Diagnostics.Stopwatch.GetElapsedTime(startingTimestamp: texted).TotalMilliseconds,
+                TextMilliseconds = System.Diagnostics.Stopwatch.GetElapsedTime(startingTimestamp: admitted, endingTimestamp: texted).TotalMilliseconds,
+            };
         } catch (InvalidDataException exception) {
             return new Prepared(ContentHash: contentHash, Delta: null, Refusal: exception.Message);
         }
@@ -149,6 +188,8 @@ internal sealed class WorldReload(WorldServer server, IServerLink link, WorldDef
     private CommandResult Submit(CommandContext context, string path, Prepared prepared, WorldSourceWatch.Reads? reads) {
         if (reads is not null) { sourceWatch.AdoptReads(reads: reads); }
         if (prepared.Refusal is { } refusal) { return sourceWatch.Refuse(diagnostic: refusal); }
+        Console.Error.WriteLine(value: string.Create(provider: System.Globalization.CultureInfo.InvariantCulture,
+            handler: $"[world.reload] source compile={prepared.CompileMilliseconds:0} ms admit={prepared.AdmitMilliseconds:0} ms text={prepared.TextMilliseconds:0} ms diff={prepared.DiffMilliseconds:0} ms patch={(prepared.Delta?.Patch.Length ?? 0)} bytes"));
         return link.SubmitRebuild(
             echoes: echoes,
             request: new WorldRebuildRequest(

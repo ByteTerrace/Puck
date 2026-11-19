@@ -1,7 +1,6 @@
 using System.Text.Json.Nodes;
 using System.Text;
 using Puck.Testing;
-using Puck.World.Transpiler.Composition;
 using Xunit;
 
 namespace Puck.World.Transpiler.Tests;
@@ -28,13 +27,13 @@ public sealed class SourceSaveLawTests {
 
     [Fact]
     public void ChangedPlacementRoundTripsAndEveryOtherByteRemains() {
-        var compiled = WorldCompiler.Compile(source: Source, cancellationToken: TestContext.Current.CancellationToken);
+        var compiled = WorldCompileSession.Shared.Compile(source: Source, cancellationToken: TestContext.Current.CancellationToken);
         var target = compiled.RequireJson().DeepClone().AsObject();
 
         target["placements"]!["rows"]![1]!["position"] = new JsonArray(4, 5, 6);
 
         Assert.True(condition: WorldSourceEdits.TryRewrite(source: Source, target: target, rewritten: out var saved, reason: out var reason), userMessage: reason);
-        Assert.True(condition: JsonNode.DeepEquals(node1: target, node2: WorldCompiler.Compile(source: saved, cancellationToken: TestContext.Current.CancellationToken).RequireJson()));
+        Assert.True(condition: JsonNode.DeepEquals(node1: target, node2: WorldCompileSession.Shared.Compile(source: saved, cancellationToken: TestContext.Current.CancellationToken).RequireJson()));
         var origin = compiled.SourceMap.Snapshot()["/placements/rows/1"];
 
         Assert.StartsWith(expectedStartString: Source[..origin.Span.Offset], actualString: saved);
@@ -45,7 +44,7 @@ public sealed class SourceSaveLawTests {
     [Theory]
     public void GeneratedPlacementRefusesByConstructAndName(string generated, string construct, string name) {
         var source = (((WorldSources.Header + "template marker(id) { placement id { prototype: \"post\" } }\nplacements { ") + generated) + " }\n");
-        var target = WorldCompiler.Compile(source: source, cancellationToken: TestContext.Current.CancellationToken).RequireJson().DeepClone().AsObject();
+        var target = WorldCompileSession.Shared.Compile(source: source, cancellationToken: TestContext.Current.CancellationToken).RequireJson().DeepClone().AsObject();
 
         target["placements"]!["rows"]![0]!["position"] = new JsonArray(1, 0, 0);
 
@@ -57,7 +56,7 @@ public sealed class SourceSaveLawTests {
     }
     [Fact]
     public void DuplicateRequiresAnAuthoredNameBeforeSave() {
-        var target = WorldCompiler.Compile(source: Source, cancellationToken: TestContext.Current.CancellationToken).RequireJson().DeepClone().AsObject();
+        var target = WorldCompileSession.Shared.Compile(source: Source, cancellationToken: TestContext.Current.CancellationToken).RequireJson().DeepClone().AsObject();
         var rows = target["placements"]!["rows"]!.AsArray();
         var duplicate = rows[1]!.DeepClone();
 
@@ -72,25 +71,25 @@ public sealed class SourceSaveLawTests {
         duplicate["id"] = "copy";
         Assert.True(condition: WorldSourceEdits.TryRewrite(source: Source, target: target, rewritten: out var saved, reason: out reason), userMessage: reason);
         Assert.Contains(actualString: saved, expectedSubstring: "placement \"still\" { prototype: \"post\" position [distance, 0, 0] yawDegrees: 0 scale: 1 }");
-        Assert.True(condition: JsonNode.DeepEquals(node1: target, node2: WorldCompiler.Compile(source: saved, cancellationToken: TestContext.Current.CancellationToken).RequireJson()));
+        Assert.True(condition: JsonNode.DeepEquals(node1: target, node2: WorldCompileSession.Shared.Compile(source: saved, cancellationToken: TestContext.Current.CancellationToken).RequireJson()));
     }
     [Fact]
     public void RemovingOneRowRetainsTheSurvivorsOriginalExpression() {
-        var target = WorldCompiler.Compile(source: Source, cancellationToken: TestContext.Current.CancellationToken).RequireJson().DeepClone().AsObject();
+        var target = WorldCompileSession.Shared.Compile(source: Source, cancellationToken: TestContext.Current.CancellationToken).RequireJson().DeepClone().AsObject();
 
         target["placements"]!["rows"]!.AsArray().RemoveAt(index: 1);
 
         Assert.True(condition: WorldSourceEdits.TryRewrite(source: Source, target: target, rewritten: out var saved, reason: out var reason), userMessage: reason);
         Assert.Contains(actualString: saved, expectedSubstring: "position [distance, 0, 0]");
         Assert.Contains(actualString: saved, expectedSubstring: "// Keep this tail.");
-        Assert.True(condition: JsonNode.DeepEquals(node1: target, node2: WorldCompiler.Compile(source: saved, cancellationToken: TestContext.Current.CancellationToken).RequireJson()));
+        Assert.True(condition: JsonNode.DeepEquals(node1: target, node2: WorldCompileSession.Shared.Compile(source: saved, cancellationToken: TestContext.Current.CancellationToken).RequireJson()));
     }
     [InlineData("marker(id: \"templated\")")]
     [InlineData("for i in range(0, 2) { placement $\"loop-{i}\" { prototype: \"post\" } }")]
     [Theory]
     public void RemovingAnAuthoredRowDoesNotRewriteUntouchedGeneratedRows(string generated) {
         var source = (((WorldSources.Header + "template marker(id) { placement id { prototype: \"post\" } }\nplacements {\nplacement \"authored\" { prototype: \"post\" }\n") + generated) + "\n}\n");
-        var compiled = WorldCompiler.Compile(source: source, cancellationToken: TestContext.Current.CancellationToken);
+        var compiled = WorldCompileSession.Shared.Compile(source: source, cancellationToken: TestContext.Current.CancellationToken);
         var target = compiled.RequireJson().DeepClone().AsObject();
 
         target["placements"]!["rows"]!.AsArray().RemoveAt(index: 0);
@@ -99,18 +98,18 @@ public sealed class SourceSaveLawTests {
 
         // The removed row stood alone on its line, which goes with it.
         Assert.Equal(expected: source.Remove(startIndex: span.Offset, count: (span.Length + 1)), actual: saved);
-        Assert.True(condition: JsonNode.DeepEquals(node1: target, node2: WorldCompiler.Compile(source: saved, cancellationToken: TestContext.Current.CancellationToken).RequireJson()));
+        Assert.True(condition: JsonNode.DeepEquals(node1: target, node2: WorldCompileSession.Shared.Compile(source: saved, cancellationToken: TestContext.Current.CancellationToken).RequireJson()));
     }
     [Fact]
     public void NewSectionRetainsTheExistingSourceExactly() {
         var source = (WorldSources.Header + "// An unrelated constant.\nlet retained = 3\n");
-        var target = WorldCompiler.Compile(source: source, cancellationToken: TestContext.Current.CancellationToken).RequireJson().DeepClone().AsObject();
+        var target = WorldCompileSession.Shared.Compile(source: source, cancellationToken: TestContext.Current.CancellationToken).RequireJson().DeepClone().AsObject();
 
         target["state"] = WorldSources.LowerClean(body: "state { world { slot score = 1 } }")["state"]!.DeepClone();
 
         Assert.True(condition: WorldSourceEdits.TryRewrite(source: source, target: target, rewritten: out var saved, reason: out var reason), userMessage: reason);
         Assert.StartsWith(actualString: saved, expectedStartString: source);
-        Assert.True(condition: JsonNode.DeepEquals(node1: target, node2: WorldCompiler.Compile(source: saved, cancellationToken: TestContext.Current.CancellationToken).RequireJson()));
+        Assert.True(condition: JsonNode.DeepEquals(node1: target, node2: WorldCompileSession.Shared.Compile(source: saved, cancellationToken: TestContext.Current.CancellationToken).RequireJson()));
     }
     [InlineData(false, false)]
     [InlineData(false, true)]
@@ -124,11 +123,11 @@ public sealed class SourceSaveLawTests {
         var source = (basis ? Source.Replace(comparisonType: StringComparison.Ordinal, newValue: (WorldSources.Header + "basis: \"base\"\n"), oldValue: WorldSources.Header) : Source);
         var sourceBytes = Encoding.UTF8.GetBytes(s: source);
         var path = files.WriteBytes(name: "world.puck", bytes: (bom ? [.. Encoding.UTF8.Preamble, .. sourceBytes] : sourceBytes));
-        var compiled = WorldCompiler.Compile(source: source, sourcePath: path, cancellationToken: TestContext.Current.CancellationToken);
+        var compiled = WorldCompileSession.Shared.Compile(source: source, sourcePath: path, cancellationToken: TestContext.Current.CancellationToken);
         var target = compiled.RequireJson().DeepClone().AsObject();
 
         target["placements"]!["rows"]![1]!["position"] = new JsonArray(7, 8, 9);
-        Assert.True(condition: WorldSourceLoader.TryReadAuthored(path: path, document: Encoding.UTF8.GetBytes(s: target.ToJsonString()), authored: out var live, reason: out var reason), userMessage: reason);
+        Assert.True(condition: WorldCompileSession.Shared.TryReadAuthored(path: path, document: Encoding.UTF8.GetBytes(s: target.ToJsonString()), authored: out var live, reason: out var reason), userMessage: reason);
 
         Assert.True(condition: WorldSourceSave.TrySave(definition: live!, path: path, bytesWritten: out var written, reason: out reason), userMessage: reason);
 
@@ -139,9 +138,9 @@ public sealed class SourceSaveLawTests {
 
         Assert.StartsWith(expectedStartString: source[..origin.Offset], actualString: saved);
         Assert.EndsWith(expectedEndString: source[(origin.Offset + origin.Length)..], actualString: saved);
-        var recompiled = WorldCompiler.Compile(source: saved, sourcePath: path, cancellationToken: TestContext.Current.CancellationToken);
+        var recompiled = WorldCompileSession.Shared.Compile(source: saved, sourcePath: path, cancellationToken: TestContext.Current.CancellationToken);
 
-        Assert.True(condition: WorldSourceLoader.TryReadAuthored(path: path, document: Encoding.UTF8.GetBytes(s: recompiled.RequireJson().ToJsonString()), authored: out var reloaded, reason: out reason), userMessage: reason);
+        Assert.True(condition: WorldCompileSession.Shared.TryReadAuthored(path: path, document: Encoding.UTF8.GetBytes(s: recompiled.RequireJson().ToJsonString()), authored: out var reloaded, reason: out reason), userMessage: reason);
         Assert.Equal(expected: WorldDefinitionSerialization.Serialize(definition: live!), actual: WorldDefinitionSerialization.Serialize(definition: reloaded!));
     }
     [InlineData(0, "0.2", "0.3")]
@@ -156,7 +155,7 @@ public sealed class SourceSaveLawTests {
               post [ { name: b, package: "sdf.film-grain", config { strength: 0.8 } } ]
             }
             """);
-        var target = WorldCompiler.Compile(source: source, cancellationToken: TestContext.Current.CancellationToken).RequireJson().DeepClone().AsObject();
+        var target = WorldCompileSession.Shared.Compile(source: source, cancellationToken: TestContext.Current.CancellationToken).RequireJson().DeepClone().AsObject();
 
         target["views"]!["post"]![row]!["config"]!["strength"] = double.Parse(after, System.Globalization.CultureInfo.InvariantCulture);
         Assert.True(condition: WorldSourceEdits.TryRewrite(source: source, target: target, rewritten: out var saved, reason: out var reason), userMessage: reason);
@@ -169,7 +168,7 @@ public sealed class SourceSaveLawTests {
             material "wood" { albedo [0.5, 0.3, 0.1] roughness: 0.6 }
             // Keep this tail.
             """);
-        var baseline = WorldCompiler.Compile(source: MaterialsSource, cancellationToken: TestContext.Current.CancellationToken).RequireJson();
+        var baseline = WorldCompileSession.Shared.Compile(source: MaterialsSource, cancellationToken: TestContext.Current.CancellationToken).RequireJson();
         var gold = baseline["materials"]![0]!.DeepClone().AsObject();
 
         gold["name"] = "gold";
@@ -179,20 +178,20 @@ public sealed class SourceSaveLawTests {
 
         appendedOnly["materials"]!.AsArray().Add(item: gold.DeepClone());
         Assert.True(condition: WorldSourceEdits.TryRewrite(source: MaterialsSource, target: appendedOnly, rewritten: out var savedAppended, reason: out var reason), userMessage: reason);
-        Assert.True(condition: JsonNode.DeepEquals(node1: appendedOnly, node2: WorldCompiler.Compile(source: savedAppended, cancellationToken: TestContext.Current.CancellationToken).RequireJson()));
+        Assert.True(condition: JsonNode.DeepEquals(node1: appendedOnly, node2: WorldCompileSession.Shared.Compile(source: savedAppended, cancellationToken: TestContext.Current.CancellationToken).RequireJson()));
 
         var modifiedAndAppended = baseline.DeepClone().AsObject();
 
         modifiedAndAppended["materials"]![0]!["roughness"] = 0.4;
         modifiedAndAppended["materials"]!.AsArray().Add(item: gold.DeepClone());
         Assert.True(condition: WorldSourceEdits.TryRewrite(source: MaterialsSource, target: modifiedAndAppended, rewritten: out var savedModified, reason: out reason), userMessage: reason);
-        Assert.True(condition: JsonNode.DeepEquals(node1: modifiedAndAppended, node2: WorldCompiler.Compile(source: savedModified, cancellationToken: TestContext.Current.CancellationToken).RequireJson()));
+        Assert.True(condition: JsonNode.DeepEquals(node1: modifiedAndAppended, node2: WorldCompileSession.Shared.Compile(source: savedModified, cancellationToken: TestContext.Current.CancellationToken).RequireJson()));
 
         var removedTailAndAppended = baseline.DeepClone().AsObject();
 
         removedTailAndAppended["materials"]!.AsArray().RemoveAt(index: 1);
         removedTailAndAppended["materials"]!.AsArray().Add(item: gold.DeepClone());
         Assert.True(condition: WorldSourceEdits.TryRewrite(source: MaterialsSource, target: removedTailAndAppended, rewritten: out var savedReplaced, reason: out reason), userMessage: reason);
-        Assert.True(condition: JsonNode.DeepEquals(node1: removedTailAndAppended, node2: WorldCompiler.Compile(source: savedReplaced, cancellationToken: TestContext.Current.CancellationToken).RequireJson()));
+        Assert.True(condition: JsonNode.DeepEquals(node1: removedTailAndAppended, node2: WorldCompileSession.Shared.Compile(source: savedReplaced, cancellationToken: TestContext.Current.CancellationToken).RequireJson()));
     }
 }

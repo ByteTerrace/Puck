@@ -89,6 +89,10 @@ public class SdfMeshBakeGroup(int selector, bool dynamic) {
     /// <summary>Gets the form the group was sealed with (<see cref="SdfMeshGeometryBuilder.Form"/>): its geometry without
     /// the poses of the slots besides its own.</summary>
     public UInt128 Form { get; private set; }
+    /// <summary>Gets the group's shape: what its geometry hashes before its tier and its operands' poses join it, so a
+    /// group planned again at another tier, or whose operand moved, keeps its shape, and a group whose instructions,
+    /// members or box an edit changed takes another.</summary>
+    public UInt128 Shape { get; private set; }
 
     /// <summary>Gets the materials the group's shapes carry, in the order its geometry numbers them.</summary>
     public int[] MaterialOrder { get; private set; } = [];
@@ -534,6 +538,8 @@ public class SdfMeshBakeGroup(int selector, bool dynamic) {
 
         FinestTier = SdfMeshTier.Finest(spacing: finest);
         CoarsestTier = SdfMeshTier.Coarsest(longestExtent: MathF.Max(x: extent.X, y: MathF.Max(x: extent.Y, y: extent.Z)));
+        // Read before the tier is asked: the planner decides a group's first tier by whether its shape is new.
+        Shape = Geometry.Form;
         Tier = SdfMeshTier.Clamp(coarsest: CoarsestTier, finest: FinestTier, tier: (tier?.Invoke(arg: this) ?? 0));
         PlannedLow = Low;
         PlannedHigh = High;

@@ -10,20 +10,20 @@ namespace Puck.Testing;
 internal static class ShippedWorldDocuments {
     // A test host resolves local documents as the game does: a document with a .puck source is that source.
     [System.Runtime.CompilerServices.ModuleInitializer]
-    internal static void InstallDocumentSource() => WorldDefinitionFileSource.UseLocalDocuments(source: Puck.World.Transpiler.Composition.PuckDocumentComposer.Instance);
+    internal static void InstallDocumentSource() => WorldDefinitionFileSource.UseLocalDocuments(source: Puck.World.Transpiler.WorldCompileSession.Shared);
 
     /// <summary>The repository-relative directory of the world packages.</summary>
     public const string WorldDirectory = "worlds";
 
     /// <summary>Returns the file that carries each document under <paramref name="directory"/>, once however many
     /// names it carries, and every module library there, which carries no document name but is a source all the same
-    /// (<see cref="Puck.World.Transpiler.Composition.PuckDocumentComposer.TryCarriers"/>), as full forward-slashed paths
+    /// (<see cref="Puck.World.Transpiler.WorldCompileSession.TryCarriers"/>), as full forward-slashed paths
     /// in ordinal order.</summary>
     /// <param name="directory">The full path of the directory to enumerate.</param>
     /// <param name="option">Whether subdirectories are enumerated.</param>
     /// <returns>The carrying files and the module libraries.</returns>
     /// <exception cref="InvalidDataException">Two files carry one document name.</exception>
-    public static IReadOnlyList<string> Files(string directory, SearchOption option = SearchOption.AllDirectories) => (Puck.World.Transpiler.Composition.PuckDocumentComposer.TryCarriers(
+    public static IReadOnlyList<string> Files(string directory, SearchOption option = SearchOption.AllDirectories) => (Puck.World.Transpiler.WorldCompileSession.TryCarriers(
         carriers: out var carriers,
         directory: directory,
         libraries: out var libraries,
@@ -40,7 +40,7 @@ internal static class ShippedWorldDocuments {
     /// <param name="name">The authored document name.</param>
     /// <returns>The full path of the carrying file.</returns>
     /// <exception cref="InvalidDataException">No file carries the name, or two do.</exception>
-    public static string Carrier(string referrer, string name) => Path.GetFullPath(path: (Puck.World.Transpiler.Composition.PuckDocumentComposer.Instance.TryRead(
+    public static string Carrier(string referrer, string name) => Path.GetFullPath(path: (Puck.World.Transpiler.WorldCompileSession.Shared.TryRead(
         content: out _,
         name: name,
         reason: out var reason,
@@ -64,7 +64,7 @@ internal static class ShippedWorldDocuments {
 
         if (!WorldDefinitionFileSource.TryDescribeComposition(
             content: Read(path: document),
-            documents: Puck.World.Transpiler.Composition.PuckDocumentComposer.Instance,
+            documents: Puck.World.Transpiler.WorldCompileSession.Shared,
             layers: out var layers,
             path: document,
             reason: out var reason
@@ -85,7 +85,7 @@ internal static class ShippedWorldDocuments {
 
         // A module library an import names is no layer (it emits no document), but the composer reads it beside its
         // importer, so each directory a composed file sits in brings its libraries along.
-        files = [.. files.Concat(second: files.Select(selector: static file => Path.GetDirectoryName(path: file)!).Distinct(comparer: StringComparer.Ordinal).SelectMany(selector: static directory => (Puck.World.Transpiler.Composition.PuckDocumentComposer.TryCarriers(
+        files = [.. files.Concat(second: files.Select(selector: static file => Path.GetDirectoryName(path: file)!).Distinct(comparer: StringComparer.Ordinal).SelectMany(selector: static directory => (Puck.World.Transpiler.WorldCompileSession.TryCarriers(
             carriers: out _,
             directory: directory,
             libraries: out var libraries,
@@ -138,7 +138,7 @@ internal static class ShippedWorldDocuments {
     /// <exception cref="InvalidDataException">The document's composition does not resolve.</exception>
     public static byte[] Composed(string path) => (WorldDefinitionFileSource.TryComposeDocumentTree(
         content: Read(path: path),
-        documents: Puck.World.Transpiler.Composition.PuckDocumentComposer.Instance,
+        documents: Puck.World.Transpiler.WorldCompileSession.Shared,
         path: path,
         reason: out var reason,
         tree: out var tree
@@ -150,7 +150,7 @@ internal static class ShippedWorldDocuments {
     /// <param name="path">The full path of the carrying file.</param>
     /// <returns>The document's UTF-8 JSON.</returns>
     public static byte[] Read(string path) => (WorldDocumentName.IsSourceFile(path: path)
-        ? Encoding.UTF8.GetBytes(s: WorldCompiler.CompileFile(path: path).RequireJson().ToJsonString())
+        ? Encoding.UTF8.GetBytes(s: WorldCompileSession.Shared.CompileFile(path: path).RequireJson().ToJsonString())
         : File.ReadAllBytes(path: path)
     );
 }

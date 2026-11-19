@@ -1,8 +1,6 @@
-using Puck.Assets;
 using Puck.Transpiler.Ast;
 using Puck.Transpiler.Diagnostics;
 using Puck.Transpiler.Lowering;
-using Puck.Transpiler.Parsing;
 using Puck.Transpiler.Rewriting;
 using Puck.Transpiler.Units;
 
@@ -13,13 +11,16 @@ namespace Puck.Transpiler.Modules;
 /// (<see cref="IDocumentVocabulary.TryResolveImport"/>). The walk reports a name that resolves to nothing, a cycle
 /// among libraries, and a library importing a document, which would compose nowhere.</summary>
 public static class ModuleResolver {
-    private sealed class ImportContext(IDocumentVocabulary? vocabulary, CancellationToken cancellationToken) {
+    private sealed class ImportContext(PuckSourceTable sources, IDocumentVocabulary? vocabulary, CancellationToken cancellationToken) {
         private readonly Dictionary<(string Directory, string Name), string?> m_libraries = [];
+        // Each library this walk read, by full path: a walk reads one file's bytes once, so an edit made while it runs
+        // cannot hand two of its steps different trees.
+        private readonly Dictionary<string, PuckSourceTable.Parsed> m_read = new(comparer: StringComparer.OrdinalIgnoreCase);
 
-        public Dictionary<string, DocumentNode> Documents { get; } = new(comparer: StringComparer.OrdinalIgnoreCase);
-        public Dictionary<string, int> SourceLengths { get; } = new(comparer: StringComparer.OrdinalIgnoreCase);
         public IDocumentVocabulary? Vocabulary { get; } = vocabulary;
         public CancellationToken CancellationToken { get; } = cancellationToken;
+        // The libraries this walk parsed rather than found held in the table.
+        public int Parsed { get; private set; }
 
         // Resolves a name once per walk; library is the library's full path, or null for a document.
         public bool TryResolve(string directory, string name, out string? library, out string reason) {
@@ -49,16 +50,17 @@ public static class ModuleResolver {
             name: import.Path,
             reason: out _
         )) ? library : null);
-        public DocumentNode Read(string path) {
-            CancellationToken.ThrowIfCancellationRequested();
-            if (!Documents.TryGetValue(key: path, value: out var document)) {
-                var source = CompileInputs.ReadAllText(path: path);
+        public DocumentNode Read(string path) => ReadParsed(path: path).Document;
+        public int SourceLength(string path) => ReadParsed(path: path).SourceLength;
 
-                document = PuckParser.ParseDocument(source, vocabulary: Vocabulary);
-                Documents.Add(key: path, value: document);
-                SourceLengths.Add(key: path, value: source.Length);
+        private PuckSourceTable.Parsed ReadParsed(string path) {
+            CancellationToken.ThrowIfCancellationRequested();
+            if (!m_read.TryGetValue(key: path, value: out var read)) {
+                read = sources.Read(parsed: out var parsed, path: path, vocabulary: Vocabulary);
+                m_read.Add(key: path, value: read);
+                if (parsed) { Parsed++; }
             }
-            return document;
+            return read;
         }
     }
     private readonly record struct ImportCost(long Declarations, long RewriteWork, long Work, int Depth);
@@ -282,19 +284,36 @@ public static class ModuleResolver {
     /// <param name="rootDoc">The root source's parsed tree.</param>
     /// <param name="rootPath">The root source's path; its imports resolve beside it.</param>
     /// <param name="diagnostics">The bag the walk reports into.</param>
+    /// <param name="budget">The compile's one evaluation budget, which the walk charges for the declarations it brings
+    /// in and the lowering that follows goes on charging; its cancellation token stops the walk.</param>
+    /// <param name="sources">The compile session's parses, which every library the walk reads comes through.</param>
+    /// <param name="parsed">The number of libraries the walk parsed rather than found held in
+    /// <paramref name="sources"/>.</param>
     /// <param name="vocabulary">The vocabulary that resolves an import's name; names are libraries when omitted.</param>
-    /// <param name="cancellationToken">Stops the walk.</param>
     /// <returns>The root with the imported declarations, or <see langword="null"/> when the graph does not
     /// resolve.</returns>
     public static DocumentNode? ImportModules(
         DocumentNode rootDoc,
         string rootPath,
         DiagnosticBag diagnostics,
-        IDocumentVocabulary? vocabulary = null,
-        CancellationToken cancellationToken = default
+        DocumentEvaluationBudget budget,
+        PuckSourceTable sources,
+        out int parsed,
+        IDocumentVocabulary? vocabulary = null
     ) {
-        var context = new ImportContext(cancellationToken: cancellationToken, vocabulary: vocabulary);
+        ArgumentNullException.ThrowIfNull(budget);
+        ArgumentNullException.ThrowIfNull(sources);
 
+        var context = new ImportContext(cancellationToken: budget.CancellationToken, sources: sources, vocabulary: vocabulary);
+
+        try {
+            return Import(budget: budget, context: context, diagnostics: diagnostics, rootDoc: rootDoc, rootPath: rootPath);
+        } finally {
+            parsed = context.Parsed;
+        }
+    }
+
+    private static DocumentNode? Import(DocumentNode rootDoc, string rootPath, DiagnosticBag diagnostics, DocumentEvaluationBudget budget, ImportContext context) {
         if (!ValidateImportGraph(context: context, diagnostics: diagnostics, rootDoc: rootDoc, rootPath: rootPath)) {
             return null;
         }
@@ -308,7 +327,7 @@ public static class ModuleResolver {
                 memo: new(comparer: StringComparer.OrdinalIgnoreCase)
             );
 
-            new DocumentEvaluationBudget { CancellationToken = cancellationToken }.Spend(
+            budget.Spend(
                 count: cost.Work,
                 span: SourceSpan.None
             );
@@ -355,7 +374,7 @@ public static class ModuleResolver {
                 var descendants = MeasureImportedModules(imported, (Path.GetDirectoryName(path: path) ?? ""), memo, context, (traversalDepth + 1));
                 var ownRewriteWork = ((ownDeclarations == 0)
                     ? 0L
-                    : Math.Max(val1: 1, val2: context.SourceLengths[path])
+                    : Math.Max(val1: 1, val2: context.SourceLength(path: path))
                 );
 
                 child = new ImportCost(
@@ -406,6 +425,7 @@ public static class ModuleResolver {
     /// <param name="rootDoc">The parsed root document node.</param>
     /// <param name="rootPath">The filesystem path to the root document.</param>
     /// <param name="diagnostics">The DiagnosticBag to report resolution errors into.</param>
+    /// <param name="sources">The compile session's parses, which every library the walk reads comes through.</param>
     /// <param name="vocabulary">Optional document vocabulary providing schema-specific lexical rules.</param>
     /// <param name="cancellationToken">Stops import traversal.</param>
     /// <returns>True if all imports resolve successfully without cycles.</returns>
@@ -413,13 +433,15 @@ public static class ModuleResolver {
         DocumentNode rootDoc,
         string rootPath,
         DiagnosticBag diagnostics,
+        PuckSourceTable sources,
         IDocumentVocabulary? vocabulary = null,
         CancellationToken cancellationToken = default
     ) {
         ArgumentNullException.ThrowIfNull(rootDoc);
         ArgumentNullException.ThrowIfNull(diagnostics);
+        ArgumentNullException.ThrowIfNull(sources);
 
-        var context = new ImportContext(cancellationToken: cancellationToken, vocabulary: vocabulary);
+        var context = new ImportContext(cancellationToken: cancellationToken, sources: sources, vocabulary: vocabulary);
 
         return ValidateImportGraph(context: context, diagnostics: diagnostics, rootDoc: rootDoc, rootPath: rootPath);
     }

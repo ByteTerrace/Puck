@@ -12,7 +12,7 @@ public class ComprehensiveSyntheticTests {
     private static string CanonicalText(JsonObject node) =>
         Encoding.UTF8.GetString(bytes: CanonicalJsonDocument.Serialize(node: node));
     private static JsonObject Compile(string source, string? defaultSchema = null, string? basePath = null) =>
-        WorldCompiler.Compile(
+        WorldCompileSession.Shared.Compile(
             basePath: basePath,
             cancellationToken: TestContext.Current.CancellationToken,
             defaultSchema: defaultSchema,

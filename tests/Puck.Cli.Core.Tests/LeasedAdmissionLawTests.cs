@@ -25,11 +25,9 @@ public sealed class LeasedAdmissionLawTests : IDisposable {
             if (reserve) {
                 Assert.Equal(TimeSpan.Zero, bound);
                 Assert.True(CliLease.Inspect(m_root, resource, clock.GetUtcNow()).HolderAlive);
-                Assert.True(CliLease.HoldsExecution(m_root));
                 return !loseHeadroom || ++reservations > 1;
             }
             Assert.False(CliLease.Inspect(m_root, resource, clock.GetUtcNow()).HolderAlive);
-            Assert.False(CliLease.HoldsExecution(m_root));
             if (loseHeadroom && ++preflights == 1) { return true; }
             blocked.SetResult();
             return await clear.Task.WaitAsync(token);

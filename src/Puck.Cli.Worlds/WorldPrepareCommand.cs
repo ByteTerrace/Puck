@@ -1,10 +1,10 @@
 using System.CommandLine;
 using System.Text.Json.Nodes;
 using Puck.World;
-using Puck.World.Transpiler.Composition;
 using Puck.SdfVm;
 using Puck.Shaders;
 using Puck.SignedDistance;
+using Puck.World.Transpiler;
 
 namespace Puck.Cli.Automation;
 
@@ -80,7 +80,7 @@ public static class WorldPrepareCommand {
             if (!WorldDefinitionFileSource.TryComposeDocumentTree(
                 catalog: machines,
                 catalogFingerprint: catalogFingerprint,
-                documents: PuckDocumentComposer.Instance,
+                documents: WorldCompileSession.Shared,
                 path: path,
                 reason: out var reason,
                 tree: out var tree

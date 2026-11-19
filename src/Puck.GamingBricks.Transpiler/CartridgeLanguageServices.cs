@@ -95,7 +95,8 @@ public static class CartridgeLanguageServices {
                 diagnostics: diagnostics,
                 document: document,
                 sourceMap: sourceMap,
-                sourcePath: sourcePath
+                sourcePath: sourcePath,
+                sources: Puck.Transpiler.Modules.PuckSourceTable.Shared
             ));
 
         if (lowered.Success && !IsModule(document: lowered.Value!)) {

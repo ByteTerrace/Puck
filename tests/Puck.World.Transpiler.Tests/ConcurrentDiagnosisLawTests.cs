@@ -7,8 +7,8 @@ namespace Puck.World.Transpiler.Tests;
 
 /// <summary>The stdio language server diagnoses on the thread pool while its read loop compiles for hover and
 /// completion, so every cache both reach is shared between threads: the composed-image cache, the compile cache
-/// (<see cref="Composition.WorldCompileCache"/>, whose own races are held in
-/// <see cref="WorldCompileCacheConcurrencyLawTests"/>), and the vocabulary and schema tables. These laws run the two
+/// (<see cref="WorldCompileSession"/>, whose own races are held in
+/// <see cref="WorldCompileSessionConcurrencyLawTests"/>), and the vocabulary and schema tables. These laws run the two
 /// side by side, many times over, and hold every result to what the same work produces alone; and they hold the host
 /// to ending a session only once the diagnosis it started has returned.</summary>
 public sealed class ConcurrentDiagnosisLawTests {

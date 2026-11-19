@@ -4,6 +4,7 @@ using System.Text.Json;
 using Puck.Testing;
 using Puck.World.Transpiler.Composition;
 using Xunit;
+using Puck.World.Transpiler;
 
 namespace Puck.World.Schema.Tests;
 
@@ -98,7 +99,7 @@ public sealed class WorldFactsCompilerShippedWorldLawTests {
             return "another shipped document imports it";
         }
 
-        return ((WorldDocumentName.IsSourceFile(path: path) && (WorldSourceIndex.Declaration(path: path) is { EmitsDocument: false, Worlds.Count: 0 }) && Transpiler.WorldCompiler.CompileFile(
+        return ((WorldDocumentName.IsSourceFile(path: path) && (WorldSourceIndex.Declaration(path: path) is { EmitsDocument: false, Worlds.Count: 0 }) && Transpiler.WorldCompileSession.Shared.CompileFile(
             allowMultiple: true,
             path: path
         ).Success)
@@ -156,7 +157,7 @@ public sealed class WorldFactsCompilerShippedWorldLawTests {
         var loaded = WorldDefinitionLoader.TryLoadFileForAdmission(
             admission: out var admission,
             contentHash: out _,
-            documents: PuckDocumentComposer.Instance,
+            documents: WorldCompileSession.Shared,
             path: path,
             proveNeighbours: false,
             reason: out var reason

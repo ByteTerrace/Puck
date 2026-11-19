@@ -5,6 +5,7 @@ using Puck.Testing;
 using Puck.World;
 using Puck.World.Transpiler.Composition;
 using Xunit;
+using Puck.World.Transpiler;
 
 namespace Puck.Cli.Worlds.Tests;
 
@@ -19,7 +20,7 @@ public sealed class WorldStagingFontLawTests {
         var bytes = File.ReadAllBytes(path: path);
         var firstOrigins = new WorldDocumentOrigins();
 
-        Assert.True(condition: PuckDocumentComposer.TryComposeWorldDocument(rootResolvedPath: path, rootBytes: bytes,
+        Assert.True(condition: WorldCompileSession.Shared.TryCompose(rootResolvedPath: path, rootBytes: bytes,
             composed: out var first, chainBytes: out _, reason: out var reason, origins: firstOrigins), userMessage: reason);
         Assert.True(condition: firstOrigins.TryGetOrigin(value: first!["title"], origin: out var original));
         first!["title"] = "mutated by caller";
@@ -28,7 +29,7 @@ public sealed class WorldStagingFontLawTests {
         using var attribution = WorldBootWork.Attribute(work: work);
         var secondOrigins = new WorldDocumentOrigins();
 
-        Assert.True(condition: PuckDocumentComposer.TryComposeWorldDocument(rootResolvedPath: path, rootBytes: bytes,
+        Assert.True(condition: WorldCompileSession.Shared.TryCompose(rootResolvedPath: path, rootBytes: bytes,
             composed: out var second, chainBytes: out _, reason: out reason, origins: secondOrigins), userMessage: reason);
         Assert.Equal(expected: "inherited", actual: second!["title"]!.GetValue<string>());
         Assert.True(condition: secondOrigins.TryGetOrigin(value: second!["title"], origin: out var held));
@@ -39,7 +40,7 @@ public sealed class WorldStagingFontLawTests {
         files.WriteText(name: "base.world.json", text: """{"title":"edited source"}""");
         var changedOrigins = new WorldDocumentOrigins();
 
-        Assert.True(condition: PuckDocumentComposer.TryComposeWorldDocument(rootResolvedPath: path, rootBytes: bytes,
+        Assert.True(condition: WorldCompileSession.Shared.TryCompose(rootResolvedPath: path, rootBytes: bytes,
             composed: out var changed, chainBytes: out _, reason: out reason, origins: changedOrigins), userMessage: reason);
         Assert.Equal(expected: "edited source", actual: changed!["title"]!.GetValue<string>());
         Assert.True(condition: changedOrigins.TryGetOrigin(value: changed!["title"], origin: out var edited));
@@ -136,11 +137,11 @@ public sealed class WorldStagingFontLawTests {
         var rootPath = files.PathOf(name: "entry.world.json").Replace(newChar: '/', oldChar: '\\');
         var bytes = CanonicalJsonDocument.Serialize(node: world);
 
-        Assert.True(condition: PuckDocumentComposer.TryComposeWorldDocument(rootResolvedPath: rootPath, rootBytes: bytes,
+        Assert.True(condition: WorldCompileSession.Shared.TryCompose(rootResolvedPath: rootPath, rootBytes: bytes,
             composed: out var cached, chainBytes: out _, reason: out var reason), userMessage: reason);
         var origins = new WorldDocumentOrigins();
 
-        Assert.True(condition: PuckDocumentComposer.TryComposeWorldDocument(rootResolvedPath: rootPath, rootBytes: bytes,
+        Assert.True(condition: WorldCompileSession.Shared.TryCompose(rootResolvedPath: rootPath, rootBytes: bytes,
             composed: out var tracked, chainBytes: out _, reason: out reason, origins: origins), userMessage: reason);
         Assert.True(condition: JsonNode.DeepEquals(node1: cached, node2: tracked));
         var fonts = tracked!["text"]!["fonts"]!.AsArray();

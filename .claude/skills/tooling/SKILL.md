@@ -16,7 +16,7 @@ File publication, paths, Git inventories, project ownership and Markdown parsing
 |---|---|---|
 | Parse project declarations and evaluate architecture policy | `ArchitectureModel` in `build/ProjectArchitecture.cs` | The build task and `Puck.Cli.Core` compile this source. MSBuild supplies evaluated policy and resolved references; `ArchitectureCommand` supplies declared facts. Keep resolved-route enforcement (`PUCKARCH006`) in `PuckArchitectureGate`. A declared report cannot prove resolved references. |
 | Walk project dependencies | [ArchitectureGraph](../../../build/ProjectArchitecture.cs) | Architecture closures follow assembly edges; affected and shader selection follow all build references. Choose the edge set; share the walk. |
-| Traverse assemblies for derivation identity | `AssemblyReach.Of` | The default follows `Puck.*`; `WorldCompileCache` includes all non-framework compiler dependencies and records missing trimmed modules. `WorldCodeWarmer` uses the same walk. Keep identity folds with their derivations. |
+| Traverse assemblies for derivation identity | `AssemblyReach.Of` | The default follows `Puck.*`; `WorldCompileSession` includes all non-framework compiler dependencies and records missing trimmed modules. `WorldCodeWarmer` uses the same walk. Keep identity folds with their derivations. |
 | Splice generated document sections | `CliGeneratedSection.TryReplace` | Packages and the architecture map preserve delimiters and surrounding text, then use `CliGeneratedFile.WriteOrCheck`, including index agreement. |
 | Install an isolated CLI candidate | `CandidateCliInstall` in `build/CandidateCliInstall.cs` | Compiled into `Puck.Cli.Release` and run as a file-based bootstrap by `setup-puck`, before a CLI exists. One exclusive feed, private package cache, fresh tool path and version check. The CLI supplies `CliProcess`; bootstrap `Main` supplies process I/O only. |
 | Acquire and admit leased work | `LeasedAdmission.AcquireAsync` and `CliLease` in `Puck.Cli.Core` | Heavy work and device Worlds park their ticket during unleased admission, then reserve with a zero wait under the grant guard. Lost headroom parks the same ticket without serving the lane. `WorldLaunch` owns live worker holds, shared through `WorldWorkHold`. The total caller deadline includes acquisition and admission. |
@@ -35,10 +35,14 @@ reference to the runtime CLI would create a bootstrap dependency and target the
 wrong runtime. Shared source is intentional. Add a new shared build source to
 the task's compiler inputs and its assembly-cache identity together.
 
-An admission beneath an executing lease (this process or an ancestor) is
-nonwaiting: a failed reading refuses the new start without disturbing live
-work. `WorldWorkHold` admits each joining start this way; one share cannot
-release another live start's hold. Cross-process growth
+Only the reservation under a lease's own guard is a single reading. Every other
+admission waits for its bound, whatever this process or an ancestor already
+holds: a lane's second start (`WorldWorkHold`'s joining share) and another
+lane's start in the same adapter judge headroom on their own readings, and one
+share cannot release another live start's hold. `WorldLaunchRequest.AdmissionWait`
+is that bound (`puck_world_start` passes its `timeoutSeconds`); a start that can
+never fit (`NeverFits`) is refused at once and `HostAdmissionRefusedException.Reason`
+names why. Cross-process growth
 reservations also remain process-local; machine leases serialize device and
 heavy starts. Do not describe those reservations as machine-wide exclusion.
 

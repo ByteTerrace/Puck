@@ -451,14 +451,15 @@ public sealed partial class PuckLanguageServer {
         return (prefix + ComputeClosingSuffix(source: prefix));
     }
     // The `state` section `text` lowers to, or null when the text is not a world source or lowers to none. Whatever
-    // the compile reports is dropped: a document mid-edit still answers for the rows that do lower.
+    // the compile reports is dropped: a document mid-edit still answers for the rows that do lower. It is the compile
+    // the buffer's diagnosis made (WorldCompileSession.CompileBuffer), so a hover over text just diagnosed compiles
+    // nothing.
     private JsonObject? LowerStateSection(string text, string? sourcePath) {
         if (m_vocabularyResolver.Resolve(source: text) is not WorldDocumentVocabulary vocabulary) {
             return null;
         }
 
-        return (WorldCompiler.Compile(
-            imports: ImportHandling.Ignore,
+        return (m_session.CompileBuffer(
             source: text,
             sourcePath: sourcePath,
             vocabulary: vocabulary
@@ -1719,6 +1720,7 @@ public sealed partial class PuckLanguageServer {
     }
 
     private readonly DocumentVocabularyResolver m_vocabularyResolver;
+    private readonly WorldCompileSession m_session;
 
     /// <summary>Creates a language server session with no document open.</summary>
     /// <param name="diagnoseDocument">An optional schema dispatcher; returns true when it supplies the document's diagnostics.</param>
@@ -1726,11 +1728,15 @@ public sealed partial class PuckLanguageServer {
     /// <param name="vocabularyResolver">An optional vocabulary resolver; null uses default World resolver.</param>
     /// <param name="machines">The deployment's machine vocabulary, which the engine's validation of a world reads.</param>
     /// <param name="catalogFingerprint">The stable metadata fingerprint for composition under <paramref name="machines"/>.</param>
+    /// <param name="session">The compile session every diagnosis, hover and completion compiles through;
+    /// <see cref="WorldCompileSession.Shared"/> when omitted.</param>
     public PuckLanguageServer(Func<DocumentNode, string?, DiagnosticBag, bool>? diagnoseDocument = null,
         Func<DocumentNode, JsonArray?>? completeDocument = null,
         DocumentVocabularyResolver? vocabularyResolver = null,
         IMachineValidationCatalog? machines = null,
-        string catalogFingerprint = "") {
+        string catalogFingerprint = "",
+        WorldCompileSession? session = null) {
+        m_session = (session ?? WorldCompileSession.Shared);
         m_catalogFingerprint = catalogFingerprint;
         m_machines = machines;
         m_diagnoseDocument = diagnoseDocument;

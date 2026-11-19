@@ -9,7 +9,7 @@ namespace Puck.World.Transpiler.Tests;
 // features is a named refusal rather than a lowering.
 public class ControlFlowTests {
     private static DiagnosticBag LowerForDiagnostics(string source) =>
-        WorldCompiler.Compile(
+        WorldCompileSession.Shared.Compile(
             cancellationToken: TestContext.Current.CancellationToken,
             source: source
         ).Diagnostics;

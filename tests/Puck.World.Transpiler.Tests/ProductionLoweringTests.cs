@@ -6,14 +6,14 @@ using Xunit;
 namespace Puck.World.Transpiler.Tests;
 
 public sealed class ProductionLoweringTests {
-    private static JsonObject Lower(string source) => WorldCompiler.Compile(source: source).RequireJson();
+    private static JsonObject Lower(string source) => WorldCompileSession.Shared.Compile(source: source).RequireJson();
 
     [Fact]
     public void CancellationStopsLoweringBeforeExpansion() {
         using var cancellation = new CancellationTokenSource();
 
         cancellation.Cancel();
-        Assert.Throws<OperationCanceledException>(testCode: () => WorldCompiler.Compile(
+        Assert.Throws<OperationCanceledException>(testCode: () => WorldCompileSession.Shared.Compile(
             cancellationToken: cancellation.Token,
             source: "_value: range(0, 1000)"
         ));
@@ -22,7 +22,7 @@ public sealed class ProductionLoweringTests {
     [InlineData("delaySeconds: d\nposition [d,0,0]")]
     [Theory]
     public void ConstantUnitsAreCheckedAtEveryDestination(string body) {
-        var result = WorldCompiler.Compile(
+        var result = WorldCompileSession.Shared.Compile(
             cancellationToken: TestContext.Current.CancellationToken,
             source: ("let d = 1m\n" + body)
         );
@@ -71,7 +71,7 @@ public sealed class ProductionLoweringTests {
     }
     [Fact]
     public void FailedConvenienceCompilationCannotEmitPartialData() {
-        Assert.Throws<InvalidOperationException>(testCode: () => WorldCompiler.Compile(
+        Assert.Throws<InvalidOperationException>(testCode: () => WorldCompileSession.Shared.Compile(
             cancellationToken: TestContext.Current.CancellationToken,
             source: "missing()"
         ).RequireJson());
@@ -108,7 +108,7 @@ public sealed class ProductionLoweringTests {
     [InlineData("_value: range(9223372036854775807, 2)")]
     [Theory]
     public void InvalidOrUnboundedInputHasLocatedDiagnostic(string source) {
-        var parsed = WorldCompiler.Compile(
+        var parsed = WorldCompileSession.Shared.Compile(
             cancellationToken: TestContext.Current.CancellationToken,
             source: source
         );
@@ -121,7 +121,7 @@ public sealed class ProductionLoweringTests {
     }
     [Fact]
     public void RepeatedCopiesCannotBypassTheWorkBudget() {
-        var result = WorldCompiler.Compile(
+        var result = WorldCompileSession.Shared.Compile(
             cancellationToken: TestContext.Current.CancellationToken,
             source: "let a = range(0, 10000)\n_value: map(range(0, 1000), i => a)"
         );
