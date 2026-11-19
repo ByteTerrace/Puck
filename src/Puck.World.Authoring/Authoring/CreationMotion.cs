@@ -8,7 +8,9 @@ namespace Puck.World.Authoring;
 /// <param name="Other">The index of an earlier shape of the group that moves apart from it.</param>
 /// <param name="Group">The group's id.</param>
 /// <param name="Blend">The blend <paramref name="Shape"/> joins the group by.</param>
-public readonly record struct CreationMovingBlend(int Shape, int Other, int Group, SdfBlendOp Blend);
+/// <param name="Operand">Whether either shape rides an operand owner (<see cref="CreationMotion.OperandShapes(CreationDocument)"/>):
+/// a cutter the group's bake reads where it stands, so the seam neither skins nor creases.</param>
+public readonly record struct CreationMovingBlend(int Shape, int Other, int Group, SdfBlendOp Blend, bool Operand = false);
 /// <summary>
 /// What moves a creation's shapes, read off its document: whether it animates at all, and which shape's motion each
 /// shape inherits. The pooled motion plan uses this reading to admit bounded rest-pose skins or partition a group
@@ -110,13 +112,10 @@ public static partial class CreationMotion {
         if ((shapes.Count == 0) || !Animates(document: document)) { return []; }
 
         var parents = new int[shapes.Count];
-        var owners = new int[shapes.Count];
+        var owners = Owners(document: document, parents: parents);
         var found = new List<CreationMovingBlend>();
+        var operands = OperandShapes(keys: OwnerKeys(owners: owners), shapes: shapes);
 
-        ResolveParents(parents: parents, shapes: shapes);
-        for (var index = 0; (index < shapes.Count); index++) {
-            owners[index] = Owner(document: document, index: index, parents: parents);
-        }
         for (var index = 0; (index < shapes.Count); index++) {
             var shape = shapes[index];
             var group = (shape.Group ?? 0);
@@ -125,12 +124,93 @@ public static partial class CreationMotion {
             if ((group == 0) || (blend == SdfBlendOp.Union)) { continue; }
             for (var earlier = 0; (earlier < index); earlier++) {
                 if (((shapes[earlier].Group ?? 0) == group) && OwnersMoveApart(document, parents, owners[earlier], owners[index])) {
-                    found.Add(item: new CreationMovingBlend(Blend: blend, Group: group, Other: earlier, Shape: index));
+                    found.Add(item: new CreationMovingBlend(Blend: blend, Group: group, Operand: (operands[index] || operands[earlier]), Other: earlier, Shape: index));
                 }
             }
         }
 
         return found;
+    }
+    /// <summary>Returns which shapes ride an operand owner: a motion owner other than the creation root
+    /// (<see cref="Owner"/>) every shape of which carves (<see cref="SdfBoundAlgebra.Carves"/>). Such a cutter moves
+    /// against the surface it cuts without a surface of its own, so the pooled bake reads it where it stands inside the
+    /// group of what it cuts, as an operand (<see cref="CreationMotionPlan"/>), and plans that group again as it moves.</summary>
+    /// <param name="document">The creation document.</param>
+    /// <returns>One entry a shape; all <see langword="false"/> for a creation whose shapes no driver, effector or frame
+    /// moves apart.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="document"/> is <see langword="null"/>.</exception>
+    public static bool[] OperandShapes(CreationDocument document) {
+        ArgumentNullException.ThrowIfNull(argument: document);
+
+        var shapes = (document.Shapes ?? []);
+
+        return OperandShapes(keys: OwnerKeys(owners: Owners(document: document, parents: new int[shapes.Count])), shapes: shapes);
+    }
+    /// <summary>Returns which shapes ride an operand owner, given each shape's owner as a key: shapes of one key move
+    /// together, and key zero is the creation root, which is never an operand owner. A key is an operand owner when every
+    /// shape it carries carves (<see cref="SdfBoundAlgebra.Carves"/>).</summary>
+    /// <param name="shapes">The creation's shapes.</param>
+    /// <param name="keys">Each shape's owner key, one a shape: zero for the root.</param>
+    /// <returns>One entry a shape.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="shapes"/> is <see langword="null"/>.</exception>
+    public static bool[] OperandShapes(IReadOnlyList<ShapeDocument> shapes, ReadOnlySpan<int> keys) {
+        ArgumentNullException.ThrowIfNull(argument: shapes);
+
+        var surfaced = new HashSet<int> { 0 };
+
+        for (var index = 0; (index < shapes.Count); index++) {
+            if (!SdfBoundAlgebra.Carves(blend: (shapes[index].Blend ?? SdfBlendOp.Union))) { _ = surfaced.Add(item: keys[index]); }
+        }
+
+        var operands = new bool[shapes.Count];
+
+        for (var index = 0; (index < shapes.Count); index++) { operands[index] = !surfaced.Contains(item: keys[index]); }
+        return operands;
+    }
+    /// <summary>Returns the groups an operand cuts that hold the surfaces of more than one owner key: each such group bakes
+    /// one piece a surface owner (<see cref="CreationMotionPlan"/>), riding that owner's slot with the operand cut into
+    /// it, because a group that reads an operand carries no skin.</summary>
+    /// <param name="shapes">The creation's shapes.</param>
+    /// <param name="keys">Each shape's owner key, one a shape, as <see cref="OperandShapes(IReadOnlyList{ShapeDocument}, ReadOnlySpan{int})"/> reads them.</param>
+    /// <param name="operands">Which shapes ride an operand owner, one entry a shape.</param>
+    /// <returns>The groups.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="shapes"/> or <paramref name="operands"/> is
+    /// <see langword="null"/>.</exception>
+    public static HashSet<int> SharedOperandGroups(IReadOnlyList<ShapeDocument> shapes, ReadOnlySpan<int> keys, bool[] operands) {
+        ArgumentNullException.ThrowIfNull(argument: shapes);
+        ArgumentNullException.ThrowIfNull(argument: operands);
+
+        var cut = new HashSet<int>();
+        var surfaces = new Dictionary<int, int>();
+
+        for (var index = 0; (index < shapes.Count); index++) {
+            var group = (shapes[index].Group ?? 0);
+
+            if (group == 0) { continue; }
+            if (operands[index]) {
+                _ = cut.Add(item: group);
+            } else if (surfaces.TryGetValue(key: group, value: out var key) && (key != keys[index])) {
+                surfaces[group] = int.MinValue;
+            } else if (!surfaces.ContainsKey(key: group)) {
+                surfaces[group] = keys[index];
+            }
+        }
+        cut.RemoveWhere(match: group => (surfaces.GetValueOrDefault(key: group, defaultValue: 0) != int.MinValue));
+        return cut;
+    }
+    // Owner keys from owners: the root's -1 becomes zero.
+    private static int[] OwnerKeys(int[] owners) => [.. owners.Select(selector: static owner => (owner + 1))];
+    // Each shape's owner (Owner), with `parents`, one entry a shape, resolved on the way.
+    private static int[] Owners(CreationDocument document, int[] parents) {
+        var shapes = (document.Shapes ?? []);
+        var owners = new int[shapes.Count];
+
+        ResolveParents(parents: parents, shapes: shapes);
+        for (var index = 0; (index < shapes.Count); index++) {
+            owners[index] = Owner(document: document, index: index, parents: parents);
+        }
+
+        return owners;
     }
     /// <summary>Returns every ungrouped shape of an animated creation whose blend is not <see cref="SdfBlendOp.Union"/>
     /// and which follows another shape. The pooled bake gives each ungrouped shape a group of its own, so it joins its
@@ -179,14 +259,20 @@ public static partial class CreationMotion {
     /// <exception cref="ArgumentNullException"><paramref name="document"/> is <see langword="null"/>.</exception>
     public static bool Creases(CreationDocument document, CreationMovingBlend blend) => CreasedGroups(document: document).Contains(item: blend.Group);
     /// <summary>Returns the groups whose moving blends crease (<see cref="Creases"/>): each group holding a moving blend
-    /// outside its envelope.</summary>
+    /// outside its envelope that no operand takes part in, and each group an operand cuts that holds more than one
+    /// owner's surfaces (<see cref="SharedOperandGroups"/>).</summary>
     /// <param name="document">The creation document.</param>
     /// <returns>The groups.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="document"/> is <see langword="null"/>.</exception>
     public static HashSet<int> CreasedGroups(CreationDocument document) {
         ArgumentNullException.ThrowIfNull(argument: document);
 
-        return [.. MovingBlends(document: document).Where(predicate: blend => !Envelope(blend: blend, document: document).Admitted).Select(selector: static blend => blend.Group)];
+        var shapes = (document.Shapes ?? []);
+        HashSet<int> creased = [.. MovingBlends(document: document).Where(predicate: blend => (!blend.Operand && !Envelope(blend: blend, document: document).Admitted)).Select(selector: static blend => blend.Group)];
+        var keys = OwnerKeys(owners: Owners(document: document, parents: new int[shapes.Count]));
+
+        creased.UnionWith(other: SharedOperandGroups(keys: keys, operands: OperandShapes(keys: keys, shapes: shapes), shapes: shapes));
+        return creased;
     }
     /// <summary>Describes a moving blend for a diagnostic: the two shapes by name, what moves each, the group and the
     /// blend, and what the bake makes of it.</summary>
@@ -197,11 +283,19 @@ public static partial class CreationMotion {
     public static string Describe(CreationDocument document, CreationMovingBlend blend) {
         ArgumentNullException.ThrowIfNull(argument: document);
 
+        if (blend.Operand) {
+            var cutter = (OperandShapes(document: document)[blend.Shape] ? blend.Shape : blend.Other);
+
+            return $"joins shape '{NameOf(document: document, index: blend.Shape)}' to group {blend.Group}'s shape '{NameOf(document: document, index: blend.Other)}' by {blend.Blend}: cutter '{NameOf(document: document, index: cutter)}' moves alone and cuts as an operand; the group bakes again each time it moves a step of the group's tier cell, so the cut trails it by at most one step, and contact still reads the cut at rest.";
+        }
+
         var envelope = Envelope(blend: blend, document: document);
         var outcome = (envelope.Admitted ? "bakes as a rest-pose skin" : ((envelope.Refusal is not null) ? "bakes as a crease; a smooth skin requires bounded motion and a CPU-readable field" : $"bakes as a crease; widen smooth to at least {(2f * envelope.Displacement):G6} or reduce the motion to keep the blend"));
 
         if (envelope.Admitted && Creases(blend: blend, document: document)) {
-            outcome = "bakes as a crease because another seam in this group is outside its envelope";
+            outcome = (OperandShapes(document: document).Where((operand, index) => (operand && (document.Shapes![index].Group == blend.Group))).Any()
+                ? "bakes as a crease because a moving cutter cuts this group, which then carries no skin"
+                : "bakes as a crease because another seam in this group is outside its envelope");
         }
 
         return $"joins shape '{NameOf(document: document, index: blend.Shape)}' to group {blend.Group}'s shape '{NameOf(document: document, index: blend.Other)}' by {blend.Blend}: theta={float.RadiansToDegrees(radians: envelope.Rotation):G6} deg (limit 60), D={envelope.Displacement:G6} (limit {(envelope.Smooth / 2f):G6}); {outcome}{((envelope.Refusal is { } reason) ? $" ({reason})" : string.Empty)}.";

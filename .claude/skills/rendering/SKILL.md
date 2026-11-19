@@ -221,9 +221,23 @@ never enters a cross-owner influence reading. Followers and their descendants in
 partition and cannot enter a finite-envelope blend.
 
 The pool marks its rigid delta-frame instances `SdfInstanceRange.RestPoseSkin`.
-`SdfMeshGeometryBuilder` freezes those slots at identity, includes the opt-in in geometry and form,
-and `SdfMeshPathBake.Settle` excludes them. Do not freeze arbitrary dynamic slots: those may carry
-absolute poses. `MovingBlendRestLawTests` exercises swing, slide and timeline owners through the real packer.
+`SdfMeshGeometryBuilder` freezes those slots at identity and includes the opt-in in geometry and form; a
+skin bakes once, at that rest. Do not freeze arbitrary dynamic slots: those may carry absolute poses.
+`MovingBlendRestLawTests` exercises swing, slide and timeline owners through the real packer.
+
+A cutter whose owner moves alone and only carves is an operand (`CreationMotion.OperandShapes`), never a skin
+member or a crease: the pooled emitter declares it on the instance of the group it cuts
+(`SdfInstanceRange.Operands`), that group rides its one surface owner's slot (`CreationMotionPlan.TryCutSlot`;
+a group of several surface owners beside an operand is partitioned, `CreationMotion.SharedOperandGroups`), and
+`SdfMeshBakeGroup.Seal` refuses an operand beside a skin member. The geometry hashes the operand's pose snapped
+to the group's tier cell once the tier is known (`SdfMeshGeometryBuilder.AppendOperands`), in geometry and form,
+and keeps it in the pose rows the bake samples. `SdfMeshPathBake.Revisit` is the one door for frame inputs that
+move without a program rebuild, sampled snapshots and operand poses: it visits only their readers, snaps and
+compares each operand every frame (`SdfMeshGeometryBuilder.OperandsMatch`), and plans a moved group again
+through `Succeed` or as its in-flight bake's `Successor`. `world.counters sdf.mesh-inputs` counts the re-plans
+and the coalesced successors (`SdfMeshInputs`). `puck mesh audit --cpu --pose` given an operand's slot offset
+plans its group again with the cut there and prints the operand's snapped pose. Contact still reads the cut at
+rest (G5), and relief still refuses any part owner (G2).
 
 `SdfFieldEvaluator.ReadInfluences` shares the point interpreter with culling disabled, carrying owner
 vectors through every composition and scope. `ReadInfluenceGradient` takes fixed central differences
@@ -248,8 +262,7 @@ places (must be zero), and geometry keys. `--pose '1=0,0,0,0,0.05,0,0.9987492'` 
 delta by member slot offset in the group frame and audits against the posed field. Compare both
 envelope extremes. A build cannot prove motion: request a 60-frame presented burst on both backends,
 with motion diagnostics on still parts, as the [moving-blends memo](../../../docs/plans/moving-blends.md) specifies.
-Material rest coordinates remain step 4 and the quiet cost window step 5; settle deletion is gap 8's step G1,
-which also makes a cutter moving against its surface an operand of that surface's group.
+Material rest coordinates remain step 4 and the quiet cost window step 5.
 
 A retained separate bake group must still ride the newly planned `Slot`, even
 when its instance selector and local geometry stay unchanged. Rigid draw poses
@@ -450,6 +463,8 @@ add the row you found.
 | Read what the device lets the process use per segment (a DXGI segment group, a Vulkan heap), or charge a device allocation to the physical memory it was placed in | `IGpuDeviceContext.MemoryReading` (refreshed by `RefreshMemoryReading` on the frame thread), `GpuMemorySegments` (the one place a segment's pool is decided), `GpuDeviceMemoryWork.CountAllocated`'s segment argument (Direct3D 12's through `DirectXDeviceMemory.SegmentOf`, Vulkan's through `GpuMemorySegments.OfMemoryType`); `MemoryAccount.ReadPools` and `host.memory` print them | `src/Puck.Abstractions/Gpu`, `src/Puck.Hosting/Jobs/MemoryAccount.cs`; [streaming plan](../../../docs/plans/streaming-and-memory.md#step-1-as-a-brief) |
 | Reserve device memory before allocating it, share a pool between residencies, or hold detail to a budget | `MemoryAccount.ReserveDevice` (a holder's peak, under the owner its objects are named for, `GpuObjectName.MemoryOwnerOf`), `GpuDeviceMemoryWork.TryAdmit` (the one door every native allocation asks; `CountAllocated` takes only its `GpuMemoryGrant`), `GpuMemoryAdmissionScope` (opened around the synchronous allocation of a replacement its holder can do without, so a full pool refuses it instead of admitting it past the limit), `SdfResidencySelector` (the one detail bias, each bake's budget, each mesh region's reservation, `SdfGpuWorkBudget`); never a share of `GpuMemoryProfile` | `src/Puck.Hosting/Jobs/MemoryAccount.cs`, `src/Puck.Abstractions/Gpu/Counters`, `src/Puck.SdfVm/SdfResidencySelector.cs`; [streaming plan](../../../docs/plans/streaming-and-memory.md#step-3-one-reservation) |
 | Read where frame time goes | `world.counters gpu`, `world.gpu-timing`, the bake's `gpu-work=[…]` line | [performance and cost](#performance-and-cost) |
+| Know which draws a raster pass selected and at which level (triangles drawn by level and tier, mesh bytes no pass selected) | The occlusion kernel's selection marks, one stage in `SdfWorldTables.SelectionMarkFrames`, read back with the portal sight verdicts through the slot's one readback (`SdfMeshOcclusion`) and read against the row epoch (`SdfWorldTables.ObserveSelectionMarks`); `world.residency`'s selection line | `src/Puck.SdfVm` |
+| Show something where a group's detail has not landed or was refused | The group's floor: planned first on arrival, kept while detail draws, evicted to on refusal (`SdfMeshPathBake.Floor.cs`, `Group.KeptFloor`); `world.residency`'s floor line | [mesh bake](references/mesh-bake.md#groups-poses-and-materials) |
 | Name a backend's compiled-kernel extension, or its target from an extension or some bytecode | `ShaderBytecode.FileExtension` (the extension), `ShaderTargets` (`Of` a backend or bytecode, `FileExtension` and `DeployedPath` of a `ShaderTarget`); never a `.dxil`/`.spv` ternary or string compare. A kernel-loading API (`SdfKernelSet.Load`, `SdfWorldPipelineCatalog.LoadDeployed`, `GpuRegionCopyPass`, `SdfMeshRasterPass`) takes a `ShaderTarget`, never an extension string | `src/Puck.Abstractions/Gpu/Shaders`, `src/Puck.Shaders.Model/Compiler/ShaderTarget.cs` |
 | Build a render-graph package's one cached pass pipeline and recover it in `Create` | `PassPipelineBuild.AcquireAsync` and `Of` | `src/Puck.Shaders/Graph` |
 | Keep a graph replacement from holding two whole graphs, or decide whether the budget may refuse it | `ShaderPipelineRenderNode.CarriedStoragesOf` (the one door a replacement takes over the installed graph's storage through, matched against the instances' own extents and sizes), `ReplacementGivesWay` (a graph whose counts moved cannot render, so its replacement is the instance's least and only a cap refuses it), `InstancesOf` (history only compute touches keeps two instances); `pipeline.inspect <instance>` reads the result | `src/Puck.Shaders`; [memory budget](../../../docs/reference/shaders.md#memory-budget) |
@@ -607,7 +622,14 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   relative depth tolerance stay unchanged. The reprojection device witness
   maps two samples at distances 64 and 32 onto the same receiver depth 128.
 - **Stationary reconstruction keeps a complete jitter window.** The resolve's
-  history surface retains each phase's color, coverage, transport and weight.
+  stationary window retains each phase's color, coverage, transport and weight.
+  It is one retained buffer the resolve updates in place (a mutable input of the
+  fragment's own, `SdfWorldPackage.HistoryWindowWritten`), not two-copy history:
+  every access to it goes through `sdfHistoryWindowWord`, which takes the
+  invocation's own id, and a pixel keeps its window only while its history comes
+  from its own pixel (`historyPixel == pixelIndex` in `stationary`). Reading a
+  window at a reprojected position would read words another invocation of the
+  same dispatch is writing; a moved pixel restarts its window instead.
   Replacing one phase and summing in fixed order removes periodic newest-phase
   bias and keeps samples the current neighborhood misses. Moving and reactive
   pixels use the clipped resolve while their window fills. A stationary window
@@ -621,11 +643,12 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   runs only for rejected footprints. A displaced camera keeps ordinary receiver
   rejection; a stationary current receiver alone does not prove no disocclusion.
   The package owns
-  `TemporalPeriod` and `HistorySurfaceWords`; the generator carries both into
-  HLSL. A layout change needs a host with the matching history allocation before
-  loading its kernels. Account for this output-sized history in GPU memory.
-  Keep the surface planar, every access through `sdfHistoryWord`: interleaved,
-  its 47 words a pixel put each lane of each access on its own sector and held
+  `TemporalPeriod`, `HistorySurfaceWords` and `HistoryWindowWords`; the generator
+  carries them into HLSL. A layout change needs a host with the matching history
+  allocation before loading its kernels. Account for this output-sized history in
+  GPU memory: the surface and the color in two copies, the window in one.
+  Keep the surface and window planar, every access through `sdfHistoryWord`:
+  interleaved, a pixel's words put each lane of each access on its own sector and held
   the resolve at L2 bandwidth. A complete window shows its own mean, so only an
   incomplete one reads the reprojected Catmull-Rom history.
   Preserve a constant coverage component exactly before half packing and after
@@ -721,9 +744,10 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   plinth's wedge across the floor from every low probe beside it), taps a coarse
   level's trace marked sheets (the curvature half's low bit) at almost any share.
   Only the finest level keeps the behind-plane floor. Nothing a camera sees reads
-  an unmeasured surface as black. A view with no cascade (a session view, or
-  `world.shadows off`) reads a shadowing directional's visibility from the probes'
-  light bits. `SdfMeshIrradianceGatherDeviceLawTests` holds the GPU and CPU
+  an unmeasured surface as black. Wherever no cascade holds a point (past the
+  cascades, blended across the band at their edge by the K row's coverage lanes;
+  on glass; in a view with none, as `world.shadows off` makes) a shadowing
+  directional's visibility is the probes' light bits (`sdfShadowRoleAnswer`). `SdfMeshIrradianceGatherDeviceLawTests` holds the GPU and CPU
   gathers to the same slots, weights, share and sun visibility.
   Relocation (`SdfMeshIrradiance.PlaceBatch`) keeps a probe clear of geometry within
   its own cell; every lookup uses its recorded offset. Placement takes the nearest clear exit; its short rejection rays
@@ -822,10 +846,12 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
 - **A named-camera layout slot reconstructs; a screen's camera does not.**
   `world.temporal` reaches every view `WorldFramePresenter.ViewQuality()`
   dresses: seat views, the operator pose and `views.layouts` slots that name a
-  camera. A camera view a screen films and a session view take a reduced
-  quality (`WorldScreenBinder.CameraViewQuality`,
-  `WorldSessionSceneEmitter.ReducedQuality`) whose `Temporal` is off, and
-  `SdfViewQuality.Restrict` ANDs it, so they never jitter.
+  camera. A camera view a screen films and a session view take the nested
+  quality (`WorldRenderSettings.NestedRestriction`, `NestedViewQuality`): the
+  presentation's own, with what the world's `render.nested` table gives up at
+  the view's presented share of the display, and `Temporal` off, which
+  `SdfViewQuality.Restrict` ANDs, so they never jitter. With no table a nested
+  view gives up nothing else, so a portal is lit as the room behind it.
 - **A settled capture cannot show what changes between frames.** Flicker
   (jitter moiré on a screen, a still scene whose pixels change), ghosting and
   trails show only in a presented capture (`FrameCaptureMode.Presented`:
@@ -1151,11 +1177,11 @@ wrong. The contracts that bite most often:
   names an `SdfSampledField` by handle; the frame carries its snapshots (`SdfFrame.Sampled`),
   the geometry hashes them, and the bake compares only `SdfSampledSet.Baked` (the handles an
   instruction samples), so a height field's heights moving restart nothing. A moved baked snapshot
-  resamples only the reader groups (`SdfMeshPathBake.Resample`, replanned from each group's
+  resamples only the reader groups (`SdfMeshPathBake.Revisit`, replanned from each group's
   planned box); a reader still baking keeps its bake and the newest plan waits as its
   `Successor`, so a field republished every frame still lands. Never compare the whole set
   in the bake, and never replan from `Low`/`High`, which the lattices narrow. Batch tickets
-  leave `Taken` once through `SdfMeshPathBake.Settle`, which both `Complete` and `Abandon`
+  leave `Taken` once through `SdfMeshPathBake.MoveTicket`, which both `Complete` and `Abandon`
   call, so a partial answer returns exactly its unanswered lattices. Each bake job writes the snapshots its groups sealed into
   its own `sdfSampledValues` table, so a lattice never samples a newer publication; never
   put sampled values back into program words or a shared GPU buffer the bake reads

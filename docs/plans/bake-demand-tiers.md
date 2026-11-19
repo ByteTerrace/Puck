@@ -137,8 +137,11 @@ seconds on the `[sdf.mesh-gi] done` lines.
 
 ## Steps and checks
 
-One step of this page's own remains; the rest of the open work is the streaming
-plan's, listed under [the region's budget](#the-regions-budget).
+The open work for demand tiers is the crease merge below. Unifying tiers and
+collapse levels under one error budget, along one chain of meshes, is
+[the virtual geometry plan's](virtual-geometry.md#the-build-order) (its
+counters, the one size-on-screen function, the tier audit and the chain), and
+the rest of residency is [the streaming plan's](streaming-and-memory.md#the-decisions).
 
 **The crease merge.** `SdfSampledLattice.CurvedSplit` reads second differences,
 and a sharp crease (two faces meeting) concentrates the field's second

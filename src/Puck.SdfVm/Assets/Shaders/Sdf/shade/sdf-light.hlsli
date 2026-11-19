@@ -112,10 +112,11 @@ struct SdfLightSource {
 };
 
 // The surface a light answers at: its point, lit normal and camera ray, its material and the cel style it shades with
-// (sdfToonStyle), its ambient occlusion (a wrapped material's already relaxed toward 1), each stable slot's shadow
-// visibility, whether the view's cascades drew it, and the irradiance volume's probes about it, which occlude a traced
-// point or spot light, and a shadowing directional in a view with no cascade (probed is false while the volume is off,
-// and every such light goes unoccluded).
+// (sdfToonStyle), its ambient occlusion (a wrapped material's already relaxed toward 1), each shadow role's cascade
+// visibility and coverage (the K row's lanes, sdfShadowVisibility) and which of them the surface pass queried, whether the
+// view's cascades drew it, and the irradiance volume's probes about it, which occlude a traced point or spot light, and a
+// shadowing directional wherever no cascade holds the point (probed is false while the volume is off, and every such
+// light goes unoccluded).
 struct SdfShadeSurface {
     float3 position;
     float3 normal;
@@ -130,13 +131,38 @@ struct SdfShadeSurface {
     SdfMeshProbes probes;
 };
 
-// A light's shadow visibility. A handoff fades a stable slot from its outgoing light to its incoming one: the outgoing
-// light's own occlusion deficit, which the slot's cascades still render, fades out with the handoff's weight, and the
-// incoming light, which no cascade renders until it holds the slot, shades unshadowed. Unslotted directionals retain
-// ambient occlusion.
-float sdfLightVisibility(int lightIndex, float4 stable, float ambientOcclusion, float4 measured) {
+// The probes' answer for a light at a surface: the share of the probes about it that see the light (sdfMeshLightVisibility)
+// when the volume traced the light there (`traced`), otherwise one, times the surface's ambient occlusion, which stands in
+// for the contact-scale shadowing the probes' spacing cannot resolve. A probe not yet measured answers lit, never dark.
+float sdfLightProbeAnswer(SdfShadeSurface surface, int lightIndex, bool traced) {
+    return ((traced ? sdfMeshLightVisibility(surface.probes, (uint)lightIndex) : 1.0) * surface.ambientOcclusion);
+}
+// One shadow role's answer at a surface: its cascades' visibility where they hold the point, the probes' answer where they
+// do not, and across the band at the cascades' edge the two blended by the cascades' coverage (the K row's lanes,
+// sdfShadowVisibility). A role whose lanes the surface pass did not query (a side the light does not reach) answers zero
+// where `surface.shadowMeasured` says so. A slot that holds no role, and a view with no cascade, take the probes' answer
+// whole, so every receiver asks the same question whichever view or pass it is in.
+float sdfShadowRoleAnswer(SdfShadeSurface surface, int role, int lightIndex, bool traced) {
+    if ((role < 0) || !surface.cascaded) {
+        return sdfLightProbeAnswer(surface, lightIndex, traced);
+    }
+    if (sdfComponent(surface.shadowMeasured, (uint)role) == 0.0) {
+        return 0.0;
+    }
+
+    float cascade = sdfComponent(surface.shadowVisibility, (uint)role);
+    float coverage = sdfComponent(surface.shadowVisibility, ((uint)role + SDF_SHADOW_ROLES));
+
+    return ((coverage >= 1.0) ? cascade : lerp(sdfLightProbeAnswer(surface, lightIndex, traced), cascade, coverage));
+}
+// A directional light's shadow visibility. A slotted light takes the answer of the role its slot holds
+// (sdfShadowRoleAnswer), so the cascades shadow a light only through the role that draws them. A handoff fades a stable
+// slot from its outgoing light to its incoming one: the outgoing light keeps the slot's answer, which its cascades still
+// render, easing toward ambient occlusion (the unslotted answer) with the handoff's weight, and the incoming light, which
+// no cascade renders until it holds the slot, takes the probes' answer. An unslotted directional takes ambient occlusion.
+float sdfLightVisibility(SdfShadeSurface surface, int lightIndex, bool traced) {
     if (lightIndex < 0) {
-        return ambientOcclusion;
+        return surface.ambientOcclusion;
     }
     [loop]
     for (uint fade = 0u; fade < (uint)SDF_SHADOW_FADE_CAPACITY; fade++) {
@@ -144,24 +170,20 @@ float sdfLightVisibility(int lightIndex, float4 stable, float ambientOcclusion, 
         SdfShadowHandoff handoff = sdfShadowHandoffs[fade];
         if (handoff.Slot < 0 || (uint)handoff.Slot >= SDF_MAX_SHADOW_SLOTS) { continue; }
         if (lightIndex == handoff.Outgoing) {
-            if (sdfComponent(measured, (uint)handoff.Slot) == 0.0) { return 0.0; }
-            return (1.0 - ((1.0 - sdfComponent(stable, (uint)handoff.Slot)) * (1.0 - handoff.Weight)));
+            return lerp(sdfShadowRoleAnswer(surface, worldShadowRoleOfSlot(handoff.Slot), lightIndex, traced), surface.ambientOcclusion, handoff.Weight);
         }
         if (lightIndex == handoff.Incoming) {
-            return sdfComponent(measured, (uint)handoff.Slot);
+            return sdfLightProbeAnswer(surface, lightIndex, traced);
         }
     }
     [loop]
     for (uint shadowSlot = 0u; shadowSlot < SDF_MAX_SHADOW_SLOTS; shadowSlot++) {
         if (shadowSlot >= worldShadowStableCount()) { break; }
         if (lightIndex == sdfComponent(passGroup.shadowSlots, shadowSlot)) {
-            return sdfComponent(stable, shadowSlot) * sdfComponent(measured, shadowSlot);
+            return sdfShadowRoleAnswer(surface, worldShadowRoleOfSlot((int)shadowSlot), lightIndex, traced);
         }
     }
-    return ambientOcclusion;
-}
-float sdfLightVisibility(int lightIndex, float4 stable, float ambientOcclusion) {
-    return sdfLightVisibility(lightIndex, stable, ambientOcclusion, float4(1.0, 1.0, 1.0, 1.0));
+    return surface.ambientOcclusion;
 }
 
 // What one light adds at a surface: its diffuse term, its specular lobe and its rim brighten, and the factor it scales
@@ -284,12 +306,12 @@ bool sdfLightNext(inout SdfLightWalk walk, out SdfLightSource light) {
 // times the cosine. A wrap of 0 reduces each wrapped term to max(n.l, 0).
 // The one evaluation of a light's direction, reach, probe share and visibility, which the default response and an
 // authored light phase's stamp both read. `visibility` is the share of a directional or point light that reaches the
-// surface. Where the view draws cascades, a directional's is its stable slot's measured shadow, which resolves every
-// scale (sdfLightVisibility; ambient occlusion for a directional no slot renders). Otherwise nothing measures the
-// light's shadow at the surface: a light the irradiance volume traced (its Shadows flag, SdfLight.IsTraced; the probes
-// record every shadowing directional too) takes the share of the probes about the surface that see it
-// (sdfMeshLightVisibility), which resolves only the probes' spacing, times the surface's ambient occlusion, which stands
-// in for the contact-scale shadowing nothing measured; an untraced one takes the ambient occlusion alone. One for every
+// surface. A directional's is its slot's role's answer (sdfLightVisibility): the cascades' measured shadow where they
+// hold the point, which resolves every scale, and elsewhere (past the cascades, in a view with none, on glass) the
+// probes' answer, so every receiver of one light asks the same question. A point or spot light takes the probes' answer:
+// a light the irradiance volume traced (its Shadows flag, SdfLight.IsTraced; the probes record every shadowing directional
+// too) takes the share of the probes about the surface that see it (sdfMeshLightVisibility), which resolves only the
+// probes' spacing, times the surface's ambient occlusion; an untraced one takes the ambient occlusion alone. One for every
 // other kind. The authored stamp requests every term; ordinary shading requests only the terms its light kind uses,
 // preserving the no-program path's work.
 struct SdfLightInputs { float3 direction; float reach; float probeShare; float visibility; };
@@ -308,14 +330,14 @@ SdfLightInputs sdfLightInputs(SdfLightSource light, SdfShadeSurface surface, boo
         if (light.kind == SdfLightScreen) inputs.reach = saturate(dot(light.facing, -inputs.direction)) / (distanceSquared + light.weight);
     }
     bool traced = surface.probed && light.record.Shadows != 0u && light.index >= 0;
-    bool probeVisibility = (light.kind == SDF_LIGHT_POINT) || (light.kind == SDF_LIGHT_DIRECTIONAL && !surface.cascaded);
-    if (traced && (authored || (probeVisibility && light.weight * inputs.reach > 0.0))) {
+    bool lit = (light.weight * inputs.reach > 0.0);
+    if (traced && (authored || ((light.kind == SDF_LIGHT_POINT) && lit))) {
         inputs.probeShare = sdfMeshLightVisibility(surface.probes, (uint)light.index);
     }
-    if (probeVisibility) {
+    if (light.kind == SDF_LIGHT_POINT) {
         inputs.visibility = inputs.probeShare * surface.ambientOcclusion;
     } else if (light.kind == SDF_LIGHT_DIRECTIONAL) {
-        inputs.visibility = sdfLightVisibility(light.index, surface.shadowVisibility, surface.ambientOcclusion, surface.shadowMeasured);
+        inputs.visibility = sdfLightVisibility(surface, light.index, (traced && lit));
     }
     return inputs;
 }

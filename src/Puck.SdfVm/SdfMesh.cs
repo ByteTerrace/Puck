@@ -328,6 +328,10 @@ public readonly record struct SdfMeshDraw(SdfMesh Mesh, Matrix4x4 ObjectToWorld,
     /// <summary>Gets whether the draw belongs to a moving body or animated placement, which the irradiance volume's
     /// static scene leaves out (<see cref="SdfMeshIrradianceScene.IsStatic"/>).</summary>
     public bool IsDynamic { get; init; }
+    /// <summary>Gets the detail tier the drawn mesh was baked at (<see cref="SdfMeshTier"/>), or -1 for a mesh no bake
+    /// tiered (an authored mesh). It reports only, in the selection counts
+    /// (<see cref="SdfWorldTables.DescribeSelection"/>): no staged record or pass reads it.</summary>
+    public int Tier { get; init; } = -1;
     /// <summary>Gets whether the draw is glass (<see cref="SdfMeshBakeGroup.Glass"/>): the glass pass rasterizes it over
     /// the opaque image, the cascades integrate its authored shadow density, and the opaque mesh pass and the
     /// irradiance volume's static scene leave it out.</summary>

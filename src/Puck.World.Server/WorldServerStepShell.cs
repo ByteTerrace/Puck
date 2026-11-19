@@ -42,6 +42,7 @@ public static class WorldServerStepShell {
         var burst = 0;
 
         while (true) {
+            using var work = HostFrameWork.MeasureWorld(server.InstanceIdentity);
             peerHost?.DrainPending();
             // Federation may commit from another thread. Its authority operation must precede this whole step or
             // follow its tape close: a post-step arrival cannot enter the bucket replay will apply before that step.
@@ -67,6 +68,7 @@ public static class WorldServerStepShell {
             // The caller's own tick clock: a queued script held by world.wait resumes off THIS count, so the barrier
             // measures completed simulation ticks rather than frames or wall time.
             publishTick(tick);
+            work.Complete();
 
             if (
                 pacing.StepsOneTickPerFrame ||
