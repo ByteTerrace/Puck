@@ -1,9 +1,9 @@
-// Generated from shader interface 'sdf-bloom' (sha256/437cb38dc0a9fe4b59ea8d9328445f11e9ce8aec3c7a1025ac45e3424478da9f). Regenerate it from the interface; never edit it.
-#ifndef PUCK_SHADER_INTERFACE_SDF_BLOOM
-#define PUCK_SHADER_INTERFACE_SDF_BLOOM
+// Generated from shader interface 'sdf-optics' (sha256/207ca910cf231fe3559138f5a8e837de9ab9718f41e3a3483fa4bbd949f76412). Regenerate it from the interface; never edit it.
+#ifndef PUCK_SHADER_INTERFACE_SDF_OPTICS
+#define PUCK_SHADER_INTERFACE_SDF_OPTICS
 
 // The Frame group: descriptor set 0, register space 0.
-struct SdfBloomFrame {
+struct SdfOpticsFrame {
     [[vk::offset(0)]] float2 pointer;
     [[vk::offset(8)]] uint2 tick;
     [[vk::offset(16)]] float time;
@@ -12,19 +12,27 @@ struct SdfBloomFrame {
     [[vk::offset(28)]] uint tickRate;
     [[vk::offset(32)]] uint pointerDown;
 };
-[[vk::binding(0, 0)]] ConstantBuffer<SdfBloomFrame> frameGroup : register(b0, space0);
+[[vk::binding(0, 0)]] ConstantBuffer<SdfOpticsFrame> frameGroup : register(b0, space0);
 
 // The Pass group: descriptor set 3, register space 3.
-struct SdfBloomPass {
+struct SdfOpticsPass {
     [[vk::offset(0)]] uint2 extent;
     [[vk::offset(8)]] float bloomCutoff;
     [[vk::offset(12)]] float bloomMix;
     [[vk::offset(16)]] float bloomRadius;
     [[vk::offset(20)]] float bloomScatter;
-    [[vk::offset(24)]] uint workCounterRow;
-    [[vk::offset(28)]] uint workCounterRowDetail;
+    [[vk::offset(24)]] uint displayEncode;
+    [[vk::offset(28)]] float displayFidelity;
+    [[vk::offset(32)]] float displaySharpness;
+    [[vk::offset(36)]] uint _pad36;
+    [[vk::offset(40)]] uint _pad40;
+    [[vk::offset(44)]] uint _pad44;
+    [[vk::offset(48)]] float4 toneShape;
+    [[vk::offset(64)]] float toneToe;
+    [[vk::offset(68)]] uint workCounterRow;
+    [[vk::offset(72)]] uint workCounterRowDetail;
 };
-[[vk::binding(0, 3)]] ConstantBuffer<SdfBloomPass> passGroupIsaD7AD8A32 : register(b0, space3);
+[[vk::binding(0, 3)]] ConstantBuffer<SdfOpticsPass> passGroupIsaD7AD8A32 : register(b0, space3);
 #define passGroup passGroupIsaD7AD8A32
 [[vk::binding(1, 3)]] Texture2D<float4> bloomSource : register(t1, space3);
 [[vk::binding(2, 3)]] Texture2D<float4> bloomFine : register(t2, space3);
@@ -116,4 +124,4 @@ void puckCountRejectedHit() {
     puckAddWork(((passGroup.workCounterRow * PuckWorkRowWords) + PuckWorkRejectedHitsWord), 1u);
 }
 
-#endif // PUCK_SHADER_INTERFACE_SDF_BLOOM
+#endif // PUCK_SHADER_INTERFACE_SDF_OPTICS
