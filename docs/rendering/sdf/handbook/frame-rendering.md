@@ -332,15 +332,32 @@ once their passes alone overrun the period. A World with no display period or
 no timestamps keeps the fixed share and says why: `world.residency`'s
 `work-budget` line prints the live share, one frame's allowance, the frame's
 GPU time it read (`follows:frame`, or the reason it read none), and the GPU
-time it granted beside what the jobs were charged. The queue runs a background
-job whole before the frame submitted after it, so a job is cut to one frame's
-allowance (`SdfGpuWorkBudget.FrameAllowanceSeconds`, handed to every client's
-take) at its kind's measured rate (`SdfGpuWorkRate`): the irradiance volume's
-traces and relights, and the bake's batches, whose rate follows the mean
-because a batch mixes groups whose evaluations differ in cost. The `gpu-work`
-line counts the budgeted jobs measured past their allowance (`over-allowance`,
-which a bake lattice larger than the allowance still reaches, since a lattice
-is never split) and names the longest (`most-job`). A frame the graph
+time it granted beside what the jobs were charged. The queue runs every
+background job whole before the frame submitted after it, so the jobs queued
+ahead of one frame together fit one frame's allowance: each take is handed what
+is left of `SdfGpuWorkBudget.FrameAllowanceSeconds` after the charged jobs
+still in flight on the queue, whichever residency's service submitted them
+(`SdfGpuWorkBudget.Allowance`, an `SdfGpuWorkAllowance`), and while work is
+queued a client takes no job priced past it, deciding before it takes
+anything. A client whose job waits for room keeps its turn in its service, so
+the bake's batches, cut to whatever is left, do not starve the irradiance
+volume's queries, which the coordinator cuts to the whole allowance. A job with
+nothing queued ahead of it runs whatever its price, so a
+bake lattice larger than the allowance (a lattice is never split) still runs,
+alone. Jobs are cut at their kind's measured rate (`SdfGpuWorkRate`): the
+irradiance volume's traces and relights, and the bake's batches, whose rate
+follows the mean because a batch mixes groups whose evaluations differ in
+cost. The `work-budget` line prints what is queued (`queued:`), and the
+`gpu-work` line counts the steps the spent allowance held (`deadline-holds`),
+the budgeted jobs measured past what they were taken to fit (`over-allowance`),
+the jobs a client handed over past what was left while work was queued
+(`over-deadline`, a client defect), and names the longest (`most-job`). The
+`frames-behind` field counts the claim that background work never costs a
+frame: from each job's span and each frame's on the queue's timestamp clock, the
+frames background work ran directly ahead of or between the submissions of
+(`behind`), and those for which that work and the frame's own GPU time exceed
+the display's period (`missed`, an upper bound, since the clock does not show
+when the frame reached the queue). A frame the graph
 withholds (`SdfWorldResidency.FrameWithheld`: a locked tick completing its
 meshes, or a frame held for its lighting) queues nothing behind the work: its
 staging drives the jobs outside the share (`SdfGpuWork.Drive`, and its

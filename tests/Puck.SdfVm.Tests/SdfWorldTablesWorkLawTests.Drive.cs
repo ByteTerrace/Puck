@@ -84,7 +84,7 @@ public sealed partial class SdfWorldTablesWorkLawTests {
         public TimeSpan RecordDelay { get; init; }
         public GpuMemoryBytes OwnedBytes => default;
         public GpuQueueCategory Category => GpuQueueCategory.Probe;
-        public bool TryTake(SdfWorldTables tables, int uploadBytes, double allowanceSeconds, [NotNullWhen(true)] out object? job, out double estimatedSeconds) {
+        public bool TryTake(SdfWorldTables tables, int uploadBytes, SdfGpuWorkAllowance allowance, [NotNullWhen(true)] out object? job, out double estimatedSeconds) {
             estimatedSeconds = 0.001;
             job = null;
             if (m_flying || (Remaining == 0)) { return false; }
@@ -111,7 +111,7 @@ public sealed partial class SdfWorldTablesWorkLawTests {
         private bool m_taken;
         public GpuMemoryBytes OwnedBytes => default;
         public GpuQueueCategory Category => GpuQueueCategory.Probe;
-        public bool TryTake(SdfWorldTables tables, int uploadBytes, double allowanceSeconds, [NotNullWhen(true)] out object? job, out double estimatedSeconds) {
+        public bool TryTake(SdfWorldTables tables, int uploadBytes, SdfGpuWorkAllowance allowance, [NotNullWhen(true)] out object? job, out double estimatedSeconds) {
             estimatedSeconds = 0.0;
             job = (m_taken ? null : new object());
             m_taken = true;

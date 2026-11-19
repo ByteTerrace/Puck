@@ -1102,9 +1102,12 @@ in flight and commits a batch once (`SdfMeshProbeGpuWork.Run`,
 follows the GPU time the frame leaves free (`SdfGpuWorkBudget`), budgeted bake
 batches are cut to one frame's allowance, and lighting is granted work for
 each second, so a game presenting 30 frames a second gets the lighting of one
-presenting 60. What remains is admitting each job against the frame's
-deadline, splitting a bake lattice, and counting frames missed behind
-background work.
+presenting 60. Each job is admitted against the frame's deadline: the jobs
+queued ahead of one frame together fit one frame's allowance
+(`SdfGpuWorkBudget.Allowance`), and the frames background work may have cost
+are counted (`SdfGpuWorkBudget.FramesMissedBehind`, `world.residency`'s
+`frames-behind`). What remains is splitting a bake lattice, and the route
+reading of that count.
 
 **What we propose.** In this order:
 

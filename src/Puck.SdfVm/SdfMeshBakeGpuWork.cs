@@ -8,7 +8,7 @@ namespace Puck.SdfVm;
 
 /// <summary>
 /// The mesh bake's sampling as background GPU work (<see cref="SdfGpuWork"/>): each job is a batch the residency's bake
-/// takes (<see cref="SdfMeshPathBake.TryTake"/>), dispatched as the mask kernel writing each lattice's instance mask and
+/// takes (<see cref="SdfMeshPathBake.TryTake(Puck.SignedDistance.SdfProgram?, out SdfMeshBakeBatch?, long)"/>), dispatched as the mask kernel writing each lattice's instance mask and
 /// the bake kernel sampling every lattice through the field interpreter, its samples copied back and answered
 /// (<see cref="SdfMeshPathBake.Complete(SdfMeshBakeBatch, ReadOnlySpan{byte})"/>). Each slot holds the batch's own inputs and outputs: its pass block, its
 /// point table (sample points, then saved poses), its sampled table, its instance masks and samples, and a World set
@@ -107,13 +107,16 @@ internal sealed class SdfMeshBakeGpuWork : ISdfGpuWorkClient {
     }
 
     /// <inheritdoc/>
-    /// <remarks>Takes the bake's next batch for the tables' uploaded program, its field evaluations past the first
-    /// lattice cut to the allowance at the bake's measured rate (<see cref="SdfMeshPathBake.BatchTaps"/> for a held frame),
-    /// and estimated at that rate.</remarks>
-    public bool TryTake(SdfWorldTables tables, int uploadBytes, double allowanceSeconds, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out object? job, out double estimatedSeconds) {
-        if (!m_bake.TryTake(batch: out var batch, field: tables.BackgroundProgram, mostTaps: m_rate.UnitsWithin(most: SdfMeshPathBake.BatchTaps, seconds: allowanceSeconds))) {
+    /// <remarks>Takes the bake's next batch for the tables' uploaded program, its field evaluations cut to the allowance
+    /// at the bake's measured rate (<see cref="SdfMeshPathBake.BatchTaps"/> for a held frame), and estimated at that rate.
+    /// With nothing queued the first lattice is taken whatever its evaluations, since a lattice is never split; while
+    /// work is queued a first lattice past what is left waits, priced so the service holds room for it.</remarks>
+    public bool TryTake(SdfWorldTables tables, int uploadBytes, SdfGpuWorkAllowance allowance, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out object? job, out double estimatedSeconds) {
+        var mostTaps = allowance.UnitsWithin(most: SdfMeshPathBake.BatchTaps, rate: m_rate);
+
+        if (!m_bake.TryTake(batch: out var batch, field: tables.BackgroundProgram, firstFits: allowance.Queued, heldTaps: out var heldTaps, mostTaps: mostTaps)) {
             job = null;
-            estimatedSeconds = 0.0;
+            estimatedSeconds = m_rate.SecondsOf(units: heldTaps);
             return false;
         }
         job = batch;
