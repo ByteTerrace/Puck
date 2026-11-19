@@ -152,7 +152,8 @@ are deleted rather than kept beside the programs.
   resolves the toon case today. Every case's program is declared by the
   document, so it is in the set `world prepare` and the publication door
   compile, and a swap is an appearance upload: no rebake and no compile. The
-  migration keeps the capability and turns nothing on: cel shading is parked
+  migration keeps the capability; cel is the debug world's treatment, chosen
+  by its materials
   ([the decision](../decisions/rendering.md#a-light-is-shadowed-wherever-it-lights-and-cel-shading-is-a-style-per-material)).
 - *Terrain and weather are programs.* The terrain pass's slope, altitude and
   curvature materials and a weather region's coatings are `shade` templates in
