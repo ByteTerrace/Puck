@@ -5,10 +5,10 @@ namespace Puck.Physics.Motion;
 
 /// <summary>One compiled instruction shared by program phases and action triggers.</summary>
 /// <remarks><c>StateName</c> carries <see cref="BodyMotionOp.Generate"/>'s draw site — the one row a generate names,
-/// since a site's source and cursor are its own — and is <see langword="null"/> for every other operation. Nothing
+/// since a site's source and cursor are its own. Nothing
 /// is bound at kit-compile time here: the generate site is a world-global <c>state</c> row, not part of this kit's
 /// per-body slot table.</remarks>
-public readonly record struct CompiledBodyInstruction(BodyMotionOp Operation, FixedQ4816 Value, FixedVector3 Direction, ulong DurationTicks, int StateSlot, ActionTarget Target = ActionTarget.Self, string? StateName = null, bool UseMoveDirection = false);
+public readonly record struct CompiledBodyInstruction(BodyMotionOp Operation, FixedQ4816 Value, FixedVector3 Direction, ulong DurationTicks, int StateSlot, ActionTarget Target = ActionTarget.Self, string? StateName = null, bool UseMoveDirection = false, BodyMotionCurve Curve = BodyMotionCurve.Linear);
 /// <summary>A slot envelope compiled into the slot's fixed counter or engine-tick domain.</summary>
 /// <param name="Minimum">The inclusive range minimum, or zero for a set.</param>
 /// <param name="Maximum">The inclusive range maximum, or zero for a set.</param>

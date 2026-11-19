@@ -45497,6 +45497,142 @@
                       "title": "WorldEffectPlanarImpulse"
                     },
                     {
+                      "description": "Moves a body along its launch plane and turns it through a signed relative yaw over time.",
+                      "properties": {
+                        "$type": {
+                          "const": "timedMove"
+                        },
+                        "right": {
+                          "description": "Travel to the right in body-sized world units.",
+                          "type": "number"
+                        },
+                        "forward": {
+                          "description": "Travel forward in body-sized world units.",
+                          "type": "number"
+                        },
+                        "yawDegrees": {
+                          "description": "Signed relative turn in degrees, in Puck\u0027s yaw convention.",
+                          "type": "number"
+                        },
+                        "durationSeconds": {
+                          "description": "Positive duration in exact engine ticks, expressed in seconds.",
+                          "type": "number"
+                        },
+                        "curve": {
+                          "description": "How both travel and yaw are distributed over the duration.",
+                          "enum": [
+                            "Linear",
+                            "Smoothstep"
+                          ],
+                          "default": "Linear",
+                          "title": "BodyMotionCurve"
+                        },
+                        "key": {
+                          "description": "The recipient of a world rule. A kit action supplies its own body.",
+                          "default": null,
+                          "title": "StateChannelRef",
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "object",
+                              "required": [
+                                "channel"
+                              ],
+                              "additionalProperties": false,
+                              "properties": {
+                                "channel": {
+                                  "type": "string"
+                                },
+                                "arguments": {
+                                  "type": "array",
+                                  "items": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string"
+                                      },
+                                      {
+                                        "type": "number"
+                                      },
+                                      {
+                                        "type": "object",
+                                        "required": [
+                                          "zone"
+                                        ],
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "zone": {
+                                            "$ref": "#/properties/kits/items/properties/motion/properties/shaping/items/properties/when/anyOf/0/properties/state/anyOf/1/properties/arguments/items/anyOf/2/properties/zone"
+                                          }
+                                        }
+                                      },
+                                      {
+                                        "type": "object",
+                                        "required": [
+                                          "expression"
+                                        ],
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "expression": {
+                                            "$ref": "#/properties/kits/items/properties/motion/properties/shaping/items/properties/when/anyOf/0/properties/state/anyOf/1/properties/arguments/items/anyOf/2/properties/zone"
+                                          }
+                                        }
+                                      }
+                                    ]
+                                  }
+                                }
+                              }
+                            },
+                            {
+                              "type": "object",
+                              "required": [
+                                "binding",
+                                "field"
+                              ],
+                              "additionalProperties": false,
+                              "properties": {
+                                "binding": {
+                                  "type": "string"
+                                },
+                                "field": {
+                                  "type": "string"
+                                }
+                              }
+                            },
+                            {
+                              "type": "object",
+                              "required": [
+                                "pool",
+                                "slot",
+                                "field"
+                              ],
+                              "additionalProperties": false,
+                              "properties": {
+                                "pool": {
+                                  "type": "string"
+                                },
+                                "slot": {
+                                  "type": "integer"
+                                },
+                                "field": {
+                                  "type": "string"
+                                }
+                              }
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "right",
+                        "forward",
+                        "yawDegrees",
+                        "durationSeconds"
+                      ],
+                      "additionalProperties": false,
+                      "title": "WorldEffectTimedMove"
+                    },
+                    {
                       "description": "Starts a named timer slot with an authored duration.",
                       "properties": {
                         "$type": {

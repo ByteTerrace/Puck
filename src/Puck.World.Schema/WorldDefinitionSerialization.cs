@@ -287,6 +287,7 @@ namespace Puck.World;
 [JsonSerializable(typeof(WorldEffect.SetVerticalVelocity))]
 [JsonSerializable(typeof(WorldEffect.ScaleVerticalVelocity))]
 [JsonSerializable(typeof(WorldEffect.PlanarImpulse))]
+[JsonSerializable(typeof(WorldEffect.TimedMove))]
 [JsonSerializable(typeof(WorldEffect.StartTimer))]
 [JsonSerializable(typeof(WorldEffect.Designate))]
 [JsonSerializable(typeof(WorldEffect.EmitCue))]
