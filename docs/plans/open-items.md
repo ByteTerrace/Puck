@@ -3139,8 +3139,9 @@ runs.
   timing and boot and work counts.
 - The temporal reconstruction's quiet-machine frame and memory qualification:
   rerun the integrated tour, standing and walking frame readings and the
-  gallery and lift body patrol; history is 47 words per output pixel
-  (`HistorySurfaceWords`), so measure the view and slot allocation.
+  gallery and lift body patrol; history is `HistorySurfaceWords` words per
+  output pixel in two copies and `HistoryWindowWords` in one, so measure the
+  view and slot allocation.
 - [medium] The sweep compares no per-tick allocation: `SweepSignals.ReadFrames`
   keeps `host.frames`' header and phases and drops its frame thread allocated
   line, and the `memory` signal reads after a collection. Keep that line as

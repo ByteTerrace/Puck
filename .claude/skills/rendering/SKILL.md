@@ -609,7 +609,14 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   relative depth tolerance stay unchanged. The reprojection device witness
   maps two samples at distances 64 and 32 onto the same receiver depth 128.
 - **Stationary reconstruction keeps a complete jitter window.** The resolve's
-  history surface retains each phase's color, coverage, transport and weight.
+  stationary window retains each phase's color, coverage, transport and weight.
+  It is one retained buffer the resolve updates in place (a mutable input of the
+  fragment's own, `SdfWorldPackage.HistoryWindowWritten`), not two-copy history:
+  every access to it goes through `sdfHistoryWindowWord`, which takes the
+  invocation's own id, and a pixel keeps its window only while its history comes
+  from its own pixel (`historyPixel == pixelIndex` in `stationary`). Reading a
+  window at a reprojected position would read words another invocation of the
+  same dispatch is writing; a moved pixel restarts its window instead.
   Replacing one phase and summing in fixed order removes periodic newest-phase
   bias and keeps samples the current neighborhood misses. Moving and reactive
   pixels use the clipped resolve while their window fills. A stationary window
@@ -623,11 +630,12 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   runs only for rejected footprints. A displaced camera keeps ordinary receiver
   rejection; a stationary current receiver alone does not prove no disocclusion.
   The package owns
-  `TemporalPeriod` and `HistorySurfaceWords`; the generator carries both into
-  HLSL. A layout change needs a host with the matching history allocation before
-  loading its kernels. Account for this output-sized history in GPU memory.
-  Keep the surface planar, every access through `sdfHistoryWord`: interleaved,
-  its 47 words a pixel put each lane of each access on its own sector and held
+  `TemporalPeriod`, `HistorySurfaceWords` and `HistoryWindowWords`; the generator
+  carries them into HLSL. A layout change needs a host with the matching history
+  allocation before loading its kernels. Account for this output-sized history in
+  GPU memory: the surface and the color in two copies, the window in one.
+  Keep the surface and window planar, every access through `sdfHistoryWord`:
+  interleaved, a pixel's words put each lane of each access on its own sector and held
   the resolve at L2 bandwidth. A complete window shows its own mean, so only an
   incomplete one reads the reprojected Catmull-Rom history.
   Preserve a constant coverage component exactly before half packing and after
