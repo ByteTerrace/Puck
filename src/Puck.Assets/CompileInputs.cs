@@ -74,7 +74,7 @@ public sealed class CompileInputLog {
 /// enclosing scope's log, so a compile that runs another compile sees the inner one's reads too.
 /// <para>
 /// The door also remembers, for the process, the digest of every file it read and the names every directory it listed
-/// held, each under the stamp (existence, length and last write) the file or directory had just before the read. A
+/// held, each under the stamp (existence, length, last write and creation) the file or directory had just before the read. A
 /// later question about the same path is answered from that memory while the stamp is unchanged
 /// (<see cref="Current"/>, <see cref="Digest"/>, <see cref="List"/>), so proving a held product still stands costs one
 /// stat per input rather than a read and a hash. A stamp written within <see cref="RacyStampWindow"/> of the read cannot
@@ -109,8 +109,9 @@ public static class CompileInputs {
     /// number of files and directories the process has read, up to <see cref="MaxRememberedPaths"/>.</summary>
     public static int RememberedPaths => Remembered.Count;
 
-    // A file's or directory's stamp: whether it exists, its length (a file's; zero for a directory) and its last write.
-    private readonly record struct Stamp(bool Exists, long Length, DateTime Written);
+    // A file's or directory's stamp: whether it exists, its length (a file's; zero for a directory), its last write and its
+    // creation, which a replacement by rename moves even when it carries the old last write along.
+    private readonly record struct Stamp(bool Exists, long Length, DateTime Written, DateTime Created);
     // The digest last read for a path under the stamp it had then, the names a listing held, and whether that stamp
     // was too recent to vouch for anything.
     private sealed record Known(Stamp Stamp, string Hash, string[]? Names, bool Racy);
@@ -122,11 +123,11 @@ public static class CompileInputs {
     }
     private static Stamp FileStamp(string fullPath) => StampOf(entry: new FileInfo(fileName: fullPath));
     private static Stamp DirectoryStamp(string fullPath) => StampOf(entry: new DirectoryInfo(path: fullPath));
-    // One stat: a file's length, or zero for a directory, and the entry's last write.
+    // One stat: a file's length, or zero for a directory, and the entry's last write and creation.
     private static Stamp StampOf(FileSystemInfo entry) {
         Interlocked.Increment(location: ref StampReadCount);
 
-        return (entry.Exists ? new Stamp(Exists: true, Length: ((entry is FileInfo file) ? file.Length : 0L), Written: entry.LastWriteTimeUtc) : default);
+        return (entry.Exists ? new Stamp(Created: entry.CreationTimeUtc, Exists: true, Length: ((entry is FileInfo file) ? file.Length : 0L), Written: entry.LastWriteTimeUtc) : default);
     }
     // The answer remembered under `stamp`, when it was read under exactly that stamp and the stamp was old enough then.
     private static Known? Vouched(string key, Stamp stamp) => ((Remembered.TryGetValue(key: key, value: out var known) && !known.Racy && (known.Stamp == stamp))

@@ -152,7 +152,7 @@ code now works this way:
   and holds what a source declares by the digest of its bytes.
 - **Proving a cached product still stands costs a stat per input.**
   `CompileInputs` remembers each file's digest and each directory's listing
-  under the stamp (existence, length, last write) the path had when it was
+  under the stamp (existence, length, last write, creation) the path had when it was
   read, and answers `CompileInput.StillHolds`, `CompileInputs.Digest` and
   `CompileInputs.List` from that memory while the stamp holds. A stamp too
   recent to vouch for a same-tick write (`CompileInputs.RacyStampWindow`) is
