@@ -163,15 +163,17 @@ public sealed class HostLoop(
                 var interval = clock.Sample();
                 var steps = 0;
 
-                if (!tickLocked) {
-                    holding = false;
-                }
-                if (holding) {
-                    pump?.Hold(intervalTicks: interval);
-                } else if (tickLocked) {
-                    steps = ((pump?.TryStep(intervalTicks: interval, stepTicks: stepTicks) == true) ? 1 : 0);
-                } else {
-                    steps = (pump?.Advance(deltaTicks: interval, maxFrameTicks: FixedTickConversion.PerRate(ratePerSecond: 4U), stepTicks: stepTicks) ?? 0);
+                using (timeline.FrameWork.Bind()) {
+                    if (!tickLocked) {
+                        holding = false;
+                    }
+                    if (holding) {
+                        pump?.Hold(intervalTicks: interval);
+                    } else if (tickLocked) {
+                        steps = ((pump?.TryStep(intervalTicks: interval, stepTicks: stepTicks) == true) ? 1 : 0);
+                    } else {
+                        steps = (pump?.Advance(deltaTicks: interval, maxFrameTicks: FixedTickConversion.PerRate(ratePerSecond: 4U), stepTicks: stepTicks) ?? 0);
+                    }
                 }
                 timeline.NoteSteps(steps: steps);
                 timeline.Mark(phase: HostFramePhase.Simulate);

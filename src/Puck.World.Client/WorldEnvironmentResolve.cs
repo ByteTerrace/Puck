@@ -248,7 +248,7 @@ public sealed partial class WorldEnvironmentResolve : IDisposable {
             Direction: SdfLights.DefaultSunDirection,
             Color: Vector3.One,
             Weight: SdfPhotometry.DirectionalWeight(lux: SdfLights.DefaultSunIlluminance),
-            Param: SdfLights.DefaultPenumbraSlope,
+            Param: 0f,
             Shadows: false
         ),
         WorldRenderLight.Occluder => new SdfLight(

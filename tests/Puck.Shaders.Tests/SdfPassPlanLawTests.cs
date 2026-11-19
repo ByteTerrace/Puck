@@ -1,13 +1,14 @@
 using Puck.Abstractions.Gpu;
 using Puck.SignedDistance;
 using Puck.Hosting;
+using Puck.Maths;
 
 namespace Puck.Shaders.Tests;
 
 /// <summary>
 /// The <c>sdf.world</c> package's fragment (<see cref="SdfWorldPackage.NativeFragment"/>), spliced into a view's graph by the
-/// graph compiler, is the one statement of an SDF view's dispatch set: the planner orders its passes the three
-/// shadow cascades, mesh, the depth pyramid, surface, views, sky and composite, the sky's field runs and the composite after the hits are
+/// graph compiler, is the one statement of an SDF view's dispatch set: the planner orders its passes mesh, the
+/// three shadow cascades, the depth pyramid, surface, the probe lookup, views, sky and composite, the sky's field runs and the composite after the hits are
 /// shaded, and plans between them exactly the buffer transitions the kernels' reads and writes need, each after the pass
 /// that last wrote or read what the next writes or reads. Every scratch buffer is retained, one allocation shared by every
 /// frame slot, whose first use of a frame orders it after the frame before, and at every capacity the planner sizes each
@@ -20,12 +21,13 @@ public sealed partial class SdfPassPlanLawTests {
 
     // The fragment's passes in dispatch order.
     private static readonly string[] Order = [
+        SdfWorldPackage.Parts.Mesh,
         SdfWorldPackage.Parts.ShadowNear,
         SdfWorldPackage.Parts.ShadowFar,
         SdfWorldPackage.Parts.ShadowSecond,
-        SdfWorldPackage.Parts.Mesh,
         SdfWorldPackage.Parts.Pyramid,
         SdfWorldPackage.Parts.Surface,
+        SdfWorldPackage.Parts.ViewsProbes,
         SdfWorldPackage.Parts.Views,
         SdfWorldPackage.Parts.Sky,
         SdfWorldPackage.Parts.Composite,
@@ -33,9 +35,11 @@ public sealed partial class SdfPassPlanLawTests {
     // Every buffer transition between two passes of a frame: the buffer, the pass it orders after and the pass it orders
     // before, and the accesses and stages on either side.
     private static readonly (string Buffer, string Producer, string Consumer, GpuAccess SourceAccess, GpuAccess DestinationAccess, GpuStage SourceStage, GpuStage DestinationStage)[] Edges = [
-        (SdfWorldPackage.Parts.MeshPyramid, SdfWorldPackage.Parts.Pyramid, SdfWorldPackage.Parts.Surface, GpuAccess.ShaderWrite, GpuAccess.ShaderRead, GpuStage.ComputeShader, GpuStage.ComputeShader),
-        // Views and the composite only read the records the surface pass wrote.
-        (SdfWorldPackage.Parts.Visibility, SdfWorldPackage.Parts.Surface, SdfWorldPackage.Parts.Views, GpuAccess.ShaderWrite, GpuAccess.ShaderRead, GpuStage.ComputeShader, GpuStage.ComputeShader),
+        // A buffer's shader-read barrier reaches every shader stage, so a later fragment reader needs none of its own.
+        (SdfWorldPackage.Parts.MeshPyramid, SdfWorldPackage.Parts.Pyramid, SdfWorldPackage.Parts.Surface, GpuAccess.ShaderWrite, GpuAccess.ShaderRead, GpuStage.ComputeShader, GpuStage.ComputeShader | GpuStage.FragmentShader),
+        // The probe lookup, views and the composite only read the records the surface pass wrote.
+        (SdfWorldPackage.Parts.Visibility, SdfWorldPackage.Parts.Surface, SdfWorldPackage.Parts.ViewsProbes, GpuAccess.ShaderWrite, GpuAccess.ShaderRead, GpuStage.ComputeShader, GpuStage.ComputeShader | GpuStage.FragmentShader),
+        (SdfWorldPackage.Parts.Probes, SdfWorldPackage.Parts.ViewsProbes, SdfWorldPackage.Parts.Views, GpuAccess.ShaderWrite, GpuAccess.ShaderRead, GpuStage.ComputeShader, GpuStage.ComputeShader | GpuStage.FragmentShader),
     ];
     // A view's graph: the one pass running the package, publishing its color.
     private static RenderGraphPlan Plan { get; } = new RenderGraphCompiler(packages: RenderGraphPackageCatalog.Engine).Compile(definition: new RenderGraphDefinition(
@@ -63,6 +67,9 @@ public sealed partial class SdfPassPlanLawTests {
     private static ulong BytesOf(string buffer, ShaderPipelineStorageCounts counts) => buffer switch {
         SdfWorldPackage.Parts.Visibility => (((((ulong)counts.Width) * counts.Height) * counts.Viewports) * SdfWorldPackage.VisibilityRecordByteLength),
         SdfWorldPackage.Parts.MeshPyramid => ((((ulong)counts.Width) * counts.Height) * sizeof(uint)),
+        // One probe record a cell of every viewport, over whole tiles.
+        SdfWorldPackage.Parts.Probes => (((((ulong)counts.Width.CeilingDivide(divisor: ShaderPipelineStorageCounts.TileEdge)) * counts.Height.CeilingDivide(divisor: ShaderPipelineStorageCounts.TileEdge)) * counts.Viewports)
+            * ((ShaderPipelineStorageCounts.TileEdge / SdfWorldPackage.ViewsProbeRate) * (ShaderPipelineStorageCounts.TileEdge / SdfWorldPackage.ViewsProbeRate)) * SdfWorldPackage.ViewsProbeWords * sizeof(uint)),
         _ => throw new ArgumentOutOfRangeException(paramName: nameof(buffer), actualValue: buffer, message: "Not a fragment buffer."),
     };
 
@@ -151,13 +158,14 @@ public sealed partial class SdfPassPlanLawTests {
                 string.Join(separator: ",", values: pass.Outputs.Select(selector: static output => output.Name))
             )),
             expected: [
-                (SdfWorldPackage.Parts.ShadowNear, "", $"{SdfWorldPackage.Parts.ShadowNearDepth},{SdfWorldPackage.Parts.ShadowNearExit}"),
-                (SdfWorldPackage.Parts.ShadowFar, "", $"{SdfWorldPackage.Parts.ShadowFarDepth},{SdfWorldPackage.Parts.ShadowFarExit}"),
-                (SdfWorldPackage.Parts.ShadowSecond, "", $"{SdfWorldPackage.Parts.ShadowSecondDepth},{SdfWorldPackage.Parts.ShadowSecondExit}"),
                 (SdfWorldPackage.Parts.Mesh, "", $"{SdfWorldPackage.Parts.MeshTarget},{SdfWorldPackage.Parts.MeshDepth}"),
+                (SdfWorldPackage.Parts.ShadowNear, "", $"{SdfWorldPackage.Parts.ShadowNearDepth},{SdfWorldPackage.Parts.ShadowNearExit}"),
+                (SdfWorldPackage.Parts.ShadowFar, SdfWorldPackage.Parts.MeshTarget, $"{SdfWorldPackage.Parts.ShadowFarDepth},{SdfWorldPackage.Parts.ShadowFarExit}"),
+                (SdfWorldPackage.Parts.ShadowSecond, "", $"{SdfWorldPackage.Parts.ShadowSecondDepth},{SdfWorldPackage.Parts.ShadowSecondExit}"),
                 (SdfWorldPackage.Parts.Pyramid, SdfWorldPackage.Parts.MeshTarget, SdfWorldPackage.Parts.MeshPyramid),
                 (SdfWorldPackage.Parts.Surface, string.Join(separator: ",", values: [SdfWorldPackage.Parts.MeshTarget, SdfWorldPackage.Parts.MeshPyramid, SdfWorldPackage.Parts.ShadowNearDepth, SdfWorldPackage.Parts.ShadowFarDepth, SdfWorldPackage.Parts.ShadowSecondDepth, SdfWorldPackage.Parts.ShadowNearExit, SdfWorldPackage.Parts.ShadowFarExit, SdfWorldPackage.Parts.ShadowSecondExit]), SdfWorldPackage.Parts.Visibility),
-                (SdfWorldPackage.Parts.Views, SdfWorldPackage.Parts.Visibility, SdfWorldPackage.Parts.Lit),
+                (SdfWorldPackage.Parts.ViewsProbes, SdfWorldPackage.Parts.Visibility, SdfWorldPackage.Parts.Probes),
+                (SdfWorldPackage.Parts.Views, $"{SdfWorldPackage.Parts.Visibility},{SdfWorldPackage.Parts.Probes}", SdfWorldPackage.Parts.Lit),
                 (SdfWorldPackage.Parts.Sky, SdfWorldPackage.Parts.Lit, string.Join(separator: ",", values: runs)),
                 (SdfWorldPackage.Parts.Composite, string.Join(separator: ",", values: [SdfWorldPackage.Parts.Lit, SdfWorldPackage.Parts.Visibility, .. runs]), SdfWorldPackage.Color),
             ]
@@ -214,6 +222,7 @@ public sealed partial class SdfPassPlanLawTests {
             actual: Buffers.Select(selector: static storage => PartOf(storage: storage.Name)).Order(comparer: StringComparer.Ordinal),
             expected: new[] {
                 SdfWorldPackage.Parts.MeshPyramid,
+                SdfWorldPackage.Parts.Probes,
                 SdfWorldPackage.Parts.Visibility,
             }.Order(comparer: StringComparer.Ordinal)
         );
@@ -250,6 +259,7 @@ public sealed partial class SdfPassPlanLawTests {
                 SdfWorldPackage.Parts.SkyUpper1,
                 SdfWorldPackage.Parts.SkyUpper2,
                 SdfWorldPackage.Parts.Visibility,
+                SdfWorldPackage.Parts.Probes,
             }.Select(selector: static part => RenderGraphPackageFragment.Spliced(name: part, pass: Sdf)).Order(comparer: StringComparer.Ordinal)
         );
 

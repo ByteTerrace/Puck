@@ -53,8 +53,8 @@ public sealed partial class WorldScreenBinder {
     // it opens one when the screen is declared, closes it when the screen is re-pointed or removed, and asks a
     // destination that ended one to admit the screen again. This follows it: a slot whose declared session the host now
     // answers with a different session object (a re-point, or one that was pending when the screen applied) rebinds
-    // onto it. A destination instance retiring drops the projection to a held last image with a stderr note: the mirror
-    // simply stops receiving deliveries and Resolve keeps re-rendering its last mirrored definition.
+    // onto it. A destination instance retiring ends the observation, with a stderr note: the screen's access settles to
+    // none, so its picture is withdrawn (SettleSessionRoutes) and it shows nothing until a session observes again.
     private void ReconcileSessionLifecycles() {
         foreach (var row in m_rows) {
             if (
@@ -96,7 +96,7 @@ public sealed partial class WorldScreenBinder {
 
             feed.InstanceGone = true;
 
-            Console.Error.WriteLine(value: $"[world.screen: session {slot.Index} -> destination '{feed.Destination}' instance '{feed.InstanceName}' retired — holding last image]");
+            Console.Error.WriteLine(value: $"[world.screen: session {slot.Index} -> destination '{feed.Destination}' instance '{feed.InstanceName}' retired — its picture is withdrawn]");
         }
     }
     // The session the boot world's authority holds for a screen, when it holds one for this very source.
@@ -318,7 +318,8 @@ public sealed partial class WorldScreenBinder {
     /// <param name="Session">The session principal the screen observes as.</param>
     /// <param name="Tier">What the destination's admission discloses to the screen.</param>
     /// <param name="LeaseHeld">Whether the observation lease's destination instance is still running.</param>
-    /// <param name="InstanceGone">Whether the destination instance retired — the projection holds its last image.</param>
+    /// <param name="InstanceGone">Whether the destination instance retired, which ended the observation and withdrew the
+    /// screen's picture.</param>
     /// <param name="Projection">How the destination render projects onto this face — see
     /// <see cref="WorldScreenProjection"/>.</param>
     /// <param name="RenderWidth">The resolved offscreen render width, pixels — the true cost this session pays every
@@ -379,10 +380,13 @@ public sealed partial class WorldScreenBinder {
         // this lease.
         private IDisposable? WindowLease { get; set; }
 
-        // The feed's route into its destination's endpoint scene and whether it renders as a view of the World's own
-        // residency instead (its destination is the boot world), both settled every frame (SettleSessionRoutes), and a
-        // window's fit (WorldScreenBinder.FitWindow), which every view of it frames with.
-        public WorldSessionRoute Route { get; } = new();
+        // The feed's access and route into its destination's endpoint scene and whether it renders as a view of the
+        // World's own residency instead (its destination is the boot world), all settled every frame
+        // (SettleSessionRoutes), the access first as the feed is made, and a window's fit (WorldScreenBinder.FitWindow),
+        // which every view of it frames with.
+        public WorldSessionRoute Route { get; } = SettledRoute(observation: hosted.Observation);
+        // What the session's own residency may render (ContentAccess), settled with its access.
+        public ContentAccess Content { get; } = new(level: AccessOf(observation: hosted.Observation), mirror: hosted.Mirror);
         public bool Home { get; set; }
 
         public Func<CameraSnapshot?>? WindowFit { get; set; }
@@ -393,9 +397,7 @@ public sealed partial class WorldScreenBinder {
         public WorldSessionSceneEmitter? Emitter { get; set; }
         public IDisposable? EnvelopeRegistration { get; set; }
         public SdfCompositionFrameSource? FrameSource { get; set; }
-        // Set by ReconcileSessionLifecycles the moment the resolved instance stops running — the projection then
-        // holds its last mirrored image (the instance keeps rendering the mirror's frozen definition; nothing here
-        // needs to force that, since the mirror simply stops receiving deliveries).
+        // Set by ReconcileSessionLifecycles the moment the resolved instance stops running.
         public bool InstanceGone { get; set; }
 
         // Releases the envelope and window registrations; the session is the authority's, and the session's instance

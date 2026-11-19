@@ -13,6 +13,7 @@ public static partial class WorldDefinitionValidator {
             catch (SdfShadeException error) { errors.Add($"render.shade: {error.Code}: {error.Message}"); }
         }
         ValidateShadowCoverage(definition.Render.ShadowCoverage, errors);
+        ValidateNested(definition.Render.Nested, errors);
         ValidateBloom(definition.Render.Bloom, "render.bloom", errors);
         if (definition.Render.Tone is { IsValid: false }) {
             errors.Add(item: "render.tone needs finite values: peak, contrast and toe positive, linearStart above zero and below peak, linearLength from 0 to below 1.");
@@ -46,6 +47,23 @@ public static partial class WorldDefinitionValidator {
             if ((quality.Tier is { } selected) && (definition.Render.Preset(tier: selected) is null)) {
                 errors.Add(item: $"views.quality[{quality.Name}].tier names no {selected} preset.");
             }
+        }
+    }
+    private static void ValidateNested(IReadOnlyList<WorldNestedViewQuality>? rows, List<string> errors) {
+        var previous = 0f;
+
+        for (var index = 0; (index < (rows?.Count ?? 0)); index++) {
+            if (rows![index] is not { } row) {
+                errors.Add(item: $"render.nested[{index}] is empty.");
+                continue;
+            }
+            if (!float.IsFinite(f: row.Share) || (row.Share <= previous) || (row.Share > 1f)) {
+                errors.Add(item: $"render.nested[{index}].share is {row.Share}; each row's share of the display's height lies in (0, 1] above the row before it.");
+            }
+            if ((row.Shadows is { } shadows) && !Enum.IsDefined(value: shadows)) {
+                errors.Add(item: $"render.nested[{index}].shadows names no shadow tier.");
+            }
+            previous = (float.IsFinite(f: row.Share) ? Math.Max(val1: previous, val2: row.Share) : previous);
         }
     }
     private static void ValidateToon(ToonStyleDocument? toon, List<string> errors) {

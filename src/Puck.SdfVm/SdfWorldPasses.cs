@@ -426,13 +426,18 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
         ];
     }
     /// <inheritdoc/>
-    public void OnGraphReleased(string instance) {
+    /// <remarks>Clears the instance's picks, restarts its temporal history and marks its view unrendered, so it cannot
+    /// stand for a frame until its passes render again.</remarks>
+    public void OnOutputsForgotten(string instance) {
         if (m_entries.TryGetValue(key: instance, value: out var entry)) {
             entry.Picker.Clear();
             entry.DiagnosticPicker.Clear();
             entry.Temporal.Reset();
             entry.TemporalFrame = -1;
             entry.RenderedBindings = -1;
+            entry.HistoryTainted = false;
+            entry.TaintedNow = false;
+            entry.TaintCause = null;
         }
     }
     /// <inheritdoc/>
@@ -659,7 +664,9 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
         if ((entry.Followed is { } departed) && (view is { } arrived)) {
             RequestOnDemand(from: departed, to: arrived);
         }
-        if (entry.Followed != view) {
+        // An instance that resolves no view keeps the passes it follows: its host renders nothing of it then (a view its
+        // viewer may not see is paused and withdrawn), so no rebuild is owed until it resolves one again.
+        if ((view is not null) && (entry.Followed != view)) {
             if (
                 (entry.Followed is not { } from) ||
                 (view is not { } to) ||

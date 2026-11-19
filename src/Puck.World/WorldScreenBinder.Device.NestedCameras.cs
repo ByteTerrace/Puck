@@ -217,15 +217,11 @@ public sealed partial class WorldScreenBinder {
         m_nestedFilms.End(target: feed);
     }
     // Films each camera of a level into a frame after the views already in it, at the quality of the frame's first view
-    // restricted as a camera view is (CameraViewQuality), and records where each landed.
+    // restricted as any nested view is (NestedQuality), and records where each landed.
     private void FilmLevel(WorldNestedScreens<SessionFeed> level, WorldSessionMirror mirror, object target, List<SdfViewSnapshot> views) {
         if (level.Cameras.Count == 0) {
             return;
         }
-
-        var quality = ((views.Count > 0)
-            ? views[0].Quality.Restrict(other: CameraViewQuality)
-            : CameraViewQuality);
 
         foreach (var camera in level.Cameras) {
             var snapshot = WorldSessionSceneEmitter.ResolveCamera(
@@ -249,7 +245,7 @@ public sealed partial class WorldScreenBinder {
             ) {
                 Bloom = Settings?.ResolveBloom(mirror.Definition.Render, camera.Camera.Rig.Bloom),
                 BloomQuality = (Settings?.BloomQualityOf(view: camera.Name) ?? Puck.Hosting.BloomQuality.Off),
-                Quality = quality,
+                Quality = NestedQuality(views: views, name: camera.Name),
             });
             views[^1] = ResolveResolution(views[^1], camera.Name, camera.Camera.RenderWidth, camera.Camera.RenderHeight);
         }

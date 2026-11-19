@@ -74,8 +74,20 @@ internal sealed class FakeGraphInstances(Func<string, ShaderPipelineRenderNode> 
 
         m_nodes.Clear();
     }
+    /// <summary>Gets every instance the host withdrew, in order.</summary>
+    public List<string> Withdrawn { get; } = [];
+
     /// <inheritdoc/>
     public ShaderPipelineRenderNode? NodeOf(string instance) => m_nodes.GetValueOrDefault(key: instance);
+    /// <inheritdoc/>
+    /// <remarks>Records the withdrawal; the fake publishes nothing to withdraw.</remarks>
+    public void Withdraw(string instance) {
+        ArgumentNullException.ThrowIfNull(argument: instance);
+        if (Instances.IndexOf(name: instance) < 0) {
+            throw new ArgumentException(message: $"The render graph has no instance '{instance}'.", paramName: nameof(instance));
+        }
+        Withdrawn.Add(item: instance);
+    }
     /// <inheritdoc/>
     public bool TryInstall(string instance, RenderGraphRuntimeGraph graph, [NotNullWhen(returnValue: false)] out RenderGraphRuntimeRefusal? refusal) {
         m_nodes[instance].Swap(pipeline: graph.Pipeline);

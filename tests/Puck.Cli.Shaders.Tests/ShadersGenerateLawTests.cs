@@ -33,10 +33,9 @@ public sealed class ShadersGenerateLawTests {
         (ShaderLowDiscrepancyHlsl.Path, ShaderLowDiscrepancyHlsl.Generate()),
     ];
 
-    // Conversion interfaces and the optional bloom placement, beside their kernels.
+    // Conversion interfaces, beside their kernels.
     private static (string Path, string Text)[] SourceIncludes => [
         .. RenderGraphPackageCatalog.SourceConversions.Concat(second: RenderGraphPackageCatalog.ImageConversions).Select(selector: static id => ($"src/Puck.Shaders/Assets/Shaders/Sources/{id}.interface.hlsli", InterfaceOf(id: id))),
-        ("src/Puck.Shaders/Assets/Shaders/Graph/place-bloom.interface.hlsli", InterfaceOf(id: RenderGraphPackageCatalog.PlaceBloom)),
     ];
 
     private static string InterfaceOf(string id) {

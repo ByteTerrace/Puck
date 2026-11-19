@@ -135,13 +135,21 @@ meadow's placement blades; a per-part triangle count needs that fixed first.
 The same quiet window owes four more readings, each of which names something a
 V-step would otherwise assume:
 
-- **Session and nested nodes.** One screen or portal session node and one
-  nested-view node per pass (`world.counters gpu node`: candidates, selection
-  dispatches, pixel passes), whether session nodes draw cascades under
-  `ReducedQuality`, and which sessions are residencies of their own. Each
-  session is a separate residency, so V5's shared classification reaches only
-  the nested views, while V1a's compaction and the job system's burst spreading
-  reach the sessions.
+- **Residency and view nodes.** One node per residency and one per view of it
+  (`world.counters gpu node`: candidates, selection dispatches, pixel passes),
+  naming the residency each view reads and whether a session's view draws
+  cascades under the nested-view table (`render.nested`). Sessions and residencies do not map one
+  to one in either direction: the boot world's sessions share its one residency
+  (`WorldScreenBinder.FilmHomeViews`), every seat and window presented in one
+  other world share that world's one residency (`WorldFramePresenter.AttachWindow`),
+  and only a viewer admitted below a full replica gets a residency of its own
+  (`WorldScreenBinder.CreateSessionResidency`). Count work per residency and per
+  view, never per session, and take a second reading with one window onto a
+  restricted destination so sharing is tested where sharing is not universal.
+- **Cascade pass breakdown.** Split one cascade pass into command walk, vertex
+  work, pixel fill and clears in a GPU capture, plus measure the cost of an
+  empty indirect draw command on each bar device before compaction claims its
+  saving.
 - **Where held poses save GPU time.** Holding poses dropped root GPU time at
   the meadow, and nothing names where: re-staged records, motion-history
   copies, the far cascade's refresh and the clipped temporal resolve are the
@@ -187,13 +195,38 @@ grows with the region, as `SdfMeshOcclusion`'s buffers already do
 
 The record splits into a per-geometry part (mesh words, the level table, flags)
 and a per-instance part (matrix, normal matrix, material, frame slot, carry,
-clip plane, motion identity, box). Each pass classifies instances (frustum or
-light box and receivers, level, occlusion phase) into a bucket or a rejection;
-a histogram and an exclusive scan give each bucket a contiguous range of
-`visibleInstances[]`, scattered in staged order within the bucket; a final
-pass writes one command per non-empty bucket and the real command count.
-Buckets are ordered by geometry, then level, and that order is the same every
-frame and in both phases.
+clip plane, motion identity, box) in the same format change as V1b, settling
+the render-origin contract at the same time (`SdfCompositionFrameSource` passes
+a zero origin today while the valley plan subtracts an exact origin for the
+same consumers, cascades and history). Each pass classifies instances (frustum
+or light box and receivers, level, occlusion phase) into a bucket or a
+rejection; a histogram and an exclusive scan give each bucket a contiguous
+range of `visibleInstances[]`, scattered in staged order within the bucket; a
+final pass writes one command per non-empty bucket and the real command count.
+Write the parallel prefix scan and ordered scatter once as a shared HLSL header
+that the probe client (currently serial) and shading bins (currently unordered)
+can adopt. Buckets are ordered by geometry, then level, and that order is the
+same every frame and in both phases. Grouping runs on today's vertex-pulling
+draws and does not depend on indexed draws.
+
+**Indexed draws as a switchable experiment.** Evaluate indexed draws pass by
+pass behind a switch over the same commands, measuring submitted, culled and
+rasterized triangles per pass (`world.counters gpu`). Because shared vertices
+cannot carry a per-vertex triangle id, passes that read triangle identity need
+the fragment stage's primitive id (which Vulkan does not enable today in
+`VulkanShaderCapabilities` / `VulkanLogicalDeviceFactory`), while opaque
+cascades need none. Coordinate glass silhouette facing with
+[transmission](transmission.md#implementation-steps) (a silhouette vertex
+belongs to opposite-facing triangles). Note the earlier packed-vertex layout
+that cut region bytes by 34% but slowed passes and was reverted: indexed draws
+become the baseline format only if every bar device supports them and none is
+slower; if they pay only on stronger hardware, they remain an enhancement
+there. No source we read measures indexed draws of this kind, and one published
+test (opened by a reviewer, not reverified) found them slower on one GPU and no
+different on an RTX 2060. The bake, visibility and shadow research each
+proposed them separately; they are this one experiment. The streaming
+prototype's "indexed read" is a different thing: buffers reached through a
+descriptor array, not an index buffer.
 
 **The vertex-stage ABI.** A command's identity word, which R2 already pushes
 (the Direct3D 12 command signature's root constant below execute-indirect tier 1.1, and at it the
@@ -230,7 +263,7 @@ shipped frame (Haar and Aaltonen, "GPU-Driven Rendering Pipelines", SIGGRAPH
 2015 Advances,
 <https://advances.realtimerendering.com/s2015/aaltonenhaar_siggraph2015_combined_final_footer_220dpi.pdf>).
 Wihlidal notes that the command processor bottlenecks on many draws and
-compacts with an order-preserving parallel prefix ("Optimizing the Graphics
+compacts survivors with a parallel prefix scan ("Optimizing the Graphics
 Pipeline with Compute", GDC 2016,
 <https://www.slideshare.net/gwihlidal/optimizing-the-graphics-pipeline-with-compute-gdc-2016>);
 the scan and stream compaction are Harris, Sengupta and Owens, GPU Gems 3,
@@ -336,11 +369,10 @@ limit.
    Puck's measured per-material, crease and normal bounds, measured against
    the collapse's share of bake thread-seconds
    ([packet](open-items.md#bake-proportional-to-change)) and its
-   `puck mesh audit` scores. It comes second: the collapse's own cheaper
-   acceptance search, and a different error measure inside it, are tried
-   first ([rendering research](rendering-research.md#10-make-a-bake-cost-what-changed-and-close-the-contour-defects)).
-   If a simplifier is then adopted it replaces the collapse. The two are
-   never both kept.
+   `puck mesh audit` scores. Try the collapse's own cheaper acceptance search
+   and attribute quadrics inside `SdfMeshCollapse` first before building a
+   replacement; if a new simplifier is adopted it replaces the collapse, and
+   the two are never both kept.
 3. **Field-derived coarse levels** were measured offline and not adopted
    ([the virtual geometry plan](virtual-geometry.md#d1-the-unit-of-detail)):
    `SdfMeshCollapse` stays the level source, and item 2's simplifier is one of
@@ -351,10 +383,11 @@ limit.
    [seam rule](streaming-and-memory.md#the-source-tile-and-its-seam-rule); a
    chunk's locked seams hold inside one tier only.
 
-**Why:** fewer triangles cut bake time and GPU geometry together, and the
-coarsest level already keeps 6 % of the stored triangles
-([frame rendering](../rendering/sdf/handbook/frame-rendering.md)), so the gain
-is at the finest level of thin parts. The raster decision rejected dropping
+**Why:** fewer triangles cut bake time and GPU geometry together, especially on
+flat and closed-form parts (cutting a grass blade part from roughly 474
+triangles to about a dozen). Per-level and per-tier triangle counters
+([virtual geometry's step 1](virtual-geometry.md#the-build-order)) replace earlier
+estimates of coarsest-level triangle share. The raster decision rejected dropping
 outline vertices world-wide at about 1 % of triangles, before thin foliage
 existed; M2's triangles per blade part decide whether it pays now.
 Kapoulkine builds a 1.64 billion-triangle cluster hierarchy in about 2 min 35 s
@@ -402,12 +435,82 @@ small cost cut; it stays a separate pyramid from the AO one.
 
 ### V5. Multi-view and shadow work
 
-**Puck builds:** shared classification across a residency's views (one read of
-instance data, per-view compact lists and per-view history, with no global
-barrier that serializes independent residencies); extending the far cascade's
-receiver and light-space occlusion to other cascades when measured worthwhile; and static
-cascade caching only where a measurement shows static redraw dominating with
-unchanged projections.
+**Puck builds:**
+
+1. **Receiver-conditioned caster culling across every cascade.** First extend
+   the far cascade's receiver mask to the near and second cascades under
+   today's rule. Then make the receiver mask a conservative union by
+   construction (landing with [illumination](illumination.md#the-build-order)'s
+   probe fallback and [transmission](transmission.md#implementation-steps)'s
+   metre-sized filter):
+   - *Coverage by construction:* mark every cascade texel any receiver can
+     read — across both shadow slots, both cascades in a blend band, the
+     widest blocker-search and filter radius allowed (sharing the authored
+     maximum bound or angular-size plus cascade-depth bound rather than
+     calling the blocker-dependent receiver function; if no finite bound can
+     be proved, cull nothing), and glass draws (which have no opaque depth
+     against the sky). Measure the exit layer's and counting fragment stage's
+     shares before changing either.
+   - *Held-cascade validity:* each mask belongs to one layer and one
+     projection and records the valid region it covers. A receiver moving
+     outside that region (camera sidestep or removed foreground occluder)
+     takes the probes' answer until redraw, and a count of out-of-region
+     receivers requests redraw. Any cascade with no mark yet (first frame
+     after a camera cut or unrendered view) keeps every caster.
+   - *Judge by casters admitted and resulting shadows* (empty indirect commands
+     still cost command walk until V1a compacts them). Check six moving cases
+     with culling on vs off: backlit glass against sky, across a cascade blend
+     band, first frame after a cut, foreground object removed during a held
+     far map, camera sidestep during a hold, and a new blocker widening a soft
+     edge where the map was empty.
+2. **Shared residency classification and glass list from the kernel.** After
+   V1b, read each residency's instance rows once per frame and share that read
+   across every view of that residency (producing the glass list from the
+   kernel, retiring the duplicate CPU glass test). Each view and cascade keeps
+   its own compact lists, frustum, depth, phase and history, with no global
+   barrier serializing independent residencies. Static cascade caching waits
+   unless measurements show static redraw dominating with unchanged projections.
+3. **Multi-residency instance table and shared-part crowds.** Write a memo for
+   taking rows from several residencies into one instance table — drawing a
+   far neighbour's authority-permitted geometry beyond the border with no body
+   there ([valley and moons](valley-and-moons.md)), naming who is admitted to
+   observe the neighbour and how the host binds that geometry for each viewer,
+   and composing characters as
+   baked parts shared by identity at draw time while pricing smooth blends
+   across parts (since a blend creates a distinct shape). Test on an authored
+   crowd (both repeated looks and every look distinct from a shared wardrobe)
+   at three crowd sizes with fixed camera, moving-body count, tier
+   (`SdfMeshBakeGroup` appends tier) and starting store: verify one residency,
+   one bake per distinct `(part, tier)` and `(blended seam, tier)`, and rows
+   visited, bytes packed and draws scaling only with visible bodies; then vary
+   the visible bodies to find the work that truly must grow. A crowd cannot
+   certify the adjacency, so the adjacency is checked on its own in
+   [the valley plan](valley-and-moons.md#phases).
+
+**Why, and the risks.** Empty indirect draws "are actually not free": one
+measurement went from 2.97 ms to 0.9 ms over 125,000 culled objects on a GTX
+1070 (Logdahl). At one stop the far cascade's receiver culling took its full
+refresh from 23,125 draws to 4,138 and from 8.5 ms to 2.9 ms, while the near
+and second cascades are culled by bounding box only, and at the lobby the two
+cascades take 3.9 ms against 1.7 ms for the main mesh pass (each measured
+once). Today's receiver mark starts from the opaque camera mesh
+(`sdfReceiverMark`) and would miss both cascades in a blend band, the blocker
+search and filter footprints, both slots and glass against the sky, which is
+why the union is built by construction. Compaction alone is all that mostly
+unique geometry gains from grouping, and every consumer of a draw's identity
+moves in the same piece of work. The strongest case against compaction is that
+recording is not most of the frame on the RTX 4070: the claim is about scale
+and code health, so compaction is measured apart from grouping. Sessions do not
+map one to one onto residencies, so only the decoding of rows that does not
+vary by view is shared; the frustum, depth, phase and held history differ per
+view, and the late phase depends on the current depth. Every step extends the
+existing classification (`SdfMeshOcclusion`) with a stable order for depth
+ties. Not checked in full: Haar and Aaltonen's 250,000 objects in two indirect
+calls draws fixed 64-vertex clusters, so it supports the cluster experiment,
+not the grouping of whole meshes; Bittner's 1.5 to 2 times was a 2010 GPU with
+CPU occlusion queries; Burns and Hunt's smaller visibility buffer pays with
+several samples a pixel and little or not at all with one, which is Puck's
+case, so nothing here credits it with a gain on the Steam Deck.
 
 Session views take part too. Their schedule decides by frustum, size and the
 glass's occlusion against the consumer's depth (`WorldViewGraphHost.PortalSightOf`
@@ -565,21 +668,21 @@ times are taken in the lead's settle windows, never by a lane under load.
 |---|---|---|---|
 | M2. The bar devices' leg | the lead, in a settle window | Whether the meadow is geometry-bound on the RTX 2060 and the Deck; the result orders V3/V4 against V2 there | Mesh and cascade GPU time with `world.counters gpu pass sdf.world$mesh` counts at `debug.go meadow` on each device |
 | V2a. Rate holds on placements | rendering | Placement roots in the rate mechanism | `world.debug-view rates` tints far meadow blades by tier; `host.frames` at `debug.go meadow` against M1's leg 1; a presented burst of eight frames shows gusts continuous and roots planted |
-| V1a. Ordered compaction | rendering | Survivors compacted in staged order, the count the survivors, single-instance commands | Commands executed equal draws in `world.counters gpu pass sdf.world$mesh`; glass GPU time near the CPU path's; stills compared tolerantly |
-| V1b. Buckets and stable identity | rendering, principal-grade review | The instance/geometry split, buckets, the vertex ABI on both backends, history by instance identity, every consumer in V1's table moved, the budget counters | At `debug.go meadow`: commands near the visible (geometry, level) count; `world.view.pick` on a blade names that blade; `world.debug-view motion` still on held blades; a presented burst shows no tie flicker in `world.debug-view material-id`; a body straddling the garden portal at `debug.go portals` clipped on both sides; `world.debug-view report colliders --json` still compares against the baked mesh (its `coverage.comparisons` counts mesh witnesses after bakes settle); a teleport and back shows no missing draws |
-| V2b. Retained instance updates | rendering | `Dress` without a rebuild; uploads by change | `dotnet-trace` of the frame thread at the meadow: no list rebuild and record staging proportional to moved slots; `world.reload` of one blade geometry rebakes one mesh and every instance follows |
-| V2c. Authored motion on the GPU | rendering, principal-grade review | The eligibility test, the compiled kernel, program-derived bounds, previous pose on the GPU, CPU evaluation for picks | At the meadow with wind on: blades move as before (a presented burst against V2b's); `world.debug-view motion` shows blade motion and none on still ground; a blade pick lands on the drawn blade; swept-box inflation reported; an author's non-foliage presentation program in a scratch world runs the same path |
-| V3a. Lossless lowering | rendering | Collinear runs on isolated meshes; exact lowering where the program proves it; the rendering skill's one-contouring rule rewritten to name the lowering choice | `puck mesh audit` clean on the blade groups; triangles per blade part against M2's; cold bake thread-seconds per stage; meadow stills compared tolerantly |
-| V3b. Faster simplifier | rendering | After the cheaper collapse has been tried: an error-aware simplifier under Puck's bounds, measured against `SdfMeshCollapse`, and one of the two kept | Land-stage thread-seconds against the collapse's; `puck mesh audit` scores no worse; `world.detail 1` and `2` stills at the gallery compared tolerantly |
+| V1a. Ordered compaction | rendering | Survivors compacted in staged order using one shared parallel prefix scan and ordered scatter HLSL header (reusable by probe client and shade bins), single-instance commands | Commands executed equal draws in `world.counters gpu pass sdf.world$mesh`; glass GPU time near the CPU path's; empty-command cost measured; stills compared tolerantly |
+| V1b. Buckets, split record and stable identity | rendering, principal-grade review | The instance/geometry record split, render-origin contract (`SdfCompositionFrameSource` zero origin vs valley exact origin), buckets on vertex-pulling draws, the vertex ABI on both backends, history by instance identity, every consumer in V1's table moved, the budget counters; followed by the switchable pass-by-pass indexed-draw experiment | At `debug.go meadow`: commands near the visible (geometry, level) count; `world.view.pick` on a blade names that blade; `world.debug-view motion` still on held blades; a presented burst shows no tie flicker in `world.debug-view material-id`; a body straddling the garden portal at `debug.go portals` clipped on both sides; `world.debug-view report colliders --json` still compares against the baked mesh (its `coverage.comparisons` counts mesh witnesses after bakes settle); a teleport and back shows no missing draws; indexed draws judged pass by pass on every bar device and backend |
+| V2b. Retained instance updates | rendering | After explaining the ~2,600 records re-staged at rest: `Dress` without a rebuild; rigid draws read their transform slot directly (G4); uploads by change | `dotnet-trace` of the frame thread at the meadow: no list rebuild and record staging proportional to moved slots; `world.reload` of one blade geometry rebakes one mesh and every instance follows |
+| V2c. Authored motion on the GPU | rendering, principal-grade review | Stage 1 decides whether to extend `SdfShadeOps` (which lacks cross-frame state and transform output today) or add a motion op table on the same emitter; then the eligibility test, compiled kernel, program-derived bounds, per-instance inputs (removing per-tile wind prototypes), previous pose on GPU, and CPU/GPU floating-point agreement for picks | At the meadow with wind on: blades move as before (a presented burst against V2b's); `world.debug-view motion` shows blade motion and none on still ground; a blade pick lands on the drawn blade; swept-box inflation reported; an author's non-foliage presentation program in a scratch world runs the same path; 4× meadow tiles pose-packing scales with animated visible instances, not tiles placed |
+| V3a. Lossless lowering | rendering | Collinear runs on isolated meshes; exact lowering where the program proves it; the rendering skill's one-contouring rule rewritten to name the lowering choice | `puck mesh audit` clean on the blade groups; blade part drops from ~474 to about a dozen triangles; cold bake thread-seconds per stage; meadow stills compared tolerantly |
+| V3b. Faster simplifier | rendering | After trying cheaper acceptance search and attribute quadrics inside `SdfMeshCollapse`: an error-aware simplifier under Puck's bounds, measured against `SdfMeshCollapse`, and one of the two kept | Land-stage thread-seconds against the collapse's; `puck mesh audit` scores no worse; `world.detail 1` and `2` stills at the gallery compared tolerantly |
 | V4a. Early-depth variant | rendering | The non-fading pipeline with `[earlydepthstencil]` | Mesh-pass GPU time and shaded fragments at the meadow on the 2060 and at the Deck's resolution; the faded avatar still reveals the room behind her at `debug.go stage` |
 | V4b. Packed visibility target | rendering | The `uint2` target and depth reconstruction | `surface` and `pyramid` GPU time against V4a's; AO and stills compared tolerantly at the gallery and meadow |
-| V5. Views and shadows | rendering | Classification shared across views; extend far-cascade culling to other cascades if measured; static caching only with receiver coverage preserved | Cascade GPU time and vertices at the meadow and the gallery; `debug.go portals` with nested views: per-view counts, no stale child image |
+| V5. Views, shadows and shared crowds | rendering | Receiver-conditioned caster culling as a conservative union across cascades; one residency instance-row read per frame shared across views (with glass list from kernel); multi-residency instance table and shared-part crowd memo/checks | Six moving caster-culling cases clean, judged by the casters admitted and the shadow that results; a rigidly skinned draw is culled when it cannot show and still shadows a visible receiver; cascade GPU time and vertices at the meadow and the gallery; `debug.go portals` with nested views: per-view counts, no stale child image; two views of one other world plus one view of a second (and a restricted-viewer window) read two residencies' rows once each and classify three views; crowd scaling checks clean at three crowd sizes |
 
 V2a and V2b run ahead of V1a (M1's verdict), so V2b builds the instance table
-V1b consumes. Which compiler emits V2c's kernel, and what the shading
-operation table lacks for motion, is settled with
-[rendering research decision 12](rendering-research.md#12-keep-motion-and-placement-as-authored-programs-at-zone-scale). V3a and V4a share no files with V1 and run beside it. V1b waits
-on V1a; V2c on V2b; V5 on V1b.
+V1b consumes. V3a and V4a share no files with V1 and run beside it. V1b waits
+on V1a; V2c on V2b; V5's shared residency read on V1b (while V5's near/second
+cascade receiver mask runs beside G3a and lands with Decision 6's shadow filter
+and probe fallback).
 
 ---
 

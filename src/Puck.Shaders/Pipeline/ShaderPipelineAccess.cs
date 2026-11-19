@@ -102,10 +102,12 @@ public readonly record struct ShaderPipelineBarrier(
     GpuStage SourceStage,
     GpuStage DestinationStage
 ) {
-    // A sampled read makes the prior write visible to every shader stage, so later readers of the same contents in the
-    // same layout need no barrier of their own.
+    // A shader read makes the prior write visible to every shader stage, so later readers of the same contents need no
+    // barrier of their own: ShaderPipelineAccessState.Then joins a later shader read into the read state without one
+    // whatever its stage. That holds for a sampled image and for a buffer, which has no layout to change: a compute read
+    // followed by a fragment read of the same buffer records one barrier, and it must reach the fragment stage too.
     private static GpuStage DestinationStages(ShaderPipelineAccessState use) =>
-        (((use.Layout == GpuImageLayout.ShaderReadOnly) && (use.Access == GpuAccess.ShaderRead))
+        (((use.Layout is GpuImageLayout.ShaderReadOnly or GpuImageLayout.Undefined) && (use.Access == GpuAccess.ShaderRead))
             ? GpuStage.ComputeShader | GpuStage.FragmentShader
             : use.Stage);
     private static ShaderPipelineBarrier Record(ShaderPipelineBarrierKind kind, ShaderPipelineAccessState prior, ShaderPipelineAccessState use) =>

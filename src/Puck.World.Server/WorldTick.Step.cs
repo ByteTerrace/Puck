@@ -303,6 +303,7 @@ public sealed partial class WorldTick {
         }
     }
     private void StepCore(in FixedStepContext context) {
+        using var work = HostFrameWork.Measure(HostFrameWorkPart.TickIngress);
         Host.Input.BeginInterval(interval: new WorldInputInterval((context.Tick + 1), (context.ElapsedTicks - context.StepTicks), context.StepTicks,
             ((m_musicClock is { } capturedClock) ? new(capturedClock.ElapsedTicks, capturedClock.TicksPerBeat, m_musicDirector!.CurrentSegmentId) : null)));
         TapFederatedIntents();
@@ -404,6 +405,7 @@ public sealed partial class WorldTick {
         var tick = (context.Tick + 1UL);
 
         var stepStartEngineTick = (context.ElapsedTicks - context.StepTicks);
+        work.Next(HostFrameWorkPart.TickMotion);
 
         // Release every carry relationship this tick's drain invalidated (a partner gone inactive, a kit retune away
         // from the facet either side needs) BEFORE the advance passes, so an orphaned target re-enters rigid
@@ -429,7 +431,7 @@ public sealed partial class WorldTick {
         );
         Host.Population.ResolveTethers();
         Host.Population.UpdateCarriedBodies();
-        Host.Population.ResolveDynamicContacts();
+        using (HostFrameWork.Measure(HostFrameWorkPart.TickContact)) { Host.Population.ResolveDynamicContacts(); }
         // The solve may move a rigid carrier. Reconcile its held pose after the contact step as well.
         Host.Population.UpdateCarriedBodies();
         Host.Population.CompleteStep(tick: tick);
@@ -540,6 +542,7 @@ public sealed partial class WorldTick {
         // Collect this tick's world-scoped events AFTER the population settles (so positions/occupancy are this
         // tick's) and BEFORE the addon read pump, so ResolveReads can stage them into the SAME batch as this tick's
         // disclosures/answers.
+        work.Next(HostFrameWorkPart.TickRules);
         Host.Events.Collect(
             definition: Host.Document.Definition,
             population: Host.Population
@@ -612,6 +615,7 @@ public sealed partial class WorldTick {
         SweepDeadlines(tick: tick);
         // Placement response sweep — AFTER StepFields, so a response condition reads this tick's own lattice writes;
         // a state-driven prototype swap for a placement carrying a Respond trait (see WorldPlacementResponse).
+        work.Next(HostFrameWorkPart.TickResponses);
         SweepPlacementResponses(tick: tick);
         // Placement deal sweep — after the rule frame has folded, so a cell a rule wrote this tick deals on this
         // tick; each dealt template's children follow its row (see WorldPlacementDeal).
@@ -619,7 +623,7 @@ public sealed partial class WorldTick {
         // A response or deal install is delivered on the tick that made it. Left pending, it would ride the next
         // delivery some later change happens to trigger, a hidden-only one included, so its delivery tick would tell
         // a recipient that something it cannot read moved.
-        Host.Document.DeliverPending();
+        using (HostFrameWork.Measure(HostFrameWorkPart.TickDelivery)) { Host.Document.DeliverPending(); }
         Host.Addons?.ResolveReads(tick: (context.Tick + 1UL));
         // Fold this tick's routed intents into their targets BEFORE the snapshot is built.
         Host.Engagement.FoldTick(replaysInput: Host.ReplaysInput);
@@ -628,6 +632,7 @@ public sealed partial class WorldTick {
         // machines[].memory bindings poke a moved cell into its machine and mirror a machine's moved byte into its
         // cell — see WorldServer.NamedMachineMemory.cs. Runs right before the machine steps so a Write binding's poke
         // reaches it before this tick's advance.
+        work.Next(HostFrameWorkPart.TickMachines);
         Host.SyncNamedMachineMemory(tick: tick);
 
         // Step every booted machine off THIS tick's freshly-folded pads: reads WorldEngagement.BuildPadSnapshot()
@@ -648,6 +653,7 @@ public sealed partial class WorldTick {
         }
         Host.Engagement.CompleteBodyRouting();
 
+        work.Next(HostFrameWorkPart.TickDelivery);
         EmitSnapshot(
             tick: (context.Tick + 1UL),
             stepTicks: context.StepTicks

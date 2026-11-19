@@ -43,6 +43,8 @@ let guideCopy = {
   "shape-round-cone-xyz" { title: "ROUND CONE XYZ", note: "A round cone scaled unevenly." }
   "shape-cone-xz" { title: "CONE XZ", note: "A cone with X and Z scaled differently." }
   "shape-superellipsoid-xyz" { title: "SUPER XYZ", note: "A superellipsoid at exponent 3, scaled unevenly." }
+  "shape-stretch-cut" { title: "STRETCH CUT", note: "A stretched capsule, cone and torus cut from a slab." }
+  "shape-stretch-smooth" { title: "STRETCH SMOOTH", note: "The same three cut smoothly: each fillet one width." }
   "shape-trapezoid" { title: "TRAPEZOID", note: "A trapezoid profile, extruded." }
   "shape-rounded-rectangle" { title: "ROUNDED RECT", note: "A rounded rectangle profile, extruded." }
   "shape-polygon-6" { title: "POLYGON 6", note: "A hexagon profile, extruded." }

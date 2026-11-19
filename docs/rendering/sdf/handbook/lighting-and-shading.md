@@ -31,16 +31,24 @@ and its gradients are the mesh's normals
 
 ## Soft shadows: cascades and a penumbra filter
 
-The first two stable shadow slots' directional lights cast shadows from the
-mesh draws: `SdfMeshShadowCascades` fits two orthographic cascades along the
-key light and one along the second slot's light, and the cascade passes draw
-every mesh into them ([the shadow cascades](frame-rendering.md#the-shadow-cascades)).
-The surface pass answers each light with a percentage-closer soft shadow from
-the first cascade holding the point: a blocker search over a rotated disk finds
-the nearest occluder inside the light's cone over the point, the gap to it
-times the light's authored penumbra half-slope
-(`worldShadowPenumbraSlope(lightIndex)`) sizes the penumbra, and a filter of
-that width answers. Both disks turn and space their
+The slotted directional lights hold shadow roles by what they emit
+(`SdfLights.RoleSlot`): the brightest the primary role, the next the secondary,
+and a light that emits nothing holds none. `SdfMeshShadowCascades` is one
+indexed set of entries, each a light camera for a role: two orthographic
+cascades along the primary role's light (the key) and one along the
+secondary's, which the cascade passes draw every mesh into
+([the shadow cascades](frame-rendering.md#the-shadow-cascades)). The surface
+pass answers each role with a percentage-closer soft shadow from the first of
+its entries holding the point: a blocker search over a rotated disk finds the
+nearest occluder inside the light's cone over the point, the gap to it times
+the light's authored penumbra half-slope (the tangent of its `angularRadius`;
+zero, a point source, when it authors none) sizes the penumbra, and a filter of
+that width, never under one texel, answers. Beside it the pass writes the
+cascades' coverage of the point, which falls to zero across a band one widest
+filter wide at the edge of the role's outermost entry. Views takes the probes'
+record of the light (`sdfShadowRoleAnswer`) wherever the coverage is below one,
+so a point past every cascade, a surface on glass and a view with no cascade
+all ask the probes, and no receiver reads as lit because no map reached it. Both disks turn and space their
 taps by the pixel's cell of the same 4×4 tile the ambient occlusion uses, and
 views averages each light's visibility over the same plane-aware 4×4 window
 (`sdfViewsFilter`), so a penumbra carries no per-pixel grain with or without
@@ -265,9 +273,11 @@ in the frame.
   [Mesh GI](../../../../.claude/skills/rendering/references/mesh-gi.md) owns the
   exact CPU/HLSL rule and record. `world.probe` marks changing or pending
   publication reads unsettled, naming the GPU and live windows separately.
-- **Reading it.** Views (`shade/sdf-mesh-irradiance.hlsli`) gather the eight
-  probes about the shaded point once (`sdfMeshProbesAt`), pushed 5 cm along
-  its normal, weighted trilinearly, by how far each lies in front of the
+- **Reading it.** The views passes (`shade/sdf-mesh-irradiance.hlsli`) gather
+  the eight probes about the shaded point once (`sdfMeshProbesAt`): the probe
+  lookup pass gathers once a cell of a few pixels and views reuses the gather
+  for the cell's pixels whose receiver matches (`passes/sdf-views-probes.hlsli`).
+  The receiver is pushed 5 cm along its normal, weighted trilinearly, by how far each lies in front of the
   surface and by its depth visibility. The sky term is each probe's sky-light
   cube, which the relight integrates from the rays that missed every surface,
   each carrying the sky's radiance about its own direction, so a window low in

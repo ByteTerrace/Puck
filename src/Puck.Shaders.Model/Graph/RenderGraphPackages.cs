@@ -22,8 +22,10 @@ public enum RenderGraphPortAccess : byte {
     /// <see cref="Puck.Abstractions.Gpu.GpuImageLayout.RenderTarget"/> for color-attachment output. Only an image port
     /// takes it.</summary>
     ColorAttachmentWrite = 3,
-    /// <summary>Reads and updates a current imported buffer in place during a compute dispatch. Its contents remain
-    /// owned by the producer; this access creates no output version and cannot target an image or history.</summary>
+    /// <summary>Reads and updates a current buffer in place during a compute dispatch: an imported one, whose contents
+    /// remain owned by the producer, or a retained package buffer of the fragment's own that is zeroed once and that no
+    /// pass writes as a version, whose contents carry from frame to frame. This access creates no output version and
+    /// cannot target an image or history.</summary>
     ComputeReadWrite = 4,
     /// <summary>Reads a current buffer as the source of a transfer command. The package declares the copy and the
     /// planner supplies its transfer-stage barrier; images and history are not transfer input ports.</summary>

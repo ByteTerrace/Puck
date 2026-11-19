@@ -154,7 +154,11 @@ orders, verifying a change by building and running it, and fixing a defect at it
   final commit, so no later merge of yours can bring in a duplicate or a broken link unseen. If you
   merge again after the `Brief:` commit (the lead resumes you after the tip moved), repeat them on
   the new merged head and report that; a failure the merge brought in goes under **Needs you** with
-  its cause rather than into a second `Brief:` commit.
+  its cause rather than into a second `Brief:` commit. Merge the tip once for that final evidence,
+  never again because it moved while your checks ran: during a wave the lead lands lanes often, a
+  tip that moves after your merge is the lead's to merge, and a lane that chases it rebuilds for
+  nothing (one lane merged the tip eight times in its last hour, each followed by a five-minute
+  World build).
 - Before your final commit, run `puck scan --only duplicates --against <base>` from your CLI copy
   (`<base>` is the integration tip your brief names; the scan reads the working tree, uncommitted
   files included) and read every `neighbour` and `helper` record

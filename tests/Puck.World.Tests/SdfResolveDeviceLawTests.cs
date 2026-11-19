@@ -162,6 +162,8 @@ public sealed class SdfResolveDeviceLawTests {
         using var historyOutput = (temporal ? services.ImageFactory.Create(format: GpuPixelFormat.R16G16B16A16Float, height: height, name: default, usage: GpuImageUsage.Storage, width: width) : null);
         using var historySurface = (temporal ? services.BufferFactory.CreateDeviceLocal(name: default, sizeBytes: ((((ulong)(SdfWorldPackage.HistorySurfaceWords * sizeof(uint))) * width) * height), usage: GpuBufferUsage.Storage) : null);
         var historyInputBytes = new byte[checked((int)(((SdfWorldPackage.HistorySurfaceWords * sizeof(uint)) * width) * height))];
+        // The stationary window the resolve updates in place: zero (no phase) unless a stationary window is seeded.
+        var windowBytes = new byte[checked((int)(((SdfWorldPackage.HistoryWindowWords * sizeof(uint)) * width) * height))];
 
         if (seededHistory) {
             for (var pixel = 0; (pixel < (width * height)); pixel++) {
@@ -173,13 +175,14 @@ public sealed class SdfResolveDeviceLawTests {
                 BinaryPrimitives.WriteUInt32LittleEndian(destination: historyInputBytes.AsSpan(start: offset),
                     value: (((uint)BitConverter.HalfToUInt16Bits(value: ((Half)8f))) << 16));
                 if (stationaryPhase.HasValue) {
+                    // The window shares the surface's planar layout in its own buffer.
                     void Write(uint word, uint value) => BinaryPrimitives.WriteUInt32LittleEndian(
-                        destination: historyInputBytes.AsSpan(start: Address(word: word)), value: value);
+                        destination: windowBytes.AsSpan(start: Address(word: word)), value: value);
                     var tap = MathF.Exp(x: -4.08f);
                     var weight = ((1f + (2f * tap)) * (1f + (2f * tap)));
 
-                    Write(word: 0u, value: 1u);
-                    Write(word: (SdfWorldPackage.HistoryWindowOffset - 1u), value: ((1u << ((int)SdfWorldPackage.TemporalPeriod)) - 1u));
+                    BinaryPrimitives.WriteUInt32LittleEndian(destination: historyInputBytes.AsSpan(start: Address(word: 0u)), value: 1u);
+                    Write(word: 0u, value: ((1u << ((int)SdfWorldPackage.TemporalPeriod)) - 1u));
                     for (var phase = 0u; phase < SdfWorldPackage.TemporalPeriod; phase++) {
                         var gray = BitConverter.HalfToUInt16Bits(value: ((Half)(phase / 7f)));
                         var first = (SdfWorldPackage.HistoryWindowOffset + (phase * SdfWorldPackage.HistorySampleWords));
@@ -193,6 +196,8 @@ public sealed class SdfResolveDeviceLawTests {
         }
         using var historyInput = (seededHistory ? services.BufferFactory.CreateDeviceLocal(name: default, sizeBytes: ((ulong)historyInputBytes.Length), usage: GpuBufferUsage.Storage) : null);
         using var historySeed = (seededHistory ? services.BufferFactory.CreateHostVisible(data: historyInputBytes, name: default, usage: GpuBufferUsage.Storage) : null);
+        using var historyWindow = (temporal ? services.BufferFactory.CreateDeviceLocal(name: default, sizeBytes: ((ulong)windowBytes.Length), usage: GpuBufferUsage.Storage) : null);
+        using var windowSeed = (temporal ? services.BufferFactory.CreateHostVisible(data: windowBytes, name: default, usage: GpuBufferUsage.Storage) : null);
         using var counters = services.BufferFactory.CreateDeviceLocal(name: default, sizeBytes: ((ulong)GpuKernelCounters.RowBytes), usage: GpuBufferUsage.Storage);
         // Every record a miss. Each output pixel's transport occupies the structured element declared by the resolve
         // interface, including both packed words.
@@ -297,6 +302,9 @@ public sealed class SdfResolveDeviceLawTests {
                                 if (resolves && (binding.Binding == Binding(member: SdfWorldPackage.HistorySurfaceWritten)) && (historySurface is not null)) {
                                     storage = historySurface;
                                 }
+                                if (resolves && (binding.Binding == Binding(member: SdfWorldPackage.HistoryWindowWritten)) && (historyWindow is not null)) {
+                                    storage = historyWindow;
+                                }
 
                                 services.Bindings.WriteBuffer(descriptorSetHandle: set, binding: binding.Binding, bufferHandle: storage.BufferHandle,
                                     bufferSize: storage.SizeBytes, kind: binding.Kind, elementStride: binding.ElementStride);
@@ -330,6 +338,13 @@ public sealed class SdfResolveDeviceLawTests {
                 recorder.TransitionBuffer(commandBufferHandle: command, bufferHandle: historySurface!.BufferHandle,
                     sourceAccessMask: GpuAccess.None, sourceStageMask: GpuStage.TopOfPipe,
                     destinationAccessMask: GpuAccess.ShaderWrite, destinationStageMask: GpuStage.ComputeShader);
+                recorder.TransitionBuffer(commandBufferHandle: command, bufferHandle: historyWindow!.BufferHandle,
+                    sourceAccessMask: GpuAccess.None, sourceStageMask: GpuStage.TopOfPipe, destinationAccessMask: GpuAccess.TransferWrite, destinationStageMask: GpuStage.Transfer);
+                recorder.CopyBuffer(commandBufferHandle: command, destinationBufferHandle: historyWindow.BufferHandle,
+                    sizeBytes: historyWindow.SizeBytes, sourceBufferHandle: windowSeed!.BufferHandle);
+                recorder.TransitionBuffer(commandBufferHandle: command, bufferHandle: historyWindow.BufferHandle,
+                    sourceAccessMask: GpuAccess.TransferWrite, sourceStageMask: GpuStage.Transfer,
+                    destinationAccessMask: (GpuAccess.ShaderRead | GpuAccess.ShaderWrite), destinationStageMask: GpuStage.ComputeShader);
                 recorder.TransitionBuffer(commandBufferHandle: command, bufferHandle: fillerBuffer.BufferHandle,
                     sourceAccessMask: GpuAccess.None, sourceStageMask: GpuStage.TopOfPipe,
                     destinationAccessMask: GpuAccess.TransferWrite, destinationStageMask: GpuStage.Transfer);

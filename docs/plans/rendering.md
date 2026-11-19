@@ -96,22 +96,13 @@ it (the owner's ruling, [AGENTS.md](../../AGENTS.md#pucks-purpose)).
 - Give every primitive under a non-uniform scale a true distance, keeping the
   authored surface
   ([the decision](../decisions/engine-design.md#a-scaled-primitive-keeps-its-authored-surface-at-a-true-distance)).
-  What still rides the generic `Scale` bound, which `puck creation shape`
-  reports as a gain: a capsule, cone or torus scaled apart in X and Z, and a
-  round cone scaled apart at all; an ellipsoid or sphere scaled apart is the
-  exponent-2 superellipsoid gauge, which contact admits; a `Path` profile and a
-  sweep certify no gain. Regular polygons already lower their scaled vertices
-  to the exact convex polygon. Each gets a closed-form lowering where one
-  exists (a multi-shape capsule lowering needs scope and emitter accounting for
-  its elliptic cylinder and ellipsoid caps) and otherwise a bounded
-  closest-point solve certified by an enclosing interval and a residual bound;
-  no such solver exists yet, and its design is the step's first part. Check:
-  read every stretched gallery primitive through `puck creation shape`; audit
-  each field against closest-surface distances on both sides and at the
-  degeneracies; audit a subtraction and a smooth blend using each as a cutter;
-  report distance error, certification, field work and mesh defects, with the
-  CPU and GPU fields agreeing; then settled captures in the gallery and the
-  bake's added work in a quiet window before choosing which solves to admit.
+  What reads a bound today, which `puck creation shape` reports as a gain: a
+  capsule, cone or torus scaled apart in X and Z, a round cone scaled apart at
+  all, and an ellipsoid or sphere scaled apart, which is the exponent-2
+  superellipsoid gauge. A `Path` profile and a sweep certify no gain, and are
+  not part of this item. The solve, its proof, its exhibits and its build
+  order are [designed below](#a-true-distance-under-a-non-uniform-scale); its
+  first two steps need no new solver and unblock the lake's bowl.
 - Finish an in-flight group that a later plan drops and retain it in the library
   and store. Read back a boot's second, different `start` plan so churn cannot
   silently rebake discarded work on every boot.
@@ -150,6 +141,369 @@ missing meshes. WARP and the fixed-point CPU audit are not substitutes for
 that GPU product. The [derived-product decision](../decisions/engine-design.md#a-derived-product-is-a-cache-never-the-truth)
 owns identity and cache semantics; the bake packet owns the derivation closure
 and shared store before this distribution work.
+
+##### A true distance under a non-uniform scale
+
+This is the design for gap 11: what the gap is in the code, the two exhibits
+and the reading each fails, the solve for each primitive, why its answer is
+the distance, where it may stop, and the build order with a check for each
+step. The last part lists the claims a review should attack.
+
+**What the gap is.** `SdfSolidGeometry.AppendScaledPrimitive` spells a scale
+into a primitive's own dimensions wherever a closed form exists. A capsule,
+cone or torus whose X and Z scales differ, and a round cone under any uneven
+scale, have none and fall to its last arm, a `Scale` instruction over the unit
+shape. That instruction evaluates `f(p / s) * min(s)`
+(`SdfProgramBuilder.Scale`): zero on the authored surface, and between
+`min(s) / max(s)` and one times the distance everywhere else
+(`SdfProgram.InstanceDistanceGain`). The fixed-point evaluator refuses it for
+contact.
+
+A stretched sphere or ellipsoid is in the same position. It lowers to the
+exponent-2 superellipsoid gauge, `(|p / r| - 1) * min(r)`, which is a bound
+with the same gain: the gallery's `shape-ellipsoid-xyz` reads
+`distance=bound gain=0.366`. The lake's bowl is one (`terrainBasin`, radii 46,
+17 and 46 m, so a gain of 0.37). The ellipsoid is therefore the first solve
+here, and the capsule and the round cone are built from it.
+
+**The two effects, measured.** Two exhibits end the gallery's stretched row.
+Each presses a capsule, a cone and a torus, scaled apart in X and Z, half way
+into a slab's face. `puck creation shape` reads the three as bounds with gains
+0.313, 0.25 and 0.471.
+
+| Effect | Exhibit | Reading that fails | The same reading with exact cutters |
+|---|---|---|---|
+| The distances a smooth blend reads away from the surface | `shape-stretch-smooth`, cut at a 0.04 m radius | The fillet bends the slab's face out to 96 to 128 mm from the capsule's rim, 104 to 160 mm from the cone's and 40 to 85 mm from the torus's, where the author wrote 40 mm all round. `puck mesh audit --cpu` reads `field slope deficit` over the threshold on 4177 of 76778 triangles, with 10 folds and 3 flipped triangles | Deficit over the threshold on none, no fold, no flip |
+| Defects in a hard cut's contour | `shape-stretch-cut` | `puck mesh audit --cpu` reads 6 folds, 1 flipped triangle and 1263 of 45817 faces flagged for turning from the field's gradient, its worst clusters all along the three rims, and the deficit over the threshold on 8358 triangles | No fold, no flip, 300 of 19476 faces flagged |
+
+The fillet's reach is the true distance from the rim at which the cutter's
+field reads the blend radius, computed from the kernel's formulas and a
+brute-force closest point in double precision. The control column is the same
+exhibit with each cutter's X and Z made equal, so every cutter takes an exact
+lowering: its rims are other curves, so it shows what an exact cutter leaves,
+not what these cutters will read. In both, 99 in 100 of the hard cut's
+vertices lie within half a millimetre of the field's surface, which is why
+the two effects are apart: a bound keeps a hard cut's surface and frays only
+its rim, and moves a smooth cut's surface itself.
+
+**What exists.** One closest-point solve is already in both interpreters: the
+ellipse's projection, a bisection of one bracketed root
+(`SdfFieldEvaluator.EllipseRootSteps`, `sdfEllipse2D` in
+`field/sdf-ellipse.hlsli`), held to a double-precision reference by
+`EllipseDistanceLawTests`. It is what makes an elliptic cylinder, a torus
+stretched in Y alone and a revolved ellipse exact. Its interval rule adds a
+fixed slack that is asserted in a comment and not derived. The sweep searches
+its curve by samples and golden-section rounds with no bound on what it
+missed. The reach certificates behind the cull tables (`SdfFieldEvaluator`)
+admit a `Scale` only when it is uniform.
+The bake searches each crossing along its lattice edge and reads a value as a
+distance only over the gradient's length (`SdfSampledLattice.PassesBetween`),
+which is why a hard cut survives a bound as well as it does. Nothing projects
+onto a triaxial ellipsoid, a cone or a torus.
+
+**Options weighed.**
+
+| Option | What it gives | Why it is or is not taken |
+|---|---|---|
+| Reduce each primitive to bracketed roots of one variable | The distance on both sides, with an interval from the bracket | Taken. The ellipsoid's reduction is published; the cone's and the torus's are derived below and checked against brute force |
+| Newton on the surface's two parameters, with a bound afterwards | A nearby surface point quickly | The point is only an upper bound. Outside a convex shape a lower bound exists (claim 1), inside none does, so it cannot answer a cutter's inside |
+| A union of exact pieces (an elliptic cylinder and two ellipsoids for the capsule) | The distance outside | Inside a union the field is the depth in one piece, which is a bound again, and a cutter is read inside |
+| Divide the bound by its gradient's length | The distance to first order at the surface | It has no bound away from the surface, where a blend reads it. The bake already does this where it helps |
+| Resample the shape into a sampled region | A distance as fine as its cell | Memory for each stretched shape, and exact nowhere |
+
+Refusing such scales or changing the surface is ruled out by
+[the decision](../decisions/engine-design.md#a-scaled-primitive-keeps-its-authored-surface-at-a-true-distance).
+
+**The solves.** Every shape here is symmetric in X and in Z, so a point is
+read by its absolute X and Z, and by its absolute Y where the shape is
+symmetric in Y. `s = (sx, sy, sz)` is the scale and `p` the point in the
+shape's own frame.
+
+*The quadric root.* For semi-axes `e` and a point with no negative
+coordinate, `F(t) = sum((e_i * p_i / (t + e_i^2))^2) - 1` falls strictly
+for `t` above `-min(e_i)^2`, where it has one root. The foot is
+`q_i = e_i^2 * p_i / (t + e_i^2)`, the root is positive outside and negative
+inside, and with `m` the least axis it lies in
+`[-e_m^2 + e_m * p_m, -e_m^2 + |e * p|]` (zero in place of the upper end
+inside). With two terms this is the ellipse's root, and one routine serves
+both.
+
+*A zero coordinate.* When `p_i` is zero its term vanishes and its pole,
+`t = -e_i^2`, still ends the bracket. If the other terms already sum below one
+at that pole, the root is the pole and `q_i` comes from the surface's own
+equation: the two feet off the plane, which is the branch `sdfEllipse2D` takes
+on its major axis. Every solve below takes this branch at its poles.
+
+*The ellipsoid.* The quadric root with three terms. Two equal radii need no
+new solve: the shape is the ellipse revolved at offset zero.
+
+*The capsule.* The scaled capsule is the segment from the origin to
+`(0, h, 0)`, `h = sy / 2`, swept by the ellipsoid of radii `s`. Its surface
+is the lower half of that ellipsoid, an elliptic cylinder between the planes
+`y = 0` and `y = h`, and the upper half of the ellipsoid about `(0, h, 0)`.
+
+- `p.y <= 0`: the ellipsoid about the origin, on both sides. `p.y >= h`: the
+  ellipsoid about `(0, h, 0)`.
+- Between the planes and outside: the ellipse's distance of `(p.x, p.z)` in
+  the ellipse `(sx, sz)`.
+- Between the planes and inside: the depth is the least of the ellipse's
+  depth and, only when `sy` is under both `sx` and `sz`, the far foot on each
+  cap. The far foot is the nearest point of a cap from a point on the other
+  side of its equator. With `y'` the height over that cap's centre, `F` over
+  `(x, y', z)` is convex between the poles `-min(sx, sz)^2` and `-sy^2`, has
+  two roots there or none, and the far foot is the larger root. The search
+  halves on the sign of `F'` until it meets a point where `F` is negative,
+  then halves on `F` between that point and `-sy^2`.
+
+*The cone.* The scaled cone has its apex at `(0, sy, 0)` and its base, the
+ellipse `(sx, sz)`, in the plane `y = -sy`. With `Y = p.y - sy` and
+`b = 1 / (4 * sy^2)`, its side is the nappe
+`x^2 / sx^2 + z^2 / sz^2 = b * Y^2`, `Y <= 0`. A foot on the nappe is
+`(sx^2 * p.x / (sx^2 + k), Y / (1 - k * b), sz^2 * p.z / (sz^2 + k))`, where
+`k` is a root of
+`G(k) = (sx * p.x / (sx^2 + k))^2 + (sz * p.z / (sz^2 + k))^2 - b * Y^2 / (1 - k * b)^2`.
+
+- `Y < 0`: `G` falls strictly from the pole `-min(sx, sz)^2` to the pole
+  `1 / b`, so it has one root there, negative inside the nappe.
+- `Y >= 0`: with `u = 1 / k`,
+  `H(u) = (sx * p.x / (1 + u * sx^2))^2 + (sz * p.z / (1 + u * sz^2))^2 - b * Y^2 / (u - b)^2`
+  falls strictly over `(0, b)`. If
+  `H(0) = sx^2 * p.x^2 + sz^2 * p.z^2 - Y^2 / b` is not above zero the
+  nearest point of the nappe is the apex; otherwise `H` has one root.
+- Inside the cone the depth is the lesser of the height over the base,
+  `Y + 2 * sy`, and the distance to the nappe's foot.
+- Outside, a foot at or above the base is the answer. Otherwise the answer
+  is the base: `-2 * sy - Y` straight down when the point is under the base
+  and `(p.x, p.z)` lies in its ellipse, and else the rim, the root of the
+  squares of `Y + 2 * sy` and the ellipse's distance of `(p.x, p.z)`.
+
+*The torus.* The unit torus has a major radius of one and a tube of ratio
+`r = 0.4`. Its points are
+`(sx * (1 + r * cos a) * cos f, sy * r * sin a, sz * (1 + r * cos a) * sin f)`
+for a tube angle `a` (zero on the outer equator, a quarter turn on top) and an
+azimuth `f`. For a point with `p.y > 0` let `m(a) = sy * (p.y / sin a - sy * r)`,
+`A(a) = sx * (1 + r * cos a) + m * cos a / sx`, and `B(a)` the same with `sz`.
+A foot at tube angle `a` has `cos f = p.x / A` and `sin f = p.z / B`, so the
+feet are the roots of `G(a) = (p.x / A)^2 + (p.z / B)^2 - 1`. `m` is the
+foot's signed reach along its normal: zero or more for a point outside, below
+zero inside.
+
+- Outside there is one root. `G` falls strictly in `cos a` wherever `m` is
+  not negative, which is `sin a <= p.y / (sy * r)`. That is every angle when
+  `p.y >= sy * r`. Otherwise it is an arc at each equator, and the root is
+  in the outer arc when `(p.x / sx)^2 + (p.z / sz)^2 >= 1` and in the inner
+  one when not.
+- Inside, `G` is below zero at the outer end of the arc between and above
+  zero at the inner end. When `sy` is no more than `sx` and `sz`, `A` and
+  `B` rise in `cos a` over the whole arc and there is one root. When it is
+  more, `A` falls where `sin a` is above the cube root of
+  `sy * p.y / (r * (sy^2 - sx^2))` and rises elsewhere, and `B` likewise:
+  the arc is cut there into pieces on which each is monotone. Over a piece
+  the end values of `A` and `B` bound both squares, so a piece whose bounds
+  keep `G` off zero holds no foot; the others are halved until they are
+  narrower than the tolerance. The depth is the least distance over the
+  pieces left.
+- `p.y = 0`: `m` is `-sy^2 * r` at every angle, and the equator feet are
+  the ellipse's distances in the plane, to `(1 + r) * (sx, sz)` and to
+  `(1 - r) * (sx, sz)`.
+
+The root is searched over the tube angle, never over its cosine: near an
+equator the cosine cannot resolve the foot.
+
+*The round cone.* Its surface is the ellipsoid of radii `s` below the plane
+`y = sy / 2`, the ellipsoid of radii `s / 2` about `(0, sy, 0)` above
+`y = 5 * sy / 4`, and between them a nappe with its apex at `(0, 2 * sy, 0)`
+and `b = 1 / (3 * sy^2)`. Outside, the nappe's foot is the answer when it lies
+between the planes. Otherwise the answer is the nearest point of whichever
+ellipsoid has it on its own cap, which claim 1 confirms for the foot found.
+Its inside is not designed here: step 7 owns it.
+
+**Why the answer is the distance.** Each claim is used where the solves above
+cite a region or skip a candidate.
+
+1. *A convex shape, outside.* For a convex solid `K`, a point `p` outside it,
+   any point `q` of its surface and the outward unit normal `n` there,
+   `n . (p - q) <= distance <= |p - q|`. `K` lies behind the plane through
+   `q`, so the plane is no farther than `K`, and `q` is a point of `K`. When
+   `p - q` is along `n` the two ends meet, so a foot is the nearest point.
+   The capsule, the cone, the round cone and the ellipsoid are convex. So is
+   the torus's hull, and outside it with `(p.x / sx)^2 + (p.z / sz)^2 >= 1`
+   the nearest point of the hull is on the torus's outer half.
+2. *An intersection, inside.* A ball about `p` lies in an intersection of
+   sets when it lies in each, so the depth in the intersection is the least
+   of the depths. The cone is its base's half-space cut by the solid nappe.
+3. *The octant.* A shape symmetric in a coordinate has a nearest point whose
+   coordinate has the point's sign: reflecting a foot to that side brings it
+   no farther.
+4. *One root.* Each term of `F`, `G` over its interval and `H` falls
+   strictly, so each has one root where its feet keep the point's signs.
+   Eberly's "Distance from a Point to an Ellipse, an Ellipsoid, or a
+   Hyperellipsoid" gives the ellipsoid's root and bracket and the zero
+   branches, and Hart's "Distance to an Ellipsoid" (Graphics Gems IV) the
+   same equation; neither was fetched for this design, and the engine's
+   ellipse follows the first. The nappe's `G` and `H` are derived here.
+5. *The capsule's regions.* Outside and under `y = 0`, the nearest point
+   cannot lie on the cylinder, whose normals are level, nor on the upper
+   cap, whose normals rise, so it is on the lower cap, where it is the
+   ellipsoid's own nearest point by claim 3. Inside and under `y = 0`, a
+   segment to the cylinder or to the upper cap leaves the ellipsoid first,
+   and the ellipsoid's nearest point is on the lower cap. Between the planes
+   and outside, the caps' normals point away, so the foot is on the
+   cylinder at the point's own height.
+6. *The far foot.* Between the planes and inside, the nearest point of a cap
+   is on its equator, which the cylinder's depth already covers, or at a
+   local minimum on its open half. Those are roots of `F` with
+   `t + sy^2 < 0` and the other two denominators positive, an interval that
+   is empty unless `sy` is under `sx` and `sz`. `F` is convex there, and a
+   root is a local minimum exactly where `F` rises (the bordered Hessian's
+   determinant is the product of the three denominators' signs times `F'`),
+   so it is the larger root. A minimum the search misses lies within its
+   last bracket of the saddle beside it, and from a saddle the distance
+   falls to the equator, so the miss costs no more than that bracket's
+   width in distance.
+7. *The torus, outside.* The normal at a surface point is the unit torus's
+   normal through the inverse scale, so a foot's point is
+   `S u + m * S^-1 v` for the unit point `u` and its unit normal `v`, which
+   gives `m`, `A` and `B`. The derivative of `A` in `c = cos a` is
+   `r * (sx^2 - sy^2) / sx + sy * p.y / (sx * (1 - c^2)^1.5)`. Where `m`
+   is not negative its second term is at least `sy^2 * r / sx`, so the
+   derivative is at least `r * sx`; `B` likewise; `G` falls strictly.
+8. *The torus, inside.* Every foot whose coordinates keep the point's signs
+   is a root of `G` in the arc, or a zero of `A` or `B` where the point's
+   coordinate is zero. The derivative above is even in `c` and rises with
+   its size, so it changes sign at most once on each side, which gives the
+   pieces. Bounds from monotone ends are exact bounds, so no root is in a
+   discarded piece, and every candidate kept is a point of the surface.
+9. *A zero coordinate.* The distance is 1-Lipschitz in the point, so the
+   branch at a pole is the limit of the solve beside it, and a branch taken
+   within a tolerance of zero moves the answer by no more than the
+   tolerance.
+
+**Where a solve may stop.** At every step a root lies in a bracket whose ends
+have opposite signs, and that invariant carries the proof, not the count of
+steps. Three interval rules follow from it.
+
+- *Between the bracket's ends.* Each coordinate of a quadric foot is
+  monotone in `t` (or `k`), so the true foot lies in the box spanned by the
+  feet at the bracket's two ends, and the distance lies between the box's
+  nearest and farthest points from `p`. For the torus the box comes from the
+  end values of `A` and `B` on a monotone piece. This holds on both sides of
+  every shape.
+- *Outside a convex shape.* Claim 1's interval holds for any surface point,
+  whatever produced it. The foot from the current estimate, put back on the
+  surface, gives `n . (p - q)` below and `|p - q|` above, and the gap is of
+  second order in the foot's error. In the prototype it fell under
+  `1e-6` of the distance for 99 samples in 100 after twelve halvings, where
+  the bracket alone needs twice that.
+- *A faster step.* A Newton or secant step may replace a halving when it
+  lands inside the bracket, since the bracket still holds the root.
+
+A solve stops when its interval is narrower than its format resolves, or
+sooner at a tolerance its caller's check justifies. It returns the interval's
+lower end in size, so stopping early never reads farther than the surface is.
+A stop on a count of steps alone is not allowed.
+
+The fixed-point evaluator computes the interval in Q48.16 with outward
+rounding (`FixedInterval`) and widens its box rule by the interval's width,
+in place of the ellipse's fixed slack. The kernel runs the same steps in
+float and carries no interval: its error is the format's, and a law holds it
+to the fixed-point answer.
+
+**The prototype.** A double-precision prototype of the capsule, the cone and
+the torus ran against a brute-force closest point (a surface grid, then a
+zoom about its best samples). Over 2,400 points, half of them inside, over
+scales up to 6 to 1 and over flat-capped capsules and tall-tubed tori, no
+solve read farther than the brute force by more than `3e-14`. The brute
+force read farther than a solve by up to `7e-5` at points a few millimetres
+from a rim, where its grid is the coarser of the two. 102 points on axes,
+centres and symmetry planes agreed to `2e-6`, read as the limit claim 9
+allows. Claim 1's interval held at every one of 11,599 early stops. Inside
+tall tubes the scan found one root or three and never more, and the nearest
+foot was always the first or the last. It decided four things: the search
+runs over the tube angle (over its cosine the equator feet were lost at
+`p.y` near zero); the bracket ends at a pole whether or not that coordinate
+is zero; an azimuth with a zero coordinate takes its other component from
+the unit circle; and the far foot is needed, since flat capsules were wrong
+inside without it. The prototype was scratch and is not in the tree: the
+laws of steps 2 to 6 replace it.
+
+**Steps, each with its check.** The invariant is that a primitive
+`SdfSolidGeometry.AppendScaledPrimitive` emits under any scale answers the
+distance to its authored surface within its reported interval, in both
+interpreters. Step 8 enforces it: that method is the one door a scaled
+primitive is lowered through, and after it no arm of the method reaches a
+`Scale` with unequal components. The guarantee stops at what is not a scaled
+primitive: a superellipsoid past exponent 2 stays a gauge, warps, flares and
+field ops stay bounds, a sweep and a path certify no gain, and a C# caller
+can still write `SdfProgramBuilder.Scale` itself.
+
+1. Correct the record: the stretched ellipsoid is a bound. The exhibits and
+   this design are that step.
+2. A sphere, ellipsoid or exponent-2 superellipsoid with two equal radii
+   lowers to the ellipse revolved at offset zero, turned so its unequal axis
+   is Y. Check: `puck creation shape` reads `distance=exact` for a spheroid
+   and for the valley's `lake-basin`, `puck creation stats` still reports
+   `contact: accepted`, and a spheroid cutter's `mesh audit --cpu` reads no
+   triangle over the slope deficit's threshold.
+3. One quadric root for both interpreters, with its interval. The ellipse
+   becomes its two-term caller, so there is one implementation. Check:
+   `EllipseDistanceLawTests` passes unchanged, and a law holds the three-term
+   root to a double-precision reference inside, on each axis and plane,
+   beside the surface and far from it, with the reference inside the
+   interval at every stop.
+4. The triaxial ellipsoid takes the root, and the gauge is left to exponents
+   past 2. Check: `shape-sphere-xyz` and `shape-ellipsoid-xyz` read
+   `distance=exact`, the box rule encloses the point answers
+   (`TryDistanceBounds` over boxes about the law's points), and the two
+   interpreters agree over a lattice.
+5. The capsule. Check: `shape-capsule-xz` reads `distance=exact` and
+   `contact=admitted`, and the law covers capsules with `sy` under `sx` and
+   `sz`, where the far foot decides.
+6. The cone, then the torus, each with the same law and the same two reads.
+   The torus's law covers `sy` above `sx` or `sz`, and `p.y` at and near
+   zero.
+7. The round cone. Its first task is the inside: the capsule's claims 5 and
+   6 with each cap ending at its tangent plane instead of its equator,
+   proved and run against brute force as the capsule's were. Until then it
+   keeps its bound and `puck creation shape` says so.
+8. `AppendScaledPrimitive` loses its `Scale` arm for unequal components, and
+   `SdfSolidGeometry.DilationGain` its stretched case. Check:
+   `puck creation shape` over the stretched row prints `bound` for
+   `shape-superellipsoid-xyz` alone.
+9. The exhibits and the cost. `puck mesh audit --cpu` reads no triangle over
+   the slope deficit's threshold, no fold and no flip on
+   `shape-stretch-cut` and `shape-stretch-smooth`, and the smooth cut's
+   fillet reaches 40 mm from each rim. Then, in the lead's window: the same
+   audit over the stored bakes on both backends, captures of both exhibits
+   and of the lake's bowl, and the field work on the bake's `done` line
+   before and after. That work decides whether the kernel takes the early
+   stop and the faster step, and whether a program of hard unions alone may
+   keep a bound, which would need its own proof that nothing in it reads a
+   distance.
+
+Each new shape is an instruction-set change with every partner in one change
+([the checklist](../../.claude/skills/rendering/SKILL.md#changing-the-instruction-set)):
+the kernel, the fixed-point evaluator with its bounds and reach rules, the
+shading cost row beside the ellipse's (`SdfShadeCost`), and the contact
+lowering, which reads the same shape.
+
+**What a review should attack.**
+
+- Claim 5's inside case: that no point of the cylinder or the far cap is
+  nearer than the near ellipsoid's own nearest point.
+- Claim 6: that the open cap holds at most one local minimum, that it is the
+  larger root, and the bound on a missed one.
+- Claim 7's derivative and claim 1's use for the torus: that outside the
+  hull's flat faces the hull's nearest point is on the torus.
+- Claim 8: that the pieces are complete, including where `A` or `B` is not
+  positive, and that three is the most roots a tall tube has. The prototype
+  saw no more; nothing proves it, and the enumeration does not depend on it.
+- The cone's base rule: that a nappe foot below the base leaves only the
+  base's disk and rim.
+- The zero branches of the nappe and the torus, which are derived here and
+  have no published form to check against.
+- The returned lower end: that it is still zero on the surface and keeps the
+  field 1-Lipschitz across the regions' seams.
 
 #### Glass
 
@@ -223,6 +577,119 @@ instance map and per-geometry, per-level ranges, never `instanceCount` alone.
 The back of a portal's glass still needs a presentation choice: no image,
 fallback colour or a front-image mirror. The
 [owner decisions](open-items.md#owner-decisions) hold that choice.
+
+### Colour conversion — scene light to display values once
+
+Today linear scene light reaches SDR displays without an sRGB encode (so the
+exposure meter's 0.104 target prints as ~1% of white instead of 10.4%, masked
+by hand-authored `compensation: 2` in `worlds/debug/hall.puck`) and is decoded
+a second time on HDR displays (`display-encode.frag.hlsl`), while `HexColor`
+enters shading gamma-naively across 22 parse sites. Because a single
+full-screen view skips `place` (`WorldRootGraph.PlacesViews`), panes enter
+`place` already encoded, and filmed views run `SdfViewSnapshot.BloomStandalone`,
+encoding cannot live in `place` alone.
+
+**Design.** Shade in linear scene light everywhere and convert once at the edge
+where scene light becomes a working image:
+
+1. **Every image declares its kind.** Keep three kinds — *scene light* (linear
+   luminance in nits, unexposed), *window image* (scene light carrying a share
+   of its world's exposure), and *working image* (display-encoded) — extending
+   `ImageColorEncoding` and `ImageSourceConversion.PassOf` with nits scale and
+   applied exposure. Each consumer declares what it reads; a render graph that
+   joins two kinds without a conversion fails to compose.
+2. **Convert at the end of each view's own graph** so no path bypasses it. Keep
+   the register's order inside that stage: sharpen (moved from `place` for
+   unscaled views, still reading linear light; scaled views keep reconstructing
+   in `place` from encoded values) -> bloom (merging both bloom paths into one)
+   -> authored tone transform (neutral engine default = none; move the filmic
+   curve constants out of engine shader code into authored data) -> mandatory
+   parameterless encode. Pass screen fidelity into this stage so it fades
+   sharpen, bloom and tone transform while leaving the encode intact. A camera
+   read both as scene light and as a direct picture publishes both outputs so
+   only the direct picture blooms. The root `place` pass then only places, and
+   panes keep their encoded contract.
+3. **Move window adaptation share to authored data.** The view beyond the
+   glass multiplies its light by its own exposure raised to a share
+   (`SdfPhotometry.WindowAdaptation`, three quarters today), and the view
+   looking through applies the rest of its own. The register adopted that and
+   rejected a window published unexposed for the viewer to expose, under which
+   a sunlit world seen from a dim room blows to white. The edge is scene light
+   on both sides; the window image's declaration carries the share so the two
+   sides cannot disagree, and the share moves from an engine constant to
+   authored data, with the standard package authoring today's three quarters.
+4. **Decode filmed views on screens.** A filmed view shown on a screen is a
+   working image; the screen decodes it before multiplying by brightness in
+   nits, and screen-glow reduction applies the same decode.
+5. **Split scene colour and display colour by type.** Audit all 22 `HexColor`
+   parse sites (`WorldBakedColors.Resolve`, `WorldEnvironmentResolve`, and
+   display-only consumers such as letterbox, HUD/text tints and source
+   colours). Introduce distinct scene-colour and display-colour types so only a
+   decoded scene colour can enter shading, while display colours stay encoded.
+6. **Build instruments first and land the retuned world together.** Author a
+   grey card and neutral plus coloured luminance patches, and add a
+   display-format readback of the presented image (SDR in both target-encode
+   cases, scRGB and HDR10). Land the mechanism, `worlds/standard/` defaults
+   (including moving default fog out of engine code) and the retuned
+   `worlds/debug/` exposures and lights in one merge — removing `compensation: 2`
+   and checking `SdfPhotometry.RangeThreshold` so lamp ranges do not lengthen
+   and inflate relighting work.
+
+**Why.** What a pixel value means is correctness, not look: the register rules
+lights, screens and the camera photometric, lights in lux and the frame in nits
+([register](../decisions/rendering.md#lights-screens-and-the-camera-are-photometric)),
+and AGENTS.md puts correctness with the engine. The fix repairs tone at every
+brightness, gives colour one convention, makes the grey card read and fixes
+HDR, and every later judgement of exposure, tonemapping, bloom and materials
+reads through it. It is decided by the evidence, with no owner call: no
+preference for the present tones keeps the present conversion. The terrain
+pass already expects the standard conversion (its grey card reads 118/255, the
+sRGB code for 18% grey). If an author wants today's appearance, they write it
+as a tone transform over the corrected conversion, judged on SDR and HDR.
+
+**Risks.** Every place's look moves at once, which is why the retune is in the
+same merge. A single full-screen view gains a pass it did not have. The sharpen
+measures a pixel's headroom against a value of 2 on linear exposed light and
+keeps reading linear light in its new place, so its constants do not change.
+The display encoder has three outputs (SDR in two cases, depending on whether
+the target encodes sRGB when written; scRGB; and HDR10, which converts
+primaries and applies its own curve), and a neutral grey passes even with that
+matrix transposed, so the check needs coloured patches. The temporal resolve
+averages linear samples and is not changed, but a bright edge in motion is
+where a conversion change shows first. No source we fetched states this
+requirement in so many words: the case rests on the code disagreeing with
+itself and on the transfer functions `transfer.hlsli` cites. Which display
+outputs each bar device exposes is read once the instruments exist. Not
+checked: the two colour resolvers and what must stay encoded, that a presented
+capture is 8-bit, that the debug world's sharpness is zero, and that the
+temporal resolve averages linear samples (a reviewer's reading); the 0.104
+target showing as 1% of white (reasoned).
+
+**Options not taken:** tuning around the missing encode with exposure
+compensation (tones right at one exposure only, surface colours taken as linear
+reflect too much light, screen pictures multiplied as luminance while still
+encoded, HDR still wrong); declaring views display-referred and fixing HDR
+alone (contradicts photometric shading and mixes linear and encoded samples
+inside one image); leaving sharpen in `place` after bloom on encoded values
+(simpler, and common practice, but it would reverse the register's
+bloom-after-sharpen ruling and need the sharpen's constants restated; the debug
+world authors a sharpness of zero, so neither order shows there today, and the
+reversal would be the owner's call).
+
+**Checks.** Under manual exposure, the grey card reads 118/255 within 3 codes
+across every view path: single world, split view, filmed view on a screen, view
+beside a pane, fully framed screen, sharpened view with bloom, camera read both
+as scene light and directly, and a window from a dim room onto a bright world
+with differing exposures. On every display format exposed by the device (SDR
+both cases, scRGB, HDR10; HDR outputs run once an HDR display is on hand),
+neutral and coloured patches authored at N nits read N times exposure times
+white level with tone transform set to none. One swatch per scene-colour kind
+(surface, sky, fog, light, keyed colour) reads right while letterbox and HUD
+colours do not move. A bright edge in motion shows no new shimmer on SDR or
+HDR, a graph joining mismatched image kinds fails to compose, lamp ranges are
+no longer than before, and another lane judges that every route chapter meets
+its reference in motion and gallery exhibits read as their plaques say. This
+lands before [authored shading becomes the sole path](author-shaders.md).
 
 ### P15 — Temporal reconstruction
 

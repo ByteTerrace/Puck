@@ -689,7 +689,7 @@
                         ]
                       },
                       "angularRadius": {
-                        "description": "The light\u0027s angular radius, in [0, atan 0.3] radians: the penumbra half-slope is its tangent, so 0 casts a hard shadow. Read only when the light shadows. Absent is the pinned penumbra.",
+                        "description": "The light\u0027s angular radius, in [0, atan 0.3] radians: the penumbra half-slope is its tangent, so 0 casts a hard shadow. Read only when the light shadows. Absent is 0, a point source: the engine chooses no softness, and the standard package authors the soft edge its own lights cast.",
                         "default": null,
                         "title": "BindableAngle",
                         "anyOf": [
@@ -11882,6 +11882,52 @@
             ],
             "additionalProperties": false,
             "title": "WorldDeviceProfile"
+          },
+          "default": null
+        },
+        "nested": {
+          "description": "What a nested view gives up at each presented size (WorldNestedViewQuality). Absent gives up nothing.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "description": "One row of the nested-view table (render.nested): what a view shown inside another (through a window or portal, on a screen a camera films, or a session\u0027s screen) gives up while it is presented at or below a share of the display\u0027s height. A nested view takes the first row, in ascending Share, whose share it does not exceed, and gives up nothing past the last row; a world with no table gives up nothing at any size, so a portal that fills the screen is lit as the room behind it.",
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "share": {
+                "description": "The largest share of the display\u0027s height, in (0, 1], at which the row applies; rows ascend strictly.",
+                "type": "number"
+              },
+              "shadows": {
+                "description": "The finest shadow tier the view keeps: Off drops its cascades, so its lights take the probes\u0027 answer. Absent keeps the world\u0027s.",
+                "enum": [
+                  "Off",
+                  "Low",
+                  "Medium",
+                  "High",
+                  null
+                ],
+                "default": null,
+                "title": "ShadowTier"
+              },
+              "ambientOcclusion": {
+                "description": "Whether the view keeps ambient occlusion: false drops it. Absent keeps the world\u0027s.",
+                "type": [
+                  "boolean",
+                  "null"
+                ],
+                "default": null
+              }
+            },
+            "required": [
+              "share"
+            ],
+            "additionalProperties": false,
+            "title": "WorldNestedViewQuality"
           },
           "default": null
         }

@@ -147,10 +147,13 @@ be baked on demand and cached where a triangle asset cannot.
   posing while any rate view's `camera.MaySee` or any cascade's `cull.Keeps`
   keeps its sphere, and the occlusion result the kernel writes
   per draw (`sdfMeshOcclusionVisibleRW[draw]`, `state.x`) is read back by
-  nothing. What is read back is `SdfPortalSight`'s own queries:
+  nothing. The selection marks (one stage in eight records which draws a
+  phase emitted and at which level, `SdfWorldTables.ObserveSelectionMarks`)
+  are per-draw submission evidence, read only as counters so far, and late
+  by a few frames. What else is read back is `SdfPortalSight`'s own queries:
   the kernel's sight step tests "Four rows per screen" against the same
   pyramid through `sdfOcclusionMaySee` and writes one word per query at
-  `SDF_SIGHT_COUNT_BASE + id.x`; `SdfMeshOcclusion.ReadSight` hands that range
+  `SDF_SIGHT_COUNT_BASE + id.x`; `SdfMeshOcclusion.ReadCounts` hands that range
   back once the slot completes, and `SdfPortalSight` applies a result only to
   the query and camera it was captured for ("Unknown, changed and retired
   observations always keep demand"). It is a reusable per-query box test with
@@ -917,9 +920,114 @@ discipline (install before publish, coarse fallback resident) as D9's model.
 Each step is one lane with a check on the debug world at the highest quality.
 Counted work stands beside every frame time, and frame times are read in the
 lead's settle windows, never by a lane under load. The steps run on
-Direct3D 12 with a windowed Vulkan leg. Steps in the
+Direct3D 12 with a windowed Vulkan leg (RTX 4070 first; RTX 2060 and Steam
+Deck legs run once the RTX 4070 meets both bars). Steps in the
 visibility plan keep their names there; this order interleaves with V1 and V2
 as noted.
+
+**One error budget along one chain of meshes.** Today tiers (`SdfMeshTier.PixelShare`
+= 0.5) and collapse levels (`SdfMeshDetail.CoarserPixels` = 1,
+`SdfMeshCollapse.CellShares` at 0.25 and 2 cells) disagree and measure screen
+size differently: the tier rule uses straight-line distance over the focal
+length (`SdfMeshDemand.PixelAt`), the level rule depth along the view direction
+stretched for the view's corners (`SdfMeshDetail.Of`). Four consequences
+follow. The finest mesh is almost never drawn: at the tier it asked for, a
+group's first coarser level always qualifies and its second about half the
+time, so level 0 is drawn only for boxes touching the eye plane, skinned and
+glass draws, and groups already at their finest tier. It still occupies memory:
+level 0's index and material data are about 1.1 GB of a 3 GB mesh region at 71
+million triangles (reasoned), and building the other levels takes 28.7% of the
+bake's CPU time. One demanding copy sets the detail of every copy: a shared
+prototype is baked once, at its largest placement scale (`WorldRigidAssets`)
+and at the finest tier any copy asks for from any view (`CopiesPixel` in
+`SdfMeshPathBake`), so one fern beside the player sets the detail of every
+fern. And nothing stands in far away: the levels stop at a two-cell error.
+Unify them around one error budget (display pixels for views, texels for shadow
+maps; the recorded one-pixel and one-texel rulings stay the engine defaults and
+authored quality tables may choose others, the one look value whose default is
+a ruling and not a neutral value) in five steps:
+
+1. **Count drawn triangles per level and tier, and unselected-level bytes.**
+   Built by the first wave's `floor` lane, because they size a floor and a
+   detail tier: one stage in eight of each raster pass marks the draws it
+   selects with their level (`SdfWorldTables.ObserveSelectionMarks`), and
+   `world.residency`'s selection line prints the triangles each pass draws by
+   level and by tier and the placed mesh bytes no pass selected. Its first
+   readings are owed to a GPU leg. Two records disagree on what the levels save
+   (the mesh-bake reference and the handbook say 11% and 6% of the stored
+   triangles; a later cold bake read 29% and 19%), and the counter settles it.
+2. **Unify screen-size projection in one function.** Replace all four separate
+   screen-size calculations (`SdfMeshDemand.PixelAt`, `SdfMeshDetail.Of`,
+   `WorldCreationInstances`, `WorldSeatViewports.PixelsPerMetre`) with one
+   function using straight-line distance so turning in place never shifts
+   detail; pass the scale to shaders as data. Then either re-pitch tiers and
+   levels against each other or store level-0 data so it can be evicted once
+   lighting stops tracing it ([illumination](illumination.md#after-the-gpu-trace)).
+3. **Audit every tier offline** (`puck mesh audit --cpu --tier`) before
+   building the chain.
+4. **Build one chain of rungs per shape.** Hold the requested tier's levels,
+   the streaming floor, and tiers other copies ask for so each copy and cascade
+   selects the coarsest qualified rung for its budget.
+   - *Recorded deviation over authored bounds.* Every rung records its
+     bidirectional deviation from the authored field via
+     `SdfMeshFieldLevels.Measure` (covering lost parts, materials and normals)
+     sampled over the authored group's own bounds, stored under the rung's mesh
+     identity. Never qualify a rung with `SdfMeshAudit`, whose grid starts from
+     the output mesh's box: if one of two parts vanishes the box shrinks to the
+     part left and the check never samples where the other was, so the audit
+     stays a diagnostic. The measure samples, so a feature thinner than its
+     sampling, or two surface crossings between two samples of the same sign,
+     can be missed; a group with such features is marked not qualified so
+     consumers keep the finer rung. Every rung is measured against the one
+     reference because the errors of two tiers cannot be put in order without
+     measuring both: a collapse's error only grows along one contour's
+     simplifications (`SdfMeshCollapse.Levels`), a level can be missing, a
+     tier contoured afresh starts from different geometry, and the floor's
+     acceptance test certifies coverage, not deviation.
+   - *Stepping down and switching.* Step down only when recorded deviation fits
+     the consumer's budget, budgeting switches on the sum of both rungs'
+     deviations. A coverage-only floor draws only for missing meshes and is
+     never stepped down to by choice. Rungs coarser than the floor wait for
+     appearance filtering (normal variance into roughness, lost materials into
+     a blend). Cap the bake-time audit cost: if recording deviations adds more
+     to the cold bake than chain draws save, stop the chain at the floor.
+   - *Checks:* walking up to one tree changes no distant tree's triangles; a
+     large distant copy and a small nearby copy each draw their own rung; thin
+     and offset contours hold across tier changes in camera and shadow views;
+     a rung exceeding budget is never taken; a two-part group losing a part at
+     a coarse rung is marked not qualified.
+5. **Thin ground cover with distance** (after [visibility V1b](visibility.md#the-build-order)).
+   Give each placed plant a stable rank derived from its occurrence identity
+   ([dense landscapes](dense-landscapes.md)) and evaluate an authored curve row
+   (`WorldGaitDrivers.CurveHeight`; default keeps everything) to drop whole
+   plants cleanly (never fading pixels), while the ground's shading program
+   covers lost density. Check: no popping in a presented walk, in the camera's
+   view or in shadows.
+
+The floor then does three jobs: it shows when a mesh has not arrived, it is
+what a far cascade draws, and it is where a distant copy ends up; the lighting
+reads it only where [illumination's lighting check](illumination.md#after-the-gpu-trace)
+passes. Nanite keeps its coarsest page resident for the same reason, and the
+debug world's coarsest tier has about a twentieth of its finest's triangles
+(measured once), so distant draws save much. Puck has an advantage a mesh-only
+engine lacks: every rung is checked against the authored field, so no
+separately authored stand-in is needed. Keeping several tiers costs bytes from
+the mesh library's one budget, a rung that fails its audit keeps its group at a
+finer tier than the chain promised, re-pitching the rules changes the look,
+and the full mesh cannot leave memory before the lighting stops tracing it.
+Still to find out: how many triangles each level and tier draws, whether
+recording a rung's deviation costs too much bake time, and whether switching
+tiers per copy pops on thin parts in motion
+([what would change the answer](rendering-research/step-designs.md#what-would-change-the-answer)).
+Options not taken: keeping both rules; more collapse levels, already measured
+and rejected (four levels down to 128 cells took an oak only from 3,052
+triangles to 1,440, and three field-built experiments are [D1](#d1-the-unit-of-detail)'s),
+so the far shadow map gets a coarser tier instead; one mesh over many copies
+(D3, G7) and clusters inside a draw (D4, G9) stay measured exceptions against
+the chain. Not checked: the other two places that compute size on screen (a
+reviewer's reading); that Nanite selects a cut per instance (the source tests
+parent against child); Dreams' remark that thinning per pixel breaks temporal
+history, which is why thinning removes whole plants.
 
 | Step | Lands | Check on `worlds/debug` | Success line |
 |---|---|---|---|
@@ -929,9 +1037,9 @@ as noted.
 | G4. Slot-resolved rigid draws (V2b's design) | A rigid dynamic draw reads its slot's live and previous transforms; selection rows derived from the slot's rest box | `dotnet-trace` of the frame thread at flight B: `sdf.instances records.changed` falls from about two thousand to the moved slots' count; `world.debug-view motion` still on a moving body; a straddling body clipped on both sides at `debug.go portals` | Records restaged per moved body equal its slots, not its groups |
 | G5. Occlusion-aware rate floor (the frame-bar CPU item) | The sight step's query list grown past `MaxScreenSurfaces` and fed one swept reach box per rated body per view; a receiver-box query in the cascade kernel; `RateOf` rating a body no query saw, no receiver kept and no consumer read at the slowest nonzero tier | Flight B facing the motion gallery through the stairwell wall: `world.rates` lists the exhibits at the floor tier, with the query latency in frames printed beside; stepping into the gallery in a presented burst; a body behind the wall whose shadow falls on the lit stair, and one whose glass or back surface feeds the far cascade's exit or optical layer, still posing at its shadow's rate; a camera cut onto a hidden body | Bodies behind the wall at the floor tier; no exhibit's presented pose older than one floor period plus the counted latency; every body a cascade's receivers keep rated as shown; a cut keeps demand until the first result for the new camera |
 | G6. Creation proxy and union parent | The alternatives rule in the kernel (a parent's record names its children's range), per-member pieces as the proxy's middle tier, the one-draw tier only where V2c's bound exists, parents per render class with a per-triangle source table, `SdfDressedPickMap.Resolve` taking the triangle, union parents above chunked unions | The Moth at 50 and 100 m draws its slots' count of records, and one per render class where its motion bound is derived; `world.counters gpu` draws and vertices at the garden crowd from the lawn; the hall's unions from the forest pose at (47.80, 0.02, -116.84); a glass-over-opaque creation (the lift's cab, or an exhibit the lane chooses) captured at parent distance against its children; `world.view.pick` on a parent naming the same child as a pick on the children at the same pixel; a parent and its children never both drawn (a count per pass) | Draws per distant creation fall to its slots, and to one per render class where admitted; the hall's far draws fall to its parents; no surface of one class lost behind a parent of another; picks agree; captures meet the reference |
-| G7. Stand parents for the forest (dense landscapes L4's far field) | A bake group over many static copies contoured as one region per render class, with a source table; the shared prototype path at D1's coarsest levels under V1's buckets as the comparison | `view.override layout three-quarter` then `view.override camera forest-overview`, and `body.pose spawn:forest 0` looking south: draws, vertices, candidates and cascade vertices against the shared path's; resident bytes of parents and children together (`world.residency`); cold derivation of the belt's parents and the re-derivation one moved tree costs; captures from the overlook and the road against the reference; the nested forest view's own counts; the frame cost on the Deck's leg in the lead's window | The overlook's far belt draws as parents at sub-pixel error and reads as a forest, and the parents beat the shared path on bytes, derivation and frame cost; where they read wrong the hybrid far tier is briefed, where they cost more the far field is the shared path (with parents shared over repeated arrangements), and the pixel rule is never loosened |
+| G7. Stand parents for the forest (dense landscapes L4's far field; measured exception after the chain) | A bake group over many static copies contoured as one region per render class, with a source table; compared against the chain of rungs above and the shared prototype path under V1's buckets (adopted only as a measured exception for repeated arrangements, never ahead of the chain) | `view.override layout three-quarter` then `view.override camera forest-overview`, and `body.pose spawn:forest 0` looking south: draws, vertices, candidates and cascade vertices against the shared path's; resident bytes of parents and children together (`world.residency`); cold derivation of the belt's parents and the re-derivation one moved tree costs; captures from the overlook and the road against the reference; the nested forest view's own counts; the frame cost on the Deck's leg in the lead's window | The overlook's far belt draws as parents at sub-pixel error and reads as a forest, and the parents beat the shared path on bytes, derivation and frame cost; where they read wrong the hybrid far tier is briefed, where they cost more the far field is the shared path (with parents shared over repeated arrangements), and the pixel rule is never loosened |
 | G8. Demand tiers' arrival contract | The tier, its key and the report are built ([D7](#d7-the-detail-budget)). What remains is arrival: a demand read ahead along the camera's bound, cancellation of a demand that leaves a view's reach, and the one in-flight budget. [The streaming plan](streaming-and-memory.md#the-build-order) owns all three with its prediction and reservation decisions; this row is its check on a creation | Spawn in the studio and walk to the Moth's face at boom 1.5 m, retreat, and cut back; open a portal onto a second demanding view: owed error and interval per group over the walk, peak resident and in-flight bytes | Owed error never worse than one tier below demand for longer than the landing budget's frames on any of the four runs; peak bytes under the budget; no view ever refused, only owed |
-| G9. Clusters inside a draw (D4's experiment) | Flat clusters of the chosen level on V1's buckets, behind a lever | The terrain sector and the hall shell from inside, on the 2060 or at the Deck's resolution: candidates, survivors, pyramid tests, rejected triangles, reference writes; moving, cut, portal-clipped and bent geometry captured | Kept only if it removes measured geometry-bound work without a missed surface, a swapped pick or a stale bound |
+| G9. Clusters inside a draw (D4's experiment) | Flat clusters of the chosen level on V1's buckets, behind a lever, admitted only on a cascade-pass measurement on a bar device where published cluster gains are largest | The terrain sector, hall shell and cascade passes on a bar device: candidates, survivors, pyramid tests, rejected triangles, reference writes; moving, cut, portal-clipped and bent geometry captured | Kept only if it removes measured geometry-bound work without a missed surface, a swapped pick or a stale bound |
 
 G3a shares no files with V2a and V1a and runs beside them; G3b waits on moving
 blends publishing its margin. G4 is V2b and lands where the visibility plan

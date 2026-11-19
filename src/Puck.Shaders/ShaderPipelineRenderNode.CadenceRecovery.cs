@@ -6,9 +6,12 @@ namespace Puck.Shaders;
 public sealed partial class ShaderPipelineRenderNode {
     // Every graph checkpoints the existing tracker at the start of a frame's recording rather than planning a second set of
     // states, so an abandoned recording, whose barriers never reach the GPU, leaves every instance in the state the GPU
-    // still has. Retained and history storage also checkpoint their content versions.
+    // still has. Retained and history storage also checkpoint their content versions, and history its cursor. The same
+    // checkpoint rolls back a frame whose submission an open batch deferred and whose hand-over then failed
+    // (RollBackHandOver).
     private readonly record struct CadenceResourceCheckpoint(RuntimeResource Resource, int Instance,
-        bool Initialized, bool HasOverride, bool OverridePlanned, ShaderPipelineAccessState Override, PackageAlias Alias, bool ExportWritten);
+        bool Initialized, bool HasOverride, bool OverridePlanned, ShaderPipelineAccessState Override, PackageAlias Alias, bool ExportWritten,
+        int HistoryLatest);
     private readonly record struct CadenceVersionCheckpoint(CadenceVersion Version, long Generation, bool Valid);
 
     private CadenceResourceCheckpoint[] m_cadenceResources = [];
@@ -42,7 +45,7 @@ public sealed partial class ShaderPipelineRenderNode {
     private void ConfigureCadenceRecovery() {
         m_cadenceRecording = false;
         m_cadenceResources = [.. m_resources.SelectMany(selector: static resource => Enumerable.Range(count: resource.Count, start: 0)
-            .Select(selector: instance => new CadenceResourceCheckpoint(Alias: default, ExportWritten: false, HasOverride: false, Initialized: false, Instance: instance, Override: default, OverridePlanned: false, Resource: resource)))];
+            .Select(selector: instance => new CadenceResourceCheckpoint(Alias: default, ExportWritten: false, HasOverride: false, HistoryLatest: 0, Initialized: false, Instance: instance, Override: default, OverridePlanned: false, Resource: resource)))];
         m_cadenceVersions = [.. m_resources.SelectMany(selector: static resource => resource.Cadence)
             .Select(selector: static version => new CadenceVersionCheckpoint(Generation: 0, Valid: false, Version: version))];
     }
@@ -65,6 +68,7 @@ public sealed partial class ShaderPipelineRenderNode {
                 Override = resource.Override[instance],
                 Alias = resource.Alias,
                 ExportWritten = resource.ExportWritten,
+                HistoryLatest = resource.HistoryLatest,
             };
         }
         for (var index = 0; (index < m_cadenceVersions.Length); index++) {
@@ -73,17 +77,27 @@ public sealed partial class ShaderPipelineRenderNode {
             m_cadenceVersions[index] = checkpoint with { Generation = checkpoint.Version.Generation, Valid = checkpoint.Version.Valid };
         }
     }
-    private void CommitCadenceFrame() {
+    // Commits the frame's history and initialization once its submission is made: the history cursors advance and the
+    // recording's checkpoint closes, so a failure after the submission (an export, a readback) rolls nothing back. A
+    // submission an open batch still defers keeps the checkpoint until its hand-over's result is known
+    // (SettleHandOver), which rolls the frame back if the submission never reached the queue.
+    private void CommitCadenceFrame(IGpuSubmissionFence fence) {
         foreach (var resource in m_resources) {
             if (!resource.HistoryWriting) { continue; }
             resource.HistoryLatest = ((resource.HistoryLatest + 1) % resource.Count);
             resource.HistoryWriting = false;
         }
         m_cadenceRecording = false;
+        m_handOverPending = (fence.ReachedQueue ? null : fence);
     }
     private void AbortCadenceFrame() {
         if (!m_cadenceRecording) { return; }
         m_cadenceRecording = false;
+        RestoreCadenceCheckpoint();
+    }
+    // Puts every instance, content version, history cursor and the initialization back as the frame's checkpoint holds
+    // them, the state the GPU still has when nothing the frame recorded ran, and owes the staged regions again.
+    private void RestoreCadenceCheckpoint() {
         foreach (var checkpoint in m_cadenceResources) {
             var resource = checkpoint.Resource;
             var instance = checkpoint.Instance;
@@ -94,6 +108,7 @@ public sealed partial class ShaderPipelineRenderNode {
             resource.Override[instance] = checkpoint.Override;
             resource.Alias = checkpoint.Alias;
             resource.ExportWritten = checkpoint.ExportWritten;
+            resource.HistoryLatest = checkpoint.HistoryLatest;
             resource.HistoryWriting = false;
         }
         foreach (var checkpoint in m_cadenceVersions) {
@@ -117,6 +132,12 @@ public sealed partial class ShaderPipelineRenderNode {
         }
     }
     private void ReleaseCadenceRecovery() {
+        // The graph's export image is released with it, so the latest frame's hand-over is settled while it still exists.
+        try {
+            SettleHandOver();
+        } catch (DeviceLostException) {
+            // Settled as far as a lost device allows; nothing on it runs again.
+        }
         m_cadenceRecording = false;
         m_cadenceResources = [];
         m_cadenceVersions = [];

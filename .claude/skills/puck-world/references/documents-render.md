@@ -195,6 +195,21 @@ zero fade ticks, and a queue that cannot progress are refused by name. The
 shipped presets currently use K = 0/1/2 and F = 0 with zero fade ticks and
 `instant`; the final sky defaults remain the P18-14 decision.
 
+A candidate competes for a slot only while its delivered illuminance is above
+zero, whatever its mode. The slots keep identities; the shadow roles go to the
+slotted lights by what each emits in the frame (`SdfLights.RoleSlot`): the
+brightest holds the primary role (the near and far cascades, and the frame's
+key light, `SdfLights.Key`), the next the secondary (one cascade), and any other
+slotted light takes the probes' answer. The `shadowSlots` report
+`world.lighting` prints names each slot's `role=`. A directional with no `angularRadius` is a point source;
+the standard package authors its own lights' soft edges.
+
+`render.nested` (`WorldNestedViewQuality` rows, ascending `share` of the
+display's height) says what a nested view gives up at each presented size:
+`shadows` (the finest tier it keeps, `Off` drops its cascades) and
+`ambientOcclusion`. No table gives up nothing; the standard authors one in
+`worlds/standard/quality.puck`.
+
 `WorldShadowAllocator` detects crossings on delivered ticks and derives fade
 progress only from the presented tick. Fixed current and prior handoff records
 hold integer crossing ticks and durations, 32 bytes each per fade slot for
