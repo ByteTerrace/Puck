@@ -150,6 +150,7 @@ namespace Puck.World.Server;
 /// no anisotropic shaping row — carried for the same forward-compatibility reason as <paramref name="Orientation"/>).</param>
 /// <param name="OverlayVelocity">The timed impulse overlay's (the dash) world-space velocity, if one is live.</param>
 /// <param name="OverlayRemainingTicks">Engine ticks remaining on the live overlay — a duration, not a deadline.</param>
+/// <param name="TimedMove">The active authored displacement and yaw, with their progress.</param>
 /// <param name="ChannelTimerTicks">Per-ordinal remaining ticks on an in-flight timed <c>body.press</c> — a
 /// duration per ordinal, copied defensively (never the live array).</param>
 /// <param name="RelativeRemainders">Conserved Q32.32 fractions below scalar precision.</param>
@@ -259,6 +260,7 @@ public readonly record struct WorldBodyTransferState(
     IReadOnlyList<PlayerIntent> TapeIntents,
     IReadOnlyList<ulong> TapeRemainingTicks,
     WorldContinuumTrajectory? PendingContinuum,
-    WorldBodyScriptActors ScriptActors);
+    WorldBodyScriptActors ScriptActors,
+    WorldTimedBodyMove TimedMove = default);
 /// <summary>Actor provenance parallel to the body's existing duration stores; no input duration is duplicated.</summary>
 public readonly record struct WorldBodyScriptActors(Principal[] Timers, Principal[] Pending, IReadOnlyList<Principal> Tape);

@@ -345,6 +345,8 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
                 Inputs = WorldInputPublication.ForOwner(redacted.Inputs, observation.Session, ref m_inputDisclosure),
             };
             redacted = redacted with { Revision = checked((int)m_cursor.Sequence) };
+            redacted = server.PresentCues(redacted, m_view,
+                fullBodies: server.Definition.Population.ObserverDisclosure.Mode == WorldObserverDisclosureMode.All);
             inner.DeliverSnapshot(snapshot: in redacted);
             FollowObserverDetach();
         } catch (Exception exception) {

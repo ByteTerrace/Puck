@@ -135,6 +135,10 @@ the input channel and timer states and owns its tuning and rig response. The
 Moth's [dash document](../debug/avatars/moth-dash.puck) supplies its burst; West/J activates it on Move.
 Run remains Shift while held, with N/left-stick press switching run on and off.
 
+`motion.puck` supplies `walkMotion()` and `easedTimedMove`. Use the latter
+in a kit action to specify its travel, signed yaw and duration with a smooth
+start and end. [Timed moves](../../.claude/skills/puck-world/references/documents-motion.md#timed-moves)
+
 The standard authors two bar layouts; every page fills the same twelve pad
 slots (the d-pad, LB, L3, the face buttons, RB and R3) in both. `wings` is the
 default, drawn with the `single` model: the mirrored six-slot diamonds (45/600

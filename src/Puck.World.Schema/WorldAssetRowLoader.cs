@@ -12,13 +12,48 @@ namespace Puck.World;
 /// so the load step has exactly one source of truth.
 /// </summary>
 public static class WorldAssetRowLoader {
-    private static bool TryLoad<TDocument>(string? documentDirectory, string source, out TDocument? document, out string? error) where TDocument : class {
+    private const string InlineJson = "data:application/json;base64,";
+
+    private static string? EmbeddedSource<T>(CanonicalDocument<T> content, string expectedHash) =>
+        string.Equals(content.Hash, expectedHash, StringComparison.Ordinal)
+            ? InlineJson + Convert.ToBase64String(content.Bytes) : null;
+
+    /// <summary>Whether the source is a self-contained audio asset rather than a filesystem path.</summary>
+    public static bool IsEmbeddedAudio(string source) => source.StartsWith(InlineJson, StringComparison.Ordinal);
+
+    /// <summary>Materializes the published audio assets so a remote listener needs no authority filesystem path.</summary>
+    public static WorldDefinition EmbedAudio(WorldDefinition definition) => definition with {
+        PatchesRaw = [.. definition.Patches.Select(patch => TryLoadPatch(definition.DocumentDirectory, patch, out var document, out _) &&
+            EmbeddedSource(SynthPatchCanonicalizer.Canonicalize(document!), patch.Hash) is { } source ? patch with { Source = source } : null).OfType<WorldPatch>()],
+        TunesRaw = [.. definition.Tunes.Select(tune => TryLoadTune(definition.DocumentDirectory, tune, out var document, out _) &&
+            EmbeddedSource(AudioCanonicalizer.Canonicalize(document!), tune.Hash) is { } source ? tune with { Source = source } : null).OfType<WorldTune>()],
+        Music = definition.Music?.Select(row => TryLoadMusic(definition.DocumentDirectory, row, out var document, out _) &&
+            EmbeddedSource(MusicCanonicalizer.Canonicalize(document!), row.Hash) is { } source ? row with { Source = source } : null).OfType<WorldMusicRow>().ToArray(),
+    };
+
+    private static bool TryLoad<TDocument>(string? documentDirectory, string source, out TDocument? document, out string? error, string? hash = null) where TDocument : class {
         document = null;
 
         if (string.IsNullOrWhiteSpace(value: source)) {
             error = "source is required.";
 
             return false;
+        }
+
+        if (IsEmbeddedAudio(source)) {
+            try {
+                var embedded = Convert.FromBase64String(source[InlineJson.Length..]);
+                if (!string.Equals(Puck.Assets.ContentPin.Compute(embedded).Hex, hash, StringComparison.Ordinal)) {
+                    error = "embedded audio source does not match its content pin.";
+                    return false;
+                }
+                document = JsonSerializer.Deserialize<TDocument>(embedded, DocumentJsonOptions.Shared);
+                error = document is null ? "embedded audio source parsed to no document." : null;
+                return document is not null;
+            } catch (Exception exception) when (exception is FormatException or JsonException) {
+                error = "embedded audio source is malformed.";
+                return false;
+            }
         }
 
         if (!WorldDocumentPaths.TryResolve(
@@ -104,7 +139,8 @@ public static class WorldAssetRowLoader {
             document: out document,
             documentDirectory: documentDirectory,
             error: out error,
-            source: row.Source
+            source: row.Source,
+            hash: row.Hash
         );
     /// <summary>Loads a <see cref="WorldPatch"/>'s referenced <c>puck.synthesizer-patch.v1</c> document.</summary>
     /// <param name="documentDirectory">The directory of the document that authored the row
@@ -118,7 +154,8 @@ public static class WorldAssetRowLoader {
             document: out document,
             documentDirectory: documentDirectory,
             error: out error,
-            source: row.Source
+            source: row.Source,
+            hash: row.Hash
         );
     /// <summary>Loads a <see cref="TableRow"/>'s referenced <c>puck.table.v1</c> document.</summary>
     /// <param name="documentDirectory">The directory of the document that authored the row
@@ -146,6 +183,7 @@ public static class WorldAssetRowLoader {
             document: out document,
             documentDirectory: documentDirectory,
             error: out error,
-            source: row.Source
+            source: row.Source,
+            hash: row.Hash
         );
 }
