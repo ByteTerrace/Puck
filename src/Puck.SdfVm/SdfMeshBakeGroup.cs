@@ -547,6 +547,7 @@ public class SdfMeshBakeGroup(int selector, bool dynamic) {
         }
         Geometry.AppendOperands(cell: SdfMeshTier.Cell(tier: Tier), transforms: transforms);
         Geometry.AppendTier(tier: Tier);
+        Geometry.AppendStepScale(program.StepScale);
         Geometry.Seal();
         Sealed = Geometry.Geometry;
         Form = Geometry.Form;

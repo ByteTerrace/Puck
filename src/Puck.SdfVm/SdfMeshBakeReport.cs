@@ -73,6 +73,12 @@ internal static class SdfMeshBakeReport {
         public long Merged;
         public long RefinedCells;
         public long Samples;
+        public long SampleHits;
+        public long SampleMisses;
+        public long ContourHits;
+        public long ContourMisses;
+        public long SimplifyHits;
+        public long SimplifyMisses;
         public long Softened;
         public long StopBatch;
         public long StopDrained;
@@ -92,6 +98,7 @@ internal static class SdfMeshBakeReport {
             WaitingGroups = FlyingGroups = WorkingGroups = 0;
             FrameGateWaitMax = FrameGateWaitTotal = FrameGateWaitsSlow = 0;
             Dispatches = Samples = Taps = Discarded = RefinedCells = CutEdges = Softened = Merged = Loaded = 0;
+            SampleHits = SampleMisses = ContourHits = ContourMisses = SimplifyHits = SimplifyMisses = 0;
         }
         /// <summary>Counts one wait for the bake's gate on the frame thread.</summary>
         /// <param name="waited">The wait, in Stopwatch ticks.</param>
@@ -113,12 +120,15 @@ internal static class SdfMeshBakeReport {
         }
 
         // The accounts as done-line fields: each stage's thread seconds, then the frames' use of their shares.
+        internal string DescribeCheckpoints() => string.Create(provider: CultureInfo.InvariantCulture,
+            handler: $"checkpoints=[sampling:{SampleHits}/{SampleMisses},contouring:{ContourHits}/{ContourMisses},simplification:{SimplifyHits}/{SimplifyMisses}]");
+
         internal string Describe(Func<string>? dispatches) {
             var stages = string.Join(separator: ",", values: Enum.GetValues<Stage>().Select(selector: stage => string.Create(provider: CultureInfo.InvariantCulture, handler: $"{stage.ToString().ToLowerInvariant()}:{(Interlocked.Read(location: ref StageTicks[((int)stage)]) / ((double)Stopwatch.Frequency)):0.0}")));
             var takes = Math.Max(val1: 1L, val2: Takes);
             var kinds = string.Join(separator: ",", values: Enumerable.Range(start: 0, count: KindNames.Length).Select(selector: kind => string.Create(provider: CultureInfo.InvariantCulture, handler: $"{KindNames[kind]}:{KindSamples[kind]}")));
 
-            return string.Create(provider: CultureInfo.InvariantCulture, handler: $" kinds=[{kinds}] cpu=[{stages}] batches={Batches} takes={Takes} idle={IdleTakes} stop=[taps:{StopTaps},samples:{StopSamples},batch:{StopBatch},drained:{StopDrained}] per-take=[waiting:{(WaitingGroups / ((double)takes)):0.0},flying:{(FlyingGroups / ((double)takes)):0.0},working:{(WorkingGroups / ((double)takes)):0.0}]{dispatches?.Invoke()} frame-gate=[max:{((FrameGateWaitMax * 1000d) / Stopwatch.Frequency):0.00}ms,total:{((FrameGateWaitTotal * 1000d) / Stopwatch.Frequency):0.0}ms,over-1ms:{FrameGateWaitsSlow}]");
+            return string.Create(provider: CultureInfo.InvariantCulture, handler: $" {DescribeCheckpoints()} kinds=[{kinds}] cpu=[{stages}] batches={Batches} takes={Takes} idle={IdleTakes} stop=[taps:{StopTaps},samples:{StopSamples},batch:{StopBatch},drained:{StopDrained}] per-take=[waiting:{(WaitingGroups / ((double)takes)):0.0},flying:{(FlyingGroups / ((double)takes)):0.0},working:{(WorkingGroups / ((double)takes)):0.0}]{dispatches?.Invoke()} frame-gate=[max:{((FrameGateWaitMax * 1000d) / Stopwatch.Frequency):0.00}ms,total:{((FrameGateWaitTotal * 1000d) / Stopwatch.Frequency):0.0}ms,over-1ms:{FrameGateWaitsSlow}]");
         }
     }
 
