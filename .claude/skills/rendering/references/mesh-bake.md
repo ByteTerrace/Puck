@@ -528,6 +528,34 @@ laws exercise that boundary.
   A stop that settles with `detail-bias` above zero is drawing coarser than
   half a pixel there: the demand is past the budget, which is the reading to
   act on, never a raised limit.
+- **A group arrives at its floor and keeps it.** A residency's group that
+  arrives with nothing to draw (no group at its selector, or one still bringing
+  its floor, `SdfMeshPathBake.Arrives`) plans its coarsest tier first
+  (`SdfMeshPathBake.Tiers`), so a place lands whole and coarse before it is
+  sharp, nearest first by the demand's priority. Once that floor has landed,
+  the next tier decision starts the demanded tier as the arrival's own bake
+  (`Group.FirstDetail`): no hold, outside `MaxInFlight` and the budget, as a
+  first plan at that tier would have baked. Until then the bake owes the frame
+  (`Owes`, `IrradiancePending`), so a lockstep still or `world.wait bakes`
+  never settles on floors. The detail lands ahead of the draws beside the
+  floor and keeps the floor with a claim of its own (`Group.KeptFloor`, taken
+  in `ShowReplaced`, the one place a replacement inherits from the group it
+  replaces); the kept floors are named ahead with the waiting products so
+  their words stay in the region. A finer tier the region refuses over a
+  standing kept floor is evicted to it at the next frame
+  (`SdfMeshPathBake.Evict`): the floor takes the draws at once where it was
+  baked from the geometry the plan reads, and is baked as a coarser
+  replacement otherwise; an evicted floor takes detail back only through the
+  budget. A group taken whole from the library, or replanned while it drew,
+  keeps no floor until it arrives again. `world.residency`'s floor line
+  (`SdfMeshPathBake.DescribeFloors`) counts floors shown, pending, empty,
+  failed and kept, groups with none, first details owed and landed,
+  evictions and their bytes, `holes` (groups in reach, demanded past a pixel,
+  drawing no standing mesh) and `hole-frames`, and the floors' bytes by
+  class. The floor is the coarsest rung only: a floor that meshes nothing is
+  counted `floor-empty` and its group goes straight to its detail, with no
+  finer rung tried and no coverage check yet
+  ([step 5](../../../../docs/plans/streaming-and-memory.md#step-5-the-floor-and-eviction)).
 - **A region refines only where its surface turns, and each region at its own
   factor.** `SdfSampledLattice.Refine` takes a factor per region
   (`SdfLatticeRegion.Factor`): `UnionFinal` asks each member's own
