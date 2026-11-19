@@ -62,7 +62,7 @@ public static partial class WorldPlacementStamp {
                 if (id == row.Id || !seen.Add(id) || !m_rows.TryGetValue(id, out var target) ||
                     !m_creations.TryGetValue(target.ShownPrototypeId, out var creation) || target.Solid is null ||
                     target.Deal is not null || target.Attach is not null || target.Inhabit is not null || !LiteralRoot(target) ||
-                    CreationMotion.Animates(creation.Document) || WorldStateDocumentValues.HasReference(creation.Document) ||
+                    CreationRig.Of(document: creation.Document).Animates || WorldStateDocumentValues.HasReference(creation.Document) ||
                     !CreationStampEmitter.EmitsContact(creation.EngineDocument)) {
                     return Invalid(out descriptor, out reason, $"{prefix}.targets '{id}' must name a distinct literal static contact placement.");
                 }

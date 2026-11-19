@@ -54,7 +54,7 @@ public sealed class MaxFiringsLawTests {
         Assert.Equal(expected: line.CheckUnits, actual: full.CheckUnits);
         Assert.Equal(expected: (1L * line.Cost.Effects), actual: line.FiringUnits);
         Assert.Equal(expected: (8L * full.Cost.Effects), actual: full.FiringUnits);
-        Assert.Equal(expected: 1L, actual: Assert.Single(collection: RuleWorkBudget.CountWriters(rules: [(rules[0], 8L)])).Value);
+        Assert.Equal(expected: 1L, actual: Assert.Single(collection: RuleWorkBudget.CountWriters(rules: [(rules[0], 8L, 0L)])).Value.Total);
     }
     // A pool sweep is priced at the pool's capacity, and its bound defers the instances past it to the next tick.
     [Fact]

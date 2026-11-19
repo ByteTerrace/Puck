@@ -38,21 +38,25 @@ public static partial class RuleCompiler {
         );
 
         try {
+            var localReads = new List<HashSet<int>>();
             var locals = CompileLocals(
                 context: context,
-                rule: rule
+                rule: rule,
+                reads: localReads
             );
             GateToken[] gate;
+            var gateReads = new HashSet<int>();
 
             // Each phase locates its own refusals, so a caller that knows the rule's index can name the authored
             // line rather than the whole rule.
+            context.LocalReads = gateReads;
             try {
                 gate = CompileGate(
                     context: context,
                     predicate: rule.Gate,
                     ruleName: rule.Name
                 );
-            } catch (RuleException error) { throw error.Within(segment: "gate"); }
+            } catch (RuleException error) { throw error.Within(segment: "gate"); } finally { context.LocalReads = null; }
 
             var effects = CompileEffects(
                 allowEmpty: !requireEffects,
@@ -137,7 +141,7 @@ public static partial class RuleCompiler {
                 PoolBindingSlot: poolBindingSlot,
                 PoolForEach: poolForEach,
                 Zones: context.Zones
-            ) { Iteration = context.Iteration, MaxFirings = (rule.MaxFirings ?? 0) };
+            ) { Deferred = DeferredLocals(gateReads: gateReads, localReads: localReads, count: compiledLocals.Length), Iteration = context.Iteration, MaxFirings = (rule.MaxFirings ?? 0) };
 
             return ((extend is null)
                 ? compiled
@@ -188,7 +192,7 @@ public static partial class RuleCompiler {
         if (rule.ForEach is { } forEach) {
             context.Iteration = context.CompileIteration(reference: forEach, ruleName: rule.Name.Value);
             if (context.Iteration is { } iteration) {
-                for (var index = 0; (index < iteration.Capacity); index++) { _ = InternKey(context: context, name: IndexKeyCache.Get(index: index)); }
+                for (var index = 0; (index < iteration.KeySpan); index++) { _ = InternKey(context: context, name: IndexKeyCache.Get(index: index)); }
             } else if (IteratesZones(forEach: forEach)) {
                 if (zones is null) {
                     throw new RuleException(
@@ -273,8 +277,10 @@ public static partial class RuleCompiler {
     /// list on the context so the gate and effects resolve <c>$local:</c> reads against it.</summary>
     /// <param name="rule">The authored rule.</param>
     /// <param name="context">The compile context, with its scope open.</param>
+    /// <param name="reads">The list that receives, per local in declared order, the ordinals of the earlier locals its
+    /// expression reads, or <see langword="null"/> when nothing records them.</param>
     /// <returns>The declared locals.</returns>
-    public static CompiledRuleLocal[] CompileLocals(Rule rule, RuleCompileContext context) {
+    public static CompiledRuleLocal[] CompileLocals(Rule rule, RuleCompileContext context, List<HashSet<int>>? reads = null) {
         ArgumentNullException.ThrowIfNull(argument: context);
         ArgumentNullException.ThrowIfNull(argument: rule);
 
@@ -293,6 +299,9 @@ public static partial class RuleCompiler {
 
         context.RuleLocals = compiled;
         for (var index = 0; (index < authored.Count); index++) {
+            var own = new HashSet<int>();
+
+            context.LocalReads = own;
             try {
                 CompileLocal(
                     compiled: compiled,
@@ -300,10 +309,51 @@ public static partial class RuleCompiler {
                     local: authored[index],
                     rule: rule
                 );
-            } catch (RuleException error) { throw error.Within(segment: $"locals[{index}]"); }
+            } catch (RuleException error) { throw error.Within(segment: $"locals[{index}]"); } finally { context.LocalReads = null; }
+            reads?.Add(item: own);
         }
 
         return [.. compiled];
+    }
+    /// <summary>Returns which locals a rule evaluates only when it fires: every local its gate does not read, directly
+    /// or through another local. A local's expression reads only earlier locals, so one walk from the last local back
+    /// closes the gate's reads over that relation.</summary>
+    /// <param name="gateReads">The locals the gate's compile resolved.</param>
+    /// <param name="localReads">Per local in declared order, the earlier locals its expression's compile resolved.</param>
+    /// <param name="count">The rule's local count.</param>
+    /// <returns>Per local, whether it is deferred to the firing; <see langword="null"/> when none is, or when a local
+    /// carries no recorded reads, so every local is judged before the gate.</returns>
+    public static bool[]? DeferredLocals(IReadOnlySet<int> gateReads, IReadOnlyList<IReadOnlySet<int>> localReads, int count) {
+        ArgumentNullException.ThrowIfNull(argument: gateReads);
+        ArgumentNullException.ThrowIfNull(argument: localReads);
+
+        if ((count == 0) || (localReads.Count != count)) {
+            return null;
+        }
+
+        var judged = new bool[count];
+
+        foreach (var ordinal in gateReads) {
+            judged[ordinal] = true;
+        }
+        for (var ordinal = (count - 1); (ordinal >= 0); ordinal--) {
+            if (!judged[ordinal]) {
+                continue;
+            }
+            foreach (var earlier in localReads[ordinal]) {
+                judged[earlier] = true;
+            }
+        }
+
+        var deferred = new bool[count];
+        var any = false;
+
+        for (var ordinal = 0; (ordinal < count); ordinal++) {
+            deferred[ordinal] = !judged[ordinal];
+            any |= deferred[ordinal];
+        }
+
+        return (any ? deferred : null);
     }
 
     // A rule iterates its own zone table when its `forEach` is the reserved word alone (RuleFacts.ForEachZones): the

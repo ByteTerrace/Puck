@@ -52,7 +52,7 @@ public sealed class WorldFactsCompileContext : RuleCompileContext {
         var owner = WorldFactsVocabulary.CompileInputOwner(string.Join(':', call.Texts()), this, ruleName);
 
         Needs.Add(facet: FacetRef.Of<IWorldInputEvents>());
-        return new WorldInputIteration(owner, WorldInputCatalog.For(definition: Definition).HistoryCapacity(ingressCapacity: (Definition.InputHistory?.EventCapacity ?? 256)));
+        return WorldInputIteration.For(definition: Definition, owner: owner);
     }
 
     /// <inheritdoc/>
@@ -507,7 +507,7 @@ public static partial class WorldFactsVocabulary {
                 var pattern = WorldFactsOperandFamily.CompileInputPattern(consume.Pattern, context, rule);
 
                 return new WorldInputConsumeEffect(WorldFactsOperandFamily.CompileInputOwner(consume.Owner, context, rule),
-                    pattern, WorldInputCatalog.For(definition: context.Definition).PatternWork(pattern, (context.Definition.InputHistory?.EventCapacity ?? 256)),
+                    pattern, WorldInputCatalog.For(definition: context.Definition).PatternWork(pattern, (context.Definition.InputHistory ?? new WorldInputHistory()).EventCapacity),
                     $"consumeInput {consume.Owner} {consume.Pattern}");
             }),
             BodyMotionArm<WorldEffect.SetVerticalVelocity>(discriminator: "setVerticalVelocity"),

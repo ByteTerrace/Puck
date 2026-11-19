@@ -4,24 +4,29 @@ namespace Puck.World.Authoring;
 
 /// <summary>Maps shapes to the root or to the nearest independently moving part.</summary>
 public sealed class CreationMotionPlan {
-    /// <summary>Compiles actual motion owners, including timeline poses and part followers.</summary>
-    public CreationMotionPlan(CreationDocument document, IReadOnlyDictionary<string, string>? partDynamics = null) {
-        var shapes = (document.Shapes ?? []);
-        var parents = new int[shapes.Count];
+    /// <summary>Initializes a new instance of the <see cref="CreationMotionPlan"/> class: a slot for the root and one for
+    /// each shape with a writer of its own (<see cref="CreationRig.Owner"/>), and the render document with every seam the
+    /// bake may not skin partitioned by owner.</summary>
+    /// <param name="rig">The rig the creation is played by: a look's (<see cref="CreationRig.Follow"/>) when its part
+    /// followers move shapes.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="rig"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException">The creation carries noise relief and a shape moves on its own.</exception>
+    public CreationMotionPlan(CreationRig rig) {
+        ArgumentNullException.ThrowIfNull(argument: rig);
 
-        CreationMotion.ResolveParents(parents: parents, shapes: shapes);
+        var document = rig.Document;
+        var shapes = (document.Shapes ?? []);
+        var parents = rig.Parents;
+
         ShapeSlots = new int[shapes.Count];
         var owners = new List<int>();
-        var parts = ((partDynamics is null) ? null : CreationPartCompiler.Compile(document: document));
         var followed = new HashSet<int>();
 
-        if (partDynamics is not null) {
-            foreach (var name in partDynamics.Keys) {
-                if (parts!.TryResolve(partId: name, transformSlot: out var index)) { followed.Add(item: index); }
-            }
+        for (var index = 0; (index < shapes.Count); index++) {
+            if ((rig.Writers(shape: index) & CreationRigWriters.Follower) != 0) { _ = followed.Add(item: index); }
         }
         for (var index = 0; (index < shapes.Count); index++) {
-            var own = ((CreationMotion.Owner(document: document, index: index, parents: parents) == index) || followed.Contains(item: index));
+            var own = (rig.Owner(shape: index) == index);
 
             if (own) {
                 owners.Add(item: index);
@@ -35,7 +40,7 @@ public sealed class CreationMotionPlan {
             throw new ArgumentException(message: "Noise relief requires every shape to ride the creation root; independently moving parts cannot share its field.", paramName: nameof(document));
         }
         m_operands = CreationMotion.OperandShapes(keys: ShapeSlots, shapes: shapes);
-        var rejected = CreationMotion.CreasedGroups(document: document);
+        var rejected = CreationMotion.CreasedGroups(rig: rig);
 
         // A group an operand cuts bakes one piece a surface owner, each riding that owner's slot alone.
         rejected.UnionWith(other: CreationMotion.SharedOperandGroups(keys: ShapeSlots, operands: m_operands, shapes: shapes));
@@ -116,7 +121,7 @@ public sealed class CreationMotionPlan {
     /// <returns><see langword="true"/> when one of the owner's partitions borrows the shape.</returns>
     public bool BorrowedBy(int shape, int slot) =>
         (m_carves[shape] && (ShapeSlots[shape] != slot) && m_partitions.Values.Contains(value: (m_groups[shape], slot)));
-    /// <summary>Returns whether a shape rides an operand owner (<see cref="CreationMotion.OperandShapes(CreationDocument)"/>):
+    /// <summary>Returns whether a shape rides an operand owner (<see cref="CreationMotion.OperandShapes(CreationRig)"/>):
     /// a cutter moving alone, which the group it cuts reads where it stands.</summary>
     /// <param name="shape">The shape's index.</param>
     /// <returns><see langword="true"/> for an operand shape.</returns>

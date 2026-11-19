@@ -1293,9 +1293,13 @@ first; then step 0's baseline legs (`puck benchmark --route seams`, both backend
 quiet window), steps 1,
 2 and 3's windowed readings and step 7's remaining implementation after its
 contiguous fallback, shared retirement timeline, destination page proofs,
-native-pool pressure trim and Vulkan's ordered binding door: native sparse
-resource ownership, Direct3D 12 tile mappings, page admission and pressure
-unmapping/compaction. Mesh regions still use contiguous storage.
+native-pool pressure trim, Vulkan's ordered binding door and Direct3D 12's
+mapped regions (`IGpuMappedBuffer`, `DirectXGpuMappedBuffer`: the mesh region
+and the probe scene back 1 MiB chunks of one reserved buffer, grow without a
+second buffer and give back chunks no placement covers): Vulkan sparse
+resource ownership behind the same interface, page-only reservation credit
+with pool-owned slack, and physical compaction. Vulkan mesh regions still use
+contiguous storage.
 The remaining indexed-read prototype window uses frozen `e9c1d485c9`;
 current hardware qualification reads the 4070, 2060 and Deck, then
 [what step 3 left](streaming-and-memory.md#step-3-one-reservation). The plan
@@ -1304,6 +1308,20 @@ and each step's check, on [the residency decision](../decisions/residency.md):
 the residency wait, background GPU work's budget, the region's budget, staging
 and every memory owner are its steps. This packet holds the defects beside it.
 
+- [high] A debug-world boot whose meshes are not stored (any bake-identity
+  change) builds 55 residencies: each `self` and `wonderland` session screen
+  renders a residency of its own of the boot world
+  (`WorldScreenBinder.CreateSessionResidency`'s `[world.view: … renders a
+  residency of its own …]` line), nested sessions add more, and
+  `WorldViewGraphHost.ReserveArrivals` keeps every one rendering while its
+  meshes arrive. On the RTX 4070 the device pool then held 15.5 GB, 14.3 GB of
+  it fixed (each session's cascades: `session/sdf.world$shadowFarOptical` and
+  `$shadowNearOptical` 2.57 GB each, four depth and exit families 0.86 GB
+  each), the 8 GiB profile cap refused 16,467 workspace admissions, and the
+  world residency had baked 30 of 7,544 groups after 211 s. The fix owes the
+  memory bar: a session screen of the same world either shares the boot
+  residency's meshes or holds no cascades of its own until it is visible, and
+  arrival does not keep nested windows of a world that is still arriving.
 - [medium] Before sparse external targets are used, retain the exact host-word
   coverage of disjoint writes across remapping. `GpuRegion.StageOwed`
   (`src/Puck.Abstractions/Gpu/Residency/GpuRegion.cs`) re-owes the known prefix;
@@ -3956,9 +3974,10 @@ and calibration, delivered cues, haptics) and the standard package's judge.
 - Its last stage, a crowd of performers at the frame bar, waits on
   [virtual geometry](virtual-geometry.md#d2-bounds-for-skinned-and-multi-slot-draws)'s
   bounds for many-part bodies and on the benchmark's remote route.
-- The pose-clip design removes the rig's caps on swings, slides, drivers and
-  effectors ([the caps](instrument-play/pose-clips.md#9-the-caps-come-off)).
-  A world's own creations then pay a counted cost. A look that arrives with a
+- The rig's caps on swings, slides, drivers and effectors are removed
+  ([the caps](instrument-play/pose-clips.md#9-the-caps-come-off)), and a
+  world's own creations pay a counted cost (`sdf.creations.terms.evaluated`,
+  `sdf.creations.effectors.solves`). A look that arrives with a
   visiting character is work another player's client must do, and nothing
   budgets its terms, effectors and transform slots. Admitting a visiting
   look's rig waits on that budget, which the plan that admits visiting looks
@@ -3981,14 +4000,15 @@ reversal brake, then a sitting.
 - [high] Engine gaps [instrument and dance play](instrument-play.md#the-engine-gaps)
   names, each with a lane in that plan's first wave and ahead of further rig
   or move authoring: a creation's poses do not blend and a driver's weight
-  cannot be limited to some shapes (`FrameDocument`, `CreationDocument.MaxDrivers`);
+  cannot be limited to some shapes (`FrameDocument`, `CreationDriverDocument`);
   an effector cannot aim at a point on its own creation
   (`CreationEffectorTargetDocument`); no driver reads the seat's input, so a
   press reaches the rig a tick late; and no motion operation turns a body
   through an angle or moves it along an eased path over a duration
   (`BodyMotionOp`, `WorldEffect.PlanarImpulse`).
   [Pose clips, body parts and reach](instrument-play/pose-clips.md) designs
-  the first three, and its steps are the build lane's order.
+  the first three, and its steps are the build lane's order; steps 1 to 3 (the
+  compiled rig, its reads and the caps) are built, so step 4 is next.
 
 - A reversal should brake faster than it accelerates: `ShapeWholeVelocityRow`
   converges at the engage rate whenever the stick is deflected, so a full
@@ -4058,12 +4078,12 @@ the model.
   camera application start the body at the perceiving pose. The play wheel's four
   rings are full (`debugRings`), so Free Cam is F9 only; a pad control needs a
   ring or a page entry.
-- [medium] Nothing drives controller output: no `Puck.World*` code references
-  `IGamepadOutput`, and cartridge rumble (`IFeedbackMachine.MotorLevel`) has
-  no consumer outside `Puck.Machines`. Wire a machine's motor to the engaged
-  seat's pad, and authored haptics. A pulse on the beat is the first authored
-  consumer ([instrument and dance play](instrument-play.md#sound), a lane of
-  its first wave).
+- [medium] Cartridge rumble is unwired: `WorldHapticDirector` now drives
+  `IGamepadOutput.Rumble` from authored `haptics` rows (with
+  `worlds/standard/instrument.puck`'s beat pulse as the first authored consumer;
+  [instrument and dance play](instrument-play.md#sound)), while cartridge
+  rumble (`IFeedbackMachine.MotorLevel`) still has no consumer outside
+  `Puck.Machines`. Wire a machine's motor to the engaged seat's pad.
 - The in-world computer runs programs (the owner's direction): the desktop
   share is one and a typing tutor another, switched on the computer itself
   with the screen showing which is live. The tutor is world-native: lessons

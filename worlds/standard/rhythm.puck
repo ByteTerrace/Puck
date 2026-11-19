@@ -50,7 +50,7 @@ rule template judgeResult(s, length, limit) {
   judge[$"status{s}"] = ((got == 0) and (missed + 1 >= limit)) ? 2 : ((at + advance >= length) ? 1 : 0)
 }
 
-template rhythmJudge(music, presses, phrase, seats = 1, windows = rhythmWindows, missLimit = 2) {
+template rhythmJudge(music, presses, phrase, seats = 1, windows = rhythmWindows, missLimit = 2, extraWorldRows = []) {
   let steps = length(phrase)
 
   state {
@@ -91,6 +91,14 @@ template rhythmJudge(music, presses, phrase, seats = 1, windows = rhythmWindows,
           kind: Int
           capacity: steps
           cells: map(range(0, steps), i => { key: $"{i}", value: 0 })
+        }
+      }
+      for extra in extraWorldRows {
+        row {
+          name: extra.name
+          kind: extra.kind
+          capacity: extra.capacity
+          cells: extra.cells
         }
       }
     }

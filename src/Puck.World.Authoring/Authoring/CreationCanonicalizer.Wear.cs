@@ -6,7 +6,7 @@ using Puck.Maths;
 namespace Puck.World.Authoring;
 
 public static partial class CreationCanonicalizer {
-    private static void ValidatePaletteLayers(PaletteEntryDocument entry, ShapeLookup lookup, IReadOnlyList<ShapeDocument> shapes, List<DocumentValidationError> errors, int index) {
+    private static void ValidatePaletteLayers(PaletteEntryDocument entry, CreationShapeLookup lookup, IReadOnlyList<ShapeDocument> shapes, List<DocumentValidationError> errors, int index) {
         Vector3 Resolve(string color) {
             if (
                 !HexColor.TryParse(

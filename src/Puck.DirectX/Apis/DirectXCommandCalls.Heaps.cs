@@ -31,6 +31,26 @@ public unsafe partial interface IDirectXCommandCalls {
     /// <param name="resource">Receives the resource on success, owned by the caller.</param>
     /// <returns>The call's result.</returns>
     HRESULT CreatePlacedResource(ID3D12Heap* heap, ulong offset, D3D12_RESOURCE_DESC* description, D3D12_RESOURCE_STATES initialState, D3D12_CLEAR_VALUE* clearValue, ID3D12Resource** resource);
+    /// <summary>Asks <c>ID3D12Device::CreateReservedResource</c>: a resource holding address range alone, whose tiles
+    /// <see cref="UpdateTileMappings"/> maps to heaps.</summary>
+    /// <param name="description">The resource's description.</param>
+    /// <param name="initialState">The state it is created in.</param>
+    /// <param name="resource">Receives the resource on success, owned by the caller.</param>
+    /// <returns>The call's result.</returns>
+    HRESULT CreateReservedResource(D3D12_RESOURCE_DESC* description, D3D12_RESOURCE_STATES initialState, ID3D12Resource** resource);
+    /// <summary>Asks <c>ID3D12CommandQueue::UpdateTileMappings</c> for one run of a buffer's tiles: maps
+    /// <paramref name="tileCount"/> tiles from <paramref name="firstTile"/> to as many tiles of <paramref name="heap"/>
+    /// from <paramref name="heapFirstTile"/>, or unmaps them when <paramref name="heap"/> is <see langword="null"/>. The
+    /// queue performs it in submission order, after the work already executed on it and before the work executed
+    /// later.</summary>
+    /// <param name="queue">The queue.</param>
+    /// <param name="resource">The reserved buffer.</param>
+    /// <param name="firstTile">The buffer's first tile of the run.</param>
+    /// <param name="tileCount">The run's tiles; at least one.</param>
+    /// <param name="heap">The heap the tiles map to, or <see langword="null"/> to unmap them.</param>
+    /// <param name="heapFirstTile">The heap's first tile of the run, in 64 KiB tiles from its start; ignored when
+    /// unmapping.</param>
+    void UpdateTileMappings(ID3D12CommandQueue* queue, ID3D12Resource* resource, uint firstTile, uint tileCount, ID3D12Heap* heap, uint heapFirstTile);
     /// <summary>Releases the caller's reference to a heap.</summary>
     /// <param name="heap">The heap.</param>
     void ReleaseHeap(ID3D12Heap* heap);
@@ -57,6 +77,10 @@ public readonly unsafe partial struct DirectXDeviceCommandCalls {
     private const int DeviceGetCustomHeapPropertiesSlot = 26;
     private const int DeviceCreateHeapSlot = 28;
     private const int DeviceCreatePlacedResourceSlot = 29;
+    private const int DeviceCreateReservedResourceSlot = 30;
+    // ID3D12CommandQueue's first own slot, after IUnknown's three, ID3D12Object's four and ID3D12DeviceChild's one; its
+    // Signal (14) is counted the same way.
+    private const int QueueUpdateTileMappingsSlot = 8;
     // ID3D12Object's slots, after IUnknown's three.
     private const int ObjectGetPrivateDataSlot = 3;
     private const int ObjectSetPrivateDataSlot = 4;
@@ -114,6 +138,41 @@ public readonly unsafe partial struct DirectXDeviceCommandCalls {
             clearValue,
             &iid,
             ((void**)resource)
+        );
+    }
+    /// <inheritdoc/>
+    public HRESULT CreateReservedResource(D3D12_RESOURCE_DESC* description, D3D12_RESOURCE_STATES initialState, ID3D12Resource** resource) {
+        var iid = ID3D12Resource.IID_Guid;
+
+        return ((delegate* unmanaged[Stdcall]<ID3D12Device*, D3D12_RESOURCE_DESC*, D3D12_RESOURCE_STATES, D3D12_CLEAR_VALUE*, Guid*, void**, HRESULT>)VtableOf(instance: device)[DeviceCreateReservedResourceSlot])(
+            device,
+            description,
+            initialState,
+            null,
+            &iid,
+            ((void**)resource)
+        );
+    }
+    /// <inheritdoc/>
+    public void UpdateTileMappings(ID3D12CommandQueue* queue, ID3D12Resource* resource, uint firstTile, uint tileCount, ID3D12Heap* heap, uint heapFirstTile) {
+        var coordinate = new D3D12_TILED_RESOURCE_COORDINATE { X = firstTile };
+        var size = new D3D12_TILE_REGION_SIZE { NumTiles = tileCount };
+        var flags = ((heap is null) ? D3D12_TILE_RANGE_FLAGS.D3D12_TILE_RANGE_FLAG_NULL : D3D12_TILE_RANGE_FLAGS.D3D12_TILE_RANGE_FLAG_NONE);
+        var start = heapFirstTile;
+        var count = tileCount;
+
+        ((delegate* unmanaged[Stdcall]<ID3D12CommandQueue*, ID3D12Resource*, uint, D3D12_TILED_RESOURCE_COORDINATE*, D3D12_TILE_REGION_SIZE*, ID3D12Heap*, uint, D3D12_TILE_RANGE_FLAGS*, uint*, uint*, D3D12_TILE_MAPPING_FLAGS, void>)VtableOf(instance: queue)[QueueUpdateTileMappingsSlot])(
+            queue,
+            resource,
+            1U,
+            &coordinate,
+            &size,
+            heap,
+            1U,
+            &flags,
+            &start,
+            &count,
+            D3D12_TILE_MAPPING_FLAGS.D3D12_TILE_MAPPING_FLAG_NONE
         );
     }
     /// <inheritdoc/>

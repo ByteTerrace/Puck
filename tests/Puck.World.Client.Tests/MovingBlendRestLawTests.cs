@@ -51,16 +51,16 @@ public sealed class MovingBlendRestLawTests {
         var first = new ShapeDocument(0, "anchor", SdfSolidPrimitive.Sphere, Vector3.Zero, Quaternion.Identity, new Vector3(value: 0.03f), 0, SdfBlendOp.Union, 0f, 1);
         var second = first with { Id = 1, Name = "moving", Blend = SdfBlendOp.SmoothUnion, Smooth = 0.04f, Slides = [new("clock", Vector3.UnitX, 0.002f)] };
         var document = CreationFixtures.Document("envelope", [first, second]) with { Drivers = [new("clock", CreationDriverDocument.SignalTime, 1f)] };
-        var admitted = new CreationMotionPlan(document);
+        var admitted = new CreationMotionPlan(rig: CreationRig.Of(document: document));
 
         Assert.Equal(admitted.RenderDocument.Shapes![0].Group, admitted.RenderDocument.Shapes[1].Group);
-        var pair = Assert.Single(collection: CreationMotion.MovingBlends(document: document));
+        var pair = Assert.Single(collection: CreationMotion.MovingBlends(rig: CreationRig.Of(document: document)));
 
-        Assert.True(condition: CreationMotion.Envelope(blend: pair, document: document).Admitted);
+        Assert.True(condition: CreationMotion.Envelope(blend: pair, rig: CreationRig.Of(document: document)).Admitted);
         var wide = document with { Shapes = [first, second with { Slides = [new("clock", Vector3.UnitX, 0.03f)] }] };
-        var split = new CreationMotionPlan(wide);
+        var split = new CreationMotionPlan(rig: CreationRig.Of(document: wide));
 
         Assert.NotEqual(split.RenderDocument.Shapes![0].Group, split.RenderDocument.Shapes[1].Group);
-        Assert.Contains("bakes as a crease", CreationMotion.Describe(blend: pair, document: wide));
+        Assert.Contains("bakes as a crease", CreationMotion.Describe(blend: pair, rig: CreationRig.Of(document: wide)));
     }
 }

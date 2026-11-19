@@ -1021,7 +1021,7 @@ public static partial class WorldPlacementStamper {
     /// carry no transforms, or only its shapes' authored poses, moves nothing, so it stamps statically.</summary>
     /// <param name="creation">The creation row.</param>
     /// <returns><see langword="true"/> when the creation's drivers, effectors or frames move a shape.</returns>
-    public static bool IsAnimated(WorldPrototype creation) => CreationMotion.Animates(document: creation.Document);
+    public static bool IsAnimated(WorldPrototype creation) => creation.Rig.Animates;
     /// <summary>Whether a placement renders as a STATIC furniture stamp — not when it is animated (the stamp pool replays
     /// it), not when it INHABITS (a live body renders its creation through a body-rooted stamp instead), and not when it
     /// ATTACHES (the stamp pool roots it on a live body's pose plus the facet's local offset, so its authored transform

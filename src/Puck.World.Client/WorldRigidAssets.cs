@@ -80,19 +80,24 @@ public sealed partial class WorldRigidAssets {
         }
     }
 
-    /// <summary>Returns whether geometry has no independently changing fields or parts.</summary>
+    /// <summary>Returns whether geometry has no independently changing fields or parts: no shape of the rig a look plays
+    /// has a writer (<see cref="CreationRig.HasPartMotion"/>), and nothing else changes its fields (a camera, a face,
+    /// erosion or a morph).</summary>
+    /// <param name="creation">The creation.</param>
+    /// <param name="look">The look a body wears it with, whose part followers count as writers, or
+    /// <see langword="null"/>.</param>
+    /// <returns><see langword="true"/> when the creation is rigid.</returns>
     public static bool IsRigid(WorldPrototype creation, WorldLook? look = null) {
-        return (Metadata(creation: creation).Rigid && ((look is null) || (look.Motion.PartDynamics is not { Count: > 0 })));
+        return (Metadata(creation: creation).Rigid && ((look is null) || !creation.Rig.Follow(partDynamics: look.Motion.PartDynamics).HasPartMotion));
     }
 
     // Definitions are immutable. Inspect their fields once, rather than once per wearing body per frame.
     private static AssetMetadata Metadata(WorldPrototype creation) => MetadataCache.GetValue(creation, static prototype => {
         var document = prototype.EngineDocument;
         var shapes = (document.Shapes ?? []);
-        var rigid = ((document.Frames is not { Count: > 0 }) && (document.Drivers is not { Count: > 0 }) &&
-            (document.Effectors is not { Count: > 0 }) && (document.Cameras is not { Count: > 0 }) &&
+        var rigid = (!prototype.Rig.HasPartMotion && (document.Cameras is not { Count: > 0 }) &&
             (document.Behavior?.Faces is not { Count: > 0 }) &&
-            shapes.All(predicate: shape => ((shape.Swings is not { Count: > 0 }) && (shape.Slides is not { Count: > 0 }) && (shape.Erode is null) && (shape.Morph is null))));
+            shapes.All(predicate: shape => ((shape.Erode is null) && (shape.Morph is null))));
         var mixed = (shapes.Any(predicate: shape => document.IsGlassShape(shape: shape)) && shapes.Any(predicate: shape => !document.IsGlassShape(shape: shape)));
 
         return new AssetMetadata(rigid, (rigid ? CreationStampEmitter.RenderReach(document, 1, null, composeBlends: true) : 0), (mixed ? 2 : 1));

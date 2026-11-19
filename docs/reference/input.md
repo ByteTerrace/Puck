@@ -362,6 +362,12 @@ rendering programme.
 ## Output and haptics
 
 `IGamepadOutput` accepts typed output commands and a raw-report escape hatch.
+Worlds drive dual-motor rumble declaratively through the `haptics` document
+section (`WorldHapticRow`, modes `Level`, `Rise`, and `Change`, with optional
+`seat` and `$body` bindings): `WorldHapticDirector` evaluates each seat's routed
+delivered state per fixed step and submits finite `RumbleEffect` pulses through
+`PlayerRoster.TryGetSeatDevice` and `GamepadManager.TryGetOutput` (`haptics.state`
+echoes per-seat status).
 The connection advertises capabilities from the interfaces its parser actually
 implements. A parser with periodic work of its own (`IServicedGamepadParser`)
 is serviced on its device loop after every read.

@@ -426,6 +426,8 @@ public static partial class RuleCompiler {
                 b: bound,
                 comparisonType: StringComparison.Ordinal
             )) {
+                _ = context.LocalReads?.Add(item: ordinal);
+
                 return new ResolvedOperand(
                     describe: name,
                     operand: new LocalOperand(

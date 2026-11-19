@@ -1,14 +1,13 @@
 using System.Numerics;
 using Puck.Maths;
-using Puck.Physics.Motion;
 using Puck.World.Authoring;
 
 namespace Puck.World.Client;
 
 /// <content>
-/// The inverse-kinematics half of the stamp pool: resolving a creation's declared effectors against its shape slots,
-/// finding each one's world target, and folding <see cref="WorldEffectorSolver"/>'s corrections into the bones' own
-/// deltas so the ordinary parent chaining carries them.
+/// The inverse-kinematics half of the stamp pool: finding each of a rig's effectors' world target through the rig's
+/// reads, and folding <see cref="WorldEffectorSolver"/>'s corrections into the bones' own deltas so the ordinary parent
+/// chaining carries them.
 /// </content>
 public sealed partial class WorldCreationInstances {
     // Per-solve scratch, sized to the chain ceiling and reused by every effector of every registration — the solve is
@@ -17,27 +16,19 @@ public sealed partial class WorldCreationInstances {
     private readonly Quaternion[] m_solveParents = new Quaternion[CreationEffectorDocument.MaxChainBones];
     private readonly Quaternion[] m_solveCorrections = new Quaternion[CreationEffectorDocument.MaxChainBones];
 
-    // Solves every declared effector and folds each bone's correction into that bone's own delta. Returns whether any
-    // own delta moved, so the caller re-chains only when a solve actually changed something.
-    private bool ApplyEffectors(Registration live, CreationDocument document, IReadOnlyList<ShapeDocument> shapes, Dictionary<int, FrameTransformDocument>? poses, IWorldStampSource client, float deltaSeconds, Vector3 rootPosition, Quaternion rootRotation, float placementScale, int shapeCount) {
-        if (document.Effectors is not { Count: > 0 } effectors) {
+    // Solves every effector of the rig, in declaration order, and folds each bone's correction into that bone's own
+    // delta. Returns whether any own delta moved, so the caller re-chains only when a solve actually changed something.
+    private bool ApplyEffectors(Registration live, IReadOnlyList<ShapeDocument> shapes, Dictionary<int, FrameTransformDocument>? poses, float deltaSeconds, Vector3 rootPosition, Quaternion rootRotation, float placementScale, int shapeCount) {
+        var effectors = live.Rig.Effectors;
+
+        if (effectors.Count == 0) {
             return false;
-        }
-        if (!live.EffectorsResolved) {
-            ResolveEffectorSlots(
-                effectors: effectors,
-                live: live,
-                shapeCount: shapeCount,
-                shapes: shapes
-            );
         }
 
         // A row-rooted registration carries no body, so it publishes no facts: an `always` gate still holds and a
         // surface probe still answers, which is what lets a placed machine arm reach for a surface.
-        var facts = ((live.BodyIndex is { } body)
-            ? client.Facts(index: body)
-            : BodyFacts.None
-        );
+        var view = live.View;
+        var facts = view.Facts;
         var moving = (live.DriverSpeed > WorldGaitDrivers.MovingSpeed);
         var blend = WorldGaitDrivers.WeightBlend(deltaSeconds: deltaSeconds);
         var inverseRoot = Quaternion.Conjugate(value: rootRotation);
@@ -46,14 +37,12 @@ public sealed partial class WorldCreationInstances {
             : 0f
         );
         var corrected = false;
-        var count = Math.Min(
-            val1: effectors.Count,
-            val2: CreationDocument.MaxEffectors
-        );
+        var solves = 0;
 
-        for (var index = 0; (index < count); index++) {
-            var effector = effectors[index];
-            var bones = live.EffectorBoneCount[index];
+        for (var index = 0; (index < effectors.Count); index++) {
+            var compiled = effectors[index];
+            var effector = compiled.Document;
+            var bones = compiled.Bones.Count;
 
             if (bones < CreationEffectorDocument.MinChainBones) {
                 live.EffectorWeight[index] = 0f;
@@ -63,8 +52,7 @@ public sealed partial class WorldCreationInstances {
                 continue;
             }
 
-            var tipSlot = live.EffectorTipSlot[index];
-            var boneBase = (index * CreationEffectorDocument.MaxChainBones);
+            var tipSlot = compiled.Tip;
 
             var (tipPosition, _) = BasePose(
                 poses: poses,
@@ -80,11 +68,10 @@ public sealed partial class WorldCreationInstances {
                 value: (posedTip * placementScale)
             ));
             var goal = new EffectorGoal(
-                client: client,
-                effector: effector,
+                effector: compiled,
                 index: index,
                 live: live,
-                reads: live.Reads,
+                reads: view,
                 rootRotation: rootRotation,
                 scale: placementScale,
                 tipWorld: tipWorld
@@ -92,9 +79,9 @@ public sealed partial class WorldCreationInstances {
 
             var gateHolds = WorldGaitDrivers.HoldsGate(
                 facts: facts,
-                gate: effector.When,
+                gate: compiled.Gate,
                 moving: moving,
-                reads: live.Reads
+                reads: view
             );
             var contactWeight = 1f;
             bool resolved;
@@ -105,8 +92,7 @@ public sealed partial class WorldCreationInstances {
                 resolved = ApplyPlant(
                     contactWeight: out contactWeight,
                     deltaSeconds: deltaSeconds,
-                    document: document,
-                    effector: effector,
+                    effector: compiled,
                     goal: ref goal,
                     index: index,
                     live: live,
@@ -185,8 +171,9 @@ public sealed partial class WorldCreationInstances {
                 start: 0
             );
 
+            solves++;
             for (var bone = 0; (bone < bones); bone++) {
-                var slot = live.EffectorBoneSlot[(boneBase + bone)];
+                var slot = compiled.Bones[bone];
                 var parent = live.PartParent[slot];
 
                 // A bone's joint is carried by its PARENT's motion, never by its own: a swing about that joint fixes
@@ -197,11 +184,11 @@ public sealed partial class WorldCreationInstances {
                 );
                 joints[bone] = ((parent >= 0)
                     ? Compose(
-                        point: RestJoint(shape: shapes[slot]),
+                        point: live.Rig.Joint(shape: slot),
                         rotation: live.PartDeltaRotation[parent],
                         translation: live.PartDeltaTranslation[parent]
                     )
-                    : RestJoint(shape: shapes[slot])
+                    : live.Rig.Joint(shape: slot)
                 );
                 corrections[bone] = Quaternion.Identity;
             }
@@ -222,8 +209,8 @@ public sealed partial class WorldCreationInstances {
                     continue;
                 }
 
-                var slot = live.EffectorBoneSlot[(boneBase + bone)];
-                var joint = RestJoint(shape: shapes[slot]);
+                var slot = compiled.Bones[bone];
+                var joint = live.Rig.Joint(shape: slot);
                 var rotation = live.PartOwnRotation[slot];
                 var translation = live.PartOwnTranslation[slot];
 
@@ -276,6 +263,8 @@ public sealed partial class WorldCreationInstances {
                 corrected = true;
             }
         }
+
+        WorldCreationWork.ProcessWork.Add(amount: solves, kind: WorldCreationWork.EffectorSolves);
 
         return corrected;
     }
@@ -352,7 +341,7 @@ public sealed partial class WorldCreationInstances {
     }
 
     // The effector's goal for one frame: resolved (TryResolveTarget) at most once, and only when a branch reads it.
-    private ref struct EffectorGoal(CreationEffectorDocument effector, Registration live, int index, IWorldStampSource client, WorldStateLease reads, Vector3 tipWorld, Quaternion rootRotation, float scale) {
+    private ref struct EffectorGoal(CreationRigEffector effector, Registration live, int index, WorldRigReads reads, Vector3 tipWorld, Quaternion rootRotation, float scale) {
         private bool m_asked;
         private bool m_resolved;
         private Vector3 m_target;
@@ -363,7 +352,6 @@ public sealed partial class WorldCreationInstances {
                 m_asked = true;
                 m_resolved = TryResolveTarget(
                     answer: ref live.EffectorProbe[index],
-                    client: client,
                     effector: effector,
                     normal: out m_normal,
                     reads: reads,
@@ -384,19 +372,18 @@ public sealed partial class WorldCreationInstances {
     // Holds the effector's target, and the contact normal there, where it was when the plant window opened, and
     // reports whether a usable target exists: a latched contact survives a probe that misses this frame, which is the
     // whole point of latching.
-    private static bool ApplyPlant(Registration live, CreationDocument document, CreationEffectorDocument effector, int index, ref EffectorGoal goal, float deltaSeconds, Quaternion rootRotation, float scale, out Vector3 target, out Vector3 normal, out float contactWeight) {
+    private static bool ApplyPlant(Registration live, CreationRigEffector effector, int index, ref EffectorGoal goal, float deltaSeconds, Quaternion rootRotation, float scale, out Vector3 target, out Vector3 normal, out float contactWeight) {
         contactWeight = 1f;
-        if (effector.Plant is not { } plant) {
+        if (effector.Document.Plant is not { } plant) {
             live.EffectorPlanted[index] = false;
             live.EffectorStepping[index] = false;
 
             return goal.Resolve(normal: out normal, target: out target);
         }
         if (!WorldGaitDrivers.TryDriver(
-            driver: plant.Driver,
+            driver: effector.PlantDriver,
             phase: out var phase,
             phases: live.DriverPhase,
-            rows: (document.Drivers ?? []),
             weight: out var driverWeight,
             weights: live.DriverWeight
         )) {
@@ -414,8 +401,7 @@ public sealed partial class WorldCreationInstances {
 
                 return ApplyRestingPlant(
                     deltaSeconds: deltaSeconds,
-                    document: document,
-                    driver: plant.Driver,
+                    driver: effector.PlantDriver,
                     index: index,
                     live: live,
                     normal: ref normal,
@@ -423,7 +409,7 @@ public sealed partial class WorldCreationInstances {
                     resolved: resting,
                     target: ref target,
                     up: StepUp(
-                        effector: effector,
+                        effector: effector.Document,
                         rootRotation: rootRotation
                     )
                 );
@@ -478,7 +464,7 @@ public sealed partial class WorldCreationInstances {
     // driver at a time. A latch survives a probe that misses this frame; a step heading for a point the probe has
     // since lost keeps the last point it found. The contact normal travels with the point: latched with it, and
     // turned from the left point's normal to the landing point's over the step.
-    private static bool ApplyRestingPlant(Registration live, CreationDocument document, string driver, int index, CreationReplantDocument replant, bool resolved, float deltaSeconds, Vector3 up, ref Vector3 target, ref Vector3 normal) {
+    private static bool ApplyRestingPlant(Registration live, int driver, int index, CreationReplantDocument replant, bool resolved, float deltaSeconds, Vector3 up, ref Vector3 target, ref Vector3 normal) {
         if (!live.EffectorPlanted[index]) {
             live.EffectorStepping[index] = false;
 
@@ -549,7 +535,6 @@ public sealed partial class WorldCreationInstances {
             resolved &&
             (Vector3.Distance(value1: latch, value2: fresh) > replant.Distance) &&
             !SiblingStepping(
-                document: document,
                 driver: driver,
                 index: index,
                 live: live
@@ -565,23 +550,11 @@ public sealed partial class WorldCreationInstances {
         return true;
     }
     // Whether another effector whose plant names the same driver is mid-step: a pair of feet steps one at a time.
-    private static bool SiblingStepping(Registration live, CreationDocument document, string driver, int index) {
-        var effectors = (document.Effectors ?? []);
-        var count = Math.Min(
-            val1: effectors.Count,
-            val2: CreationDocument.MaxEffectors
-        );
+    private static bool SiblingStepping(Registration live, int driver, int index) {
+        var effectors = live.Rig.Effectors;
 
-        for (var other = 0; (other < count); other++) {
-            if (
-                (other != index) &&
-                live.EffectorStepping[other] &&
-                string.Equals(
-                a: effectors[other].Plant?.Driver,
-                b: driver,
-                comparisonType: StringComparison.Ordinal
-            )
-            ) {
+        for (var other = 0; (other < effectors.Count); other++) {
+            if ((other != index) && live.EffectorStepping[other] && (effectors[other].PlantDriver == driver)) {
                 return true;
             }
         }
@@ -629,131 +602,42 @@ public sealed partial class WorldCreationInstances {
         rotation: rotation,
         value: point
     ) + translation);
-    // A bone's hinge in rest creation space: the pivot of its first swing, its authored joint when it swings nothing,
-    // and its own origin when it declares neither.
-    private static Vector3 RestJoint(ShapeDocument shape) => ((shape.Swings is { Count: > 0 } swings)
-        ? swings[0].Pivot.Value
-        : ((shape.Joint is { } joint)
-            ? joint.Value
-            : shape.Position.Value
-    ));
-    // Each effector's bone and tip shape slots, resolved once per registration off the immutable document. A slot the
-    // document cannot name leaves the effector with too few bones, which reads as inert.
-    private static void ResolveEffectorSlots(Registration live, IReadOnlyList<CreationEffectorDocument> effectors, IReadOnlyList<ShapeDocument> shapes, int shapeCount) {
-        Array.Clear(array: live.EffectorBoneCount);
-        Array.Fill(
-            array: live.EffectorTipSlot,
-            value: -1
-        );
-
-        var count = Math.Min(
-            val1: effectors.Count,
-            val2: CreationDocument.MaxEffectors
-        );
-
-        for (var index = 0; (index < count); index++) {
-            var effector = effectors[index];
-            var chain = (effector.Chain ?? []);
-            var tip = ShapeSlot(
-                name: effector.Tip,
-                shapeCount: shapeCount,
-                shapes: shapes
-            );
-
-            if (
-                (tip < 0) ||
-                (chain.Count < CreationEffectorDocument.MinChainBones) ||
-                (chain.Count > CreationEffectorDocument.MaxChainBones)
-            ) {
-                continue;
-            }
-
-            var boneBase = (index * CreationEffectorDocument.MaxChainBones);
-            var bones = 0;
-
-            for (var bone = 0; (bone < chain.Count); bone++) {
-                var slot = ShapeSlot(
-                    name: chain[bone],
-                    shapeCount: shapeCount,
-                    shapes: shapes
-                );
-
-                if (slot < 0) {
-                    bones = 0;
-
-                    break;
-                }
-
-                live.EffectorBoneSlot[(boneBase + bone)] = slot;
-                bones++;
-            }
-
-            live.EffectorBoneCount[index] = bones;
-            live.EffectorTipSlot[index] = tip;
-        }
-
-        live.EffectorsResolved = true;
-    }
-    private static int ShapeSlot(IReadOnlyList<ShapeDocument> shapes, int shapeCount, string? name) {
-        if (name is null) {
-            return -1;
-        }
-        for (var index = 0; (index < shapeCount); index++) {
-            if (string.Equals(
-                a: shapes[index].Name?.Value,
-                b: name,
-                comparisonType: StringComparison.Ordinal
-            )) {
-                return index;
-            }
-        }
-
-        return -1;
-    }
     // The effector's world-space goal this frame, or false when nothing answers — a probe that finds no surface, a
     // body target that is not live, a state cell that holds no point. The normal is the probed surface's; a body or
     // state target names no surface and reports world up. A surface probe's reach and standoff are the body's own
     // lengths, at its scale.
-    private static bool TryResolveTarget(ref WorldFieldAnswer<WorldSurfaceQuery, WorldSurfaceAnswer> answer, CreationEffectorDocument effector, IWorldStampSource client, WorldStateLease reads, Vector3 tipWorld, Quaternion rootRotation, float scale, out Vector3 target, out Vector3 normal) {
+    private static bool TryResolveTarget(ref WorldFieldAnswer<WorldSurfaceQuery, WorldSurfaceAnswer> answer, CreationRigEffector effector, WorldRigReads reads, Vector3 tipWorld, Quaternion rootRotation, float scale, out Vector3 target, out Vector3 normal) {
         target = tipWorld;
         normal = Vector3.UnitY;
 
-        var goal = effector.Target;
+        var goal = effector.Document.Target;
 
-        switch (goal.Kind) {
-            case CreationEffectorTargetDocument.KindBody: {
-                    var index = (goal.Index ?? -1);
+        if (effector.Target is not { } read) {
+            return false;
+        }
 
-                    if (
-                        (((uint)index) >= ((uint)WorldClient.EntityCapacity)) ||
-                        !client.IsActive(index: index)
-                    ) {
+        switch (read.Kind) {
+            case CreationRigReadKind.Body: {
+                    if (!reads.TryBody(orientation: out var orientation, position: out var position, read: read)) {
                         return false;
                     }
 
                     // The offset rides the TARGET body's attitude, so a handle authored on a carried crate stays on the
                     // crate's corner as it turns rather than sliding around it.
-                    target = (client.Position(index: index) + Vector3.Transform(
-                        rotation: client.Orientation(index: index),
+                    target = (position + Vector3.Transform(
+                        rotation: orientation,
                         value: (goal.Offset?.Value ?? Vector3.Zero)
                     ));
 
                     return true;
                 }
-            case CreationEffectorTargetDocument.KindState: {
-                    return (
-                        (goal.Reference is { } reference) &&
-                        WorldGaitDrivers.TryReadStateVector(
-                        reads: reads,
-                        reference: reference,
-                        value: out target
-                    )
-                    );
+            case CreationRigReadKind.State: {
+                    return reads.TryPoint(read: read, value: out target);
                 }
             default: {
-                    return WorldEffectorSolver.TryProbeSurface(
+                    return reads.TryProbe(
                         answer: ref answer,
-                        field: client.StaticField,
+                        read: read,
                         origin: tipWorld,
                         reach: ((goal.Reach?.Value ?? 0f) * scale),
                         rootRotation: rootRotation,
@@ -808,37 +692,29 @@ public sealed partial class WorldCreationInstances {
         var document = live.Creation.EngineDocument;
         var drivers = new List<WorldRigDriver>();
         var effectors = new List<WorldRigEffector>();
-        var driverRows = (document.Drivers ?? []);
-        var driverCount = Math.Min(
-            val1: driverRows.Count,
-            val2: CreationDocument.MaxDrivers
-        );
+        var driverRows = live.Rig.Drivers;
 
-        for (var index = 0; (index < driverCount); index++) {
+        for (var index = 0; (index < driverRows.Count); index++) {
             drivers.Add(item: new WorldRigDriver(
-                Name: driverRows[index].Name,
+                Name: driverRows[index].Document.Name,
                 Phase: live.DriverPhase[index],
                 Weight: live.DriverWeight[index]
             ));
         }
 
-        var effectorRows = (document.Effectors ?? []);
-        var effectorCount = Math.Min(
-            val1: effectorRows.Count,
-            val2: CreationDocument.MaxEffectors
-        );
+        var effectorRows = live.Rig.Effectors;
 
-        for (var index = 0; (index < effectorCount); index++) {
+        for (var index = 0; (index < effectorRows.Count); index++) {
             effectors.Add(item: new WorldRigEffector(
-                Name: effectorRows[index].Name,
+                Name: effectorRows[index].Document.Name,
                 Weight: live.EffectorWeight[index],
                 Planted: live.EffectorPlanted[index],
                 Target: (live.EffectorHasTarget[index]
                 ? live.EffectorTarget[index]
                 : null),
-                Bones: live.EffectorBoneCount[index],
+                Bones: effectorRows[index].Bones.Count,
                 Stepping: live.EffectorStepping[index],
-                Align: ((effectorRows[index].Align is null)
+                Align: ((effectorRows[index].Document.Align is null)
                 ? null
                 : live.EffectorAlign[index]),
                 Normal: live.EffectorNormal[index]

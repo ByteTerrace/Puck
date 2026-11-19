@@ -113,13 +113,36 @@ template instrumentPlay(music, seats = 1, phrase = rhythmPhrase, windows = rhyth
       mode: Level
       setBodyState(key: $"{index}", state: "breathing", expression: 0)
     }
+    rule $"instrument-beat-{seat}" {
+      when bodyState(body, index, breathing) == 1 and clock(music, beat) != instrumentBeat[$"{seat}"]
+      mode: Level
+      instrumentBeat[$"{seat}"] = clock(music, beat)
+    }
   }
+
+  haptics: map(range(1, seats), s => {
+    id: $"instrument-beat-{s}"
+    low: 0.25
+    high: 0.1
+    durationSeconds: 0.045
+    mode: Change
+    signal: $"state.instrumentBeat.{s}"
+    seat: $"seat{s}"
+  })
 
   rhythmJudge(
     music: music,
     presses: map(range(0, 4), i => { channel: ventChannels[i], note: i + 1 }),
     phrase: phrase,
     seats: seats,
-    windows: windows
+    windows: windows,
+    extraWorldRows: [
+      {
+        name: "instrumentBeat"
+        kind: Int
+        capacity: seats
+        cells: map(range(1, seats), s => { key: $"{s}", value: 0 })
+      }
+    ]
   )
 }

@@ -156,12 +156,34 @@ public readonly record struct WorldRuleWorkBudget(int RuleRows, int InteractionR
     ),
         _ => null,
     };
+    // Where each rule runs in the tick (WorldRuleHost.EvaluateWorldRules): the rules no group claims in one pass in
+    // document order, then every group's passes, then the interactions in theirs. A grouped rule's line may run in any
+    // pass of its group, so it is placed anywhere (-1); as a writer it runs after every ungrouped rule and before every
+    // interaction, so it is placed between them. An interaction runs after both.
+    private static (long Line, long Writer) RulePlace(int index, CompiledRule[] rules, HashSet<string> grouped) => (grouped.Contains(item: rules[index].Name)
+        ? (-1L, rules.Length)
+        : (index, index));
+    private static long InteractionPlace(int index, CompiledRule[] rules) => ((rules.Length + 1L) + index);
+    private static HashSet<string> Grouped(WorldDefinition definition) {
+        var grouped = new HashSet<string>(comparer: StringComparer.Ordinal);
+
+        foreach (var group in definition.RuleGroups) {
+            foreach (var step in group.Steps) {
+                _ = grouped.Add(item: step.Rule.Value);
+            }
+        }
+
+        return grouped;
+    }
     private static List<RuleWorkContributor> Lines(WorldDefinition definition, WorldFactsCompileContext context, CompiledRule[] rules, CompiledRule[] interactions) {
         var contributors = new List<RuleWorkContributor>(capacity: (rules.Length + interactions.Length));
         var gate = GateCommitCost(context: context, definition: definition);
         var writes = new List<Puck.State.CellAccess>();
+        var grouped = Grouped(definition: definition);
 
-        foreach (var rule in rules) {
+        for (var index = 0; (index < rules.Length); index++) {
+            var rule = rules[index];
+
             contributors.Add(item: RuleWorkBudget.Contributor(
                 commit: (WritesGate(definition: definition, rule: rule, writes: writes) ? gate : 0L),
                 rule: rule,
@@ -171,10 +193,13 @@ public readonly record struct WorldRuleWorkBudget(int RuleRows, int InteractionR
                     rule: rule
                 ),
                 isInteraction: false,
-                context: context
+                context: context,
+                order: RulePlace(grouped: grouped, index: index, rules: rules).Line
             ));
         }
-        foreach (var interaction in interactions) {
+        for (var index = 0; (index < interactions.Length); index++) {
+            var interaction = interactions[index];
+
             contributors.Add(item: RuleWorkBudget.Contributor(
                 commit: (WritesGate(definition: definition, rule: interaction, writes: writes) ? gate : 0L),
                 rule: interaction,
@@ -184,7 +209,8 @@ public readonly record struct WorldRuleWorkBudget(int RuleRows, int InteractionR
                     rule: interaction
                 ),
                 isInteraction: true,
-                context: context
+                context: context,
+                order: InteractionPlace(index: index, rules: rules)
             ));
         }
 
@@ -209,22 +235,23 @@ public readonly record struct WorldRuleWorkBudget(int RuleRows, int InteractionR
         }
         return false;
     }
-    private static List<(CompiledRule Rule, long Multiplier)> Multiplied(WorldDefinition definition, WorldFactsCompileContext context, CompiledRule[] rules, CompiledRule[] interactions) {
-        var result = new List<(CompiledRule, long)>(capacity: (rules.Length + interactions.Length));
+    private static List<(CompiledRule Rule, long Multiplier, long Order)> Multiplied(WorldDefinition definition, WorldFactsCompileContext context, CompiledRule[] rules, CompiledRule[] interactions) {
+        var result = new List<(CompiledRule, long, long)>(capacity: (rules.Length + interactions.Length));
+        var grouped = Grouped(definition: definition);
 
-        foreach (var rule in rules) {
-            result.Add(item: (rule, Multiplier(
-            context: context,
-            definition: definition,
-            rule: rule
-        )));
+        for (var index = 0; (index < rules.Length); index++) {
+            result.Add(item: (rules[index], Multiplier(
+                context: context,
+                definition: definition,
+                rule: rules[index]
+            ), RulePlace(grouped: grouped, index: index, rules: rules).Writer));
         }
-        foreach (var interaction in interactions) {
-            result.Add(item: (interaction, Multiplier(
-            context: context,
-            definition: definition,
-            rule: interaction
-        )));
+        for (var index = 0; (index < interactions.Length); index++) {
+            result.Add(item: (interactions[index], Multiplier(
+                context: context,
+                definition: definition,
+                rule: interactions[index]
+            ), InteractionPlace(index: index, rules: rules)));
         }
 
         return result;
@@ -425,7 +452,9 @@ public readonly record struct WorldRuleWorkBudget(int RuleRows, int InteractionR
                 ? $"forEach {RuleFacts.ForEachBodies} body capacity={definition.Population.Capacity}{firings}"
                 : ((rule.PoolForEach is { } pool)
                     ? $"pool sweep over '{pool.Name}' capacity={pool.Capacity}{firings}"
-                    : "no forEach — priced once"))
+                    : ((rule.Iteration is WorldInputIteration events)
+                        ? $"forEach inputEvents, the events one step admits={events.StepCapacity} (of {events.HistoryCapacity} retained){firings}"
+                        : "no forEach — priced once")))
         );
     }
     /// <summary>Returns the work units an expression costs against a document.</summary>

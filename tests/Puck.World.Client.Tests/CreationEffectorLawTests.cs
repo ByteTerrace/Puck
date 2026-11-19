@@ -327,6 +327,140 @@ public sealed class CreationEffectorLawTests {
             )]
     );
 
+    /// <summary>A body at rest whose hand reaches for another body follows that body when only the target moves: the
+    /// target is one of the rig's reads, and the wake test hashes the reads (<see cref="WorldRigReads.Revision"/>).</summary>
+    [Fact]
+    public void ABodyAtRestFollowsAMovingBodyTarget() {
+        var document = new CreationDocument(
+            Effectors: [new CreationEffectorDocument(
+                Chain: ["thigh", "shin"],
+                Name: "hand",
+                Target: new CreationEffectorTargetDocument(Index: 1, Kind: CreationEffectorTargetDocument.KindBody),
+                Tip: "boot",
+                When: [CreationDriverDocument.WhenAlways]
+            )],
+            Frames: null,
+            Name: "reacher",
+            Palette: null,
+            Schema: CreationDocument.CurrentSchema,
+            Shapes: [
+                Part(id: 0, joint: Hip, name: "thigh", parent: null, pivot: null, position: new Vector3(x: 0f, y: 0.75f, z: 0f)),
+                Part(id: 1, joint: Knee, name: "shin", parent: "thigh", pivot: null, position: new Vector3(x: 0f, y: 0.3f, z: 0f)),
+                Part(id: 2, name: "boot", parent: "shin", pivot: null, position: new Vector3(x: 0f, y: 0.1f, z: 0f)),
+            ]
+        );
+        var creation = Prototype(document: document);
+        var client = Client(definition: Definition(creation: creation));
+        var pool = new WorldCreationInstances();
+
+        pool.Reconcile(placementFrames: WorldPlacementFrameCompilation.Compile(placements: [], worldSeed: 0UL),
+            bodyStamps: [new WorldCreationInstances.BodyStamp(BodyIndex: 0, Creation: creation, Scale: 1f, Look: WorldLook.Implicit)],
+            creations: [creation],
+            dynamics: [],
+            placements: []
+        );
+        var transforms = new DynamicTransform[pool.DynamicSlotCount];
+
+        Vector3 Frame(ulong tick, Vector3 target) {
+            client.DeliverSnapshot(snapshot: new WorldSnapshot(
+                Authority: "a",
+                Entries: new[] {
+                    new EntitySnapshot(Active: true, BodyColor: Vector3.One, CatalogRig: 0, Continuity: EntityContinuity.Continuous, Generation: 1, Index: 0, Kit: 0, Look: 0, Orientation: Quaternion.Identity, Position: Vector3.Zero),
+                    new EntitySnapshot(Active: true, BodyColor: Vector3.One, CatalogRig: 0, Continuity: EntityContinuity.Continuous, Generation: 1, Index: 1, Kit: 0, Look: 0, Orientation: Quaternion.Identity, Position: target),
+                },
+                Revision: 0,
+                StepTicks: 1UL,
+                Tick: tick
+            ), stream: default);
+            client.UpdateRenderPoses(alpha: 1f);
+            pool.Tick(deltaSeconds: (1f / 60f));
+            var moved = new SdfMovedTransforms();
+
+            moved.Begin(everything: false, tableRows: transforms.Length);
+            pool.PackTransforms(moved: moved, client: client, parkPosition: new Vector3(x: 0f, y: -1000f, z: 0f), slotBase: 0, transforms: transforms);
+
+            return pool.BodyShapePose(bodyIndex: 0, shapeIndex: 2).Position;
+        }
+
+        var first = new Vector3(x: 0.3f, y: 0.4f, z: 0.2f);
+        var second = new Vector3(x: -0.3f, y: 0.4f, z: 0.2f);
+        var tip = Vector3.Zero;
+
+        for (var tick = 0UL; (tick < 120UL); tick++) { tip = Frame(target: first, tick: tick); }
+        AssertNear(actual: tip, expected: first, what: "the hand on the first target");
+        // Only the target moves: the reaching body, its facts and its state are unchanged.
+        for (var tick = 120UL; (tick < 122UL); tick++) { tip = Frame(target: second, tick: tick); }
+        AssertNear(actual: tip, expected: second, what: "the hand on the moved target");
+    }
+    /// <summary>A rig's tables are sized from the rig, so a creation with forty drivers and ten effectors advances every
+    /// driver and solves every effector: none is clamped at a fixed width.</summary>
+    [Fact]
+    public void FortyDriversAndTenEffectorsAllRun() {
+        var shapes = new List<ShapeDocument>();
+        var effectors = new List<CreationEffectorDocument>();
+
+        for (var leg = 0; (leg < 10); leg++) {
+            var x = (0.2f * leg);
+
+            shapes.Add(item: Part(id: (3 * leg), joint: new Vector3(x: x, y: 1f, z: 0f), name: $"upper{leg}", parent: null, pivot: null, position: new Vector3(x: x, y: 0.75f, z: 0f)));
+            shapes.Add(item: Part(id: ((3 * leg) + 1), joint: new Vector3(x: x, y: 0.5f, z: 0f), name: $"lower{leg}", parent: $"upper{leg}", pivot: null, position: new Vector3(x: x, y: 0.3f, z: 0f)));
+            shapes.Add(item: Part(id: ((3 * leg) + 2), name: $"tip{leg}", parent: $"lower{leg}", pivot: null, position: new Vector3(x: x, y: 0.1f, z: 0f)));
+            effectors.Add(item: new CreationEffectorDocument(
+                Chain: [$"upper{leg}", $"lower{leg}"],
+                Name: $"reach{leg}",
+                Target: new CreationEffectorTargetDocument(Index: 1, Kind: CreationEffectorTargetDocument.KindBody, Offset: new DocumentVector3(value: new Vector3(x: (x + 0.3f), y: 0.4f, z: 0.2f))),
+                Tip: $"tip{leg}",
+                When: [CreationDriverDocument.WhenAlways]
+            ));
+        }
+
+        var creation = Prototype(document: new CreationDocument(
+            Drivers: [.. Enumerable.Range(count: 40, start: 0).Select(selector: static index => new CreationDriverDocument(Cadence: 1f, Name: $"d{index}", Signal: CreationDriverDocument.SignalTime, When: [CreationDriverDocument.WhenAlways]))],
+            Effectors: effectors,
+            Frames: null,
+            Name: "many",
+            Palette: null,
+            Schema: CreationDocument.CurrentSchema,
+            Shapes: shapes
+        ));
+        var client = Client(definition: Definition(creation: creation));
+        var pool = new WorldCreationInstances();
+
+        pool.Reconcile(placementFrames: WorldPlacementFrameCompilation.Compile(placements: [], worldSeed: 0UL),
+            bodyStamps: [new WorldCreationInstances.BodyStamp(BodyIndex: 0, Creation: creation, Scale: 1f, Look: WorldLook.Implicit)],
+            creations: [creation],
+            dynamics: [],
+            placements: []
+        );
+        var transforms = new DynamicTransform[pool.DynamicSlotCount];
+
+        for (var tick = 0UL; (tick < 120UL); tick++) {
+            client.DeliverSnapshot(snapshot: new WorldSnapshot(
+                Authority: "a",
+                Entries: new[] {
+                    new EntitySnapshot(Active: true, BodyColor: Vector3.One, CatalogRig: 0, Continuity: EntityContinuity.Continuous, Generation: 1, Index: 0, Kit: 0, Look: 0, Orientation: Quaternion.Identity, Position: Vector3.Zero),
+                    new EntitySnapshot(Active: true, BodyColor: Vector3.One, CatalogRig: 0, Continuity: EntityContinuity.Continuous, Generation: 1, Index: 1, Kit: 0, Look: 0, Orientation: Quaternion.Identity, Position: Vector3.Zero),
+                },
+                Revision: 0,
+                StepTicks: 1UL,
+                Tick: tick
+            ), stream: default);
+            client.UpdateRenderPoses(alpha: 1f);
+            pool.Tick(deltaSeconds: (1f / 60f));
+            var moved = new SdfMovedTransforms();
+
+            moved.Begin(everything: false, tableRows: transforms.Length);
+            pool.PackTransforms(moved: moved, client: client, parkPosition: new Vector3(x: 0f, y: -1000f, z: 0f), slotBase: 0, transforms: transforms);
+        }
+
+        Assert.True(condition: pool.TryBodyRig(bodyIndex: 0, state: out var rig));
+        Assert.Equal(expected: 40, actual: rig!.Drivers.Count);
+        Assert.True(condition: (rig.Drivers[39].Phase > 0f), userMessage: $"driver 40 phase {rig.Drivers[39].Phase}");
+        Assert.Equal(expected: 10, actual: rig.Effectors.Count);
+        for (var leg = 8; (leg < 10); leg++) {
+            AssertNear(actual: pool.BodyShapePose(bodyIndex: 0, shapeIndex: ((3 * leg) + 2)).Position, expected: new Vector3(x: -((0.2f * leg) + 0.3f), y: 0.4f, z: -0.2f), what: $"effector {leg + 1}'s tip, in the engine frame");
+        }
+    }
     /// <summary>Contact influence releases outside stance instead of dragging the authored swing onto the floor;
     /// an omitted swing weight retains target following, and the stance window still supports the limb.</summary>
     [Fact]
@@ -1062,13 +1196,13 @@ public sealed class CreationEffectorLawTests {
             comparisonType: StringComparison.Ordinal,
             expectedSubstring: "duplicate effector name 'footLeft'."
         );
-        Assert.Contains(
+        Assert.DoesNotContain(
             actualString: Refusal(document: Rig(effectors: [.. Enumerable.Range(
-                    count: (CreationDocument.MaxEffectors + 1),
+                    count: 10,
                     start: 0
                 ).Select(selector: index => Leg(plant: null) with { Name = $"e{index}" })])),
             comparisonType: StringComparison.Ordinal,
-            expectedSubstring: $"exceeds the {CreationDocument.MaxEffectors}-effector list."
+            expectedSubstring: "exceeds"
         );
         // The gate rides the driver vocabulary, so its refusals are the same ones.
         Assert.Contains(

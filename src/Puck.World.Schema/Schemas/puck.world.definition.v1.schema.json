@@ -126,6 +126,9 @@
     "markers": {
       "$ref": "./schema/markers.schema.json"
     },
+    "haptics": {
+      "$ref": "./schema/haptics.schema.json"
+    },
     "rules": {
       "$ref": "./schema/rules.schema.json"
     },

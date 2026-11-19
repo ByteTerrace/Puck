@@ -64,6 +64,7 @@ public sealed partial record WorldDefinition(
     [property: JsonPropertyName("inputHold"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldInputHoldAuthoring? InputHoldRaw = null,
     [property: JsonPropertyName("theme"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldThemeSection? ThemeRaw = null,
     [property: JsonPropertyName("markers"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldMarkerRow>? MarkersRaw = null,
+    [property: JsonPropertyName("haptics"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldHapticRow>? HapticsRaw = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldRule>? Rules = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldIdentityDefinition? Identity = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldGroupsSection? Groups = null,
@@ -319,6 +320,9 @@ public sealed partial record WorldDefinition(
     /// <summary>Gets the marker rows — ABSENT resolves to none (no marker channel output).</summary>
     [JsonIgnore]
     public IReadOnlyList<WorldMarkerRow> Markers => (MarkersRaw ?? []);
+    /// <summary>Gets the world-authored pad haptic pulse rows — ABSENT resolves to none.</summary>
+    [JsonIgnore]
+    public IReadOnlyList<WorldHapticRow> Haptics => (HapticsRaw ?? []);
     /// <summary>Gets the profileless locomotion speeds a stand-in with no seated profile advances on — ABSENT
     /// resolves to <see cref="WorldMotionDefaults.Default"/> (inert, near-zero).</summary>
     [JsonIgnore]

@@ -311,6 +311,12 @@ public static class WorldValueFields {
     public static WorldValueField BlendWeight { get; } = new(typeof(WorldCameraProgramOp.Blend), nameof(WorldCameraProgramOp.Blend.Weight), WorldValueDomain.Unit);
     /// <summary>A select op's key.</summary>
     public static WorldValueField SelectKey { get; } = new(typeof(WorldCameraProgramOp.SelectProgram), nameof(WorldCameraProgramOp.SelectProgram.Key), WorldValueDomain.Finite);
+    /// <summary>A haptic row's low-frequency motor intensity.</summary>
+    public static WorldValueField HapticLow { get; } = new(typeof(WorldHapticRow), nameof(WorldHapticRow.Low), WorldValueDomain.Unit);
+    /// <summary>A haptic row's high-frequency motor intensity.</summary>
+    public static WorldValueField HapticHigh { get; } = new(typeof(WorldHapticRow), nameof(WorldHapticRow.High), WorldValueDomain.Unit);
+    /// <summary>A haptic row's state-driven trigger scalar.</summary>
+    public static WorldValueField HapticSignal { get; } = new(typeof(WorldHapticRow), nameof(WorldHapticRow.Signal), WorldValueDomain.Finite);
 
     /// <summary>Returns the field a model member declares.</summary>
     /// <param name="owner">The model type that declares the member.</param>
@@ -424,6 +430,9 @@ public static class WorldValueFields {
         FieldOfView,
         BlendWeight,
         SelectKey,
+        HapticLow,
+        HapticHigh,
+        HapticSignal,
     ];
 
     // Built on first lookup, once every field and All have initialized.

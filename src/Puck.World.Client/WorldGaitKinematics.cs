@@ -14,16 +14,17 @@ namespace Puck.World.Client;
 public sealed class WorldGaitKinematics {
     private const float TwoPi = (2f * MathF.PI);
 
-    private readonly SecondOrderResponse[] m_responses = new SecondOrderResponse[CreationDocument.MaxDrivers];
-    private readonly bool[] m_follows = new bool[CreationDocument.MaxDrivers];
-    private readonly float[] m_value = new float[CreationDocument.MaxDrivers];
-    private readonly float[] m_velocity = new float[CreationDocument.MaxDrivers];
-    private readonly float[] m_previousTarget = new float[CreationDocument.MaxDrivers];
-    private readonly bool[] m_seeded = new bool[CreationDocument.MaxDrivers];
+    // One follower per driver, sized to the driver list Resolve was last handed.
+    private SecondOrderResponse[] m_responses = [];
+    private bool[] m_follows = [];
+    private float[] m_value = [];
+    private float[] m_velocity = [];
+    private float[] m_previousTarget = [];
+    private bool[] m_seeded = [];
 
     private Vector2 m_localVelocity;
     private Vector2 m_worldVelocity;
-    private IReadOnlyList<CreationDriverDocument>? m_resolvedDrivers;
+    private IReadOnlyList<CreationRigDriver>? m_resolvedDrivers;
     private IReadOnlyList<DynamicsRow>? m_resolvedRows;
 
     /// <summary>Gets the eased planar travel direction relative to the rendered facing, radians in (−π, π]; positive
@@ -42,7 +43,7 @@ public sealed class WorldGaitKinematics {
     /// output happened to equal the preceding output. No follower is advanced by this read.</summary>
     /// <param name="index">The driver's row index.</param>
     /// <returns>Whether the follower has a continuation under a constant target.</returns>
-    public bool FollowerContinues(int index) => (m_follows[index] && m_seeded[index] &&
+    public bool FollowerContinues(int index) => ((((uint)index) < ((uint)m_follows.Length)) && m_follows[index] && m_seeded[index] &&
         ((m_value[index] != m_previousTarget[index]) || (m_velocity[index] != 0f)));
     /// <summary>Clears the eased motion and every follower, so a reused body slot starts at rest facing forward.</summary>
     public void Reset() {
@@ -69,28 +70,34 @@ public sealed class WorldGaitKinematics {
             y: turned.Z
         );
     }
-    /// <summary>Resolves each driver's <see cref="CreationDriverDocument.Dynamics"/> row into its follower response.
-    /// Re-resolves only when the driver list or the row list is a different instance from the last call; a driver
-    /// naming no row, or a row the list does not hold, tracks its signal exactly.</summary>
-    /// <param name="drivers">The creation's declared drivers, or <see langword="null"/> for none.</param>
+    /// <summary>Resolves each driver's <see cref="CreationDriverDocument.Dynamics"/> row into its follower response, one
+    /// follower per driver. Re-resolves only when the driver list or the row list is a different instance from the last
+    /// call; a driver naming no row, or a row the list does not hold, tracks its signal exactly. A longer driver list
+    /// grows the followers, keeping each existing one's state.</summary>
+    /// <param name="drivers">The rig's drivers (<see cref="CreationRig.Drivers"/>), or <see langword="null"/> for none.</param>
     /// <param name="rows">The world's declared <c>dynamics</c> rows, or <see langword="null"/> for none.</param>
-    public void Resolve(IReadOnlyList<CreationDriverDocument>? drivers, IReadOnlyList<DynamicsRow>? rows) {
+    public void Resolve(IReadOnlyList<CreationRigDriver>? drivers, IReadOnlyList<DynamicsRow>? rows) {
         if (ReferenceEquals(objA: drivers, objB: m_resolvedDrivers) && ReferenceEquals(objA: rows, objB: m_resolvedRows)) {
             return;
         }
 
         m_resolvedDrivers = drivers;
         m_resolvedRows = rows;
+
+        var count = (drivers?.Count ?? 0);
+
+        if (m_follows.Length < count) {
+            Array.Resize(array: ref m_responses, newSize: count);
+            Array.Resize(array: ref m_follows, newSize: count);
+            Array.Resize(array: ref m_value, newSize: count);
+            Array.Resize(array: ref m_velocity, newSize: count);
+            Array.Resize(array: ref m_previousTarget, newSize: count);
+            Array.Resize(array: ref m_seeded, newSize: count);
+        }
         Array.Clear(array: m_follows);
-
-        var count = Math.Min(
-            val1: (drivers?.Count ?? 0),
-            val2: CreationDocument.MaxDrivers
-        );
-
         for (var index = 0; (index < count); index++) {
             m_follows[index] = WorldDynamicsResponse.TryResolveResponse(
-                name: drivers![index].Dynamics,
+                name: drivers![index].Document.Dynamics,
                 response: out m_responses[index],
                 rows: rows
             );
@@ -145,7 +152,7 @@ public sealed class WorldGaitKinematics {
     /// <param name="deltaSeconds">The frame delta, seconds.</param>
     /// <returns>The driver's phase.</returns>
     public float Follow(int index, float target, float period, float deltaSeconds) {
-        if (!m_follows[index]) {
+        if ((((uint)index) >= ((uint)m_follows.Length)) || !m_follows[index]) {
             return target;
         }
         if (!m_seeded[index]) {
