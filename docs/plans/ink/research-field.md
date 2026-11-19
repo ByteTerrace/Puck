@@ -338,7 +338,7 @@ winner rule as the material does. The bake already samples the winner at every
 vertex and every quad's quarter centres to place material boundaries
 (`SdfMeshMaterialCut`), and it does so in the sample mode that leaves two of
 its five words empty. That mode takes one tap, so the gradient it writes is
-zero (`passes/sdf-mesh-bake.comp.hlsl:128`):
+zero (`passes/sdf-mesh-bake.comp.hlsl:134`):
 
 ```hlsl
         meshBakeSamplesRW[word] = asuint(value);

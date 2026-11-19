@@ -71,6 +71,9 @@ public readonly record struct SdfMeshBakeRequest(Vector3 Origin, Vector3 Cell, (
     /// lattice of the group, so its coarse samples, fine samples, gradient taps and material reads read one field. Zero
     /// cell, the default, thickens nothing.</summary>
     public (float Cell, float Stroke) Glyphs { get; init; }
+
+    // Only a field slice observes live frame poses. A persisted bake uses its sealed pose rows.
+    internal bool LivePoses { get; init; }
 }
 /// <summary>The lattices one bake dispatch samples, at most <see cref="SdfWorldPackage.MeshBakeBatch"/> holding at most
 /// <see cref="SdfWorldPackage.MeshBakeMaxSamples"/> samples together, and the group each answers.</summary>
@@ -720,7 +723,43 @@ public sealed partial class SdfMeshPathBake {
     /// <param name="heldTaps">The evaluations of the first lattice <paramref name="firstFits"/> held back, which the
     /// next take waits for room for; zero when none was.</param>
     /// <returns><see langword="true"/> when the bake takes a lattice.</returns>
-    public bool TryTake(SdfProgram? field, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out SdfMeshBakeBatch? batch, long mostTaps, bool firstFits, out long heldTaps) {
+    public bool TryTake(SdfProgram? field, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out SdfMeshBakeBatch? batch, long mostTaps, bool firstFits, out long heldTaps) =>
+        TryTake(batch: out batch, field: field, firstFits: firstFits, heldTaps: out heldTaps, mostTaps: mostTaps, owedOnly: false);
+    /// <summary>Takes the lattices of one dispatch as
+    /// <see cref="TryTake(SdfProgram?, out SdfMeshBakeBatch?, long, bool, out long)"/> does, from the groups that owe the
+    /// frame alone (<see cref="OwedGroups"/>), under the allowance of the work the frame owes
+    /// (<see cref="SdfGpuWorkBudget.OwedAllowance"/>). A field slice is never owed.</summary>
+    /// <param name="field">The program whose field the dispatch samples: the tables' uploaded program.</param>
+    /// <param name="batch">The lattices to dispatch and the group each answers.</param>
+    /// <param name="mostTaps">The field evaluations the batch makes at most, as the other take reads it.</param>
+    /// <param name="firstFits">Whether the first lattice is held to <paramref name="mostTaps"/> too.</param>
+    /// <param name="heldTaps">The evaluations of the first lattice <paramref name="firstFits"/> held back; zero when none
+    /// was.</param>
+    /// <returns><see langword="true"/> when the bake takes a lattice.</returns>
+    public bool TryTakeOwed(SdfProgram? field, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out SdfMeshBakeBatch? batch, long mostTaps, bool firstFits, out long heldTaps) {
+        if (OwedGroups == 0) {
+            batch = null;
+            heldTaps = 0L;
+            return false;
+        }
+        return TryTake(batch: out batch, field: field, firstFits: firstFits, heldTaps: out heldTaps, mostTaps: mostTaps, owedOnly: true);
+    }
+    /// <summary>Gets how many groups owed the frame as of the latest prepared frame: an arrival's work, which a boot, a
+    /// world reached through a portal and a form edit start with: a group still bringing its first mesh with nothing of
+    /// its own drawn (a hole where a view looks, or a place none sees yet), or an arrival's first detail replacing the
+    /// floor it landed first (<see cref="SdfMeshTier"/>). Ordinary background work in play (a tier the demand moved to, a
+    /// resample, an eviction's floor) owes nothing. Read from any thread.</summary>
+    public int OwedGroups => Volatile.Read(location: ref m_owedGroups);
+
+    // The groups that owed the frame as of the latest Prioritize.
+    private int m_owedGroups;
+
+    // Whether a group owes the frame work it can bake: not done, baking for itself, and either drawing nothing yet or
+    // an arrival's first detail (Group.FirstDetail). A follower's mesh is its leader's work, which takes the follower's
+    // view (Prioritize); a group waiting on another residency's bake of its geometry holds no lattice.
+    private static bool OwesFrame(Group group) => (!group.Done && !group.Retired && (group.Leader is null) && (group.Joined is null) && ((group.Shown is null) || group.FirstDetail));
+
+    private bool TryTake(SdfProgram? field, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out SdfMeshBakeBatch? batch, long mostTaps, bool firstFits, out long heldTaps, bool owedOnly) {
         batch = null;
         heldTaps = 0L;
         mostTaps = Math.Clamp(value: mostTaps, min: (firstFits ? 0L : 1L), max: BatchTaps);
@@ -742,8 +781,9 @@ public sealed partial class SdfMeshPathBake {
             m_takenSampled.Clear();
             var samples = 0;
             var taps = 0;
-            // A slice's lattices come first, within the same batch, so a long bake never holds a diagnostic back.
-            while ((m_slice is { } slice) && (lattices.Count < SdfWorldPackage.MeshBakeBatch)) {
+            // A slice's lattices come first, within the same batch, so a long bake never holds a diagnostic back; it owes
+            // the frame no hole, so an owed take leaves it to the next.
+            while (!owedOnly && (m_slice is { } slice) && (lattices.Count < SdfWorldPackage.MeshBakeBatch)) {
                 if (slice.Take(instances: (m_program?.Instances.Count ?? 0), ticket: out var lattice, worldSelector: SdfMeshBakeGroup.WorldSelector) is not { } next) { break; }
                 if (((lattices.Count > 0) || firstFits) && (((taps + next.Taps) > mostTaps) || ((samples + next.Samples) > SdfWorldPackage.MeshBakeMaxSamples))) {
                     if (lattices.Count == 0) { heldTaps = next.Taps; }
@@ -776,8 +816,8 @@ public sealed partial class SdfMeshPathBake {
                 working += ((!group.Done && group.Contouring) ? 1 : 0);
                 admitted += ((!group.Done && group.Admitted) ? 1 : 0);
                 awaiting += ((!group.Done && group.AwaitsStage) ? 1 : 0);
-                if (group.Done || group.InFlight || group.Contouring || (group.Next is null)) { continue; }
-                candidates.Add(item: (group.Priority, index));
+                if (group.Done || group.InFlight || group.Contouring || (group.Next is null) || (owedOnly && !OwesFrame(group: group))) { continue; }
+                candidates.Add(item: (RankOf(group: group), index));
             }
             if (pending) {
                 m_accounts.Takes++;
@@ -850,6 +890,7 @@ public sealed partial class SdfMeshPathBake {
                     admitted++;
                     awaiting++;
                 }
+                if (ProbeSamples(group, in next)) { continue; }
                 group.InFlight = true;
                 group.TakenSamples += next.Samples;
                 samples += next.Samples;
@@ -900,6 +941,10 @@ public sealed partial class SdfMeshPathBake {
     // The groups a take may take a lattice of, by priority, reused take to take.
     private readonly List<(float Priority, int Index)> m_candidates = [];
 
+    // A group's rank among a take's candidates: every group in view (Group.InView) ahead of every group out of it, each
+    // side by its priority. A priority is never negative, so an out-of-view group's rank is taken into [-1, 0) with its
+    // order kept.
+    private static float RankOf(Group group) => (group.InView ? group.Priority : (-1f / (1f + group.Priority)));
     // Higher priority first, then the plan's order.
     private static readonly Comparison<(float Priority, int Index)> ByPriority = static (left, right) =>
         ((right.Priority.CompareTo(value: left.Priority) is var order and not 0) ? order : left.Index.CompareTo(value: right.Index));
@@ -928,7 +973,7 @@ public sealed partial class SdfMeshPathBake {
 
         for (var index = 0; (index < batch.Lattices.Length); index++) {
             var lattice = batch.Lattices[index];
-            var bytes = ((lattice.Samples * SdfWorldPackage.MeshBakeSampleWords) * sizeof(uint));
+            var bytes = SampleBytes(in lattice);
             var slice = samples.Slice(length: bytes, start: offset);
 
             offset += bytes;
@@ -962,8 +1007,16 @@ public sealed partial class SdfMeshPathBake {
                     group.EndWork();
                     continue;
                 }
+                var checkpoint = CaptureSamples(group, slice);
                 Enqueue(group: group, urgent: true, work: () => {
-                    using (answer) { AnswerGroup(answer: answer, group: group, request: in lattice); }
+                    using (answer) {
+                        using var captured = checkpoint;
+                        if (captured is not null && CheckpointStore(group) is { } store) {
+                            store.WriteSamples(group.Checkpoints!.Sampling, group.SampleProbe!.Value, captured.GetSpan());
+                        }
+                        group.SampleProbe = null;
+                        AnswerGroup(answer: answer, group: group, request: in lattice);
+                    }
                 });
                 continue;
             }
@@ -1099,7 +1152,7 @@ public sealed partial class SdfMeshPathBake {
                     + (((3L * mesh.TriangleCount) + mesh.TriangleMaterials.Length) * sizeof(uint)));
             }
 
-            return $"[sdf.mesh-bake] residency={Residency} groups={m_groups.Count} meshes={meshes} pending={m_groups.Count(predicate: static group => !group.Done)} dispatches={m_accounts.Dispatches} samples={m_accounts.Samples} discarded={m_accounts.Discarded} taps={m_accounts.Taps} refined={m_accounts.RefinedCells} edges={m_accounts.CutEdges} softened={m_accounts.Softened} merged={m_accounts.Merged} loaded={m_accounts.Loaded} skinned={m_groups.Count(predicate: static group => (group.Mesh is { VertexMembers.IsEmpty: false }))} triangles={triangles} vertices={vertices} bytes={bytes} seconds={(m_reported ? m_seconds : m_clock.Elapsed.TotalSeconds):0.000}";
+            return $"[sdf.mesh-bake] residency={Residency} groups={m_groups.Count} meshes={meshes} pending={m_groups.Count(predicate: static group => !group.Done)} dispatches={m_accounts.Dispatches} samples={m_accounts.Samples} discarded={m_accounts.Discarded} taps={m_accounts.Taps} refined={m_accounts.RefinedCells} edges={m_accounts.CutEdges} softened={m_accounts.Softened} merged={m_accounts.Merged} loaded={m_accounts.Loaded} skinned={m_groups.Count(predicate: static group => (group.Mesh is { VertexMembers.IsEmpty: false }))} triangles={triangles} vertices={vertices} bytes={bytes} seconds={(m_reported ? m_seconds : m_clock.Elapsed.TotalSeconds):0.000} {m_accounts.DescribeCheckpoints()}";
         }
     }
 
@@ -1332,7 +1385,8 @@ public sealed partial class SdfMeshPathBake {
         }
         group.Owner = this;
         group.TakeDemandBox();
-        if ((old is not null) && Keeps(group: group, identity: identity, old: old)) {
+        if ((old is not null) && (old.Done || (old.CheckpointProgram is null) || ReferenceEquals(old.CheckpointProgram, m_program))
+            && Keeps(group: group, identity: identity, old: old)) {
             old.AdoptSampled(planned: group);
             Replace(group: old, index: index);
             if (!old.Done && (old.Leader is null) && (old.Replaces is null)) { _ = leaders.TryAdd(key: old.Sealed, value: old); }
@@ -1498,7 +1552,12 @@ public sealed partial class SdfMeshPathBake {
             group.Next = Lattice(gradients: false, group: group, longest: CoarseSamples, minimum: CoarseSamples);
         }
         group.Identity = Identity.Value;
-        if (!Library.Holds(geometry: group.Sealed, identity: group.Identity)) { return false; }
+        if (Identity.HasParts && Library.Disk is not null) {
+            group.Checkpoints = Identity;
+            group.CheckpointProgram = m_program;
+            group.CheckpointGeometry = CheckpointInput(group, m_program!);
+        }
+        if (!Library.Holds(geometry: group.Sealed, identity: group.Identity) && !HoldsCheckpoint(group)) { return false; }
         group.Deferred = group.Next;
         group.Next = null;
         group.Contouring = true;
@@ -1594,7 +1653,7 @@ public sealed partial class SdfMeshPathBake {
         var empty = !(low.X <= high.X);
 
         // An empty result is a fact about the geometry, stored whether or not the group is still planned.
-        if (empty) { Library.StoreEmpty(geometry: group.Sealed, identity: group.Identity, persist: true); }
+        if (empty) { StoreEmpty(group); }
         lock (m_gate) {
             group.InFlight = false;
             if (!m_groups.Contains(item: group)) { return; }
@@ -1801,7 +1860,7 @@ public sealed partial class SdfMeshPathBake {
                 outside |= (value >= 0f);
             }
             empty = (!(inside && outside) && !SheetBetween(lattice: final.Lattice, values: final.Values));
-            if (empty) { Library.StoreEmpty(geometry: group.Sealed, identity: group.Identity, persist: true); }
+            if (empty) { StoreEmpty(group); }
         }
 
         FinalLattice? emptied = null;
@@ -1870,7 +1929,7 @@ public sealed partial class SdfMeshPathBake {
         var empty = ((refusal is not null) || (points.Length == 0));
 
         if (empty) {
-            if (refusal is not null) { SdfMeshBakeReport.Refused(refusal: refusal, selector: group.Selector); } else { Library.StoreEmpty(geometry: group.Sealed, identity: group.Identity, persist: true); }
+            if (refusal is not null) { SdfMeshBakeReport.Refused(refusal: refusal, selector: group.Selector); } else { StoreEmpty(group); }
         } else {
             // The refinement now names its fine samples, so the admission narrows from their bound to their count.
             _ = group.Memory.TryReserve(peak: PeakOf(final: final, fineSamples: ((final.Stage == FinalStage.Refinement) ? points.Length : 0)));
@@ -2014,7 +2073,7 @@ public sealed partial class SdfMeshPathBake {
         int[] creases = [];
 
         if (empty) {
-            if (contour is not null) { Library.StoreEmpty(geometry: group.Sealed, identity: group.Identity, persist: true); }
+            if (contour is not null) { StoreEmpty(group); }
         } else if (contour is not null) {
             creases = CreaseVertices(contour: contour);
             if (creases.Length > 0) {
@@ -2245,6 +2304,10 @@ public sealed partial class SdfMeshPathBake {
             }
         }
         lock (m_gate) { m_accounts.CutEdges += edges; }
+        if (mesh is not null) {
+            mesh = mesh with { BakeCell = group.DiagnosticCell };
+            KeepCheckpoint(group, mesh, simplified: false);
+        }
         Land(group: group, mesh: mesh);
     }
     // Lands a group's finished mesh, its coplanar triangles merged into the polygons they tile (SdfMeshPlanarMerge) and its
@@ -2257,15 +2320,23 @@ public sealed partial class SdfMeshPathBake {
             var contoured = mesh.TriangleCount;
             var started = Stopwatch.GetTimestamp();
 
-            mesh = mesh with { BakeCell = group.DiagnosticCell };
-            mesh = ((!group.Dynamic && !group.Glass && ((group.Instances > 1) || (mesh.TriangleCount >= SdfMeshChunks.WholeTriangles)))
-                ? SdfMeshChunks.Bake(mesh, preserveFeatures: group.Geometry.ContainsGlyph)
-                : SdfMeshChunks.Merge(levels: !group.Glass, mesh: mesh, preserveFeatures: group.Geometry.ContainsGlyph));
+            mesh = SimplificationStage.Run(mesh, group.Dynamic, group.Glass, group.Instances, group.Geometry.ContainsGlyph);
             merged = (contoured - mesh.TriangleCount);
             Account(detail: new(Count: contoured, Kept: mesh.TriangleCount), group: group, since: started, stage: BakeStage.Land);
-            started = Stopwatch.GetTimestamp();
-            mesh = Library.Store(form: (group.Dynamic ? group.Form : null), geometry: group.Sealed, identity: group.Identity, materials: group.MaterialOrder, mesh: mesh);
+            KeepCheckpoint(group, mesh, simplified: true);
+        }
+        PublishMesh(group, mesh, merged);
+    }
+
+    private void PublishMesh(Group group, SdfMesh? mesh, int merged) {
+        if (mesh is not null) {
+            var started = Stopwatch.GetTimestamp();
+            mesh = StageCodeCurrent(group)
+                ? Library.Store(form: (group.Dynamic ? group.Form : null), geometry: group.Sealed, identity: group.Identity, materials: group.MaterialOrder, mesh: mesh)
+                : mesh.NativeCopy(Library.Allocator, Library.Account);
             Account(since: started, stage: BakeStage.Store);
+        } else if ((group.Outcome is not null) && StageCodeCurrent(group)) {
+            Library.StoreEmpty(geometry: group.Sealed, identity: group.Identity, persist: true);
         }
 
         lock (m_gate) {
@@ -2273,7 +2344,7 @@ public sealed partial class SdfMeshPathBake {
             group.Contouring = false;
             group.Done = true;
             Draw(group: group, mesh: mesh);
-            group.Outcome = ((mesh is null) ? "mesh refused" : null);
+            group.Outcome = ((mesh is null) ? (group.Outcome ?? "mesh refused") : null);
 
             group.Points.Resize(0);
             group.PointMaterials.Resize(0);
@@ -2284,6 +2355,11 @@ public sealed partial class SdfMeshPathBake {
     // its coarse lattice.
     private void Load(Group group) {
         var loaded = Library.TryLoad(form: (group.Dynamic ? group.Form : null), geometry: group.Sealed, identity: group.Identity, materials: group.MaterialOrder, mesh: out var mesh, refusal: out var refusal);
+
+        if (!loaded && ResumeCheckpoint(group)) {
+            lock (m_gate) { m_loadsDone++; m_loadLast = Stopwatch.GetTimestamp(); }
+            return;
+        }
 
         lock (m_gate) {
             group.Contouring = false;
@@ -2621,6 +2697,11 @@ public sealed partial class SdfMeshPathBake {
             Outcome = (Clamped ? $"no surface{how} (bound clamped to the far distance)" : $"no surface{how}");
         // The identity of the bake the group started under, and the coarse lattice it bakes from when its load fails.
         public UInt128 Identity { get; set; }
+        public SdfMeshBakeIdentity? Checkpoints { get; set; }
+        public SdfProgram? CheckpointProgram { get; set; }
+        public SdfMeshGeometry CheckpointGeometry { get; set; }
+        public bool CheckedCheckpoints { get; set; }
+        public UInt128? SampleProbe { get; set; }
         public SdfMeshBakeRequest? Deferred { get; set; }
         // Whether the mesh came from the library or its store rather than a bake of this group.
         public bool Stored { get; set; }
@@ -2731,6 +2812,10 @@ public sealed partial class SdfMeshPathBake {
         // The display pixels its demand box projects at the demand point that sees it largest, as of the latest frame
         // that measured it (SdfMeshDemand.Priority); zero with no demand point.
         public float Priority { get; set; }
+        // Whether a view may see the group as of the latest frame that measured it (SdfMeshDemand.Sees), which every group
+        // is before its first measure: the bake takes those in view first (RankOf), and only one arriving in view plans
+        // its floor first (Tiers).
+        public bool InView { get; set; } = true;
         // The tier the demand asked of the group at the latest frame (Retier), the frames in a row it has owed a finer
         // tier than it draws, and whether a finer tier's bake meshed nothing at the demanded tier, so none is tried until
         // the demand asks another.

@@ -687,8 +687,9 @@ cross-world doors carry bodies and answers until it lands.
 - **Which grant verb admits an offer over a socket?** Step 12's lane, within
   the five verbs the grant table has.
 
-Three choices in this design are the engine's behaviour, made here for the
-owner to overturn:
+Three choices in this design are the engine's behaviour. Each follows from the
+owner's rulings (a crossing is continuous motion; doors far less restricted
+than Portal's; authority placed per world), so they stand as settled:
 
 - A body crossing a moving door keeps its velocity relative to the door. The
   alternative, keeping its velocity in the world, makes a door that sweeps over
@@ -697,3 +698,15 @@ owner to overturn:
 - A door pair may face any two ways, and a body is righted after it crosses.
 - A door onto another world is two doors under a lease, each owned by its own
   world, and never one world's write into another.
+
+Three more follow from the rulings in the same way:
+
+- A door may open onto a world the source's author never listed, named by an
+  address the opener's identity carries ("onto any world"). It stays the last
+  build step because naming a world after boot is a new mutation axis.
+- The moon door is built as debug-world content on this mechanism: the moons
+  are federated worlds of their own to explore (AGENTS.md, "Puck's purpose").
+- The standard package's player-opened cross-world door admits only its
+  opener's party by default, because a floor door under another player would
+  move that player into another world's custody. It is an author's value that
+  any world overrides.

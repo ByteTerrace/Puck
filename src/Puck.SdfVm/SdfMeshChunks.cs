@@ -95,24 +95,6 @@ public static class SdfMeshChunks {
         return Join(chunks: chunks);
     }
 
-    /// <summary>Merges a contour into its planar polygons (<see cref="SdfMeshPlanarMerge"/>) and, unless
-    /// <paramref name="levels"/> is false, collapses the merged mesh into its coarser levels (<see cref="SdfMeshCollapse"/>):
-    /// what every landed mesh, and each chunk of a chunked one, is made of.</summary>
-    /// <param name="mesh">The contour, with its actual bake cell.</param>
-    /// <param name="preserveFeatures">Whether coarser levels limit crease and material-edge error to the largest bake-cell
-    /// dimension divided by 8.</param>
-    /// <param name="levels">Whether the mesh takes coarser levels; glass, which its pass draws at level zero alone, does
-    /// not.</param>
-    /// <returns>The merged mesh, levelled or not.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="mesh"/> is <see langword="null"/>.</exception>
-    public static SdfMesh Merge(SdfMesh mesh, bool preserveFeatures, bool levels = true) {
-        ArgumentNullException.ThrowIfNull(argument: mesh);
-
-        var merged = SdfMeshPlanarMerge.Merge(mesh: mesh);
-
-        return (levels ? SdfMeshCollapse.Levels(mesh: merged, preserveFeatures: preserveFeatures) : merged);
-    }
-
     /// <summary>Joins chunks' merged surfaces for whole-group queries. Only chunks are stored and drawn; the joined
     /// arrays are a CPU query view, never another resident GPU mesh. The joined mesh holds the vertex and triangle
     /// attributes once: its chunks are views of its positions, normals and triangle materials, in order, each keeping its
