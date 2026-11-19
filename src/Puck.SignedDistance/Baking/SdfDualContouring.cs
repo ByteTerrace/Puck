@@ -7,11 +7,12 @@ namespace Puck.SignedDistance.Baking;
 /// <summary>
 /// A surface extracted from an <see cref="ISdfContourLattice"/>: one vertex per surface patch of each cell the surface crosses,
 /// and one quad per sign-changing lattice edge joining the vertices of the four cells around it. Positions and normals
-/// are world-space doubles; quads list four vertex indices, wound counter-clockwise seen from outside.
+/// are world space, placed in doubles and rounded once to single precision; quads list four vertex indices, wound
+/// counter-clockwise seen from outside.
 /// </summary>
 internal sealed class SdfSurface {
-    public required double[] Normals { get; init; }
-    public required double[] Positions { get; init; }
+    public required float[] Normals { get; init; }
+    public required float[] Positions { get; init; }
     public int QuadCount => (Quads.Length / 4);
     public required int[] Quads { get; init; }
     // Per quad, the lattice corner at the outside end of the sign-changing edge the quad crosses: the field there is
@@ -23,7 +24,7 @@ internal sealed class SdfSurface {
     public required sbyte[] QuadAxes { get; init; }
     // Per vertex, three components: the way the lattice says its patch faces (SdfContourFacing.Patch), a merged vertex's
     // the sum of its fine vertices'.
-    public required double[] Patches { get; init; }
+    public required float[] Patches { get; init; }
     // Per vertex, whether it lies on a crease or corner of the surface (Place's feature): empty where no vertex does.
     public bool[] Features { get; init; } = [];
     // Per vertex, whether its crossings' tangent planes drew it away from their mean (Place), as to a crease or to the
@@ -265,9 +266,9 @@ internal static class SdfDualContouring {
             Beside = besides.ToArray(),
             Features = features.ToArray(),
             Solved = solveds.ToArray(),
-            Normals = normals.ToArray(),
-            Patches = patches.ToArray(),
-            Positions = positions.ToArray(),
+            Normals = Narrowed(values: normals.AsSpan()),
+            Patches = Narrowed(values: patches.AsSpan()),
+            Positions = Narrowed(values: positions.AsSpan()),
             QuadAxes = quadAxes,
             QuadCorners = quadCorners,
             Quads = quads,
@@ -814,15 +815,15 @@ internal static class SdfDualContouring {
         // on a crease, and where its fine vertices' tangent planes lie in `piecePlanes`. A merged index is numbered as its
         // piece is first met in vertex order, so walking the indices visits the pieces in that order.
         using var pieceLease = RentedArrays.Rent<Piece>(array: out var pieces, minimumLength: mergedCount);
-        var mergedPositions = new double[(3 * mergedCount)];
-        var mergedNormals = new double[(3 * mergedCount)];
+        using var mergedPositionLease = RentedArrays.Rent<double>(array: out var mergedPositions, minimumLength: (3 * mergedCount));
+        using var mergedNormalLease = RentedArrays.Rent<double>(array: out var mergedNormals, minimumLength: (3 * mergedCount));
         var mergedFeatures = new bool[mergedCount];
         var mergedSolved = new bool[mergedCount];
         var mergedBesides = new bool[mergedCount];
         // Per merged vertex, where Settle returns it: an unowned vertex's own crossings' mean, a piece's fine vertices'
         // mean of theirs.
-        var mergedAnchors = new double[(3 * mergedCount)];
-        var mergedPatches = new double[(3 * mergedCount)];
+        using var mergedAnchorLease = RentedArrays.Rent<double>(array: out var mergedAnchors, minimumLength: (3 * mergedCount));
+        using var mergedPatchLease = RentedArrays.Rent<double>(array: out var mergedPatches, minimumLength: (3 * mergedCount));
         var merged = 0;
 
         remap.AsSpan(start: 0, length: vertexCount).Fill(value: -1);
@@ -941,7 +942,7 @@ internal static class SdfDualContouring {
             }
         }
 
-        HandOff(besides: mergedBesides, features: mergedFeatures, grid: grid, handoffs: mergedHandoffs.AsSpan(), positions: mergedPositions, solveds: mergedSolved, target: (x, y, z) => {
+        HandOff(besides: mergedBesides, features: mergedFeatures, grid: grid, handoffs: mergedHandoffs.AsSpan(), positions: mergedPositions.AsSpan(start: 0, length: (3 * mergedCount)), solveds: mergedSolved, target: (x, y, z) => {
             var vertex = cellVertex(x, y, z);
 
             return ((vertex < 0) ? -1 : remap[vertex]);
@@ -990,19 +991,26 @@ internal static class SdfDualContouring {
             keptQuads++;
         }
 
-        Settle(anchors: mergedAnchors, axes: mergedAxes, besides: mergedBesides, features: mergedFeatures, patches: mergedPatches, positions: mergedPositions, quads: mergedQuads, solveds: mergedSolved);
+        Settle(anchors: mergedAnchors.AsSpan(start: 0, length: (3 * mergedCount)), axes: mergedAxes, besides: mergedBesides, features: mergedFeatures, patches: mergedPatches.AsSpan(start: 0, length: (3 * mergedCount)), positions: mergedPositions.AsSpan(start: 0, length: (3 * mergedCount)), quads: mergedQuads, solveds: mergedSolved);
 
         return new SdfSurface {
             Features = mergedFeatures,
             Beside = mergedBesides,
             Solved = mergedSolved,
-            Normals = mergedNormals,
-            Patches = mergedPatches,
-            Positions = mergedPositions,
+            Normals = Narrowed(values: mergedNormals.AsSpan(start: 0, length: (3 * mergedCount))),
+            Patches = Narrowed(values: mergedPatches.AsSpan(start: 0, length: (3 * mergedCount))),
+            Positions = Narrowed(values: mergedPositions.AsSpan(start: 0, length: (3 * mergedCount))),
             QuadAxes = mergedAxes,
             QuadCorners = mergedCorners,
             Quads = mergedQuads,
         };
+    }
+    // The values rounded to single precision, in an array of exactly their count.
+    private static float[] Narrowed(ReadOnlySpan<double> values) {
+        var narrowed = new float[values.Length];
+
+        for (var index = 0; (index < values.Length); index++) { narrowed[index] = ((float)values[index]); }
+        return narrowed;
     }
     // One merged vertex's piece, while Merge gathers it: its fine vertices' count and summed positions, crossings' means,
     // patch facings and normals, its root vertex, whether any fine vertex lies on a crease or records tangent planes, and
