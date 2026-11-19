@@ -127,6 +127,8 @@ D3D12_FEATURE_DATA_D3D12_OPTIONS19
 // spans, and whether the device implements ID3D12Device1 (SetResidencyPriority) and ID3D12Device3 (EnqueueMakeResident).
 D3D12_FEATURE_DATA_GPU_VIRTUAL_ADDRESS_SUPPORT
 ID3D12Device3
+// And its optional capabilities (GpuOptionalCapabilities): options 5's raytracing tier, whose 1.1 is inline ray queries.
+D3D12_FEATURE_DATA_D3D12_OPTIONS5
 
 // Direct3D 12: whether the device samples a format from a two-dimensional texture, which an image upload refuses by
 // name when it does not.

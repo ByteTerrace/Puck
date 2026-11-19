@@ -254,6 +254,10 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
     /// messages and a GPU capture. The presenter registration sets it from <c>GpuDeviceOptions.NameObjects</c>; the
     /// objects are named whenever <see cref="RecordRemoval"/> is on as well.</summary>
     public bool NameObjects { get; init; }
+    /// <summary>Gets the optional capabilities the device is created without even where it reports them
+    /// (<see cref="GpuDeviceCapabilities.Withheld"/>). The presenter registration sets it from
+    /// <c>GpuDeviceOptions.Withheld</c>.</summary>
+    public GpuOptionalCapabilities Withheld { get; init; }
 
     /// <summary>Gets whether the device records device removed extended data (DRED): the auto-breadcrumb trail of every
     /// command list, with the PIX-event label each operation ran under, and the page fault that removed a device, with
@@ -360,7 +364,10 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
             segments: segments,
             serial: m_readingSerial
         ));
-        m_capabilities = m_deviceApi.GetDeviceCapabilities(deviceHandle: m_device.Handle);
+        var reported = m_deviceApi.GetDeviceCapabilities(deviceHandle: m_device.Handle);
+
+        m_capabilities = reported.WithOptional(reported: reported.Optional, withheld: Withheld);
+        Console.Error.WriteLine(value: $"[gpu-optional] {GpuOptionalCapabilitiesSpelling.Of(capabilities: m_capabilities.Optional)} withheld={GpuOptionalCapabilitiesSpelling.Of(capabilities: m_capabilities.Withheld)} raytracing-tier={m_capabilities.RaytracingTier}");
         EnsureShaderModelFloor(deviceHandle: m_device.Handle);
         var barriers = default(D3D12_FEATURE_DATA_D3D12_OPTIONS12);
 

@@ -109,15 +109,22 @@ public static unsafe class DirectXFeatureReads {
     /// asks reports that field empty.
     /// <para>And how it backs memory (<see cref="GpuDeviceCapabilities.WithDirectXBacking"/>): options' tiled resources
     /// tier, the virtual address support query's per-resource address bits (zero when the runtime does not answer it),
-    /// and the two interfaces the caller probed.</para></summary>
+    /// and the two interfaces the caller probed.</para>
+    /// <para>And its optional capabilities (<see cref="GpuDeviceCapabilities.WithOptional"/>): ray queries where options
+    /// 5's raytracing tier reaches 1.1, whose inline <c>RayQuery</c> a compute kernel traces with, and the device
+    /// implements <c>ID3D12Device5</c>, which builds acceleration structures; a runtime that does not answer options 5
+    /// reports no tier. The device context withholds what its host asks.</para></summary>
     /// <typeparam name="TSupport">The query's answerer.</typeparam>
     /// <param name="support">The device's feature queries.</param>
     /// <param name="residencyPriority">Whether the device implements <c>ID3D12Device1</c>.</param>
     /// <param name="enqueueMakeResident">Whether the device implements <c>ID3D12Device3</c>.</param>
+    /// <param name="raytracingInterfaces">Whether the device implements <c>ID3D12Device5</c>.</param>
     /// <returns>The capabilities.</returns>
     /// <exception cref="DirectXException">The options query, which every Direct3D 12 runtime answers, failed.</exception>
-    public static GpuDeviceCapabilities Capabilities<TSupport>(TSupport support, bool residencyPriority = false, bool enqueueMakeResident = false) where TSupport : IDirectXFeatureSupport {
+    public static GpuDeviceCapabilities Capabilities<TSupport>(TSupport support, bool residencyPriority = false, bool enqueueMakeResident = false,
+        bool raytracingInterfaces = false) where TSupport : IDirectXFeatureSupport {
         var options = new D3D12_FEATURE_DATA_D3D12_OPTIONS();
+        var options5 = new D3D12_FEATURE_DATA_D3D12_OPTIONS5();
         var options19 = new D3D12_FEATURE_DATA_D3D12_OPTIONS19();
         var addresses = new D3D12_FEATURE_DATA_GPU_VIRTUAL_ADDRESS_SUPPORT();
 
@@ -137,8 +144,15 @@ public static unsafe class DirectXFeatureReads {
         if (!TryCheck(data: ref addresses, feature: D3D12_FEATURE.D3D12_FEATURE_GPU_VIRTUAL_ADDRESS_SUPPORT, support: support)) {
             addresses = default;
         }
+        if (!TryCheck(data: ref options5, feature: D3D12_FEATURE.D3D12_FEATURE_D3D12_OPTIONS5, support: support)) {
+            options5 = default;
+        }
 
-        return GpuDeviceCapabilities.FromDirectX(
+        var reported = ((raytracingInterfaces && (options5.RaytracingTier >= D3D12_RAYTRACING_TIER.D3D12_RAYTRACING_TIER_1_1))
+            ? GpuOptionalCapabilities.RayQuery
+            : GpuOptionalCapabilities.None);
+
+        return (GpuDeviceCapabilities.FromDirectX(
             resourceBindingTier: ((uint)options.ResourceBindingTier),
             rootSignatureVersion: HighestRootSignatureVersion(support: support),
             samplerHeapSize: options19.MaxSamplerDescriptorHeapSize,
@@ -150,7 +164,7 @@ public static unsafe class DirectXFeatureReads {
             residencyPriority: residencyPriority,
             resourceAddressBits: addresses.MaxGPUVirtualAddressBitsPerResource,
             tiledResourcesTier: ((uint)options.TiledResourcesTier)
-        );
+        ).WithOptional(reported: reported, withheld: GpuOptionalCapabilities.None) with { RaytracingTier = ((uint)options5.RaytracingTier) });
     }
     /// <summary>Fills a memory profile from the native structures Direct3D 12 and DXGI report: the architecture's
     /// <c>UMA</c> and <c>CacheCoherentUMA</c>, the adapter's <c>DedicatedVideoMemory</c> and <c>SharedSystemMemory</c>,

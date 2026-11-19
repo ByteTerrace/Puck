@@ -156,7 +156,7 @@ public static class VulkanPresenterServiceRegistration {
             physicalDeviceApi: sp.GetRequiredService<IVulkanPhysicalDeviceApi>(),
             pipelineCacheStore: sp.GetService<GpuPipelineCacheStore>(),
             pipelineCacheWork: sp.GetRequiredKeyedService<GpuPipelineCacheWork>(serviceKey: PipelineCacheBackend)
-        ));
+        ) { Withheld = (sp.GetService<GpuDeviceOptions>()?.Withheld ?? GpuOptionalCapabilities.None) });
         services.TryAddSingleton<IVulkanSwapchainSupportApi>(implementationFactory: static sp => new VulkanSwapchainSupportApi(physicalDeviceApi: sp.GetRequiredService<IVulkanPhysicalDeviceApi>()));
         services.TryAddSingleton<IVulkanSwapchainFactory>(implementationFactory: static sp => new VulkanSwapchainFactory(swapchainApi: sp.GetRequiredService<IVulkanSwapchainApi>()));
         services.TryAddSingleton<IVulkanRenderPassFactory>(implementationFactory: static sp => new VulkanRenderPassFactory(renderPassApi: sp.GetRequiredService<IVulkanRenderPassApi>()));

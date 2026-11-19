@@ -1115,6 +1115,7 @@ public static class WorldBootComposition {
             NameObjects = ((inputs.Validation != GpuValidation.Off) || (inputs.CaptureTool is not null)),
             Software = inputs.Software,
             Validation = inputs.Validation,
+            Withheld = inputs.WithheldGpu,
         });
         // The operator's gpu.capture, over the capture tool the boot loaded, if any; a GPU host drives it every frame.
         services.AddSingleton(implementationInstance: new GpuFrameCapture(

@@ -1,4 +1,5 @@
 using Puck.Abstractions.Counting;
+using Puck.Abstractions.Gpu;
 using Puck.Shaders;
 
 namespace Puck.SdfVm;
@@ -136,6 +137,15 @@ public sealed class SdfKernelSet {
         SdfKernel.ScreenEmission => "sdf-screen-emission",
         SdfKernel.Resolve => "sdf-resolve",
         _ => throw new ArgumentOutOfRangeException(paramName: nameof(kernel), actualValue: kernel, message: "Not an SDF kernel."),
+    };
+    /// <summary>Returns the optional device capabilities a kernel variant depends on (<see cref="GpuOptionalCapabilities"/>):
+    /// a pipeline set builds it only on a device created with every one (<see cref="GpuDeviceCapabilities.Has"/>), and
+    /// its caller takes the path it replaces wherever the set lacks it (<see cref="SdfWorldPipelines.Leases"/>). Every
+    /// kernel ships on every machine, since compiling one needs no device.</summary>
+    /// <param name="kernel">The kernel.</param>
+    /// <returns>The capabilities, or <see cref="GpuOptionalCapabilities.None"/> for a kernel every device runs.</returns>
+    public static GpuOptionalCapabilities RequiresOf(SdfKernel kernel) => kernel switch {
+        _ => GpuOptionalCapabilities.None,
     };
     /// <summary>Returns the layout of the interface a kernel reads: reconstruction's
     /// (<see cref="SdfWorldInterfaces.ResolveParameters"/>), the sky's and composite's
