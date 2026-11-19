@@ -490,7 +490,7 @@ add the row you found.
 | Put the world's placements into the program a frame draws | `WorldPlacementStamper` (static placements), `WorldCreationInstances` (animated, attached and inhabited creations), `CreationStampEmitter` (a creation's stamp); one shape's chain, field ops, panel, relief and trims are `ShapeEmission.Emit` for both, each path supplying only its `IShapeEmissionFrame` | `src/Puck.World.Client`, `src/Puck.World.Authoring/Authoring` |
 | Decide when a frame rebuilds and how it presents | `WorldSceneEmitter` (the composed revision), `WorldFramePresenter` (the `ISdfFrameSource` that delivers it) | `src/Puck.World.Client` |
 | Add a camera or another view of the world | the view types in `src/Puck.SdfVm/Views`, `WorldViewInstances` | [motion and views](../../../docs/rendering/sdf/handbook/motion-and-views.md) |
-| Run GPU work off the frame (a bake, a relight) | `SdfGpuWork` and its clients, `SdfMeshBakeGpuWork`. A client's per-slot buffers come from the recording (`SdfGpuWorkRecording.HostBuffer`, `DeviceBuffer`), never the buffer factory: that door reserves them (`SdfGpuWorkHold`) | `src/Puck.SdfVm`; [the bake's dispatch](#which-dispatch-owns-the-code) |
+| Run GPU work off the frame (a bake, a relight) | `SdfGpuWork` and its clients, `SdfMeshBakeGpuWork`. A client's per-slot buffers come from the recording (`SdfGpuWorkRecording.HostBuffer`, `DeviceBuffer`), never the buffer factory: that door reserves them (`SdfGpuWorkHold`). A client cuts each job to the allowance its take is handed (`SdfGpuWorkAllowance`: what the charged jobs in flight leave of `SdfGpuWorkBudget.FrameAllowanceSeconds`, the share the frame leaves free, which `WorldBackgroundAllowance` feeds from every node's timestamps) at its kind's `SdfGpuWorkRate`, and while work is queued takes no job priced past it, deciding before it takes anything; never a fixed share. The budget counts frames background work may have cost (`FramesMissedBehind`, `frames-behind` on `world.residency`) | `src/Puck.SdfVm`, `src/Puck.World/WorldBackgroundAllowance.cs`; [the bake's dispatch](#which-dispatch-owns-the-code) |
 | Have the frame thread take work up while it waits between frames, or wake it for a GPU completion | `HostWaits.Serve` (a `WaitService`, served by `HostWaits.Pace`) and `IGpuSubmissionFence.SignalOnCompletion`; never a poll loop or a thread of your own that records. A wait inside the frame's open batch (a residency's staging, `SdfGpuWork.Drive`) hands its submissions off first (`IGpuSubmissionFence.HandOff`), or the completion it sleeps on never comes before the flush | `src/Puck.Abstractions/Waiting`, `src/Puck.Abstractions/Gpu/Device` |
 | Compute irradiance, and check it on the CPU | `SdfMeshIrradiance`, whose CPU reference shares one probe lookup with the relight and the views shader | `src/Puck.SdfVm`; [mesh GI](references/mesh-gi.md) |
 | Meter a view's picture for its exposure (histogram, percentiles, dead band, cut snap) | the composite's histogram (`passes/sdf-composite.comp.hlsl`), read back by `SdfSkyRecorder`, reduced by `SdfExposure.Meter`, followed by `SdfViewExposures` | `src/Puck.SdfVm`, `src/Puck.SignedDistance`; [the decision](../../../docs/decisions/rendering.md#lights-screens-and-the-camera-are-photometric) |
@@ -719,6 +719,19 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   receive no fade. Vulkan requires `shaderDemoteToHelperInvocation` at device
   creation and capability 5379 in `VulkanShaderCapabilities`; `clip` compiles to
   that feature even when the live opacity is one.
+- **A view can pose one stamp its own way.** `SdfViewSnapshot.PoseOverlay`
+  (`SdfPoseOverlay`: first slot, slot count, first overlay row) makes that view
+  read a stamp's dynamic-transform slots from other rows of the same table: the
+  pass block's `poseOverlay`, applied by `sdfViewPoseSlot` (`frame/sdf-mesh.hlsli`)
+  to every skin member read (`sdfMeshSkinSlotsOf`), to the draw's own frame slot
+  through `sdfViewPoseCarry` in `sdfMeshWorldVertex` and `sdfMeshPreviousPosition`
+  (a draw's matrix is its frame slot's own row), and to a hit's shading frame
+  (`sdfMeshHitFrameSlot`, `sdfMeshSurfaceNormal`). Only a seat's own view carries
+  one, for its guess layer (`WorldCreationInstances.GuessOverlay`); a new reader of
+  a mesh vertex's or a hit's slot goes through `sdfViewPoseSlot`, or that view draws
+  the shared pose there. A light anchored to a slot, a mirror's or portal's own
+  view and the host's anchors read the shared rows, and a rigid draw is culled by
+  its shared pose's box.
 - **Every light answers through one interface,** `shade/sdf-light.hlsli`; a new
   light kind is a branch there and nowhere else. Views and glass visit lights
   through one walk (`sdfLightWalkStart`, `sdfLightNext`) over two masks
@@ -1445,9 +1458,25 @@ by its fence share is GPU back-pressure, not CPU work.
   and the windows on the way to it, at `WorldPortalVisibility.ArrivalShare` for each world a rendered view leads to
   whose `SdfWorldResidency.MeshesArriving` holds: its bake pending, or its region owing words or their upload. A
   residency's bake samples and its meshes land only in frames that render one of its views: a frame that renders none
-  still prepares it and may pack, which moves what its background work binds. In `world.residency`, a residency
+  still prepares it while it owes its minimum (`SdfWorldResidency.OwesPreparation`) and may pack, which moves what its
+  background work binds. In `world.residency`, a residency
   whose `uploads` stand still while `unbound` in its `gpu-work` counts every pump and `owed` stays above zero is one
   nobody renders. `gpu.faults lose` makes every residency land again, a quick check of that path.
+- **A frame captures only what it reads.** `SdfWorldPasses.BeginFrame` serves every held residency's upkeep
+  (`SdfWorldResidency.Upkeep`), captures the host residency, which places the cameras, and prepares residencies that
+  owe their minimum; the runtime then seals its roots and footprints (`RenderGraphFrame.Seal`) and prepares only the
+  instances `RenderGraphScheduler.Readers` marks (`IRenderGraphPackageFactory.PrepareRead`), in rounds until none is
+  new, and asks `IsUnchanged` of those alone. A scheduled render is always among them, since `Readers` follows every
+  edge `Schedule` passes demand along; a new demand edge in the scheduler goes into `Readers` in the same change, or
+  its producer renders from a residency nobody captured this frame. A graph installed mid-frame still stages late
+  (`SdfWorldResidency.Staged`, counted). `world.counters sdf.captures` reads residencies held against captures run.
+- **A dress walks only what moved.** `SdfMeshDresser.Dress` skips its group walk while the bake's product revision and
+  copy layout revision stand; `SdfMeshPathBake.Replace` (the group list's one writer), Restart's clear, the
+  `Group.Mesh` setter, `ShowOwn` and `FinishReplacements` move the product revision, so a new change to what
+  `FrameAccess` exposes (a group's shown mesh, its tier, the list) moves it through one of them. Rigid copies come
+  through the composition source's copy journal (`SdfFrame.MeshCopyChanges`, a `GpuChangedRows` read by a
+  `GpuRowCursor`), which the dresser and the bake's layout check each read. `sdf.instances.dress.groups-visited`,
+  `.groups-stood` and `.copies-visited` count it.
 - **A program's bake plan is made on its build thread.** The composition
   source hands each program its background build finishes to
   `ISdfFrameSource.ObserveBuilds`, the residency plans it there

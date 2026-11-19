@@ -16,6 +16,10 @@ public sealed partial class ShaderPipelineRenderNode {
         public readonly LeaseRetireList Leases = new();
         // Whether a readback pass was armed with this slot's latest submission and has not yet heard it complete.
         public bool ReadbacksOwed;
+        // The submission whose end the slot's readback passes have heard (completed or abandoned): an early proof
+        // (RetireCompleted, RetireSignaledReadbacks) and the wait at the slot's reuse prove the same submission, and its
+        // passes hear it once (WaitSlot). A slot nothing has been submitted to has nothing to hear.
+        public long Settled;
     }
     // One storage of the plan, shared by its forwarding versions. Owned ordinary/history storage has one instance
     // per flight slot; transient and retained intermediates share one queue-ordered instance.

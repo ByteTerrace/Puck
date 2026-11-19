@@ -6,6 +6,7 @@ using System.Runtime.InteropServices;
 using Puck.Shaders;
 using Puck.SignedDistance;
 using Puck.SignedDistance.Baking;
+using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Memory;
 using Puck.Hosting.Jobs;
 using BakeStage = Puck.SdfVm.SdfMeshBakeReport.Stage;
@@ -80,6 +81,16 @@ public sealed record SdfMeshBakeBatch(SdfMeshBakeRequest[] Lattices, object[] Ti
     /// <summary>Gets the handles of the program the batch samples (<see cref="SdfProgram.SampledFields"/>), which its sampled
     /// table's directory holds a word for.</summary>
     public int SampledHandles { get; init; }
+    /// <summary>Gets the field evaluations the batch's lattices make (<see cref="SdfMeshBakeRequest.Taps"/>), the unit the
+    /// bake's GPU time is measured in.</summary>
+    public long Taps {
+        get {
+            var taps = 0L;
+
+            foreach (var lattice in Lattices) { taps += lattice.Taps; }
+            return taps;
+        }
+    }
     /// <summary>Gets the words of the batch's sampled table (<see cref="WriteSampled"/>), at least one.</summary>
     public int SampledWords {
         get {
@@ -212,7 +223,7 @@ public enum SdfMeshBakeTicket {
 /// static copy, the run of static instances that bake with the first (<see cref="SdfInstanceRange.BakesWithPrevious"/>),
 /// so shapes of one copy that share a face bake as their union. Each group's field is sampled through the frame's own
 /// interpreter (<c>sdf-mesh-bake.comp.hlsl</c>) with only its instances in the walk's mask, lattices taken in the groups'
-/// order into batches the residency's background GPU work dispatches (<see cref="TryTake"/>, <see cref="SdfGpuWork"/>),
+/// order into batches the residency's background GPU work dispatches (<see cref="TryTake(SdfProgram?, out SdfMeshBakeBatch?, long)"/>, <see cref="SdfGpuWork"/>),
 /// each lattice at most <see cref="LatticeTaps"/> field evaluations: a coarse lattice over the group's bounding sphere, refinements over the box of
 /// the cells the surface can cross until the box stops shrinking, then a final lattice of at most 65 samples a side
 /// whose spacing follows the box's own proportions (a union's cubic, keeping each of its shapes at the resolution its own
@@ -240,9 +251,9 @@ public sealed partial class SdfMeshPathBake {
     /// many evaluations (a gradient sample counts five), a few milliseconds of a current desktop GPU
     /// (<see cref="NanosecondsPerTap"/>). No lattice's spacing or extent reads it, so the meshes do not depend on it.</summary>
     public const int LatticeTaps = 1_000_000;
-    /// <summary>The field evaluations one batch (<see cref="TryTake"/>) makes at most, past its first lattice. The
-    /// background GPU work (<see cref="SdfGpuWork"/>) paces batches by their measured GPU time; this bounds one
-    /// submission's.</summary>
+    /// <summary>The field evaluations one batch (<see cref="TryTake(SdfProgram?, out SdfMeshBakeBatch?, long)"/>) makes at most, past its first lattice, whatever
+    /// its allowance: what a held frame's own batch takes, which queues no frame behind it. A budgeted batch is cut to
+    /// the frame allowance at the bake's measured rate (<see cref="SdfMeshBakeGpuWork"/>), within this.</summary>
     public const int BatchTaps = (8 * LatticeTaps);
     /// <summary>The GPU time one field evaluation is estimated to take, in nanoseconds, on a current desktop GPU (the
     /// debug world's cold bake measures about four on an RTX 4070): what the background GPU work charges a batch before
@@ -464,6 +475,9 @@ public sealed partial class SdfMeshPathBake {
     private IReadOnlyList<SdfMeshInstance> m_demandCopies = [];
     private CopyLayout[] m_copyLayout = [];
     private int[] m_copyAssetSlots = [];
+    // The copy journal's endpoint the layout was last compared at, and the runs it named.
+    private readonly GpuRowCursor m_copyCursor = new();
+    private readonly GpuUploadRuns m_copyRuns = new(GpuRegion.MaxCopyRuns);
 
     private long m_copyLayoutRevision;
 
@@ -518,6 +532,7 @@ public sealed partial class SdfMeshPathBake {
             m_demandTransforms = frame.DynamicTransforms;
             m_demandCopies = frame.MeshInstances;
             if (!SameCopyLayout(frame: frame)) { IndexCopies(frame: frame); }
+            m_copyCursor.Commit();
             // The bake reads only the baked handles: a frame whose height fields' heights alone moved changes nothing here.
             // A lost mesh (SdfMeshLibrary.Lose) restarts the bake on the same program, which bakes again only the groups
             // whose meshes were lost (Keeps). An operand moves with the frame's transforms, so its readers are visited every
@@ -569,17 +584,28 @@ public sealed partial class SdfMeshPathBake {
         public void Dispose() => m_scope.Dispose();
     }
 
+    // Whether the frame's copies keep the layout the index was built from: compared at the copies the producer's journal
+    // names changed since the last prepared frame, or at every copy when it cannot prove that window (a frame whose
+    // template slots moved owes every copy). It collects the cursor PrepareFrame commits.
     private bool SameCopyLayout(SdfFrame frame) {
-        if ((m_copyLayout.Length != frame.MeshInstances.Count) || (m_copyAssetSlots.Length != frame.MeshAssetSlots.Count)) { return false; }
-        for (var index = 0; (index < m_copyAssetSlots.Length); index++) { if (m_copyAssetSlots[index] != frame.MeshAssetSlots[index]) { return false; } }
-        for (var index = 0; (index < m_copyLayout.Length); index++) {
-            var old = m_copyLayout[index];
-            var copy = frame.MeshInstances[index];
+        var whole = m_copyCursor.Collect(frame.MeshCopyChanges, frame.MeshCopyChangesSerial, frame.MeshInstances, frame.MeshInstances.Count, 0,
+            m_copyRuns, force: ((frame.MeshCopyChanges is null) || (m_copyLayout.Length != frame.MeshInstances.Count)));
 
-            if ((old.AssetSlot != copy.AssetSlot) || (old.TemplateRange != copy.TemplateRange) || (old.IsDynamic != copy.IsDynamic) || (old.HasMesh != (copy.Mesh is not null)) ||
-                (old.OtherAssetSlots.Length != copy.OtherAssetSlots.Count)) { return false; }
-            for (var surface = 0; (surface < old.OtherAssetSlots.Length); surface++) {
-                if (old.OtherAssetSlots[surface] != copy.OtherAssetSlots[surface]) { return false; }
+        if ((m_copyLayout.Length != frame.MeshInstances.Count) || (m_copyAssetSlots.Length != frame.MeshAssetSlots.Count)) { return false; }
+        if (whole) {
+            for (var index = 0; (index < m_copyAssetSlots.Length); index++) { if (m_copyAssetSlots[index] != frame.MeshAssetSlots[index]) { return false; } }
+        }
+        for (var run = 0; (run < m_copyRuns.Count); run++) {
+            SdfMeshHistory.ProcessWork.Add(kind: SdfMeshHistory.DressCopiesVisited, amount: m_copyRuns.Length(index: run));
+            for (var index = m_copyRuns.Start(index: run); (index < (m_copyRuns.Start(index: run) + m_copyRuns.Length(index: run))); index++) {
+                var old = m_copyLayout[index];
+                var copy = frame.MeshInstances[index];
+
+                if ((old.AssetSlot != copy.AssetSlot) || (old.TemplateRange != copy.TemplateRange) || (old.IsDynamic != copy.IsDynamic) || (old.HasMesh != (copy.Mesh is not null)) ||
+                    (old.OtherAssetSlots.Length != copy.OtherAssetSlots.Count)) { return false; }
+                for (var surface = 0; (surface < old.OtherAssetSlots.Length); surface++) {
+                    if (old.OtherAssetSlots[surface] != copy.OtherAssetSlots[surface]) { return false; }
+                }
             }
         }
         return true;
@@ -639,9 +665,9 @@ public sealed partial class SdfMeshPathBake {
     /// <summary>Takes the lattices of one dispatch: the next lattice of each group that owes one and has none in flight,
     /// the groups the demand points see largest first (<see cref="SdfMeshDemand"/>) and the plan's order among equals, up
     /// to <see cref="SdfWorldPackage.MeshBakeBatch"/> lattices, <see cref="SdfWorldPackage.MeshBakeMaxSamples"/> samples
-    /// and <see cref="BatchTaps"/> evaluations. Each call takes a batch of its own, so several batches dispatch at once,
-    /// each lattice in one of them, and a taken batch counts as the bake's work. Taking by priority rather than round robin
-    /// finishes the groups about the views first, each landing in the mesh library as it finishes, so a residency the
+    /// and <paramref name="mostTaps"/> evaluations. Each call takes a batch of its own, so several batches dispatch at
+    /// once, each lattice in one of them, and a taken batch counts as the bake's work. Taking by priority rather than round
+    /// robin finishes the groups about the views first, each landing in the mesh library as it finishes, so a residency the
     /// program leaves mid-bake (a body crossing into another world) leaves the groups it finished there for the residency
     /// it reaches.</summary>
     /// <param name="field">The program whose field the dispatch samples: the tables' uploaded program. The bake takes
@@ -649,9 +675,28 @@ public sealed partial class SdfMeshPathBake {
     /// program's field.</param>
     /// <param name="batch">The lattices to dispatch and the group each answers, handed back to
     /// <see cref="Complete(SdfMeshBakeBatch, ReadOnlySpan{byte})"/> or <see cref="Abandon"/>.</param>
+    /// <param name="mostTaps">The field evaluations the batch makes at most past its first lattice, which is always taken
+    /// and holds at most <see cref="LatticeTaps"/>; held to <see cref="BatchTaps"/>. No lattice reads it, so the meshes do
+    /// not depend on it.</param>
     /// <returns><see langword="true"/> when the bake takes a lattice.</returns>
-    public bool TryTake(SdfProgram? field, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out SdfMeshBakeBatch? batch) {
+    public bool TryTake(SdfProgram? field, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out SdfMeshBakeBatch? batch, long mostTaps = BatchTaps) =>
+        TryTake(batch: out batch, field: field, firstFits: false, heldTaps: out _, mostTaps: mostTaps);
+    /// <summary>Takes the lattices of one dispatch as <see cref="TryTake(SdfProgram?, out SdfMeshBakeBatch?, long)"/>
+    /// does, optionally holding its first lattice to <paramref name="mostTaps"/> too.</summary>
+    /// <param name="field">The program whose field the dispatch samples: the tables' uploaded program.</param>
+    /// <param name="batch">The lattices to dispatch and the group each answers.</param>
+    /// <param name="mostTaps">The field evaluations the batch makes at most past its first lattice, and, when
+    /// <paramref name="firstFits"/>, including it; held to <see cref="BatchTaps"/>.</param>
+    /// <param name="firstFits">Whether the first lattice is held to <paramref name="mostTaps"/> too, so a batch past it
+    /// is not taken at all: for background work queued behind other jobs ahead of a frame
+    /// (<see cref="SdfGpuWorkAllowance.Queued"/>), which waits for them rather than overrun the frame's deadline.</param>
+    /// <param name="heldTaps">The evaluations of the first lattice <paramref name="firstFits"/> held back, which the
+    /// next take waits for room for; zero when none was.</param>
+    /// <returns><see langword="true"/> when the bake takes a lattice.</returns>
+    public bool TryTake(SdfProgram? field, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out SdfMeshBakeBatch? batch, long mostTaps, bool firstFits, out long heldTaps) {
         batch = null;
+        heldTaps = 0L;
+        mostTaps = Math.Clamp(value: mostTaps, min: (firstFits ? 0L : 1L), max: BatchTaps);
         using (EnterFrameGate()) {
             if ((field is null) || !ReferenceEquals(objA: field, objB: m_program)) { return false; }
             // Work that finishes from here on offers the next take.
@@ -669,7 +714,8 @@ public sealed partial class SdfMeshPathBake {
             // A slice's lattices come first, within the same batch, so a long bake never holds a diagnostic back.
             while ((m_slice is { } slice) && (lattices.Count < SdfWorldPackage.MeshBakeBatch)) {
                 if (slice.Take(instances: (m_program?.Instances.Count ?? 0), ticket: out var lattice, worldSelector: SdfMeshBakeGroup.WorldSelector) is not { } next) { break; }
-                if ((lattices.Count > 0) && (((taps + next.Taps) > BatchTaps) || ((samples + next.Samples) > SdfWorldPackage.MeshBakeMaxSamples))) {
+                if (((lattices.Count > 0) || firstFits) && (((taps + next.Taps) > mostTaps) || ((samples + next.Samples) > SdfWorldPackage.MeshBakeMaxSamples))) {
+                    if (lattices.Count == 0) { heldTaps = next.Taps; }
                     slice.Return(ticket: lattice);
                     break;
                 }
@@ -732,8 +778,12 @@ public sealed partial class SdfMeshPathBake {
                 }
                 // Only sampled values consume the fixed readback budget. Saved poses follow the sample points
                 // in a growable input table; charging them here strands a full 65-cubed lattice forever.
-                // A batch's first lattice is always taken, and no lattice holds more than LatticeTaps.
-                if ((lattices.Count > 0) && ((taps + next.Taps) > BatchTaps)) { stop = 1; break; }
+                // A batch's first lattice is taken unless it must fit too, and no lattice holds more than LatticeTaps.
+                if (((lattices.Count > 0) || firstFits) && ((taps + next.Taps) > mostTaps)) {
+                    if (lattices.Count == 0) { heldTaps = next.Taps; }
+                    stop = 1;
+                    break;
+                }
                 // A group starting its final lattice holds that lattice and everything meshed from it until it lands,
                 // so the process account admits its simultaneous peak; the rest keep their small refining lattices.
                 // A first slab returned unanswered keeps the admission it took.
@@ -825,7 +875,7 @@ public sealed partial class SdfMeshPathBake {
     /// <summary>Returns a taken batch's lattices still unanswered to their groups, as when its dispatch never completed or
     /// its answer stopped part way; each group dispatches its lattice again, and those lattices' samples count as discarded.
     /// A lattice already answered or returned stays as it is.</summary>
-    /// <param name="batch">The batch <see cref="TryTake"/> took, or <see langword="null"/>.</param>
+    /// <param name="batch">The batch <see cref="TryTake(SdfProgram?, out SdfMeshBakeBatch?, long)"/> took, or <see langword="null"/>.</param>
     public void Abandon(SdfMeshBakeBatch? batch) {
         if (batch is null) { return; }
         lock (m_gate) {
@@ -836,7 +886,7 @@ public sealed partial class SdfMeshPathBake {
     /// lattice is decoded on the calling thread and answered on the bake's workers. A lattice answered or returned already
     /// takes nothing; one whose answer throws stays taken, so <see cref="Abandon"/> returns it and every lattice after
     /// it.</summary>
-    /// <param name="batch">The batch <see cref="TryTake"/> took.</param>
+    /// <param name="batch">The batch <see cref="TryTake(SdfProgram?, out SdfMeshBakeBatch?, long)"/> took.</param>
     /// <param name="samples">The batch's samples, <see cref="SdfWorldPackage.MeshBakeSampleWords"/> words each, the
     /// lattices back to back.</param>
     public void Complete(SdfMeshBakeBatch batch, ReadOnlySpan<byte> samples) {
@@ -1067,10 +1117,12 @@ public sealed partial class SdfMeshPathBake {
         }
     }
 
-    // Puts a group at an index of the list, under the gate.
+    // Puts a group at an index of the list, under the gate: with Restart's clear, the list's one writer, so it moves the
+    // product revision the dresser stands its group walk on (SdfMeshDresser).
     private void Replace(int index, Group group) {
         m_allResident = false;
         m_floorRevision++;
+        m_productRevision++;
         group.Owner = this;
         m_groups[index] = group;
         m_doneThrough = Math.Min(val1: m_doneThrough, val2: index);
@@ -1091,6 +1143,7 @@ public sealed partial class SdfMeshPathBake {
         m_program = program;
         m_sampled = sampled;
         m_groups.Clear();
+        m_productRevision++;
         m_doneThrough = 0;
         // A slice samples one program and set: a new one takes every lattice again.
         m_slice?.Reset();
@@ -1135,12 +1188,11 @@ public sealed partial class SdfMeshPathBake {
         // A program rebuilt with a group's instructions unchanged keeps that group, its bake and any lattice in flight; only
         // a group whose geometry moved bakes again (Place).
         var started = new PlaceCounts();
-        var replaced = (previous.Count != m_groups.Count);
         // The group of this bake baking each geometry, which every later group of that geometry waits on (Follow).
         var leaders = new Dictionary<SdfMeshGeometry, Group>();
 
         for (var index = 0; (index < m_groups.Count); index++) {
-            replaced |= Place(group: m_groups[index], identity: identity, index: index, leaders: leaders, old: previous.GetValueOrDefault(key: m_groups[index].Selector), started: ref started);
+            _ = Place(group: m_groups[index], identity: identity, index: index, leaders: leaders, old: previous.GetValueOrDefault(key: m_groups[index].Selector), started: ref started);
         }
         // A previous group this program does not keep is retired: its queued work is dropped (TakeWork).
         var planned = new HashSet<Group>(collection: m_groups, comparer: ReferenceEqualityComparer.Instance);
@@ -1153,12 +1205,6 @@ public sealed partial class SdfMeshPathBake {
         m_firstDetailsOwed = m_groups.Count(predicate: static group => group.FirstDetailOwed);
         Prioritize();
         BeginAccounts(cause: "program", fresh: true, instances: program.Instances.Count, restarted: restarted, started: started);
-        // The draws name their groups, so they are rebuilt only when a group was replaced, renumbered or dropped; a
-        // program change that keeps every group (a palette value) leaves the drawn meshes, and the mesh revision, alone.
-        // A replacement taken wholly from cache lands no later bake callback to invalidate these draws.
-        if (replaced) {
-            m_productRevision++;
-        }
         m_restartMilliseconds = Stopwatch.GetElapsedTime(startingTimestamp: restarted).TotalMilliseconds;
     }
     // Starts each successor whose group has landed in that group's place (Revisit): the landed mesh draws until the
@@ -1167,7 +1213,6 @@ public sealed partial class SdfMeshPathBake {
         var restarted = Stopwatch.GetTimestamp();
         var identity = Identity.Value;
         var started = new PlaceCounts();
-        var replaced = false;
         Dictionary<SdfMeshGeometry, Group>? leaders = null;
 
         foreach (var index in m_inputReaders) {
@@ -1175,12 +1220,11 @@ public sealed partial class SdfMeshPathBake {
 
             if (!old.Done || (old.Successor is not { } plan)) { continue; }
             m_promoted++;
-            replaced |= Succeed(identity: identity, index: index, leaders: (leaders ??= Leaders()), old: old, plan: plan, started: ref started);
+            _ = Succeed(identity: identity, index: index, leaders: (leaders ??= Leaders()), old: old, plan: plan, started: ref started);
         }
         if (leaders is null) { return; }
         BeginOrphans(indices: m_inputReaders, started: ref started);
         BeginAccounts(cause: "promote", fresh: false, instances: frame.Program.Instances.Count, restarted: restarted, started: started);
-        if (replaced) { m_productRevision++; }
     }
     // Puts a reader's newer plan in the place of the reader, which has landed (Place), dropping any successor the reader
     // held, which the plan replaces, and retiring the reader once its place holds another group. The one door a replanned

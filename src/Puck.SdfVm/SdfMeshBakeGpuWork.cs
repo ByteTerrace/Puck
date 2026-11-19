@@ -8,7 +8,7 @@ namespace Puck.SdfVm;
 
 /// <summary>
 /// The mesh bake's sampling as background GPU work (<see cref="SdfGpuWork"/>): each job is a batch the residency's bake
-/// takes (<see cref="SdfMeshPathBake.TryTake"/>), dispatched as the mask kernel writing each lattice's instance mask and
+/// takes (<see cref="SdfMeshPathBake.TryTake(Puck.SignedDistance.SdfProgram?, out SdfMeshBakeBatch?, long)"/>), dispatched as the mask kernel writing each lattice's instance mask and
 /// the bake kernel sampling every lattice through the field interpreter, its samples copied back and answered
 /// (<see cref="SdfMeshPathBake.Complete(SdfMeshBakeBatch, ReadOnlySpan{byte})"/>). Each slot holds the batch's own inputs and outputs: its pass block, its
 /// point table (sample points, then saved poses), its sampled table, its instance masks and samples, and a World set
@@ -45,6 +45,9 @@ internal sealed class SdfMeshBakeGpuWork : ISdfGpuWorkClient {
 
     private readonly SlotResources[] m_slots = new SlotResources[SdfGpuWork.SlotCount];
     private readonly byte[] m_block = new byte[SdfMeshBakeBlock.SizeBytes];
+    // The measured GPU time of one field evaluation, following the mean: a batch mixes several groups' lattices whose
+    // evaluations differ in cost, and a rate that rose to the costliest batch at once would shrink every batch after it.
+    private readonly SdfGpuWorkRate m_rate = new(priorSecondsPerUnit: (SdfMeshPathBake.NanosecondsPerTap * 1e-9), rise: SdfGpuWorkRate.Fall);
 
     private bool m_disposed;
 
@@ -104,20 +107,20 @@ internal sealed class SdfMeshBakeGpuWork : ISdfGpuWorkClient {
     }
 
     /// <inheritdoc/>
-    /// <remarks>Takes the bake's next batch for the tables' uploaded program, estimated at
-    /// <see cref="SdfMeshPathBake.NanosecondsPerTap"/> a field evaluation.</remarks>
-    public bool TryTake(SdfWorldTables tables, int uploadBytes, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out object? job, out double estimatedSeconds) {
-        if (!m_bake.TryTake(batch: out var batch, field: tables.BackgroundProgram)) {
+    /// <remarks>Takes the bake's next batch for the tables' uploaded program, its field evaluations cut to the allowance
+    /// at the bake's measured rate (<see cref="SdfMeshPathBake.BatchTaps"/> for a held frame), and estimated at that rate.
+    /// With nothing queued the first lattice is taken whatever its evaluations, since a lattice is never split; while
+    /// work is queued a first lattice past what is left waits, priced so the service holds room for it.</remarks>
+    public bool TryTake(SdfWorldTables tables, int uploadBytes, SdfGpuWorkAllowance allowance, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out object? job, out double estimatedSeconds) {
+        var mostTaps = allowance.UnitsWithin(most: SdfMeshPathBake.BatchTaps, rate: m_rate);
+
+        if (!m_bake.TryTake(batch: out var batch, field: tables.BackgroundProgram, firstFits: allowance.Queued, heldTaps: out var heldTaps, mostTaps: mostTaps)) {
             job = null;
-            estimatedSeconds = 0.0;
+            estimatedSeconds = m_rate.SecondsOf(units: heldTaps);
             return false;
         }
-
-        var taps = 0L;
-
-        foreach (var lattice in batch.Lattices) { taps += lattice.Taps; }
         job = batch;
-        estimatedSeconds = ((taps * SdfMeshPathBake.NanosecondsPerTap) * 1e-9);
+        estimatedSeconds = m_rate.SecondsOf(units: batch.Taps);
         return true;
     }
     /// <inheritdoc/>
@@ -196,6 +199,7 @@ internal sealed class SdfMeshBakeGpuWork : ISdfGpuWorkClient {
     public void Complete(object job, SdfGpuWorkReadback readback) {
         var batch = ((SdfMeshBakeBatch)job);
 
+        if (readback.GpuSeconds is { } seconds) { m_rate.Observe(seconds: seconds, units: batch.Taps); }
         SdfMeshPathBake.RunFirst(work: () => {
             var length = readback.Length;
             // The copy belongs to this answer alone: native storage from the bake's allocator, charged while it lasts

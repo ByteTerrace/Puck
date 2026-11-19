@@ -45,7 +45,11 @@ public sealed class RenderGraphRuntimeNode : IRenderRoot, ICaptureRequestTarget 
         m_displayHeight = ((int)height);
         m_displayWidth = ((int)width);
         Footprints = [.. footprints];
+        m_seal = SealRoots;
     }
+
+    // The frame's seal, made once so a produced frame allocates no delegate.
+    private readonly Action m_seal;
 
     /// <summary>Gets or sets the reads the display shows inside its rendering instances this frame.</summary>
     public IReadOnlyList<RenderGraphFootprint> Footprints { get; set; }
@@ -93,25 +97,7 @@ public sealed class RenderGraphRuntimeNode : IRenderRoot, ICaptureRequestTarget 
     /// the root's image shows this frame.</remarks>
     public RootFrame ProduceFrame(in FrameContext context) {
         using (HostFrameWork.Measure(HostFrameWorkPart.Pump)) { Prepare?.Invoke(context: in context); }
-        m_roots.Clear();
-        m_roots.Add(item: new RenderGraphRoot(
-            Height: 1.0,
-            Instance: Runtime.Root,
-            Width: 1.0
-        ));
-
-        var roots = Roots;
-
-        for (var index = 0; (index < roots.Count); index++) {
-            if (!string.Equals(
-                a: roots[index].Instance,
-                b: Runtime.Root,
-                comparisonType: StringComparison.Ordinal
-            )) {
-                m_roots.Add(item: roots[index]);
-            }
-        }
-
+        SealRoots();
         m_presentedTicks += context.FrameDeltaTicks;
 
         var rendered = (context with { PresentedTicks = m_presentedTicks });
@@ -130,6 +116,7 @@ public sealed class RenderGraphRuntimeNode : IRenderRoot, ICaptureRequestTarget 
                 FrameTicks = context.FrameDeltaTicks,
                 GridHertz = context.GridHertz,
                 PresentedTicks = m_presentedTicks,
+                Seal = m_seal,
                 Steps = context.Steps,
                 StepsNext = context.StepsNext,
             }
@@ -142,6 +129,29 @@ public sealed class RenderGraphRuntimeNode : IRenderRoot, ICaptureRequestTarget 
             Render: Runtime.Render,
             Surface: surface
         );
+    }
+    // Rewrites the frame's roots from the host's as they stand: the runtime's root over the whole display, then every
+    // other root the host names. The host rewrites its roots in the captures the frame starts (a filming camera's), so
+    // the runtime seals the list after them (RenderGraphFrame.Seal) rather than reading the one composed before them.
+    private void SealRoots() {
+        m_roots.Clear();
+        m_roots.Add(item: new RenderGraphRoot(
+            Height: 1.0,
+            Instance: Runtime.Root,
+            Width: 1.0
+        ));
+
+        var roots = Roots;
+
+        for (var index = 0; (index < roots.Count); index++) {
+            if (!string.Equals(
+                a: roots[index].Instance,
+                b: Runtime.Root,
+                comparisonType: StringComparison.Ordinal
+            )) {
+                m_roots.Add(item: roots[index]);
+            }
+        }
     }
     /// <inheritdoc/>
     public void RequestCapture(FrameCaptureRequest request) => Runtime.RequestCapture(request: request);

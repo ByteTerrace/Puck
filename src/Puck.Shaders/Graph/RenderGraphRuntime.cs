@@ -1252,7 +1252,9 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
         DisposeDrainedRetiring();
         ApplyWithdrawals();
         m_captureFootprints = frame.Footprints;
+        // Upkeep and the host's capture, then the lists sealed after the cameras it places, then the frame's readers.
         PackagesBeginFrame(context: in context);
+        PrepareReaders(context: in context, frame: in frame);
         // Preparation can rebuild a host's live footprints; capture and scheduling must read the same demand.
         RefreshConvergenceDemand(captured: m_captureInstance);
         work.Next(HostFrameWorkPart.Schedule);

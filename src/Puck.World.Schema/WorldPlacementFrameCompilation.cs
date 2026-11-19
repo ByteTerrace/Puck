@@ -19,7 +19,7 @@ public readonly record struct CompiledPlacementFrame(FixedVector3 FixedPosition,
     /// <summary>Gets the presentation widening of the world origin.</summary>
     public Vector3 Position => FixedPosition.ToVector3();
     /// <summary>Gets the presentation heading in degrees.</summary>
-    public float YawDegrees => ((float)(((double)FixedYawRadians) * (180d / Math.PI)));
+    public float YawDegrees => ((float)double.RadiansToDegrees(radians: ((double)FixedYawRadians)));
     /// <summary>Gets the presentation widening of the world scale.</summary>
     public float Scale => ((float)((double)FixedScale));
     /// <summary>Gets the deterministic world rotation.</summary>

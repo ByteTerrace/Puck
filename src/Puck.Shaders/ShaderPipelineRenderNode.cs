@@ -1571,7 +1571,10 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
             return;
         }
         NoteWaited(fence: fence);
-        CompletePackageReadbacks(slot: slot);
+        if (m_slots[slot].Settled != m_slots[slot].Submission) {
+            m_slots[slot].Settled = m_slots[slot].Submission;
+            CompletePackageReadbacks(slot: slot);
+        }
         m_completedSubmissions = Math.Max(m_completedSubmissions, m_slots[slot].Submission);
     }
 

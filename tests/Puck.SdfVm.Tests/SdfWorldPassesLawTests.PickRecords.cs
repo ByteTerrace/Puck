@@ -18,7 +18,8 @@ public sealed partial class SdfWorldPassesLawTests {
         var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
 
         builder.ResetPoint().Sphere(material: material, radius: 1f);
-        var current = Frame() with { Program = builder.Build() };
+        // A host triangle stands at mesh row 0, so a mesh hit on it is current (SdfMeshRows.IdentityStands).
+        var current = DrawnFrame() with { Program = builder.Build() };
         using var view = new SdfTestView(device: gpu, extent: Extent, hostsOnDirectX: false, pipelines: pipelines,
             residency: new SdfWorldResidency(frameSource: new CapturingFrameSource(capture: () => current), height: Extent,
                 kernels: SdfTestPipelines.Kernels(), name: SdfTestView.Instance, pipelines: pipelines, width: Extent));
@@ -32,7 +33,7 @@ public sealed partial class SdfWorldPassesLawTests {
         var record = ((((24 * ((int)Extent)) + 8)) * SdfWorldPackage.VisibilityRecordByteLength);
 
         BinaryPrimitives.WriteSingleLittleEndian(destination: records.AsSpan(start: record), value: 5f);
-        BinaryPrimitives.WriteUInt32LittleEndian(destination: records.AsSpan(start: (record + 4)), value: SdfVisibility.IdentityOf(kind: SdfVisibilityKind.Mesh, source: 1));
+        BinaryPrimitives.WriteUInt32LittleEndian(destination: records.AsSpan(start: (record + 4)), value: SdfVisibility.IdentityOf(kind: SdfVisibilityKind.Mesh, source: 0));
         BinaryPrimitives.WriteInt32LittleEndian(destination: records.AsSpan(start: (record + 8)), value: material);
 
         var request = picker.Request(x: 0.25f, y: 0.75f);
@@ -45,7 +46,7 @@ public sealed partial class SdfWorldPassesLawTests {
         Assert.Equal(expected: request, actual: hit.Request);
         Assert.True(condition: hit.Hit);
         Assert.Equal(expected: SdfVisibilityKind.Mesh, actual: hit.Kind);
-        Assert.Equal(expected: 1U, actual: hit.Source);
+        Assert.Equal(expected: 0U, actual: hit.Source);
         Assert.Equal(expected: 5f, actual: hit.Distance);
         Assert.Equal(expected: material, actual: hit.Material);
     }

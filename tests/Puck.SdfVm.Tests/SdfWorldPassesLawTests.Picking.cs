@@ -121,9 +121,11 @@ public sealed partial class SdfWorldPassesLawTests {
     }
     [Fact]
     public void InspectorCapturesSurfaceWithItsCameraAndDiscardsCuts() {
-        var gpu = new FakeGpuDevice(holdFences: true);
+        // The host triangle's motion history copies between the region's tables, which a strided copy requires to be apart.
+        var gpu = new FakeGpuDevice(holdFences: true, trackObjects: true) { DistinctBuffers = true };
         var pipelines = SdfTestPipelines.Cache();
-        var current = Frame();
+        // A host triangle stands at mesh row 0, so a mesh hit on it is current (SdfMeshRows.IdentityStands).
+        var current = DrawnFrame();
         var captured = current.Views[0].Camera;
         using var view = new SdfTestView(device: gpu, extent: Extent, hostsOnDirectX: false, pipelines: pipelines,
             residency: new SdfWorldResidency(frameSource: new CapturingFrameSource(capture: () => current), height: Extent,
@@ -138,7 +140,7 @@ public sealed partial class SdfWorldPassesLawTests {
         gpu.WriteReadback = (_, bytes) => {
             if (bytes.Length != SurfaceRecordBytes) { return; }
             BinaryPrimitives.WriteSingleLittleEndian(destination: bytes, value: 4);
-            BinaryPrimitives.WriteUInt32LittleEndian(destination: bytes[4..], value: SdfVisibility.IdentityOf(kind: SdfVisibilityKind.Mesh, source: 1));
+            BinaryPrimitives.WriteUInt32LittleEndian(destination: bytes[4..], value: SdfVisibility.IdentityOf(kind: SdfVisibilityKind.Mesh, source: 0));
             BinaryPrimitives.WriteUInt32LittleEndian(destination: bytes[20..], value: 32767);
         };
         var picker = view.Passes.PickerOf(instance: SdfTestView.Instance);

@@ -506,7 +506,8 @@ public static class WorldStateDocumentValues {
 
         return true;
     }
-    /// <summary>Returns <paramref name="definition"/> with every document value resolved against its own state cells.</summary>
+    /// <summary>Returns <paramref name="definition"/> with every shade program use resolved against its shades table
+    /// (<see cref="WorldShadeTable.TryResolve{T}"/>) and every document value resolved against its own state cells.</summary>
     /// <param name="definition">The document to resolve.</param>
     /// <param name="resolved">The resolved document: <paramref name="definition"/> itself when it carries no reference,
     /// or on a refusal.</param>
@@ -520,10 +521,15 @@ public static class WorldStateDocumentValues {
     public static bool TryResolve(WorldDefinition definition, out WorldDefinition resolved, out string reason, bool deferDrawSites = false) {
         ArgumentNullException.ThrowIfNull(argument: definition);
 
+        if (!WorldShadeTable.TryResolve(source: definition, graph: definition, resolved: out var shaded, reason: out reason)) {
+            resolved = definition;
+
+            return false;
+        }
         if (!TryRewrite(
-            graph: definition,
+            graph: shaded,
             reason: out reason,
-            resolver: new Resolver(arena: null, definition: definition, deferDrawSites: deferDrawSites, detach: false, root: "definition", soughtRow: null, time: null),
+            resolver: new Resolver(arena: null, definition: shaded, deferDrawSites: deferDrawSites, detach: false, root: "definition", soughtRow: null, time: null),
             rewritten: out resolved
         )) {
             return false;
@@ -555,8 +561,14 @@ public static class WorldStateDocumentValues {
         ArgumentNullException.ThrowIfNull(argument: graph);
         ArgumentNullException.ThrowIfNull(argument: source);
 
+        if (!WorldShadeTable.TryResolve(source: source, graph: graph, resolved: out var shaded, reason: out reason)) {
+            resolved = graph;
+
+            return false;
+        }
+
         return TryRewrite(
-            graph: graph,
+            graph: shaded,
             reason: out reason,
             resolver: new Resolver(arena: null, definition: source, deferDrawSites: false, detach: false, root: "document", soughtRow: null, time: null),
             rewritten: out resolved

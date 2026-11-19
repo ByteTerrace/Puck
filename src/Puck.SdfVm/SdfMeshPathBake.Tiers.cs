@@ -206,14 +206,15 @@ public sealed partial class SdfMeshPathBake {
                 // The replaced group keeps drawing, and a finer tier is not tried until the demand asks another.
                 replaced.RetierRefused = true;
                 Replace(group: replaced, index: index);
-                m_productRevision++;
                 continue;
             }
             // The landed mesh replaces the drawn one: the replaced group retires here, its one place, and releases its mesh
-            // once its last work ends.
+            // once its last work ends. The tier the group's draws carry is its own from now on (FrameAccess.TierOf), a
+            // change of what the dresser reads, so the product revision moves.
             m_retiredGroups.Add(item: replaced);
             replaced.Retired = true;
             group.Replaces = null;
+            m_productRevision++;
             if (group.FirstDetail) { m_floorsRaised++; } else if (group.Tier > replaced.Tier) { m_coarsened++; } else { m_retiers++; }
             group.FirstDetail = false;
             if (group.Stored) { m_retiersReused++; }
@@ -443,7 +444,6 @@ public sealed partial class SdfMeshPathBake {
                 Over: over
             )));
         }
-        if (replaced) { m_productRevision++; }
         Volatile.Write(
             location: ref m_detailQuiet,
             value: ((replaced || (inFlight > 0) || (landing > 0) || (owedWaiting > 0) || (firstsInFlight > 0) || (firstsOwed > 0) || pressing) ? 0 : Math.Min(val1: (m_detailQuiet + elapsed), val2: SdfMeshTier.SettleFrames))

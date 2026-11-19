@@ -37,6 +37,8 @@ public sealed class WorldRoutedScene : ISdfFrameDresser, IDisposable {
     public WorldCreationInstances BodyStamps => m_emitter.BodyStamps;
     private readonly Func<SdfFrame?> m_hostFrame;
     private readonly List<SdfViewSnapshot> m_views = [];
+    // The roster slot each latched seat view belongs to (-1 for none), which decides the one view the guess overlay reaches.
+    private readonly List<int> m_viewSeats = [];
     private readonly List<WorldRoutedWindow> m_windows = [];
     // The seats and windows the presenter latched last (EndViews), which membership changes wait for, and the views the
     // last dressed frame rendered, kept for a frame with neither: a frame always carries a view.
@@ -151,14 +153,27 @@ public sealed class WorldRoutedScene : ISdfFrameDresser, IDisposable {
     /// <see langword="null"/> (<see cref="WorldSessionSceneEmitter.TextFault"/>).</summary>
     public string? TextFault => m_emitter.TextFault;
 
+    /// <summary>Gets or sets what offers the presenting client's guess to this scene's guess layer: the guess for this
+    /// scene's endpoint (<see cref="WorldClient.SeatGuessAt"/>), drawn in the guessing seat's own view alone
+    /// (<see cref="Dress"/>). <see langword="null"/>, the default and a shared session scene's, offers none.</summary>
+    public Func<IWorldSeatGuess?>? SeatGuess {
+        get => m_emitter.SeatGuess;
+        set => m_emitter.SeatGuess = value;
+    }
     /// <summary>Clears the views the presenter latched, before it latches this frame's.</summary>
-    public void BeginViews() => m_views.Clear();
+    public void BeginViews() {
+        m_views.Clear();
+        m_viewSeats.Clear();
+    }
     /// <summary>Latches a seat's view of this world for the frame.</summary>
     /// <param name="view">The seat's view, framed in this world's own coordinates; this scene's residency renders it,
     /// whatever its boot frame's copy says (<see cref="SdfViewSnapshot.Elsewhere"/>).</param>
+    /// <param name="seat">The roster slot whose view it is, which takes this scene's guess overlay when the guess is that
+    /// seat's (<see cref="WorldCreationInstances.GuessSlot"/>); -1 for none.</param>
     /// <returns>The view's index in the scene's frames.</returns>
-    public int AddView(in SdfViewSnapshot view) {
+    public int AddView(in SdfViewSnapshot view, int seat = -1) {
         m_views.Add(item: (view with { Elsewhere = false }));
+        m_viewSeats.Add(item: seat);
 
         return (m_views.Count - 1);
     }
@@ -191,8 +206,14 @@ public sealed class WorldRoutedScene : ISdfFrameDresser, IDisposable {
         if ((m_latchedSeatCount + m_latchedWindows.Count) != 0) {
             m_dressedViews.Clear();
 
+            // The pool packed before this dress, so its guess overlay is this frame's; only the guessing seat's own view
+            // reads it, and every window, filmed camera and other seat reads the shared pose.
+            var guessSlot = m_emitter.BodyStamps.GuessSlot;
+
             for (var seat = 0; (seat < m_latchedSeatCount); seat++) {
-                m_dressedViews.Add(item: m_views[seat]);
+                m_dressedViews.Add(item: (((guessSlot >= 0) && (m_viewSeats[seat] == guessSlot))
+                    ? (m_views[seat] with { PoseOverlay = m_emitter.BodyStamps.GuessOverlay })
+                    : m_views[seat]));
             }
 
             // The emitter's own view frames the world's default projection at a session screen's quality.
@@ -208,32 +229,17 @@ public sealed class WorldRoutedScene : ISdfFrameDresser, IDisposable {
         Film?.Invoke(obj: m_frameViews);
         FitSkyViews?.Invoke(m_frameViews, frame.Sky, width, height);
 
-        var dressed = ((m_hostFrame() is { } host)
-            ? (frame with {
-                EnableCadenceGate = host.EnableCadenceGate,
-                MeshCull = host.MeshCull,
-                MeshDetail = host.MeshDetail,
-                UpdateRates = host.UpdateRates,
-                RateCounts = host.RateCounts,
-                RateIntervals = host.RateIntervals,
-                Time = host.Time,
-                TickLocked = host.TickLocked,
-                ConvergesLighting = host.ConvergesLighting,
-                Views = m_frameViews,
-            })
-            : (frame with { Views = m_frameViews }));
+        // The scene's stamp pool takes the boot presentation's levers (the presenter's PresentStamps), so its next pack
+        // rates its bodies by the views and shadow cascades this frame renders the world through, as the boot world's pool
+        // is rated by its own. The scene also takes the boot presentation's clock and lockstep.
+        var host = m_hostFrame();
+        var dressed = m_emitter.TakeLevers(frame: (frame with { Views = m_frameViews }), height: height, host: host, views: m_frameViews, width: width);
 
-        // The scene's stamp pool takes the boot presentation's levers (the presenter's PresentAt), so its next pack rates
-        // its bodies by the views and shadow cascades this frame renders the world through, as the boot world's pool is
-        // rated by its own: a body or animated placement no seat, window, filmed camera or shadow of them may show holds.
-        // Each view counts its region of the frame's height, as the boot presentation counts a view it has no display
-        // share for.
-        var stamps = m_emitter.BodyStamps;
-
-        stamps.RateBy(counts: dressed.RateCounts, height: height, intervals: dressed.RateIntervals, views: m_frameViews);
-        stamps.ShadowBy(frame: dressed, height: height, width: width);
-
-        return dressed;
+        return ((host is null) ? dressed : (dressed with {
+            Time = host.Time,
+            TickLocked = host.TickLocked,
+            ConvergesLighting = host.ConvergesLighting,
+        }));
     }
     /// <summary>Finds the camera the first seat presented in the world renders with this frame, as the presenter latched
     /// it: the eye every window a screen of this world shows fits to, as the boot world's windows fit to its viewer.</summary>

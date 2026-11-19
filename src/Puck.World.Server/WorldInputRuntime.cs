@@ -21,9 +21,10 @@ public sealed partial class WorldInputRuntime {
         public int[] Facing = [];
 
         public WorldInputPublication Publication;
-        // The last batch with events this owner submitted that the authority took or refused: its epoch, its highest event
-        // sequence and the tick it was answered in. Delivery only (WorldInputAnswer): nothing the authority computes reads
-        // it, and it is not checkpointed, so a resumed authority answers from its next batch.
+        // The last batch with events this owner submitted that the authority took or refused (WorldInputRuntime.Answer):
+        // its epoch, its highest event sequence and the tick it was answered in. Delivery only (WorldInputAnswer): nothing
+        // the authority computes reads it, and it is not checkpointed, so a resumed authority answers from its next batch;
+        // a client keeps each edge it has seen answered, so an answer a restore or a cut drops revives no guess.
         public WorldInputAnswer Answer;
         public WorldInputControllerOrigin? Controller;
         public WorldInputProducer? Producer;
@@ -282,14 +283,27 @@ public sealed partial class WorldInputRuntime {
         }
         return found;
     }
-    /// <summary>Accepts a timing-bearing batch only for its admitted identity and current authoritative tuple.</summary>
-    public bool TryAdmit(Principal principal, in WorldInputBatch batch, out string reason, int? bodyIndex = null) {
-        if (!m_owners.TryGetValue(key: principal, value: out var owner)) { reason = "input.owner: no admitted source profile"; return false; }
+    /// <summary>Records that the authority answered an owner's batch in this tick, taken or refused, whichever check
+    /// decides it: the one door <see cref="WorldInputAnswer"/> is written through. The submission door calls it before
+    /// any check that can refuse the batch (a gate on the body, a Drive denial, a reach, the admission itself), so every
+    /// refusal is answered.</summary>
+    /// <param name="principal">The input owner the batch was sent as, already proven to be the submitting actor or a
+    /// controller it owns.</param>
+    /// <param name="batch">The batch.</param>
+    /// <param name="bodyIndex">The body the batch targets.</param>
+    /// <remarks>Only a batch of the owner's current epoch for the owner's own route is answered: a stale epoch's events
+    /// restart with the epoch the client then reconciles to, and a batch for another body is not this owner's input, so
+    /// neither can overwrite the answer the current epoch holds.</remarks>
+    public void Answer(Principal principal, in WorldInputBatch batch, int bodyIndex) {
+        if (!m_owners.TryGetValue(key: principal, value: out var owner) || (owner.Body != bodyIndex) || (batch.Epoch != owner.Input.Epoch)) { return; }
         var answered = 0U;
 
         foreach (var input in batch.Events.Span) { answered = Math.Max(val1: answered, val2: input.Sequence); }
-        // Taken or refused, a batch with events is answered in this tick.
         if (answered != 0U) { owner.Answer = new WorldInputAnswer(Epoch: batch.Epoch, Owner: principal, Sequence: answered, Tick: Interval.Tick); }
+    }
+    /// <summary>Accepts a timing-bearing batch only for its admitted identity and current authoritative tuple.</summary>
+    public bool TryAdmit(Principal principal, in WorldInputBatch batch, out string reason, int? bodyIndex = null) {
+        if (!m_owners.TryGetValue(key: principal, value: out var owner)) { reason = "input.owner: no admitted source profile"; return false; }
         if ((bodyIndex is { } body) && (body != owner.Body)) { reason = "input.owner: the submitted target differs from the admitted route"; return false; }
         if (!TrySynchronize(activation: 0, owner: owner, reason: out reason)) { return false; }
         if (!Permitted(owner: owner, reach: out var reach)) { reason = "input.permission: the owner no longer holds Drive over its route"; return false; }

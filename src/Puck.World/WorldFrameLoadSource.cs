@@ -5,18 +5,22 @@ using Puck.World.Client;
 
 namespace Puck.World;
 
-/// <summary>The load the dynamic-resolution controller reads in a presentation with a render graph: one view's
-/// (<paramref name="view"/>, the world's own by default) GPU frame time, from the pass timestamps <see cref="WorldGpuTiming"/> records while
-/// the controller asks; the presenter's present timing, when the host's presenter reports it (a windowed World's
-/// swapchain; an offscreen World presents nothing, so it reports none). A timed reading sums the view's newest submissions
-/// not read before, through a <see cref="WorldFrameLoadAggregate"/>, and names the grid each submission's node recorded it at
-/// (<see cref="ShaderPipelineRenderNode.TryGetRenderGrid"/>). Reading allocates nothing.</summary>
+/// <summary>The frame's GPU load in a presentation with a render graph, from the pass timestamps
+/// <see cref="WorldGpuTiming"/> records while a reader asks: one view's (<paramref name="view"/>, the world's own by
+/// default), which the dynamic-resolution controller reads, or every node's (no view), the frame's own GPU work, nested
+/// views among it, which the background allowance reads (<see cref="WorldBackgroundAllowance"/>); and the presenter's
+/// present timing, when the host's presenter reports it (a windowed World's swapchain; an offscreen World presents
+/// nothing, so it reports none). A timed reading sums the newest submissions not read before, through a
+/// <see cref="WorldFrameLoadAggregate"/>, and names the grid each submission's node recorded it at
+/// (<see cref="ShaderPipelineRenderNode.TryGetRenderGrid"/>). Background GPU work is timed apart and never in it.
+/// Reading allocates nothing.</summary>
 /// <param name="presentTiming">Resolves the presenter's present timing, on the first read, or <see langword="null"/> for a
 /// host whose presenter reports none.</param>
 /// <param name="timing">The timestamp demand the views' GPU frame time is recorded under.</param>
 /// <param name="probe">The render probe, whose root runtime holds the views' work.</param>
-/// <param name="view">The view whose fresh submissions this source reads.</param>
-internal sealed class WorldFrameLoadSource(Func<IPresentTimingFeedback?> presentTiming, WorldGpuTiming timing, WorldRenderProbe probe, string view = WorldViewGraphs.WorldInstance) : IWorldFrameLoadSource {
+/// <param name="view">The view whose fresh submissions this source reads, or <see langword="null"/> for every node the
+/// runtime runs.</param>
+internal sealed class WorldFrameLoadSource(Func<IPresentTimingFeedback?> presentTiming, WorldGpuTiming timing, WorldRenderProbe probe, string? view = WorldViewGraphs.WorldInstance) : IWorldFrameLoadSource {
     private readonly WorldFrameLoadAggregate m_gpu = new();
 
     private IPresentTimingFeedback? m_presentTiming;
@@ -100,7 +104,9 @@ internal sealed class WorldFrameLoadSource(Func<IPresentTimingFeedback?> present
             timed = true;
 
             if (node.TryGetRenderGrid(grid: out var grid, submission: submission)) {
-                m_gpu.Add(grid: grid, load: (node.LatestTimingMilliseconds / 1000d), render: submission, view: view);
+                var (start, end) = node.LatestTimingSpan;
+
+                m_gpu.Add(grid: grid, load: (node.LatestTimingMilliseconds / 1000d), queueEnd: (end / 1000d), queueStart: (start / 1000d), render: submission, view: view);
             }
         }
 
@@ -119,7 +125,7 @@ internal sealed class WorldFrameLoadSource(Func<IPresentTimingFeedback?> present
         }
 
         FindViews(runtime: runtime);
-        completions = runtime.TakeRetiredCompletions(instance: view);
+        if (view is { } name) { completions = runtime.TakeRetiredCompletions(instance: name); }
 
         foreach (var node in m_nodes) {
             if (node is not null) {
@@ -147,9 +153,7 @@ internal sealed class WorldFrameLoadSource(Func<IPresentTimingFeedback?> present
         var survivors = new int[instances.Count];
 
         for (var index = 0; (index < instances.Count); index++) {
-            var name = instances[index].Name;
-
-            nodes[index] = (((name == view) && (runtime.Producer(instance: index) is null)) ? runtime.Node(instance: index) : null);
+            nodes[index] = NodeAt(index: index, runtime: runtime);
             survivors[index] = ((nodes[index] is { } node) ? Array.FindIndex(array: m_nodes, match: previous => ReferenceEquals(objA: previous, objB: node)) : -1);
         }
 
@@ -166,10 +170,14 @@ internal sealed class WorldFrameLoadSource(Func<IPresentTimingFeedback?> present
     // Whether an instance is one of the world's own views: world, or world$2 on.
     private static bool IsView(string instance) =>
         (string.Equals(a: instance, b: WorldViewGraphs.WorldInstance, comparisonType: StringComparison.Ordinal) || (WorldViewNames.ViewOf(instance: instance) is not null));
+    // The node of an instance this source reads, or null: one with a node of its own (no producer) that is the view, or
+    // any such when the source reads every node.
+    private ShaderPipelineRenderNode? NodeAt(RenderGraphRuntime runtime, int index) =>
+        ((((view is null) || (runtime.Instances.Instances[index].Name == view)) && (runtime.Producer(instance: index) is null))
+            ? runtime.Node(instance: index) : null);
     private bool NodesHold(RenderGraphRuntime runtime) {
         for (var index = 0; (index < m_nodes.Length); index++) {
-            var current = (((runtime.Instances.Instances[index].Name == view) && (runtime.Producer(instance: index) is null))
-                ? runtime.Node(instance: index) : null);
+            var current = NodeAt(index: index, runtime: runtime);
 
             if (!ReferenceEquals(objA: m_nodes[index], objB: current)) {
                 return false;

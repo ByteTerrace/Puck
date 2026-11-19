@@ -8,9 +8,10 @@ namespace Puck.World;
 public static partial class WorldDefinitionValidator {
     private static void ValidateRenderResolution(WorldDefinition definition, List<string> errors) {
         ValidateToon(definition.Render.Toon, errors);
-        if (definition.Render.Shade is { } shade) {
-            try { _ = SdfShadeProgram.Compile(shade); }
-            catch (SdfShadeException error) { errors.Add($"render.shade: {error.Code}: {error.Message}"); }
+        // Every program the world uses, once: its uses name these rows, so a program 135 creations share admits once.
+        foreach (var (key, program) in (definition.ShadesRaw ?? new Dictionary<string, SdfShadeDefinition>())) {
+            try { _ = SdfShadeProgram.Compile(program); }
+            catch (SdfShadeException error) { errors.Add($"shades['{key}']: {error.Code}: {error.Message}"); }
         }
         ValidateShadowCoverage(definition.Render.ShadowCoverage, errors);
         ValidateNested(definition.Render.Nested, errors);
