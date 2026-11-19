@@ -59,9 +59,34 @@ Steps 2 and 4 read this matrix, and step 6 reads it again on the final set.
     programs are not the cause; fix the non-shader cause named by the
     per-phase readings first.
 
-The RTX 4070's columns are read on both backends: the binned path costs less
-than unsplit views at the stops measured, so `world.shaders.bins` stays on by
-default there. The RTX 2060 and the Steam Deck have no column read.
+The RTX 4070's columns are read on both backends at the gallery's level 1,
+the north valley slope and the hero spawn (`worlds/debug/shading.sweep.json`);
+the RTX 2060 and the Steam Deck have no column read. The readings, their
+builds and the machine's load are in the commits that took them. What they
+decided:
+
+- *Specialization activates for the debug world's real set.* All eight
+  programs (`cel`, `terrain+cel`, `weathered`, three `flow`s, `paint`, `inset`)
+  publish before the first stop, and a second boot's compile is a cache hit.
+- *The specialized columns cost close to the layers', within the spread these
+  loaded windows allow.* A views plan prices the tier that records it and the
+  view's lights, so a binned 2560×1440 view records two indirect dispatches
+  where an interpreter-priced plan over every frame light recorded on the
+  order of a thousand; the default light response leaves out the terms a
+  program replaces; a directional's probe share is read only by a program that
+  asks for it; and a specialized arm computes its light-invariant values once
+  before the walk. The specialized kernels hold the plain kernels' register
+  count on Vulkan. The quiet window's paired reading is queued.
+- *The interpreter does not fit on the RTX 4070.* It costs tens of times the
+  specialized kernels wherever `terrain+cel` covers the view (hundreds of
+  milliseconds a views pass at 2560×1440), so a cold specialization (a first
+  boot after an engine change, a program edit) shows frames of that length
+  until the set publishes. Whether the surface shades with neutral shading
+  instead while it compiles is the owner's question this matrix's rule names.
+- *Bins stay on by default.* On Vulkan the binned views pass, its filter
+  included, is at or under the unsplit one at every stop; on Direct3D 12 it is
+  slower at the slope, which no longer comes from dispatch count and waits on
+  Direct3D 12 occupancy per bin (step 4).
 
 ## The remaining steps
 
@@ -95,10 +120,11 @@ injection).
   program over a full-screen surface, interpreted), with the margin stated in
   the commit that sets it. Work is submitted work, never elapsed time: the
   bound makes each dispatch a preemption-sized unit and claims nothing about a
-  submission of many dispatches. Under the provisional value the debug world's
-  largest program prices a job at a few tens of tiles, so a programmed frame
-  records several hundred dispatches on either path; calibration sets that
-  count.
+  submission of many dispatches. The planner prices the tier that records a
+  frame (a specialized arm without the interpreter's per-instruction dispatch
+  work) and the lights the view's mask holds, so under the provisional value a
+  specialized debug-world view records a handful of jobs and an interpreted one
+  hundreds; calibration sets those counts.
 - *Quarantine.* Each submission already carries the program identities its
   shade jobs recorded (`SdfWorldResidency.InFlightShadeIdentities`), and a
   device loss marks the unproven ones lost; nothing reads the mark yet. The
