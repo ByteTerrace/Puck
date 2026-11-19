@@ -103,7 +103,7 @@ price what the mesh pipeline costs instead:
   window's light as it is, and a display decodes its working image to the linear
   light it emits, in the screen shading and in the screen emission's reduction
   alike. No runtime check yet refuses a graph that joins two kinds without the
-  conversion; the open item is in [the rendering plan](../plans/rendering.md#what-is-open).
+  conversion; the open item is in [the rendering plan](../plans/rendering.md#colour-conversion--scene-light-to-display-values-once).
 - **Authored colour has two types.** A hex literal spells a display colour
   (`DisplayColor`, CSS semantics); shading reads only a scene colour (`SceneColor`),
   which decoding a display colour makes. Surface colours resolve through
