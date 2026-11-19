@@ -16,6 +16,13 @@ public interface IGpuSubmissionFence : IDisposable {
     /// <exception cref="GpuSubmissionAbandonedException">The submission never reached the queue, so nothing proves it
     /// ran.</exception>
     bool IsSignaled { get; }
+    /// <summary>Gets whether the submission armed with this fence has reached the queue, so what it recorded runs or
+    /// has run: <see langword="false"/> while an open batch still defers it and once its hand-over failed before the
+    /// queue took it (abandoned, until a <see cref="Wait"/> reports that); <see langword="true"/> once it is on the queue,
+    /// and when none is outstanding. A caller that acts for a deferred submission after its batch's flush (a shared
+    /// signal, a publication) asks its own fence, never whether the flush itself succeeded, since an earlier hand-over
+    /// of the same batch may have taken or dropped it. Reading it never blocks and never throws.</summary>
+    bool ReachedQueue { get; }
 
     /// <summary>Blocks until the last submission armed with this fence has retired on the GPU, then re-arms the
     /// fence for reuse. A no-op when no submission is outstanding (never armed, or already waited).</summary>

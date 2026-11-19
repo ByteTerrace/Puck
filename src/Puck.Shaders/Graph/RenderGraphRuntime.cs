@@ -142,7 +142,7 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
     private int m_turn;
     private int m_unproduced;
     // The nodes whose frame wrote an export this frame, which complete it once the batch has reached the queue.
-    private readonly List<ShaderPipelineRenderNode> m_exportsOwed = [];
+    private readonly List<ShaderPipelineRenderNode> m_settlementsOwed = [];
 
     private RenderGraphRuntime(RenderGraphInstanceSet set, RenderGraphRuntimeGraph?[] graphs, ShaderPipelineRenderNode?[] nodes, IRenderGraphExternalProducer?[] producers, SourceGraph?[] sources, Binding[][] inputs, int root, IGpuDeviceContext device, RenderGraphPackageRecorders packages, PackageGraphs packageGraphs, GpuPassPipelineCache pipelines, bool hostsOnDirectX, uint inFlightFrames, GpuImageLeases images) {
         m_images = images;
@@ -1520,14 +1520,14 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
                 node.ShownAtItsExtent = (index == m_root);
                 node.UnreadFrames = m_unreadFrames[index];
 
-                // An export the node writes is completed behind the whole batch, once it is flushed.
+                // What the node commits for a deferred submission, and an export it writes, settle once the batch is flushed.
                 node.DefersExportCompletion = true;
 
                 try {
                     surface = node.ProduceFrame(context: in context);
                 } finally {
                     node.DefersExportCompletion = false;
-                    if (node.OwesExportCompletion) { m_exportsOwed.Add(item: node); }
+                    if (node.OwesSettlement) { m_settlementsOwed.Add(item: node); }
                     if (node.FrameCounter != rendered) {
                         longestRecord = Math.Max(val1: longestRecord, val2: node.LastRecordTicks);
                         m_historySucceeded[index] = true;
@@ -1591,7 +1591,7 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
             Complete();
         } finally {
             work.Next(HostFrameWorkPart.Flush);
-            CompleteOwedExports(queue: queue);
+            SettleHandOvers(queue: queue);
         }
         work.Next(HostFrameWorkPart.Pump);
         if (longestRecord >= 0) { RenderRecordWork.Process.Frame(longestRecordTicks: longestRecord); }
