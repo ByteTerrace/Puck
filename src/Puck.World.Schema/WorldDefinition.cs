@@ -102,6 +102,20 @@ public sealed partial record WorldDefinition(
     [property: JsonPropertyName("seatPrograms"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldSeatProgram>? SeatProgramsRaw = null,
     [property: JsonPropertyName("routes"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldRoute>? RoutesRaw = null
 ) {
+    private readonly IReadOnlyDictionary<string, Puck.SignedDistance.SdfShadeDefinition>? m_storedShades;
+
+    /// <summary>Gets or initializes the world's shade programs, each under its computed identity: read, the table a
+    /// document carried, which resolves the uses that name a program by key; written, every program this definition's
+    /// uses name (<see cref="WorldShadeTable.Of"/>), so a row no use names is never written and a use that holds its
+    /// program carries it. ABSENT when nothing uses a program.</summary>
+    [JsonPropertyName("shades"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyDictionary<string, Puck.SignedDistance.SdfShadeDefinition>? ShadesRaw {
+        get => WorldShadeTable.Of(definition: this);
+        init => m_storedShades = value;
+    }
+    // The table the document carried, which only resolution reads; consumers read the uses themselves.
+    internal IReadOnlyDictionary<string, Puck.SignedDistance.SdfShadeDefinition>? StoredShades => m_storedShades;
+
     /// <summary>Gets the companion roles this world declares; absent declares none, so every companion is refused at
     /// reservation.</summary>
     [JsonIgnore]

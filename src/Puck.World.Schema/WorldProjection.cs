@@ -117,6 +117,9 @@ public sealed record WorldProjectionProvenance(string Authority, string? Documen
 /// value keys on does not cross.</param>
 /// <param name="Haptics">The world's authored haptic pulse rows driven by delivered state, evaluated per local
 /// seat by the haptic director.</param>
+/// <param name="Shades">The shade programs the render defaults and the prototype bodies name by key
+/// (<see cref="WorldShadeTable"/>): a body travels naming its programs, never holding them, so each program crosses
+/// once however many bodies use it.</param>
 public sealed record WorldProjectionDocument(
     WorldProjectionProvenance Provenance,
     WorldMotionDefaults Motion,
@@ -155,7 +158,8 @@ public sealed record WorldProjectionDocument(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<StateSpace>? Spaces = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldTimelineSection? Timeline = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldMusicRow>? Music = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldHapticRow>? Haptics = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldHapticRow>? Haptics = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyDictionary<string, Puck.SignedDistance.SdfShadeDefinition>? Shades = null
 ) {
     /// <summary>The document schema version. A reader refuses any other value; the canonical writer always emits it.</summary>
     public const string SchemaVersion = "puck.world.projection.v1";
@@ -350,7 +354,8 @@ public static class WorldProjection {
                 keyed: keyed,
                 time: in time
             ),
-            Haptics: definition.HapticsRaw
+            Haptics: definition.HapticsRaw,
+            Shades: definition.ShadesRaw
         );
 
         WorldStateDisclosure.ValidateBindings(
@@ -836,6 +841,7 @@ public static class WorldProjection {
             HapticsRaw: projection.Haptics
         ) {
             DocumentId = projection.Provenance.DocumentId,
+            ShadesRaw = projection.Shades,
         };
 
         if (Uncarried(definition: hydrated) is { } uncarried) {

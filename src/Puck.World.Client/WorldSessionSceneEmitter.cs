@@ -549,7 +549,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
             Toon = ToonStyleDocument.ResolveDefault(toon: m_mirror.Definition.Render.Toon, shown: Session?.ToonOverride),
             Tone = WorldRenderSettings.ToneOf(render: m_mirror.Definition.Render),
             ShadePrograms = Session?.ShadePrograms ?? true,
-            ShadeDefault = WorldRenderSettings.CompileShade(Session?.ShadeOverride ?? m_mirror.Definition.Render.Shade),
+            ShadeDefault = WorldRenderSettings.CompileShade(Session?.ShadeOverride ?? m_mirror.Definition.Render.Shade?.Definition),
             ShadeDeclared = WorldRenderSettings.DeclaredShades(definition: m_mirror.Definition),
             Sky = environment.Sky,
             // The mirrored world's static placements' meshes, then its stamp pool's.
