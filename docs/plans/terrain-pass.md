@@ -14,10 +14,10 @@ the rest.
 |---|---|---|
 | Creation relief | `CreationNoiseDocument` (`src/Puck.World.Authoring/Authoring/CreationDocument.cs`), `SdfOp.NoiseDisplace`; GPU `sdfValueNoise3` (`field/sdf-noise.hlsli`), CPU `SdfFieldEvaluator.RenderEditField` (`Queries/SdfFieldEvaluator.RenderOps.cs`) | fBm value noise added to the field: `MaxAmplitude` 4 m, `MaxNoiseOctaves` 8, no ridges, warp or erosion. |
 | Smooth blends | `ShapeDocument.MaxSmooth` | 0.5 m, so a 400 m wall is hard-unioned masses. |
-| The valley | `worlds/debug/valley.puck`, `worlds/standard/terrain.puck` | Eight sectors of three superellipsoids, 4 m fBm at 0.02 cycles/m, one palette slot. `terrainFloorCut` keeps buried halves off the lattice. |
+| The valley | `worlds/debug/valley.puck`, `worlds/standard/terrain.puck` | Eight sectors of three superellipsoids, 4 m fBm at 0.02 cycles/m, one rock slot carrying the terrain program (`valleyRockBands`). `terrainFloorCut` keeps buried halves off the lattice. |
 | Bake detail | `CreationNoiseDocument.DetailSpacing`, `WorldShapeDetail.PartsOf` | A scoped creation declares a part a shape and one for its relief, so each refines its own box. One lattice's fine-sample budget (`SdfSampledLattice.MaxFineSamples`) still holds a sector coarser than the 1.56 m its relief declares: the north-west wall bakes at 2.5 m ([mesh bake](../../.claude/skills/rendering/references/mesh-bake.md#groups-poses-and-materials)). |
 | Contact | `WorldColliderSet`, `FixedStaticCollider` (analytic convex kinds and the relief's field collider, `FixedStaticColliderKind.Field`); `FixedFieldContactSolver`, the world-wide field provider the debug world does not select | A relieved copy collides as its fixed-point field, authored blends included; an unrelieved copy keeps analytic primitive unions. Both field paths read one certified surface solve; what remains of it is in [certified field contact](open-items.md#certified-field-contact). |
-| Materials | The fixed weathering layer (`shade/shade-weathering.hlsli`) and the standard's `weathered` program (`worlds/standard/shading.puck`) | No slope or altitude rule, though the weathering's up-facing deposit and its curvature edges are such rules. |
+| Materials | The standard's `terrain` program and `terrainMaterial` (`worlds/standard/terrain.puck`), the `weathered` program (`worlds/standard/shading.puck`), and the fixed weathering layer (`shade/shade-weathering.hlsli`) the [shader plan's step 6](author-shaders.md#the-remaining-steps) deletes | Up to four bands by slope, altitude (repeating for strata) and curvature, with breakup; no detail relief, and curvature only as fine as the baked normals. Both standard sets are unwritten. |
 | Atmosphere | `SdfSky.PackAtmosphere`, `shade/sdf-atmosphere.hlsli`, CPU twin `SdfAir` | Height fog and haze, scalar extinction; haze extinction is `-log(1 - amount) / farDistance`. The valley's fog (`clearDayAir`) fades rock toward a white sky, not toward blue. |
 | Far shadows | `SdfMeshShadowCascades`, `SdfDistantShadows` | Cascades split at 16 and 120 m; past them the distant map (static casters within its reach, held between changes) shadows the walls at about 1.3 m a texel in the debug world, unread on a GPU leg. |
 | Exposure | `SdfViewExposures`, `SdfExposure.Meter`, the composite's histogram | Each view meters its own image (the [rendering decision](../decisions/rendering.md#lights-screens-and-the-camera-are-photometric)) under the Moth basis's band, percentiles and compensation; a cut snaps to the first reading rendered after it. |
@@ -538,23 +538,37 @@ fixed table would be a second shading mechanism beside the programs, built
 against rows the shader plan's
 [step 6](author-shaders.md#the-remaining-steps) deletes.
 
-The standard package gains a `shade` template for terrain that composes up to a
-few bands, each a material response (colour, roughness, specular, optional
-detail relief) under a mask the program computes from the stamp:
+Built: the standard's `terrain` shade template (`worlds/standard/terrain.puck`)
+composes up to four bands, each a material response (colour, roughness,
+specular, an amount) under a mask the program computes from the stamp:
 
-- slope, from `surface.normal` against world up, a degree range with softness;
-- altitude, from `surface.position`, a height range with softness;
+- slope, from the surface normal against up, a degree range with a soft width;
+- altitude, a height range with a soft width, repeating every `period` metres
+  when one is given, so a band is a stratum;
 - curvature, from `surface.curvature`, the mean curvature the surface pass
   derives from the baked normals (convex ridges, concave gullies), which the
-  standard's `weathered` program already reads for its edges;
-- breakup, from `lattice` in world space with a scale and a seed, which jitters
-  each mask's edges.
+  standard's `weathered` program also reads for its edges;
+- breakup, two octaves of `lattice` in the same space, which jitters each
+  reading before its range and varies the brightness.
 
 Solid 3D noise needs no triplanar projection, so steep walls do not stretch.
-The band count is a structural parameter and every range, softness and colour a
-runtime one, so the two standard sets and an author's third are one program
-with different data. A rigid copy's bands read its own frame through the
-layer-space stamp members, as paints do.
+The band count and which readings each band reads are structural, and every
+range, width and colour a runtime value, so two sets of one shape are one
+program with different data, and a reading a band leaves open costs no
+instruction. Slope and altitude read the creation's own frame through the
+layer-space stamp members unless `world: 1`, so a rigid copy's bands ride it.
+An author writes `terrainBand` records and lays them on a palette row with
+`terrainMaterial`, which composes the program after whatever the row already
+runs (a `shade` list, [authored shading](../../.claude/skills/rendering/references/authored-shading.md)):
+a cel style keeps its light response, and the bands lay over a surface
+treatment the row carries. The weathering's up-facing deposit is a slope band;
+the `weathered` program's deposit also takes a threshold and width
+(`settleThreshold`, `settleWidth`), so a crisp settle line is authored there
+too. The fixed weathering layer keeps its linear deposit until the
+[shader plan's step 6](author-shaders.md#the-remaining-steps) deletes it.
+
+Still open: the optional detail relief (a band's normal tilt from the relief's
+shading octaves) and the two standard sets.
 
 Regional weather coatings reach the same programs as lanes and parameters, so
 retained wetness and deposits and terrain's slope and altitude bands are one
@@ -687,13 +701,10 @@ this plan's, and each is filled before work that sculpts or tunes around it
   [the relief mask](#the-relief-mask), designed above with its own steps A to
   C. It is built and checked now with the CPU bake; its kernel edit lands in
   the bake fundamental's batch of kernel edits (see Risks).
-- **Step 6's terrain programs (gap 2).** The default frame runs the fixed
-  layers, which have no slope or altitude rule, because authored programs
-  sit behind a switch that is left off. The step needs the colour conversion
-  (decision 5 of the rendering plan, which starts now, and which step 1's grey
-  card reads) and the RTX 4070's shading columns, which
-  [the shader plan](author-shaders.md#the-decision-matrix) already holds. The
-  RTX 2060's and the Steam Deck's columns do not hold it back.
+- **Step 6's terrain programs (gap 2).** Built: the terrain program and its
+  masks, on every wall ([above](#slope-altitude-and-curvature-materials)). The
+  walls show it only where authored programs run (`world.shade programs`), and
+  their frame-bar reading with the program on every wall is still owed.
 - **Step 7's far shadows (gap 3).** Built: the distant shadow map is one more
   entry of the cascade set (`SdfMeshShadowCascades.DistantEntry`), with its own
   texels, so it costs the near cascades no precision. Its reach, texels and
@@ -725,7 +736,7 @@ the same window as its after, never from a recorded figure.
 | 1. Image meter's checks | rendering A | 0; [colour conversion](rendering.md#colour-conversion--scene-light-to-display-values-once) | The grey card reads 118/255 ±3 under its manual EV through every view path. Under 0.5% of rock pixels clip in any channel at `valley-rim` and `valley-slope`. A stop's EV agrees within 0.05 whichever stop preceded it (a cut snaps, so the band leaves no history). The composite's added cost with the meter is stated beside the composite alone. |
 | 4. Relative caps, shape bound (gap 1) | authoring/bake D | The bound fix none, and its first action is the triangle count of a bound about the shapes; 3 for relief | A sector bakes at its declared spacing. Warm boot's counted bake work is unchanged. |
 | 3. `TerrainRelief` op, with a mask over a region (gap 4) | field/maths C | The kernel edit lands in the [bake fundamental](open-items.md#bake-proportional-to-change)'s batch of kernel edits; the CPU side and the mask's design start now | A fixed-point CPU bake and a kernel bake of one sector, both derived in the run, agree within the bake's tolerance. The exact noise result is pinned by one Maths law. A sector's CPU bake at the same cell costs at most 1.5× its `NoiseDisplace` bake in counted samples. With the mask over the lake's bowl, the bowl's floor and walls stand where their shapes put them ([its checks](#the-proof-exhibit)). |
-| 6. Terrain programs (gap 2) | rendering/shading F | The colour conversion (step 1's grey card reads it); the RTX 4070's shading columns ([the shader plan's matrix](author-shaders.md#the-decision-matrix)), which are read | The terrain template with its slope, altitude, curvature and breakup masks, and the weathering's up-facing deposit expressed through it. The frame bar holds at `valley-slope` with the program on every wall; the stills read as the two sets' references. |
+| 6. Terrain programs (gap 2) | rendering/shading F | The colour conversion (step 1's grey card reads it); the RTX 4070's shading columns ([the shader plan's matrix](author-shaders.md#the-decision-matrix)), which are read | Built: the terrain template and its masks, on every wall (`valleyRockBands`). Open: the frame bar at `valley-slope` with the program on every wall, a measurement; the band's detail relief. |
 | 7. Far shadows (gap 3) | rendering A, after 1 | 0; shadow maps assigned by light role (the rendering plan's `shadows` lane) | `valley-rim` shows ridge shadows on the far walls, and the frame bar holds there with the sun moving. |
 | 2. Aerial perspective (gap 13) | rendering B | 0; the colour conversion | `SdfAir` and the kernel agree as today. At `valley-draw-distance`, rock 700 m out shifts measurably toward the sky's hue and the rim keeps its silhouette. Changing `farDistance` changes no pixel nearer than it. |
 | 5. Certified field contact | physics E | [certified field contact](open-items.md#certified-field-contact), with 3's relief | One certified solve serves both contact paths; the valley witnesses report 0 red, feet stay within skin plus bake error on the 58° face, creep is 0, and two runs reproduce. No coarser contact cut is allowed. Still open: the 58° face, the rim's creep and clearance close to a slope (packet). |
