@@ -1287,7 +1287,7 @@ public sealed class GpuResidencyLawTests {
 
         Assert.True(condition: region.OwesCarry);
 
-        var replaced = region.Shrink(byteCount: (Bytes / 2L));
+        var replaced = Assert.IsAssignableFrom<IGpuBuffer>(@object: region.Shrink(byteCount: (Bytes / 2L)));
 
         Assert.False(condition: region.OwesCarry);
         Assert.Equal(expected: (2UL * ((ulong)Bytes)), actual: replaced.SizeBytes);
