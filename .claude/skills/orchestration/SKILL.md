@@ -104,6 +104,17 @@ collided runs, while the same expensive work ran eight times).
 
 ## Spend verification, not writing
 
+**Lanes code; the lead merges, builds and tests in bulk (the owner's ruling).**
+A lane writes the code, builds what it touched, runs the checks that only read
+its tree, and hands back: it takes no windowed leg, timing or capture of its own
+change, except a look lane, for which seeing is the work. Freed of the GPU, more
+lanes run at once, bounded by build CPU and memory. The lead runs a bulk window
+on the merged tip every few hours or every eight to ten merges: the full build,
+the test suites, a headless boot, windowed boots on both backends, the
+`world.iteration` loops and queued counter checks, stills at the key places,
+and quiet-machine timing. A failure goes to a fix lane; no lane waits for the
+window, and the lead never lets the window slip while merges pile up.
+
 **Three phases, each with its own evidence (the owner's ruling: measurements
 on a noisy machine have no value, and measurement must never become the
 bottleneck).**
