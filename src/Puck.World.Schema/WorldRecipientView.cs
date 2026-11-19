@@ -39,6 +39,78 @@ public sealed partial class WorldRecipientView(Func<WorldDefinition> definition,
     public bool ReadsWhole(int row) => Includes(row) && Observer.ReadsWhole(row);
     /// <summary>Whether a named row is carried whole at this ceiling.</summary>
     public bool ReadsWhole(string row) => Arena.Catalog.TryResolve(StateLane.Document, row, out var handle) && ReadsWhole(handle.Ordinal);
+    /// <summary>Whether this view discloses a replica that withholds nothing a scene reads: it observes at
+    /// <see cref="WorldDisclosureTier.Replica"/> and reads every row of the store whole, its fields and zones included.
+    /// Every filter a stream applies to a replica beyond body redaction (a row's image, the placement projection, the
+    /// field projection, a solid size's source cell) passes everything through exactly when every row is read whole,
+    /// so a stream whose view answers <see langword="true"/> here is handed the authority's own scene inputs. The
+    /// answer reads declarations and policy alone, never which members are present or hidden now.</summary>
+    public bool ReadsEverything {
+        get {
+            if (!Observes || (ceiling != WorldDisclosureTier.Replica)) { return false; }
+            var observer = Observer;
+            var rows = Arena.Rows.Count;
+            for (var row = 0; row < rows; row++) {
+                if (!observer.ReadsWhole(row)) { return false; }
+            }
+            return true;
+        }
+    }
+    /// <summary>Admits a transient derived from a whole row under a stable audience.</summary>
+    /// <param name="row">The row's catalog ordinal.</param>
+    /// <returns><see langword="true"/> when the row is carried whole at this ceiling and no audience on its path
+    /// follows another row's members.</returns>
+    public bool ReadsCueDependency(int row) => ReadsWhole(row) && (Unrestricted || ReadsUnderStableAudience(row));
+    /// <summary>Admits a transient derived from the physical field regions: every field row of every region, and every
+    /// row a region's travel resistance reads, is read whole under a stable audience, as the field projection carries
+    /// a field only when its row reads whole.</summary>
+    /// <returns><see langword="true"/> when the recipient reads every field region whole.</returns>
+    public bool ReadsEveryFieldRegion() {
+        if (!Observes) { return false; }
+        if (Unrestricted) { return true; }
+        var arena = Arena;
+        var observer = Observer;
+        bool Reads(string name) => arena.Catalog.TryResolve(StateLane.Document, name, out var handle) &&
+            observer.ReadsWhole(handle.Ordinal) && ReadsUnderStableAudience(handle.Ordinal);
+        foreach (var region in Source.FieldRegions) {
+            foreach (var field in region.Fields) {
+                if (!Reads(field.Name)) { return false; }
+            }
+            if (region.TravelResistance?.Row is { } resistance && !Reads(resistance)) { return false; }
+        }
+        return true;
+    }
+    /// <summary>Admits a transient derived from a screen's machine memory: the recipient holds the machine (the replica
+    /// document carries machines; a presentation projection does not) and reads whole every row the machine's memory
+    /// bindings exchange with its hardware.</summary>
+    /// <param name="screen">The screen index.</param>
+    /// <returns><see langword="true"/> when the recipient holds the screen's machine and every bound row.</returns>
+    public bool HoldsMachine(int screen) {
+        if (!Observes) { return false; }
+        if (Unrestricted) { return true; }
+        if (ceiling != WorldDisclosureTier.Replica) { return false; }
+        var source = Source;
+        WorldScreen? row = null;
+        foreach (var candidate in source.Screens) {
+            if (candidate.Index == screen) { row = candidate; break; }
+        }
+        if ((row?.Source is not WorldScreenSource.Machine machineSource) ||
+            (WorldDefinitionRows.FindMachine(source.Machines, machineSource.Instance) is not { } machine)) { return false; }
+        foreach (var binding in machine.Memory ?? []) {
+            if ((binding?.Row is { } bound) &&
+                !(Arena.Catalog.TryResolve(StateLane.Document, bound, out var handle) && ReadsCueDependency(handle.Ordinal))) { return false; }
+        }
+        return true;
+    }
+    // Whether no audience on the row's path follows another row's members, which a transient cannot track as they move.
+    private bool ReadsUnderStableAudience(int row) {
+        var arena = Arena;
+        if (arena.Rows[row].Visibility?.ReadersFrom is not null) { return false; }
+        foreach (var zone in arena.Catalog.ContainingZones(row)) {
+            if (arena.Rows[zone].Visibility?.ReadersFrom is not null) { return false; }
+        }
+        return true;
+    }
     /// <summary>The policy's withheld metadata, never an undisclosed member count. A view that does not observe
     /// withholds every name whole, declared or not, so its answer never tells which rows exist.</summary>
     public WorldWithheldRow? Withheld(string row) {

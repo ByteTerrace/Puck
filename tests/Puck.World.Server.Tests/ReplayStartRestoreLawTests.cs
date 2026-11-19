@@ -68,12 +68,13 @@ public sealed class ReplayStartRestoreLawTests {
     private sealed class SeedSink(Func<ulong> seed) : IClientSink {
         public List<ulong> Seeds { get; } = [];
 
-        public void DeliverDefinition(WorldDefinition definition, WorldDocumentVersion version) => Seeds.Add(item: seed());
+        public void DeliverDefinition(WorldDefinition definition, WorldDocumentVersion version, in WorldStreamStamp stream) => Seeds.Add(item: seed());
         public void DeliverAnswer(in QueryAnswer answer) { }
         public void DeliverComposition(WorldComposition composition) { }
         public void DeliverSessionLever(WorldSessionLever lever) { }
-        public void DeliverSnapshot(in WorldSnapshot snapshot) { }
-        public void DeliverState(WorldDefinition definition, WorldDocumentVersion version, in WorldStateStamp stamp) { }
+        public void DeliverCut(in WorldStreamStamp stream, bool terminal) { }
+        public void DeliverSnapshot(in WorldSnapshot snapshot, in WorldStreamStamp stream) { }
+        public void DeliverState(WorldDefinition definition, WorldDocumentVersion version, in WorldStateStamp stamp, in WorldStreamStamp stream) { }
     }
 
     [Fact]

@@ -157,7 +157,9 @@ public sealed class PartProgramLawTests {
         // Instance 0 is one scope of leaves and compiles. Instance 1 nests a scope, which the part compiler refuses, so
         // it stays on the generic walk; its entry still carries its distance gain, the product of its nested scopes'
         // rescales (1 / FieldRescale) for a sphere, which mapCore's whole-instance and group-mask word rejections scale
-        // the gap to its bound by.
+        // the gap to its bound by. The program writes each pop's rescale from the scope's content, so two plain nested
+        // scopes of a sphere rescale by one and the gain is one; content that would rescale (a warp, a relief, a
+        // chamfer seam) certifies no gain at all.
         var instructions = Scope(
             inner: 1,
             materialA: 0,
@@ -173,8 +175,8 @@ public sealed class PartProgramLawTests {
                 material: 0,
                 radius: 1
             ),
-            Op(SdfOp.PopField) with { Data1 = new Vector4(w: 0, x: 0, y: 0.5f, z: 0) },
-            Op(SdfOp.PopField) with { Data1 = new Vector4(w: 0, x: 0, y: 0.8f, z: 0) },
+            Op(SdfOp.PopField),
+            Op(SdfOp.PopField),
         ]);
         var program = Build(
             instructions,
@@ -191,7 +193,7 @@ public sealed class PartProgramLawTests {
 
         Assert.NotEqual(expected: 0u, actual: words[((table + 4) + 2)] & SdfProgram.PartLeafCountMask);
         Assert.Equal(expected: 0u, actual: words[((table + 8) + 2)] & SdfProgram.PartLeafCountMask);
-        Assert.Equal(expected: 2.5f, actual: program.InspectInstance(index: 1).FieldRescale, tolerance: 1e-6f);
+        Assert.Equal(expected: 1f, actual: program.InspectInstance(index: 1).FieldRescale, tolerance: 1e-6f);
         Assert.Equal(expected: (1f / program.InspectInstance(index: 1).FieldRescale), actual: program.InstanceDistanceGain(index: 1), tolerance: 1e-6f);
         var packed = SdfProgram.DecodePartDistanceGain(entryCountLane: words[((table + 8) + 2)]);
 

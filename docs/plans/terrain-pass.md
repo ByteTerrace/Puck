@@ -86,10 +86,14 @@ The mask is built as a field scope in the instruction stream, which
 describe. Two adversarial reviews found that this form does not hold its
 invariants, and a round of fixes did not close them.
 [The relief mask design](terrain-pass/relief-mask-design.md) replaces the
-scope with an operand that travels with its relief instruction, and answers
-every finding of both reviews and of the review of the design itself. The step
-that builds the construct rewrites those two sections; an author's document
-does not change.
+scope with an operand that travels with its relief instruction, and a second
+review of that design found seven more flaws.
+[Its step back](terrain-pass/relief-mask-design.md#the-step-back) returns to
+what the lake and the gallery need and recommends a smaller form: a mask is a
+short run of data rows before its relief, and a region shape is a box, an
+ellipsoid, a capsule or a plane. The lead decides which form is built. The
+step that builds it rewrites those two sections. The row form keeps an
+author's document and narrows the types a region shape may be.
 
 #### What an author writes
 
@@ -298,8 +302,8 @@ The design rests on five invariants.
    door: contact's program comes from `CreationStampEmitter.EmitContact`, which
    calls the same EmitNoise.
 5. **The step bound includes the band's slope.** The relief adds to its
-   scope's Lipschitz bound additively, as the relief does today in a
-   shape-free chain (`SdfProgram.Lipschitz.cs`). With masks, that contribution
+   scope's Lipschitz bound additively, at its own instruction and through its
+   chain's point factor, as every relief does (`SdfProgram.Lipschitz.cs`). With masks, that contribution
    becomes `|a| · B`, where `a` is the amplitude, `L` is the unmasked relief's
    gradient bound, and
 
@@ -477,12 +481,16 @@ dearest:
   inside the 1.5× budget, so the sum formula stays. Still open: the `mask`
   construct and its spelling pair (the generic value path carries the mask
   meanwhile); the mask's change of form, whose steps and checks are in
-  [the relief mask design](terrain-pass/relief-mask-design.md#migration-steps);
+  [the relief mask design](terrain-pass/relief-mask-design.md#migration-steps)
+  and, for the smaller form its step back recommends, in
+  [that section's migration](terrain-pass/relief-mask-design.md#migration-and-checks);
   and a band narrower than the bake's coarse cell or contact's gradient taps,
-  which neither sees and which that design's bake-and-contact step closes: the band
-  declares a bake part at a quarter of its width (`WorldShapeDetail.PartsOf`),
-  and the relief field collider's gradient step
-  (`WorldColliderSet.ReliefField`) includes the band's width.
+  which neither sees. The design closes it with a bake part at a quarter of
+  the band's width (`WorldShapeDetail.PartsOf`) and the band's width in the
+  relief field collider's gradient step (`WorldColliderSet.ReliefField`); the
+  step back closes it by reading the band as one more wavelength in the
+  relief's own spacing (`CreationNoiseDocument.DetailSpacing`) and in that
+  gradient step.
 - **Step B: kernel agreement.** This is step 3's existing target applied to a
   masked sector: a fixed-point CPU bake and a kernel bake agree within the
   bake's tolerance, on Direct3D 12 and on Vulkan. *Check:* `puck mesh audit`
@@ -541,6 +549,21 @@ dearest:
   amplitude by the local gradient. It composes with the mask by
   multiplication, and invariant 5's bound still holds, since the plan keeps the
   undamped bound.
+
+#### A relief after a fold
+
+A relief (noise, sine or cellular) after a point operation with no global
+continuous derivative bound, such as a repeat whose cells jump at their seams
+or a reach-dependent warp, is refused: the program names the operation
+(`SdfProgram.AnalyzeReliefPointFactors`), and the `puck.sdf.v1` door refuses a
+`noiseDisplace` or `cellDisplace` that follows a `cellJitter` with no `reset`
+between them (`SdfRefusal.ReliefAfterFold`), a document an addon could write
+before. No creation emits such a chain: a creation's noise rides its stamp's
+rigid prefix and scale, and its sine relief a rigid chain of its own. Letting
+a relief follow a fold again needs a marcher and a bake that handle a seam's
+jump explicitly, with the relief charged inside each cell through the prefix's
+scale. Nothing designs that yet; it waits on a world that wants repeated
+relieved content, which a relief under its own reset already serves.
 
 ### Contact on the drawn relief
 

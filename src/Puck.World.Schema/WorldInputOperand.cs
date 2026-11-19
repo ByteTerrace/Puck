@@ -65,7 +65,7 @@ public sealed class WorldInputOperand : WorldOperandFact {
     public int Pattern { get; }
 }
 /// <summary>Transactional consumption of one named pattern's selected range.</summary>
-public sealed class WorldInputConsumeEffect(WorldInputOwnerReference owner, int pattern, long work, string describe) : WorldFactEffect(describe) {
+public sealed class WorldInputConsumeEffect(WorldInputOwnerReference owner, int pattern, long work, string describe) : WorldFactEffect(describe, WorldDisclosureReach.Bodies) {
     /// <summary>Semantic input owner.</summary>
     public WorldInputOwnerReference Owner { get; } = owner;
     /// <summary>Compiled pattern index.</summary>

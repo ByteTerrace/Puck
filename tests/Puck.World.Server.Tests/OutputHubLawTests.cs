@@ -214,15 +214,18 @@ public sealed class OutputHubLawTests {
 /// contract) and counts deliveries.</summary>
 internal sealed class RecordingSink : IClientSink {
     public int SnapshotDeliveries { get; private set; }
+    public WorldGameplayCue[] LastCues { get; private set; } = [];
 
     private EntitySnapshot[] m_lastEntries = [];
 
     public void DeliverAnswer(in QueryAnswer answer) { }
     public void DeliverComposition(WorldComposition composition) { }
-    public void DeliverDefinition(WorldDefinition definition, WorldDocumentVersion version) { }
+    public void DeliverDefinition(WorldDefinition definition, WorldDocumentVersion version, in WorldStreamStamp stream) { }
     public void DeliverSessionLever(WorldSessionLever lever) { }
-    public void DeliverSnapshot(in WorldSnapshot snapshot) {
+    public void DeliverCut(in WorldStreamStamp stream, bool terminal) { }
+    public void DeliverSnapshot(in WorldSnapshot snapshot, in WorldStreamStamp stream) {
         SnapshotDeliveries++;
+        LastCues = snapshot.Cues.ToArray();
         m_lastEntries = snapshot.Entries.ToArray();
 
         // An entry's action state is borrowed scratch the next snapshot overwrites.
@@ -241,7 +244,7 @@ internal sealed class RecordingSink : IClientSink {
 
         return null;
     }
-    public void DeliverState(WorldDefinition definition, WorldDocumentVersion version, in WorldStateStamp stamp) { }
+    public void DeliverState(WorldDefinition definition, WorldDocumentVersion version, in WorldStateStamp stamp, in WorldStreamStamp stream) { }
     /// <summary>The most recently delivered snapshot's continuity hint for the named entity index, or
     /// <see langword="null"/> when no delivery has reported that index active.</summary>
     public EntityContinuity? LastContinuity(int index) {
@@ -276,9 +279,10 @@ internal sealed class SelfDisposingThrowingSink : IClientSink {
 
     public void DeliverAnswer(in QueryAnswer answer) { }
     public void DeliverComposition(WorldComposition composition) { }
-    public void DeliverDefinition(WorldDefinition definition, WorldDocumentVersion version) { }
+    public void DeliverDefinition(WorldDefinition definition, WorldDocumentVersion version, in WorldStreamStamp stream) { }
     public void DeliverSessionLever(WorldSessionLever lever) { }
-    public void DeliverSnapshot(in WorldSnapshot snapshot) {
+    public void DeliverCut(in WorldStreamStamp stream, bool terminal) { }
+    public void DeliverSnapshot(in WorldSnapshot snapshot, in WorldStreamStamp stream) {
         m_attempts++;
 
         if (m_attempts >= 2) {
@@ -286,7 +290,7 @@ internal sealed class SelfDisposingThrowingSink : IClientSink {
             throw new InvalidOperationException(message: "SelfDisposingThrowingSink: deliberate dispose-then-throw for OutputHubLawTests.");
         }
     }
-    public void DeliverState(WorldDefinition definition, WorldDocumentVersion version, in WorldStateStamp stamp) { }
+    public void DeliverState(WorldDefinition definition, WorldDocumentVersion version, in WorldStateStamp stamp, in WorldStreamStamp stream) { }
 }
 /// <summary>A typed-lane sink test double that calls <c>AttachSink</c> from within its first ordinary tick delivery
 /// (the attach primer is benign), attempting to smuggle a second sink into the live fan-out — the reentrancy
@@ -299,16 +303,17 @@ internal sealed class ReattachingSink(Puck.World.Server.WorldServer server) : IC
 
     public void DeliverAnswer(in QueryAnswer answer) { }
     public void DeliverComposition(WorldComposition composition) { }
-    public void DeliverDefinition(WorldDefinition definition, WorldDocumentVersion version) { }
+    public void DeliverDefinition(WorldDefinition definition, WorldDocumentVersion version, in WorldStreamStamp stream) { }
     public void DeliverSessionLever(WorldSessionLever lever) { }
-    public void DeliverSnapshot(in WorldSnapshot snapshot) {
+    public void DeliverCut(in WorldStreamStamp stream, bool terminal) { }
+    public void DeliverSnapshot(in WorldSnapshot snapshot, in WorldStreamStamp stream) {
         m_attempts++;
 
         if (m_attempts >= 2) {
             _ = server.AttachSink(sink: Smuggled);
         }
     }
-    public void DeliverState(WorldDefinition definition, WorldDocumentVersion version, in WorldStateStamp stamp) { }
+    public void DeliverState(WorldDefinition definition, WorldDocumentVersion version, in WorldStateStamp stamp, in WorldStreamStamp stream) { }
 }
 /// <summary>A typed-lane sink test double that throws out of <see cref="DeliverSnapshot"/> from
 /// <paramref name="throwFromCall"/> onward (1-based call count) — proves <c>WorldOutputHub</c>'s per-sink exception
@@ -318,14 +323,15 @@ internal sealed class FaultingSink(int throwFromCall) : IClientSink {
 
     public void DeliverAnswer(in QueryAnswer answer) { }
     public void DeliverComposition(WorldComposition composition) { }
-    public void DeliverDefinition(WorldDefinition definition, WorldDocumentVersion version) { }
+    public void DeliverDefinition(WorldDefinition definition, WorldDocumentVersion version, in WorldStreamStamp stream) { }
     public void DeliverSessionLever(WorldSessionLever lever) { }
-    public void DeliverSnapshot(in WorldSnapshot snapshot) {
+    public void DeliverCut(in WorldStreamStamp stream, bool terminal) { }
+    public void DeliverSnapshot(in WorldSnapshot snapshot, in WorldStreamStamp stream) {
         Attempts++;
 
         if (Attempts >= throwFromCall) {
             throw new InvalidOperationException(message: "FaultingSink: deliberate delivery fault for OutputHubLawTests.");
         }
     }
-    public void DeliverState(WorldDefinition definition, WorldDocumentVersion version, in WorldStateStamp stamp) { }
+    public void DeliverState(WorldDefinition definition, WorldDocumentVersion version, in WorldStateStamp stamp, in WorldStreamStamp stream) { }
 }

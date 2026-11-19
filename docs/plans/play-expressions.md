@@ -50,8 +50,8 @@ avatar doing it, and the gameplay follows once the engine can express it.
 The bard goes first because most of what it needs is built. Its first wave
 writes designs for the rig and for sound that the other two will lean on,
 whatever they become: a hand that reaches a chosen thing, a press that moves
-the hand before the next tick, more shading values a body can drive, and a
-rule's cue that reaches every client
+the hand before the authority's answer is shown, more shading values a body
+can drive, and a rule's cue that reaches every client
 ([the engine gaps](instrument-play.md#the-engine-gaps)). Those designs are
 written for hands in general and carry no instrument's vocabulary.
 
@@ -365,7 +365,7 @@ answer from the owner, which the row or the questions name.
 
 | Order | Concept | What it forces | Why here |
 |---|---|---|---|
-| 1 | The bard, with a dance step that truly strikes | Rig layers that can be masked by body part, a hand that reaches a point on its own body, a press that moves a finger before the next tick, a rule's sound that crosses the wire, and a limb whose sweep the simulation knows | Every memo puts it first, most of its timing machinery exists, and every later tool stands on its hands and its clock |
+| 1 | The bard, with a dance step that truly strikes | Rig layers that can be masked by body part, a hand that reaches a point on its own body, a press that moves a finger before the authority's answer is shown, a rule's sound that crosses the wire, and a limb whose sweep the simulation knows | Every memo puts it first, most of its timing machinery exists, and every later tool stands on its hands and its clock |
 | 2 | The mender, on a structure first and then on a body | Geometry that changes during a fight at a cost that follows the size of the change, contact that reads the change, a hand that reaches a body chosen a moment ago, and a measure of fit between two fields | All three memos chose a geometry class second. It puts the engine's most distinctive claim, that every shape is a field, onto characters. A structure first (Astra's gate hinge, Fable's breach in a wall) is one instance, and the cutter that exists may draw it, though contact would not yet feel the fit (gap 5). Forty bodies with forty different wounds need the new design |
 | 2, beside it | Action alchemy on the ground | Lattices under many moving bodies at fight pace, state for each player in pools, and the hand-off | It shares no gap with the mender, so it does not wait. It is nearly all authored data, it is the owner's example, and it is the first test of slots and calls on something other than the bard |
 | 3 | The Dealer, if table play leaves the table (question 4) | Views that differ by recipient for forty moving players, a picture drawn for one viewer only, and a hand-off of something hidden | An MMO needs hidden things everywhere, and the cards exist. It waits on the [disclosure plan](disclosure.md)'s open work |
@@ -401,7 +401,7 @@ anything.
 | 3 | The rig does not read a press | Fable (its gap 2) | [Gap C](instrument-play.md#the-rig) | Read: the signals `CreationDriverDocument` accepts are motion signals, state cells and other drivers. Fable's memo and the bard's plan agree |
 | 4 | A limb touches nothing in the simulation | Fable (its gap 1). Astra's splint that "catches under motion" and Neon's wedge punched home need it without saying so | "A strike is a distance test", in [the body](instrument-play.md#the-body) | Read: `CreationEffectorDocument` says its result is presentation only and that "every simulation value" is blind to it. The swept volume and first contact are steps 1 and 2 of [readable interaction](readable-interaction.md#build-order) and are not built |
 | 5 | Geometry cannot change on a body, or at a chosen point, during a fight | All three: Astra's impression and splint, Neon's Mosaic-Mender and Lathe-Carver, Fable's Mender (its gap 5) | Not raised | The sources disagree. Neon treats live carving as available. Read: the one moving cut that exists is a shape inside the creation it cuts (`CreationMotion.OperandShapes`), and the validator's own warning says its group bakes again as it moves and "contact still reads the cut at rest" ([moving blends, gap 8](moving-blends.md#gap-8-a-cutter-that-moves-against-the-surface-it-cuts)). The types Neon cites for cheap updates exist (`IRegionalContactField.TryDifference`, `NavigationRuntime`), and their comments describe comparing a field with the one it replaces. Nobody traced them to a rule that carves. One thing no memo noted: a lattice row with a height is already ground that moves as it is drawn and that bodies stand on (`FieldLatticeSolid`), at the size of a lattice cell |
-| 6 | Sound from play stays in one process and runs out of voices | Astra (the note and the foot as "one event" on a remote connection), Neon (many voices and ducking at forty), Fable (its gap 8) | [Gaps I, J and K](instrument-play.md#sound) | Read: `WorldServer.GameplayCueTap` is wired to the local audio director and passes a cue's name and site only, and the synthesizer holds a fixed number of voices (`VoiceSynth.VoiceCount`). Hearing another player's note in time has no design in any source |
+| 6 | One timed sound and pose over a remote connection | Astra (the note and the foot as "one event" on a remote connection), Neon (many voices and ducking at forty), Fable (its gap 8) | [Gaps I, J and K](instrument-play.md#sound) | The [delivered-cue design](instrument-play.md#delivered-cues-and-music-design) carries one disclosed cue to both consumers and defines voice stealing for `VoiceSynth`. |
 | 7 | Views that differ by recipient, at forty, in motion | Neon (Stagehand), Fable (Dealer and Actuary; its gap 10), Astra (the Reckoner predicts only from "observations the player actually received") | Not raised | The types exist (`WorldRecipientView`, `WorldStateDisclosure`). Nobody measured the cost at forty recipients, and nobody read whether a picture can be drawn for one viewer. The [disclosure plan](disclosure.md) holds the open work |
 | 8 | Rule work that grows with the number of players | Astra (Reckoner, Flock Tender), Neon (Floor-Caller, Fulcrum-Smith), Fable (Actuary) | Its stage 1 reports the cost for each pressing seat | The budget types exist (`RuleWorkBudget`, `RuleCapacity.MaxWorkUnitsPerTick`). No memo counted the work of any concept |
 | 9 | A thing cannot be handed from one body to another by play | Fable (its gap 11, marked unconfirmed); Neon and Astra pass things without asking how | Not raised | Read, and now confirmed in part. A carry exists: a body whose kit has the facet holds one rigid body at an offset from its root, and a release gives the held body the carrier's velocity (`WorldCarry`, `WorldCommand.CarryBody`, `WorldCommand.ReleaseCarry`). It starts only from the `body.carry` command. Neither family of rule effects (`WorldEffect`, `ActionEffect`) has a carry, so a kit action or a rule cannot start a catch. A rule can push a rigid body (`WorldEffect.ApplyRigidImpulse`), which is the throw. A body already carried is refused to a second carrier, so a pass is a release and then a carry. The held thing rides the root and not a hand |
@@ -425,12 +425,13 @@ hands in general". This round shows what that has to mean, in three places:
    limited to named shapes ([gap A](instrument-play.md#the-rig)) should let an
    author name a set of shapes once, as a body part, and use it for a clip's
    mask and for a tool's reach. Then a second tool on the hands costs no new
-   mechanism.
+   mechanism. [Designed](instrument-play/pose-clips.md#1-a-body-part-is-a-named-set-of-shapes).
 2. **The effector target should take a body from state.** The design adds a
    target on the creation's own shape
    ([gap B](instrument-play.md#the-rig)). Every other concept in this round
    needs a hand on a body that a rule chose, and that is the same record with
    one more kind of target. Designing both together avoids a second pass.
+   [Designed](instrument-play/pose-clips.md#5-an-effector-reaches-its-own-creation-or-a-body-a-rule-chose).
 3. **The delivered cue should carry a call.** A rule's cue that reaches every
    client ([gap I](instrument-play.md#sound)) is also how a client learns that
    a call opened near it. The design should treat a cue's payload as general.

@@ -295,10 +295,13 @@ public sealed record WorldAudioCue(
     /// <summary>Determines whether <paramref name="token"/> is one of the <see cref="MusicWhenTokens"/> a
     /// <c>puck.music.v1</c> <c>when</c> field may name.</summary>
     /// <param name="token">The candidate token.</param>
-    public static bool IsMusicWhenToken(string? token) => Contains(
+    public static bool IsMusicWhenToken(string? token) => MusicCueName(token) is not null || Contains(
         candidate: token,
         tokens: MusicWhenTokens
     );
+    /// <summary>Extracts a valid authored rule cue name from a score condition.</summary>
+    public static string? MusicCueName(string? token) => token is not null && token.StartsWith("cue:", StringComparison.Ordinal) &&
+        WorldGameplayCue.IsValidName(token[4..]) ? token[4..] : null;
     /// <summary>Determines whether <paramref name="token"/> is one of the <see cref="ProducerBypassedTokens"/> a
     /// producer fires directly, so an authored <c>audio.cues</c> row can never target it.</summary>
     /// <param name="token">The candidate token.</param>

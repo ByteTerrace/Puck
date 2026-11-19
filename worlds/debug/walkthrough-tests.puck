@@ -29,6 +29,9 @@ test "gallery level 1 blend row" {
   when {
     seat1: body.pose spawn:shape-blend-union 0
     ticks 1
+    // The spawn stands her turned toward +X for the chase camera (shapes.puck's gallerySpawns); square her to the row.
+    seat1: body.pose - - - 180 - - 0
+    ticks 1
     seat1: player.camera.view first
     ticks 9
     // Recenter: the View page (left trigger) and its North face button.
@@ -70,6 +73,8 @@ test "gallery level 1 blend row" {
 test "gallery level 0 primitives row" {
   when {
     seat1: body.pose spawn:shape-sphere 0
+    ticks 1
+    seat1: body.pose - - - 180 - - 0
     ticks 1
     seat1: player.camera.view first
     ticks 9

@@ -70,7 +70,7 @@ public sealed class WorldSessionFollowLawTests {
     private static WorldSessionMirror Session(WorldDefinition definition) {
         var session = new WorldSessionMirror(placeholder: definition);
 
-        session.DeliverDefinition(definition: definition, version: default);
+        session.DeliverDefinition(definition: definition, version: default, stream: default);
 
         return session;
     }
@@ -94,7 +94,7 @@ public sealed class WorldSessionFollowLawTests {
             StepTicks: 1UL,
             Entries: ReadOnlyMemory<EntitySnapshot>.Empty,
             FieldCells: new[] { new FieldCellDelta(Region: "world", FieldName: "bump", Cell: 5, Field: 1, Raw: One), new FieldCellDelta(Region: "world", FieldName: "bump", Cell: 2, Field: 1, Raw: (One / 2L)) }
-        ));
+        ), stream: default);
         state = session.FollowState();
 
         Assert.Equal(expected: [0d, 0d, 0.5d, 0d, 0d, 1d, 0d, 0d], actual: state.RowValues(slot: bump).ToArray());
@@ -133,7 +133,7 @@ public sealed class WorldSessionFollowLawTests {
                 Position: Vector3.Zero,
                 State: new[] { (3L * One) }
             ) }
-        ));
+        ), stream: default);
         state = session.FollowState();
         state.Apply(fraction: 1f);
 
@@ -187,7 +187,7 @@ public sealed class WorldSessionFollowLawTests {
         session.DeliverState(
             definition: Document(bump: "#112233"),
             stamp: new WorldStateStamp(EngineTick: 2UL, Everything: true, MovedRows: ReadOnlyMemory<int>.Empty, Tick: 2UL),
-            version: default
+            version: default, stream: default
         );
         emitter.WriteRevision(destination: after);
 

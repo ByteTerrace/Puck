@@ -8,22 +8,44 @@ public static class RuleDataflow {
     /// savepoints hold.</summary>
     /// <param name="effects">The compiled effects.</param>
     /// <param name="into">The needs being built.</param>
-    public static void CollectEffectFacts(IRuleEffect[] effects, RuleNeedsBuilder into) {
+    /// <param name="includeSources">Whether to include everything a firing observes beyond the effect kinds: the
+    /// declared sources read during preflight, a value source's operand and the key facts behind it, a destination's
+    /// live key and a branch condition's key facts. Whether a firing lands (and so whether what it emits exists)
+    /// depends on all of them, which a disclosure decision over the firing must see.</param>
+    public static void CollectEffectFacts(IRuleEffect[] effects, RuleNeedsBuilder into, bool includeSources = false) {
         ArgumentNullException.ThrowIfNull(argument: effects);
         ArgumentNullException.ThrowIfNull(argument: into);
 
         foreach (var effect in effects) {
             into.AddFact(fact: effect);
             if (effect is IfEffect branch) {
-                CollectGateFacts(
-                    gate: branch.Condition,
-                    into: into
-                );
+                if (includeSources) {
+                    CollectGateSchedulingFacts(gate: branch.Condition, into: into);
+                } else {
+                    CollectGateFacts(
+                        gate: branch.Condition,
+                        into: into
+                    );
+                }
+            }
+            if (includeSources) {
+                foreach (var source in effect.Sources) {
+                    CollectOperandFacts(operand: source.Operand, into: into, includeKeyDependencies: true);
+                    CollectExpressionSchedulingFacts(source.Program, into);
+                    CompiledCellRef.CollectFacts(source.KeyFrom, into);
+                }
+                if (effect is IValueSourcedEffect valued) {
+                    CollectSourceFacts(source: valued.Source, into: into);
+                }
+                if (effect is IStateAddressedEffect addressed) {
+                    CompiledCellRef.CollectFacts(reference: addressed.KeyFrom, into: into);
+                }
             }
             foreach (var arm in effect.Arms) {
                 CollectEffectFacts(
                     effects: arm,
-                    into: into
+                    into: into,
+                    includeSources: includeSources
                 );
             }
         }
@@ -203,6 +225,19 @@ public static class RuleDataflow {
         foreach (var token in gate) {
             token.LeftSource.CollectFacts(into: into);
             token.RightSource.CollectFacts(into: into);
+        }
+    }
+    /// <summary>Appends everything a compiled gate observes, its key indirections included: the walk a schedule or a
+    /// disclosure decision is built from, where <see cref="CollectGateFacts"/> serves compile-time admission.</summary>
+    /// <param name="gate">The compiled postfix gate.</param>
+    /// <param name="into">The needs being built.</param>
+    public static void CollectGateSchedulingFacts(GateToken[] gate, RuleNeedsBuilder into) {
+        ArgumentNullException.ThrowIfNull(argument: gate);
+        ArgumentNullException.ThrowIfNull(argument: into);
+
+        foreach (var token in gate) {
+            CollectSourceFacts(source: token.LeftSource, into: into);
+            CollectSourceFacts(source: token.RightSource, into: into);
         }
     }
     /// <summary>Returns every state cell one evaluation of a rule reads.</summary>

@@ -89,10 +89,8 @@ public sealed partial class DirectXPipelineLayout : IDisposable {
         return layout;
     }
 
-    // The layout's draw command signature, created on its first counted indirect draw, and whether its commands start at
-    // their draw arguments (DrawSkipsIdentity).
+    // The layout's draw command signature, created on its first counted indirect draw.
     private nint m_drawSignature;
-    private bool m_drawSkipsIdentity;
 
     private readonly Lock m_drawSignatureLock = new();
 

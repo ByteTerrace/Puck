@@ -216,8 +216,10 @@ saves contact work; its render field still bakes normally. Edit-to-running stays
 under 30 seconds, checked on a quiet machine by the lead.
 
 The limits retained protect representations or per-pixel work: 255 skin members
-per bake group (refused by group name if exceeded), 24-bit GPU indices, the
-material sentinel, 64 bounded volumes and 32 screen bindings. Scopes nest to 4.
+per bake group (a group past it throws when its mesh is sealed, during the
+bake, naming its first instance: `SdfMeshBakeGroup`; no document check reports
+it), 24-bit GPU indices, the material sentinel, 64 bounded volumes and 32
+screen bindings. Scopes nest to 4.
 Derived faces follow the world's highest authored screen index.
 
 ## Surface and look

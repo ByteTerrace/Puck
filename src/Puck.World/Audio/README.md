@@ -76,50 +76,17 @@ coefficient ramps carry the change without retriggering a sustained patch.
 
 ## The music-transition cue lane
 
-A committed `MusicDirector` segment transition fires the `music.transition`
-cue token, listener-placed. The wiring lives outside this folder—
-`WorldServer.MusicTransitionTap` (`Puck.World.Server`, invoked from
-`WorldServer.Step`'s music-step call site) reaches `WorldAudioDirector.SubmitCue`
-through the same tap-and-wiring shape `WorldPostBuildWiring` uses for the
-edit-echo cue lane. A world authors a stinger off it by
-declaring a `patches` row and an `audio.cues` row naming
-`"event": "music.transition"` and that patch's id.
+The presentation's `MusicDirector` steps on the recipient's delivered tick.
+A committed transition submits `music.transition` through the authored cue
+table. The authority's score clock supplies the beat and bar boundaries.
 
 ## The conditional-layer and embellishment lanes
 
-A segment's conditional audio layers (`MusicDirector.ActiveLayerTuneIds`) and
-director embellishments (`LastEmbellishmentPatchId`/`LastEmbellishmentTick`)
-each reach the client through their own tap-and-wiring pair, both wired in
-`WorldPostBuildWiring` beside the music-transition lane above:
-
-- `WorldServer.MusicLayerTap` fires on any tick the active-layer TUNE ID SET
-  changes (level-triggered—unlike a transition, this is not gated to a
-  commit tick), reaching `WorldAudioDirector.SetActiveMusicLayers`, which
-  re-runs `ReconcileSpeakers` against the cached definition so the derived
-  plan tracks it immediately. `DeriveMusicLayers` (in `WorldAudioDirector`,
-  called from `ReconcileSpeakers`) admits one continuous
-  `AudioEmitterKind.Bed` emitter per active tune id, anchored at the world
-  origin with a support radius engineered to always read full presence (a
-  music layer carries no world position)—so a layer entering/leaving
-  cross-fades over the Bed kind's existing presence-gain slew rather than a
-  hard cut. `speaker.state` echoes each as a `musicLayer:<tuneId>` row
-  alongside every `speaker:`/`placement:` row.
-- `WorldServer.MusicEmbellishmentTap` fires the tick an embellishment fires,
-  carrying its own resolved patch id—unlike `music.transition`, this cannot
-  ride `WorldAudioDirector.SubmitCue`'s token→row lookup, because an
-  embellishment's patch is chosen PER EMBELLISHMENT in the `puck.music.v1`
-  document, not by one fixed `audio.cues` row shared across every firing.
-  `WorldAudioDirector.SubmitEmbellishment` fires the transient directly
-  (listener-placed, like `music.transition`), recorded under the
-  `music.embellishment` cue token so `speaker.state`'s live transient-cue
-  tail reads it the same way every other cue reads. Every cue firing also
-  writes `speaker.state`'s monotone `lastCue:<token>=<patch>` tail (never
-  reset), the fact a proof reads to show a cue fired without racing the
-  live transient pool's expiry.
-
-Neither a layer's nor an embellishment's authored `gainThousandths` reaches
-presentation gain yet—see `Puck.World.Authoring.MusicLayerDocument
-.GainThousandths`'s remarks.
+A score matches ambient events or a named `cue:<name>` it received through
+recipient disclosure. `WorldAudioDirector` gives each active tune a bed
+emitter at the layer's gain. An embellishment fires its own patch through the
+one-shot transient pool and appears in `speaker.state` under
+`music.embellishment`.
 
 ## The voice-babble playback lane
 

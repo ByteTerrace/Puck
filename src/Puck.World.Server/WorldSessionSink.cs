@@ -24,6 +24,7 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
     private bool m_withheld;
     private bool m_replicaDefined;
     private bool m_deliveringSnapshot;
+    private bool m_streamEnded;
 
     private EntitySnapshot[] m_redacted = [];
     private readonly WorldDeliveryCursor m_cursor = new();
@@ -50,13 +51,7 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
         ((query is WorldQuery.StateObservations) || DisclosesFullReplica)
     );
 
-    private bool DisclosesFullReplica => (
-        (Tier == WorldDisclosureTier.Replica) &&
-        new WorldSinkDisclosure(
-            ObserverBodyIndex: -1,
-            Policy: server.Definition.Population.ObserverDisclosure
-        ).IsFull
-    );
+    private bool DisclosesFullReplica => ((Tier == WorldDisclosureTier.Replica) && WorldSessionObservation.RedactsNoBody(server: server));
 
     // Nothing reaches an observer once it has ended its own subscription.
     private bool Discloses() {
@@ -69,7 +64,13 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
         }
 
         if (!m_withheld) {
+            // The stream stops observing: everything it was delivered is lost to it, which its reader is told at once.
             Release();
+            try {
+                _ = AnnounceCut();
+            } catch (Exception exception) {
+                EndAfterFault(exception: exception);
+            }
         }
 
         m_withheld = true;
@@ -123,6 +124,7 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
                     MovedRows: default,
                     Tick: tick
                 ),
+                stream: m_cursor.Stamp(),
                 version: version
             );
 
@@ -149,6 +151,7 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
                     MovedRows: default,
                     Tick: tick
                 ),
+                stream: m_cursor.Stamp(),
                 version: version
             );
 
@@ -157,6 +160,7 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
 
         inner.DeliverDefinition(
             definition: hydrated,
+            stream: m_cursor.Stamp(),
             version: version
         );
     }
@@ -166,11 +170,75 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
         var time = server.DeliveryTime;
 
         Present(
-            delivery: m_feed.Compose(cursor: m_cursor, view: m_view),
+            delivery: ComposeProjection(),
             engineTick: time.EngineTick,
             tick: time.Tick,
             version: Version
         );
+    }
+    // Composes what the observer's projection owes; after a cut, its whole projection under the new generation.
+    private WorldProjectionDelivery ComposeProjection() {
+        var delivery = m_feed.Compose(cursor: m_cursor, view: m_view);
+
+        if (!AnnounceCut()) {
+            return delivery;
+        }
+        m_feed.Release();
+        m_hydrated = null;
+
+        return m_feed.Compose(cursor: m_cursor, view: m_view);
+    }
+    // Sends the record a cut the cursor decided owes, once: the new generation, with no content. True when one was sent,
+    // after which the stream owes its whole disclosed document and a primer before anything newer.
+    private bool AnnounceCut() {
+        if (!m_cursor.TakeCut()) {
+            return false;
+        }
+        inner.DeliverCut(stream: m_cursor.Stamp(), terminal: false);
+
+        return true;
+    }
+    // Primes a replica observer alone after a cut its snapshot path decided: the whole disclosed document under the new
+    // generation, before the snapshot in hand, which completes it as the primer.
+    private void PrimeAfterCut() {
+        if (!AnnounceCut()) {
+            return;
+        }
+        if (Tier != WorldDisclosureTier.Replica) {
+            var time = server.DeliveryTime;
+
+            m_feed.Release();
+            m_hydrated = null;
+            Present(
+                delivery: m_feed.Compose(cursor: m_cursor, view: m_view),
+                engineTick: time.EngineTick,
+                tick: time.Tick,
+                version: Version
+            );
+
+            return;
+        }
+        m_cursor.ForgetDocument();
+        if (m_cursor.DeliverDefinition(view: m_view) is { } whole) {
+            inner.DeliverDefinition(definition: whole, stream: m_cursor.Stamp(), version: Version);
+        }
+    }
+    /// <summary>Ends the stream: releases what it holds, cuts, and tells the observer the stream ends, so a reader
+    /// bound to it lets go of what it showed. Called once the observation has ended; nothing is delivered after
+    /// it.</summary>
+    public void End() {
+        if (m_streamEnded) {
+            return;
+        }
+        m_streamEnded = true;
+        Release();
+        _ = m_cursor.TakeCut();
+
+        try {
+            inner.DeliverCut(stream: m_cursor.Stamp(), terminal: true);
+        } catch (Exception exception) {
+            Fault ??= exception;
+        }
     }
     // Ends a withheld span: the observer takes the current disclosed definition before anything newer.
     private void Resume() {
@@ -180,7 +248,7 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
 
         m_withheld = false;
 
-        DeliverDefinition(definition: server.Definition, version: server.DocumentVersion);
+        DeliverDefinition(definition: server.Definition, stream: WorldStreamStamp.Unspanned, version: server.DocumentVersion);
 
         FollowObserverDetach();
     }
@@ -195,6 +263,26 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
     }
 
     private WorldDefinition? DiscloseToReplica(WorldDefinition definition) => m_cursor.DeliverDefinition(view: m_view);
+    // Delivers the replica document a definition owes the observer, after the record of any cut composing it decided;
+    // a cut that composed no document primes the observer alone all the same.
+    private void DeliverReplicaDocument(WorldDefinition? delivered) {
+        if (delivered is not null) {
+            _ = AnnounceCut();
+            inner.DeliverDefinition(definition: delivered, stream: m_cursor.Stamp(), version: Version);
+            PrimeReplica();
+        } else if (m_cursor.TakeCut()) {
+            Reprime();
+        }
+    }
+    // Sends a cut the cursor already took, then the whole disclosed document and a primer under its generation.
+    private void Reprime() {
+        inner.DeliverCut(stream: m_cursor.Stamp(), terminal: false);
+        m_cursor.ForgetDocument();
+        if (m_cursor.DeliverDefinition(view: m_view) is { } whole) {
+            inner.DeliverDefinition(definition: whole, stream: m_cursor.Stamp(), version: Version);
+            PrimeReplica();
+        }
+    }
     // Replacing a replica document replaces its state arena and observation metadata together. Complete that
     // delivery with the existing non-consuming primer now, rather than leaving policy-dependent work for a later
     // quiet tick. The primer has the actual entity table too; an empty synthetic snapshot would erase bodies.
@@ -206,7 +294,7 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
         // borrowed carrier while the hub is still fanning it out to other sinks.
         if (m_deliveringSnapshot) { return; }
         FollowObserverDetach();
-        if (DetachReason is null) { DeliverSnapshot(snapshot: server.Document.BuildPrimerSnapshot()); }
+        if (DetachReason is null) { DeliverSnapshot(snapshot: server.Document.BuildPrimerSnapshot(), stream: WorldStreamStamp.Unspanned); }
     }
 
     /// <summary>Discloses a definition as this session's tier shows it, for a read door — see
@@ -269,7 +357,10 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
     }
     public void DeliverComposition(WorldComposition composition) {
     }
-    public void DeliverDefinition(WorldDefinition definition, WorldDocumentVersion version) {
+    public void DeliverCut(in WorldStreamStamp stream, bool terminal) {
+        // The hub's fan-out has one span that never ends; this stream decides its own cuts.
+    }
+    public void DeliverDefinition(WorldDefinition definition, WorldDocumentVersion version, in WorldStreamStamp stream) {
         if (!Discloses()) {
             return;
         }
@@ -279,7 +370,7 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
             server.AttachCursor(observation.Session, m_cursor);
 
             if (Tier == WorldDisclosureTier.Replica) {
-                if (DiscloseToReplica(definition: definition) is { } delivered) { inner.DeliverDefinition(definition: delivered, version: Version); PrimeReplica(); }
+                DeliverReplicaDocument(delivered: DiscloseToReplica(definition: definition));
             } else {
                 Project(
                     definition: definition,
@@ -299,15 +390,19 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
 
     private WorldInputPublication[] m_inputDisclosure = [];
 
-    public void DeliverSnapshot(in WorldSnapshot snapshot) {
+    public void DeliverSnapshot(in WorldSnapshot snapshot, in WorldStreamStamp stream) {
         if (!Discloses()) {
             return;
         }
 
+        var bodies = server.Definition.Population.ObserverDisclosure;
+
+        m_cursor.ObserveBodies(mode: bodies.Mode, radius: bodies.Radius);
+
         var redacted = WorldOutputHub.Redact(
             disclosure: new WorldSinkDisclosure(
                 ObserverBodyIndex: -1,
-                Policy: server.Definition.Population.ObserverDisclosure
+                Policy: bodies
             ),
             scratch: ref m_redacted,
             snapshot: in snapshot
@@ -344,8 +439,12 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
                 SolidScales = m_scales.Filter(m_view, redacted.SolidScales),
                 Inputs = WorldInputPublication.ForOwner(redacted.Inputs, observation.Session, ref m_inputDisclosure),
             };
+            // A cut the rows or the body policy decided primes the observer alone, and this snapshot completes it.
+            PrimeAfterCut();
             redacted = redacted with { Revision = checked((int)m_cursor.Sequence) };
-            inner.DeliverSnapshot(snapshot: in redacted);
+            redacted = server.PresentCues(redacted, m_view,
+                fullBodies: server.Definition.Population.ObserverDisclosure.Mode == WorldObserverDisclosureMode.All);
+            inner.DeliverSnapshot(snapshot: in redacted, stream: m_cursor.Stamp());
             FollowObserverDetach();
         } catch (Exception exception) {
             EndAfterFault(exception: exception);
@@ -358,7 +457,7 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
     // Below Replica the observer's feed decides what the values owe it: nothing, a delta of the members they moved, or
     // a whole projection after a withheld span. Body redaction does not renumber a Replica's state rows and must not
     // turn value-only updates into structural rebuilds.
-    public void DeliverState(WorldDefinition definition, WorldDocumentVersion version, in WorldStateStamp stamp) {
+    public void DeliverState(WorldDefinition definition, WorldDocumentVersion version, in WorldStateStamp stamp, in WorldStreamStamp stream) {
         if (!Discloses()) {
             return;
         }
@@ -368,7 +467,7 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
             if (Tier != WorldDisclosureTier.Replica) {
                 m_withheld = false;
                 Present(
-                    delivery: m_feed.Compose(cursor: m_cursor, view: m_view),
+                    delivery: ComposeProjection(),
                     engineTick: stamp.EngineTick,
                     tick: stamp.Tick,
                     version: Version
@@ -380,7 +479,7 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
 
             if (m_withheld) {
                 m_withheld = false;
-                if (DiscloseToReplica(definition: definition) is { } resumed) { inner.DeliverDefinition(definition: resumed, version: Version); PrimeReplica(); }
+                DeliverReplicaDocument(delivered: DiscloseToReplica(definition: definition));
                 FollowObserverDetach();
 
                 return;
@@ -393,8 +492,11 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
             // whole.
             if (stamp.ArenaValues && !m_cursor.FrameMoved(view: m_view)) { return; }
             if (DiscloseToReplica(definition: definition) is { } delivered) {
-                inner.DeliverState(delivered, Version, stamp with { Everything = true, MovedRows = default, ArenaValues = false });
+                _ = AnnounceCut();
+                inner.DeliverState(delivered, Version, stamp with { Everything = true, MovedRows = default, ArenaValues = false }, m_cursor.Stamp());
                 PrimeReplica();
+            } else if (m_cursor.TakeCut()) {
+                Reprime();
             }
             FollowObserverDetach();
         } catch (Exception exception) {

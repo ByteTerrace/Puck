@@ -21,8 +21,8 @@ are the generated `$type` lists: the state engine's own (`ActionPredicate`,
 them `pose`, `save`, and, each admitting an EXISTING `WorldMutation` kind into
 the rule effect set (never a new door), `upsertHudPanel`/
 `removeHudPanel` (a world-scoped HUD row) and `upsertPlacement`/`removePlacement`
-(a placement row). The four body-motion effects — `setVerticalVelocity`,
-`scaleVerticalVelocity`, `planarImpulse`, `designate` — are one operation in a
+(a placement row). The body-motion effects — `setVerticalVelocity`,
+`scaleVerticalVelocity`, `planarImpulse`, `timedMove`, `designate` — work in a
 kit's action and a rule: a kit's action acts on its own body, a rule names the
 body with `key` and refuses a `target`, and both lower through
 `WorldBodyEffects`. `startTimer` writes a kit's own timer slot and is refused BY

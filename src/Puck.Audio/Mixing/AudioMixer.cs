@@ -403,6 +403,8 @@ public sealed class AudioMixer {
 
             m_lastTriggerSequence = trigger.Sequence;
 
+            if (trigger.EmitterId >= 0 && !snapshot.ContainsEmitter(trigger.EmitterId)) { continue; }
+
             var patch = FindPatch(id: trigger.PatchId);
 
             if (patch < 0) {
@@ -411,11 +413,16 @@ public sealed class AudioMixer {
                 continue;
             }
 
+            var voice = m_patches[patch];
+            if (voice.PitchFromCueArgument && trigger.CueArgument is >= 1 and <= VoiceSynth.MaxPitchMillihertz) {
+                voice = voice with { PitchMillihertz = (int)trigger.CueArgument.Value };
+            }
             _ = m_synth.Trigger(
-                patch: in m_patches[patch],
+                patch: in voice,
                 seed: trigger.Seed,
                 gainQ16: trigger.GainQ16,
-                emitterId: trigger.EmitterId
+                emitterId: trigger.EmitterId,
+                stealGainQ16: trigger.StealGainQ16
             );
         }
     }
@@ -640,8 +647,8 @@ public sealed class AudioMixer {
             other: MaxBlockFrames
         );
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(value: frames);
-        ConsumeTriggers(snapshot: snapshot);
         m_synth.ReleaseUnbound(emitters: snapshot.Emitters);
+        ConsumeTriggers(snapshot: snapshot);
 
         var emitters = snapshot.Emitters;
 

@@ -34,7 +34,10 @@ projects one tick's `WorldEventFeed.Edges` into `MusicSenseEdge`s at the
 `WorldServer.Step` call site, immediately after `Collect()`. A rhythm hit
 window is an authored `compareState` range over the `$clock:<music>:phaseError`
 world-rule operand (the signed tick distance from `MusicClock`'s current
-position to the nearest beat) rather than a dedicated grader type.
+position to the nearest beat) rather than a dedicated grader type; the
+[clock operands](#clock-operands) below hold the rest of the family. The standard
+package's [`rhythm.puck`](../../worlds/standard/rhythm.puck) writes that range once
+as data: windows, grades and a phrase of steps on beats.
 
 A world names its score, tunes and patches by rows (`music`, `tunes`,
 `patches`, like `tables`), each a name, a `source` and a SHA-256 pin of the
@@ -71,6 +74,75 @@ else. In particular, `Puck.Audio` parses no document—a `puck.synthesizer-patch
 patch crosses into the mixer's `VoicePatch` struct through the host's patch
 factory, which stays in `Puck.World` alongside the rest of the presentation glue (the tune host, the
 render device) documented in [`Puck.World`'s Audio/ folder](../../src/Puck.World/Audio/README.md).
+
+## Delivered rule cues
+
+`emitCue` takes a name, optional text `payload`, optional integer expression
+`argument`, and an optional body `key`. The recipient receives the cue on
+the firing tick if it can read the rule's dependencies and see the addressed
+body.
+
+A rule's dependencies are everything its judgement and its firing read:
+every row it reads or writes, read whole under an audience that does not
+follow another row's members, plus what each world fact declares about
+itself (`IWorldDisclosedFact`, collected by `WorldRuleDisclosure`). A fact
+that finds bodies (a population count, a region occupancy, a distance, an
+identity fact, a `$pair:` key, a decision's neighbour perception, an effect
+that refuses when its body is inactive) needs a delivery that carries every
+body. A sight line, a path or a field paint also needs every field region
+read whole. A region or influence read needs the placement in the
+recipient's projection. A machine memory byte needs the recipient to hold
+the screen's machine (a replica document) and every row its memory bindings
+exchange. A host fact whose type declares nothing reaches only the
+authority, and the first withheld firing narrates the rule on `world.cue`.
+
+The in-process presentation serves every local seat from one delivery. Each
+cue carries the seats whose own views admit it (`WorldGameplayCue.Audience`),
+the listener hears it only when its seat is among them, and a look plays it
+when any local seat may see it.
+
+A delivered document carries its patches, tunes and scores with their
+canonical content inline (`WorldAssetRowLoader.EmbedAudio`, cached by content
+pin), so a remote client or a routed view needs none of the authority's
+files. The authority leaves out a row whose file no longer loads or matches
+its pin and reports it once on standard error. A recipient hydrating a
+projection refuses the document, naming the row, when an audio row names a
+path, fails its family's validation or misses its pin
+(`WorldDefinitionValidator.TryValidateDeliveredAudio`). The client's audio
+director skips and reports a row that does not load rather than throwing on
+the frame thread.
+
+A look can use the cue's name as its on-demand frame. An `audio.cues`
+row can bind the same name to a patch. A patch with `pitchFromCueArgument`
+uses a valid argument as base pitch in millihertz and uses its authored base
+pitch when the argument is absent or outside the pitch range.
+
+A score can use `when = "cue:phrase.ready"` in a transition, layer, or
+embellishment. The listener evaluates the condition over its own delivered
+cues. Transitions honor the score's boundary, layers use `gainThousandths`
+at the bed emitter, and embellishments fire on the matching delivery.
+`VoiceSynth` takes a free slot or replaces the quietest voice by its current
+envelope times authored gain. Equal levels replace the oldest voice first.
+
+## Clock operands
+
+A world's `music` row gives its rules the `$clock:<music>:<facet>` operands,
+spelled `clock(<music>, <facet>)` in a `.puck` rule. Each facet reads the music
+clock in one of two places.
+
+| Facet | Reads | Kind |
+|---|---|---|
+| `phaseError` | The signed engine-tick distance from the clock's current position to the nearest beat: positive past the beat, negative before the next one, tied toward past at half a beat | Int |
+| `beat`, `bar` | The beat or bar index since the music began, at the clock's current position | Int |
+| `beatInBar` | The zero-based place of the current beat in its bar | Int |
+| `phaseErrorAt:<owner>:<channel>:<kind>:<occurrence>` | The signed distance in seconds from one input event to the nearest beat. The event is read at its captured time plus the owner's calibration, or, when `inputHistory.judgement` is `Admission`, at the start of its admission interval with neither | Fixed |
+| `beatAt:…`, `barAt:…`, `beatInBarAt:…` | The index of the beat nearest that event, its bar and its place in the bar. An event before the first beat reads a negative beat | Int |
+
+The current-position facets read the clock after this tick's advance. The
+`At` facets read the `music` coordinates the authority recorded in the event's
+interval, so a later tempo or segment change leaves the answer as it was, and an
+event with no recorded coordinates (a world with no music at capture) reads
+absent, which `??` defaults. Neither form accepts a key.
 
 ## Speaker gain
 

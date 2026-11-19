@@ -679,6 +679,7 @@ public static class SdfDocumentDecoder {
         var list = new List<SdfDocumentOp>(capacity: count);
         var depth = 0;
         var index = 0;
+        int? fold = null;
 
         foreach (var element in opsElement.EnumerateArray()) {
             var context = $"ops[{index}]";
@@ -971,6 +972,18 @@ public static class SdfDocumentDecoder {
                 reason: SdfRefusal.UnhandledOpKind
             ),
             };
+
+            // A relief samples the chain's point: one after a fold since the last reset would jump at the fold's seams.
+            if (kind == SdfDocumentOpKind.CellJitter) {
+                fold ??= index;
+            } else if (kind == SdfDocumentOpKind.Reset) {
+                fold = null;
+            } else if ((kind is SdfDocumentOpKind.NoiseDisplace or SdfDocumentOpKind.CellDisplace) && (fold is { } folded)) {
+                throw new SdfDocumentException(
+                    message: $"{context}: '{opName}' samples the point the 'cellJitter' at ops[{folded}] folded, which jumps at its cells' seams where no step bound covers the relief. Put a 'reset' and the shape's own transforms between them.",
+                    reason: SdfRefusal.ReliefAfterFold
+                );
+            }
 
             if (kind == SdfDocumentOpKind.Push) {
                 if (depth >= SdfProgramBuilder.MaxFieldScopeDepth) {

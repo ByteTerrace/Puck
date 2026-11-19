@@ -40,6 +40,16 @@
       ]
     },
     {
+      "name": "removed",
+      "steps": [
+        { "at": 2, "run": "world.row.set state {\"name\":\"hand\",\"kind\":\"Int\",\"capacity\":4,\"cellVisibility\":true,\"cells\":[{\"key\":\"secret0\",\"value\":7,\"visibility\":{\"readers\":[\"seat1\"]}}]}" },
+        { "at": 4, "run": "world.state.cell.set hand pub 3" },
+        { "at": 10, "run": "world.state.cell.remove hand secret0" },
+        { "at": 35, "run": "world.row.remove placements probe-hand/pub" },
+        { "at": 35, "run": "world.row.remove placements probe-faces/top" }
+      ]
+    },
+    {
       "name": "late",
       "steps": [
         { "at": 2, "run": "world.row.set state {\"name\":\"hand\",\"kind\":\"Int\",\"capacity\":4,\"cellVisibility\":true,\"cells\":[]}" },

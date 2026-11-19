@@ -7331,6 +7331,52 @@
       "additionalProperties": false,
       "title": "WorldEffectPlanarImpulse"
     },
+    "WorldEffectTimedMove": {
+      "description": "Moves a body along its launch plane and turns it through a signed relative yaw over time.",
+      "properties": {
+        "$type": {
+          "const": "timedMove"
+        },
+        "right": {
+          "description": "Travel to the right in body-sized world units.",
+          "type": "number"
+        },
+        "forward": {
+          "description": "Travel forward in body-sized world units.",
+          "type": "number"
+        },
+        "yawDegrees": {
+          "description": "Signed relative turn in degrees, in Puck\u0027s yaw convention.",
+          "type": "number"
+        },
+        "durationSeconds": {
+          "description": "Positive duration in exact engine ticks, expressed in seconds.",
+          "type": "number"
+        },
+        "curve": {
+          "description": "How both travel and yaw are distributed over the duration.",
+          "enum": [
+            "Linear",
+            "Smoothstep"
+          ],
+          "default": "Linear",
+          "title": "BodyMotionCurve"
+        },
+        "key": {
+          "$ref": "#/$defs/StateChannelRefNonNullable",
+          "description": "The recipient of a world rule. A kit action supplies its own body.",
+          "default": null
+        }
+      },
+      "required": [
+        "right",
+        "forward",
+        "yawDegrees",
+        "durationSeconds"
+      ],
+      "additionalProperties": false,
+      "title": "WorldEffectTimedMove"
+    },
     "WorldEffectStartTimer": {
       "description": "Starts a named timer slot with an authored duration.",
       "properties": {
@@ -7416,6 +7462,11 @@
         "key": {
           "$ref": "#/$defs/StateChannelRefNonNullable",
           "description": "The body the cue is about \u2014 a body index, a $cell: indirection, or a bound key.",
+          "default": null
+        },
+        "argument": {
+          "$ref": "#/$defs/ExpressionProgramNonNullable2",
+          "description": "An optional integer expression, interpreted by the cue\u0027s consumer.",
           "default": null
         }
       },
@@ -9246,6 +9297,9 @@
         },
         {
           "$ref": "#/$defs/WorldEffectPlanarImpulse"
+        },
+        {
+          "$ref": "#/$defs/WorldEffectTimedMove"
         },
         {
           "$ref": "#/$defs/WorldEffectStartTimer"

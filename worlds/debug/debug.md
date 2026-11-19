@@ -30,7 +30,7 @@ dotnet run --project src/Puck.World -c Release -- --control --world worlds/debug
 `--world`. It opens on the
 Moth basis's chase camera (the `play` layout, which 5 returns to): it follows
 the avatar from behind and through every crossing. `debug.go portals` stands it
-at the wing's doorway. Keys 1 to 4
+before the painting wing's north wall. Keys 1 to 4
 switch to the fixed inspection cameras. `--control` opens the
 Operator attachment an MCP client drives
 ([setup](../../src/Puck.Mcp/README.md)). Where several Worlds run, start the
@@ -260,7 +260,8 @@ case, `stage` when omitted:
 | `deduction`, `skirmish` | (55, 9.05, 38.1) and (67, 9.05, 38.1), north of the social-deduction and fog-of-war skirmish tables in the board game room ([`deduction.puck`](deduction.puck), [`skirmish.puck`](skirmish.puck)) | -Z, across the table |
 | `chess`, `go`, `reversi`, `alchemy`, `granaries` | (56.5, 9.05, 21), (56.5, 9.05, 29), (65, 9.05, 21), (65, 9.05, 29) and (65, 9.05, 13), at White's edge of the chess table, Black's of the Go and Reversi tables, and the south edge of the Alchemy and granary tables in the board game room ([`chess.md`](chess.md), [`go.md`](go.md), [`reversi.md`](reversi.md), [`alchemy.md`](alchemy.md), [`granaries.md`](granaries.md)), close enough to sit | +Z, across the board |
 | `desktop` | (12.4, 0.05, 23.7), behind the chair at the desktop computer in the gallery lobby | -X, toward the monitor |
-| `portals` | (53.5, 0.05, 26), the painting wing's doorway | +X, into the wing |
+| `painting-room` | (55, 0.05, 26), just inside the painting wing's doorway | East-north-east, across the room: the garden and night paintings left of her, the linked pair's east painting right |
+| `portals` | (57.5, 0.05, 31), before the painting wing's north wall | A little east of +Z: the garden painting left of her, the night painting right |
 | `portal-garden`, `portal-night` | (57, 0.05, 36.3) and (64, 0.05, 36.3), before the garden and night paintings | +Z; walk ahead to cross |
 | `portal-link` | (54.5, 0.05, 34.5), before the west painting of the linked pair | -X; walk ahead to come out of the east one |
 | `portal-fall` | (66, 0.05, 18.6), south of the floor painting | +Z; walk ahead to drop in |
@@ -273,10 +274,15 @@ case, `stage` when omitted:
 | `meadow` | (119.5, 0.04, -55.3), in the wind meadow east of the studio ([`meadow.md`](meadow.md)) | -Z |
 | `range` | (-100, 0, 118), the head of the rate range ([`range.md`](range.md)) | -Z, down the lane |
 | `pool` | (-43, 0.05, -12), the west path's end beside the pool's steps and its float gauge ([`water.puck`](water.puck), [`pool.puck`](pool.puck)) | -X, over the water |
+| `glacier` | On the moraine's crest beside the glacier's trough on the north-west wall, 361 m up ([`valley.puck`](valley.puck)) | Across the trough, down onto the ice |
+| `valley-<sector>` | 190 m out toward each of the valley's eight sectors on the floor, where a body that falls out of the world is stood back up; the north-west's stands 15 degrees round toward north, clear of the falls' plunge basin | The centre |
 
-The chase camera keeps its world heading when a body is posed, so a place
-facing -Z frames from behind the body as the boot view does, and `gallery`
-(facing +Z) frames it from the front until the camera is turned. `help
+The chase camera keeps its place around a posed body: its world-referenced yaw
+turns by the heading the body turned by (`WorldSeatViewState.ObserveBody`), so a
+camera behind the body before `debug.go` is behind it after. A feature straight
+ahead of the body therefore stands behind it in the camera's view, and a place
+that frames several features, or an exhibit (`gallery.go`), stands the body
+turned so the feature sits beside her. `help
 debug.go` prints the usage and the lines it runs, `run debug.go chess` is the
 same line, and a binding row or wheel sector names it like any verb
 (`command: "debug.go", text: "chess"`). An argument that is not a spawn point

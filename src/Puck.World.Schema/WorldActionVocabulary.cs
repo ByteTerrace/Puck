@@ -26,8 +26,8 @@ public static class WorldPredicate {
     public sealed record Held(string Channel) : ActionPredicate;
 }
 /// <summary>The effect arms the world adds to <see cref="ActionEffect"/>, registered by
-/// <see cref="WorldFactsVocabulary"/>. The four body-motion arms (<see cref="SetVerticalVelocity"/>,
-/// <see cref="ScaleVerticalVelocity"/>, <see cref="PlanarImpulse"/>, <see cref="Designate"/>) are one operation in
+/// <see cref="WorldFactsVocabulary"/>. The body-motion arms (<see cref="SetVerticalVelocity"/>,
+/// <see cref="ScaleVerticalVelocity"/>, <see cref="PlanarImpulse"/>, <see cref="TimedMove"/>, <see cref="Designate"/>) work in
 /// both scopes: a kit's action acts on its own body when it names none, and a world rule, which has no body of its
 /// own, names one with <c>key</c> (<see cref="WorldBodyEffects"/> is the one check and lowering both read). A timer
 /// belongs to a kit's action programs and refuses in a world rule; the document, cue, field, pose, body-state and save
@@ -74,6 +74,21 @@ public static class WorldEffect {
         ActionTarget Target = ActionTarget.Self,
         bool UseMoveDirection = false
     ) : ActionEffect;
+    /// <summary>Moves a body along its launch plane and turns it through a signed relative yaw over time.</summary>
+    /// <param name="Right">Travel to the right in body-sized world units.</param>
+    /// <param name="Forward">Travel forward in body-sized world units.</param>
+    /// <param name="YawDegrees">Signed relative turn in degrees, in Puck's yaw convention.</param>
+    /// <param name="DurationSeconds">Positive duration in exact engine ticks, expressed in seconds.</param>
+    /// <param name="Curve">How both travel and yaw are distributed over the duration.</param>
+    /// <param name="Key">The recipient of a world rule. A kit action supplies its own body.</param>
+    public sealed record TimedMove(
+        decimal Right,
+        decimal Forward,
+        decimal YawDegrees,
+        decimal DurationSeconds,
+        BodyMotionCurve Curve = BodyMotionCurve.Linear,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] StateChannelRef? Key = null
+    ) : ActionEffect;
     /// <summary>Starts a named timer slot with an authored duration.</summary>
     public sealed record StartTimer(string State, float Seconds, ActionTarget Target = ActionTarget.Self) : ActionEffect;
     /// <summary>Designates a subject into a body's named target register, or clears the register. A kit's action
@@ -95,10 +110,12 @@ public static class WorldEffect {
     /// <param name="Name">The cue name; see <see cref="WorldGameplayCue.IsValidName"/>.</param>
     /// <param name="Payload">An optional bounded payload.</param>
     /// <param name="Key">The body the cue is about — a body index, a <c>$cell:</c> indirection, or a bound key.</param>
+    /// <param name="Argument">An optional integer expression, interpreted by the cue's consumer.</param>
     public sealed record EmitCue(
         string Name,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Payload = null,
-        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] StateChannelRef? Key = null
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] StateChannelRef? Key = null,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ExpressionProgram? Argument = null
     ) : ActionEffect;
     /// <summary>Applies the same instantaneous world-space rigid impulse <c>body.impulse</c> fires (Δv = impulse /
     /// mass, through the server's rigid-body solver — never a second impulse mechanism) to a
@@ -211,7 +228,22 @@ public enum WorldBodyDesignationKind : byte {
 /// <param name="Payload">An optional bounded payload interpreted by the consumer.</param>
 /// <param name="Body">An optional active-body index associated with the cue.</param>
 /// <param name="Tick">The simulation tick that emitted it.</param>
-public readonly record struct WorldGameplayCue(string Name, string? Payload, int? Body, ulong Tick) {
+/// <param name="Argument">The optional integer argument.</param>
+/// <param name="Generation">The addressed body's generation, or zero when there is no body.</param>
+/// <param name="Audience">For an in-process delivery that serves every local seat, the seats whose own views admit the
+/// cue, one bit per seat slot; zero for a delivery to one recipient, whose view already admitted it. It never crosses a
+/// wire.</param>
+public readonly record struct WorldGameplayCue(string Name, string? Payload, int? Body, ulong Tick, long? Argument = null, int Generation = 0, ulong Audience = 0UL) {
+    /// <summary>The number of local seat slots <see cref="Audience"/> can name.</summary>
+    public const int MaxAudienceSeats = 64;
+
+    /// <summary>Determines whether the cue may be presented for a local seat.</summary>
+    /// <param name="seat">The seat slot, or a negative value for a presentation that follows no seat.</param>
+    /// <returns><see langword="true"/> when the delivery served one recipient, or when the seat's own view admitted the
+    /// cue; for no seat, when any local seat's view admitted it.</returns>
+    public bool AdmitsSeat(int seat) => (Audience == 0UL) || (seat < 0) ||
+        ((seat < MaxAudienceSeats) && ((Audience & (1UL << seat)) != 0UL));
+
     /// <summary>Determines whether a cue name is a bounded dot-separated token suitable for a document and log.</summary>
     /// <param name="candidate">The candidate cue name.</param>
     /// <returns><see langword="true"/> when the name is non-empty, bounded, begins and ends with an ASCII letter or

@@ -1,3 +1,5 @@
+using Puck.World.Protocol;
+
 namespace Puck.World.Client;
 
 public sealed partial class WorldFramePresenter {
@@ -11,13 +13,16 @@ public sealed partial class WorldFramePresenter {
     private void AdvanceShadows(WorldDefinition definition, int revision, WorldStateMirror mirror) =>
         m_deliveredShadows.Advance(definition: definition, mirror: mirror, revision: revision);
 
-    /// <summary>Reads the last presented shadow selection of the queried authority.</summary>
-    /// <param name="definition">The queried definition.</param>
-    /// <returns>The slot report, or null when this presenter has no matching frame.</returns>
-    public string? DescribeShadowSlots(WorldDefinition definition) {
-        if (m_environment.DescribeShadowSlots(definition: definition) is { } boot) { return boot; }
+    /// <summary>Reads the last presented shadow selection of the queried authority: the boot world's when the client's
+    /// delivered version names the authority's activation, else the routed world's whose delivered version does. A
+    /// client's definition is its own object, never the server's, so the authority is matched by version value.</summary>
+    /// <param name="authority">The queried authority's document version (<c>WorldServer.DocumentVersion</c>).</param>
+    /// <returns>The slot report, or <see langword="null"/> when this presenter has presented no frame of that
+    /// authority.</returns>
+    public string? DescribeShadowSlots(WorldDocumentVersion authority) {
+        if (m_client.DocumentVersion.Activation == authority.Activation) { return m_environment.DescribeShadowSlots(); }
         foreach (var scene in m_routedScenes.Values) {
-            if (scene.DescribeShadowSlots(definition: definition) is { } report) { return report; }
+            if (scene.DescribeShadowSlots(authority: authority) is { } report) { return report; }
         }
         return null;
     }

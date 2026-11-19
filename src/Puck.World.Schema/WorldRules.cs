@@ -109,6 +109,8 @@ public static class WorldRuleCapacity {
     public const int MaxCueNameLength = 64;
     /// <summary>The longest cue payload, in UTF-16 code units.</summary>
     public const int MaxCuePayloadLength = 256;
+    /// <summary>Maximum one-shot cues carried to a single recipient per delivered tick.</summary>
+    public const int MaxDeliveredCues = 1024;
     /// <summary>The maximum individuals retained by one parameterized decision option.</summary>
     public const int MaxDecisionCandidates = 32;
     /// <summary>The maximum options considered by one decision.</summary>
