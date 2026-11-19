@@ -151,15 +151,10 @@ public static unsafe class DirectXBarriers {
     public static D3D12_GLOBAL_BARRIER Fixed(GpuImageLayout oldLayout, GpuImageLayout newLayout, GpuStage sourceStages, GpuStage destinationStages) {
         newLayout = Entered(layout: newLayout);
 
-        var (syncBefore, accessBefore) = Side(layout: oldLayout, stages: sourceStages);
-        var (syncAfter, accessAfter) = Side(layout: newLayout, stages: destinationStages);
-
-        return new D3D12_GLOBAL_BARRIER {
-            AccessAfter = accessAfter,
-            AccessBefore = accessBefore,
-            SyncAfter = syncAfter,
-            SyncBefore = syncBefore,
-        };
+        return Sides(
+            after: Side(layout: newLayout, stages: destinationStages),
+            before: Side(layout: oldLayout, stages: sourceStages)
+        );
     }
     /// <summary>Builds the global barrier that orders the accesses two neutral masks name across every resource.</summary>
     /// <param name="sourceAccess">The accesses the barrier makes visible.</param>
@@ -167,17 +162,11 @@ public static unsafe class DirectXBarriers {
     /// <param name="sourceStages">The stages whose accesses the barrier waits for.</param>
     /// <param name="destinationStages">The stages that wait for the barrier.</param>
     /// <returns>The barrier.</returns>
-    public static D3D12_GLOBAL_BARRIER Global(GpuAccess sourceAccess, GpuAccess destinationAccess, GpuStage sourceStages, GpuStage destinationStages) {
-        var (syncBefore, accessBefore) = Side(access: sourceAccess, buffer: false, stages: sourceStages);
-        var (syncAfter, accessAfter) = Side(access: destinationAccess, buffer: false, stages: destinationStages);
-
-        return new D3D12_GLOBAL_BARRIER {
-            AccessAfter = accessAfter,
-            AccessBefore = accessBefore,
-            SyncAfter = syncAfter,
-            SyncBefore = syncBefore,
-        };
-    }
+    public static D3D12_GLOBAL_BARRIER Global(GpuAccess sourceAccess, GpuAccess destinationAccess, GpuStage sourceStages, GpuStage destinationStages) =>
+        Sides(
+            after: Side(access: destinationAccess, buffer: false, stages: destinationStages),
+            before: Side(access: sourceAccess, buffer: false, stages: sourceStages)
+        );
     /// <summary>Builds the barrier that orders a default-heap buffer's accesses. A buffer has no layout. A source that
     /// names no device work (a host write, a first use) still waits for every earlier access with every access, since an
     /// earlier list in the same execution may have touched the buffer, and a buffer that cannot be unordered-accessed
@@ -300,10 +289,7 @@ public static unsafe class DirectXBarriers {
             };
 
             group.Anonymous.pTextureBarriers = pointer;
-            commandList->Barrier(
-                NumBarrierGroups: 1,
-                pBarrierGroups: &group
-            );
+            Record(commandList: commandList, group: group);
         }
     }
     /// <summary>Records one buffer barrier on a list's enhanced-barrier interface.</summary>
@@ -316,10 +302,7 @@ public static unsafe class DirectXBarriers {
         };
 
         group.Anonymous.pBufferBarriers = &barrier;
-        commandList->Barrier(
-            NumBarrierGroups: 1,
-            pBarrierGroups: &group
-        );
+        Record(commandList: commandList, group: group);
     }
     /// <summary>Records one global barrier on a list's enhanced-barrier interface.</summary>
     /// <param name="commandList">The enhanced-barrier interface.</param>
@@ -332,12 +315,22 @@ public static unsafe class DirectXBarriers {
         };
 
         group.Anonymous.pGlobalBarriers = &barrier;
+        Record(commandList: commandList, group: group);
+    }
+
+    // The one native Barrier call; the group's barriers stay pinned by the caller for its duration.
+    private static void Record(ID3D12GraphicsCommandList7* commandList, D3D12_BARRIER_GROUP group) =>
         commandList->Barrier(
             NumBarrierGroups: 1,
             pBarrierGroups: &group
         );
-    }
-
+    private static D3D12_GLOBAL_BARRIER Sides((D3D12_BARRIER_SYNC Sync, D3D12_BARRIER_ACCESS Access) before, (D3D12_BARRIER_SYNC Sync, D3D12_BARRIER_ACCESS Access) after) =>
+        new() {
+            AccessAfter = after.Access,
+            AccessBefore = before.Access,
+            SyncAfter = after.Sync,
+            SyncBefore = before.Sync,
+        };
     // Every sync bit, for an access that accepts any; never ANDed into a sync except with a real one.
     private const D3D12_BARRIER_SYNC AnySync = ~D3D12_BARRIER_SYNC.D3D12_BARRIER_SYNC_NONE;
     // The three programmable shader stages a stage mask names.

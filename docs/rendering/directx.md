@@ -48,6 +48,19 @@ global dependency, preserving recording order.
 [Microsoft's specification](https://microsoft.github.io/DirectX-Specs/d3d/D3D12EnhancedBarriers.html)
 defines the layouts, their accesses and the lack of buffer layouts.
 
+`DirectXBarriers` builds and records every barrier, and each side's layout,
+accesses and syncs come from two tables in it, transcribed from the
+specification: the accesses each layout permits (`LayoutAccess`) and the syncs
+that serve each access (`SyncsServing`). `DirectXBarriers.Paired` keeps only the
+sync bits some access permits and widens to SYNC_ALL when what remains does not
+serve every access; the runtime checks both directions and fails the command
+list's `Close` with E_INVALIDARG on either. The depth-write layout states the
+write access alone: the debug layer refuses DEPTH_STENCIL_READ there although the
+specification's table lists it. `DirectXBarrierCompatibilityLawTests` holds every
+side the builders can produce to an independent copy of the tables, without a
+device. A headless World records no barriers, so only a windowed boot with
+`--debug-layers` shows the runtime's verdict.
+
 The submitter collects a render-graph batch into one ExecuteCommandLists and one
 completion signal, except that background jobs deferred ahead of the frame's
 work reach the queue in one of their own, with their own signal. Each deferred
