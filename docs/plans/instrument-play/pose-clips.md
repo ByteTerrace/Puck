@@ -1194,7 +1194,13 @@ The capability searched for, what was read, and why nothing existing owns it.
   onto another, and the fixed-point type has `FixedQuaternion.Slerp`. Neither
   is a float arc that leaves the signs alone, so step 5 added
   `VectorFunctions.Arc` with `TurnAngle`, `ScaleTurn` and `WithPositiveScalar`
-  (two inline turn-angle formulas moved onto `TurnAngle`).
+  (two inline turn-angle formulas moved onto `TurnAngle`, and the three
+  `Quaternion.Slerp` calls from the identity that scaled a turn, in the
+  client's correction easing and the effector's align and replant, onto
+  `ScaleTurn`).
+- **A share of a layer.** Read `WorldGaitDrivers.ComposeDelta` and the
+  effector weight. Nothing scaled a driver's weight per shape; the share is
+  `CreationRig.Share`, and step 7's effector share is to call it.
 - **One list of what moves a shape.** Read the owner rule then in
   `CreationMotion`, `CreationMotionPlan`, `WorldRigidAssets.IsRigid` and the
   effector code. `CreationMotionPlan` came closest: it already added a look's
