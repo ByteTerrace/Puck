@@ -261,7 +261,7 @@ public sealed class SessionShadowDeliveryLawTests {
         var frame = resolver.Resolve(delivered, session.DefinitionRevision, presentation, shadowSelection: selection);
 
         Assert.Equal(2, frame.Lights.ShadowSlots[0]);
-        var report = resolver.DescribeShadowSlots(definition: delivered);
+        var report = resolver.DescribeShadowSlots();
 
         Assert.Contains(actualString: report, expectedSubstring: "shadowSlots tick=11+0.5");
         Assert.Contains(actualString: report, expectedSubstring: "shadow[1] light=second");
@@ -271,7 +271,7 @@ public sealed class SessionShadowDeliveryLawTests {
         Assert.Equal(new PresentedTick(Fraction: 0, Whole: 12), tick);
         Assert.Equal(new[] { "third", "first" }, slots[..count.StableCount].Select(selector: slot => slot.Candidate.Name));
         _ = resolver.Resolve(delivered, session.DefinitionRevision, presentation, shadowSelection: selection);
-        report = resolver.DescribeShadowSlots(definition: delivered);
+        report = resolver.DescribeShadowSlots();
         Assert.Contains(actualString: report, expectedSubstring: "shadowSlots tick=12+0");
         Assert.Contains(actualString: report, expectedSubstring: "shadow[1] light=first");
     }

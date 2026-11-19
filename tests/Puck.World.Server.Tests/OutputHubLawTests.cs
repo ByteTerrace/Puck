@@ -214,6 +214,7 @@ public sealed class OutputHubLawTests {
 /// contract) and counts deliveries.</summary>
 internal sealed class RecordingSink : IClientSink {
     public int SnapshotDeliveries { get; private set; }
+    public WorldGameplayCue[] LastCues { get; private set; } = [];
 
     private EntitySnapshot[] m_lastEntries = [];
 
@@ -224,6 +225,7 @@ internal sealed class RecordingSink : IClientSink {
     public void DeliverCut(in WorldStreamStamp stream, bool terminal) { }
     public void DeliverSnapshot(in WorldSnapshot snapshot, in WorldStreamStamp stream) {
         SnapshotDeliveries++;
+        LastCues = snapshot.Cues.ToArray();
         m_lastEntries = snapshot.Entries.ToArray();
 
         // An entry's action state is borrowed scratch the next snapshot overwrites.

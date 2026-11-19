@@ -56,6 +56,17 @@ public sealed partial class WorldRecipientView(Func<WorldDefinition> definition,
             return true;
         }
     }
+    /// <summary>Admits a transient derived from a whole row under a stable audience.</summary>
+    public bool ReadsCueDependency(int row) {
+        if (!ReadsWhole(row)) { return false; }
+        if (Unrestricted) { return true; }
+        var arena = Arena;
+        if (arena.Rows[row].Visibility?.ReadersFrom is not null) { return false; }
+        foreach (var zone in arena.Catalog.ContainingZones(row)) {
+            if (arena.Rows[zone].Visibility?.ReadersFrom is not null) { return false; }
+        }
+        return true;
+    }
     /// <summary>The policy's withheld metadata, never an undisclosed member count. A view that does not observe
     /// withholds every name whole, declared or not, so its answer never tells which rows exist.</summary>
     public WorldWithheldRow? Withheld(string row) {

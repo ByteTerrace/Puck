@@ -926,6 +926,10 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
     }
 
     private readonly WorldSolidScaleMirror m_solidScales = new();
+    /// <summary>The local rig's delivered one-shot frames.</summary>
+    public WorldPresentationCueFeed CueFrames { get; } = new();
+    /// <summary>Observes the local seat's disclosed presentation events.</summary>
+    public Action<WorldDefinition, WorldPresentationCueTick>? PresentCues { get; set; }
     private float m_solidScaleAlpha = 1f;
 
     /// <inheritdoc/>
@@ -1052,6 +1056,9 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
             // A tick no state delivery refreshed still moves every bound cell whose value-over-time trait has not rested.
             m_stateMirror.Advance(engineTick: m_engineTick, tick: m_tick);
         }
+        var cues = WorldPresentationCueFeed.Capture(snapshot);
+        if (cues.Cues.Length != 0) { CueFrames.Publish(cues); }
+        PresentCues?.Invoke(m_definition, cues);
     }
     /// <inheritdoc/>
     /// <remarks>A value-only mutation cannot have changed channels, target registers, or scene shape: the fresh
@@ -1093,6 +1100,7 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
     private void BeginVersion(WorldDocumentVersion version) {
         if (version.Activation != m_documentVersion.Activation) {
             m_stateMirror.BeginLifetime();
+            CueFrames.Clear();
         }
 
         m_documentVersion = version;

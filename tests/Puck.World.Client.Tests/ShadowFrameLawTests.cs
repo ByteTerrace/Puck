@@ -61,7 +61,7 @@ public sealed class ShadowFrameLawTests {
             for (var index = 0; (index < frame.Lights.Count); index++) {
                 Assert.Equal(((index < 3) ? 1u : 0u), frame.Lights[index].Shadows);
             }
-            var report = resolver.DescribeShadowSlots(definition: definition);
+            var report = resolver.DescribeShadowSlots();
 
             Assert.Contains(actualString: report, expectedSubstring: "active=3 fades=1 queued=1");
             Assert.Contains(actualString: report, expectedSubstring: "shadow[0] light=a index=0 reason=auto rank=3");
@@ -72,8 +72,8 @@ public sealed class ShadowFrameLawTests {
         mirror.Advance(engineTick: (crossing + 16), tick: 3);
         mirror.Apply(fraction: 1f);
         Assert.Equal(2, resolver.Resolve(definition: definition, revision: 0, mirror: mirror).Lights.ShadowSlots[0]);
-        Assert.Contains("slot=1 outgoing=c index=1 incoming=d index=3", resolver.DescribeShadowSlots(definition: definition));
-        Assert.Contains("weight=0 reason=selectionChanged fromQueue", resolver.DescribeShadowSlots(definition: definition));
+        Assert.Contains("slot=1 outgoing=c index=1 incoming=d index=3", resolver.DescribeShadowSlots());
+        Assert.Contains("weight=0 reason=selectionChanged fromQueue", resolver.DescribeShadowSlots());
     }
     [Fact]
     public void ARetiredFadeRemainsInTheEarlierFrameIntervalAcrossANameReorder() {
@@ -98,7 +98,7 @@ public sealed class ShadowFrameLawTests {
             var frame = resolver.Resolve(definition: reordered, revision: 1, mirror: mirror);
 
             Assert.Equal(1, frame.Lights.ShadowSlots[0]);
-            var report = resolver.DescribeShadowSlots(definition: reordered);
+            var report = resolver.DescribeShadowSlots();
 
             Assert.Contains(actualString: report, expectedSubstring: "active=3 fades=1 queued=1");
             Assert.Contains(actualString: report, expectedSubstring: "slot=0 outgoing=a index=1 incoming=b index=0");
@@ -249,7 +249,7 @@ public sealed class ShadowFrameLawTests {
             Assert.Equal(expected: ((index is 0 or 1 or 4) ? 1u : 0u), actual: frame.Lights[index].Shadows);
         }
 
-        var report = resolver.DescribeShadowSlots(definition: reordered);
+        var report = resolver.DescribeShadowSlots();
 
         Assert.NotNull(@object: report);
         Assert.Contains(actualString: report, expectedSubstring: "K=3 F=1 fadeTicks=100 overflow=queue");
@@ -257,7 +257,6 @@ public sealed class ShadowFrameLawTests {
         Assert.Contains(actualString: report, expectedSubstring: "shadow[0] light=first index=4 reason=always");
         Assert.Contains(actualString: report, expectedSubstring: "shadow[1] light=second index=0 reason=always");
         Assert.Contains(actualString: report, expectedSubstring: "shadow[2] light=automatic index=1 reason=auto rank=3");
-        Assert.Null(@object: resolver.DescribeShadowSlots(definition: definition));
     }
     [Fact]
     public void StateOnlyDefinitionReplacementChangesRanksWithoutResettingNamedSlots() {

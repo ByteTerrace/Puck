@@ -72,6 +72,23 @@ patch crosses into the mixer's `VoicePatch` struct through the host's patch
 factory, which stays in `Puck.World` alongside the rest of the presentation glue (the tune host, the
 render device) documented in [`Puck.World`'s Audio/ folder](../../src/Puck.World/Audio/README.md).
 
+## Delivered rule cues
+
+`emitCue` takes a name, optional text `payload`, optional integer expression
+`argument`, and an optional body `key`. The recipient receives the cue on
+the firing tick if it can read the rule's dependencies and see the addressed
+body. A look can use the cue's name as its on-demand frame. An `audio.cues`
+row can bind the same name to a patch. A patch with `pitchFromCueArgument`
+uses a valid argument as base pitch in millihertz and uses its authored base
+pitch when the argument is absent or outside the pitch range.
+
+A score can use `when = "cue:phrase.ready"` in a transition, layer, or
+embellishment. The listener evaluates the condition over its own delivered
+cues. Transitions honor the score's boundary, layers use `gainThousandths`
+at the bed emitter, and embellishments fire on the matching delivery.
+`VoiceSynth` takes a free slot or replaces the quietest voice by its current
+envelope times authored gain. Equal levels replace the oldest voice first.
+
 ## Speaker gain
 
 A speaker feed's `gain` accepts a number (1 is unity), a numeric state binding

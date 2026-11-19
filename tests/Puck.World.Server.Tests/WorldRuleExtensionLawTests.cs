@@ -387,7 +387,6 @@ public sealed class WorldRuleExtensionLawTests {
                 )]
         );
         using var fixture = Fixtures.FreshServer(definition: definition);
-        WorldGameplayCue? cue = null;
 
         Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(
             Principal: Principal.Seat(slot: 0),
@@ -395,10 +394,11 @@ public sealed class WorldRuleExtensionLawTests {
             IdentityName: null,
             WireProtocolKey: WorldProtocol.WireProtocolKey
         )).Accepted);
-        fixture.Server.GameplayCueTap = value => cue = value;
+        var sink = new RecordingSink();
+        using var delivery = fixture.Server.AttachSeatPresentation(sink, Principal.Seat(0));
         fixture.Step();
 
-        Assert.Null(value: cue);
+        Assert.Empty(sink.LastCues);
         Assert.True(condition: (fixture.Server.Body(index: 0)!.CaptureTransferState().VerticalVelocity < FixedQ4816.Zero));
         Assert.Equal(
             expected: 2L,
@@ -1075,13 +1075,13 @@ public sealed class WorldRuleExtensionLawTests {
                     Effects: [new WorldEffect.EmitCue(
                             Key: "0",
                             Name: "round.start",
-                            Payload: "blue"
+                            Payload: "blue",
+                            Argument: ExpressionProgram.Parse("440000")
                         )]
                 )]
         );
 
         using var fixture = Fixtures.FreshServer(definition: definition);
-        WorldGameplayCue? observed = null;
 
         Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(
             Principal: Principal.Seat(slot: 0),
@@ -1089,10 +1089,11 @@ public sealed class WorldRuleExtensionLawTests {
             IdentityName: null,
             WireProtocolKey: WorldProtocol.WireProtocolKey
         )).Accepted);
-        fixture.Server.GameplayCueTap = cue => observed = cue;
+        var sink = new RecordingSink();
+        using var delivery = fixture.Server.AttachSeatPresentation(sink, Principal.Seat(0));
         fixture.Step();
 
-        var cue = Assert.IsType<WorldGameplayCue>(@object: observed);
+        var cue = Assert.Single(sink.LastCues);
 
         Assert.Equal(
             expected: "round.start",
@@ -1110,6 +1111,10 @@ public sealed class WorldRuleExtensionLawTests {
             expected: 1UL,
             actual: cue.Tick
         );
+        var frame = WorldFederationCodec.EncodeSnapshot(new WorldSnapshot(cue.Tick, 0, 1, default, Cues: new[] { cue }));
+        Assert.True(WorldFederationCodec.TryDecodeSnapshot(frame, out var decoded, out _));
+        Assert.Equal(cue, Assert.Single(decoded.Cues.ToArray()));
+        Assert.Equal(440000L, cue.Argument);
     }
     [Fact]
     public void AudioCueTableAdmitsTokensEmittedByThisWorldRules() {

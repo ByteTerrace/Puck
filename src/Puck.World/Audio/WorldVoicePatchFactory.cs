@@ -42,6 +42,7 @@ public static class WorldVoicePatchFactory {
             SustainQ16: ((int)((sustainThousandths * 65536L) / 1000L)),
             ReleaseFrames: (document.ReleaseFrames ?? 0),
             PitchMillihertz: document.PitchMillihertz,
+            PitchFromCueArgument: document.PitchFromCueArgument,
             SweepMillihertzPerFrame: (document.SweepMillihertzPerFrame ?? 0),
             VibratoDepthMillihertz: (document.VibratoDepthMillihertz ?? 0),
             VibratoRateMillihertz: (document.VibratoRateMillihertz ?? 0),

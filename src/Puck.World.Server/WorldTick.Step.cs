@@ -303,6 +303,8 @@ public sealed partial class WorldTick {
         }
     }
     private void StepCore(in FixedStepContext context) {
+        m_cues.Clear();
+        m_cueMusicBoundary = 0;
         using var work = HostFrameWork.Measure(HostFrameWorkPart.TickIngress);
         Host.Input.BeginInterval(interval: new WorldInputInterval((context.Tick + 1), (context.ElapsedTicks - context.StepTicks), context.StepTicks,
             ((m_musicClock is { } capturedClock) ? new(capturedClock.ElapsedTicks, capturedClock.TicksPerBeat, m_musicDirector!.CurrentSegmentId) : null)));
@@ -557,6 +559,7 @@ public sealed partial class WorldTick {
         ) {
             var previousElapsedTicks = musicClock.ElapsedTicks;
             var boundary = musicClock.Advance(stepTicks: context.StepTicks);
+            m_cueMusicBoundary = (byte)boundary;
 
             // Diegetic-instrument clock fold — see InstrumentClockBoundary's own remarks for why holding the screen
             // application is the whole gate (never a WorldSessionLever) and why only Beat, never Bar, is contributed.
@@ -654,10 +657,13 @@ public sealed partial class WorldTick {
         Host.Engagement.CompleteBodyRouting();
 
         work.Next(HostFrameWorkPart.TickDelivery);
-        EmitSnapshot(
-            tick: (context.Tick + 1UL),
-            stepTicks: context.StepTicks
-        );
+        m_deliveringCues = true;
+        try {
+            EmitSnapshot(tick: (context.Tick + 1UL), stepTicks: context.StepTicks);
+        } finally {
+            m_deliveringCues = false;
+            m_cues.Clear();
+        }
         m_lastCompletedTick = (context.Tick + 1UL);
         m_lastStepTicks = context.StepTicks;
         m_lastCompletedEngineTicks = context.ElapsedTicks;

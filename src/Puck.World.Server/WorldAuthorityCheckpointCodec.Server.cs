@@ -871,6 +871,7 @@ public static partial class WorldAuthorityCheckpointCodec {
         writer.WriteFixed(value: state.DrivePitch);
         writer.WriteFixedVector(value: state.OverlayVelocity);
         writer.WriteUInt64(value: state.OverlayRemainingTicks);
+        WorldTimedBodyMove.Write(writer, state.TimedMove);
         WriteULongArray(
             writer: writer,
             values: state.ChannelTimerTicks
@@ -991,6 +992,7 @@ public static partial class WorldAuthorityCheckpointCodec {
         var drivePitch = reader.ReadFixed();
         var overlayVelocity = reader.ReadFixedVector();
         var overlayRemainingTicks = reader.ReadUInt64();
+        var timedMove = WorldTimedBodyMove.Read(ref reader);
         var channelTimerTicks = ReadULongArray(
             field: "channel timer ticks",
             reader: ref reader
@@ -1162,6 +1164,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             OverlayRemainderZ: overlayRemainderZ,
             OverlayRemainingTicks: overlayRemainingTicks,
             OverlayVelocity: overlayVelocity,
+            TimedMove: timedMove,
             PendingContinuum: pendingContinuum,
             PendingDefaultChannelPress: pendingDefaultChannelPress,
             PendingDefaultChannelValue: pendingDefaultChannelValue,

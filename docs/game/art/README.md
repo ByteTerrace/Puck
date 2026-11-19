@@ -15,6 +15,7 @@ documents remain the implementation sources.
 | [Valley and gallery visual references](valley-and-gallery.md) | Environment direction and real-life references | Source references, initial comparisons, and the selected B direction for a painterly, cartoony futuristic valley and gallery. |
 | [Armored chibi hero implementation brief](armored-chibi-hero-brief.md) | Character design and motion | Aesthetic brief defining silhouette, chunky chibi anime armor, materials, and movement dynamics for the hero avatar within Puck's signed-distance renderer. |
 | [Moth concept pack](moth-concept-pack/README.md) | Concept art and model sheets | The Moth's visual standard: the mech-suit turnaround, construction details, poses and expressions, flight, the off-suit Moth with her scale and fit inside the suit, the handheld at true scale, the flight-pack references and prompt provenance. |
+| [Moth instrument and dance concept pack](instrument-play-pack/README.md) | Instrument, fingering and dance | The forearm instrument, its playing stances and hand studies, and beat-by-beat choreography for the travelling step, spin strike and leap finish. |
 
 ## Concept art review
 

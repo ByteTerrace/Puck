@@ -442,6 +442,8 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
             // A cut the rows or the body policy decided primes the observer alone, and this snapshot completes it.
             PrimeAfterCut();
             redacted = redacted with { Revision = checked((int)m_cursor.Sequence) };
+            redacted = server.PresentCues(redacted, m_view,
+                fullBodies: server.Definition.Population.ObserverDisclosure.Mode == WorldObserverDisclosureMode.All);
             inner.DeliverSnapshot(snapshot: in redacted, stream: m_cursor.Stamp());
             FollowObserverDetach();
         } catch (Exception exception) {
