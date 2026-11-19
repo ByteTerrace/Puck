@@ -70,7 +70,7 @@ public static partial class MeshAuditLines {
     public static string TopologyLine(SdfMeshAuditReport report) {
         ArgumentNullException.ThrowIfNull(argument: report);
 
-        return string.Create(provider: CultureInfo.InvariantCulture, handler: $"  topology: {report.Folds} folds, {report.Flipped} flipped, {report.Slivers} slivers, {report.OpenEdges} open edges, {report.NonManifoldEdges} non-manifold edges; surface: {report.Crossings} crossings, {report.MissingCrossings} uncovered");
+        return string.Create(provider: CultureInfo.InvariantCulture, handler: $"  topology: {report.Folds} folds ({report.CreaseFolds} on the field's creases), {report.Flipped} flipped, {report.Slivers} slivers, {report.OpenEdges} open edges, {report.NonManifoldEdges} non-manifold edges; surface: {report.Crossings} crossings, {report.MissingCrossings} uncovered");
     }
 
     /// <summary>Returns the classes of a measured group's defects, each with the cells' refinement flags its items lie in.</summary>
@@ -134,6 +134,6 @@ public static partial class MeshAuditLines {
 
     [GeneratedRegex(pattern: @"^group \d+ .*\bprototype=(?<prototype>\S+) .*: \d+ triangles, .*\bscore (?<score>\d+(?:\.\d+)?)", options: RegexOptions.CultureInvariant)]
     private static partial Regex HeadingPattern();
-    [GeneratedRegex(pattern: @"^  topology: (?<folds>\d+) folds, (?<flipped>\d+) flipped, (?<slivers>\d+) slivers, (?<open>\d+) open edges, (?<nonmanifold>\d+) non-manifold edges; surface: (?<crossings>\d+) crossings, (?<uncovered>\d+) uncovered", options: RegexOptions.CultureInvariant)]
+    [GeneratedRegex(pattern: @"^  topology: (?<folds>\d+) folds(?: \(\d+ on the field's creases\))?, (?<flipped>\d+) flipped, (?<slivers>\d+) slivers, (?<open>\d+) open edges, (?<nonmanifold>\d+) non-manifold edges; surface: (?<crossings>\d+) crossings, (?<uncovered>\d+) uncovered", options: RegexOptions.CultureInvariant)]
     private static partial Regex TopologyPattern();
 }
