@@ -1707,7 +1707,7 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
             (m_steps == 0) &&
             m_ready &&
             published &&
-            (!m_outputRefreshRequested || m_installedUnrendered)
+            (!m_outputRefreshRequested || m_installedUnrendered || m_publicationLost)
         ) {
             if (m_frame != 0) {
                 PinStandingCaptureIfOffered();
@@ -1923,6 +1923,23 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
             request,
             PendingCapturePath
         );
+    }
+    /// <summary>Withdraws the node's published image and buffers, as a device loss does, without releasing its graph:
+    /// it publishes nothing until it renders again, a paused node presents nothing and owes no initialization frame, a
+    /// selected output is not presented again from the graph's images, and a capture served without rendering reports
+    /// that no completed output exists. The runtime calls it when a host withdraws what the instance published
+    /// (<see cref="IRenderGraphInstances.Withdraw"/>).</summary>
+    /// <exception cref="ObjectDisposedException">The node is disposed.</exception>
+    public void WithdrawPublication() {
+        ObjectDisposedException.ThrowIf(
+            condition: m_disposed,
+            instance: this
+        );
+        ClearBufferPublications();
+        Publish(surface: default);
+        m_publishedStateTick = null;
+        m_publishedFrame = null;
+        m_publicationLost = true;
     }
     /// <summary>Clears all history state and resets the presentation counter. Submissions in flight complete first; the
     /// completed work sample is then withdrawn, and <see cref="ResetSubmission"/> marks where counting since this reset

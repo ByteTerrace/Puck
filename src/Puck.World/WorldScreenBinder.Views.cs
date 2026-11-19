@@ -33,9 +33,6 @@ public sealed partial class WorldScreenBinder {
     // Each session view's residency by instance name, and the frame source it renders; released views reused.
     private readonly Dictionary<string, ViewResidency> m_viewResidencies = new(comparer: StringComparer.Ordinal);
     private readonly List<string> m_releasedViews = [];
-    // Last valid bindings, not another residency owner: the graph retains their resources and published image.
-    // An unavailable observation holds that image under the graph host's pause policy instead of resolving a new scene.
-    private readonly Dictionary<string, SdfWorldView> m_heldViews = new(StringComparer.Ordinal);
 
     /// <summary>Gets or sets the world's residency, which renders every camera view as a view of the world's frame, and
     /// whose frame each routed residency films first; <see langword="null"/> in a presentation with no render graph, where
@@ -67,18 +64,13 @@ public sealed partial class WorldScreenBinder {
     public bool TryResolveView(string name, out SdfWorldView view) {
         ArgumentNullException.ThrowIfNull(argument: name);
 
-        if (!IsAvailable(view: name)) {
-            return m_heldViews.TryGetValue(name, out view) && !view.Residency.IsReleased;
-        }
-        if (!TryResolveAvailableView(name, out view)) { return false; }
-        if (SessionFeedOf(name) is not null || NestedCameraLevel(name) is not null || m_infinityOutputs.ContainsKey(name)) {
-            m_heldViews[name] = view;
-        }
-        return true;
-    }
-    private bool TryResolveAvailableView(string name, out SdfWorldView view) {
-
         view = default;
+
+        // The binding side of a view's access: one its viewer may not see now resolves to nothing, so nothing can render
+        // it, and the graph host withdraws what it published (WorldViewGraphHost.BeginFrame).
+        if (!Available(view: name)) {
+            return false;
+        }
 
         if (
             (m_viewPipelines is null) ||
@@ -129,7 +121,7 @@ public sealed partial class WorldScreenBinder {
     /// presentation's own views of the world's residency.</summary>
     /// <param name="name">The instance's name.</param>
     /// <param name="world">The world's residency.</param>
-    /// <returns>The current or held view, or null when a known unavailable observation has no valid binding to hold.</returns>
+    /// <returns>The current view, or null for a known observation its viewer may not see now.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="name"/> or <paramref name="world"/> is
     /// <see langword="null"/>.</exception>
     public SdfWorldView? ResolveInstanceView(string name, SdfWorldResidency world) {
@@ -141,9 +133,8 @@ public sealed partial class WorldScreenBinder {
         )) {
             return view;
         }
-        // A known but unavailable observation is not an unnamed host view. In particular its first unavailable frame
-        // must not expose the whole root merely because no previous image/binding exists to hold.
-        if (!IsAvailable(view: name)) { return null; }
+        // A known but unavailable observation is not an unnamed host view: it must never expose the whole root.
+        if (!Available(view: name)) { return null; }
 
         return (TryResolveRoutedView(
             name: name,
@@ -159,8 +150,9 @@ public sealed partial class WorldScreenBinder {
     // A registered session's own residency, rendering its frame source, created the first time a view resolves to it and
     // made again when its frame source is another.
     private SdfWorldResidency? SessionResidencyOf(SessionFeed feed) {
-        // The sole private-residency allocation door, shared by a session's own view and its nested cameras.
-        if (!Available(feed)) { return null; }
+        // The sole private-residency allocation door, shared by a session's own view and its nested cameras. It makes
+        // nothing while the mirror holds content delivered under wider access than the viewer has now (ContentAccess).
+        if (!Available(feed: feed) || !feed.Content.MayMake(access: feed.Route.Access.Level)) { return null; }
         var source = OwnSourceOf(feed: feed);
         var name = feed.RegistrationName;
 
@@ -227,7 +219,6 @@ public sealed partial class WorldScreenBinder {
         }
 
         m_viewResidencies.Clear();
-        m_heldViews.Clear();
         ReleaseRoutedResidencies();
         ReleaseInfinityRoots();
     }
@@ -313,9 +304,6 @@ public sealed partial class WorldScreenBinder {
 
         if (m_views.TryPublish(instances: out var views)) {
             Mappings.ReconcileViews(views: views);
-            foreach (var name in m_heldViews.Keys.ToArray()) {
-                if (!views.Contains(name)) { m_heldViews.Remove(name); }
-            }
         }
     }
     // Whether any screen shows a camera registration.
