@@ -49,17 +49,23 @@ public sealed class WorldSessionObservation : IDisposable {
 
     /// <summary>Gets a value indicating whether the observation is delivered everything its world holds right now: it has
     /// not ended, it still observes the whole world, its admission discloses a <see cref="WorldDisclosureTier.Replica"/>,
-    /// and its world's observer disclosure redacts no body. Only then may a viewer render its world's own whole replica
-    /// in its place (a portal window joining its destination's endpoint scene), since that replica shows it nothing its
-    /// own delivery would not. Read on the thread that steps the observed world.</summary>
-    public bool DisclosesEverything => (
-        CanObserve &&
-        (Tier == WorldDisclosureTier.Replica) &&
-        new WorldSinkDisclosure(
-            ObserverBodyIndex: -1,
-            Policy: m_server.Definition.Population.ObserverDisclosure
-        ).IsFull
-    );
+    /// its world's observer disclosure redacts no body, and its view reads every row whole
+    /// (<see cref="WorldRecipientView.ReadsEverything"/>), so neither its rows, its placements, its fields nor its solid
+    /// sizes are filtered. Only then may a viewer render its world's own whole replica in its place (a portal window
+    /// joining its destination's endpoint scene), since that replica shows it nothing its own delivery would not. Read on
+    /// the thread that steps the observed world.</summary>
+    /// <remarks>The test is declarative and conservative: a world that declares any restricted row, cell or zone the
+    /// session does not pass makes every window onto it keep a residency of its own, whether or not a member is hidden
+    /// now.</remarks>
+    public bool DisclosesEverything => (CanObserve && DisclosesWholeReplica(server: m_server, view: View));
+
+    // Whether the session is handed the authority's whole replica: no body redacted and no row filtered.
+    internal static bool DisclosesWholeReplica(WorldServer server, WorldRecipientView view) => (RedactsNoBody(server: server) && view.ReadsEverything);
+    // Whether the world's live observer disclosure hands a session every body as the authority holds it.
+    internal static bool RedactsNoBody(WorldServer server) => new WorldSinkDisclosure(
+        ObserverBodyIndex: -1,
+        Policy: server.Definition.Population.ObserverDisclosure
+    ).IsFull;
 
     internal void Attach(WorldSessionSink sink) => m_sink = sink;
     internal bool AllowsQuery(WorldQuery query) => (!m_ended && (m_sink?.AllowsQuery(query: query) == true));

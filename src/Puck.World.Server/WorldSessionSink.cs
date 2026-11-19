@@ -50,13 +50,7 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
         ((query is WorldQuery.StateObservations) || DisclosesFullReplica)
     );
 
-    private bool DisclosesFullReplica => (
-        (Tier == WorldDisclosureTier.Replica) &&
-        new WorldSinkDisclosure(
-            ObserverBodyIndex: -1,
-            Policy: server.Definition.Population.ObserverDisclosure
-        ).IsFull
-    );
+    private bool DisclosesFullReplica => ((Tier == WorldDisclosureTier.Replica) && WorldSessionObservation.RedactsNoBody(server: server));
 
     // Nothing reaches an observer once it has ended its own subscription.
     private bool Discloses() {
