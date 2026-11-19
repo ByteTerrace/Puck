@@ -136,7 +136,8 @@ into the repository.
   grant those actual paths in the permission profile. Do not require a fixed
   Windows checkout path. Login and hook trust remain per-user, never copied.
 - **Antigravity.** Install its CLI and sign in with the owner's account. Run
-  `agy -p "<brief>" --output-format stream-json` from the worktree, without `--mode`.
+  `agy -p "<brief>" --model <slug> --effort <level> --output-format stream-json`
+  from the worktree, without `--mode`.
   Headless auto behavior comes from `agentMode: "auto"` in the home-only
   `~/.gemini/antigravity-cli/settings.json`; the owner-approved settings below
   record its necessary non-secret policy. Auto mode does not consult the ask list; shared
@@ -173,7 +174,7 @@ records the approved configuration, not portable login or trust state.
 ```json
 {
   "agentMode": "auto",
-  "model": "Gemini 4 Argon (High)",
+  "model": "Gemini 4 Neon (High)",
   "permissions": {
     "allow": [
       "command(regex:.*)",
