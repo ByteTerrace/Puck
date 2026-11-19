@@ -41,7 +41,7 @@ public interface IGpuMappedBuffer : IGpuPagedBuffer {
 /// <param name="release">What releases them: queues their unmapping and returns their backing; <see langword="null"/> for
 /// none.</param>
 public sealed class GpuMappedRelease(ulong bytes, Action? release) : IDisposable {
-    private Action? m_release = release;
+    private readonly DisposeOnce m_release = new(action: release);
 
     /// <summary>Gets a release of nothing.</summary>
     public static GpuMappedRelease None { get; } = new(bytes: 0UL, release: null);
@@ -50,5 +50,5 @@ public sealed class GpuMappedRelease(ulong bytes, Action? release) : IDisposable
     public ulong Bytes { get; } = bytes;
 
     /// <inheritdoc/>
-    public void Dispose() => Interlocked.Exchange(location1: ref m_release, value: null)?.Invoke();
+    public void Dispose() => m_release.Dispose();
 }

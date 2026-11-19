@@ -2803,14 +2803,16 @@ specialization and its measurement remain with native resource integration.
 This follows the semaphore ordering in the Vulkan reference and the independent
 vkd3d-proton implementation cited in the backend contract above.
 
-**Pieces still to build, in dependency order.** Add native reserved/sparse
-resource ownership, Direct3D 12 tile mapping, page-only residency admission
-with pool-owned slack (M2), sparse arena placement policy (M5), and fenced
-unmapping plus physical compaction (M6). Vulkan's binding door and both pools'
-empty-block trim exist; mesh regions still choose contiguous storage. No
-current piece claims a sparse path chosen or budget-drop sparse relief. Both
-backends must stay bootable at each piece, and the final hardware check below
-still gates any claim that sparse relief works.
+**Pieces still to build, in dependency order.** Direct3D 12's reserved
+destination, its tile mapping through the queue door, and fenced unmapping
+(a released chunk's tiles return to the arena only after the buffer's own
+fence passes the queued unmapping, `DirectXGpuMappedBuffer`) exist, and the
+mesh region and the probe scene use them. Still to build: Vulkan sparse
+resource ownership behind `IGpuMappedBuffer` through its binding door,
+page-only residency admission with pool-owned slack (M2), sparse arena
+placement policy (M5), and physical compaction (M6). Both backends must stay
+bootable at each piece, and the final hardware check below still gates any
+claim that budget-drop relief works.
 
 **Code review disposition (continuation 3, findings on 2ad5ac190a).**
 
