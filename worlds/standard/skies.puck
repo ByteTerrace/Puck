@@ -143,13 +143,14 @@ function sunDirection(h, heading, noonElevation) = [
 // `noonElevation` degrees at noon and sets at eighteen, at `peak` lux times the cosine of its hour angle, and casts no
 // light below the horizon; it is `horizonColor` until seven and from seventeen, and `noonColor` between. The day starts
 // at `start` hours. The template authors the moon, a directional named `moon` whose `shadow: auto` lets it take a shadow
-// slot once the sun has set; a world restyles it with `moonPeak` and `moonColor`, or overrides the row by its name. It
+// slot once the sun has set; a world restyles it with `moonPeak`, `moonColor` and `moonAngularRadius` (the soft edge of
+// its shadows, in radians: a light with no size is a point source), or overrides the row by its name. It
 // stands opposite the sun, at `moonPeak` lux times the cosine of its hour angle, in `moonColor`. The night sky's gradient shows at `nightLuminance` nits and its stars
 // at `starLuminance`. Writing the row moves the time (`world.state.cell.set <clock> $value 0.5` is noon), and its
 // advance holds the sun (`world.row.set state <clock> advance {"perSecondNumerator":0,"perSecondDenominator":1}`) and
 // runs it again (the numerator back to one over `daySeconds`). The exposure is the world's to key on the same clock
 // (`render.exposure`'s `minimum`, `maximum`, `compensation` and `ev100` take `{ clock, keys }`).
-template dayCycle(clock = "day", daySeconds = 1440, start = 10, noonElevation = 60, heading = 0, peak = 100000, noonColor = "#FFF0DC", horizonColor = "#FFB278", cloudiness = 0.25, cloudTier = low, sunLight = 0, moonPeak = 0.25, moonColor = "#C8D4FF", nightLuminance = 2, starLuminance = 2) {
+template dayCycle(clock = "day", daySeconds = 1440, start = 10, noonElevation = 60, heading = 0, peak = 100000, noonColor = "#FFF0DC", horizonColor = "#FFB278", cloudiness = 0.25, cloudTier = low, sunLight = 0, moonPeak = 0.25, moonColor = "#C8D4FF", moonAngularRadius = 0.11, nightLuminance = 2, starLuminance = 2) {
   timeline {
     clocks [{ name: clock, state: clock, spanSeconds: 24h }]
   }
@@ -166,7 +167,7 @@ template dayCycle(clock = "day", daySeconds = 1440, start = 10, noonElevation = 
   render {
     lighting {
       lights [
-        directional(name: "moon", direction: [0, 1, 0], color: moonColor, illuminance: 0lx, shadow: auto)
+        directional(name: "moon", direction: [0, 1, 0], color: moonColor, illuminance: 0lx, shadow: auto, angularRadius: moonAngularRadius)
       ]
       clock: clock
       keys: map(range(0, 24), h => {

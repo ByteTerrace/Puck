@@ -113,6 +113,8 @@
 #define SDF_SHADOW_BITS             8u
 #define SDF_SHADOW_MASK             0x000000FFu
 #define SDF_SHADOW_SLOTS            4u
+#define SDF_SHADOW_ROLES            2u
+#define SDF_MESH_SHADOW_ENTRIES     3u
 #define SDF_SHADOW_FADE_CAPACITY    2u
 
 // The visibility record's normal word (SdfVisibility): its SNORM16 scale and the word of a record with no normal.

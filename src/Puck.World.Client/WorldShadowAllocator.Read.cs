@@ -55,7 +55,7 @@ public sealed partial class WorldShadowAllocator {
         var rank = 0;
 
         foreach (var light in source.Lights) {
-            if ((light is { Mode: not WorldShadowMode.Never } other) && (other.LightIndex >= 0) && (Same(left: candidate, right: other) || Before(left: other, right: candidate, source: source))) { rank++; }
+            if ((light is { } other) && Admitted(candidate: other) && (other.LightIndex >= 0) && (Same(left: candidate, right: other) || Before(left: other, right: candidate, source: source))) { rank++; }
         }
         return rank;
     }

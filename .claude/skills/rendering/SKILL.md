@@ -716,9 +716,10 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   plinth's wedge across the floor from every low probe beside it), taps a coarse
   level's trace marked sheets (the curvature half's low bit) at almost any share.
   Only the finest level keeps the behind-plane floor. Nothing a camera sees reads
-  an unmeasured surface as black. A view with no cascade (a session view, or
-  `world.shadows off`) reads a shadowing directional's visibility from the probes'
-  light bits. `SdfMeshIrradianceGatherDeviceLawTests` holds the GPU and CPU
+  an unmeasured surface as black. Wherever no cascade holds a point (past the
+  cascades, blended across the band at their edge by the K row's coverage lanes;
+  on glass; in a view with none, as `world.shadows off` makes) a shadowing
+  directional's visibility is the probes' light bits (`sdfShadowRoleAnswer`). `SdfMeshIrradianceGatherDeviceLawTests` holds the GPU and CPU
   gathers to the same slots, weights, share and sun visibility.
   Relocation (`SdfMeshIrradiance.PlaceBatch`) keeps a probe clear of geometry within
   its own cell; every lookup uses its recorded offset. Placement takes the nearest clear exit; its short rejection rays
@@ -820,10 +821,12 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
 - **A named-camera layout slot reconstructs; a screen's camera does not.**
   `world.temporal` reaches every view `WorldFramePresenter.ViewQuality()`
   dresses: seat views, the operator pose and `views.layouts` slots that name a
-  camera. A camera view a screen films and a session view take a reduced
-  quality (`WorldScreenBinder.CameraViewQuality`,
-  `WorldSessionSceneEmitter.ReducedQuality`) whose `Temporal` is off, and
-  `SdfViewQuality.Restrict` ANDs it, so they never jitter.
+  camera. A camera view a screen films and a session view take the nested
+  quality (`WorldRenderSettings.NestedRestriction`, `NestedViewQuality`): the
+  presentation's own, with what the world's `render.nested` table gives up at
+  the view's presented share of the display, and `Temporal` off, which
+  `SdfViewQuality.Restrict` ANDs, so they never jitter. With no table a nested
+  view gives up nothing else, so a portal is lit as the room behind it.
 - **A settled capture cannot show what changes between frames.** Flicker
   (jitter moiré on a screen, a still scene whose pixels change), ghosting and
   trails show only in a presented capture (`FrameCaptureMode.Presented`:

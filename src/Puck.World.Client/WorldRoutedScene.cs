@@ -297,8 +297,8 @@ public sealed class WorldRoutedWindow : IDisposable {
     /// views; -1 before its first latch or once the window is disposed.</summary>
     public int Index => (m_scene?.IndexOf(window: this) ?? -1);
     /// <summary>Gets or sets the view the window renders: its camera, framed in the scene world's own coordinates, and its
-    /// quality. <see langword="null"/>, the default, renders the world's default projection at a session screen's
-    /// reduced quality (<see cref="WorldSessionSceneEmitter.ReducedQuality"/>).</summary>
+    /// quality. <see langword="null"/>, the default, renders the world's default projection at a nested view's quality
+    /// (<see cref="Puck.World.WorldRenderSettings.NestedViewQuality"/>).</summary>
     public SdfViewSnapshot? View { get; set; }
     /// <summary>Gets or sets how the window dresses the world's default projection it renders while <see cref="View"/> is
     /// <see langword="null"/>, or <see langword="null"/> to render it as the emitter framed it.</summary>

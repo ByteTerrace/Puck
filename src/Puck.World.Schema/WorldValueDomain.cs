@@ -110,11 +110,11 @@ public static class WorldValueFields {
     public static WorldValueField FogLuminance { get; } = new(typeof(WorldRenderFog), nameof(WorldRenderFog.Luminance), Luminance, Why: LuminanceWhy);
     /// <summary>The medium's luminance, in nits.</summary>
     public static WorldValueField MediumLuminance { get; } = new(typeof(WorldRenderMedium), nameof(WorldRenderMedium.Luminance), Luminance, Why: LuminanceWhy);
-    /// <summary>A directional light's positive angular radius, in radians, up to the widest penumbra the lights table carries.</summary>
+    /// <summary>A directional light's angular radius, in radians, from zero (a point source) up to the widest penumbra the
+    /// lights table carries.</summary>
     public static WorldValueField DirectionalAngularRadius { get; } = new(typeof(WorldRenderLight.Directional), nameof(WorldRenderLight.Directional.AngularRadius), new WorldValueDomain(
         Maximum: MathF.Atan(x: SdfLights.MaxPenumbraSlope),
-        Minimum: 0f,
-        MinimumOpen: true
+        Minimum: 0f
     ));
     /// <summary>The sky's ambient gain.</summary>
     public static WorldValueField EnvironmentAmbient { get; } = new(typeof(WorldRenderEnvironment), nameof(WorldRenderEnvironment.Ambient), WorldValueDomain.NonNegative);

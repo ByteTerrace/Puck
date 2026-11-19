@@ -3398,13 +3398,10 @@ error for a level, one texel for a shadow map) are the owner's recorded
 rulings. They stay the engine's defaults, and an authored table may
 differ.
 
-One default is not neutral and goes. A directional light with no authored
-angular size takes a soft edge the engine chose
-(`SdfLights.DefaultPenumbraSlope`). That is a look held in the engine. With
-the `shadows` lane, a light with no authored size is a point source, and
-its shadow's edge is as hard as the map's filter allows. The standard
-package authors the soft edge it wants on its own lights, and an author's
-explicit size is honoured as it is today.
+A directional light with no authored angular size is a point source: its
+shadow's edge is as hard as the map's filter allows, and the engine chooses
+no softness. The standard package authors the soft edge it wants on its own
+lights, and an author's explicit size is honoured.
 
 ### What the owner settled
 

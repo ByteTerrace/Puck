@@ -9534,6 +9534,21 @@ export type WorldNavigationSharing = {
   expandedNodesPerTick: number;
 };
 
+export type WorldNestedViewQuality = {
+  /**
+   * The largest share of the display's height, in (0, 1], at which the row applies; rows ascend strictly.
+   */
+  share: number;
+  /**
+   * The finest shadow tier the view keeps: Off drops its cascades, so its lights take the probes' answer. Absent keeps the world's.
+   */
+  shadows?: ShadowTier | null;
+  /**
+   * Whether the view keeps ambient occlusion: false drops it. Absent keeps the world's.
+   */
+  ambientOcclusion?: boolean | null;
+};
+
 export type WorldObserverDisclosure = {
   /**
    * Which bodies an observer is delivered.
@@ -10883,6 +10898,10 @@ export type WorldRenderDefaults = {
    * The default shading program inherited by materials without their own.
    */
   shade?: SdfShadeDefinition | null;
+  /**
+   * What a nested view gives up at each presented size (WorldNestedViewQuality). Absent gives up nothing.
+   */
+  nested?: (WorldNestedViewQuality | null)[] | null;
 };
 
 export type WorldRenderEnvironment = {
@@ -11095,7 +11114,7 @@ export type WorldRenderLightDirectional = {
    */
   illuminance?: BindableScalar;
   /**
-   * The light's angular radius, in [0, atan 0.3] radians: the penumbra half-slope is its tangent, so 0 casts a hard shadow. Read only when the light shadows. Absent is the pinned penumbra.
+   * The light's angular radius, in [0, atan 0.3] radians: the penumbra half-slope is its tangent, so 0 casts a hard shadow. Read only when the light shadows. Absent is 0, a point source: the engine chooses no softness, and the standard package authors the soft edge its own lights cast.
    */
   angularRadius?: BindableAngle;
   /**
