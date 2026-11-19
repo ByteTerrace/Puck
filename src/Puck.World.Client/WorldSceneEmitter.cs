@@ -578,6 +578,7 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
         // The stamp pool packs after the avatar catalog (its reserved slots sit past the frozen avatar capacity):
         // animated placements ride their static pose, attached and body-rooted stamps ride the client's live body pose; hidden slots
         // park below the floor.
+        m_animator.PresentCues(m_client.CueFrames, m_client);
         m_animator.PackTransforms(
             transforms: slots,
             client: m_client,

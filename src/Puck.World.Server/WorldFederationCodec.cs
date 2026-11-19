@@ -172,7 +172,7 @@ public static partial class WorldFederationCodec {
     /// <see cref="HandshakeWireFormat.WriteHelloAsync"/> — that is the only hello; the challenge/authenticate exchange
     /// that follows rides ordinary frames. The key's final digit is the contract's version: raise it whenever the
     /// federation wire contract changes.</summary>
-    public const ulong WireKey = 0x334445464B435550UL; // "PUCKFED3"
+    public const ulong WireKey = 0x344445464B435550UL; // "PUCKFED4"
     /// <summary>The length of a document leaf's header, in bytes: the tier byte, then the document version's 16
     /// activation bytes and 8 sequence bytes, both little-endian. The document's payload starts here.</summary>
     public const int DocumentHeaderBytes = 25;
@@ -886,6 +886,18 @@ public static partial class WorldFederationCodec {
         writer.WriteInt32(value: snapshot.SolidScales.Length);
         foreach (var size in snapshot.SolidScales.Span) { writer.WriteString(value: size.Placement); writer.WriteInt64(value: size.Scale.Value); }
         if (!WorldWireCodec.TryWriteInputPublications(writer, snapshot.Inputs.Span)) { throw new ArgumentException(message: "snapshot input publication exceeds wire bounds", paramName: nameof(snapshot)); }
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(snapshot.Cues.Length, WorldRuleCapacity.MaxDeliveredCues);
+        writer.WriteByte(snapshot.MusicBoundary);
+        writer.WriteByte(snapshot.MusicSenses);
+        writer.WriteInt32(snapshot.Cues.Length);
+        foreach (ref readonly var cue in snapshot.Cues.Span) {
+            writer.WriteString(cue.Name);
+            writer.WriteNullableString(cue.Payload);
+            writer.WriteBoolean(cue.Argument.HasValue);
+            if (cue.Argument is { } argument) { writer.WriteInt64(argument); }
+            writer.WriteInt32(cue.Body ?? -1);
+            writer.WriteInt32(cue.Generation);
+        }
 
         return writer.ToArray();
     }
@@ -1696,14 +1708,34 @@ public static partial class WorldFederationCodec {
         var sizes = reader.ReadArray(field: "solid sizes", maximum: (WireLimits.MaxDocumentBytes / 12),
             readItem: static (ref WireReader r) => new WorldSolidScale(Placement: r.ReadString(field: "solid placement"), Scale: Puck.Maths.FixedQ4816.FromRawBits(value: r.ReadInt64())));
         var inputs = WorldWireCodec.ReadInputPublications(reader: ref reader);
+        var musicBoundary = reader.ReadByte();
+        var musicSenses = reader.ReadByte();
+        if ((musicBoundary & ~3) != 0 || (musicSenses & ~7) != 0) { reader.Fail(WireRefusal.EnumValueUnknown, "invalid snapshot music flags"); }
+        var cueCount = reader.ReadCount(field: "snapshot cues", maximum: WorldRuleCapacity.MaxDeliveredCues, minimum: 0);
+        var cues = cueCount == 0 ? [] : new WorldGameplayCue[cueCount];
+        for (var index = 0; index < cueCount; index++) {
+            var name = reader.ReadString(field: "cue name", maxBytes: WorldRuleCapacity.MaxCueNameLength);
+            var payload = reader.ReadNullableString(field: "cue payload", maxBytes: WorldRuleCapacity.MaxCuePayloadLength * 4);
+            long? argument = reader.ReadBoolean() ? reader.ReadInt64() : null;
+            var target = reader.ReadInt32();
+            var generation = reader.ReadInt32();
+            if (!WorldGameplayCue.IsValidName(name) || payload?.Length > WorldRuleCapacity.MaxCuePayloadLength ||
+                target < -1 || target >= WorldBodiesLimits.CapacityCeiling || generation < 0 || (target == -1 && generation != 0)) {
+                reader.Fail(WireRefusal.PayloadMalformed, "invalid snapshot cue");
+            }
+            cues[index] = new(name, payload, target < 0 ? null : target, tick, argument, generation);
+        }
 
         snapshot = new WorldSnapshot(
             Authority: authority,
+            Cues: cues,
             EngineTick: engineTick,
             Entries: entries,
             FieldCells: deltas,
             FieldsFull: fieldsFull,
             Inputs: inputs,
+            MusicBoundary: musicBoundary,
+            MusicSenses: musicSenses,
             Revision: revision,
             SolidScales: sizes,
             StepTicks: stepTicks,

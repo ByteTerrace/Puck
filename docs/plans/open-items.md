@@ -3966,6 +3966,8 @@ reversal brake, then a sitting.
   press reaches the rig a tick late; and no motion operation turns a body
   through an angle or moves it along an eased path over a duration
   (`BodyMotionOp`, `WorldEffect.PlanarImpulse`).
+  [Pose clips, body parts and reach](instrument-play/pose-clips.md) designs
+  the first three, and its steps are the build lane's order.
 
 - A reversal should brake faster than it accelerates: `ShapeWholeVelocityRow`
   converges at the engage rate whenever the stick is deflected, so a full
@@ -4041,12 +4043,6 @@ the model.
   seat's pad, and authored haptics. A pulse on the beat is the first authored
   consumer ([instrument and dance play](instrument-play.md#sound), a lane of
   its first wave).
-- [high] Two timing gaps [instrument and dance play](instrument-play.md#timing)
-  names, one lane of its first wave: the clock operand answers only the
-  distance to the nearest beat, so no rule can read which beat or bar the
-  clock is on (`MusicClock.CurrentBeat` has no operand); and
-  `WorldCommand.CalibrateInput` is applied by the authority and sent by
-  nothing, so a player has no way to set the calibration the judgement adds.
 - The in-world computer runs programs (the owner's direction): the desktop
   share is one and a typing tutor another, switched on the computer itself
   with the screen showing which is live. The tutor is world-native: lessons
@@ -4182,14 +4178,6 @@ Owner: media lane · ordinary · Next: let an unread capture feed idle.
   downscale on the GPU ahead of the readback.
 - [medium] `CaptureSink` is constructed nowhere in `src`: an unreached capture
   capability to wire, not delete (AGENTS.md).
-- [high] Sound gaps [instrument and dance play](instrument-play.md#sound)
-  names, one designed lane of its first wave: a rule's cue reaches the
-  speakers only through `WorldServer.GameplayCueTap`, a callback inside the
-  authority's process that drops the cue's payload, so a remote client hears
-  none and a cue cannot carry a pitch; `WorldCreationInstances.TriggerCue` has
-  no caller; a score arms only on the three events of
-  `WorldAudioCue.MusicWhenTokens`, never on a rule; and `VoiceSynth`'s 32
-  voices have no rule for which sound when more are asked for.
 
 ### Debug world content
 

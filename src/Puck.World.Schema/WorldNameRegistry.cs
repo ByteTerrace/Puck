@@ -542,6 +542,12 @@ public static partial class WorldNameRegistry {
             WorldNameRole.Key
         ),
         new(
+            typeof(WorldEffect.TimedMove),
+            nameof(WorldEffect.TimedMove.Key),
+            WorldNameKind.State,
+            WorldNameRole.Key
+        ),
+        new(
             typeof(WorldEffect.ApplyRigidImpulse),
             nameof(WorldEffect.ApplyRigidImpulse.Key),
             WorldNameKind.State,

@@ -262,7 +262,7 @@ A visitor's identity at a destination is rebuilt from its projection with no
 owned document (`WorldIdentity.FromProjection`, `src/Puck.World.Schema/WorldIdentity.cs:208-217`)
 **[opened]**. The `setIdentityFact` effect writes the body's rule lane and the
 identity's facts row together **[opened]**
-(`src/Puck.World.Schema/WorldActionVocabulary.cs:144-147`):
+(`src/Puck.World.Schema/WorldActionVocabulary.cs:161-164`):
 
 ```csharp
     /// <summary>Writes one fact on the identity a world-addressed body drives under: the body's cell in the world's

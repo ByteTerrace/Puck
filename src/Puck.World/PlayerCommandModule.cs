@@ -58,6 +58,8 @@ internal sealed partial class PlayerCommandModule(PlayerRoster roster, WorldPopu
     /// <summary>The look-swap command: turns the seat camera a half-turn about the body.</summary>
     /// <summary>The look-recenter command: turns the seat camera round behind the body.</summary>
     public const string RecenterLookCommand = Puck.World.Client.PlayerCommandNames.RecenterLookCommand;
+    /// <summary>The input latency calibration: <c>player.calibrate &lt;seconds&gt; [seat]</c>.</summary>
+    public const string CalibrateCommand = "player.calibrate";
     /// <summary>The engaged-screen view toggle: <c>player.frame [seat]</c>.</summary>
     public const string FrameCommand = "player.frame";
     /// <summary>The generic sensor-input mode toggle.</summary>
@@ -580,6 +582,10 @@ internal sealed partial class PlayerCommandModule(PlayerRoster roster, WorldPopu
         }
 
         foreach (var command in ModeVerbs()) {
+            yield return Route(command: command);
+        }
+
+        foreach (var command in CalibrationVerbs()) {
             yield return Route(command: command);
         }
 

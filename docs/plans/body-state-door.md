@@ -224,7 +224,7 @@ The Action writes, as an example of the shape
         }
 ```
 
-And the turn budget (`src/Puck.World.Server/WorldBody.Step.cs:1286`):
+And the turn budget (`src/Puck.World.Server/WorldBody.Step.cs:1300`):
 
 ```csharp
         var budget = accumulator.Integrate(

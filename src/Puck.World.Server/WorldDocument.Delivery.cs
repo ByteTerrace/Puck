@@ -65,13 +65,15 @@ public sealed partial class WorldDocument {
     /// frame.</summary>
     /// <param name="sink">The sink to deliver snapshots to.</param>
     /// <param name="disclosure">What this sink's observer is delivered.</param>
+    /// <param name="present">The local presentation's recipient filter for ordinary ticks.</param>
     /// <returns>A lease that detaches <paramref name="sink"/> when disposed.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="sink"/> is <see langword="null"/>.</exception>
-    internal IDisposable AttachSink(IClientSink sink, in WorldSinkDisclosure disclosure) {
+    internal IDisposable AttachSink(IClientSink sink, in WorldSinkDisclosure disclosure, Func<WorldSnapshot, WorldSnapshot>? present = null) {
         ArgumentNullException.ThrowIfNull(argument: sink);
 
         var lease = Host.Output.Subscribe(
             disclosure: in disclosure,
+            present: present,
             sink: sink
         );
 

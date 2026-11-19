@@ -65,7 +65,7 @@ public readonly record struct WorldInputInterval(ulong Tick, ulong EngineStart, 
     /// <summary>Folds the exact interval and its historical music coordinates.</summary>
     public void AppendStateHash(ref Fnv1aHash hash) {
         hash.Add(value: Tick); hash.Add(value: EngineStart); hash.Add(value: EngineDuration); hash.Add(value: ((byte)(Music.HasValue ? 1 : 0)));
-        if (Music is { } music) { hash.Add(value: music.ElapsedTicks); hash.Add(value: music.TicksPerBeat); hash.Add(value: music.Segment); }
+        if (Music is { } music) { hash.Add(value: music.ElapsedTicks); hash.Add(value: music.TicksPerBeat); hash.Add(value: music.Segment); hash.Add(value: music.BeatsPerBar); }
     }
     /// <summary>Tests the half-open interval before admitting a fixed sub-tick timestamp.</summary>
     public bool Contains(FixedQ4816 offset) => ((offset.Value >= 0) &&
@@ -102,23 +102,59 @@ public readonly record struct WorldInputInterval(ulong Tick, ulong EngineStart, 
     }
 }
 /// <summary>The existing music clock at capture-interval start, preserved through tempo/segment changes.</summary>
-public readonly record struct WorldInputMusicSegment(ulong ElapsedTicks, long TicksPerBeat, string Segment) {
+/// <param name="ElapsedTicks">Engine ticks the clock had counted at interval start.</param>
+/// <param name="TicksPerBeat">The authored engine-tick length of one beat.</param>
+/// <param name="Segment">The score segment playing at interval start.</param>
+/// <param name="BeatsPerBar">The authored beat count of one bar.</param>
+public readonly record struct WorldInputMusicSegment(ulong ElapsedTicks, long TicksPerBeat, string Segment, int BeatsPerBar) {
+    /// <summary>Gets the beat nearest an event's captured time, with the same tie toward the later beat that
+    /// <see cref="PhaseError"/> uses; a press before the first beat reads -1 or less.</summary>
+    /// <param name="offset">The event's offset inside its interval, in Q48.16 seconds.</param>
+    /// <param name="calibration">The owner's calibration, in Q48.16 seconds.</param>
+    /// <returns>The beat index since the music began.</returns>
+    public long NearestBeat(FixedQ4816 offset, FixedQ4816 calibration) {
+        Phase(offset: offset, calibration: calibration, beat: out var beat);
+
+        return beat;
+    }
+    /// <summary>Gets the nearest beat's position inside its bar, always in zero up to <see cref="BeatsPerBar"/>.</summary>
+    /// <param name="offset">The event's offset inside its interval, in Q48.16 seconds.</param>
+    /// <param name="calibration">The owner's calibration, in Q48.16 seconds.</param>
+    /// <returns>The zero-based beat in its bar.</returns>
+    public long NearestBeatInBar(FixedQ4816 offset, FixedQ4816 calibration) => NearestBeat(offset: offset, calibration: calibration).FloorModulo(modulus: ((long)BeatsPerBar));
+    /// <summary>Gets the bar holding the nearest beat.</summary>
+    /// <param name="offset">The event's offset inside its interval, in Q48.16 seconds.</param>
+    /// <param name="calibration">The owner's calibration, in Q48.16 seconds.</param>
+    /// <returns>The bar index since the music began; a press before the first beat reads -1 or less.</returns>
+    public long NearestBar(FixedQ4816 offset, FixedQ4816 calibration) => NearestBeat(offset: offset, calibration: calibration).FloorDivide(divisor: ((long)BeatsPerBar));
     /// <summary>Signed nearest-beat error in Q48.16 seconds, with one widened ties-to-even rounding.</summary>
     public FixedQ4816 PhaseError(FixedQ4816 offset, FixedQ4816 calibration) {
-        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(TicksPerBeat);
-        var period = (((Int128)TicksPerBeat) << FixedQ4816.FractionBitCount);
-        var position = ((((Int128)ElapsedTicks) << FixedQ4816.FractionBitCount) +
-            ((((Int128)offset.Value) + calibration.Value) * FixedTickConversion.TicksPerSecond));
-        var phase = (position % period);
-
-        if (phase < 0) { phase += period; }
-        if (phase > (period / 2)) { phase -= period; }
+        var phase = Phase(offset: offset, calibration: calibration, beat: out _);
         var magnitude = ((UInt128)((phase < 0) ? -phase : phase));
         var divisor = ((UInt128)FixedTickConversion.TicksPerSecond);
         var remainder = (magnitude % divisor);
         var raw = FixedPointRounding.RoundToNearestTiesToEven(distanceToNext: (divisor - remainder), distanceToTruncated: remainder, truncated: (magnitude / divisor));
 
         return FixedQ4816.FromRawBits(value: checked((long)((phase < 0) ? -((Int128)raw) : (Int128)raw)));
+    }
+
+    // The phase is in (-period/2, period/2] of Q48.16 engine ticks about the nearest beat, which is the floor beat or the
+    // next one past half a period.
+    private Int128 Phase(FixedQ4816 offset, FixedQ4816 calibration, out long beat) {
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(TicksPerBeat);
+        var period = (((Int128)TicksPerBeat) << FixedQ4816.FractionBitCount);
+        var position = ((((Int128)ElapsedTicks) << FixedQ4816.FractionBitCount) +
+            ((((Int128)offset.Value) + calibration.Value) * FixedTickConversion.TicksPerSecond));
+        var (quotient, phase) = position.FloorDivRem(divisor: period);
+
+        if (phase > (period / 2)) {
+            phase -= period;
+            quotient++;
+        }
+
+        beat = checked((long)quotient);
+
+        return phase;
     }
 }
 /// <summary>Semantic wire events. Crossings and cancellation outcomes are authority-derived history records.</summary>

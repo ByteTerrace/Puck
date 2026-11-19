@@ -160,7 +160,7 @@ public sealed class WorldFederationProjectionSink(WorldDisclosureTier tier, stri
 
         if (m_cursor.DeliverDefinition(view: m_view) is { } delivered) {
             Write(WorldFederationResponse.Definition, WorldFederationCodec.DocumentLeaf(
-                payload: WorldDefinitionSerialization.SerializeCompact(definition: delivered), tier: tier, version: Version));
+                payload: WorldDefinitionSerialization.SerializeCompact(definition: WorldAssetRowLoader.EmbedAudio(delivered)), tier: tier, version: Version));
         }
     }
     public void DeliverSessionLever(WorldSessionLever lever) { }
@@ -186,19 +186,20 @@ public sealed class WorldFederationProjectionSink(WorldDisclosureTier tier, stri
         }
         var currentDisclosure = disclosure();
 
-        m_sampler.SetUpdateSeconds(updateSeconds: currentDisclosure.Policy.UpdateSeconds);
-        if (!m_sampler.TryProject(
-            projected: out var projected,
-            snapshot: in snapshot
-        )) {
-            return;
-        }
+        var projected = snapshot;
         if (!currentDisclosure.IsFull) {
             projected = WorldOutputHub.Redact(
                 disclosure: in currentDisclosure,
                 scratch: ref m_redacted,
                 snapshot: in projected
             );
+        }
+        if (m_view is not null) { projected = server!.PresentCues(projected, m_view, currentDisclosure.IsFull); }
+        var atCadence = snapshot with { Cues = projected.Cues, MusicBoundary = projected.MusicBoundary, MusicSenses = projected.MusicSenses };
+        m_sampler.SetUpdateSeconds(updateSeconds: currentDisclosure.Policy.UpdateSeconds);
+        if (!m_sampler.TryProject(atCadence, out projected)) { return; }
+        if (!currentDisclosure.IsFull) {
+            projected = WorldOutputHub.Redact(currentDisclosure, projected, ref m_redacted);
         }
         if (m_view is not null) { projected = projected with { FieldCells = m_rows.Advance(m_view, m_cursor, projected.FieldCells, (tier == WorldDisclosureTier.Replica)) }; } else if (!projected.FieldCells.IsEmpty) { throw new InvalidOperationException(message: "A state change delivery requires its authority view."); }
         projected = projected with { Revision = checked((int)m_cursor.Sequence), SolidScales = ((m_view is null) ? default : m_scales.Filter(m_view, projected.SolidScales)) };

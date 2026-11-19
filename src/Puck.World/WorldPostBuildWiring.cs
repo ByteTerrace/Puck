@@ -1,4 +1,3 @@
-using System.Numerics;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Puck.Abstractions.Gpu;
@@ -16,9 +15,8 @@ namespace Puck.World;
 /// <summary>
 /// The post-build wiring step every boot shape runs: the affordance vocabulary install, the boot document's genuine
 /// binding-vocabulary re-validation (see the remarks on <see cref="Install"/>), the accepted-session-lever
-/// attachment, the schedule drain, and the server's
-/// <see cref="WorldServer.EchoTap"/>/<see cref="WorldServer.SaveEffectTap"/>/<see cref="WorldServer.MusicTransitionTap"/>/
-/// <see cref="WorldServer.MusicLayerTap"/>/<see cref="WorldServer.MusicEmbellishmentTap"/>
+/// attachment, the schedule drain, the local client's delivered cues, and the server's
+/// <see cref="WorldServer.EchoTap"/> and <see cref="WorldServer.SaveEffectTap"/>
 /// closures — moved out of the old presentation-only render-root
 /// factory so <c>wire.errors</c> stays honest headless (a deferred Simulation-routed refusal is counted regardless of
 /// boot shape). Called once from <c>Program.cs</c> right after <c>IHost.Build()</c>, for both boot shapes. The
@@ -403,20 +401,7 @@ public static class WorldPostBuildWiring {
         var pacing = services.GetRequiredService<PresentPacingControl>();
         var bindingBarVisibility = services.GetRequiredService<WorldBindingBarVisibility>();
 
-        // The authored gameplay-cue lane: emitCue publishes a deterministic token from simulation. Audio consumes
-        // that token through the same document-authored cue table as built-in events; an optional body association
-        // supplies the body's authoritative position at delivery time, otherwise listener placement applies.
-        worldServer.GameplayCueTap = cue => {
-            var site = (((cue.Body is { } index) && (worldServer.Body(index: index) is { } body))
-                ? body.FixedPosition.ToVector3()
-                : (Vector3?)null
-            );
-
-            audioDirector.SubmitCue(
-                eventToken: cue.Name,
-                site: site
-            );
-        };
+        services.GetRequiredService<WorldClient>().PresentCues = audioDirector.PresentLocalCues;
 
         worldServer.SaveEffectTap = tick => {
             var target = definitionSource.SourcePath;
@@ -446,31 +431,6 @@ public static class WorldPostBuildWiring {
         // here, after the container finishes building, loses nothing. Every headless script and canary reads the
         // identical lines a direct Console.Error write would have produced.
         services.GetRequiredService<WorldInstanceHost>().AttachNarrationSink(sink: new WorldConsoleNarrationSink());
-
-        // THE MUSIC-TRANSITION CUE LANE: a committed segment transition fires music.transition, listener-placed (a
-        // transition carries no world site) — the server calls out and the composition root supplies the cue.
-        // CORE: WorldServer and the audio director are both core-registered, so this runs unconditionally in EVERY
-        // boot shape; a headless boot's cue accumulates harmlessly like every other cue here.
-        worldServer.MusicTransitionTap = _ => {
-            audioDirector.SubmitCue(
-                eventToken: WorldAudioCue.MusicTransition,
-                site: null
-            );
-        };
-
-        // THE MUSIC-LAYER LANE: the active conditional-layer tune id set is level-triggered (never queued), so the
-        // audio director re-derives its bed plan against it EVERY tick the set changes — see
-        // WorldAudioDirector.SetActiveMusicLayers. CORE, same posture as the transition lane above.
-        worldServer.MusicLayerTap = tuneIds => {
-            audioDirector.SetActiveMusicLayers(tuneIds: tuneIds);
-        };
-
-        // THE MUSIC-EMBELLISHMENT CUE LANE: a fired director embellishment voices its OWN authored patch directly —
-        // see WorldAudioDirector.SubmitEmbellishment's remarks for why this cannot ride the ordinary SubmitCue
-        // token→row lookup the transition lane above uses. CORE, same posture as the transition lane above.
-        worldServer.MusicEmbellishmentTap = patchId => {
-            audioDirector.SubmitEmbellishment(patchId: patchId);
-        };
 
         // A capture still owed a frame as the run ends, a scheduled row's or a world.screenshot's, is refused by name by
         // the host loop (IFixedStepSimulation.SettleOwedFrames, WorldCaptureScheduler.Drain) before it disposes the
