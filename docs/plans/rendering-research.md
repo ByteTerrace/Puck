@@ -21,11 +21,12 @@ It measured nothing either.
 
 Three things live elsewhere:
 
-- **The step designs.** Each decision here gives the problem, the proposal,
-  the reason, the cost and what is unknown. The steps in full, with their
-  checks, are in [the step designs](rendering-research/step-designs.md).
-  A lane that takes up a decision moves its steps into the plan that owns
-  them, which every decision names.
+- **The steps and cross-cutting tables.** Each decision's and bet's steps
+  and checks live in the owning plan each decision names. Cross-cutting
+  tables that belong to no single owning plan (the missing measurements, the
+  properties the order rests on, where each look is authored, outside
+  techniques not taken, research still owed, and the sources) stay in
+  [the cross-cutting reference](rendering-research/step-designs.md).
 - **The review history.** Each review's findings and the answer to each
   are in this file's history (`git log --follow
   docs/plans/rendering-research.md`).
@@ -250,7 +251,7 @@ The frame thread and the GPU work at the same time, so each has to fit the
 |---|---|---|---|
 | All GPU memory | Not measured as one figure. The main view's graph holds about 2.5 GB at the bar's size | 8 GB of the card's 12 | Room for the system and other programs (Puck plays nice with its host). The cap is not an engine input today: the limit the engine admits against is the operating system's budget less a tenth (`MemoryAccount.Record`). The first wave makes it one |
 | Resident baked meshes | About 3 GB, growing toward 4 GiB | 3 GB resident around the viewer | Residency evicts by distance and view; the cap is independent of how large the world is |
-| Image history | 196 bytes a pixel in two copies, about 1.4 GB for the main view at 2560 by 1440 | 0.9 GB for the main view | Decision 13, which also gives the arithmetic. A nested view that keeps a history adds its own at its own size, and the lane that splits the history reports that total |
+| Image history | 196 bytes a pixel in two copies, about 1.4 GB for the main view at 2560 by 1440; split, 228 bytes a pixel (32 in two copies, 164 once), about 0.84 GB by arithmetic, not yet read with `pipeline.inspect` | 0.9 GB for the main view | Decision 13, which also gives the arithmetic. A nested view that keeps a history adds its own at its own size, and the lane that splits the history reports that total |
 | Lighting probes | About 72 MB a table in up to four copies, and a hit cache of about 90 MB, for every world shown | 0.6 GB in one shared pool | One pool for every world in view, not a pool per world |
 | Shadow maps | 96 MiB for the cascades, and 144 MB of glass storage for each shadowed view at the highest tier | 0.4 GB | Glass storage shared across views |
 | The bake's own memory while baking | More than 10 GB of the process's private memory in a cold bake | Bounded on every device. On the Steam Deck it counts inside the 10 GB for the process and the GPU together | A walk into a place whose meshes are not stored bakes during play, so this is a play-time cost. The bake's peak has to fall far enough that every device can bake a floor (see [how a shared product is named and trusted](#how-a-shared-product-is-named-and-trusted)) |
@@ -615,7 +616,7 @@ that day. Nothing else waits for a bet.
 
 | Bet | Time box | When it starts |
 |---|---|---|
-| 1. A view that has not changed keeps its picture, decided from the change records the client already reads | Memo 3 days, prototype 7 | The memo now. The prototype only if the breakdown of produce shows that capturing a shown, unchanged world is a real cost |
+| 1. A view that has not changed keeps its picture, decided from the change records the client already reads | Prototype 7 days | [The memo](rendering-research/bet1-client-records.md) is written. The prototype only if the breakdown of produce shows that capturing a shown, unchanged world is a real cost |
 | 2. A portal crossing prepared ahead | 7 days | When decision 2's minimums exist |
 | 3. Worlds merged into one view, and crowds built from shared parts | Memo 4 days, prototype 10 | The memo any time. The prototype when the instance table takes rows from several worlds (decision 11) |
 | 4. Products shared by a name that says what they mean | Memo 4 days, prototype 8 | Now on the desktop: the owner confirmed the design. The exchange between GPU vendors has its own box when the hardware is on hand |
@@ -798,13 +799,35 @@ Two records exist and are read today.
   and never summed, because a sum can cancel.
 
 The bet is that these two, with a few additions, cover every input a view
-reads. Its first step is a memo that lists what
+reads. [The memo](rendering-research/bet1-client-records.md) lists what
 `SdfWorldResidency.Prepare` reads on the client and names, for each input,
-the client record that covers it: the mirror's revision, the scene's
-revision vector, the tick's snapshot, the clock phase evaluated for the
-presented tick, or the camera. Inputs with no record are listed as gaps.
-The prototype then closes gaps in an existing revision vector. It does not
-join the authority to the frame.
+the client record that covers it or says there is none. It was written
+from the source, with nothing run. Four of its findings shape the
+prototype.
+
+- **The two records are narrower than they look.** The mirror's revision
+  does not move when an easing value is presented between two ticks, or
+  when the presented tick moves. The revision vector covers only which
+  geometry exists. Ten inputs have no record that can be read before a
+  capture, and seven of them are small additions to a type that already
+  knows the answer.
+- **The shortcut should skip the capture and leave alone the decision of
+  whether the picture stands.** Everything the residency reads after the
+  capture is then still covered by today's hash and refusals. A world with
+  a running screen can skip its capture, although its picture can never
+  stand.
+- **The boot world's capture is not a candidate.** It resolves the cameras
+  the other views are fitted to, and it publishes the frame's sound,
+  markers and cursor viewports. The candidates are a world a seat is
+  presented in or seen through a window, a session screen, and an infinity
+  view.
+- **The prototype's first step is a count** of the captures that change
+  nothing, which nothing measures today. That count decides whether there
+  is a cost to save.
+
+The prototype then closes the gaps in a second vector kept beside the
+revision vector, under the same contract. It does not join the authority
+to the frame.
 
 Three rules come with it, because its failure is silent: a view that
 wrongly keeps its picture also lowers the count the work is judged by.
@@ -825,9 +848,9 @@ wrongly keeps its picture also lowers the count the work is judged by.
 
 Checked for this section: the three projects' lack of any `StateArena`
 reference, the mirror's summary and its refresh from the stamp's moved
-rows, and the revision vector's contract. Not checked: that every input of
-`Prepare` reaches the client through one of these. That is the memo's
-job.
+rows, and the revision vector's contract. The memo read which inputs of
+`Prepare` reach the client through one of these. Not checked: any of it in
+a running World.
 
 ## The decisions
 
@@ -837,8 +860,9 @@ with what was checked, and with the plan that owns its steps. "Checked"
 means the code or the source was opened for this page and says what the
 text says. "Not checked" covers three weaker kinds of claim, and the note
 says which: a reader's report that was not reopened, a single measurement
-on the lead machine that was not repeated, or arithmetic. The steps in
-full are in [the step designs](rendering-research/step-designs.md).
+on the lead machine that was not repeated, or arithmetic. Each decision's
+steps and checks live in the owning plan it names, routed from
+[the cross-cutting reference](rendering-research/step-designs.md).
 
 ### 1. Measure beside the work
 
@@ -1587,9 +1611,11 @@ one it writes, which is 392 bytes a pixel.
 
 1. *Split the history.* Forty of the surface history's forty-seven words
    are a window of the last eight frames. That window moves to one buffer
-   updated in place where a pixel did not move, and only the seven words
-   that follow motion stay in two copies, with the colour. That is 160
-   bytes once and 36 bytes twice: 232 bytes a pixel. A pixel that moved
+   updated in place where a pixel did not move, with the phase mask that
+   says which of its phases hold samples, and only the six words that
+   follow motion stay in two copies, with the colour. As built
+   (`SdfWorldPackage.HistoryWindowWords`, `HistorySurfaceWords`) that is
+   164 bytes once and 32 bytes twice: 228 bytes a pixel. A pixel that moved
    restarts its window; it keeps no second store, so the figure holds in
    motion as well as at rest.
 2. *One shading path*, after decision 5 has fixed the colour conversion.
@@ -1601,7 +1627,7 @@ one it writes, which is 392 bytes a pixel.
 
 **Why.** The owner's ruling on the bar's size makes the history the
 largest single store after the meshes: about 1.4 GB for the main view at
-2560 by 1440. The split brings it to about 0.9 GB. It also stops the
+2560 by 1440. The split brings it to about 0.84 GB. It also stops the
 resolve copying the stored window every frame, and the resolve takes 3 ms
 at the bar's size. One shading path removes a second implementation.
 
@@ -1619,7 +1645,7 @@ in-place history, so its design is reviewed as it is built.
 from its own position on the moving route. What a player sees when a
 shading program arrives that has no compiled kernel yet.
 
-**Against the budget.** The history row, from about 1.4 GB to 0.9 GB for
+**Against the budget.** The history row, from about 1.4 GB to 0.84 GB for
 the main view on the RTX 4070. The resolve's row, from 3 ms toward 1.5 ms.
 The shading row, from 10.5 and 13 ms toward 5 ms. A nested view that keeps
 a history pays the same bytes for each of its own pixels, and the lane
@@ -2037,7 +2063,7 @@ technique makes possible for the ones after it.
 | 6 | A completion signal for each background job | The same wait, on every device and on the frame's queue | The CPU learns a job is done 1 to 2 ms after the frame is handed over, not about 25 ms after. Read from the code | First wave, `signal` |
 | 7 | Shadows by ray where no map reaches | Gap 3 on the RTX 4070, and local lights, which have no shadow maps today | A look. Its cost follows the distant share of the screen. Unmeasured | Second wave |
 | 8 | Reflections by ray on glass and water | Glass and water, which reflect only the sky and the probes | A look. One ray for each reflective pixel. Unmeasured | After the second wave |
-| 9 | A vendor's upscaler as an authored alternative to the resolve | The resolve's 3.0 ms and the image history's 1.4 GB | 1 to 2 ms and about 1 GB by arithmetic. Its cost at native size on the RTX 4070 is unverified | After the second wave, with an owner's question |
+| 9 | A vendor's upscaler as an authored alternative to the resolve | The resolve's 3.0 ms and the image history's 0.84 GB after the split | 1 to 2 ms and about 1 GB by arithmetic. Its cost at native size on the RTX 4070 is unverified | After the second wave, with an owner's question |
 | 10 | Texture transitions through enhanced barriers | The gaps between the frame's compute passes on Direct3D 12 | Under half a millisecond, a guess. The sure gain is one barrier model in place of two | First wave, `direct3d` |
 | 11 | Demand counted from what was drawn | The finest level of the resident meshes: about 1.1 GB of the 3 GB, almost never drawn | Memory and bake time, not frame time. Unmeasured | Second wave |
 | 12 | Present timing and the drivers' latency reports | Decision 15's record for every present | No frame time. It is the instrument that reads when a frame showed | Second wave, the record for every present |
@@ -2459,8 +2485,8 @@ CPU thread reads to learn that work on a queue has finished.
 **9. A vendor's upscaler as an authored alternative to the resolve.**
 
 - *What it speeds up.* At native size, where the bar is read: the resolve
-  (3.0 ms) and the image history (about 1.4 GB today, about 0.9 GB after
-  `history`). At a render scale a player's table authors, every pass that
+  (3.0 ms) and the image history (about 0.84 GB with `history`'s split,
+  from about 1.4 GB). At a render scale a player's table authors, every pass that
   scales with rendered pixels.
 - *Evidence.* NVIDIA's DLSS programming guide gives 95 to 204 MB of
   internal memory at a 2560 by 1440 output
@@ -2879,8 +2905,8 @@ the bar as ruled.**
 - *Owns.* `src/Puck.World.Client/WorldShadowAllocator*.cs`,
   `src/Puck.SdfVm/SdfMeshShadowCascades.cs`, the shadow slots in
   `src/Puck.SignedDistance`, `passes/sdf-surface-stage.hlsli`,
-  `shade/sdf-light.hlsli`, `WorldSessionSceneEmitter.ReducedQuality`,
-  `WorldScreenBinder.CameraViewQuality`, and the nested table's rows in the
+  `shade/sdf-light.hlsli`, the nested views' quality (`WorldRenderSettings.NestedRestriction`),
+  and the nested table's rows in the
   quality presets.
 - *Needs.* Nothing.
 - *Model.* Opus `specialist`.
@@ -2940,9 +2966,9 @@ masked.**
   is deleted.
 - *Owns.* `src/Puck.World.Authoring/Authoring/CreationMotionPlan.cs`, the
   pooled emitter (`WorldCreationInstances.Emit.cs`),
-  `SdfMeshGeometryBuilder`, `SdfMeshSettle.cs` and
-  `SdfMeshPathBake.Settle.cs`, which go, and the group state only they
-  read.
+  `SdfMeshGeometryBuilder`, and the settle rebake and the group state only
+  it read (landed: both are deleted, and `SdfMeshPathBake.Revisit` re-plans
+  a group when its operand moves a step).
 - *Needs.* Nothing.
 - *Model.* Opus `specialist`.
 - *Finish line.* G1's checks hold
@@ -3160,7 +3186,6 @@ start as a model is free.
 
 | Work | Outcome | Model |
 |---|---|---|
-| The first bet's memo | Every input `SdfWorldResidency.Prepare` reads on the client has a named change record, or is listed as having none ([the first bet](#the-first-bet-stands-on-the-clients-records)) | Fable `principal`, or Astra |
 | Terrain research | A research round across the families on seams between tiles, how tiles scale, and far shadows. The terrain pass's plan holds its findings | The lead's research round |
 | The stretched primitive's solver | An exhibit and a failing measurement for each of gap 11's two effects, then the design of the closest-point solve with its certificate | Fable `principal`. Any proof that skips work gets an adversarial review |
 | The fourth bet's memo | What a shared product's name holds, the receiver's check for each attribute, and how fetching is priced against deriving | Astra, or Fable `principal` |
@@ -3404,13 +3429,10 @@ error for a level, one texel for a shadow map) are the owner's recorded
 rulings. They stay the engine's defaults, and an authored table may
 differ.
 
-One default is not neutral and goes. A directional light with no authored
-angular size takes a soft edge the engine chose
-(`SdfLights.DefaultPenumbraSlope`). That is a look held in the engine. With
-the `shadows` lane, a light with no authored size is a point source, and
-its shadow's edge is as hard as the map's filter allows. The standard
-package authors the soft edge it wants on its own lights, and an author's
-explicit size is honoured as it is today.
+A directional light with no authored angular size is a point source: its
+shadow's edge is as hard as the map's filter allows, and the engine chooses
+no softness. The standard package authors the soft edge it wants on its own
+lights, and an author's explicit size is honoured.
 
 ### What the owner settled
 
@@ -3510,9 +3532,10 @@ full list is in [the step designs](rendering-research/step-designs.md#what-would
 
 ## Where the rest is
 
-[The step designs](rendering-research/step-designs.md) hold, for each
-decision, the steps with their order, the options that were not taken,
-and the reasoning in full. They also hold the table of missing
-measurements, what each item's run should show, the properties the order rests
-on and what enforces each, the outside techniques that were considered
-and not taken, the research still owed, and the sources.
+Every decision's and bet's steps, options and checks now live in the owning
+plan it names. [The cross-cutting reference](rendering-research/step-designs.md)
+holds the routing table plus what belongs to no single owning plan: the table
+of missing measurements, the properties the order rests on, where each look is
+authored, what would change the answer, outside techniques not taken, research
+still owed, existing systems extended, duplicated work across areas, and the
+sources.

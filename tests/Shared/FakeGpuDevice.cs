@@ -835,6 +835,7 @@ internal sealed class FakeGpuDevice :
         public bool Pinned { get; set; }
         /// <summary>Gets the signal the outstanding submission asked to be set on its completion, or null.</summary>
         public EventWaitHandle? CompletionSignal => m_signal;
+        public bool ReachedQueue => (!Abandoned && !Deferred);
         public bool IsSignaled {
             get {
                 gpu.Hit(key: "IGpuSubmissionFence.IsSignaled");

@@ -36,6 +36,9 @@ public enum SdfKernel {
     /// <summary>The surface pass: every pixel's visibility record from the mesh target, screen-space occlusion and the
     /// shadow cascades, with no field query.</summary>
     Surface,
+    /// <summary>The probe lookup: the irradiance volume's gather once a cell of the render extent, into the probe records
+    /// views reads.</summary>
+    ViewsProbes,
     /// <summary>Shading the visibility records into the lit image, with no field query.</summary>
     Views,
     /// <summary>The views kernel with authored interpretation absent, for frames with no active program.</summary>

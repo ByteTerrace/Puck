@@ -54,12 +54,26 @@ internal sealed class VulkanSubmissionBatch(VulkanDeviceCommands device, VkQueue
             WaitStart: m_deferred.Waits.Count
         );
 
-        // An entry names its ranges by where they start, so lists a refused defer extended only hold words no entry names.
-        m_deferred.CommandBuffers.AddRange(source: commandBuffers);
-        m_deferred.Waits.AddRange(source: waitSemaphores);
-        m_deferred.Values.AddRange(source: waitValues);
+        // An entry names its ranges by where they start, and the waits and their values share one start, so a copy that
+        // fails part way is cut back to where it began before the fence is abandoned.
+        try {
+            m_deferred.CommandBuffers.AddRange(source: commandBuffers);
+            m_deferred.Waits.AddRange(source: waitSemaphores);
+            m_deferred.Values.AddRange(source: waitValues);
+        } catch {
+            m_deferred.Truncate(commandBuffers: entry.CommandBufferStart, waits: entry.WaitStart);
+            Refuse(fence: fence);
 
-        return TryDefer(entries: [entry], fence: fence, lists: commandBuffers.Length);
+            throw;
+        }
+        try {
+            return TryDefer(entries: [entry], fence: fence, lists: commandBuffers.Length);
+        } catch {
+            // The base batch abandoned the fence; its lists took nothing.
+            m_deferred.Truncate(commandBuffers: entry.CommandBufferStart, waits: entry.WaitStart);
+
+            throw;
+        }
     }
 
     /// <inheritdoc/>
@@ -102,6 +116,12 @@ internal sealed class VulkanSubmissionBatch(VulkanDeviceCommands device, VkQueue
         public List<ulong> Values { get; } = [];
         public List<nint> Waits { get; } = [];
 
+        // Cuts the copied lists back to the given lengths; the waits and their values share one length.
+        public void Truncate(int commandBuffers, int waits) {
+            CommandBuffers.RemoveRange(index: commandBuffers, count: (CommandBuffers.Count - commandBuffers));
+            Waits.RemoveRange(index: waits, count: (Waits.Count - waits));
+            Values.RemoveRange(index: waits, count: (Values.Count - waits));
+        }
         public void Clear() {
             CommandBuffers.Clear();
             Stages.Clear();

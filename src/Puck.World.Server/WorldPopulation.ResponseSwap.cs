@@ -23,9 +23,11 @@ public sealed partial class WorldPopulation {
         ArgumentNullException.ThrowIfNull(argument: definition);
         ArgumentNullException.ThrowIfNull(argument: rows);
 
+        var movesProjectedSurfaces = WorldColliderSet.MovesProjectedSurfaces(definition, rows);
         if (
             (solids is null) &&
             (m_targetField is null) &&
+            !movesProjectedSurfaces &&
             (m_baseContactField is WorldColliderSet set) &&
             set.TryCarryAcrossHolding(
                 definition: definition,
@@ -46,6 +48,7 @@ public sealed partial class WorldPopulation {
         var local = (
             (solids is null) &&
             (m_targetField is null) &&
+            !movesProjectedSurfaces &&
             m_sleepFieldTermsKnown &&
             (m_sleepFieldVersion == ContactFieldVersion) &&
             (m_baseContactField is WorldColliderSet)
@@ -57,6 +60,7 @@ public sealed partial class WorldPopulation {
 
         CompileSolidConsumers(
             definition: definition,
+            previousDefinition: previous,
             previousNavigation: previousNavigation,
             solids: solids
         );

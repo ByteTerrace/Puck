@@ -74,7 +74,22 @@ what it guards, never on an earlier fence that happens to share a hand-over.
 Background jobs (`GpuQueueWork.IsBackground`) deferred ahead of frame work take
 a hand-over of their own (`GpuSubmissionBatch.Admit`, cause `job-end`), so
 their fences, and any deferred before them, such as a residency's upload,
-answer before the frame's renders finish. Anything
+answer before the frame's renders finish. Because one batch can reach the queue
+in several hand-overs, code acting for a deferred submission after the flush
+asks that submission's own fence whether it reached the queue
+(`IGpuSubmissionFence.ReachedQueue`), never whether the flush succeeded. A node
+rendered inside the batch commits its frame (history cursors, initialization,
+publication) while its submission is deferred; those commits stand only once
+`ShaderPipelineRenderNode.SettleHandOver` finds the submission reached the
+queue. The runtime settles every node it rendered after the flush
+(`RenderGraphRuntime.SettleHandOvers`), and the node settles itself at the start
+of its next frame, before an install and when an abandoned slot's wait reports
+it. A submission that never reached the queue rolls the frame back to its
+recording checkpoint (cursors, instance states, content versions,
+initialization, and the frame counter a graphics history writer's framebuffer
+ring is indexed by), withdraws its publication and ends its export unwritten. A
+new commit made for a deferred submission belongs in that checkpoint, or it
+outlives a failed hand-over. Anything
 that must see deferred work first splits the batch (the deferred work goes to the
 queue and the batch stays open): a wait on a deferred fence, `SubmitAndWait`, the
 device's wait for idle, an external wait on Direct3D 12, and every other native
@@ -162,6 +177,19 @@ yields an empty, default or stale result that the frame presents as success.
 - `SdfWorldResidency.NotReadyReason` names a pending build or a refused table
   build.
 
+- A withdrawn instance (`IRenderGraphInstances.Withdraw`,
+  `RenderGraphRuntime.Withdrawal.cs`) and every instance that read it, at the
+  same frame or the previous one, lose their recorded outputs, their nodes'
+  publications (`ShaderPipelineRenderNode.WithdrawPublication`) and their
+  packages' history (`IRenderGraphPackageFactory.OnOutputsForgotten`) before
+  the next frame schedules. Readers bind the stand-in, and each withdrawn
+  instance renders to stay shown until it has rendered again. The World
+  withdraws a view whose viewer's access narrowed
+  (`WorldViewGraphHost.BindAccess`, `WorldViewerAccess`): a picture a viewer is
+  no longer allowed is a trust boundary, and only an adversarial review sees a
+  path around this door (an external producer's own output, an export already
+  copied out).
+
 **Laws.** `RenderGraphRuntimeLawTests.Lifetime`
 (`ACaptureNoRootOutputServesIsRefusedByNameAndThenDropped`),
 `RenderGraphRuntimeLawTests.Alias`
@@ -173,8 +201,10 @@ under `experimental/tests/Puck.World.Canaries` with every other canary.
 
 **Violations to hunt.** A path that returns null, empty or a default handle and
 lets the frame present; a stand-in bound without being recorded; a refusal
-whose message omits the name a reader needs; a released or retired producer
-whose readers still bind its last image; a package recorder that binds a buffer
+whose message omits the name a reader needs; a released, retired or withdrawn
+producer whose readers still bind its last image; a reader of a binding the
+runtime does not record (a new door around `RecordedAt`), which a withdrawal
+cannot reach; a package recorder that binds a buffer
 port by its version name and leaves a name it does not map on the dummy. A
 preserving forward version (`PreservesPredecessor`) reaches a recorder's
 context under its storage root's name, not its own, so a recorder that maps

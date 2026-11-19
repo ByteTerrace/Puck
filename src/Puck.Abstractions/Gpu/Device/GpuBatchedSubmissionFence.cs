@@ -48,6 +48,9 @@ public abstract class GpuBatchedSubmissionFence : IGpuSubmissionFence {
         }
     }
 
+    /// <inheritdoc/>
+    public bool ReachedQueue => (!m_abandoned && (m_deferred is null));
+
     /// <summary>Refuses a fence with a submission outstanding, an abandoned one included: the caller must have drained it
     /// (<see cref="Wait"/>).</summary>
     /// <exception cref="InvalidOperationException">A submission is outstanding.</exception>

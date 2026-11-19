@@ -102,7 +102,7 @@ public sealed partial class SdfMeshPathBake {
     }
     // Measures every group still owing a mesh by its demand box at the demand points; with none, the priorities stand as
     // they were and the plan's order decides. It runs on the frame's thread with the gate open: the frame's thread alone
-    // replaces the group list and the copy index (Restart, Settle, IndexCopies), and a priority only orders work, never
+    // replaces the group list and the copy index (Restart, Revisit, IndexCopies), and a priority only orders work, never
     // changes a mesh, so a worker reading one mid-measure, or finishing a group this measures, orders no mesh differently.
     private void Prioritize() {
         if (Demand.Count == 0) { return; }
@@ -391,7 +391,12 @@ public sealed partial class SdfMeshPathBake {
             m_regionNamedBytes = ((long)tables.MeshRegionNamedBytes);
             m_regionRefused = tables.MeshRegionRefused;
             ServeAhead(tables: tables);
-            if (m_allResident) { return; }
+            if (m_regionRefused > 0) { CollectEvictions(tables: tables); }
+            if (m_allResident) {
+                m_holes = 0;
+                return;
+            }
+            CountHoles(tables: tables);
 
             var now = Stopwatch.GetTimestamp();
             var all = true;
@@ -428,8 +433,13 @@ public sealed partial class SdfMeshPathBake {
     // words between the two. A piece the region had no room for beside the mesh it replaces (RefusesAhead) cannot
     // land until that mesh gives its words up, so its product takes the draws once its other pieces stand and the
     // piece waits out of the frame as a first mesh does. Under the gate, on the frame's thread.
+    // The floors each group keeps while a finer tier draws (Group.KeptFloor) are named ahead with them, so their words
+    // stay where a fallen-back draw reads them; the set is named again when a kept floor or the group list changes
+    // (m_floorRevision).
     private void ServeAhead(SdfWorldTables tables) {
-        if ((m_ahead.Count == 0) && (m_aheadNamed == m_aheadRevision) && ReferenceEquals(objA: tables, objB: m_aheadTables)) { return; }
+        var floorsMoved = (m_floorsNamed != m_floorRevision);
+
+        if ((m_ahead.Count == 0) && !floorsMoved && (m_aheadNamed == m_aheadRevision) && ReferenceEquals(objA: tables, objB: m_aheadTables)) { return; }
         for (var at = (m_ahead.Count - 1); (at >= 0); at--) {
             var group = m_ahead[at];
 
@@ -439,15 +449,20 @@ public sealed partial class SdfMeshPathBake {
                 m_aheadRevision++;
             }
         }
-        if ((m_aheadNamed != m_aheadRevision) || !ReferenceEquals(objA: tables, objB: m_aheadTables)) {
+        if ((m_aheadNamed != m_aheadRevision) || floorsMoved || !ReferenceEquals(objA: tables, objB: m_aheadTables)) {
             m_aheadMeshes.Clear();
             foreach (var group in m_ahead) {
                 var mesh = group.Mesh!;
 
                 for (var piece = 0; (piece < mesh.PieceCount); piece++) { m_aheadMeshes.Add(item: mesh.Piece(index: piece)); }
             }
+            foreach (var group in m_groups) {
+                if (group.Retired || (group.KeptFloor is not { } floor)) { continue; }
+                for (var piece = 0; (piece < floor.PieceCount); piece++) { m_aheadMeshes.Add(item: floor.Piece(index: piece)); }
+            }
             tables.NameMeshesAhead(meshes: m_aheadMeshes);
             m_aheadNamed = m_aheadRevision;
+            m_floorsNamed = m_floorRevision;
             m_aheadTables = tables;
         }
         var landing = false;
@@ -610,7 +625,7 @@ public sealed partial class SdfMeshPathBake {
                 _ = line.Append(provider: CultureInfo.InvariantCulture, handler: $" near-last={lastNear.Selector}{(lastNear.Dynamic ? "/dynamic" : ((lastNear.Instances > 1) ? $"/union{lastNear.Instances}" : "/static"))}/{(lastNear.Mesh?.TriangleCount ?? 0)}tri");
             }
             _ = line.Append(provider: CultureInfo.InvariantCulture, handler: $" bake-age={((start == 0) ? 0d : Stopwatch.GetElapsedTime(startingTimestamp: start).TotalSeconds):0.000}s loads={m_loadsDone}/{m_loadsQueued} load-span={loadSpan:0.000}s plan-ms={m_planMilliseconds:0.0} restart-ms={m_restartMilliseconds:0.0}");
-            _ = line.Append(provider: CultureInfo.InvariantCulture, handler: $" frames={m_preparedFrames} restarts={m_restarts} restart-groups={m_restartGroups} resamples={m_resamples} resample-groups={m_resampleGroups} sampled-readers={m_sampledReaders.Count} coalesced={m_coalesced} promoted={m_promoted} successors={m_successors} ahead={m_ahead.Count} handed={m_handed} handed-refused={m_handedRefused}");
+            _ = line.Append(provider: CultureInfo.InvariantCulture, handler: $" frames={m_preparedFrames} restarts={m_restarts} restart-groups={m_restartGroups} resamples={m_resamples} resample-groups={m_resampleGroups} input-readers={m_inputReaders.Count} operand-readers={m_operandReaders} operand-replans={m_operandReplans} coalesced={m_coalesced} promoted={m_promoted} successors={m_successors} ahead={m_ahead.Count} handed={m_handed} handed-refused={m_handedRefused}");
             _ = line.Append(provider: CultureInfo.InvariantCulture, handler: $" vertex-bytes={vertexBytes} level0={levelTriangles[0]}tri/{levelBytes[0]}B level1={levelTriangles[1]}tri/{levelBytes[1]}B level2={levelTriangles[2]}tri/{levelBytes[2]}B");
             // The detail budget's debt (SdfMeshTier): the groups drawing a coarser tier than their demand asks, the worst
             // such group's cell in display pixels and the longest wait, now and since the bake started, the finer tiers

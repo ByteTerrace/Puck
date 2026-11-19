@@ -1073,9 +1073,10 @@ A joined-world projection renders the destination from the destination's own del
 its own measured clock, never through the host's presentation clock—independently scheduled or
 remote worlds do not share a presentation coordinate. It lights the destination under the
 destination's own sky and lighting, its keys read on the destination's own clocks, and its sky clock
-(star twinkle, cloud drift) is the destination's delivered engine tick. Its view renders at a
-session screen's reduced quality (`WorldSessionSceneEmitter.ReducedQuality`: no soft shadows, no
-ambient occlusion, no far bound).
+(star twinkle, cloud drift) is the destination's delivered engine tick. Its view renders at the
+viewer's quality, giving up only what the viewer's nested-view table (`render.nested`) says at the
+share of the display the view is presented at (`WorldRenderSettings.NestedViewQuality`), and with no
+far bound.
 
 A projected destination draws its own screens wherever it is rendered, as the boot world does: a
 portal inside it shows its own destination, whose portals show theirs, recursively, to the
@@ -1176,6 +1177,12 @@ observation of the destination. A session of the boot world joins no scene: it r
 World's own residency, filmed after the World's camera views, so the boot world is resident once however
 many windows show it. The rule holds at every depth: a destination shown at two depths, or by a window and
 a seat, shares its one residency while each session discloses everything.
+A session's access (none, what it discloses, or everything) is settled once a frame before any view of it
+is bound (`WorldViewerAccess`). When it narrows, the screen shows nothing it was shown before: every picture
+its view published, and every picture rendered over one, is withdrawn from the render graph
+(`IRenderGraphInstances.Withdraw`), and its own residency, if built from content delivered under the wider
+access, goes with every background job it submitted. A view its viewer may not see resolves to no residency
+at all. Another session showing the same world keeps its picture.
 Each view of a shared residency binds the screens of the level it renders, so one world seen at two
 depths shows each level's own images. Every level is an instance of its own, with its own temporal
 history and its own resets, so no level's history carries another level's frames. A seat presented

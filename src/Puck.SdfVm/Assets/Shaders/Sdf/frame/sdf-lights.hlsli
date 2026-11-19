@@ -38,16 +38,34 @@ float3 worldPointLightPosition(SdfLight light) {
     return light.Direction;
 #endif
 }
-// Slot zero's direction, or the pinned sun's when it is vacant, for the glass tint and material fill.
+// The light that holds a shadow role (SdfLights.RoleLight): the stable slot passGroup.shadowRoles names for it, or -1 when
+// no slot holds it.
+int worldShadowRoleLight(uint role) {
+    int slot = sdfComponent(passGroup.shadowRoles, role);
+
+    return (((slot >= 0) && ((uint)slot < worldShadowStableCount())) ? sdfComponent(passGroup.shadowSlots, (uint)slot) : -1);
+}
+// The shadow role a stable slot holds, or -1 for a slot that holds none (its light takes the probes' answer).
+int worldShadowRoleOfSlot(int slot) {
+    [unroll]
+    for (uint role = 0u; (role < SDF_SHADOW_ROLES); role++) {
+        if ((slot >= 0) && (sdfComponent(passGroup.shadowRoles, role) == slot)) {
+            return (int)role;
+        }
+    }
+    return -1;
+}
+// The key light's direction (the primary shadow role's light), or the pinned sun's when no slotted light emits, for the
+// glass tint and material fill.
 float3 worldSunDirection() {
-    int index = passGroup.shadowSlots.x;
+    int index = worldShadowRoleLight(0u);
 
     return ((index >= 0 && (uint)index < worldLightCount()) ? sdfLights[(uint)index].Direction : SdfSunDirection);
 }
-// Slot zero's light as the luminance it gives a white surface facing it, in nits: the scale an authored material fill
-// stands in for indirect light by. Zero while the slot is vacant.
+// The key light as the luminance it gives a white surface facing it, in nits: the scale an authored material fill stands
+// in for indirect light by. Zero while no slotted light emits.
 float3 worldKeyRadiance() {
-    int index = passGroup.shadowSlots.x;
+    int index = worldShadowRoleLight(0u);
 
     if ((index < 0) || ((uint)index >= worldLightCount())) {
         return float3(0.0, 0.0, 0.0);

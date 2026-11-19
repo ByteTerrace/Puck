@@ -1612,7 +1612,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             var snapshot = m_frameViews[view];
             var viewWidth = ((uint)Math.Max(val1: 1f, val2: (snapshot.Region.Width * width)));
             var viewHeight = ((uint)Math.Max(val1: 1f, val2: (snapshot.Region.Height * height)));
-            var count = ((cascades.SecondPenumbraSlope > 0f) ? 3 : 2);
+            var count = cascades.Count;
 
             for (var cascade = 0; (cascade < count); cascade++) {
                 m_rateShadows.Add(item: (view, SdfMeshCull.Of(camera: snapshot.Camera, cascade: cascades[cascade], far: frame.FarDistance, height: viewHeight, texels: cascades.Texels, width: viewWidth)));
@@ -2318,6 +2318,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
         m_animator = animator;
         m_sdfDocuments = sdfDocuments;
         m_graphs = graphs;
+        if (graphs is not null) { settings.DisplayShare = name => graphs.DisplayShareOf(instance: name); }
 
         // Resolve the primer snapshot's render poses once so the capacity probe and the camera anchors are live before
         // the first frame. Alpha 0 is immaterial — a freshly spawned entity has previous == current pose.

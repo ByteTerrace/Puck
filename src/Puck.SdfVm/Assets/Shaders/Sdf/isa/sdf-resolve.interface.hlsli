@@ -1,4 +1,4 @@
-// Generated from shader interface 'sdf-resolve' (sha256/f88070565d36c97a7ef5509e6b04524fc5c3a1a2410da009869531183096559d). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'sdf-resolve' (sha256/d3cfca7e1bfa69c49101b3d15cd3a46cbf24a66263a8a25a983df9eb1fac7eab). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SDF_RESOLVE
 #define PUCK_SHADER_INTERFACE_SDF_RESOLVE
 
@@ -189,63 +189,70 @@ struct SdfResolvePass {
     [[vk::offset(696)]] uint _pad696;
     [[vk::offset(700)]] uint _pad700;
     [[vk::offset(704)]] float4 meshShadowParameters;
-    [[vk::offset(720)]] uint meshShadowTexels;
-    [[vk::offset(724)]] uint _pad724;
-    [[vk::offset(728)]] uint _pad728;
-    [[vk::offset(732)]] uint _pad732;
-    [[vk::offset(736)]] float4 meterLight[6];
-    [[vk::offset(832)]] float meterLuminance;
-    [[vk::offset(836)]] float nearDistance;
-    [[vk::offset(840)]] uint _pad840;
-    [[vk::offset(844)]] uint _pad844;
-    [[vk::offset(848)]] float4 previousView[6];
-    [[vk::offset(944)]] uint screenCount;
-    [[vk::offset(948)]] float screenFidelity;
-    [[vk::offset(952)]] uint _pad952;
-    [[vk::offset(956)]] uint _pad956;
-    [[vk::offset(960)]] uint4 shadeBinWidths;
-    [[vk::offset(976)]] uint4 shadeDefault;
-    [[vk::offset(992)]] float4 shadeDemand;
-    [[vk::offset(1008)]] uint4 shadeIdentity[2];
-    [[vk::offset(1040)]] uint shadePrograms;
-    [[vk::offset(1044)]] uint shadowFadeCount;
-    [[vk::offset(1048)]] uint shadowSlotCount;
-    [[vk::offset(1052)]] uint _pad1052;
-    [[vk::offset(1056)]] int4 shadowSlots;
-    [[vk::offset(1072)]] float skyPeakLuminance;
-    [[vk::offset(1076)]] uint _pad1076;
+    [[vk::offset(720)]] uint4 meshShadowRoles;
+    [[vk::offset(736)]] float4 meshShadowSlopes;
+    [[vk::offset(752)]] uint meshShadowTexels;
+    [[vk::offset(756)]] uint _pad756;
+    [[vk::offset(760)]] uint _pad760;
+    [[vk::offset(764)]] uint _pad764;
+    [[vk::offset(768)]] float4 meterLight[6];
+    [[vk::offset(864)]] float meterLuminance;
+    [[vk::offset(868)]] float nearDistance;
+    [[vk::offset(872)]] uint _pad872;
+    [[vk::offset(876)]] uint _pad876;
+    [[vk::offset(880)]] float4 previousView[6];
+    [[vk::offset(976)]] uint screenCount;
+    [[vk::offset(980)]] float screenFidelity;
+    [[vk::offset(984)]] uint _pad984;
+    [[vk::offset(988)]] uint _pad988;
+    [[vk::offset(992)]] uint4 shadeBinWidths;
+    [[vk::offset(1008)]] uint4 shadeDefault;
+    [[vk::offset(1024)]] float4 shadeDemand;
+    [[vk::offset(1040)]] uint4 shadeIdentity[2];
+    [[vk::offset(1072)]] uint shadePrograms;
+    [[vk::offset(1076)]] uint shadowFadeCount;
     [[vk::offset(1080)]] uint _pad1080;
     [[vk::offset(1084)]] uint _pad1084;
-    [[vk::offset(1088)]] float3 stampFade;
-    [[vk::offset(1100)]] float tanHalfFieldOfView;
-    [[vk::offset(1104)]] uint temporal;
+    [[vk::offset(1088)]] int4 shadowRoles;
+    [[vk::offset(1104)]] uint shadowSlotCount;
     [[vk::offset(1108)]] uint _pad1108;
     [[vk::offset(1112)]] uint _pad1112;
     [[vk::offset(1116)]] uint _pad1116;
-    [[vk::offset(1120)]] float4 toonBands;
-    [[vk::offset(1136)]] float4 toonInk;
-    [[vk::offset(1152)]] float4 toonOutline;
-    [[vk::offset(1168)]] float4 toonShadow;
-    [[vk::offset(1184)]] float upscaleSharpness;
-    [[vk::offset(1188)]] uint viewBase;
-    [[vk::offset(1192)]] uint _pad1192;
-    [[vk::offset(1196)]] uint _pad1196;
-    [[vk::offset(1200)]] float3 viewForward;
-    [[vk::offset(1212)]] uint _pad1212;
-    [[vk::offset(1216)]] float3 viewPosition;
-    [[vk::offset(1228)]] uint _pad1228;
-    [[vk::offset(1232)]] float3 viewRight;
-    [[vk::offset(1244)]] uint _pad1244;
-    [[vk::offset(1248)]] float3 viewUp;
-    [[vk::offset(1260)]] uint viewportCount;
-    [[vk::offset(1264)]] uint workCounterRow;
-    [[vk::offset(1268)]] uint workCounterRowDetail;
-    [[vk::offset(1272)]] uint _pad1272;
+    [[vk::offset(1120)]] int4 shadowSlots;
+    [[vk::offset(1136)]] float skyPeakLuminance;
+    [[vk::offset(1140)]] uint _pad1140;
+    [[vk::offset(1144)]] uint _pad1144;
+    [[vk::offset(1148)]] uint _pad1148;
+    [[vk::offset(1152)]] float3 stampFade;
+    [[vk::offset(1164)]] float tanHalfFieldOfView;
+    [[vk::offset(1168)]] uint temporal;
+    [[vk::offset(1172)]] uint _pad1172;
+    [[vk::offset(1176)]] uint _pad1176;
+    [[vk::offset(1180)]] uint _pad1180;
+    [[vk::offset(1184)]] float4 toonBands;
+    [[vk::offset(1200)]] float4 toonInk;
+    [[vk::offset(1216)]] float4 toonOutline;
+    [[vk::offset(1232)]] float4 toonShadow;
+    [[vk::offset(1248)]] float upscaleSharpness;
+    [[vk::offset(1252)]] uint viewBase;
+    [[vk::offset(1256)]] uint _pad1256;
+    [[vk::offset(1260)]] uint _pad1260;
+    [[vk::offset(1264)]] float3 viewForward;
     [[vk::offset(1276)]] uint _pad1276;
-    [[vk::offset(1280)]] float4 worldLanes;
+    [[vk::offset(1280)]] float3 viewPosition;
+    [[vk::offset(1292)]] uint _pad1292;
+    [[vk::offset(1296)]] float3 viewRight;
+    [[vk::offset(1308)]] uint _pad1308;
+    [[vk::offset(1312)]] float3 viewUp;
+    [[vk::offset(1324)]] uint viewportCount;
+    [[vk::offset(1328)]] uint workCounterRow;
+    [[vk::offset(1332)]] uint workCounterRowDetail;
+    [[vk::offset(1336)]] uint _pad1336;
+    [[vk::offset(1340)]] uint _pad1340;
+    [[vk::offset(1344)]] float4 worldLanes;
 };
-[[vk::binding(0, 3)]] ConstantBuffer<SdfResolvePass> passGroupIsaCA79AE1D : register(b0, space3);
-#define passGroup passGroupIsaCA79AE1D
+[[vk::binding(0, 3)]] ConstantBuffer<SdfResolvePass> passGroupIsaA97037E8 : register(b0, space3);
+#define passGroup passGroupIsaA97037E8
 [[vk::binding(1, 3)]] Texture2D<float4> currentColor : register(t1, space3);
 [[vk::binding(2, 3)]] [[vk::image_format("rgba16f")]] RWTexture2D<float4> output : register(u2, space3);
 [[vk::binding(3, 3)]] StructuredBuffer<uint> sdfVisibilityRecords : register(t3, space3);
@@ -255,7 +262,8 @@ struct SdfResolvePass {
 [[vk::binding(7, 3)]] StructuredBuffer<uint> historySurface : register(t7, space3);
 [[vk::binding(8, 3)]] [[vk::image_format("rgba16f")]] RWTexture2D<float4> historyColorRW : register(u8, space3);
 [[vk::binding(9, 3)]] RWStructuredBuffer<uint> historySurfaceRW : register(u9, space3);
-[[vk::binding(10, 3)]] RWStructuredBuffer<uint> workCounters : register(u10, space3);
+[[vk::binding(10, 3)]] RWStructuredBuffer<uint> historyWindowRW : register(u10, space3);
+[[vk::binding(11, 3)]] RWStructuredBuffer<uint> workCounters : register(u11, space3);
 
 // The pass's own work, added to its row of the node's kernel counters (GpuKernelCounters, which reads the rows
 // back): each counted kind in GpuWork.KernelKinds order, march steps, texels written, sky evaluations, sky hashes,

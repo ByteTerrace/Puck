@@ -82,9 +82,11 @@ longer than all the other packaging together, so it runs beside the solution bui
 rather than after it: it installs the SDK and `wasm-tools`, restores and compiles
 only `Puck.World.Browser`'s dependency closure, which declares no shader or world
 compile, publishes it once, and uploads the AppBundle as `browser-payload`. Its
-second job runs that exact payload under the Node harness. The Azure release and
-the NuGet release call it beside the artifact producer; a standalone
-`verify.yml` run calls it too. Native compilation and trimming remain part of its
+second job runs that exact payload under the Node harness. The workflow's
+`stage` input selects one job: the Azure release calls it with `publish` for the
+payload its bundle ships and again with `verify` for the harness, which only
+reports, so a harness failure never holds the application bundle. The NuGet
+release and a standalone `verify.yml` run call it with both jobs. Native compilation and trimming remain part of its
 one publish operation. The solution build's own browser AppBundle, the one the
 compiled archive carries, is the build's rather than the AOT publish's.
 Its duration is not a CI-time target: it runs in parallel and is off the
@@ -185,7 +187,8 @@ change): a run that timed out before saving would leave every later run cold.
 and AGB (Advanced GamingBrick) binaries
 on Linux and its candidate CLI for
 the generated schema, name-registry, project-map layering, and branding
-distribution checks.
+distribution checks. The Azure release runs it beside the deploy path: its jobs
+report and hold no deploy.
 `puck schema --check` also compares the dashboard portal's
 generated world types, which `puck schema` writes from the same schema, so that
 check needs no Node.js or npm step. `puck branding --check` verifies that
@@ -290,15 +293,20 @@ flowchart LR
     managed --> runtime[Runtime and package verification]
     managed --> bundle[Assemble application bundle]
     browser --> bundle
+    browser --> harness[WebAssembly harness]
     docs --> bundle
     managed --> containers[Verify saved images]
     images --> containers
-    tests --> deploy[Deploy verified artifacts]
-    runtime --> deploy
-    browser --> deploy
+    managed --> infra[Compile infrastructure]
+    infra --> deploy[Deploy to Azure production]
     bundle --> deploy
     containers --> deploy
 ```
+
+The shipping path is the artifact build, infrastructure compile, application
+bundle and container verification into the deploy job. The test shards,
+runtime and package verification, the browser harness and coverage are separate
+reports on the same run, in parallel, and nothing on the path waits for them.
 
 ### Which CI checks the local gate runs
 
@@ -312,7 +320,7 @@ the step in the same change.
 | `dotnet restore Puck.slnx --locked-mode` | `artifacts.yml`, `format.yml` | `locks` (`puck locks --check`), before anything builds; the solution build then restores nothing |
 | `dotnet build src/Puck.Azure.Resources/bootstrap.cs -c Release` | `artifacts.yml` | `bootstrap` |
 | `dotnet build Puck.slnx -c Release --no-restore` | `artifacts.yml`, `format.yml` | `build` |
-| `puck shaders generate --check` | `artifacts.yml`, `format.yml`, `verify.yml` | `shaders generate` |
+| `puck shaders generate --check` | `format.yml`, `verify.yml` | `shaders generate` |
 | `puck schema`, `registry`, `wasm-stdlib`, `architecture` and `branding --check` | `verify.yml` | the step of the same name |
 | `puck pull-request format` | `format.yml` | `format` over the change's C# and `.puck` sources |
 | `puck docs links` | `verify.yml` (`documents`) | `affected`, when the change touches a corpus page, a C# source or deletes a file |
@@ -549,7 +557,7 @@ installs the CLI from it.
 The one job without an installed CLI is the artifact producer, which invokes the
 assembly its solution build just compiled
 (`dotnet src/Puck.Cli/bin/Release/net11.0/Puck.Cli.dll`) for every verb it runs,
-`shaders generate --check` and `nuget pack` among them. A release run therefore
+`shaders collect` and `nuget pack` among them. A release run therefore
 compiles the CLI once, in that build, and packs it once, into `nuget-packages`;
 every other job that runs `puck` installs that package through `setup-puck`.
 Three builds stay outside that rule. The formatting workflow packs the pull
@@ -735,10 +743,16 @@ The candidate CLI and browser build use pinned DXC. Both official manifests
 check clean source provenance; a build that changes tracked shader artifacts
 must reconcile those generated files before a release can claim a clean checkout.
 
-A push to `main` deploys after the artifact build and every verification job
-succeed. While the owner's refactoring campaign suspends test requirements
-([AGENTS.md](../../AGENTS.md#puck-is-pre-release)), the **Test .NET artifacts**
-shards report on every push but, like the coverage check, hold no release. A manual
+A push to `main` deploys once the artifacts build (including the published
+World's startup check), the infrastructure compiles, the application bundle
+assembles and the container images verify (the silo's activation, QUIC and
+checkpoint recovery among them). While the owner's refactoring campaign
+suspends test requirements ([AGENTS.md](../../AGENTS.md#puck-is-pre-release)),
+the deploy job's `needs` name only those jobs. The **Test .NET artifacts** shards,
+the runtime verification workflow (documentation corpus, generated contracts,
+emulator batteries, Linux world tests, SPIR-V comparison), package installation,
+the browser harness and the coverage check run in parallel on every push and
+report, and a red one neither holds nor skips the deploy. A manual
 run exposes one `deploy` switch; setting it to false performs build and validation
 only. Pull requests have no Azure credentials. Trusted infrastructure
 builds authenticate before restoring the pinned `ts/bvm` Template Specs through
