@@ -2005,21 +2005,11 @@ intent is in its guide.
 - [high] Cel is the debug world's treatment
   ([the ruling](../decisions/rendering.md#a-light-is-shadowed-wherever-it-lights-and-cel-shading-is-a-style-per-material)):
   every place opts in through its materials (`celMaterial`) and is judged
-  under it. The valley's rock, the glacier's ice, the gallery hall and the
-  Moth's painted slots are in. Owed: the exhibits' plinths and labels, held by
-  the gap below; the valley walls' shade reading as mass, which the domes'
+  under it. The valley's rock, the glacier's ice, the gallery hall, the
+  exhibits' plinths, labels and section signs, and the Moth's painted slots are
+  in. Owed: the valley walls' shade reading as mass, which the domes'
   smooth macro form limits more than the shading does; each place's guide
   naming its outside references for the treatment; and dawn and night legs.
-- [high] A palette row's shade program is copied whole into every creation
-  document that uses it, as an expression graph of about 15,800 budget units
-  (2,262 nodes) for `cel`: opting the 135 exhibits' plinths and labels into
-  `galleryStyle` (`worlds/debug/shapes.puck`'s `galleryPalette`) took one
-  compilation's work from 2M to 26M units, past `DocumentEvaluationBudget.WorkLimit`
-  (PUCK047), and would add megabytes to the world definition. `WorldShadeLowering`
-  already lowers a template call once per compilation; the copies are the cost.
-  Programs need a shared identity across documents (a document-level program
-  table a row names, or a compact canonical form), so a repeated program costs
-  once (AGENTS.md, "Ergonomic is optimal").
 - [held, the owner's ruling] The Moth and the swallow wait for a pair session
   with the owner, and no lane models either until then. Agent modeling did not
   converge: builders passed views the critic failed with pixel evidence, and

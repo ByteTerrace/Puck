@@ -2480,6 +2480,31 @@
       ],
       "title": "SdfShadeType"
     },
+    "SdfShadeParameter": {
+      "description": "A runtime slot\u0027s type and initial data. Names bind source references and do not enter program identity.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "type": {
+          "$ref": "#/$defs/SdfShadeType"
+        },
+        "bits": {
+          "type": "array",
+          "items": {
+            "type": "integer"
+          }
+        }
+      },
+      "required": [
+        "name",
+        "type",
+        "bits"
+      ],
+      "additionalProperties": false,
+      "title": "SdfShadeParameter"
+    },
     "SdfShadePhase": {
       "description": "The three entry points of a material\u0027s presentation program.",
       "enum": [
@@ -2522,10 +2547,7 @@
     },
     "SdfPathSegment": {
       "description": "A line, quadratic/cubic Bezier, or circular arc ending at End. An arc uses ArcCenter and Clockwise; Beziers use Control and optionally Control2. Controls are in the profile\u0027s local XY frame.",
-      "type": [
-        "object",
-        "null"
-      ],
+      "type": "object",
       "properties": {
         "end": {
           "type": "array",
@@ -2575,10 +2597,7 @@
     },
     "SdfPathContour": {
       "description": "A continuous contour. Filled contours close implicitly; stroked contours remain open unless Closed.",
-      "type": [
-        "object",
-        "null"
-      ],
+      "type": "object",
       "properties": {
         "start": {
           "type": "array",
@@ -2885,10 +2904,7 @@
     },
     "SdfShadeExpression": {
       "description": "An expression supplied to shade admission, never executable words. The compiler validates every field.",
-      "type": [
-        "object",
-        "null"
-      ],
+      "type": "object",
       "properties": {
         "op": {
           "description": "An op-table spelling, or constant, parameter, or input.",
@@ -2979,6 +2995,100 @@
       ],
       "additionalProperties": false,
       "title": "SdfShadeExpression"
+    },
+    "SdfShadeOutput": {
+      "description": "An output expression; omitted outputs retain the stage\u0027s default.",
+      "type": "object",
+      "properties": {
+        "phase": {
+          "$ref": "#/$defs/SdfShadePhase"
+        },
+        "name": {
+          "type": "string"
+        },
+        "value": {
+          "$ref": "#/$defs/SdfShadeExpressionNonNullable"
+        }
+      },
+      "required": [
+        "phase",
+        "name",
+        "value"
+      ],
+      "additionalProperties": false,
+      "title": "SdfShadeOutput"
+    },
+    "SdfShadeValue": {
+      "description": "A dependency-ordered value in the canonical document. Reads may name only earlier values of this phase.",
+      "type": "object",
+      "properties": {
+        "phase": {
+          "$ref": "#/$defs/SdfShadePhase"
+        },
+        "name": {
+          "type": "string"
+        },
+        "value": {
+          "$ref": "#/$defs/SdfShadeExpressionNonNullable"
+        }
+      },
+      "required": [
+        "phase",
+        "name",
+        "value"
+      ],
+      "additionalProperties": false,
+      "title": "SdfShadeValue"
+    },
+    "SdfShadeDefinition": {
+      "description": "The source-level expression graph serialized in a material. Admission always compiles it afresh.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "parameters": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/SdfShadeParameter"
+          }
+        },
+        "outputs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/SdfShadeOutput"
+          }
+        },
+        "values": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/SdfShadeValue"
+          },
+          "default": null
+        }
+      },
+      "required": [
+        "name",
+        "parameters",
+        "outputs"
+      ],
+      "additionalProperties": false
+    },
+    "ShadeReference": {
+      "description": "A shade program a document uses (a palette row\u0027s, a look case\u0027s or the world\u0027s default): the program\u0027s identity, and the program once the document\u0027s table has supplied it. The identity is computed from the program\u0027s canonical bytes (KeyOf), never authored, so every use of one program names one row of the world\u0027s shades table and a program used by many creations is held, written and compiled once.",
+      "title": "ShadeReference",
+      "anyOf": [
+        {
+          "type": "string",
+          "description": "The key of a row of the world\u0027s shades table."
+        },
+        {
+          "$ref": "#/$defs/SdfShadeDefinition"
+        }
+      ]
     },
     "WorldScreenSourceNone": {
       "description": "No provider is bound \u2014 the engine shades the slot as dark glass, lit faintly by the sun.",
@@ -10390,447 +10500,7 @@
       },
       "additionalProperties": false
     },
-    "ShapeNonNullable52": {
-      "enum": [
-        "Float",
-        "Float2",
-        "Float3",
-        "Float4",
-        "UInt",
-        "UInt3"
-      ]
-    },
     "ShapeNullable11": {
-      "type": [
-        "object",
-        "null"
-      ],
-      "properties": {
-        "name": {
-          "type": "string"
-        },
-        "type": {
-          "$ref": "#/$defs/ShapeNonNullable52"
-        },
-        "bits": {
-          "type": "array",
-          "items": {
-            "type": "integer"
-          }
-        }
-      },
-      "required": [
-        "name",
-        "type",
-        "bits"
-      ],
-      "additionalProperties": false
-    },
-    "ShapeNonNullable53": {
-      "enum": [
-        "Revolve",
-        "Extrude"
-      ],
-      "x-enumDescriptions": {
-        "Revolve": "Revolve the 2D profile around the local Y axis (the revolve lift operator): the profile sits in the (radial, Y) half-plane at a radial offset (the shape\u0027s liftAmount). Exact when the offset clears the profile\u0027s radial extent (a torus-like solid); a harmless conservative underestimate near the axis when the profile crosses it (offset 0 = a solid of revolution centred on the axis, e.g. a spheroid from an ellipse). Always 1-Lipschitz.",
-        "Extrude": "Extrude the 2D profile along the local Z axis (the extrude lift operator) to the given half-height (the shape\u0027s liftAmount): a prism/slab whose cross-section is the exact 2D shape. Exact for any exact 2D field, and 1-Lipschitz."
-      }
-    },
-    "ShapeNullable12": {
-      "type": [
-        "object",
-        "null"
-      ],
-      "properties": {
-        "a": {
-          "type": "array",
-          "items": {
-            "type": "number"
-          },
-          "minItems": 3,
-          "maxItems": 3,
-          "description": "The curve\u0027s first control point, in creation units."
-        },
-        "b": {
-          "type": "array",
-          "items": {
-            "type": "number"
-          },
-          "minItems": 3,
-          "maxItems": 3,
-          "description": "The curve\u0027s middle control point."
-        },
-        "c": {
-          "type": "array",
-          "items": {
-            "type": "number"
-          },
-          "minItems": 3,
-          "maxItems": 3,
-          "description": "The curve\u0027s last control point."
-        },
-        "radiusStart": {
-          "type": "number",
-          "description": "The sweep radius at t = 0."
-        },
-        "radiusEnd": {
-          "type": "number",
-          "description": "The sweep radius at t = 1."
-        },
-        "bulge": {
-          "type": "number",
-          "description": "The mid-span radius bulge amplitude."
-        },
-        "strands": {
-          "type": "integer",
-          "description": "The strand count, 1..MaxSweepStrands."
-        },
-        "twist": {
-          "type": "number",
-          "description": "The strand orbit rate, in turns along the curve."
-        },
-        "strandOffset": {
-          "type": "number",
-          "description": "The strand orbit radius, in creation units."
-        }
-      },
-      "additionalProperties": false
-    },
-    "ShapeNullable13": {
-      "type": [
-        "object",
-        "null"
-      ],
-      "properties": {
-        "type": {
-          "$ref": "#/$defs/ShapeNonNullable50"
-        },
-        "x": {
-          "type": "number",
-          "default": 1
-        },
-        "y": {
-          "type": "number",
-          "default": 1
-        },
-        "z": {
-          "type": "number",
-          "default": 1
-        },
-        "taper": {
-          "type": "number",
-          "default": 0.5
-        },
-        "profile": {
-          "$ref": "#/$defs/ShapeNullable7",
-          "default": null
-        },
-        "lift": {
-          "$ref": "#/$defs/ShapeNonNullable53",
-          "default": "Extrude"
-        },
-        "rounding": {
-          "type": "number",
-          "default": 0
-        },
-        "chamfer": {
-          "type": "number",
-          "default": 0
-        },
-        "exponent": {
-          "type": "number",
-          "default": 2
-        },
-        "curve": {
-          "$ref": "#/$defs/ShapeNullable12",
-          "default": null
-        }
-      },
-      "required": [
-        "type"
-      ],
-      "additionalProperties": false
-    },
-    "ShapeNullable14": {
-      "type": [
-        "object",
-        "null"
-      ],
-      "properties": {
-        "op": {
-          "type": "string",
-          "description": "An op-table spelling, or constant, parameter, or input."
-        },
-        "arguments": {
-          "$ref": "#/$defs/ShapeNullable15",
-          "default": null,
-          "description": "The expression\u0027s operands."
-        },
-        "name": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "default": null,
-          "description": "A stamp member or runtime parameter name."
-        },
-        "type": {
-          "$ref": "#/$defs/ShapeNonNullable52",
-          "description": "The type of a literal, validated against its bits.",
-          "default": "Float"
-        },
-        "bits": {
-          "type": [
-            "array",
-            "null"
-          ],
-          "items": {
-            "type": "integer"
-          },
-          "default": null,
-          "description": "32-bit literal components; integer components are never float converted."
-        },
-        "shape": {
-          "$ref": "#/$defs/ShapeNullable13",
-          "description": "The structural descriptor of a shape operation.",
-          "default": null
-        }
-      },
-      "required": [
-        "op"
-      ],
-      "additionalProperties": false
-    },
-    "ShapeNullable15": {
-      "type": [
-        "array",
-        "null"
-      ],
-      "items": {
-        "$ref": "#/$defs/ShapeNullable14",
-        "description": "An expression supplied to shade admission, never executable words. The compiler validates every field."
-      }
-    },
-    "ShapeNonNullable54": {
-      "type": "object",
-      "properties": {
-        "op": {
-          "type": "string",
-          "description": "An op-table spelling, or constant, parameter, or input."
-        },
-        "arguments": {
-          "type": [
-            "array",
-            "null"
-          ],
-          "items": {
-            "$ref": "#/$defs/ShapeNullable14",
-            "description": "An expression supplied to shade admission, never executable words. The compiler validates every field."
-          },
-          "default": null,
-          "description": "The expression\u0027s operands."
-        },
-        "name": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "default": null,
-          "description": "A stamp member or runtime parameter name."
-        },
-        "type": {
-          "$ref": "#/$defs/ShapeNonNullable52",
-          "description": "The type of a literal, validated against its bits.",
-          "default": "Float"
-        },
-        "bits": {
-          "type": [
-            "array",
-            "null"
-          ],
-          "items": {
-            "type": "integer"
-          },
-          "default": null,
-          "description": "32-bit literal components; integer components are never float converted."
-        },
-        "shape": {
-          "$ref": "#/$defs/ShapeNullable13",
-          "description": "The structural descriptor of a shape operation.",
-          "default": null
-        }
-      },
-      "required": [
-        "op"
-      ],
-      "additionalProperties": false
-    },
-    "ShapeNullable16": {
-      "type": [
-        "object",
-        "null"
-      ],
-      "properties": {
-        "phase": {
-          "enum": [
-            "Surface",
-            "Light",
-            "Compose"
-          ]
-        },
-        "name": {
-          "type": "string"
-        },
-        "value": {
-          "$ref": "#/$defs/ShapeNonNullable54"
-        }
-      },
-      "required": [
-        "phase",
-        "name",
-        "value"
-      ],
-      "additionalProperties": false
-    },
-    "ShapeNullable17": {
-      "type": [
-        "object",
-        "null"
-      ],
-      "properties": {
-        "op": {
-          "type": "string",
-          "description": "An op-table spelling, or constant, parameter, or input."
-        },
-        "arguments": {
-          "type": [
-            "array",
-            "null"
-          ],
-          "items": {
-            "$ref": "#/$defs/ShapeNullable14",
-            "description": "An expression supplied to shade admission, never executable words. The compiler validates every field."
-          },
-          "default": null,
-          "description": "The expression\u0027s operands."
-        },
-        "name": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "default": null,
-          "description": "A stamp member or runtime parameter name."
-        },
-        "type": {
-          "$ref": "#/$defs/ShapeNonNullable52",
-          "description": "The type of a literal, validated against its bits.",
-          "default": "Float"
-        },
-        "bits": {
-          "type": [
-            "array",
-            "null"
-          ],
-          "items": {
-            "type": "integer"
-          },
-          "default": null,
-          "description": "32-bit literal components; integer components are never float converted."
-        },
-        "shape": {
-          "$ref": "#/$defs/ShapeNullable13",
-          "description": "The structural descriptor of a shape operation.",
-          "default": null
-        }
-      },
-      "required": [
-        "op"
-      ],
-      "additionalProperties": false
-    },
-    "ShapeNonNullable55": {
-      "type": "object",
-      "properties": {
-        "op": {
-          "type": "string",
-          "description": "An op-table spelling, or constant, parameter, or input."
-        },
-        "arguments": {
-          "type": [
-            "array",
-            "null"
-          ],
-          "items": {
-            "$ref": "#/$defs/ShapeNullable17",
-            "description": "An expression supplied to shade admission, never executable words. The compiler validates every field."
-          },
-          "default": null,
-          "description": "The expression\u0027s operands."
-        },
-        "name": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "default": null,
-          "description": "A stamp member or runtime parameter name."
-        },
-        "type": {
-          "$ref": "#/$defs/ShapeNonNullable52",
-          "description": "The type of a literal, validated against its bits.",
-          "default": "Float"
-        },
-        "bits": {
-          "type": [
-            "array",
-            "null"
-          ],
-          "items": {
-            "type": "integer"
-          },
-          "default": null,
-          "description": "32-bit literal components; integer components are never float converted."
-        },
-        "shape": {
-          "$ref": "#/$defs/ShapeNullable13",
-          "description": "The structural descriptor of a shape operation.",
-          "default": null
-        }
-      },
-      "required": [
-        "op"
-      ],
-      "additionalProperties": false
-    },
-    "ShapeNullable18": {
-      "type": [
-        "object",
-        "null"
-      ],
-      "properties": {
-        "phase": {
-          "enum": [
-            "Surface",
-            "Light",
-            "Compose"
-          ]
-        },
-        "name": {
-          "type": "string"
-        },
-        "value": {
-          "$ref": "#/$defs/ShapeNonNullable55"
-        }
-      },
-      "required": [
-        "phase",
-        "name",
-        "value"
-      ],
-      "additionalProperties": false
-    },
-    "ShapeNullable19": {
       "enum": [
         "Union",
         "SmoothUnion",
@@ -10869,7 +10539,7 @@
         "StairsSubtraction": "Carves continuous steps of radius r (Data1.x) and step count n (Data1.z) from the subtraction. Strictly 1-Lipschitz. PopField compose only."
       }
     },
-    "ShapeNonNullable56": {
+    "ShapeNonNullable52": {
       "properties": {
         "$type": {
           "const": "symmetry"
@@ -10892,7 +10562,7 @@
       ],
       "additionalProperties": false
     },
-    "ShapeNonNullable57": {
+    "ShapeNonNullable53": {
       "properties": {
         "$type": {
           "const": "repeat"
@@ -10919,7 +10589,7 @@
       ],
       "additionalProperties": false
     },
-    "ShapeNullable20": {
+    "ShapeNullable12": {
       "enum": [
         "X",
         "Y",
@@ -10932,7 +10602,7 @@
         "Z": "The local Z axis; a polar repeat about it folds the XY plane (a clock face or a gear facing \u002BZ)."
       }
     },
-    "ShapeNonNullable58": {
+    "ShapeNonNullable54": {
       "properties": {
         "$type": {
           "const": "polar"
@@ -10942,7 +10612,7 @@
           "description": "The sector count around the axis (clamped \u003E= 1)."
         },
         "axis": {
-          "$ref": "#/$defs/ShapeNullable20",
+          "$ref": "#/$defs/ShapeNullable12",
           "description": "The rotation axis (null = Y, the XZ ground plane).",
           "default": null
         },
@@ -10972,7 +10642,7 @@
       ],
       "additionalProperties": false
     },
-    "ShapeNonNullable59": {
+    "ShapeNonNullable55": {
       "enum": [
         "P1",
         "P2",
@@ -11012,7 +10682,7 @@
         "P6M": "The full hex kaleidoscope (6-fold rotations plus both mirror families)."
       }
     },
-    "ShapeNullable21": {
+    "ShapeNullable13": {
       "enum": [
         "XZ",
         "XY",
@@ -11025,13 +10695,13 @@
         "YZ": "Y and Z: a wall facing X."
       }
     },
-    "ShapeNonNullable60": {
+    "ShapeNonNullable56": {
       "properties": {
         "$type": {
           "const": "wallpaper"
         },
         "group": {
-          "$ref": "#/$defs/ShapeNonNullable59",
+          "$ref": "#/$defs/ShapeNonNullable55",
           "description": "The wallpaper group: one whose fold is continuous (PMM, P4M, P3M1, P6M; see IsContinuous). A program refuses any other group by name when it builds."
         },
         "cell": {
@@ -11043,7 +10713,7 @@
           "description": "The repeat-cell limit per plane axis (null = UnboundedLimit per axis): a non-negative whole number of cells for a square group, and unbounded for a hex group, which is bounded by intersecting it with a bounding shape instead (LimitRefusal)."
         },
         "plane": {
-          "$ref": "#/$defs/ShapeNullable21",
+          "$ref": "#/$defs/ShapeNullable13",
           "description": "The fold plane (null = XZ).",
           "default": null
         },
@@ -11062,7 +10732,7 @@
       ],
       "additionalProperties": false
     },
-    "ShapeNullable22": {
+    "ShapeNullable14": {
       "enum": [
         "White",
         "Blue",
@@ -11075,7 +10745,7 @@
         "Gaussian": "The central-limit average of several decorrelated hashed uniforms per axis: a bell-shaped offset whose mass clusters toward the cell centre, with occasional outliers."
       }
     },
-    "ShapeNonNullable61": {
+    "ShapeNonNullable57": {
       "properties": {
         "$type": {
           "const": "jitter"
@@ -11113,7 +10783,7 @@
           "description": "The hashed palette rows a copy\u0027s material strides over (null = 0, geometric only); the palette must hold the rows the stride reaches."
         },
         "flavor": {
-          "$ref": "#/$defs/ShapeNullable22",
+          "$ref": "#/$defs/ShapeNullable14",
           "description": "How the displacement is distributed over the cell (null = White).",
           "default": null
         },
@@ -11128,7 +10798,7 @@
       ],
       "additionalProperties": false
     },
-    "ShapeNonNullable62": {
+    "ShapeNonNullable58": {
       "properties": {
         "$type": {
           "const": "logSphere"
@@ -11155,7 +10825,7 @@
       ],
       "additionalProperties": false
     },
-    "ShapeNullable23": {
+    "ShapeNullable15": {
       "type": [
         "object",
         "null"
@@ -11165,32 +10835,32 @@
       ],
       "anyOf": [
         {
-          "$ref": "#/$defs/ShapeNonNullable56",
+          "$ref": "#/$defs/ShapeNonNullable52",
           "description": "Reflection fold across a plane \u2014 Symmetry. One authored half repeats mirror-imaged across the plane."
         },
         {
-          "$ref": "#/$defs/ShapeNonNullable57",
+          "$ref": "#/$defs/ShapeNonNullable53",
           "description": "Bounded linear domain repeat \u2014 Repeat. Expands for contact only when the limit is a whole number within the copy budget; an absent limit is unbounded (UnboundedRepeatLimit per axis) and does not expand."
         },
         {
-          "$ref": "#/$defs/ShapeNonNullable58",
+          "$ref": "#/$defs/ShapeNonNullable54",
           "description": "Angular domain repeat \u2014 Polar. Its sectors expand to one rigid copy each, so contact carries the full ring."
         },
         {
-          "$ref": "#/$defs/ShapeNonNullable60",
+          "$ref": "#/$defs/ShapeNonNullable56",
           "description": "Wallpaper-group lattice fold \u2014 Wallpaper. Render only: it has no rigid-copy expansion, so a solid placement carrying one is refused by name at validation."
         },
         {
-          "$ref": "#/$defs/ShapeNonNullable61",
+          "$ref": "#/$defs/ShapeNonNullable57",
           "description": "Stochastic lattice fold \u2014 Jitter: a repeat whose every cell displaces, tumbles and recolours its copy by a hash of the cell. Render only: a hashed copy per cell has no rigid-copy expansion, so a solid placement carrying one is refused by name at validation."
         },
         {
-          "$ref": "#/$defs/ShapeNonNullable62",
+          "$ref": "#/$defs/ShapeNonNullable58",
           "description": "Log-spherical shell fold \u2014 LogSphere: space tiled into self-similar shells about the origin, each a scaled copy of the prototype shell, so one shape repeats outward and inward at every scale. Render only: a scaled copy per shell has no rigid-copy expansion, so a solid placement carrying one is refused by name at validation."
         }
       ]
     },
-    "ShapeNullable24": {
+    "ShapeNullable16": {
       "type": [
         "object",
         "null"
@@ -11233,7 +10903,7 @@
       ],
       "additionalProperties": false
     },
-    "ShapeNullable25": {
+    "ShapeNullable17": {
       "type": [
         "object",
         "null"
@@ -11271,7 +10941,7 @@
       ],
       "additionalProperties": false
     },
-    "ShapeNullable26": {
+    "ShapeNullable18": {
       "type": [
         "object",
         "null"
@@ -11301,7 +10971,7 @@
       ],
       "additionalProperties": false
     },
-    "ShapeNullable27": {
+    "ShapeNullable19": {
       "type": [
         "object",
         "null"
@@ -11332,7 +11002,7 @@
       ],
       "additionalProperties": false
     },
-    "ShapeNullable28": {
+    "ShapeNullable20": {
       "type": [
         "object",
         "null"
@@ -11376,7 +11046,7 @@
       ],
       "additionalProperties": false
     },
-    "ShapeNullable29": {
+    "ShapeNullable21": {
       "type": [
         "object",
         "null"
@@ -11402,7 +11072,7 @@
       ],
       "additionalProperties": false
     },
-    "ShapeNullable30": {
+    "ShapeNullable22": {
       "type": [
         "object",
         "null"
@@ -11433,7 +11103,7 @@
       ],
       "additionalProperties": false
     },
-    "ShapeNullable31": {
+    "ShapeNullable23": {
       "type": [
         "object",
         "null"
@@ -11467,7 +11137,7 @@
       ],
       "additionalProperties": false
     },
-    "ShapeNullable32": {
+    "ShapeNullable24": {
       "type": [
         "object",
         "null"
@@ -11501,7 +11171,7 @@
       ],
       "additionalProperties": false
     },
-    "ShapeNullable33": {
+    "ShapeNullable25": {
       "type": [
         "object",
         "null"
@@ -11526,7 +11196,7 @@
       ],
       "additionalProperties": false
     },
-    "ShapeNullable34": {
+    "ShapeNullable26": {
       "type": [
         "object",
         "null"
@@ -11551,7 +11221,7 @@
       ],
       "additionalProperties": false
     },
-    "ShapeNullable35": {
+    "ShapeNullable27": {
       "type": [
         "object",
         "null"
@@ -11577,7 +11247,7 @@
       ],
       "additionalProperties": false
     },
-    "ShapeNullable36": {
+    "ShapeNullable28": {
       "type": [
         "object",
         "null"
@@ -11615,7 +11285,7 @@
           "description": "The palette slot (null = 0)."
         },
         "blend": {
-          "$ref": "#/$defs/ShapeNullable19",
+          "$ref": "#/$defs/ShapeNullable11",
           "description": "The blend op name (null = Union)."
         },
         "smooth": {
@@ -11670,7 +11340,7 @@
             "null"
           ],
           "items": {
-            "$ref": "#/$defs/ShapeNullable23",
+            "$ref": "#/$defs/ShapeNullable15",
             "description": "One domain operator authored on a ShapeDocument, applied in creation space \u2014 after the creation/placement frame chain (origin/rotation/scale) and before the shape\u0027s own translate/rotate/scale, so every entry in Domain shares one space regardless of kind. The wire form of SdfDomainOp: a $type-discriminated ordered list whose optional members ToDomainOps resolves."
           },
           "default": null,
@@ -11682,7 +11352,7 @@
             "null"
           ],
           "items": {
-            "$ref": "#/$defs/ShapeNullable24",
+            "$ref": "#/$defs/ShapeNullable16",
             "description": "One driver-fed rotation authored on a ShapeDocument: the shape turns about Axis at Pivot by amplitude \u00B7 wave(\u03C6 \u002B phase) \u00B7 w. Presentation-only \u2014 nothing downstream of the dynamic transform buffer reads it, so the SDF program, the analytic colliders, the compiled solid field, and every simulation value are untouched by an authored swing."
           },
           "default": null,
@@ -11694,7 +11364,7 @@
             "null"
           ],
           "items": {
-            "$ref": "#/$defs/ShapeNullable25",
+            "$ref": "#/$defs/ShapeNullable17",
             "description": "One driver-fed translation authored on a ShapeDocument: the shape slides along Axis by amplitude \u00B7 wave(\u03C6 \u002B phase) \u00B7 w \u2014 a piston, a hull\u0027s bob, a breathing chest. Presentation-only on the same terms as ShapeSwingDocument."
           },
           "default": null,
@@ -11739,7 +11409,7 @@
           "description": "Only for Box, Prism, Cylinder and Cone: the edge-rounding radius in the creation\u0027s own units, finite and non-negative. The profile (and, for an extruded prism, its half-depth) insets by it and the field offsets back out, so the shape keeps its authored extent and its edges fillet; a Box without it is sharp, so boxes that touch meet as one solid, and a solid placement collides as the same rounded or sharp box. Refused by name past MaxRounding."
         },
         "panel": {
-          "$ref": "#/$defs/ShapeNullable26",
+          "$ref": "#/$defs/ShapeNullable18",
           "description": "The shape\u0027s second-material inset face region (null = none) \u2014 see ShapePanelDocument. Render-only; refused by name on a Plane, on a shape carrying Domain ops or a non-zero Group, and on a creation that otherwise needs its own field scope.",
           "default": null
         },
@@ -11757,7 +11427,7 @@
             "null"
           ],
           "items": {
-            "$ref": "#/$defs/ShapeNullable27",
+            "$ref": "#/$defs/ShapeNullable19",
             "description": "A second-material band painted onto a ShapeDocument\u0027s own surface wherever it sits near another, earlier-declared shape in the same creation \u2014 the pipeline\u0027s ivory boot band (max(shin - .003, -ankleCut - .095)) generalized: the host\u0027s surface where it is within Width of the reference shape\u0027s own surface, painted with Material. Where ShapePanelDocument recesses or raises a copy of a shape\u0027s OWN geometry, a trim colors the host\u0027s surface against a REFERENCE shape\u0027s geometry instead \u2014 a Subtraction cutter riding the host\u0027s own Group is the common case (the carve\u0027s own edge becomes the trim\u0027s guide), or a plain plane-like Box authored purely to mark a seam. Authored as one shape that bakes two field operands (the host\u0027s own eroded copy plus the reference\u0027s own dilated copy); no budget admits or refuses them, StampShapeCount only reports that bake work."
           },
           "default": null,
@@ -11772,7 +11442,7 @@
           "description": "Whether this shape is a detail shape (null = false): excluded from contact (it never carves the contact field or the collider) while the baked frame samples it like any other shape, so a seam (a thin subtraction) or a rivet (a small union, its own material) bakes into the mesh and paints its footprint through the bake\u0027s point-sampled materials. Refused by name alongside Panel or Trims on the same shape."
         },
         "flare": {
-          "$ref": "#/$defs/ShapeNullable28",
+          "$ref": "#/$defs/ShapeNullable20",
           "description": "The shape\u0027s radial flare warp (null = none) \u2014 see ShapeFlareDocument. Admitted on every primitive; applies to the shape\u0027s own local point after Twist/Bend, in that order (twist, then bend, then flare), before the primitive\u0027s own scale. Render-only, like Twist/Bend.",
           "default": null
         },
@@ -11790,14 +11460,14 @@
             "null"
           ],
           "items": {
-            "$ref": "#/$defs/ShapeNullable29",
+            "$ref": "#/$defs/ShapeNullable21",
             "description": "The authored form of one GaussianPush bump: a gaussian displacement of the shape\u0027s local point applied before the primitive evaluates \u2014 p -= Push \u00B7 exp(-|(p - Center) / Radii|\u00B2) (see Bumps). The pipeline\u0027s faceOffset cheek/muzzle bumps (pushed along local \u002BZ) are two of these. Render-only, like Twist/Bend: Puck.SignedDistance.Queries.SdfFieldEvaluator does not interpret GaussianPush, so a shape carrying one is unreachable for deterministic field contact."
           },
           "default": null,
           "description": "The shape\u0027s Gaussian domain-push bumps (null = none), at most MaxBumps \u2014 see ShapeBumpDocument. Applied to the shape\u0027s own local point after Shear, before the primitive\u0027s own scale. Render-only, like Twist/Bend/Flare."
         },
         "shear": {
-          "$ref": "#/$defs/ShapeNullable30",
+          "$ref": "#/$defs/ShapeNullable22",
           "description": "A polynomial point shear with explicit target and driver axes.",
           "default": null
         },
@@ -11807,22 +11477,22 @@
           "default": null
         },
         "erode": {
-          "$ref": "#/$defs/ShapeNullable31",
+          "$ref": "#/$defs/ShapeNullable23",
           "description": "The shape\u0027s per-instance lane-driven erosion (null = none) \u2014 see ShapeErodeDocument. Admitted on every primitive; its reach is this shape\u0027s own Reach, so it needs no separate authored magnitude.",
           "default": null
         },
         "cells": {
-          "$ref": "#/$defs/ShapeNullable32",
+          "$ref": "#/$defs/ShapeNullable24",
           "description": "Shape-local cellular relief, evaluated after geometry within its own field scope.",
           "default": null
         },
         "warp": {
-          "$ref": "#/$defs/ShapeNullable33",
+          "$ref": "#/$defs/ShapeNullable25",
           "description": "The shape\u0027s cross-coupled sinusoidal domain warp (null = none) \u2014 see ShapeWarpDocument. Applied to the shape\u0027s own local point after Bumps, before Elongate. Render-only.",
           "default": null
         },
         "displace": {
-          "$ref": "#/$defs/ShapeNullable34",
+          "$ref": "#/$defs/ShapeNullable26",
           "description": "The shape\u0027s sine relief (null = none) \u2014 see ShapeDisplaceDocument. Added to the shape\u0027s own field inside its own scope. Render-only.",
           "default": null
         },
@@ -11839,7 +11509,7 @@
           "description": "Only with a stairs Blend (StairsUnion, StairsSubtraction): the steps the seam takes over the blend radius Smooth, in [1, MaxSteps] (null = DefaultSteps)."
         },
         "morph": {
-          "$ref": "#/$defs/ShapeNullable35",
+          "$ref": "#/$defs/ShapeNullable27",
           "description": "Only with a MorphBlend, and required by it: the lane and range the morph runs over \u2014 see ShapeMorphDocument.",
           "default": null
         }
@@ -11853,7 +11523,7 @@
       ],
       "additionalProperties": false
     },
-    "ShapeNullable37": {
+    "ShapeNullable29": {
       "type": [
         "object",
         "null"
@@ -12102,7 +11772,7 @@
       "additionalProperties": false,
       "title": "WorldChannelSelection"
     },
-    "ShapeNonNullable63": {
+    "ShapeNonNullable59": {
       "anyOf": [
         {
           "type": "integer"
@@ -12195,7 +11865,7 @@
       },
       "additionalProperties": false
     },
-    "ShapeNonNullable64": {
+    "ShapeNonNullable60": {
       "type": "object",
       "properties": {
         "epochTick": {
@@ -12538,401 +12208,6 @@
       ],
       "additionalProperties": false,
       "title": "PaletteSurfaceDocument"
-    },
-    "Vector2List": {
-      "type": [
-        "array",
-        "null"
-      ],
-      "items": {
-        "type": "array",
-        "items": {
-          "type": "number"
-        },
-        "minItems": 2,
-        "maxItems": 2
-      }
-    },
-    "SdfPathSegmentNonNullable": {
-      "description": "A line, quadratic/cubic Bezier, or circular arc ending at End. An arc uses ArcCenter and Clockwise; Beziers use Control and optionally Control2. Controls are in the profile\u0027s local XY frame.",
-      "type": "object",
-      "properties": {
-        "end": {
-          "type": "array",
-          "items": {
-            "type": "number"
-          },
-          "minItems": 2,
-          "maxItems": 2
-        },
-        "control": {
-          "default": null,
-          "type": "array",
-          "items": {
-            "type": "number"
-          },
-          "minItems": 2,
-          "maxItems": 2
-        },
-        "control2": {
-          "default": null,
-          "type": "array",
-          "items": {
-            "type": "number"
-          },
-          "minItems": 2,
-          "maxItems": 2
-        },
-        "arcCenter": {
-          "default": null,
-          "type": "array",
-          "items": {
-            "type": "number"
-          },
-          "minItems": 2,
-          "maxItems": 2
-        },
-        "clockwise": {
-          "type": "boolean",
-          "default": false
-        }
-      },
-      "required": [
-        "end"
-      ],
-      "additionalProperties": false,
-      "title": "SdfPathSegment"
-    },
-    "SdfPathContourNonNullable": {
-      "description": "A continuous contour. Filled contours close implicitly; stroked contours remain open unless Closed.",
-      "type": "object",
-      "properties": {
-        "start": {
-          "type": "array",
-          "items": {
-            "type": "number"
-          },
-          "minItems": 2,
-          "maxItems": 2
-        },
-        "segments": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/SdfPathSegmentNonNullable"
-          }
-        },
-        "closed": {
-          "type": "boolean",
-          "default": false
-        }
-      },
-      "required": [
-        "start",
-        "segments"
-      ],
-      "additionalProperties": false,
-      "title": "SdfPathContour"
-    },
-    "SdfPathProfileNullable": {
-      "description": "A bounded presentation profile. Filled contours use even/odd fill, including holes. Curves are flattened once at composition, with a local-space geometric error at most Tolerance (apart from floating-point rounding). Strokes approximate the union of disks along the curve, including their varying radius, to the same tolerance. The emitted polygon/rounded-segment field is 1-Lipschitz; no margin moves its zero surface. At most 128 edges are emitted; exceeding that budget refuses instead of silently relaxing the requested tolerance.",
-      "type": [
-        "object",
-        "null"
-      ],
-      "properties": {
-        "contours": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/SdfPathContourNonNullable"
-          }
-        },
-        "tolerance": {
-          "type": "number",
-          "default": 0.001
-        },
-        "stroke": {
-          "$ref": "#/$defs/SdfPathStroke",
-          "default": null
-        },
-        "shear": {
-          "$ref": "#/$defs/SdfPathShear",
-          "default": null
-        }
-      },
-      "required": [
-        "contours"
-      ],
-      "additionalProperties": false,
-      "title": "SdfPathProfile"
-    },
-    "SdfPrismProfileNullable": {
-      "description": "Authored profile controls for a solid prism. The profile is extruded along local Z.",
-      "type": [
-        "object",
-        "null"
-      ],
-      "properties": {
-        "kind": {
-          "$ref": "#/$defs/SdfPrismProfileKind",
-          "description": "The profile family."
-        },
-        "cornerRadius": {
-          "description": "A fraction in [0, 1]: the profile\u0027s smaller half-extent for RoundedRectangle\u0027s corner radius or ChamferedRectangle\u0027s chamfer radius; the scaled polygon\u0027s conservative inradius (ConvexPolygonInradius) for Convex\u0027s uniform corner rounding, also clamped to the extrusion half-depth when extruded.",
-          "type": "number",
-          "default": 0
-        },
-        "sides": {
-          "description": "Polygon side count, from 3 through 32.",
-          "type": "integer",
-          "default": 6
-        },
-        "vertices": {
-          "$ref": "#/$defs/Vector2List",
-          "description": "Convex only: 3 to MaxConvexVertices local XY points, clockwise (X right, Y up \u2014 each turn\u0027s 2D cross product of consecutive edges strictly negative), no coincident or collinear vertices, and convex. Ignored by every other kind.",
-          "default": null
-        },
-        "path": {
-          "$ref": "#/$defs/SdfPathProfileNullable",
-          "description": "Required only for Path; its points are normalized profile coordinates.",
-          "default": null
-        }
-      },
-      "required": [
-        "kind"
-      ],
-      "additionalProperties": false,
-      "title": "SdfPrismProfile"
-    },
-    "SdfShadeParameter": {
-      "description": "A runtime slot\u0027s type and initial data. Names bind source references and do not enter program identity.",
-      "type": "object",
-      "properties": {
-        "name": {
-          "type": "string"
-        },
-        "type": {
-          "$ref": "#/$defs/SdfShadeType"
-        },
-        "bits": {
-          "type": "array",
-          "items": {
-            "type": "integer"
-          }
-        }
-      },
-      "required": [
-        "name",
-        "type",
-        "bits"
-      ],
-      "additionalProperties": false,
-      "title": "SdfShadeParameter"
-    },
-    "SdfShadeParameterList": {
-      "type": "array",
-      "items": {
-        "$ref": "#/$defs/SdfShadeParameter"
-      }
-    },
-    "SdfShadeShapeNullable": {
-      "description": "A structural shape descriptor. Compilation uses the existing solid/paint emission and admission.",
-      "type": [
-        "object",
-        "null"
-      ],
-      "properties": {
-        "type": {
-          "$ref": "#/$defs/SdfSolidPrimitive"
-        },
-        "x": {
-          "type": "number",
-          "default": 1
-        },
-        "y": {
-          "type": "number",
-          "default": 1
-        },
-        "z": {
-          "type": "number",
-          "default": 1
-        },
-        "taper": {
-          "type": "number",
-          "default": 0.5
-        },
-        "profile": {
-          "$ref": "#/$defs/SdfPrismProfileNullable",
-          "default": null
-        },
-        "lift": {
-          "enum": [
-            "Revolve",
-            "Extrude"
-          ],
-          "default": "Extrude",
-          "title": "SdfLift"
-        },
-        "rounding": {
-          "type": "number",
-          "default": 0
-        },
-        "chamfer": {
-          "type": "number",
-          "default": 0
-        },
-        "exponent": {
-          "type": "number",
-          "default": 2
-        },
-        "curve": {
-          "$ref": "#/$defs/SdfSweepParameters",
-          "default": null
-        }
-      },
-      "required": [
-        "type"
-      ],
-      "additionalProperties": false,
-      "title": "SdfShadeShape"
-    },
-    "SdfShadeExpressionNonNullable2": {
-      "description": "An expression supplied to shade admission, never executable words. The compiler validates every field.",
-      "type": "object",
-      "properties": {
-        "op": {
-          "description": "An op-table spelling, or constant, parameter, or input.",
-          "type": "string"
-        },
-        "arguments": {
-          "$ref": "#/$defs/SdfShadeExpressionListNullable",
-          "default": null
-        },
-        "name": {
-          "description": "A stamp member or runtime parameter name.",
-          "type": [
-            "string",
-            "null"
-          ],
-          "default": null
-        },
-        "type": {
-          "$ref": "#/$defs/SdfShadeType",
-          "description": "The type of a literal, validated against its bits.",
-          "default": "Float"
-        },
-        "bits": {
-          "$ref": "#/$defs/Int32List",
-          "description": "32-bit literal components; integer components are never float converted.",
-          "default": null
-        },
-        "shape": {
-          "$ref": "#/$defs/SdfShadeShapeNullable",
-          "description": "The structural descriptor of a shape operation.",
-          "default": null
-        }
-      },
-      "required": [
-        "op"
-      ],
-      "additionalProperties": false,
-      "title": "SdfShadeExpression"
-    },
-    "SdfShadeExpressionListNullable": {
-      "type": [
-        "array",
-        "null"
-      ],
-      "items": {
-        "$ref": "#/$defs/SdfShadeExpressionNonNullable2"
-      }
-    },
-    "SdfShadeOutput": {
-      "description": "An output expression; omitted outputs retain the stage\u0027s default.",
-      "type": "object",
-      "properties": {
-        "phase": {
-          "$ref": "#/$defs/SdfShadePhase"
-        },
-        "name": {
-          "type": "string"
-        },
-        "value": {
-          "$ref": "#/$defs/SdfShadeExpressionNonNullable"
-        }
-      },
-      "required": [
-        "phase",
-        "name",
-        "value"
-      ],
-      "additionalProperties": false,
-      "title": "SdfShadeOutput"
-    },
-    "SdfShadeOutputList": {
-      "type": "array",
-      "items": {
-        "$ref": "#/$defs/SdfShadeOutput"
-      }
-    },
-    "SdfShadeValue": {
-      "description": "A dependency-ordered value in the canonical document. Reads may name only earlier values of this phase.",
-      "type": "object",
-      "properties": {
-        "phase": {
-          "$ref": "#/$defs/SdfShadePhase"
-        },
-        "name": {
-          "type": "string"
-        },
-        "value": {
-          "$ref": "#/$defs/SdfShadeExpressionNonNullable"
-        }
-      },
-      "required": [
-        "phase",
-        "name",
-        "value"
-      ],
-      "additionalProperties": false,
-      "title": "SdfShadeValue"
-    },
-    "SdfShadeValueList": {
-      "type": [
-        "array",
-        "null"
-      ],
-      "items": {
-        "$ref": "#/$defs/SdfShadeValue"
-      }
-    },
-    "SdfShadeDefinition": {
-      "description": "The source-level expression graph serialized in a material. Admission always compiles it afresh.",
-      "type": [
-        "object",
-        "null"
-      ],
-      "properties": {
-        "name": {
-          "type": "string"
-        },
-        "parameters": {
-          "$ref": "#/$defs/SdfShadeParameterList"
-        },
-        "outputs": {
-          "$ref": "#/$defs/SdfShadeOutputList"
-        },
-        "values": {
-          "$ref": "#/$defs/SdfShadeValueList",
-          "default": null
-        }
-      },
-      "required": [
-        "name",
-        "parameters",
-        "outputs"
-      ],
-      "additionalProperties": false,
-      "title": "SdfShadeDefinition"
     },
     "ActionFactNullable": {
       "enum": [
@@ -14085,6 +13360,288 @@
         }
       ],
       "title": "CellSetExpression"
+    },
+    "SdfPathSegmentNullable": {
+      "description": "A line, quadratic/cubic Bezier, or circular arc ending at End. An arc uses ArcCenter and Clockwise; Beziers use Control and optionally Control2. Controls are in the profile\u0027s local XY frame.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "end": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          },
+          "minItems": 2,
+          "maxItems": 2
+        },
+        "control": {
+          "default": null,
+          "type": "array",
+          "items": {
+            "type": "number"
+          },
+          "minItems": 2,
+          "maxItems": 2
+        },
+        "control2": {
+          "default": null,
+          "type": "array",
+          "items": {
+            "type": "number"
+          },
+          "minItems": 2,
+          "maxItems": 2
+        },
+        "arcCenter": {
+          "default": null,
+          "type": "array",
+          "items": {
+            "type": "number"
+          },
+          "minItems": 2,
+          "maxItems": 2
+        },
+        "clockwise": {
+          "type": "boolean",
+          "default": false
+        }
+      },
+      "required": [
+        "end"
+      ],
+      "additionalProperties": false,
+      "title": "SdfPathSegment"
+    },
+    "SdfPathContourNullable": {
+      "description": "A continuous contour. Filled contours close implicitly; stroked contours remain open unless Closed.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "start": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          },
+          "minItems": 2,
+          "maxItems": 2
+        },
+        "segments": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/SdfPathSegmentNullable"
+          }
+        },
+        "closed": {
+          "type": "boolean",
+          "default": false
+        }
+      },
+      "required": [
+        "start",
+        "segments"
+      ],
+      "additionalProperties": false,
+      "title": "SdfPathContour"
+    },
+    "SdfPathProfileNullable": {
+      "description": "A bounded presentation profile. Filled contours use even/odd fill, including holes. Curves are flattened once at composition, with a local-space geometric error at most Tolerance (apart from floating-point rounding). Strokes approximate the union of disks along the curve, including their varying radius, to the same tolerance. The emitted polygon/rounded-segment field is 1-Lipschitz; no margin moves its zero surface. At most 128 edges are emitted; exceeding that budget refuses instead of silently relaxing the requested tolerance.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "contours": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/SdfPathContourNullable"
+          }
+        },
+        "tolerance": {
+          "type": "number",
+          "default": 0.001
+        },
+        "stroke": {
+          "$ref": "#/$defs/SdfPathStroke",
+          "default": null
+        },
+        "shear": {
+          "$ref": "#/$defs/SdfPathShear",
+          "default": null
+        }
+      },
+      "required": [
+        "contours"
+      ],
+      "additionalProperties": false,
+      "title": "SdfPathProfile"
+    },
+    "SdfPrismProfileNullable": {
+      "description": "Authored profile controls for a solid prism. The profile is extruded along local Z.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/SdfPrismProfileKind",
+          "description": "The profile family."
+        },
+        "cornerRadius": {
+          "description": "A fraction in [0, 1]: the profile\u0027s smaller half-extent for RoundedRectangle\u0027s corner radius or ChamferedRectangle\u0027s chamfer radius; the scaled polygon\u0027s conservative inradius (ConvexPolygonInradius) for Convex\u0027s uniform corner rounding, also clamped to the extrusion half-depth when extruded.",
+          "type": "number",
+          "default": 0
+        },
+        "sides": {
+          "description": "Polygon side count, from 3 through 32.",
+          "type": "integer",
+          "default": 6
+        },
+        "vertices": {
+          "description": "Convex only: 3 to MaxConvexVertices local XY points, clockwise (X right, Y up \u2014 each turn\u0027s 2D cross product of consecutive edges strictly negative), no coincident or collinear vertices, and convex. Ignored by every other kind.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "default": null,
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            },
+            "minItems": 2,
+            "maxItems": 2
+          }
+        },
+        "path": {
+          "$ref": "#/$defs/SdfPathProfileNullable",
+          "description": "Required only for Path; its points are normalized profile coordinates.",
+          "default": null
+        }
+      },
+      "required": [
+        "kind"
+      ],
+      "additionalProperties": false,
+      "title": "SdfPrismProfile"
+    },
+    "SdfShadeShapeNullable": {
+      "description": "A structural shape descriptor. Compilation uses the existing solid/paint emission and admission.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "type": {
+          "$ref": "#/$defs/SdfSolidPrimitive"
+        },
+        "x": {
+          "type": "number",
+          "default": 1
+        },
+        "y": {
+          "type": "number",
+          "default": 1
+        },
+        "z": {
+          "type": "number",
+          "default": 1
+        },
+        "taper": {
+          "type": "number",
+          "default": 0.5
+        },
+        "profile": {
+          "$ref": "#/$defs/SdfPrismProfileNullable",
+          "default": null
+        },
+        "lift": {
+          "enum": [
+            "Revolve",
+            "Extrude"
+          ],
+          "default": "Extrude",
+          "title": "SdfLift"
+        },
+        "rounding": {
+          "type": "number",
+          "default": 0
+        },
+        "chamfer": {
+          "type": "number",
+          "default": 0
+        },
+        "exponent": {
+          "type": "number",
+          "default": 2
+        },
+        "curve": {
+          "$ref": "#/$defs/SdfSweepParameters",
+          "default": null
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "additionalProperties": false,
+      "title": "SdfShadeShape"
+    },
+    "SdfShadeExpressionNullable": {
+      "description": "An expression supplied to shade admission, never executable words. The compiler validates every field.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "op": {
+          "description": "An op-table spelling, or constant, parameter, or input.",
+          "type": "string"
+        },
+        "arguments": {
+          "$ref": "#/$defs/SdfShadeExpressionListNullable",
+          "default": null
+        },
+        "name": {
+          "description": "A stamp member or runtime parameter name.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "type": {
+          "$ref": "#/$defs/SdfShadeType",
+          "description": "The type of a literal, validated against its bits.",
+          "default": "Float"
+        },
+        "bits": {
+          "$ref": "#/$defs/Int32List",
+          "description": "32-bit literal components; integer components are never float converted.",
+          "default": null
+        },
+        "shape": {
+          "$ref": "#/$defs/SdfShadeShapeNullable",
+          "description": "The structural descriptor of a shape operation.",
+          "default": null
+        }
+      },
+      "required": [
+        "op"
+      ],
+      "additionalProperties": false,
+      "title": "SdfShadeExpression"
+    },
+    "SdfShadeExpressionListNullable": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "$ref": "#/$defs/SdfShadeExpressionNullable"
+      }
     },
     "CellSetExpressionNullable2": {
       "description": "The boolean-closed cell-set vocabulary: the same operators a pattern spells over a word, spelled over the positions of a family, a board, or a zone. Every expression lowers to one CellSet whose width is the carrier\u0027s own.",

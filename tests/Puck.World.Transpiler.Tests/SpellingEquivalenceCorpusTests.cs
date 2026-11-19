@@ -59,9 +59,12 @@ public class SpellingEquivalenceCorpusTests {
         Assert.Equal(actual: b.Document, expected: a.Document);
         Assert.Equal(actual: b.Tests, expected: a.Tests);
         if (pair.StartsWith(comparisonType: StringComparison.Ordinal, value: "shade-")) {
-            static SdfShadeProgram Program(string document) => SdfShadeProgram.Compile(
-                definition: JsonNode.Parse(document)!["prototypes"]![0]!["document"]!["palette"]![0]!["shade"]!
-                    .Deserialize(jsonTypeInfo: CreationJsonContext.Document.SdfShadeDefinition)!);
+            static SdfShadeProgram Program(string document) {
+                var json = JsonNode.Parse(document)!;
+                var key = json["prototypes"]![0]!["document"]!["palette"]![0]!["shade"]!.GetValue<string>();
+
+                return SdfShadeProgram.Compile(definition: json["shades"]![key]!.Deserialize(jsonTypeInfo: CreationJsonContext.Document.SdfShadeDefinition)!);
+            }
             var left = Program(document: a.Document);
             var right = Program(document: b.Document);
 

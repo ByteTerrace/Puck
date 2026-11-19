@@ -229,8 +229,8 @@ let galleryStyle = celStyle with {
 function galleryCel(base) = celMaterial(base, galleryStyle)
 let galleryPalette = [
   { color: "#B9C4D0", roughness: 0.45, specular: 0.3 }
-  { color: "#3A3F47", roughness: 0.85 }
-  { color: "#F2EEE4", roughness: 0.6 }
+  galleryCel({ color: "#3A3F47", roughness: 0.85 })
+  galleryCel({ color: "#F2EEE4", roughness: 0.6 })
 ]
 let accent = { color: "#D9822B", roughness: 0.45, specular: 0.3 }
 
