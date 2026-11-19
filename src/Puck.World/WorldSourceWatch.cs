@@ -81,7 +81,7 @@ public sealed class WorldSourceWatch {
         foreach (var input in reads.Inputs) {
             var normalized = input with { Path = PuckPaths.Normalize(path: input.Path) };
 
-            facts.TryAdd(key: normalized with { ContentHash = string.Empty }, value: normalized);
+            facts.TryAdd(key: normalized.Question, value: normalized);
         }
         var root = new CompileInput(ContentHash: string.Empty, Kind: CompileInputKind.Content, Path: path);
 
