@@ -387,9 +387,9 @@ public sealed class SdfMeshDresser : IDisposable {
                 ObjectToWorld: matrix) {
                 FrameSlot = (group.Dynamic ? group.Slot : null),
                 Glass = group.Glass,
+                // A displaced surface is never static (SdfMeshDraw.IsStatic), whatever its placement does.
                 Displacement = group.Displacement,
-                // A displaced surface moves as it is drawn, so it stays out of the irradiance volume's static scene.
-                IsDynamic = (group.Dynamic || (group.Displacement is not null)),
+                IsDynamic = group.Dynamic,
                 Tier = tier,
             };
         }

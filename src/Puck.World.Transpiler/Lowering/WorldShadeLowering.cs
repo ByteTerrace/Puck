@@ -35,7 +35,29 @@ internal sealed class WorldShadeLowering {
     // The phase whose block is lowering, or null outside a phase block (a template's top-level let).
     private SdfShadePhase? m_phase;
 
+    // One compilation's programs: every program its `shade` values lowered, under its identity (ShadeReference.KeyOf),
+    // and each lowered program expression's identity in this compilation (CacheKeyOf) with the program it lowered to. A
+    // use lowers to its program's key, so a palette row a let or a template repeats (every exhibit's plinth) lowers its
+    // program once, holds it once in the document's `shades` table (Programs) and costs one key a use.
+    private sealed class Compilation {
+        public Dictionary<string, JsonNode> Programs { get; } = new(comparer: StringComparer.Ordinal);
+        public Dictionary<string, string> Lowered { get; } = new(comparer: StringComparer.Ordinal);
+        public Dictionary<TemplateNode, int> Templates { get; } = new(comparer: ReferenceEqualityComparer.Instance);
+    }
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<DocumentEvaluationBudget, Compilation> Compilations = new();
+
+    /// <summary>Returns the programs a compilation's <c>shade</c> values lowered, each under its key, in the order they
+    /// were first lowered; empty when it lowered none. The nodes are the compilation's own: a caller copies them.</summary>
+    internal static IReadOnlyDictionary<string, JsonNode> ProgramsOf(DocumentEvaluationBudget budget) => (Compilations.TryGetValue(key: budget, value: out var compilation)
+        ? compilation.Programs : new Dictionary<string, JsonNode>());
+
     public static JsonNode? Lower(ExpressionNode expression, DocumentScope scope) {
+        var compilation = Compilations.GetValue(key: scope.Budget, createValueCallback: static _ => new());
+        var cacheKey = CacheKeyOf(expression: expression, scope: scope, compilation: compilation);
+
+        if ((cacheKey is not null) && compilation.Lowered.TryGetValue(key: cacheKey, value: out var known)) {
+            return scope.Budget.Adopt(value: JsonValue.Create(value: known), span: expression.Span);
+        }
         try {
             var lowering = new WorldShadeLowering();
 
@@ -46,8 +68,13 @@ internal sealed class WorldShadeLowering {
                 lowering.m_outputs.OrderBy(keySelector: p => p.Key.Item1).ThenBy(p => p.Key.Item2, StringComparer.Ordinal)
                     .Select(selector: p => new SdfShadeOutput(p.Key.Item1, p.Key.Item2, p.Value)).ToArray());
             var program = SdfShadeProgram.Compile(definition: definition);
+            var key = ShadeReference.KeyOf(definition: program.Definition);
 
-            return JsonSerializer.SerializeToNode(program.Definition, CreationJsonContext.Document.SdfShadeDefinition);
+            if (!compilation.Programs.ContainsKey(key: key)) {
+                compilation.Programs[key] = scope.Budget.Adopt(value: JsonSerializer.SerializeToNode(program.Definition, CreationJsonContext.Document.SdfShadeDefinition), span: expression.Span)!;
+            }
+            if (cacheKey is not null) { compilation.Lowered[cacheKey] = key; }
+            return scope.Budget.Adopt(value: JsonValue.Create(value: key), span: expression.Span);
         } catch (SdfShadeException error) {
             scope.Diagnostics.ReportError(code: error.Code, message: error.Message, span: expression.Span);
             return null;
@@ -60,6 +87,49 @@ internal sealed class WorldShadeLowering {
         }
     }
 
+    // A program expression's identity in this compilation, everything its lowering reads (Program): a shade template
+    // call's template and each argument's name and value (BindParameter evaluates every argument as data or a structural
+    // constant), a program read as a value by that value, a binding by what it binds, and a list by its elements in
+    // order. Null for a block of phases, and for anything whose values do not evaluate cleanly, which lowers on its own.
+    private static string? CacheKeyOf(ExpressionNode expression, DocumentScope scope, Compilation compilation) {
+        var reported = scope.Diagnostics.Count;
+        var text = new System.Text.StringBuilder();
+
+        try {
+            return (Append(expression: expression, scope: scope) && (scope.Diagnostics.Count == reported)) ? text.ToString() : null;
+        } catch (DocumentEvaluationException) {
+            return null;
+        }
+
+        bool Append(ExpressionNode expression, DocumentScope scope) {
+            switch (expression) {
+                case ArrayExpressionNode composed:
+                    text.Append(value: '[');
+                    foreach (var element in composed.Elements) {
+                        if (!Append(expression: element, scope: scope)) { return false; }
+                        text.Append(value: ',');
+                    }
+                    text.Append(value: ']');
+                    return true;
+                case CallExpressionNode call when scope.Templates.TryGetValue(key: call.Name, value: out var template) && template.IsShade:
+                    if (!compilation.Templates.TryGetValue(key: template, value: out var ordinal)) { compilation.Templates[template] = ordinal = compilation.Templates.Count; }
+                    text.Append(value: 'T').Append(value: ordinal).Append(value: '(');
+                    foreach (var argument in call.Arguments) {
+                        text.Append(value: argument.Name).Append(value: '=')
+                            .Append(value: (DocumentLowering.EvaluateValue(expr: argument.Value, scope: scope)?.ToJsonString() ?? "null")).Append(value: ';');
+                    }
+                    text.Append(value: ')');
+                    return true;
+                case IdentifierExpressionNode id when scope.TryGetExpression(id.Name, out var bound, out var lexical):
+                    return Append(expression: bound!, scope: lexical);
+                case IdentifierExpressionNode or MemberAccessExpressionNode or IndexExpressionNode:
+                    text.Append(value: '=').Append(value: (DocumentLowering.EvaluateValue(expression, scope)?.ToJsonString() ?? "null"));
+                    return true;
+                default:
+                    return false;
+            }
+        }
+    }
     // A program is a shade template call, a block of phases, a binding of either, an admitted program held as a value (a
     // palette row's `shade`, read as `base.shade`), or a list of programs composed in order. In a composition each
     // element's outputs replace the same outputs of the elements before it, and its surface phase reads what they wrote
@@ -103,6 +173,12 @@ internal sealed class WorldShadeLowering {
                 case JsonObject admitted:
                     Import(definition: (admitted.Deserialize(jsonTypeInfo: CreationJsonContext.Document.SdfShadeDefinition)
                         ?? throw new SdfShadeException(code: "PUCK126", message: "A shade value is an admitted program.")));
+                    return;
+                // An admitted program is held by its key: a row's `shade` this compilation lowered names its program.
+                case JsonValue named when named.TryGetValue<string>(value: out var key):
+                    Import(definition: ((Compilations.TryGetValue(key: scope.Budget, value: out var compilation) && compilation.Programs.TryGetValue(key: key, value: out var held))
+                        ? held.Deserialize(jsonTypeInfo: CreationJsonContext.Document.SdfShadeDefinition)!
+                        : throw new SdfShadeException(code: "PUCK126", message: $"Shade value '{key}' names no program this compilation lowered.")));
                     return;
                 case null when optional:
                     return;

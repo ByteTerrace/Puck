@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using Puck.Assets;
+using Puck.World.Authoring;
 
 namespace Puck.World;
 
@@ -99,7 +100,8 @@ public sealed partial class WorldDisclosureImages {
 /// <summary>The state rows a scene drawn from a world's delivered document reads by name, beside the rows its placements
 /// read (which the disclosure records as it deals them): every bindable and text-screen placeholder the document binds to
 /// a cell (<see cref="WorldKeyedValues.BoundOf"/>), every field region's field rows and travel-resistance row, every
-/// creation's size source (<c>sizeBy</c>), and every state clock's row. Body poses, registers and facts cross in the
+/// state cell a creation's pose reads (<see cref="CreationRows"/>: its drivers' signals and gates, its effectors' gates,
+/// targets and the cells that select a target body, its size source), and every state clock's row. Body poses, registers and facts cross in the
 /// snapshot's body table, which a stream redacts by its world's observer disclosure, not by a row. A seat's input
 /// publications are no scene input: only a seat's own client reads them (<c>WorldClient</c>, <c>WorldSeatBindings</c>),
 /// never a scene emitter.</summary>
@@ -121,11 +123,33 @@ public static class WorldSceneInputs {
             foreach (var field in region.Fields) { _ = rows.Add(item: field.Name); }
             if (region.TravelResistance?.Row is { } resistance) { _ = rows.Add(item: resistance); }
         }
-        foreach (var creation in definition.Creations) {
-            if (StateBinding.Parse(token: creation.Document.SizeBy) is { } size) { _ = rows.Add(item: size.Row); }
-        }
+        rows.UnionWith(other: CreationRows(definition: definition));
         foreach (var clock in (definition.Timeline.Clocks ?? [])) {
             if (clock?.State is { } state) { _ = rows.Add(item: state); }
+        }
+
+        return rows;
+    }
+    /// <summary>Returns the names of the state rows the document's creations' poses read: every state read of each
+    /// creation's compiled rig (<see cref="CreationRig.Reads"/>), the one list the pose pass reads through and the
+    /// presentation manifest registers for delivery.</summary>
+    /// <param name="definition">The document.</param>
+    /// <returns>The row names, each once.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="definition"/> is <see langword="null"/>.</exception>
+    public static IReadOnlySet<string> CreationRows(WorldDefinition definition) {
+        ArgumentNullException.ThrowIfNull(argument: definition);
+
+        var rows = new HashSet<string>(comparer: StringComparer.Ordinal);
+
+        foreach (var creation in definition.Creations) {
+            // A rig's lowered document compiles no rig; what it still reads is its size source.
+            if (creation.Document.Lowered) {
+                if (StateBinding.Parse(token: creation.Document.SizeBy) is { } size) { _ = rows.Add(item: size.Row); }
+                continue;
+            }
+            foreach (var read in CreationRig.Of(document: creation.Document).Reads) {
+                if ((read.Kind == CreationRigReadKind.State) && (StateBinding.Parse(token: read.Reference) is { } binding)) { _ = rows.Add(item: binding.Row); }
+            }
         }
 
         return rows;

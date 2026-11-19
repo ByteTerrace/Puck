@@ -48,8 +48,16 @@ float3 sdfMeshPreviousPosition(uint record, uint k) {
             sdfPreviousDynamicTransforms[3u * slots.s1].xyz, sdfPreviousDynamicTransforms[3u * slots.s1 + 1u]);
     }
 
-    return sdfMeshCarryPoint(record, ((object.x * sdfMeshPreviousRow(record, 0u)) + (object.y * sdfMeshPreviousRow(record, 1u)) +
-        (object.z * sdfMeshPreviousRow(record, 2u)) + sdfMeshPreviousRow(record, 3u)));
+    float3 position = ((object.x * sdfMeshPreviousRow(record, 0u)) + (object.y * sdfMeshPreviousRow(record, 1u)) +
+        (object.z * sdfMeshPreviousRow(record, 2u)) + sdfMeshPreviousRow(record, 3u));
+    uint frameSlot = asuint(asint(sdfMeshRecordWord(record + SDF_MESH_FRAME_SLOT_WORD)));
+    uint shown = sdfViewPoseSlot(frameSlot);
+    if (shown != frameSlot) {
+        sdfViewPoseCarry(sdfPreviousDynamicTransforms[3u * frameSlot].xyz, sdfPreviousDynamicTransforms[3u * frameSlot + 1u],
+            sdfPreviousDynamicTransforms[3u * shown].xyz, sdfPreviousDynamicTransforms[3u * shown + 1u], position, unused);
+    }
+
+    return sdfMeshCarryPoint(record, position);
 }
 // Returns the point carried by the same mesh triangle in the preceding consumed frame: the visibility record's hit (every
 // hit the surface pass writes is a mesh's) resolved through the mesh hit door, which answers no previous point for a hit

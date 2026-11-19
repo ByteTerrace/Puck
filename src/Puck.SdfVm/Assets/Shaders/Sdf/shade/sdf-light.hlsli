@@ -111,8 +111,7 @@ struct SdfLightSource {
     SdfLight record;
 };
 
-// The surface a light answers at: its point, lit normal and camera ray, its material and the cel style it shades with
-// (sdfToonStyle), its ambient occlusion (a wrapped material's already relaxed toward 1), each shadow role's cascade
+// The surface a light answers at: its point, lit normal and camera ray, its material, its ambient occlusion (a wrapped material's already relaxed toward 1), each shadow role's cascade
 // visibility and coverage (the K row's lanes, sdfShadowVisibility) and which of them the surface pass queried, whether the
 // view's cascades drew it, and the irradiance volume's probes about it, which occlude a traced point or spot light, and a
 // shadowing directional wherever no cascade holds the point (probed is false while the volume is off, and every such
@@ -122,7 +121,6 @@ struct SdfShadeSurface {
     float3 normal;
     float3 rayDirection;
     SdfMaterialData material;
-    SdfToonStyle toon;
     float ambientOcclusion;
     float4 shadowVisibility;
     float4 shadowMeasured;
@@ -396,13 +394,8 @@ SdfLightResponse sdfLightResponse(SdfLightSource light, SdfShadeSurface surface,
         if ((radiance * visibility) > 0.0) {
             float lambert = sdfWrapDiffuse(dot(normal, inputs.direction), surface.material.wrap);
 
-            if (sdfToonEnabled(surface.toon)) {
-                response.diffuse = light.color * radiance * sdfToonBand(surface.toon, lambert, visibility);
-                response.specular = light.color * sdfToonSpecular(surface.toon, surface.material, normal, -surface.rayDirection, inputs.direction, radiance, visibility);
-            } else {
-                response.diffuse = (light.color * ((radiance * lambert) * visibility));
-                response.specular = (light.color * sdfMaterialSpecular(surface.material, normal, -surface.rayDirection, inputs.direction, ((SDF_PI * radiance) * visibility)));
-            }
+            response.diffuse = (light.color * ((radiance * lambert) * visibility));
+            response.specular = (light.color * sdfMaterialSpecular(surface.material, normal, -surface.rayDirection, inputs.direction, ((SDF_PI * radiance) * visibility)));
         }
     } else if (light.kind == SDF_LIGHT_RIM) {
         response.rim = ((light.weight * light.color) * pow((1.0 - saturate(dot(normal, -surface.rayDirection))), light.param));

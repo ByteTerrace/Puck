@@ -1,49 +1,64 @@
-// The standard's cel styles, a library. A style is one `toon` value: a palette row names one for its own material, and a
-// world names one as the default every material without a style of its own inherits, which `world.toon on|off` then
-// switches live:
+// The standard's cel styles, a library. A style is the `cel` shade program's values (shading.puck) and the style row the
+// engine keeps beside a program, its ink: the outline that reads neighbouring depth and normals, which no per-pixel
+// program can. `celMaterial` writes both onto a palette row, so the row bands and inks while its neighbours keep theirs:
 //
 //   import "../standard/styles"
-//   palette [{ color: "#C9A27E", wrap: 0.35, toon: celStyle }]   // this material bands; its neighbours keep theirs
-//   render { toon: celStyle }                                     // every material without a style of its own bands
+//   palette [celMaterial({ color: "#C9A27E", wrap: 0.35 }, celStyle)]
 //
-// A style is on unless it says `enabled: false`: `continuousStyle` keeps a material continuous under a banded world. Every
-// field is the engine's `render.toon` field, and a world overrides one by writing its own style beside these.
+// `celLook` is the same pair as a case of a palette row's `toonSelect`, which swaps a slot's look live by a state cell;
+// `plainLook` is the continuous case. A world that wants every material styled names the program as its `render.shade`
+// and the ink as its `render.toon`. The live `world.toon off` shades every styled material continuously and uninked.
 //
 // `celStyle` bands each light's cosine and multiplies the shadow after the band, so the cascades' soft penumbra and its
-// colour survive under the band's edge; `celHardStyle` bands the cosine and the shadow together, the harder look in
-// which a penumbra snaps to the band. Both keep the rim lights, the environment reflection and ambient occlusion.
+// colour survive under the band's edge; `celHardStyle` bands the cosine and the shadow together (`combined`), the
+// harder look in which a penumbra snaps to the band. Both keep the rim lights, the environment reflection and ambient
+// occlusion. Both paint their shade: `restore` gives each light's shade side a share of it back and `bleed` keeps only
+// some of the bounce's hue, so a shade reads as a held mauve a step below the lit paint rather than whatever the lawn
+// bounces. Neither tones its light: the view's display pass (`render.tone`) does, once.
 
 import "shading"
-function celMaterial(base, style, combined = 0) = base with {
-  toon: style
-  shade: cel(style.threshold, style.softness, style.shadowTint, style.specularSize, style.exposure, style.shoulder, combined)
+// The row's own program, if it has one, runs first and cel lights what it wrote: a weathered or terrain row keeps its
+// surface under the band.
+function celMaterial(base, style) = base with {
+  toon: style.ink
+  shade [base.shade, cel(style.threshold, style.softness, style.shadowTint, style.specularSize, combined: style.combined,
+    restore: style.restore, bleed: style.bleed, form: style.form)]
 }
+function celLook(style) = celMaterial({}, style)
+
 let celStyle = {
-  threshold: 0.45
+  threshold: 0.2
   softness: 0.08
-  shadowTint [0.38, 0.48, 0.65]
-  outlineWidth: 1.5
-  outlineDistance: 12
-  outlineNormal: 0.65
-  outlineTint [0.08, 0.1, 0.16]
+  shadowTint [0.72, 0.6, 0.8]
   specularSize: 0.025
-  exposure: 0.5
-  shoulder: 0.65
-  band: Visibility
+  combined: 0
+  restore: 0.6
+  bleed: 0.3
+  form: 0.35
+  ink {
+    outlineWidth: 1.5
+    outlineDistance: 12
+    outlineNormal: 0.65
+    outlineTint [0.08, 0.1, 0.16]
+  }
 }
 
 let celHardStyle = {
-  threshold: 0.5
+  threshold: 0.3
   softness: 0.02
-  shadowTint [0.32, 0.4, 0.58]
-  outlineWidth: 2
-  outlineDistance: 12
-  outlineNormal: 0.65
-  outlineTint [0.06, 0.07, 0.12]
+  shadowTint [0.6, 0.5, 0.72]
   specularSize: 0.02
-  exposure: 0.5
-  shoulder: 0.65
-  band: Combined
+  combined: 1
+  restore: 0.5
+  bleed: 0.2
+  form: 0
+  ink {
+    outlineWidth: 2
+    outlineDistance: 12
+    outlineNormal: 0.65
+    outlineTint [0.06, 0.07, 0.12]
+  }
 }
 
 let continuousStyle = { enabled: false }
+let plainLook = { toon: continuousStyle }

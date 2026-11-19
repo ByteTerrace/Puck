@@ -8,7 +8,8 @@ namespace Puck.World;
 
 /// <content>
 /// <c>body.rig</c> names authoritative input alongside a body-rooted creation look's live animation state.
-/// Input answers headlessly too; animation reads the presentation's <see cref="WorldCreationInstances"/> pool.
+/// Input and the seat's guess readings answer headlessly too; animation reads the presentation's
+/// <see cref="WorldCreationInstances"/> pool.
 /// </content>
 internal sealed partial class PlayerCommandModule {
     private static readonly CommandForms BodyRigForms = CommandForms.Of(verb: "body.rig", RigForm);
@@ -73,7 +74,7 @@ internal sealed partial class PlayerCommandModule {
             return WorldInputReadBack.Result(answer: answer);
         }
 
-        var input = answer.Text;
+        var input = (answer.Text + ((index < PlayerRoster.MaxSlots) ? GuessReadings(slot: index) : string.Empty));
         var pool = m_stamps;
         var bodyIndex = index;
         if ((index < PlayerRoster.MaxSlots) && (m_screens.Presenter is { } presenter) && presenter.TrySeatScene(index: out _, scene: out var scene, slot: index)) {
@@ -118,8 +119,32 @@ internal sealed partial class PlayerCommandModule {
                 : $" shape:{shape.Name} parent={(shape.Parent ?? "root")} delta={Point(value: shape.Delta)} turn={Scalar(value: shape.TurnRadians)}"));
         }
 
+        // The seat's guess layer, the pose its own view alone draws; the drivers above are the shared pose every other
+        // reader sees. The read-back above already passed the seat's own input disclosure.
+        if (pool.TryGuessRig(bodyIndex: bodyIndex, slot: out _, state: out var guessed) && (guessed is not null)) {
+            foreach (var driver in guessed.Drivers) {
+                if (driver.Source is { } source) { _ = line.Append(value: $" layer:{driver.Name} phase={Scalar(value: driver.Phase)} source={source}"); }
+            }
+        }
+
         _ = line.Append(value: ']');
 
         return new CommandResult(Output: line.ToString());
+    }
+    // One reading for each led driver the world's creations author: whether this client offers the seat a guess and, when
+    // it does, what the guess is and the figures it was decided from. The reading is the client's, so it answers headlessly,
+    // where no creation is posed.
+    private string GuessReadings(int slot) {
+        var readings = new StringBuilder();
+
+        foreach (var creation in m_client.Definition.Creations) {
+            foreach (var driver in (creation.Document.Drivers ?? [])) {
+                if (driver.Lead is not { } channel) { continue; }
+
+                _ = readings.Append(value: $" guess:{creation.Id}.{driver.Name}[{channel}]={m_client.DescribeGuess(slot: slot, channel: channel)}");
+            }
+        }
+
+        return readings.ToString();
     }
 }

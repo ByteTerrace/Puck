@@ -546,10 +546,10 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
             IndirectApply = environment.Indirect.Apply,
             Lights = environment.Lights,
             Exposure = WorldRenderSettings.Pinned(exposure: environment.Exposure, pin: Session?.ExposurePin),
-            Toon = ToonStyleDocument.ResolveDefault(toon: m_mirror.Definition.Render.Toon, enabled: Session?.ToonOverride),
+            Toon = ToonStyleDocument.ResolveDefault(toon: m_mirror.Definition.Render.Toon, shown: Session?.ToonOverride),
             Tone = WorldRenderSettings.ToneOf(render: m_mirror.Definition.Render),
-            ShadePrograms = Session?.ShadePrograms ?? false,
-            ShadeDefault = WorldRenderSettings.CompileShade(Session?.ShadeOverride ?? m_mirror.Definition.Render.Shade),
+            ShadePrograms = Session?.ShadePrograms ?? true,
+            ShadeDefault = WorldRenderSettings.CompileShade(Session?.ShadeOverride ?? m_mirror.Definition.Render.Shade?.Definition),
             ShadeDeclared = WorldRenderSettings.DeclaredShades(definition: m_mirror.Definition),
             Sky = environment.Sky,
             // The mirrored world's static placements' meshes, then its stamp pool's.
@@ -889,6 +889,16 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
     public void PrepareFrame() {
         // The pool packs during the capture that follows, so it rates its bodies by this frame's presentation rate.
         PresentStamps?.Invoke(obj: m_pool);
+        PrepareRegistrations();
+        m_pool.PrepareGuess(source: m_source);
+    }
+    /// <summary>Gets or sets what offers the presenting client's guess to this scene's guess layer
+    /// (<see cref="WorldSessionStampSource.Guess"/>): set only on the scene a seat may be presented in.</summary>
+    public Func<IWorldSeatGuess?>? SeatGuess {
+        get => m_source.Guess;
+        set => m_source.Guess = value;
+    }
+    private void PrepareRegistrations() {
         if ((m_preparedDefinition == m_mirror.DefinitionRevision) && (m_preparedSnapshot == m_mirror.SnapshotRevision) && !m_census.TryTakeMove()) { return; }
         m_preparedDefinition = m_mirror.DefinitionRevision;
         m_preparedSnapshot = m_mirror.SnapshotRevision;

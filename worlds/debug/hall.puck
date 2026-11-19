@@ -55,14 +55,14 @@ let hallBoard = 4
 let hallCeiling = 5
 let hallCarLight = 6
 let hallPalette = [
-  { color: "#D4D4D4", roughness: 0.85, specular: 0.04 }
-  { color: "#9A9A9A", roughness: 0.7, specular: 0.08 }
-  { color: "#3E3F42", roughness: 0.6, specular: 0.15 }
+  galleryCel({ color: "#D4D4D4", roughness: 0.85, specular: 0.04 })
+  galleryCel({ color: "#9A9A9A", roughness: 0.7, specular: 0.08 })
+  galleryCel({ color: "#3E3F42", roughness: 0.6, specular: 0.15 })
   // The strips' diffuser, a linear LED fixture's luminance, enough that a lit level meters above the darkest daytime
   // exposure (the `exposure` section below).
   { color: "#FFFFFF", roughness: 0.5, emissive: 4000nit }
-  { color: "#EEEEEB", roughness: 0.6 }
-  { color: "#E8E8E8", roughness: 0.9, specular: 0.02 }
+  galleryCel({ color: "#EEEEEB", roughness: 0.6 })
+  galleryCel({ color: "#E8E8E8", roughness: 0.9, specular: 0.02 })
   // The lift car's luminous ceiling: the car's light spread over nearly its whole ceiling, dim enough to read as a
   // bright white panel at the darkest exposure rather than a glare.
   { color: "#FFFFFF", roughness: 0.5, emissive: 120nit }

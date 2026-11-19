@@ -20,10 +20,17 @@ public sealed partial class WorldRenderSettings {
     /// <returns>The program, or <see langword="null"/> when <paramref name="definition"/> is.</returns>
     /// <exception cref="SdfShadeException"><paramref name="definition"/> is refused.</exception>
     public static SdfShadeProgram? CompileShade(SdfShadeDefinition? definition) => definition is null ? null : SdfShadeProgram.Compile(definition);
+    /// <summary>Compiles the program a document's use names, which its world's shades table resolved.</summary>
+    /// <param name="shade">The use, or <see langword="null"/> for none.</param>
+    /// <returns>The admitted program, or <see langword="null"/> for none.</returns>
+    /// <exception cref="SdfShadeException">The program is refused.</exception>
+    /// <exception cref="InvalidOperationException"><paramref name="shade"/> names a program no table resolved.</exception>
+    public static SdfShadeProgram? CompileShade(Puck.World.Authoring.ShadeReference? shade) => CompileShade(definition: shade?.Definition);
 
     /// <summary>Returns every palette slot a world's documents declare that can shade: each creation's palette and each
     /// field region's material, with the program it runs (its own, or the document's <c>render.shade</c> default when it
-    /// declares none) and its base wrap. A slot that runs no program is left out.</summary>
+    /// declares none) and its base wrap, and a slot whose look a state cell chooses once more for each case's program
+    /// (<see cref="Puck.World.Authoring.PaletteToonSelectDocument"/>). A slot that runs no program is left out.</summary>
     /// <param name="definition">The world definition.</param>
     /// <param name="fallback">The default a slot with no program of its own runs, or <see langword="null"/> for the
     /// document's own.</param>
@@ -37,6 +44,9 @@ public sealed partial class WorldRenderSettings {
         return definition.Creations.SelectMany(selector: static prototype => (prototype.Document.Palette ?? []))
             .Concat(second: definition.FieldRegions.SelectMany(selector: static region => region.Fields)
                 .Where(predicate: static field => (field.Material is not null)).Select(selector: static field => field.Material!))
+            .SelectMany(selector: static material => ((material.ToonSelect?.Cases is { } cases)
+                ? cases.Select(selector: look => (Shade: look.Shade, material.Wrap)).Prepend(element: (material.Shade, material.Wrap))
+                : [(material.Shade, material.Wrap)]))
             .Select(selector: material => (Program: (CompileShade(material.Shade) ?? fallback), Wrap: (material.Wrap ?? 0f)))
             .Where(predicate: static material => (material.Program is not null))
             .Select(selector: static material => (material.Program!, material.Wrap));

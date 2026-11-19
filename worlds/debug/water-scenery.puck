@@ -96,7 +96,7 @@ prototypes {
     flow: fallsFlowLayer with { coverageLane: fallsLane },
     coverageLane: fallsLane
   )
-  glacierMass(id: "glacier", shapes: glacierShapes, origin: glacierOrigin, relief: glacierRelief)
+  glacierMass(id: "glacier", shapes: glacierShapes, origin: glacierOrigin, relief: glacierRelief, palette: glacierIcePalette)
   glacierMass(id: "glacier-melt", shapes: meltShapes, origin: glacierOrigin, palette: meltPalette)
   lakeStones(
     id: "lake-stones",

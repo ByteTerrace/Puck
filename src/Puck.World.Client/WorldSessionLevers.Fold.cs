@@ -85,7 +85,7 @@ public static partial class WorldSessionLevers {
     // The shadow switch keeps the authored tier while it agrees with it; scalar ceilings survive without quantization.
     private static WorldRenderDefaults? FoldRender(WorldRenderDefaults? render, WorldRenderSettings settings) {
         if ((render is null) && (settings.RenderScale == WorldRenderDefaults.Absent.RenderScale) &&
-            (settings.IndirectTier == Puck.SignedDistance.SdfIndirectTier.Medium) && (settings.SkyFieldScale == 1f) && !settings.Toon && settings.ShadeOverride is null &&
+            (settings.IndirectTier == Puck.SignedDistance.SdfIndirectTier.Medium) && (settings.SkyFieldScale == 1f) && settings.ShadeOverride is null &&
             !settings.RayQueries && settings.DistantShadows is null) {
             return null;
         }
@@ -107,9 +107,6 @@ public static partial class WorldSessionLevers {
             UpscaleSharpness = settings.UpscaleSharpness,
             Temporal = settings.Temporal,
             Shade = settings.ShadeOverride ?? render.Shade,
-            // The lever switches only a complete style (ToonStyleDocument.ResolveDefault); a world with none, or with a
-            // disabled one that leaves its values out, renders continuous whatever the lever says, and saves as authored.
-            Toon = ((render.Toon is { IsComplete: true } toon) && (settings.Toon != toon.IsOn)) ? (toon with { Enabled = settings.Toon }) : render.Toon,
             SkyQuality = settings.SkyQuality,
             SkyFieldScale = settings.SkyFieldScale,
             DynamicResolution = settings.DynamicResolution,

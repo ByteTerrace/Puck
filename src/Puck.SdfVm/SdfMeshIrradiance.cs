@@ -66,7 +66,7 @@ public readonly record struct SdfMeshIrradianceParameters(bool Enabled, SdfMeshI
 /// the camera first), then the probes whose lighting is oldest. A relight reflects the light the volume holds about each
 /// hit, so bounce accumulates over successive relights; a probe is relit until it has taken one relight a sweep under
 /// the current lighting, and a lighting that changes every frame (a day's sun) keeps the relight cycling over the
-/// window at the rate the frame's budget grants (<see cref="SdfFrame.IndirectBudget"/>). Overload lengthens the
+/// window at the rate the budget grants each second of wall time (<see cref="SdfFrame.IndirectBudget"/>), whatever the frame rate. Overload lengthens the
 /// lighting's age, never the frame, and is reported as an <c>[sdf.mesh-gi] behind</c> line. A lighting-converged frame relights its
 /// window from no bounce through every sweep before it renders, so its light depends on its scene, lighting and window
 /// alone. The dynamic draws (moving bodies) receive the volume's light and do not cast into it; an anchored light, which
@@ -440,7 +440,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
             for (var row = 0; (row < draws.Count); row++) {
                 var draw = draws[row];
 
-                if ((draw.Mesh is null) || !SdfMeshIrradianceScene.IsStatic(draw: in draw)) { continue; }
+                if (!draw.IsStatic) { continue; }
                 var key = (draw.Mesh, draw.ObjectToWorld, draw.Material);
 
                 if (!counts.TryGetValue(key: key, value: out var left)) { return null; }
@@ -516,9 +516,12 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     private Layout m_layout;
     private SdfMeshIrradianceParameters m_published;
     private SdfIndirectBudget m_budget;
-    // The budget's grants not yet spent: probes the worker may relight and trace before the next frame grants more.
-    private long m_relightCredits;
-    private long m_traceCredits;
+    // The budget's grants not yet spent: probes the worker may relight and trace before the next frame grants more, in
+    // whole and part probes, since a rate of a few probes a second grants less than one a frame. And when the latest
+    // grant was made (a Stopwatch timestamp, zero before the first), which the next grants the wall time since.
+    private double m_relightCredits;
+    private double m_traceCredits;
+    private long m_grantedAt;
     // The window's lighting age at the start of the latest relight cycle, in seconds: its median and oldest probe.
     private float m_ageMedian;
     private float m_ageMax;
@@ -911,17 +914,37 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     // What a drain's light is a function of: the geometry, the lighting, the windows and the layout.
     private (int Geometry, int Lighting, int Windows, Layout Layout) DrainKey() => (m_geometry, m_lightingVersion, m_windowVersion, m_layout);
 
-    // Whether the worker may do any work this frame: an unbounded part of the budget, or credit left in either part.
-    private bool Granted => ((m_budget.Relight <= 0) || (m_budget.Trace <= 0) || (m_relightCredits > 0) || (m_traceCredits > 0));
+    // Whether the worker may do any work this frame: an unbounded part of the budget, or a whole probe's credit left in
+    // either part.
+    private bool Granted => ((m_budget.RelightPerSecond <= 0) || (m_budget.TracePerSecond <= 0) || (m_relightCredits >= 1.0) || (m_traceCredits >= 1.0));
 
-    // Grants a frame's budget: each bounded part gains its count, held to two frames' worth, so a worker that falls
-    // behind does not bank a burst.
+    /// <summary>The most wall time, in seconds, one frame's grant covers: a quarter of a second, so a presentation down
+    /// to four frames a second still grants its whole rate, a longer hitch grants no burst past it, and a worker that
+    /// falls behind banks at most that much.</summary>
+    public const double MostGrantSeconds = 0.25;
+    /// <summary>The wall time, in seconds, the first frame's grant covers, before any frame has been granted: a 60 Hz
+    /// frame.</summary>
+    public const double FirstGrantSeconds = (1.0 / 60.0);
+
+    // Grants the budget for the wall time since the last frame's grant, held to MostGrantSeconds: each bounded part gains
+    // its rate a second for that time, and holds at most MostGrantSeconds of it, so the work a second does not fall with
+    // the frame rate and a worker that falls behind does not bank a burst. Presentation only: the drain of a
+    // lighting-converged frame ignores the budget, so its light never depends on the wall clock.
     private void Grant(SdfIndirectBudget budget) {
         budget.Validate();
         m_budget = budget;
-        if (budget.Relight > 0) { m_relightCredits = Math.Min(val1: (m_relightCredits + budget.Relight), val2: (2L * budget.Relight)); }
-        if (budget.Trace > 0) { m_traceCredits = Math.Min(val1: (m_traceCredits + budget.Trace), val2: (2L * budget.Trace)); }
+
+        var now = Stopwatch.GetTimestamp();
+        var seconds = ((m_grantedAt == 0L) ? FirstGrantSeconds : Math.Min(val1: MostGrantSeconds, val2: Stopwatch.GetElapsedTime(startingTimestamp: m_grantedAt, endingTimestamp: now).TotalSeconds));
+
+        m_grantedAt = now;
+        if (budget.RelightPerSecond > 0) { m_relightCredits = Banked(credits: m_relightCredits, perSecond: budget.RelightPerSecond, seconds: seconds); }
+        if (budget.TracePerSecond > 0) { m_traceCredits = Banked(credits: m_traceCredits, perSecond: budget.TracePerSecond, seconds: seconds); }
     }
+    // A part's credits after a grant of `seconds` at its rate: at most MostGrantSeconds of it, and never less than a
+    // whole probe's worth of room, so a rate under four probes a second still reaches one.
+    private static double Banked(double credits, int perSecond, double seconds) =>
+        Math.Min(val1: (credits + (perSecond * seconds)), val2: Math.Max(val1: 1.0, val2: (perSecond * MostGrantSeconds)));
     // Owes the worker work; the clock the done line reports starts when the volume leaves its settled state.
     private void Owe() {
         m_sweepsSince = 0;
@@ -1356,7 +1379,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
 
     // The budget and the lighting's age, as key=value pairs; under the gate.
     private string DescribeAge() => string.Create(provider: CultureInfo.InvariantCulture,
-        handler: $"budget-relight={((m_budget.Relight > 0) ? m_budget.Relight.ToString(provider: CultureInfo.InvariantCulture) : "unbounded")} budget-trace={((m_budget.Trace > 0) ? m_budget.Trace.ToString(provider: CultureInfo.InvariantCulture) : "unbounded")} age-target={((m_budget.Age > 0f) ? m_budget.Age.ToString(format: "0.##", provider: CultureInfo.InvariantCulture) : "none")} age-p50={m_ageMedian:0.##} age-max={m_ageMax:0.##} relit-per-second={m_cycleRate:0} {DescribeLevelAges()}");
+        handler: $"budget-relight-per-second={((m_budget.RelightPerSecond > 0) ? m_budget.RelightPerSecond.ToString(provider: CultureInfo.InvariantCulture) : "unbounded")} budget-trace-per-second={((m_budget.TracePerSecond > 0) ? m_budget.TracePerSecond.ToString(provider: CultureInfo.InvariantCulture) : "unbounded")} age-target={((m_budget.Age > 0f) ? m_budget.Age.ToString(format: "0.##", provider: CultureInfo.InvariantCulture) : "none")} age-p50={m_ageMedian:0.##} age-max={m_ageMax:0.##} relit-per-second={m_cycleRate:0} {DescribeLevelAges()}");
     // Sample at the diagnostic read, rather than reporting the ages from the last work-list rebuild.
     private string DescribeLevelAges() {
         if (m_lighting is null) { return ""; }
@@ -1484,7 +1507,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
             for (var row = m_keyRuns.Start(index: run); (row < (m_keyRuns.Start(index: run) + m_keyRuns.Length(index: run))); row++) {
                 if (m_drawStatic[row]) { m_keyValue = unchecked((m_keyValue - m_drawKeys[row])); m_keyStatic--; }
                 var draw = draws[row];
-                var isStatic = ((draw.Mesh is not null) && SdfMeshIrradianceScene.IsStatic(draw: in draw));
+                var isStatic = draw.IsStatic;
 
                 m_drawStatic[row] = isStatic;
                 if (isStatic) { m_staticRows.Add(item: row); } else { m_staticRows.Remove(item: row); }
@@ -1516,7 +1539,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         foreach (var index in m_staticRows) {
             var draw = meshDraws[index];
 
-            if ((draw.Mesh is null) || !SdfMeshIrradianceScene.IsStatic(draw: in draw)) { continue; }
+            if (!draw.IsStatic) { continue; }
             if (count == snapshot.Length) { snapshot = RentedArrays.Grow(array: snapshot, keep: count, minimumLength: Math.Max(val1: 16, val2: (2 * count))); }
             snapshot[count++] = draw;
         }
@@ -1956,8 +1979,9 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
                     }
                     lighting = m_lighting!;
 
-                    var traceCredits = ((m_budget.Trace > 0) ? m_traceCredits : long.MaxValue);
-                    var relightCredits = ((m_budget.Relight > 0) ? m_relightCredits : long.MaxValue);
+                    // A part's whole probes of credit; a part probe waits for the next grant.
+                    var traceCredits = ((m_budget.TracePerSecond > 0) ? ((long)m_traceCredits) : long.MaxValue);
+                    var relightCredits = ((m_budget.RelightPerSecond > 0) ? ((long)m_relightCredits) : long.MaxValue);
                     var traces = ((m_listTraceCursor < m_listTraces) && (traceCredits > 0));
                     var relights = ((m_listRelightCursor < candidates.Count) && (relightCredits > 0));
 
@@ -1978,8 +2002,8 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
                     take = 0;
                     while (((index + take) < end) && (take < BatchProbes) && (take < credits)) { take++; }
                     if (trace) {
-                        if (m_budget.Trace > 0) { m_traceCredits -= take; }
-                    } else if (m_budget.Relight > 0) {
+                        if (m_budget.TracePerSecond > 0) { m_traceCredits -= take; }
+                    } else if (m_budget.RelightPerSecond > 0) {
                         m_relightCredits -= take;
                     }
                 }
@@ -2200,7 +2224,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         m_behindAt = now;
 
         Console.Error.WriteLine(value: string.Create(provider: CultureInfo.InvariantCulture,
-            handler: $"[sdf.mesh-gi] behind level={worst} age-max={m_listAgeMax[worst]:0.##} target={SdfMeshProbeRelight.AgeBoundOf(level: worst, target: m_budget.Age):0.##} combined-age-p50={m_ageMedian:0.##} probes={ages.Count} relit-per-second={m_cycleRate:0} needed-per-second={needed:0} shortfall-per-second={MathF.Max(x: 0f, y: (needed - m_cycleRate)):0} budget-relight={m_budget.Relight}"));
+            handler: $"[sdf.mesh-gi] behind level={worst} age-max={m_listAgeMax[worst]:0.##} target={SdfMeshProbeRelight.AgeBoundOf(level: worst, target: m_budget.Age):0.##} combined-age-p50={m_ageMedian:0.##} probes={ages.Count} relit-per-second={m_cycleRate:0} needed-per-second={needed:0} shortfall-per-second={MathF.Max(x: 0f, y: (needed - m_cycleRate)):0} budget-relight-per-second={m_budget.RelightPerSecond}"));
     }
     // Traces and relights one batch of the listed probes on the pool, then lands it. The batch reads the cache as it stood
     // before the batch, so its probes' bounce does not depend on the order the pool runs them in. A pass of zero or more

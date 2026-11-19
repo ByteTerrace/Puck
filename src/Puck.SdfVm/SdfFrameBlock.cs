@@ -57,8 +57,6 @@ public static partial class SdfFrameBlock {
     private static readonly int LightCount = Offset(member: SdfWorldPackage.LightCount);
     private static readonly int LightMask = Offset(member: SdfWorldPackage.LightMask);
     private static readonly int Exposure = Offset(member: SdfWorldPackage.Exposure);
-    private static readonly int ToonBands = Offset(member: SdfWorldPackage.ToonBands);
-    private static readonly int ToonShadow = Offset(member: SdfWorldPackage.ToonShadow);
     private static readonly int ToonOutline = Offset(member: SdfWorldPackage.ToonOutline);
     private static readonly int ToonInk = Offset(member: SdfWorldPackage.ToonInk);
     private static readonly int ExposeShare = Offset(member: SdfWorldPackage.ExposeShare);
@@ -73,6 +71,7 @@ public static partial class SdfFrameBlock {
     private static readonly int NearDistance = Offset(member: SdfWorldPackage.NearDistance);
     private static readonly int ScreenCount = Offset(member: SdfWorldPackage.ScreenCount);
     private static readonly int StampFade = Offset(member: SdfWorldPackage.StampFade);
+    private static readonly int PoseOverlay = Offset(member: SdfWorldPackage.PoseOverlay);
     private static readonly int ShadowSlots = Offset(member: SdfWorldPackage.ShadowSlots);
     private static readonly int ShadowSlotCount = Offset(member: SdfWorldPackage.ShadowSlotCount);
     private static readonly int ShadowRoles = Offset(member: SdfWorldPackage.ShadowRoles);
@@ -225,15 +224,13 @@ public static partial class SdfFrameBlock {
             WriteUInt32(block: block, offset: (LightMask + (word * sizeof(uint))), value: ((uint)(mask >> (32 * word))));
         }
         WriteSingle(block: block, offset: Exposure, value: (tables.Exposures?.MultiplierOf(view: view) ?? 1f));
-        Span<Vector4> toonRows = stackalloc Vector4[4];
+        Span<Vector4> toonRows = stackalloc Vector4[2];
 
         frame.Toon.WriteRows(inkW: ((float)snapshot.RenderGrid), mode: frame.Toon.Mode, rows: toonRows);
-        WriteVector4(block: block, offset: ToonBands, value: toonRows[0]);
         WriteFlag(block, Offset(SdfWorldPackage.ShadePrograms), frame.ShadePrograms);
         WriteShadeDefault(block, tables.ShadeDefaultFirst, frame.ShadeDefault);
-        WriteVector4(block: block, offset: ToonShadow, value: toonRows[1]);
-        WriteVector4(block: block, offset: ToonOutline, value: toonRows[2]);
-        WriteVector4(block: block, offset: ToonInk, value: toonRows[3]);
+        WriteVector4(block: block, offset: ToonOutline, value: toonRows[0]);
+        WriteVector4(block: block, offset: ToonInk, value: toonRows[1]);
         WriteSingle(block: block, offset: ExposeShare, value: (snapshot.Unexposed ? SdfPhotometry.WindowAdaptation : 1f));
         WriteSingle(block: block, offset: AirLight, value: (tables.Exposures?.AirLightOf(view: view) ?? 1f));
         WriteSingle(block: block, offset: MeterLuminance, value: (tables.Exposures?.MeteredOf(view: view) ?? 0f));
@@ -283,6 +280,12 @@ public static partial class SdfFrameBlock {
         WriteFlag(block: block, offset: GeometryOnly, value: quality.GeometryOnly);
         WriteSingle(block: block, offset: ScreenFidelity, value: Math.Clamp(max: 1f, min: 0f, value: snapshot.ScreenFidelity));
         WriteVector3(block: block, offset: StampFade, value: new System.Numerics.Vector3(x: snapshot.StampFade.FirstSlot, y: snapshot.StampFade.SlotCount, z: snapshot.StampFade.Opacity));
+        // A disabled overlay writes zeros, which no slot falls inside (sdfViewPoseSlot).
+        var overlay = ((snapshot.PoseOverlay.SlotCount > 0) ? snapshot.PoseOverlay : default);
+
+        WriteUInt32(block: block, offset: PoseOverlay, value: ((uint)overlay.FirstSlot));
+        WriteUInt32(block: block, offset: (PoseOverlay + sizeof(uint)), value: ((uint)overlay.SlotCount));
+        WriteUInt32(block: block, offset: (PoseOverlay + (2 * sizeof(uint))), value: ((uint)overlay.OverlaySlot));
     }
 
 

@@ -8,7 +8,14 @@ the implemented contract (admission, the canonical form, the two tiers, the
 publication door, binning, the planner and its checks) is in
 [the authored-shading reference](../../.claude/skills/rendering/references/authored-shading.md).
 The language, the lowering, the interpreter, specialization by program set,
-binning and the work planner are built. This plan holds what remains: the bar
+binning, the work planner and the shared program identity are built. A world
+holds each program once in its `shades` table under the program's content
+identity, and every use (a palette row, a look case, `render.shade`) names it by
+key, so a style on many creations costs one program in the compilation, the
+world definition and its projection
+([one program, one row](../../.claude/skills/rendering/references/authored-shading.md#one-program-one-row)).
+A phase the shading gains later, such as the ink phase
+[the ink plan](ink.md) adds, joins the definition the table already holds. This plan holds what remains: the bar
 devices' readings, the work bound's calibration and the device-loss quarantine,
 the migration of the engine's fixed-function layers into standard programs,
 and the two deferred hooks.
@@ -123,14 +130,15 @@ injection).
 so captures are judged once). Shading has one path: the fixed-function layers
 are deleted rather than kept beside the programs.
 
-- *What goes.* The lever `world.shade programs|layers`; the C# records
-  `SdfWeathering`, `SdfInset`, `SdfRadialPaint`, `SdfFlow` and the toon style's
-  shading half; their palette documents (`PaletteWeatheringDocument`,
+- *What goes.* The lever `world.shade programs|layers` (programs already run by
+  default); the C# records `SdfWeathering`, `SdfInset`, `SdfRadialPaint` and
+  `SdfFlow`; their palette documents (`PaletteWeatheringDocument`,
   `PaletteInsetDocument`, `PaletteFlowDocument`); their admission rules in
-  `SdfMaterialLayers.IsValid`; their rows in `SdfAppearance.Pack`; and their
-  HLSL (`shade-layers.hlsli`, `shade-weathering.hlsli`, `shade-flow.hlsli`,
-  `sdf-toon.hlsli`'s banding, the `toon` branches of `sdfLightStage` and
-  `sdfLightResponse`). `sdfMaterialLoad` is reduced to the base response,
+  `SdfMaterialLayers.IsValid`; their rows in `SdfAppearance.Pack`; their HLSL
+  (`shade-layers.hlsli`, `shade-weathering.hlsli`, `shade-flow.hlsli`); and the
+  rule that a program omitting the surface phase keeps the layers, which the
+  standard's `cel` relies on until then. The toon style's shading half has
+  already gone: the `cel` program is the one band. `sdfMaterialLoad` is reduced to the base response,
   glass, the program reference, the parameter block, the demand and the lanes.
   The schema is regenerated (`puck schema`), and a slot that still spells
   `weathering` or `flow` is refused by name: one change, no compatibility path.
@@ -140,20 +148,14 @@ are deleted rather than kept beside the programs.
   data); the paints' shape descriptors (a `shape` op's operand); the lanes; the
   flow clock as a stamp input; and the cel outline, which reads neighbour depth
   and normal and so cannot be a per-pixel program, with its style row.
-- *The style switch's successor.* The world default moves from `render.toon`
-  and `world.toon` to `render.shade` and `world.shade default`, which are
-  built. A palette row's `toon` becomes its `shade` (`cel(...)`, or `plain()`
-  to stay continuous under a cel default). `toonSelect`
-  (`PaletteToonSelectDocument`), which binds a row's style to a state cell and
-  is how `moth.style Cel|Plain` swaps the Moth live with no rebake (the owner's
-  ruling that she supports both), is replaced by a `shadeSelect` of the same
-  shape: a `state` cell and `cases`, each case a `shade` reference with the
-  outline's style row beside it, resolved where `WorldSurfaceMaterials`
-  resolves the toon case today. Every case's program is declared by the
-  document, so it is in the set `world prepare` and the publication door
-  compile, and a swap is an appearance upload: no rebake and no compile. The
-  migration keeps the capability; cel is the debug world's treatment, chosen
-  by its materials
+- *The style switch, as built.* The banding is the `cel` program; a palette
+  row's `toon` and the world's `render.toon` are the style row beside it (the
+  styled mark and the ink), and `render.shade` is the world default's program.
+  `toonSelect` cases are each a style row and a program (`celLook`,
+  `plainLook`), declared by the document so `world prepare` and the publication
+  door compile them, and a swap is an appearance upload. `world.toon off`
+  suppresses every style. Cel is the debug world's treatment, chosen by its
+  materials
   ([the decision](../decisions/rendering.md#a-light-is-shadowed-wherever-it-lights-and-cel-shading-is-a-style-per-material)).
 - *Terrain and weather are programs.* The terrain pass's slope, altitude and
   curvature materials and a weather region's coatings are `shade` templates in
@@ -165,8 +167,8 @@ are deleted rather than kept beside the programs.
 - Check: the matrix's final row on every device; the debug world's sweep tour
   stills on both backends judged against each place's reference, with the
   pre-migration stills beside them as evidence of what moved;
-  `puck compile --validate` refusing a slot that still spells `weathering`,
-  `flow`, `toon` or `toonSelect`; `moth.style Plain` then `Cel` swapping the
+  `puck compile --validate` refusing a slot that still spells `weathering` or
+  `flow`; `moth.style Plain` then `Cel` swapping the
   Moth with `world.counters sdf.shade` showing no compile and the bake counters
   no bake.
 

@@ -156,9 +156,9 @@ public readonly record struct WorldQualityPreset(
 /// <param name="SkyFieldScale">The boot sky field grid fraction, one or one half, independent of view render scale.</param>
 /// <param name="Exposure">The camera exposure each view maps the luminance it shades to the display by, before the
 /// tone curve. Absent is a manual exposure at <c>SdfExposure.DefaultEv100</c>, a sunlit day's.</param>
-/// <param name="Toon">The world's default cel style, which every material that authors no style of its own shades with
-/// (<see cref="ToonStyleDocument"/>), on unless it says <c>enabled: false</c>, and which the live <c>world.toon</c> lever
-/// turns on or off. Absent is off.</param>
+/// <param name="Toon">The world's default cel style (<see cref="ToonStyleDocument"/>), which every material that authors
+/// no style of its own takes: its ink, and the styled mark the live <c>world.toon off</c> suppresses with the
+/// <see cref="Shade"/> default it inks. On unless it says <c>enabled: false</c>; absent is off.</param>
 /// <param name="Bloom">Optional camera scatter. Absent is off.</param>
 /// <param name="ShadowCoverage">How far the key light's shadow cascades reach (<see cref="WorldRenderShadowCoverage"/>).
 /// Absent keeps the engine's 16 m near, 120 m far and 200 m caster reach; <c>world.budget</c> prints the coverage with
@@ -206,7 +206,7 @@ public sealed record WorldRenderDefaults(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] Puck.Hosting.CameraBloom? Bloom = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldRenderShadowCoverage? ShadowCoverage = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<BindableScalar>? Lanes = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] SdfShadeDefinition? Shade = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] Puck.World.Authoring.ShadeReference? Shade = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldDeviceProfile>? Devices = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldNestedViewQuality>? Nested = null,
     bool RayQueries = false,
@@ -439,7 +439,7 @@ public sealed record WorldNestedViewQuality(
 /// <param name="Bounces">Feedback sweeps after the direct sweep, capped by the selected tier. Absent uses that tier's limit.</param>
 /// <param name="Apply">Bindable receiver-only controls. They do not change the traced radiance.</param>
 /// <param name="Tier">The boot tier, Medium by default. The live session lever and selected quality preset override it.</param>
-/// <param name="Budget">The irradiance work each frame grants the volume and the lighting age it reports past; absent
+/// <param name="Budget">The irradiance work each second grants the volume and the lighting age it reports past; absent
 /// bounds nothing.</param>
 /// <param name="LightingGrid">Fixed angular and radiometric grids for indirect captures; absent leaves them continuous.</param>
 public sealed record WorldRenderIndirect(
@@ -457,14 +457,14 @@ public sealed record WorldRenderIndirectLightingGrid(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? DirectionDegrees = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? Radiance = null);
 /// <summary>The irradiance volume's budget: a light change costs a relight of the probes' cached hits and a geometry
-/// change costs a trace, each granted per rendered frame, and overload lengthens the lighting's age rather than the
-/// frame. Every member is optional; an absent one leaves that part unbounded.</summary>
-/// <param name="Relight">The probes relit per frame, at least one.</param>
-/// <param name="Trace">The probes whose hits are traced per frame, at least one.</param>
+/// change costs a trace, each granted for each second of wall time whatever the frame rate, and overload lengthens the
+/// lighting's age rather than the frame. Every member is optional; an absent one leaves that part unbounded.</summary>
+/// <param name="RelightPerSecond">The probes relit each second, at least one.</param>
+/// <param name="TracePerSecond">The probes whose hits are traced each second, at least one.</param>
 /// <param name="Age">The lighting age, in seconds, past which the volume reports it is behind; positive.</param>
 public sealed record WorldRenderIndirectBudget(
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? Relight = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? Trace = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? RelightPerSecond = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? TracePerSecond = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? Age = null);
 /// <summary>Gains applied once where each source enters the traced light.</summary>
 /// <param name="Lights">Explicit diffuse light gain.</param>

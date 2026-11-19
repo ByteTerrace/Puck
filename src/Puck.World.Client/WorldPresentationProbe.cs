@@ -147,6 +147,7 @@ public sealed class WorldPresentationProbe(TimeProvider? time = null) {
             Add(hash: ref hash, value: view.Quality.SkyFieldScale); hash.Add(value: ((uint)view.Quality.ShadowResolution));
             hash.Add(value: ((byte)(view.Quality.GeometryOnly ? 1 : 0))); hash.Add(value: ((byte)(view.Quality.DisableAmbientOcclusion ? 1 : 0))); hash.Add(value: ((byte)(view.Quality.DisableSoftShadows ? 1 : 0))); hash.Add(value: ((byte)(view.Quality.Temporal ? 1 : 0)));
             hash.Add(value: ((uint)view.StampFade.FirstSlot)); hash.Add(value: ((uint)view.StampFade.SlotCount)); Add(hash: ref hash, value: view.StampFade.Opacity);
+            hash.Add(value: ((uint)view.PoseOverlay.FirstSlot)); hash.Add(value: ((uint)view.PoseOverlay.SlotCount)); hash.Add(value: ((uint)view.PoseOverlay.OverlaySlot));
         }
         return hash.Value;
     }

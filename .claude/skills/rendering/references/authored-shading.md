@@ -35,6 +35,48 @@ light response (cel) are one program with one identity, and admission prices the
 composition as one. Only the surface phase chains; the light and compose phases
 read the composed surface through `surface.albedo` and its siblings.
 
+## One program, one row
+
+A world holds each program once, in its root `shades` table, under its identity
+(`ShadeReference.KeyOf`: the definition's name, a slash and the SHA-256 of its
+compact canonical JSON); a palette row, a look case and `render.shade` each
+write that key ([decision](../../../../docs/decisions/rendering.md#authored-shading)).
+The invariant is that every use a consumer reads holds its program, and the
+program is the one its key names. The places that keep it:
+
+- **Lowering.** `WorldShadeLowering.Lower` answers a key, and the compilation
+  keeps each program once (`ProgramsOf`), with each program expression's
+  identity in that compilation (`CacheKeyOf`: a template call's template and
+  evaluated arguments, a value by its value, a list by its elements), so a
+  palette row a template repeats lowers once and costs a key a use.
+  `WorldShadeLowering.Import` reads a key as the program this compilation
+  lowered under it. `WorldDocumentEmitter` writes the compilation's programs as
+  the root's `shades`; `WorldDocumentMembers` hoists a program written inline
+  into the table, keeps the rows a whole document's uses name and refuses a key
+  no row holds.
+- **Composition.** `WorldDocumentBasis` adopts `shades` rows whole: equal keys
+  are equal programs, so layers and sibling imports never merge one member by
+  member.
+- **The model.** `ShadeReference` reads a key alone or a whole program, and
+  writes its key. `WorldDefinition.ShadesRaw` writes the table derived from the
+  uses (`WorldShadeTable.Of`), so a row nothing names is dropped and a use
+  holding its program (a mutation's inline program) carries it.
+- **Resolution, the one door.** `WorldStateDocumentValues.TryResolve` and
+  `TryResolveGraph`, which every door that turns bytes into a live world runs,
+  call `WorldShadeTable.TryResolve` first: every key-only use takes its program
+  from the table, and a key the table does not hold, or a row whose key is not
+  its program's identity, is refused by path. `ShadeReference.Definition`
+  throws on a use no door resolved, so a reader that skipped the door fails
+  loudly rather than shading with the default. A projection carries the table
+  (`WorldProjectionDocument.Shades`) because its prototype bodies travel as
+  content-addressed objects that name their programs.
+
+The table is a document shape only. Admission, `DeclaredShadeMaterials`,
+`world prepare`, the publication door and the specialized kernels see programs
+by content and identity as before, and a definition object shared by a key's
+uses is compiled once (`SdfShadeProgram.Compile`'s per-instance table). The
+bake never reads a program, so the table leaves the bake identity alone.
+
 `WorldShadeLowering` binds each runtime argument through an immutable typed view;
 integer expectations cross `let`, `select`, conditional and function bindings.
 One source argument may supply float and uint views without changing either slot.
@@ -83,8 +125,13 @@ The standard programs live in `worlds/standard/shading.puck`, called by the
 foliage, water and styles libraries and the debug world's exhibits; the terrain
 program (`terrain`, laid on a row by `terrainMaterial`) lives with the terrain
 library in `worlds/standard/terrain.puck`.
-`world.shade programs|layers` selects interpreted programs or the old layers for
-comparison. A material with no program inherits `WorldRenderDefaults.Shade`
+`world.shade programs|layers` selects programs (the default) or the old layers
+for comparison. A program that omits the surface phase keeps the material's
+layers as its surface (`sdfShadeHas(binding, 0u)` in the views and glass stages,
+`SdfShadeProgram.Authors` on the CPU); the standard's `cel` relies on it. While
+`world.toon off` suppresses every cel style, `sdfShadeBinding` marks a styled
+material's binding unstyled (`sdfToonAuthored`), and `sdfShadeHas` reads its light
+and compose phases as omitted. A material with no program inherits `WorldRenderDefaults.Shade`
 (`render.shade`); `world.shade default <program|document>` selects an admitted
 named scene program or restores that document default. `SdfFrameBlock.WriteShadeDefault`
 carries its identity and parameter range; `SdfWorldTables.PackShadeDefault`

@@ -44,7 +44,11 @@ A document's `schema:` field selects its vocabulary, never the filename.
   the earlier ones wrote as `material.*` and `surface.normal`. A list field is
   spelled without the colon, as every list is. A structural argument reaches the
   template as its expression: a function's scalar parameter works, a member of a
-  record parameter does not. Refusals are `PUCK126`–`PUCK130`; ordinary
+  record parameter does not. A `shade` value lowers to its program's key, and the
+  document's root `shades` table holds each distinct program once, so a style on a
+  hundred rows costs one program and a hundred keys
+  ([one program, one row](../rendering/references/authored-shading.md#one-program-one-row)).
+  Refusals are `PUCK126`–`PUCK130`; ordinary
   recursion and invalid compile-time ranges retain the core's codes. See
   [the rendering contract](../rendering/references/authored-shading.md).
 

@@ -80,10 +80,6 @@ public static partial class SdfWorldPackage {
     /// luminance it shades to the display by before its display pass, and the display-referred terms (an ink line, the editor
     /// grid, an unbound screen's glass) are divided by (<c>float</c>).</summary>
     public const string Exposure = "exposure";
-    /// <summary>The world's default cel style (<c>SdfToon.WriteRows</c>, a material's rows 22 to 25 alike): mode (zero
-    /// off, one banding the cosine under its visibility, two banding both together), diffuse threshold, terminator width and
-    /// specular size (<c>float4</c>).</summary>
-    public const string ToonBands = "toonBands";
     /// <summary>The measurement lever selecting admitted shading programs rather than legacy material layers.</summary>
     public const string ShadePrograms = "shadePrograms";
     /// <summary>The world default's owned code and runtime-parameter ranges in the appearance words.</summary>
@@ -92,9 +88,9 @@ public static partial class SdfWorldPackage {
     public const string ShadeIdentity = "shadeIdentity";
     /// <summary>The default's conservative shadow demand, including unassigned base wrap.</summary>
     public const string ShadeDemand = "shadeDemand";
-    /// <summary>Cel shadow tint and reflected-light exposure gain (<c>float4</c>).</summary>
-    public const string ToonShadow = "toonShadow";
-    /// <summary>Cel outline radius in output pixels, half-width distance, normal threshold and colour shoulder (<c>float4</c>).</summary>
+    /// <summary>The world's default cel style's first row (<c>SdfToon.WriteRows</c>, a material's row 22 alike): its mode
+    /// (<c>SdfToon.Mode</c>, negative while every style is suppressed), outline radius in output pixels, half-width
+    /// distance and crease cosine (<c>float4</c>).</summary>
     public const string ToonOutline = "toonOutline";
     /// <summary>Cel outline's linear RGB multiplier, and the view's render grid, which scales every style's outline radius
     /// from output to render pixels (<c>float4</c>).</summary>
@@ -199,6 +195,9 @@ public static partial class SdfWorldPackage {
     public const string ScreenFidelity = "screenFidelity";
     /// <summary>The view-local stamp fade: first transform slot, slot count and opacity.</summary>
     public const string StampFade = "stampFade";
+    /// <summary>The view-local pose overlay: first transform slot, slot count and first overlay row, each a whole number
+    /// (<c>SdfPoseOverlay</c>).</summary>
+    public const string PoseOverlay = "poseOverlay";
     /// <summary>The program word stream.</summary>
     public const string ProgramWords = "sdfWords";
     /// <summary>The dynamic-transform table, three float4 rows per slot.</summary>
@@ -326,13 +325,11 @@ public static partial class SdfWorldPackage {
         Value(name: LightCount, type: ShaderValueType.Uint),
         Value(name: LightMask, type: ShaderValueType.Uint4),
         Value(name: Exposure, type: ShaderValueType.Float),
-        Value(name: ToonBands, type: ShaderValueType.Float4),
         Value(name: ShadePrograms, type: ShaderValueType.Uint),
         Value(name: ShadeDefault, type: ShaderValueType.Uint4),
         ShaderInterfaceMember.Value(group: ShaderInterfaceGroup.Pass, name: ShadeIdentity, type: ShaderValueType.Uint4, length: 2),
         Value(name: ShadeDemand, type: ShaderValueType.Float4),
         Value(name: ShadeBinWidths, type: ShaderValueType.Uint4),
-        Value(name: ToonShadow, type: ShaderValueType.Float4),
         Value(name: ToonOutline, type: ShaderValueType.Float4),
         Value(name: ToonInk, type: ShaderValueType.Float4),
         Value(name: WorldLanes, type: ShaderValueType.Float4),
@@ -369,6 +366,7 @@ public static partial class SdfWorldPackage {
         Value(name: GeometryOnly, type: ShaderValueType.Uint),
         Value(name: ScreenFidelity, type: ShaderValueType.Float),
         Value(name: StampFade, type: ShaderValueType.Float3),
+        Value(name: PoseOverlay, type: ShaderValueType.Uint3),
         ShaderInterfaceMember.Value(group: ShaderInterfaceGroup.Pass, length: (MeshShadowCascadeCount * MeshShadowCascadeRows), name: MeshShadowCascades, type: ShaderValueType.Float4),
         Value(name: MeshShadowCount, type: ShaderValueType.Uint),
         Value(name: MeshShadowParameters, type: ShaderValueType.Float4),

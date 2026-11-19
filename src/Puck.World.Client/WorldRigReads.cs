@@ -23,16 +23,21 @@ public sealed class WorldRigReads {
     private IWorldStampSource? m_client;
     private int m_body = -1;
     private IWorldBodyPoses? m_poses;
-    private IWorldSeatGuess? m_guess;
     private readonly CreationRigDriver[] m_leads;
+    // A guessing view's guess, presentation clock and, for each of the rig's lead reads, the edge it last saw outstanding
+    // and the clock reading it first saw that edge at; null for a view of the shared pose.
+    private readonly LeadAges? m_ages;
+    private IWorldSeatGuess? m_guess;
 
-    /// <summary>Initializes a new instance of the <see cref="WorldRigReads"/> class over a rig's reads.</summary>
+    /// <summary>Initializes a new instance of the <see cref="WorldRigReads"/> class over a rig's reads: a view of the
+    /// shared pose, every reader's, which answers no lead (<see cref="TryLead"/> reads the cell's place empty).</summary>
     /// <param name="rig">The rig whose reads the view answers.</param>
     /// <param name="lease">The registration's lease of the state mirror, bound to the wearing body, which state reads go
     /// through.</param>
     /// <exception cref="ArgumentNullException"><paramref name="rig"/> or <paramref name="lease"/> is
     /// <see langword="null"/>.</exception>
-    public WorldRigReads(CreationRig rig, WorldStateLease lease) {
+    public WorldRigReads(CreationRig rig, WorldStateLease lease) : this(guessing: false, lease: lease, rig: rig) { }
+    private WorldRigReads(CreationRig rig, WorldStateLease lease, bool guessing) {
         ArgumentNullException.ThrowIfNull(argument: rig);
         ArgumentNullException.ThrowIfNull(argument: lease);
 
@@ -40,11 +45,24 @@ public sealed class WorldRigReads {
         m_lease = lease;
         m_bodies = [.. rig.Reads.Where(predicate: static read => (read.Kind == CreationRigReadKind.Body))];
         m_leads = [.. rig.Drivers.Where(predicate: static driver => (driver.Lead is not null))];
+        m_ages = (guessing ? new LeadAges(reads: rig.Reads.Count) : null);
     }
+    /// <summary>Creates a guessing view over a rig's reads: the view of a presenting seat's own guess layer, the one kind of
+    /// view <see cref="BindGuess"/> accepts. Only the guess layer of a stamp pool makes one, for the pose drawn in the
+    /// owning seat's own view alone (<see cref="WorldCreationInstances.GuessOverlay"/>); every registration any other
+    /// reader resolves carries a view of the shared pose.</summary>
+    /// <param name="rig">The rig whose reads the view answers.</param>
+    /// <param name="lease">The guess layer's lease of the state mirror, bound to the wearing body.</param>
+    /// <returns>The view.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="rig"/> or <paramref name="lease"/> is
+    /// <see langword="null"/>.</exception>
+    public static WorldRigReads ForGuess(CreationRig rig, WorldStateLease lease) => new(guessing: true, lease: lease, rig: rig);
 
-    /// <summary>Gets whether a guess was in force for any of the rig's leads when <see cref="Revision"/> was last read: a
-    /// registration with one is evaluated in full that frame, whatever its rate tier.</summary>
+    /// <summary>Gets whether a guess was in force for any of the rig's leads when <see cref="Revision"/> was last read;
+    /// always <see langword="false"/> on a view of the shared pose.</summary>
     public bool Guessing { get; private set; }
+    /// <summary>Gets whether this is a guessing view (<see cref="ForGuess"/>).</summary>
+    public bool AnswersLeads => (m_ages is not null);
 
     /// <summary>Gets the rig whose reads the view answers.</summary>
     public CreationRig Rig => m_rig;
@@ -76,12 +94,14 @@ public sealed class WorldRigReads {
             // A guess moves the revision when it starts, changes level or ends.
             var guessing = false;
 
-            foreach (var driver in m_leads) {
-                var guessed = TryLead(level: out var level, read: driver.Lead!, seconds: driver.LeadSeconds);
+            if (m_ages is not null) {
+                foreach (var driver in m_leads) {
+                    var guessed = TryLead(level: out var level, read: driver.Lead!, seconds: driver.LeadSeconds);
 
-                guessing |= guessed;
-                hash.Add(value: guessed);
-                hash.Add(value: level);
+                    guessing |= guessed;
+                    hash.Add(value: guessed);
+                    hash.Add(value: level);
+                }
             }
             Guessing = guessing;
 
@@ -94,26 +114,56 @@ public sealed class WorldRigReads {
     /// <param name="body">The wearing body's population index, or -1 for a registration with none.</param>
     /// <param name="poses">The registrations' drawn poses another body's part and pose serial are read from; or
     /// <see langword="null"/>, which reads every body's serial as zero and every part as its body's root.</param>
-    /// <param name="guess">The presenting seat's guess (<see cref="IWorldStampSource.SeatGuess"/>), which the view answers
-    /// leads from only when its body is the wearing body; or <see langword="null"/> for none.</param>
-    public void Bind(IWorldStampSource? client, int body, IWorldBodyPoses? poses = null, IWorldSeatGuess? guess = null) {
+    public void Bind(IWorldStampSource? client, int body, IWorldBodyPoses? poses = null) {
         m_client = client;
         m_body = body;
         m_poses = poses;
-        m_guess = (((guess is not null) && (body >= 0) && (guess.Body == body)) ? guess : null);
     }
-    /// <summary>Reads a driver's lead: the presenting seat's own level on the lead's channel, while a guess is in force for
-    /// the wearing body (<see cref="WorldSeatInput.TryLead"/>).</summary>
+    /// <summary>Points a guessing view at this frame's guess and presentation clock.</summary>
+    /// <param name="guess">The presenting seat's guess (<see cref="IWorldStampSource.SeatGuess"/>), which the view answers
+    /// leads from only when its body is the wearing body; or <see langword="null"/> for none.</param>
+    /// <param name="clockSeconds">The guess layer's presentation clock, in seconds: the frames' presented time summed,
+    /// which advances by the completed ticks under lockstep and by the frames' own time otherwise, never the wall
+    /// clock, so a guess's age (<c>leadSeconds</c>) repeats wherever the frames repeat.</param>
+    /// <exception cref="InvalidOperationException">The view is a view of the shared pose, which no guess may reach.</exception>
+    public void BindGuess(IWorldSeatGuess? guess, float clockSeconds) {
+        if (m_ages is not { } ages) { throw new InvalidOperationException(message: "Only a guess layer's view (WorldRigReads.ForGuess) reads a guess; the shared pose every reader resolves never does."); }
+
+        m_guess = (((guess is not null) && (m_body >= 0) && (guess.Body == m_body)) ? guess : null);
+        ages.Clock = clockSeconds;
+    }
+    /// <summary>Reads a driver's lead: the presenting seat's own level on the lead's channel, while one of its edges on the
+    /// channel is outstanding (<see cref="WorldSeatInput.TryLead"/>) and no older on the presentation clock than
+    /// <paramref name="seconds"/>. A view of the shared pose answers none.</summary>
     /// <param name="read">One of the rig's <see cref="CreationRigReadKind.Lead"/> reads.</param>
-    /// <param name="seconds">How long, in seconds, an unanswered guess may show.</param>
+    /// <param name="seconds">How long, in seconds of presented time, an unanswered guess may show.</param>
     /// <param name="level">The level; zero when there is no guess.</param>
     /// <returns><see langword="true"/> while a guess is in force; the driver then reads it in place of its cell.</returns>
     /// <exception cref="ArgumentException"><paramref name="read"/> is not one of the rig's lead reads.</exception>
     public bool TryLead(CreationRigRead read, float seconds, out float level) {
         Require(kind: CreationRigReadKind.Lead, read: read);
         level = 0f;
+        if ((m_ages is not { } ages) || (m_guess is not { } guess)) { return false; }
+        if (!guess.TryLead(channel: read.Reference!, edge: out var edge, level: out var guessed)) {
+            ages.Edge[read.Index] = 0UL;
 
-        return ((m_guess is { } guess) && guess.TryLead(channel: read.Reference!, leadSeconds: seconds, level: out level));
+            return false;
+        }
+        if (ages.Edge[read.Index] != edge) {
+            ages.Edge[read.Index] = edge;
+            ages.Since[read.Index] = ages.Clock;
+        }
+        if ((ages.Clock - ages.Since[read.Index]) > seconds) { return false; }
+        level = guessed;
+
+        return true;
+    }
+    // The ages of a guessing view's leads, indexed by read: the outstanding edge each last saw and the clock reading it
+    // was first seen at.
+    private sealed class LeadAges(int reads) {
+        public float Clock;
+        public readonly ulong[] Edge = new ulong[reads];
+        public readonly float[] Since = new float[reads];
     }
     /// <summary>Resolves which body a body read names this frame: its fixed index, or the index its selecting cell holds
     /// as stored truth. A cell selects a body only when it holds a whole number naming an active body.</summary>
@@ -256,17 +306,23 @@ public sealed class WorldRigReads {
         }
     }
 }
-/// <summary>The presenting seat's guess on its own input (<c>CreationDriverDocument.Lead</c>): offered only by a client that
-/// presents for exactly one seat, for the body that seat controls, so no other viewer's picture can carry it.</summary>
+/// <summary>The presenting seat's guess on its own input (<c>CreationDriverDocument.Lead</c>), offered to the scene of the
+/// world the seat's body is in (<see cref="WorldClient.SeatGuessAt"/>). Only that scene's guess layer reads it
+/// (<see cref="WorldRigReads.ForGuess"/>), into rows only the seat's own view reads
+/// (<see cref="WorldCreationInstances.GuessOverlay"/>), so no camera, anchor, pointer, other view or read-back of the
+/// shared pose can carry it.</summary>
 public interface IWorldSeatGuess {
-    /// <summary>Gets the population index of the body the seat controls.</summary>
+    /// <summary>Gets the population index, in the scene's world, of the body the seat controls.</summary>
     int Body { get; }
-    /// <summary>Answers a lead through the seat's one guess function (<see cref="WorldSeatInput.TryLead"/>).</summary>
+    /// <summary>Gets the seat's 0-based roster slot, whose own view alone draws the guess.</summary>
+    int Slot { get; }
+    /// <summary>Answers whether one of the seat's edges on a channel is outstanding, through the seat's one guess function
+    /// (<see cref="WorldSeatInput.TryLead"/>).</summary>
     /// <param name="channel">The input channel's name.</param>
-    /// <param name="leadSeconds">How long, in seconds, an unanswered guess may show.</param>
-    /// <param name="level">The seat's own level on the channel; zero when there is no guess.</param>
-    /// <returns><see langword="true"/> while a guess is in force.</returns>
-    bool TryLead(string channel, float leadSeconds, out float level);
+    /// <param name="level">The seat's own level on the channel; zero when no edge is outstanding.</param>
+    /// <param name="edge">The outstanding edge's identity, which a later edge never shares; zero when none is.</param>
+    /// <returns><see langword="true"/> while an edge is outstanding.</returns>
+    bool TryLead(string channel, out float level, out ulong edge);
 }
 /// <summary>The drawn poses of the bodies a rig may read (<see cref="WorldRigReads.Bind"/>): another body's part and the
 /// serial its registration moves each time its pose changes.</summary>

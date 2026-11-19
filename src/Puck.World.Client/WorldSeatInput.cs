@@ -20,10 +20,10 @@ public sealed class WorldSeatInput {
     private bool m_admitted;
     private WorldInputSwitch m_boundary;
     // The last edge (a press, a release or an axis sample) this producer sent on each logical channel in the current
-    // epoch: its event sequence (zero for none) and the presentation timestamp of the batch that carried it.
+    // epoch, by its event sequence (zero for none), and the highest of those whose answer the seat has seen presented
+    // (TryLead), which stays answered whatever a later delivery carries.
     private readonly uint[] m_edgeSequence;
-    private readonly long[] m_edgeStamp;
-    private readonly TimeProvider m_time;
+    private readonly uint[] m_answeredSequence;
 
     /// <summary>Reads a named action's authority-published eligibility, rearming and continuation.</summary>
     public WorldInputActionStatus ActionStatus(string name) {
@@ -49,12 +49,10 @@ public sealed class WorldSeatInput {
     /// <param name="bindings">The routed binding sources.</param>
     /// <param name="previous">The producer this one replaces on the same attachment, whose observations it keeps, or
     /// <see langword="null"/>.</param>
-    /// <param name="time">The presentation clock a guess's age is read on, or <see langword="null"/> for the system's.</param>
-    public WorldSeatInput(WorldDefinition definition, IReadOnlyList<BindingSourceContract> bindings, WorldSeatInput? previous = null, TimeProvider? time = null) {
+    public WorldSeatInput(WorldDefinition definition, IReadOnlyList<BindingSourceContract> bindings, WorldSeatInput? previous = null) {
         m_catalog = WorldInputCatalog.For(definition: definition);
         m_edgeSequence = new uint[m_catalog.Channels.Length];
-        m_edgeStamp = new long[m_catalog.Channels.Length];
-        m_time = (time ?? TimeProvider.System);
+        m_answeredSequence = new uint[m_catalog.Channels.Length];
         var contracts = new List<WorldInputSource>();
         var names = new List<string>();
 
@@ -122,6 +120,7 @@ public sealed class WorldSeatInput {
         m_producer.Reconcile(publication.Revision, publication.Epoch, m_catalog.Mappings[publication.Mapping], publication.Baseline, sources);
         // A new epoch ends every guess: its edges belong to the epoch the authority closed.
         Array.Clear(array: m_edgeSequence);
+        Array.Clear(array: m_answeredSequence);
         m_boundary = publication.Boundary;
         m_keptActivations.Clear();
         foreach (var decision in m_boundary.Decisions.Span) {
@@ -235,53 +234,94 @@ public sealed class WorldSeatInput {
         var batch = m_producer.Publish(tick, seat.PointerRay);
 
         Array.Clear(array: m_relative);
-        if (!batch.Events.IsEmpty) {
-            var stamp = m_time.GetTimestamp();
-
-            foreach (var input in batch.Events.Span) {
-                if ((input.Kind is WorldInputEventKind.Press or WorldInputEventKind.Release or WorldInputEventKind.AxisSample) && (input.Channel < m_edgeSequence.Length)) {
-                    m_edgeSequence[input.Channel] = input.Sequence;
-                    m_edgeStamp[input.Channel] = stamp;
-                }
+        foreach (var input in batch.Events.Span) {
+            if ((input.Kind is WorldInputEventKind.Press or WorldInputEventKind.Release or WorldInputEventKind.AxisSample) && (input.Channel < m_edgeSequence.Length)) {
+                m_edgeSequence[input.Channel] = input.Sequence;
             }
         }
         return new(tick, body, motion, owner, Input: batch);
     }
-    /// <summary>Answers a driver's lead (<c>CreationDriverDocument.Lead</c>): the one function a guess is read through.
-    /// It reads only this seat's own producer and the authority's answer to it, and writes nothing.</summary>
+    /// <summary>Answers whether an edge this seat sent on a channel is outstanding (<c>CreationDriverDocument.Lead</c>):
+    /// the one function a guess's start and end are read through, deciding through <see cref="ReadGuess"/>. The only
+    /// state it writes is the seat's own record that an edge's answer was presented, so an answer a later delivery no
+    /// longer carries (a restored checkpoint, a withdrawn span) revives no guess.</summary>
     /// <param name="channel">The input channel's name.</param>
-    /// <param name="leadSeconds">How long, in seconds, an unanswered guess may show.</param>
     /// <param name="answer">The last input the authority answered for this seat's owner, or <see langword="null"/>
     /// when none has been delivered.</param>
     /// <param name="presentedTick">The simulation tick the presented state was last delivered at.</param>
     /// <param name="presentedFraction">How far the frame has presented from the tick before it to
     /// <paramref name="presentedTick"/>, in [0, 1].</param>
-    /// <param name="level">The seat's own folded level on the channel; zero when there is no guess.</param>
-    /// <returns><see langword="true"/> while a guess is in force: the seat is admitted with no lost capture, the channel
-    /// is a button or an axis live in the mapping the authority last published, an edge this seat sent on it in the
-    /// current epoch has not had its answer presented, and that edge is no older than
-    /// <paramref name="leadSeconds"/>.</returns>
-    /// <remarks>The caller decides the audience: it asks only on a client that presents for exactly this one seat,
-    /// for the body the seat controls.</remarks>
-    public bool TryLead(string channel, float leadSeconds, WorldInputAnswer? answer, ulong presentedTick, float presentedFraction, out float level) {
-        level = 0f;
-        if (!m_admitted || m_producer.CaptureLost || !m_catalog.TryGetLogicalId(id: out var logical, name: channel) ||
-            (m_catalog.Channels[logical].Shape is not (ChannelShape.Binary or ChannelShape.Bipolar or ChannelShape.Unipolar)) ||
-            !m_producer.Mapping.IsLive(logicalId: logical)) {
-            return false;
-        }
+    /// <param name="level">The seat's own folded level on the channel; zero when no edge is outstanding.</param>
+    /// <param name="edge">The outstanding edge's identity, its epoch and event sequence together, which no other edge of
+    /// this producer shares; zero when none is outstanding.</param>
+    /// <returns><see langword="true"/> while an edge is outstanding (<see cref="WorldGuessState.InForce"/>).</returns>
+    /// <remarks>How long an unanswered edge may show (<c>leadSeconds</c>) is measured by the caller on the presentation
+    /// clock (<see cref="WorldRigReads.TryLead"/>), never here on the wall clock. The caller decides the audience: it asks
+    /// only for the body the seat controls, and draws what it learns in that seat's own view alone.</remarks>
+    public bool TryLead(string channel, WorldInputAnswer? answer, ulong presentedTick, float presentedFraction, out float level, out ulong edge) {
+        var reading = ReadGuess(answer: answer, channel: channel, presentedFraction: presentedFraction, presentedTick: presentedTick);
 
-        var sequence = m_edgeSequence[logical];
-
-        if (sequence == 0U) { return false; }
-        // Answered once the authority's answer covers the edge in this epoch and the tick it answered in is presented.
-        if ((answer is { } answered) && (answered.Epoch == m_producer.Epoch) && (answered.Sequence >= sequence) &&
-            ((presentedTick > answered.Tick) || ((presentedTick == answered.Tick) && (presentedFraction >= 1f)))) {
-            return false;
+        level = reading.Level;
+        edge = 0UL;
+        if ((reading.State == WorldGuessState.Answered) && m_catalog.TryGetLogicalId(id: out var logical, name: channel)) {
+            m_answeredSequence[logical] = Math.Max(val1: m_answeredSequence[logical], val2: reading.Outstanding);
         }
-        if (m_time.GetElapsedTime(startingTimestamp: m_edgeStamp[logical]).TotalSeconds > leadSeconds) { return false; }
-        level = ((float)m_producer.Level(channel: logical));
+        if (reading.State != WorldGuessState.InForce) { return false; }
+        // A sequence restarts with each epoch, so the epoch keeps a later epoch's edge from reading as an earlier one.
+        edge = ((reading.Epoch << 32) ^ reading.Outstanding);
 
         return true;
     }
+    /// <summary>Reads why an edge on a channel is or is not outstanding, with the figures it was decided from: the one
+    /// decision <see cref="TryLead"/> answers from. It writes nothing.</summary>
+    /// <param name="channel">The input channel's name.</param>
+    /// <param name="answer">The last input the authority answered for this seat's owner, or <see langword="null"/>.</param>
+    /// <param name="presentedTick">The simulation tick the presented state was last delivered at.</param>
+    /// <param name="presentedFraction">How far the frame has presented toward <paramref name="presentedTick"/>, in [0, 1].</param>
+    /// <returns>The reading; its level is zero unless the state is <see cref="WorldGuessState.InForce"/>.</returns>
+    public WorldGuessReading ReadGuess(string channel, WorldInputAnswer? answer, ulong presentedTick, float presentedFraction) {
+        if (!m_admitted) { return new(WorldGuessState.NotAdmitted, 0U, 0f, m_producer.Epoch); }
+        if (m_producer.CaptureLost) { return new(WorldGuessState.CaptureLost, 0U, 0f, m_producer.Epoch); }
+        if (!m_catalog.TryGetLogicalId(id: out var logical, name: channel) ||
+            (m_catalog.Channels[logical].Shape is not (ChannelShape.Binary or ChannelShape.Bipolar or ChannelShape.Unipolar))) {
+            return new(WorldGuessState.NotALevelChannel, 0U, 0f, m_producer.Epoch);
+        }
+        if (!m_producer.Mapping.IsLive(logicalId: logical)) { return new(WorldGuessState.NotLive, 0U, 0f, m_producer.Epoch); }
+
+        var sequence = m_edgeSequence[logical];
+
+        if (sequence == 0U) { return new(WorldGuessState.NoEdge, 0U, 0f, m_producer.Epoch); }
+        // Answered once the authority's answer covers the edge in this epoch and the tick it answered in is presented, and
+        // answered for good once the seat has seen that (TryLead).
+        if ((sequence <= m_answeredSequence[logical]) || ((answer is { } answered) && (answered.Epoch == m_producer.Epoch) && (answered.Sequence >= sequence) &&
+            ((presentedTick > answered.Tick) || ((presentedTick == answered.Tick) && (presentedFraction >= 1f))))) {
+            return new(WorldGuessState.Answered, sequence, 0f, m_producer.Epoch);
+        }
+
+        return new(WorldGuessState.InForce, sequence, ((float)m_producer.Level(channel: logical)), m_producer.Epoch);
+    }
 }
+/// <summary>Why a seat's edge on a channel is or is not outstanding (<see cref="WorldSeatInput.ReadGuess"/>).</summary>
+public enum WorldGuessState {
+    /// <summary>The seat's input is not admitted by its authority.</summary>
+    NotAdmitted,
+    /// <summary>The producer lost a capture.</summary>
+    CaptureLost,
+    /// <summary>The channel is not a button or an axis the world declares.</summary>
+    NotALevelChannel,
+    /// <summary>The channel is not live in the mapping the authority last published.</summary>
+    NotLive,
+    /// <summary>The seat has sent no edge on the channel in the current epoch.</summary>
+    NoEdge,
+    /// <summary>The authority's answer to the seat's last edge has been presented.</summary>
+    Answered,
+    /// <summary>The seat's last edge is outstanding; a guess layer shows it for at most its <c>leadSeconds</c> of
+    /// presented time.</summary>
+    InForce,
+}
+/// <summary>An edge's decision and the figures it rests on.</summary>
+/// <param name="State">Why the edge is or is not outstanding.</param>
+/// <param name="Outstanding">The event sequence of the seat's last edge on the channel in the epoch; zero for none.</param>
+/// <param name="Level">The seat's folded level while in force; otherwise zero.</param>
+/// <param name="Epoch">The producer's input epoch.</param>
+public readonly record struct WorldGuessReading(WorldGuessState State, uint Outstanding, float Level, ulong Epoch);

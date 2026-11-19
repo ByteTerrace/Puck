@@ -209,7 +209,7 @@ public sealed partial class SdfWorldTablesWorkLawTests {
             // estimate left it instead of at a debt that holds all later work.
             Assert.True(condition: (answer.GpuSeconds is >= 0.0 and <= 0.001), userMessage: $"the job was measured at {answer.GpuSeconds} s");
             Assert.Contains("clamped:1,", budget.Describe());
-            Assert.True(condition: (budget.GpuCredit > -SdfGpuWork.FrameShareSeconds), userMessage: $"the credit fell to {budget.GpuCredit}");
+            Assert.True(condition: (budget.GpuCredit > -budget.FrameAllowanceSeconds), userMessage: $"the credit fell to {budget.GpuCredit}");
         } finally {
             rig.Gpu.WriteReadback = null;
             client.ReleaseAnswers();
@@ -225,7 +225,7 @@ public sealed partial class SdfWorldTablesWorkLawTests {
         public GpuMemoryBytes OwnedBytes => default;
         public int Remaining { get; set; }
 
-        public bool TryTake(SdfWorldTables tables, int uploadBytes, [NotNullWhen(true)] out object? job, out double estimatedSeconds) {
+        public bool TryTake(SdfWorldTables tables, int uploadBytes, double allowanceSeconds, [NotNullWhen(true)] out object? job, out double estimatedSeconds) {
             estimatedSeconds = 0.0;
             job = null;
             if (Remaining == 0) { return false; }

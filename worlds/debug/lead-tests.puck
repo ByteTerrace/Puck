@@ -1,0 +1,65 @@
+// What the authority does with the presses a `lead` driver guesses at (`puck test worlds/debug/lead-tests.puck --reproduce`).
+// The guess itself is the seat's own client's: no scenario can read a pose. These fix the authority's half, so the
+// guess is judged against what it answers for.
+schema: "puck.world.definition.v1"
+basis: "lead-fixture"
+documentId: "lead-tests"
+simulation {
+  rateHz: 30
+}
+
+test "a press the rule takes sets the cell and its release clears it" {
+  when {
+    ticks 3
+    seat1: player.signal keyboard.u press
+    ticks 6
+    seat1: player.signal keyboard.u release
+    ticks 4
+  }
+  expect {
+    pressPose[0] == 0
+    channel(1, press) == 0
+  }
+}
+
+test "a press held for sixty ticks is taken while the rule allows it" {
+  when {
+    ticks 3
+    seat1: player.signal keyboard.u press
+    ticks 60
+  }
+  expect {
+    pressPose[0] == 1
+    channel(1, press) == 1
+  }
+}
+
+test "a press the rule refuses leaves the cell at zero for the whole hold" {
+  given {
+    refuse = 1
+  }
+  when {
+    ticks 3
+    seat1: player.signal keyboard.u press
+    ticks 60
+  }
+  expect {
+    pressPose[0] == 0
+    channel(1, press) == 1
+  }
+}
+
+test "a mode switch in the middle of a press ends the press" {
+  when {
+    ticks 3
+    seat1: player.signal keyboard.u press
+    ticks 8
+    seat1: player.signal keyboard.o press
+    ticks 8
+  }
+  expect {
+    bodyState(body, 0, mode) == 1
+    pressPose[0] == 0
+    channel(1, press) == 0
+  }
+}

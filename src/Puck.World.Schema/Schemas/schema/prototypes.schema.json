@@ -585,10 +585,25 @@
                     "cases": {
                       "type": "array",
                       "items": {
-                        "$ref": "./common.schema.json#/$defs/ShapeNullable10",
-                        "description": "A cel style on the wire (SdfToon): the world\u0027s default style (render.toon, which the live world.toon lever overrides) and a palette row\u0027s own (Toon) are this one shape, so a style authored once (the standard\u0027s styles.puck) serves both. The engine holds no look of its own: a style that bands authors every value, and one that says enabled: false needs none. Presentation only; no field enters simulation state or the bake."
+                        "type": [
+                          "object",
+                          "null"
+                        ],
+                        "properties": {
+                          "toon": {
+                            "$ref": "./common.schema.json#/$defs/ShapeNullable10",
+                            "description": "The case\u0027s style (ToonStyleDocument), or null for none.",
+                            "default": null
+                          },
+                          "shade": {
+                            "default": null,
+                            "description": "The case\u0027s program, or null for none."
+                          }
+                        },
+                        "additionalProperties": false,
+                        "description": "One look a PaletteToonSelectDocument chooses: the slot\u0027s cel style and its shade program while the case is selected. A case that leaves either out shades the slot without it: no style of its own (the world\u0027s default style) and no program of its own (the world\u0027s render.shade)."
                       },
-                      "description": "The styles, the first for the value zero; each is a whole style (ToonStyleDocument), enabled: false keeping the slot continuous."
+                      "description": "The looks, the first for the value zero (PaletteToonCaseDocument)."
                     }
                   },
                   "required": [
@@ -736,71 +751,8 @@
                   "description": "The slot\u0027s flow layer (PaletteFlowDocument): shading that moves along an authored flow over still geometry; null moves nothing."
                 },
                 "shade": {
-                  "type": [
-                    "object",
-                    "null"
-                  ],
-                  "properties": {
-                    "name": {
-                      "type": "string"
-                    },
-                    "parameters": {
-                      "type": "array",
-                      "items": {
-                        "type": [
-                          "object",
-                          "null"
-                        ],
-                        "properties": {
-                          "name": {
-                            "type": "string"
-                          },
-                          "type": {
-                            "$ref": "./common.schema.json#/$defs/ShapeNonNullable53"
-                          },
-                          "bits": {
-                            "type": "array",
-                            "items": {
-                              "type": "integer"
-                            }
-                          }
-                        },
-                        "required": [
-                          "name",
-                          "type",
-                          "bits"
-                        ],
-                        "additionalProperties": false,
-                        "description": "A runtime slot\u0027s type and initial data. Names bind source references and do not enter program identity."
-                      }
-                    },
-                    "outputs": {
-                      "type": "array",
-                      "items": {
-                        "$ref": "./common.schema.json#/$defs/ShapeNullable15",
-                        "description": "An output expression; omitted outputs retain the stage\u0027s default."
-                      }
-                    },
-                    "values": {
-                      "type": [
-                        "array",
-                        "null"
-                      ],
-                      "items": {
-                        "$ref": "./common.schema.json#/$defs/ShapeNullable15",
-                        "description": "A dependency-ordered value in the canonical document. Reads may name only earlier values of this phase."
-                      },
-                      "default": null
-                    }
-                  },
-                  "required": [
-                    "name",
-                    "parameters",
-                    "outputs"
-                  ],
-                  "additionalProperties": false,
                   "default": null,
-                  "description": "The authored presentation program and runtime parameters."
+                  "description": "The slot\u0027s shade program (ShadeReference), or null for the world\u0027s default."
                 }
               },
               "required": [
@@ -817,7 +769,7 @@
               "null"
             ],
             "items": {
-              "$ref": "./common.schema.json#/$defs/ShapeNullable33",
+              "$ref": "./common.schema.json#/$defs/ShapeNullable28",
               "description": "The persisted form of a placed shape. Position and Rotation are authored in the creation\u0027s author frame \u2014 see CreationFrame \u2014 and Scale is the primitive\u0027s size directly: see CreationGeometry\u0027s unit table."
             }
           },
@@ -1446,7 +1398,7 @@
                     "shapes": {
                       "type": "array",
                       "items": {
-                        "$ref": "./common.schema.json#/$defs/ShapeNullable33",
+                        "$ref": "./common.schema.json#/$defs/ShapeNullable28",
                         "description": "The persisted form of a placed shape. Position and Rotation are authored in the creation\u0027s author frame \u2014 see CreationFrame \u2014 and Scale is the primitive\u0027s size directly: see CreationGeometry\u0027s unit table."
                       },
                       "description": "The region\u0027s shapes, at least one: geometry only (type, name, pose, scale, exponent, rounding), each a box, a sphere, an ellipsoid, a superellipsoid, a capsule scaled alike in X and Z or a plane (Lower). A relief\u0027s masks hold at most MaxRegions shapes in all."
@@ -1561,12 +1513,12 @@
                   "description": "The containing world\u0027s dynamics row (natural frequency, damping, initial response) an instantaneous signal\u0027s phase follows through, or null to track the signal exactly. A hip that trails a turn and overshoots as it settles, a lean that builds and relaxes, and a pose that eases toward a new level are one signal read through a second-order response. Refused on an integrating signal and on a SignalDriverPrefix signal, whose phase is a running cycle rather than a level; the world validator refuses a name its dynamics section does not declare."
                 },
                 "cadenceBy": {
-                  "$ref": "./common.schema.json#/$defs/ShapeNullable34",
+                  "$ref": "./common.schema.json#/$defs/ShapeNullable29",
                   "description": "Scales Cadence each frame by a curve of an earlier driver\u0027s phase, or null to keep it fixed. A stride on planar travel that takes its radians per metre from a curve of the body\u0027s speed lengthens its stride as the body speeds up, so its step rate rises less than its speed does.",
                   "default": null
                 },
                 "weightBy": {
-                  "$ref": "./common.schema.json#/$defs/ShapeNullable34",
+                  "$ref": "./common.schema.json#/$defs/ShapeNullable29",
                   "description": "Sets the level the weight eases toward while the gate holds, from a curve of an earlier driver\u0027s phase clamped to [0, 1], or null for 1. Two drivers reading one stride\u0027s phase through SignalDriverPrefix, one weighted by a falling curve of speed and one by a rising one, cross-fade a walk into a run without their legs ever leaving step.",
                   "default": null
                 },
@@ -1797,7 +1749,7 @@
                   "description": "How much of the tip\u0027s tilt the contact takes out, in [0, 1] (null = 0: the tip keeps whatever orientation the solved chain hands it). At 1 the tip\u0027s rest orientation is re-aligned to the contact normal: the tip axis that points against the target\u0027s probe Direction at rest (creation up for a target that names none) turns onto the surface normal at the target, latched with the plant, or onto world up when the target reports no surface. The turn is the shortest one, about the tip\u0027s own origin, so the tip stays on its target and keeps the heading the chain gave it. It is weighted by the eased weight the goal blends by, so a tip a plant releases to its swing (SwingWeight 0) keeps its authored swing off the ground. A boot whose sole is flat at rest keeps it flat when the chain bends to reach a target off its rest offset, and a Standoff equal to the tip origin\u0027s rest height then puts the whole sole on the surface."
                 },
                 "weightBy": {
-                  "$ref": "./common.schema.json#/$defs/ShapeNullable34",
+                  "$ref": "./common.schema.json#/$defs/ShapeNullable29",
                   "description": "The level the effector\u0027s weight eases toward while its gate holds, from a curve of a driver\u0027s phase clamped to [0, 1], read as a driver\u0027s WeightBy reads one (null = 1). The driver it names owns the effector: the effector\u0027s layer share is that driver\u0027s share over every shape the effector writes (EffectorShare), and a driver with no Parts covers what its effectors write. Any declared driver may own one, since every driver advances before any effector solves.",
                   "default": null
                 },
