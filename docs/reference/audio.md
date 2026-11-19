@@ -34,7 +34,8 @@ projects one tick's `WorldEventFeed.Edges` into `MusicSenseEdge`s at the
 `WorldServer.Step` call site, immediately after `Collect()`. A rhythm hit
 window is an authored `compareState` range over the `$clock:<music>:phaseError`
 world-rule operand (the signed tick distance from `MusicClock`'s current
-position to the nearest beat) rather than a dedicated grader type.
+position to the nearest beat) rather than a dedicated grader type; the
+[clock operands](#clock-operands) below hold the rest of the family.
 
 A world names its score, tunes and patches by rows (`music`, `tunes`,
 `patches`, like `tables`), each a name, a `source` and a SHA-256 pin of the
@@ -71,6 +72,26 @@ else. In particular, `Puck.Audio` parses no document—a `puck.synthesizer-patch
 patch crosses into the mixer's `VoicePatch` struct through the host's patch
 factory, which stays in `Puck.World` alongside the rest of the presentation glue (the tune host, the
 render device) documented in [`Puck.World`'s Audio/ folder](../../src/Puck.World/Audio/README.md).
+
+## Clock operands
+
+A world's `music` row gives its rules the `$clock:<music>:<facet>` operands,
+spelled `clock(<music>, <facet>)` in a `.puck` rule. Each facet reads the music
+clock in one of two places.
+
+| Facet | Reads | Kind |
+|---|---|---|
+| `phaseError` | The signed engine-tick distance from the clock's current position to the nearest beat: positive past the beat, negative before the next one, tied toward past at half a beat | Int |
+| `beat`, `bar` | The beat or bar index since the music began, at the clock's current position | Int |
+| `beatInBar` | The zero-based place of the current beat in its bar | Int |
+| `phaseErrorAt:<owner>:<channel>:<kind>:<occurrence>` | The signed distance in seconds from one input event to the nearest beat. The event is read at its captured time plus the owner's calibration, or, when `inputHistory.judgement` is `Admission`, at the start of its admission interval with neither | Fixed |
+| `beatAt:…`, `barAt:…`, `beatInBarAt:…` | The index of the beat nearest that event, its bar and its place in the bar. An event before the first beat reads a negative beat | Int |
+
+The current-position facets read the clock after this tick's advance. The
+`At` facets read the `music` coordinates the authority recorded in the event's
+interval, so a later tempo or segment change leaves the answer as it was, and an
+event with no recorded coordinates (a world with no music at capture) reads
+absent, which `??` defaults. Neither form accepts a key.
 
 ## Speaker gain
 

@@ -305,7 +305,7 @@ public sealed partial class WorldTick {
     private void StepCore(in FixedStepContext context) {
         using var work = HostFrameWork.Measure(HostFrameWorkPart.TickIngress);
         Host.Input.BeginInterval(interval: new WorldInputInterval((context.Tick + 1), (context.ElapsedTicks - context.StepTicks), context.StepTicks,
-            ((m_musicClock is { } capturedClock) ? new(capturedClock.ElapsedTicks, capturedClock.TicksPerBeat, m_musicDirector!.CurrentSegmentId) : null)));
+            ((m_musicClock is { } capturedClock) ? new(capturedClock.ElapsedTicks, capturedClock.TicksPerBeat, m_musicDirector!.CurrentSegmentId, capturedClock.BeatsPerBar) : null)));
         TapFederatedIntents();
         // Settled here, before anything below can compose or rebase a mutation: context.ElapsedTicks is this whole
         // step's own engine-time coordinate (the exact engine tick the step completes at), so every write and read
