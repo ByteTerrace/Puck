@@ -1773,7 +1773,12 @@ engine counts:
   look critic is called only when the direction is in doubt. Lanes that
   change looks may land in the same batch.
 
-A lane lands on its build and boot; this evidence is gathered across the batch. Test requirements are lifted for the
+A lane lands on its build and boot; this evidence is gathered across the batch.
+In this wave the readiness boot is the lead's: with sixteen lanes on the lead
+machine the World build lease queued thirteen deep at about five minutes a
+build, so a lane hands back on the build of what it touched, and the lead
+boots each batch's merged tip headless and bisects a failure over the batch.
+A lane still starts a headless World when its reading decides what it builds. Test requirements are lifted for the
 refactoring campaign ([AGENTS.md](../../AGENTS.md#puck-is-pre-release)): no
 suite, coverage figure or recorded baseline is required of a change, and a
 test a change breaks is updated or deleted in that change. Equality with the
@@ -2494,7 +2499,7 @@ CPU thread reads to learn that work on a queue has finished.
 - *What it speeds up.* A barrier tells the GPU that a resource changes
   use between two passes. Direct3D 12 has an older and a newer form. Puck
   requires the newer one and uses it for buffers, but every texture still
-  goes through the older one (`DirectXBarriers.Transition`), which makes
+  goes through the older one (a legacy resource barrier), which makes
   the driver assume the worst case. The frame is a chain of compute passes
   over images, so it pays that between most of them.
 - *Evidence.* The specification: "Mixing legacy and enhanced barriers on
@@ -3030,8 +3035,9 @@ one barrier model.**
   split of one shadow pass into command processing, vertex work and
   rasterization, and the command change stays only if it removed code. A
   route run on Direct3D 12 with `--debug-layers` prints no barrier message,
-  no texture reaches `DirectXBarriers.Transition`, and presented frames on
-  the route show nothing new.
+  and presented frames on the route show nothing new. (Landed: the legacy
+  transition path is deleted and every texture transition is an enhanced
+  barrier; the windowed reading and the debug-layer route are the lead's.)
 
 **`signal`: a background job is known finished when it finishes.**
 

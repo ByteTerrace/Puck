@@ -109,6 +109,7 @@ public sealed record WorldFieldsSection(
                 (field.Min != trait.Min) ||
                 (field.Max != trait.Max) ||
                 (field.HeightScale != trait.HeightScale) ||
+                (field.SimulationOnly != trait.SimulationOnly) ||
                 (field.Material != trait.Material) ||
                 !string.Equals(
                 a: field.Color,
@@ -211,6 +212,7 @@ public sealed record WorldFieldsSection(
                 (a.Min != b.Min) ||
                 (a.Max != b.Max) ||
                 (a.HeightScale != b.HeightScale) ||
+                (a.SimulationOnly != b.SimulationOnly) ||
                 (a.Medium != b.Medium)
             ) {
                 return false;
@@ -294,7 +296,8 @@ public sealed record WorldFieldsSection(
                 Max: trait.Max,
                 Medium: (trait.Medium is not null),
                 Min: trait.Min,
-                Name: row.Name.Value
+                Name: row.Name.Value,
+                SimulationOnly: trait.SimulationOnly
             ));
 
             foreach (var fill in (trait.Paint ?? [])) {
@@ -355,7 +358,8 @@ public sealed record WorldFieldsSection(
                     ? new WorldLatticeMedium()
                     : null),
                         Min: row.Min,
-                        Paint: ((paint.Length == 0) ? null : paint)
+                        Paint: ((paint.Length == 0) ? null : paint),
+                        SimulationOnly: row.SimulationOnly
                     ),
                     Name: CellName.Parse(candidate: row.Name)
                 ));
@@ -418,6 +422,7 @@ public sealed record WorldFieldTopology(
 /// <c>state.&lt;row&gt;[.&lt;key&gt;]</c> Text-cell binding (<see cref="WorldColor"/>'s shared grammar, resolved live
 /// at emit); defaults to white when no material is supplied.</param>
 /// <param name="Material">Optional surface material using the creation palette vocabulary.</param>
+/// <param name="SimulationOnly">Keep this row in lattice reactions and omit its surface and body coupling.</param>
 /// <param name="Paint">The initial fills, applied in order over <paramref name="Initial"/>.</param>
 /// <param name="Medium">Marks this field a fluid MEDIUM, or <see langword="null"/> for an ordinary field. A medium
 /// field's value times <paramref name="HeightScale"/> over the lattice origin is a free surface every active body
@@ -433,7 +438,8 @@ public sealed record WorldStateFieldTrait(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Color = null,
     IReadOnlyList<WorldLatticeFill>? Paint = null,
     WorldLatticeMedium? Medium = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] PaletteEntryDocument? Material = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] PaletteEntryDocument? Material = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] bool SimulationOnly = false
 ) {
     /// <summary>The initial fills, applied in order over <see cref="Initial"/>.</summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
@@ -481,6 +487,7 @@ public sealed record WorldFieldLatticeDefinition(
 /// is nonzero, or omitted for a neutral white surface.</param>
 /// <param name="Material">Optional surface material using the creation palette vocabulary.</param>
 /// <param name="Medium">Whether this field is a fluid medium (see <see cref="WorldStateFieldTrait.Medium"/>).</param>
+/// <param name="SimulationOnly">Keep this row in lattice reactions and omit its surface and body coupling.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record WorldFieldRow(
     string Name,
@@ -490,8 +497,13 @@ public sealed record WorldFieldRow(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] float HeightScale = 0f,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Color = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] bool Medium = false,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] PaletteEntryDocument? Material = null
-);
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] PaletteEntryDocument? Material = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] bool SimulationOnly = false
+) {
+    /// <summary>Gets whether presentation should publish and draw a height field for this row.</summary>
+    [JsonIgnore]
+    public bool DrawsSurface => ((HeightScale > 0f) && !SimulationOnly);
+}
 /// <summary>One initial fill of a lattice row, applied in order over the row's <c>initial</c>. Every kind decides
 /// per CELL with integer hashes and Q48.16 arithmetic only, so a fill is bit-identical on every machine and backend
 /// -- lattice values are simulation state. The <c>Field</c> member is compile-stamped from the carrying row (see
