@@ -20,6 +20,21 @@ the display clock. `lockstep` pins that clock before the first frame too
 Pausing or enabling lockstep after attachment is too late to control those
 initial inputs. Keep the backend and built source state fixed across repeats.
 
+Two things a fresh `cacheDir` does not reset, and one lockstep hides
+([the wall-time measurement](../../../../docs/plans/field-programs/research-bake-time.md)).
+The driver's own shader cache decides the opening wait: the bake's GPU client is
+created with the residency's tables (`SdfWorldResidency.EnsureTables`), after
+every one of its pipelines compiles, so a build whose shaders the driver has
+not seen waits 15 to 35 seconds before its first lattice and a repeat waits
+under one. Lockstep and held frames drive background work without the GPU
+budget (`SdfGpuWorkBudget.Observe`), so a lockstep bake measures the worker
+pool's pace and a free-running one the budget's, which was three times slower
+when the frame's GPU time passed its period. To trace a bake from process
+start, set `DOTNET_EnableEventPipe` with an output path and provider config in
+the World's environment rather than attaching after the start; the runtime's
+allocation events (verbose level) slow allocation-heavy stages, so time a bake
+without them.
+
 For timing, `bench startup --bake` pins those clocks with `--paused --lockstep`.
 Lighting convergence can delay the readiness barrier after the bakes finish;
 allow for it in `--timeout-seconds`. Its per-sample `timeline.log` keeps
