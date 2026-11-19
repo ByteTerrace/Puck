@@ -224,6 +224,119 @@ The back of a portal's glass still needs a presentation choice: no image,
 fallback colour or a front-image mirror. The
 [owner decisions](open-items.md#owner-decisions) hold that choice.
 
+### Colour conversion — scene light to display values once
+
+Today linear scene light reaches SDR displays without an sRGB encode (so the
+exposure meter's 0.104 target prints as ~1% of white instead of 10.4%, masked
+by hand-authored `compensation: 2` in `worlds/debug/hall.puck`) and is decoded
+a second time on HDR displays (`display-encode.frag.hlsl`), while `HexColor`
+enters shading gamma-naively across 22 parse sites. Because a single
+full-screen view skips `place` (`WorldRootGraph.PlacesViews`), panes enter
+`place` already encoded, and filmed views run `SdfViewSnapshot.BloomStandalone`,
+encoding cannot live in `place` alone.
+
+**Design.** Shade in linear scene light everywhere and convert once at the edge
+where scene light becomes a working image:
+
+1. **Every image declares its kind.** Keep three kinds — *scene light* (linear
+   luminance in nits, unexposed), *window image* (scene light carrying a share
+   of its world's exposure), and *working image* (display-encoded) — extending
+   `ImageColorEncoding` and `ImageSourceConversion.PassOf` with nits scale and
+   applied exposure. Each consumer declares what it reads; a render graph that
+   joins two kinds without a conversion fails to compose.
+2. **Convert at the end of each view's own graph** so no path bypasses it. Keep
+   the register's order inside that stage: sharpen (moved from `place` for
+   unscaled views, still reading linear light; scaled views keep reconstructing
+   in `place` from encoded values) -> bloom (merging both bloom paths into one)
+   -> authored tone transform (neutral engine default = none; move the filmic
+   curve constants out of engine shader code into authored data) -> mandatory
+   parameterless encode. Pass screen fidelity into this stage so it fades
+   sharpen, bloom and tone transform while leaving the encode intact. A camera
+   read both as scene light and as a direct picture publishes both outputs so
+   only the direct picture blooms. The root `place` pass then only places, and
+   panes keep their encoded contract.
+3. **Move window adaptation share to authored data.** The view beyond the
+   glass multiplies its light by its own exposure raised to a share
+   (`SdfPhotometry.WindowAdaptation`, three quarters today), and the view
+   looking through applies the rest of its own. The register adopted that and
+   rejected a window published unexposed for the viewer to expose, under which
+   a sunlit world seen from a dim room blows to white. The edge is scene light
+   on both sides; the window image's declaration carries the share so the two
+   sides cannot disagree, and the share moves from an engine constant to
+   authored data, with the standard package authoring today's three quarters.
+4. **Decode filmed views on screens.** A filmed view shown on a screen is a
+   working image; the screen decodes it before multiplying by brightness in
+   nits, and screen-glow reduction applies the same decode.
+5. **Split scene colour and display colour by type.** Audit all 22 `HexColor`
+   parse sites (`WorldBakedColors.Resolve`, `WorldEnvironmentResolve`, and
+   display-only consumers such as letterbox, HUD/text tints and source
+   colours). Introduce distinct scene-colour and display-colour types so only a
+   decoded scene colour can enter shading, while display colours stay encoded.
+6. **Build instruments first and land the retuned world together.** Author a
+   grey card and neutral plus coloured luminance patches, and add a
+   display-format readback of the presented image (SDR in both target-encode
+   cases, scRGB and HDR10). Land the mechanism, `worlds/standard/` defaults
+   (including moving default fog out of engine code) and the retuned
+   `worlds/debug/` exposures and lights in one merge — removing `compensation: 2`
+   and checking `SdfPhotometry.RangeThreshold` so lamp ranges do not lengthen
+   and inflate relighting work.
+
+**Why.** What a pixel value means is correctness, not look: the register rules
+lights, screens and the camera photometric, lights in lux and the frame in nits
+([register](../decisions/rendering.md#lights-screens-and-the-camera-are-photometric)),
+and AGENTS.md puts correctness with the engine. The fix repairs tone at every
+brightness, gives colour one convention, makes the grey card read and fixes
+HDR, and every later judgement of exposure, tonemapping, bloom and materials
+reads through it. It is decided by the evidence, with no owner call: no
+preference for the present tones keeps the present conversion. The terrain
+pass already expects the standard conversion (its grey card reads 118/255, the
+sRGB code for 18% grey). If an author wants today's appearance, they write it
+as a tone transform over the corrected conversion, judged on SDR and HDR.
+
+**Risks.** Every place's look moves at once, which is why the retune is in the
+same merge. A single full-screen view gains a pass it did not have. The sharpen
+measures a pixel's headroom against a value of 2 on linear exposed light and
+keeps reading linear light in its new place, so its constants do not change.
+The display encoder has three outputs (SDR in two cases, depending on whether
+the target encodes sRGB when written; scRGB; and HDR10, which converts
+primaries and applies its own curve), and a neutral grey passes even with that
+matrix transposed, so the check needs coloured patches. The temporal resolve
+averages linear samples and is not changed, but a bright edge in motion is
+where a conversion change shows first. No source we fetched states this
+requirement in so many words: the case rests on the code disagreeing with
+itself and on the transfer functions `transfer.hlsli` cites. Which display
+outputs each bar device exposes is read once the instruments exist. Not
+checked: the two colour resolvers and what must stay encoded, that a presented
+capture is 8-bit, that the debug world's sharpness is zero, and that the
+temporal resolve averages linear samples (a reviewer's reading); the 0.104
+target showing as 1% of white (reasoned).
+
+**Options not taken:** tuning around the missing encode with exposure
+compensation (tones right at one exposure only, surface colours taken as linear
+reflect too much light, screen pictures multiplied as luminance while still
+encoded, HDR still wrong); declaring views display-referred and fixing HDR
+alone (contradicts photometric shading and mixes linear and encoded samples
+inside one image); leaving sharpen in `place` after bloom on encoded values
+(simpler, and common practice, but it would reverse the register's
+bloom-after-sharpen ruling and need the sharpen's constants restated; the debug
+world authors a sharpness of zero, so neither order shows there today, and the
+reversal would be the owner's call).
+
+**Checks.** Under manual exposure, the grey card reads 118/255 within 3 codes
+across every view path: single world, split view, filmed view on a screen, view
+beside a pane, fully framed screen, sharpened view with bloom, camera read both
+as scene light and directly, and a window from a dim room onto a bright world
+with differing exposures. On every display format exposed by the device (SDR
+both cases, scRGB, HDR10; HDR outputs run once an HDR display is on hand),
+neutral and coloured patches authored at N nits read N times exposure times
+white level with tone transform set to none. One swatch per scene-colour kind
+(surface, sky, fog, light, keyed colour) reads right while letterbox and HUD
+colours do not move. A bright edge in motion shows no new shimmer on SDR or
+HDR, a graph joining mismatched image kinds fails to compose, lamp ranges are
+no longer than before, and another lane judges that every route chapter meets
+its reference in motion and gallery exhibits read as their plaques say. This
+lands before [authored shading becomes the sole path](author-shaders.md).
+
 ### P15 — Temporal reconstruction
 
 Reconstruction and dynamic resolution are implemented. P15-8's floor-tier

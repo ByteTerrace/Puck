@@ -35,19 +35,48 @@ one.
   rows E4 partitions are a small part of snapshot emission; the rest lies in
   what E4 keeps serial (the field and input tail and the subscribers'
   `DeliverSnapshot`), which is profiled before T3 assumes otherwise.
-- About a third of produce is per-view command recording
-  (`ShaderPipelineRenderNode.RenderFrame`); the shared residency preparation
-  before it (`SdfWorldPasses.BeginFrame`) is about half, of which the per-body
-  pose pack (`WorldCreationInstances.PackTransforms`) partitions by
-  registration.
+- With residency staging moved out of recording into package preparation,
+  per-view command recording (`ShaderPipelineRenderNode.RenderFrame`) sums to
+  about 1 ms in the debug world, while total produce reaches about 26 ms at
+  2560 by 1440 (beside 7 to 10 ms of tick). Most of produce is therefore
+  outside recording and unexplained until the frame-thread breakdown separates
+  work from GPU waits. Inside package preparation (`SdfWorldPasses.BeginFrame`),
+  per-body pose packing (`WorldCreationInstances.PackTransforms`, about 0.9 ms
+  of 3.4 ms) partitions by registration.
 - During a cold bake the machine is oversubscribed by construction: the bake
   runs one worker per logical processor (`SdfMeshPathBake.Workers`),
   the irradiance trace a quarter of the processors more
-  (`SdfMeshIrradiance.cs:126-127`), the frame thread runs beside both, and no
+  (`SdfMeshIrradiance`), the frame thread runs beside both, and no
   priority separates the frame from the bake.
 - Background allocation is a frame cost whichever thread allocates, since a
   collection suspends every managed thread
   ([data and memory](../../.claude/skills/dotnet-performance/references/data-and-memory.md#a-young-collection-costs-what-survives-and-what-old-objects-point-at)).
+  One measured run allocated 68 MB in a single iteration and took 47
+  collections totalling 674 ms of pauses over 600 iterations (worst pauses of
+  20 to 28 ms, longer than a full frame).
+
+### Frame-thread measurements owed
+
+Before optimizing smaller frame-thread costs or settling where the tick runs,
+the job system's work packet adds five measurements on the RTX 4070:
+
+- **Produce split by part** (following `RenderRecordWork`): pumping, capture,
+  packing, staging lighting, exposure, scheduling, preparing packages,
+  recording and flushing, keeping time spent waiting for the GPU apart from CPU
+  work. Parts must sum to within 5% of `host.frames`' `produce-work`.
+- **The tick split by phase, chapter and world instance**: every world instance
+  currently steps in series on the frame thread (`WorldInstanceHost.StepInstances`),
+  and this breakdown ranks the parallel partitions (T3, T2) against the tick's
+  serial causes.
+- **Captures and prepares during produce, counted by cause**: a scheduled
+  render, an owed upload, a consumer minimum, or a freshness check
+  (`RenderGraphRuntime.WithUnchanged`), feeding the
+  [streaming plan's capture order](streaming-and-memory.md#decision-4-a-residency-is-staged-by-its-demand-not-by-a-render).
+- **Garbage collections and bytes allocated per iteration, by source**, across
+  both backends.
+- **Marginal cost of one more world stepped and one more nested view in frame**
+  on scratch worlds, feeding the tick-placement design in
+  [open question 7](#open-questions).
 
 ### The frame bar at the standard stops
 
@@ -1350,11 +1379,14 @@ as `puck mesh audit` for bake defects.
 
 | Step | Lands | Check on `worlds/debug` that catches its failure |
 |---|---|---|
+| **Lift slow steps and frame-thread breakdowns** | Fix the lift chapter's 0.6 to 0.8 s steps at their cause: make installed rigid-body contact probes and per-session state delivery on a door swap (`WorldSessionSink.DeliverState`, `WorldDeliveryCursor.FrameMoved`) follow only the rows that changed. In the same pass, add the [frame-thread measurements owed](#frame-thread-measurements-owed) (produce split, tick split, capture counts by cause, per-iteration allocations, and the +1 world / +1 nested view readings). | `puck benchmark --headless --route debug --chapter "the lift"` shows no step in the hundreds of milliseconds, and the windowed route agrees; produce parts sum within 5% of `produce-work` with GPU waits separate; +1 world and +1 nested view each report a distinct delta. The lift's cause is open items' thread trace of the headless chapter, not reopened for this plan. |
+| **Per-frame allocation cuts** | Eliminate per-iteration managed allocations on the frame thread and background threads at the sources the trace names (no dependency on the pool; runs immediately). Do not switch the GC mode to mask allocations: it hides the problem without fixing its cause. | Allocations per iteration drop at the traced sources and 20 to 28 ms GC pauses disappear on the benchmark route; no garbage collection pauses the steady loop. |
 | **S1's reading** | Nothing more to build: the scheduling stage is in. Its standing reading on a windowed World is owed. | At `debug.go desktop` and `debug.go overlook`, `world.rates`' `burst` reads about half of each lever's items rated at one tier, where one shared phase reads all of them, and `host.frames` standing there shows no iteration over 16.7 ms of work from a tick meeting the burst. |
 | **C0 The control plane's phase, and bounded waits** ([designed and reviewed above](#the-control-planes-phase-and-bounded-waits), steps C0.1 to C0.8) | The host loop gives the control plane (console, MCP, input) a guaranteed phase of every iteration, held iterations included; every cross-subsystem wait carries a deadline and a named reason, so a presentation wait on lighting convergence cannot starve the console. Headless; no new thread. It is first because J1 moves the waits it names, and a wait with no deadline moved onto a pool is still a stall. | A lockstep walkthrough tour stop that converges lighting: a console verb issued during the drain answers within one iteration, and a wait that exceeds its deadline reports its named reason in `world.wait`'s answer instead of holding. |
-| **J1 The pool and the channels** | The design comes first, as a document reviewed by another family before any build: the hand-rolled concurrency sites moved onto the job system project by project, with the scheduler analyzer and `puck scan`'s `LockAnalyzer` switched on for each project as it migrates. Then `Puck.Hosting.Jobs`: classes with their comparers, bounded units, the dependency rules, a fork that returns an operation its forking thread owns (C0's contract for a join past the wait budget), the cap with hysteresis, per-owner channels drained at each owner's install point, parking, shutdown settlement; every site in section 1's table moved; the bake's static pool, the irradiance worker counts and the engine's `Parallel.For` deleted; `JobWorkers`' `0` reconciled with the pool's `max(2, ProcessorCount - 2)` workers plus the frame thread. A worker preempted while it holds a partition holds the join, so the cap against oversubscription is measured with other programs running before smaller partitions are tried. | A cold bake with `host.frames` sampled through it, and the process's thread count at `workers + 2` plus the dedicated threads. A lockstep `world.at` still after a `world.reload` traces its own scene (`[sdf.mesh-gi]` reports the frame's draw count). A channel forced full by a scratch world with more groups than its capacity lands every group (`[sdf.mesh-bake] done` counts match). A headless boot with a reflow verb answers it. `quit` during a cold bake exits cleanly with no device-after-dispose message in stderr on both backends. The first visible group bakes before any unseen one (`[sdf.mesh-bake]` order against `world.view.pick`). |
-| **T3 Crossing scan partitions** | E3 by seat partition with occupancy deltas. | T0 on a fixture of 40 seats where two seats enter one party-travel door on one tick and seats straddle the 32-seat boundary; the crossing log (transfer tick, cohort) identical across counts and against the recording. |
-| **T2 Rigid advance partitions** | E1 for rigid bodies with partition scratch; the rigid share measured first; the one pose-read change re-recorded. | T0 on a fixture of 200 rigid bodies (a rack and a domino line) beside kit bodies whose producers target a rigid body; hashes identical across counts; `puck bench world` at 0 B median a tick; a standing `host.frames` simulate read. |
+| **J1 The pool and the channels** | The design comes first, as a document reviewed by another family before any build: the hand-rolled concurrency sites moved onto the job system project by project, with the scheduler analyzer and `puck scan`'s `LockAnalyzer` switched on for each project as it migrates. Then `Puck.Hosting.Jobs`: classes with their comparers, bounded units, the dependency rules, a fork that returns an operation its forking thread owns (C0's contract for a join past the wait budget), the cap with hysteresis, per-owner channels drained at each owner's install point, parking, shutdown settlement; every site in section 1's table moved; the bake's static pool, the irradiance worker counts and the engine's `Parallel.For` deleted; `JobWorkers`' `0` reconciled with the pool's `max(2, ProcessorCount - 2)` workers plus the frame thread. A worker preempted while it holds a partition holds the join, so the cap against oversubscription is measured with other programs running before smaller partitions are tried. | A cold bake with `host.frames` sampled through it, and the process's thread count at `workers + 2` plus the dedicated threads. A lockstep `world.at` still after a `world.reload` traces its own scene (`[sdf.mesh-gi]` reports the frame's draw count). A channel forced full by a scratch world with more groups than its capacity lands every group (`[sdf.mesh-bake]` done counts match). A headless boot with a reflow verb answers it. `quit` during a cold bake exits cleanly with no device-after-dispose message in stderr on both backends. The first visible group bakes before any unseen one (`[sdf.mesh-bake]` order against `world.view.pick`). |
+| **T3 Crossing scan partitions** | E3 by seat partition with occupancy deltas (note: 32 seats per partition saves nothing in today's debug world with a handful of seats, so the tick breakdown ranks this against serial tick fixes below). | T0 on a fixture of 40 seats where two seats enter one party-travel door on one tick and seats straddle the 32-seat boundary; the crossing log (transfer tick, cohort) identical across counts and against the recording. |
+| **T2 Rigid advance partitions** | E1 for rigid bodies with partition scratch; the rigid share is read from the tick breakdown first; the one pose-read change re-recorded. | T0 on a fixture of 200 rigid bodies (a rack and a domino line) beside kit bodies whose producers target a rigid body; hashes identical across counts; `puck bench world` at 0 B median a tick; a standing `host.frames` simulate read. |
+| **Serial tick and produce cuts** | Fix the tick's serial bottlenecks ranked by the tick breakdown — in particular the bounds cache missing for every box of a moving body (`BodySupportMemo.Query`, `SdfBoundsCache`) and scanning every body's facts on every rule pass (`WorldRuleHost.DeriveFacts`). On the produce side, cut the largest named parts in breakdown order: field queries are about a third of the meadow's frame (measured once), so first replace the 6-sample field gradient (`SdfFieldEvaluator.TryFieldGradient`) with the 4-sample form without building a second cache beside `WorldFieldAnswer`, eliminate redundant draw-record uploads ([visibility](visibility.md#the-build-order)), move interpreted motion to compiled programs ([dense landscapes](dense-landscapes.md)), and run remaining pose packing (`WorldCreationInstances.PackTransforms`) in parallel on the J1 pool. | Each cut reports the breakdown drop it claimed on the benchmark route; deterministic tick hashes hold for the tick cuts, and field-query counts drop on the meadow chapter. |
 | **R1 Parallel recording in waves** (held until it pays) | Admission first: recording is taken only on a workload whose serial record sum (`world.counters render.record`, `record-microseconds` over `frames`) is several milliseconds with the critical path (`longest-microseconds` over `frames`) well below it; with residency staging moved into package preparation the debug world's sum is about a millisecond, so concurrency could save about half of one and is not yet worth workers. When admitted: waves, prepare-before-fork with the fence first, residency upload and extent in preparation, in-order submission, the pose pack fork; and before it is safe, a thread-safe pipeline cache lookup, a counting recorder and per-worker command pools, with queue operations still serialized and the join before commit. The prepare, record and commit separation of a node's frame stays whether or not recording forks. Direct3D 12 and a windowed Vulkan boot. | `host.frames` produce avg at the lobby; a `world.at` script that moves a portal view and changes a screen's source every frame for 120 frames, with stills at three ticks compared as above with the serial build's on both backends (a one-frame-late read or a descriptor overwritten under a slot in flight shows as a localized difference beyond the noise); GPU-based validation clean on Direct3D 12 and the validation layer clean on Vulkan. |
 | **B1 GI's CPU work as jobs** | The change-set closure is built; what lands is the scene build, placement and selection as `Lighting` jobs under J1's pool. | After a `world.reload` that removes a wall and one that moves a draw: the probe tables and a still compared with a full retrace's (the windowed check the closure still owes); `[sdf.mesh-gi]` probes traced against the whole window; no `Parallel.For` left in the irradiance code. |
 | **M2b Probe block ownership** (the streaming plan's) | Written when the CPU held every probe's hit blocks. The trace and relight now run on the GPU and the full CPU hit blocks are released; what the probe cache and the trace scene keep is bounded in bytes by the streaming plan's [step 9](streaming-and-memory.md#step-9-lighting-on-the-same-demand), which owns this work. | That step's `probe-cache-bytes` and `probe-cache-blocks` staying bounded along a valley flight. This row stays only so the memory steps' numbering holds; nothing is built here. |
@@ -1428,22 +1460,57 @@ step that meets it.
    for many worlds in view at once, and a frame that steps all of them before
    it draws cannot hold its bar however short each step is. So a tick on a
    thread of its own is not ruled out. It is this plan's design question,
-   and its first input is a measurement the
-   [rendering plan](rendering-research.md#3-shorten-the-tick-and-settle-where-it-runs)
-   takes in its first wave: what one more world in frame costs the frame
-   thread. The design weighs at least three arrangements. Worlds the player
-   is not acting in step on other threads, which adds nothing to the time
-   from input to display. Every world steps on its own thread and the frame
-   reads the latest complete state, which shortens the frame to the longer
-   of tick and produce and can show a tick older than the player's input.
-   And the tick staying where it is. Each is stated with its measured time
-   from input to display beside today's, which nothing measures yet. The
-   register's rule that a frame of latency is never the fix for a missed bar
-   ([the pipeline foundation](../decisions/rendering.md#the-pipeline-foundation))
-   constrains the answer, so an arrangement that adds latency for the world
-   the player acts in goes to the owner with that measurement. Whether an
-   unseen world may step less often is its authority's choice and is part of
-   the same design.
+   starting from the marginal cost of one more world instance in frame
+   ([frame-thread measurements owed](#frame-thread-measurements-owed)) and the
+   [benchmark's input-to-display latency column](benchmark.md#presentation-timing-and-admission-stage-8),
+   which reports tick-integrated motion and between-tick pointer look
+   (`WorldSeatViewState.PresentedLook`) apart. The design weighs three
+   arrangements:
+   - *Worlds the player is not acting in step on other threads*, while the
+     world the player's body is in keeps its tick ahead of the frame: adds no
+     input-to-display latency and stops the frame thread paying for worlds it
+     only looks at.
+   - *Every world steps on its own thread and the frame reads the latest
+     complete state*, lowering the frame interval from tick plus produce to
+     the longer of the two, at the risk of showing the tick before the
+     player's input reached it. Moving any tick off the frame thread requires
+     a produce path that reads no live server state
+     ([the presentation view](runtime-and-delivery.md#the-presentation-view)),
+     as a remote authority already works.
+   - *The tick stays on the frame thread*, shortened by C0, J1, T3, T2 and the
+     serial tick fixes.
+   Each arrangement is judged beside today's measured input-to-display latency.
+   Because the register rules that a frame of latency is never the fix for a
+   missed bar ([the pipeline foundation](../decisions/rendering.md#the-pipeline-foundation)),
+   any arrangement that adds latency for the world the player acts in goes to
+   the owner with that measurement. Whether an unseen world may step less often
+   is its authority's choice and is part of the same design: authority is
+   placed per world, so where a world steps is a property of that world
+   ([the world model](../architecture/worlds.md#the-idea-in-plain-terms)).
+
+   Two options are not taken. Leaving the tick serial fixes nothing: the frame
+   stays the sum of tick and produce. Deciding the thread question now, in
+   either direction, is premature: ruling a tick thread out on the latency
+   ruling alone settles one world and leaves the many-world case unanswered,
+   and ruling it in adds a hand-off whose latency no source we read measures.
+   The partitions' order still matters meanwhile. With the pool in place, a
+   join that passes its wait budget keeps the logical tick open across loop
+   iterations and lets the control plane run; without it, new partitions go
+   through today's join, which waits inside one call, so input and the console
+   would be held for the slowest partition. The bounded waits and the pool pay
+   for themselves whatever the partitions save, because every other piece of
+   CPU work the rendering plan moves off the frame thread runs on that pool.
+   The kit bodies and rule gates stay serial until their transaction is
+   redesigned, so partitions shorten the tick without removing it, and in the
+   debug world they may shorten it little.
+
+   *What the readings show.* A console verb issued while a tick's join is
+   overdue is answered within one iteration. Through a cold bake the process's
+   threads are counted as pool workers, the frame and control threads and
+   dedicated threads, each against this plan's figure. The tick is reported in
+   milliseconds by phase for each chapter, before and after. The report states
+   whether the tick and produce each fit the period while their sum does not,
+   which is the reading that would reopen a tick on its own thread.
 
 ---
 
