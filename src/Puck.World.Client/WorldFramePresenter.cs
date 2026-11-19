@@ -1394,11 +1394,11 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
         m_settings.RateIntervals.Advance(frameSeconds: context.FrameDeltaSeconds, rate: m_presentationRate);
         // The stamp pools pack during the captures that follow, so they rate their bodies by this frame's step flags and
         // levers, none while the frame is held for a settled capture: the boot world's and every routed scene's, whose
-        // frames take this frame's levers (WorldRoutedScene.Dress).
-        var rates = RatesOf(rates: m_settings.UpdateRates, settles: SettlesCapture);
-
-        m_animator.PresentAt(rate: m_presentationRate, rates: rates);
-        foreach (var scene in m_routedScenes.Values) { scene.BodyStamps.PresentAt(rate: m_presentationRate, rates: rates); }
+        // frames take this frame's levers (WorldRoutedScene.Dress); a session rendered through a residency of its own
+        // takes them as its capture starts (PresentStamps).
+        m_frameRates = RatesOf(rates: m_settings.UpdateRates, settles: SettlesCapture);
+        PresentStamps(pool: m_animator);
+        foreach (var scene in m_routedScenes.Values) { PresentStamps(pool: scene.BodyStamps); }
 
         if (m_graphs is not { } graphs) {
             return;
@@ -1409,6 +1409,23 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             views: m_client.Definition.Views
         );
     }
+
+    // The update rates this frame's stamp pools pack by (PresentStamps), as PrepareGraph decided them.
+    private SdfUpdateRates m_frameRates;
+
+    /// <summary>Hands a stamp pool this frame's presentation rate and update rates, which its next pack rates its bodies
+    /// by: none while the frame is held for a settled capture. The boot world's pool and every routed scene's take them
+    /// as the graph is prepared; a session rendered through a residency of its own takes them as its capture
+    /// starts.</summary>
+    /// <param name="pool">The pool.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="pool"/> is <see langword="null"/>.</exception>
+    public void PresentStamps(WorldCreationInstances pool) {
+        ArgumentNullException.ThrowIfNull(argument: pool);
+        pool.PresentAt(rate: m_presentationRate, rates: m_frameRates);
+    }
+    /// <summary>Gets the frame the presentation dressed last, whose levers a session rendered through a residency of its
+    /// own takes (<see cref="WorldSessionSceneEmitter.HostFrame"/>), or <see langword="null"/> before the first.</summary>
+    public SdfFrame? DressedFrame => m_dressedFrame;
 
     /// <summary>Gets or sets the work that follows this frame's composed cameras and graph placements, before the
     /// runtime schedules it, such as the editor comparison's placement and viewport record.</summary>
@@ -1752,6 +1769,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
                     ) {
                         // A new pose is a new record, so every operator move cuts the temporal history like a teleport.
                         CutRevision = ViewCut(index: m_views.Count, source: pose, revision: 0),
+                        Source = pose,
                         Bloom = m_settings.ResolveBloom(m_client.Definition.Render),
                         BloomQuality = m_settings.BloomQuality,
                         Quality = quality,
@@ -1785,6 +1803,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
                         Region: region
                     ) {
                         CutRevision = ViewCut(index: m_views.Count, source: m_namedCameraRigCache[cameraName], revision: m_namedCameraRigCache[cameraName].Revision),
+                        Source = m_namedCameraRigCache[cameraName],
                         Bloom = namedBloom,
                         BloomQuality = m_settings.BloomQuality,
                         Quality = quality,
@@ -1907,6 +1926,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
                     ? new SdfStampFade(fadeSlot, fadeSlots, m_roster.Seat(slot: slot)!.View.BodyOpacity)
                     : default),
                 CutRevision = ViewCut(index: m_views.Count, source: m_seatCameraRigs[slot]!, revision: m_roster.Seat(slot: slot)!.View.CutRevision),
+                Source = m_seatCameraRigs[slot],
                 Elsewhere = (presentedElsewhere is not null),
                 Grid = SeatGrid(slot: slot),
                 Bloom = bloom,
@@ -2030,6 +2050,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
                 )
             ) {
                 CutRevision = ViewCut(index: m_views.Count, source: this, revision: 0),
+                Source = this,
                 Bloom = m_settings.ResolveBloom(m_client.Definition.Render),
                 BloomQuality = m_settings.BloomQuality,
                 Quality = quality,

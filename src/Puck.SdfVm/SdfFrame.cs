@@ -27,6 +27,12 @@ public readonly record struct SdfViewSnapshot(CameraSnapshot Camera, NormalizedR
 
     /// <summary>The camera's cut revision, moved when its framing is reseeded or a layout slot changes its source.</summary>
     public long CutRevision { get; init; }
+    /// <summary>The object whose view the slot shows (a seat's camera rig, a named camera, a screen's camera
+    /// registration), the same object for as long as the slot shows that view, or <see langword="null"/> when the cut
+    /// revision alone tells the slot's views apart. A residency's per-view state keyed by slot (an exposure and the
+    /// readings in flight for it) starts a new generation when another source or cut takes the slot, so state one view
+    /// left never lands on another (<see cref="SdfViewExposures.GenerationOf"/>).</summary>
+    public object? Source { get; init; }
     /// <summary>The pixels high the mesh demand measures the view's projected sizes in (<see cref="SdfMeshDemand"/>)
     /// when the view renders into an image apart from the residency's output: a camera filmed for a screen its own
     /// image's height, and a window fitted to its glass the display pixels the glass spans from the viewer's eye, since

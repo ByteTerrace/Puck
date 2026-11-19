@@ -513,7 +513,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
 
         FitSkyViews?.Invoke(m_views, environment.Sky, width, height);
 
-        return new SdfFrame(
+        var frame = new SdfFrame(
             Program: program,
             ProgramChanged: programChanged,
             Time: 0f,
@@ -557,6 +557,43 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
             MeshDrawsRevision = meshDrawsRevision,
             SlotClips = m_pool.SlotClips,
         };
+
+        return ((HostFrame is { } host) ? TakeLevers(frame: frame, height: height, host: host(), views: m_views, width: width) : frame);
+    }
+    /// <summary>Gets or sets the frame the presentation dressed this frame, whose levers the frames of a session rendered
+    /// through a residency of its own take (<see cref="TakeLevers"/>), or <see langword="null"/> for an emitter whose scene
+    /// takes them itself (<see cref="WorldRoutedScene"/>).</summary>
+    public Func<SdfFrame?>? HostFrame { get; set; }
+    /// <summary>Gets or sets what hands the stamp pool this frame's presentation rate and update rates before it packs
+    /// (<see cref="WorldFramePresenter.PresentStamps"/>), or <see langword="null"/> for an emitter whose scene does.</summary>
+    public Action<WorldCreationInstances>? PresentStamps { get; set; }
+    /// <summary>Returns a frame under the presentation's levers (its cadence gate, cull and detail levels, update rates,
+    /// rate counters and intervals), and rates the stamp pool by the views and shadow cascades the frame renders its world
+    /// through, so its next pack holds a body or animated placement none of them, nor a shadow of them, may show. Each
+    /// view counts its region of the frame's height, as the presentation counts a view it has no display share for.</summary>
+    /// <param name="frame">The frame dressed for the session or scene, with its final views.</param>
+    /// <param name="host">The frame the presentation dressed this frame, or <see langword="null"/> before it has dressed
+    /// one, when the frame keeps its own levers.</param>
+    /// <param name="views">The frame's final views.</param>
+    /// <param name="width">The frame's width, in pixels.</param>
+    /// <param name="height">The frame's height, in pixels.</param>
+    /// <returns>The frame under the presentation's levers.</returns>
+    public SdfFrame TakeLevers(SdfFrame frame, SdfFrame? host, IReadOnlyList<SdfViewSnapshot> views, uint width, uint height) {
+        ArgumentNullException.ThrowIfNull(argument: frame);
+        ArgumentNullException.ThrowIfNull(argument: views);
+
+        var dressed = ((host is null) ? frame : (frame with {
+            EnableCadenceGate = host.EnableCadenceGate,
+            MeshCull = host.MeshCull,
+            MeshDetail = host.MeshDetail,
+            UpdateRates = host.UpdateRates,
+            RateCounts = host.RateCounts,
+            RateIntervals = host.RateIntervals,
+        }));
+
+        m_pool.RateBy(counts: dressed.RateCounts, height: height, intervals: dressed.RateIntervals, views: views);
+        m_pool.ShadowBy(frame: dressed, height: height, width: width);
+        return dressed;
     }
     /// <inheritdoc/>
     public void Emit(SdfProgramBuilder builder, in SdfEmitContext context) {
@@ -850,6 +887,8 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
     private int m_preparedSnapshot = int.MinValue;
 
     public void PrepareFrame() {
+        // The pool packs during the capture that follows, so it rates its bodies by this frame's presentation rate.
+        PresentStamps?.Invoke(obj: m_pool);
         if ((m_preparedDefinition == m_mirror.DefinitionRevision) && (m_preparedSnapshot == m_mirror.SnapshotRevision) && !m_census.TryTakeMove()) { return; }
         m_preparedDefinition = m_mirror.DefinitionRevision;
         m_preparedSnapshot = m_mirror.SnapshotRevision;
