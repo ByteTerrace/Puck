@@ -86,9 +86,10 @@ The mask is built as a field scope in the instruction stream, which
 describe. Two adversarial reviews found that this form does not hold its
 invariants, and a round of fixes did not close them.
 [The relief mask design](terrain-pass/relief-mask-design.md) replaces the
-scope with an operand of the relief, held in a program side table, and answers
-every finding of both reviews. Its third step rewrites those two sections; an
-author's document does not change.
+scope with an operand that travels with its relief instruction, and answers
+every finding of both reviews and of the review of the design itself. The step
+that builds the construct rewrites those two sections; an author's document
+does not change.
 
 #### What an author writes
 
@@ -481,7 +482,7 @@ dearest:
   meanwhile); the mask's change of form, whose steps and checks are in
   [the relief mask design](terrain-pass/relief-mask-design.md#migration-steps);
   and a band narrower than the bake's coarse cell or contact's gradient taps,
-  which neither sees and which that design's fourth step closes: the band
+  which neither sees and which that design's bake-and-contact step closes: the band
   declares a bake part at a quarter of its width (`WorldShapeDetail.PartsOf`),
   and the relief field collider's gradient step
   (`WorldColliderSet.ReliefField`) includes the band's width.
