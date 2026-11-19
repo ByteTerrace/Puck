@@ -171,6 +171,17 @@ cel pixel passes one tone curve (the display pass's `render.tone`), never one
 inside the material as well. The cel work the
 [illumination plan](../plans/illumination.md#cel-shading) had scheduled resumes.
 
+**Ink is edge signals the engine computes and an ink phase authors write (the
+owner's ruling).** Outlines are meant to be performant and expressive. The
+engine computes a view's edge signals once (depth discontinuity, normal crease,
+object and material boundaries, and the distance to the nearest edge) and keeps
+them correct in motion, across dynamic resolution and temporal reprojection.
+What an edge looks like (which edges ink, width, taper, colour, breakup) is an
+authored ink phase of the shade program in the standard package, run only where
+an edge is near. No look's vocabulary names the mechanism: the cel and toon
+names in engine schemas, kernels, levers and verbs are a leak, removed by the
+[ink plan](../plans/ink.md).
+
 - **Shadow where the response is.** The surface pass queries a light's cascades
   wherever that light's diffuse response is non-zero, a wrapped material's side
   past the terminator included, and filters what it queried. A side it skips
