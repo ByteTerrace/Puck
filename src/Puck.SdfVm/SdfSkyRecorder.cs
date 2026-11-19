@@ -21,7 +21,7 @@ namespace Puck.SdfVm;
 // The composite also meters the image it writes (SdfExposure.Meter): each frame slot owns a histogram buffer, which the
 // recording clears before the dispatch and copies into the slot's readback buffer after it, and the copy is read only once
 // the node proves the slot complete (RenderGraphSlotResults), then handed to the residency's exposures
-// (SdfViewExposures.Publish) with the view, cut and multiplier the frame drew with. Both buffers are the recorder's own,
+// (SdfViewExposures.Publish) with the view, its generation and the multiplier the frame drew with. Both buffers are the recorder's own,
 // never a graph version, and each slot's are touched only by that slot's recordings, which the slot's fence orders.
 internal sealed class SdfSkyRecorder : IRenderGraphPackageRecorder, IRenderGraphPackageReadback {
     // The common frame values copy by name from the world layout, whose block the one frame writer lays out.
@@ -76,7 +76,7 @@ internal sealed class SdfSkyRecorder : IRenderGraphPackageRecorder, IRenderGraph
         internal readonly IGpuReadbackBuffer Readback = readback;
         internal SdfViewExposures? Exposures;
         internal int View;
-        internal long Cut;
+        internal long Generation;
         internal float Multiplier;
         internal float Reference;
         internal float Local;
@@ -129,7 +129,7 @@ internal sealed class SdfSkyRecorder : IRenderGraphPackageRecorder, IRenderGraph
         Span<uint> words = stackalloc uint[SdfExposure.MeterWords];
 
         slot.Readback.Read(MemoryMarshal.AsBytes(span: words));
-        slot.Exposures?.Publish(cut: slot.Cut, local: slot.Local, multiplier: slot.Multiplier, reference: slot.Reference, view: slot.View, words: words);
+        slot.Exposures?.Publish(generation: slot.Generation, local: slot.Local, multiplier: slot.Multiplier, reference: slot.Reference, view: slot.View, words: words);
     }
 
     public void Dispose() {
@@ -223,8 +223,9 @@ internal sealed class SdfSkyRecorder : IRenderGraphPackageRecorder, IRenderGraph
             ToShader(meter: meter, recorder: recorder, commandBuffer: commandBuffer, source: GpuAccess.TransferRead);
             meter.Exposures = residency.Exposures;
             meter.View = index;
-            meter.Cut = frame.Views[index].CutRevision;
+            // Read after the multiplier, whose first read this frame stages the view and so starts its generation.
             meter.Multiplier = residency.Exposures.MultiplierOf(view: index);
+            meter.Generation = residency.Exposures.GenerationOf(view: index);
             var reference = residency.Exposures.MeteredOf(view: index);
 
             meter.Reference = ((reference > 0f) ? SdfPhotometry.MeteredEv100(luminance: reference) : float.NaN);

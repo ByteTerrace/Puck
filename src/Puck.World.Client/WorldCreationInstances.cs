@@ -121,8 +121,12 @@ public sealed partial class WorldCreationInstances : IWorldBodyPoses {
 
         private WorldRigReads? m_view;
 
+        // Whether this is a pool's guess layer (WorldCreationInstances.Guess.cs), which no lookup of the pool reaches; only it
+        // reads through a guessing view.
+        public bool GuessLayer { get; init; }
+
         // The one view the pose pass reads through: the rig's compiled reads, state cells through Reads.
-        public WorldRigReads View => (m_view ??= new WorldRigReads(lease: Reads, rig: Rig));
+        public WorldRigReads View => (m_view ??= (GuessLayer ? WorldRigReads.ForGuess(lease: Reads, rig: Rig) : new WorldRigReads(lease: Reads, rig: Rig)));
         // Moves each time a full pack changes a slot, so a registration whose rig reads this body wakes (WorldRigReads.Revision).
         public int PoseSerial;
         // The view's revision at the last full pack, and at this frame's wake test, which tell a wake from a changed read.
@@ -334,7 +338,7 @@ public sealed partial class WorldCreationInstances : IWorldBodyPoses {
 
     /// <summary>The whole pool's reserved dynamic-transform slot count — the frame source adds this onto the avatar
     /// catalog's frozen capacity.</summary>
-    public int DynamicSlotCount => (ArticulatedSlotCount + Rigid.SlotCount);
+    public int DynamicSlotCount => (ArticulatedSlotCount + Rigid.SlotCount + m_guessRows);
     public int RegistrationCount => m_pool.Length;
 
     public int SlotsAt(int index) => (m_pool[index]?.Slots ?? 0);
@@ -489,9 +493,10 @@ public sealed partial class WorldCreationInstances : IWorldBodyPoses {
     // non-inhabited row — an inhabited row roots through the body-stamp census instead.
     private static bool PoolRooted(WorldPlacement row, WorldPrototype creation) =>
         ((row.Inhabit is null) && (WorldPlacementStamper.IsAnimated(creation: creation) || (row.Attach is not null)));
-    private static Registration RegisterBody(BodyStamp stamp) {
+    private static Registration RegisterBody(BodyStamp stamp, bool guessLayer = false) {
         var registration = new Registration(rig: stamp.Creation.Rig) {
             BodyIndex = stamp.BodyIndex,
+            GuessLayer = guessLayer,
             Creation = stamp.Creation,
             Parts = CreationPartCompiler.Compile(document: stamp.Creation.Document),
             Scale = stamp.Scale,

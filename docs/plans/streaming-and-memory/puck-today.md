@@ -172,12 +172,13 @@ All paths are under `src/` unless stated.
 ### 1.12 `WorldViewGraphHost.ReserveArrivals` and the arrival share (Puck.World.Client/WorldViewGraphHost.cs)
 
 - **Driven by:** a walk from the main instance, roots and every producer the root reads this frame (the synthesized footprint, each placed view and pane) through session windows; the first
-  hidden window onto an arriving world and every window on the way back are kept (:1614-1654) **[opened]**. The walk
-  admits only producers that are portals (`if (!m_portals.Contains(item: producer) || ...) { return; }`, :1648)
-  **[opened]**.
-- **What it does:** a kept window that is Unseen/Small/Hidden renders at
-  `WorldPortalVisibility.ArrivalShare` (`public const double ArrivalShare = 0.0625;`, WorldPortalVisibility.cs:40) in
-  `CompleteFootprints` (:1698-1704), `DecideFootprint` (:1798-1801) and `RootFilmedViews` (:1838-1840) **[opened]**.
+  hidden window onto an arriving world and every window on the way back are kept (`ReserveArrivals`, which
+  `CompleteFootprints` calls first, with `ReachForArrival` taking each step) **[opened]**. The walk
+  admits only producers that are portals (`if (!m_portals.Contains(item: producer) || ...) { return; }`, in
+  `ReachForArrival`) **[opened]**.
+- **What it does:** a kept window that is Unseen/Small/Hidden (`RendersForArrival`) renders at
+  `WorldPortalVisibility.ArrivalShare` (`public const double ArrivalShare = 0.0625;`) in the footprint pass that
+  `CompleteFootprints` runs, in `DecideFootprint` and in `RootFilmedViews` **[opened]**.
 - **Why it exists (the stand-in):** `SdfWorldResidency.MeshesArriving => (MeshPathBake.Pending || (m_tables?.MeshesArriving ?? false));`
   with the doc "only frames that render one of its views bring them" (SdfWorldResidency.cs:223-230) **[opened]**,
   because background work binds only after an upload: `internal bool BindsBackgroundWork => ((m_uploads > 0UL) && (m_bindingRevision == m_uploadedBindingRevision) && (m_backgroundProgram is not null));`
@@ -254,7 +255,7 @@ the same physical RAM `MemoryAccount.DefaultBudget` takes 3/4 of **[inference]**
 | **Device budget readings** | A live reading beside the static profile on `IGpuDeviceContext` (`GpuMemoryProfile MemoryProfile { get; }`, Puck.Abstractions/Gpu/Device/IGpuDeviceContext.cs:34); Direct3D 12 in `DirectXNativeDeviceApi.ReadMemoryProfile(IDXGIAdapter1* adapter, ...)` (DirectXNativeDeviceApi.cs:231; `IDXGIAdapter3` needed for `QueryVideoMemoryInfo` **[inference]**); Vulkan beside `VulkanNativePhysicalDeviceApi.GetMemoryProfile` (VulkanNativePhysicalDeviceApi.cs:319; needs the extension enabled at device creation **[inference]**); fields in `HostMemoryCommandModule.Describe` (:54-75) | The static shares: `MeshRegionLimitOf` (MeshRegion.cs:225), `ShaderPipelineMemoryBudget.For` (:22), and the bake's `HostMemory.AvailablePhysicalBytes` pacing (SdfMeshPathBake.cs:766-774) on unified memory |
 | **One byte authority** | `MemoryAccount` (Puck.Hosting). `GpuRegion` lives in Puck.Abstractions, below Puck.Hosting, so it can only report through `IAllocationObserver` (Puck.Abstractions/Memory/OwnedBuffer.cs:6-10), the interface `MemoryAccount.Owner` already implements (MemoryAccount.cs:106). Puck.Shaders references Puck.Hosting (Puck.Shaders.csproj:14), so the pipeline budget can reserve directly. `GpuDeviceMemoryWork` would become an owner feed or the account would read it | `ShaderPipelineMemoryBudget`'s separate quarter; each residency's own region limit (SdfWorldTables.cs:205); per-residency `SdfGpuWork` budgets (SdfWorldTables.cs:400); `RegionBudgetBytes` read from one residency's tables (Tiers.cs:65) |
 | **Eviction by priority** | `SdfMeshPathBake.Retier` spare/bias logic (Tiers.cs:232-408) reading one cross-residency reservation; `SdfMeshRegionArena.Plan` refusal (src/Puck.SdfVm/SdfMeshRegionArena.cs:197-213) and `ForgetUnnamed`; `SdfWorldTables.EnsureMeshRegionCapacity` (the same region growth door) catching a device refusal and lowering the limit; the library's weight (SdfMeshLibrary.cs:315, 321-330) charging only cache-only payloads | Arena refusal that leaves draws out (a hole), the throw on refused growth, "coarsen every demand evenly" bias as the only response |
-| **Mapped demand through portal faces** | `SdfMeshDemand` gains points not from `frame.Views` (`Place` exists for offline use, SdfMeshDemand.cs:81-94); the producer is the fitted window camera already computed in `WorldScreenBinder.SharedViewOf` (Device.Session.cs:117-138) and `WorldSessionSceneEmitter` (WorldSessionSceneEmitter.cs:494-497); a residency must pack and upload its tables with no view rendered so `BindsBackgroundWork` (src/Puck.SdfVm/SdfWorldTables.Bindings.cs:61) holds | `ReserveArrivals`/`ReachForArrival`/`RendersForArrival` (WorldViewGraphHost.cs:1594-1654), the `ArrivalShare` cases (:1698-1704, :1798-1801, :1838-1840), `WorldPortalVisibility.ArrivalShare` (:40), and the arriving-world reads (`WorldScreenBinder.Nesting.cs:389`) |
+| **Mapped demand through portal faces** | `SdfMeshDemand` gains points not from `frame.Views` (`Place` exists for offline use, SdfMeshDemand.cs:81-94); the producer is the fitted window camera already computed in `WorldScreenBinder.SharedViewOf` (Device.Session.cs:117-138) and `WorldSessionSceneEmitter` (WorldSessionSceneEmitter.cs:494-497); a residency must pack and upload its tables with no view rendered so `BindsBackgroundWork` (src/Puck.SdfVm/SdfWorldTables.Bindings.cs:61) holds | `ReserveArrivals`/`ReachForArrival`/`RendersForArrival` (`WorldViewGraphHost`), the `ArrivalShare` cases (in `CompleteFootprints`' footprint pass, `DecideFootprint` and `RootFilmedViews`), `WorldPortalVisibility.ArrivalShare`, and the arriving-world reads (`WorldScreenBinder.Nesting.cs:389`) |
 | **Lighting on the demand points** | `SdfMeshIrradiance.WindowCamera`/`WindowAnchor`/`WindowLow`/`CaptureViewCameras` (:573-575, :925-985, :1225-1235) reading the residency's `SdfMeshDemand` instead of re-deriving from `frame.Views`; `StaticKey`/`StartSceneBuild` (:1290-1374) filtering to the window's reach; `ProbeCache.Retain` (:2890) by bytes from the account; `ScenePendingDue` (:1267) | The second demand derivation; the whole-frame trace scene; cell-count retention |
 | **Authored areas** | Candidates for "an existing volume vocabulary": `WorldPlacementSpatialVolume` with `WorldPlacementSpatialRole` `Occupation`/`Clearance`/`Influence` (Puck.World.Schema/WorldPlacementSpatial.cs:13-20, 51-57), whose influence channel "is opaque to the engine and is never interpreted" (:44); and `WorldGravityArea` bounds (WorldGravity.cs:69-75). Neither has openings. Consumption point: `SdfMeshPathBake.Prioritize`/`MeasureDemand` (src/Puck.SdfVm/SdfMeshPathBake.Residency.cs:90-106, 324-336) | Nothing (new) |
 | **Terrain tiles** | `SdfMeshBakeGroup` forms groups by instance, slot or union (`Selector` "its slot, `-(index + 1)` of its first separate instance, or WorldSelector", SdfMeshBakeGroup.cs:26-28); grep finds no `Terrain`/`Tile` class in `src/` | A whole large instance as one group with one tier and one demand box **[inference]** |
@@ -287,8 +288,8 @@ the same physical RAM `MemoryAccount.DefaultBudget` takes 3/4 of **[inference]**
    job scheduler" the selector feeds does not exist as one type (§6, assumption 7).
 ### Stand-ins (where the decision's design should be)
 
-1. **Rendering hidden windows to make worlds load:** `ArrivalShare = 0.0625` renders (WorldViewGraphHost.cs:1698-1704
-   et al.), because background bake/landing binds only after an upload (src/Puck.SdfVm/SdfWorldTables.Bindings.cs:61; SdfGpuWork.cs:412).
+1. **Rendering hidden windows to make worlds load:** `ArrivalShare = 0.0625` renders (`WorldViewGraphHost.CompleteFootprints`,
+   `DecideFootprint` and `RootFilmedViews`), because background bake/landing binds only after an upload (src/Puck.SdfVm/SdfWorldTables.Bindings.cs:61; SdfGpuWork.cs:412).
 2. **Whole residency released and rebuilt on a routed world's absence:** Device.Routed.cs:200-215 disposes the whole
    residency (tables, region, probes); its arena slack and probes are lost; the library and store are what make the
    return cheap.
@@ -319,7 +320,7 @@ in `residency.md` and item 8 in `arrival-proportional.md`. Step numbers in this 
 2. **open-items Residency step 2** cites `SdfMeshIrradiance.cs:456-458` for `Views[0]`/`WindowCamera`; now
    `WindowCamera` is :573-575 and `WindowAnchor` :925-928.
 3. **open-items Residency step 3** "replacing the blanket baking share (`WorldViewGraphHost.ResetFootprints`). A
-   window nobody sees still demands everything about its camera": `ResetFootprints` (WorldViewGraphHost.cs:1578-1588)
+   window nobody sees still demands everything about its camera": `ResetFootprints` (`WorldViewGraphHost`)
    only clears lists; the share is applied in `ReserveArrivals`/`CompleteFootprints`/`DecideFootprint`/`RootFilmedViews`.
    And a fitted window demands only inside its frustum at the viewer's density
    (`DemandWithinView`, Device.Session.cs:135-137; SdfMeshDemand.cs:221-227), so "everything about its camera" holds
@@ -363,7 +364,7 @@ in `residency.md` and item 8 in `arrival-proportional.md`. Step numbers in this 
 
 Checked and still accurate: no device budget query in `src/`; `GpuRegion.Grow` throws on device refusal; the material
 cut is outside the account; a root camera demands through walls; `ProbeCache` spins (`Thread.SpinWait`, :2944) and
-is not byte-bounded; the arrival search walks session windows only (portal producers, WorldViewGraphHost.cs:1648);
+is not byte-bounded; the arrival search walks session windows only (portal producers, `WorldViewGraphHost.ReachForArrival`);
 R0, S1, D1 and R1h exist (`SdfMeshStagingCause.cs`, `sdfMeshResolveHit` in `frame/sdf-mesh.hlsli`, `SdfMeshStorage.cs`)
 and R1a/R1b do not.
 

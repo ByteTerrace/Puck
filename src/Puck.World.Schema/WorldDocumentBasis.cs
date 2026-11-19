@@ -21,6 +21,9 @@ namespace Puck.World;
 /// world clears an optional section its basis authors — e.g. <c>"gravity": null</c> derives a zero-gravity world
 /// from a gravity-carrying basis). An object carrying <c>"$replace": true</c> replaces wholesale, keeping its
 /// member order and literal null values; the marker itself is consumed.</description></item>
+/// <item><description>The root's <c>shades</c> rows compose whole: each is a shade program under its content identity
+/// (<see cref="WorldShadeTable"/>), so a layer's row of a key another layer holds is the same program and is adopted
+/// whole, never merged member by member, and two imports holding one program never collide.</description></item>
 /// <item><description>A <c>$type</c>-discriminated object whose derived discriminator differs from the basis's
 /// replaces wholesale — the arms of a union share no members, so merging across them could only compose a row the
 /// strict parse refuses.</description></item>
@@ -75,6 +78,9 @@ public static class WorldDocumentBasis {
     /// <summary>The document root member naming, in order, the fragment documents this file imports — the fan-in
     /// half of composition beside the single-parent <see cref="BasisMemberName"/> chain (see the type remarks).</summary>
     public const string ImportsMemberName = "imports";
+    /// <summary>The document root member holding the world's shade programs, each under its content identity; its rows
+    /// compose whole (see the type remarks).</summary>
+    public const string ShadesMemberName = "shades";
     /// <summary>The basis-chain depth ceiling, refusals included — a recursion bound, not an authoring target; a
     /// chain this deep is unreadable long before it is unloadable. Shared by the import graph: any path through
     /// basis and import edges together is capped at this many documents.</summary>
@@ -620,6 +626,15 @@ public static class WorldDocumentBasis {
                 (target[propertyName: name] is JsonObject basisObject) &&
                 (value is JsonObject overlayObject)
             ) {
+                // A shades row is a program under its own content identity: a layer's row of the same key is the same
+                // program, so rows are adopted whole and never merged member by member (WorldShadeTable).
+                if ((path == "$") && (name == ShadesMemberName)) {
+                    foreach (var (key, row) in overlayObject) {
+                        basisObject[key] = WorldDocumentOrigins.Clone(node: row, origins: origins);
+                    }
+
+                    continue;
+                }
                 if (TypeDiscriminatorsDiffer(
                     basis: basisObject,
                     overlay: overlayObject
@@ -769,6 +784,14 @@ public static class WorldDocumentBasis {
                 continue;
             }
 
+            // Two imports using one program hold one row under its content identity: the first is kept whole.
+            if ((path == "$") && (name == ShadesMemberName) && (existing is JsonObject held) && (value is JsonObject rows)) {
+                foreach (var (key, row) in rows) {
+                    if (!held.ContainsKey(propertyName: key)) { held[key] = WorldDocumentOrigins.Clone(node: row, origins: origins); }
+                }
+
+                continue;
+            }
             if (
                 (existing is JsonObject existingObject) &&
                 (value is JsonObject overlayObject) &&

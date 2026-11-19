@@ -66,7 +66,7 @@ public readonly record struct SdfMeshIrradianceParameters(bool Enabled, SdfMeshI
 /// the camera first), then the probes whose lighting is oldest. A relight reflects the light the volume holds about each
 /// hit, so bounce accumulates over successive relights; a probe is relit until it has taken one relight a sweep under
 /// the current lighting, and a lighting that changes every frame (a day's sun) keeps the relight cycling over the
-/// window at the rate the frame's budget grants (<see cref="SdfFrame.IndirectBudget"/>). Overload lengthens the
+/// window at the rate the budget grants each second of wall time (<see cref="SdfFrame.IndirectBudget"/>), whatever the frame rate. Overload lengthens the
 /// lighting's age, never the frame, and is reported as an <c>[sdf.mesh-gi] behind</c> line. A lighting-converged frame relights its
 /// window from no bounce through every sweep before it renders, so its light depends on its scene, lighting and window
 /// alone. The dynamic draws (moving bodies) receive the volume's light and do not cast into it; an anchored light, which
@@ -516,9 +516,12 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     private Layout m_layout;
     private SdfMeshIrradianceParameters m_published;
     private SdfIndirectBudget m_budget;
-    // The budget's grants not yet spent: probes the worker may relight and trace before the next frame grants more.
-    private long m_relightCredits;
-    private long m_traceCredits;
+    // The budget's grants not yet spent: probes the worker may relight and trace before the next frame grants more, in
+    // whole and part probes, since a rate of a few probes a second grants less than one a frame. And when the latest
+    // grant was made (a Stopwatch timestamp, zero before the first), which the next grants the wall time since.
+    private double m_relightCredits;
+    private double m_traceCredits;
+    private long m_grantedAt;
     // The window's lighting age at the start of the latest relight cycle, in seconds: its median and oldest probe.
     private float m_ageMedian;
     private float m_ageMax;
@@ -911,17 +914,37 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     // What a drain's light is a function of: the geometry, the lighting, the windows and the layout.
     private (int Geometry, int Lighting, int Windows, Layout Layout) DrainKey() => (m_geometry, m_lightingVersion, m_windowVersion, m_layout);
 
-    // Whether the worker may do any work this frame: an unbounded part of the budget, or credit left in either part.
-    private bool Granted => ((m_budget.Relight <= 0) || (m_budget.Trace <= 0) || (m_relightCredits > 0) || (m_traceCredits > 0));
+    // Whether the worker may do any work this frame: an unbounded part of the budget, or a whole probe's credit left in
+    // either part.
+    private bool Granted => ((m_budget.RelightPerSecond <= 0) || (m_budget.TracePerSecond <= 0) || (m_relightCredits >= 1.0) || (m_traceCredits >= 1.0));
 
-    // Grants a frame's budget: each bounded part gains its count, held to two frames' worth, so a worker that falls
-    // behind does not bank a burst.
+    /// <summary>The most wall time, in seconds, one frame's grant covers: a quarter of a second, so a presentation down
+    /// to four frames a second still grants its whole rate, a longer hitch grants no burst past it, and a worker that
+    /// falls behind banks at most that much.</summary>
+    public const double MostGrantSeconds = 0.25;
+    /// <summary>The wall time, in seconds, the first frame's grant covers, before any frame has been granted: a 60 Hz
+    /// frame.</summary>
+    public const double FirstGrantSeconds = (1.0 / 60.0);
+
+    // Grants the budget for the wall time since the last frame's grant, held to MostGrantSeconds: each bounded part gains
+    // its rate a second for that time, and holds at most MostGrantSeconds of it, so the work a second does not fall with
+    // the frame rate and a worker that falls behind does not bank a burst. Presentation only: the drain of a
+    // lighting-converged frame ignores the budget, so its light never depends on the wall clock.
     private void Grant(SdfIndirectBudget budget) {
         budget.Validate();
         m_budget = budget;
-        if (budget.Relight > 0) { m_relightCredits = Math.Min(val1: (m_relightCredits + budget.Relight), val2: (2L * budget.Relight)); }
-        if (budget.Trace > 0) { m_traceCredits = Math.Min(val1: (m_traceCredits + budget.Trace), val2: (2L * budget.Trace)); }
+
+        var now = Stopwatch.GetTimestamp();
+        var seconds = ((m_grantedAt == 0L) ? FirstGrantSeconds : Math.Min(val1: MostGrantSeconds, val2: Stopwatch.GetElapsedTime(startingTimestamp: m_grantedAt, endingTimestamp: now).TotalSeconds));
+
+        m_grantedAt = now;
+        if (budget.RelightPerSecond > 0) { m_relightCredits = Banked(credits: m_relightCredits, perSecond: budget.RelightPerSecond, seconds: seconds); }
+        if (budget.TracePerSecond > 0) { m_traceCredits = Banked(credits: m_traceCredits, perSecond: budget.TracePerSecond, seconds: seconds); }
     }
+    // A part's credits after a grant of `seconds` at its rate: at most MostGrantSeconds of it, and never less than a
+    // whole probe's worth of room, so a rate under four probes a second still reaches one.
+    private static double Banked(double credits, int perSecond, double seconds) =>
+        Math.Min(val1: (credits + (perSecond * seconds)), val2: Math.Max(val1: 1.0, val2: (perSecond * MostGrantSeconds)));
     // Owes the worker work; the clock the done line reports starts when the volume leaves its settled state.
     private void Owe() {
         m_sweepsSince = 0;
@@ -1312,8 +1335,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
             if (!sample.Invalid && ((sample.Lighting != lighting.Version) || (sample.Settled != !m_owed))) {
                 // The hits were traced from the sample's own origin, so it is relit there, however far within its cell the
                 // camera now stands.
-                Relight(feedback: (lighting.Feedback && m_layout.Bounce), hits: sample.Hits, layout: m_layout, lighting: lighting, lights: default, local: sample.Local,
-                    lows: lows, origin: sample.Position, radiance: sample.Radiance, reuseLocal: (sample.LocalVersion == lighting.LocalVersion), scene: scene, sky: sample.SkyLight);
+                RelightCameraSample(lighting: lighting, lows: lows, reuseLocal: (sample.LocalVersion == lighting.LocalVersion), sample: sample, scene: scene);
                 sample.Lighting = lighting.Version;
                 sample.LocalVersion = lighting.LocalVersion;
                 sample.Settled = !m_owed;
@@ -1326,10 +1348,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         var valid = TraceHits(hits: traced.Hits, inside: out _, layout: m_layout, origin: position, scene: scene, sky: traced.Sky);
 
         traced.Invalid = !valid;
-        if (valid) {
-            Relight(feedback: (lighting.Feedback && m_layout.Bounce), hits: traced.Hits, layout: m_layout, lighting: lighting, lights: default, local: traced.Local,
-                lows: lows, origin: position, radiance: traced.Radiance, reuseLocal: false, scene: scene, sky: traced.SkyLight);
-        }
+        if (valid) { RelightCameraSample(lighting: lighting, lows: lows, reuseLocal: false, sample: traced, scene: scene); }
         traced.Lighting = lighting.Version;
         traced.LocalVersion = lighting.LocalVersion;
         traced.Settled = !m_owed;
@@ -1337,6 +1356,43 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         m_cameraSamples[m_nextCameraSample] = traced;
         m_nextCameraSample = ((m_nextCameraSample + 1) % m_cameraSamples.Length);
         return traced;
+    }
+    // Relights a camera sample's hits from its own origin and closes them (CloseCameraSample).
+    private void RelightCameraSample(CameraSample sample, Lighting lighting, (int X, int Y, int Z)[] lows, SdfMeshIrradianceScene scene, bool reuseLocal) {
+        Span<Vector3> open = stackalloc Vector3[SdfMeshProbeDepth.HitCount];
+
+        Relight(feedback: (lighting.Feedback && m_layout.Bounce), hits: sample.Hits, layout: m_layout, lighting: lighting, lights: default, local: sample.Local,
+            lows: lows, origin: sample.Position, radiance: sample.Radiance, reuseLocal: reuseLocal, scene: scene, sky: sample.SkyLight, open: open);
+        CloseCameraSample(hits: sample.Hits, open: open, radiance: sample.Radiance, sky: sample.SkyLight);
+    }
+    // KEEP IN SYNC with the closure in sdf-probe-camera-sample-stage.hlsli. A camera sample stands for every surface no probe
+    // answers (sdfMeshIndirectSeen), so a hit of its own that no probe answers reflects the light the sample receives about
+    // the hit's normal: one probe's interreflection, iterated CameraSampleClosurePasses times from the relit cube. Without
+    // it, before the volume measures a room, its walls carry only the fixtures' direct light while an opening shows the
+    // daylit ground outside at full strength, and every unanswered surface in the room takes the opening's colour. `open`
+    // is each texel's reflectance its bounce leaves open (Shade's Open); `sky` stays as relit.
+    private static void CloseCameraSample(ReadOnlySpan<uint> hits, ReadOnlySpan<Vector3> open, Span<Vector3> radiance, ReadOnlySpan<Vector3> sky) {
+        var directions = SdfMeshProbeDepth.RayDirections;
+        var weights = SdfMeshProbeDepth.RayWeights;
+        Span<Vector3> relit = stackalloc Vector3[6];
+        Span<Vector3> light = stackalloc Vector3[6];
+        Span<Vector3> added = stackalloc Vector3[6];
+
+        radiance[..6].CopyTo(destination: relit);
+        for (var pass = 0; (pass < SdfMeshIrradianceProbe.CameraSampleClosurePasses); pass++) {
+            for (var axis = 0; (axis < 6); axis++) { light[axis] = (radiance[axis] + sky[axis]); }
+            added.Clear();
+            for (var texel = 0; (texel < SdfMeshProbeDepth.HitCount); texel++) {
+                if ((open[texel] == Vector3.Zero) || !SdfMeshProbeDepth.TryHit(backFace: out _, distance: out _, hits: hits, material: out _, normal: out var normal, texel: texel)) { continue; }
+
+                var reflected = (open[texel] * Cube(cube: light, normal: normal, squared: (normal * normal)));
+
+                for (var axis = 0; (axis < 6); axis++) {
+                    added[axis] += (reflected * (weights[texel] * MathF.Max(x: 0f, y: Vector3.Dot(vector1: directions[texel], vector2: Axes[axis]))));
+                }
+            }
+            for (var axis = 0; (axis < 6); axis++) { radiance[axis] = (relit[axis] + (added[axis] / AxisTotals[axis])); }
+        }
     }
 
     /// <summary>Describes the volume: its tier's layout, the static scene, the lights it traces, the probes cached, the
@@ -1356,7 +1412,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
 
     // The budget and the lighting's age, as key=value pairs; under the gate.
     private string DescribeAge() => string.Create(provider: CultureInfo.InvariantCulture,
-        handler: $"budget-relight={((m_budget.Relight > 0) ? m_budget.Relight.ToString(provider: CultureInfo.InvariantCulture) : "unbounded")} budget-trace={((m_budget.Trace > 0) ? m_budget.Trace.ToString(provider: CultureInfo.InvariantCulture) : "unbounded")} age-target={((m_budget.Age > 0f) ? m_budget.Age.ToString(format: "0.##", provider: CultureInfo.InvariantCulture) : "none")} age-p50={m_ageMedian:0.##} age-max={m_ageMax:0.##} relit-per-second={m_cycleRate:0} {DescribeLevelAges()}");
+        handler: $"budget-relight-per-second={((m_budget.RelightPerSecond > 0) ? m_budget.RelightPerSecond.ToString(provider: CultureInfo.InvariantCulture) : "unbounded")} budget-trace-per-second={((m_budget.TracePerSecond > 0) ? m_budget.TracePerSecond.ToString(provider: CultureInfo.InvariantCulture) : "unbounded")} age-target={((m_budget.Age > 0f) ? m_budget.Age.ToString(format: "0.##", provider: CultureInfo.InvariantCulture) : "none")} age-p50={m_ageMedian:0.##} age-max={m_ageMax:0.##} relit-per-second={m_cycleRate:0} {DescribeLevelAges()}");
     // Sample at the diagnostic read, rather than reporting the ages from the last work-list rebuild.
     private string DescribeLevelAges() {
         if (m_lighting is null) { return ""; }
@@ -1956,8 +2012,9 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
                     }
                     lighting = m_lighting!;
 
-                    var traceCredits = ((m_budget.Trace > 0) ? m_traceCredits : long.MaxValue);
-                    var relightCredits = ((m_budget.Relight > 0) ? m_relightCredits : long.MaxValue);
+                    // A part's whole probes of credit; a part probe waits for the next grant.
+                    var traceCredits = ((m_budget.TracePerSecond > 0) ? ((long)m_traceCredits) : long.MaxValue);
+                    var relightCredits = ((m_budget.RelightPerSecond > 0) ? ((long)m_relightCredits) : long.MaxValue);
                     var traces = ((m_listTraceCursor < m_listTraces) && (traceCredits > 0));
                     var relights = ((m_listRelightCursor < candidates.Count) && (relightCredits > 0));
 
@@ -1978,8 +2035,8 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
                     take = 0;
                     while (((index + take) < end) && (take < BatchProbes) && (take < credits)) { take++; }
                     if (trace) {
-                        if (m_budget.Trace > 0) { m_traceCredits -= take; }
-                    } else if (m_budget.Relight > 0) {
+                        if (m_budget.TracePerSecond > 0) { m_traceCredits -= take; }
+                    } else if (m_budget.RelightPerSecond > 0) {
                         m_relightCredits -= take;
                     }
                 }
@@ -2200,7 +2257,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         m_behindAt = now;
 
         Console.Error.WriteLine(value: string.Create(provider: CultureInfo.InvariantCulture,
-            handler: $"[sdf.mesh-gi] behind level={worst} age-max={m_listAgeMax[worst]:0.##} target={SdfMeshProbeRelight.AgeBoundOf(level: worst, target: m_budget.Age):0.##} combined-age-p50={m_ageMedian:0.##} probes={ages.Count} relit-per-second={m_cycleRate:0} needed-per-second={needed:0} shortfall-per-second={MathF.Max(x: 0f, y: (needed - m_cycleRate)):0} budget-relight={m_budget.Relight}"));
+            handler: $"[sdf.mesh-gi] behind level={worst} age-max={m_listAgeMax[worst]:0.##} target={SdfMeshProbeRelight.AgeBoundOf(level: worst, target: m_budget.Age):0.##} combined-age-p50={m_ageMedian:0.##} probes={ages.Count} relit-per-second={m_cycleRate:0} needed-per-second={needed:0} shortfall-per-second={MathF.Max(x: 0f, y: (needed - m_cycleRate)):0} budget-relight-per-second={m_budget.RelightPerSecond}"));
     }
     // Traces and relights one batch of the listed probes on the pool, then lands it. The batch reads the cache as it stood
     // before the batch, so its probes' bounce does not depend on the order the pool runs them in. A pass of zero or more
@@ -2445,14 +2502,16 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     // holds that cube for the current local version (`reuseLocal`) reads it and traces no shadow ray toward a point
     // light; otherwise it shades it into `local` and, when `lights` is not empty, marks which traced lights its origin
     // sees. The directional lights and the bounce are shaded every relight, and every ray that misses carries the sky's
-    // radiance about it into `sky`. The same quadrature weighs the cubes as weighed its sky shares.
+    // radiance about it into `sky`. The same quadrature weighs the cubes as weighed its sky shares. When `open` is not
+    // empty it receives each texel's reflectance its bounce leaves open (Shade's Open, zero for a miss or a back face).
     private void Relight(Vector3 origin, ReadOnlySpan<uint> hits, Layout layout, Lighting lighting, (int X, int Y, int Z)[] lows, SdfMeshIrradianceScene scene,
-        bool feedback, Span<Vector3> radiance, Span<Vector3> local, Span<Vector3> sky, bool reuseLocal, Span<uint> lights) {
+        bool feedback, Span<Vector3> radiance, Span<Vector3> local, Span<Vector3> sky, bool reuseLocal, Span<uint> lights, Span<Vector3> open = default) {
         var directions = SdfMeshProbeDepth.RayDirections;
         var weights = SdfMeshProbeDepth.RayWeights;
 
         radiance.Clear();
         sky.Clear();
+        open.Clear();
         if (!reuseLocal) { local.Clear(); }
         for (var texel = 0; (texel < SdfMeshProbeDepth.HitCount); texel++) {
             if (!SdfMeshProbeDepth.TryHit(backFace: out var back, distance: out var distance, hits: hits, material: out var material, normal: out var normal, texel: texel)) {
@@ -2465,9 +2524,10 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
 
             var direction = directions[texel];
 
-            var (varying, fixedLight) = Shade(feedback: feedback, layout: layout, lighting: lighting, local: !reuseLocal, lows: lows, material: material, normal: normal,
+            var (varying, fixedLight, texelOpen) = Shade(feedback: feedback, layout: layout, lighting: lighting, local: !reuseLocal, lows: lows, material: material, normal: normal,
                 point: (origin + (direction * distance)), scene: scene);
 
+            if (!open.IsEmpty) { open[texel] = texelOpen; }
             if ((varying == Vector3.Zero) && (fixedLight == Vector3.Zero)) { continue; }
             for (var axis = 0; (axis < 6); axis++) {
                 var weight = (weights[texel] * MathF.Max(x: 0f, y: Vector3.Dot(vector1: direction, vector2: Axes[axis])));
@@ -2512,8 +2572,9 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     // The radiance a hit sends back along its ray, in the views pass's units (albedo times the light a surface receives),
     // in two parts. Varying: the directional lights' bounce under a traced shadow and, with feedback, the reflected light
     // of the probes about it. Local, when asked for: the traced point and spot lights' bounce under their windowed
-    // falloff, cone and a traced shadow, and its emission.
-    private (Vector3 Varying, Vector3 Local) Shade(Lighting lighting, Vector3 point, Vector3 normal, int material, bool feedback, bool local, Layout layout, (int X, int Y, int Z)[] lows, SdfMeshIrradianceScene scene) {
+    // falloff, cone and a traced shadow, and its emission. Open: with feedback, the reflectance (times the bounce gain) a
+    // hit no probe answers leaves without its bounce, zero where the volume answers (sdfProbeShade's `unanswered`).
+    private (Vector3 Varying, Vector3 Local, Vector3 Open) Shade(Lighting lighting, Vector3 point, Vector3 normal, int material, bool feedback, bool local, Layout layout, (int X, int Y, int Z)[] lows, SdfMeshIrradianceScene scene) {
         var surface = lighting.MaterialAt(index: material);
         var reflected = ((surface.Albedo * (1f - surface.Metal)) * (surface.Bleed ?? Vector3.One));
         var varying = Vector3.Zero;
@@ -2560,22 +2621,30 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         if (local && lighting.Emission && (surface.Emissive > 0f) && (surface.EmissiveLane is null)) {
             fixedLight += (((surface.Albedo * surface.Emissive) * (surface.Bleed ?? Vector3.One)) * lighting.Gains.Emission);
         }
+        var open = Vector3.Zero;
+
         if (feedback && (reflected != Vector3.Zero)) {
-            varying += ((reflected * Incoming(layout: layout, lows: lows, normal: normal, point: point)) * lighting.Gains.Feedback);
+            if (TryIncoming(layout: layout, lows: lows, normal: normal, point: point, light: out var incoming)) {
+                varying += ((reflected * incoming) * lighting.Gains.Feedback);
+            } else {
+                open = (reflected * lighting.Gains.Feedback);
+            }
         }
 
-        return (varying, fixedLight);
+        return (varying, fixedLight, open);
     }
     // The light a surface receives from the cached probes about it, as the views pass reads the volume
     // (sdfMeshProbesAt, shade/sdf-mesh-irradiance.hlsli): the probes Select chooses, each weighted as Gather weighs it.
     // It reads each probe's own cubes, exactly as the published volume does.
-    private Vector3 Incoming(Vector3 point, Vector3 normal, Layout layout, (int X, int Y, int Z)[] lows) {
-        var (sky, bounce) = IncomingParts(layout: layout, lows: lows, normal: normal, point: point);
+    private bool TryIncoming(Vector3 point, Vector3 normal, Layout layout, (int X, int Y, int Z)[] lows, out Vector3 light) {
+        var (sky, bounce, answers) = IncomingParts(layout: layout, lows: lows, normal: normal, point: point);
 
-        return (sky + bounce);
+        light = (sky + bounce);
+        return answers;
     }
-    // Incoming's two terms apart: the sky light and the surfaces' radiance the probes' cubes hold.
-    private (Vector3 Sky, Vector3 Bounce) IncomingParts(Vector3 point, Vector3 normal, Layout layout, (int X, int Y, int Z)[] lows) {
+    // TryIncoming's two terms apart: the sky light and the surfaces' radiance the probes' cubes hold, and whether any probe
+    // answers the receiver (sdfMeshAnswers), both terms zero where none does.
+    private (Vector3 Sky, Vector3 Bounce, bool Answers) IncomingParts(Vector3 point, Vector3 normal, Layout layout, (int X, int Y, int Z)[] lows) {
         var squared = (normal * normal);
         Span<float> cornerWeights = stackalloc float[GatherSlots];
         Span<(int X, int Y, int Z)> cornerCells = stackalloc (int X, int Y, int Z)[GatherSlots];
@@ -2598,10 +2667,10 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         }
 
         if (total <= 0f) {
-            return (Vector3.Zero, Vector3.Zero);
+            return (Vector3.Zero, Vector3.Zero, false);
         }
 
-        return ((sky / total), (bounce / total));
+        return ((sky / total), (bounce / total), true);
     }
 
     /// <summary>Reads the probes about a receiver as the views pass gathers them (<c>sdfMeshProbesAt</c>): the chosen
@@ -2710,7 +2779,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
             }
             var level = selection.Level;
 
-            var (sky, bounce) = IncomingParts(layout: layout, lows: Lows(), normal: normal, point: point);
+            var (sky, bounce, _) = IncomingParts(layout: layout, lows: Lows(), normal: normal, point: point);
 
             lines.Add(item: string.Create(provider: CultureInfo.InvariantCulture,
                 $"[world.probe: point=({point.X:0.###}, {point.Y:0.###}, {point.Z:0.###}) normal=({normal.X:0.##}, {normal.Y:0.##}, {normal.Z:0.##}) level={level} measured={(selection.Measured ? 1 : 0)} share={selection.Share:0.####} remainder-level={selection.RemainderLevel} remainder-measured={(selection.RemainderMeasured ? 1 : 0)} spacing={SpacingText(spacing: layout.SpacingOf(level: level))} window=({low.X}, {low.Y}, {low.Z})+{layout.DimsOf(level: level).X}x{layout.DimsOf(level: level).Y}x{layout.DimsOf(level: level).Z} answering={answering} weight={total:0.####} relighting={(m_owed ? 1 : 0)} indirect-sky=({sky.X:0.#}, {sky.Y:0.#}, {sky.Z:0.#}) indirect-bounce=({bounce.X:0.#}, {bounce.Y:0.#}, {bounce.Z:0.#})]"));

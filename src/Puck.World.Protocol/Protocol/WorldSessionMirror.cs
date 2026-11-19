@@ -73,6 +73,27 @@ public sealed class WorldSessionMirror : IClientSink {
     /// <param name="publication">The owner's publication, when the latest image carries one.</param>
     /// <returns><see langword="true"/> when the latest image carries a publication for <paramref name="owner"/>.</returns>
     public bool TryInput(Principal owner, out WorldInputPublication publication) => TryOwned(owner: owner, records: static image => image.Inputs, value: out publication);
+    /// <summary>Reads the input publication of whichever owner drives a body from the latest complete image: what a
+    /// client reads when the authority knows its seat by another principal than the client does (a forwarded authority
+    /// stamps a traveler as its peer), since a body has one input owner and a delivery carries the recipient's own
+    /// records.</summary>
+    /// <param name="entity">The body's address at this authority.</param>
+    /// <param name="publication">The publication, whose <see cref="WorldInputPublication.Owner"/> names the owner the
+    /// authority answers this body's input under (<see cref="TryInputAnswer"/>).</param>
+    /// <returns><see langword="true"/> when the latest image carries a publication for the body's index and
+    /// generation.</returns>
+    public bool TryInputOf(WorldEntityAddress entity, out WorldInputPublication publication) {
+        var result = m_images.Read(state: entity, read: static (in SnapshotImage image, long version, WorldEntityAddress body) => {
+            foreach (var input in image.Inputs.Values) {
+                if ((input.Body == body.Index) && (input.Generation == body.Generation)) { return (Found: true, Value: input); }
+            }
+
+            return (Found: false, Value: default(WorldInputPublication));
+        });
+
+        publication = result.Value;
+        return result.Found;
+    }
 
     // Reads one owner's record from one of the latest complete image's owner-scoped tables.
     private bool TryOwned<T>(Principal owner, Func<SnapshotImage, Dictionary<Principal, T>> records, out T value) {

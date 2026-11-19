@@ -18,11 +18,17 @@ internal sealed partial class SdfMeshProbeGpuWork {
 
     // Only this door publishes a scene: no query is admitted while its replacement uploads, and its root
     // is written last. The old root, prefix and geometry remain intact until that last submission retires.
-    private bool TakeSceneUpload([NotNullWhen(true)] out object? job, out double estimatedSeconds) {
+    // A chunk holds at most SdfGpuWork.UploadChunkBytes, so while work is queued a chunk is read only when that many
+    // bytes' copy fits what is left of the frame's allowance: a chunk read from its channel cannot be put back.
+    private bool TakeSceneUpload(SdfGpuWorkAllowance allowance, [NotNullWhen(true)] out object? job, out double estimatedSeconds) {
         job = null;
         estimatedSeconds = 0;
         var upload = m_sceneUpload!;
         if (upload.Work.IsFaulted) { upload.Work.GetAwaiter().GetResult(); }
+        if (!allowance.Admits(seconds: SdfGpuWork.UploadSecondsOf(bytes: SdfGpuWork.UploadChunkBytes))) {
+            estimatedSeconds = SdfGpuWork.UploadSecondsOf(bytes: SdfGpuWork.UploadChunkBytes);
+            return false;
+        }
         if (!upload.Chunks.Reader.TryRead(out var chunk) && (m_sceneInFlight != 0 || !upload.TryRoot(out chunk))) { return false; }
         m_sceneInFlight++;
         job = chunk;

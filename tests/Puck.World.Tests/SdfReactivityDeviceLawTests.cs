@@ -119,6 +119,7 @@ public sealed class SdfReactivityDeviceLawTests {
         public IGpuReadbackBuffer? Latest { get; set; }
 
         public void BeginFrame(in FrameContext context) => inner.BeginFrame(context: in context);
+        public void PrepareRead(string instance, in FrameContext context) => inner.PrepareRead(context: in context, instance: instance);
         public IShaderPipelineStorageCounter? CounterOf(string instance) => inner.CounterOf(instance: instance);
         public IShaderPipelineRenderExtent? RenderExtentOf(string instance) => inner.RenderExtentOf(instance: instance);
         public RenderGraphPackageFragment? FragmentOf(string instance) => inner.FragmentOf(instance: instance);

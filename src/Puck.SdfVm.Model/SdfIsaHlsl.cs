@@ -306,6 +306,7 @@ public static class SdfIsaHlsl {
         declarations.Count(name: "SDF_PROBE_CACHE_WORDS", value: SdfMeshProbeRelight.CacheWords);
         declarations.Count(name: "SDF_PROBE_RELIGHT_RESULT_WORDS", value: SdfMeshProbeRelight.ResultWords);
         declarations.Count(name: "SDF_PROBE_CAMERA_SAMPLE_OUTPUT_WORDS", value: SdfMeshProbeRelight.CameraSampleOutputWords);
+        declarations.Count(name: "SDF_PROBE_CAMERA_SAMPLE_CLOSURE_PASSES", value: SdfMeshIrradianceProbe.CameraSampleClosurePasses);
         declarations.Count(name: "SDF_PROBE_RECORD_INPUT_WORD", value: SdfMeshProbeRelight.RecordInputWord);
         declarations.Count(name: "SDF_PROBE_RELIGHT_PREVIOUS_WORD", value: SdfMeshProbeRelight.PreviousWord);
         declarations.Count(name: "SDF_PROBE_SELECT_GROUP_SIZE", value: SdfMeshProbeRelight.SelectGroupSize);

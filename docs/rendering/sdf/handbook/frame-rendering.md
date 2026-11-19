@@ -317,14 +317,47 @@ views and screens one frame updated over the same window.
 ## What each pass costs
 
 The passes scale with different things. The bake's two kernels are no pass of
-the frame: they run as the residency's background GPU work, at most
-`SdfGpuWork.GpuShare` of the GPU's time by each job's measured timestamps, and
-only while a bake is pending ([the bake](#the-bake)). The queue runs a background
-job whole before the frame submitted after it, so the share is also a bound per
-job: a client cuts its jobs to `SdfGpuWork.FrameShareSeconds` at its kind's
-measured rate (`SdfGpuWorkRate`), as the irradiance volume's traces and relights
-do, and `world.residency`'s `gpu-work` line counts the jobs measured past it
-(`over-frame-share`) and names the longest (`most-job`). A frame the graph
+the frame: they run as the residency's background GPU work, by each job's
+measured timestamps, and only while a bake is pending ([the bake](#the-bake)).
+Background work takes the share of the GPU's time the frame's own work leaves
+free (`SdfGpuWorkBudget.Share`): each frame the presentation hands the budget
+the display's period and the GPU time every node of the render graph took, read
+from their timestamps (`WorldBackgroundAllowance`), and the share follows what
+their mean leaves of the period short of a tenth, between one millisecond a
+period (`SdfGpuWorkBudget.LeastFrameSeconds`) and `SdfGpuWork.GpuShare`. It
+falls at once when the frame needs more and climbs back by steps. Background
+jobs are timed apart from the frame, so they never push their own share down,
+and dynamic resolution, which reads the same views, moves the render grid only
+once their passes alone overrun the period. A World with no display period or
+no timestamps keeps the fixed share and says why: `world.residency`'s
+`work-budget` line prints the live share, one frame's allowance, the frame's
+GPU time it read (`follows:frame`, or the reason it read none), and the GPU
+time it granted beside what the jobs were charged. The queue runs every
+background job whole before the frame submitted after it, so the jobs queued
+ahead of one frame together fit one frame's allowance: each take is handed what
+is left of `SdfGpuWorkBudget.FrameAllowanceSeconds` after the charged jobs
+still in flight on the queue, whichever residency's service submitted them
+(`SdfGpuWorkBudget.Allowance`, an `SdfGpuWorkAllowance`), and while work is
+queued a client takes no job priced past it, deciding before it takes
+anything. A client whose job waits for room keeps its turn in its service, so
+the bake's batches, cut to whatever is left, do not starve the irradiance
+volume's queries, which the coordinator cuts to the whole allowance. A job with
+nothing queued ahead of it runs whatever its price, so a
+bake lattice larger than the allowance (a lattice is never split) still runs,
+alone. Jobs are cut at their kind's measured rate (`SdfGpuWorkRate`): the
+irradiance volume's traces and relights, and the bake's batches, whose rate
+follows the mean because a batch mixes groups whose evaluations differ in
+cost. The `work-budget` line prints what is queued (`queued:`), and the
+`gpu-work` line counts the steps the spent allowance held (`deadline-holds`),
+the budgeted jobs measured past what they were taken to fit (`over-allowance`),
+the jobs a client handed over past what was left while work was queued
+(`over-deadline`, a client defect), and names the longest (`most-job`). The
+`frames-behind` field counts the claim that background work never costs a
+frame: from each job's span and each frame's on the queue's timestamp clock, the
+frames background work ran directly ahead of or between the submissions of
+(`behind`), and those for which that work and the frame's own GPU time exceed
+the display's period (`missed`, an upper bound, since the clock does not show
+when the frame reached the queue). A frame the graph
 withholds (`SdfWorldResidency.FrameWithheld`: a locked tick completing its
 meshes, or a frame held for its lighting) queues nothing behind the work: its
 staging drives the jobs outside the share (`SdfGpuWork.Drive`, and its
@@ -1026,9 +1059,12 @@ samples up to 240 lattices through the interpreter, one call site, with only
 the group's instances in the walk (`sdfMapOmitWorldSegments` drops the unowned
 segments from it). The work keeps a ring of slots, each submitted on its own
 fence and refilled once its job completed and its samples were copied off, and
-takes at most `SdfGpuWork.GpuShare` of the GPU's time by each job's own
+takes the background budget's live share of the GPU's time
+(`SdfGpuWorkBudget.Share`, at most `SdfGpuWork.GpuShare`) by each job's own
 timestamps, so a cold bake samples as fast as its groups ask for lattices
-rather than one batch a rendered frame. The work is stepped at the frame's
+rather than one batch a rendered frame. A batch in play is cut to one frame's
+allowance at the bake's measured rate; a held frame's batch takes up to
+`SdfMeshPathBake.BatchTaps`, since no frame queues behind it. The work is stepped at the frame's
 pumps and inside the host's wait between frames (`HostWaits.Pace`), which a
 job's fence, a readied lattice and the budget's next credit end early, so a
 slow present does not pace it either. Every lattice is chunked to

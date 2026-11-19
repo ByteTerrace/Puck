@@ -693,8 +693,13 @@ direction: concurrent whole-solution builds exhaust a machine's memory.
   undone before it spreads, and the lane fixes it at the cause. A headless World
   composes no renderer, so it records no barrier, publishes no probe scene and
   presents nothing: a batch whose merges touch GPU or rendering code also gets a
-  short windowed boot on Direct3D 12 (with `--debug-layers`) and on Vulkan before
-  the lead pushes it. In one wave a barrier fault and a probe-scene publication
+  short windowed boot on Direct3D 12 (with `--debug-layers`) and on Vulkan. That
+  boot never holds a push back (the owner's ruling, after about forty merges sat
+  unpushed while the boot waited for a GPU the lanes held): the lead pushes the
+  integration branch after every few merges as its backup, and the boot runs on
+  the pushed tip. The lead's window outranks lane legs, so when a lane's World
+  holds the GPU or the memory, the lead asks it to stop rather than queue behind
+  it, and a red boot is fixed on the next push. In one wave a barrier fault and a probe-scene publication
   that threw on every device both passed every headless boot and every review
   that read them, and broke the first windowed boot. A clean stderr is not a
 clean boot: that boot also waits for bakes, searches the bake log for `empty=`

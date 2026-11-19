@@ -239,6 +239,12 @@ public static class WorldRenderRoot {
 
         var overlaid = (overlay is not null);
         var timing = sp.GetRequiredService<WorldGpuTiming>();
+        // The background allowance follows the GPU time every node of the graph leaves free of the display's period.
+        var allowance = new WorldBackgroundAllowance(
+            budget: () => SdfResidencySelector.Of(device: device).Work,
+            load: new WorldFrameLoadSource(presentTiming: static () => null, probe: sp.GetRequiredService<WorldRenderProbe>(), timing: timing, view: null),
+            timing: timing
+        );
 
         frameSource.FrameComposed = () => {
             host.PresentComparison();
@@ -328,6 +334,7 @@ public static class WorldRenderRoot {
                     companionNode = captureNode;
                     companionScene = shown;
                 }
+                allowance.Advance(context: in context);
                 timing.Tick();
             },
             Roots = host.Roots,

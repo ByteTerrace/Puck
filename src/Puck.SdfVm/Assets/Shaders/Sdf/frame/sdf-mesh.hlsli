@@ -88,9 +88,27 @@ int sdfMeshMaterial(SdfMeshHit hit) {
 int sdfMeshRasterMaterial(uint draw, uint triangleIndex) {
     return sdfMeshMaterialOf(sdfMeshRecord(draw), triangleIndex);
 }
-// The dynamic-transform slot a resolved hit's draw stores its mesh in, or SDF_TRANSFORM_SLOT_NONE.
+// The row this view reads a dynamic-transform slot from. A view's pose overlay (passGroup.poseOverlay: first slot, slot
+// count, first overlay row; SdfPoseOverlay) reads one stamp's slots from the overlay's rows, which hold that stamp posed
+// for this view alone; every other slot, and every slot of a view with no overlay (a zero count), reads its own row. A
+// negative slot (SDF_TRANSFORM_SLOT_NONE) wraps far past any range and reads as itself. Every reader of a mesh vertex's
+// slots (sdfMeshSkinSlotsOf, sdfMeshWorldVertex, sdfMeshPreviousPosition) and of a hit's shading frame
+// (sdfMeshHitFrameSlot, sdfMeshSurfaceNormal) goes through it.
+uint sdfViewPoseSlot(uint slot) {
+    uint offset = (slot - passGroup.poseOverlay.x);
+    return ((offset < passGroup.poseOverlay.y) ? (passGroup.poseOverlay.z + offset) : slot);
+}
+// Carries a draw's world point and normal from the pose its frame slot's own row holds (p0, q0) to the pose the view's
+// overlay row holds for it (p1, q1): a draw's matrix is its frame slot's own row, so a view that reads the slot from an
+// overlay row places the draw under that row instead.
+void sdfViewPoseCarry(float3 p0, float4 q0, float3 p1, float4 q1, inout float3 position, inout float3 normal) {
+    position = rotatePointByQuaternion(rotatePointByInverseQuaternion(position - p0, q0), q1) + p1;
+    normal = rotatePointByQuaternion(rotatePointByInverseQuaternion(normal, q0), q1);
+}
+// The dynamic-transform slot whose row a resolved hit's draw shades in this view (sdfViewPoseSlot), or
+// SDF_TRANSFORM_SLOT_NONE.
 int sdfMeshHitFrameSlot(SdfMeshHit hit) {
-    return asint(sdfMeshRecordWord(hit.record + SDF_MESH_FRAME_SLOT_WORD));
+    return asint(sdfViewPoseSlot(sdfMeshRecordWord(hit.record + SDF_MESH_FRAME_SLOT_WORD)));
 }
 // The vertex a draw's index `k` names.
 uint sdfMeshIndexAt(uint record, uint k) {
@@ -270,14 +288,23 @@ float3 sdfMeshNormalToWorld(uint record, float3 n) {
 }
 // The world position and normal of a draw's index `k`: the vertex it names displaced by a height field's heights
 // (sdfMeshDisplaced), skinned under its members' slots in this frame (sdfMeshSkinCurrent), then under the draw's
-// row-vector matrix, whose fourth row carries translation (its normal matrix for the normal), and its carry. The normal
-// is meaningful only for a mesh that carries normals.
+// row-vector matrix, whose fourth row carries translation (its normal matrix for the normal), carried to the row this
+// view reads the draw's frame slot from (sdfViewPoseCarry), and its portal carry. The normal is meaningful only for a mesh
+// that carries normals.
 void sdfMeshWorldVertex(uint record, uint k, out float3 position, out float3 normal) {
     normal = asfloat(sdfMeshWords3(sdfMeshVertexAt(record, k) + 3u));
     float3 object = sdfMeshDisplaced(record, sdfMeshObjectPosition(record, k), false, normal);
     object = sdfMeshSkinCurrent(record, k, object, normal);
-    position = sdfMeshCarryPoint(record, sdfMeshWorldDirection(record, object) + sdfMeshRow(record, 3u));
-    normal = sdfMeshCarryDirection(record, sdfMeshNormalToWorld(record, normal));
+    position = sdfMeshWorldDirection(record, object) + sdfMeshRow(record, 3u);
+    normal = sdfMeshNormalToWorld(record, normal);
+    uint frameSlot = asuint(asint(sdfMeshRecordWord(record + SDF_MESH_FRAME_SLOT_WORD)));
+    uint shown = sdfViewPoseSlot(frameSlot);
+    if (shown != frameSlot) {
+        sdfViewPoseCarry(sdfDynamicTransforms[3u * frameSlot].xyz, sdfDynamicTransforms[3u * frameSlot + 1u],
+            sdfDynamicTransforms[3u * shown].xyz, sdfDynamicTransforms[3u * shown + 1u], position, normal);
+    }
+    position = sdfMeshCarryPoint(record, position);
+    normal = sdfMeshCarryDirection(record, normal);
 }
 float3 sdfMeshWorldPosition(uint record, uint k) {
     float3 position, normal;
@@ -396,6 +423,7 @@ float3 sdfMeshSurfaceNormal(SdfMeshHit hit, float3 surfacePoint, float3 rayDirec
     if ((sdfMeshRecordWord(record + SDF_MESH_FLAGS_WORD) & SDF_MESH_WORLD_MATERIAL_FLAG) != 0u) {
         frameSlot = SDF_TRANSFORM_SLOT_NONE;
     }
+    frameSlot = asint(sdfViewPoseSlot(asuint(frameSlot)));
 
     faceNormal = (face * rsqrt(max(dot(face, face), 1.0e-30)));
     faceNormal = ((dot(faceNormal, rayDirection) > 0.0) ? -faceNormal : faceNormal);

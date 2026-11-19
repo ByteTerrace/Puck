@@ -306,16 +306,17 @@ public sealed partial class SdfWorldPassesLawTests {
     public void ATemporalViewRunsTheTemporalFragmentWithHistoryAtItsOutput() {
         using var rig = new TemporalRig(views: 1, temporal: true);
 
-        // The temporal fragment, its one stable shadow slot drawing no second slot's cascade.
+        // The temporal fragment with its display stage, its one stable shadow slot drawing no second slot's cascade, and no distant map while the frame has none.
         Assert.Equal(
             actual: rig.Passes.FragmentOf(instance: "world")!.Passes.Select(selector: static pass => pass.Name),
-            expected: SdfWorldPackage.TemporalFragment.Passes.Select(selector: static pass => pass.Name).Where(predicate: static name => (name != SdfWorldPackage.Parts.ShadowSecond))
+            expected: SdfWorldPackage.WithDisplay(fragment: SdfWorldPackage.TemporalFragment, quality: BloomQuality.Off).Passes.Select(selector: static pass => pass.Name).Where(predicate: static name => (name is not (SdfWorldPackage.Parts.ShadowSecond or SdfWorldPackage.Parts.ShadowDistant)))
         );
         var plan = rig.World.Plan!;
 
         var resolve = plan.Passes.Single(predicate: static pass => pass.Name.EndsWith(comparisonType: StringComparison.Ordinal, value: $"${SdfWorldPackage.Resolve}"));
 
-        Assert.EndsWith(expectedEndString: $"${SdfWorldPackage.Parts.Composite}", actualString: plan.Passes[^1].Name);
+        Assert.EndsWith(expectedEndString: $"${SdfWorldPackage.Parts.Composite}", actualString: plan.Passes[^2].Name);
+        Assert.EndsWith(expectedEndString: $"${SdfWorldPackage.Display}", actualString: plan.Passes[^1].Name);
         var history = plan.Storages.Where(predicate: static storage => storage.Declaration.History).Select(selector: static storage => storage.Name).Order(comparer: StringComparer.Ordinal);
 
         Assert.Equal(actual: history, expected: [$"{RenderGraphPackageCatalog.SdfWorld}${SdfWorldPackage.Parts.HistoryColor}", $"{RenderGraphPackageCatalog.SdfWorld}${SdfWorldPackage.Parts.HistorySurface}"]);
@@ -584,10 +585,14 @@ public sealed partial class SdfWorldPassesLawTests {
                 FrameDeltaTicks: ((displayHertz > 0) ? (Puck.Maths.FixedTickConversion.TicksPerSecond / ((ulong)displayHertz)) : 0UL),
                 Host: new HostContext(capabilities: new Dictionary<Type, object> { [typeof(IGpuDeviceContext)] = m_gpu }),
                 StepTicks: 0, TargetHeight: Extent, TargetWidth: Extent, DisplayHertz: displayHertz, GridHertz: displayHertz);
+            // The irradiance volume's first lighting lands in wall time (its GPU work draws on a budget that accrues by the
+            // clock, not by frames), so the rig settles it before a law counts frames: a view stands only once its lighting
+            // has settled (SdfWorldResidency.IsUnchanged).
             TestLiveness.Until(step: () => {
                 Produce();
                 return (Selected.IsReady && Passes.HasRenderedResolvedView(instance: "world") &&
-                    (World.Extent == (Extent, Extent)) && !World.IsBuildingCandidate && !Selected.MeshPathBake.Pending);
+                    (World.Extent == (Extent, Extent)) && !World.IsBuildingCandidate && !Selected.MeshPathBake.Pending &&
+                    !Selected.MeshIrradiance.Settling && !(Second?.MeshIrradiance.Settling ?? false));
             }, reason: () => Selected.NotReadyReason, wait: Selected.WaitPipelineBuilds);
             Produce();
 
@@ -637,6 +642,12 @@ public sealed partial class SdfWorldPassesLawTests {
 
             _ = Runtime.ProduceFrame(context: in context, frame: in scheduled);
         }
+        // Produces frames until the irradiance volume's lighting has settled, which a lighting change relights in wall
+        // time: a view stands only once its lighting has (SdfWorldResidency.IsUnchanged).
+        public void SettleLighting() => TestLiveness.Until(step: () => {
+            Produce();
+            return !(Selected.MeshIrradiance.Settling || (Second?.MeshIrradiance.Settling ?? false));
+        }, reason: static () => "The irradiance volume's lighting never settled.");
         // Whether the latest frame let the view's previous output stand.
         public bool Stood() => (World.FrameCounter == m_rendered);
         // Refuses the next frame's render submission, after its passes recorded: the residency's table upload is the
@@ -660,17 +671,12 @@ public sealed partial class SdfWorldPassesLawTests {
                 y: BitConverter.ToSingle(value: block, startIndex: (offset + sizeof(float)))
             );
         }
-        // The bytes of the history surface the resolve of one more frame writes. The resolve's pass set is the third from the
-        // frame's last: the sky and the composite follow it.
+        // The bytes of the history surface the resolve of one more frame writes.
         public uint HistorySurfaceBytes() {
-            m_gpu.SetBinds = [];
             Produce();
-            var set = m_gpu.SetBinds.Where(predicate: static bind => (bind.Group == ((uint)ShaderInterfaceGroup.Pass))).Select(selector: static bind => bind.Set).Distinct().ToArray()[^3];
-
-            m_gpu.SetBinds = null;
 
             return ((uint)m_gpu.Memory(bufferHandle: m_gpu.BufferAt(
-                set: set,
+                set: m_gpu.BoundSetOf(group: ((uint)ShaderInterfaceGroup.Pass), part: SdfWorldPackage.Resolve),
                 binding: SdfKernelInterfaces.BindingOf(layout: SdfWorldInterfaces.ResolveParameters.Layout, member: SdfWorldPackage.HistorySurfaceWritten))).Length);
         }
         public void Dispose() {
@@ -681,9 +687,9 @@ public sealed partial class SdfWorldPassesLawTests {
             Second?.Dispose();
         }
 
-        // The latest bound block belongs to the composite. Its temporal values match the world passes, but its sky
-        // interface has different offsets, so read the layout that the production sky recorder actually wrote.
-        private byte[] Block() => m_gpu.Memory(bufferHandle: m_gpu.BufferAt(set: m_gpu.BoundSet(group: 3), binding: 0));
+        // The composite's latest block. Its temporal values match the world passes, but its sky interface has different
+        // offsets, so read the layout that the production sky recorder actually wrote.
+        private byte[] Block() => m_gpu.Memory(bufferHandle: m_gpu.BufferAt(set: m_gpu.BoundSetOf(group: ((uint)ShaderInterfaceGroup.Pass), part: SdfWorldPackage.Parts.Composite), binding: 0));
         private static int Offset(string member) => ((int)SdfWorldInterfaces.SkyParameters.BlockOffsetOf(member: member));
     }
     // An external producer handing out one image, tainted until it fills.

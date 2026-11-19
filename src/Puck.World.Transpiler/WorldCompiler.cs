@@ -47,6 +47,9 @@ public sealed record WorldCompilation(
     public IReadOnlyList<CompileInput> Inputs { get; init; } = [];
     /// <summary>Gets every named world emitted by a composition, in declaration order. Empty for a single-document source.</summary>
     public IReadOnlyList<WorldOutput> Worlds { get; init; } = [];
+    /// <summary>Gets the work units the lowering charged its <see cref="Puck.Transpiler.Lowering.DocumentEvaluationBudget"/>,
+    /// of the <see cref="Puck.Transpiler.Lowering.DocumentEvaluationBudget.WorkLimit"/> (PUCK047) it may spend.</summary>
+    public long EvaluationWork { get; init; }
     /// <summary>Gets the asset verification context. An explicit refresh is saved by the caller after validation.</summary>
     public AssetCompilationContext? Assets { get; init; }
     /// <summary>Gets the <c>allow</c> lines of the compiled tree and of the libraries it imported, read once from
@@ -323,7 +326,7 @@ public static class WorldCompiler {
             Json: ((worlds.Count == 0) ? loweringResult.Value : ((worlds.Count == 1) ? worlds[0].Json : null)),
             SourceMap: ((worlds.Count == 1) ? worlds[0].SourceMap : sourceMap),
             TestWorlds: testWorlds
-        ) { Acknowledgements = SourceAcknowledgements.Of(document: document, sourcePath: sourcePath), Assets = assets, Worlds = worlds };
+        ) { Acknowledgements = SourceAcknowledgements.Of(document: document, sourcePath: sourcePath), Assets = assets, EvaluationWork = loweringResult.EvaluationWork, Worlds = worlds };
     }
 
     /// <summary>Reads <paramref name="path"/> and compiles it.</summary>

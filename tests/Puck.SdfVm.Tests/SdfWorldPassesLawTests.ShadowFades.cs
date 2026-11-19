@@ -44,7 +44,7 @@ public sealed partial class SdfWorldPassesLawTests {
         lights.ShadowSlots.SetSlot(light: 0, slot: 0);
         lights.ShadowSlots.SetHandoffs(handoffs: [new SdfShadowHandoff(Incoming: 0, Outgoing: 0, Slot: 0, Weight: 0.5f)]);
         Assert.Equal(expected: 1, actual: view.Residency.Frame!.Lights.ShadowSlots.FadeCount);
-        using var block = gpu.Services.BufferFactory.CreateHostVisible(name: default, sizeBytes: ((uint)SdfFrameBlock.SizeBytes), usage: GpuBufferUsage.Uniform);
+        using var block = gpu.Services.BufferFactory.CreateHostVisible(name: default, sizeBytes: ((uint)IGpuBindings.ConstantBufferBytes(blockBytes: ((uint)SdfFrameBlock.SizeBytes))), usage: GpuBufferUsage.Uniform);
         using var scratch = gpu.Services.BufferFactory.CreateDeviceLocal(name: default, sizeBytes: 4096, usage: GpuBufferUsage.Storage);
         var pool = gpu.Services.Bindings.CreatePool(name: default,
             sizes: GpuDescriptorPoolSizes.ForGroups(groups: context.Parameters.Layout.PipelineLayout(stages: GpuShaderStage.Compute).Groups));
@@ -61,7 +61,8 @@ public sealed partial class SdfWorldPassesLawTests {
                 PassBlock: passBlock, Leases: new LeaseRetireList(), Context: frame, MayStandIn: false, WorkCounters: counters.RowOf(row: 0, slot: 0));
 
             Assert.Equal(expected: RenderGraphPackageOutcome.Drew, actual: recorder.Record(recording: in recording));
-            Assert.Equal(expected: SdfKernelSet.StemOf(kernel: SdfKernel.Views), actual: gpu.BoundPipelineName);
+            // A frame running no shade program shades through the fixed views kernel (SdfWorldResidency.ShadeFallback).
+            Assert.Equal(expected: SdfKernelSet.StemOf(kernel: SdfKernel.ViewsPlain), actual: gpu.BoundPipelineName);
             var offset = ((int)SdfWorldInterfaces.WorldParameters.BlockOffsetOf(member: SdfWorldPackage.ShadowFadeCount));
 
             Assert.Equal(expected: 1u, actual: BinaryPrimitives.ReadUInt32LittleEndian(source: passBlock.AsSpan(start: offset)));

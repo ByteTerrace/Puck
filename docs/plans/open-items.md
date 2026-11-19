@@ -679,17 +679,17 @@ What an arrival and a hand-over still cost the frame:
   of the arrival (store loads, tier hand-overs, the trace scene rebuilt over
   them), which `world.wait bakes` and `world.wait residency` do not wait for.
   Attribute it with a `dotnet-trace` of the frame thread on arrival.
-- [medium] The bake's batches are cut by count (`SdfMeshPathBake.BatchTaps`)
-  and charged at a fixed `SdfMeshPathBake.NanosecondsPerTap`, so a bake during
-  play submits jobs several frames long. Cutting them at the bake's
-  `SdfGpuWorkRate` to `SdfGpuWork.FrameShareSeconds` shrank every batch to its
-  costliest group's rate and cut the groups in flight to a third. Landing it
-  needs a rate that does not do that (per lattice kind, or following the mean)
-  and enough jobs in flight for share-sized jobs, then the cold bake measured
-  against the bar. `SdfMeshPathBake.TryTake` changes move the bake identity.
-- [low] A probe scene upload chunk can still measure past a frame's share
+- [medium] A bake batch in play is cut to the live frame allowance at the
+  bake's mean-following rate (`SdfMeshBakeGpuWork`), but a lattice is never
+  split, so a first lattice of up to `SdfMeshPathBake.LatticeTaps` evaluations
+  taken with nothing queued still runs past a small allowance (`over-allowance`);
+  while other jobs are queued it waits for them. Whether allowance-sized
+  batches keep enough groups in flight for a cold arrival in play is not
+  measured: an earlier cut at a rate that rose to the costliest batch cut the
+  groups in flight to a third. Measure a cold arrival in play against the bar.
+- [low] A probe scene upload chunk can still measure past the frame allowance
   against its `SdfGpuWork.UploadSecondsOf` estimate (`world.residency`'s
-  `over-frame-share` and `most-job`).
+  `over-allowance` and `most-job`).
 - [medium] The volume's fill beside many point lights: a fresh probe's relight
   traces every hit texel toward every shadowing point light in range
   (`sdfProbeShade`), so the window beside the teal room's lamps takes minutes
@@ -934,11 +934,11 @@ says how one is reproduced and profiled.
    be attributed to each operation, which nobody has looked at.
    - *Check:* editing Land rebakes with zero GPU sampling dispatches and lowers
      the C# edit-wait reading.
-3. **Cut bake jobs to the live frame allowance.** Today `SdfMeshPathBake.BatchTaps`
-   and fixed `SdfMeshPathBake.NanosecondsPerTap` submit full 8M-sample batches
-   (~32 ms against a 4.2 ms allowance), stalling play frames on RTX 4070. A
-   prior single worst-group rate shrank batches to a third of concurrency; use
-   a per-lattice-kind rate or mean rate instead, and re-measure the cold bake.
+3. **Measure the cold bake under the live frame allowance.** Budgeted batches
+   are cut to the allowance at a mean-following rate (`SdfMeshBakeGpuWork`);
+   held frames keep `SdfMeshPathBake.BatchTaps`. Re-measure the cold bake held
+   and a cold arrival in play, and split a lattice only if `over-allowance`
+   shows the unsplit first lattice matters.
 4. **Rank and build the top cold-bake speed fix.** After stage keys (and
    contour/triangle fixes) land, run one quiet cold bake under the recipe
    recording worker activity, GPU wait per request, GPU timestamps and total
@@ -1321,21 +1321,22 @@ and every memory owner are its steps. This packet holds the defects beside it.
   arriving residency, which is right once windows share. Still to read: the
   residency count, the device pool's held and peak bytes, and the cascade
   families at the hero spawn and in the painting wing.
-- [high] On Direct3D 12 the debug world's mesh region refuses meshes instead of
-  coarsening, so the valley's lake (water, stones, lining), the glacier's ice and
-  the falls do not draw there, while Vulkan draws them. After a settled cold bake
-  on the RTX 4070, `world.residency` on Direct3D 12 read `region-budget=1755015471B
-  region-named=1417497668B region-limit=1286602752B region-refused=398 holes=157
-  detail-bias=0`; on Vulkan `region-limit=1728053248B region-named=1109669796B
-  region-refused=0 detail-bias=1 coarsened=300`. The Direct3D 12 region (mapped,
-  `DirectXGpuMappedBuffer`) stopped growing below its budget and the selector
-  refused placements rather than raising the detail bias
-  (`SdfResidencySelector`, `SdfMeshRegionArena.Clip`). Vulkan's raised bias is
-  not free either: plaque lettering in the gallery drops strokes there ("RO ND
-  CONE", "ELLIPSO D"), which Direct3D 12 draws whole. Find why the mapped
-  region's limit stays under its grant and why refusal wins over the bias; the
-  check is `region-refused=0` and the lake drawn on both backends from the
+- [high] On Direct3D 12 the debug world's mesh region refused meshes instead of
+  coarsening, so the valley's lake, the glacier's ice and the falls did not draw
+  there. The causes are fixed at their source but not yet seen in a windowed run:
+  the bake's budget now never passes the limit the region's grant reserves
+  (`SdfResidencySelector.Budget`, `SdfResidencyGrant.LimitBytes`), a refused mesh
+  presses the detail bias on its own (`SdfMeshPathBake.Retier`), and any
+  residency's pressure raises the one bias, not only the largest one's. The
+  check is a settled Direct3D 12 debug world reading `region-refused=0` with a
+  raised `detail-bias` in `world.residency`, and the lake drawn from the
   `glacier` place.
+- [high] A raised detail bias drops strokes from the gallery's plaque lettering
+  ("RO ND CONE", "ELLIPSO D" on Vulkan at `detail-bias=1`). Once Direct3D 12
+  coarsens too (above), the lettering is at risk there as well. A coarser tier
+  of engraved text should keep every stroke legible: find which tier loses the
+  thin strokes and why tier selection does not hold them; the check is every
+  shape plaque in the gallery reading whole on both backends.
 - [medium] Before sparse external targets are used, retain the exact host-word
   coverage of disjoint writes across remapping. `GpuRegion.StageOwed`
   (`src/Puck.Abstractions/Gpu/Residency/GpuRegion.cs`) re-owes the known prefix;
@@ -1467,7 +1468,11 @@ The volume's cost and convergence:
   geometry change, every probe's local cube starts again
   (`SdfMeshIrradiance`'s `reuseLocal`), and a World that converges its
   lighting owes a drain per retier wave and per step of the day's lighting
-  grid; the walkthrough tour pays it at every exhibit. The streaming plan's
+  grid; the walkthrough tour pays it at every exhibit. It also holds back the
+  first fill after a boot: while tiers land the main residency's static scene
+  rebuilds every few seconds, its probes' traces barely advance, and its finest
+  level publishes minutes late, so the gallery hall reads its camera sample's
+  light (`sdfMeshIndirectSeen`) until then. The streaming plan's
   step 9 decides which tier the lighting traces; the tour's drains per still
   on the `[sdf.mesh-gi] done` lines measure whichever lands.
 - [medium] A held frame's hold stops at the instance. A view withheld for its
@@ -1509,8 +1514,6 @@ The volume's cost and convergence:
 - [medium] Full relight, selection, metering and hit-cache paths need CPU and
   GPU parity coverage; the trace law covers miss-only directional visibility
   and the gather law receiver lookup.
-- [low] The relight budget is per rendered frame, so at a low frame rate it
-  cannot hold the 8 s age. A rate in probes a second decouples them.
 - [low] A teleport brings cells relit long ago back into the window, and the
   next cycle prints `behind` with their age, which reads as overload.
 - [medium · unmeasured] The debug world's night floor (EV 2, keyed on `day`)
@@ -2020,21 +2023,11 @@ intent is in its guide.
 - [high] Cel is the debug world's treatment
   ([the ruling](../decisions/rendering.md#a-light-is-shadowed-wherever-it-lights-and-cel-shading-is-a-style-per-material)):
   every place opts in through its materials (`celMaterial`) and is judged
-  under it. The valley's rock, the glacier's ice, the gallery hall and the
-  Moth's painted slots are in. Owed: the exhibits' plinths and labels, held by
-  the gap below; the valley walls' shade reading as mass, which the domes'
+  under it. The valley's rock, the glacier's ice, the gallery hall, the
+  exhibits' plinths, labels and section signs, and the Moth's painted slots are
+  in. Owed: the valley walls' shade reading as mass, which the domes'
   smooth macro form limits more than the shading does; each place's guide
   naming its outside references for the treatment; and dawn and night legs.
-- [high] A palette row's shade program is copied whole into every creation
-  document that uses it, as an expression graph of about 15,800 budget units
-  (2,262 nodes) for `cel`: opting the 135 exhibits' plinths and labels into
-  `galleryStyle` (`worlds/debug/shapes.puck`'s `galleryPalette`) took one
-  compilation's work from 2M to 26M units, past `DocumentEvaluationBudget.WorkLimit`
-  (PUCK047), and would add megabytes to the world definition. `WorldShadeLowering`
-  already lowers a template call once per compilation; the copies are the cost.
-  Programs need a shared identity across documents (a document-level program
-  table a row names, or a compact canonical form), so a repeated program costs
-  once (AGENTS.md, "Ergonomic is optimal").
 - [held, the owner's ruling] The Moth and the swallow wait for a pair session
   with the owner, and no lane models either until then. Agent modeling did not
   converge: builders passed views the critic failed with pixel evidence, and
@@ -4022,9 +4015,9 @@ reversal brake, then a sitting.
   the first three, and its steps are the build lane's order; steps 1 to 8 (the
   compiled rig, its reads, the caps, parts as sets, adding clips, masks and
   replacing, reach and influence, and the guess) are built, so step 9, the
-  Moth's hand, is next. Step 8's headless readings (the press log, one and two
-  seats, a refusing rule, a delayed answer, the hold bypass) wait on a fixture
-  world that binds a channel to a led driver.
+  Moth's hand, is next. Step 8's guess is a pose layer the guessing seat's own
+  view alone reads; its windowed reading (the press drawn early in that view and
+  in no other view, camera screen or session window) waits on the lead's batch.
 
 - A reversal should brake faster than it accelerates: `ShapeWholeVelocityRow`
   converges at the engage rate whenever the stick is deflected, so a full
@@ -4307,7 +4300,9 @@ content on the owner's call.
   `AddonAbi.MaxChannels` first); the yard itself, `worlds/debug/combat.puck`,
   with a target-and-strike station, an elements station and hazards, the Moth
   casting through her gauntlets; then two clients on one authority with
-  speculative local movement replayed on correction.
+  speculative local movement replayed on correction. The yard also carries the
+  doors station of [portals in play](portals-in-play.md#8-the-debug-world-probe):
+  sentries that sight and fire through doors a player places.
 - Weather, particles and a climate wing
   ([decision](../decisions/engine-design.md#weather-is-a-regions-composition-of-generic-pieces)),
   after the job system: six sealed glass-walled bays east of the hall (calm,
@@ -4375,7 +4370,11 @@ reviews it and says so (the owner's ruling).
   at runtime by a player's action as an authored rule, aim at a surface
   rendered at astronomical distance, and a crossing between worlds with
   different gravity. Whether the moon admits a visitor's portal is the moon's
-  own grant.
+  own grant. The owner has since ruled that players place doors in play, and
+  [portals in play](portals-in-play.md#4-a-door-onto-another-world-opened-in-play)
+  designs the mechanism: the moon offers sockets and grants a visitor's offer.
+  The moon door itself, as debug-world content, still waits for the owner's
+  word.
 - Exposure per place and the tone curve left this list. Both are look values,
   which authors set and the owner is not asked to choose. The mechanisms
   they need, a blend of exposure across a doorway or a portal and the tone

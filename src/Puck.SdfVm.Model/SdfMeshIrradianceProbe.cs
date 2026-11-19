@@ -34,6 +34,11 @@ public static class SdfMeshIrradianceProbe {
     /// <summary>The distance in metres within which the meter's camera stands at a probe and casts no visibility ray to
     /// it.</summary>
     public const float CameraSampleCoincident = 1.0e-3f;
+    /// <summary>The passes a camera sample traced at the camera iterates its own light through the hits no probe answers:
+    /// each such hit reflects the light the sample receives about its normal (one probe's interreflection), so the
+    /// sample's surroundings carry the emitters' and fixtures' bounce before the volume measures it. A pass leaves at most
+    /// the brightest reflectance to that power of the light it has yet to add.</summary>
+    public const int CameraSampleClosurePasses = 16;
     /// <summary>The distance in metres a shadow ray toward a point light ends before the light, so a fixture sunk a little
     /// into its housing is not blocked by it.</summary>
     public const float LightBias = 0.02f;

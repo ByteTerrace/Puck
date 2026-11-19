@@ -1028,8 +1028,8 @@ laws exercise that boundary.
   answered when it completes and the next taken when it is ready, whatever
   the frame rate. Such a step takes no job within `SdfGpuWork.HostBudget` of
   the wait's deadline. The budget is
-  `SdfGpuWork.GpuShare` of the GPU's time, charged by each job's own
-  timestamps (a client's estimate, `NanosecondsPerTap`, until they land or on a
+  the share of the GPU's time the frame leaves free (`SdfGpuWorkBudget.Share`, at most `SdfGpuWork.GpuShare`), charged by each job's own
+  timestamps (the bake's mean-following rate, from a prior of `NanosecondsPerTap`, until they land or on a
   queue without them), banking at most a short spell while idle. A job binds the
   latest upload's World set only while nothing it binds has moved since that
   upload and the tables' uploaded program is the bake's

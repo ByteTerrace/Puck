@@ -13,6 +13,9 @@ public static partial class CompileCommand {
     private static int ExecuteWorldCompilation(string source, string sourcePath, string? outputPath, ImportHandling imports, bool strict, bool validate, bool updateAssets, IDictionary<string, string>? written = null) {
         var compilation = WorldCompiler.Compile(source, sourcePath: sourcePath, imports: imports, allowMultiple: true, updateAssets: updateAssets);
         var diagnostics = compilation.Diagnostics;
+
+        CompilationMeasurement.Note(path: sourcePath, work: compilation.EvaluationWork);
+
         var sourceCompilation = (compilation.Success ? WorldCompiledSource.From(compilation: compilation) : null);
         // One output per document name the source emits (WorldCompilation.DocumentNames): each world a composition
         // declares, or the one document an ordinary source lowers to, under its stem. A module library emits none.

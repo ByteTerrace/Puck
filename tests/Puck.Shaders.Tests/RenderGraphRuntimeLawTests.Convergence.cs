@@ -121,6 +121,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
             m_inner.BeginFrame(context: in context);
             PrepareFootprints?.Invoke();
         }
+        public void PrepareRead(string instance, in FrameContext context) => m_inner.PrepareRead(context: in context, instance: instance);
         public ValueTask<IDisposable?> BuildAsync(RenderGraphPackageRecorderContext context, CancellationToken cancellationToken) =>
             m_inner.BuildAsync(cancellationToken: cancellationToken, context: context);
         public IRenderGraphPackageRecorder Create(RenderGraphPackageRecorderContext context, IDisposable? built, RenderGraphPackageGroups groups) =>

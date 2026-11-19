@@ -19,6 +19,9 @@ public readonly record struct SdfViewSnapshot(CameraSnapshot Camera, NormalizedR
     public BloomQuality BloomQuality { get; init; }
     /// <summary>A screen-door fade of one stamp's transform-slot range in this view only. Default draws every stamp.</summary>
     public SdfStampFade StampFade { get; init; }
+    /// <summary>A pose of one stamp drawn in this view only: its transform slots read their rows from the overlay's rows.
+    /// Default reads every slot's own row.</summary>
+    public SdfPoseOverlay PoseOverlay { get; init; }
 
     /// <summary>The infinity layers fitted to this consumer's camera, identified by their authored names.
     /// Their producer names identify existing render-graph outputs; the sky recorder binds them under the frame's
@@ -27,6 +30,12 @@ public readonly record struct SdfViewSnapshot(CameraSnapshot Camera, NormalizedR
 
     /// <summary>The camera's cut revision, moved when its framing is reseeded or a layout slot changes its source.</summary>
     public long CutRevision { get; init; }
+    /// <summary>The object whose view the slot shows (a seat's camera rig, a named camera, a screen's camera
+    /// registration), the same object for as long as the slot shows that view, or <see langword="null"/> when the cut
+    /// revision alone tells the slot's views apart. A residency's per-view state keyed by slot (an exposure and the
+    /// readings in flight for it) starts a new generation when another source or cut takes the slot, so state one view
+    /// left never lands on another (<see cref="SdfViewExposures.GenerationOf"/>).</summary>
+    public object? Source { get; init; }
     /// <summary>The pixels high the mesh demand measures the view's projected sizes in (<see cref="SdfMeshDemand"/>)
     /// when the view renders into an image apart from the residency's output: a camera filmed for a screen its own
     /// image's height, and a window fitted to its glass the display pixels the glass spans from the viewer's eye, since
@@ -98,6 +107,16 @@ public readonly record struct SdfViewSnapshot(CameraSnapshot Camera, NormalizedR
 /// <param name="SlotCount">The number of slots owned by the stamp; zero disables fading.</param>
 /// <param name="Opacity">The screen coverage, from zero (hidden) to one (solid).</param>
 public readonly record struct SdfStampFade(int FirstSlot, int SlotCount, float Opacity);
+/// <summary>A view-local pose overlay: the slots of one stamp read their dynamic-transform rows from another range of
+/// the same table, which holds that stamp posed for this view alone (<c>frame/sdf-mesh-skin.hlsli</c>,
+/// <c>sdfViewPoseSlot</c>). Every reader of the shared rows (the other views, mirrors and portals, the host's anchors and
+/// picking) reads the stamp's own rows; only the draws this view rasterizes, and the shading of their pixels, read the
+/// overlay.</summary>
+/// <param name="FirstSlot">The stamp's first dynamic-transform slot.</param>
+/// <param name="SlotCount">The number of slots the overlay replaces; zero disables it.</param>
+/// <param name="OverlaySlot">The first row of the overlay's range, which holds the replacement for
+/// <paramref name="FirstSlot"/> and the rows after it in order.</param>
+public readonly record struct SdfPoseOverlay(int FirstSlot, int SlotCount, int OverlaySlot);
 /// <summary>One infinity layer's fitted sampling parameters and the render-graph image this consumer reads.</summary>
 /// <param name="Layer">The infinity layer's unique authored name.</param>
 /// <param name="Parameters">The sampling basis and rectangle fitted to this consumer. The sky retains the
@@ -197,11 +216,25 @@ public sealed record SdfFrame(
     /// <param name="meshAssetSlots">The baked template slots.</param>
     /// <param name="meshInstances">The copies of local geometry assets.</param>
     /// <param name="sampled">The snapshots the program's sampled fields hold this frame.</param>
-    internal void Compose(IReadOnlyList<int> meshAssetSlots, IReadOnlyList<SdfMeshInstance> meshInstances, SdfSampledSet sampled) {
+    /// <param name="copyChanges">The journal of the copies that changed in <paramref name="meshInstances"/>, or
+    /// <see langword="null"/> when a consumer must compare the whole list.</param>
+    /// <param name="copyChangesSerial">The journal's endpoint captured with <paramref name="meshInstances"/>.</param>
+    internal void Compose(IReadOnlyList<int> meshAssetSlots, IReadOnlyList<SdfMeshInstance> meshInstances, SdfSampledSet sampled,
+        GpuRowChanges? copyChanges = null, long copyChangesSerial = 0) {
         m_meshAssetSlots = meshAssetSlots;
         m_meshInstances = meshInstances;
         m_sampled = sampled;
+        MeshCopyChanges = copyChanges;
+        MeshCopyChangesSerial = copyChangesSerial;
     }
+    /// <summary>Gets the producer's journal of the rigid copies that changed in <see cref="MeshInstances"/> (another copy
+    /// at an index, or the copy at an index moved to another frame slot), or <see langword="null"/> when a consumer must
+    /// compare the whole list. A frame whose template slots or copy count changed owes the whole list. The list and journal
+    /// are borrowed together until their producer next rewrites them, so a consumer reads them while it dresses the frame
+    /// (<see cref="SdfMeshDresser.Dress"/>), each through its own <see cref="GpuRowCursor"/>.</summary>
+    public GpuRowChanges? MeshCopyChanges { get; private set; }
+    /// <summary>Gets the copy journal's endpoint captured with <see cref="MeshInstances"/>.</summary>
+    public long MeshCopyChangesSerial { get; private set; }
     /// <summary>The host's immutable document version, retained through bake dressing for matching-state diagnostics.
     /// Compared by value: a delivered client document need not be the authority's object.</summary>
     public object? DiagnosticSource { get; init; }

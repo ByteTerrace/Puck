@@ -674,8 +674,9 @@ recording are not:
   (`SdfWorldPassRecorder.cs:429-431`, `residency.Submit`; `SdfWorldResidency.cs:620-623`,
   an unsynchronized `m_submitted` check-and-set around `tables.SubmitUpload`),
   and recording mutates the residency's requested extent (`:415-417`) and bound
-  screen handles (`:683`). `SdfWorldPasses.BeginFrame` begins and prepares each
-  residency but does not perform this upload (`SdfWorldPasses.cs:394-403`).
+  screen handles (`:683`). Package preparation (`SdfWorldPasses.BeginFrame`,
+  `SdfWorldPasses.PrepareRead`) begins and prepares each residency the frame
+  reads but does not perform this upload.
 
 ### What changes
 

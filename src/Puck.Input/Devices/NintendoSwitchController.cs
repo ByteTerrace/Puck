@@ -52,7 +52,7 @@ public sealed class NintendoSwitchController : IGamepadParser, IRumbleParser, IL
     // The gyro reads 936 deg/s across the span between its calibration offset and sensitivity (SDL, dekuNukem);
     // the factory sensitivity of 13371 gives the nominal 0.07 deg/s per LSB.
     private const float GyroCalibrationDegreesPerSecond = 936f;
-    private const float GyroNominalRadiansPerSecondPerLsb = ((GyroCalibrationDegreesPerSecond / 13371f) * (MathF.PI / 180f));
+    private static readonly float GyroNominalRadiansPerSecondPerLsb = float.DegreesToRadians(degrees: (GyroCalibrationDegreesPerSecond / 13371f));
     private const int ImuCalibrationLength = 24;
     private const int ImuOffset = 13;   // three 12-byte samples (accel xyz, gyro xyz; int16 LE)
     private const int ImuSampleCount = 3;
@@ -322,7 +322,7 @@ public sealed class NintendoSwitchController : IGamepadParser, IRumbleParser, IL
         }
 
         var accelerometerScale = (new Vector3(value: 4f) / accelerometerSpan);
-        var gyroScale = (new Vector3(value: (GyroCalibrationDegreesPerSecond * (MathF.PI / 180f))) / gyroSpan);
+        var gyroScale = (new Vector3(value: float.DegreesToRadians(degrees: GyroCalibrationDegreesPerSecond)) / gyroSpan);
 
         if (
             !IsNear(

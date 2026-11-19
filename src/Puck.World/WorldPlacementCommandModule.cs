@@ -143,10 +143,10 @@ internal sealed partial class WorldPlacementCommandModule(WorldServer server, Wo
             );
 
             var localFrame = boundary.CompileFrame();
-            var turn = ((((double)WorldFrameIsometry.YawDelta(
+            var turn = double.RadiansToDegrees(radians: ((double)WorldFrameIsometry.YawDelta(
                 destination: neighbour.CounterpartFrame,
                 source: localFrame
-            )) * 180d) / Math.PI);
+            )));
             var threshold = ((double)WorldAdjacencyPolicy.OwnershipFace(
                 adjacency: adjacency,
                 definition: definition
