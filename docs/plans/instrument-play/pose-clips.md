@@ -8,11 +8,13 @@ aim at its own body (gap B), and a press that reaches the rig a tick late
 [play expression](../play-expressions.md#what-the-bards-first-wave-should-take-from-this),
 and decides what happens to the rig's caps.
 
-Steps 1 to 6 are built: the compiled rig (`CreationRig`), the one view the
+Steps 1 to 8 are built: the compiled rig (`CreationRig`), the one view the
 pose pass reads through (`WorldRigReads`), the removed caps, parts as sets
 (`CreationPartCompiler`), adding clips (`CreationClipCompiler`,
-`VectorFunctions.Arc`), and masks and replacing (`CreationRig.Share`,
-`CreationMotion.ClipLimit`). The rest of
+`VectorFunctions.Arc`), masks and replacing (`CreationRig.Share`,
+`CreationMotion.ClipLimit`), reach and influence
+(`CreationRig.EffectorShare`, the `shape` target, a body named by a cell), and
+the guess (`WorldSeatInput.TryLead`, `WorldInputAnswer`). The rest of
 the page is a design, and its [steps](#steps-each-with-its-check) are the build
 lane's order. The sections below keep the reasoning each built step rests on. A reviewer
 from another model family attacked the first version with twenty-one
@@ -302,8 +304,7 @@ jump and the landing, without those four drivers knowing that playing exists.
 - `parts`: a list of part ids. The driver's swings, slides and clip poses play
   only on shapes those parts cover. Omitted, the mask is the shapes the driver
   itself poses, together with every shape an effector it owns writes
-  ([section 6](#6-an-effector-is-a-final-constraint-and-a-layer-sets-its-influence);
-  step 6 built the first half, and effector ownership arrives with step 7).
+  ([section 6](#6-an-effector-is-a-final-constraint-and-a-layer-sets-its-influence)).
 - `mode`: `add`, the default and today's behaviour, or `replace`.
 
 **The share.** A replacing driver with weight `w` scales every driver
@@ -561,7 +562,8 @@ how old). One kind would hide that difference.
   job.
 - A part follower (`partDynamics`) moves a shape after the solve. A follower
   on the target shape or on the chain breaks the contact. The world validator
-  warns where a look does this.
+  is to warn where a look does this; step 7 did not build that warning, and it
+  stays open here.
 - A remote client needs the cell. The presentation manifest registers an
   effector target's reference only for the `state` kind today
   (`WorldPresentationManifest`), so a body index used by nothing else would
@@ -795,8 +797,14 @@ Otherwise the driver reads its cell, exactly as today.
   sends it to no one. Each owner's delivery gains the last sequence the
   authority has answered for that owner, taken or refused, and the tick it
   answered in. It goes to that owner only, as the input publication does
-  (`WorldInputPublication.ForOwner`). Without it a remote client cannot tell
-  a late answer from a refusal. Prediction will need the same fact.
+  (`WorldOwnedRecords.ForOwner`). Without it a remote client cannot tell
+  a late answer from a refusal. Prediction will need the same fact. The answer
+  carries the batch's input epoch, since event sequences restart each epoch,
+  and it is delivery only: it is neither hashed nor checkpointed, so a resumed
+  authority answers from its next batch and a guess left open across the
+  resume ends at `leadSeconds`. The answered tick counts as presented once the
+  mirror the rig reads has delivered a later tick, or that tick at a
+  presentation fraction of one.
 - **`leadSeconds` bounds a guess that gets no answer** (a stalled link). It
   is authored on the driver, because how long an unconfirmed press may show
   is a matter of feel. The engine's default is a quarter of a second.
@@ -1021,7 +1029,7 @@ structural does, the row says so.
 | A pose is evaluated again when a value it reads changes. | The pose pass can read only through the view of the rig's compiled reads, and the wake test hashes that view. | A body far away is still evaluated at its tier's rate. A body nothing can see is not evaluated. |
 | A body judged unseen cannot be in view in any pose its rig can reach. | The sphere it is judged by takes the reach derived from the compiled rig. | A part follower can overshoot the derived reach. The widest drawn pose covers that only after it has happened once. |
 | Every state cell a rig reads is sent to the recipients allowed to read it. | The presentation manifest registers from the compiled reads. | Disclosure decides who is allowed, unchanged. |
-| A guess is drawn only for the seat that pressed, and only while its input is outstanding. | One function answers a `lead`. The one-seat test, the outstanding test and the age test are inside it. | That seat can see a press the authority refuses, until the answer arrives. A recording of its screen shows the guess. |
+| A guess is drawn only for the seat that pressed, and only while its input is outstanding. | One function answers a `lead` (`WorldSeatInput.TryLead`), with the outstanding test and the age test inside it. The one-seat test is in the one place a guess is offered (`IWorldStampSource.SeatGuess`, null on every source but a client presenting for one seat), and the rig's view answers a lead only for the body that guess names. | That seat can see a press the authority refuses, until the answer arrives. A recording of its screen shows the guess. |
 | A guess changes nothing the authority computes. | The function that answers a `lead` writes nothing, and the client cannot reference the server (`build/Architecture.props`, enforced at build). | A player acts on what they see, which is why input is recorded. |
 | The engine learns no instrument, dance or finger. | Review. The names are a clip, a part, a mode, a lead. | A leaked name is a defect fixed when found. |
 
@@ -1097,8 +1105,8 @@ and its applied weight, and the source a led driver read.
 | 4. Parts as sets (built) | `shapes` and `except` on a part, compiled by the part compiler. | `puck creation stats` prints each part's shapes for a fixture with a nested part and an `except`. An unknown shape or part id is refused by name. A look's existing `partDynamics` on a one-shape part reads as before. |
 | 5. Clips, adding (built) | The `clips` list, axis and angle keys, the stored sign, the arc routine in `Puck.Maths`, `ease`, held and looping positions. | On a fixture with a two-key clip on a state driver, `body.rig <body> <shape>` reads the key's turn when the cell is at the key, half of it midway under `linear`, and half again at half weight. Keys of plus and minus 90 degrees about one axis read zero at the midpoint, and the same with the second key written about the opposite axis. A key written in the author frame about +X reads the same angle about the engine's −X, and a pose with no turn reads a zero delta. The sketch's finger reads rest at a cell of zero, part way at one half and its key at one. A held clip on a `time` driver is refused by name, and so is a looping clip whose period does not divide one turn. A looping clip crosses its seam, and the point where its driver's phase wraps, with no jump, forward and at a negative cadence. A held clip on a state driver holds its last key when the cell passes it. Validation refuses a clip on a folded shape, an unknown shape, and a composed turn of a half turn or more. A test holds the track bound over random keys under a half turn. |
 | 6. Masks and replacing (built) | `parts` and `mode` on a driver, the shares, the seam bound's clip rules. | On a fixture where a `time` swing and a replacing clip pose one shape: at full weight `body.rig` reads exactly the key's turn at every tick, at half weight the swing reads at half amplitude, and a shape outside the mask is unchanged. A stance clip about X and a sway swing about Y on one shoulder give the same pose whether the sway's driver is declared before or after the stance's, at equal shares. The Moth's strafe reads as in step 1 under a replacing layer at half weight on her arms. Seam fixtures, each read from `creation stats`, on a 1 mm part at its joint inside a static box, smooth 14 mm, so the seam's box reaches 26 mm from the joint: five replacing 15 degree poses on five drivers are admitted (6.78 mm against 7); the same at 17 degrees are split (7.68 mm); the same five 15 degree poses on adding drivers read 75 degrees and are split; a clip that only slides 8 mm is split; two 35 degree clips on one driver and joint read 70 degrees and are split; five 13 degree tracks on one driver read 65 degrees and are split. A test samples weights and positions of random rigs and finds no pose past the bound. |
-| 7. Reach and influence | The `shape` target and its refusals. `reference` and `part` on the `body` target, the identity check, the fade. `weightBy` and blend times on an effector, its share over its writes, the release. | Two arms, one swinging on `time`, the other's fingertip aimed at a point on it: `error` on the final pose stays under a tenth of a millimetre for 200 ticks. The three refusals fire by name. With a cell holding a second body's index, the hand reaches that body's part and follows a change of the cell in the next frame. Clearing the cell reads `target=none` in that frame, the weight eases, and moving the former target during the fade moves the hand by nothing. A cell of zero selects body zero. A slot that is reused releases the latch. A planted leg under a replacing layer at weight one that covers the thigh and shin and leaves out the foot: the applied weight reads zero in the first such frame, with a blend-out of half a second authored, and the knee reads exactly the clip's key. After that layer leaves and the body has walked a metre, the foot plants at the new ground point. An owner whose `parts` leave out a bone is refused, naming the bone. A planted hand under an adding recoil on a later layer keeps its `error`, and the elbow shows the recoil. Two effectors on one shoulder: the later holds its `error`, the earlier reports its own, and the compiler warns. A recipient allowed the index cell sees the reach, and one denied it sees rest. |
-| 8. The guess | `lead` and `leadSeconds` on a state driver, the one function that answers it, the owner's acknowledgement, the wake and the hold bypass. | A log records, for each press, the times of capture, the tick that takes it in, the cell's change and each presented frame. On a one-seat client a scripted press at a stated offset reads source `lead` and a phase above zero in the first frame after the tick that takes it in, and source `cell` once that tick is presented. With two seats on the client the source never reads `lead`, both views draw one pose, and an anchor on the finger reads that pose. A second client watching the same body reads `cell` throughout. A rule that refuses the press while the button is held for 60 ticks: the source returns to `cell` when the answer is presented and the phase reads zero for the rest of the hold. A cell a rule holds at one with the channel idle reads one. A mode switch during an outstanding press ends the guess in that frame. `lead` on a relative or a text channel is refused by name. A body at rest with the rate tiers on is evaluated in the frame after the tick that takes the press in. With answers delayed by a stated number of ticks, the guess holds until the answer is presented, with no return to the cell between, and ends at `leadSeconds` when no answer comes. `puck test --reproduce` on the scripted run gives the same authority hashes with `lead` authored and removed. |
+| 7. Reach and influence (built) | The `shape` target and its refusals. `reference` and `part` on the `body` target, the identity check, the fade. `weightBy` and blend times on an effector, its share over its writes, the release. | Two arms, one swinging on `time`, the other's fingertip aimed at a point on it: `error` on the final pose stays under a tenth of a millimetre for 200 ticks. The three refusals fire by name. With a cell holding a second body's index, the hand reaches that body's part and follows a change of the cell in the next frame. Clearing the cell reads `target=none` in that frame, the weight eases, and moving the former target during the fade moves the hand by nothing. A cell of zero selects body zero. A slot that is reused releases the latch. A planted leg under a replacing layer at weight one that covers the thigh and shin and leaves out the foot: the applied weight reads zero in the first such frame, with a blend-out of half a second authored, and the knee reads exactly the clip's key. After that layer leaves and the body has walked a metre, the foot plants at the new ground point. An owner whose `parts` leave out a bone is refused, naming the bone. A planted hand under an adding recoil on a later layer keeps its `error`, and the elbow shows the recoil. Two effectors on one shoulder: the later holds its `error`, the earlier reports its own, and the compiler warns. A recipient allowed the index cell sees the reach, and one denied it sees rest. |
+| 8. The guess (built) | `lead` and `leadSeconds` on a state driver, the one function that answers it, the owner's acknowledgement, the wake and the hold bypass. | A log records, for each press, the times of capture, the tick that takes it in, the cell's change and each presented frame. On a one-seat client a scripted press at a stated offset reads source `lead` and a phase above zero in the first frame after the tick that takes it in, and source `cell` once that tick is presented. With two seats on the client the source never reads `lead`, both views draw one pose, and an anchor on the finger reads that pose. A second client watching the same body reads `cell` throughout. A rule that refuses the press while the button is held for 60 ticks: the source returns to `cell` when the answer is presented and the phase reads zero for the rest of the hold. A cell a rule holds at one with the channel idle reads one. A mode switch during an outstanding press ends the guess in that frame. `lead` on a relative or a text channel is refused by name. A body at rest with the rate tiers on is evaluated in the frame after the tick that takes the press in. With answers delayed by a stated number of ticks, the guess holds until the answer is presented, with no return to the cell between, and ends at `leadSeconds` when no answer comes. `puck test --reproduce` on the scripted run gives the same authority hashes with `lead` authored and removed. |
 | 9. The Moth's hand | The plan's hands lane: joints, segments, the stance, the vents. | The plan's stage 2 row, in the lead's windowed batch. |
 
 ## What this design does not cover

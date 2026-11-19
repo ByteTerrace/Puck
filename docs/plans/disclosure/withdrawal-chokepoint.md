@@ -94,14 +94,15 @@ every row read whole; step 6 replaced it with the authority's proof
 
 The same session's own stream is filtered by more than that. Its document comes
 from the cursor's disclosed images, and each snapshot's fields, solid sizes and
-inputs are filtered for the recipient:
+inputs and input answers are filtered for the recipient:
 
-`src/Puck.World.Server/WorldSessionSink.cs:459-461`
+`src/Puck.World.Server/WorldSessionSink.cs:462-465`
 
 ```csharp
                 FieldCells = m_rows.Advance(m_view, m_cursor, cells, replica),
                 SolidScales = m_scales.Filter(m_view, redacted.SolidScales),
-                Inputs = WorldInputPublication.ForOwner(redacted.Inputs, observation.Session, ref m_inputDisclosure),
+                Inputs = WorldOwnedRecords.ForOwner(redacted.Inputs, observation.Session, ref m_inputDisclosure),
+                InputAnswers = WorldOwnedRecords.ForOwner(redacted.InputAnswers, observation.Session, ref m_answerDisclosure),
 ```
 
 The scene the window joins is fed by the unfiltered attach

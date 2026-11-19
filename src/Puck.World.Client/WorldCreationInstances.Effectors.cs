@@ -1,6 +1,7 @@
 using System.Numerics;
 using Puck.Maths;
 using Puck.World.Authoring;
+using Puck.World.Protocol;
 
 namespace Puck.World.Client;
 
@@ -18,7 +19,14 @@ public sealed partial class WorldCreationInstances {
 
     // Solves every effector of the rig, in declaration order, and folds each bone's correction into that bone's own
     // delta. Returns whether any own delta moved, so the caller re-chains only when a solve actually changed something.
-    private bool ApplyEffectors(Registration live, IReadOnlyList<ShapeDocument> shapes, Dictionary<int, FrameTransformDocument>? poses, float deltaSeconds, Vector3 rootPosition, Quaternion rootRotation, float placementScale, int shapeCount) {
+    //
+    // Each effector first resolves who its target is (TargetIdentity) and releases its latch through ReleaseLatch when
+    // that differs from the target it last acted on, or there is none; only then is a latch consulted. Its applied
+    // weight is its eased level times its authored weight times its layer share (CreationRig.EffectorShare), read fresh
+    // and never eased, and a share of zero releases the latch too. A frame that resolves no target solves toward the
+    // last goal it drew, held in the creation's own frame, while the weight eases out, so a lost target is never read
+    // again and the limb eases back from where it was.
+    private bool ApplyEffectors(Registration live, IReadOnlyList<ShapeDocument> shapes, Dictionary<int, FrameTransformDocument>? poses, float deltaSeconds, Vector3 rootPosition, Quaternion rootRotation, float placementScale, int shapeCount, WorldDefinition? definition) {
         var effectors = live.Rig.Effectors;
 
         if (effectors.Count == 0) {
@@ -30,7 +38,6 @@ public sealed partial class WorldCreationInstances {
         var view = live.View;
         var facts = view.Facts;
         var moving = (live.DriverSpeed > WorldGaitDrivers.MovingSpeed);
-        var blend = WorldGaitDrivers.WeightBlend(deltaSeconds: deltaSeconds);
         var inverseRoot = Quaternion.Conjugate(value: rootRotation);
         var inverseScale = ((placementScale > 0f)
             ? (1f / placementScale)
@@ -46,7 +53,8 @@ public sealed partial class WorldCreationInstances {
 
             if (bones < CreationEffectorDocument.MinChainBones) {
                 live.EffectorWeight[index] = 0f;
-                live.EffectorPlanted[index] = false;
+                live.EffectorApplied[index] = 0f;
+                ReleaseLatch(index: index, live: live);
                 live.EffectorHasTarget[index] = false;
 
                 continue;
@@ -71,11 +79,20 @@ public sealed partial class WorldCreationInstances {
                 effector: compiled,
                 index: index,
                 live: live,
+                poses: poses,
                 reads: view,
+                rootPosition: rootPosition,
                 rootRotation: rootRotation,
                 scale: placementScale,
+                shapes: shapes,
                 tipWorld: tipWorld
             );
+            var identity = TargetIdentity(effector: compiled, goal: ref goal, reads: view);
+
+            if (!identity.Present || (identity != live.EffectorIdentity[index])) {
+                ReleaseLatch(index: index, live: live);
+            }
+            live.EffectorIdentity[index] = identity;
 
             var gateHolds = WorldGaitDrivers.HoldsGate(
                 facts: facts,
@@ -88,7 +105,10 @@ public sealed partial class WorldCreationInstances {
             Vector3 targetWorld;
             Vector3 normalWorld;
 
-            if (gateHolds) {
+            if (!identity.Present) {
+                // Nothing about a lost target is read again.
+                (resolved, targetWorld, normalWorld) = (false, tipWorld, Vector3.UnitY);
+            } else if (gateHolds) {
                 resolved = ApplyPlant(
                     contactWeight: out contactWeight,
                     deltaSeconds: deltaSeconds,
@@ -107,45 +127,70 @@ public sealed partial class WorldCreationInstances {
                 (targetWorld, normalWorld) = (tipWorld, Vector3.UnitY);
                 resolved = ((live.EffectorWeight[index] > 0f) && goal.Resolve(normal: out normalWorld, target: out targetWorld));
                 // A contact released in flight cannot be reused on a later landing at another world point.
-                live.EffectorPlanted[index] = false;
-                live.EffectorStepping[index] = false;
+                ReleaseLatch(index: index, live: live);
+            }
+
+            var share = live.Rig.EffectorShare(effector: compiled, weights: live.DriverWeight);
+
+            // A layer that takes the effector away lets go of its contact, so it plants afresh where the body stands when
+            // the layer leaves.
+            if (share <= 0f) {
+                ReleaseLatch(index: index, live: live);
             }
 
             var holds = (resolved && gateHolds);
-            var weight = (live.EffectorWeight[index] + (((holds
-                ? contactWeight
-                : 0f) - live.EffectorWeight[index]) * blend));
+            var level = (holds
+                ? (contactWeight * WorldGaitDrivers.CurveLevel(curve: compiled.WeightCurve, definition: definition, driver: compiled.Owner, phases: live.DriverPhase))
+                : 0f
+            );
+            var weight = WorldGaitDrivers.EaseWeight(
+                blend: out _,
+                blendInSeconds: effector.BlendInSeconds,
+                blendOutSeconds: effector.BlendOutSeconds,
+                deltaSeconds: deltaSeconds,
+                level: level,
+                weight: live.EffectorWeight[index]
+            );
 
-            // Snapped at BOTH ends of the exponential approach, unlike a driver's weight, which only needs the
-            // release end: a correction held at 1 − ε keeps the tip that fraction short of its goal, and since the
-            // goal is a WORLD point while the shortfall is measured from the body, a latched contact would creep as
-            // the body travelled. Snapping makes a plant hold still.
-            live.EffectorWeight[index] = (holds
-                ? ((weight > (1f - WorldGaitDrivers.RestWeight))
-                    ? 1f
-                    : weight)
-                : ((weight < WorldGaitDrivers.RestWeight)
-                    ? 0f
-                    : weight
-            ));
+            // Snapped onto its level, at either end and between, unlike a driver's weight, which only needs the release
+            // end: a correction held at 1 − ε keeps the tip that fraction short of its goal, and since the goal is a
+            // WORLD point while the shortfall is measured from the body, a latched contact would creep as the body
+            // travelled. Snapping makes a plant hold still.
+            live.EffectorWeight[index] = ((MathF.Abs(x: (weight - level)) < WorldGaitDrivers.RestWeight) ? level : weight);
 
             live.EffectorHasTarget[index] = resolved;
             live.EffectorTarget[index] = targetWorld;
             live.EffectorNormal[index] = normalWorld;
             live.EffectorAlign[index] = 0f;
 
-            var applied = (live.EffectorWeight[index] * (effector.Weight?.Value ?? 1f));
+            var applied = (live.EffectorWeight[index] * (effector.Weight?.Value ?? 1f) * share);
 
-            if (
-                (applied <= 0f) ||
-                !resolved
-            ) {
+            live.EffectorApplied[index] = applied;
+
+            Vector3 goalCreation;
+            Vector3 normalCreation;
+
+            if (resolved) {
+                goalCreation = (Vector3.Transform(rotation: inverseRoot, value: (targetWorld - rootPosition)) * inverseScale);
+                normalCreation = Vector3.Transform(rotation: inverseRoot, value: normalWorld);
+                live.EffectorGoal[index] = goalCreation;
+                live.EffectorGoalNormal[index] = normalCreation;
+                live.EffectorHasGoal[index] = true;
+            } else if (live.EffectorHasGoal[index]) {
+                // A fade toward the last goal drawn, held in the creation's frame: the limb eases back to its driven pose
+                // from where it was.
+                (goalCreation, normalCreation) = (live.EffectorGoal[index], live.EffectorGoalNormal[index]);
+            } else {
                 continue;
             }
 
-            // The gate weight blends the GOAL, not the solved pose: at weight w the tip is asked for a point w of the
-            // way to the target, so a released effector eases back onto the driver-posed limb through poses the chain
-            // can actually hold.
+            if (applied <= 0f) {
+                continue;
+            }
+
+            // The weight blends the GOAL, not the solved pose: at weight w the tip is asked for a point w of the way to
+            // the target, so a released effector eases back onto the driver-posed limb through poses the chain can
+            // actually hold.
             var targetCreation = Vector3.Lerp(
                 amount: Math.Clamp(
                     max: 1f,
@@ -153,10 +198,7 @@ public sealed partial class WorldCreationInstances {
                     value: applied
                 ),
                 value1: posedTip,
-                value2: (Vector3.Transform(
-                    rotation: inverseRoot,
-                    value: (targetWorld - rootPosition)
-                ) * inverseScale)
+                value2: goalCreation
             );
             var joints = m_solveJoints.AsSpan(
                 length: bones,
@@ -248,10 +290,7 @@ public sealed partial class WorldCreationInstances {
                 effector: effector,
                 index: index,
                 live: live,
-                normal: Vector3.Transform(
-                    rotation: inverseRoot,
-                    value: normalWorld
-                ),
+                normal: normalCreation,
                 poses: poses,
                 shapes: shapes,
                 tipSlot: tipSlot
@@ -340,7 +379,7 @@ public sealed partial class WorldCreationInstances {
     }
 
     // The effector's goal for one frame: resolved (TryResolveTarget) at most once, and only when a branch reads it.
-    private ref struct EffectorGoal(CreationRigEffector effector, Registration live, int index, WorldRigReads reads, Vector3 tipWorld, Quaternion rootRotation, float scale) {
+    private ref struct EffectorGoal(CreationRigEffector effector, Registration live, int index, WorldRigReads reads, IReadOnlyList<ShapeDocument> shapes, Dictionary<int, FrameTransformDocument>? poses, Vector3 tipWorld, Vector3 rootPosition, Quaternion rootRotation, float scale) {
         private bool m_asked;
         private bool m_resolved;
         private Vector3 m_target;
@@ -352,10 +391,14 @@ public sealed partial class WorldCreationInstances {
                 m_resolved = TryResolveTarget(
                     answer: ref live.EffectorProbe[index],
                     effector: effector,
+                    live: live,
                     normal: out m_normal,
+                    poses: poses,
                     reads: reads,
+                    rootPosition: rootPosition,
                     rootRotation: rootRotation,
                     scale: scale,
+                    shapes: shapes,
                     target: out m_target,
                     tipWorld: tipWorld
                 );
@@ -367,6 +410,43 @@ public sealed partial class WorldCreationInstances {
             return m_resolved;
         }
     }
+    // Who an effector's target is this frame: the shape, for a target on the creation's own shape; the body's address
+    // (slot and occupant generation), for a body target; the cell holding a point, for a state target; and the field
+    // the probe reads, for a surface, which a probe that misses does not change.
+    private static EffectorTargetIdentity TargetIdentity(CreationRigEffector effector, WorldRigReads reads, ref EffectorGoal goal) {
+        if (effector.TargetShape >= 0) {
+            return new(Kind: EffectorTargetKind.Shape, Shape: effector.TargetShape);
+        }
+
+        return effector.Target switch {
+            { Kind: CreationRigReadKind.Body } body => (reads.TryBodyAddress(address: out var address, read: body) ? new(Kind: EffectorTargetKind.Body, Address: address) : default),
+            { Kind: CreationRigReadKind.State } => (goal.Resolve(normal: out _, target: out _) ? new(Kind: EffectorTargetKind.State) : default),
+            { Kind: CreationRigReadKind.Probe } probe => ((reads.ProbeField(read: probe) is { } field) ? new(Field: field, Kind: EffectorTargetKind.Surface) : default),
+            _ => default,
+        };
+    }
+    private enum EffectorTargetKind : byte { None, Shape, Body, State, Surface }
+    // Who an effector's target is (TargetIdentity); default names none. Equal identities name the same target.
+    private readonly record struct EffectorTargetIdentity(EffectorTargetKind Kind, WorldEntityAddress Address = default, int Shape = -1, object? Field = null) {
+        public bool Present => (Kind != EffectorTargetKind.None);
+    }
+    // The one door an effector's contact is released through: its plant latch and its resting step. A lost or changed
+    // target, a closed gate, a layer share of zero and a continuity cut all release here.
+    private static void ReleaseLatch(Registration live, int index) {
+        live.EffectorPlanted[index] = false;
+        live.EffectorStepping[index] = false;
+    }
+    // Lands the error each resolved effector reports (body.rig): the distance from its tip's drawn origin to its target on
+    // the final pose, after every effector and part follower has run; NaN where no target resolved.
+    private static void MeasureEffectorErrors(Registration live) {
+        var effectors = live.Rig.Effectors;
+
+        for (var index = 0; (index < effectors.Count); index++) {
+            live.EffectorError[index] = (((effectors[index].Tip >= 0) && live.EffectorHasTarget[index])
+                ? Vector3.Distance(value1: PackedShapePose(live: live, shapeIndex: effectors[index].Tip).Position, value2: live.EffectorTarget[index])
+                : float.NaN);
+        }
+    }
 
     // Holds the effector's target, and the contact normal there, where it was when the plant window opened, and
     // reports whether a usable target exists: a latched contact survives a probe that misses this frame, which is the
@@ -374,8 +454,7 @@ public sealed partial class WorldCreationInstances {
     private static bool ApplyPlant(Registration live, CreationRigEffector effector, int index, ref EffectorGoal goal, float deltaSeconds, Quaternion rootRotation, float scale, out Vector3 target, out Vector3 normal, out float contactWeight) {
         contactWeight = 1f;
         if (effector.Document.Plant is not { } plant) {
-            live.EffectorPlanted[index] = false;
-            live.EffectorStepping[index] = false;
+            ReleaseLatch(index: index, live: live);
 
             return goal.Resolve(normal: out normal, target: out target);
         }
@@ -386,8 +465,7 @@ public sealed partial class WorldCreationInstances {
             weight: out var driverWeight,
             weights: live.DriverWeight
         )) {
-            live.EffectorPlanted[index] = false;
-            live.EffectorStepping[index] = false;
+            ReleaseLatch(index: index, live: live);
 
             return goal.Resolve(normal: out normal, target: out target);
         }
@@ -416,8 +494,7 @@ public sealed partial class WorldCreationInstances {
             if (live.EffectorStepping[index]) {
                 // The gait took the limb back mid-step: the cycle latches afresh rather than snapping the tip back to
                 // the point the step left.
-                live.EffectorStepping[index] = false;
-                live.EffectorPlanted[index] = false;
+                ReleaseLatch(index: index, live: live);
             }
         }
 
@@ -601,15 +678,34 @@ public sealed partial class WorldCreationInstances {
         value: point
     ) + translation);
     // The effector's world-space goal this frame, or false when nothing answers — a probe that finds no surface, a
-    // body target that is not live, a state cell that holds no point. The normal is the probed surface's; a body or
-    // state target names no surface and reports world up. A surface probe's reach and standoff are the body's own
-    // lengths, at its scale.
-    private static bool TryResolveTarget(ref WorldFieldAnswer<WorldSurfaceQuery, WorldSurfaceAnswer> answer, CreationRigEffector effector, WorldRigReads reads, Vector3 tipWorld, Quaternion rootRotation, float scale, out Vector3 target, out Vector3 normal) {
+    // body target that is not live, a state cell that holds no point. The normal is the probed surface's, or for a
+    // target on one of the creation's shapes the reverse of its approach direction as the shape carries it; a body or
+    // state target, or a shape target with no direction, names no surface and reports world up. A surface probe's reach
+    // and standoff are the body's own lengths, at its scale.
+    private static bool TryResolveTarget(ref WorldFieldAnswer<WorldSurfaceQuery, WorldSurfaceAnswer> answer, CreationRigEffector effector, Registration live, WorldRigReads reads, IReadOnlyList<ShapeDocument> shapes, Dictionary<int, FrameTransformDocument>? poses, Vector3 tipWorld, Vector3 rootPosition, Quaternion rootRotation, float scale, out Vector3 target, out Vector3 normal) {
         target = tipWorld;
         normal = Vector3.UnitY;
 
         var goal = effector.Document.Target;
 
+        if (effector.TargetShape is var shape and >= 0) {
+            // The shape's pose as this frame drew it so far: after every driver and every earlier effector, which the
+            // canonicalizer guarantees is its final pose. The point rides the shape from its rest pose.
+            var rest = shapes[shape];
+            var (basePosition, baseRotation) = BasePose(poses: poses, shape: rest);
+            var point = ((goal.Offset is { } offset)
+                ? (basePosition + Vector3.Transform(rotation: (baseRotation * Quaternion.Conjugate(value: rest.Rotation.Value)), value: (offset.Value - rest.Position.Value)))
+                : basePosition);
+            var posed = Compose(point: point, rotation: live.PartDeltaRotation[shape], translation: live.PartDeltaTranslation[shape]);
+            var direction = (goal.Direction?.Value ?? Vector3.Zero);
+
+            target = (rootPosition + Vector3.Transform(rotation: rootRotation, value: (posed * scale)));
+            if (direction.LengthSquared() > 0f) {
+                normal = -Vector3.Normalize(value: Vector3.Transform(rotation: (rootRotation * live.PartDeltaRotation[shape]), value: direction));
+            }
+
+            return true;
+        }
         if (effector.Target is not { } read) {
             return false;
         }
@@ -696,7 +792,8 @@ public sealed partial class WorldCreationInstances {
             drivers.Add(item: new WorldRigDriver(
                 Name: driverRows[index].Document.Name,
                 Phase: live.DriverPhase[index],
-                Weight: live.DriverWeight[index]
+                Weight: live.DriverWeight[index],
+                Source: ((driverRows[index].Lead is null) ? null : (live.DriverLed[index] ? WorldRigDriver.SourceLead : WorldRigDriver.SourceCell))
             ));
         }
 
@@ -715,7 +812,9 @@ public sealed partial class WorldCreationInstances {
                 Align: ((effectorRows[index].Document.Align is null)
                 ? null
                 : live.EffectorAlign[index]),
-                Normal: live.EffectorNormal[index]
+                Normal: live.EffectorNormal[index],
+                Applied: live.EffectorApplied[index],
+                Error: (float.IsNaN(f: live.EffectorError[index]) ? null : live.EffectorError[index])
             ));
         }
 
@@ -767,10 +866,18 @@ public readonly record struct WorldRigShape(string Name, int Index, string? Pare
 /// <param name="Name">The driver's authored name.</param>
 /// <param name="Phase">Its running phase, radians.</param>
 /// <param name="Weight">Its eased gate weight in [0, 1].</param>
-public readonly record struct WorldRigDriver(string Name, float Phase, float Weight);
+/// <param name="Source">For a driver with a lead, what its phase read at the last advance: <see cref="SourceLead"/> or
+/// <see cref="SourceCell"/>; <see langword="null"/> for a driver with none.</param>
+public readonly record struct WorldRigDriver(string Name, float Phase, float Weight, string? Source = null) {
+    /// <summary>The phase read the presenting seat's guess on the driver's lead.</summary>
+    public const string SourceLead = "lead";
+    /// <summary>The phase read the driver's state cell.</summary>
+    public const string SourceCell = "cell";
+}
 /// <summary>One declared effector's live value in a <see cref="WorldRigState"/>.</summary>
 /// <param name="Name">The effector's authored name.</param>
-/// <param name="Weight">Its eased gate weight in [0, 1].</param>
+/// <param name="Weight">Its eased weight in [0, 1]: the level it eases toward is its gate times its contact weight times
+/// its <c>weightBy</c> curve.</param>
 /// <param name="Planted">Whether its contact latch is holding a target this frame.</param>
 /// <param name="Target">The world point its tip is being asked for, or <see langword="null"/> when nothing
 /// resolved (a probe that found no surface, an inactive body target, a cell holding no point) or nothing was asked (a
@@ -783,7 +890,11 @@ public readonly record struct WorldRigDriver(string Name, float Phase, float Wei
 /// <see langword="null"/> when the effector authors no <see cref="CreationEffectorDocument.Align"/>.</param>
 /// <param name="Normal">The unit world contact normal the tip was aligned against, meaningful while
 /// <paramref name="Target"/> is.</param>
-public readonly record struct WorldRigEffector(string Name, float Weight, bool Planted, Vector3? Target, int Bones, bool Stepping, float? Align = null, Vector3 Normal = default) {
+/// <param name="Applied">The weight the solve and the align used: the eased weight times the authored weight times the
+/// layer share, in [0, 1].</param>
+/// <param name="Error">The distance, world units, from the tip's drawn origin to <paramref name="Target"/> on the final
+/// pose, after every effector and part follower has run, or <see langword="null"/> when no target resolved.</param>
+public readonly record struct WorldRigEffector(string Name, float Weight, bool Planted, Vector3? Target, int Bones, bool Stepping, float? Align = null, Vector3 Normal = default, float Applied = 0f, float? Error = null) {
     /// <summary>Gets the contact word <c>body.rig</c> prints: <c>stepping</c> mid-step, else <c>yes</c> while the latch
     /// holds and <c>no</c> while it does not.</summary>
     public string Contact => (Stepping

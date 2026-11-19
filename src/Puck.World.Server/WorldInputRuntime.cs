@@ -21,6 +21,10 @@ public sealed partial class WorldInputRuntime {
         public int[] Facing = [];
 
         public WorldInputPublication Publication;
+        // The last batch with events this owner submitted that the authority took or refused: its epoch, its highest event
+        // sequence and the tick it was answered in. Delivery only (WorldInputAnswer): nothing the authority computes reads
+        // it, and it is not checkpointed, so a resumed authority answers from its next batch.
+        public WorldInputAnswer Answer;
         public WorldInputControllerOrigin? Controller;
         public WorldInputProducer? Producer;
 
@@ -34,6 +38,7 @@ public sealed partial class WorldInputRuntime {
     private readonly Dictionary<(Principal Actor, int Body, string Source), Owner> m_controllers = [];
 
     private WorldInputPublication[] m_publications = [];
+    private WorldInputAnswer[] m_answers = [];
     private WorldInputInterval[] m_intervals;
     private int m_intervalCount;
     private int m_intervalNext;
@@ -80,6 +85,18 @@ public sealed partial class WorldInputRuntime {
             m_publications[count++] = owner.Publication;
         }
         return m_publications.AsMemory(length: count, start: 0);
+    }
+    /// <summary>Publishes, for each owner a physical client drives, the last input the authority answered for it, taken
+    /// or refused; reuses its storage, so the memory is valid until the next call.</summary>
+    /// <returns>The answers, one for each such owner that has had a batch with events answered.</returns>
+    public ReadOnlyMemory<WorldInputAnswer> Answers() {
+        if (m_answers.Length < m_ordered.Count) { m_answers = new WorldInputAnswer[m_ordered.Count]; }
+        var count = 0;
+
+        foreach (var owner in m_ordered) {
+            if ((owner.Controller is null) && (owner.Answer.Sequence != 0)) { m_answers[count++] = owner.Answer; }
+        }
+        return m_answers.AsMemory(length: count, start: 0);
     }
     /// <summary>Starts an interval and expires input history without allocating.</summary>
     public void BeginInterval(WorldInputInterval interval) {
@@ -268,6 +285,11 @@ public sealed partial class WorldInputRuntime {
     /// <summary>Accepts a timing-bearing batch only for its admitted identity and current authoritative tuple.</summary>
     public bool TryAdmit(Principal principal, in WorldInputBatch batch, out string reason, int? bodyIndex = null) {
         if (!m_owners.TryGetValue(key: principal, value: out var owner)) { reason = "input.owner: no admitted source profile"; return false; }
+        var answered = 0U;
+
+        foreach (var input in batch.Events.Span) { answered = Math.Max(val1: answered, val2: input.Sequence); }
+        // Taken or refused, a batch with events is answered in this tick.
+        if (answered != 0U) { owner.Answer = new WorldInputAnswer(Epoch: batch.Epoch, Owner: principal, Sequence: answered, Tick: Interval.Tick); }
         if ((bodyIndex is { } body) && (body != owner.Body)) { reason = "input.owner: the submitted target differs from the admitted route"; return false; }
         if (!TrySynchronize(activation: 0, owner: owner, reason: out reason)) { return false; }
         if (!Permitted(owner: owner, reach: out var reach)) { reason = "input.permission: the owner no longer holds Drive over its route"; return false; }

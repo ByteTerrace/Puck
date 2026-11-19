@@ -109,7 +109,7 @@ query padding and the body's contact skin stay in world units. The local mesh st
 baked. The debug glacier is the standard family's example.
 
 `drivers` is any number of named `{ name, signal, cadence, when, blendInSeconds,
-blendOutSeconds, dynamics, cadenceBy, weightBy, parts, mode }`. Everything
+blendOutSeconds, dynamics, cadenceBy, weightBy, parts, mode, lead, leadSeconds }`. Everything
 animated names one. They advance in declaration order, and a driver reads only
 drivers declared before it, the rule a shape's `parent` follows.
 
@@ -148,6 +148,26 @@ reach from any joint inside it is at least `√3·k`, and a clip turn over about
 `dynamics` names a world `dynamics` row a setting driver's phase follows through
 (second-order: trail, overshoot, settle). An integrating driver and a
 `driver.<name>` driver refuse it; the world validator refuses an undeclared row.
+
+`lead` (an input channel's name) and `leadSeconds` (default 0.25) let a
+state-cell driver show the presenting seat's own press before the authority's
+answer is drawn: a guess. While the client presents for exactly one seat
+(`IWorldStampSource.SeatGuess`, null with two seats on one screen and on a session
+view), that seat controls the body, is admitted with no lost capture, the channel
+is live in the mapping the authority last published, an edge the seat sent on it
+(a press, a release or an axis sample) has not had its answer presented, and the
+edge is no older than `leadSeconds`, the phase follows the seat's own folded level
+in place of the cell. The one function is `WorldSeatInput.TryLead`; it writes
+nothing, and the authority never reads `lead`. The answer is
+`WorldInputAnswer` (the epoch, the highest event sequence of the last batch the
+authority took or refused for that owner, and the tick it answered in), delivered
+to that owner alone; the guess ends when that tick is fully presented, at a new
+input epoch, or at `leadSeconds`. A guess is one of the rig's reads
+(`CreationRigReadKind.Lead`): its start, level and end move the wake revision, and
+a registration with a guess in force is never held by a rate tier. `body.rig`
+prints `source=lead` or `source=cell` for a led driver. Refused by name: `lead`
+on a signal that is not a state cell, `leadSeconds` without `lead`, and (world
+validator) a channel that is not declared, or is relative or text.
 
 `cadenceBy` and `weightBy` are each `{ driver, curve }`: the height (Z) of a
 world `curves` row where its X equals that earlier driver's phase, held at the
@@ -228,16 +248,55 @@ resolves to `limb` when there are exactly three shapes, and a `limb` with any
 other count demotes to `spine`. A chain naming a missing shape id is dropped.
 
 `effectors` is any number of CCD solvers, `{ name, chain, tip, target, when, weight,
-plant, align }`, where `chain` and `tip` name shapes **by name**, 2 to 8 bones, solved
-over 64 iterations.
+plant, align, weightBy, blendInSeconds, blendOutSeconds }`, where `chain` and `tip`
+name shapes **by name**, 2 to 8 bones, solved over 64 iterations. Effectors solve
+after every driver, in declaration order, each on the pose the one before it left:
+a constraint on the final pose, so motion a later layer adds to a constrained chain
+shows above the tip and not at it. An effector writes every bone of its chain and,
+when it aligns, its tip (`CreationRigEffector.Writes`).
 
-A `target` is `{ kind }` of `surface`, `body`, or `state`:
+A `target` is `{ kind }` of `surface`, `body`, `state`, or `shape`:
 
 | Kind | Fields |
 |---|---|
 | `surface` | `direction` (author frame, nonzero), `reach` in (0, 8], `standoff` ≤ 1 |
-| `body` | `index`, `offset` ≤ 16 |
+| `body` | exactly one of `index` (fixed) and `reference` (a numeric `state.<row>[.<key>]` holding the body's index, read as stored truth: a whole number naming an active body selects it, anything else selects none, so zero is body zero and -1 clears it); `part` (optional, a part id the body's look publishes, read as last drawn, the root when it publishes none); `offset` ≤ 16 riding the target's attitude |
 | `state` | `reference` = `state.<row>[.<key>]` holding a world-space point |
+| `shape` | `shape`, a shape of the same creation; `offset` ≤ 16, a rest point in the author frame that rides the shape (omitted, the shape's origin); `direction` (optional), the approach the shape carries, whose reverse is the normal `align` turns the tip onto |
+
+A `shape` target is read on the pose of the same frame, after every driver and
+every earlier effector. Refused by name: a target shape that is, or hangs from, a
+bone or the tip of the effector's own chain; a later effector that writes the
+target shape or a shape it hangs from; and a `plant` on a `shape` target. A later
+effector that writes a shape an earlier effector's tip hangs from is warned about
+(PUCK133, `CreationRig.Contests`): the later one solves last and holds its own
+target.
+
+Each frame an effector first resolves who its target is: the shape, the body's
+`WorldEntityAddress` (slot and occupant generation), the cell holding a point, or
+the field a probe reads. When that differs from the target it last acted on, or
+there is none, it releases its plant latch and its step through one function
+(`ReleaseLatch`), so a reused slot or a cleared cell never keeps the old latch. A
+frame that resolves no target (a lost target, a probe that misses with no latch)
+reports `target=none`, and the solve keeps running toward the last goal it drew,
+held in the creation's own frame, while the weight eases out: nothing about a lost
+target is read again.
+
+The weight the solve and `align` use is three numbers multiplied. The eased level
+eases toward the gate times the contact weight times `weightBy`'s curve height at
+its driver's phase (`{ driver, curve }`, as a driver's), over `blendInSeconds` and
+`blendOutSeconds` (default 0.15), snapping onto its level within a thousandth. The
+authored `weight` is the second. The layer share is the third, read fresh every
+frame and never eased (`CreationRig.EffectorShare`): for each shape the effector
+writes, the owner's share there (the `weightBy` driver's weight times `1 - w` of
+each later replacing driver covering the shape; with no owner, every replacing
+driver counts), the smallest across its writes. A layer that takes any written
+shape at full weight removes the effector in that frame and releases its latch, so
+a foot plants afresh where the body stands when the layer leaves. A driver with no
+`parts` covers what its effectors write; one whose `parts` leave out a shape its
+effector writes is refused, naming the shape. `body.rig` prints each effector's
+`applied` weight and its `error`, the distance from its tip to its target on the
+final pose after every effector and follower.
 
 `reach`, `standoff` and a replant's `distance` and `height` are creation
 lengths: at a look or `bodies.scale` scale other than one they scale with the

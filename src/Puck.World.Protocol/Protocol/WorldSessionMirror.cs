@@ -57,20 +57,32 @@ public sealed class WorldSessionMirror : IClientSink {
     private readonly Lock m_followGate = new();
     // The latest delivery's input publications, written under m_snapshotWriteGate and read through the published image.
     private readonly Dictionary<Principal, WorldInputPublication> m_inputs = [];
+    // The latest delivery's input answers, kept and published beside the publications.
+    private readonly Dictionary<Principal, WorldInputAnswer> m_answers = [];
+
+    /// <summary>Reads the last input the authority answered for an owner from the latest complete image, never waiting on
+    /// a delivery in progress.</summary>
+    /// <param name="owner">The principal whose answer to read.</param>
+    /// <param name="answer">The owner's answer, when the latest image carries one.</param>
+    /// <returns><see langword="true"/> when the latest image carries an answer for <paramref name="owner"/>.</returns>
+    public bool TryInputAnswer(Principal owner, out WorldInputAnswer answer) => TryOwned(owner: owner, records: static image => image.Answers, value: out answer);
 
     /// <summary>Reads an authority-issued input epoch and its immutable source decisions from the latest complete
     /// image, never waiting on a delivery in progress.</summary>
     /// <param name="owner">The principal whose input publication to read.</param>
     /// <param name="publication">The owner's publication, when the latest image carries one.</param>
     /// <returns><see langword="true"/> when the latest image carries a publication for <paramref name="owner"/>.</returns>
-    public bool TryInput(Principal owner, out WorldInputPublication publication) {
-        var result = m_images.Read(state: owner, read: static (in SnapshotImage image, long version, Principal principal) => {
-            var found = image.Inputs.TryGetValue(key: principal, value: out var value);
+    public bool TryInput(Principal owner, out WorldInputPublication publication) => TryOwned(owner: owner, records: static image => image.Inputs, value: out publication);
 
-            return (Found: found, Value: value);
+    // Reads one owner's record from one of the latest complete image's owner-scoped tables.
+    private bool TryOwned<T>(Principal owner, Func<SnapshotImage, Dictionary<Principal, T>> records, out T value) {
+        var result = m_images.Read(state: (Owner: owner, Records: records), read: static (in SnapshotImage image, long version, (Principal Owner, Func<SnapshotImage, Dictionary<Principal, T>> Records) state) => {
+            var found = state.Records(arg: image).TryGetValue(key: state.Owner, value: out var record);
+
+            return (Found: found, Value: record);
         });
 
-        publication = result.Value;
+        value = result.Value!;
         return result.Found;
     }
     /// <summary>Reads one body from the latest complete image: both pose endpoints, the facts and the tick of one
@@ -562,6 +574,8 @@ public sealed class WorldSessionMirror : IClientSink {
         image.ArrivalTimestamp = SnapshotArrivalTimestamp;
         image.Inputs.Clear();
         foreach (var (owner, input) in m_inputs) { image.Inputs[owner] = input; }
+        image.Answers.Clear();
+        foreach (var (owner, answer) in m_answers) { image.Answers[owner] = answer; }
         m_arrivals.CopyTo(array: image.Arrivals, index: 0);
         image.ArrivalCount = m_arrivalCount;
     }
@@ -618,6 +632,7 @@ public sealed class WorldSessionMirror : IClientSink {
 
         public long ArrivalTimestamp = arrivalTimestamp;
         public readonly Dictionary<Principal, WorldInputPublication> Inputs = [];
+        public readonly Dictionary<Principal, WorldInputAnswer> Answers = [];
         public readonly long[] Arrivals = new long[ArrivalHistory];
 
         public int ArrivalCount;
@@ -769,6 +784,8 @@ public sealed class WorldSessionMirror : IClientSink {
             m_solidScales.Deliver(sizes: snapshot.SolidScales.Span);
             m_inputs.Clear();
             foreach (ref readonly var input in snapshot.Inputs.Span) { m_inputs[input.Owner] = input; }
+            m_answers.Clear();
+            foreach (ref readonly var answer in snapshot.InputAnswers.Span) { m_answers[answer.Owner] = answer; }
             var seeded = m_seededRouteEntity;
             var containsSeed = ((seeded is { } address) && SnapshotContains(
                 entity: in address,
