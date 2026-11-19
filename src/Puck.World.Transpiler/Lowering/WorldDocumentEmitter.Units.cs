@@ -35,9 +35,9 @@ public static class WorldDocumentEmitterUnits {
         ["emissive"] = UnitDimension.Nits,
         ["temperature"] = UnitDimension.Kelvin,
     };
-    // An angle a light or the sky keeps in radians under a name that does not say so, written in degrees.
+    // An angle a light, the sky or a clip key keeps in radians under a name that does not say so, written in degrees.
     private static readonly HashSet<string> RadiansFields = new(comparer: StringComparer.Ordinal) {
-        "angularRadius", "band", "feather", "spread", "turn", "tilt",
+        "angularRadius", "band", "feather", "spread", "turn", "tilt", "angle",
     };
     private static readonly HashSet<string> MetersFields = new(comparer: StringComparer.Ordinal) {
         "position", "scale", "radius", "margin", "reach", "standoff", "cellSize", "spacing", "distance",

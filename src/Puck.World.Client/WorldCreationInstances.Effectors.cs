@@ -278,10 +278,9 @@ public sealed partial class WorldCreationInstances {
         }
 
         var direction = (effector.Target.Direction?.Value ?? Vector3.Zero);
-        var turn = Quaternion.Slerp(
-            amount: amount,
-            quaternion1: Quaternion.Identity,
-            quaternion2: WorldEffectorSolver.FromTo(
+        var turn = VectorFunctions.ScaleTurn(
+            fraction: amount,
+            turn: WorldEffectorSolver.FromTo(
                 from: Vector3.Transform(
                     rotation: live.PartDeltaRotation[tipSlot],
                     value: ((direction.LengthSquared() > 0f)
@@ -514,10 +513,9 @@ public sealed partial class WorldCreationInstances {
                 up: up
             );
             normal = Vector3.Transform(
-                rotation: Quaternion.Slerp(
-                    amount: progress,
-                    quaternion1: Quaternion.Identity,
-                    quaternion2: WorldEffectorSolver.FromTo(
+                rotation: VectorFunctions.ScaleTurn(
+                    fraction: progress,
+                    turn: WorldEffectorSolver.FromTo(
                         from: live.EffectorPlantNormal[index],
                         to: live.EffectorStepToNormal[index]
                     )
@@ -749,7 +747,7 @@ public sealed partial class WorldCreationInstances {
                 Index: index,
                 Parent: ((parent >= 0) ? shapes[parent].Name?.Value : null),
                 Delta: live.PartDeltaTranslation[index],
-                TurnRadians: (2f * MathF.Acos(x: Math.Clamp(value: MathF.Abs(x: turn.W), min: 0f, max: 1f)))
+                TurnRadians: VectorFunctions.TurnAngle(turn: turn)
             );
         }
 

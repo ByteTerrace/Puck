@@ -20,7 +20,7 @@ public static partial class CreationCanonicalizer {
 
     private static readonly HashSet<string> KnownMemberNames = new(comparer: StringComparer.OrdinalIgnoreCase) {
         "schema", "name", "palette", "shapes", "frames", "chains", "cameras", "behavior", "textRuns", "parts",
-        "noise", "drivers", "effectors",
+        "noise", "drivers", "effectors", "clips",
     };
 
     // The behavior manifest normalizes to a canonical locomotion member name and drops a face/sound naming a missing
@@ -365,6 +365,7 @@ public static partial class CreationCanonicalizer {
         }
 
         var names = new HashSet<string>(comparer: StringComparer.Ordinal);
+        AuthoredPartTable? parts = null;
 
         for (var i = 0; (i < drivers.Count); i++) {
             var driver = drivers[i];
@@ -450,6 +451,18 @@ public static partial class CreationCanonicalizer {
                 gate: driver.When,
                 path: $"drivers[{i}].when"
             );
+            if (driver.Mode is not (null or CreationDriverDocument.ModeAdd or CreationDriverDocument.ModeReplace)) {
+                errors.Add(item: new(Message: $"mode '{driver.Mode}' is not recognized; the modes are '{CreationDriverDocument.ModeAdd}' and '{CreationDriverDocument.ModeReplace}'.", Path: $"drivers[{i}].mode"));
+            }
+            if (driver.Parts is { } mask) {
+                parts ??= CreationPartCompiler.Resolve(document: document, refuse: static (_, _) => { });
+
+                for (var entry = 0; (entry < mask.Count); entry++) {
+                    if ((mask[entry] is not { } part) || !parts.TryCover(partId: part, shapes: out _)) {
+                        errors.Add(item: new(Message: $"names no part '{mask[entry]}'; a mask names the creation's parts.", Path: $"drivers[{i}].parts[{entry}]"));
+                    }
+                }
+            }
         }
     }
     // A driver reads only drivers declared before it, so one pass in declaration order advances every source before
@@ -1562,35 +1575,13 @@ public static partial class CreationCanonicalizer {
             ));
         }
     }
-    private static void ValidateParts(CreationDocument document, List<DocumentValidationError> errors, HashSet<int> shapeIds) {
-        if (document.Parts is not { Count: > 0 } parts) {
+    // The part compiler is the one place a part becomes shapes; validation reports what it refuses.
+    private static void ValidateParts(CreationDocument document, List<DocumentValidationError> errors) {
+        if (document.Parts is not { Count: > 0 }) {
             return;
         }
 
-        var partIds = new HashSet<string>(comparer: StringComparer.Ordinal);
-
-        for (var index = 0; (index < parts.Count); index++) {
-            var part = parts[index];
-
-            if (string.IsNullOrWhiteSpace(value: part.Id)) {
-                errors.Add(item: new(
-                    Message: "a part id is required.",
-                    Path: $"parts[{index}].id"
-                ));
-            } else if (!partIds.Add(item: part.Id)) {
-                errors.Add(item: new(
-                    Path: $"parts[{index}].id",
-                    Message: $"duplicate part id '{part.Id}'."
-                ));
-            }
-
-            if (!shapeIds.Contains(item: part.ShapeId)) {
-                errors.Add(item: new(
-                    Path: $"parts[{index}].shapeId",
-                    Message: $"references missing shape id {part.ShapeId}."
-                ));
-            }
-        }
+        _ = CreationPartCompiler.Resolve(document: document, refuse: (path, message) => errors.Add(item: new(Message: message, Path: path)));
     }
     // The declared sounds: unique names, a finite level/radius, and the INLINE puck.synthesizer-patch.v1 patch validated through
     // the synth family's OWN canonicalizer (the one pipeline — never a re-implementation), its violations re-pathed
@@ -2687,6 +2678,7 @@ public static partial class CreationCanonicalizer {
             document: document,
             errors: errors
         );
+        CreationClipCompiler.Validate(document: document, refuse: (path, message) => errors.Add(item: new(Message: message, Path: path)));
         ValidateEffectors(
             document: document,
             errors: errors,
@@ -2705,8 +2697,7 @@ public static partial class CreationCanonicalizer {
         );
         ValidateParts(
             document: document,
-            errors: errors,
-            shapeIds: shapeIds
+            errors: errors
         );
         ValidateChains(
             document: document,

@@ -523,6 +523,7 @@ public static partial class WorldDefinitionValidator {
         }
 
         foreach (var term in CreationRig.Of(document: document).AllTerms) {
+            if (term.Track is not null) { continue; }
             RequireCurveRow(definition: definition, errors: errors, path: $"{path}.shapes[{term.Shape}].{((term.Kind == CreationRigTermKind.Turn) ? "swings" : "slides")}[{term.Source}].wave", wave: term.Wave);
         }
     }

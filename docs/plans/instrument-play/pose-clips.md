@@ -8,8 +8,11 @@ aim at its own body (gap B), and a press that reaches the rig a tick late
 [play expression](../play-expressions.md#what-the-bards-first-wave-should-take-from-this),
 and decides what happens to the rig's caps.
 
-Steps 1 to 3 are built: the compiled rig (`CreationRig`), the one view the
-pose pass reads through (`WorldRigReads`), and the removed caps. The rest of
+Steps 1 to 6 are built: the compiled rig (`CreationRig`), the one view the
+pose pass reads through (`WorldRigReads`), the removed caps, parts as sets
+(`CreationPartCompiler`), adding clips (`CreationClipCompiler`,
+`VectorFunctions.Arc`), and masks and replacing (`CreationRig.Share`,
+`CreationMotion.ClipLimit`). The rest of
 the page is a design, and its [steps](#steps-each-with-its-check) are the build
 lane's order. The sections below keep the reasoning each built step rests on. A reviewer
 from another model family attacked the first version with twenty-one
@@ -146,7 +149,8 @@ entry publishes one shape's transform under an id, which a look's
 cover:
 
 - `shapes`: shape names. The part covers each named shape and every shape
-  that hangs from it through `parent`. Omitted, it is the anchor shape.
+  that hangs from it through `parent`. Omitted, it names the anchor shape, so
+  the part covers the anchor and what hangs from it.
 - `except`: ids of parts declared earlier, whose shapes are removed.
 
 Parts may overlap. `CreationPartCompiler.Compile` computes each part's set
@@ -298,7 +302,8 @@ jump and the landing, without those four drivers knowing that playing exists.
 - `parts`: a list of part ids. The driver's swings, slides and clip poses play
   only on shapes those parts cover. Omitted, the mask is the shapes the driver
   itself poses, together with every shape an effector it owns writes
-  ([section 6](#6-an-effector-is-a-final-constraint-and-a-layer-sets-its-influence)).
+  ([section 6](#6-an-effector-is-a-final-constraint-and-a-layer-sets-its-influence);
+  step 6 built the first half, and effector ownership arrives with step 7).
 - `mode`: `add`, the default and today's behaviour, or `replace`.
 
 **The share.** A replacing driver with weight `w` scales every driver
@@ -453,7 +458,14 @@ output is in the commit that lands this page.
 
 **What it costs or risks.** The collapse in rule 2 is what lets a hand with
 many poses keep a skinned seam at all, and it rests on every clip turn of a
-shape sharing one joint. A swing keeps its own pivot, which the pelvis needs
+shape sharing one joint. The collapse does not widen what one turn may do: the
+seam's box is the overlap of the two parts' boxes widened by the smooth radius
+on every side, so the reach from a joint inside it is at least √3 times the
+radius, and `2 × √3 × radius × sin(θ / 2)` stays under half the radius only
+while θ is under about 16.6 degrees, whatever the radius. A joint turned
+further than that creases. (The first version's fixture, a seam box 18 mm from
+the joint at a smooth radius of 14 mm, could not be built: the box alone
+reaches at least 24 mm.) A swing keeps its own pivot, which the pelvis needs
 (it leans about the ground and turns about the hips), so swings stay outside
 it. Counting swings and adding drivers in full while a replacing layer is
 reducing them is safe, and loose.
@@ -1082,9 +1094,9 @@ and its applied weight, and the source a led driver read.
 | 1. The compiled rig (built) | Swings and slides lower to terms. The writers of each shape are compiled, the aligned tip among them. The readers take the compiled rig, and the converted document carries no motion facets. The joint rule moves to one home, joint first. No new capability. | `puck references` on a shape's swings and slides lists only the canonicalizer, the frame conversion, the sculpting builder, the lowering and the generated document table. `puck creation stats` on the Moth prints the same seam lines as before, and `puck motion --reproduce` on her walk and on a strafe gives the poses it gave before: the step claims to change nothing for her, so equality is the right tool. A fixture with a tip that is not a bone, has no swing, aligns, and joins its parent by a smooth blend: `creation stats` shows the tip with a slot of its own and its seam refused a skin. The gallery's reach exhibit, whose arm is moved only by an effector, and a fixture look with only a part follower both evaluate as rigs, and the exhibit still reaches its point. A fixture bone with a `joint` and a swing about another point solves about the joint. |
 | 2. The reads (built) | The compiled list of reads, the one view the pose pass reads through, the wake test over it, the manifest registering from it, the rate a read body inherits, the derived reach. | With the rate tiers on, a hand on another body through the existing `body` target: move only the target, and the reaching body's count of evaluated poses rises in the next frame. A fixture whose hand a state cell extends by a slide, held out of every view at rest: setting the cell with the root and the camera still evaluates it and the hand appears. A remote recipient allowed a driver's cell reads the pose, and one denied it reads rest. |
 | 3. The caps (built) | Every table sized from the compiled rig. The four refusals and the constants deleted. Counts in `creation stats`, two new work counters. The mesh member limit checked at compile time. | A fixture with 40 drivers, 12 swings and 5 slides on one shape, and 10 effectors passes `puck compile --validate`. Driver 40 names a `dynamics` row and `body.rig` shows its phase trailing its target on a step. Effectors 9 and 10 solve to an `error` under a tenth of a millimetre, and that pair, sharing a plant driver, step one at a time at rest. The shape's delta shows all five slides. A group with 256 moving members is refused by `compile --validate` with the group's name. The debug world boots. |
-| 4. Parts as sets | `shapes` and `except` on a part, compiled by the part compiler. | `puck creation stats` prints each part's shapes for a fixture with a nested part and an `except`. An unknown shape or part id is refused by name. A look's existing `partDynamics` on a one-shape part reads as before. |
-| 5. Clips, adding | The `clips` list, axis and angle keys, the stored sign, the arc routine in `Puck.Maths`, `ease`, held and looping positions. | On a fixture with a two-key clip on a state driver, `body.rig <body> <shape>` reads the key's turn when the cell is at the key, half of it midway under `linear`, and half again at half weight. Keys of plus and minus 90 degrees about one axis read zero at the midpoint, and the same with the second key written about the opposite axis. A key written in the author frame about +X reads the same angle about the engine's −X, and a pose with no turn reads a zero delta. The sketch's finger reads rest at a cell of zero, part way at one half and its key at one. A held clip on a `time` driver is refused by name, and so is a looping clip whose period does not divide one turn. A looping clip crosses its seam, and the point where its driver's phase wraps, with no jump, forward and at a negative cadence. A held clip on a state driver holds its last key when the cell passes it. Validation refuses a clip on a folded shape, an unknown shape, and a composed turn of a half turn or more. A test holds the track bound over random keys under a half turn. |
-| 6. Masks and replacing | `parts` and `mode` on a driver, the shares, the seam bound's clip rules. | On a fixture where a `time` swing and a replacing clip pose one shape: at full weight `body.rig` reads exactly the key's turn at every tick, at half weight the swing reads at half amplitude, and a shape outside the mask is unchanged. A stance clip about X and a sway swing about Y on one shoulder give the same pose whether the sway's driver is declared before or after the stance's, at equal shares. The Moth's strafe reads as in step 1 under a replacing layer at half weight on her arms. Seam fixtures, each read from `creation stats`: five replacing 20 degree poses on five drivers, the seam's box 18 mm from the joint, smooth 14 mm, is admitted (6.25 mm against 7); the same at 25 mm is split (8.68 mm); a clip that only slides 8 mm is split; two 35 degree clips on one driver and joint read 70 degrees and are split; five 13 degree tracks on one driver read 65 degrees and are split. A test samples weights and positions of random rigs and finds no pose past the bound. |
+| 4. Parts as sets (built) | `shapes` and `except` on a part, compiled by the part compiler. | `puck creation stats` prints each part's shapes for a fixture with a nested part and an `except`. An unknown shape or part id is refused by name. A look's existing `partDynamics` on a one-shape part reads as before. |
+| 5. Clips, adding (built) | The `clips` list, axis and angle keys, the stored sign, the arc routine in `Puck.Maths`, `ease`, held and looping positions. | On a fixture with a two-key clip on a state driver, `body.rig <body> <shape>` reads the key's turn when the cell is at the key, half of it midway under `linear`, and half again at half weight. Keys of plus and minus 90 degrees about one axis read zero at the midpoint, and the same with the second key written about the opposite axis. A key written in the author frame about +X reads the same angle about the engine's −X, and a pose with no turn reads a zero delta. The sketch's finger reads rest at a cell of zero, part way at one half and its key at one. A held clip on a `time` driver is refused by name, and so is a looping clip whose period does not divide one turn. A looping clip crosses its seam, and the point where its driver's phase wraps, with no jump, forward and at a negative cadence. A held clip on a state driver holds its last key when the cell passes it. Validation refuses a clip on a folded shape, an unknown shape, and a composed turn of a half turn or more. A test holds the track bound over random keys under a half turn. |
+| 6. Masks and replacing (built) | `parts` and `mode` on a driver, the shares, the seam bound's clip rules. | On a fixture where a `time` swing and a replacing clip pose one shape: at full weight `body.rig` reads exactly the key's turn at every tick, at half weight the swing reads at half amplitude, and a shape outside the mask is unchanged. A stance clip about X and a sway swing about Y on one shoulder give the same pose whether the sway's driver is declared before or after the stance's, at equal shares. The Moth's strafe reads as in step 1 under a replacing layer at half weight on her arms. Seam fixtures, each read from `creation stats`, on a 1 mm part at its joint inside a static box, smooth 14 mm, so the seam's box reaches 26 mm from the joint: five replacing 15 degree poses on five drivers are admitted (6.78 mm against 7); the same at 17 degrees are split (7.68 mm); the same five 15 degree poses on adding drivers read 75 degrees and are split; a clip that only slides 8 mm is split; two 35 degree clips on one driver and joint read 70 degrees and are split; five 13 degree tracks on one driver read 65 degrees and are split. A test samples weights and positions of random rigs and finds no pose past the bound. |
 | 7. Reach and influence | The `shape` target and its refusals. `reference` and `part` on the `body` target, the identity check, the fade. `weightBy` and blend times on an effector, its share over its writes, the release. | Two arms, one swinging on `time`, the other's fingertip aimed at a point on it: `error` on the final pose stays under a tenth of a millimetre for 200 ticks. The three refusals fire by name. With a cell holding a second body's index, the hand reaches that body's part and follows a change of the cell in the next frame. Clearing the cell reads `target=none` in that frame, the weight eases, and moving the former target during the fade moves the hand by nothing. A cell of zero selects body zero. A slot that is reused releases the latch. A planted leg under a replacing layer at weight one that covers the thigh and shin and leaves out the foot: the applied weight reads zero in the first such frame, with a blend-out of half a second authored, and the knee reads exactly the clip's key. After that layer leaves and the body has walked a metre, the foot plants at the new ground point. An owner whose `parts` leave out a bone is refused, naming the bone. A planted hand under an adding recoil on a later layer keeps its `error`, and the elbow shows the recoil. Two effectors on one shoulder: the later holds its `error`, the earlier reports its own, and the compiler warns. A recipient allowed the index cell sees the reach, and one denied it sees rest. |
 | 8. The guess | `lead` and `leadSeconds` on a state driver, the one function that answers it, the owner's acknowledgement, the wake and the hold bypass. | A log records, for each press, the times of capture, the tick that takes it in, the cell's change and each presented frame. On a one-seat client a scripted press at a stated offset reads source `lead` and a phase above zero in the first frame after the tick that takes it in, and source `cell` once that tick is presented. With two seats on the client the source never reads `lead`, both views draw one pose, and an anchor on the finger reads that pose. A second client watching the same body reads `cell` throughout. A rule that refuses the press while the button is held for 60 ticks: the source returns to `cell` when the answer is presented and the phase reads zero for the rest of the hold. A cell a rule holds at one with the channel idle reads one. A mode switch during an outstanding press ends the guess in that frame. `lead` on a relative or a text channel is refused by name. A body at rest with the rate tiers on is evaluated in the frame after the tick that takes the press in. With answers delayed by a stated number of ticks, the guess holds until the answer is presented, with no return to the cell between, and ends at `leadSeconds` when no answer comes. `puck test --reproduce` on the scripted run gives the same authority hashes with `lead` authored and removed. |
 | 9. The Moth's hand | The plan's hands lane: joints, segments, the stance, the vents. | The plan's stage 2 row, in the lead's windowed batch. |
@@ -1180,8 +1192,15 @@ The capability searched for, what was read, and why nothing existing owns it.
   `Puck.Maths` and the sources for interpolation between rotations. The
   float helpers hold `VectorFunctions.ShortestArc`, which turns one direction
   onto another, and the fixed-point type has `FixedQuaternion.Slerp`. Neither
-  is a float arc that leaves the signs alone, so step 5 adds one beside
-  `VectorFunctions`.
+  is a float arc that leaves the signs alone, so step 5 added
+  `VectorFunctions.Arc` with `TurnAngle`, `ScaleTurn` and `WithPositiveScalar`
+  (two inline turn-angle formulas moved onto `TurnAngle`, and the three
+  `Quaternion.Slerp` calls from the identity that scaled a turn, in the
+  client's correction easing and the effector's align and replant, onto
+  `ScaleTurn`).
+- **A share of a layer.** Read `WorldGaitDrivers.ComposeDelta` and the
+  effector weight. Nothing scaled a driver's weight per shape; the share is
+  `CreationRig.Share`, and step 7's effector share is to call it.
 - **One list of what moves a shape.** Read the owner rule then in
   `CreationMotion`, `CreationMotionPlan`, `WorldRigidAssets.IsRigid` and the
   effector code. `CreationMotionPlan` came closest: it already added a look's

@@ -233,6 +233,9 @@ public static class WorldSemanticValidator {
         foreach (var warning in UngroupedBlends(definition: definition)) {
             Report(diagnostics: diagnostics, finding: locator.Locate(code: PuckDiagnosticCodes.UngroupedBlend, message: warning, severity: DiagnosticSeverity.Warning));
         }
+        foreach (var warning in UnplayedMotions(definition: definition)) {
+            Report(diagnostics: diagnostics, finding: locator.Locate(code: PuckDiagnosticCodes.UnplayedMotion, message: warning, severity: DiagnosticSeverity.Warning));
+        }
 
         return (errors.Count == 0);
     }
@@ -249,12 +252,12 @@ public static class WorldSemanticValidator {
     /// <param name="definition">The world.</param>
     /// <returns>The warnings, in prototype and shape order.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="definition"/> is <see langword="null"/>.</exception>
-    public static IReadOnlyList<string> MovingBlends(WorldDefinition definition) => BlendWarnings(
+    public static IReadOnlyList<string> MovingBlends(WorldDefinition definition) => CreationWarnings(
         definition: definition,
         warn: static document => {
             var rig = CreationRig.Of(document: document);
 
-            return CreationMotion.MovingBlends(rig: rig).Where(predicate: blend => (blend.Operand || CreationMotion.Creases(blend: blend, rig: rig))).Select(selector: blend => (blend.Shape, CreationMotion.Describe(blend: blend, rig: rig)));
+            return CreationMotion.MovingBlends(rig: rig).Where(predicate: blend => (blend.Operand || CreationMotion.Creases(blend: blend, rig: rig))).Select(selector: blend => ($"shapes[{blend.Shape}].blend", CreationMotion.Describe(blend: blend, rig: rig)));
         }
     );
     /// <summary>Returns a warning for each ungrouped shape of an animated creation that declares a blend other than
@@ -263,13 +266,26 @@ public static class WorldSemanticValidator {
     /// <param name="definition">The world.</param>
     /// <returns>The warnings, in prototype and shape order.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="definition"/> is <see langword="null"/>.</exception>
-    public static IReadOnlyList<string> UngroupedBlends(WorldDefinition definition) => BlendWarnings(
+    public static IReadOnlyList<string> UngroupedBlends(WorldDefinition definition) => CreationWarnings(
         definition: definition,
-        warn: static document => CreationMotion.UngroupedBlends(rig: CreationRig.Of(document: document)).Select(selector: shape => (shape, CreationMotion.DescribeUngrouped(document: document, shape: shape)))
+        warn: static document => CreationMotion.UngroupedBlends(rig: CreationRig.Of(document: document)).Select(selector: shape => ($"shapes[{shape}].blend", CreationMotion.DescribeUngrouped(document: document, shape: shape)))
     );
-    // A warning for each shape `warn` names in each creation, its blend's path first as a refusal's is, then the creation
-    // and the sentence `warn` gives it.
-    private static IReadOnlyList<string> BlendWarnings(WorldDefinition definition, Func<CreationDocument, IEnumerable<(int Shape, string Text)>> warn) {
+    /// <summary>Returns a warning for each motion a creation's driver authors on a shape its mask does not cover
+    /// (<see cref="CreationRig.Unplayed"/>), which never plays, its driver's path first as a refusal's is.</summary>
+    /// <param name="definition">The world.</param>
+    /// <returns>The warnings, in prototype order.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="definition"/> is <see langword="null"/>.</exception>
+    public static IReadOnlyList<string> UnplayedMotions(WorldDefinition definition) => CreationWarnings(
+        definition: definition,
+        warn: static document => {
+            var rig = CreationRig.Of(document: document);
+
+            return rig.Unplayed.Select(selector: unplayed => ($"drivers[{unplayed.Driver}].parts", CreationMotion.DescribeUnplayed(rig: rig, unplayed: unplayed)));
+        }
+    );
+    // A warning for each member `warn` names in each creation, its path in the creation first as a refusal's is, then the
+    // creation and the sentence `warn` gives it.
+    private static IReadOnlyList<string> CreationWarnings(WorldDefinition definition, Func<CreationDocument, IEnumerable<(string Path, string Text)>> warn) {
         ArgumentNullException.ThrowIfNull(definition);
 
         var warnings = new List<string>();
@@ -277,8 +293,8 @@ public static class WorldSemanticValidator {
 
         for (var index = 0; (index < creations.Count); index++) {
             if (creations[index]?.Document is not { } document) { continue; }
-            foreach (var (shape, text) in warn(arg: document)) {
-                warnings.Add(item: $"prototypes[{index}].doc.shapes[{shape}].blend: creation '{creations[index].Id}' {text}");
+            foreach (var (path, text) in warn(arg: document)) {
+                warnings.Add(item: $"prototypes[{index}].doc.{path}: creation '{creations[index].Id}' {text}");
             }
         }
 
