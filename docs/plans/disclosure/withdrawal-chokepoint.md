@@ -541,8 +541,10 @@ the key leaves out the authority's bookkeeping bypass, which changes row
 reservations and nothing a scene reads; the scene a mirror hands out exposes no
 reservation.
 
-A view of a shared residency states the key it may show, and renders only a
-frame whose content carries that key. A frame that does not is answered as a
+A view of a shared residency states its own stream's span and the key it may
+show. Its pictures carry both spans, the shared scene's and its own, so a
+narrowing of either stream discards them. It renders only a frame whose content
+carries its key. A frame that does not is answered as a
 waiting source is today (`ISdfFrameSource.Waiting`): the view keeps its last
 output and renders nothing, and the binder moves it to a residency of its own
 at the next settle. Its earlier pictures stay valid, because they were rendered
@@ -673,9 +675,12 @@ because finding 1 is the only one that shows content never delivered.
 2. **The label on the render graph.** The taint flag becomes the carried value;
    the bind methods, external outputs and package reads require it; the output
    records move behind the filtered read; the frame begins with the discard by
-   label; a discarded root that did not render returns the stand-in. Spans are
-   supplied by today's `WorldViewerAccess` until step 3 (a new span where the
-   epoch moves today). Deletes `IRenderGraphInstances.Withdraw`, the edge walk
+   label; a discarded root that did not render returns the stand-in. The frame
+   source's span member and a view's own span land here. Until step 3 a
+   session's span comes from today's `WorldViewerAccess`, which replaces it
+   wherever its epoch moves now, so this step changes how a narrowing is
+   carried and not yet how it is decided. Deletes
+   `IRenderGraphInstances.Withdraw`, the edge walk
    in `RenderGraphRuntime.ApplyWithdrawals`, the epoch table in
    `WorldViewGraphHost.BindAccess`, `WorldViewAccess.Join` and
    `WorldViewAccess.Retired` with the name grammar that feeds it.
