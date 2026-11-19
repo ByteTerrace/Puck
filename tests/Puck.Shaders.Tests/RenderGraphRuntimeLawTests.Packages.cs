@@ -355,19 +355,31 @@ public sealed partial class RenderGraphRuntimeLawTests {
             set: Set(PackageInstance(), PackageInstance() with { Name = Second })
         ), userMessage: refusal?.Message);
 
+        // Nothing reads a parked view, so the runtime asks neither whether it is unchanged until it is shown again.
+        const int Parked = 3;
         var asked = view.AskedUnreadBy[PackageView].Count;
+
+        for (var frame = 0; (frame < Parked); frame++) {
+            ProducePackageFrame(frameIndex: index++, parked: true, runtime: runtime);
+        }
+        Assert.Equal(expected: asked, actual: view.AskedUnreadBy[PackageView].Count);
+        Assert.False(condition: view.AskedUnreadBy.ContainsKey(key: Second));
+
         var newcomerAsked = false;
 
         for (var frame = 0; ((frame < 40) && !newcomerAsked); frame++) {
-            var before = (view.AskedUnreadBy.TryGetValue(key: Second, value: out var seen) ? seen.Count : 0);
+            var shown = new RenderGraphFrame(DisplayHeight: Display, DisplayHertz: 60, DisplayWidth: Display, Footprints: [], Index: index, Tick: index,
+                Roots: [new RenderGraphRoot(Height: 1.0, Instance: PackageView, Width: 1.0), new RenderGraphRoot(Height: 1.0, Instance: Second, Width: 1.0)]);
 
-            ProducePackageFrame(frameIndex: index++, parked: true, runtime: runtime);
-            // The kept view carries the three frames it was parked for before the reconfiguration, and one more a frame.
-            Assert.Equal(expected: (3L + frame), actual: view.AskedUnreadBy[PackageView][(asked + frame)]);
-            if (view.AskedUnreadBy.TryGetValue(key: Second, value: out var after) && (after.Count > before)) {
-                // The newcomer counted nothing before the reconfiguration, so its first question carries only the frames
-                // parked since.
-                Assert.Equal(expected: ((long)frame), actual: after[before]);
+            index++;
+            _ = runtime.ProduceFrame(context: default, frame: in shown);
+            // The kept view carries the three frames it was parked for before the reconfiguration and those since, a count
+            // that moves only while it is parked.
+            Assert.Equal(expected: (3L + Parked), actual: view.AskedUnreadBy[PackageView][asked]);
+            // The newcomer counted nothing before the reconfiguration, so its first question carries only the frames parked
+            // since.
+            if (view.AskedUnreadBy.TryGetValue(key: Second, value: out var after)) {
+                Assert.Equal(expected: ((long)Parked), actual: after[0]);
                 newcomerAsked = true;
             }
         }
