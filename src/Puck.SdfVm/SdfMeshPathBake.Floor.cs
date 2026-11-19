@@ -33,7 +33,7 @@ public sealed partial class SdfMeshPathBake {
             var group = m_groups[index];
 
             if (group.Retired || !group.Done || (group.Replaces is not null) || group.Ahead || (group.KeptFloor is not { } floor) || (group.Mesh is not { } mesh)) { continue; }
-            if (!AnyPiece(mesh: mesh, test: tables.RefusesMesh) || !AllPieces(mesh: floor, test: tables.MeshStands)) { continue; }
+            if (!AnyPiece(mesh: mesh, test: tables.RefusesMesh) || AnyPiece(mesh: floor, test: piece => !tables.MeshStands(mesh: piece))) { continue; }
             m_evictions.Add(item: (group, index));
         }
     }
@@ -112,10 +112,6 @@ public sealed partial class SdfMeshPathBake {
     private static bool AnyPiece(SdfMesh mesh, Func<SdfMesh, bool> test) {
         for (var piece = 0; (piece < mesh.PieceCount); piece++) { if (test(arg: mesh.Piece(index: piece))) { return true; } }
         return false;
-    }
-    private static bool AllPieces(SdfMesh mesh, Func<SdfMesh, bool> test) {
-        for (var piece = 0; (piece < mesh.PieceCount); piece++) { if (!test(arg: mesh.Piece(index: piece))) { return false; } }
-        return true;
     }
 
     // The classes a floor's bytes are reported by, in the order a group is classed.
