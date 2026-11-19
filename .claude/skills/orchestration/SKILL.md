@@ -22,6 +22,12 @@ on it and put the best-fit partner there. Busy is not progress: never queue
 filler to make a partner look busy. Idleness is a prompt to re-read the path, not
 to create work.
 
+When the owner asks what the lead thinks (a direction, a priority, a plan), the
+lead answers and waits; it launches lanes on that direction only when the owner
+says to (the owner's correction, after three lanes started on a plan the owner
+had only asked an opinion of). A standing mandate to keep velocity covers the
+plan the owner already agreed, not a new direction offered for discussion.
+
 **A feature the owner asks for has one owner and a definition of done before
 any mechanism lane starts** (the owner's ruling, after water shipped as a string
 of mechanisms nobody held to the feature). The plan states the feature as the
