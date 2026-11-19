@@ -86,10 +86,10 @@ that hold by what a viewer can be shown.
 
 ### A session with restricted rows is drawn from the whole replica
 
-Confirmed, and closed by step 1. The test that lets a window join its
-destination's own scene (`WorldSessionObservation.DisclosesEverything`) read
-the tier and the body policy and nothing else; it now also requires
-`WorldRecipientView.ReadsEverything`.
+Confirmed, and closed. The test that let a window join its destination's own
+scene read the tier and the body policy and nothing else. Step 1 tightened it to
+every row read whole; step 6 replaced it with the authority's proof
+(`WorldSceneProof`), which compares the scene inputs themselves.
 
 The same session's own stream is filtered by more than that. Its document comes
 from the cursor's disclosed images, and each snapshot's fields, solid sizes and
@@ -895,8 +895,8 @@ for the display. The second and third kinds are GPU legs the lead schedules.
    *Built,* except the authored lease: `WorldDeliveryCursor` decides cuts and
    issues `WorldStreamStamp`s, `IClientSink` carries them and `DeliverCut`,
    `WorldStreamIngress` orders a mirror's records, a remote observer closes
-   its span when its session ends, and `WorldRecipientView.ReadsEverything`
-   tightens the whole-replica test. The card and ingress checks are
+   its span when its session ends, and the whole-replica test was tightened
+   until step 6's proof replaced it. The card and ingress checks are
    `StreamGenerationLawTests`; the hidden-policy variants are
    `disclosure-probe`'s `one` (added) and `removed`. The engine's default
    lease of none is in force; a lease an admission grants is

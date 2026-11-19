@@ -15,6 +15,12 @@ public sealed partial class WorldServer {
     /// <summary>Gets the <c>world.disclosure</c> counters: the shared image table's monotonic composition work.</summary>
     public Puck.Abstractions.Counting.IWorkCounterSource DisclosureWorkSource => m_disclosureImages.Work;
 
+    // The operator's replica view, which reads every row whole: the whole reader a session's scene is compared with.
+    private WorldRecipientView? m_wholeView;
+    // The scene identity a whole reader of this world is handed now (WorldRecipientView.SceneIdentity), computed once
+    // per audience while nothing it reads moves.
+    internal Puck.Assets.ContentPin WholeSceneIdentity() => (m_wholeView ??= DeliveryView(Principal.Console, WorldDisclosureTier.Replica)).SceneIdentity!.Value;
+
     internal WorldRecipientView DeliveryView(Principal? recipient, WorldDisclosureTier tier, Func<bool>? observes = null) =>
         new(() => Definition, () => Arena, recipient, tier, observes ?? (() => true), m_disclosureImages,
             AuthorityIdentity, () => DeliveryTime, () => recipient is { } actor && Grants.IsOperator(actor));

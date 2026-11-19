@@ -39,23 +39,16 @@ public sealed partial class WorldRecipientView(Func<WorldDefinition> definition,
     public bool ReadsWhole(int row) => Includes(row) && Observer.ReadsWhole(row);
     /// <summary>Whether a named row is carried whole at this ceiling.</summary>
     public bool ReadsWhole(string row) => Arena.Catalog.TryResolve(StateLane.Document, row, out var handle) && ReadsWhole(handle.Ordinal);
-    /// <summary>Whether this view discloses a replica that withholds nothing a scene reads: it observes at
-    /// <see cref="WorldDisclosureTier.Replica"/> and reads every row of the store whole, its fields and zones included.
-    /// Every filter a stream applies to a replica beyond body redaction (a row's image, the placement projection, the
-    /// field projection, a solid size's source cell) passes everything through exactly when every row is read whole,
-    /// so a stream whose view answers <see langword="true"/> here is handed the authority's own scene inputs. The
-    /// answer reads declarations and policy alone, never which members are present or hidden now.</summary>
-    public bool ReadsEverything {
-        get {
-            if (!Observes || (ceiling != WorldDisclosureTier.Replica)) { return false; }
-            var observer = Observer;
-            var rows = Arena.Rows.Count;
-            for (var row = 0; row < rows; row++) {
-                if (!observer.ReadsWhole(row)) { return false; }
-            }
-            return true;
-        }
-    }
+    /// <summary>Gets the content identity of the scene inputs a replica stream through this view is handed now: the
+    /// disclosed document less its state rows, and for each row a scene reads (<see cref="WorldSceneInputs"/> and the
+    /// rows the placements read) whether this view reads it whole and otherwise its image. Two views with equal
+    /// identities are handed the same scene inputs, body redaction aside, which the snapshot's body table carries
+    /// under the world's observer disclosure. A row no scene reads never moves it. Read on the thread that steps the
+    /// world; <see langword="null"/> for a view that does not observe at <see cref="WorldDisclosureTier.Replica"/>.</summary>
+    public Puck.Assets.ContentPin? SceneIdentity => (Observes && (ceiling == WorldDisclosureTier.Replica)) ? images.SceneIdentity(this) : null;
+    /// <summary>Gets the first row a scene reads that this view does not read whole, by name, or <see langword="null"/>
+    /// when it reads every one whole: an operator's account of why a stream's scene differs from a whole reader's.</summary>
+    public string? FirstSceneRowWithheld => Observes ? images.FirstSceneRowWithheld(this) : null;
     /// <summary>Admits a transient derived from a whole row under a stable audience.</summary>
     /// <param name="row">The row's catalog ordinal.</param>
     /// <returns><see langword="true"/> when the row is carried whole at this ceiling and no audience on its path

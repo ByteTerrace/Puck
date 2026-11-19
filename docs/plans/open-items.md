@@ -2384,7 +2384,7 @@ findings are answered in decision 3a. Then the researcher brief's priorities
   access is settled on the viewer's side from its observation
   (`WorldViewerAccess`, `WorldScreenBinder.AccessOf`), and three separate
   guards act on it (`IRenderGraphInstances.Withdraw`,
-  `WorldScreenBinder.ContentAccess`, `WorldSessionObservation.DisclosesEverything`).
+  `WorldScreenBinder.ContentAccess`, and the window sharing test, now `WorldSceneProof`).
   An adversarial review found a way around each, and
   [the withdrawal chokepoint](disclosure/withdrawal-chokepoint.md) checks its
   nine findings against the code and ranks the eight that hold in whole or in

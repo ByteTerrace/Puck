@@ -147,7 +147,7 @@ public sealed partial class WorldScreenBinder {
     // The access an observation gives its viewer now: everything its world holds, what it discloses, or nothing.
     private static WorldSessionAccess AccessOf(WorldSessionObservation? observation) => ((observation is null)
         ? WorldSessionAccess.None
-        : (observation.DisclosesEverything
+        : ((observation.SceneProof is { SharesAuthority: true })
             ? WorldSessionAccess.Everything
             : (observation.CanObserve ? WorldSessionAccess.Disclosed : WorldSessionAccess.None)));
 }
