@@ -41,6 +41,7 @@ public static partial class BenchmarkCommand {
         public readonly Option<bool> Headless = new("--headless") { Description = "Play without a window or renderer: the arrival, state hash and host iterations are reported and every reading that needs a renderer is absent." };
         public readonly Option<int?> At = CliOptions.OptionalCount<int>("--at", "The tick the run is armed at: its first chapter's first line lands at this tick, or four ticks after the boot when that is later. Omitted starts four ticks after the boot.", 1);
         public readonly Option<int> Loops = CliOptions.Count("--loops", $"Play the route this many times from one boot, each loop from the state the one before left (1..{MaxLoops}, default 1). Reported as cold (the first), warm (the second) and steady (the rest).", 1, 1, MaxLoops);
+        public readonly Option<string> Profile = new("--profile") { DefaultValueFactory = _ => "auto", Description = "The device profile the run plays under, applied before the first chapter (`world.device-profile`): a name of the world's render.devices, auto (the one matching the adapter, the default) or none. Its quality table and memory bars are the run's conditions, and the report names them." };
         public readonly Option<bool> Uncapped = new("--uncapped") { Description = "Boot with the present mode that does not wait for the display (immediate), for a throughput trend; never a frame bar. The report says it ran uncapped and a comparison refuses to set it beside a paced run." };
         public readonly Option<double?> Budget = CliOptions.Amount("--budget", "The host work, in milliseconds, past which an iteration is over (default 16.667, one 60 Hz period).", 0.1);
         public readonly Option<int> Timeout = CliOptions.Count("--timeout-seconds", $"The run's wall-time limit (1..7200, default {DefaultTimeoutSeconds}): a run that passes it ends itself and keeps a partial report. The verb waits a further {BudgetGraceSeconds} s for the boot and collection.", 1, DefaultTimeoutSeconds, 7200);
@@ -55,7 +56,7 @@ public static partial class BenchmarkCommand {
         public Command Command { get; }
 
         public RunOptions() => Command = new Command(Verb, "Play a route through the debug world in real time on a fresh paused World and report every chapter's frame statistics, hitches, GPU passes and counters; compare with an earlier report.") {
-            World, Route, Chapter, Backends, Headless, At, Loops, Uncapped, Budget, Timeout, Width, Height, Cache, Artifact, Output, Against, All, Json,
+            World, Route, Chapter, Backends, Headless, At, Loops, Profile, Uncapped, Budget, Timeout, Width, Height, Cache, Artifact, Output, Against, All, Json,
         };
     }
 
@@ -279,8 +280,15 @@ public static partial class BenchmarkCommand {
             throw new InvalidOperationException("the renderer was not ready within 60 s");
         }
 
+        var profile = live.Run($"world.device-profile {CommandEcho.Quote(parse.GetValue(options.Profile) ?? "auto")}", 60);
+
+        if (!profile.Ok) {
+            throw new InvalidOperationException($"the World refused the device profile: {profile.Output}");
+        }
+        print($"{Verb}: {profile.Output}\n");
+
         var runDirectory = Path.Combine(directory, "world");
-        var line = string.Create(CultureInfo.InvariantCulture, $"world.benchmark run {CommandEcho.Quote(File.Exists(path: route) ? PuckPaths.Normalize(route) : route)} {(prefix.Length == 0 ? "-" : CommandEcho.Quote(prefix))}{((parse.GetValue(options.At) is { } at) ? $" at {at}" : string.Empty)}{((parse.GetValue(options.Budget) is { } budgetMs) ? $" budget {budgetMs}" : string.Empty)} timeout {timeout} loops {parse.GetValue(options.Loops)} output {CommandEcho.Quote(PuckPaths.Normalize(runDirectory))}");
+        var line =string.Create(CultureInfo.InvariantCulture, $"world.benchmark run {CommandEcho.Quote(File.Exists(path: route) ? PuckPaths.Normalize(route) : route)} {(prefix.Length == 0 ? "-" : CommandEcho.Quote(prefix))}{((parse.GetValue(options.At) is { } at) ? $" at {at}" : string.Empty)}{((parse.GetValue(options.Budget) is { } budgetMs) ? $" budget {budgetMs}" : string.Empty)} timeout {timeout} loops {parse.GetValue(options.Loops)} output {CommandEcho.Quote(PuckPaths.Normalize(runDirectory))}");
         var armed = live.Run(line, 60);
 
         if (!armed.Ok) {
@@ -332,6 +340,7 @@ public static partial class BenchmarkCommand {
             ["world"] = world,
             ["backend"] = backend,
             ["shape"] = (headless ? "headless" : "windowed"),
+            ["profile"] = parse.GetValue(options.Profile),
             ["uncapped"] = (!headless && parse.GetValue(options.Uncapped)),
             ["at"] = (parse.GetValue(options.At) is { } at ? at : 0),
             ["loops"] = parse.GetValue(options.Loops),
@@ -405,6 +414,7 @@ public static partial class BenchmarkCommand {
         ["backends"] = string.Join(',', backends.Select(backend => ((backend is { } chosen) ? WorldBackendTokens.Token(chosen) : "headless"))),
         ["loops"] = parse.GetValue(options.Loops).ToString(CultureInfo.InvariantCulture),
         ["at"] = (parse.GetValue(options.At)?.ToString(CultureInfo.InvariantCulture) ?? "(boot)"),
+        ["profile"] = (parse.GetValue(options.Profile) ?? "auto"),
         ["uncapped"] = parse.GetValue(options.Uncapped).ToString(),
         ["timeoutSeconds"] = parse.GetValue(options.Timeout).ToString(CultureInfo.InvariantCulture),
     };

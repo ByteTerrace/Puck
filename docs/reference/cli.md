@@ -2933,6 +2933,14 @@ puck benchmark compare <baseline report.json or directory> <candidate report.jso
   the one before it ends, from its tick hook; its arrival is its seat program's (`arrived`, or `failed` with the kind,
   the tick and the place: a driven wall contact, a step out of the places its path crosses, a lost path, a pose that did
   not land, its time limit).
+- **Profile.** `--profile <name|auto|none>` (default `auto`) applies a device profile before the first chapter, by
+  sending the World `world.device-profile`: a name of the world's `render.devices` rows, the row whose `match` the
+  adapter's name contains, or none. Applying writes the profile's quality table through the `world.quality` levers
+  (windowed or offscreen) and caps the device and host memory pools at the profile's bars. The run's `profile` object
+  in `run.json` names the profile, how it was selected, the adapter, the table and the caps with the limits the
+  process account admitted against, and its `topology` object names the authority endpoint the seat's body stood in
+  and whether that is `in-process` or `remote`. The profile is one of the report's conditions, so a comparison sets
+  runs under different profiles apart.
 - **Pace.** A run is display-paced with the ordinary lighting budget; nothing in it pauses, settles or waits, and the run
   turns lockstep presentation off at its start and records that it did. `--uncapped` boots with the immediate present mode for a throughput
   trend, and the report records it in the run's conditions; the presentation target itself is the host's own cap (`world.target`

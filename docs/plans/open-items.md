@@ -3198,6 +3198,17 @@ the stages; this packet holds what a stage does not.
   the client. The rendering plan's `bench` lane rebuilds it on what the
   seat's client was delivered
   ([its decision 1](rendering-research.md#1-measure-beside-the-work)).
+  What the driver reads, and what the endpoint delivers instead: the body's
+  pose (`WorldAuthorityEndpoint.Mirror`, presentation floats where the driver
+  reads fixed point), the delivered definition (`WorldAuthorityEndpoint.Definition`,
+  from which places and spawn points follow), and a navigation planner that
+  exists only as `WorldPopulation.PlanSteering`, which needs a resolved
+  population with its contact field and the seat kit's collider. The driver
+  also fails a chapter on `WorldBody.LastObstructionNormal`, a witness no
+  snapshot carries. The report separates the in-process and remote topology
+  (`topology` in the run report) but a run against `--connect` still cannot
+  drive its seat: the driver holds its controls and reports a `seat` failure
+  when the chapter's time limit passes.
 - [medium] A fresh run's first chapter opens on the boot's settling, not on
   its pose: on a headless World armed `at 10` after a `--paused` boot, the
   chapter's first two iterations (ticks 10 and 11) still simulate for
