@@ -242,22 +242,25 @@ public sealed class BodySweepRefusalLawTests {
     [Fact]
     public void ARefusedCarriedBodyIsImmovableForTheRestOfItsTickAndPushesNothingIntoItsCarrier() {
         // The carried ball posed at the carrier's least x is refused; a second, resting ball overlaps it from an eighth
-        // of a unit away. The pair pass must resolve the second ball against the refused one as static: the refused
-        // ball keeps its pose bit for bit, the second ball alone leaves the overlap, and the carrier, which falls under
-        // its own kit's gravity, ends the tick exactly where it ends it when the second ball is posed far away.
-        var overlapped = CarriedPairTick(otherZ: -FixedQ4816.FromDouble(value: 0.125));
-        var apart = CarriedPairTick(otherZ: FixedQ4816.FromInteger(value: 50L));
+        // of a unit away. The rigid solve treats the refused ball as static: it keeps its pose bit for bit, while
+        // the contact pushes the second ball away within the authored push-out limit. The carrier falls as in the
+        // separated control.
+        var overlappingZ = -FixedQ4816.FromDouble(value: 0.125);
+        var separatedZ = FixedQ4816.FromInteger(value: 50L);
+        var overlapped = CarriedPairTick(otherZ: overlappingZ);
+        var apart = CarriedPairTick(otherZ: separatedZ);
 
         Assert.True(condition: overlapped.OverlappedBefore, userMessage: "the fixture must start the two balls in overlap");
         Assert.Equal(actual: overlapped.BallRefusal, expected: ContactRefusal.UnrepresentableSweep);
         Assert.Equal(actual: overlapped.BallAfter, expected: overlapped.BallBefore);
         Assert.Equal(actual: overlapped.Carrier, expected: apart.Carrier);
-        Assert.False(condition: overlapped.OverlappedAfter, userMessage: "the second ball must be resolved out of the refused ball");
+        Assert.True(condition: (overlapped.OtherZ < overlappingZ), userMessage: $"the contact must push the second ball away from the refused ball, got Z={overlapped.OtherZ}");
+        Assert.Equal(expected: separatedZ, actual: apart.OtherZ);
     }
 
     // One tick of a carry whose ball is posed at the carrier's least x, with a second, resting ball posed beside it at
     // the given z.
-    private static ((FixedVector3, FixedQuaternion) BallBefore, (FixedVector3, FixedQuaternion) BallAfter, (FixedVector3, FixedQuaternion) Carrier, ContactRefusal BallRefusal, bool OverlappedBefore, bool OverlappedAfter) CarriedPairTick(FixedQ4816 otherZ) {
+    private static ((FixedVector3, FixedQuaternion) BallBefore, (FixedVector3, FixedQuaternion) BallAfter, (FixedVector3, FixedQuaternion) Carrier, ContactRefusal BallRefusal, bool OverlappedBefore, FixedQ4816 OtherZ) CarriedPairTick(FixedQ4816 otherZ) {
         using var fixture = Fixtures.FreshServer(definition: CarryFixtures.WallCarryDocument(includeOtherBody: true, includeWall: true));
         var carrier = fixture.JoinSeat();
         var ball = fixture.Server.Body(index: CarryFixtures.BallIndex)!;
@@ -279,7 +282,7 @@ public sealed class BodySweepRefusalLawTests {
 
         fixture.Step();
 
-        return (ballBefore, (ball.FixedPosition, ball.FixedOrientation), (carrier.FixedPosition, carrier.FixedOrientation), ball.SweepRefusal, overlappedBefore, Overlaps(left: ball, right: other));
+        return (ballBefore, (ball.FixedPosition, ball.FixedOrientation), (carrier.FixedPosition, carrier.FixedOrientation), ball.SweepRefusal, overlappedBefore, other.FixedPosition.Z);
     }
     private static bool Overlaps(WorldBody left, WorldBody right) => FixedDynamicBodyContacts.TryCorrection(
         correction: out _,
