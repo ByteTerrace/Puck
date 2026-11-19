@@ -2882,14 +2882,21 @@ The edit loop:
   no replaceable types. Profile per-project, analyzer, restore and copy costs
   before naming a cause; the artifact builder's separate output directory is
   a lead, not proof of lost incremental reuse.
-- [medium] A `.puck` compile of the debug world takes about 15 s, half the
-  edit budget, before every reload. Profile it for hot spots and fix them: a
-  cold compile spends seconds in the composer's `JsonNode` merge
-  (`WorldDocumentBasis`: `DeepEquals`, `OrderedDictionary.IndexOf`,
-  `RowIdentity`). Only if the cost proves spread across the pipeline, take
-  Zig's incremental compiler as the design
-  ([Inside Zig's Incremental Compilation](https://mlugg.co.uk/posts/incremental-compilation-internals/)):
-  per-declaration units, recorded dependencies, early cutoff.
+- [high] A whole-world `.puck` compile of the debug world still reads,
+  validates and installs the whole world before every reload, every
+  `puck compile --validate` and every root `puck lint`, whatever the edit.
+  [The authoring loop](iteration/authoring-loop.md#what-was-measured) took the
+  profile, and its [build order](iteration/authoring-loop.md#build-order) is
+  the work. Step 1 has landed (the name index, the stamp-trusted digests and
+  origins composed only for a finding); step 2, one compile session, is next.
+- [medium] `puck decompile` writes a source the compiler refuses when the
+  document holds a shading program: a palette's `shade` prints as its table
+  key (`shade: "program/<hash>"`), which is PUCK126, and
+  [the CLI reference](../reference/cli.md#the-puck-dsl-verbs) says the verb
+  never writes such a source. `world.save` prints rows through the same
+  `WorldDecompiler`, so a whole-row rewrite of a palette fails its proof.
+  Print the program as the phase block the grammar accepts
+  ([the authoring loop](iteration/authoring-loop.md#saving-an-edit-to-source)).
 - [high] A debug-world `world.reload` prepares off the tick and shares its
   unchanged rows, but its install still costs hundreds of milliseconds on the
   tick that adopts it, and its preparation's garbage pauses the frame thread

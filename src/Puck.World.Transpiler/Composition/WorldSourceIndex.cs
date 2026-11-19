@@ -27,16 +27,21 @@ public sealed record WorldDocumentClaims(string Path, IReadOnlyList<string> Name
 /// and the official build, read names through here and nowhere else.
 /// <para>
 /// Every read goes through <see cref="CompileInputs"/>: the directory's listing
-/// (<see cref="CompileInputKind.Listing"/>) and each source's bytes. A compile that resolves a name here therefore
+/// (<see cref="CompileInputKind.Listing"/>) and each source's digest. A compile that resolves a name here therefore
 /// rests on both, and the compile cache serves it again only while both hold: a file added beside it, removed, or
 /// renamed in any letter case moves the listing, and an edit to any source there, the edits that change what it
-/// declares among them, moves that source's bytes. A source's declaration is held by the digest of its bytes, so an
-/// unchanged source is parsed once per process however often the index is read.
+/// declares among them, moves that source's digest. What a source declares, and whether it is a world source at all,
+/// is held by the digest of its bytes, so an unchanged source is parsed once per process however often the index is
+/// read; and a directory's claims are held while its listing and every source's digest are the ones they were built
+/// from. The door answers a listing and a digest from each path's stamp while the stamp holds, so reading an unchanged
+/// directory's claims again reads no file's contents.
 /// </para>
 /// </summary>
 public static class WorldSourceIndex {
     /// <summary>The most parsed declarations the index holds; reading one more past it starts the hold afresh.</summary>
     public const int MaxHeldDeclarations = 4096;
+    /// <summary>The most directories whose claims the index holds; reading one more past it starts the hold afresh.</summary>
+    public const int MaxHeldDirectories = 1024;
 
     private const string DeclarationExtension = ".declaration";
     private const string DeclarationsDirectory = "declarations";
@@ -44,7 +49,15 @@ public static class WorldSourceIndex {
 
     // A source's declaration by the digest of its bytes; null for bytes that do not parse.
     private static readonly ConcurrentDictionary<string, WorldSourceDeclaration?> Held = new(comparer: StringComparer.Ordinal);
+    // Whether a source is a world source (IsWorldSource), by the digest of its bytes.
+    private static readonly ConcurrentDictionary<string, bool> HeldVocabulary = new(comparer: StringComparer.Ordinal);
+    // A directory's claims, by the directory exactly as spelled, with the listing and digests they were built from.
+    private static readonly ConcurrentDictionary<string, HeldClaims> HeldDirectories = new(comparer: StringComparer.Ordinal);
     private static int HeldRevision;
+
+    // The claims a directory's files made: the files listed, each source's digest in listing order (null for one that
+    // could not be read), and the claims built from them.
+    private sealed record HeldClaims(IReadOnlyList<string> Files, string?[] Digests, IReadOnlyList<WorldDocumentClaims> Claims);
 
     /// <summary>Returns the names every carrying file directly in <paramref name="directory"/> claims, one entry per
     /// file in ordinal order of its path. A source that cannot be read or does not parse cannot say what it emits, so
@@ -57,19 +70,37 @@ public static class WorldSourceIndex {
     public static IReadOnlyList<WorldDocumentClaims> Claims(string directory) {
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: directory);
 
+        ForgetOnCodeUpdate();
+
+        var files = CompileInputs.List(directory: directory);
+        var digests = new string?[files.Count];
+        var contents = new byte[]?[files.Count];
+
+        for (var index = 0; (index < files.Count); index++) {
+            if (WorldDocumentName.IsSourceFile(path: files[index])) {
+                digests[index] = TryDigest(content: out contents[index], path: files[index]);
+            }
+        }
+
+        if (HeldDirectories.TryGetValue(key: directory, value: out var held) &&
+            held.Files.SequenceEqual(second: files, comparer: StringComparer.Ordinal) &&
+            held.Digests.AsSpan().SequenceEqual(other: digests)) {
+            return held.Claims;
+        }
+
         var claims = new List<WorldDocumentClaims>();
 
-        foreach (var file in CompileInputs.List(directory: directory)) {
-            var path = Puck.Abstractions.PuckPaths.Slashed(path: file);
+        for (var index = 0; (index < files.Count); index++) {
+            var path = Puck.Abstractions.PuckPaths.Slashed(path: files[index]);
 
             if (WorldDocumentName.IsDocumentFile(path: path)) {
                 claims.Add(item: new WorldDocumentClaims(
                     Names: [WorldDocumentName.OfDocumentFile(path: System.IO.Path.GetFileName(path: path))],
                     Path: path
                 ));
-            } else if (WorldDocumentName.IsSourceFile(path: path) && IsWorldSourceFile(path: path)) {
+            } else if (WorldDocumentName.IsSourceFile(path: path) && HeldIsWorldSource(content: contents[index], digest: digests[index], path: path)) {
                 claims.Add(item: new WorldDocumentClaims(
-                    Names: (Declaration(path: path)?.Names(sourcePath: path) ?? WorldCompilation.EmittedNames(
+                    Names: (HeldDeclaration(content: contents[index], digest: digests[index], path: path)?.Names(sourcePath: path) ?? WorldCompilation.EmittedNames(
                         declaredWorlds: [],
                         emitsDocument: true,
                         sourcePath: path
@@ -79,7 +110,78 @@ public static class WorldSourceIndex {
             }
         }
 
+        if (HeldDirectories.Count >= MaxHeldDirectories) {
+            HeldDirectories.Clear();
+        }
+        HeldDirectories[directory] = new HeldClaims(Claims: claims, Digests: digests, Files: files);
+
         return claims;
+    }
+    // A source's digest through the door, recording it; null for a source that is absent or cannot be read, which
+    // claims its stem. `content` is its bytes when the door had to read them.
+    private static string? TryDigest(string path, out byte[]? content) {
+        try {
+            return CompileInputs.Digest(content: out content, path: path);
+        } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
+            content = null;
+
+            return null;
+        }
+    }
+    // The source's bytes when the digest's holds do not answer: those the door just read, else read again.
+    private static byte[]? BytesOf(string path, byte[]? content) {
+        if (content is not null) {
+            return content;
+        }
+        try {
+            return CompileInputs.ReadAllBytes(path: path);
+        } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
+            return null;
+        }
+    }
+    // Whether the source whose digest is `digest` is a world source; one that cannot be read is held to be.
+    private static bool HeldIsWorldSource(string path, string? digest, byte[]? content) {
+        if (digest is null) {
+            return true;
+        }
+        if (HeldVocabulary.TryGetValue(key: digest, value: out var held)) {
+            return held;
+        }
+        if (BytesOf(content: content, path: path) is not { } bytes) {
+            return true;
+        }
+
+        var isWorld = IsWorldSource(source: FileContent.Text(content: bytes));
+
+        if (HeldVocabulary.Count >= MaxHeldDeclarations) {
+            HeldVocabulary.Clear();
+        }
+        // Held under the digest of the bytes actually read, which differ from `digest` only when the file moved since.
+        HeldVocabulary[ContentPin.Compute(content: bytes).Hex] = isWorld;
+
+        return isWorld;
+    }
+    // What the source whose digest is `digest` declares; null when it cannot be read or does not parse.
+    private static WorldSourceDeclaration? HeldDeclaration(string path, string? digest, byte[]? content) {
+        if (digest is null) {
+            return null;
+        }
+        if (Held.TryGetValue(key: digest, value: out var held)) {
+            return held;
+        }
+
+        return ((BytesOf(content: content, path: path) is { } bytes) ? Declaration(content: bytes) : null);
+    }
+    // A hot-reload edit to the parser makes every held declaration a product of code that no longer runs.
+    private static void ForgetOnCodeUpdate() {
+        var revision = Puck.Abstractions.CodeRevision.Current;
+
+        if (Volatile.Read(location: ref HeldRevision) != revision) {
+            Held.Clear();
+            HeldVocabulary.Clear();
+            HeldDirectories.Clear();
+            Volatile.Write(location: ref HeldRevision, value: revision);
+        }
     }
     /// <summary>Returns whether source text is a world source: its <c>schema:</c> names the world vocabulary
     /// (<see cref="WorldDefinition.SchemaVersion"/>), or it names none, as a module library and an imported fragment
@@ -100,21 +202,11 @@ public static class WorldSourceIndex {
     public static bool IsWorldSourceFile(string path) {
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: path);
 
-        byte[] content;
+        ForgetOnCodeUpdate();
 
-        try {
-            content = CompileInputs.ReadAllBytes(path: path);
-        } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
-            return true;
-        }
+        var digest = TryDigest(content: out var content, path: path);
 
-        using var reader = new StreamReader(
-            detectEncodingFromByteOrderMarks: true,
-            encoding: Encoding.UTF8,
-            stream: new MemoryStream(buffer: content)
-        );
-
-        return IsWorldSource(source: reader.ReadToEnd());
+        return HeldIsWorldSource(content: content, digest: digest, path: path);
     }
     /// <summary>Reads what the source at <paramref name="path"/> declares, through <see cref="CompileInputs"/>.</summary>
     /// <param name="path">The <c>.puck</c> source.</param>
@@ -122,15 +214,11 @@ public static class WorldSourceIndex {
     public static WorldSourceDeclaration? Declaration(string path) {
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: path);
 
-        byte[] content;
+        ForgetOnCodeUpdate();
 
-        try {
-            content = CompileInputs.ReadAllBytes(path: path);
-        } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
-            return null;
-        }
+        var digest = TryDigest(content: out var content, path: path);
 
-        return Declaration(content: content);
+        return HeldDeclaration(content: content, digest: digest, path: path);
     }
     /// <summary>Reads what the source whose bytes are <paramref name="content"/> declares, held by the digest of
     /// those bytes and persisted beside the process's compiles (<see cref="WorldCompileCache.Shared"/>) when it
@@ -151,13 +239,7 @@ public static class WorldSourceIndex {
     public static WorldSourceDeclaration? Declaration(byte[] content, string? compilations) {
         ArgumentNullException.ThrowIfNull(argument: content);
 
-        // A hot-reload edit to the parser makes every held declaration a product of code that no longer runs.
-        var revision = Puck.Abstractions.CodeRevision.Current;
-
-        if (Volatile.Read(location: ref HeldRevision) != revision) {
-            Held.Clear();
-            Volatile.Write(location: ref HeldRevision, value: revision);
-        }
+        ForgetOnCodeUpdate();
 
         var key = ContentPin.Compute(content: content).Hex;
 
@@ -180,7 +262,11 @@ public static class WorldSourceIndex {
     }
     /// <summary>Forgets every declaration held in memory, so the next read of each source reads its persisted
     /// declaration or parses it.</summary>
-    public static void ForgetHeld() => Held.Clear();
+    public static void ForgetHeld() {
+        Held.Clear();
+        HeldVocabulary.Clear();
+        HeldDirectories.Clear();
+    }
 
     private static WorldSourceDeclaration? ReadPersisted(byte[] content, string key, string root) {
         var directory = System.IO.Path.Combine(path1: root, path2: DeclarationsDirectory);
@@ -245,16 +331,7 @@ public static class WorldSourceIndex {
     // The parse a compile of the same bytes starts from (WorldCompiler.Compile), and nothing after it. Text is decoded
     // as a compile reads it: a byte-order mark selects the encoding, UTF-8 otherwise.
     private static WorldSourceDeclaration? Parse(byte[] content) {
-        string source;
-
-        using (var reader = new StreamReader(
-            detectEncodingFromByteOrderMarks: true,
-            encoding: Encoding.UTF8,
-            stream: new MemoryStream(buffer: content)
-        )) {
-            source = reader.ReadToEnd();
-        }
-
+        var source = FileContent.Text(content: content);
         var diagnostics = new DiagnosticBag();
         var parsed = PuckParser.ParseDocumentWithDiagnostics(
             diagnostics: diagnostics,

@@ -120,7 +120,8 @@ public static partial class WorldDocumentEmitter {
         Assets.AssetCompilationContext? assets = null,
         IReadOnlyList<EnumDefinition>? inheritedEnums = null,
         JsonObject? inheritedState = null,
-        bool includeTests = true
+        bool includeTests = true,
+        DocumentEvaluationBudget? budget = null
     ) {
         ArgumentNullException.ThrowIfNull(document);
 
@@ -152,7 +153,8 @@ public static partial class WorldDocumentEmitter {
             diagnostics: diagnostics,
             schema: document.Schema
         ) {
-            Budget = new DocumentEvaluationBudget { CancellationToken = cancellationToken },
+            // The compile's one budget, which its import walk has already charged, when the caller holds one.
+            Budget = (budget ?? new DocumentEvaluationBudget { CancellationToken = cancellationToken }),
         };
 
         var textsMap = new Dictionary<string, HashSet<string>>(comparer: StringComparer.Ordinal);

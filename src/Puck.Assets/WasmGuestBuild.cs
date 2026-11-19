@@ -70,6 +70,16 @@ public sealed record WasmGuestBuild(string Crate, IReadOnlyList<string>? Feature
         return false;
     }
 
+    /// <summary>Returns whether a path is spelled the way a source-backed module's logical path is, a <c>.wasm</c> file
+    /// under a <c>wasm</c> directory, without reading the build inventory. Only such a path can be one whose bytes are
+    /// derived (<see cref="TryFind"/>) rather than the file's own.</summary>
+    /// <param name="path">Absolute requested path.</param>
+    /// <returns>Whether <see cref="TryFind"/> could recognize the path.</returns>
+    public static bool MayName(string path) {
+        var normalized = Puck.Abstractions.PuckPaths.Slashed(path: path);
+
+        return (normalized.Contains("/wasm/", StringComparison.Ordinal) && normalized.EndsWith(".wasm", StringComparison.Ordinal));
+    }
     /// <summary>Recognizes a declared source-backed module without compiling it.</summary>
     /// <param name="path">Requested absolute module path.</param>
     /// <param name="build">The declared variant.</param>
@@ -78,10 +88,10 @@ public sealed record WasmGuestBuild(string Crate, IReadOnlyList<string>? Feature
     public static bool TryFind(string path, out WasmGuestBuild? build, out string? workspace) {
         build = null;
         workspace = null;
-        var normalized = Puck.Abstractions.PuckPaths.Slashed(path: path);
-        if (!normalized.Contains("/wasm/", StringComparison.Ordinal) || !normalized.EndsWith(".wasm", StringComparison.Ordinal)) {
+        if (!MayName(path: path)) {
             return false;
         }
+        var normalized = Puck.Abstractions.PuckPaths.Slashed(path: path);
         var liveWorkspace = normalized[..normalized.LastIndexOf("/wasm/", StringComparison.Ordinal)] + "/wasm";
         workspace = Directory.Exists(liveWorkspace) ? liveWorkspace : null;
         foreach (var candidate in ReadBuilds(workspace)) {

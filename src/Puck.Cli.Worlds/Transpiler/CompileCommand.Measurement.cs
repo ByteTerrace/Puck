@@ -1,3 +1,4 @@
+using Puck.Assets;
 using Puck.Transpiler.Lowering;
 using System.Diagnostics;
 using System.Globalization;
@@ -15,6 +16,8 @@ public static partial class CompileCommand {
 
         private readonly long m_start = Stopwatch.GetTimestamp();
         private readonly long m_allocated = GC.GetTotalAllocatedBytes(precise: true);
+        private readonly long m_contentReads = CompileInputs.ContentReads;
+        private readonly long m_stampReads = CompileInputs.StampReads;
         private readonly List<(string Path, long Work)> m_work = [];
 
         public CompilationMeasurement() {
@@ -33,6 +36,10 @@ public static partial class CompileCommand {
             using var process = Process.GetCurrentProcess();
             Console.Error.WriteLine(string.Create(CultureInfo.InvariantCulture,
                 $"compile measure: elapsed-ms={Stopwatch.GetElapsedTime(m_start).TotalMilliseconds:0.0} peak-working-set-bytes={process.PeakWorkingSet64} managed-allocated-bytes={GC.GetTotalAllocatedBytes(precise: true) - m_allocated} managed-live-bytes={GC.GetTotalMemory(forceFullCollection: false)}"));
+            // The file reads the compile's door made: contents read and directories listed, the stats that vouched for
+            // an answer without one, and the distinct files and directories those answers cover.
+            Console.Error.WriteLine(string.Create(CultureInfo.InvariantCulture,
+                $"compile measure: file-content-reads={CompileInputs.ContentReads - m_contentReads} file-stamp-reads={CompileInputs.StampReads - m_stampReads} files-known={CompileInputs.RememberedPaths}"));
             foreach (var (path, work) in m_work.OrderByDescending(keySelector: static entry => entry.Work).Take(count: LargestShown)) {
                 Console.Error.WriteLine(string.Create(CultureInfo.InvariantCulture,
                     $"compile measure: evaluation-work={work} limit={DocumentEvaluationBudget.WorkLimit} share={(100d * work / DocumentEvaluationBudget.WorkLimit):0.0}% source={CliPaths.ToDisplay(fullPath: Path.GetFullPath(path: path))}"));
