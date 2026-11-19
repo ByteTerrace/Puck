@@ -120,7 +120,7 @@ public sealed partial class SdfProgramBuilder {
         );
 
         // The degenerate-spacing clamp and the reciprocal are HOST-BAKED (Data1.xyz), mirroring Repeat().
-        var clamped = ClampSpacing(spacing: spacing);
+        var clamped = SdfDerivedLanes.RepeatSpacing(spacing: spacing);
 
         if (materialVariants < 0) {
             throw new ArgumentException(
@@ -159,7 +159,7 @@ public sealed partial class SdfProgramBuilder {
                 w: jitter
             ),
             Data1: new Vector4(
-                value: (Vector3.One / clamped),
+                value: SdfDerivedLanes.Reciprocal(extents: clamped),
                 w: clampedTumble
             ),
             Material: ((uint)materialVariants),
@@ -255,12 +255,6 @@ public sealed partial class SdfProgramBuilder {
         );
 
         // The global scale correction is baked once; the Lipschitz analysis includes it.
-        var (_, maxS) = SdfProgram.FlareExtrema(
-            amount: amount,
-            bulge: bulge,
-            startScale: startScale
-        );
-
         return Transform(
             data0: new Vector4(
                 w: (1f / span),
@@ -270,7 +264,7 @@ public sealed partial class SdfProgramBuilder {
             ),
             data1: new Vector4(
                 w: 0f,
-                x: (1f / maxS),
+                x: SdfDerivedLanes.AxialProfileCorrection(amount: amount, bulge: bulge, startScale: startScale),
                 y: startScale,
                 z: 0f
             ),
@@ -504,7 +498,7 @@ public sealed partial class SdfProgramBuilder {
         // matching Repeat's baked-reciprocal pattern; KEEP IN SYNC with SDF_OP_LOG_SPHERE in field/sdf-map.hlsli).
         var ratio = MathF.Max(
             x: shellRatio,
-            y: 1.0001f
+            y: SdfDerivedLanes.MinLogSphereRatio
         );
         var w = MathF.Log(x: ratio);
 
@@ -513,7 +507,7 @@ public sealed partial class SdfProgramBuilder {
                 w: 0f,
                 x: w,
                 y: twist,
-                z: (1f / w)
+                z: SdfDerivedLanes.LogSphereInverseCell(logCell: w)
             ),
             op: SdfOp.LogSphere
         );
@@ -542,7 +536,7 @@ public sealed partial class SdfProgramBuilder {
 
         // The degenerate-spacing clamp and the reciprocal are HOST-BAKED (Data1.xyz): shapes evaluate millions of
         // times per frame, programs build once (KEEP IN SYNC with SDF_OP_REPEAT in Assets/Shaders/Sdf/field/sdf-map.hlsli).
-        var clamped = ClampSpacing(spacing: spacing);
+        var clamped = SdfDerivedLanes.RepeatSpacing(spacing: spacing);
 
         return Transform(
             data0: new Vector4(
@@ -550,7 +544,7 @@ public sealed partial class SdfProgramBuilder {
                 w: 0f
             ),
             data1: new Vector4(
-                value: (Vector3.One / clamped),
+                value: SdfDerivedLanes.Reciprocal(extents: clamped),
                 w: 0f
             ),
             op: SdfOp.Repeat
@@ -584,7 +578,7 @@ public sealed partial class SdfProgramBuilder {
         // SDF_OP_REPEAT_LIMITED in Assets/Shaders/Sdf/field/sdf-map.hlsli). Clamped WITHOUT Abs, matching the shader's old
         // max(data0.xyz, 0.001) — a negative spacing must keep behaving as it did. Unlike Repeat there is no free lane
         // for the reciprocal (Data1.xyz carries the limit), so the shader keeps its divide.
-        var clamped = ClampSpacing(spacing: spacing);
+        var clamped = SdfDerivedLanes.RepeatSpacing(spacing: spacing);
 
         return Transform(
             data0: new Vector4(
@@ -650,16 +644,16 @@ public sealed partial class SdfProgramBuilder {
             );
         }
 
-        var angle = ((2f * MathF.PI) / sectors);
+        var (angle, inverseAngle, inverseCount) = SdfDerivedLanes.PolarSectors(sectors: sectors);
 
         m_instructions.Add(item: new SdfInstruction(
             Blend: (mirror
             ? 1u
             : 0u),
             Data0: new Vector4(
-                w: (1f / sectors),   // 1/count — the per-sector material wrap
+                w: inverseCount,     // 1/count — the per-sector material wrap
                 x: angle,            // 2π/count — the sector angle
-                y: (1f / angle),     // count/(2π) — 1/angle, for the sector floor-division
+                y: inverseAngle,     // count/(2π) — 1/angle, for the sector floor-division
                 z: sectors           // count — the sector-index wrap
             ),
             Data1: default,
@@ -775,13 +769,7 @@ public sealed partial class SdfProgramBuilder {
         return Transform(
             data0: new Vector4(
                 value: clamped,
-                w: MathF.Min(
-                    x: clamped.X,
-                    y: MathF.Min(
-                        x: clamped.Y,
-                        y: clamped.Z
-                    )
-                )
+                w: SdfDerivedLanes.ScaleCorrection(scale: clamped)
             ),
             op: SdfOp.Scale
         );

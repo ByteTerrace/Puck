@@ -720,33 +720,25 @@ public sealed partial class SdfProgram {
     //
     // Using ‖f‖₂ (which is >= ‖f‖∞) was merely conservative, never wrong — but it over-clamps by up to sqrt(3)x on an
     // isotropic frequency and buys nothing but march steps. Reach-INDEPENDENT (a global bound on the sin basis, unlike
-    // twist/bend which grow with reach), so it multiplies the whole chain like exp(w/2). amp == 0 yields 1.0f exactly,
-    // so a displace/warp-free program stays byte-identical.
-    // The metric-stretch step factor for a NoiseDisplace fBm field (Data0 = frequency, amplitude, gain, lacunarity;
-    // Data1.x = host-baked 1/Σ gainᵏ; Blend = octave count). One octave of quintic-blended trilinear value noise over
-    // corner values remapped to [-1, 1] has per-axis slope bounded by u'max·span = (15/8)·2 = 15/4 per unit cell, so
-    // its world-space gradient norm is bounded by frequency·(15/4)·√3 (axes combined Euclidean — conservative, the
-    // per-axis bounds are not simultaneously tight). Octave k scales by gainᵏ·lacunarityᵏ, and the host normalization
-    // divides the amplitude side by Σ gainᵏ, so the total is
-    //   L = |amplitude|·frequency·(15/4)·√3·Σ (gain·lacunarity)ᵏ / Σ gainᵏ.
-    // Reach-INDEPENDENT (a global bound on the lattice basis), so it multiplies the whole chain like Displace's
-    // factor. amplitude == 0 yields 1.0f exactly, so a noise-free program stays byte-identical.
-    private static float CellDisplaceLipschitz(SdfInstruction instruction) =>
-        new SdfCellDisplacement(instruction.Data0.X, instruction.Data0.Y, instruction.Shape,
-            ((SdfCellMode)instruction.Blend), instruction.Data0.Z).StepFactor;
-    private static float NoiseDisplaceLipschitz(SdfInstruction instruction, float maskSlope) => NoiseDisplaceStepFactor(
-        amplitude: MathF.Abs(x: instruction.Data0.Y),
-        frequency: MathF.Abs(x: instruction.Data0.X),
-        gain: MathF.Abs(x: instruction.Data0.Z),
-        lacunarity: MathF.Abs(x: instruction.Data0.W),
-        maskSlope: maskSlope,
-        octaves: ((int)instruction.Blend)
-    );
+    // twist/bend which grow with reach). A warp multiplies its chain by 1 + this slope; a sine relief adds the slope, times
+    // its point factor, at its own instruction (AnalyzeLipschitz). amp == 0 yields 0 exactly.
+    private static float DisplaceSlope(SdfInstruction instruction) {
+        var amplitude = MathF.Abs(x: instruction.Data0.W);
+        var frequency = MathF.Max(
+            x: MathF.Abs(x: instruction.Data0.X),
+            y: MathF.Max(
+                x: MathF.Abs(x: instruction.Data0.Y),
+                y: MathF.Abs(x: instruction.Data0.Z)
+            )
+        );
 
-    /// <summary>The conservative metric-stretch step factor one <see cref="SdfOp.NoiseDisplace"/> op multiplies into
-    /// a program's step clamp — the derivation above, exposed so an authoring door can budget-check a noise
-    /// declaration against the ONE formula <c>AnalyzeLipschitz</c> bakes instead of mirroring it. A zero amplitude
-    /// returns exactly 1.</summary>
+        return (amplitude * frequency);
+    }
+
+    /// <summary>Returns the conservative step factor of one noise relief, in the units of the frame it samples: one plus
+    /// its slope (<see cref="SdfNoiseDisplacement.Slope"/>) plus its masks' slopes times its amplitude. It is the formula
+    /// <c>AnalyzeLipschitz</c> charges, through the relief's point factor, so an authoring door can budget-check a noise
+    /// declaration against it instead of mirroring it. A zero amplitude returns exactly 1.</summary>
     /// <param name="frequency">The base lattice frequency (cells per world unit).</param>
     /// <param name="amplitude">The peak displacement (world units).</param>
     /// <param name="octaves">The octave count (1..<see cref="SdfProgramBuilder.MaxNoiseOctaves"/>).</param>
@@ -757,44 +749,12 @@ public sealed partial class SdfProgram {
     /// <c>a·(w∇n + n∇w)</c> with <c>|n| ≤ 1</c> and <c>0 ≤ w ≤ 1</c>, so the masks add <c>|a|</c> times their slope.</param>
     /// <returns>The multiplicative step factor (≥ 1 for non-negative inputs).</returns>
     public static float NoiseDisplaceStepFactor(float frequency, float amplitude, int octaves, float gain, float lacunarity, float maskSlope = 0f) {
-        if (amplitude == 0.0f) {
-            return 1.0f;
-        }
-
-        var gainSum = 0.0f;
-        var gainPower = 1.0f;
-        var gradientSum = 0.0f;
-        var termPower = 1.0f;
-
-        for (var octave = 0; (octave < octaves); octave++) {
-            gainSum += gainPower;
-            gainPower *= gain;
-            gradientSum += termPower;
-            termPower *= (gain * lacunarity);
-        }
-
-        // (15/4)·√3 — the quintic-blend slope bound over the [-1, 1] corner span, per the derivation above. The
-        // (1 / Σ gainᵏ) factor reproduces the builder's host-baked Data1.X normalization bit-for-bit (the same
-        // accumulation loop over the same floats), so this form and the instruction form agree exactly.
-        const float NoiseGradientBound = 6.49519053f;
-
-        var unmasked = (1.0f + (((amplitude * (1.0f / gainSum)) * frequency) * (NoiseGradientBound * gradientSum)));
+        var unmasked = (1.0f + SdfNoiseDisplacement.Slope(amplitude: amplitude, frequency: frequency, gain: gain, lacunarity: lacunarity, octaves: octaves));
 
         return ((maskSlope > 0.0f) ? (unmasked + (amplitude * maskSlope)) : unmasked);
     }
 
-    private static float DisplaceWarpLipschitz(SdfInstruction instruction) {
-        var amplitude = MathF.Abs(x: instruction.Data0.W);
-        var frequency = MathF.Max(
-            x: MathF.Abs(x: instruction.Data0.X),
-            y: MathF.Max(
-                x: MathF.Abs(x: instruction.Data0.Y),
-                y: MathF.Abs(x: instruction.Data0.Z)
-            )
-        );
-
-        return (1.0f + (amplitude * frequency));
-    }
+    private static float DisplaceWarpLipschitz(SdfInstruction instruction) => (1.0f + DisplaceSlope(instruction: instruction));
     // The product of a chain's CellJitter boundary step factors, folded at chain-close against the chain's FINAL max
     // shape reach (mirrors chainLogSphereProduct's role, but reach-DEPENDENT on the shapes that follow the fold, so it
     // cannot be accumulated inline — the shape reach is only known once the whole chain has been walked). Compounds as a
