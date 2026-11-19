@@ -322,8 +322,18 @@ public sealed partial class SdfWorldTables {
         public GpuMemoryBytes OwnedBytes => default;
 
         // A landing is cut by its bytes: the most an upload job stages copies in under the least frame allowance at
-        // SdfGpuWork.UploadCopyBytesPerSecond, so the allowance never binds it.
-        public bool TryTake(SdfWorldTables current, int uploadBytes, double allowanceSeconds, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out object? job, out double estimatedSeconds) {
+        // SdfGpuWork.UploadCopyBytesPerSecond, so a whole allowance never binds it. While work is queued it is cut to
+        // the bytes whose copy fits what is left, and waits when not even the least job's does.
+        public bool TryTake(SdfWorldTables current, int uploadBytes, SdfGpuWorkAllowance allowance, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out object? job, out double estimatedSeconds) {
+            if (allowance.Queued) {
+                if (!allowance.Admits(seconds: SdfGpuWork.UploadSecondsOf(bytes: SdfGpuWork.UploadChunkBytes))) {
+                    job = null;
+                    // Owed words ask the service to hold room for the least landing.
+                    estimatedSeconds = ((current.m_meshesOwed.Count > 0) ? SdfGpuWork.UploadSecondsOf(bytes: SdfGpuWork.UploadChunkBytes) : 0d);
+                    return false;
+                }
+                uploadBytes = ((int)Math.Max(val1: SdfGpuWork.UploadChunkBytes, val2: Math.Min(val1: (allowance.Seconds * SdfGpuWork.UploadCopyBytesPerSecond), val2: uploadBytes)));
+            }
             if (current.TryTakeLanding(job: out var landing, uploadBytes: uploadBytes)) {
                 job = landing;
                 estimatedSeconds = SdfGpuWork.UploadSecondsOf(bytes: (((long)landing.Words) * sizeof(uint)));

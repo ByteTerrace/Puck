@@ -104,7 +104,9 @@ internal sealed class WorldFrameLoadSource(Func<IPresentTimingFeedback?> present
             timed = true;
 
             if (node.TryGetRenderGrid(grid: out var grid, submission: submission)) {
-                m_gpu.Add(grid: grid, load: (node.LatestTimingMilliseconds / 1000d), render: submission, view: view);
+                var (start, end) = node.LatestTimingSpan;
+
+                m_gpu.Add(grid: grid, load: (node.LatestTimingMilliseconds / 1000d), queueEnd: (end / 1000d), queueStart: (start / 1000d), render: submission, view: view);
             }
         }
 

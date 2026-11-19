@@ -18,8 +18,17 @@ public sealed partial class RenderGraphRuntime {
     private int[] m_staleFrames = [];
     // The reason each instance's standing was last narrated, by instance name: a narration lasts from its start until the
     // instance is current again, so a reconfiguration that renumbers the instances or resets their standing neither
-    // repeats a refusal that still holds nor hides its clearing. Reconfiguration forgets the instances it removes.
+    // repeats a refusal that still holds nor hides its clearing. Reconfiguration forgets the instances it removes. A reader
+    // of a refused or waiting instance takes on that instance's reason word for word (MarkReadStale), so a reason is told
+    // once while any instance holds it, and cleared once no instance does.
     private readonly Dictionary<string, string> m_narrated = new(comparer: StringComparer.Ordinal);
+
+    /// <summary>Gets or sets where the runtime narrates an instance's refusal, a wait that outlasts
+    /// <see cref="StallFrames"/>, their clearing and a failed capture, one line each; <see langword="null"/>, the
+    /// default, narrates on standard error as it stands when each line is written.</summary>
+    public TextWriter? Narration { get; set; }
+
+    private void Narrate(string line) => (Narration ?? Console.Error).WriteLine(value: line);
 
     /// <summary>The render attempts in a row an instance may wait without showing its frame before the runtime narrates
     /// why: about thirty seconds at the simulation's default rate, far past a cold boot's pipeline builds.</summary>
@@ -108,9 +117,10 @@ public sealed partial class RenderGraphRuntime {
             m_narrated.Remove(
                 key: m_set.Instances[index].Name,
                 value: out var cleared
-            )
+            ) &&
+            !m_narrated.ContainsValue(value: cleared)
         ) {
-            Console.Error.WriteLine(value: $"[render-graph] cleared: {cleared}");
+            Narrate(line: $"[render-graph] cleared: {cleared}");
         }
     }
     // Drops the narrations of instances the set no longer holds; nothing renders them, so nothing would clear them.
@@ -131,8 +141,10 @@ public sealed partial class RenderGraphRuntime {
             (refused || (++m_staleFrames[index] > StallFrames)) &&
             !(m_narrated.TryGetValue(key: name, value: out var narrated) && string.Equals(a: reason, b: narrated, comparisonType: StringComparison.Ordinal))
         ) {
+            var told = m_narrated.ContainsValue(value: reason);
+
             m_narrated[name] = reason;
-            Console.Error.WriteLine(value: $"[render-graph] {(refused ? "refused" : $"not rendered for {m_staleFrames[index]} attempts")}: {reason}");
+            if (!told) { Narrate(line: $"[render-graph] {(refused ? "refused" : $"not rendered for {m_staleFrames[index]} attempts")}: {reason}"); }
         }
     }
     // A paused node presents its exact previous image on purpose. Its readers consume that standing publication, not

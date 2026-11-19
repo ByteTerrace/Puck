@@ -52,6 +52,9 @@ internal sealed class UploadModelGpu :
     private Predicate<(nint CommandBuffer, nint Buffer)>? m_ofResetCommandBuffer;
     private nint m_resetCommandBuffer;
     private readonly nint[] m_boundSets = new nint[8];
+    // The pass whose debug group is open, and the set each pass last bound at each group (BoundSetOf).
+    private string? m_pass;
+    private readonly Dictionary<(string Part, uint Group), nint> m_passSets = [];
 
     private nint m_boundPipeline;
     private nint m_boundSet;
@@ -145,10 +148,19 @@ internal sealed class UploadModelGpu :
     /// <param name="group">The group.</param>
     /// <returns>The set's handle.</returns>
     public nint BoundSet(uint group) => m_boundSets[group];
+    /// <summary>Returns the set a pass most recently bound at a group, the pass named by the last segment of its debug
+    /// group's label (a render graph pass's <c>package$part</c>), so a law reads one pass's block whatever passes record
+    /// after it.</summary>
+    /// <param name="part">The pass's part name.</param>
+    /// <param name="group">The group.</param>
+    /// <returns>The set's handle.</returns>
+    /// <exception cref="KeyNotFoundException">No pass of that name has bound a set at the group.</exception>
+    public nint BoundSetOf(string part, uint group) => m_passSets[(part, group)];
 
-    /// <summary>Gets or sets the list every set bind is appended to, in recording order, as its group and set, or
+    /// <summary>Gets or sets the list every set bind is appended to, in recording order, as its group, its set and the part
+    /// of the pass whose debug group it was bound in (BoundSetOf), or
     /// <see langword="null"/>, the default, to record none.</summary>
-    public List<(uint Group, nint Set)>? SetBinds { get; set; }
+    public List<(uint Group, nint Set, string? Part)>? SetBinds { get; set; }
 
     /// <summary>Gets or sets how many fenced submissions pass before the next one throws before any command reaches the
     /// queue, or -1, the default, for none.</summary>
@@ -288,8 +300,8 @@ internal sealed class UploadModelGpu :
         _ = m_bufferReadsOrdered.RemoveWhere(match: (m_ofResetCommandBuffer ??= (entry => (entry.CommandBuffer == m_resetCommandBuffer))));
     }
     void IGpuRecorder.EndCommandBuffer(nint commandBufferHandle) { }
-    void IGpuRecorder.BeginDebugGroup(nint commandBufferHandle, string label) { }
-    void IGpuRecorder.EndDebugGroup(nint commandBufferHandle) { }
+    void IGpuRecorder.BeginDebugGroup(nint commandBufferHandle, string label) => m_pass = label[(label.LastIndexOf(value: '$') + 1)..];
+    void IGpuRecorder.EndDebugGroup(nint commandBufferHandle) => m_pass = null;
     void IGpuRecorder.BeginRenderPass(nint commandBufferHandle, IGpuFramebuffer framebuffer, GpuPixelRect? area) { }
     void IGpuRecorder.EndRenderPass(nint commandBufferHandle) { }
     void IGpuRecorder.BindVertexBuffer(nint commandBufferHandle, nint bufferHandle, ulong sizeBytes, uint strideBytes) { }
@@ -340,7 +352,8 @@ internal sealed class UploadModelGpu :
     void IGpuRecorder.BindDescriptorSet(nint commandBufferHandle, GpuBindPoint bindPoint, nint pipelineLayoutHandle, uint group, nint descriptorSetHandle) {
         m_boundSet = descriptorSetHandle;
         m_boundSets[group] = descriptorSetHandle;
-        SetBinds?.Add(item: (group, descriptorSetHandle));
+        if (m_pass is { } pass) { m_passSets[(pass, group)] = descriptorSetHandle; }
+        SetBinds?.Add(item: (group, descriptorSetHandle, m_pass));
     }
     void IGpuRecorder.BindPipeline(nint commandBufferHandle, GpuBindPoint bindPoint, nint pipelineHandle) => m_boundPipeline = pipelineHandle;
     void IGpuRecorder.Dispatch(nint commandBufferHandle, uint groupCountX, uint groupCountY, uint groupCountZ) {

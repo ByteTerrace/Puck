@@ -216,6 +216,104 @@ public sealed partial class SdfWorldTablesWorkLawTests {
         }
     }
 
+    [Fact]
+    public void AJobIsAdmittedOnlyWhenItAndTheJobsQueuedAheadOfTheFrameFitTheFramesAllowance() {
+        using var rig = new Rig(holdFences: true);
+
+        rig.Render();
+        var work = rig.Engine.GpuWork;
+        var budget = rig.Engine.Grant.Selector.Work;
+        // Each job is priced past half the allowance: the credit would let two fly, and four slots are free.
+        var client = new PricedClient(gpu: rig.Gpu.Services, seconds: (0.55 * budget.FrameAllowanceSeconds)) { Remaining = 3 };
+
+        static long Holds(SdfGpuWork work) => long.Parse(s: System.Text.RegularExpressions.Regex.Match(input: work.Describe(), pattern: "deadline-holds:([0-9]+),").Groups[1].Value, provider: System.Globalization.CultureInfo.InvariantCulture);
+        var held = Holds(work: work);
+
+        work.Add(client: client);
+        try {
+            work.Pump(tables: rig.Engine);
+            // One job is queued ahead of the next frame; the second waits for it rather than overrun the deadline.
+            Assert.Equal(1, work.InFlight);
+            Assert.Equal(2, client.Remaining);
+            Assert.True(condition: budget.Allowance.Queued);
+            Assert.Equal(expected: (0.55 * budget.FrameAllowanceSeconds), actual: budget.QueuedSeconds, precision: 12);
+            Assert.Equal(expected: (held + 1L), actual: Holds(work: work));
+            work.Pump(tables: rig.Engine);
+            Assert.Equal(1, work.InFlight);
+
+            // Once it completes its charge leaves the queue and the next is taken.
+            foreach (var fence in rig.Gpu.SubmittedFences) { fence.Completed = true; }
+            work.Pump(tables: rig.Engine);
+            _ = Assert.Single(collection: client.Answers);
+            Assert.Equal(1, work.InFlight);
+            Assert.Equal(1, client.Remaining);
+            Assert.Equal(expected: (0.55 * budget.FrameAllowanceSeconds), actual: budget.QueuedSeconds, precision: 12);
+            Assert.Contains("over-deadline:0,", work.Describe());
+        } finally { client.ReleaseAnswers(); }
+        work.Dispose();
+        // A disposed service's abandoned job leaves the queue too.
+        Assert.Equal(expected: 0.0, actual: budget.QueuedSeconds);
+        Assert.False(condition: budget.Allowance.Queued);
+    }
+
+    [Fact]
+    public void AClientWhoseJobWaitsForRoomKeepsItsTurnOverAnotherCutToWhatIsLeft() {
+        using var rig = new Rig(holdFences: true);
+
+        rig.Render();
+        using var work = new SdfGpuWork(device: rig.Gpu, name: "law");
+        // The small client is a bake cut to whatever is left; the large one a query cut to the whole allowance.
+        var allowance = work.FrameAllowanceSeconds;
+        var small = new PricedClient(gpu: rig.Gpu.Services, seconds: (0.05 * allowance)) { Remaining = 100 };
+        var large = new PricedClient(gpu: rig.Gpu.Services, seconds: (0.97 * allowance)) { Remaining = 2 };
+
+        work.Add(client: small);
+        work.Add(client: large);
+        try {
+            work.Pump(tables: rig.Engine);
+            // The small job flies; the large one does not fit what is left and holds its turn, so no more small jobs take
+            // the room it waits for although three slots are free.
+            Assert.Equal((1, 99, 2), (work.InFlight, small.Remaining, large.Remaining));
+            Assert.Contains("deadline-holds:1,", work.Describe());
+
+            foreach (var fence in rig.Gpu.SubmittedFences) { fence.Completed = true; }
+            work.Pump(tables: rig.Engine);
+            // With the queue empty the large job is taken first, and the small one now waits behind it in turn.
+            Assert.Equal((1, 99, 1), (work.InFlight, small.Remaining, large.Remaining));
+        } finally {
+            small.ReleaseAnswers();
+            large.ReleaseAnswers();
+        }
+    }
+    // A client whose every job is priced at a fixed GPU time and copies four bytes back, which takes no job the allowance
+    // does not admit.
+    private sealed class PricedClient(GpuDeviceServices gpu, double seconds) : ISdfGpuWorkClient {
+        private readonly IGpuBuffer m_source = gpu.BufferFactory.CreateDeviceLocal(sizeBytes: 4, usage: GpuBufferUsage.Storage, name: new GpuObjectName(owner: "law", part: "priced"));
+
+        public List<SdfGpuWorkReadback> Answers { get; } = [];
+        public GpuQueueCategory Category => GpuQueueCategory.Bake;
+        public GpuMemoryBytes OwnedBytes => default;
+        public int Remaining { get; set; }
+
+        public bool TryTake(SdfWorldTables tables, int uploadBytes, SdfGpuWorkAllowance allowance, [NotNullWhen(true)] out object? job, out double estimatedSeconds) {
+            estimatedSeconds = ((Remaining == 0) ? 0.0 : seconds);
+            job = null;
+            // A job that does not fit is priced, so the service holds room for it.
+            if ((Remaining == 0) || !allowance.Admits(seconds: seconds)) { return false; }
+            Remaining--;
+            job = new object();
+            return true;
+        }
+        public void Record(object job, in SdfGpuWorkRecording recording) => recording.CopyToReadback(m_source, 4);
+        public void Complete(object job, SdfGpuWorkReadback readback) => Answers.Add(item: readback);
+        public void Abandon(object job) => Remaining++;
+        public void Dispose() => m_source.Dispose();
+        public void ReleaseAnswers() {
+            foreach (var answer in Answers) {
+                try { answer.Release(); } catch (InvalidOperationException) { }
+            }
+        }
+    }
     // A client whose every job holds one device-local buffer of the slot and copies four bytes of it back; a job handed
     // back is offered again.
     private sealed class HoldingClient(ulong scratchBytes) : ISdfGpuWorkClient {
@@ -225,7 +323,7 @@ public sealed partial class SdfWorldTablesWorkLawTests {
         public GpuMemoryBytes OwnedBytes => default;
         public int Remaining { get; set; }
 
-        public bool TryTake(SdfWorldTables tables, int uploadBytes, double allowanceSeconds, [NotNullWhen(true)] out object? job, out double estimatedSeconds) {
+        public bool TryTake(SdfWorldTables tables, int uploadBytes, SdfGpuWorkAllowance allowance, [NotNullWhen(true)] out object? job, out double estimatedSeconds) {
             estimatedSeconds = 0.0;
             job = null;
             if (Remaining == 0) { return false; }
