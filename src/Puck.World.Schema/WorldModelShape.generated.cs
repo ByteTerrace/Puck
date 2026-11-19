@@ -5251,8 +5251,8 @@ public static partial class WorldModelShape {
         T(typeof(global::Puck.World.WorldRenderIndirectBudget), true, JsonTypeInfoKind.Object, null,
             [],
             [
-                M("relight", typeof(global::System.Nullable<global::System.Int32>), typeof(global::Puck.World.WorldRenderIndirectBudget), "Relight", Read | Write, static value => ((global::Puck.World.WorldRenderIndirectBudget)value).Relight),
-                M("trace", typeof(global::System.Nullable<global::System.Int32>), typeof(global::Puck.World.WorldRenderIndirectBudget), "Trace", Read | Write, static value => ((global::Puck.World.WorldRenderIndirectBudget)value).Trace),
+                M("relightPerSecond", typeof(global::System.Nullable<global::System.Int32>), typeof(global::Puck.World.WorldRenderIndirectBudget), "RelightPerSecond", Read | Write, static value => ((global::Puck.World.WorldRenderIndirectBudget)value).RelightPerSecond),
+                M("tracePerSecond", typeof(global::System.Nullable<global::System.Int32>), typeof(global::Puck.World.WorldRenderIndirectBudget), "TracePerSecond", Read | Write, static value => ((global::Puck.World.WorldRenderIndirectBudget)value).TracePerSecond),
                 M("age", typeof(global::System.Nullable<global::System.Single>), typeof(global::Puck.World.WorldRenderIndirectBudget), "Age", Read | Write, static value => ((global::Puck.World.WorldRenderIndirectBudget)value).Age),
             ],
             []),

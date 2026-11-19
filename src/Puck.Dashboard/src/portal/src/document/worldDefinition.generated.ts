@@ -11219,7 +11219,7 @@ export type WorldRenderIndirect = {
    */
   tier?: SdfIndirectTier;
   /**
-   * The irradiance work each frame grants the volume and the lighting age it reports past; absent bounds nothing.
+   * The irradiance work each second grants the volume and the lighting age it reports past; absent bounds nothing.
    */
   budget?: WorldRenderIndirectBudget | null;
   /**
@@ -11245,13 +11245,13 @@ export type WorldRenderIndirectApply = {
 
 export type WorldRenderIndirectBudget = {
   /**
-   * The probes relit per frame, at least one.
+   * The probes relit each second, at least one.
    */
-  relight?: number | null;
+  relightPerSecond?: number | null;
   /**
-   * The probes whose hits are traced per frame, at least one.
+   * The probes whose hits are traced each second, at least one.
    */
-  trace?: number | null;
+  tracePerSecond?: number | null;
   /**
    * The lighting age, in seconds, past which the volume reports it is behind; positive.
    */

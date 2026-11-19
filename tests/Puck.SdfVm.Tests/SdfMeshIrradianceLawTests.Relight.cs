@@ -43,22 +43,25 @@ public sealed partial class SdfMeshIrradianceLawTests {
         return words;
     }
 
-    /// <summary>A budget of one trace a frame, spent, leaves the worker waiting for the next grant rather than listing
+    /// <summary>A budget of a few traces a second, spent, leaves the worker waiting for the next grant rather than listing
     /// the unfunded window again and again under either presentation clock; an explicit lighting-converged frame then
     /// takes over what it had left and renders the window a fresh converged frame does.</summary>
     [InlineData(false)]
     [InlineData(true)]
     [Theory]
     public async Task ASpentTraceBudgetWaitsUnderEitherClockUntilLightingConverges(bool tickLocked) {
-        var frame = Frame() with { TickLocked = tickLocked, IndirectBounces = 0, IndirectBudget = new SdfIndirectBudget(Relight: 0, Trace: 1, Age: 0f) };
+        const int PerSecond = 25;
+        var frame = Frame() with { TickLocked = tickLocked, IndirectBounces = 0, IndirectBudget = new SdfIndirectBudget(RelightPerSecond: 0, TracePerSecond: PerSecond, Age: 0f) };
         var volume = Volume();
+        var clock = System.Diagnostics.Stopwatch.StartNew();
 
         for (var stage = 0; (stage < 20); stage++) {
             _ = volume.Stage(bakePending: false, frame: frame, tier: SdfIndirectTier.Medium, write: _ => { });
             Thread.Sleep(millisecondsTimeout: 20);
         }
-        // Each frame grants one trace, held to two frames' worth: twenty frames fund at most 21.
-        Assert.InRange(actual: volume.Counters.Read(kind: SdfMeshIrradiance.Traced), low: 1L, high: 21L);
+        // The grants fund the rate for the wall time the frames spanned, and a sixtieth of a second for the first: no
+        // more traces than that, whatever the frames' count.
+        Assert.InRange(actual: volume.Counters.Read(kind: SdfMeshIrradiance.Traced), low: 1L, high: (long)Math.Ceiling(a: (PerSecond * (clock.Elapsed.TotalSeconds + SdfMeshIrradiance.FirstGrantSeconds))));
 
         var words = Array.Empty<uint>();
         var locked = Task.Run(() => volume.Stage(bakePending: false, frame: (frame with { ConvergesLighting = true }), tier: SdfIndirectTier.Medium, write: memory => words = memory.ToArray()), TestContext.Current.CancellationToken);

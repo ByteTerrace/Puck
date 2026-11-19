@@ -341,6 +341,15 @@ laws exercise that boundary.
 - **Groups are planned in one place.** `SdfMeshBakeGroup.Plan` forms a
   program's groups, geometry and pose rows; the bake and the mesh audit both
   call it, so a change to grouping changes both.
+- **A group's bound stops at the frame's far distance.** The plan clamps each
+  instance's bound to a cube of the far distance about the instance's centre
+  (`SdfMeshBakeGroup.Clamped`), and a world that authors no `render.farDistance`
+  takes `SdfFrame.DefaultFarDistance`, 40 m. A creation placed at the origin
+  whose shapes stand hundreds of metres out (a valley wall sector) then bakes
+  empty on every backend and in `puck mesh audit --cpu` alike, and its entry in
+  the done line's `empty=[...]` says `bound clamped to the far distance`. A
+  scratch world cut from the debug world keeps the debug world's
+  `render.farDistance`, or its far terrain is no evidence about the bake.
 - **A static copy is one group.** Its shapes bake as their union
   (`SdfInstanceRange.BakesWithPrevious`) on a cubic lattice past the per-axis
   cap with per-shape refinement regions (`SdfMeshPathBake.UnionFinal`); its
@@ -439,7 +448,7 @@ laws exercise that boundary.
   creation's each on its own slot, before any text-coupled instance opens
   (`WorldCreationInstances.Emit`). A glass draw (`SdfMeshDraw.Glass`) is drawn by the
   glass pass alone and stays out of the mesh pass, the cascades and the
-  irradiance scene (`SdfMeshIrradianceScene.IsStatic`).
+  irradiance scene (`SdfMeshDraw.IsStatic`).
 - **Every shape declares its spacing by one rule.** `WorldShapeDetail.Of`
   serves a static stamp's shape, a pooled blend group's part and an ungrouped
   pooled shape alike, feeding `SdfInstanceRange.Detail` and
@@ -1011,8 +1020,8 @@ laws exercise that boundary.
   answered when it completes and the next taken when it is ready, whatever
   the frame rate. Such a step takes no job within `SdfGpuWork.HostBudget` of
   the wait's deadline. The budget is
-  `SdfGpuWork.GpuShare` of the GPU's time, charged by each job's own
-  timestamps (a client's estimate, `NanosecondsPerTap`, until they land or on a
+  the share of the GPU's time the frame leaves free (`SdfGpuWorkBudget.Share`, at most `SdfGpuWork.GpuShare`), charged by each job's own
+  timestamps (the bake's mean-following rate, from a prior of `NanosecondsPerTap`, until they land or on a
   queue without them), banking at most a short spell while idle. A job binds the
   latest upload's World set only while nothing it binds has moved since that
   upload and the tables' uploaded program is the bake's

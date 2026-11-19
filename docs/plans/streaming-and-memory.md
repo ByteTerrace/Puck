@@ -1128,7 +1128,7 @@ the region reads a mesh's words again through the hold for a flush, a
 relocation, a moved mesh and another residency's landing
 (`SdfWorldTables.MeshWordsOf`); the lighting's trace scene claims every static
 mesh and builds its CPU hierarchy from positions and level-zero indices,
-leaving dynamic and glass meshes out (`SdfMeshIrradianceScene.IsStatic`); a
+leaving dynamic and glass meshes out (`SdfMeshDraw.IsStatic`); a
 renumbered variant reads the materials; a device loss lands everything again.
 A hold can also run a restore on its caller or wait for one (the restore's
 `NeedResident`). The mesh library forgets a mesh a residency still holds, so a
@@ -1992,7 +1992,7 @@ first is built.
   form is confined to the time the frame thread is busy or blocked in a
   driver call, which is under a frame.
 - A second queue would let the driver's scheduler interleave a long job with
-  the frame, in place of cutting jobs to `SdfGpuWork.FrameShareSeconds`. That
+  the frame, in place of cutting jobs to `SdfGpuWorkBudget.FrameAllowanceSeconds`. That
   is a rendering gain, not a servicing one, and it is what would justify the
   cost above; the leases are what such a queue needs, so it moves the
   service's submit and keeps the rest.

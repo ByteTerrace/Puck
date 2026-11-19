@@ -376,11 +376,13 @@ far cascade, authored per device row (`WorldQualityPreset.DistantShadows`) and a
 carried on `SdfFrame.DistantShadows`; the [handbook](../../../docs/rendering/sdf/handbook/frame-rendering.md#the-distant-shadow-map)
 owns the behaviour. Its invariant is that a held map draws only what cannot move while it stands: the
 `shadow-distant` pass stages `staticOnly`, so the selection kernel rejects every record carrying
-`SdfMeshRecord.DynamicFlag` (set from `SdfMeshIrradianceScene.IsStatic` in `SdfMeshRegion.WriteDraw`), and its
+`SdfMeshRecord.DynamicFlag` (set from `SdfMeshDraw.IsStatic` in `SdfMeshRegion.WriteDraw`, derived so a skinned or
+displaced draw, which moves without its record changing, is never static), and its
 signature (`SdfWorldPasses.DistantSignatureOf`) folds `SdfWorldTables.StaticDrawRevision`, which only
 `StageChangedDraws` and `Unname` advance. A new path that changes a static draw's record outside those two leaves a
 stale map standing. Readers take the camera through `CascadesOf`, which reads the committed one
-(`SubmittedDistant`) or none; an entry without a committed camera writes no role (`SdfFrameBlock.WriteMeshShadows`
+(`SubmittedDistant`, which like every package commit runs only once the frame's submission reached the queue:
+`ShaderPipelineRenderNode.CommitPackages`) or none; an entry without a committed camera writes no role (`SdfFrameBlock.WriteMeshShadows`
 through `SdfMeshShadowCascades.Holds`), and the surface pass reads no optical term for it. Because its count makes
 the set four long while the secondary entry may be empty, test entries with `Holds`, never `index < Count`.
 
@@ -483,7 +485,7 @@ add the row you found.
 | Put the world's placements into the program a frame draws | `WorldPlacementStamper` (static placements), `WorldCreationInstances` (animated, attached and inhabited creations), `CreationStampEmitter` (a creation's stamp); one shape's chain, field ops, panel, relief and trims are `ShapeEmission.Emit` for both, each path supplying only its `IShapeEmissionFrame` | `src/Puck.World.Client`, `src/Puck.World.Authoring/Authoring` |
 | Decide when a frame rebuilds and how it presents | `WorldSceneEmitter` (the composed revision), `WorldFramePresenter` (the `ISdfFrameSource` that delivers it) | `src/Puck.World.Client` |
 | Add a camera or another view of the world | the view types in `src/Puck.SdfVm/Views`, `WorldViewInstances` | [motion and views](../../../docs/rendering/sdf/handbook/motion-and-views.md) |
-| Run GPU work off the frame (a bake, a relight) | `SdfGpuWork` and its clients, `SdfMeshBakeGpuWork`. A client's per-slot buffers come from the recording (`SdfGpuWorkRecording.HostBuffer`, `DeviceBuffer`), never the buffer factory: that door reserves them (`SdfGpuWorkHold`) | `src/Puck.SdfVm`; [the bake's dispatch](#which-dispatch-owns-the-code) |
+| Run GPU work off the frame (a bake, a relight) | `SdfGpuWork` and its clients, `SdfMeshBakeGpuWork`. A client's per-slot buffers come from the recording (`SdfGpuWorkRecording.HostBuffer`, `DeviceBuffer`), never the buffer factory: that door reserves them (`SdfGpuWorkHold`). A client cuts each job to the allowance its take is handed (`SdfGpuWorkBudget.FrameAllowanceSeconds`, the share the frame leaves free, which `WorldBackgroundAllowance` feeds from every node's timestamps) at its kind's `SdfGpuWorkRate`; never a fixed share | `src/Puck.SdfVm`, `src/Puck.World/WorldBackgroundAllowance.cs`; [the bake's dispatch](#which-dispatch-owns-the-code) |
 | Have the frame thread take work up while it waits between frames, or wake it for a GPU completion | `HostWaits.Serve` (a `WaitService`, served by `HostWaits.Pace`) and `IGpuSubmissionFence.SignalOnCompletion`; never a poll loop or a thread of your own that records. A wait inside the frame's open batch (a residency's staging, `SdfGpuWork.Drive`) hands its submissions off first (`IGpuSubmissionFence.HandOff`), or the completion it sleeps on never comes before the flush | `src/Puck.Abstractions/Waiting`, `src/Puck.Abstractions/Gpu/Device` |
 | Compute irradiance, and check it on the CPU | `SdfMeshIrradiance`, whose CPU reference shares one probe lookup with the relight and the views shader | `src/Puck.SdfVm`; [mesh GI](references/mesh-gi.md) |
 | Meter a view's picture for its exposure (histogram, percentiles, dead band, cut snap) | the composite's histogram (`passes/sdf-composite.comp.hlsl`), read back by `SdfSkyRecorder`, reduced by `SdfExposure.Meter`, followed by `SdfViewExposures` | `src/Puck.SdfVm`, `src/Puck.SignedDistance`; [the decision](../../../docs/decisions/rendering.md#lights-screens-and-the-camera-are-photometric) |

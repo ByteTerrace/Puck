@@ -439,7 +439,7 @@ public sealed record WorldNestedViewQuality(
 /// <param name="Bounces">Feedback sweeps after the direct sweep, capped by the selected tier. Absent uses that tier's limit.</param>
 /// <param name="Apply">Bindable receiver-only controls. They do not change the traced radiance.</param>
 /// <param name="Tier">The boot tier, Medium by default. The live session lever and selected quality preset override it.</param>
-/// <param name="Budget">The irradiance work each frame grants the volume and the lighting age it reports past; absent
+/// <param name="Budget">The irradiance work each second grants the volume and the lighting age it reports past; absent
 /// bounds nothing.</param>
 /// <param name="LightingGrid">Fixed angular and radiometric grids for indirect captures; absent leaves them continuous.</param>
 public sealed record WorldRenderIndirect(
@@ -457,14 +457,14 @@ public sealed record WorldRenderIndirectLightingGrid(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? DirectionDegrees = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? Radiance = null);
 /// <summary>The irradiance volume's budget: a light change costs a relight of the probes' cached hits and a geometry
-/// change costs a trace, each granted per rendered frame, and overload lengthens the lighting's age rather than the
-/// frame. Every member is optional; an absent one leaves that part unbounded.</summary>
-/// <param name="Relight">The probes relit per frame, at least one.</param>
-/// <param name="Trace">The probes whose hits are traced per frame, at least one.</param>
+/// change costs a trace, each granted for each second of wall time whatever the frame rate, and overload lengthens the
+/// lighting's age rather than the frame. Every member is optional; an absent one leaves that part unbounded.</summary>
+/// <param name="RelightPerSecond">The probes relit each second, at least one.</param>
+/// <param name="TracePerSecond">The probes whose hits are traced each second, at least one.</param>
 /// <param name="Age">The lighting age, in seconds, past which the volume reports it is behind; positive.</param>
 public sealed record WorldRenderIndirectBudget(
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? Relight = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? Trace = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? RelightPerSecond = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? TracePerSecond = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? Age = null);
 /// <summary>Gains applied once where each source enters the traced light.</summary>
 /// <param name="Lights">Explicit diffuse light gain.</param>
