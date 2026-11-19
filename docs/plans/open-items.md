@@ -105,10 +105,11 @@ The next lead rewrites this section when it hands off in turn.
   ([the register](../decisions/runtime-and-delivery.md#vendor-binaries)); the four engine questions of the
   rendering plan ([what the owner settled](rendering-research.md#what-the-owner-settled-1));
   shared products in the [decision register](../decisions/engine-design.md#a-derived-product-is-a-cache-never-the-truth).
-- **Release rehearsal.** Release Azure dispatched without deploying on
-  `lead/authoring` now builds every artifact. Its last fixes (retrying
-  downloads, the AGB toolchain, the TraceEvent version, the registry) are on
-  the branch; read the latest dispatched run before the owner pushes `main`.
+- **Release rehearsal.** The rehearsal's fixes (retrying downloads, the AGB
+  toolchain, the TraceEvent version, the registry) are on `main`, and each
+  push to `main` runs Release Azure. Read the latest run on `main` before the
+  owner pushes `lead/rendering`'s work there, and fix what it shows on
+  `lead/rendering`.
 - **Before the owner pushes `main`:** the owner deferred the
   [security review](#security-review)'s write-door leaks for this push, as
   AGENTS.md allows for a high finding; they stay high work, ranked first in
@@ -338,8 +339,8 @@ engineering call is the lead's and sits in its packet as a "Decide" line.
 
 Owner-only actions:
 
-- **Pushing `main`**, which deploys to Azure. `lead/authoring` is hundreds of
-  commits ahead. Push once the read-door leaks ([Next](#next), line 1) and the
+- **Pushing `main`**, which deploys to Azure. `lead/rendering` holds the
+  rendering wave's work. Push once the read-door leaks ([Next](#next), line 1) and the
   Azure release's causes ([delivery](#delivery-launcher-and-ci)) are fixed and
   the milestone's riskiest areas have had a fresh fix pass (AGENTS.md); red
   tests hold nothing back while test requirements are suspended.
