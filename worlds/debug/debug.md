@@ -212,8 +212,10 @@ crevasses clustered where the ice bends; Raven Glacier's crevasses (Wikimedia
 Commons, Frank Kovalchek) for white sun planes, saturated blue shade faces and
 navy slots, and dirt where the ice meets rock; Overwatch 2's Antarctic
 Peninsula (Blizzard, Xbox Wire) for ice built of chunky bevelled blocks with
-snow only on their up-facing planes. The ice holds still: nothing on it flows
-like water; the lake is flat and
+snow only on their up-facing planes; a meltwater stream on the Great Aletsch
+Glacier (Wikimedia Commons, Arkelin) for a smooth melt channel of opaque jade
+water churning white where it bends. The ice holds still: only its melt channel
+runs, and it meets the lake in churn; the lake is flat and
 reflective, clear over its near stones, turquoise in the middle and teal deep
 (panel 2); the falls are a continuous sheet with a transparent core, white
 edges, spray at the impact and foam carried downstream (panel 3); the river and
