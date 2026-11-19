@@ -121,6 +121,25 @@ test "a beat that passes with no press is a miss for its step" {
   }
 }
 
+test "two presses inside one step are each judged, in the order they happened" {
+  when {
+    ticks 4
+    seat1: player.signal keyboard.y press
+    ticks 9
+    seat1: player.signal keyboard.j press at:0.001
+    seat1: player.signal keyboard.j release at:0.002
+    seat1: player.signal keyboard.j press at:0.003
+    ticks 3
+  }
+  expect {
+    judgeGrade1[0] == 3
+    judge.step1 == 1
+    judge.misses1 == 1
+    judge.strength1 == 2
+    judge.status1 == 0
+  }
+}
+
 test "a vent pressed with the instrument down is not judged" {
   when {
     ticks 4

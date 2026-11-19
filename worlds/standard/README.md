@@ -105,7 +105,8 @@ press in a seat row's `<button>Edge` and `<button>Down` cells (`seatPress`), whi
 `rhythm.puck` is a library: `rhythmJudge(...)` grades each seat's presses against its world's score and tracks the
 phrase they play (a list of steps, each a note on a beat; a press is a channel that means one note), with windows, a
 strength that a miss lowers by one, a run of misses that ends the phrase and a miss for a beat that passes unplayed,
-all as rows and rules a world refines by id. It names no
+all as rows and rules a world refines by id. One `forEach: $inputEvents` rule a seat judges every press a step admitted,
+oldest first, up to `pressesPerStep`. It names no
 instrument, so a dance's moves are the same call with different presses. `instrument.puck` is a library built on it:
 `instrumentPlay(...)` authors the breath and four vent channels, the binding page that opens while both triggers are
 squeezed, the rules that raise and lower the instrument, the `instrumentBeat` beat-pulse state and its `haptics` row

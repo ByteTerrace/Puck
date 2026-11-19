@@ -172,49 +172,6 @@ public static partial class RuleCompiler {
         }
         return compiled;
     }
-    /// <summary>Returns the compiled rules no group claims, in the order they were compiled.</summary>
-    /// <param name="rules">The compiled rules, in the order <see cref="CompileAll"/> produced them — the order
-    /// <see cref="CompiledRuleGroup.Members"/> indexes.</param>
-    /// <param name="groups">The compiled groups over those rules.</param>
-    /// <returns>The unclaimed rules.</returns>
-    /// <remarks>A claimed rule runs only under its group's pass or cursor, so a host evaluates this array directly
-    /// and the group array through <c>EvaluateGroups</c>; evaluating the whole rule array beside the groups would
-    /// fire every member twice per tick.</remarks>
-    public static CompiledRule[] Ungrouped(CompiledRule[] rules, CompiledRuleGroup[] groups) {
-        ArgumentNullException.ThrowIfNull(argument: groups);
-        ArgumentNullException.ThrowIfNull(argument: rules);
-
-        if (groups.Length == 0) {
-            return rules;
-        }
-
-        var claimed = new bool[rules.Length];
-        var count = rules.Length;
-
-        foreach (var group in groups) {
-            foreach (var member in group.Members) {
-                if (
-                    (((uint)member) < ((uint)claimed.Length)) &&
-                    !claimed[member]
-                ) {
-                    claimed[member] = true;
-                    count--;
-                }
-            }
-        }
-
-        var unclaimed = new CompiledRule[count];
-        var next = 0;
-
-        for (var index = 0; (index < rules.Length); index++) {
-            if (!claimed[index]) {
-                unclaimed[next++] = rules[index];
-            }
-        }
-
-        return unclaimed;
-    }
-
     private static CompiledRuleGroup CompileGroup(RuleGroupDeclaration group, IReadOnlyList<CompiledRule> rules, IReadOnlyDictionary<string, int> byRule, Dictionary<string, string> claimed, RuleCompileContext context) {
         var name = group.Name.Value;
 

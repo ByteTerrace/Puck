@@ -154,10 +154,12 @@ wherever you persist the latch.
 ## Compile and run groups from C#
 
 `RuleCompiler.CompileGroups` compiles `RuleGroupDeclaration` records against an
-already compiled rule array. `RuleCompiler.Ungrouped` returns the rules no group
-claims. A host evaluates that array directly and the groups through
-`RuleEvaluator.EvaluateGroups`. Evaluating the whole rule array beside the
-groups would fire every member twice.
+already compiled rule array. `RuleEvaluationOrder.Of` reads the groups' members
+and its `Ungrouped` returns the rules no group claims. A host evaluates that
+array directly and the groups through `RuleEvaluator.EvaluateGroups`.
+Evaluating the whole rule array beside the groups would fire every member
+twice. The work sheet places each line by the same order object, so it cannot
+disagree with the host about which rule runs where.
 
 ```csharp
 RuleGroupDeclaration turn = new(
@@ -172,7 +174,7 @@ RuleGroupDeclaration turn = new(
 
 var compiled = RuleCompiler.CompileAll(rules: authored, context: context);
 var groups = RuleCompiler.CompileGroups(groups: [turn], rules: compiled, context: context);
-var ungrouped = RuleCompiler.Ungrouped(rules: compiled, groups: groups);
+var ungrouped = RuleEvaluationOrder.Of(rules: compiled, groups: groups).Ungrouped;
 var progress = new RuleGroupState();
 
 for (var tick = 1UL; tick <= 10UL; tick++)

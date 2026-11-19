@@ -1371,7 +1371,7 @@ public static partial class WorldDefinitionValidator {
                 context: ruleContext,
                 definition: definition,
                 interactions: compiledInteractions,
-                rules: compiledRules
+                order: Puck.State.Rules.RuleEvaluationOrder.Of(groups: compiledGroups, rules: compiledRules)
             );
 
             if (WorldRuleWorkBudget.Refuse(
