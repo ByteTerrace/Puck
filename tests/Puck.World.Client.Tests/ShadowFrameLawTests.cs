@@ -308,16 +308,16 @@ public sealed class ShadowFrameLawTests {
         );
         var client = ClientFixtures.Client(definition: definition);
 
-        client.DeliverDefinition(definition: definition, version: default);
+        client.DeliverDefinition(definition: definition, version: default, stream: default);
         client.DeliverSnapshot(snapshot: new WorldSnapshot(
-            Tick: 0UL, EngineTick: 0UL, Revision: 0, StepTicks: 1UL, Entries: ReadOnlyMemory<EntitySnapshot>.Empty));
+            Tick: 0UL, EngineTick: 0UL, Revision: 0, StepTicks: 1UL, Entries: ReadOnlyMemory<EntitySnapshot>.Empty), stream: default);
         using var resolver = new WorldEnvironmentResolve(domains: new WorldValueDomainGuard());
 
         Assert.Equal(expected: 1, actual: resolver.Resolve(definition: definition, revision: 0, mirror: client.StateMirror).Lights.ShadowSlots[0]);
         client.DeliverState(
             definition: definition,
             version: default,
-            stamp: new WorldStateStamp(Tick: 1UL, EngineTick: 1UL, MovedRows: ReadOnlyMemory<int>.Empty, Everything: true)
+            stamp: new WorldStateStamp(Tick: 1UL, EngineTick: 1UL, MovedRows: ReadOnlyMemory<int>.Empty, Everything: true), stream: default
         );
 
         Assert.Equal(expected: 0f, actual: client.StateMirror.Scalar(delivered: true, fallback: -1f, scalar: weight));
@@ -329,7 +329,7 @@ public sealed class ShadowFrameLawTests {
             StepTicks: 1UL,
             Entries: ReadOnlyMemory<EntitySnapshot>.Empty,
             FieldCells: new[] { new FieldCellDelta(Region: "world", FieldName: "heat", Cell: 0, Field: 0, Raw: Puck.Maths.FixedQ4816.FromDouble(value: 2d).Value) }
-        ));
+        ), stream: default);
 
         Assert.Equal(expected: 2f, actual: client.StateMirror.Scalar(delivered: true, fallback: -1f, scalar: weight));
         Assert.Equal(expected: "field", actual: Assert.Single(collection: Slots(resolver: resolver, tick: 1UL)).Candidate.Name);
@@ -350,7 +350,7 @@ public sealed class ShadowFrameLawTests {
         );
         var client = ClientFixtures.Client(definition: definition);
 
-        client.DeliverDefinition(definition: definition, version: default);
+        client.DeliverDefinition(definition: definition, version: default, stream: default);
         using var resolver = new WorldEnvironmentResolve(domains: new WorldValueDomainGuard());
 
         Assert.Equal(expected: 1, actual: resolver.Resolve(definition: definition, revision: 0, mirror: client.StateMirror).Lights.ShadowSlots[0]);
@@ -359,7 +359,7 @@ public sealed class ShadowFrameLawTests {
             Tick: tick, EngineTick: tick, Revision: 0, StepTicks: 1UL,
             Entries: ReadOnlyMemory<EntitySnapshot>.Empty,
             FieldCells: new[] { new FieldCellDelta(Region: "world", FieldName: "heat", Cell: 0, Field: 0, Raw: Puck.Maths.FixedQ4816.FromDouble(value: weight).Value) }
-        ));
+        ), stream: default);
 
         Snapshot(tick: 0UL, weight: 2d);
         Assert.Equal(expected: "field", actual: Assert.Single(collection: Slots(resolver: resolver, tick: 0UL)).Candidate.Name);
@@ -368,7 +368,7 @@ public sealed class ShadowFrameLawTests {
         Snapshot(tick: 1UL, weight: 3d);
         Assert.Equal(expected: bootInstalls, actual: client.StateMirror.Installs);
 
-        client.DeliverDefinition(definition: definition with { }, version: default);
+        client.DeliverDefinition(definition: definition with { }, version: default, stream: default);
         Assert.Equal(expected: "field", actual: Assert.Single(collection: Slots(resolver: resolver, tick: 1UL)).Candidate.Name);
         Snapshot(tick: 1UL, weight: 0d);
         Assert.Equal(expected: "steady", actual: Assert.Single(collection: Slots(resolver: resolver, tick: 1UL)).Candidate.Name);

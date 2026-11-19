@@ -359,7 +359,7 @@ internal static class WorldBenchmarks {
             }
 
             server.Advance(stepTicks: stepTicks);
-            client.DeliverState(definition: server.Definition, stamp: new Puck.World.Protocol.WorldStateStamp(Tick: 0UL, EngineTick: 0UL, MovedRows: default, Everything: false), version: server.DocumentVersion);
+            client.DeliverState(definition: server.Definition, stamp: new Puck.World.Protocol.WorldStateStamp(Tick: 0UL, EngineTick: 0UL, MovedRows: default, Everything: false), version: server.DocumentVersion, stream: Puck.World.Protocol.WorldStreamStamp.Unspanned);
             Emit(times: changed, bytes: changedBytes, sample: Math.Max(val1: 0, val2: (change - 4)));
         }
         Array.Sort(array: steadyBytes);

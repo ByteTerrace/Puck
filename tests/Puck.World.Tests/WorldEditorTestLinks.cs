@@ -124,7 +124,7 @@ internal static class EditorEndpoints {
         observe: sink => {
             sink.DeliverDefinition(
                 definition: definition,
-                version: version
+                version: version, stream: default
             );
             sink.DeliverSnapshot(snapshot: new WorldSnapshot(
                 Authority: identity,
@@ -144,7 +144,7 @@ internal static class EditorEndpoints {
                 Revision: 0,
                 StepTicks: 1680UL,
                 Tick: 1UL
-            ));
+            ), stream: default);
 
             return new Lease();
         },

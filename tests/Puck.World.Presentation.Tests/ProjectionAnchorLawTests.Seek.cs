@@ -25,13 +25,14 @@ public sealed partial class ProjectionAnchorLawTests {
 
         public void DeliverAnswer(in QueryAnswer answer) { }
         public void DeliverComposition(WorldComposition composition) => Kinds.Add(item: "composition");
-        public void DeliverDefinition(WorldDefinition definition, WorldDocumentVersion version) => Kinds.Add(item: "definition");
+        public void DeliverDefinition(WorldDefinition definition, WorldDocumentVersion version, in WorldStreamStamp stream) => Kinds.Add(item: "definition");
         public void DeliverSessionLever(WorldSessionLever lever) { }
-        public void DeliverSnapshot(in WorldSnapshot snapshot) {
+        public void DeliverCut(in WorldStreamStamp stream, bool terminal) { }
+        public void DeliverSnapshot(in WorldSnapshot snapshot, in WorldStreamStamp stream) {
             Kinds.Add(item: "snapshot");
             SnapshotTicks.Add(item: snapshot.Tick);
         }
-        public void DeliverState(WorldDefinition definition, WorldDocumentVersion version, in WorldStateStamp stamp) => Kinds.Add(item: "state");
+        public void DeliverState(WorldDefinition definition, WorldDocumentVersion version, in WorldStateStamp stamp, in WorldStreamStamp stream) => Kinds.Add(item: "state");
     }
 
     private static WorldFederationProjectionSink PresentationViewer(WorldServer server) => new(
@@ -54,9 +55,9 @@ public sealed partial class ProjectionAnchorLawTests {
             Assert.True(condition: frame.Ok);
 
             if (frame.Kind == ((byte)WorldFederationResponse.Definition)) {
-                Assert.True(condition: WorldFederationCodec.TryDecodeDocument(body: frame.Body.Span, definition: out _, failure: out var failure, hold: hold, tier: out _, version: out _), userMessage: failure.ToString());
+                Assert.True(condition: WorldFederationCodec.TryDecodeDocument(body: frame.Body.Span[WorldFederationCodec.StreamStampBytes..], definition: out _, failure: out var failure, hold: hold, tier: out _, version: out _), userMessage: failure.ToString());
             } else if (frame.Kind == ((byte)WorldFederationResponse.ProjectionDelta)) {
-                Assert.True(condition: WorldFederationCodec.TryDecodeProjectionDelta(body: frame.Body.Span, definition: out _, failure: out var failure, hold: hold, stamp: out _, valuesOnly: out _, version: out _), userMessage: failure.ToString());
+                Assert.True(condition: WorldFederationCodec.TryDecodeProjectionDelta(body: frame.Body.Span[WorldFederationCodec.StreamStampBytes..], definition: out _, failure: out var failure, hold: hold, stamp: out _, valuesOnly: out _, version: out _), userMessage: failure.ToString());
             }
         }
     }

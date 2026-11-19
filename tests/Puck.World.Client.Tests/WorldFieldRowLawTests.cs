@@ -97,7 +97,7 @@ public sealed class WorldFieldRowLawTests {
         }, definition: Fixtures.BuildDocument());
         definition = definition.WithWorldState(rows: [.. definition.AuthoredState, Colors(bump: "#3FAF6F")]);
         var client = ClientFixtures.Client(definition: definition);
-        client.DeliverDefinition(definition: definition, version: default);
+        client.DeliverDefinition(definition: definition, version: default, stream: default);
         Assert.True(condition: client.StateMirror.SlotOf(conversion: WorldStateConversion.Color, token: "state.colors.fill") >= 0);
         var emitter = new WorldFieldEmitter(client: client);
         var builder = new SdfProgramBuilder();
@@ -224,9 +224,9 @@ public sealed class WorldFieldRowLawTests {
 
         var client = ClientFixtures.Client(definition: definition);
 
-        client.DeliverDefinition(definition: definition, version: default);
+        client.DeliverDefinition(definition: definition, version: default, stream: default);
         client.DeliverSnapshot(snapshot: new WorldSnapshot(Tick: 0UL, Revision: 0, StepTicks: 1UL,
-            Entries: ReadOnlyMemory<EntitySnapshot>.Empty, FieldCells: writes));
+            Entries: ReadOnlyMemory<EntitySnapshot>.Empty, FieldCells: writes), stream: default);
         var emitter = new WorldFieldEmitter(client: client);
 
         for (var step = 0; (step < 4); step++) { emitter.PrepareFrame(); }
@@ -341,7 +341,7 @@ public sealed class WorldFieldRowLawTests {
         var client = ClientFixtures.Client(definition: definition);
         var emitter = new WorldFieldEmitter(client: client);
 
-        client.DeliverDefinition(definition: definition, version: default);
+        client.DeliverDefinition(definition: definition, version: default, stream: default);
         emitter.PrepareFrame();
 
         // The first frame publishes the zero lattice: no column raised, so every reference voxel is the empty-space bound.
@@ -362,7 +362,7 @@ public sealed class WorldFieldRowLawTests {
             StepTicks: 1UL,
             Entries: ReadOnlyMemory<EntitySnapshot>.Empty,
             FieldCells: new[] { new FieldCellDelta(Region: "world", FieldName: "bump", Cell: 5, Field: 1, Raw: One) }
-        ));
+        ), stream: default);
         emitter.PrepareFrame();
 
         var raised = field.Reference.Current;
@@ -382,7 +382,7 @@ public sealed class WorldFieldRowLawTests {
             StepTicks: 1UL,
             Entries: ReadOnlyMemory<EntitySnapshot>.Empty,
             FieldCells: new[] { new FieldCellDelta(Region: "world", FieldName: "bump", Cell: 5, Field: 1, Raw: One) }
-        ));
+        ), stream: default);
         emitter.PrepareFrame();
         emitter.PrepareFrame();
 
@@ -396,7 +396,7 @@ public sealed class WorldFieldRowLawTests {
             StepTicks: 1UL,
             Entries: ReadOnlyMemory<EntitySnapshot>.Empty,
             FieldCells: new[] { new FieldCellDelta(Region: "world", FieldName: "bump", Cell: 5, Field: 1, Raw: (One / 2)) }
-        ));
+        ), stream: default);
         emitter.PrepareFrame();
 
         Assert.Same(expected: raised, actual: field.Reference.Current);
@@ -412,7 +412,7 @@ public sealed class WorldFieldRowLawTests {
         var bareClient = ClientFixtures.Client(definition: bare);
         var bareEmitter = new WorldFieldEmitter(client: bareClient);
 
-        bareClient.DeliverDefinition(definition: bare, version: default);
+        bareClient.DeliverDefinition(definition: bare, version: default, stream: default);
         var unattached = Revision(emitter: bareEmitter);
 
         bareEmitter.PrepareFrame();
@@ -422,7 +422,7 @@ public sealed class WorldFieldRowLawTests {
         var client = ClientFixtures.Client(definition: definition);
         var emitter = new WorldFieldEmitter(client: client);
 
-        client.DeliverDefinition(definition: definition, version: default);
+        client.DeliverDefinition(definition: definition, version: default, stream: default);
         var start = Revision(emitter: emitter);
 
         emitter.PrepareFrame();
@@ -435,7 +435,7 @@ public sealed class WorldFieldRowLawTests {
             StepTicks: 1UL,
             Entries: ReadOnlyMemory<EntitySnapshot>.Empty,
             FieldCells: new[] { new FieldCellDelta(Region: "world", FieldName: "bump", Cell: 5, Field: 1, Raw: One) }
-        ));
+        ), stream: default);
         emitter.PrepareFrame();
         Assert.Equal(expected: made, actual: Revision(emitter: emitter));
     }

@@ -39,6 +39,23 @@ public sealed partial class WorldRecipientView(Func<WorldDefinition> definition,
     public bool ReadsWhole(int row) => Includes(row) && Observer.ReadsWhole(row);
     /// <summary>Whether a named row is carried whole at this ceiling.</summary>
     public bool ReadsWhole(string row) => Arena.Catalog.TryResolve(StateLane.Document, row, out var handle) && ReadsWhole(handle.Ordinal);
+    /// <summary>Whether this view discloses a replica that withholds nothing a scene reads: it observes at
+    /// <see cref="WorldDisclosureTier.Replica"/> and reads every row of the store whole, its fields and zones included.
+    /// Every filter a stream applies to a replica beyond body redaction (a row's image, the placement projection, the
+    /// field projection, a solid size's source cell) passes everything through exactly when every row is read whole,
+    /// so a stream whose view answers <see langword="true"/> here is handed the authority's own scene inputs. The
+    /// answer reads declarations and policy alone, never which members are present or hidden now.</summary>
+    public bool ReadsEverything {
+        get {
+            if (!Observes || (ceiling != WorldDisclosureTier.Replica)) { return false; }
+            var observer = Observer;
+            var rows = Arena.Rows.Count;
+            for (var row = 0; row < rows; row++) {
+                if (!observer.ReadsWhole(row)) { return false; }
+            }
+            return true;
+        }
+    }
     /// <summary>Admits a transient derived from a whole row under a stable audience.</summary>
     public bool ReadsCueDependency(int row) {
         if (!ReadsWhole(row)) { return false; }

@@ -263,13 +263,14 @@ public sealed class DeliveryReviewLawTests {
             Assert.True(State.TryRead(ordinal, key, false, 0, 0, out var sample));
             return sample.Value.Raw;
         }
-        public void DeliverDefinition(WorldDefinition definition, WorldDocumentVersion version) {
+        public void DeliverDefinition(WorldDefinition definition, WorldDocumentVersion version, in WorldStreamStamp stream) {
             m_definition = definition;
             Versions.Add(version.Sequence);
             State.TryResolveRow("hand", out _);
         }
-        public void DeliverState(WorldDefinition definition, WorldDocumentVersion version, in WorldStateStamp stamp) => DeliverDefinition(definition, version);
-        public void DeliverSnapshot(in WorldSnapshot snapshot) {
+        public void DeliverState(WorldDefinition definition, WorldDocumentVersion version, in WorldStateStamp stamp, in WorldStreamStamp stream) => DeliverDefinition(definition, version, stream: default);
+        public void DeliverCut(in WorldStreamStamp stream, bool terminal) { }
+        public void DeliverSnapshot(in WorldSnapshot snapshot, in WorldStreamStamp stream) {
             Deltas.AddRange(snapshot.FieldCells.ToArray());
             Versions.Add(snapshot.Revision);
             State.ApplyFieldCells(snapshot.FieldCells.Span, new int[StateCapacity.MaxRows]);
