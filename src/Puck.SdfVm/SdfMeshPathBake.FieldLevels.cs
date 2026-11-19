@@ -182,8 +182,7 @@ public sealed partial class SdfMeshPathBake {
             }
         }
 
-        contour.SelectDiagonals();
-        var cut = new SdfMeshMaterialCut(contour: contour.SplitAtCreases());
+        var cut = new SdfMeshMaterialCut(contour: contour.Finished(cell: lattice.ContourCell));
 
         for (var round = cut.Points(); (round.Length > 0); round = cut.Points()) {
             var at = Xyz(points: round);

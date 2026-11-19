@@ -1827,13 +1827,16 @@ public sealed partial class SdfMeshPathBake {
         emptied?.Dispose();
     }
     // The fine cells along each axis a final lattice's coarse cell refines into at most: a union's own factor, or as many
-    // as reach FineCell floored by the group's tier, at most MaxRefinement.
+    // as reach FineCell floored by the group's tier, from two to MaxRefinement. A lattice already at that spacing still
+    // refines twofold where its samples cannot resolve the surface at all (SdfSampledLattice.Refine's essential cells: a
+    // sheet or gap thinner than a cell, two patches in one cell): those lose a feature's whole extent, not a fraction of
+    // a cell, so no tier's pixel bound covers them; with no region, only those cells refine.
     private static int FactorOf(FinalLattice final) {
         var cell = final.Lattice.Cell;
 
         return ((final.Factor > 0)
             ? final.Factor
-            : Math.Min(val1: MaxRefinement, val2: ((int)MathF.Ceiling(x: (MathF.Min(x: cell.X, y: MathF.Min(x: cell.Y, y: cell.Z)) / MathF.Max(x: FineCell, y: final.TierCell))))));
+            : Math.Clamp(value: ((int)MathF.Ceiling(x: (MathF.Min(x: cell.X, y: MathF.Min(x: cell.Y, y: cell.Z)) / MathF.Max(x: FineCell, y: final.TierCell)))), min: 2, max: MaxRefinement));
     }
 
     // The workspace bytes a final lattice's bake holds at once, per lattice sample and per fine sample: the lattice's
@@ -2083,8 +2086,7 @@ public sealed partial class SdfMeshPathBake {
     private void Split(Group group) {
         var started = Stopwatch.GetTimestamp();
 
-        group.Contour!.SelectDiagonals();
-        var contour = group.Contour!.SplitAtCreases();
+        var contour = group.Contour!.Finished(cell: group.DiagnosticCell);
         var cut = new SdfMeshMaterialCut(contour: contour);
         var points = cut.Points();
 

@@ -1012,8 +1012,17 @@ decision 10 is in (`puck mesh audit --cpu` prints each failing shape's defect
 class and whether its cell was flagged for finer sampling): the failing cells of
 the blend exhibits and nearly all of the Moth's were flagged and measured, so the
 fix is a contour rule for a cell that cannot resolve its faces, built behind an
-audit of every stored mesh; only the swallow's streamers were never examined, a
-lattice at its tier's floor on which the refinement scan never runs;
+audit of every stored mesh. The contour now welds the vertices a cell cannot
+tell apart (`SdfContour.Weld`), the material cut puts a boundary beside a
+crease vertex at the vertex (`SdfMeshMaterialCut.Boundary`), the audit counts a
+fold the field's own crease explains apart, and a lattice at its tier's floor
+still refines the cells it cannot resolve at all, so the swallow's streamer tips
+are no longer lost. What remains is the junction where creases meet a curved
+groove (`shape-groove-union`, `shape-smooth-subtraction`, where the field check
+moves solved vertices up to half a cell or refuses a kinked one) and the Moth's
+shin blades below; closed thin sheets (the lawn's blades, the swallow's
+streamers) fold at their rims against a field they are deliberately thicker
+than. Then
 a primitive under a non-uniform scale gives a bound, not a distance (gap 11,
 [rendering](rendering.md#bake-quality)); and, beside them,
 [moving blends](moving-blends.md#engine-gaps-first)' step 4 (gap 10). Then the

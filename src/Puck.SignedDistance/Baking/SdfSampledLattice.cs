@@ -49,10 +49,352 @@ public sealed record SdfContour(float[] Positions, float[] Normals, int[] Quads,
     // A lifted chamfer's corner meets its neighboring bevel at 31.4 degrees, although the bevel meets the main face at
     // 45. Leave room below that smaller turn for sampled triangle normals; using 32 blended the corner across its rim.
     private const double CreaseDegrees = 25.0;
+    // The longest quad edge Finished welds, in the contour's finest cells: past the few hundredths of a cell a row beside
+    // a crease stands off it and the crowding where creases meet, short of moving a surface a fraction of a cell the
+    // lattice resolves.
+    private const float WeldCells = 0.15f;
+    // The cosine of the most a quad that survives a weld may turn (Weld): thirty degrees.
+    private const float WeldTurnCosine = 0.966f;
 
     /// <summary>Selects each quad's outward-facing diagonal from its current vertex positions and normals. Call again
     /// after changing positions, before <see cref="SplitAtCreases"/> freezes the per-face normals.</summary>
     public void SelectDiagonals() => SdfSampledLattice.SelectDiagonals(contour: this);
+    /// <summary>Returns the contour its material cut takes, once its vertices stand where they will: welded where two
+    /// vertices lie nearer than a cell resolves (<see cref="Weld"/>), each quad split along its outward diagonal
+    /// (<see cref="SelectDiagonals"/>), and split at its creases (<see cref="SplitAtCreases"/>).</summary>
+    /// <param name="cell">The contour's finest cell along each axis, in its frame's units.</param>
+    /// <returns>The finished contour.</returns>
+    public SdfContour Finished(Vector3 cell) {
+        var welded = Weld(distance: (WeldCells * MathF.Min(x: cell.X, y: MathF.Min(x: cell.Y, y: cell.Z))));
+
+        welded.SelectDiagonals();
+
+        return welded.SplitAtCreases();
+    }
+    /// <summary>Returns the contour with each pair of vertices a quad's edge joins nearer than
+    /// <paramref name="distance"/> welded into one vertex, shortest first: the vertices of neighbouring cells that the
+    /// lattice cannot tell apart, as where a row of cells beside a crease places its vertices a few hundredths of a cell
+    /// off the crease's own row, or where several cells crowd the point two creases meet. The vertex a crossing pins to a
+    /// crease (<see cref="Features"/>, not <see cref="Beside"/>) keeps its place and takes the other; two of one kind meet
+    /// at their midpoint. A quad the weld closes to a triangle stays one, and a quad it closes to fewer corners goes. A
+    /// weld is refused where it would join two quad corners that do not share an edge, join two vertices with a
+    /// neighbour that no triangle between them holds (the link condition, which keeps the surface manifold), or turn a
+    /// quad that faces out along its lattice edge (<see cref="SdfContourFacing.Splits"/>) so that neither split
+    /// does.</summary>
+    /// <param name="distance">The longest edge welded, in the contour's units; zero or less welds nothing.</param>
+    /// <returns>The welded contour with its unreferenced vertices dropped; this contour when nothing welds.</returns>
+    public SdfContour Weld(float distance) {
+        var quadCount = QuadCount;
+        var vertexCount = VertexCount;
+
+        if (!(distance > 0f) || (quadCount == 0)) { return this; }
+
+        var positions = Positions;
+        var limit = (distance * distance);
+        var candidates = new List<(float Length, int A, int B)>();
+        var seen = new HashSet<long>(comparer: PackedIntPairComparer.Instance);
+        var raw = new int[4];
+
+        for (var quad = 0; (quad < quadCount); quad++) {
+            var count = RawCorners(quad: quad, corners: raw);
+
+            for (var corner = 0; (corner < count); corner++) {
+                var (a, b) = (raw[corner], raw[((corner + 1) % count)]);
+                var length = DistanceSquared(a: a, b: b, positions: positions);
+
+                if ((a != b) && (length < limit) && seen.Add(item: PackedIntPair.Pack(high: Math.Min(val1: a, val2: b), low: Math.Max(val1: a, val2: b)))) {
+                    candidates.Add(item: (length, Math.Min(val1: a, val2: b), Math.Max(val1: a, val2: b)));
+                }
+            }
+        }
+        if (candidates.Count == 0) { return this; }
+        candidates.Sort();
+
+        positions = (float[])positions.Clone();
+
+        var normals = (float[])Normals.Clone();
+        var patches = ((Patches.Length == (3 * vertexCount)) ? (float[])Patches.Clone() : []);
+        var features = Grown(flags: Features, length: vertexCount);
+        var solved = Grown(flags: Solved, length: vertexCount);
+        var beside = Grown(flags: Beside, length: vertexCount);
+        var parent = new int[vertexCount];
+        var starts = new int[(vertexCount + 1)];
+
+        for (var vertex = 0; (vertex < vertexCount); vertex++) { parent[vertex] = vertex; }
+        for (var quad = 0; (quad < quadCount); quad++) {
+            var count = RawCorners(quad: quad, corners: raw);
+
+            for (var corner = 0; (corner < count); corner++) { starts[(raw[corner] + 1)]++; }
+        }
+        for (var vertex = 0; (vertex < vertexCount); vertex++) { starts[(vertex + 1)] += starts[vertex]; }
+
+        var incident = new int[starts[vertexCount]];
+        var filled = new int[vertexCount];
+
+        for (var quad = 0; (quad < quadCount); quad++) {
+            var count = RawCorners(quad: quad, corners: raw);
+
+            for (var corner = 0; (corner < count); corner++) { incident[(starts[raw[corner]] + filled[raw[corner]]++)] = quad; }
+        }
+
+        // A welded vertex's quads: the union of its parts', kept apart from the rows of the vertices no weld has reached.
+        var welded = new Dictionary<int, List<int>>();
+        var affected = new List<int>();
+        var facing = new List<bool>();
+        var areas = new List<Vector3>();
+        var neighbours = new HashSet<int>();
+        var allowed = new HashSet<int>();
+        var corners = new int[4];
+        var any = false;
+
+        // No path compression: a trial weld that is refused undoes its one link, which a compressed path would have copied.
+        int Find(int vertex) {
+            while (parent[vertex] != vertex) { vertex = parent[vertex]; }
+
+            return vertex;
+        }
+        ReadOnlySpan<int> Around(int vertex) => (welded.TryGetValue(key: vertex, value: out var list) ? CollectionsMarshal.AsSpan(list: list) : incident.AsSpan(start: starts[vertex], length: (starts[(vertex + 1)] - starts[vertex])));
+        // A quad's distinct corners as the welds so far name them, in order around it.
+        int Corners(int quad, Span<int> into) {
+            var count = RawCorners(quad: quad, corners: raw);
+            var kept = 0;
+
+            for (var corner = 0; (corner < count); corner++) {
+                var vertex = Find(vertex: raw[corner]);
+
+                if ((kept == 0) || (into[(kept - 1)] != vertex)) { into[kept++] = vertex; }
+            }
+            if ((kept > 1) && (into[(kept - 1)] == into[0])) { kept--; }
+
+            return kept;
+        }
+        // Whether a quad faces out as its lattice edge says, as the welds so far place its corners; a quad closed to
+        // fewer than three corners, or a contour that records no lattice edges, passes.
+        bool FacesOut(int quad) {
+            var count = Corners(quad: quad, into: corners);
+
+            if ((count < 3) || (quad >= QuadAxes.Length)) { return true; }
+            if (count == 3) { corners[3] = corners[2]; }
+
+            return (SdfContourFacing.Splits(axis: QuadAxes[quad], patches: patches, positions: positions, quad: corners) is not (false, false));
+        }
+        int Rank(int vertex) => ((features[vertex] && !beside[vertex]) ? 2 : (features[vertex] ? 1 : 0));
+        // A quad's area normal about its corners as the welds so far place them (Newell's sum), zero for one closed to
+        // fewer than three corners.
+        Vector3 Facing(int quad) {
+            var count = Corners(quad: quad, into: corners);
+            var sum = Vector3.Zero;
+
+            if (count < 3) { return sum; }
+            for (var corner = 0; (corner < count); corner++) {
+                var (p, q) = (corners[corner], corners[((corner + 1) % count)]);
+                var (px, py, pz) = (positions[(3 * p)], positions[((3 * p) + 1)], positions[((3 * p) + 2)]);
+                var (qx, qy, qz) = (positions[(3 * q)], positions[((3 * q) + 1)], positions[((3 * q) + 2)]);
+
+                sum += new Vector3(x: ((py - qy) * (pz + qz)), y: ((pz - qz) * (px + qx)), z: ((px - qx) * (py + qy)));
+            }
+
+            return sum;
+        }
+
+        foreach (var (_, first, second) in candidates) {
+            var (a, b) = (Find(vertex: first), Find(vertex: second));
+
+            // Only a crease's crowding welds: two vertices no crease placed lie on one smooth face or a closed sheet, whose
+            // short edges are the surface's own detail.
+            if ((a == b) || !(DistanceSquared(a: a, b: b, positions: positions) < limit)) { continue; }
+
+            affected.Clear();
+            foreach (var quad in Around(vertex: a)) { affected.Add(item: quad); }
+            foreach (var quad in Around(vertex: b)) {
+                if (!affected.Contains(item: quad)) { affected.Add(item: quad); }
+            }
+
+            // The link condition: every neighbour the two share is the third corner of a triangle between them.
+            var adjacent = false;
+            var crossed = false;
+
+            neighbours.Clear();
+            allowed.Clear();
+            foreach (var quad in affected) {
+                var count = Corners(quad: quad, into: corners);
+                var (at, bt) = (corners.AsSpan(start: 0, length: count).IndexOf(value: a), corners.AsSpan(start: 0, length: count).IndexOf(value: b));
+
+                if ((at >= 0) && (bt >= 0)) {
+                    var apart = Math.Abs(value: (at - bt));
+
+                    if ((apart != 1) && (apart != (count - 1))) {
+                        crossed = true;
+                        break;
+                    }
+                    adjacent = true;
+                    if (count == 3) { allowed.Add(item: corners[(3 - at - bt)]); }
+                }
+                if (at >= 0) {
+                    neighbours.Add(item: corners[((at + 1) % count)]);
+                    neighbours.Add(item: corners[(((at + count) - 1) % count)]);
+                }
+            }
+            if (crossed || !adjacent) { continue; }
+
+            var linked = true;
+
+            foreach (var quad in affected) {
+                var count = Corners(quad: quad, into: corners);
+                var bt = corners.AsSpan(start: 0, length: count).IndexOf(value: b);
+
+                if (bt < 0) { continue; }
+                foreach (var next in (ReadOnlySpan<int>)[corners[((bt + 1) % count)], corners[(((bt + count) - 1) % count)]]) {
+                    if ((next != a) && neighbours.Contains(item: next) && !allowed.Contains(item: next)) { linked = false; }
+                }
+            }
+            if (!linked) { continue; }
+
+            facing.Clear();
+            areas.Clear();
+            foreach (var quad in affected) {
+                facing.Add(item: FacesOut(quad: quad));
+                areas.Add(item: Facing(quad: quad));
+            }
+
+            var (rankA, rankB) = (Rank(vertex: a), Rank(vertex: b));
+            var take = ((rankA == rankB) ? 0.5f : ((rankA > rankB) ? 0f : 1f));
+            Span<float> held = [positions[(3 * a)], positions[((3 * a) + 1)], positions[((3 * a) + 2)]];
+            Span<float> heldPatch = [0f, 0f, 0f];
+
+            if (patches.Length > 0) { patches.AsSpan(start: (3 * a), length: 3).CopyTo(destination: heldPatch); }
+
+            for (var axis = 0; (axis < 3); axis++) {
+                positions[((3 * a) + axis)] = (held[axis] + (take * (positions[((3 * b) + axis)] - held[axis])));
+                if (patches.Length > 0) { patches[((3 * a) + axis)] += patches[((3 * b) + axis)]; }
+            }
+            parent[b] = a;
+
+            var keeps = true;
+
+            for (var index = 0; (index < affected.Count); index++) {
+                if (facing[index] && !FacesOut(quad: affected[index])) {
+                    keeps = false;
+                    break;
+                }
+
+                // A quad that stays turns with its corners by no more than a weld of a sliver's width can: one that turns
+                // further was small beside the move and folds against its neighbours.
+                var after = Facing(quad: affected[index]);
+                var (beforeLength, afterLength) = (areas[index].Length(), after.Length());
+
+                if ((afterLength > 0f) && (beforeLength > 0f) && (Vector3.Dot(vector1: areas[index], vector2: after) < (WeldTurnCosine * beforeLength * afterLength))) {
+                    keeps = false;
+                    break;
+                }
+            }
+            if (!keeps) {
+                parent[b] = b;
+                held.CopyTo(destination: positions.AsSpan(start: (3 * a), length: 3));
+                if (patches.Length > 0) { heldPatch.CopyTo(destination: patches.AsSpan(start: (3 * a), length: 3)); }
+                continue;
+            }
+
+            any = true;
+            welded[a] = [.. affected];
+            _ = welded.Remove(key: b);
+            if (take == 1f) {
+                normals.AsSpan(start: (3 * b), length: 3).CopyTo(destination: normals.AsSpan(start: (3 * a), length: 3));
+                (features[a], solved[a], beside[a]) = (features[b], solved[b], beside[b]);
+            } else if (take == 0.5f) {
+                var sum = new Vector3(x: (normals[(3 * a)] + normals[(3 * b)]), y: (normals[((3 * a) + 1)] + normals[((3 * b) + 1)]), z: (normals[((3 * a) + 2)] + normals[((3 * b) + 2)]));
+                var length = sum.Length();
+
+                if (length > 0f) {
+                    (normals[(3 * a)], normals[((3 * a) + 1)], normals[((3 * a) + 2)]) = ((sum.X / length), (sum.Y / length), (sum.Z / length));
+                }
+                (features[a], solved[a], beside[a]) = ((features[a] || features[b]), (solved[a] || solved[b]), (beside[a] && beside[b]));
+            }
+        }
+        if (!any) { return this; }
+
+        // The quads as the welds name them, and the vertices they still reference, renumbered in their original order.
+        var quads = new List<int>(capacity: Quads.Length);
+        var materials = new List<int>(capacity: quadCount);
+        var axes = new List<sbyte>(capacity: QuadAxes.Length);
+        var remap = new int[vertexCount];
+
+        Array.Fill(array: remap, value: -1);
+        for (var quad = 0; (quad < quadCount); quad++) {
+            var count = Corners(quad: quad, into: corners);
+
+            if (count < 3) { continue; }
+            if (count == 3) { corners[3] = corners[2]; }
+            for (var corner = 0; (corner < 4); corner++) {
+                quads.Add(item: corners[corner]);
+                remap[corners[corner]] = 0;
+            }
+            materials.Add(item: QuadMaterials[quad]);
+            if (quad < QuadAxes.Length) { axes.Add(item: QuadAxes[quad]); }
+        }
+
+        var kept = 0;
+
+        for (var vertex = 0; (vertex < vertexCount); vertex++) {
+            if (remap[vertex] == 0) { remap[vertex] = kept++; }
+        }
+
+        var quadArray = quads.ToArray();
+
+        for (var corner = 0; (corner < quadArray.Length); corner++) { quadArray[corner] = remap[quadArray[corner]]; }
+
+        float[] Compact(float[] values) {
+            var compact = new float[(3 * kept)];
+
+            for (var vertex = 0; (vertex < vertexCount); vertex++) {
+                if (remap[vertex] >= 0) { values.AsSpan(start: (3 * vertex), length: 3).CopyTo(destination: compact.AsSpan(start: (3 * remap[vertex]), length: 3)); }
+            }
+
+            return compact;
+        }
+        bool[] CompactFlags(bool[] values, bool[] original) {
+            if (original.Length == 0) { return []; }
+
+            var compact = new bool[kept];
+
+            for (var vertex = 0; (vertex < vertexCount); vertex++) {
+                if (remap[vertex] >= 0) { compact[remap[vertex]] = values[vertex]; }
+            }
+
+            return compact;
+        }
+
+        return this with {
+            Beside = CompactFlags(original: Beside, values: beside),
+            Features = CompactFlags(original: Features, values: features),
+            Normals = Compact(values: normals),
+            Patches = ((patches.Length > 0) ? Compact(values: patches) : []),
+            Positions = Compact(values: positions),
+            QuadAxes = [.. axes],
+            QuadMaterials = [.. materials],
+            Quads = quadArray,
+            Solved = CompactFlags(original: Solved, values: solved),
+        };
+
+        static bool[] Grown(bool[] flags, int length) {
+            var grown = new bool[length];
+
+            flags.AsSpan(start: 0, length: Math.Min(val1: flags.Length, val2: length)).CopyTo(destination: grown);
+
+            return grown;
+        }
+    }
+    // A quad's corners as its vertex indices name them: three where its last two are one vertex (a triangle), else four.
+    private int RawCorners(int quad, Span<int> corners) {
+        Quads.AsSpan(start: (4 * quad), length: 4).CopyTo(destination: corners);
+
+        return ((corners[2] == corners[3]) ? 3 : 4);
+    }
+    private static float DistanceSquared(int a, int b, float[] positions) {
+        var (dx, dy, dz) = ((positions[(3 * a)] - positions[(3 * b)]), (positions[((3 * a) + 1)] - positions[((3 * b) + 1)]), (positions[((3 * a) + 2)] - positions[((3 * b) + 2)]));
+
+        return (((dx * dx) + (dy * dy)) + (dz * dz));
+    }
     /// <summary>Returns the contour with its crease vertices split: a vertex two of whose quads face
     /// apart by more than 25 degrees gives each quad corner a vertex of its own at the same place, whose normal is the
     /// area-weighted facing of the vertex's quads within 25 degrees of that quad's, so a sharp edge shades as the two faces
