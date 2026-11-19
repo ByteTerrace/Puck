@@ -16,7 +16,7 @@ and relit, jobs, bytes, GPU nanoseconds from the jobs' own timestamps) do not de
 
 The volume's own work is small. A boot that looks at the spawn and holds still traced the whole Medium window
 (49,152 probes) once and published every level within two minutes: levels 0, 1 and 2 at 75, 95 and 115 s of
-uptime, with 0.27 s of GPU time for every trace and about 9 µs of GPU a relight (leg 1). At High in the gallery
+uptime, with 0.27 s of GPU time for all its traces and about 9 µs of GPU a relight (leg 1). At High in the gallery
 hall, the same: 73,728 probes, level 0 at 89 s (leg 2).
 
 The minutes come from a boot that sees another copy of the same world. In the gallery lobby the big painting
@@ -34,8 +34,13 @@ pool and runs its own full lighting volume on the one background budget (leg 3, 
   the session residency's jobs used 16.1 s and the main world's 2.5 s. The main volume landed no probe for its
   first five polls, never finished its first fill in 900 s (41,856 of 49,152 probes cached at the end), and its
   trace jobs waited 3.1 s on average from submission to answer.
-- **The grant is the floor.** At boot the frame's own GPU time (16 to 28 ms) overruns the 16.67 ms period, so
-  background work gets its least, 1 ms a frame, about 18 to 21 ms of GPU a wall second, in every leg.
+- **The grant is the floor.** At boot the frame's own GPU time (14 to 28 ms) overruns the 16.67 ms period, so
+  background work gets its least, 1 ms a frame, about 18 to 23 ms of GPU a wall second, in every leg.
+
+On Vulkan the same boot is worse, because the mesh budget falls further: the world's to 578 MB, the bias to 14
+half rungs, 2,121 of the world's groups coarsened, and the two large scenes rebuilt 30 times (27 of them past the
+union rule) before the bias settled. The world's volume cached no probe for its first eight polls and published
+level 0 at about 500 s (leg 4).
 
 The earlier runs that took 577 s and 912 s to a first main `done`, and the Vulkan runs that never reached one,
 show the same signature: the session residency's scene (6,600 to 6,800 draws) built beside the main one, 11 to 46
@@ -101,12 +106,18 @@ mesh under the same transform) and new or gone places.
 | 3 | 224 to 273 s | garden, 74 draws | 18, 16, 14 | Coarsening under the rising bias; each abandoned the garden's list |
 | 3 | 266 s | session, 6,766 draws | 6,974: about 3,487 swap pairs | Coarsening (581 M → 243 M triangles, bias 4); union; 43,008 of 49,152 traces abandoned |
 | 3 | 275 s | session, 6,732 draws | 1,358: about 679 swap pairs | Coarsening (→ 173 M, bias 6); union |
+| 4 | 83 to about 360 s | world and session, 6,668 to 6,980 draws | 293 to 8,810 each | 30 large rebuilds, 27 past the union rule, 2 to 56 s apart; the world's scene 577 M → 353 M → 310 M → 174 M → 155 M triangles as the bias climbed to 14 |
 
 Legs 1 and 2 built no scene after the first detail: with only the world's residency staged (every other
 residency read `groups=0`), the detail bias stayed 0 and the region budget at 3.75 GB *(leg 1, 2)*. In leg 3 the
 bias read 0, then 2 by the second poll, 4 by the sixth and 6 by the seventh, in the world, the session and the
 garden alike; the world's `region-budget` fell 3,750,754,532 → 2,142,037,574 → 1,361,642,372 bytes while its own
-`region-named` stayed near 1.3 GB, and the session named 1,133,913,312 bytes, later 871,358,252 *(leg 3)*.
+`region-named` stayed near 1.3 GB, and the session named 1,133,913,312 bytes, later 871,358,252 *(leg 3)*. On
+Vulkan the world's `region-budget` fell to 578,415,426 bytes by the fourth poll, the bias climbed one to three half
+rungs a poll to 14 by the twelfth and settled at 12, and the world coarsened 2,121 groups and the session 1,008
+*(leg 4)*. *Inference, unverified:* Vulkan's mesh region keeps a contiguous destination where Direct3D 12 maps one
+(`SdfResidencyGrant.Mapped`), so the selector holds back replacement room on Vulkan and each residency's budget is
+smaller for the same pool.
 
 **In the earlier runs.** Large-scene builds (6,300 to 7,000 draws, both large residencies) before the main
 volume's first `done`, or in the whole run where none came, and how many added more than 64 new geometries (each
@@ -161,6 +172,12 @@ and `gpu-work=[…]` at the last poll):
 The world's probe cache read 0 for the first five polls, 38,400 by the ninth, and 41,856 at the end; the session's
 reached 49,152 by the ninth *(leg 3)*. In leg 1, alone, the world's jobs answered in 43.3 ms (trace) and 88.9 ms
 (relight) on average.
+
+On Vulkan, over leg 4's 900 s: the world's service 22,641 jobs and 7,244 ms of GPU, the session's 30,387 jobs and
+12,981 ms, the garden's 3,090 jobs and 809 ms, of 21.0 s granted. Selection grew with the remembered changes: the
+garden's 305 selection jobs tested 4.6 G probe-ray-box pairs and the session's 206 tested 2.4 G
+(`select:305/4607892174u`, `select:206/2406076982u`), because each selection walks every probe's rays over every box
+newer than its trace, up to `MaxChanges` (16) changes of `MaxChangeBoxes` (64) boxes *(leg 4, code)*.
 
 **Who goes first.** Every residency's service draws on the presentation's one `SdfGpuWorkBudget`, and "the services
 take from it first come, in the order their residencies are pumped" (its summary) *(code)*. Nothing orders them by
@@ -304,7 +321,8 @@ and runs above; none is measured on changed code.
    residency draws on, which is what raised the bias to 6 in leg 3. A session handed the same scene, or a subset
    of it, can read the world residency's region (the disclosure plan decides what it may read). *Saving:* the
    bias rise and every coarsening wave it causes in every residency, and about 1 GB of device memory while the
-   painting is in view. *Check:* `detail-bias` stays 0 in leg 3 and the session's `region-named` is near zero. This
+   painting is in view; on Vulkan, the bias of 14 and 2,121 coarsened world groups of leg 4. *Check:* `detail-bias`
+   stays 0 in legs 3 and 4 and the session's `region-named` is near zero. This
    is a streaming-plan change; it is listed because it is the trigger of the churn the lighting pays for.
 4. **Keep work a change does not invalidate.** Land a batch with the geometry version it traced against and leave
    the retrace decision to the next selection, instead of dropping it in `Batch` and `RelightGpu` and cancelling
@@ -319,9 +337,10 @@ and runs above; none is measured on changed code.
    `ConvergedShare`.
 6. **Name a large change without unioning it.** Replace the one-box union past `MaxChangeBoxes` with a structure the
    selection kernel queries per ray in logarithmic time. *Saving:* a wave retraces only the probes the swapped draws
-   reach, instead of the whole window; every large rebuild in the legs and 31 of run A's 40 crossed the rule.
-   *Check:* the selection's `most-job` boxes and tests stay bounded at a wave of several thousand changes, and the
-   traced count per rebuild falls below the window.
+   reach, instead of the whole window; every large rebuild in the legs and 31 of run A's 40 crossed the rule. The
+   same structure bounds the selection's own cost, which reached 4.6 G box tests for the garden's 74-draw volume in
+   leg 4. *Check:* the selection's `most-job` boxes and tests stay bounded at a wave of several thousand changes,
+   and the traced count per rebuild falls below the window.
 7. **Let a loading boot spend the GPU on its lighting, and bound the jobs admitted with nothing queued.** Before the
    first view is shown (or while a view is withheld for its lighting), run the volume's work unbudgeted as a
    converging frame's drain does (`SdfGpuWork.Drive`, `SdfGpuWorkAllowance.Unbounded`); and cut structure builds to
@@ -353,6 +372,10 @@ apart by their scene's draw count. A stdin script read `world.residency` and `wo
 | 1 | Direct3D 12 | the spawn, held still | Medium | Only the world residency staged; two scene builds; levels published at 75, 95 and 115 s; the grant at its floor throughout |
 | 2 | Direct3D 12 | the gallery hall (`body.pose 31.25 4.57 28.52 273`, `world.indirect high`), then along the hall | High | Only the world residency staged; the switch to High abandoned 768 of 49,152 traces; level 0 at 89 s, levels 1 and 2 by 126 s; no scene build after the first detail |
 | 3 | Direct3D 12 | `debug.go wonderland`, then the hall | Medium | The session and garden residencies staged; bias 0 → 6; four rebuilds past the first detail; the world's first fill unfinished at 900 s |
+| 4 | Vulkan | `debug.go wonderland`, then the hall | Medium | As leg 3 with a smaller budget: bias 0 → 14; 30 large rebuilds; the world's level 0 at about 500 s |
+
+Every leg's store was warm (leg 4's bake `done` line: `dispatches=0`, `loaded=1226`). No leg ran cold; the cold
+readings here are runs C and H.
 
 ## Earlier runs
 
@@ -376,6 +399,10 @@ In run A the session volume landed 266,606 traces and 1,596,160 relights against
 
 ## What was not run
 
+- **Cold legs on this tip.** The legs ran on the shared store; the cold readings are runs C (Direct3D 12, 206 s with
+  a scene that barely moved) and H (Vulkan, 36 large rebuilds, no main `done`), at their own builds. A cold boot
+  adds the bake's own draw on the one budget, which run C shows costs about 150 s against run B's warm 56 s on a
+  still scene.
 - **Profilers.** No `dotnet-trace` or PIX capture was taken: the counts above (jobs, GPU nanoseconds from the
   jobs' own timestamps, grants, holds, bytes) answered every question the brief asked of them, and the host side of
   a rebuild (up to 2.2 s of CPU a scene build in the legs, the `seconds=` field) is not what holds the lighting. A capture of

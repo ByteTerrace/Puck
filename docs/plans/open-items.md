@@ -1470,10 +1470,12 @@ The volume's cost and convergence:
   step 9 decides which tier the lighting traces; the tour's drains per still
   on the `[sdf.mesh-gi] done` lines measure whichever lands.
   [The settle-time record](illumination/research-settle-time.md) accounts for
-  the boot's minutes (a scene that rebuilds 40 times before the first `done`,
-  a change past 64 draws that retraces the whole window, batches dropped at
-  each rebuild, and a second full volume for the shared session residency) and
-  ranks the fixes.
+  the boot's minutes: a boot that sees the lobby's painting stages the shared
+  session residency with its own copy of the world's meshes, the shared
+  detail bias climbs (to 6 on Direct3D 12, 14 on Vulkan), every coarsening
+  wave rebuilds both irradiance scenes past the 64-draw union rule, the
+  batches in flight are dropped, and the session's full volume takes most of
+  a 1 ms-a-frame grant first come. It ranks the fixes.
 - [medium] A held frame's hold stops at the instance. A view withheld for its
   lighting records no pass (`IRenderGraphPackageFactory.WithheldOf`), but an
   instance that reads it is only marked stale and still records its passes,
