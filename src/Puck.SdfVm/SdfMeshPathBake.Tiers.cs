@@ -102,7 +102,8 @@ public sealed partial class SdfMeshPathBake {
         // to the coarsest rung that changes its mesh. It owes its demanded tier, which Retier starts once the floor
         // stands. One arriving out of view plans its demanded tier at once: no view waits on a whole coarse place there,
         // so its floor would be a quarter more work before its detail, and the take orders it behind the groups in view
-        // (RankOf). It keeps no floor, so an eviction of its detail bakes one then (Evict).
+        // (RankOf). It keeps no floor, as a group taken whole from the library keeps none, so a detail the region refuses
+        // falls back through the budget's coarser tiers (Retier) rather than an eviction (Evict).
         return group => {
             if (!arrives(arg: group) || !seen(arg: group)) { return demanded(arg: group); }
             ((Group)group).FirstDetailOwed = true;

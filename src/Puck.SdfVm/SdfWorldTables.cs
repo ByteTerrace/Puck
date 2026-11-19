@@ -200,19 +200,34 @@ public sealed partial class SdfWorldTables : IDisposable {
     /// <exception cref="InvalidOperationException">The device's descriptor heap cannot admit the tables' pools
     /// (<see cref="CheckAdmission"/>, checked before anything is allocated).</exception>
     /// <param name="shadowGlassRaster">The cascade glass extinction pipeline.</param>
-    public SdfWorldTables(IGpuDeviceContext device, SdfWorldPipelines pipelines, IGpuComputePipeline regionCopy, GpuPassPipeline meshRaster, GpuPassPipeline shadowRaster, GpuPassPipeline shadowExitRaster, GpuPassPipeline shadowGlassRaster, GpuPassPipeline glassRaster, GpuPassPipeline occlusion, SdfWorldTablesOptions options) {
+    public SdfWorldTables(IGpuDeviceContext device, SdfWorldPipelines pipelines, IGpuComputePipeline regionCopy, GpuPassPipeline meshRaster, GpuPassPipeline shadowRaster, GpuPassPipeline shadowExitRaster, GpuPassPipeline shadowGlassRaster, GpuPassPipeline glassRaster, GpuPassPipeline occlusion, SdfWorldTablesOptions options)
+        : this(device: device, options: options, passes: new SdfWorldPassPipelines(
+            RegionCopy: regionCopy,
+            MeshRaster: BuiltSlot(name: nameof(meshRaster), pipeline: meshRaster, graphics: true),
+            ShadowRaster: BuiltSlot(name: nameof(shadowRaster), pipeline: shadowRaster, graphics: true),
+            ShadowExitRaster: BuiltSlot(name: nameof(shadowExitRaster), pipeline: shadowExitRaster, graphics: true),
+            ShadowGlassRaster: BuiltSlot(name: nameof(shadowGlassRaster), pipeline: shadowGlassRaster, graphics: true),
+            GlassRaster: BuiltSlot(name: nameof(glassRaster), pipeline: glassRaster, graphics: true),
+            Occlusion: BuiltSlot(name: nameof(occlusion), pipeline: occlusion, graphics: false)
+        ), pipelines: pipelines) { }
+    // Wraps a built pass pipeline as a slot, refusing one of the wrong kind before anything is allocated.
+    private static SdfPassPipelineSlot BuiltSlot(string name, GpuPassPipeline pipeline, bool graphics) {
+        ArgumentNullException.ThrowIfNull(argument: pipeline, paramName: name);
+        if (graphics && ((pipeline.Graphics is null) || (pipeline.RenderPass is null))) { throw new ArgumentException(message: "The pass pipeline is not a graphics pipeline with a render pass.", paramName: name); }
+        if (!graphics && (pipeline.Compute is null)) { throw new ArgumentException(message: "The pass pipeline is not a compute pipeline.", paramName: name); }
+        return new SdfPassPipelineSlot(built: pipeline, name: name);
+    }
+    // The construction every table is built through: its pass pipelines as slots, which may still be building
+    // (SdfPassPipelineSlot), since the tables need none of them until a view records, and a frame waits for each
+    // (FrameWaiting). Its region copy and the set's tables' kernels (SdfWorldPipelines.TableKernels) are built.
+    internal SdfWorldTables(IGpuDeviceContext device, SdfWorldPipelines pipelines, SdfWorldPassPipelines passes, SdfWorldTablesOptions options) {
         ArgumentNullException.ThrowIfNull(device);
         // The arena places nothing past the region's first granule until the grant reserves room to grow
         // (PrepareMeshRegionLimit).
         m_meshArena = new SdfMeshRegionArena(limitBytes: MeshRegionGranuleBytes);
         m_meshesOwed = new OwedMeshes(arena: m_meshArena);
         ArgumentNullException.ThrowIfNull(pipelines);
-        ArgumentNullException.ThrowIfNull(regionCopy);
-        ArgumentNullException.ThrowIfNull(meshRaster);
-        ArgumentNullException.ThrowIfNull(shadowRaster);
-        ArgumentNullException.ThrowIfNull(shadowExitRaster);
-        ArgumentNullException.ThrowIfNull(glassRaster);
-        ArgumentNullException.ThrowIfNull(occlusion);
+        ArgumentNullException.ThrowIfNull(passes.RegionCopy);
         ObjectDisposedException.ThrowIf(
             condition: pipelines.IsDisposed,
             instance: pipelines
@@ -258,15 +273,13 @@ public sealed partial class SdfWorldTables : IDisposable {
         using var scope = new GpuCreationScope();
 
         m_pipelines = pipelines;
-        m_meshPipeline = (meshRaster.Graphics ?? throw new ArgumentException(message: "The mesh pass pipeline is not a graphics pipeline.", paramName: nameof(meshRaster)));
-        m_meshRenderPass = (meshRaster.RenderPass ?? throw new ArgumentException(message: "The mesh pass pipeline names no render pass.", paramName: nameof(meshRaster)));
-        m_shadowPipeline = (shadowRaster.Graphics ?? throw new ArgumentException(message: "The shadow pass pipeline is not a graphics pipeline.", paramName: nameof(shadowRaster)));
-        m_shadowRenderPass = (shadowRaster.RenderPass ?? throw new ArgumentException(message: "The shadow pass pipeline names no render pass.", paramName: nameof(shadowRaster)));
-        m_shadowExitPipeline = (shadowExitRaster.Graphics ?? throw new ArgumentException(message: "The shadow exit pipeline is not a graphics pipeline.", paramName: nameof(shadowExitRaster)));
-        m_shadowGlassPipeline = (shadowGlassRaster.Graphics ?? throw new ArgumentException(message: "The shadow glass pipeline is not a graphics pipeline.", paramName: nameof(shadowGlassRaster)));
-        m_glassPipeline = (glassRaster.Graphics ?? throw new ArgumentException(message: "The glass pass pipeline is not a graphics pipeline.", paramName: nameof(glassRaster)));
-        m_occlusionPipeline = (occlusion.Compute ?? throw new ArgumentException(message: "The mesh pass occlusion kernel is not a compute pipeline.", paramName: nameof(occlusion)));
-        m_regionCopyPipeline = regionCopy;
+        m_meshRaster = passes.MeshRaster;
+        m_shadowRaster = passes.ShadowRaster;
+        m_shadowExitRaster = passes.ShadowExitRaster;
+        m_shadowGlassRaster = passes.ShadowGlassRaster;
+        m_glassRaster = passes.GlassRaster;
+        m_occlusion = passes.Occlusion;
+        m_regionCopyPipeline = passes.RegionCopy;
         m_regionCopies = new GpuRegionCopyRecording(
             begin: BeginUpload,
             readers: RegionReaders,
@@ -371,22 +384,8 @@ public sealed partial class SdfWorldTables : IDisposable {
             release: m_bindings.DestroyPool
         );
 
-        var worldGroups = pipelines.Pipeline(kernel: SdfKernel.Surface).GroupLayoutHandles;
-
-        // The World set per ring slot, which every view's compute passes bind, written the first time one is bound
-        // (WorldSet).
-        for (var slot = 0; (slot < FrameRingSize); slot++) {
-            m_worldSets[slot] = m_bindings.AllocateSet(
-                name: NameOf(
-                    detail: "world group",
-                    index: slot,
-                    part: "tables"
-                ),
-                descriptorSetLayoutHandle: worldGroups[((int)WorldGroup)],
-                poolHandle: m_pool
-            );
-        }
-
+        // The World set per ring slot, which every view's compute passes bind, is allocated and written the first time
+        // one is bound (WorldSet).
         // One sampler per filter; a screen samples its source through the one its row chooses and the glyph atlas through
         // the nearest one. The World sets bind them (WriteWorldSet).
         foreach (var filter in Enum.GetValues<GpuSamplerFilter>()) {
