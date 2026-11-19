@@ -24,15 +24,24 @@ precise float sdfTorus(float3 p, float major, float minor) {
 precise float sdfPlane(float3 p, float3 normal, float offset) {
     return (dot(p, normal) + offset);
 }
-// inverseLengthSquared = 1/dot(endpoint, endpoint), HOST-BAKED (data1.y) by SdfProgramBuilder.Capsule.
-precise float sdfCapsule(float3 p, float3 endpoint, float radius, float inverseLengthSquared) {
-    float h = clamp((dot(p, endpoint) * inverseLengthSquared), 0.0, 1.0);
+// The segment parameter is dot(p, e) / dot(e, e), clamped to [0, 1], from the endpoint alone (a zero endpoint is a
+// sphere): the formula the fixed-point evaluator rounds once (FixedVector3.SegmentParameter). KEEP IN SYNC with
+// Puck.SignedDistance.Queries.SdfFieldEvaluator.SdfCapsule.
+precise float sdfCapsule(float3 p, float3 endpoint, float radius) {
+    float lengthSquared = dot(endpoint, endpoint);
+    float h = ((lengthSquared > 0.0) ? clamp((dot(p, endpoint) / lengthSquared), 0.0, 1.0) : 0.0);
     return (length(p - (h * endpoint)) - radius);
 }
 precise float sdfCylinder(float3 p, float radius, float halfHeight) {
     return puckBoxDistance2(float2(length(p.xz), abs(p.y)) - float2(radius, halfHeight));
 }
-// The ellipsoid: the superellipsoid's scaled gauge at e = 2, (|p/r| - 1) * min(r). EXACTLY 1-Lipschitz at every
+// The superellipsoid's gauge ratios carried in metres, q = |p| * min(r) / r, the form the fixed-point evaluator rounds
+// once (SdfFieldEvaluator.SuperellipsoidScaledRatio): the radii lie on the grid both carriers hold, so both scale by
+// the same smallest radius.
+precise float3 sdfSuperellipsoidRatios(float3 p, float minRadius, float3 inverseRadii) {
+    return (abs(p) * (minRadius * inverseRadii));
+}
+// The ellipsoid: the superellipsoid's scaled gauge at e = 2, |p * min(r) / r| - min(r). EXACTLY 1-Lipschitz at every
 // eccentricity (SdfProgramBuilder.Superellipsoid's proof covers e = 2), so it needs no step clamp and no field scope;
 // it shares its zero set with the true ellipsoid and underestimates Euclidean distance away from it. The center
 // returns -min(r) like the general path's m <= 0 branch (length(0) = 0). KEEP IN SYNC with the e == 2 fast path of
@@ -40,7 +49,7 @@ precise float sdfCylinder(float3 p, float radius, float halfHeight) {
 precise float sdfEllipsoidGauge(float3 p, float3 radii, float3 inverseRadii) {
     float minRadius = min(radii.x, min(radii.y, radii.z));
 
-    return ((length(p * inverseRadii) - 1.0) * minRadius);
+    return (length(sdfSuperellipsoidRatios(p, minRadius, inverseRadii)) - minRadius);
 }
 precise float sdfSuperellipsoidNormFactor(float exponent) {
     return 1.0 - (7.0 / 25.0) * (exponent - 2.0);
@@ -60,11 +69,11 @@ precise float sdfSuperellipsoidPowerNorm(float3 q, float m, float exponent) {
     float3 u = pow(q / m, exponent);
     return m * pow((u.x + u.y) + u.z, 1.0 / exponent);
 }
-// The superellipsoid: q = pow(abs(p) * inverseRadii, e); d = (pow(q.x+q.y+q.z, 1/e) - 1) * min(r). EXACTLY
+// The superellipsoid: with q = |p| * min(r) / r, d = pow(sum(q_i^e), 1/e) - min(r). EXACTLY
 // 1-Lipschitz for every radius and every e >= 1 (see SdfProgramBuilder.Superellipsoid's remarks for the proof) — no
 // AnalyzeLipschitz step clamp is needed. e == 2 (every ellipsoid) takes sdfEllipsoidGauge's pow-free form, the same
-// field. inverseRadii = 1/max(abs(radii), eps),
-// HOST-BAKED (data1.yzw); minRadius = min(abs(radii)) is cheap enough to read straight off data0.xyz per eval.
+// field. inverseRadii = 1/radii, HOST-BAKED (data1.yzw); minRadius = min(radii) is cheap enough to read straight off
+// data0.xyz per eval. For 2 < e <= 3 the power norm is clamped to its certified band around length(q), in both readers.
 // The l_e gauge is computed in its FACTORED form, m * (sum((q_i/m)^e))^(1/e) with m = max(q): every pow() argument
 // stays in [0, 1] (the sum in [1, 3]), so a far query never overflows — the plain sum(q_i^e) reaches float infinity at
 // |p|/r ~ 1e5 for e = 8 (and saturates the fixed-point mirror's Q48.16 carrier at |p|/r ~ 60), which would collapse
@@ -75,9 +84,9 @@ precise float sdfSuperellipsoid(float3 p, float3 radii, float3 inverseRadii, flo
         return sdfEllipsoidGauge(p, radii, inverseRadii);
     }
 
-    float3 q = (abs(p) * inverseRadii);
-    float m = max(q.x, max(q.y, q.z));
     float minRadius = min(radii.x, min(radii.y, radii.z));
+    float3 q = sdfSuperellipsoidRatios(p, minRadius, inverseRadii);
+    float m = max(q.x, max(q.y, q.z));
 
     if (m <= 0.0) {
         return -minRadius;
@@ -87,7 +96,7 @@ precise float sdfSuperellipsoid(float3 p, float3 radii, float3 inverseRadii, flo
     if (exponent > 2.0 && exponent <= 3.0) {
         norm = sdfClampSuperellipsoidNorm(norm, length(q), exponent);
     }
-    return (norm - 1.0) * minRadius;
+    return (norm - minRadius);
 }
 // slope b = (lowerRadius - upperRadius)/height and its complement a = sqrt(1 - b*b) are HOST-BAKED (data0.w / data1.y).
 precise float sdfRoundCone(float3 p, float lowerRadius, float upperRadius, float height, float b, float a) {
@@ -743,7 +752,7 @@ precise float evaluateShape(uint shapeType, float3 p, float4 data0, float4 data1
         // e == 2 takes the ellipsoid's pow-free gauge; any other exponent the general power path.
         case SDF_SHAPE_SUPERELLIPSOID:  result = sdfSuperellipsoid(p, data0.xyz, data1.yzw, data0.w); break;
         // Articulated-character core: limbs overwhelmingly lower to capsules/cylinders.
-        case SDF_SHAPE_CAPSULE:     result = sdfCapsule(p, data0.xyz, data0.w, data1.y); break;
+        case SDF_SHAPE_CAPSULE:     result = sdfCapsule(p, data0.xyz, data0.w); break;
         // data0.xy arrive inset by the edge-rounding radius data1.w; subtracting it offsets the rims back out.
         case SDF_SHAPE_CYLINDER:    result = (sdfCylinder(p, data0.x, data0.y) - data1.w); break;
         // The 2D-primitive family: each lifted wrapper reads its lift mode (data1.y) and lift amount (data0.w) itself.

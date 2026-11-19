@@ -5,7 +5,9 @@
 // against one clock.
 //
 // A press is graded by how far it fell from the nearest beat of the world's score, at the time the host captured it
-// (sub-tick, plus the seat's calibration), and by which beat that was. The first press after a phrase ends starts a new
+// (sub-tick, plus the seat's calibration), and by which beat that was. The presses a step admitted are judged oldest
+// first, so presses that share a step each count, up to `pressesPerStep` of them (the work sheet prices the rule at that
+// many firings). The first press after a phrase ends starts a new
 // one and is its first step's beat; each later step is due that many beats after the first (`beat` in the phrase). A
 // press that lands on the awaited step's beat with the awaited note inside a window is a hit worth the window's grade
 // (`perfect` 3, `good` 2, `ok` 1). Any other press on the beat, or the right note outside every window, is a miss. A press
@@ -50,7 +52,7 @@ rule template judgeResult(s, length, limit) {
   judge[$"status{s}"] = ((got == 0) and (missed + 1 >= limit)) ? 2 : ((at + advance >= length) ? 1 : 0)
 }
 
-template rhythmJudge(music, presses, phrase, seats = 1, windows = rhythmWindows, missLimit = 2, extraWorldRows = []) {
+template rhythmJudge(music, presses, phrase, seats = 1, windows = rhythmWindows, missLimit = 2, pressesPerStep = 4, extraWorldRows = []) {
   let steps = length(phrase)
 
   state {
@@ -105,27 +107,42 @@ template rhythmJudge(music, presses, phrase, seats = 1, windows = rhythmWindows,
   }
 
   for s in range(1, seats) {
-    for press in presses {
-      rule $"judge-{s}-{press.channel}" {
-        local error = clock(music, phaseErrorAt, s, press.channel, Press, 0) ?? 0.0
-        local pressBeat = clock(music, beatAt, s, press.channel, Press, 0) ?? 0
-        local distance = absolute(error)
-        local window = (
-          (distance <= windows.perfect) ? 3 : ((distance <= windows.good) ? 2 : ((distance <= windows.ok) ? 1 : 0))
-        )
-        local live = judge[$"status{s}"] == 0
-        local at = live ? judge[$"step{s}"] : 0
-        local carried = live ? judge[$"strength{s}"] : 0
-        local missed = live ? judge[$"misses{s}"] : 0
-        local begin = (at > 0) ? judge[$"start{s}"] : pressBeat
-        local due = begin + judgePhraseBeat[at]
-        local got = ((judgePhrase[at] == press.note) and (pressBeat == due)) ? window : 0
-        local advance = (pressBeat < due) ? 0 : 1
-        when inputEdge(s, press.channel, Press, 0) and inputTick(s, press.channel, Press, 0) == $tick
-        mode: Level
-        judgeResult(s, steps, missLimit)
-        judgeError[$"{s}"] = error
+    // One sweep over the seat's events in this step, oldest first, so two presses inside one step are each judged in the
+    // order they happened, and the second reads what the first wrote. Each local chain below folds the presses' channels
+    // into the one value the event at hand carries: whether it is a press, the note it means, and where it fell.
+    rule $"judge-{s}" {
+      forEach: $"$inputEvents:{s}"
+      maxFirings: pressesPerStep
+      local pressed0 = 0
+      local note0 = 0
+      local error0 = 0.0
+      local beat0 = 0
+      for (press, i) in presses {
+        local $"pressed{i + 1}" = inputEdge(s, press.channel, Press, each) ? 1 : $"pressed{i}"
+        local $"note{i + 1}" = inputEdge(s, press.channel, Press, each) ? press.note : $"note{i}"
+        local $"error{i + 1}" = clock(music, phaseErrorAt, s, press.channel, Press, each) ?? $"error{i}"
+        local $"beat{i + 1}" = clock(music, beatAt, s, press.channel, Press, each) ?? $"beat{i}"
       }
+      local pressed = $"pressed{length(presses)}"
+      local note = $"note{length(presses)}"
+      local error = $"error{length(presses)}"
+      local pressBeat = $"beat{length(presses)}"
+      local distance = absolute(error)
+      local window = (
+        (distance <= windows.perfect) ? 3 : ((distance <= windows.good) ? 2 : ((distance <= windows.ok) ? 1 : 0))
+      )
+      local live = judge[$"status{s}"] == 0
+      local at = live ? judge[$"step{s}"] : 0
+      local carried = live ? judge[$"strength{s}"] : 0
+      local missed = live ? judge[$"misses{s}"] : 0
+      local begin = (at > 0) ? judge[$"start{s}"] : pressBeat
+      local due = begin + judgePhraseBeat[at]
+      local got = ((judgePhrase[at] == note) and (pressBeat == due)) ? window : 0
+      local advance = (pressBeat < due) ? 0 : 1
+      when pressed
+      mode: Level
+      judgeResult(s, steps, missLimit)
+      judgeError[$"{s}"] = error
     }
 
     // A step whose beat has passed with no press is a miss, so a phrase the player stops playing ends on its own.

@@ -155,8 +155,10 @@ public sealed class WorldProjectionSampler {
     /// <summary>Accumulates one borrowed authority snapshot and returns the next projection image when due.</summary>
     /// <param name="snapshot">The next full-rate snapshot, in increasing tick order.</param>
     /// <param name="projected">The self-contained sampled image when due; otherwise the default value.</param>
+    /// <param name="due">Whether the image is owed now whatever the cadence, as the primer of a stream's new generation
+    /// is.</param>
     /// <returns><see langword="true"/> when <paramref name="projected"/> should be delivered.</returns>
-    public bool TryProject(in WorldSnapshot snapshot, out WorldSnapshot projected) {
+    public bool TryProject(in WorldSnapshot snapshot, out WorldSnapshot projected, bool due = false) {
         if (
             m_hasObservedSnapshot &&
             (snapshot.Tick <= m_lastObservedTick)
@@ -170,6 +172,7 @@ public sealed class WorldProjectionSampler {
         m_lastObservedTick = snapshot.Tick;
         Accumulate(snapshot: in snapshot);
         if (
+            !due &&
             m_hasDeliveredSnapshot &&
             snapshot.Cues.IsEmpty &&
             snapshot.MusicBoundary == 0 &&

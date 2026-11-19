@@ -177,15 +177,22 @@ public sealed class WorldFederationProjectionSink(WorldDisclosureTier tier, stri
     public void DeliverCut(in WorldStreamStamp stream, bool terminal) {
         // The hub's fan-out has one span that never ends; this stream decides its own cuts.
     }
+    public void CloseSpan(ulong stream) { }
     public void DeliverDefinition(WorldDefinition definition, WorldDocumentVersion version, in WorldStreamStamp stream) {
         if (!Current()) {
             return;
         }
         if (m_view is null) { throw new InvalidOperationException(message: "A document delivery requires its authority view."); }
         server!.AttachCursor(cursor: m_cursor, recipient: recipient);
+        // An install can change the body policy while no snapshot follows (a paused world): it is observed here too, so
+        // a policy that turns redacting cuts with the document that carries it.
+        var bodies = disclosure().Policy;
+
+        m_cursor.ObserveBodies(mode: bodies.Mode, radius: bodies.Radius);
 
         if (m_feed is not null) {
             var time = server!.DeliveryTime;
+            var cut = false;
 
             // Only a disclosure refusal ends the stream by name; any other failure to compose is a fault, which the
             // hub detaches the sink for.
@@ -193,6 +200,7 @@ public sealed class WorldFederationProjectionSink(WorldDisclosureTier tier, stri
                 var delivery = m_feed.Compose(cursor: m_cursor, view: m_view);
 
                 if (AnnounceCut()) {
+                    cut = true;
                     m_feed.Release();
                     delivery = m_feed.Compose(cursor: m_cursor, view: m_view);
                 }
@@ -205,17 +213,32 @@ public sealed class WorldFederationProjectionSink(WorldDisclosureTier tier, stri
             } catch (WorldDisclosureException) {
                 End(reason: DisclosureDetachReason);
             }
+            if (cut) { PrimeSnapshot(); }
 
             return;
         }
 
         if (m_cursor.DeliverDefinition(view: m_view) is { } delivered) {
-            _ = AnnounceCut();
+            var cut = AnnounceCut();
+
             WriteRecord(WorldFederationResponse.Definition, WorldFederationCodec.DocumentLeaf(
                 payload: WorldDefinitionSerialization.SerializeCompact(definition: delivered), tier: tier, version: Version));
+            if (cut) { PrimeSnapshot(); }
         } else if (AnnounceCut()) {
             PrimeAfterCut();
+            PrimeSnapshot();
         }
+    }
+    // Completes a generation a document delivery opened with the primer snapshot it owes, outside the cadence: the
+    // authority's current table under the live body policy, so the peer is never left on a cut with no bodies to show
+    // while no tick follows.
+    private void PrimeSnapshot() {
+        if (m_invalidated || (server is null)) {
+            return;
+        }
+        var primer = server.Document.BuildPrimerSnapshot();
+
+        WriteSnapshot(projected: primer with { Cues = default, MusicBoundary = 0, MusicSenses = 0 }, currentDisclosure: disclosure());
     }
     public void DeliverSessionLever(WorldSessionLever lever) { }
 
@@ -240,6 +263,10 @@ public sealed class WorldFederationProjectionSink(WorldDisclosureTier tier, stri
         }
         var currentDisclosure = disclosure();
 
+        // The body policy is observed at every authoritative tick, sampled or not, so a policy that turns redacting cuts
+        // at once rather than at the cadence's next sample.
+        m_cursor.ObserveBodies(mode: currentDisclosure.Policy.Mode, radius: currentDisclosure.Policy.Radius);
+
         var projected = snapshot;
         if (!currentDisclosure.IsFull) {
             projected = WorldOutputHub.Redact(
@@ -251,18 +278,29 @@ public sealed class WorldFederationProjectionSink(WorldDisclosureTier tier, stri
         if (m_view is not null) { projected = server!.PresentCues(projected, m_view, currentDisclosure.IsFull); }
         var atCadence = snapshot with { Cues = projected.Cues, MusicBoundary = projected.MusicBoundary, MusicSenses = projected.MusicSenses };
         m_sampler.SetUpdateSeconds(updateSeconds: currentDisclosure.Policy.UpdateSeconds);
-        if (!m_sampler.TryProject(atCadence, out projected)) { return; }
-        m_cursor.ObserveBodies(mode: currentDisclosure.Policy.Mode, radius: currentDisclosure.Policy.Radius);
+        // A cut owes its primer now, whatever the cadence.
+        if (!m_sampler.TryProject(snapshot: in atCadence, due: m_cursor.CutOwed, projected: out projected)) { return; }
+        WriteSnapshot(projected: projected, currentDisclosure: currentDisclosure);
+    }
+    // Writes one sampled or primer snapshot as the peer may see it: redacted under the live body policy, its cells and
+    // sizes as its view discloses them. A cut the rows or the body policy decided primes the peer alone first, and this
+    // snapshot completes it, its rows advanced again against the generation's whole document so that every observation
+    // the document owes the peer rides it.
+    private void WriteSnapshot(WorldSnapshot projected, in WorldSinkDisclosure currentDisclosure) {
         if (!currentDisclosure.IsFull) {
             projected = WorldOutputHub.Redact(currentDisclosure, projected, ref m_redacted);
         }
-        if (m_view is not null) { projected = projected with { FieldCells = m_rows.Advance(m_view, m_cursor, projected.FieldCells, (tier == WorldDisclosureTier.Replica)) }; } else if (!projected.FieldCells.IsEmpty) { throw new InvalidOperationException(message: "A state change delivery requires its authority view."); }
-        projected = projected with { Revision = checked((int)m_cursor.Sequence), SolidScales = ((m_view is null) ? default : m_scales.Filter(m_view, projected.SolidScales)) };
+        var cells = projected.FieldCells;
+        var replica = (tier == WorldDisclosureTier.Replica);
+
+        if (m_view is not null) { projected = projected with { FieldCells = m_rows.Advance(m_view, m_cursor, cells, replica) }; } else if (!cells.IsEmpty) { throw new InvalidOperationException(message: "A state change delivery requires its authority view."); }
+        projected = projected with { SolidScales = ((m_view is null) ? default : m_scales.Filter(m_view, projected.SolidScales)) };
         projected = projected with { Inputs = ((recipient is { } inputOwner) ? WorldInputPublication.ForOwner(projected.Inputs, inputOwner, ref m_inputDisclosure) : default) };
-        // A cut the rows or the body policy decided primes the peer alone, and this snapshot completes it.
         if (AnnounceCut()) {
             PrimeAfterCut();
+            if (m_view is not null) { projected = projected with { FieldCells = m_rows.Advance(m_view, m_cursor, cells, replica) }; }
         }
+        projected = projected with { Revision = checked((int)m_cursor.Sequence) };
         WriteRecord(
             WorldFederationResponse.Snapshot,
             WorldFederationCodec.EncodeSnapshot(snapshot: in projected)
@@ -273,7 +311,7 @@ public sealed class WorldFederationProjectionSink(WorldDisclosureTier tier, stri
     public void DeliverState(WorldDefinition definition, WorldDocumentVersion version, in WorldStateStamp stamp, in WorldStreamStamp stream) {
         if ((m_feed is not null) || !stamp.ArenaValues || ((m_view is not null) && m_cursor.FrameMoved(view: m_view))) { DeliverDefinition(definition: definition, stream: in stream, version: version); }
     }
-    public void PrimeRoute(in WorldAuthorityRouteDescription route) => Write(
+    public void PrimeRoute(in WorldAuthorityRouteDescription route) => WriteRecord(
         WorldFederationResponse.Route,
         WorldFederationCodec.EncodeRoute(
             authority: authority,

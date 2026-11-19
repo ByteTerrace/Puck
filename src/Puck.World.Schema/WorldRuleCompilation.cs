@@ -14,13 +14,13 @@ public sealed class WorldRuleCompilation {
         Definition = definition;
         Rules = rules;
         Groups = groups;
-        Ungrouped = Puck.State.Rules.RuleCompiler.Ungrouped(
+        Order = Puck.State.Rules.RuleEvaluationOrder.Of(
             groups: groups,
             rules: rules
         );
         Interactions = interactions;
         Tables = tables;
-        m_work = new(valueFactory: () => (work ?? WorldRuleWorkBudget.Analyze(Definition, Rules, Interactions, context)));
+        m_work = new(valueFactory: () => (work ?? WorldRuleWorkBudget.Analyze(Definition, Order, Interactions, context)));
         m_costReport = new(valueFactory: () => WorldCostReport.Generate(compilation: this));
         m_hazards = new(valueFactory: () => Puck.State.Rules.RuleHazards.Analyze(
             catalog: Definition.StateCatalog,
@@ -58,9 +58,11 @@ public sealed class WorldRuleCompilation {
     public Puck.State.Rules.CompiledRule[] Interactions { get; }
     /// <summary>Gets the compiled rules in document order.</summary>
     public Puck.State.Rules.CompiledRule[] Rules { get; }
+    /// <summary>Gets the order a host evaluates the rules in, which the work sheet places its lines by.</summary>
+    public Puck.State.Rules.RuleEvaluationOrder Order { get; }
     /// <summary>Gets the rules of <see cref="Rules"/> that no group of <see cref="Groups"/> claims — the set a host
     /// evaluates directly, because a claimed rule runs only under its group.</summary>
-    public Puck.State.Rules.CompiledRule[] Ungrouped { get; }
+    public Puck.State.Rules.CompiledRule[] Ungrouped => Order.Ungrouped;
     /// <summary>Gets the pinned tables in document order.</summary>
     public CompiledTable[] Tables { get; }
 

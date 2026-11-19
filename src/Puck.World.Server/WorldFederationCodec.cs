@@ -493,9 +493,13 @@ public static partial class WorldFederationCodec {
     /// <param name="record">The stamped record.</param>
     /// <param name="stream">The record's stamp on success.</param>
     /// <param name="body">The body behind the stamp on success.</param>
-    /// <param name="failure">The named refusal when the record is too short to carry a stamp.</param>
-    /// <returns><see langword="true"/> when the record is long enough to carry a stamp.</returns>
-    public static bool TryReadStamped(ReadOnlySpan<byte> record, out WorldStreamStamp stream, out ReadOnlySpan<byte> body, out WireFailure failure) {
+    /// <param name="failure">The named refusal when the record is too short to carry a stamp or its stamp is not one a
+    /// cursor issues.</param>
+    /// <param name="issuedOnly">Whether only a stamp a cursor issues is accepted, as on the wire; a report rendering a
+    /// recorded transcript, which can hold the unspanned fan-out's records, reads any stamp.</param>
+    /// <returns><see langword="true"/> when the record carries a stamp, one a cursor could have issued when
+    /// <paramref name="issuedOnly"/> is set.</returns>
+    public static bool TryReadStamped(ReadOnlySpan<byte> record, out WorldStreamStamp stream, out ReadOnlySpan<byte> body, out WireFailure failure, bool issuedOnly = true) {
         if (record.Length < StreamStampBytes) {
             stream = default;
             body = default;
@@ -505,10 +509,18 @@ public static partial class WorldFederationCodec {
         }
         stream = ReadStamp(source: record);
         body = record[StreamStampBytes..];
+        if (issuedOnly && !IsIssued(stream: in stream)) {
+            failure = new WireFailure(Detail: "an observation record's stream stamp is not one a cursor issues", Refusal: WireRefusal.PayloadMalformed);
+
+            return false;
+        }
         failure = default;
 
         return true;
     }
+    // Whether a stamp read from the wire is one a delivery cursor issues: every observation stream is spanned (the
+    // unspanned fan-out never leaves its process), its generation counts up from zero and its ordinals from one.
+    private static bool IsIssued(in WorldStreamStamp stream) => stream.IsSpanned && (stream.Generation >= 0L) && (stream.Ordinal > 0L);
     /// <summary>Encodes a stream's cut or end: its stamp, then one byte that is one when the stream ends.</summary>
     /// <param name="stream">The record's stamp.</param>
     /// <param name="terminal">Whether the stream ends.</param>
@@ -525,9 +537,10 @@ public static partial class WorldFederationCodec {
     /// <param name="body">The record bytes.</param>
     /// <param name="stream">The record's stamp on success.</param>
     /// <param name="terminal">Whether the stream ends, on success.</param>
-    /// <returns><see langword="true"/> when the record is exactly a stamp and a terminal byte of zero or one.</returns>
+    /// <returns><see langword="true"/> when the record is exactly a spanned stamp a cursor could have issued and a
+    /// terminal byte of zero or one.</returns>
     public static bool TryDecodeCut(ReadOnlySpan<byte> body, out WorldStreamStamp stream, out bool terminal) {
-        if ((body.Length != (StreamStampBytes + 1)) || (body[StreamStampBytes] > 1)) {
+        if ((body.Length != (StreamStampBytes + 1)) || (body[StreamStampBytes] > 1) || !IsIssued(stream: ReadStamp(source: body))) {
             stream = default;
             terminal = false;
 

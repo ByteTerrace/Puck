@@ -691,16 +691,16 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
             ? WorldFederationLane.Routed
             : WorldFederationLane.Transaction
         );
-    // The last stamp one observation session delivered, so the span it holds closes when the session ends.
+    // The current observation session's ingress, so the span it holds closes when the session ends.
     private sealed class ObservedStream {
-        public WorldStreamStamp Last;
+        public WorldStreamIngress? Session;
     }
     // A session that ended can no longer tell its reader of a cut, so the span it was showing closes: its reader drops
-    // what that stream delivered and takes the next session's stream as a new admission.
+    // what that stream delivered and takes the next session's stream as a new admission. The close is the reader's own
+    // transport speaking, never a record, so nothing about it is taken from the wire.
     private static void CloseObserved(IClientSink sink, ObservedStream observed) {
-        if (observed.Last.IsSpanned) {
-            sink.DeliverCut(stream: observed.Last, terminal: true);
-            observed.Last = default;
+        if ((Interlocked.Exchange(location1: ref observed.Session, value: null) is { } session) && (session.Span.Stream is var stream and not 0UL)) {
+            sink.CloseSpan(stream: stream);
         }
     }
     private async Task<bool> ObserveSessionAsync(IClientSink sink, ObservedStream observed, CancellationToken ct) {
@@ -735,11 +735,24 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
             stream: stream
         ).ConfigureAwait(continueOnCapturedContext: false);
 
-        // The projection this session holds: a presentation-tier delta merges over it, and a new session starts from a
-        // whole projection again.
+        // The projection this session holds: a presentation-tier delta merges over it, and a new session, or a new
+        // generation of this one, starts from a whole projection again.
         byte[]? Fetch(ContentPin pin) => upstream.FetchPrototype(pin: pin, traveler: ((m_submissionCredential is { } credential)
             ? new WorldTravelerObservation(credential.SourceAuthority, credential.Mobility) : null));
         var hold = new WorldProjectionHold(fetch: Fetch);
+        // The session's one door: every record it reads, a route included, passes this ingress on its stamp before
+        // anything the record carries is decoded into the hold or published by this authority, and a record out of
+        // order (another stream, an earlier generation, an ordinal not ahead) ends the session, which closes the
+        // reader's span. The reader's own ingress orders the records again across sessions.
+        var ingress = new WorldStreamIngress();
+
+        observed.Session = ingress;
+        bool Admits(ReadOnlySpan<byte> record, out WorldStreamStamp stamp, out ReadOnlySpan<byte> body, out WireFailure failure) {
+            if (!WorldFederationCodec.TryReadStamped(record: record, stream: out stamp, body: out body, failure: out failure)) { return false; }
+            if (ingress.Admit(stream: in stamp)) { return true; }
+            failure = new WireFailure(Detail: "an observation record is out of its stream's order", Refusal: WireRefusal.PayloadMalformed);
+            return false;
+        }
 
         while (!ct.IsCancellationRequested) {
             var frame = await WorldFederationCodec.ReadResponseAsync(
@@ -772,8 +785,9 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
                 case WorldFederationResponse.Route:
                     if (
                         !m_submissionCredential.HasValue ||
+                        !Admits(record: frame.Body.Span, stamp: out _, body: out var routeBody, failure: out _) ||
                         !WorldFederationCodec.TryDecodeRoute(
-                        frame.Body.Span,
+                        routeBody,
                         out var route,
                         out _,
                         fetch: Fetch
@@ -784,19 +798,22 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
                     ObserveRoute(route: route);
                     break;
                 case WorldFederationResponse.Cut: {
-                        if (!WorldFederationCodec.TryDecodeCut(body: frame.Body.Span, stream: out var cut, terminal: out var terminal)) {
+                        if (!WorldFederationCodec.TryDecodeCut(body: frame.Body.Span, stream: out var cut, terminal: out var terminal) ||
+                            !ingress.Cut(stream: in cut, terminal: terminal)) {
                             return false;
                         }
-                        observed.Last = cut;
+                        // The ended span's projection goes with it: the generation the cut opens starts from its whole
+                        // projection, which nothing of the ended span can complete.
+                        hold = new WorldProjectionHold(fetch: Fetch);
                         sink.DeliverCut(stream: cut, terminal: terminal);
                         if (terminal) {
-                            observed.Last = default;
+                            return false;
                         }
                         break;
                     }
                 case WorldFederationResponse.Definition: {
                         if (
-                            !WorldFederationCodec.TryReadStamped(record: frame.Body.Span, stream: out var definitionStream, body: out var definitionBody, failure: out var definitionFailure) ||
+                            !Admits(record: frame.Body.Span, stamp: out var definitionStream, body: out var definitionBody, failure: out var definitionFailure) ||
                             !WorldFederationCodec.TryDecodeDocument(
                             body: definitionBody,
                             definition: out var definition,
@@ -832,7 +849,6 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
                             location: ref m_definition,
                             value: definition
                         );
-                        observed.Last = definitionStream;
                         sink.DeliverDefinition(
                             definition: definition,
                             stream: definitionStream,
@@ -841,7 +857,7 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
                         break;
                     }
                 case WorldFederationResponse.ProjectionDelta: {
-                        if (!WorldFederationCodec.TryReadStamped(record: frame.Body.Span, stream: out var deltaStream, body: out var deltaBody, failure: out var deltaFailure) || !WorldFederationCodec.TryDecodeProjectionDelta(
+                        if (!Admits(record: frame.Body.Span, stamp: out var deltaStream, body: out var deltaBody, failure: out var deltaFailure) || !WorldFederationCodec.TryDecodeProjectionDelta(
                             body: deltaBody,
                             definition: out var merged,
                             failure: out deltaFailure,
@@ -865,7 +881,6 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
                             value: merged
                         );
 
-                        observed.Last = deltaStream;
                         if (valuesOnly) {
                             sink.DeliverState(
                                 definition: merged,
@@ -884,7 +899,7 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
                         break;
                     }
                 case WorldFederationResponse.Snapshot: {
-                        if (!WorldFederationCodec.TryReadStamped(record: frame.Body.Span, stream: out var snapshotStream, body: out var snapshotBody, failure: out var snapshotFailure) || !WorldFederationCodec.TryDecodeSnapshot(
+                        if (!Admits(record: frame.Body.Span, stamp: out var snapshotStream, body: out var snapshotBody, failure: out var snapshotFailure) || !WorldFederationCodec.TryDecodeSnapshot(
                             body: snapshotBody,
                             snapshot: out var snapshot,
                             failure: out snapshotFailure
@@ -907,7 +922,6 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
                             location: ref m_authority,
                             value: snapshot.Authority
                         );
-                        observed.Last = snapshotStream;
                         sink.DeliverSnapshot(snapshot: in snapshot, stream: snapshotStream);
                         break;
                     }

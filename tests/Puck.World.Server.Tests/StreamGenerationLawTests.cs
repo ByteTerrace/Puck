@@ -1,3 +1,4 @@
+using Puck.Assets.Documents;
 using Puck.Commands;
 using Puck.World.Client;
 using Puck.World.Protocol;
@@ -107,7 +108,11 @@ public sealed class StreamGenerationLawTests {
 
         var lost = new WorldSessionMirror(placeholder: placeholder);
         lost.DeliverDefinition(definition: delivered, stream: new WorldStreamStamp(Generation: 0L, Ordinal: 1L, Stream: 3UL), version: default);
-        lost.CloseSpan();
+        // A close of a stream the mirror does not hold changes nothing.
+        lost.CloseSpan(stream: 9UL);
+        Assert.False(lost.Span.Closed);
+        Assert.Same(delivered, lost.Definition);
+        lost.CloseSpan(stream: 3UL);
         Assert.True(lost.Span.Closed);
         Assert.Same(placeholder, lost.Definition);
         // A late record of the closed stream never brings it back; the next admission's stream binds.
@@ -125,5 +130,112 @@ public sealed class StreamGenerationLawTests {
         observation.Dispose();
         Assert.True(mirror.Span.Closed);
         Assert.Same(WorldProjection.Undisclosed, mirror.Definition);
+    }
+
+    [Fact]
+    public void NoStreamThatClosedOnAMirrorBindsItAgainAndNothingUnspannedReachesOneThatHeldASpan() {
+        var mirror = new WorldSessionMirror(placeholder: WorldProjection.Undisclosed);
+        var first = Fixtures.BuildDocument();
+        var second = first with { DocumentId = "second" };
+        var replayed = first with { DocumentId = "replayed" };
+
+        mirror.DeliverDefinition(definition: first, stream: new WorldStreamStamp(Generation: 0L, Ordinal: 1L, Stream: 1UL), version: default);
+        mirror.CloseSpan(stream: 1UL);
+        mirror.DeliverDefinition(definition: second, stream: new WorldStreamStamp(Generation: 0L, Ordinal: 1L, Stream: 2UL), version: default);
+        Assert.Same(second, mirror.Definition);
+        mirror.DeliverCut(stream: new WorldStreamStamp(Generation: 0L, Ordinal: 2L, Stream: 2UL), terminal: true);
+        Assert.Same(WorldProjection.Undisclosed, mirror.Definition);
+        // The first stream closed before the second bound: it stays closed, as does an unordered record.
+        mirror.DeliverDefinition(definition: replayed, stream: new WorldStreamStamp(Generation: 0L, Ordinal: 1L, Stream: 1UL), version: default);
+        mirror.DeliverDefinition(definition: replayed, stream: WorldStreamStamp.Unspanned, version: default);
+        Assert.Same(WorldProjection.Undisclosed, mirror.Definition);
+        Assert.Equal(2L, mirror.IngressRefusals);
+    }
+
+    [Fact]
+    public void EveryCutWithdrawsTheMirrorAndTheNewGenerationsFirstSnapshotSeedsBothPoseEndpoints() {
+        var mirror = new WorldSessionMirror(placeholder: WorldProjection.Undisclosed);
+        var document = Fixtures.BuildDocument();
+        var ordinal = 0L;
+        WorldStreamStamp Next(long generation) => new(Generation: generation, Ordinal: ++ordinal, Stream: 5UL);
+        static WorldSnapshot At(ulong tick, float x) => new(Authority: "a", Revision: 0, StepTicks: 1UL, Tick: tick, EngineTick: tick,
+            Entries: new[] { new EntitySnapshot(Active: true, BodyColor: System.Numerics.Vector3.One, CatalogRig: 0, Continuity: EntityContinuity.Continuous,
+                Generation: 1, Index: 0, Kit: 0, Look: 0, Orientation: System.Numerics.Quaternion.Identity, Position: new System.Numerics.Vector3(x, 0f, 0f)) });
+
+        mirror.DeliverDefinition(definition: document, stream: Next(0L), version: default);
+        mirror.DeliverSnapshot(snapshot: At(1UL, 1f), stream: Next(0L));
+        mirror.DeliverSnapshot(snapshot: At(2UL, 2f), stream: Next(0L));
+        Assert.Equal(1f, mirror.PreviousPosition(index: 0).X);
+        // A cut that does not end the stream withdraws all the same: nothing of the ended span stays showable while the
+        // new generation's document is still on its way.
+        mirror.DeliverCut(stream: Next(1L), terminal: false);
+        Assert.Same(WorldProjection.Undisclosed, mirror.Definition);
+        Assert.False(mirror.IsActive(index: 0));
+        Assert.False(mirror.Span.Closed);
+        mirror.DeliverDefinition(definition: document, stream: Next(1L), version: default);
+        mirror.DeliverSnapshot(snapshot: At(3UL, 3f), stream: Next(1L));
+        Assert.True(mirror.IsActive(index: 0));
+        Assert.Equal(3f, mirror.PreviousPosition(index: 0).X);
+        Assert.Equal(3f, mirror.CurrentPosition(index: 0).X);
+    }
+
+    [Fact]
+    public void AHiddenZoneInstalledOverARowTheSpectatorReadWholeCutsOnlyWhenACellItReadIsHidden() {
+        using var fixture = Fixtures.FreshServer(Table() with {
+            StateRaw = new WorldStateSection(World: [.. Table().State.Where(row => row.Name.Value != "held")]),
+        });
+        var (mirror, observation) = Observe(fixture);
+
+        using (observation) {
+            fixture.Step();
+            // An empty zone only seat 1 reads, over the cards the spectator read whole: nothing it read is hidden.
+            fixture.Server.EnqueueMutation(new WorldMutation.UpsertStateRow(Principal.Console, new WorldStateRow(Name: CellName.Parse("secret"), Kind: CellKind.Bool,
+                Domain: new StateDomain.KeysOf(CellName.Parse("cards"), Ordered: true), Visibility: new StateVisibility(Readers: ["seat1"]), Cells: [])));
+            Assert.True(fixture.Server.DrainAdministrative());
+            fixture.Step();
+            fixture.Server.EnqueueMutation(new WorldMutation.UpsertStateCell(Principal.Console, "face", "b", 21, WorldDocumentWriteKind.Set));
+            Assert.True(fixture.Server.DrainAdministrative());
+            fixture.Step();
+            Assert.Equal(0L, mirror.Span.Generation);
+            // Card a enters the zone: its cell and face are hidden from the spectator now, which is a loss.
+            fixture.Server.EnqueueMutation(new WorldMutation.UpsertStateCell(Principal.Console, "secret", "a", 1, WorldDocumentWriteKind.Set));
+            Assert.True(fixture.Server.DrainAdministrative());
+            fixture.Step();
+            fixture.Step();
+            Assert.Equal(1L, mirror.Span.Generation);
+        }
+    }
+
+    [Fact]
+    public void APresentationSpectatorShownADealtCardCutsWhenTheCardMovesIntoAZoneItCannotRead() {
+        var deck = new WorldPlacement(Id: "deck", PrototypeId: "card", Position: new DocumentVector3(value: System.Numerics.Vector3.Zero), YawDegrees: 0f, Scale: 1f,
+            Distribution: new WorldDistribution(
+                Region: new WorldDistributionRegion.Lattice(StepA: new DocumentVector3(value: System.Numerics.Vector3.UnitX), CountA: 2,
+                    StepB: new DocumentVector3(value: System.Numerics.Vector3.UnitZ), CountB: 1),
+                Fill: new WorldSequence(Name: WorldSequence.None, Offset: 0, Step: 0f)),
+            Deal: new WorldPlacementDeal(Row: "cards"));
+        var table = Table();
+
+        using var fixture = Fixtures.FreshServer(table with {
+            Admission = [new WorldAdmissionEntry(Domain: "*", Disclosure: WorldDisclosureTier.Presentation, Mode: WorldAdmissionTrustMode.FederatedAuthority,
+                Grants: [new WorldAdmissionGrant(Capability: WorldCapability.Observe, Subject: GrantSubject.All, Budget: 100)])],
+            CreationsRaw = [Puck.World.Testing.CreationFixtures.UnitSphere(id: "card")],
+            PlacementRowsRaw = [deck],
+        });
+        var (mirror, observation) = Observe(fixture);
+
+        using (observation) {
+            fixture.Step();
+            Assert.Equal(0L, mirror.Span.Generation);
+            // The cards cross to a presentation recipient only as the placements dealt from them, never as a row: losing
+            // one is a cut all the same.
+            fixture.Server.EnqueueMutation(new WorldMutation.RemoveStateCell(Key: "a", Principal: Principal.Console, Row: "table"));
+            fixture.Server.EnqueueMutation(new WorldMutation.UpsertStateCell(Principal.Console, "held", "a", 1, WorldDocumentWriteKind.Set));
+            Assert.True(fixture.Server.DrainAdministrative());
+            fixture.Step();
+            fixture.Step();
+            Assert.Equal(1L, mirror.Span.Generation);
+            Assert.Equal(0L, mirror.IngressRefusals);
+        }
     }
 }

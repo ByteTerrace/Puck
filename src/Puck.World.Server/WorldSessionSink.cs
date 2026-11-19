@@ -170,23 +170,33 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
         var time = server.DeliveryTime;
 
         Present(
-            delivery: ComposeProjection(),
+            delivery: ComposeProjection(cut: out var cut),
             engineTick: time.EngineTick,
             tick: time.Tick,
             version: Version
         );
+        if (cut) { PrimeSnapshot(); }
     }
-    // Composes what the observer's projection owes; after a cut, its whole projection under the new generation.
-    private WorldProjectionDelivery ComposeProjection() {
+    // Composes what the observer's projection owes; after a cut, its whole projection under the new generation, which
+    // the primer snapshot completes once it is presented (cut).
+    private WorldProjectionDelivery ComposeProjection(out bool cut) {
         var delivery = m_feed.Compose(cursor: m_cursor, view: m_view);
 
-        if (!AnnounceCut()) {
+        cut = AnnounceCut();
+        if (!cut) {
             return delivery;
         }
         m_feed.Release();
         m_hydrated = null;
 
         return m_feed.Compose(cursor: m_cursor, view: m_view);
+    }
+    // Observes the live body policy outside a snapshot: an install can turn it redacting while no snapshot follows (a
+    // paused world), and the cut is owed with the document that carries it.
+    private void ObserveBodies() {
+        var bodies = server.Definition.Population.ObserverDisclosure;
+
+        m_cursor.ObserveBodies(mode: bodies.Mode, radius: bodies.Radius);
     }
     // Sends the record a cut the cursor decided owes, once: the new generation, with no content. True when one was sent,
     // after which the stream owes its whole disclosed document and a primer before anything newer.
@@ -198,11 +208,11 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
 
         return true;
     }
-    // Primes a replica observer alone after a cut its snapshot path decided: the whole disclosed document under the new
-    // generation, before the snapshot in hand, which completes it as the primer.
-    private void PrimeAfterCut() {
+    // Primes the observer alone after a cut its snapshot path decided: the whole disclosed document under the new
+    // generation, before the snapshot in hand, which completes it as the primer. True when a cut was primed.
+    private bool PrimeAfterCut() {
         if (!AnnounceCut()) {
-            return;
+            return false;
         }
         if (Tier != WorldDisclosureTier.Replica) {
             var time = server.DeliveryTime;
@@ -216,12 +226,13 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
                 version: Version
             );
 
-            return;
+            return true;
         }
         m_cursor.ForgetDocument();
         if (m_cursor.DeliverDefinition(view: m_view) is { } whole) {
             inner.DeliverDefinition(definition: whole, stream: m_cursor.Stamp(), version: Version);
         }
+        return true;
     }
     /// <summary>Ends the stream: releases what it holds, cuts, and tells the observer the stream ends, so a reader
     /// bound to it lets go of what it showed. Called once the observation has ended; nothing is delivered after
@@ -291,6 +302,11 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
         // AttachSink supplies the first primer itself. Subsequent definition/state replacements have no such
         // caller, so they must complete the same pair here.
         if (!m_replicaDefined) { m_replicaDefined = true; return; }
+        PrimeSnapshot();
+    }
+    // Completes a document a definition path delivered with the primer snapshot it owes: a generation a cut opened is
+    // primed alone, whatever the cadence and whether or not a tick follows.
+    private void PrimeSnapshot() {
         // Resume already has its caller's snapshot in hand. Rebuilding a primer here would overwrite that
         // borrowed carrier while the hub is still fanning it out to other sinks.
         if (m_deliveringSnapshot) { return; }
@@ -361,6 +377,7 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
     public void DeliverCut(in WorldStreamStamp stream, bool terminal) {
         // The hub's fan-out has one span that never ends; this stream decides its own cuts.
     }
+    public void CloseSpan(ulong stream) { }
     public void DeliverDefinition(WorldDefinition definition, WorldDocumentVersion version, in WorldStreamStamp stream) {
         if (!Discloses()) {
             return;
@@ -369,6 +386,7 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
         try {
             m_withheld = false;
             server.AttachCursor(observation.Session, m_cursor);
+            ObserveBodies();
 
             if (Tier == WorldDisclosureTier.Replica) {
                 DeliverReplicaDocument(delivered: DiscloseToReplica(definition: definition));
@@ -436,13 +454,20 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
                 }
             }
 
+            var cells = redacted.FieldCells;
+            var replica = (Tier == WorldDisclosureTier.Replica);
+
             redacted = redacted with {
-                FieldCells = m_rows.Advance(m_view, m_cursor, redacted.FieldCells, (Tier == WorldDisclosureTier.Replica)),
+                FieldCells = m_rows.Advance(m_view, m_cursor, cells, replica),
                 SolidScales = m_scales.Filter(m_view, redacted.SolidScales),
                 Inputs = WorldInputPublication.ForOwner(redacted.Inputs, observation.Session, ref m_inputDisclosure),
             };
-            // A cut the rows or the body policy decided primes the observer alone, and this snapshot completes it.
-            PrimeAfterCut();
+            // A cut the rows or the body policy decided primes the observer alone, and this snapshot completes it: its
+            // rows are advanced again against the generation's whole document, so every observation the document owes
+            // the observer rides it.
+            if (PrimeAfterCut()) {
+                redacted = redacted with { FieldCells = m_rows.Advance(m_view, m_cursor, cells, replica) };
+            }
             redacted = redacted with { Revision = checked((int)m_cursor.Sequence) };
             redacted = server.PresentCues(redacted, m_view,
                 fullBodies: server.Definition.Population.ObserverDisclosure.Mode == WorldObserverDisclosureMode.All);
@@ -467,14 +492,16 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
 
         try {
             server.AttachCursor(observation.Session, m_cursor);
+            ObserveBodies();
             if (Tier != WorldDisclosureTier.Replica) {
                 m_withheld = false;
                 Present(
-                    delivery: ComposeProjection(),
+                    delivery: ComposeProjection(cut: out var cut),
                     engineTick: stamp.EngineTick,
                     tick: stamp.Tick,
                     version: Version
                 );
+                if (cut) { PrimeSnapshot(); }
                 FollowObserverDetach();
 
                 return;

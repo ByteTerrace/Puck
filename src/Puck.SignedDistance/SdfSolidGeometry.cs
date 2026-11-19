@@ -600,6 +600,40 @@ public static class SdfSolidGeometry {
                 detail: detail
             );
         }
+        var largestScale = MathF.Max(x: effectiveScale.X, y: MathF.Max(x: effectiveScale.Y, y: effectiveScale.Z));
+
+        return AppendNativePrimitive(blend: blend, chain: chain, chamfer: chamfer, detail: detail, effectiveScale: effectiveScale, exponent: exponent, material: material, rounding: rounding, smooth: smooth, type: type)
+            ?? AppendPrimitive(
+                blend: blend,
+                chain: chain.Scale(scale: effectiveScale),
+                chamfer: (chamfer / largestScale),
+                detail: detail,
+                material: material,
+                rounding: (rounding / largestScale),
+                smooth: smooth,
+                type: type
+            );
+    }
+    /// <summary>Appends a primitive with its scale spelled into its own dimensions, never riding a
+    /// <see cref="SdfProgramBuilder.Scale"/> transform: the arms <see cref="AppendScaledPrimitive"/> takes at a non-uniform
+    /// scale, callable at any scale. A box packs its scaled half-extents (or a chamfered rectangle when it is chamfered),
+    /// a sphere, an ellipsoid or a superellipsoid its radii, a capsule scaled alike in X and Z its endpoint and radius, a
+    /// plane its unit normal, and a torus, a cylinder or a cone scaled alike in X and Z its revolved section.</summary>
+    /// <param name="chain">The builder to emit into.</param>
+    /// <param name="type">The primitive.</param>
+    /// <param name="effectiveScale">The scale, already through <see cref="EffectiveScale"/>.</param>
+    /// <param name="material">The material index.</param>
+    /// <param name="blend">The blend that composes the shape.</param>
+    /// <param name="smooth">The blend's smooth radius.</param>
+    /// <param name="rounding">The edge-rounding radius, in world units.</param>
+    /// <param name="chamfer">The edge-chamfer radius, in world units.</param>
+    /// <param name="detail">Whether the shape is a detail shape.</param>
+    /// <param name="exponent">The superellipsoid's exponent; ignored by every other primitive.</param>
+    /// <returns>The builder, or <see langword="null"/> when the primitive has no native arm at this scale (a prism, a sweep,
+    /// a round cone, or a revolved primitive scaled unlike in X and Z), having emitted nothing.</returns>
+    public static SdfProgramBuilder? AppendNativePrimitive(SdfProgramBuilder chain, SdfSolidPrimitive type, Vector3 effectiveScale, int material, SdfBlendOp blend, float smooth, float rounding, float chamfer, bool detail, float exponent) {
+        ArgumentNullException.ThrowIfNull(chain);
+
         // The plain Box arm's faces sit at the scaled half-extents, as the transformed unit box's do, under the authored
         // world-space rounding inset from them (sdfBox erodes by it and offsets back out), so the field stays a true
         // rounded-box distance at any aspect; the chamfered arm keeps the same zero set (the authoring doors refuse a
@@ -740,28 +774,7 @@ public static class SdfSolidGeometry {
             detail: detail,
             smooth: smooth
         ),
-            _ => AppendPrimitive(
-            chain: chain.Scale(scale: effectiveScale),
-            type: type,
-            material: material,
-            blend: blend,
-            rounding: (rounding / MathF.Max(
-                x: effectiveScale.X,
-                y: MathF.Max(
-                    x: effectiveScale.Y,
-                    y: effectiveScale.Z
-                )
-            )),
-            chamfer: (chamfer / MathF.Max(
-                x: effectiveScale.X,
-                y: MathF.Max(
-                    x: effectiveScale.Y,
-                    y: effectiveScale.Z
-                )
-            )),
-            smooth: smooth,
-            detail: detail
-        ),
+            _ => null,
         };
     }
     /// <summary>Reads a primitive's local extent from the canonical dimension table.</summary>

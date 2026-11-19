@@ -30,7 +30,7 @@
 #define SDF_OP_GAUSSIAN_PUSH     24u
 #define SDF_OP_LANE_ERODE        25u
 #define SDF_OP_CELL_DISPLACE     26u
-#define SDF_OP_RELIEF_WEIGHT     27u
+#define SDF_OP_RELIEF_ROW        27u
 
 // Puck.SignedDistance.SdfShapeType.
 #define SDF_SHAPE_BOX                 0u
@@ -116,6 +116,11 @@
 #define SDF_WPG_P6   15u
 #define SDF_WPG_P6M  16u
 
+// Puck.SignedDistance.SdfReliefRowKind.
+#define SDF_RELIEF_ROW_KIND_BAND      0u
+#define SDF_RELIEF_ROW_KIND_POSE      1u
+#define SDF_RELIEF_ROW_KIND_PRIMITIVE 2u
+
 // The program header, the first vector of the word stream: the vectors before the instruction headers, and each lane's accessor.
 #define SDF_PROGRAM_HEADER_VECTORS       1u
 #define SDF_PROGRAM_INSTRUCTION_COUNT(v) ((v).x)
@@ -167,6 +172,7 @@
 #define SDF_LANE_ERODE_RAGGED_AMOUNT 0.35
 #define SDF_SCREEN_MATERIAL          65535
 #define SDF_MAX_NOISE_OCTAVES        8u
+#define SDF_MAX_RELIEF_ROWS          72u
 #define SDF_MAX_SWEEP_STRANDS        4u
 #define SDF_MAX_CONVEX_VERTICES      32u
 #define SDF_CONVEX_COUNT_BITS        5u

@@ -230,8 +230,6 @@ public sealed partial class SdfFieldEvaluator {
         // eroded by an interval of its reach; cleared by ResetPoint.
         var laneErodeSkip = false;
         var laneErodeAmount = FixedInterval.FromPoint(value: FixedQ4816.Zero);
-        // The relief weight's interval (WalkPoints' reliefWeight), which the next relief consumes.
-        var reliefWeight = FixedInterval.FromPoint(value: FixedQ4816.One);
         Span<FixedInterval> scopes = stackalloc FixedInterval[SdfProgramBuilder.MaxFieldScopeDepth];
         var scopeDepth = 0;
         var cullIndex = (reaches.IsEmpty ? cullBounds.Length : 0);
@@ -376,18 +374,16 @@ public sealed partial class SdfFieldEvaluator {
                         break;
                     }
                 case SdfOp.NoiseDisplace: {
-                        result = NoiseDisplaceBounds(instruction: in instruction, local: local, result: result, weight: reliefWeight);
-                        reliefWeight = FixedInterval.FromPoint(value: FixedQ4816.One);
+                        result = NoiseDisplaceBounds(instruction: in instruction, local: local, result: result, weight: ((instruction.ReliefMasks is { } masks) ? MaskProductBounds(masks: masks, q: local) : null));
                         break;
                     }
-                case SdfOp.ReliefWeight: {
-                        reliefWeight = (reliefWeight * ReliefMaskWeightBounds(instruction: in instruction, region: result));
-                        result = FixedInterval.FromPoint(value: FarDistance);
+                case SdfOp.ReliefRow: {
+                        // A relief's data row: its relief reads it (instruction.ReliefMasks); it bounds nothing here.
                         break;
                     }
                 case SdfOp.PushField: {
                         scopes[scopeDepth++] = result;
-                        result = FixedInterval.FromPoint(value: ((instruction.Aux.Value > 0L) ? instruction.Aux : FarDistance));
+                        result = FixedInterval.FromPoint(value: FarDistance);
                         break;
                     }
                 case SdfOp.PopField: {
@@ -566,7 +562,7 @@ public sealed partial class SdfFieldEvaluator {
         SdfOp.LaneErode,
         SdfOp.Displace,
         SdfOp.NoiseDisplace,
-        SdfOp.ReliefWeight,
+        SdfOp.ReliefRow,
     ];
     /// <summary>Gets the shapes the bounds interpreter has an inclusion rule for. Every shape the point interpreter
     /// accepts must appear here; the sync law holds the two sets equal.</summary>
@@ -1031,8 +1027,17 @@ public sealed partial class SdfFieldEvaluator {
                 : new FixedInterval(lower: FixedQ4816.Zero, upper: FixedQ4816.One));
             var sum = ((FixedInterval.Pow(exponent: power, value: Ratio(component: q.X)) + FixedInterval.Pow(exponent: power, value: Ratio(component: q.Y))) + FixedInterval.Pow(exponent: power, value: Ratio(component: q.Z)));
             var root = FixedInterval.Pow(exponent: (Point(value: FixedQ4816.One) / power), value: FixedInterval.Max(first: sum, second: Point(value: FixedQ4816.One)));
+            var norm = (m * root);
 
-            joined = Join(joined: joined, next: ((m * root) - minimumRadius));
+            // The point side's clamp of the norm to its certified band (SdfSuperellipsoid), over the box.
+            if ((exponent > Two) && (exponent <= SuperellipsoidClampedExponent)) {
+                var length = q.Length;
+                var floor = ((Point(value: FixedQ4816.One) - (Point(value: SuperellipsoidNormSlope) * (power - Point(value: Two)))) * length);
+
+                norm = FixedInterval.Max(first: floor, second: FixedInterval.Min(first: norm, second: length));
+            }
+
+            joined = Join(joined: joined, next: (norm - minimumRadius));
         }
 
         return joined!.Value;

@@ -304,14 +304,17 @@ public sealed record CreationNoiseDocument(
         return ((frequency > 0f) ? (0.25f / frequency) : 0f);
     }
     /// <summary>Returns the derived march step factor of this facet's resolved parameters, its masks' band slopes
-    /// included (<see cref="SdfProgram.ReliefMaskSlope"/>), in creation units.</summary>
+    /// included (<see cref="SdfReliefMask.BandSlope"/>), in creation units: the bound the program charges the
+    /// relief at, through its point factor. A mask whose band describes none adds nothing; validation refuses it.</summary>
     /// <returns>The multiplicative step factor (1 = inert).</returns>
     public float StepFactor() => SdfProgram.NoiseDisplaceStepFactor(
         amplitude: MathF.Abs(x: Amplitude),
         frequency: MathF.Abs(x: Frequency),
         gain: (Gain ?? 0.5f),
         lacunarity: (Lacunarity ?? 2f),
-        maskSlope: (Masks ?? []).Sum(selector: static mask => SdfProgram.ReliefMaskSlope(fade: mask.Fade, inside: (mask.Inside ?? 0f), outside: (mask.Outside ?? 1f))),
+        maskSlope: (Masks ?? []).Sum(selector: static mask => ((SdfReliefBand.TryOf(band: out var band, inside: (mask.Inside ?? 0f), outside: (mask.Outside ?? 1f), start: (mask.Start ?? 0f), width: mask.Fade) is null)
+            ? SdfReliefMask.BandSlope(band: band)
+            : 0f)),
         octaves: (Octaves ?? 4)
     );
 }
@@ -323,13 +326,17 @@ public sealed record CreationNoiseDocument(
 /// With <paramref name="Inside"/> zero the relief is exactly zero on and inside the region, so a carve or pad that is its
 /// own region keeps its authored surface; a band at least <c>9/8 · amplitude · |outside − inside|</c> wide opens no
 /// hidden pocket under a thin carved floor.</summary>
-/// <param name="Shapes">The region's shapes, at least one: geometry only (type, name, pose, scale, exponent, rounding,
-/// chamfer, elongate, a prism's profile and lift), of a type contact admits.</param>
-/// <param name="Fade">The band's width, in creation units, above zero.</param>
+/// <param name="Shapes">The region's shapes, at least one: geometry only (type, name, pose, scale, exponent, rounding), each
+/// a box, a sphere, an ellipsoid, a superellipsoid, a capsule scaled alike in X and Z or a plane
+/// (<see cref="SdfReliefRegion.Lower"/>). A relief's masks hold at most <see cref="SdfReliefMask.MaxRegions"/> shapes in
+/// all.</param>
+/// <param name="Fade">The band's width, in creation units, at least 2⁻¹²; snapped to a multiple of 2⁻¹²
+/// (<see cref="SdfReliefBand"/>).</param>
 /// <param name="Start">Where the band starts, as a distance in creation units from the region's surface; negative starts
-/// it inside the region (null = 0).</param>
-/// <param name="Inside">The weight on and inside the region, in [0, 1] (null = 0).</param>
-/// <param name="Outside">The weight past the band, in [0, 1] (null = 1).</param>
+/// it inside the region (null = 0). Snapped to a multiple of 2⁻¹²; the start, the fade and their sum lie within
+/// <see cref="SdfReliefBand.Limit"/> units.</param>
+/// <param name="Inside">The weight on and inside the region, in [0, 1] (null = 0), snapped to a multiple of 2⁻¹⁶.</param>
+/// <param name="Outside">The weight past the band, in [0, 1] (null = 1), snapped to a multiple of 2⁻¹⁶.</param>
 public sealed record CreationReliefMaskDocument(
     IReadOnlyList<ShapeDocument> Shapes,
     float Fade,

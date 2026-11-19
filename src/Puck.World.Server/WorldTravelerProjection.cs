@@ -68,14 +68,15 @@ internal static class WorldTravelerProjection {
             ).IsAllowed);
             bool Current() => SameProjection() && Authorized();
             var view = server.DeliveryView(principal, request.Ceiling, Authorized);
-            var disclosure = new WorldSinkDisclosure(
-                view.Definition.Population.ObserverDisclosure,
-                principal.Index
-            );
 
+            // The live body policy at every delivery, as every other projection reads it: a policy edit reaches the next
+            // delivery, and one that turns redacting cuts this stream.
             sink = new(
                 authority: server.AuthorityIdentity,
-                disclosure: () => disclosure,
+                disclosure: () => new WorldSinkDisclosure(
+                    Policy: server.Definition.Population.ObserverDisclosure,
+                    ObserverBodyIndex: principal.Index
+                ),
                 isCurrent: Current,
                 recipient: principal,
                 server: server,

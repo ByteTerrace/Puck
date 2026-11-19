@@ -124,23 +124,18 @@ public sealed partial class SdfProgram {
                 audit.Unit(lanes: (SdfOperandLanes.Data0X | SdfOperandLanes.Data0Y | SdfOperandLanes.Data0Z), subject: "plane normal");
                 audit.Zero(lanes: (SdfOperandLanes.Header | SdfOperandLanes.Data1));
                 break;
-            case SdfOp.PushField: {
-                    // Zero for an ordinary scope; a relief mask's scope carries its seed, which AnalyzeLipschitz writes from
-                    // the band (RequireReliefMasks checks the scope is a mask's).
-                    var seed = BitConverter.UInt32BitsToSingle(value: instruction.Shape);
-
-                    audit.Require(condition: ((instruction.Shape == 0u) || (float.IsFinite(f: seed) && (seed > 0f))), lane: SdfOperandLanes.Shape, requirement: "a scope's seed is zero or a positive finite float's bits");
-                    audit.MarkWritten(lanes: SdfOperandLanes.Shape);
-                    audit.Zero(lanes: (SdfOperandLanes.Blend | SdfOperandLanes.Material | SdfOperandLanes.Data0 | SdfOperandLanes.Data1));
-                    break;
-                }
+            case SdfOp.PushField:
+                audit.Zero(lanes: SdfOperandLanes.All);
+                break;
             case SdfOp.PopField:
                 RequirePopLanes(audit: ref audit);
                 break;
             case SdfOp.NoiseDisplace:
+                // Material counts the mask rows before the relief, an authored lane the program's door checks against
+                // the run (DecodeReliefRuns).
                 _ = SdfNoiseDisplacement.Of(instruction: instruction);
                 audit.MarkDerived(lanes: SdfOperandLanes.Data1X);
-                audit.Zero(lanes: (SdfOperandLanes.Material | SdfOperandLanes.Data1Y | SdfOperandLanes.Data1Z | SdfOperandLanes.Data1W));
+                audit.Zero(lanes: (SdfOperandLanes.Data1Y | SdfOperandLanes.Data1Z | SdfOperandLanes.Data1W));
                 break;
             case SdfOp.AxialProfile:
                 audit.Require(condition: Enum.IsDefined(value: ((SdfAxis)instruction.Shape)), lane: SdfOperandLanes.Shape, requirement: "it names the profile axis, a defined SdfAxis");
@@ -169,10 +164,8 @@ public sealed partial class SdfProgram {
                 new SdfCellDisplacement(instruction.Data0.X, instruction.Data0.Y, instruction.Shape, ((SdfCellMode)instruction.Blend), instruction.Data0.Z).Validate();
                 audit.Zero(lanes: (SdfOperandLanes.Material | SdfOperandLanes.Data0W | SdfOperandLanes.Data1));
                 break;
-            case SdfOp.ReliefWeight:
-                // Data0 is the band, which RequireReliefMasks checks with the scope around it; AnalyzeLipschitz writes Data1.
-                audit.MarkWritten(lanes: SdfOperandLanes.Data1);
-                audit.Zero(lanes: SdfOperandLanes.Header);
+            case SdfOp.ReliefRow:
+                RequireReliefRowLanes(audit: ref audit);
                 break;
             default:
                 throw new ArgumentException(message: $"Instruction {index} is {instruction.Op}, which has no row in the program's lane contract.", paramName: paramName);
@@ -211,6 +204,38 @@ public sealed partial class SdfProgram {
                 break;
         }
     }
+    // A relief mask's row, by its kind (SdfReliefRowKind, the Blend lane). Every lane of every kind is classed, and each
+    // magnitude stays within what both carriers hold (SdfReliefRegion.MaxMagnitude), so no unused lane reaches the
+    // geometry key and no value the kernel reads verbatim saturates in the fixed-point evaluator. The door
+    // (DecodeReliefRuns) checks the run's order, owner and caps.
+    private static void RequireReliefRowLanes(ref LaneAudit audit) {
+        var instruction = audit.Instruction;
+
+        audit.Zero(lanes: SdfOperandLanes.Material);
+        audit.Within(lanes: (SdfOperandLanes.Data0 | SdfOperandLanes.Data1), limit: SdfReliefRegion.MaxMagnitude);
+
+        switch ((SdfReliefRowKind)instruction.Blend) {
+            case SdfReliefRowKind.Band: {
+                    var refusal = SdfReliefBand.TryRead(band: out _, row: instruction);
+
+                    audit.Zero(lanes: (SdfOperandLanes.Shape | SdfOperandLanes.Data1));
+                    audit.Require(condition: (refusal is null), lane: SdfOperandLanes.Data0X, requirement: (refusal ?? string.Empty));
+                    break;
+                }
+            case SdfReliefRowKind.Pose:
+                audit.Zero(lanes: (SdfOperandLanes.Shape | SdfOperandLanes.Data0W));
+                audit.Unit(lanes: SdfOperandLanes.Data1, subject: "region pose quaternion");
+                break;
+            case SdfReliefRowKind.Primitive:
+                audit.Require(condition: SdfReliefRegion.IsListed(shape: ((SdfShapeType)instruction.Shape)), lane: SdfOperandLanes.Shape, requirement: "a region's primitive is a Box, a Superellipsoid, a Capsule or a Plane");
+                audit.Zero(lanes: SdfOperandLanes.Data1X);
+                RequireShapeLanes(audit: ref audit);
+                break;
+            default:
+                audit.Require(condition: false, lane: SdfOperandLanes.Blend, requirement: "it names the row's kind, a defined SdfReliefRowKind");
+                break;
+        }
+    }
     private static void RequireShapeLanes(ref LaneAudit audit) {
         var instruction = audit.Instruction;
         var shape = ((SdfShapeType)instruction.Shape);
@@ -234,9 +259,10 @@ public sealed partial class SdfProgram {
                 audit.Zero(lanes: Data1Tail);
                 break;
             case SdfShapeType.Capsule:
+                // Both readers project onto the endpoint by its own squared length, which must stay finite in float.
                 audit.AtLeast(lanes: SdfOperandLanes.Data0W, minimum: 0f);
-                audit.Derived(lane: SdfOperandLanes.Data1Y, expected: SdfDerivedLanes.CapsuleInverseLengthSquared(endpoint: audit.Data0Xyz), derivation: "inverse squared length");
-                audit.Zero(lanes: (SdfOperandLanes.Data1Z | SdfOperandLanes.Data1W));
+                audit.Require(condition: float.IsFinite(f: Vector3.Dot(vector1: audit.Data0Xyz, vector2: audit.Data0Xyz)), lane: SdfOperandLanes.Data0X, requirement: "a capsule's endpoint has a finite squared length");
+                audit.Zero(lanes: Data1Tail);
                 break;
             case SdfShapeType.Sphere:
                 audit.AtLeast(lanes: SdfOperandLanes.Data0X, minimum: 0f);
@@ -339,8 +365,11 @@ public sealed partial class SdfProgram {
                     break;
                 }
             case SdfShapeType.Superellipsoid:
+                // The radii and the exponent are values both carriers hold exactly (SdfDerivedLanes.FixedGrid), so the
+                // kernel and the fixed-point evaluator scale the gauge by the same smallest radius.
                 audit.AtLeast(lanes: Dimensions, minimum: SdfDerivedLanes.MinSuperellipsoidRadius);
                 audit.Require(condition: ((instruction.Data0.W >= SdfProgramBuilder.MinSuperellipsoidExponent) && (instruction.Data0.W <= SdfProgramBuilder.MaxSuperellipsoidExponent)), lane: SdfOperandLanes.Data0W, requirement: $"an exponent lies in [{SdfProgramBuilder.MinSuperellipsoidExponent}, {SdfProgramBuilder.MaxSuperellipsoidExponent}], the interval its 1-Lipschitz proof covers");
+                audit.OnFixedGrid(lanes: SdfOperandLanes.Data0);
                 audit.Derived(lanes: Data1Tail,expected: SdfDerivedLanes.Reciprocal(extents: audit.Data0Xyz), derivation: "inverse radii");
                 break;
             case SdfShapeType.ConvexPolygon:
@@ -423,6 +452,20 @@ public sealed partial class SdfProgram {
             Require(condition: ((mode >= 0f) && (mode == MathF.Floor(x: mode)) && Enum.IsDefined(value: ((SdfLift)((uint)mode)))), lane: SdfOperandLanes.Data1Y, requirement: "it names the profile's lift, a defined SdfLift");
         }
         public void MarkDerived(SdfOperandLanes lanes) => m_derived |= lanes;
+        // Every lane in the set a value Q48.16 and single-precision float both hold exactly (SdfDerivedLanes.FixedGrid).
+        public readonly void OnFixedGrid(SdfOperandLanes lanes) {
+            foreach (var lane in Lanes(lanes: lanes)) {
+                var value = Float(lane: lane);
+
+                Require(condition: (SdfDerivedLanes.FixedGrid(value: value) == value), lane: lane, requirement: "its operation requires a multiple of 2^-16, which both carriers hold exactly");
+            }
+        }
+        // Every lane in the set within the magnitude both carriers hold without saturating.
+        public readonly void Within(SdfOperandLanes lanes, float limit) {
+            foreach (var lane in Lanes(lanes: lanes)) {
+                Require(condition: (MathF.Abs(x: Float(lane: lane)) <= limit), lane: lane, requirement: $"its operation requires a magnitude of at most {limit}");
+            }
+        }
         public void MarkWritten(SdfOperandLanes lanes) => m_written |= lanes;
         public readonly void Require(bool condition, SdfOperandLanes lane, string requirement) {
             if (!condition) {

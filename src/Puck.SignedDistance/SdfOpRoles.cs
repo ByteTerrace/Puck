@@ -8,7 +8,7 @@ public enum SdfOpRole {
     Structure,
     /// <summary>Changes the accumulated field, never the point: <see cref="SdfOp.Onion"/>, <see cref="SdfOp.Dilate"/>,
     /// <see cref="SdfOp.Displace"/>, <see cref="SdfOp.NoiseDisplace"/>, <see cref="SdfOp.CellDisplace"/>,
-    /// <see cref="SdfOp.ReliefWeight"/>.</summary>
+    /// and a relief's data row, <see cref="SdfOp.ReliefRow"/>, which travels with the relief that reads it.</summary>
     Field,
     /// <summary>Moves the point, and every copy it makes of what follows is bounded: a rigid move, a warp, a finite
     /// fold.</summary>
@@ -25,7 +25,7 @@ public static class SdfOpRoles {
     /// <exception cref="InvalidOperationException"><paramref name="op"/> has no role.</exception>
     public static SdfOpRole Of(SdfOp op) => op switch {
         SdfOp.ShapeBlend or SdfOp.ResetPoint or SdfOp.PushField or SdfOp.PopField => SdfOpRole.Structure,
-        SdfOp.Onion or SdfOp.Dilate or SdfOp.Displace or SdfOp.NoiseDisplace or SdfOp.CellDisplace or SdfOp.ReliefWeight => SdfOpRole.Field,
+        SdfOp.Onion or SdfOp.Dilate or SdfOp.Displace or SdfOp.NoiseDisplace or SdfOp.CellDisplace or SdfOp.ReliefRow => SdfOpRole.Field,
         SdfOp.Translate or SdfOp.Rotate or SdfOp.Scale or SdfOp.TransformDynamic or SdfOp.RotatePlane or SdfOp.Elongate or
         SdfOp.RepeatPolar or SdfOp.DomainWarp or SdfOp.SymmetryPlane or SdfOp.AxialProfile or SdfOp.Shear or
         SdfOp.GaussianPush or SdfOp.LaneErode => SdfOpRole.Point,

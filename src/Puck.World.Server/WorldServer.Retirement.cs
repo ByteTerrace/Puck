@@ -77,6 +77,9 @@ public sealed partial class WorldServer {
             m_stopReason = reason;
             m_authorityRetiring = true;
             m_document.RefusePending(reason: reason);
+            // A stopped world delivers nothing further, so every session observing it ends now: each stream sends its
+            // terminal record, and a screen showing this world through a session shows it no longer.
+            DetachSessionSinks(reason: StoppedCode);
         }
 
         m_stopped.Cancel();

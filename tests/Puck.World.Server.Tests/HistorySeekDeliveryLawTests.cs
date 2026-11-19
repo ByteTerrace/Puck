@@ -23,6 +23,7 @@ public sealed class HistorySeekDeliveryLawTests {
         public void DeliverDefinition(WorldDefinition definition, WorldDocumentVersion version, in WorldStreamStamp stream) => Log.Add(item: "definition");
         public void DeliverSessionLever(WorldSessionLever lever) { }
         public void DeliverCut(in WorldStreamStamp stream, bool terminal) { }
+        public void CloseSpan(ulong stream) { }
         public void DeliverSnapshot(in WorldSnapshot snapshot, in WorldStreamStamp stream) {
             Log.Add(item: "snapshot");
             SnapshotTicks.Add(item: snapshot.Tick);

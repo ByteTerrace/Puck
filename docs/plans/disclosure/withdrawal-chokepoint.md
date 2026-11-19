@@ -96,10 +96,10 @@ The same session's own stream is filtered by more than that. Its document comes
 from the cursor's disclosed images, and each snapshot's fields, solid sizes and
 inputs are filtered for the recipient:
 
-`src/Puck.World.Server/WorldSessionSink.cs:438-440`
+`src/Puck.World.Server/WorldSessionSink.cs:459-461`
 
 ```csharp
-                FieldCells = m_rows.Advance(m_view, m_cursor, redacted.FieldCells, (Tier == WorldDisclosureTier.Replica)),
+                FieldCells = m_rows.Advance(m_view, m_cursor, cells, replica),
                 SolidScales = m_scales.Filter(m_view, redacted.SolidScales),
                 Inputs = WorldInputPublication.ForOwner(redacted.Inputs, observation.Session, ref m_inputDisclosure),
 ```
@@ -720,11 +720,15 @@ floor or the fallback until its own bake lands. Whether a form can match across
 different hidden topology was not shown either way; the fence does not depend
 on the answer.
 
-**Sound.** The mixer plays the operator's presentation. Its sources are wired
-to the boot client, and no session mirror feeds it, so no session's sound is
-cut today. Before a session's sound is accepted, its source, scheduled cues,
-history and queued samples must be owned by the stream's generation, with the
-cut taking effect at the next mixer block after ingress accepts it.
+**Sound.** The mixer plays the operator's presentation, and while the first
+seat is routed into another world it plays that route's mirror
+(`WorldAudioDirector.PresentRoutedAudio`). A cut withdraws the mirror's queued
+cue frames, and the director drops the routed score, its layers and its
+scheduled and sounding transients whenever the mirror's span moves, so a cut
+takes effect at the next presentation after ingress accepts it. A session
+screen's own sound is not heard. Before it is, its source, scheduled cues,
+history and queued samples must be owned by the stream's generation in the
+same way.
 
 ### Where each kind of product sits
 
@@ -895,9 +899,25 @@ for the display. The second and third kinds are GPU legs the lead schedules.
    mirror unchanged. A law drops the connection: the span closes.
    *Built,* except the authored lease: `WorldDeliveryCursor` decides cuts and
    issues `WorldStreamStamp`s, `IClientSink` carries them and `DeliverCut`,
-   `WorldStreamIngress` orders a mirror's records, a remote observer closes
-   its span when its session ends, and the whole-replica test was tightened
-   until step 6's proof replaced it. The card and ingress checks are
+   `WorldStreamIngress` orders a mirror's records, and the whole-replica test
+   was tightened until step 6's proof replaced it. Every
+   accepted cut, terminal or not, withdraws the mirror to the undisclosed
+   document with no body, route seed or queued cue, so the new generation fills
+   it from empty. A remote observation session passes every record, its route
+   records included, through a `WorldStreamIngress` of its own before decoding
+   anything into its projection hold, and when the session ends its transport
+   closes the reader's span with `IClientSink.CloseSpan`, never with a
+   fabricated record. An ingress takes unspanned records only before it was
+   ever bound, and no stream that closed on it binds it again. A row restricted
+   only by a containing zone is imaged at the presentation tier like any other
+   restricted row, so a presentation stream re-composes and cuts when a dealt
+   card it was shown moves into a zone it cannot read. The cursor holds an image
+   of every row, whole or not, so a row that turns withholding cuts only when a
+   cell the stream read is unreadable now. Both sinks observe the body policy on document
+   deliveries and on every tick ahead of the cadence, prime a cut with a
+   snapshot whatever the cadence, and advance a cut snapshot's rows again
+   against the new document. A world that stops ends every session observing
+   it with its terminal record. The card and ingress checks are
    `StreamGenerationLawTests`; the hidden-policy variants are
    `disclosure-probe`'s `one` (added) and `removed`. The engine's default
    lease of none is in force; a lease an admission grants is

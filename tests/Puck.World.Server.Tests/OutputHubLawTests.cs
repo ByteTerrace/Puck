@@ -223,6 +223,7 @@ internal sealed class RecordingSink : IClientSink {
     public void DeliverDefinition(WorldDefinition definition, WorldDocumentVersion version, in WorldStreamStamp stream) { }
     public void DeliverSessionLever(WorldSessionLever lever) { }
     public void DeliverCut(in WorldStreamStamp stream, bool terminal) { }
+    public void CloseSpan(ulong stream) { }
     public void DeliverSnapshot(in WorldSnapshot snapshot, in WorldStreamStamp stream) {
         SnapshotDeliveries++;
         LastCues = snapshot.Cues.ToArray();
@@ -282,6 +283,7 @@ internal sealed class SelfDisposingThrowingSink : IClientSink {
     public void DeliverDefinition(WorldDefinition definition, WorldDocumentVersion version, in WorldStreamStamp stream) { }
     public void DeliverSessionLever(WorldSessionLever lever) { }
     public void DeliverCut(in WorldStreamStamp stream, bool terminal) { }
+    public void CloseSpan(ulong stream) { }
     public void DeliverSnapshot(in WorldSnapshot snapshot, in WorldStreamStamp stream) {
         m_attempts++;
 
@@ -306,6 +308,7 @@ internal sealed class ReattachingSink(Puck.World.Server.WorldServer server) : IC
     public void DeliverDefinition(WorldDefinition definition, WorldDocumentVersion version, in WorldStreamStamp stream) { }
     public void DeliverSessionLever(WorldSessionLever lever) { }
     public void DeliverCut(in WorldStreamStamp stream, bool terminal) { }
+    public void CloseSpan(ulong stream) { }
     public void DeliverSnapshot(in WorldSnapshot snapshot, in WorldStreamStamp stream) {
         m_attempts++;
 
@@ -326,6 +329,7 @@ internal sealed class FaultingSink(int throwFromCall) : IClientSink {
     public void DeliverDefinition(WorldDefinition definition, WorldDocumentVersion version, in WorldStreamStamp stream) { }
     public void DeliverSessionLever(WorldSessionLever lever) { }
     public void DeliverCut(in WorldStreamStamp stream, bool terminal) { }
+    public void CloseSpan(ulong stream) { }
     public void DeliverSnapshot(in WorldSnapshot snapshot, in WorldStreamStamp stream) {
         Attempts++;
 

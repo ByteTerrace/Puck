@@ -107,8 +107,11 @@ public sealed partial class WorldScreenBinder {
             var seen = DeliveryMark.Of(mirror: delivered);
 
             if (seen != m_seen) {
+                // A delivery inside one span may have been made under the wider of the two settles' access. A span that
+                // moved (a cut, a close, a new stream) withdrew the mirror and primed it again under the stream's access
+                // then, so what it holds now was delivered under the narrower access this settle reads.
+                Mirror = (((m_settled > access) && !seen.MovedSpan(earlier: m_seen)) ? m_settled : access);
                 m_seen = seen;
-                Mirror = ((m_settled > access) ? m_settled : access);
             }
             m_settled = access;
             if (!holdsSource) {
@@ -122,9 +125,16 @@ public sealed partial class WorldScreenBinder {
         public bool MayMake(WorldSessionAccess access) => (Mirror <= access);
         public void Made() => Source = Mirror;
     }
-    // A mirror's deliveries so far: its definition and snapshot revisions, either of which moves with a delivery.
-    private readonly record struct DeliveryMark(int Definition, int Snapshot) {
-        public static DeliveryMark Of(WorldSessionMirror mirror) => new(Definition: mirror.DefinitionRevision, Snapshot: mirror.SnapshotRevision);
+    // A mirror's deliveries so far: its definition and snapshot revisions, either of which moves with a delivery, and the
+    // span its ingress holds.
+    private readonly record struct DeliveryMark(int Definition, int Snapshot, ulong Stream, long Generation, bool Closed) {
+        public static DeliveryMark Of(WorldSessionMirror mirror) {
+            var span = mirror.Span;
+
+            return new(Definition: mirror.DefinitionRevision, Snapshot: mirror.SnapshotRevision, Stream: span.Stream, Generation: span.Generation, Closed: span.Closed);
+        }
+        // Whether the mirror's span moved since an earlier mark: its stream, its generation or its close.
+        public bool MovedSpan(DeliveryMark earlier) => (Stream != earlier.Stream) || (Generation != earlier.Generation) || (Closed != earlier.Closed);
     }
     // A new session's route and a new infinity layer's access, settled from their observation as they are made, so a
     // view resolved before the next frame settles them reads the access they start with.
