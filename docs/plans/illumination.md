@@ -496,16 +496,17 @@ Six steps run in order:
    allowance, the frame's GPU time and the GPU time granted against the time
    charged). Lockstep and held frames never meter their work, so a drain's
    result stays a function of its inputs.
-   - *One-frame job admission.* Built: the service's one take hands every
-     client the live frame allowance (`SdfGpuWorkBudget.FrameAllowanceSeconds`;
-     no bound for a held frame), and the probe coordinator reads the same live
-     figure as it cuts queries. Still to build: admitting a job against the
-     frame deadline (priced length + queued jobs + banked credit + margin). A
-     job already in the GPU's queue cannot be recalled, and the service keeps
-     up to `SdfGpuWork.SlotCount` jobs in flight, so several allowance-sized
-     jobs can still queue ahead of one frame; the budget can bank
-     `SdfGpuWorkBudget.MostBankSeconds` times the share of GPU credit, more
-     than a frame.
+   - *Deadline admission.* Built: the jobs queued ahead of one frame together
+     fit one frame allowance. The service's one take hands every client what
+     is left of the live allowance after the charged jobs still in flight on
+     the presentation's queue (`SdfGpuWorkBudget.Allowance`; no bound for a held
+     frame), and while work is queued a client takes no job priced past it, so
+     neither `SdfGpuWork.SlotCount` allowance-sized jobs nor credit banked over
+     a long gap (`SdfGpuWorkBudget.MostBankSeconds` times the share) queue more
+     than an allowance ahead of a frame. A job with nothing queued runs
+     whatever its price. The probe coordinator still cuts queries to the whole
+     allowance, so a query waits for an empty queue; cutting it to what is left
+     needs the coordinator to know the queue when it cuts.
    - *Controller and overload order.* Dynamic resolution reads the root views'
      passes, which background work never inflates, and scales the render grid
      only when they alone overrun the period, while the background share falls
@@ -517,11 +518,13 @@ Six steps run in order:
      stay served in one-frame jobs.
    - *Promise and reporting.* Lighting's authored work-per-second promise holds
      only while the frame's own passes leave its share free; past that limit
-     the frame holds its bar and lighting age grows past its bound. Still to
-     build: counting frames missed behind a background job apart from overdue
-     lighting. Cutting jobs to one frame's allowance bounds what one job can
-     cost a frame; it does not make the promise hold when the frame is over for
-     long.
+     the frame holds its bar and lighting age grows past its bound. Frames
+     missed behind background work are counted apart from overdue lighting
+     (`world.residency`'s `frames-behind`, `SdfGpuWorkBudget.FramesMissedBehind`),
+     an upper bound read from the jobs' and frames' spans on the queue's clock;
+     the reading on the benchmark route is owed. Admitting jobs against the
+     deadline bounds what background work can cost a frame; it does not make
+     the promise hold when the frame is over for long.
 2. **Cut bake jobs to the live frame allowance.** Built: a budgeted batch's
    evaluations past its first lattice are cut to the allowance at the bake's
    measured rate (`SdfMeshBakeGpuWork`), which follows the mean

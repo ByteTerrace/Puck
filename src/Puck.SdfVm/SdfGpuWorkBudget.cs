@@ -28,6 +28,25 @@ namespace Puck.SdfVm;
 /// frame from a long job queued ahead of it; a job cut to the frame allowance can.
 /// </para>
 /// <para>
+/// Invariant: the jobs queued ahead of one frame together fit one frame allowance. Every service on the presentation's
+/// queue shares this budget, and each job is admitted (<see cref="Allowance"/>) only when its priced length and the
+/// priced length of every charged job still in flight fit <see cref="FrameAllowanceSeconds"/>, so neither several slots
+/// of allowance-sized jobs nor credit banked over a long gap (up to <see cref="MostBankSeconds"/> of the share) queue more
+/// than an allowance ahead of a frame. The one exception keeps work progressing: a job with nothing queued ahead of it is
+/// admitted whatever its price. The queued length moves only through a charge (<see cref="ChargeGpu"/>, which enters the
+/// job) and that charge's leaving (<see cref="Leave"/>, once its job completed or was abandoned); the service leaves each
+/// charge at the one place a slot gives up its job.
+/// </para>
+/// <para>
+/// The claim that background work never costs a frame is counted (<see cref="FramesMissedBehind"/>). The service hands
+/// over each job's span on the queue's timestamp clock (<see cref="Ran"/>) and the presentation each frame's
+/// (<see cref="Observe"/>); a frame is behind background work when background work ran on the queue directly before its
+/// first submission (no idle gap past <see cref="QueueGapSeconds"/>) or between its submissions, and it may have been missed
+/// for it when that work and the frame's own GPU time together exceed the display's period. The count is an upper bound:
+/// the queue's clock does not show when the frame reached the queue, so the whole run of background work ahead of it is
+/// charged as its wait.
+/// </para>
+/// <para>
 /// Credit is a rate of wall time. It accrues by the time since the last accrual, whichever service made it, at the live
 /// share, so the work a second does not fall with the frame rate: a service that found the budget empty marks it wanted
 /// (<see cref="Want"/>), and the next accrual then banks the whole gap, up to <see cref="MostBankSeconds"/> of it. An
@@ -74,9 +93,22 @@ public sealed class SdfGpuWorkBudget(Func<long>? clock = null) {
     /// <summary>The most one step raises the share by: two hundredths, so the share climbs from the least to
     /// <see cref="SdfGpuWork.GpuShare"/> over about ten steps.</summary>
     public const double RiseShare = 0.02;
+    /// <summary>The idle gap, in seconds of the queue's clock, past which a frame's first submission is taken to have
+    /// waited for nothing that ran before it: a tenth of a millisecond, above the queue's own gap between two
+    /// submissions.</summary>
+    public const double QueueGapSeconds = 1e-4;
+    /// <summary>The background jobs' queue spans the budget keeps to judge frames by: the latest 64, several frames'
+    /// worth of every slot of several services.</summary>
+    public const int KeptSpans = 64;
+    /// <summary>The frames' readings a frame's judgement waits for after its own: two, so the background jobs that ran
+    /// before it on the queue, whose fences signaled before its timestamps were written, have been answered and their spans
+    /// handed over.</summary>
+    public const int JudgeAfter = 2;
 
     // The host payload bytes the budget banks at most: a full slot ring of the largest jobs.
     private const double MostUploadCreditBytes = (SdfGpuWork.SlotCount * ((double)SdfGpuWork.MostUploadJobBytes));
+    // The frames awaiting judgement at most; an older one is judged early rather than dropped.
+    private const int MostPendingFrames = 8;
 
     private readonly Lock m_gate = new();
     private readonly Func<long> m_clock = (clock ?? Stopwatch.GetTimestamp);
@@ -104,6 +136,24 @@ public sealed class SdfGpuWorkBudget(Func<long>? clock = null) {
     private double m_windowSeconds;
     private double m_frameSeconds;
     private bool m_holding;
+
+    // The priced length of the charged jobs still in flight and how many they are: what is queued ahead of the next
+    // frame. The length reads zero whenever the count does, so rounding left by entries and leavings never holds work.
+    private double m_queued;
+    private int m_queuedJobs;
+
+    // The latest background jobs' spans on the queue's clock (a ring), the frames awaiting judgement with the reading
+    // they were taken at, and what the judgements counted.
+    private readonly (double Start, double End)[] m_spans = new (double Start, double End)[KeptSpans];
+    private int m_spanNext;
+    private int m_spanCount;
+    private readonly Queue<PendingFrame> m_pendingFrames = new();
+    private long m_readings;
+    private long m_framesJudged;
+    private long m_framesBehind;
+    private long m_framesMissed;
+    private double m_behindSeconds;
+    private double m_mostBehindSeconds;
 
     /// <summary>Gets whether the budget holds credit of both kinds, so a service may take its next job.</summary>
     public bool Holds {
@@ -152,6 +202,40 @@ public sealed class SdfGpuWorkBudget(Func<long>? clock = null) {
             lock (m_gate) { return (m_share * m_period); }
         }
     }
+    /// <summary>Gets what the next budgeted job may take before the frame's deadline: the frame allowance less the priced
+    /// length of the charged jobs in flight, and whether any is (<see cref="SdfGpuWorkAllowance"/>). Safe to read from any
+    /// thread.</summary>
+    public SdfGpuWorkAllowance Allowance {
+        get {
+            lock (m_gate) {
+                var allowance = (m_share * m_period);
+
+                return ((m_queuedJobs == 0) ? new(Queued: false, Seconds: allowance) : new(Queued: true, Seconds: Math.Max(val1: 0.0, val2: (allowance - m_queued))));
+            }
+        }
+    }
+    /// <summary>Gets the priced length, in seconds, of the charged jobs still in flight: the background work queued ahead
+    /// of the next frame.</summary>
+    public double QueuedSeconds {
+        get {
+            lock (m_gate) { return m_queued; }
+        }
+    }
+    /// <summary>Gets the frames judged so far that background work may have cost: those behind background work whose own
+    /// GPU time and that work together exceeded the display's period. An upper bound; zero supports the claim that
+    /// background work never costs a frame.</summary>
+    public long FramesMissedBehind {
+        get {
+            lock (m_gate) { return m_framesMissed; }
+        }
+    }
+    /// <summary>Gets the frames judged so far that background work ran directly ahead of, or between the submissions
+    /// of, whether or not it cost them their period.</summary>
+    public long FramesBehind {
+        get {
+            lock (m_gate) { return m_framesBehind; }
+        }
+    }
 
     /// <summary>Returns the GPU time, in seconds, a job is charged for a measurement: the measurement when it lies
     /// between zero and the wall time the job was in flight, and otherwise the job's estimate held to that time, since
@@ -185,14 +269,27 @@ public sealed class SdfGpuWorkBudget(Func<long>? clock = null) {
     /// took, read back since the previous frame (zero for a frame that rendered nothing new). Every
     /// <see cref="FollowFrames"/> readings it moves the share to <see cref="ShareOf"/> their mean: down at once, up by at
     /// most <see cref="RiseShare"/> and not on the step after a fall. Lockstep and held frames never read the share
-    /// (their work is unbudgeted), so a drain's result does not depend on it.</summary>
+    /// (their work is unbudgeted), so a drain's result does not depend on it. A reading that carries the frame's span on
+    /// the queue's clock is judged against the background jobs' spans <see cref="JudgeAfter"/> readings later
+    /// (<see cref="FramesMissedBehind"/>).</summary>
     /// <param name="periodSeconds">The display's period, in seconds; positive.</param>
     /// <param name="frameSeconds">The frame's own GPU time read back since the previous reading, in seconds.</param>
+    /// <param name="queueStartSeconds">When the frame's first submission read back began, in seconds on the queue's
+    /// timestamp clock (the clock <see cref="Ran"/> reads).</param>
+    /// <param name="queueEndSeconds">When its last submission read back ended, on the same clock; no later than
+    /// <paramref name="queueStartSeconds"/> for a reading with no span, which is not judged.</param>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="periodSeconds"/> is not positive.</exception>
-    public void Observe(double periodSeconds, double frameSeconds) {
+    public void Observe(double periodSeconds, double frameSeconds, double queueStartSeconds = 0.0, double queueEndSeconds = 0.0) {
         if (!(periodSeconds > 0.0)) { throw new ArgumentOutOfRangeException(paramName: nameof(periodSeconds), actualValue: periodSeconds, message: "A display period is positive."); }
 
         lock (m_gate) {
+            if (queueEndSeconds > queueStartSeconds) {
+                if (m_pendingFrames.Count >= MostPendingFrames) { Judge(frame: m_pendingFrames.Dequeue()); }
+                m_pendingFrames.Enqueue(item: new PendingFrame(End: queueEndSeconds, Own: (double.IsFinite(d: frameSeconds) ? Math.Max(val1: 0.0, val2: frameSeconds) : 0.0), Period: periodSeconds, Reading: m_readings, Start: queueStartSeconds));
+            }
+            m_readings++;
+            while ((m_pendingFrames.Count > 0) && ((m_readings - m_pendingFrames.Peek().Reading) > JudgeAfter)) { Judge(frame: m_pendingFrames.Dequeue()); }
+
             if (m_follows != "frame") {
                 // A reading after none starts a window of its own.
                 m_follows = "frame";
@@ -263,31 +360,64 @@ public sealed class SdfGpuWorkBudget(Func<long>? clock = null) {
             m_wants++;
         }
     }
-    /// <summary>Charges a submitted job's estimated GPU time.</summary>
+    /// <summary>Charges a submitted job's estimated GPU time and enters it among the jobs queued ahead of the next frame
+    /// (<see cref="Allowance"/>) until its charge leaves (<see cref="Leave"/>).</summary>
     /// <param name="seconds">The estimate, in seconds.</param>
-    /// <returns>The seconds the charge debited: the estimate, less what the debt's floor dropped; what the job's
-    /// settlement (<see cref="SettleGpu"/>) replaces.</returns>
-    public double ChargeGpu(double seconds) {
-        lock (m_gate) { return Charge(seconds: seconds); }
+    /// <returns>The charge: the seconds it debited (the estimate, less what the debt's floor dropped), which the job's
+    /// settlement (<see cref="SettleGpu"/>) replaces, and the seconds it entered the queue with, which its leaving
+    /// takes out.</returns>
+    public SdfGpuWorkCharge ChargeGpu(double seconds) {
+        var queued = ((double.IsFinite(d: seconds) && (seconds > 0.0)) ? seconds : 0.0);
+
+        lock (m_gate) {
+            m_queued += queued;
+            m_queuedJobs++;
+
+            return new SdfGpuWorkCharge(Debited: Charge(seconds: seconds), Queued: queued);
+        }
+    }
+    /// <summary>Takes a charged job out of the jobs queued ahead of the next frame: its job completed or was abandoned.
+    /// Each charge leaves once; a charge no job made (<see langword="default"/>) leaves nothing.</summary>
+    /// <param name="charge">The job's charge (<see cref="ChargeGpu"/>'s answer).</param>
+    public void Leave(in SdfGpuWorkCharge charge) {
+        if (!charge.Entered) { return; }
+        lock (m_gate) {
+            m_queuedJobs = Math.Max(val1: 0, val2: (m_queuedJobs - 1));
+            m_queued = ((m_queuedJobs == 0) ? 0.0 : Math.Max(val1: 0.0, val2: (m_queued - charge.Queued)));
+        }
     }
     /// <summary>Replaces what a charged job debited with its measured GPU time, held to what the job could have run
     /// (<see cref="MeasuredWithin"/>), and counts a measurement that was not one. It gives back at most what the charge
     /// debited.</summary>
-    /// <param name="debited">The seconds the job's charge debited (<see cref="ChargeGpu"/>'s answer).</param>
+    /// <param name="charge">The job's charge (<see cref="ChargeGpu"/>'s answer), whose debit the measurement
+    /// replaces.</param>
     /// <param name="estimate">The seconds the job was estimated to take, which a measurement no job could have made
     /// falls back to.</param>
     /// <param name="measured">The seconds its timestamps read.</param>
     /// <param name="inFlight">The wall time, in seconds, between the job's submission and its answer.</param>
     /// <returns>The seconds the job is charged in the estimate's place.</returns>
-    public double SettleGpu(double debited, double estimate, double measured, double inFlight) {
+    public double SettleGpu(in SdfGpuWorkCharge charge, double estimate, double measured, double inFlight) {
         var seconds = MeasuredWithin(clamped: out var clamped, estimate: estimate, inFlight: inFlight, measured: measured);
 
         lock (m_gate) {
             if (clamped) { m_clamped++; }
-            _ = Charge(seconds: (seconds - debited));
+            _ = Charge(seconds: (seconds - charge.Debited));
         }
 
         return seconds;
+    }
+    /// <summary>Takes a background job's span on the queue's timestamp clock, which frames are judged against
+    /// (<see cref="FramesMissedBehind"/>). The budget keeps the latest <see cref="KeptSpans"/>.</summary>
+    /// <param name="startSeconds">When the job began, in seconds on the queue's clock.</param>
+    /// <param name="endSeconds">When it ended, on the same clock; a span that does not end after it begins is
+    /// ignored.</param>
+    public void Ran(double startSeconds, double endSeconds) {
+        if (!(endSeconds > startSeconds) || !double.IsFinite(d: startSeconds) || !double.IsFinite(d: endSeconds)) { return; }
+        lock (m_gate) {
+            m_spans[m_spanNext] = (startSeconds, endSeconds);
+            m_spanNext = ((m_spanNext + 1) % KeptSpans);
+            m_spanCount = Math.Min(val1: KeptSpans, val2: (m_spanCount + 1));
+        }
     }
     /// <summary>Charges the host payload bytes a taken job stages.</summary>
     /// <param name="bytes">The bytes.</param>
@@ -301,12 +431,61 @@ public sealed class SdfGpuWorkBudget(Func<long>? clock = null) {
     /// GPU time it read (or why it read none), the steps that lowered and raised the share, the credit it holds, what it
     /// granted and what its services charged since it was made (their ratio is how much of the allowance the work used),
     /// how often one found it empty, the measurements no job could have made and the charges dropped at the debt's
-    /// floor.</summary>
+    /// floor; then the work queued ahead of the next frame, and the frames judged against the background jobs' spans:
+    /// those behind background work, those it may have cost (<see cref="FramesMissedBehind"/>), and the background
+    /// GPU time ahead of the frames behind it, in all and at most.</summary>
     /// <returns>One space-led field.</returns>
     public string Describe() {
         lock (m_gate) {
-            return string.Create(provider: CultureInfo.InvariantCulture, handler: $" work-budget=[gpu-share:{m_share:0.000},share-cap:{SdfGpuWork.GpuShare:0.00},frame-allowance:{(m_share * m_period * 1000.0):0.00}ms,period:{(m_period * 1000.0):0.00}ms,frame-gpu:{(m_frameSeconds * 1000.0):0.00}ms,follows:{m_follows},falls:{m_falls},rises:{m_rises},gpu-credit:{(m_credit * 1000.0):0.00}ms,gpu-granted:{(m_granted * 1000.0):0}ms,gpu-charged:{(m_charged * 1000.0):0}ms,upload-rate:{SdfGpuWork.UploadBytesPerSecond:0}B/s,upload-credit:{m_uploadCredit:0}B,uploaded:{m_uploaded:0}B,wants:{m_wants},clamped:{m_clamped},floored:{m_floored}]");
+            return string.Create(provider: CultureInfo.InvariantCulture, handler: $" work-budget=[gpu-share:{m_share:0.000},share-cap:{SdfGpuWork.GpuShare:0.00},frame-allowance:{(m_share * m_period * 1000.0):0.00}ms,period:{(m_period * 1000.0):0.00}ms,frame-gpu:{(m_frameSeconds * 1000.0):0.00}ms,follows:{m_follows},falls:{m_falls},rises:{m_rises},gpu-credit:{(m_credit * 1000.0):0.00}ms,gpu-granted:{(m_granted * 1000.0):0}ms,gpu-charged:{(m_charged * 1000.0):0}ms,upload-rate:{SdfGpuWork.UploadBytesPerSecond:0}B/s,upload-credit:{m_uploadCredit:0}B,uploaded:{m_uploaded:0}B,wants:{m_wants},clamped:{m_clamped},floored:{m_floored},queued:{m_queuedJobs}/{(m_queued * 1000.0):0.00}ms] frames-behind=[judged:{m_framesJudged},behind:{m_framesBehind},missed:{m_framesMissed},behind-gpu:{(m_behindSeconds * 1000.0):0.0}ms,most-behind:{(m_mostBehindSeconds * 1000.0):0.00}ms]");
         }
+    }
+
+    // Judges one frame against the background jobs' spans, under the gate. The background work behind which it ran is
+    // the run of spans ending at its first submission with no idle gap past QueueGapSeconds, and every span between its
+    // first submission's start and its last's end; their union's length is the wait charged to it. The frame is behind
+    // when that wait is positive, and may have been missed for it when the wait and its own GPU time exceed its period.
+    private void Judge(PendingFrame frame) {
+        Span<(double Start, double End)> spans = stackalloc (double Start, double End)[KeptSpans];
+        var count = 0;
+        var from = frame.Start;
+
+        // The run ahead: each pass takes the run's start back past every span that reaches it.
+        for (var extended = true; extended;) {
+            extended = false;
+            for (var index = 0; (index < m_spanCount); index++) {
+                var (start, end) = m_spans[index];
+
+                if ((start < from) && (end >= (from - QueueGapSeconds))) {
+                    from = start;
+                    extended = true;
+                }
+            }
+        }
+        for (var index = 0; (index < m_spanCount); index++) {
+            var (start, end) = m_spans[index];
+            var clippedStart = Math.Max(val1: start, val2: from);
+            var clippedEnd = Math.Min(val1: end, val2: frame.End);
+
+            if (clippedEnd > clippedStart) { spans[count++] = (clippedStart, clippedEnd); }
+        }
+        spans[..count].Sort(comparison: static (a, b) => a.Start.CompareTo(value: b.Start));
+
+        var wait = 0.0;
+        var reach = double.NegativeInfinity;
+
+        foreach (var (start, end) in spans[..count]) {
+            var begin = Math.Max(val1: start, val2: reach);
+
+            if (end > begin) { wait += (end - begin); }
+            reach = Math.Max(val1: reach, val2: end);
+        }
+        m_framesJudged++;
+        if (!(wait > 0.0)) { return; }
+        m_framesBehind++;
+        m_behindSeconds += wait;
+        m_mostBehindSeconds = Math.Max(val1: m_mostBehindSeconds, val2: wait);
+        if ((wait + frame.Own) > frame.Period) { m_framesMissed++; }
     }
 
     // The one write that moves the GPU credit by a charge: under the gate. A charge that is not a number changes
@@ -331,4 +510,18 @@ public sealed class SdfGpuWorkBudget(Func<long>? clock = null) {
         m_charged += debited;
         return debited;
     }
+
+    // A frame's reading awaiting judgement: its span on the queue's clock, its own GPU time and period, all in seconds,
+    // and the reading it was taken at.
+    private readonly record struct PendingFrame(double Start, double End, double Own, double Period, long Reading);
+}
+/// <summary>One job's charge to a <see cref="SdfGpuWorkBudget"/> (<see cref="SdfGpuWorkBudget.ChargeGpu"/>): what it
+/// debited from the GPU credit, which its settlement replaces, and the priced length it entered the queue ahead of the
+/// next frame with, which its leaving (<see cref="SdfGpuWorkBudget.Leave"/>) takes out.</summary>
+/// <param name="Debited">The seconds the charge debited.</param>
+/// <param name="Queued">The seconds the job entered the queue with: its estimate, or zero for one that is not a positive
+/// number.</param>
+public readonly record struct SdfGpuWorkCharge(double Debited, double Queued) {
+    // Only a charge the budget made has a job in the queue: the default charge (a slot with no charged job) has not.
+    internal bool Entered { get; } = true;
 }

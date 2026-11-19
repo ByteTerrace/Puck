@@ -682,7 +682,8 @@ What an arrival and a hand-over still cost the frame:
 - [medium] A bake batch in play is cut to the live frame allowance at the
   bake's mean-following rate (`SdfMeshBakeGpuWork`), but a lattice is never
   split, so a first lattice of up to `SdfMeshPathBake.LatticeTaps` evaluations
-  still runs past a small allowance (`over-allowance`). Whether allowance-sized
+  taken with nothing queued still runs past a small allowance (`over-allowance`);
+  while other jobs are queued it waits for them. Whether allowance-sized
   batches keep enough groups in flight for a cold arrival in play is not
   measured: an earlier cut at a rate that rose to the costliest batch cut the
   groups in flight to a third. Measure a cold arrival in play against the bar.

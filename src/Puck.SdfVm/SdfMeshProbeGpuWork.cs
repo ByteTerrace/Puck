@@ -316,13 +316,13 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
     // starts only when none is in flight and no query is taken while it runs, and an exclusive query runs alone. Every
     // job is cut to the live frame allowance, a held frame's too: the coordinator cuts queries before any take knows
     // whose frame it serves, and a structure build held to the same span keeps a held frame's submissions as short.
-    public bool TryTake(SdfWorldTables tables, int uploadBytes, double allowanceSeconds, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out object? job, out double estimatedSeconds) {
+    public bool TryTake(SdfWorldTables tables, int uploadBytes, SdfGpuWorkAllowance allowance, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out object? job, out double estimatedSeconds) {
         job = null;
         estimatedSeconds = 0;
         lock (m_gate) {
             if (m_exclusive || !tables.BindsBackgroundWork) { return false; }
             if (m_sceneUpload is { } upload) {
-                if (!upload.Cancelled && m_volume.KeepsGpuScene(upload.Scene)) { return TakeSceneUpload(out job, out estimatedSeconds); }
+                if (!upload.Cancelled && m_volume.KeepsGpuScene(upload.Scene)) { return TakeSceneUpload(allowance, out job, out estimatedSeconds); }
                 // Stop producing immediately, but reclaim addresses only after the worker and every submitted copy
                 // retire. Completed immutable geometry is retained for the next scene, so roster churn cannot restart
                 // it forever. No frame thread joins a blocked writer or publishes an abandoned prefix.
@@ -332,7 +332,7 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
                 upload.Dispose();
                 m_sceneUpload = null;
             }
-            if (TryTakeStructures(allowanceSeconds: Math.Min(val1: allowanceSeconds, val2: FrameAllowanceSeconds), job: out job, estimatedSeconds: out estimatedSeconds, tables: tables)) { return true; }
+            if (TryTakeStructures(allowance: (allowance with { Seconds = Math.Min(val1: allowance.Seconds, val2: FrameAllowanceSeconds) }), job: out job, estimatedSeconds: out estimatedSeconds, tables: tables)) { return true; }
             if (!m_pending.TryPeek(out var pending)) { return false; }
             if (!((pending.Commits || pending.CameraSample) ? m_volume.KeepsGpuPublication(pending.Scene, pending.Geometry, pending.Window) : m_volume.KeepsGpuScene(pending.Scene)) ||
                 (pending.CameraSample && (m_feedback is null || m_feedbackWords != pending.VolumeWords)) ||
@@ -367,6 +367,14 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
             }
             var exclusive = Exclusive(query: pending);
             if (exclusive && (m_inFlight != 0)) { return false; }
+            // The coordinator cut the query to the whole frame allowance: while work is queued it waits for room, which
+            // its price asks the service to hold.
+            var price = m_rates[(int)KindOf(pending)].SecondsOf(units: UnitsOf(pending));
+
+            if (!allowance.Admits(seconds: price)) {
+                estimatedSeconds = price;
+                return false;
+            }
             pending.Meshes = meshes;
             if (pending.Lighting is not null && !pending.Selection && !pending.CameraSample) {
                 if (m_feedbackWords != pending.VolumeWords) {
