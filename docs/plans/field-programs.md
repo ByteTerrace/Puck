@@ -17,7 +17,10 @@ design round.
   [The measurement](field-programs/research-measure.md) puts the bake kernel
   at a few seconds of GPU time in a cold bake of minutes, splits a heavy
   program's per-sample cost between walking and arithmetic, and prices the
-  clamp.
+  clamp. [Where the wall time goes](field-programs/research-bake-time.md)
+  accounts for the rest: the CPU worker pool under lockstep, the background
+  GPU budget in a free-running boot, and a wait for every pipeline on a cold
+  driver cache.
 - **Two readers and many walkers.** Every op is interpreted on the CPU and on
   the GPU, and the CPU side switches over it in roughly ten analyses (point
   walk, bounds, lane contract, cells, Lipschitz, cull, skip spheres, rigid
