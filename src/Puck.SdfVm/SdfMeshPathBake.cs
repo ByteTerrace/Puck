@@ -1960,7 +1960,7 @@ public sealed partial class SdfMeshPathBake {
             }
             group.Creases = creases;
             group.PointsAnswered = 0;
-            group.Next = CreaseChunk(group: group);
+            group.Next = PointsChunk(gradients: true, group: group);
         }
     }
     // The vertices a contour's field check measures (AnswerCreases): every vertex no crossing pins to the surface.
@@ -1973,11 +1973,12 @@ public sealed partial class SdfMeshPathBake {
 
         return [.. found];
     }
-    // The next chunk of the vertices a group's field check measures, as many as a frame's share of field evaluations takes.
-    private static SdfMeshBakeRequest CreaseChunk(Group group) {
-        var count = Math.Min(val1: (group.Points!.Length - group.PointsAnswered), val2: (LatticeTaps / 5));
+    // The next chunk of the vertices a group's field check measures (gradients at taps the crease spacing apart) or of its
+    // material points (values alone), as many as a frame's share of field evaluations takes.
+    private static SdfMeshBakeRequest PointsChunk(Group group, bool gradients) {
+        var count = Math.Min(val1: (group.Points!.Length - group.PointsAnswered), val2: (LatticeTaps / (gradients ? 5 : 1)));
 
-        return RequestOf(cell: group.CreaseSpacing, dims: (count, 1, 1), gradients: true, group: group, origin: Vector3.Zero) with {
+        return RequestOf(cell: (gradients ? group.CreaseSpacing : Vector3.One), dims: (count, 1, 1), gradients: gradients, group: group, origin: Vector3.Zero) with {
             Points = group.Points.Memory.Slice(group.PointsAnswered, count),
         };
     }
@@ -2024,7 +2025,7 @@ public sealed partial class SdfMeshPathBake {
             m_accounts.KindSamples[5] += request.Samples;
             m_accounts.Softened += softened;
             if (more) {
-                group.Next = CreaseChunk(group: group);
+                group.Next = PointsChunk(gradients: true, group: group);
                 return;
             }
             group.Next = null;
@@ -2076,7 +2077,7 @@ public sealed partial class SdfMeshPathBake {
         lock (m_gate) {
             group.Contouring = false;
             if (!m_groups.Contains(item: group)) { return; }
-            group.Next = PointChunk(group: group);
+            group.Next = PointsChunk(gradients: false, group: group);
         }
     }
     // Fills a group's point round and the storage its answers land in, on the worker running the group's stage: no
@@ -2085,14 +2086,6 @@ public sealed partial class SdfMeshPathBake {
         group.Points.CopyFrom(source: points);
         group.PointMaterials.Resize(points.Length, clear: false, preserve: false);
         group.PointsAnswered = 0;
-    }
-    // The next chunk of a group's material points, at most a frame's share of field evaluations.
-    private static SdfMeshBakeRequest PointChunk(Group group) {
-        var count = Math.Min(val1: (group.Points!.Length - group.PointsAnswered), val2: LatticeTaps);
-
-        return RequestOf(cell: Vector3.One, dims: (count, 1, 1), gradients: false, group: group, origin: Vector3.Zero) with {
-            Points = group.Points.Memory.Slice(group.PointsAnswered, count),
-        };
     }
     // Answers a chunk of a group's material points; once a round's every point is answered, its material cut takes them
     // on the thread pool (Advance).
@@ -2104,7 +2097,7 @@ public sealed partial class SdfMeshPathBake {
             if (!m_groups.Contains(item: group)) { return; }
             m_accounts.KindSamples[kind] += request.Samples;
             if (group.PointsAnswered < group.Points!.Length) {
-                group.Next = PointChunk(group: group);
+                group.Next = PointsChunk(gradients: false, group: group);
                 return;
             }
 
@@ -2133,7 +2126,7 @@ public sealed partial class SdfMeshPathBake {
         lock (m_gate) {
             group.Contouring = false;
             if (!m_groups.Contains(item: group)) { return; }
-            group.Next = PointChunk(group: group);
+            group.Next = PointsChunk(gradients: false, group: group);
         }
     }
     // Builds a group's mesh from its contour, cut along its material boundaries.
