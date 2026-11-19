@@ -23,10 +23,10 @@ test "each step of a phrase grades by its window at 60 Hz, a millisecond either 
     ticks 3
   }
   expect {
-    judge.grade1_0 == 3
-    judge.grade1_1 == 2
-    judge.grade1_2 == 3
-    judge.grade1_3 == 1
+    judgeGrade1[0] == 3
+    judgeGrade1[1] == 2
+    judgeGrade1[2] == 3
+    judgeGrade1[3] == 1
     judge.strength1 == 9
     judge.status1 == 1
   }

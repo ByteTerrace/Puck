@@ -44,10 +44,13 @@ function instrumentFamily(suspendedBy = []) = {
 }
 
 // `music` names the world's score row, `seats` is the number of local seats that may play (each seat's body is its
-// number minus one), and `phrase` is the notes the judge awaits, each a vent number from 1 to 4. `holds` are the chords
+// number minus one), and `phrase` is the steps the judge awaits, each a vent number from 1 to 4 on a beat (`rhythmPhrase`). `holds` are the chords
 // of `modifiers` that open the instrument page, one for each press order that opens it (the first carries the entries and
 // the rest inherit it), and `breathSources` are the sources of the breath.
-template instrumentPlay(music, seats = 1, phrase = [1, 2, 3, 4], windows = rhythmWindows, modifiers = padModifiers, holds = [["lt", "rt"], ["rt", "lt"]], breathSources = ["gamepad.rightTrigger", "keyboard.x"]) {
+template instrumentPlay(music, seats = 1, phrase = rhythmPhrase, windows = rhythmWindows, modifiers = padModifiers, holds = [
+  ["lt", "rt"]
+  ["rt", "lt"]
+], breathSources = ["gamepad.rightTrigger", "keyboard.x"]) {
   channels [
     { name: "breath", shape: Unipolar, composition: true }
     { name: "vent1", shape: Binary, composition: true }
@@ -82,7 +85,16 @@ template instrumentPlay(music, seats = 1, phrase = [1, 2, 3, 4], windows = rhyth
             label: "Instrument"
             entries: (hold == 0) ? concat(
               [{ channel: "breath", id: "breath", label: "Breath", scale: 1, sources: breathSources }],
-              map(range(0, 4), i => { channel: ventChannels[i], id: ventChannels[i], label: $"Vent {i + 1}", scale: 1, sources: ventSources[i] })
+              map(
+                range(0, 4),
+                i => {
+                  channel: ventChannels[i]
+                  id: ventChannels[i]
+                  label: $"Vent {i + 1}"
+                  scale: 1
+                  sources: ventSources[i]
+                }
+              )
             ) : []
           }
         })

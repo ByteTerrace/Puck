@@ -26,10 +26,10 @@ test "each step of a phrase grades by its window, a millisecond either side of t
   }
   expect {
     bodyState(body, 0, breathing) == 1
-    judge.grade1_0 == 3
-    judge.grade1_1 == 2
-    judge.grade1_2 == 3
-    judge.grade1_3 == 1
+    judgeGrade1[0] == 3
+    judgeGrade1[1] == 2
+    judgeGrade1[2] == 3
+    judgeGrade1[3] == 1
     judge.strength1 == 9
     judge.step1 == 4
     judge.status1 == 1
@@ -51,9 +51,9 @@ test "a wrong note is a miss, two in a row end the phrase, and the next press st
     ticks 3
   }
   expect {
-    judge.grade1_0 == 3
-    judge.grade1_1 == 0
-    judge.grade1_2 == 0
+    judgeGrade1[0] == 3
+    judgeGrade1[1] == 0
+    judgeGrade1[2] == 0
     judge.misses1 == 2
     judge.strength1 == 1
     judge.status1 == 2
@@ -78,7 +78,46 @@ test "the first press after a phrase ends starts a new phrase from its first ste
     judge.step1 == 1
     judge.strength1 == 3
     judge.misses1 == 0
-    judge.grade1_0 == 3
+    judgeGrade1[0] == 3
+  }
+}
+
+test "a press ahead of its step's beat is a stray miss and the step stays awaited" {
+  when {
+    ticks 4
+    seat1: player.signal keyboard.y press
+    ticks 9
+    seat1: player.signal keyboard.j press at:0
+    ticks 2
+    seat1: player.signal keyboard.l press at:0
+    ticks 13
+    seat1: player.signal keyboard.i press at:0
+    ticks 3
+  }
+  expect {
+    judgeGrade1[0] == 3
+    judgeGrade1[1] == 3
+    judge.misses1 == 0
+    judge.strength1 == 5
+    judge.step1 == 2
+    judge.status1 == 0
+  }
+}
+
+test "a beat that passes with no press is a miss for its step" {
+  when {
+    ticks 4
+    seat1: player.signal keyboard.y press
+    ticks 9
+    seat1: player.signal keyboard.j press at:0
+    ticks 33
+  }
+  expect {
+    judgeGrade1[0] == 3
+    judgeGrade1[1] == 0
+    judge.step1 == 2
+    judge.misses1 == 1
+    judge.strength1 == 2
   }
 }
 

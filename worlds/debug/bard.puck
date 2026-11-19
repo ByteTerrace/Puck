@@ -9,6 +9,9 @@ import "score"
 
 let breathKey = ["keyboard.y"]
 let breathHolds = [["breath"]]
-let breathModifiers = concat(padModifiers, [{ id: "breath", label: "BR", pressThreshold: 0.5, releaseThreshold: 0.35, sources: breathKey }])
+let breathModifiers = concat(
+  padModifiers,
+  [{ id: "breath", label: "BR", pressThreshold: 0.5, releaseThreshold: 0.35, sources: breathKey }]
+)
 
 instrumentPlay(music: score, modifiers: breathModifiers, holds: breathHolds, breathSources: breathKey)

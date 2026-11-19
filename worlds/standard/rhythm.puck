@@ -1,64 +1,97 @@
 // The standard's rhythm judge, a library. `rhythmJudge(...)` grades a seat's presses against its world's beat and tracks the
-// phrase they play, with no instrument and no dance in it: a phrase is a list of notes (any whole numbers), and a press is a
-// channel that means one note when it lands. A bard's vents, a dancer's moves and any other expression's buttons are the
-// same call with different `presses` and `phrase`, so every one is judged by one set of rules against one clock.
+// phrase they play, with no instrument and no dance in it: a phrase is a list of steps, each a note (any whole number)
+// on a beat, and a press is a channel that means one note when it lands. A bard's vents, a dancer's moves and any other
+// expression's buttons are the same call with different `presses` and `phrase`, so every one is judged by one set of rules
+// against one clock.
 //
-// Each press is graded by how far it fell from the nearest beat of the world's score, at the time the host captured it
-// (sub-tick, plus the seat's calibration; `clock(<music>, phaseErrorAt, ...)` in input-clock-fixture.puck is the one
-// operand every grade reads). A note that is the awaited one and falls inside a window is a hit worth the window's grade
-// (`perfect` 3, `good` 2, `ok` 1); the awaited note outside every window, or any other note, is a miss. A hit adds its
-// grade to the phrase's strength and clears the miss run. A miss lowers the strength by one (never below zero) and the
-// phrase continues, and `missLimit` misses in a row end it. The last step judged completes it. The next press after a
-// phrase ends starts a new one at its first step.
+// A press is graded by how far it fell from the nearest beat of the world's score, at the time the host captured it
+// (sub-tick, plus the seat's calibration), and by which beat that was. The first press after a phrase ends starts a new
+// one and is its first step's beat; each later step is due that many beats after the first (`beat` in the phrase). A
+// press that lands on the awaited step's beat with the awaited note inside a window is a hit worth the window's grade
+// (`perfect` 3, `good` 2, `ok` 1). Any other press on the beat, or the right note outside every window, is a miss. A press
+// before its step's beat is a stray miss and leaves the step awaited. A beat that passes with no press at all is a miss
+// for its step. A hit adds its grade to the phrase's strength and clears the run of misses. A miss lowers the strength by
+// one (never below zero) and the phrase continues, and `missLimit` misses in a row end it. The last step judged
+// completes it.
 //
-// The state is one keyed Int row named `name` (default `judge`), with these cells for each seat `<s>` (1-based):
+// The state is one keyed Int row named `judge`, with these cells for each seat `<s>` (1-based):
 //
 //   status<s>      0 playing or not started, 1 complete, 2 ended by misses
 //   step<s>        the index of the awaited step, or the phrase's length once it ends
+//   start<s>       the beat of the phrase's first press
 //   strength<s>    the grades added so far, less one for each miss
 //   misses<s>      the misses in a row
-//   grade<s>_<i>   the grade the press at step i earned (0 for a miss; the last phrase's, until a new one reaches step i)
 //
-// `<name>Phrase` is the authored phrase as a row keyed by step index (a rule or HUD may read the awaited note), and
-// `<name>Error` is the signed error in seconds of each seat's latest press (a negative error is early).
-//
-// What this library does not do yet: it grades a press against the NEAREST beat, so it cannot say that step k belongs on
-// beat b of a bar, and it cannot notice a beat that passed with no press. Both wait for the clock's beat and bar operands
-// (instrument-play.md, gap G); each marked place below is the one line they enter.
+// `judgeGrade<s>` is seat s's grade for each step, keyed by step index (0 for a miss; the last phrase's, until a new one
+// reaches the step). `judgePhrase` and `judgePhraseBeat` are the authored phrase as rows keyed by step index, and
+// `judgeError` is the signed error in seconds of each seat's latest press (negative is early).
 //
 //   import "../standard/rhythm"
-//   rhythmJudge(music: score, presses: [{ channel: "vent1", note: 1 }], phrase: [1, 1])
+//   rhythmJudge(music: score, presses: [{ channel: "vent1", note: 1 }], phrase: [{ note: 1, beat: 0 }, { note: 1, beat: 1 }])
 
 // The standard's windows, in seconds either side of a beat. They are exact Q48.16 values, so a press measured against a
 // window never rounds across it. A world passes its own.
 let rhythmWindows = { perfect: 0.03125, good: 0.0625, ok: 0.125 }
 
+// The standard's phrase of four notes, one a beat.
+let rhythmPhrase = [{ note: 1, beat: 0 }, { note: 2, beat: 1 }, { note: 3, beat: 2 }, { note: 4, beat: 3 }]
+
+// What a judged step does to seat `s`'s cells, from the locals of the rule that splices it: `at` the step judged, `advance`
+// whether the step is consumed (a stray press ahead of its beat is not), `got` the grade it earned (0 for a miss),
+// `carried` and `missed` the strength and run of misses it began with, and `begin` the phrase's first beat.
+rule template judgeResult(s, length, limit) {
+  if advance == 1 {
+    $"judgeGrade{s}"[at] = got
+  }
+  judge[$"strength{s}"] = (got > 0) ? (carried + got) : maximum(carried - 1, 0)
+  judge[$"misses{s}"] = (got > 0) ? 0 : (missed + 1)
+  judge[$"step{s}"] = at + advance
+  judge[$"start{s}"] = begin
+  judge[$"status{s}"] = ((got == 0) and (missed + 1 >= limit)) ? 2 : ((at + advance >= length) ? 1 : 0)
+}
+
 template rhythmJudge(music, presses, phrase, seats = 1, windows = rhythmWindows, missLimit = 2) {
   let steps = length(phrase)
+
   state {
     world {
       row {
         name: "judgePhrase"
         kind: Int
-        cells: map(range(0, length(phrase)), i => { key: $"{i}", value: phrase[i] })
+        capacity: steps
+        cells: map(range(0, steps), i => { key: $"{i}", value: phrase[i].note })
+      }
+      row {
+        name: "judgePhraseBeat"
+        kind: Int
+        capacity: steps
+        cells: map(range(0, steps), i => { key: $"{i}", value: phrase[i].beat - phrase[0].beat })
       }
       row {
         name: "judgeError"
         kind: Fixed
+        capacity: seats
         cells: map(range(1, seats), s => { key: $"{s}", value: "0" })
       }
       row {
         name: "judge"
         kind: Int
-        cells: flatMap(range(1, seats), s => concat(
-          [
-            { key: $"status{s}", value: 0 }
-            { key: $"step{s}", value: 0 }
-            { key: $"strength{s}", value: 0 }
-            { key: $"misses{s}", value: 0 }
-          ],
-          map(range(0, length(phrase)), i => { key: $"grade{s}_{i}", value: 0 })
-        ))
+        capacity: seats * 5
+        cells: flatMap(range(1, seats), s => [
+          { key: $"status{s}", value: 0 }
+          { key: $"step{s}", value: 0 }
+          { key: $"start{s}", value: 0 }
+          { key: $"strength{s}", value: 0 }
+          { key: $"misses{s}", value: 0 }
+        ])
+      }
+      for s in range(1, seats) {
+        row {
+          name: $"judgeGrade{s}"
+          kind: Int
+          capacity: steps
+          cells: map(range(0, steps), i => { key: $"{i}", value: 0 })
+        }
       }
     }
   }
@@ -67,29 +100,38 @@ template rhythmJudge(music, presses, phrase, seats = 1, windows = rhythmWindows,
     for press in presses {
       rule $"judge-{s}-{press.channel}" {
         local error = clock(music, phaseErrorAt, s, press.channel, Press, 0) ?? 0.0
+        local pressBeat = clock(music, beatAt, s, press.channel, Press, 0) ?? 0
         local distance = absolute(error)
-        local window = ((distance <= windows.perfect) ? 3 : ((distance <= windows.good) ? 2 : ((distance <= windows.ok) ? 1 : 0)))
+        local window = (
+          (distance <= windows.perfect) ? 3 : ((distance <= windows.good) ? 2 : ((distance <= windows.ok) ? 1 : 0))
+        )
         local live = judge[$"status{s}"] == 0
         local at = live ? judge[$"step{s}"] : 0
         local carried = live ? judge[$"strength{s}"] : 0
         local missed = live ? judge[$"misses{s}"] : 0
-        // MARK(beat operand): the awaited step's beat is checked here once `clock` reads the beat index; until then a
-        // step is the next press, whichever beat it falls on.
-        local wanted = judgePhrase[at]
-        local got = (wanted == press.note) ? window : 0
+        local begin = (at > 0) ? judge[$"start{s}"] : pressBeat
+        local due = begin + judgePhraseBeat[at]
+        local got = ((judgePhrase[at] == press.note) and (pressBeat == due)) ? window : 0
+        local advance = (pressBeat < due) ? 0 : 1
         when inputEdge(s, press.channel, Press, 0) and inputTick(s, press.channel, Press, 0) == $tick
         mode: Level
-        for i in range(0, length(phrase)) {
-          if at == i {
-            judge[$"grade{s}_{i}"] = got
-          }
-        }
-        judge[$"strength{s}"] = (got > 0) ? (carried + got) : maximum(carried - 1, 0)
-        judge[$"misses{s}"] = (got > 0) ? 0 : (missed + 1)
-        judge[$"step{s}"] = at + 1
-        judge[$"status{s}"] = ((got == 0) and (missed + 1 >= missLimit)) ? 2 : ((at + 1 >= steps) ? 1 : 0)
+        judgeResult(s, steps, missLimit)
         judgeError[$"{s}"] = error
       }
+    }
+
+    // A step whose beat has passed with no press is a miss, so a phrase the player stops playing ends on its own.
+    rule $"judge-lapse-{s}" {
+      local live = judge[$"status{s}"] == 0
+      local at = live ? judge[$"step{s}"] : 0
+      local carried = judge[$"strength{s}"]
+      local missed = judge[$"misses{s}"]
+      local begin = judge[$"start{s}"]
+      local got = 0
+      local advance = 1
+      when live and at > 0 and clock(music, beat) >= (begin + judgePhraseBeat[at] + 1)
+      mode: Level
+      judgeResult(s, steps, missLimit)
     }
   }
 }
