@@ -120,19 +120,13 @@ public static class CompileInputs {
             frame.Log.Add(input: input);
         }
     }
-    private static Stamp FileStamp(string fullPath) {
+    private static Stamp FileStamp(string fullPath) => StampOf(entry: new FileInfo(fileName: fullPath));
+    private static Stamp DirectoryStamp(string fullPath) => StampOf(entry: new DirectoryInfo(path: fullPath));
+    // One stat: a file's length, or zero for a directory, and the entry's last write.
+    private static Stamp StampOf(FileSystemInfo entry) {
         Interlocked.Increment(location: ref StampReadCount);
 
-        var file = new FileInfo(fileName: fullPath);
-
-        return (file.Exists ? new Stamp(Exists: true, Length: file.Length, Written: file.LastWriteTimeUtc) : default);
-    }
-    private static Stamp DirectoryStamp(string fullPath) {
-        Interlocked.Increment(location: ref StampReadCount);
-
-        var directory = new DirectoryInfo(path: fullPath);
-
-        return (directory.Exists ? new Stamp(Exists: true, Length: 0, Written: directory.LastWriteTimeUtc) : default);
+        return (entry.Exists ? new Stamp(Exists: true, Length: ((entry is FileInfo file) ? file.Length : 0L), Written: entry.LastWriteTimeUtc) : default);
     }
     // The answer remembered under `stamp`, when it was read under exactly that stamp and the stamp was old enough then.
     private static Known? Vouched(string key, Stamp stamp) => ((Remembered.TryGetValue(key: key, value: out var known) && !known.Racy && (known.Stamp == stamp))
