@@ -65,6 +65,15 @@ namespace Puck.SdfVm;
 /// was never taken, so it is never given back, and no settlement raises the credit above where the job's charge found
 /// it.
 /// </para>
+/// <para>
+/// Work the frame owes a hole (a bake lattice of a group in view that draws nothing yet) is frame work, not optional
+/// background work, and has its own allowance (<see cref="OwedAllowance"/>): the GPU time the frame does not need, read
+/// from the frames' measured interval less their own GPU time (<see cref="OwedFrameSecondsOf"/>), never less than
+/// <see cref="SdfGpuWork.GpuShare"/> of the period and never more than one period. Owed jobs enter the queue ahead of
+/// the next frame as every charged job does, so the jobs queued ahead of one frame fit the owed allowance and the
+/// ordinary jobs still fit <see cref="FrameAllowanceSeconds"/>; they never draw on the credit, so the ordinary work
+/// (landing, lighting) keeps its share beside them (<see cref="ChargeGpu"/>).
+/// </para>
 /// <para>The services take from it first come, in the order their residencies are pumped. Thread-safe.</para>
 /// </summary>
 /// <param name="clock">Reads the time, in <see cref="Stopwatch"/> ticks; <see langword="null"/> reads
@@ -136,6 +145,16 @@ public sealed class SdfGpuWorkBudget(Func<long>? clock = null) {
     private double m_windowSeconds;
     private double m_frameSeconds;
     private bool m_holding;
+    // The wall time between the frames' readings: when the latest came, the window's sum, and the mean the last step
+    // read; and the owed allowance that step set (OwedFrameSecondsOf), with the owed jobs charged and their measured GPU
+    // time.
+    private long m_readingAt;
+    private double m_windowWall;
+    private int m_windowIntervals;
+    private double m_interval;
+    private double m_owedFrame = (SdfGpuWork.GpuShare * ReferencePeriodSeconds);
+    private long m_owedJobs;
+    private double m_owedSeconds;
 
     // The priced length of the charged jobs still in flight and how many they are: what is queued ahead of the next
     // frame. The length reads zero whenever the count does, so rounding left by entries and leavings never holds work.
@@ -214,6 +233,40 @@ public sealed class SdfGpuWorkBudget(Func<long>? clock = null) {
             }
         }
     }
+    /// <summary>Gets what the next job the frame owes a hole may take before the frame's deadline: the owed frame
+    /// allowance (<see cref="OwedFrameSeconds"/>) less the priced length of every charged job in flight, owed or not, and
+    /// whether any is. Safe to read from any thread.</summary>
+    public SdfGpuWorkAllowance OwedAllowance {
+        get {
+            lock (m_gate) {
+                return ((m_queuedJobs == 0) ? new(Queued: false, Seconds: m_owedFrame) : new(Queued: true, Seconds: Math.Max(val1: 0.0, val2: (m_owedFrame - m_queued))));
+            }
+        }
+    }
+    /// <summary>Gets the GPU time, in seconds, the jobs the frame owes a hole may queue ahead of one frame, as the last
+    /// step of the share set it (<see cref="OwedFrameSecondsOf"/>). Safe to read from any thread.</summary>
+    public double OwedFrameSeconds {
+        get {
+            lock (m_gate) { return m_owedFrame; }
+        }
+    }
+    /// <summary>Returns the GPU time, in seconds, the work the frame owes a hole may queue ahead of one frame: what the
+    /// frames leave idle of the time between them (their measured interval, no shorter than the display's period, short of
+    /// <see cref="HeadroomShare"/> of it, less their own GPU time), never less than <see cref="SdfGpuWork.GpuShare"/> of the
+    /// period, which ordinary background work takes beside an unloaded frame, and never more than one period, so a frame
+    /// waits at most that long behind it. The interval counts what owed work delayed a frame by, but only short of the
+    /// headroom share, so the allowance it sets settles rather than feeding on itself.</summary>
+    /// <param name="periodSeconds">The display's period, in seconds; positive.</param>
+    /// <param name="intervalSeconds">The frames' mean wall time between readings, in seconds; zero or less when not
+    /// measured, read as the period.</param>
+    /// <param name="frameSeconds">The frames' own GPU time, in seconds.</param>
+    /// <returns>The owed allowance, in seconds.</returns>
+    public static double OwedFrameSecondsOf(double periodSeconds, double intervalSeconds, double frameSeconds) {
+        var least = (SdfGpuWork.GpuShare * periodSeconds);
+        var idle = (((1.0 - HeadroomShare) * Math.Max(val1: periodSeconds, val2: (double.IsFinite(d: intervalSeconds) ? intervalSeconds : 0.0))) - Math.Max(val1: 0.0, val2: frameSeconds));
+
+        return (double.IsNaN(d: idle) ? least : Math.Clamp(max: periodSeconds, min: least, value: idle));
+    }
     /// <summary>Gets the priced length, in seconds, of the charged jobs still in flight: the background work queued ahead
     /// of the next frame.</summary>
     public double QueuedSeconds {
@@ -282,7 +335,14 @@ public sealed class SdfGpuWorkBudget(Func<long>? clock = null) {
     public void Observe(double periodSeconds, double frameSeconds, double queueStartSeconds = 0.0, double queueEndSeconds = 0.0) {
         if (!(periodSeconds > 0.0)) { throw new ArgumentOutOfRangeException(paramName: nameof(periodSeconds), actualValue: periodSeconds, message: "A display period is positive."); }
 
+        var now = m_clock();
+
         lock (m_gate) {
+            if ((m_readingAt != 0) && (now > m_readingAt)) {
+                m_windowWall += ((now - m_readingAt) / ((double)Stopwatch.Frequency));
+                m_windowIntervals++;
+            }
+            m_readingAt = now;
             if (queueEndSeconds > queueStartSeconds) {
                 if (m_pendingFrames.Count >= MostPendingFrames) { Judge(frame: m_pendingFrames.Dequeue()); }
                 m_pendingFrames.Enqueue(item: new PendingFrame(End: queueEndSeconds, Own: (double.IsFinite(d: frameSeconds) ? Math.Max(val1: 0.0, val2: frameSeconds) : 0.0), Period: periodSeconds, Reading: m_readings, Start: queueStartSeconds));
@@ -295,14 +355,20 @@ public sealed class SdfGpuWorkBudget(Func<long>? clock = null) {
                 m_follows = "frame";
                 m_windowFrames = 0;
                 m_windowSeconds = 0.0;
+                m_windowWall = 0.0;
+                m_windowIntervals = 0;
             }
             m_period = periodSeconds;
             m_windowFrames++;
             m_windowSeconds += (double.IsFinite(d: frameSeconds) ? Math.Max(val1: 0.0, val2: frameSeconds) : 0.0);
             if (m_windowFrames < FollowFrames) { return; }
             m_frameSeconds = (m_windowSeconds / m_windowFrames);
+            m_interval = ((m_windowIntervals > 0) ? (m_windowWall / m_windowIntervals) : 0.0);
+            m_owedFrame = OwedFrameSecondsOf(frameSeconds: m_frameSeconds, intervalSeconds: m_interval, periodSeconds: periodSeconds);
             m_windowFrames = 0;
             m_windowSeconds = 0.0;
+            m_windowWall = 0.0;
+            m_windowIntervals = 0;
 
             var target = ShareOf(frameSeconds: m_frameSeconds, periodSeconds: periodSeconds);
 
@@ -318,8 +384,9 @@ public sealed class SdfGpuWorkBudget(Func<long>? clock = null) {
             }
         }
     }
-    /// <summary>Takes a frame with no reading: the share stands at <see cref="SdfGpuWork.GpuShare"/> of the display's
-    /// period, or of <see cref="ReferencePeriodSeconds"/> when none is known, and the budget names why.</summary>
+    /// <summary>Takes a frame with no reading: the share and the owed allowance stand at <see cref="SdfGpuWork.GpuShare"/>
+    /// of the display's period, or of <see cref="ReferencePeriodSeconds"/> when none is known, and the budget names
+    /// why.</summary>
     /// <param name="periodSeconds">The display's period, in seconds; zero or less when none is known.</param>
     /// <param name="reason">Why there is no reading, one word for <see cref="Describe"/>.</param>
     public void Unread(double periodSeconds, string reason) {
@@ -329,9 +396,13 @@ public sealed class SdfGpuWorkBudget(Func<long>? clock = null) {
             m_follows = reason;
             m_period = ((periodSeconds > 0.0) ? periodSeconds : ReferencePeriodSeconds);
             m_share = SdfGpuWork.GpuShare;
+            m_owedFrame = (SdfGpuWork.GpuShare * m_period);
             m_holding = false;
             m_windowFrames = 0;
             m_windowSeconds = 0.0;
+            m_windowWall = 0.0;
+            m_windowIntervals = 0;
+            m_readingAt = 0;
         }
     }
     /// <summary>Banks the GPU time and the upload bytes their rates allow since the last accrual by any service.</summary>
@@ -361,17 +432,23 @@ public sealed class SdfGpuWorkBudget(Func<long>? clock = null) {
         }
     }
     /// <summary>Charges a submitted job's estimated GPU time and enters it among the jobs queued ahead of the next frame
-    /// (<see cref="Allowance"/>) until its charge leaves (<see cref="Leave"/>).</summary>
+    /// (<see cref="Allowance"/>, <see cref="OwedAllowance"/>) until its charge leaves (<see cref="Leave"/>). A job the
+    /// frame owes a hole enters the queue alone and debits nothing: it is held to the owed allowance, not the credit.</summary>
     /// <param name="seconds">The estimate, in seconds.</param>
-    /// <returns>The charge: the seconds it debited (the estimate, less what the debt's floor dropped), which the job's
-    /// settlement (<see cref="SettleGpu"/>) replaces, and the seconds it entered the queue with, which its leaving
-    /// takes out.</returns>
-    public SdfGpuWorkCharge ChargeGpu(double seconds) {
+    /// <param name="owed">Whether the job is work the frame owes a hole, taken under <see cref="OwedAllowance"/>.</param>
+    /// <returns>The charge: the seconds it debited (the estimate, less what the debt's floor dropped; zero for an owed
+    /// job), which the job's settlement (<see cref="SettleGpu"/>) replaces, and the seconds it entered the queue with,
+    /// which its leaving takes out.</returns>
+    public SdfGpuWorkCharge ChargeGpu(double seconds, bool owed = false) {
         var queued = ((double.IsFinite(d: seconds) && (seconds > 0.0)) ? seconds : 0.0);
 
         lock (m_gate) {
             m_queued += queued;
             m_queuedJobs++;
+            if (owed) {
+                m_owedJobs++;
+                return new SdfGpuWorkCharge(Debited: 0.0, Queued: queued) { Owed = true };
+            }
 
             return new SdfGpuWorkCharge(Debited: Charge(seconds: seconds), Queued: queued);
         }
@@ -388,7 +465,7 @@ public sealed class SdfGpuWorkBudget(Func<long>? clock = null) {
     }
     /// <summary>Replaces what a charged job debited with its measured GPU time, held to what the job could have run
     /// (<see cref="MeasuredWithin"/>), and counts a measurement that was not one. It gives back at most what the charge
-    /// debited.</summary>
+    /// debited. An owed job's time is counted apart and debits nothing.</summary>
     /// <param name="charge">The job's charge (<see cref="ChargeGpu"/>'s answer), whose debit the measurement
     /// replaces.</param>
     /// <param name="estimate">The seconds the job was estimated to take, which a measurement no job could have made
@@ -401,7 +478,11 @@ public sealed class SdfGpuWorkBudget(Func<long>? clock = null) {
 
         lock (m_gate) {
             if (clamped) { m_clamped++; }
-            _ = Charge(seconds: (seconds - charge.Debited));
+            if (charge.Owed) {
+                m_owedSeconds += seconds;
+            } else {
+                _ = Charge(seconds: (seconds - charge.Debited));
+            }
         }
 
         return seconds;
@@ -428,7 +509,8 @@ public sealed class SdfGpuWorkBudget(Func<long>? clock = null) {
         }
     }
     /// <summary>Describes the budget: the live share against its cap, one frame's allowance, the period and the frame's own
-    /// GPU time it read (or why it read none), the steps that lowered and raised the share, the credit it holds, what it
+    /// GPU time it read (or why it read none), the frames' mean interval, the owed allowance it set and the owed jobs
+    /// charged with their measured GPU time, the steps that lowered and raised the share, the credit it holds, what it
     /// granted and what its services charged since it was made (their ratio is how much of the allowance the work used),
     /// how often one found it empty, the measurements no job could have made and the charges dropped at the debt's
     /// floor; then the work queued ahead of the next frame, and the frames judged against the background jobs' spans:
@@ -437,7 +519,7 @@ public sealed class SdfGpuWorkBudget(Func<long>? clock = null) {
     /// <returns>One space-led field.</returns>
     public string Describe() {
         lock (m_gate) {
-            return string.Create(provider: CultureInfo.InvariantCulture, handler: $" work-budget=[gpu-share:{m_share:0.000},share-cap:{SdfGpuWork.GpuShare:0.00},frame-allowance:{(m_share * m_period * 1000.0):0.00}ms,period:{(m_period * 1000.0):0.00}ms,frame-gpu:{(m_frameSeconds * 1000.0):0.00}ms,follows:{m_follows},falls:{m_falls},rises:{m_rises},gpu-credit:{(m_credit * 1000.0):0.00}ms,gpu-granted:{(m_granted * 1000.0):0}ms,gpu-charged:{(m_charged * 1000.0):0}ms,upload-rate:{SdfGpuWork.UploadBytesPerSecond:0}B/s,upload-credit:{m_uploadCredit:0}B,uploaded:{m_uploaded:0}B,wants:{m_wants},clamped:{m_clamped},floored:{m_floored},queued:{m_queuedJobs}/{(m_queued * 1000.0):0.00}ms] frames-behind=[judged:{m_framesJudged},behind:{m_framesBehind},missed:{m_framesMissed},behind-gpu:{(m_behindSeconds * 1000.0):0.0}ms,most-behind:{(m_mostBehindSeconds * 1000.0):0.00}ms]");
+            return string.Create(provider: CultureInfo.InvariantCulture, handler: $" work-budget=[gpu-share:{m_share:0.000},share-cap:{SdfGpuWork.GpuShare:0.00},frame-allowance:{(m_share * m_period * 1000.0):0.00}ms,period:{(m_period * 1000.0):0.00}ms,frame-gpu:{(m_frameSeconds * 1000.0):0.00}ms,interval:{(m_interval * 1000.0):0.00}ms,owed-allowance:{(m_owedFrame * 1000.0):0.00}ms,owed-jobs:{m_owedJobs},owed-gpu:{(m_owedSeconds * 1000.0):0}ms,follows:{m_follows},falls:{m_falls},rises:{m_rises},gpu-credit:{(m_credit * 1000.0):0.00}ms,gpu-granted:{(m_granted * 1000.0):0}ms,gpu-charged:{(m_charged * 1000.0):0}ms,upload-rate:{SdfGpuWork.UploadBytesPerSecond:0}B/s,upload-credit:{m_uploadCredit:0}B,uploaded:{m_uploaded:0}B,wants:{m_wants},clamped:{m_clamped},floored:{m_floored},queued:{m_queuedJobs}/{(m_queued * 1000.0):0.00}ms] frames-behind=[judged:{m_framesJudged},behind:{m_framesBehind},missed:{m_framesMissed},behind-gpu:{(m_behindSeconds * 1000.0):0.0}ms,most-behind:{(m_mostBehindSeconds * 1000.0):0.00}ms]");
         }
     }
 
@@ -524,4 +606,6 @@ public sealed class SdfGpuWorkBudget(Func<long>? clock = null) {
 public readonly record struct SdfGpuWorkCharge(double Debited, double Queued) {
     // Only a charge the budget made has a job in the queue: the default charge (a slot with no charged job) has not.
     internal bool Entered { get; } = true;
+    // Whether the job is work the frame owes a hole, whose time the credit never carries (SdfGpuWorkBudget.ChargeGpu).
+    internal bool Owed { get; init; }
 }
