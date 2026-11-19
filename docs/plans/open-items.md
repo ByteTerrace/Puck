@@ -2351,26 +2351,26 @@ the single disclosure build table; the rd2-review
 findings are answered in decision 3a. Then the researcher brief's priorities
 ([security review](../development/security-review.md)).
 
-- [high] A narrowing a session's access cannot see. A viewer's access is
-  settled from its observation as none, disclosed or everything
-  (`WorldViewerAccess`, `WorldScreenBinder.AccessOf`), and a narrowing between
-  those levels withdraws every picture the view published
-  (`IRenderGraphInstances.Withdraw`) and releases the private residency built
-  from wider content (`WorldScreenBinder.ContentAccess`). A narrowing inside
-  "disclosed" (a cell visibility or audience the session loses while it still
-  observes) moves no level, so the old private picture stands until the view
-  next renders, and a cadence hold keeps it. The observation needs a
-  disclosure generation the authority moves whenever what it delivers this
-  session narrows, settled into the same epoch. This is the first half of
-  decision 14's step 5 (results keyed by what each viewer was delivered).
-- [medium] What a withdrawal does not reach. An infinity layer keeps its
-  frame source across a narrowing, so a program composed from the wider
-  content can reach the layer's next residency until the source composes
-  again (`WorldScreenBinder.WithdrawInfinityResidency`). An external producer
-  keeps its own latest output, and an export already copied out of the
-  runtime keeps its copy. A residency's screen emission and sky environment
-  derived from a withdrawn screen image are not shown to be derived again
-  (`SdfWorldTables.ProjectTaintedSourcesAgain` re-derives only tainted ones).
+- [high] A viewer can still be shown what it may no longer see. A session's
+  access is settled on the viewer's side from its observation
+  (`WorldViewerAccess`, `WorldScreenBinder.AccessOf`), and three separate
+  guards act on it (`IRenderGraphInstances.Withdraw`,
+  `WorldScreenBinder.ContentAccess`, `WorldSessionObservation.DisclosesEverything`).
+  An adversarial review found a way around each, and
+  [the withdrawal chokepoint](disclosure/withdrawal-chokepoint.md) checks its
+  nine findings against the code and ranks the seven that hold in whole or in
+  part. The worst shows content that
+  was never delivered: a replica-tier session in a world with a restricted row
+  is drawn from the authority's whole replica. The others keep a picture or a
+  product of one after access narrows: a view that retires skips the
+  withdrawal, a replaced session keeps the previous residency, a node's own
+  history and several retained copies survive, and a narrowing inside
+  "disclosed" is not seen at all. The memo designs one door in their place
+  (the stream stamps each delivery with its span of access, and the render
+  graph carries the span on every output) and orders seven steps, each with a
+  check. Next: the Codex design review of the memo, then its step 1, which
+  closes the worst finding. This is decision 14's step 5 (results keyed by
+  what each viewer was delivered) with the withdrawn picture of decision 2.
 
 - [high] Authored search must plan over what its actor is disclosed. Today an
   actor-less job reads true state under the audience check (an AI can read a
