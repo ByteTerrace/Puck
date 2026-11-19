@@ -7,10 +7,11 @@ import "../standard/styles"
 // faces (docs/game/art/valley-and-gallery.md), large lit planes over mauve shade, the step soft enough that the relief's
 // metre-scale lumps shade as one mass rather than a speckle, and no ink, as a painted cliff has none.
 let valleyRockStyle = celStyle with {
-  threshold: 0.3
+  threshold: 0.15
   softness: 0.3
-  shadowTint [0.82, 0.66, 0.8]
+  shadowTint [0.78, 0.6, 0.8]
   specularSize: 0.02
+  restore: 0.55
   ink {
     outlineWidth: 0
     outlineDistance: 12

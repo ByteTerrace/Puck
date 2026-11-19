@@ -54,10 +54,12 @@ let valleyRidges = [glacierRidge]
 // crowns turn from sunlit white-blue to a clear blue shade as a painted glacier does, its weathering kept as the ice's
 // surface, and no ink. The grit row (slot 5) takes the rock's look.
 let glacierIceStyle = celStyle with {
-  threshold: 0.3
+  threshold: 0.15
   softness: 0.25
-  shadowTint [0.62, 0.78, 1]
+  shadowTint [0.6, 0.75, 1]
   specularSize: 0.03
+  restore: 0.6
+  bleed: 0.4
   ink {
     outlineWidth: 0
     outlineDistance: 12

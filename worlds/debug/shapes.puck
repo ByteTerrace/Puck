@@ -212,10 +212,12 @@ let accentMaterial = 3
 // silhouettes and creases. An exhibit's subject (slot 0 of an exhibit's palette, and the slots it adds) keeps its own
 // shading: the gallery is the engine's self-test, and its plaques say what each subject shows.
 let galleryStyle = celStyle with {
-  threshold: 0.35
-  softness: 0.12
-  shadowTint [0.9, 0.88, 0.92]
+  threshold: 0.08
+  softness: 0.1
+  shadowTint [0.86, 0.84, 0.9]
   specularSize: 0.02
+  restore: 0.65
+  bleed: 0.2
   ink {
     outlineWidth: 1
     outlineDistance: 10
