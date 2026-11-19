@@ -106,7 +106,7 @@ public class ConstructEffectLineLawTests {
         var source = Probe(third: third!);
         var expected = RefusingLine(source: source);
         var sourceMap = new SourceMap();
-        var compilation = WorldCompiler.Compile(
+        var compilation = WorldCompileSession.Shared.Compile(
             cancellationToken: TestContext.Current.CancellationToken,
             source: source,
             sourceMap: sourceMap

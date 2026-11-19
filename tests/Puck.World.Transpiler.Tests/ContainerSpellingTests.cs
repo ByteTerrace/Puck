@@ -145,7 +145,7 @@ public class ContainerSpellingTests {
     );
     [Fact]
     public void TestANestedFieldBlockLowersLikeItsPropertySpelling() {
-        var lowered = WorldCompiler.Compile(
+        var lowered = WorldCompileSession.Shared.Compile(
             cancellationToken: TestContext.Current.CancellationToken,
             source: """
             schema: "puck.world.definition.v1"

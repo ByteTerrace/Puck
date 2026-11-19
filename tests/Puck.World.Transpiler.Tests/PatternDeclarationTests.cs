@@ -188,7 +188,7 @@ public class PatternDeclarationTests {
             expectedSubstring: "next = 2"
         );
 
-        var relowered = WorldCompiler.Compile(
+        var relowered = WorldCompileSession.Shared.Compile(
             cancellationToken: TestContext.Current.CancellationToken,
             source: source
         );

@@ -1,9 +1,9 @@
 using System.Diagnostics;
 using Puck.Commands;
 using Puck.Testing;
-using Puck.World.Transpiler.Composition;
 using System.Text;
 using Xunit;
+using Puck.World.Transpiler;
 
 namespace Puck.World.Tests;
 
@@ -21,9 +21,9 @@ public sealed class WorldWatchLawTests {
         var child = files.WriteText(name: "child.world.json", text: "{\"state\":{\"world\":{\"score\":1}}}");
         const string Json = "{\"imports\":[{\"document\":\"child\"}]}";
         var root = files.WriteText(name: (source ? "root.puck" : "root.world.json"), text: (source ? "imports [ { document: \"child\" } ]" : Json));
-        var bytes = (source ? (WorldCompileCache.Shared.TryCompile(compiled: out var compiled, failure: out _, path: root) ? compiled!.Document! : throw new InvalidOperationException(message: "fixture source did not compile")) : Encoding.UTF8.GetBytes(s: Json));
+        var bytes = (source ? (WorldCompileSession.Shared.TryCompile(compiled: out var compiled, failure: out _, path: root) ? compiled!.Document! : throw new InvalidOperationException(message: "fixture source did not compile")) : Encoding.UTF8.GetBytes(s: Json));
 
-        Assert.True(condition: PuckDocumentComposer.TryComposeWorldDocument(root, bytes, out _, out _, out var reason), userMessage: reason);
+        Assert.True(condition: WorldCompileSession.Shared.TryCompose(root, bytes, out _, out _, out var reason), userMessage: reason);
         var count = 0;
         var watch = new WorldSourceWatch(() => root);
 
@@ -56,7 +56,7 @@ public sealed class WorldWatchLawTests {
         Assert.Equal(actual: count, expected: 1);
         var rootReads = watch.RecordReads(path: root)!;
         using (Puck.Assets.CompileInputs.Record(log: rootReads.Log)) {
-            Assert.True(condition: WorldCompileCache.Shared.TryCompile(compiled: out _, failure: out _, path: root));
+            Assert.True(condition: WorldCompileSession.Shared.TryCompile(compiled: out _, failure: out _, path: root));
         }
         watch.AdoptReads(reads: rootReads);
         File.WriteAllText(module, Module.Replace(comparisonType: StringComparison.Ordinal, newValue: "9", oldValue: "7"));
@@ -133,7 +133,7 @@ public sealed class WorldWatchLawTests {
         Assert.Equal(actual: count, expected: 1);
         var firstReads = watch.RecordReads(path: first)!;
         using (Puck.Assets.CompileInputs.Record(log: firstReads.Log)) {
-            Assert.False(condition: WorldCompileCache.Shared.TryCompile(compiled: out _, failure: out _, path: first));
+            Assert.False(condition: WorldCompileSession.Shared.TryCompile(compiled: out _, failure: out _, path: first));
         }
         watch.AdoptReads(reads: firstReads);
         watch.Complete(result: CommandResult.Error(output: "missing counter.puck"));

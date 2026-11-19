@@ -9,7 +9,6 @@ using Puck.Transpiler.Ast;
 using Puck.World.Transpiler.Embeddings;
 using Puck.World.Transpiler.Lowering;
 using Puck.World.Transpiler.Assets;
-using Puck.World.Transpiler.Composition;
 
 namespace Puck.World.Transpiler;
 
@@ -75,7 +74,7 @@ public sealed record WorldCompilation(
     /// composition declares, under the name it declares; else the source's own file stem, for an ordinary source;
     /// else none, for a module library. These are exactly the names the source carries, the one reading every door
     /// that resolves or ships a name by emission asks: the name index (<see cref="Composition.WorldSourceIndex"/>)
-    /// through which the document composer (<see cref="Composition.PuckDocumentComposer"/>), a tree compile and the
+    /// through which the compile session's composition (<see cref="WorldCompileSession"/>), a tree compile and the
     /// official build resolve names, and every writer of a compiled source's documents.</summary>
     /// <param name="sourcePath">The source's path, spelled as the file system spells its file name; its stem is the
     /// file name without its <c>.puck</c> suffix.</param>
@@ -120,16 +119,18 @@ public sealed record WorldCompilation(
         return Json!;
     }
 }
-/// <summary>The one door into <c>puck.world.definition.v1</c> compilation: source text in, canonical document out.
-/// <c>puck compile</c>, <c>puck lint</c>, <c>puck embed</c>, the game's boot path, the basis composer, the language
-/// server and every test harness call this and nothing else, so no caller can hold a stage the others do not —
-/// a parse without its import walk, a lowering without the embedding lock beside the source, a compile whose
-/// diagnostics go nowhere.</summary>
+/// <summary>The order <c>puck.world.definition.v1</c> compilation runs its stages in: source text in, canonical
+/// document out. Only <see cref="WorldCompileSession"/> calls it, so every host compiles through a session and no
+/// caller can hold a stage the others do not — a parse without its import walk, a lowering without the embedding lock
+/// beside the source, a compile whose diagnostics go nowhere, an import walk that reads around the session's
+/// parses.</summary>
 /// <remarks>The stages themselves stay where they live: <see cref="PuckParser"/>, <see cref="ModuleResolver"/>,
 /// <see cref="EmbeddingLock"/> and <see cref="WorldDocumentEmitter"/>, whose lowering is reachable only from inside
 /// this assembly. This type owns the order they run in and the defaults they run under.</remarks>
-public static class WorldCompiler {
+internal static class WorldCompiler {
     /// <summary>Compiles <paramref name="source"/> to its canonical world document.</summary>
+    /// <param name="session">The session whose parses the import walk reads and through which a basis or an import
+    /// is composed.</param>
     /// <param name="source">The <c>.puck</c> source text.</param>
     /// <param name="sourcePath">The file the text came from, when it came from one. It roots relative asset paths,
     /// the import walk, and the <c>.embeddings.json</c> lock beside it.</param>
@@ -149,6 +150,7 @@ public static class WorldCompiler {
     /// <param name="updateAssets">Prepares refreshed asset pins without writing them. The caller saves the lock only after validation succeeds.</param>
     /// <returns>The compilation.</returns>
     public static WorldCompilation Compile(
+        WorldCompileSession session,
         string source,
         string? sourcePath = null,
         string? basePath = null,
@@ -163,6 +165,7 @@ public static class WorldCompiler {
         bool updateAssets = false,
         bool includeTests = true
     ) {
+        ArgumentNullException.ThrowIfNull(argument: session);
         ArgumentNullException.ThrowIfNull(argument: source);
 
         diagnostics ??= new DiagnosticBag();
@@ -171,10 +174,10 @@ public static class WorldCompiler {
         WorldBootWork.Count(kind: WorldBootWork.Compiles);
         using var compilationWork = WorldBootWork.AttributeCompilation();
 
-        // The modules the import walk parses are the .puck files it reads, so the walk's own reads are the count. The
-        // basis read for its enums is a compile of its own, counted there or served held, so its reads are not.
         var reads = new CompileInputLog();
-        var basisReads = new CompileInputLog();
+        // The source itself and every library the walk parsed rather than found held in the session's parses. A basis
+        // read for its enums is a compile of its own, counted there or served held.
+        var parses = 1L;
         using var recording = CompileInputs.Record(log: reads);
         var inputPath = ((sourcePath is null) ? null : Puck.Abstractions.PuckPaths.Normalize(path: Path.GetFullPath(path: sourcePath)));
 
@@ -186,7 +189,8 @@ public static class WorldCompiler {
             var result = CompileRecorded(
                 allowMultiple: allowMultiple,
                 basePath: basePath,
-                basisReads: basisReads,
+                parses: ref parses,
+                session: session,
                 cancellationToken: cancellationToken,
                 defaultSchema: defaultSchema,
                 diagnostics: diagnostics,
@@ -202,22 +206,12 @@ public static class WorldCompiler {
 
             return result with { Inputs = reads.Inputs };
         } finally {
-            var basisPaths = basisReads.Inputs.Select(selector: static input => input.Path).ToHashSet(comparer: StringComparer.Ordinal);
-
-            WorldBootWork.Current.Add(
-                amount: (1L + reads.Inputs.LongCount(predicate: input => (
-                    (input.Kind == CompileInputKind.Content) &&
-                    WorldDocumentName.IsSourceFile(path: input.Path) &&
-                    !Puck.Abstractions.PuckPaths.Comparer.Equals(x: Puck.Abstractions.PuckPaths.Normalize(path: Path.GetFullPath(path: input.Path)), y: inputPath) &&
-                    !basisPaths.Contains(item: input.Path)
-                ))),
-                kind: WorldBootWork.PuckParses
-            );
+            WorldBootWork.Current.Add(amount: parses, kind: WorldBootWork.PuckParses);
         }
     }
 
-    private static WorldCompilation CompileRecorded(string source, string? sourcePath, string? basePath, ImportHandling imports, EmbeddingLock? embeddings, string? defaultSchema, DiagnosticBag diagnostics, SourceMap sourceMap,
-        CancellationToken cancellationToken, WorldDocumentVocabulary vocabulary, bool allowMultiple, bool updateAssets, CompileInputLog basisReads, bool includeTests) {
+    private static WorldCompilation CompileRecorded(WorldCompileSession session, string source, string? sourcePath, string? basePath, ImportHandling imports, EmbeddingLock? embeddings, string? defaultSchema, DiagnosticBag diagnostics, SourceMap sourceMap,
+        CancellationToken cancellationToken, WorldDocumentVocabulary vocabulary, bool allowMultiple, bool updateAssets, ref long parses, bool includeTests) {
         var parseResult = PuckParser.ParseDocumentWithDiagnostics(
             defaultSchema: defaultSchema,
             diagnostics: diagnostics,
@@ -252,10 +246,14 @@ public static class WorldCompiler {
             var withModules = ModuleResolver.ImportModules(
                 budget: budget,
                 diagnostics: diagnostics,
+                parsed: out var parsed,
                 rootDoc: document,
                 rootPath: sourcePath!,
+                sources: session.Sources,
                 vocabulary: vocabulary
             );
+
+            parses += parsed;
 
             if (withModules is not null) {
                 document = withModules;
@@ -275,7 +273,7 @@ public static class WorldCompiler {
                     ? [.. document.Statements.OfType<ImportNode>().Where(predicate: static import => !import.NamesFile)]
                     : []),
                 keepState: hasTests,
-                reads: basisReads,
+                session: session,
                 sourcePath: sourcePath
             ));
 
@@ -334,6 +332,7 @@ public static class WorldCompiler {
     }
 
     /// <summary>Reads <paramref name="path"/> and compiles it.</summary>
+    /// <param name="session">The session the compile runs through (<see cref="Compile"/>).</param>
     /// <param name="path">The <c>.puck</c> source file.</param>
     /// <param name="imports">What the import graph is worth to this compile.</param>
     /// <param name="embeddings">An embedding lock to resolve authored vector text against; defaults to the one
@@ -347,6 +346,7 @@ public static class WorldCompiler {
     /// <returns>The compilation.</returns>
     /// <exception cref="IOException">The file could not be read.</exception>
     public static WorldCompilation CompileFile(
+        WorldCompileSession session,
         string path,
         ImportHandling imports = ImportHandling.Validate,
         EmbeddingLock? embeddings = null,
@@ -363,6 +363,7 @@ public static class WorldCompiler {
         var reads = new CompileInputLog();
         using var recording = CompileInputs.Record(log: reads);
         var result = Compile(
+            session: session,
             includeTests: includeTests,
             allowMultiple: allowMultiple,
             updateAssets: updateAssets,
@@ -388,13 +389,11 @@ public static class WorldCompiler {
         IReadOnlyList<ImportNode> imports,
         bool keepState,
         string? sourcePath,
-        CompileInputLog reads
+        WorldCompileSession session
     ) {
         if (((basis is null) && (imports.Count == 0)) || (sourcePath is null)) {
             return ([], null);
         }
-
-        using var recording = CompileInputs.Record(log: reads);
 
         var referrer = Puck.Abstractions.PuckPaths.Normalize(path: Path.GetFullPath(path: sourcePath));
         var reading = (ReadingBasisOf.Value ?? []);
@@ -410,14 +409,14 @@ public static class WorldCompiler {
         try {
             JsonObject? state = null;
 
-            if ((basis is not null) && (TryReadComposed(name: basis, referrer: referrer) is { } basisDoc)) {
+            if ((basis is not null) && (TryReadComposed(name: basis, referrer: referrer, session: session) is { } basisDoc)) {
                 state = (keepState
                     ? ((basisDoc["state"] as JsonObject)?.DeepClone() as JsonObject)
                     : (basisDoc["state"] as JsonObject));
             }
 
             foreach (var import in imports) {
-                if (TryReadComposed(name: import.Path, referrer: referrer) is not { } importedDoc) {
+                if (TryReadComposed(name: import.Path, referrer: referrer, session: session) is not { } importedDoc) {
                     continue;
                 }
                 if (!string.IsNullOrEmpty(value: import.Alias)) {
@@ -461,9 +460,9 @@ public static class WorldCompiler {
             ReadingBasisOf.Value = previous;
         }
     }
-    private static JsonObject? TryReadComposed(string name, string referrer) => (
+    private static JsonObject? TryReadComposed(string name, string referrer, WorldCompileSession session) => (
         (
-            PuckDocumentComposer.Instance.TryRead(
+            session.TryRead(
                 content: out var content,
                 name: name,
                 reason: out _,
@@ -471,7 +470,7 @@ public static class WorldCompiler {
                 resolvedName: out var resolved
             ) &&
             (content is not null) &&
-            PuckDocumentComposer.TryComposeWorldDocument(
+            session.TryCompose(
                 chainBytes: out _,
                 composed: out var composed,
                 reason: out _,

@@ -18,7 +18,7 @@ public sealed class CompileBatchTests {
 
         foreach (var validate in new[] { false, true }) {
             var (exit, output) = ConsoleCapture.Run(run: () => CompileCommand.Run(
-                path: path, output: null, watch: false, strict: false, validate: validate));
+                path: path, output: null, strict: false, validate: validate));
             Assert.Equal(actual: exit, expected: 1);
             Assert.Contains(actualString: output, expectedSubstring: "PUCK030");
             Assert.Contains(actualString: output, expectedSubstring: $"'{member}'");
@@ -62,8 +62,7 @@ public sealed class CompileBatchTests {
         Assert.False(condition: File.Exists(path: Path.ChangeExtension(extension: ".world.json", path: last)));
     }
     [Fact]
-    public void BatchRefusesAmbiguousOutputAndWatchBeforeExecution() {
+    public void BatchRefusesAmbiguousOutputBeforeExecution() {
         Assert.NotEmpty(collection: CompileCommand.Create().Parse(["a.puck", "b.puck", "--output", "shared.json"]).Errors);
-        Assert.NotEmpty(collection: CompileCommand.Create().Parse(["a.puck", "b.puck", "--watch"]).Errors);
     }
 }

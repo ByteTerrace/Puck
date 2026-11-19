@@ -1492,6 +1492,10 @@ from disk on the thread pool instead of baking, so an unchanged world reboots
 without baking and a changed creation bakes only its own groups; an entry that
 fails its checksum, names another key or is no mesh is refused by name
 (`[sdf.mesh-bake] group … store refused: …`), deleted, and its group bakes.
+The bake can resume from a lossless simplified mesh or contour when only a
+later stage changed. Contouring can also reuse samples for an unchanged
+lattice or point request. Run `puck mesh identity --against <dir>` to compare
+stage identities and read the bake's `checkpoints` counters to see actual reuse.
 The store is presentation's alone: no simulation state reads it.
 Only new geometry bakes. The bake reports its residency, groups,
 dispatches, samples, groups loaded, triangles, vertices and wall time on stderr

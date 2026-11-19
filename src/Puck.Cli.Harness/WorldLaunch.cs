@@ -57,6 +57,11 @@ public sealed record WorldLaunchRequest(string Step, string Artifact) {
     /// <summary>Gets whether this worker takes or shares the heavy execution lease after admission, which also
     /// checks for other heavy test suites.</summary>
     public bool HeavySuite { get; init; }
+    /// <summary>Gets how long the start waits for its turn (the lease queue and the host's headroom, each fresh reading
+    /// included), or <see langword="null"/> for each wait's own default (<see cref="CliLease.DefaultWait"/> for a lease,
+    /// <see cref="Host.HostAdmission.Timeout"/> for a start that takes none). A start that can never fit the machine is refused
+    /// at once whatever this is.</summary>
+    public TimeSpan? AdmissionWait { get; init; }
     /// <summary>Gets the GPU lease holder's name, or <see langword="null"/> for <see cref="Step"/>.</summary>
     public string? Holder { get; init; }
     /// <summary>Gets the lane the GPU lease is held for, or <see langword="null"/> for the checkout's lane
@@ -199,7 +204,7 @@ public sealed class WorldLaunch : IDisposable {
     /// admission's own wait text), or <see langword="null"/>.</param>
     /// <returns>The admitted launch, which holds the GPU lease until it is disposed or the World it starts has exited.</returns>
     /// <exception cref="TimeoutException">The GPU lease stayed held past the lease wait.</exception>
-    /// <exception cref="HostAdmissionRefusedException">The host had no headroom within the admission's bound.</exception>
+    /// <exception cref="HostAdmissionRefusedException">The host had no headroom within <see cref="WorldLaunchRequest.AdmissionWait"/>, or the World can never fit the machine.</exception>
     /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was cancelled.</exception>
     /// <exception cref="InvalidOperationException">The checkout names no shared lease directory.</exception>
     public static WorldLaunch Admit(WorldLaunchRequest request, CancellationToken cancellationToken = default, Func<IDisposable>? queue = null, Action<string>? stage = null) =>
@@ -211,15 +216,31 @@ public sealed class WorldLaunch : IDisposable {
     /// <param name="stage">Receives what the start is waiting on, or <see langword="null"/>.</param>
     /// <returns>The admitted launch.</returns>
     /// <exception cref="TimeoutException">The GPU lease stayed held past the lease wait.</exception>
-    /// <exception cref="HostAdmissionRefusedException">The host had no headroom within the admission's bound.</exception>
+    /// <exception cref="HostAdmissionRefusedException">The host had no headroom within <see cref="WorldLaunchRequest.AdmissionWait"/>, or the World can never fit the machine.</exception>
     /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was cancelled.</exception>
     /// <exception cref="InvalidOperationException">The checkout names no shared lease directory.</exception>
     public static async Task<WorldLaunch> AdmitAsync(WorldLaunchRequest request, CancellationToken cancellationToken = default, Func<IDisposable>? queue = null, Action<string>? stage = null) {
-        using var waiting = queue?.Invoke();
+        string? never = null;
 
+        // A refusal no wait could have avoided is named by the stage the admission reports it on; the exception a wait that
+        // ran out of time throws carries no reason of its own, so it is given this one.
+        void Watch(string text) {
+            if (text.StartsWith(value: Host.HostAdmission.RefusedStage, comparisonType: StringComparison.Ordinal)) { never = text[Host.HostAdmission.RefusedStage.Length..]; }
+            stage?.Invoke(obj: text);
+        }
+
+        try {
+            using var waiting = queue?.Invoke();
+
+            return await AdmitCoreAsync(cancellationToken: cancellationToken, request: request, stage: Watch).ConfigureAwait(continueOnCapturedContext: false);
+        } catch (HostAdmissionRefusedException) when (never is not null) {
+            throw new HostAdmissionRefusedException(step: request.Step, reason: never);
+        }
+    }
+    private static async Task<WorldLaunch> AdmitCoreAsync(WorldLaunchRequest request, Action<string> stage, CancellationToken cancellationToken) {
         if (!request.OpensDevice && !request.HeavySuite) {
-            stage?.Invoke(obj: "host-admission");
-            await AdmitHostAsync(bound: null, cancellationToken: cancellationToken, refuse: true, request: request, reserve: true, stage: stage).ConfigureAwait(continueOnCapturedContext: false);
+            stage.Invoke(obj: "host-admission");
+            await AdmitHostAsync(bound: request.AdmissionWait, cancellationToken: cancellationToken, refuse: true, request: request, reserve: true, stage: stage).ConfigureAwait(continueOnCapturedContext: false);
 
             return new WorldLaunch(gpu: null, request: request);
         }
@@ -233,8 +254,8 @@ public sealed class WorldLaunch : IDisposable {
             (root, token) => LeasedAdmission.AcquireAsync(root, name, holder, lane,
                 (place, step, device, heavy, kind, bound, reserve, progress, phase, cancel) => WorldAdmission.TryAdmitAsync(bound: bound, cancellationToken: cancel, checkout: place, device: device, heavySuite: heavy, kind: kind, reserve: reserve, stage: phase, step: step),
                 checkout, request.Step, request.OpensDevice, request.HeavySuite, request.Kind, TimeProvider.System,
-                CliLease.DefaultWait, Console.Error, stage, token),
-            token => AdmitHostAsync(bound: TimeSpan.Zero, cancellationToken: token, refuse: false, request: request, reserve: true, stage: stage), cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
+                (request.AdmissionWait ?? CliLease.DefaultWait), Console.Error, stage, token),
+            token => AdmitHostAsync(bound: request.AdmissionWait, cancellationToken: token, refuse: false, request: request, reserve: true, stage: stage), cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
 
         return new WorldLaunch(gpu: gpu, request: request);
     }

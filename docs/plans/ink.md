@@ -481,7 +481,8 @@ the first time. Three things change for an author:
   style per material.
 - A gain that followed a state row or a clock rides one of the four world lanes
   (`render.lanes`) into the program.
-- `render.lighting.curvature` is refused by name.
+- `render.lighting.curvature` is refused by name, with no alias, as AGENTS.md's
+  zero-legacy rule requires; the standard template replaces it in the same step.
 
 The standing rule that a program omitting a phase takes the engine's default
 means a material without the template shades exactly as an unauthored world

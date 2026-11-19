@@ -31,8 +31,10 @@ authoring layer: JSON stays the wire form and the checked-in source of every shi
 `Decompiler/WorldDecompiler.cs` (JSON → tree → source) → `Validation/{PuckLinter,WorldSemanticValidator}.cs` →
 `Lsp/PuckLanguageServer.cs` (editor integration). The core's `ModuleResolver` composes `import`s.
 
-`WorldCompiler.Compile`/`CompileFile` ([`WorldCompiler.cs`](WorldCompiler.cs)) is the one entry point into that
-pipeline: source text in, canonical document out, having parsed with this vocabulary, walked the import graph
+[`WorldCompileSession`](WorldCompileSession.cs) is the one entry point into that pipeline, and every host holds one:
+the CLI's verbs, the World's boot, reload and source watch, the language server and the browser engine.
+`WorldCompileSession.Shared` is the process's. `Compile` and `CompileFile` are source text in, canonical document
+out, having parsed with this vocabulary, walked the import graph
 (`ImportHandling` picks validate or neither) and resolved authored vector text against the
 `.embeddings.json` lock beside the source. `asset "path"` additionally checks the `<stem>.assets.json` lock beside the root
 source; explicit refresh prepares pins without writing until the caller saves after validation. See
@@ -51,10 +53,14 @@ them and its `references` rows repointed at the generated file names. In a test 
 for a sibling document in `expect` (`garden { … }`) is not lowered into that world: `WorldTestWorld.Foreign`
 carries each such line as a `WorldTestForeign`, which `puck test` lowers into the sibling document once it has
 composed it (`TryApply`). Booting them is `puck test`'s, not this assembly's. The CLI writes each declared world
-beside the source, or into the directory named by `--output`. `WorldDocumentEmitter`'s lowering is internal to this assembly, so
-`puck compile`, `puck lint`, `puck embed`, the language server, the game's boot path, the basis composer and every test harness run the
-same stages in the same order rather than each assembling its own. The cartridge vocabulary is this one's peer and
-lowers through `CartridgeDocumentEmitter`, which no world code reaches.
+beside the source, or into the directory named by `--output`. `WorldCompiler`, which orders the stages, and
+`WorldDocumentEmitter`'s lowering are internal to this assembly and reached only through a session, so `puck compile`,
+`puck lint`, `puck embed`, the language server, the game's boot path, the composition and every test harness run the
+same stages in the same order rather than each assembling its own. The import walk reads every library through the
+session's parses (`Puck.Transpiler.Modules.PuckSourceTable`), held by the digest of the library's bytes, so a library
+every source imports is parsed once per process; `world.boot.puck-parses` counts the parses a compile actually made.
+The cartridge vocabulary is this one's peer and lowers through `CartridgeDocumentEmitter`, whose import walk reads
+through the same `PuckSourceTable.Shared`.
 
 `WorldStaging` composes generated test worlds and composition worlds beside their
 source before relocating their file references to the staging directory. A font
@@ -68,18 +74,19 @@ through basis/import merges, aliases and tombstones, so staging checks the
 effective font's original spelling; an overridden or dropped font contributes
 neither an asset read nor a new refusal.
 
-A door that needs only a source's documents compiles through
-[`Composition/WorldCompileCache`](Composition/WorldCompileCache.cs) instead: the game's boot loader, the basis
-composer every basis and import reads through (and so `world.reload`), and `puck test`'s compile of the source its
-tests generate worlds from. Document compiles omit test lowering; `puck test` requests a distinct cache entry with
-tests included. A compile reads the file system only through `Puck.Assets.CompileInputs`, which
+A door that needs only a source's documents compiles through the session's `TryCompile` instead: the game's boot
+loader, the composition every basis and import reads through (and so `world.reload`), and `puck test`'s compile of
+the source its tests generate worlds from. Document compiles omit test lowering; `puck test` requests a distinct entry
+with tests included, and asks for it unheld (`hold: false`), so each source's generated worlds live only while it is
+staged. An editor buffer compiles through `CompileBuffer`, which holds the latest compile of each buffer by its path
+and text, so a diagnosis, a hover and a completion over one unchanged buffer compile it once. A compile reads the file system only through `Puck.Assets.CompileInputs`, which
 records every fact it learned — the bytes of the source, of each module the import walk read, of the embedding and
 asset locks and of every hashed asset, every path it only probed, absent or present, and every directory whose
 names it resolved a basis in — and a held compile is served again only while every one of those facts still holds,
 so editing a module recompiles exactly the sources that import it and nothing is compiled twice unchanged.
 `WorldCompilation.Inputs` retains those facts even when an editor or CLI compiles the root directly.
-`WorldCompiledSource.From` snapshots its output and facts for the composer to reuse without lowering that root
-again. The composer still resolves the current carrier, compares the supplied document's bytes and checks every
+`WorldCompiledSource.From` snapshots its output and facts for a view of the session rooted at it
+(`WithRoot`) to compose without lowering that root again. The composer still resolves the current carrier, compares the supplied document's bytes and checks every
 original input fact. An unsaved buffer records its own text, so it cannot claim the different file on disk as its
 provenance. Supplying a completed root is not a compile-cache lookup and adds no cache-hit count.
 The same store holds composed images with the original source-chain bytes and the complete input facts, so an
@@ -106,8 +113,8 @@ ignores case, so different builds sharing the directory keep their own entries i
 write keeps the directory to `MaxPersistedEntries` entries and removes the temporary files an interrupted write left.
 Concurrent misses on one source compile it once, the rest waiting for that compile, and every file fact a compile
 records is a full path. A failed compile is never held. Each compile and each answer counts under the `world.boot` work source (`world.boot.compiles`,
-`world.boot.puck-cache-hits`). [`Composition/WorldSourceLoader`](Composition/WorldSourceLoader.cs) admits a compiled
-single-document source exactly as the game boots one.
+`world.boot.puck-cache-hits`). The session's `TryLoadForAdmission` admits a compiled single-document source exactly as
+the game boots one.
 
 A cold source compile composes its basis to read inherited enum declarations.
 The composer attributes that work to `world.boot.compile-documents-read`,
@@ -379,7 +386,7 @@ field's type does (`slot left: Element = Air`): the row is `Int`, carries `enum`
 `state.enums` through the same `MaterializeRuntimeEnum` a record field and an explicit `row { enum: Element }`
 use, and a world document carries every enum it declares there (`MaterializeDeclaredEnums`). A document with a
 `basis` lowers against the enums its basis's composed document declares (`WorldCompiler` reads them through
-`PuckDocumentComposer`, and the compile rests on every file that read touched), so a member it writes reads as the
+the session's composition, and the compile rests on every file that read touched), so a member it writes reads as the
 basis reads it and the basis, not the child, carries the enum. A name no enum it can see declares stays on the row
 or field, and the validation of the composed world refuses one the composed section does not hold as PUCK119 at the
 line that names it (the engine words that refusal once, `WorldDefinitionValidator.UndeclaredRowEnum` and
@@ -792,7 +799,7 @@ family (PUCK_LINT_005 onward) live in the lowering/lint stages, not the parser.
 
 `Validation/PuckLinter.LintReferences` walks the LOWERED JSON (not the AST) for candidate reference sites, but a
 document declaring `basis` builds its name catalog from the WHOLE composed basis/import graph
-(`Composition/PuckDocumentComposer`, rooted beside the `sourcePath` argument—the same composition
+(the session's composition, rooted beside the `sourcePath` argument—the same composition
 `WorldSemanticValidator.ValidateComposedWorld` and the game boot path run) rather than from the document alone, so a
 name only a basis or import supplies resolves correctly. It still only ever WALKS the document's own tree, never
 the composed one (whose merged array order no longer lines up with the caller's `SourceMap`), so a reported
@@ -882,7 +889,7 @@ construct tables are `Lazy` or built once and only read, evaluation scratch and 
 state are `[ThreadStatic]`, and the local document source is installed once under a lock. The server's own document
 state is touched only on the loop; a unit reads its snapshot alone. `ConcurrentDiagnosisLawTests` runs diagnoses and
 loop-style compiles side by side and holds every result to the same work run alone, and holds the stdio host to
-returning only after the diagnosis it started has; `WorldCompileCacheConcurrencyLawTests` races misses, edits,
+returning only after the diagnosis it started has; `WorldCompileSessionConcurrencyLawTests` races misses, edits,
 persisted reads and writes against one directory-backed cache.
 
 ### Semantic tokens

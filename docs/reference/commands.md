@@ -839,6 +839,29 @@ acting principal's render grant. `world.debug-view bloom` shows the scatter alon
 all other diagnostic views bypass it. The [frame handbook](../rendering/sdf/handbook/frame-rendering.md#camera-bloom)
 describes authoring, endpoint eligibility and the exposed-HDR cutoff option.
 
+## Edit loops
+
+`world.iteration` reads how long each edit took to show in the running World
+(`WorldIterationClock`). Every loop is timed from the edit to the first
+produced frame that finds each of four stages true:
+
+| Stage | The frame that first finds |
+|---|---|
+| `frame` | the edited document (or a reloaded kernel) rendered with the program its content calls for: a look value shows |
+| `shown` | every mesh group drawing its own geometry at some tier, no stand-in from before the edit and no hole: a changed form shows whole |
+| `meshes` | the bakes settled at their demanded detail and standing in the mesh region, the fact `world.wait residency` waits on |
+| `lit` | the irradiance volume no longer tracing or relighting: the settled frame |
+
+The boot is a loop timed from process start, so a restart and a cold boot
+read the same way. `world.reload` (by hand, or from `world.watch` once its
+quiet period ends) and `world.shaders.reload` each begin a loop.
+`world.iteration begin <name>` begins one for the edit on the next line, such
+as a `world.row.set`, and a reload that follows it joins it. A newer loop
+supersedes one still open. A settled loop prints `[world.iteration] <line>` on
+stderr, so `host.log category world.iteration` reads every loop a World has
+run, and `world.wait iteration <seconds>` holds a script until the latest loop
+settles. A host with no renderer reaches no frame and says so.
+
 ## Scene diagnostics
 
 Scene diagnostics are operator commands: their authority-wide counters,

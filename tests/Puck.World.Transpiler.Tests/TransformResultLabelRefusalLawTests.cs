@@ -15,7 +15,7 @@ public class TransformResultLabelRefusalLawTests {
         transform boardCombine(row: deck, operation: Copy)
         """;
 
-    private static DiagnosticBag Compile(string statement) => WorldCompiler.Compile(
+    private static DiagnosticBag Compile(string statement) => WorldCompileSession.Shared.Compile(
         cancellationToken: TestContext.Current.CancellationToken,
         source: Source(statement: statement)
     ).Diagnostics;

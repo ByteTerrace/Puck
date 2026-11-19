@@ -8,8 +8,8 @@ using Puck.Testing;
 using Puck.World;
 using Puck.World.Authoring;
 using Puck.World.Client;
-using Puck.World.Transpiler.Composition;
 using Xunit;
+using Puck.World.Transpiler;
 
 namespace Puck.Cli.Worlds.Tests.Mesh;
 
@@ -31,7 +31,7 @@ public sealed class MeshCommandTests {
     );
     // The world's rest scene and its planned groups, as the verb plans them.
     private static (RestScene Scene, List<SdfMeshBakeGroup> Groups) Plan(string world) {
-        Assert.True(condition: WorldDefinitionLoader.TryLoadFileForAdmission(admission: out var admission, contentHash: out _, documents: PuckDocumentComposer.Instance, path: world, proveNeighbours: false, reason: out var reason), userMessage: reason);
+        Assert.True(condition: WorldDefinitionLoader.TryLoadFileForAdmission(admission: out var admission, contentHash: out _, documents: WorldCompileSession.Shared, path: world, proveNeighbours: false, reason: out var reason), userMessage: reason);
 
         var definition = admission!.Definition;
         var scene = RestScene.Compose(definition: definition, sourcePath: world);

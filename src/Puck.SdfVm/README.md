@@ -134,19 +134,16 @@ The direct walk retains internal cuts, blend order, the material winner and the
 scope's distance correction; unsupported parts use the generic interpreter.
 The shader implementation is in `Assets/Shaders/Sdf/field/sdf-parts.hlsli`.
 
-Mesh cache identity follows the positive production entries in `SdfMeshBakeClosure.BakeRoots`, including constructor
-defaults, batch taking, the point and sampled tables' layout, the sample answer, contour/material/skin/level work,
-the store's encoder and `SdfMeshBakeBlock.Write`, together with the two bake kernels and the entry format's version
-(`SdfMeshStore.EntryVersion`). Reading an entry back and copying a mesh into native storage are outside it: what an
-entry's bytes mean is the format's, so a decode edit that changes it changes `SdfMeshStoreCodec.Magic`. `SdfMeshDresser` owns presentation separately:
+Mesh cache identity follows the production calls walked by `SdfMeshBakeClosure`
+and both bake kernels. The store can resume from lossless samples, contours and
+simplified meshes. A restored contour includes material cuts and skin weights.
+`puck mesh identity --against` reports reuse by stage. `SdfMeshDresser` owns presentation:
 retained topology, poses, clipping, picking and mesh claims. It reads live landed products through the bake's locked
 `PrepareFrame` access and acknowledges the captured product revision only after publishing the dressed frame.
 The one copy-membership index serves both bake demand and dressing. Dresser disposal releases its claims before
-bake retirement. This separation also keeps type-granular hot reload of `SdfMeshDresser`, `SdfMeshHistory`, `SdfWorldPassRecorder`, `SdfWorldTables`,
-`SdfFrameBlock` and `SdfMeshRegion` outside the bake identity. The shared `ShaderParameterWriter` writes both view and
-bake blocks, while each block type owns only its own offsets. Field and material appearance packing still share the
-program constructor and remain conservatively included; this separation does not promise every appearance edit is
-cache-neutral.
+bake retirement. The shared `ShaderParameterWriter` writes both view and bake
+blocks. `SdfMeshBakeBlock` owns the bake's offsets and packs the same lattice
+rows for both the dispatch and the sample cache key.
 
 The tables' construction options (`SdfWorldTablesOptions`) set an
 initial program-word and instance reserve and a fixed dynamic-transform

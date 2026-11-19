@@ -54,7 +54,7 @@ public sealed class ValidateComposedWorldTests : IDisposable {
             patches [voice]
             """;
         var path = Path.Combine(path1: m_directory.RootPath, path2: "world.puck");
-        var compiled = WorldCompiler.Compile(source, sourcePath: path, cancellationToken: TestContext.Current.CancellationToken);
+        var compiled = WorldCompileSession.Shared.Compile(source, sourcePath: path, cancellationToken: TestContext.Current.CancellationToken);
         var diagnostics = new DiagnosticBag();
 
         Assert.NotNull(@object: WorldSemanticValidator.ValidateComposedWorld(compiled.Json!, compiled.SourceMap, diagnostics, path));
@@ -126,7 +126,7 @@ public sealed class ValidateComposedWorldTests : IDisposable {
                 world second = room()
                 """;
         var sourcePath = Path.Combine(path1: m_directory.RootPath, path2: "composition.puck");
-        var compiled = WorldCompiler.Compile(Source, sourcePath: sourcePath, allowMultiple: true, cancellationToken: TestContext.Current.CancellationToken);
+        var compiled = WorldCompileSession.Shared.Compile(Source, sourcePath: sourcePath, allowMultiple: true, cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.True(condition: compiled.Success, userMessage: string.Join(separator: "\n", values: compiled.Diagnostics));
         var diagnostics = WorldSourceDiagnostics.Diagnose(source: Source, sourcePath: sourcePath, cancellationToken: TestContext.Current.CancellationToken);

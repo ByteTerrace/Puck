@@ -1,7 +1,7 @@
 using Puck.World.Server;
-using Puck.World.Transpiler.Composition;
 using Xunit;
 using Puck.World.Machines;
+using Puck.World.Transpiler;
 
 namespace Puck.World.Testing;
 
@@ -37,7 +37,7 @@ internal static partial class CompiledWorldFixtures {
     }
     internal static byte[] Compile(string path, string? instanceIdentity = null, string? catalogFingerprint = null, CompiledWorldChunks? chunks = null) {
         Assert.True(
-            condition: WorldSourceLoader.TryReadAuthored(
+            condition: WorldCompileSession.Shared.TryReadAuthored(
                 authored: out var authored,
                 catalog: Catalog,
                 catalogFingerprint: Catalog.CompositionFingerprint,

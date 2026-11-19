@@ -1,17 +1,16 @@
 using System.Text;
 using Puck.Testing;
-using Puck.World.Transpiler.Composition;
 using Xunit;
 
 namespace Puck.World.Transpiler.Tests;
 
-/// <summary>CONTRACT UNDER TEST: <see cref="WorldCompileCache"/> stays exact when callers on several threads, and
+/// <summary>CONTRACT UNDER TEST: <see cref="WorldCompileSession"/> stays exact when callers on several threads, and
 /// instances standing in for several processes, share one source and one persisted directory. Concurrent misses on one
 /// source compile it once; an edit racing readers never leaves a stale compile served once it settles; a persisted
 /// entry is only ever read whole; and the directory stays bounded, abandoned temporary files included. Each law owns
 /// its directory-backed cache and counts through its own attributed <see cref="WorldBootWork"/> ledger, so the
-/// process-wide <see cref="WorldCompileCache.Shared"/> is never touched.</summary>
-public sealed class WorldCompileCacheConcurrencyLawTests {
+/// process-wide <see cref="WorldCompileSession.Shared"/> is never touched.</summary>
+public sealed class WorldCompileSessionConcurrencyLawTests {
     private const string Module = "let initial = {0}\nmodule counter() {{ state {{ world {{ slot score = initial }} }} }}";
     private const string Root = "import \"counter\"\nuse counter as root()";
     private const int Threads = 8;
@@ -26,7 +25,7 @@ public sealed class WorldCompileCacheConcurrencyLawTests {
     private static byte[] Serial(TemporaryDirectory files, int version) {
         files.WriteText(name: "counter.puck", text: ModuleAt(version: version));
 
-        return Encoding.UTF8.GetBytes(s: WorldCompiler.CompileFile(path: files.PathOf(name: "root.puck"), cancellationToken: TestContext.Current.CancellationToken).RequireJson().ToJsonString());
+        return Encoding.UTF8.GetBytes(s: WorldCompileSession.Shared.CompileFile(path: files.PathOf(name: "root.puck"), cancellationToken: TestContext.Current.CancellationToken).RequireJson().ToJsonString());
     }
     private static (long Compiles, long Hits) Counts(WorldBootWork work) =>
         (work.Read(kind: WorldBootWork.Compiles), work.Read(kind: WorldBootWork.PuckCacheHits));
@@ -84,7 +83,7 @@ public sealed class WorldCompileCacheConcurrencyLawTests {
 
         var root = files.WriteText(name: "root.puck", text: Root);
         var directory = files.PathOf(name: "cache");
-        var cache = new WorldCompileCache(directory: directory);
+        var cache = new WorldCompileSession(directory: directory);
         var expected = Serial(files: files, version: 7);
         var work = new WorldBootWork();
         var documents = new byte[Threads][];
@@ -106,7 +105,7 @@ public sealed class WorldCompileCacheConcurrencyLawTests {
         var fresh = new WorldBootWork();
 
         using (WorldBootWork.Attribute(work: fresh)) {
-            Assert.True(condition: new WorldCompileCache(directory: directory).TryCompile(compiled: out var reread, failure: out _, path: root));
+            Assert.True(condition: new WorldCompileSession(directory: directory).TryCompile(compiled: out var reread, failure: out _, path: root));
             Assert.Equal(expected: expected, actual: reread!.Document);
         }
 
@@ -119,7 +118,7 @@ public sealed class WorldCompileCacheConcurrencyLawTests {
         var module = files.WriteText(name: "counter.puck", text: ModuleAt(version: 1));
         var root = files.WriteText(name: "root.puck", text: Root);
         var directory = files.PathOf(name: "cache");
-        var cache = new WorldCompileCache(directory: directory);
+        var cache = new WorldCompileSession(directory: directory);
         var versions = new[] { Serial(files: files, version: 1), Serial(files: files, version: 2) };
         var writing = 1;
         var served = 0;
@@ -153,7 +152,7 @@ public sealed class WorldCompileCacheConcurrencyLawTests {
         Assert.True(condition: (served > 0));
         Assert.True(condition: cache.TryCompile(compiled: out var settled, failure: out _, path: root));
         Assert.Equal(expected: versions[1], actual: settled!.Document);
-        Assert.True(condition: new WorldCompileCache(directory: directory).TryCompile(compiled: out var reread, failure: out _, path: root));
+        Assert.True(condition: new WorldCompileSession(directory: directory).TryCompile(compiled: out var reread, failure: out _, path: root));
         Assert.Equal(expected: versions[1], actual: reread!.Document);
     }
     [Fact]
@@ -170,7 +169,7 @@ public sealed class WorldCompileCacheConcurrencyLawTests {
         OnThreads(count: 2, body: index => {
             if (index == 0) {
                 // Each edit makes the writer's held compile stand no longer, so it compiles and rewrites the one entry.
-                var writer = new WorldCompileCache(directory: directory);
+                var writer = new WorldCompileSession(directory: directory);
 
                 // The rewrites go on until the reader has read often enough to have raced them.
                 for (var edit = 0; ((edit < 40) || (Volatile.Read(location: ref read) < 20)); ++edit) {
@@ -191,7 +190,7 @@ public sealed class WorldCompileCacheConcurrencyLawTests {
 
             while (Volatile.Read(location: ref writing) == 1) {
                 try {
-                    if (new WorldCompileCache(directory: directory).TryCompile(compiled: out var compiled, failure: out _, path: root)) {
+                    if (new WorldCompileSession(directory: directory).TryCompile(compiled: out var compiled, failure: out _, path: root)) {
                         Assert.Contains(collection: versions, filter: version => version.AsSpan().SequenceEqual(other: compiled!.Document));
                         _ = Interlocked.Increment(location: ref read);
                     }
@@ -217,7 +216,7 @@ public sealed class WorldCompileCacheConcurrencyLawTests {
         Directory.CreateDirectory(path: directory);
 
         // A directory already full of older entries, and writes a killed process left half done.
-        for (var index = 0; (index < WorldCompileCache.MaxPersistedEntries); ++index) {
+        for (var index = 0; (index < WorldCompileSession.MaxPersistedEntries); ++index) {
             var entry = Path.Combine(path1: directory, path2: $"{index:x32}.compiled");
 
             File.WriteAllBytes(bytes: [0], path: entry);
@@ -230,15 +229,15 @@ public sealed class WorldCompileCacheConcurrencyLawTests {
             File.SetLastWriteTimeUtc(lastWriteTimeUtc: old, path: orphan);
         }
 
-        Assert.True(condition: new WorldCompileCache(directory: directory).TryCompile(compiled: out _, failure: out _, path: root));
+        Assert.True(condition: new WorldCompileSession(directory: directory).TryCompile(compiled: out _, failure: out _, path: root));
         Assert.Empty(collection: Directory.GetFiles(path: directory, searchPattern: "*.tmp"));
-        Assert.True(condition: (Directory.GetFiles(path: directory).Length <= WorldCompileCache.MaxPersistedEntries));
+        Assert.True(condition: (Directory.GetFiles(path: directory).Length <= WorldCompileSession.MaxPersistedEntries));
 
         // The entry just written is the newest, so it is the one the bound kept.
         var work = new WorldBootWork();
 
         using (WorldBootWork.Attribute(work: work)) {
-            Assert.True(condition: new WorldCompileCache(directory: directory).TryCompile(compiled: out _, failure: out _, path: root));
+            Assert.True(condition: new WorldCompileSession(directory: directory).TryCompile(compiled: out _, failure: out _, path: root));
         }
 
         Assert.Equal(expected: (0L, 1L), actual: Counts(work: work));

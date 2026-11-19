@@ -5,7 +5,7 @@ using Xunit;
 namespace Puck.Cli.Release.Tests;
 
 /// <summary>CONTRACT UNDER TEST: every verb that enumerates a directory's world documents reads it through the one
-/// enumeration the composer resolves names by (<see cref="Puck.World.Transpiler.Composition.PuckDocumentComposer.TryCarriers"/>),
+/// enumeration the composer resolves names by (<see cref="Puck.World.Transpiler.WorldCompileSession.TryCarriers"/>),
 /// so the official build and <c>puck test</c> agree with the game on which file carries each document name, and both
 /// refuse by name two files whose document names differ only in letter case. A module library emits no document, so its
 /// file name is no document name anywhere: a document file named like it is its name's carrier. The official build

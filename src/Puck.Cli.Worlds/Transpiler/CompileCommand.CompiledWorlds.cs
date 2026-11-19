@@ -5,6 +5,7 @@ using Puck.World.Transpiler.Composition;
 using Puck.World.Transpiler.Validation;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Puck.World.Transpiler;
 
 namespace Puck.Cli.Transpiler;
 
@@ -71,7 +72,7 @@ public static partial class CompileCommand {
         var (catalog, fingerprint) = CompiledWorldMachines.Value;
         var destination = CompiledWorld.Beside(documentPath: besidePath);
 
-        if (!WorldSourceLoader.TryCompileWorld(
+        if (!WorldCompileSession.Shared.TryCompileWorld(
             catalog: catalog,
             catalogFingerprint: fingerprint,
             compiledWorld: out var bytes,

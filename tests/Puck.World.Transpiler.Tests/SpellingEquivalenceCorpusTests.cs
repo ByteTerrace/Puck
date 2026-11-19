@@ -25,7 +25,7 @@ public class SpellingEquivalenceCorpusTests {
         return Path.Combine(path1: directory, path2: "tests", path3: "Puck.World.Transpiler.Tests", path4: "SpellingEquivalence");
     }
     private static (string Document, string[] Tests) Compile(string path) {
-        var compilation = WorldCompiler.CompileFile(cancellationToken: TestContext.Current.CancellationToken, path: path);
+        var compilation = WorldCompileSession.Shared.CompileFile(cancellationToken: TestContext.Current.CancellationToken, path: path);
 
         Assert.False(condition: compilation.Diagnostics.HasErrors, userMessage: compilation.Diagnostics.FormatReport());
 

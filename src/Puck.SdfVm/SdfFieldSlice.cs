@@ -159,6 +159,7 @@ public sealed class SdfFieldSlice {
                 Selector: (((index & 1) == 0) ? -1 : worldSelector)
             ) {
                 Instances = (((index & 1) == 0) ? instances : 1),
+                LivePoses = true,
                 Points = m_points.AsMemory(start: first, length: count),
             };
         }

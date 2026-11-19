@@ -13,7 +13,8 @@ internal sealed record MeshBuildIdentity(
     UInt128 MaskKernel,
     UInt128 BakeKernel,
     IReadOnlyDictionary<string, UInt128> Members,
-    IReadOnlyDictionary<string, string> Reasons
+    IReadOnlyDictionary<string, string> Reasons,
+    IReadOnlyDictionary<string, UInt128> Stages
 ) {
     internal static MeshBuildIdentity Read(string buildDirectory, string extension) {
         var directory = Path.GetFullPath(buildDirectory);
@@ -35,7 +36,13 @@ internal sealed record MeshBuildIdentity(
                 MaskKernel: Property<UInt128>(identity, "MaskKernel"),
                 BakeKernel: Property<UInt128>(identity, "BakeKernel"),
                 Members: Snapshot(Property<IReadOnlyDictionary<string, UInt128>>(identity, "Members")),
-                Reasons: Snapshot(Property<IReadOnlyDictionary<string, string>>(code, "Reasons"))
+                Reasons: Snapshot(Property<IReadOnlyDictionary<string, string>>(code, "Reasons")),
+                Stages: new Dictionary<string, UInt128>(StringComparer.Ordinal) {
+                    ["sampling"] = Property<UInt128>(identity, "Sampling"),
+                    ["contouring"] = Property<UInt128>(identity, "Contouring"),
+                    ["simplification"] = Property<UInt128>(identity, "Simplification"),
+                    ["landing"] = Property<UInt128>(identity, "Value"),
+                }
             );
         } catch (TargetInvocationException exception) {
             // Copy only text: retaining a target exception would retain its collectible assembly context too.

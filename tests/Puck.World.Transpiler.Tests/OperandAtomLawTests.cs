@@ -148,7 +148,7 @@ public class OperandAtomLawTests {
 
         File.WriteAllText(contents: "schema: \"puck.world.definition.v1\"\n\nimport \"library\" as lib\n\nuse lib.bump as first()\n", path: rootPath);
 
-        var compilation = WorldCompiler.CompileFile(rootPath, cancellationToken: TestContext.Current.CancellationToken);
+        var compilation = WorldCompileSession.Shared.CompileFile(rootPath, cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.False(condition: compilation.Diagnostics.HasErrors, userMessage: compilation.Diagnostics.FormatReport(""));
         Assert.Contains(

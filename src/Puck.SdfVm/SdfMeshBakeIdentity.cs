@@ -24,16 +24,20 @@ public sealed class SdfMeshBakeIdentity {
     private SdfMeshBakeIdentity(SdfMeshBakeClosure code, UInt128 maskKernel, UInt128 bakeKernel, string applied) {
         Applied = applied;
         BakeKernel = bakeKernel;
-        Code = ((applied.Length == 0) ? code.Hash : Fold(applied: applied, code: code.Hash));
+        Code = Fold(applied: applied, code: code.Hash);
         CodeRevision = Puck.Abstractions.CodeRevision.Current;
         EntryVersion = code.EntryVersion;
         MaskKernel = maskKernel;
         Members = code.Members;
+        Sampling = Combine(code.Sampling, maskKernel, bakeKernel);
+        Contouring = Combine(Sampling, code.Contouring, code.Checkpoints);
+        Simplification = Combine(Contouring, code.Simplification, code.Checkpoints);
         Value = SdfMeshStore.BuildIdentityOf(bakeKernel: bakeKernel, code: Code, entryVersion: EntryVersion, maskKernel: maskKernel);
         HasParts = true;
     }
 
-    private static UInt128 Fold(UInt128 code, string applied) {
+    internal static UInt128 Fold(UInt128 code, string applied) {
+        if (applied.Length == 0) { return code; }
         var bytes = new byte[(16 + System.Text.Encoding.UTF8.GetByteCount(s: applied))];
 
         System.Buffers.Binary.BinaryPrimitives.WriteUInt128LittleEndian(destination: bytes, value: code);
@@ -42,8 +46,22 @@ public sealed class SdfMeshBakeIdentity {
         return XxHash128.HashToUInt128(source: bytes);
     }
 
+    private static UInt128 Combine(UInt128 input, UInt128 code, UInt128 format) {
+        Span<byte> bytes = stackalloc byte[48];
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt128LittleEndian(bytes, input);
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt128LittleEndian(bytes[16..], code);
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt128LittleEndian(bytes[32..], format);
+        return XxHash128.HashToUInt128(bytes);
+    }
+
     /// <summary>Gets the identity's value, which keys the store's entries.</summary>
     public UInt128 Value { get; }
+    /// <summary>Gets the identity of producing and restoring field samples.</summary>
+    public UInt128 Sampling { get; }
+    /// <summary>Gets the identity of the uncompressed, cut and skinned surface before simplification.</summary>
+    public UInt128 Contouring { get; }
+    /// <summary>Gets the identity of the simplified surface before the landing codec quantizes it.</summary>
+    public UInt128 Simplification { get; }
     /// <summary>Gets whether the identity carries its parts, or its value alone.</summary>
     public bool HasParts { get; }
     /// <summary>Gets the store's entry format version (<see cref="SdfMeshStore.EntryVersion"/>), or empty for a value

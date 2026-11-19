@@ -1,5 +1,4 @@
 using Puck.Testing;
-using Puck.World.Transpiler.Composition;
 using Xunit;
 
 namespace Puck.World.Transpiler.Tests;
@@ -7,7 +6,7 @@ namespace Puck.World.Transpiler.Tests;
 public sealed class WorldCompositionCacheLawTests {
     private static (string Json, string Hash, long Compositions) Compose(string root, string cache, string catalog = "") {
         WorldDefinitionFileSource.ForgetComposedDocuments();
-        var source = new PuckDocumentComposer(cache: new WorldCompileCache(directory: cache));
+        var source = new WorldCompileSession(directory: cache);
         var work = new WorldBootWork();
         using var attribution = WorldBootWork.Attribute(work: work);
 
@@ -56,14 +55,14 @@ public sealed class WorldCompositionCacheLawTests {
         using var files = new TemporaryDirectory();
         var path = files.WriteText(name: "root.puck", text: "state { world { slot score = 1 } }\ntest \"score\" { expect { score == 1 } }");
         var directory = files.PathOf(name: "cache");
-        var cache = new WorldCompileCache(directory: directory);
+        var cache = new WorldCompileSession(directory: directory);
 
         Assert.True(condition: cache.TryCompile(path, out var document, out var failure), userMessage: failure?.Diagnostics.FormatReport(path));
         Assert.Empty(collection: document!.Tests);
-        Assert.True(condition: new WorldCompileCache(directory: directory).TryCompile(path, out var tested, out failure, includeTests: true), userMessage: failure?.Diagnostics.FormatReport(path));
+        Assert.True(condition: new WorldCompileSession(directory: directory).TryCompile(path, out var tested, out failure, includeTests: true), userMessage: failure?.Diagnostics.FormatReport(path));
         Assert.Single(collection: tested!.Tests);
         Assert.Equal(document.Document, tested.Document);
-        Assert.True(condition: new WorldCompileCache(directory: directory).TryCompile(path, out var warm, out failure), userMessage: failure?.Diagnostics.FormatReport(path));
+        Assert.True(condition: new WorldCompileSession(directory: directory).TryCompile(path, out var warm, out failure), userMessage: failure?.Diagnostics.FormatReport(path));
         Assert.Empty(collection: warm!.Tests);
     }
 }

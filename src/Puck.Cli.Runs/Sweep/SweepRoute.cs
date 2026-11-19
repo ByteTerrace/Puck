@@ -3,7 +3,7 @@ using System.Text.Json.Nodes;
 
 using Puck.Cli.Motion;
 using Puck.World;
-using Puck.World.Transpiler.Composition;
+using Puck.World.Transpiler;
 
 namespace Puck.Cli.Sweep;
 
@@ -43,7 +43,8 @@ public sealed record SweepRoute(string Reference, IReadOnlyList<SweepStep> Steps
             return false;
         }
 
-        _ = new WorldCompileCache(directory: WorldCompileCache.Shared.Directory).TryCompile(compiled: out var compiled, failure: out var failure, includeTests: true, path: source);
+        // A route reads its test block once, so its generated worlds are not held for the run.
+        _ = WorldCompileSession.Shared.TryCompile(compiled: out var compiled, failure: out var failure, hold: false, includeTests: true, path: source);
 
         if (failure is not null) {
             error = $"the route's source {reference[..hash]} does not compile: {string.Join(separator: "; ", values: failure.Diagnostics.Select(selector: static diagnostic => diagnostic.Message).Take(count: 3))}";

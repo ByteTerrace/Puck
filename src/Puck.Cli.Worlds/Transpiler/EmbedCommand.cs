@@ -434,7 +434,7 @@ public static class EmbedCommand {
         failure = null;
 
         var loweringDiags = new DiagnosticBag();
-        var lowerResult = WorldCompiler.CompileFile(
+        var lowerResult = WorldCompileSession.Shared.CompileFile(
             diagnostics: loweringDiags,
             imports: ImportHandling.Ignore,
             path: puckFilePath

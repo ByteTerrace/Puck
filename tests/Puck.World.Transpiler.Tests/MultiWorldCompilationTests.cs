@@ -7,7 +7,7 @@ namespace Puck.World.Transpiler.Tests;
 public sealed class MultiWorldCompilationTests {
     [Fact]
     public void ModuleFamiliesAreEmittedInsideEachWorld() {
-        var result = WorldCompiler.Compile(cancellationToken: TestContext.Current.CancellationToken, source: """
+        var result = WorldCompileSession.Shared.Compile(cancellationToken: TestContext.Current.CancellationToken, source: """
             module room(size) {
               state { world { slot Piece[0..size] = 0 } }
             }
@@ -21,7 +21,7 @@ public sealed class MultiWorldCompilationTests {
     }
     [Fact]
     public void AliasedModuleUseEmitsItsFamilies() {
-        var result = WorldCompiler.Compile(cancellationToken: TestContext.Current.CancellationToken, source: """
+        var result = WorldCompileSession.Shared.Compile(cancellationToken: TestContext.Current.CancellationToken, source: """
             module pieces() {
               state { world { slot Piece[0..1] = 0 } }
             }
@@ -40,7 +40,7 @@ public sealed class MultiWorldCompilationTests {
             world first = room(3)
             world second = room(8)
             """;
-        var result = WorldCompiler.Compile(cancellationToken: TestContext.Current.CancellationToken, source: source, allowMultiple: true);
+        var result = WorldCompileSession.Shared.Compile(cancellationToken: TestContext.Current.CancellationToken, source: source, allowMultiple: true);
 
         Assert.True(condition: result.Success, userMessage: string.Join(separator: "\n", values: result.Diagnostics));
         Assert.Null(@object: result.Json);
@@ -49,9 +49,9 @@ public sealed class MultiWorldCompilationTests {
         Assert.Equal(8L, result.Worlds[1].Json["state"]!["world"]![0]!["value"]!.GetValue<long>());
         Assert.Equal("Traveller", result.Worlds[1].Json["state"]!["records"]![0]!["name"]!.GetValue<string>());
         Assert.Throws<InvalidOperationException>(testCode: () => result.RequireJson());
-        Assert.False(condition: WorldCompiler.Compile(cancellationToken: TestContext.Current.CancellationToken, source: source).Success);
+        Assert.False(condition: WorldCompileSession.Shared.Compile(cancellationToken: TestContext.Current.CancellationToken, source: source).Success);
         var formatted = PuckPrinter.Print(document: result.Document!);
-        var roundTrip = WorldCompiler.Compile(cancellationToken: TestContext.Current.CancellationToken, source: formatted, allowMultiple: true);
+        var roundTrip = WorldCompileSession.Shared.Compile(cancellationToken: TestContext.Current.CancellationToken, source: formatted, allowMultiple: true);
 
         Assert.True(condition: roundTrip.Success, userMessage: string.Join(separator: "\n", values: roundTrip.Diagnostics));
         Assert.True(condition: JsonNode.DeepEquals(node1: result.Worlds[1].Json, node2: roundTrip.Worlds[1].Json));
@@ -63,13 +63,13 @@ public sealed class MultiWorldCompilationTests {
     [InlineData("world x = missing()")]
     [Theory]
     public void InvalidWorldDeclarationsRefuse(string declarations) {
-        var result = WorldCompiler.Compile(cancellationToken: TestContext.Current.CancellationToken, source: ("module room() { }\n" + declarations), allowMultiple: true);
+        var result = WorldCompileSession.Shared.Compile(cancellationToken: TestContext.Current.CancellationToken, source: ("module room() { }\n" + declarations), allowMultiple: true);
 
         Assert.False(condition: result.Success);
     }
     [Fact]
     public void WorldsHaveSeparateMapsAndDeclaredNamesAreOrigins() {
-        var result = WorldCompiler.Compile(cancellationToken: TestContext.Current.CancellationToken, source: """
+        var result = WorldCompileSession.Shared.Compile(cancellationToken: TestContext.Current.CancellationToken, source: """
             module room(value) { simulation { rateHz: value } }
             world north = room(20)
             world south = room(30)

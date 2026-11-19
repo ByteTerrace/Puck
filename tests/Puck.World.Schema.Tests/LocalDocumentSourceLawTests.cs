@@ -1,6 +1,6 @@
 using Puck.Testing;
-using Puck.World.Transpiler.Composition;
 using Xunit;
+using Puck.World.Transpiler;
 
 namespace Puck.World.Schema.Tests;
 
@@ -38,14 +38,14 @@ public sealed class LocalDocumentSourceLawTests {
     public void ThisTestHostInstalledTheComposerAndInstallingItAgainChangesNothing() {
         Assert.Same(
             actual: WorldDefinitionFileSource.LocalDocuments,
-            expected: PuckDocumentComposer.Instance
+            expected: WorldCompileSession.Shared
         );
 
-        WorldDefinitionFileSource.UseLocalDocuments(source: PuckDocumentComposer.Instance);
+        WorldDefinitionFileSource.UseLocalDocuments(source: WorldCompileSession.Shared);
 
         Assert.Same(
             actual: WorldDefinitionFileSource.LocalDocuments,
-            expected: PuckDocumentComposer.Instance
+            expected: WorldCompileSession.Shared
         );
     }
     [Fact]
@@ -54,11 +54,11 @@ public sealed class LocalDocumentSourceLawTests {
 
         Assert.Contains(
             actualString: refusal.Message,
-            expectedSubstring: "already installed as Puck.World.Transpiler.Composition.PuckDocumentComposer"
+            expectedSubstring: "already installed as Puck.World.Transpiler.WorldCompileSession"
         );
         Assert.Same(
             actual: WorldDefinitionFileSource.LocalDocuments,
-            expected: PuckDocumentComposer.Instance
+            expected: WorldCompileSession.Shared
         );
     }
     [Fact]

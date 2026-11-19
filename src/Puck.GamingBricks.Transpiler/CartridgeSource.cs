@@ -22,7 +22,7 @@ public static class CartridgeSource {
     public static JsonObject Lower(ReadOnlyMemory<byte> content, string sourcePath) {
         var diagnostics = new DiagnosticBag();
         var parsed = PuckParser.ParseDocumentWithDiagnostics(source: Encoding.UTF8.GetString(bytes: content.Span), diagnostics: diagnostics).Value;
-        var lowered = ((parsed is null) ? null : CartridgeDocumentEmitter.LowerSource(parsed, sourcePath, diagnostics).Value);
+        var lowered = ((parsed is null) ? null : CartridgeDocumentEmitter.LowerSource(diagnostics: diagnostics, document: parsed, sourcePath: sourcePath, sources: Puck.Transpiler.Modules.PuckSourceTable.Shared).Value);
 
         if (diagnostics.HasErrors || (lowered is null)) {
             throw new MachineContentException(string.Join(separator: "; ", values: diagnostics.Select(selector: d => $"{d.Code}: {d.Message}")));

@@ -1005,7 +1005,9 @@ lighting error). Once the trace mesh is camera-independent, price storing
 cached probe hits on disk by their input identity as an optional follow-up.
 Test coarse-to-fine convergence (far level, storey-sized level, then finest) in
 a harness judged by time until near-player lighting is right, not pass count
-alone.
+alone. [The settle-time record](illumination/research-settle-time.md) measures
+what the view-driven scene costs a boot today and ranks this step first among
+the fixes for it.
 
 **Tracing light with the field (comparison after stable trace mesh).** Where
 triangles may be the wrong representation, compare four ways inside the one

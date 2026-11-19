@@ -17,7 +17,7 @@ public sealed class ShadeLoweringTests {
         } } }
         """;
     private static SdfShadeProgram Compile(string text) {
-        var compilation = WorldCompiler.Compile(text, cancellationToken: TestContext.Current.CancellationToken);
+        var compilation = WorldCompileSession.Shared.Compile(text, cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.True(condition: compilation.Success, userMessage: compilation.Diagnostics.FormatReport());
         // A use names its program by key; the document's shades table holds the program once.
@@ -49,7 +49,7 @@ public sealed class ShadeLoweringTests {
     [InlineData("roughness = shape({ type: Sphere, x: n }, surface.position)", "n", "2", "", "PUCK130")]
     [Theory]
     public void RefusalsHaveCompilerCodes(string body, string parameters, string arguments, string before, string code) {
-        var compiled = WorldCompiler.Compile(World(arguments: arguments, before: before, body: body, parameters: parameters), cancellationToken: TestContext.Current.CancellationToken);
+        var compiled = WorldCompileSession.Shared.Compile(World(arguments: arguments, before: before, body: body, parameters: parameters), cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Contains(collection: compiled.Diagnostics, filter: d => (d.Code == code));
     }
@@ -58,7 +58,7 @@ public sealed class ShadeLoweringTests {
         var program = Compile(text: World("roughness = clock\n roughness = lanes.world2\n albedo = material.albedo"));
 
         Assert.Equal(SdfShadeReads.World2, program.Reads);
-        var bad = WorldCompiler.Compile(World("roughness = light.visibility"), cancellationToken: TestContext.Current.CancellationToken);
+        var bad = WorldCompileSession.Shared.Compile(World("roughness = light.visibility"), cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Contains(collection: bad.Diagnostics, filter: d => (d.Code == "PUCK126"));
     }
@@ -165,7 +165,7 @@ public sealed class ShadeLoweringTests {
     }
     [Fact]
     public void CapChargesHelperWorkAndSweepStrands() {
-        var compiled = WorldCompiler.Compile(World(
+        var compiled = WorldCompileSession.Shared.Compile(World(
             "let n = surface.position\n for i in range(0, 200) { let n = n * lattice(n, uint(7)) }\n albedo = n"), cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Contains(collection: compiled.Diagnostics, filter: d => (d.Code == "PUCK129"));
@@ -221,7 +221,7 @@ public sealed class ShadeLoweringTests {
     [InlineData("chamfer: -1")]
     [Theory]
     public void StructuralShapesUsePrimitiveAdmission(string controls) {
-        var result = WorldCompiler.Compile(World($"roughness = shape({{ type: Box, {controls} }}, surface.position)"), cancellationToken: TestContext.Current.CancellationToken);
+        var result = WorldCompileSession.Shared.Compile(World($"roughness = shape({{ type: Box, {controls} }}, surface.position)"), cancellationToken: TestContext.Current.CancellationToken);
         Assert.Contains(result.Diagnostics, d => d.Code == "PUCK127");
     }
 
