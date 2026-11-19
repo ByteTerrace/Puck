@@ -180,6 +180,8 @@ public sealed class WorldHapticDirector {
                 seat: seat
             );
             seat.ResetTrackers();
+            seat.SeenMirror = null;
+            seat.SeenLifetime = -1;
             seat.RowCount = 0;
             seat.HasGamepad = false;
             seat.HasOutput = false;
@@ -226,11 +228,23 @@ public sealed class WorldHapticDirector {
             (mirror is null) ||
             (definition.Haptics.Count == 0)
         ) {
-            if (seat.LevelActive && (now >= seat.PulseExpiryTimestamp)) {
-                StopOutput(
-                    output: output,
-                    seat: seat
-                );
+            if (seat.LevelActive) {
+                if (now >= seat.PulseExpiryTimestamp) {
+                    StopOutput(
+                        output: output,
+                        seat: seat
+                    );
+                } else {
+                    seat.ClearLevelState();
+                }
+            }
+
+            if (mirror is null) {
+                seat.SeenMirror = null;
+                seat.SeenLifetime = -1;
+            } else {
+                seat.SeenMirror = mirror;
+                seat.SeenLifetime = mirror.Lifetime;
             }
 
             seat.ResetTrackers();
@@ -247,11 +261,11 @@ public sealed class WorldHapticDirector {
         );
 
         if (
-            (seat.SeenLifetime != mirror.Lifetime) ||
-            (seat.SeenInstalls != mirror.Installs)
+            !ReferenceEquals(objA: seat.SeenMirror, objB: mirror) ||
+            (seat.SeenLifetime != mirror.Lifetime)
         ) {
+            seat.SeenMirror = mirror;
             seat.SeenLifetime = mirror.Lifetime;
-            seat.SeenInstalls = mirror.Installs;
             seat.ResetTrackers();
         }
 
@@ -453,11 +467,15 @@ public sealed class WorldHapticDirector {
             return;
         }
 
-        if (seat.LevelActive && (now >= seat.PulseExpiryTimestamp)) {
-            StopOutput(
-                output: output,
-                seat: seat
-            );
+        if (seat.LevelActive) {
+            if (now >= seat.PulseExpiryTimestamp) {
+                StopOutput(
+                    output: output,
+                    seat: seat
+                );
+            } else {
+                seat.ClearLevelState();
+            }
         }
     }
     private int ResolveBodyIndex(int slot) {
@@ -466,6 +484,12 @@ public sealed class WorldHapticDirector {
             (route.Entity.Index != slot)
         ) {
             return route.Entity.Index;
+        }
+
+        var routed = m_seatBindings.RoutedEntityIndex(slot: slot);
+
+        if (routed != slot) {
+            return routed;
         }
 
         return (m_perception?.PerceivedBody(slot: slot) ?? slot);
@@ -558,9 +582,7 @@ public sealed class WorldHapticDirector {
             _ = output.Rumble(effect: RumbleEffect.Off);
         }
 
-        seat.LevelActive = false;
-        seat.LevelLow = 0f;
-        seat.LevelHigh = 0f;
+        seat.ClearLevelState();
     }
     private void StopActiveDevice(SeatSlot seat, long now) {
         if (
@@ -573,9 +595,7 @@ public sealed class WorldHapticDirector {
 
         seat.HasActiveDevice = false;
         seat.ActiveDevice = default;
-        seat.LevelActive = false;
-        seat.LevelLow = 0f;
-        seat.LevelHigh = 0f;
+        seat.ClearLevelState();
         seat.PulseExpiryTimestamp = 0L;
     }
 
@@ -607,10 +627,15 @@ public sealed class WorldHapticDirector {
         public long PulseExpiryTimestamp;
         public ulong PulsesSent;
         public int RowCount;
-        public int SeenInstalls = -1;
         public int SeenLifetime = -1;
+        public WorldStateMirror? SeenMirror;
         public int Serial = 1;
 
+        public void ClearLevelState() {
+            LevelActive = false;
+            LevelLow = 0f;
+            LevelHigh = 0f;
+        }
         public RowState GetOrAddRowState(string id) {
             if (!Rows.TryGetValue(key: id, value: out var state)) {
                 state = new RowState();

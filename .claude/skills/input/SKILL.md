@@ -214,7 +214,12 @@ The pattern contract (`WorldInputPattern.cs`, `WorldInputOwner.Patterns.cs`):
   ([the ruling](../puck-world/SKILL.md#an-agents-world-opens-no-physical-device)).
   Never inject real input to test.
 - Output goes through `IGamepadOutput` (capability-gated; rumble is finite by
-  contract). Protocol work consults several independent sources and cites each
+  contract). `WorldHapticDirector` evaluates world-authored `haptics` rows
+  (`WorldHapticRow`) per local seat against each seat's routed
+  `WorldStateMirror` (including `$body` keys via `WorldStateLease`) and
+  drives the seat's assigned pad via `PlayerRoster.TryGetSeatDevice` and
+  `GamepadManager.TryGetOutput`; `haptics.state` echoes per-seat status.
+  Protocol work consults several independent sources and cites each
   (AGENTS.md); hardware evidence and owed runs are in
   [device input](../../../docs/reference/input.md#limits-and-hardware-evidence).
 
@@ -230,6 +235,7 @@ The pattern contract (`WorldInputPattern.cs`, `WorldInputOwner.Patterns.cs`):
 | Consumption happens only on a committed firing | the `consumeInput` arm in `WorldRuleHost.Arms.cs` |
 | A binding names known sources and bindable commands | `BindingVocabularyCheck` |
 | Same input, same state | history, holds and claims in `WorldInputOwner.Checkpoint.cs`; `puck test --reproduce` |
+| World `haptics` rows | `WorldDefinitionValidator.Haptics.cs` (unique ids, unit intensities, positive duration within `WorldHapticCapacity.MaxDurationSeconds`, `mode`/`signal` agreement, seat tokens) and `WorldValueDomainGuard` |
 | Menu and Escape are reserved | nothing yet (H4) |
 
 ## Open gaps
@@ -242,9 +248,11 @@ The pattern contract (`WorldInputPattern.cs`, `WorldInputOwner.Patterns.cs`):
   `Puck.World.Server` and only `WorldRuleHost` calls `TryMatch`; the
   always-active plane runs no matcher, so a remote authority decides every
   pattern. H4 runs the one matcher on the plane over its local events.
-- **No world drives device output.** No `Puck.World*` code calls
-  `IGamepadOutput`, and a cartridge's `IFeedbackMachine.MotorLevel` has no
-  consumer. Keep both: an unreached capability is wired, not deleted.
+- **Cartridge rumble is unwired.** `WorldHapticDirector` drives
+  `IGamepadOutput.Rumble` from authored `haptics` rows
+  (`worlds/standard/instrument.puck` pulses on the beat), while a cartridge's
+  `IFeedbackMachine.MotorLevel` still has no consumer. Keep it: an unreached
+  capability is wired, not deleted.
 - The typing tutor and chat exhibits, the owed hardware runs and the decision's
   raw-slot wording are in [the input packet](../../../docs/plans/open-items.md#input-channels).
 
