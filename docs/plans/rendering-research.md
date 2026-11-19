@@ -251,7 +251,7 @@ The frame thread and the GPU work at the same time, so each has to fit the
 |---|---|---|---|
 | All GPU memory | Not measured as one figure. The main view's graph holds about 2.5 GB at the bar's size | 8 GB of the card's 12 | Room for the system and other programs (Puck plays nice with its host). The cap is not an engine input today: the limit the engine admits against is the operating system's budget less a tenth (`MemoryAccount.Record`). The first wave makes it one |
 | Resident baked meshes | About 3 GB, growing toward 4 GiB | 3 GB resident around the viewer | Residency evicts by distance and view; the cap is independent of how large the world is |
-| Image history | 196 bytes a pixel in two copies, about 1.4 GB for the main view at 2560 by 1440 | 0.9 GB for the main view | Decision 13, which also gives the arithmetic. A nested view that keeps a history adds its own at its own size, and the lane that splits the history reports that total |
+| Image history | 196 bytes a pixel in two copies, about 1.4 GB for the main view at 2560 by 1440; split, 228 bytes a pixel (32 in two copies, 164 once), about 0.84 GB by arithmetic, not yet read with `pipeline.inspect` | 0.9 GB for the main view | Decision 13, which also gives the arithmetic. A nested view that keeps a history adds its own at its own size, and the lane that splits the history reports that total |
 | Lighting probes | About 72 MB a table in up to four copies, and a hit cache of about 90 MB, for every world shown | 0.6 GB in one shared pool | One pool for every world in view, not a pool per world |
 | Shadow maps | 96 MiB for the cascades, and 144 MB of glass storage for each shadowed view at the highest tier | 0.4 GB | Glass storage shared across views |
 | The bake's own memory while baking | More than 10 GB of the process's private memory in a cold bake | Bounded on every device. On the Steam Deck it counts inside the 10 GB for the process and the GPU together | A walk into a place whose meshes are not stored bakes during play, so this is a play-time cost. The bake's peak has to fall far enough that every device can bake a floor (see [how a shared product is named and trusted](#how-a-shared-product-is-named-and-trusted)) |
@@ -1611,9 +1611,11 @@ one it writes, which is 392 bytes a pixel.
 
 1. *Split the history.* Forty of the surface history's forty-seven words
    are a window of the last eight frames. That window moves to one buffer
-   updated in place where a pixel did not move, and only the seven words
-   that follow motion stay in two copies, with the colour. That is 160
-   bytes once and 36 bytes twice: 232 bytes a pixel. A pixel that moved
+   updated in place where a pixel did not move, with the phase mask that
+   says which of its phases hold samples, and only the six words that
+   follow motion stay in two copies, with the colour. As built
+   (`SdfWorldPackage.HistoryWindowWords`, `HistorySurfaceWords`) that is
+   164 bytes once and 32 bytes twice: 228 bytes a pixel. A pixel that moved
    restarts its window; it keeps no second store, so the figure holds in
    motion as well as at rest.
 2. *One shading path*, after decision 5 has fixed the colour conversion.
@@ -1625,7 +1627,7 @@ one it writes, which is 392 bytes a pixel.
 
 **Why.** The owner's ruling on the bar's size makes the history the
 largest single store after the meshes: about 1.4 GB for the main view at
-2560 by 1440. The split brings it to about 0.9 GB. It also stops the
+2560 by 1440. The split brings it to about 0.84 GB. It also stops the
 resolve copying the stored window every frame, and the resolve takes 3 ms
 at the bar's size. One shading path removes a second implementation.
 
@@ -1643,7 +1645,7 @@ in-place history, so its design is reviewed as it is built.
 from its own position on the moving route. What a player sees when a
 shading program arrives that has no compiled kernel yet.
 
-**Against the budget.** The history row, from about 1.4 GB to 0.9 GB for
+**Against the budget.** The history row, from about 1.4 GB to 0.84 GB for
 the main view on the RTX 4070. The resolve's row, from 3 ms toward 1.5 ms.
 The shading row, from 10.5 and 13 ms toward 5 ms. A nested view that keeps
 a history pays the same bytes for each of its own pixels, and the lane
@@ -2064,7 +2066,7 @@ technique makes possible for the ones after it.
 | 6 | A completion signal for each background job | The same wait, on every device and on the frame's queue | The CPU learns a job is done 1 to 2 ms after the frame is handed over, not about 25 ms after. Read from the code | First wave, `signal` |
 | 7 | Shadows by ray where no map reaches | Gap 3 on the RTX 4070, and local lights, which have no shadow maps today | A look. Its cost follows the distant share of the screen. Unmeasured | Second wave |
 | 8 | Reflections by ray on glass and water | Glass and water, which reflect only the sky and the probes | A look. One ray for each reflective pixel. Unmeasured | After the second wave |
-| 9 | A vendor's upscaler as an authored alternative to the resolve | The resolve's 3.0 ms and the image history's 1.4 GB | 1 to 2 ms and about 1 GB by arithmetic. Its cost at native size on the RTX 4070 is unverified | After the second wave, with an owner's question |
+| 9 | A vendor's upscaler as an authored alternative to the resolve | The resolve's 3.0 ms and the image history's 0.84 GB after the split | 1 to 2 ms and about 1 GB by arithmetic. Its cost at native size on the RTX 4070 is unverified | After the second wave, with an owner's question |
 | 10 | Texture transitions through enhanced barriers | The gaps between the frame's compute passes on Direct3D 12 | Under half a millisecond, a guess. The sure gain is one barrier model in place of two | First wave, `direct3d` |
 | 11 | Demand counted from what was drawn | The finest level of the resident meshes: about 1.1 GB of the 3 GB, almost never drawn | Memory and bake time, not frame time. Unmeasured | Second wave |
 | 12 | Present timing and the drivers' latency reports | Decision 15's record for every present | No frame time. It is the instrument that reads when a frame showed | Second wave, the record for every present |
@@ -2486,8 +2488,8 @@ CPU thread reads to learn that work on a queue has finished.
 **9. A vendor's upscaler as an authored alternative to the resolve.**
 
 - *What it speeds up.* At native size, where the bar is read: the resolve
-  (3.0 ms) and the image history (about 1.4 GB today, about 0.9 GB after
-  `history`). At a render scale a player's table authors, every pass that
+  (3.0 ms) and the image history (about 0.84 GB with `history`'s split,
+  from about 1.4 GB). At a render scale a player's table authors, every pass that
   scales with rendered pixels.
 - *Evidence.* NVIDIA's DLSS programming guide gives 95 to 204 MB of
   internal memory at a 2560 by 1440 output

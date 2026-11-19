@@ -482,7 +482,8 @@ phases with the occlusion kernel between them, `SdfMeshOcclusion`) →
 current camera receivers) → `pyramid` (the ambient occlusion's
 depth pyramid from the mesh target) → `surface` (each pixel's visibility record from the mesh
 target: normal, screen-space AO, the cascades' soft shadows into K;
-`passes/sdf-surface-stage.hlsli`) → `views` (materials and lighting) →
+`passes/sdf-surface-stage.hlsli`) → `views-probes` (the irradiance volume's
+gather once a cell, `passes/sdf-views-probes.hlsli`) → `views` (materials and lighting) →
 `resolve` (reduced or temporal views) → `sky` → `composite`. A view of a
 program with a glass shape (`SdfProgram.HasGlass`) inserts `glass-clear` →
 `glass` (graphics, the glass draws alone) → `glass-shade` after `views`
@@ -629,7 +630,12 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   invocation's own id, and a pixel keeps its window only while its history comes
   from its own pixel (`historyPixel == pixelIndex` in `stationary`). Reading a
   window at a reprojected position would read words another invocation of the
-  same dispatch is writing; a moved pixel restarts its window instead.
+  same dispatch is writing; a moved pixel restarts its window instead. The graph
+  admits such a buffer only when the updater's one mutable input is the only
+  reference any pass makes to it (`ShaderPipelineCompiler.UpdatesInPlace`), so a
+  second reader of the window is refused; a graph replacement keeps the window
+  and the two history rings together or restarts all three
+  (`ShaderPipelineRenderNode.PreserveCarriedStorages`).
   Replacing one phase and summing in fixed order removes periodic newest-phase
   bias and keeps samples the current neighborhood misses. Moving and reactive
   pixels use the clipped resolve while their window fills. A stationary window
@@ -710,8 +716,19 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   exposure for any before/after comparison. A view with no camera sample reads the
   open sky, so a closed room meters as daylight and a display in it reads black:
   `camera=none` names its `wait=` ([mesh GI](references/mesh-gi.md)).
-- **The irradiance volume is read once a pixel** (`sdfMeshProbesAt`), and that
-  gather supplies indirect light, reflections and traced static-light visibility.
+- **The irradiance volume is gathered once a cell and read once a pixel.** The
+  probe lookup pass (`views-probes`) runs `sdfMeshProbesAt` at one representative
+  pixel of each `SdfWorldPackage.ViewsProbeRate`-pixel cell, at its geometric
+  normal; views reuses that gather where the pixel's receiver lies within the
+  normal bias of the representative's, on its tangent plane and facing alike
+  (`sdfViewsProbesAt`), and gathers for itself across a depth or crease edge, so
+  the reuse never steps across a visibility edge the record shows. The cube reads
+  stay per pixel, along its shading normal and mirror direction. The gather
+  supplies indirect light, reflections and traced static-light visibility; glass
+  gathers at its own pane (`passes/sdf-glass-stage.hlsli`), since a pane is lit
+  apart from the surface behind it. `passes/sdf-views-split.hlsli` holds the
+  views pass's compile-out switches for reading each part's share of
+  `sdf.world$views` with a reload.
   Each probe publishes its own measured cubes, without neighbour filtering.
   Visibility uses a 12×12 octahedral first-hit surface map, one bounded ray
   per texel. Each word packs ray distance and two signed normal bytes;

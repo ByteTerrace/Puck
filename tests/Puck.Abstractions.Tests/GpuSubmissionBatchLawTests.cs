@@ -51,6 +51,44 @@ public sealed class GpuSubmissionBatchLawTests {
     }
 
     [Fact]
+    public void EachFenceSaysWhetherItsOwnHandOverReachedTheQueueWhateverALaterOneDid() {
+        var batch = new Batch();
+        using var bake = new Fence();
+        using var copy = new Fence();
+        using var late = new Fence();
+        batch.Begin();
+        using (GpuQueueWork.Attribute(GpuQueueCategory.Bake)) { batch.TryDefer([1], 1, bake); }
+        Assert.False(bake.ReachedQueue);
+        // The copy's deferral hands the job over; the copy itself waits for the flush, which fails.
+        batch.TryDefer([2], 1, copy);
+        Assert.True(bake.ReachedQueue);
+        Assert.False(copy.ReachedQueue);
+        batch.TryDefer([3], 1, late);
+        batch.FailBeforeArm = true;
+        Assert.Throws<InvalidOperationException>(batch.Flush);
+        Assert.True(bake.ReachedQueue);
+        Assert.False(copy.ReachedQueue);
+        Assert.False(late.ReachedQueue);
+        // A flush that succeeds after an earlier hand-over failed does not make the dropped submissions reached.
+        batch.FailBeforeArm = false;
+        batch.Flush();
+        Assert.False(copy.ReachedQueue);
+    }
+
+    [Fact]
+    public void AFenceWithASubmissionOutstandingIsRefusedBeforeAnythingIsDeferred() {
+        var batch = new Batch();
+        using var frame = new Fence();
+        batch.Begin();
+        // A fence with a submission outstanding is refused before anything is deferred or handed over.
+        Assert.True(batch.TryDefer([1], 1, frame));
+        Assert.Throws<InvalidOperationException>(() => batch.TryDefer([2], 1, frame));
+        batch.Flush();
+        Assert.Equal([1], batch.Submitted);
+        Assert.True(frame.ReachedQueue);
+    }
+
+    [Fact]
     public void AFrameSubmissionWhoseJobHandOverFailsIsAbandonedWithTheJob() {
         var batch = new Batch();
         using var bake = new Fence();

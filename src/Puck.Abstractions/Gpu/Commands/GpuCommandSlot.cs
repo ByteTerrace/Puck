@@ -62,13 +62,15 @@ public sealed class GpuCommandSlot(GpuObjectName name) : IDisposable {
         );
     }
 
-    /// <summary>Waits for the slot's last submission, a lost device counting as done, then releases the command buffer
-    /// and the fence. Safe to call more than once.</summary>
+    /// <summary>Waits for the slot's last submission, a lost device or a submission that never reached the queue counting
+    /// as done, then releases the command buffer and the fence. Safe to call more than once.</summary>
     public void Dispose() {
         try {
             Wait();
         } catch (DeviceLostException) {
             // Nothing on a lost device runs again.
+        } catch (GpuSubmissionAbandonedException) {
+            // Nothing of an abandoned submission reached the queue, so nothing reads the slot.
         }
 
         m_commands?.Dispose();

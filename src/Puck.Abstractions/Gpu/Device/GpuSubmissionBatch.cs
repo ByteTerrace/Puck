@@ -88,9 +88,16 @@ public abstract class GpuSubmissionBatch<TEntry> : GpuSubmissionBatch {
 
         return true;
     }
+    /// <summary>Abandons the fence of a submission <see cref="Admit"/> took that a derived batch then failed to defer (its
+    /// own lists could not take the submission), so the fence reports that nothing of it reached the queue rather than
+    /// reading complete.</summary>
+    /// <param name="fence">The fence the submission arms, or <see langword="null"/>; it must have no submission
+    /// outstanding.</param>
+    protected static void Refuse(GpuBatchedSubmissionFence? fence) => fence?.MarkAbandoned();
     /// <summary>Defers a submission when the batch is open and the submission is not empty, its lists counted under the
-    /// calling thread's <see cref="GpuQueueWork.Current"/> category, after any hand-over <see cref="Admit"/> makes (whose
-    /// failure it rethrows with <paramref name="fence"/> abandoned).</summary>
+    /// calling thread's <see cref="GpuQueueWork.Current"/> category, after any hand-over <see cref="Admit"/> makes. Room
+    /// for the submission is reserved before <paramref name="fence"/> is marked deferred, so a failure there, or in
+    /// Admit's hand-over, rethrows with the fence abandoned and the work already deferred left as it was.</summary>
     /// <param name="entries">The submission's entries.</param>
     /// <param name="lists">The number of command lists the entries carry.</param>
     /// <param name="fence">The fence it arms, or <see langword="null"/>; it must have no submission outstanding.</param>
@@ -102,6 +109,16 @@ public abstract class GpuSubmissionBatch<TEntry> : GpuSubmissionBatch {
         var category = GpuQueueWork.Current;
         var background = GpuQueueWork.IsBackground(category: category);
 
+        try {
+            _ = m_entries.EnsureCapacity(capacity: (m_entries.Count + entries.Length));
+            _ = m_owners.EnsureCapacity(capacity: (m_owners.Count + lists));
+            if (fence is not null) { _ = m_fences.EnsureCapacity(capacity: (m_fences.Count + 1)); }
+        } catch {
+            Refuse(fence: fence);
+
+            throw;
+        }
+        // Nothing below allocates or throws: the lists hold room for the submission.
         fence?.Defer(batch: this);
         foreach (var entry in entries) { m_entries.Add(item: entry); }
         for (var list = 0; (list < lists); list++) { m_owners.Add(item: category); }
