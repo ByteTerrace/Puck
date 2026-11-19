@@ -286,7 +286,7 @@ public static class WorldDocumentBasis {
         // sequence cannot express the target, including a pure key reorder inside an otherwise unchanged row.
         var mergedOrder = basis.Select(member => member.Key).Where(target.ContainsKey)
             .Concat(target.Select(member => member.Key).Where(name => !basis.ContainsKey(name)));
-        if (!mergedOrder.SequenceEqual(target.Select(member => member.Key), StringComparer.Ordinal)) {
+        if (!mergedOrder.SequenceEqual(target.Select(member => member.Key), StringComparer.Ordinal) || HoldsNewNull(basis: basis, target: target)) {
             var replacement = new JsonObject { [ReplaceMemberName] = true };
             foreach (var (name, value) in target) { replacement.Add(name, value?.DeepClone()); }
             return replacement;
@@ -351,6 +351,19 @@ public static class WorldDocumentBasis {
 
         return delta;
     }
+    // Whether the target holds a member as an explicit null where the basis holds a value or no such member. A null
+    // in a delta removes the member on merge, so a member-wise delta cannot leave one standing: the object is replaced.
+    private static bool HoldsNewNull(JsonObject basis, JsonObject target) {
+        foreach (var (name, value) in target) {
+            if ((value is null) && (!basis.TryGetPropertyValue(jsonNode: out var held, propertyName: name) || (held is not null))) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+    // Whether a delta object replaces its target whole rather than merging into it member by member.
+    internal static bool ReplacesObject(JsonObject delta) => IsTrue(node: delta[propertyName: ReplaceMemberName]);
     private static bool HasDuplicateKey(JsonArray list, string key, out string duplicate) {
         _ = IndexRows(list, key, out duplicate);
         return duplicate.Length != 0;

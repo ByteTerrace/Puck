@@ -2893,14 +2893,6 @@ The edit loop:
   built whether or not anything reads it). Its
   [build order](iteration/authoring-loop.md#build-order) is the work, and its
   first step removes those three costs.
-- [high] `world.reload` refuses after one live edit to a creation's palette
-  (`world.row.set creations <id> document.palette[0].color <json>`),
-  answering `world.reload.delta-unrepresentable:` with an empty reason until
-  the edit is undone (`world.undo`); setting the colour back does not clear
-  it. The cause is not confirmed; the reload diffs the installed
-  declarations, which now hold the live edit, against the source
-  (`WorldReloadDelta.Create`). The authoring loop's delta between source
-  revisions removes the diff; until then the refusal owes at least its reason.
 - [medium] `puck decompile` writes a source the compiler refuses when the
   document holds a shading program: a palette's `shade` prints as its table
   key (`shade: "program/<hash>"`), which is PUCK126, and

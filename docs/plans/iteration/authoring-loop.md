@@ -865,13 +865,10 @@ added to that instrument, never to a second one.
 
 ## Defects found on the way
 
-The first, second and fourth are recorded in
+The first and third are recorded in
 [open items](../open-items.md#edit-to-running-hot-reload-and-boot); the rest
 are removed by the step named or carried by a verification request.
 
-- `world.reload` refuses after a live creation palette edit, with
-  `world.reload.delta-unrepresentable:` and an empty reason, until the edit
-  is undone. Step 4 removes the cause.
 - `puck decompile` writes a source the compiler refuses when the document
   holds a shading program. Step 8 fixes it.
 - An unchanged reload is not a no-op: it installs fully, clears the journal

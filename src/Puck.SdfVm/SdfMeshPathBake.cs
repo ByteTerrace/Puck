@@ -1103,17 +1103,22 @@ public sealed partial class SdfMeshPathBake {
         ArgumentNullException.ThrowIfNull(argument: transforms);
 
         var planned = Stopwatch.GetTimestamp();
-        // The selectors whose groups draw something, as the frame's thread left them: every other selector arrives and
-        // plans its floor first, as the restart that adopts this plan decides from the same groups (Arrives).
+        // The selectors whose groups draw something and the shapes the bake holds, as the frame's thread left them:
+        // every other selector, and every group of another shape, arrives and plans its floor first, as the restart
+        // that adopts this plan decides from the same groups (Arrives).
         HashSet<int> drawing;
+        HashSet<UInt128> shapes;
 
-        lock (m_gate) { drawing = [.. m_groups.Where(predicate: static group => !Arrives(old: group)).Select(selector: static group => group.Selector)]; }
+        lock (m_gate) {
+            drawing = [.. m_groups.Where(predicate: static group => !Arrives(old: group)).Select(selector: static group => group.Selector)];
+            shapes = [.. m_groups.Select(selector: static group => group.Shape)];
+        }
 
         var groups = SdfMeshBakeGroup.Plan(
             create: static (selector, dynamic) => new Group(dynamic: dynamic, selector: selector),
             farDistance: farDistance,
             program: program,
-            tier: Tiers(arrives: selector => !drawing.Contains(item: selector), copies: false, transforms: transforms),
+            tier: Tiers(arrives: group => (!drawing.Contains(item: group.Selector) || NewShape(planned: group, shapes: shapes)), copies: false, transforms: transforms),
             transforms: transforms
         );
 
@@ -1165,7 +1170,8 @@ public sealed partial class SdfMeshPathBake {
 
         // A new program takes the plan a build already made off the frame's thread (PlanAhead), with each group this restart
         // cannot keep that read the transforms or a moved field planned again at the frame's; otherwise the whole plan.
-        var tiers = Tiers(arrives: selector => Arrives(old: previous.GetValueOrDefault(key: selector)), transforms: frame.DynamicTransforms);
+        var shapes = previous.Values.Select(selector: static group => group.Shape).ToHashSet();
+        var tiers = Tiers(arrives: group => PlansFloor(old: previous.GetValueOrDefault(key: group.Selector), planned: group, shapes: shapes), transforms: frame.DynamicTransforms);
 
         if (plan is not null) {
             // A group that read a transform is planned again unless the previous program keeps it; a static group that
