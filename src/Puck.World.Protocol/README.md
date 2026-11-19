@@ -138,6 +138,18 @@ the install it reflects, one more at every install of a new live definition.
 A mutation verdict carries the version it applied at (or was refused against),
 so a reader orders a verdict against a delivered document exactly, whichever
 arrives first: a document at or past a verdict's version reflects that edit.
+
+Every content delivery also carries a `WorldStreamStamp`: the stream's opaque
+random identity, its generation and the record's ordinal, all issued by the
+stream's `WorldDeliveryCursor`. A session or federation stream advances its
+generation on a cut (the loss of something it was delivered from a part that
+can withhold from it) and says so with `DeliverCut`, which carries no content;
+a terminal cut ends the stream. The authority's own fan-out is
+`WorldStreamStamp.Unspanned`. A `WorldSessionMirror`'s `WorldStreamIngress`
+is the one writer of the span it holds: it takes records only from the stream
+that bound it, at or past its generation and after its last ordinal, and a
+terminal record or a lost remote connection closes the span and withdraws
+what the mirror held.
 `WorldSessionMirror` publishes a delivered definition and its version as one
 `WorldDeliveredDocument` and raises `DocumentDelivered` with that pair after each
 delivery.

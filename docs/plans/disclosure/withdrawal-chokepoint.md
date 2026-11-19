@@ -8,7 +8,7 @@ property as one invariant, and designs the structural door that holds it, in
 place of the per-path guards the review kept finding ways around. A design
 review of the first draft found sixteen flaws in that door; this revision
 closes each at its cause and [answers them one by one](#the-design-reviews-findings-answered).
-It is a design. Nothing here is built.
+Step 1 of [the build order](#the-build-order) is built; the rest is a design.
 
 ## Summary
 
@@ -909,6 +909,15 @@ for the display. The second and third kinds are GPU legs the lead schedules.
    leaves an interest radius: none. A law replays a record of an earlier
    generation and a record of another stream into a mirror: both rejected, the
    mirror unchanged. A law drops the connection: the span closes.
+   *Built,* except the authored lease: `WorldDeliveryCursor` decides cuts and
+   issues `WorldStreamStamp`s, `IClientSink` carries them and `DeliverCut`,
+   `WorldStreamIngress` orders a mirror's records, a remote observer closes
+   its span when its session ends, and `WorldRecipientView.ReadsEverything`
+   tightens the whole-replica test. The card and ingress checks are
+   `StreamGenerationLawTests`; the hidden-policy variants are
+   `disclosure-probe`'s `one` (added) and `removed`. The engine's default
+   lease of none is in force; a lease an admission grants is
+   [an open question](#open-questions-and-their-owners).
 2. **The carrying value, the one writer and the filtered read, beside the
    existing withdrawal.** The taint flag becomes the label; content and label
    become one value at external outputs, bindings, holds and package reads; the
@@ -1031,8 +1040,8 @@ Searched before proposing a generation or a key.
 - The session source's `Fallback` colour is the authored answer to "what does a
   screen with nothing to show draw".
 
-No per-stream disclosure generation exists anywhere in the tree, on either
-side. That part is new.
+No per-stream disclosure generation existed on either side; step 1 added it
+as `WorldDeliveryCursor.Generation` and `WorldStreamIngress`.
 
 ## Open questions and their owners
 
@@ -1043,9 +1052,14 @@ side. That part is new.
   can no longer hold, so that a view which stopped showing a screen long ago is
   not restarted when that screen's session is cut. The step 3 lane measures how
   often that restart happens on the benchmark route before adding it.
-- Whether the engine's default lease after a lost connection should be none.
-  It is the strict reading and it blanks a portal on a network hiccup. The step
-  1 lane lands the default and the authored surface together.
+- The lease an admission grants a stream after a lost connection. The default
+  of none is built: a remote observer's span closes as its session ends, which
+  blanks a neighbour's view on a network hiccup. The authored surface is not:
+  a `lease` member on an admission row, carried to the observer when the
+  stream is admitted, holding the closed span showable that long, and closed
+  at once when the next session's first record arrives. Its first consumer is
+  a remote neighbour, which nothing in the debug world runs yet; the lane
+  that next works on remote observation builds it.
 - Whether the scene a mirror hands out can become one type that the proof's
   comparison walks, which would retire review-only item 3. The step 6 lane
   decides when it sees the comparison's size.

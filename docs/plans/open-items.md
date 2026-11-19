@@ -2381,8 +2381,9 @@ findings are answered in decision 3a. Then the researcher brief's priorities
   order with the content, and content travels with the right to show it as one
   value. A design review found sixteen flaws in the first draft, and the memo
   answers each. It orders eight steps, each with a check, and no step deletes a
-  guard before its replacement owns the same paths. Next: its step 1, which
-  tightens the whole-replica test at once and lands the stream's generation.
+  guard before its replacement owns the same paths. Its step 1 is built (the
+  tightened whole-replica test, the stream's generation, ordered ingress), all
+  but the lease an admission grants after a lost connection. Next: step 2.
   This is decision 14's step 5 (results keyed by what each viewer was
   delivered) with the withdrawn picture of decision 2.
 
