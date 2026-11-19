@@ -1,0 +1,125 @@
+// Focused witnesses for ink: one form for each kind of line, under a template that draws a level line at a constant
+// pixel width from the stamp alone. The sphere and the capsule have the same radius, so a width that
+// follows the curvature across the view shows as the same line on both and one that follows the mean curvature shows the
+// capsule's line at half width. The box's outline is a crease, which no per-pixel scalar finds. The joined pair is a
+// smooth blend, whose seam no comparison of neighbouring pixels finds, and the stacked pair is a hard union of two
+// shapes that bake as one draw.
+schema: "puck.world.definition.v1"
+basis: "../minimal/minimal"
+documentId: "ink-checks"
+import "../standard/shading"
+
+function inkPixels(value, slope) = abs(value) / max(slope * surface.footprint, 0.0000001)
+function inkLine(pixels, width) = 1 - smoothstep(max(width - 1, 0), width, pixels)
+
+shade template inkLevels(threshold, width, inkColor) {
+  light {
+    let sine = sqrt(max(1 - light.cosine * light.cosine, 0))
+    let terminator = inkLine(inkPixels(light.cosine - threshold, abs(surface.curvature) * sine), width)
+    diffuse = light.color * (light.weight * light.reach * max(light.cosine, 0) * light.visibility * (1 - terminator))
+  }
+  compose {
+    let g = saturate(-dot(surface.normal, surface.rayDirection))
+    let inside = (1 - sqrt(max(1 - g * g, 0))) / max(abs(surface.curvature), 0.0000001)
+    let contour = inkLine(inside / max(surface.footprint, 0.0000001), width)
+    let breakup = smoothstep(0.35, 0.65, lattice(surface.layerPosition * 40, uint(7)))
+    let lit = surface.albedo * (compose.radiance + compose.indirect) * compose.attenuation * compose.adaptation
+    color = mix(lit, inkColor * lit, contour * breakup)
+  }
+}
+
+let inkPalette = [{ color: "#C9A27E", roughness: 0.6, specular: 0.04, shade: inkLevels(0.1, 2, [0.05, 0.05, 0.08]) }]
+
+render {
+  shade: plain()
+}
+spawnPoints [{ id: "start", position [0, 1, 4], yawDegrees: 180 }]
+prototypes {
+  prototype "ink-sphere" {
+    document {
+      schema: "puck.creation.v1"
+      palette: inkPalette
+      shape Sphere "sphere" {
+        position [0, 1, 0]
+        scale [1, 1, 1]
+      }
+    }
+  }
+  prototype "ink-capsule" {
+    document {
+      schema: "puck.creation.v1"
+      palette: inkPalette
+      shape Capsule "capsule" {
+        position [0, 1.5, 0]
+        scale [1, 3, 1]
+      }
+    }
+  }
+  prototype "ink-box" {
+    document {
+      schema: "puck.creation.v1"
+      palette: inkPalette
+      shape Box "box" {
+        position [0, 1, 0]
+        scale [1.6, 1.6, 1.6]
+      }
+    }
+  }
+  prototype "ink-blend" {
+    document {
+      schema: "puck.creation.v1"
+      palette: inkPalette
+      shape Sphere "body" {
+        position [0, 1, 0]
+        scale [1, 1, 1]
+      }
+      shape Sphere "limb" {
+        position [0.9, 1.5, 0]
+        scale [0.6, 0.6, 0.6]
+        blend: "Union"
+        smooth: 0.25
+      }
+    }
+  }
+  prototype "ink-stack" {
+    document {
+      schema: "puck.creation.v1"
+      palette: inkPalette
+      shape Box "plinth" {
+        position [0, 0.4, 0]
+        scale [1.4, 0.8, 1.4]
+      }
+      shape Box "block" {
+        position [0, 1.2, 0]
+        scale [1.4, 0.8, 1.4]
+      }
+    }
+  }
+}
+placements {
+  placement "ink-sphere" {
+    prototype: "ink-sphere"
+    position [-6, 0, -3]
+    solid
+  }
+  placement "ink-capsule" {
+    prototype: "ink-capsule"
+    position [-3, 0, -3]
+    solid
+  }
+  placement "ink-box" {
+    prototype: "ink-box"
+    position [0, 0, -3]
+    solid
+  }
+  placement "ink-blend" {
+    prototype: "ink-blend"
+    position [3, 0, -3]
+    solid
+  }
+  placement "ink-stack" {
+    prototype: "ink-stack"
+    position [6, 0, -3]
+    solid
+  }
+}
