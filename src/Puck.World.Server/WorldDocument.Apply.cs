@@ -788,6 +788,8 @@ public sealed partial class WorldDocument {
             var reloadEdit = ((request.Kind == WorldRebuildKind.Reload) ? NameReloadEdit(candidate: candidate) : null);
 
             if (reloadEdit is { } stateEdit) {
+                candidate = stateEdit.Candidate;
+                installed = candidate;
                 if (Host.KeepsArena(candidate: candidate)) {
                     rebuildArena = Host.Arena;
                     stateKept = ", state kept";

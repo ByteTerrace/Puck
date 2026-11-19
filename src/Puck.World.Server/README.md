@@ -536,9 +536,9 @@ What survives an arena install is decided in one place,
   the installed declarations' own object for every row the source left
   unchanged (`WorldReloadDelta.Share`, decided by the content diff, so a replay
   drive's re-read shares the same rows), and `WorldDocument.NameReloadEdit`
-  seeds again only the rows that are new objects: the live arena stays when
-  none is, and a replacement born with the changed rows carries the rest
-  otherwise. Lattices keep their cells, and a row whose draw pass the source
+  seeds again only the rows whose serialized declaration differs from the
+  installed one: the live arena stays when none does, and a replacement born
+  with the changed rows carries the rest otherwise. Lattices keep their cells, and a row whose draw pass the source
   changed repaints. A reload that changes a part of the state section other
   than its rows, or a section that declares pools, loads whole, as below.
 - **Load** (`world.load`, `world.reset`, a history seek, a

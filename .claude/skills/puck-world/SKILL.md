@@ -503,8 +503,8 @@ bytes and what the install kept of the state; `[world.reload] source` and
 admission, text, diff, reconstruction, admission and install.
 
 **A reload installs as the edit it is.** `WorldDocument.ApplyRebuild` seeds again only
-the state rows the source changed (`WorldDocument.NameReloadEdit`, by row identity on
-the shared candidate) and keeps every other row's live value, the rule latches and the
+the state rows the source changed (`WorldDocument.NameReloadEdit`, comparing each row
+with the installed one by its serialized bytes) and keeps every other row's live value, the rule latches and the
 lattices' cells (`WorldArenaContinuity.Edit`); `world.reset` and `world.load` install
 a document whole. A reload candidate that was not shared by a delta against the
 installed declarations (a replay drive's re-read) is shared at the top of the apply

@@ -118,8 +118,9 @@ while this step was built, so [the checks](#checks) below are owed.
 ### How a reload installs
 
 - **As the edit it is.** `WorldDocument.ApplyRebuild` names the state rows the
-  source changed (`WorldDocument.NameReloadEdit`, by row identity on the
-  shared candidate) and installs a reload as a mutation installs: the live
+  source changed (`WorldDocument.NameReloadEdit`: a row is unchanged when it
+  is the installed object or serializes to the same bytes) and installs a
+  reload as a mutation installs: the live
   arena itself when no row changed, otherwise a replacement born with the
   changed rows that carries every other row's live values
   (`WorldServer.TryPrepareArenaReplacement`), under
@@ -158,14 +159,19 @@ while this step was built, so [the checks](#checks) below are owed.
   `WorldReloadDelta`: a live delta by `TryPrepare`, and any other holder of
   the whole target (a replay drive's re-read, a delta an install overtook) by
   `WorldReloadDelta.Share` at the top of the apply. Both share by the same
-  patch, so a row's identity means "the source did not change this" on a live
-  run and on its replay alike. Determinism rests on that: a recorded reload is
-  a path and a content pin, the replay reads the file again, and it seeds the
-  same rows.
+  patch, so an object's identity means "the source did not change this" on a
+  live run and on its replay alike. What the simulation keeps rests on
+  content directly: `WorldDocument.NameReloadEdit` compares each state row
+  with the installed one, so the rows a reload seeds do not depend on what
+  was shared. A recorded reload is a path and a content pin, the replay reads
+  the file again, and it seeds the same rows.
 - **Where it stops.** A product that reads more of the document than the rows
   it is kept under would stand stale; the keys in the table above are what
   this path trusts. A draw row a document fills at install is filled again by
-  a reload.
+  a reload. Sharing is an economy, never a proof: `WorldDocumentWalker.Share`
+  keeps a list whole when its typed rows and its tree's rows do not line up,
+  as the state rows do not once one of them changes, and what was not shared
+  is derived again.
 
 ### The door the authoring loop asks for
 
@@ -200,7 +206,7 @@ population rebuild.
 | A reload with no state change keeps the arena | The verb answers `state kept` | Headless |
 | An authority in the sender's process reconstructs nothing | `[world.rebuild]` prints `reconstruct=0 ms` | Headless |
 | A reload after a live creation edit installs | `world.row.set creations <id> document.palette[0].color <json>`, then `world.reload` | Headless |
-| A reload that changes one state row seeds that row alone | The verb answers `state rows re-seeded 1 kept N` | Owed |
+| A reload that changes one state row seeds that row alone | The verb answers `state rows re-seeded 1 kept N`, and a cell written in another row reads the same after | Headless |
 | A colour edit bakes nothing | `host.log category sdf.mesh-bake` shows no group begun after the reload | Owed, windowed |
 | A form edit bakes that creation's groups, floor first | The same log names only those groups, and `world.residency`'s floor line counts them before their detail lands | Owed, windowed |
 | A recorded reload reproduces | `puck test --reproduce` over a scenario that reloads mid-run | Owed |
