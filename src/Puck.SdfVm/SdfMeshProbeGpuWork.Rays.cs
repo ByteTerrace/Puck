@@ -387,6 +387,9 @@ internal sealed partial class SdfMeshProbeGpuWork {
             m_structureBackoffScene = null;
             m_structureBackoff = TimeSpan.Zero;
         }
+        // What it retired goes now if no job admitted before it still flies, rather than at the next job's landing, which
+        // a residency nothing renders may never reach.
+        DrainRetired();
     }
     // Retires every bottom neither the published top nor, while the lever is on, the published scene names. Under the
     // gate.
@@ -407,14 +410,24 @@ internal sealed partial class SdfMeshProbeGpuWork {
             _ = m_bottoms.Remove(key: geometry);
         }
     }
-    // What the structures hold, for the volume's memory line.
+    // What the structures hold, for the volume's memory line: every byte still held (retired ones included), the bottoms'
+    // bytes and the triangles they cover, whose ratio is the driver's and compares backends apart from scenes, the top's
+    // bytes, and the ready bottoms kept uncompacted because the driver answered no compacted size.
     private string DescribeStructures() {
         var ready = 0;
+        var uncompacted = 0;
+        var bottomBytes = 0UL;
+        var triangles = 0L;
 
         foreach (var bottom in m_bottoms.Values) {
-            if (bottom.State == BottomState.Ready) { ready++; }
+            if (bottom.State == BottomState.Ready) {
+                ready++;
+                if (bottom.CompactedBytes == 0UL) { uncompacted++; }
+            }
+            bottomBytes += bottom.Structure?.SizeBytes ?? 0UL;
+            if (bottom.Structure is not null) { triangles += bottom.Geometry.Count; }
         }
-        return FormattableString.Invariant($"trace-structures={((m_structures is null) ? "unsupported" : (m_volume.RayQueries ? "on" : "off"))} trace-structure-device-bytes={m_structureBytes} trace-structure-bottoms={m_bottoms.Count} trace-structure-bottoms-ready={ready} trace-structure-top-instances={m_top?.Instances.Length ?? 0} trace-structure-tops-built={m_topsBuilt} trace-structure-retired={m_retired.Count}");
+        return FormattableString.Invariant($"trace-structures={((m_structures is null) ? "unsupported" : (m_volume.RayQueries ? "on" : "off"))} trace-structure-device-bytes={m_structureBytes} trace-structure-bottom-bytes={bottomBytes} trace-structure-bottom-triangles={triangles} trace-structure-top-bytes={m_top?.Structure.SizeBytes ?? 0UL} trace-structure-bottoms={m_bottoms.Count} trace-structure-bottoms-ready={ready} trace-structure-bottoms-uncompacted={uncompacted} trace-structure-top-instances={m_top?.Instances.Length ?? 0} trace-structure-tops-built={m_topsBuilt} trace-structure-retired={m_retired.Count}");
     }
     // Frees every structure the client holds; the service has drained, so no submission reads them.
     private void DisposeStructures() {
