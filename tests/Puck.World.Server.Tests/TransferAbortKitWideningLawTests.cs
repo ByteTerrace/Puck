@@ -94,7 +94,7 @@ public sealed class TransferAbortKitWideningLawTests {
                     Rate: 2.4f,
                     ReferenceSpeed: 4f,
                     Falloff: 0.55f,
-                    PitchRate: 0f
+                    PitchRate: 1f
                 ),
                 Holds: [
                     new WorldHold(
@@ -359,10 +359,8 @@ public sealed class TransferAbortKitWideningLawTests {
 
         Assert.True(condition: programSwitched);
 
-        // DrivePitch — forced directly through the SAME public Pose() a hard teleport/warp already uses (this
-        // kit's own PitchRate is 0, so nothing in ordinary play would move it; a future flying-variant kit would —
-        // see WorldBodyTransferState's own remarks on why this is captured regardless of today's grounded-only
-        // seat kits).
+        // The colliderless kit needs a positive pitch rate to drive while airborne. Pose sets DrivePitch before
+        // throttle and turn exercise the drive accumulators.
         body.Pose(
             position: body.FixedPosition,
             yawRadians: body.FixedYaw,
@@ -446,10 +444,9 @@ public sealed class TransferAbortKitWideningLawTests {
             condition: (capturedState.ChannelTimerTicks[TimedPressOrdinal] > 0),
             userMessage: "the timed press must have a live remaining-ticks countdown"
         );
-        Assert.NotEqual(
-            expected: 0L,
-            actual: capturedState.PlanarRampRemainder | capturedState.DriveLongRemainder | capturedState.DriveLatRemainder | capturedState.DriveResidualRemainder
-        );
+        Assert.NotEqual(expected: 0L, actual: capturedState.DriveLongRemainder);
+        Assert.NotEqual(expected: 0L, actual: capturedState.DriveLatRemainder);
+        Assert.NotEqual(expected: 0L, actual: capturedState.DriveResidualRemainder);
         Assert.True(
             condition: (capturedState.LaneFactHeld[SurgeOrdinal] != 0UL),
             userMessage: "the surge action's OnFact edge (Falling) must be latched held by now"
