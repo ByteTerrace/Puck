@@ -1104,8 +1104,7 @@ remaining reds and the Moth's shin groups share.
   it.
 - [high] [Moving blends](moving-blends.md) steps 4 and 5: paints, insets and
   lanes across a blended seam, then the quiet-window cost of a skinned
-  close-up and a crowd on both backends. Retiring the settle rebake moved to
-  gap 8's step G1.
+  close-up and a crowd on both backends.
 - [medium] The curvature gate refines sharp creases as turns (toes and soles
   about twice over): the samples cannot tell a crease from a fillet narrower
   than a cell. A measured cell whose fine samples are two affine faces takes
