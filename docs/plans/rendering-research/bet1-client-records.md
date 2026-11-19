@@ -93,9 +93,11 @@ is not reproduced, and is the same hole the shortcut has to close.
 
 ## What preparing a view does today
 
-Each frame the package prepares every residency it holds, whether or not
-anything shows it (`SdfWorldPasses.BeginFrame`). The question of whether a
-view stands is asked afterwards and begins with the same preparation,
+Each frame the package prepares the host residency and each residency that
+owes its minimum (`SdfWorldPasses.BeginFrame`), and every other residency
+only for an instance the frame reads (`SdfWorldPasses.PrepareRead`). The
+question of whether a view stands is asked afterwards, of read instances
+only, and begins with the same preparation,
 which runs once a frame (`SdfWorldResidency.IsUnchanged`,
 `SdfWorldResidency.Prepare`). The preparation has three parts.
 

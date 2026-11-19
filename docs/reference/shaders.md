@@ -857,7 +857,14 @@ runs as a fragment with exported outputs, the runtime makes its graph, one pass
 named after the package id running it, and exposes the fragment's declared
 inputs and outputs. The first output is the instance's default. It renders on a
 node like any graph instance; a package without such a fragment is refused by name.
-Before it schedules each frame the runtime asks the package of every instance
+Before it schedules each frame the runtime starts every package's frame
+(`IRenderGraphPackageFactory.BeginFrame`), seals the frame's roots and
+footprints after the captures that start composes (`RenderGraphFrame.Seal`),
+and prepares what the frame reads (`IRenderGraphPackageFactory.PrepareRead`):
+each instance a schedule of the frame could render, by the scheduler's demand
+rules before any refresh or budget (`RenderGraphScheduler.Readers`), visited in
+rounds until a round finds no new reader. It then asks the package of every
+instance the frame reads
 whose inputs stand unchanged and whose graph runs only package passes whether anything it
 renders from changed since its latest render
 (`IRenderGraphPackageFactory.IsUnchanged`), and declares the instances none of
@@ -931,8 +938,11 @@ for the residency however many views read it (its `environment` pass,
 than the map holds and the atmosphere reads the map (a fog in-scattering the
 sky, or a haze); the composite's atmosphere reads the map instead of evaluating
 the sky. At
-the start of each frame the factory starts and prepares every residency it
-holds (`IRenderGraphPackageFactory.BeginFrame`); it answers `IsUnchanged` from
+the start of each frame the factory serves every residency's upkeep, starts its
+frame, and prepares the host residency, whose capture places the cameras, and
+each residency that owes its minimum, meshes arriving or lighting settling
+(`IRenderGraphPackageFactory.BeginFrame`); any other residency is prepared only
+for an instance the frame reads (`IRenderGraphPackageFactory.PrepareRead`). It answers `IsUnchanged` from
 the residency's record of what each view last rendered, and sizes a view's
 counted scratch through `CounterOf` from the view's extent and the residency's
 instance capacity. A pass installs only once its residency has built its

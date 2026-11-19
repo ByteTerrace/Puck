@@ -1431,9 +1431,25 @@ by its fence share is GPU back-pressure, not CPU work.
   and the windows on the way to it, at `WorldPortalVisibility.ArrivalShare` for each world a rendered view leads to
   whose `SdfWorldResidency.MeshesArriving` holds: its bake pending, or its region owing words or their upload. A
   residency's bake samples and its meshes land only in frames that render one of its views: a frame that renders none
-  still prepares it and may pack, which moves what its background work binds. In `world.residency`, a residency
+  still prepares it while it owes its minimum (`SdfWorldResidency.OwesPreparation`) and may pack, which moves what its
+  background work binds. In `world.residency`, a residency
   whose `uploads` stand still while `unbound` in its `gpu-work` counts every pump and `owed` stays above zero is one
   nobody renders. `gpu.faults lose` makes every residency land again, a quick check of that path.
+- **A frame captures only what it reads.** `SdfWorldPasses.BeginFrame` serves every held residency's upkeep
+  (`SdfWorldResidency.Upkeep`), captures the host residency, which places the cameras, and prepares residencies that
+  owe their minimum; the runtime then seals its roots and footprints (`RenderGraphFrame.Seal`) and prepares only the
+  instances `RenderGraphScheduler.Readers` marks (`IRenderGraphPackageFactory.PrepareRead`), in rounds until none is
+  new, and asks `IsUnchanged` of those alone. A scheduled render is always among them, since `Readers` follows every
+  edge `Schedule` passes demand along; a new demand edge in the scheduler goes into `Readers` in the same change, or
+  its producer renders from a residency nobody captured this frame. A graph installed mid-frame still stages late
+  (`SdfWorldResidency.Staged`, counted). `world.counters sdf.captures` reads residencies held against captures run.
+- **A dress walks only what moved.** `SdfMeshDresser.Dress` skips its group walk while the bake's product revision and
+  copy layout revision stand; `SdfMeshPathBake.Replace` (the group list's one writer), Restart's clear, the
+  `Group.Mesh` setter, `ShowOwn` and `FinishReplacements` move the product revision, so a new change to what
+  `FrameAccess` exposes (a group's shown mesh, its tier, the list) moves it through one of them. Rigid copies come
+  through the composition source's copy journal (`SdfFrame.MeshCopyChanges`, a `GpuChangedRows` read by a
+  `GpuRowCursor`), which the dresser and the bake's layout check each read. `sdf.instances.dress.groups-visited`,
+  `.groups-stood` and `.copies-visited` count it.
 - **A program's bake plan is made on its build thread.** The composition
   source hands each program its background build finishes to
   `ISdfFrameSource.ObserveBuilds`, the residency plans it there

@@ -332,6 +332,15 @@ public interface IRenderGraphPackageFactory {
     /// whether an instance is unchanged and before any instance renders.</summary>
     /// <param name="context">The host's frame context of the frame being produced.</param>
     void BeginFrame(in FrameContext context) { }
+    /// <summary>Prepares what an instance one of whose passes runs the factory's package reads this frame (an SDF view's
+    /// captured and packed frame), before the runtime asks whether the instance is unchanged and before the frame is
+    /// scheduled. The runtime calls it on the frame thread once a frame for each instance something reads this frame (a
+    /// root, a same-frame footprint of a read consumer, a buffer or bound input of one), after
+    /// <see cref="BeginFrame"/>, in turn until preparing finds no new reader; an instance nothing reads is neither
+    /// prepared nor asked whether it is unchanged, since no schedule of the frame can render it.</summary>
+    /// <param name="instance">The instance something reads this frame.</param>
+    /// <param name="context">The host's frame context of the frame being produced.</param>
+    void PrepareRead(string instance, in FrameContext context) { }
     /// <summary>Prepares a scheduled render of an instance one of whose passes runs the factory's package: the frame's
     /// shared work its recording reads (an upload, a background pump), done once here so that no node's recording pays
     /// for it. The runtime calls it on the frame thread once the frame is scheduled, for every render the schedule
