@@ -1,15 +1,20 @@
 // Where the debug world's glacier lies and what it is made of: a body of ice lying in a U-shaped trough that runs down a ridge
 // behind the lake and ends at the lake's back shore, so its melt feeds the lake. A library: it emits no document. The ridge,
 // the trough carved in it, the grooves in the trough's floor and the moraine banked along it are the north-west wall's own
-// rock (valley.puck); the ice is a creation lying in the trough. Every piece is placed on the trough's ramp frame:
-// `rampPoint(s, x, n)` is `s` metres up the ramp from the lake's shore, `x` along the ring and `n` off the ramp along its normal.
+// rock (valley.puck); the ice and its meltwater are creations lying in the trough. Every piece is placed on the trough's
+// ramp frame: `rampPoint(s, x, n)` is `s` metres up the ramp from the lake's shore, `x` along the ring and `n` off the ramp
+// along its normal.
 import "../standard/water"
+import "../standard/rig"
 import "valley-form"
 import "water-site"
 
-let rampAngle = 40
-let rampSin = sine(rampAngle * 0.017453292519943295)
-let rampCos = cosine(rampAngle * 0.017453292519943295)
+let degree = 0.017453292519943295
+// The ramp climbs at the ridge's own mean slope, so the trough cut along it stays about as deep under the ridge's top from the
+// lake to the head, and the ice lies in a cradle the whole way rather than standing proud of the ridge's crest.
+let rampAngle = 30
+let rampSin = sine(rampAngle * degree)
+let rampCos = cosine(rampAngle * degree)
 // Where the ramp's foot touches the lake's surface, out from the ring's centre.
 let rampRadial = 474
 function rampPoint(s, x, n) = [
@@ -17,6 +22,8 @@ function rampPoint(s, x, n) = [
   lakeSite.surface + s * rampSin + n * rampCos,
   rampRadial + s * rampCos - n * rampSin
 ]
+// The height off the ramp of the lake's surface at `s`: the ramp runs on under the water below its foot.
+function waterlineAt(s) = 0 - s * rampSin / rampCos
 
 // The ridge behind the lake: a mass the wall's terrain adds beyond the lake's bowl, rising from the rim's height at the bowl's back
 // shore to a crest the glacier's head lies below. Its ellipsoid is the terrain library's own (`terrainMass`).
@@ -37,11 +44,15 @@ function ridgeGround(r, x) = 0 - ridgeHalf * valleySink + ridgeHalf * squareRoot
     ((ridgeCentre - r) / glacierRidge.radial) * ((ridgeCentre - r) / glacierRidge.radial) -
     (x - glacierRidge.offset) / glacierRidge.across * ((x - glacierRidge.offset) / glacierRidge.across)
 )
+// The cosine of the ridge top's climb along the radial at `r` and `x`, from its height a metre either side.
+function ridgeClimbCosine(r, x) = 1 / squareRoot(
+  1 + ((ridgeGround(r + 1, x) - ridgeGround(r - 1, x)) / 2) * ((ridgeGround(r + 1, x) - ridgeGround(r - 1, x)) / 2)
+)
 let valleyRidges = [glacierRidge]
 
-// The ice's cel look (the standard's icePalette under glacierIceStyle): a wide cool shade step, so the lumps' rounded
-// crowns turn from sunlit white-blue to a clear blue shade as a painted glacier does, the flow layer kept as the ice's
-// surface, and no ink.
+// The ice's cel look (the standard's glacierPalette under glacierIceStyle): a wide cool shade step, so the ice's rounded
+// crowns turn from sunlit white-blue to a clear blue shade as a painted glacier does, its weathering kept as the ice's
+// surface, and no ink. The grit row (slot 5) takes the rock's look.
 let glacierIceStyle = celStyle with {
   threshold: 0.3
   softness: 0.25
@@ -54,27 +65,48 @@ let glacierIceStyle = celStyle with {
     outlineTint [1, 1, 1]
   }
 }
-let glacierIcePalette = map(icePalette, row => celMaterial(row, glacierIceStyle))
+let glacierIcePalette = map(glacierPalette, (row, index) => (index == 5) ? celRock(row) : celMaterial(row, glacierIceStyle))
 
-// The wall's rock palette after its own: the trough's polished floor, and the moraine's grey and dark debris.
+// The wall's rock palette after its own: the trough's polished floor, the moraine's debris (a pale grit speckled dark, one
+// material over every heap so no seam shows between them) and a darker rock.
 let wallPalette = [
   celRock({ color: "#94705A", roughness: 0.55, specular: 0.08 })
-  celRock({ color: "#A8876A", roughness: 0.95, specular: 0.02 })
+  celRock({
+    color: "#A8876A"
+    roughness: 0.95
+    specular: 0.02
+    weathering {
+      noise: 0.85
+      scale: 0.55
+      octaves: 2
+      octaveRatio: 2.03
+      octaveGain: 0.534
+      turn [0.2, -0.4, -0.4, 0.8]
+      softness: 0.08
+      floor: 1
+      seed: 23
+      under [{ threshold: 0.6, surface { color: "#6B5242", roughness: 0.95, metal: 0 } }]
+    }
+  })
   celRock({ color: "#6B5242", roughness: 0.95, specular: 0.02 })
 ]
 
 // The trough: the rock cut away along the ramp in a U, `troughHalf` either side of its axis and rounded at the floor by
-// `troughRound`, its cut face the polished floor; and three grooves down its floor that run on to the lake, each
-// { sector, label, position, half, rotation, rounding, material }.
+// `troughRound`, its cut face the polished floor, from just under the lake's surface at the toe to a rounded headwall
+// at `troughHeadS` that closes the cirque the ice fills; and two grooves down its floor that run on to the lake. Each is a
+// `terrainCut` row { sector, label, position, half, rotation, rounding, material }, and the sector's relief stays out of
+// every one (`terrainCarveMask`), so the ice lies on the floor and against the walls the cut puts there.
 let troughHalf = 18
 let troughRound = 14
+let troughFootS = -6
+let troughHeadS = 98
 let valleyCuts = concat(
   [
     {
       sector: "north-west"
       label: "glacier-trough"
-      position: rampPoint(40, 0, 20)
-      half [troughHalf, 20, 56]
+      position: rampPoint((troughFootS + troughHeadS) / 2, 0, 20)
+      half [troughHalf, 20, (troughHeadS - troughFootS) / 2]
       rotation: onSlope(rampCos, 0)
       rounding: troughRound
       material: 1
@@ -84,105 +116,641 @@ let valleyCuts = concat(
     sector: "north-west"
     label: $"glacier-groove-{g}"
     position: rampPoint(46, (g * 2 - 1) * 7.5, 0.6)
-    half [2.4, 2.2, 46]
+    half [2.4, 2.2, 44]
     rotation: onSlope(rampCos, 0)
     rounding: 1.2
     material: 1
   })
 )
-
-// The moraine banked along both lips of the trough: ridges of heaped debris lying on the ridge's top, each
-// { sector, label, position, radii, rotation, material } with its length along the slope.
-let valleyMounds = flatMap(
-  range(0, 2),
-  side => map(range(0, 6), k => {
-    sector: "north-west"
-    label: $"glacier-moraine-{side}-{k}"
-    position [
-      (side * 2 - 1) * (troughHalf + 5 + 2 * siteScatter(k + side * 7, 0.381966)),
-      ridgeGround(484 + 11 * k, (side * 2 - 1) * (troughHalf + 5)) - 0.4,
-      484 + 11 * k
-    ]
-    radii [5 + 2 * siteScatter(k + side * 7, 0.618034), 3.6, 14 + 5 * siteScatter(k + side * 7, 0.754878)]
-    rotation: onSlope(
-      1 / squareRoot(
-        1 +
-          ((ridgeGround(485 + 11 * k, (side * 2 - 1) * (troughHalf + 5)) -
-            ridgeGround(483 + 11 * k, (side * 2 - 1) * (troughHalf + 5))) /
-            2) *
-            ((ridgeGround(485 + 11 * k, (side * 2 - 1) * (troughHalf + 5)) -
-              ridgeGround(483 + 11 * k, (side * 2 - 1) * (troughHalf + 5))) /
-              2)
-      ),
-      8 * (siteScatter(k + side * 7, 0.430159) - 0.5)
+// The height off the ramp of the trough's floor at `x` across: flat in the middle, rising round the floor's rounding to
+// meet the walls at `troughRound`.
+function troughFloorAt(x) = x * x <= (troughHalf - troughRound) * (troughHalf - troughRound) ? 0 : troughRound -
+  squareRoot(
+    maximum(
+      0,
+      troughRound * troughRound -
+        (squareRoot(x * x) - troughHalf + troughRound) * (squareRoot(x * x) - troughHalf + troughRound)
     )
-    material: siteScatter(k + side * 7, 0.236068) > 0.7 ? 3 : 2
-  })
-)
+  )
 
-// The ice: one tongue of overlapped lumps lying in the trough, widest at the head's basin and narrowing to a lobed toe at the
-// lake, its section convex across (the crown stands over the margins). Each lump is { s, x, n, hx, hn, hs, yaw }: its centre
-// `s` up the ramp, `x` across and `n` off it, and its half extents across, off the ramp and along it; its bottom is sunk into
-// the trough's floor. The glacier's origin is its head on the bed, so the toe retreats as the ice shrinks.
-let iceExponent = 2
-let glacierHeadS = 92
-let glacierOrigin = rampPoint(glacierHeadS, 0, 0)
-let iceShape = [
-  { s: 77, x: 2, n: 3.0, hx: 20, hn: 5.5, hs: 15 * 1.45, yaw: 3 }
-  { s: 62, x: -2, n: 4.5, hx: 19.5, hn: 6.5, hs: 20 * 1.45, yaw: -2 }
-  { s: 43, x: 1, n: 5.5, hx: 18.5, hn: 7.0, hs: 19 * 1.45, yaw: 2 }
-  { s: 25, x: -1.5, n: 5.0, hx: 17, hn: 6.5, hs: 18 * 1.45, yaw: -3 }
-  { s: 9, x: 0.5, n: 3.4, hx: 14, hn: 5.0, hs: 13 * 1.45, yaw: 2 }
-  { s: 4, x: -8, n: 2.4, hx: 8, hn: 3.6, hs: 6 * 1.45, yaw: 8 }
-  { s: 2, x: 8.5, n: 2.2, hx: 7.5, hn: 3.4, hs: 6 * 1.45, yaw: -10 }
-]
-// Each lump reaches 1.5 m further into the floor than its crown requires, since the trough floor undulates under the rock relief.
-let iceBody = map(iceShape, l => l with { n: l.n - 1.5, hn: l.hn + 1.5 })
-let glacierLumps = map(iceBody, l => {
-  position: rampPoint(l.s, l.x, l.n)
-  half [l.hx, l.hn, l.hs]
-  cosine: rampCos
-  yaw: l.yaw
-  exponent: iceExponent
-  material: 0
-})
-// The height over the ramp of the ice's crown at ramp distance `s` and `x` across (each lump an ellipsoid, the union their
-// highest), for laying a furrow on it.
-function lumpCrown(l, s, x) = 1 - ((x - l.x) / l.hx) * ((x - l.x) / l.hx) - ((s - l.s) / l.hs) * ((s - l.s) / l.hs) > 0 ?
-  l.n + l.hn * squareRoot(1 - ((x - l.x) / l.hx) * ((x - l.x) / l.hx) - ((s - l.s) / l.hs) * ((s - l.s) / l.hs)) :
-  -100
-function iceCrown(s, x) = reduce(iceBody, -100, (top, l) => maximum(top, lumpCrown(l, s, x)))
-// A furrow from ramp point [s0, x0] to [s1, x1], sunk `d` metres under the crown along it and bowed `bow` = [across, along]
-// at its middle: a tube of `radius` whose middle swells by `bulge`.
-function furrowBetween(p0, p1, bow, d, radius, bulge) = {
-  position: rampPoint(p0[0], p0[1], iceCrown(p0[0], p0[1]) - d)
-  b [
-    (p1[1] - p0[1]) / 2 + 2 * bow[0],
-    2 * (iceCrown((p0[0] + p1[0]) / 2, (p0[1] + p1[1]) / 2) - iceCrown(p0[0], p0[1])) - (iceCrown(p1[0], p1[1]) - iceCrown(p0[0], p0[1])) / 2,
-    (p1[0] - p0[0]) / 2 + 2 * bow[1]
-  ]
-  c [p1[1] - p0[1], iceCrown(p1[0], p1[1]) - iceCrown(p0[0], p0[1]), p1[0] - p0[0]]
-  cosine: rampCos
-  yaw: 0
-  radius: radius
-  bulge: bulge
+// The lateral moraines banked along both lips of the trough: heaped debris on the ridge's top, a crest of big rounded heaps
+// and an inner row of smaller ones on the slope toward the ice, each a rock of its own size, yaw and lean, all one grit, with
+// blocky boulders strewn over both. Each is { sector, label, position, radii, exponent, rotation, material } with its length
+// along the slope, a superellipsoid of `exponent` (2 a rounded heap, more a squarer boulder).
+function moraineHeap(label, k, r, x, radii, exponent = 2) = {
+  sector: "north-west"
+  label: label
+  position [x, ridgeGround(r, x) - 0.45 * radii[1], r]
+  radii: radii
+  exponent: exponent
+  rotation: turnAfter(
+    onSlope(ridgeClimbCosine(r, x), 50 * (siteScatter(k, 0.430159) - 0.5)),
+    turnAbout([0, 0, 1], 24 * (siteScatter(k, 0.896491) - 0.5))
+  )
   material: 2
 }
-// Crevasses open across the ice in belts where the bed steepens, each an arc bowed down-glacier (from [s, x] to [s, x]), and a
-// melt channel winds down the ice's right side to the toe.
-let glacierFurrows = concat(
-  map(
+let valleyMounds = flatMap(
+  range(0, 2),
+  side => concat(
+    map(range(0, 15), k => moraineHeap(
+      $"glacier-moraine-{side}-{k}",
+      k + side * 31,
+      474 + 6 * k + 2 * siteScatter(k + side * 31, 0.569840),
+      (side * 2 - 1) * (troughHalf + 5.5 + 2.5 * siteScatter(k + side * 31, 0.381966)),
+      [
+        3 + 2.2 * siteScatter(k + side * 31, 0.618034)
+        2.2 + 1.4 * siteScatter(k + side * 31, 0.236068)
+        3.6 + 2.4 * siteScatter(k + side * 31, 0.754878)
+      ]
+    )),
+    map(range(0, 14), k => moraineHeap(
+      $"glacier-moraine-inner-{side}-{k}",
+      k + side * 31 + 17,
+      477 + 6 * k + 2 * siteScatter(k + side * 31 + 17, 0.569840),
+      (side * 2 - 1) * (troughHalf + 2.2 + 1.2 * siteScatter(k + side * 31 + 17, 0.381966)),
+      [
+        1.6 + 1.2 * siteScatter(k + side * 31 + 17, 0.618034)
+        1.4 + 0.9 * siteScatter(k + side * 31 + 17, 0.236068)
+        2.2 + 1.6 * siteScatter(k + side * 31 + 17, 0.754878)
+      ]
+    )),
+    map(range(0, 22), k => moraineHeap(
+      $"glacier-moraine-boulder-{side}-{k}",
+      k + side * 31 + 41,
+      474 + 4 * k + 3 * siteScatter(k + side * 31 + 41, 0.569840),
+      (side * 2 - 1) * (troughHalf + 1.2 + 9 * siteScatter(k + side * 31 + 41, 0.381966)),
+      [
+        0.7 + 0.8 * siteScatter(k + side * 31 + 41, 0.618034)
+        0.6 + 0.5 * siteScatter(k + side * 31 + 41, 0.236068)
+        0.8 + 0.9 * siteScatter(k + side * 31 + 41, 0.754878)
+      ],
+      3.5
+    ))
+  )
+)
+
+// The ice, after the references (docs/game/art/caldera-water-pack panel 2, and the glacier references its guide names): one
+// convex tongue, widest in its basin under the head wall and narrowing down the ramp to a lobed toe that stands in the lake.
+// Its crest stands proud of the moraine's lips the whole way; its margins come down onto the trough's floor, where a band of
+// grit lies along the foot of the ice. The surface is a run of arcs across the flow, each bowed down-glacier at its middle
+// (concave up-glacier, as transverse ogives and crevasses lie), merged into one body: low blue risers on the tongue, a steep
+// icefall where the ice bends over the break of slope, its rows opening into slots that splay up-glacier at the margins,
+// and a snowfield névé that climbs into the head wall and feathers over its lip onto the ridge. Snow lies as a lens on every
+// up-facing plane, thinning to nothing before its edges, so the risers, bevels and slots stay blue; a moraine stripe of grit
+// runs down the flow. A slot is carved in layers, a pale lip over deeper blue walls and a cobalt bottom; the toe is
+// scalloped where the water laps it, wet and dark at the waterline, with a portal at its foot and a melt channel down the
+// tongue that falls into the lake, both churning the water where they meet it (the meltwater is a creation of its own,
+// smooth where the ice's relief melts every other surface into one irregular skin).
+//
+// The cross-section's crest, its margin and its half width are piecewise linear in `s`, each a list of [s, value].
+let iceHalfWidths = [[-8, 10.5], [0, 11.2], [15, 12.6], [35, 14.4], [50, 15.8], [62, 17], [75, 17.8], [100, 17.8]]
+let iceCrests = [
+  [-8, 7], [-3, 8.5], [3, 11.5], [12, 14.2], [25, 16.4], [44, 17.8], [50, 18.4], [64, 21], [72, 20], [84, 16.6], [
+    94, 13.3
+  ],
+  [100, 12.6]
+]
+let iceMargins = [[-8, 3], [0, 4.5], [15, 7.5], [35, 9.5], [50, 11], [62, 12.2], [75, 12.6], [100, 11]]
+function profileAt(points, s) = reduce(
+  range(0, length(points) - 1),
+  points[0][1],
+  (value, i) => s > points[i][0] ? points[i][1] +
+    (points[i + 1][1] - points[i][1]) * minimum(1, (s - points[i][0]) / (points[i + 1][0] - points[i][0])) : value
+)
+function iceHalfWidthAt(s) = profileAt(iceHalfWidths, s)
+// The height off the ramp of the ice's surface at `s` and `x` across: a parabola from the margin up to the crest.
+function iceSurfaceAt(s, x) = profileAt(iceMargins, s) +
+  (profileAt(iceCrests, s) - profileAt(iceMargins, s)) *
+    (1 - minimum(1, x * x / (iceHalfWidthAt(s) * iceHalfWidthAt(s))))
+// Its slope across the flow, d(height)/dx.
+function iceSurfaceSlope(s, x) = 0 - 2 * (profileAt(iceCrests, s) - profileAt(iceMargins, s)) * maximum(
+  0 - iceHalfWidthAt(s),
+  minimum(iceHalfWidthAt(s), x)
+) / (iceHalfWidthAt(s) * iceHalfWidthAt(s))
+
+let glacierHeadS = troughHeadS - 4
+let glacierOrigin = rampPoint(glacierHeadS, 0, 0)
+// Every mass bottoms out `iceBed` under the trough's floor, so the ice is held by the rock wherever it meets it.
+let iceBed = -3
+// How far neighbouring segments of a row overlap, so a row is one body with no seam between its blocks.
+let iceSeam = 1.6
+// How far a core stands inside the slab over it, so a slot's lower walls step in under a lip.
+let iceInset = 0.35
+// A snow lens: its half thickness, a superellipsoid's, which leaves a flat-topped dome thinning to nothing at its rim.
+let snowDepth = 1.4
+// The bend's sense: a positive bend moves a segment's ends this way along its local X (up the ramp).
+let bendSense = 1
+// Where the moraine stripe runs across the flow, and how far it stands over the ice.
+let stripeX = -3.4
+// The local frame of an ice segment: X runs up the ramp (its depth along the flow), Y across (its length, which the bend
+// arcs) and Z off the ramp (its height): a third of a turn about (1, 1, 1) backwards from the slope's own frame.
+let iceFrameTurn = [-0.5, -0.5, -0.5, 0.5]
+// A segment's turn: rolled across by the tangent `rollTangent` (its top following the section's crown), yawed by the
+// tangent `yawTangent` (its length following its row's arc) and tipped back so its top climbs at `tilt` degrees.
+function segmentTurn(tilt, yawTangent, rollTangent) = turnAfter(
+  turnAbout([1, 0, 0], 0 - tilt),
+  turnAfter(turnByTangent([0, 1, 0], yawTangent), turnAfter(turnByTangent([0, 0, 1], rollTangent), iceFrameTurn))
+)
+
+// The rows across the flow, from the toe to the head of the icefall. Each is { s, hz, tilt, sag, cuts, core, band, snow,
+// rise, round, stripe, bow, lead, waterline }: its middle `s` up the ramp; its half depth `hz` along the flow; the climb
+// `tilt` (degrees) of its tops, flatter than the surface so each top's down-glacier edge stands as a blue riser; how far
+// `sag` its margins lie up-glacier of its middle (the arc); its `cuts` across, as fractions of the half width, the outer
+// ones reaching into the trough's walls; its slab's thickness `band` over a core of material `core` (-1: no core, the slab
+// reaching the bed), or with `waterline` the slab ending over the lake's surface; the snow lens's share `snow` of each top
+// across, `snowAlong` of it along, how far `snowShift` it sits down-glacier of the top's middle (both as shares of the
+// half depth, so a lens lies on the strip of top the next row up leaves showing) and its `rise` over the top; its bevel
+// `round`; whether the moraine `stripe` crosses it; and per segment its own `bow` (the sag of a lobe) and `lead`
+// down-glacier.
+let toeRow = {
+  s: 0.6
+  hz: 4
+  tilt: 37
+  sag: 0
+  cuts [-1.12, -0.34, 0.38, 1.12]
+  core: 6
+  band: 0
+  snow: 0.78
+  snowAlong: 0.62
+  snowShift: -0.15
+  rise: 0.3
+  round: 1.6
+  stripe: 0
+  bow [2.4, 3.0, 2.2]
+  lead [0.8, -0.8, 0.5]
+  waterline: 1
+}
+function tongueRow(s, hz, tilt, sag, cuts, snow) = {
+  s: s
+  hz: hz
+  tilt: tilt
+  sag: sag
+  cuts: cuts
+  core: -1
+  band: 0
+  snow: snow
+  snowAlong: 0.72
+  snowShift: -0.24
+  rise: 0.35
+  round: 0.7
+  stripe: 1
+  bow: map(range(0, length(cuts) - 1), j => 0)
+  lead: map(range(0, length(cuts) - 1), j => 0)
+  waterline: 0
+}
+function icefallRow(s, hz, tilt, sag, cuts) = tongueRow(s, hz, tilt, sag, cuts, 0.9) with {
+  core: 3
+  band: 3
+  snowAlong: 0.82
+  snowShift: 0
+  rise: 0.45
+  round: 0.8
+}
+let iceRows = [
+  toeRow
+  tongueRow(4.8, 4.4, 27, 1.6, [-1.12, -0.3, 0.42, 1.12], 0.8)
+  tongueRow(11, 4.2, 25, 2.0, [-1.12, -0.45, 0.2, 1.12], 0.82)
+  tongueRow(17.5, 4.3, 24, 2.3, [-1.12, -0.1, 1.12], 0.84)
+  tongueRow(24, 4.2, 25, 2.6, [-1.12, -0.5, 0.3, 1.12], 0.86)
+  tongueRow(30.5, 4.3, 24, 2.8, [-1.12, 0.05, 1.12], 0.86)
+  tongueRow(37, 4.2, 25, 3.0, [-1.12, -0.35, 0.5, 1.12], 0.88)
+  tongueRow(43.5, 4.0, 23, 3.2, [-1.12, -0.6, 0.1, 1.12], 0.88)
+  icefallRow(49.6, 2.3, 14, 3.8, [-1.12, -0.2, 1.12])
+  icefallRow(54.8, 2.2, 13, 4.0, [-1.12, -0.55, 0.3, 1.12])
+  icefallRow(60, 2.3, 14, 4.2, [-1.12, 0.15, 1.12])
+  icefallRow(65.2, 2.4, 15, 4.0, [-1.12, -0.4, 0.45, 1.12])
+  icefallRow(71, 3.2, 18, 3.0, [-1.1, -0.1, 1.1]) with { snow: 0.94 }
+]
+// Segment `j` of row `i`: `k` numbers it for its scatter.
+function iceSegment(row, i, j) = iceSegmentAcross(
+  row,
+  i * 7 + j,
+  j,
+  iceHalfWidthAt(row.s),
+  row.cuts[j] * iceHalfWidthAt(row.s),
+  row.cuts[j + 1] * iceHalfWidthAt(row.s)
+)
+function iceSegmentAcross(row, k, j, w, a, b) = iceSegmentAlong(row, k, j, w, (a + b) / 2, (b - a) / 2 + iceSeam / 2)
+function iceSegmentAlong(row, k, j, w, xc, hx) = iceSegmentTipped(
+  row,
+  k,
+  xc,
+  hx,
+  row.s + row.sag * (xc / w) * (xc / w) + row.lead[j] + 1.2 * (siteScatter(k, 0.145898) - 0.5),
+  row.hz * (0.88 + 0.24 * siteScatter(k, 0.236068)),
+  row.tilt + 6 * (siteScatter(k, 0.381966) - 0.5),
+  0 - 2 * row.sag * xc / (w * w) + 0.08 * (siteScatter(k, 0.754878) - 0.5),
+  row.sag / (w * w) + row.bow[j] / (hx * hx)
+)
+function iceSegmentTipped(row, k, xc, hx, s, hz, tilt, yawTangent, bend) = iceSegmentTopped(
+  row,
+  k,
+  xc,
+  hx,
+  s,
+  hz,
+  bend,
+  iceSurfaceAt(s, xc) + 1.0 * (siteScatter(k, 0.618034) - 0.5),
+  segmentTurn(tilt, yawTangent, iceSurfaceSlope(s, xc))
+)
+function iceSegmentTopped(row, k, xc, hx, s, hz, bend, top, q) = iceSegmentBanded(
+  row,
+  k,
+  xc,
+  hx,
+  s,
+  hz,
+  bend,
+  top,
+  q,
+  row.core < 0 ? top - iceBed + 2 : (row.waterline > 0 ? top - waterlineAt(s - hz) - 1.3 : row.band)
+)
+function iceSegmentBanded(row, k, xc, hx, s, hz, bend, top, q, band) = {
+  row: row
+  k: k
+  x: xc
+  hx: hx
+  s: s
+  hz: hz
+  bend: bend
+  top: top
+  q: q
+  band: band
+  round: minimum(row.round, minimum(band / 2 - 0.05, minimum(hz, hx) - 0.05))
+  point: rampPoint(s, xc, top)
+  up: turnedBy(q, [0, 0, 1])
+  along: turnedBy(q, [1, 0, 0])
+  across: turnedBy(q, [0, 1, 0])
+}
+let iceSegments = flatMap(
+  range(0, length(iceRows)),
+  i => map(range(0, length(iceRows[i].cuts) - 1), j => iceSegment(iceRows[i], i, j))
+)
+
+// A point `d` along a segment's own axis `axis` from its top's middle.
+function segmentOffset(g, axis, d) = [g.point[0] + axis[0] * d, g.point[1] + axis[1] * d, g.point[2] + axis[2] * d]
+// A point off a segment's top's middle by `a` along its flow, `y` across and `u` up, the bend carrying it along with the
+// surface it lies on.
+function segmentPoint(g, a, y, u) = [
+  g.point[0] + g.along[0] * (a + bendSense * g.bend * y * y) + g.across[0] * y + g.up[0] * u,
+  g.point[1] + g.along[1] * (a + bendSense * g.bend * y * y) + g.across[1] * y + g.up[1] * u,
+  g.point[2] + g.along[2] * (a + bendSense * g.bend * y * y) + g.across[2] * y + g.up[2] * u
+]
+// The slab: the ice from the top down `band`.
+function segmentSlab(g) = {
+  type: "Box"
+  name: $"ice-slab-{g.k}"
+  material: 0
+  rounding: g.round
+  bend: g.bend
+  position: segmentOffset(g, g.up, 0 - g.band / 2)
+  rotation: g.q
+  scale [g.hz, g.hx, g.band / 2]
+}
+// The core under a slab, inset so the slab's edges overhang it: the deep ice a slot's lower walls show, or the wet band
+// at the toe's waterline.
+function segmentCore(g) = segmentCoreSized(g, (g.top - g.band - iceBed) / 2 + 1)
+function segmentCoreSized(g, half) = {
+  type: "Box"
+  name: $"ice-core-{g.k}"
+  material: g.row.core
+  rounding: 0.8
+  bend: g.bend
+  position: segmentOffset(g, g.up, 0 - g.band - half)
+  rotation: g.q
+  scale [g.hz - iceInset, g.hx - iceInset, half]
+}
+// The snow lens on a top: a flat dome inside the bevels, rising `rise` over the top and meeting it in a rim pushed in and
+// out by a few bumps, so no two lenses share an outline.
+function segmentSnow(g) = segmentSnowSized(g, g.hz * g.row.snowAlong, (g.hx - g.round) * g.row.snow)
+function segmentSnowSized(g, along, across) = {
+  type: "Superellipsoid"
+  name: $"ice-snow-{g.k}"
+  material: 1
+  exponent: 3
+  bend: g.bend
+  position: segmentPoint(g, g.row.snowShift * g.hz, 0, g.row.rise - snowDepth)
+  rotation: g.q
+  scale [along, across, snowDepth]
+  bumps: map(range(0, 3), b => {
+    center [
+      along * 0.8 * cosine((120 * b + 360 * siteScatter(g.k * 3 + b, 0.618034)) * degree)
+      across * 0.8 * sine((120 * b + 360 * siteScatter(g.k * 3 + b, 0.618034)) * degree)
+      snowDepth - g.row.rise
+    ]
+    radii [1.2 + siteScatter(g.k * 3 + b, 0.381966), 1.8 + 1.5 * siteScatter(g.k * 3 + b, 0.754878), 0.8]
+    push [
+      (siteScatter(g.k * 3 + b, 0.236068) > 0.5 ? 0.45 : -0.45) *
+        cosine((120 * b + 360 * siteScatter(g.k * 3 + b, 0.618034)) * degree),
+      (siteScatter(g.k * 3 + b, 0.236068) > 0.5 ? 0.45 : -0.45) *
+        sine((120 * b + 360 * siteScatter(g.k * 3 + b, 0.618034)) * degree)
+      0
+    ]
+  })
+}
+// The moraine stripe where it crosses a segment: a band of grit lying on its top along the flow, standing over the snow, and
+// draped down its riser, so the stripe runs on unbroken down the tongue.
+function segmentStripe(g) = segmentStripeAt(g, stripeX - g.x, 0.75 + 0.25 * siteScatter(g.k, 0.569840))
+function segmentStripeAt(g, y, width) = [
+  {
+    type: "Superellipsoid"
+    name: $"ice-stripe-{g.k}"
+    material: 5
+    exponent: 2.5
+    position: segmentPoint(g, 0, y, g.row.rise + 0.12 - 0.9)
+    rotation: g.q
+    scale [g.hz * 0.96, width, 0.9]
+  }
+  {
+    type: "Superellipsoid"
+    name: $"ice-stripe-riser-{g.k}"
+    material: 5
+    exponent: 2.5
+    position: segmentPoint(g, 0.6 - 0.15 - g.hz, y, -1.1)
+    rotation: g.q
+    scale [0.6, width, 1.4]
+  }
+]
+function stripeCrosses(g) = g.row.stripe > 0 and (stripeX - g.x) * (stripeX - g.x) < (g.hx - 1) * (g.hx - 1)
+let segmentShapes = concat(
+  map(iceSegments, g => segmentSlab(g)),
+  map(filter(iceSegments, g => g.row.core >= 0), g => segmentCore(g)),
+  map(filter(iceSegments, g => g.row.snow > 0), g => segmentSnow(g)),
+  flatMap(filter(iceSegments, g => stripeCrosses(g)), g => segmentStripe(g))
+)
+
+// The névé: a snowfield filling the basin from the head of the icefall to the head wall, its top a plane climbing at
+// `neveTilt` (the ridge's own climb above the wall, so the snow runs on into it), rounded down at its margins onto the lips;
+// and an apron that carries it over the wall's lip and up the ridge, thinning to nothing where the rock's relief breaks it.
+// Its lower edge runs in among the icefall's top rows, whose seracs break through it.
+let neveTilt = 13
+let neveTop = rampPoint(85, 0, 14.6)
+let neveUp = [0, cosine(neveTilt * degree), 0 - sine(neveTilt * degree)]
+let apronTop = [0, ridgeGround(557, 0) + 0.45, 557]
+let apronUp = [0, cosine(12 * degree), 0 - sine(12 * degree)]
+let neveShapes = [
+  {
+    type: "Superellipsoid"
+    name: "neve"
+    material: 1
+    exponent: 2.6
+    position [neveTop[0] - neveUp[0] * 6, neveTop[1] - neveUp[1] * 6, neveTop[2] - neveUp[2] * 6]
+    rotation: onSlope(cosine(neveTilt * degree), 0)
+    scale [18.6, 6, 19]
+    bumps [
+      { center [-8, 6, -5], radii [6, 3, 7], push [0, 0.7, 0] }
+      { center [7, 6, 3], radii [5, 3, 6], push [0, -0.5, 0] }
+      { center [-2, 6, 11], radii [7, 3, 5], push [0, 0.6, 0] }
+    ]
+  }
+  {
+    type: "Superellipsoid"
+    name: "neve-apron"
+    material: 1
+    exponent: 2.3
+    position [apronTop[0] - apronUp[0] * 1.6, apronTop[1] - apronUp[1] * 1.6, apronTop[2] - apronUp[2] * 1.6]
+    rotation: onSlope(cosine(12 * degree), 0)
+    scale [15, 1.6, 8]
+  }
+]
+// The bed ice under the icefall: a slab whose top is the cobalt floor of every slot between its rows.
+let iceBedTop = 12
+let iceBedShape = {
+  type: "Box"
+  name: "ice-bed"
+  material: 2
+  rounding: 0.5
+  position: rampPoint(57.5, 0, (iceBed + iceBedTop) / 2)
+  rotation: onSlope(rampCos, 0)
+  scale [14.5, (iceBedTop - iceBed) / 2, 10.5]
+}
+
+// Grit where the ice meets rock: low heaps along the foot of each margin on the trough's floor, half over the ice's
+// edge, and along the lips where the basin's ice laps the rim.
+let gritShapes = flatMap(
+  range(0, 2),
+  side => concat(
+    map(range(0, 14), k => gritHeap(
+      $"grit-{side}-{k}",
+      k + side * 17,
+      -2.5 + 5 * k,
+      (side * 2 - 1) * (iceHalfWidthAt(-2.5 + 5 * k) + 0.4),
+      (side * 2 - 1) * 6
+    )),
+    map(range(0, 5), k => {
+      type: "Superellipsoid"
+      name: $"grit-lip-{side}-{k}"
+      material: 5
+      exponent: 2.2
+      position [
+        (side * 2 - 1) * 18.5
+        ridgeGround(rampPoint(66 + 7 * k, 0, 12.5)[2], 18.5) + 0.15
+        rampPoint(66 + 7 * k, 0, 12.5)[2]
+      ]
+      rotation: onSlope(ridgeClimbCosine(rampPoint(66 + 7 * k, 0, 12.5)[2], 18.5), (side * 2 - 1) * 4)
+      scale [1.4 + 0.4 * siteScatter(k + side * 5, 0.618034), 0.9, 4 + siteScatter(k + side * 5, 0.381966)]
+    })
+  )
+)
+function gritHeap(name, k, s, x, yaw) = {
+  type: "Superellipsoid"
+  name: name
+  material: 5
+  exponent: 2.2
+  position: rampPoint(s + 1.2 * (siteScatter(k, 0.145898) - 0.5), x, troughFloorAt(x) + 0.1)
+  rotation: onSlope(rampCos, yaw + 10 * (siteScatter(k, 0.430159) - 0.5))
+  scale [
+    1.5 + 0.5 * siteScatter(k, 0.618034)
+    0.8 + 0.3 * siteScatter(k, 0.236068)
+    4.4 + 1.0 * siteScatter(k, 0.754878)
+  ]
+}
+
+// The slots carved in the ice. A slot runs from [s, x] to [s, x], bowed `bow` metres down-glacier at its middle and
+// `swing` metres across, carved in `layers`, each { depth, radius, bulge, material }: a tube centred `depth` under the
+// ice's surface that swells by `bulge` at its middle and closes at its ends, so the slot opens as a lens.
+let slotLayers = [
+  { depth: 0.1, radius: 1.0, bulge: 0.6, material: 4 }
+  { depth: 1.4, radius: 0.55, bulge: 0.5, material: 3 }
+  { depth: 2.8, radius: 0.35, bulge: 0.35, material: 2 }
+]
+let splayLayers = [
+  { depth: 0.1, radius: 0.7, bulge: 0.4, material: 4 }
+  { depth: 1.1, radius: 0.4, bulge: 0.3, material: 3 }
+  { depth: 2.0, radius: 0.28, bulge: 0.2, material: 2 }
+]
+let schrundLayers = [
+  { depth: 0.1, radius: 1.2, bulge: 0.8, material: 4 }
+  { depth: 1.6, radius: 0.7, bulge: 0.6, material: 3 }
+  { depth: 3.2, radius: 0.45, bulge: 0.4, material: 2 }
+]
+function iceSlot(name, p0, p1, bow, swing, layers) = map(
+  range(0, length(layers)),
+  i => iceTube(
+    $"{name}-{i}",
+    layers[i],
+    [p0[1], iceSurfaceAt(p0[0], p0[1]) - layers[i].depth, p0[0]],
     [
-      { p0 [22, -9], p1 [25, 5], bow [0, -2.5], radius: 1.2 }
-      { p0 [31, -2], p1 [29, 6], bow [0, -1.5], radius: 1.0 }
-      { p0 [47, -14], p1 [50, -1], bow [0, -3], radius: 1.5 }
-      { p0 [51, 3], p1 [46, 15], bow [0, -2.5], radius: 1.3 }
-      { p0 [57, -11], p1 [61, 4], bow [0, -3.5], radius: 1.6 }
-      { p0 [66, -6], p1 [65, 12], bow [0, -2], radius: 1.1 }
-      { p0 [75, -12], p1 [78, -1], bow [0, -2.5], radius: 1.4 }
-      { p0 [83, 2], p1 [81, 13], bow [0, -2], radius: 1.0 }
+      (p0[1] + p1[1]) / 2 + swing
+      iceSurfaceAt((p0[0] + p1[0]) / 2 - bow, (p0[1] + p1[1]) / 2 + swing) - layers[i].depth,
+      (p0[0] + p1[0]) / 2 - bow
     ],
-    f => furrowBetween(f.p0, f.p1, f.bow, 0.3, 0.35, f.radius * 1.4)
-  ),
-  [furrowBetween([44, 9], [4, 10], [3, 0], 0.5, 0.3, 0.9)]
+    [p1[1], iceSurfaceAt(p1[0], p1[1]) - layers[i].depth, p1[0]]
+  )
+)
+// A tube through the points `a`, `m` (its middle) and `c`, each [x, n, s] in the ramp frame.
+function iceTube(name, layer, a, m, c) = {
+  type: "Sweep"
+  name: name
+  blend: "Subtraction"
+  material: layer.material
+  position: rampPoint(a[2], a[0], a[1])
+  rotation: onSlope(rampCos, 0)
+  curve {
+    a [0, 0, 0]
+    b [
+      2 * (m[0] - a[0]) - (c[0] - a[0]) / 2
+      2 * (m[1] - a[1]) - (c[1] - a[1]) / 2
+      2 * (m[2] - a[2]) - (c[2] - a[2]) / 2
+    ]
+    c [c[0] - a[0], c[1] - a[1], c[2] - a[2]]
+    radiusStart: layer.radius
+    radiusEnd: layer.radius
+    bulge: layer.bulge
+  }
+}
+// Splaying crevasses: short slots running in from each margin of the tongue and down-glacier toward its middle.
+let splaySlots = flatMap(
+  range(0, 2),
+  side => flatMap(range(0, 6), k => iceSlot(
+    $"splay-{side}-{k}",
+    [
+      9 + 6.2 * k + 1.5 * siteScatter(k + side * 7, 0.618034),
+      (side * 2 - 1) * (iceHalfWidthAt(9 + 6.2 * k) - 0.3)
+    ],
+    [
+      5.8 + 6.2 * k + 1.5 * siteScatter(k + side * 7, 0.618034),
+      (side * 2 - 1) * (iceHalfWidthAt(9 + 6.2 * k) - 5.5 - 2 * siteScatter(k + side * 7, 0.381966))
+    ],
+    0.5,
+    0,
+    splayLayers
+  ))
+)
+// The névé's crevasses where it bends over into the icefall, concave up-glacier, and the bergschrund under the head wall,
+// convex up-glacier as the wall curves round the cirque.
+let neveSlots = concat(
+  iceSlot("neve-0", [76.5, -15], [76.8, 2], 1.6, 0, slotLayers),
+  iceSlot("neve-1", [79, -6], [79.5, 13.5], 1.8, 0, slotLayers),
+  iceSlot("neve-2", [82.6, -13], [82, -1], 1.0, 0, splayLayers),
+  iceSlot("neve-3", [84.8, 4], [85.2, 15], 1.0, 0, splayLayers),
+  iceSlot("bergschrund", [91, -15.5], [91, 15.5], -4.5, 0, schrundLayers)
+)
+
+// The toe: scallops melted out of each lobe's front at the waterline, and a portal at its foot where the meltwater leaves.
+let toeSegments = filter(iceSegments, g => g.row.waterline > 0)
+let toeScallops = flatMap(toeSegments, g => map(range(0, 2), b => toeScallop(g, b, (b * 2 - 1) * 0.45 * g.hx)))
+function toeScallop(g, b, y) = toeScallopAt(g, b, y, g.s - g.hz + 0.5 + bendSense * g.bend * y * y)
+function toeScallopAt(g, b, y, s) = {
+  type: "Sphere"
+  name: $"toe-scallop-{g.k}-{b}"
+  blend: "SmoothSubtraction"
+  smooth: 0.4
+  material: 6
+  position: rampPoint(s, g.x + y, waterlineAt(s) + 0.7)
+  scale [
+    1.7 + 0.8 * siteScatter(g.k * 2 + b, 0.618034)
+    1.7 + 0.8 * siteScatter(g.k * 2 + b, 0.618034)
+    1.7 + 0.8 * siteScatter(g.k * 2 + b, 0.618034)
+  ]
+}
+let portalS = -3
+let portalX = -4.6
+let toePortal = {
+  type: "Ellipsoid"
+  name: "toe-portal"
+  blend: "Subtraction"
+  material: 2
+  position: rampPoint(portalS, portalX, waterlineAt(portalS) + 0.1)
+  scale [2.3, 2.9, 4.5]
+}
+// The melt channel: a smooth groove down the tongue's right side, through each riser and over the toe's front into the
+// lake. `meltPath` is its course, [s, x] down the tongue to the toe's lip, then its fall to the water.
+let meltPath = [[34, 6.2], [21, 4.8], [8, 7], [1.2, 7.6]]
+let meltFoot = [-5.4, 7.8]
+let meltGroove = { depth: 0.2, radius: 1.15, bulge: 0, material: 6 }
+let meltWater = { depth: 1.05, radius: 0.5, bulge: 0, material: 0 }
+function meltCourse(name, layer) = concat(
+  flatMap(range(0, length(meltPath) - 1), i => iceSlot(
+    $"{name}-{i}",
+    meltPath[i],
+    meltPath[i + 1],
+    0,
+    (i % 2 * 2 - 1) * 0.8,
+    [layer]
+  )),
+  [
+    iceTube(
+      $"{name}-fall",
+      layer,
+      [
+        meltPath[length(meltPath) - 1][1]
+        iceSurfaceAt(meltPath[length(meltPath) - 1][0], meltPath[length(meltPath) - 1][1]) - layer.depth
+        meltPath[length(meltPath) - 1][0]
+      ],
+      [(meltPath[length(meltPath) - 1][1] + meltFoot[1]) / 2, 5.4 - layer.depth, -3.4],
+      [meltFoot[1], waterlineAt(meltFoot[0]) - layer.depth, meltFoot[0]]
+    )
+  ]
+)
+let glacierShapes = concat(
+  [iceBedShape],
+  segmentShapes,
+  neveShapes,
+  gritShapes,
+  splaySlots,
+  neveSlots,
+  toeScallops,
+  [toePortal],
+  meltCourse("melt-groove", meltGroove)
+)
+// The ice's relief: a low fBm that melts every face, edge and slot of the masses into one irregular skin.
+let glacierRelief = {
+  frequency: 0.18
+  amplitude: 0.45
+  octaves: 3
+  gain: 0.5
+  lacunarity: 2.1
+  seed: 41
+}
+
+// The meltwater: the channel's water, the same course lying in its groove and running over the toe into the lake, and the
+// churn where it and the portal's outflow meet the lake, foam lying on the water with a few clots standing in it.
+function churn(name, s, x) = concat(
+  [
+    {
+      type: "Superellipsoid"
+      name: name
+      material: 1
+      exponent: 2.2
+      position [x, lakeSite.surface - 0.45, rampPoint(s, x, waterlineAt(s))[2]]
+      scale [3, 0.6, 2.6]
+    }
+  ],
+  map(range(0, 4), k => {
+    type: "Ellipsoid"
+    name: $"{name}-clot-{k}"
+    material: 1
+    position [
+      x + 2.2 * cosine(90 * k * degree + 40 * siteScatter(k, 0.618034) * degree)
+      lakeSite.surface - 0.15
+      rampPoint(s, x, waterlineAt(s))[2] + 1.8 * sine(90 * k * degree + 40 * siteScatter(k, 0.618034) * degree)
+    ]
+    scale [0.5 + 0.3 * siteScatter(k, 0.381966), 0.45, 0.45 + 0.3 * siteScatter(k, 0.754878)]
+  })
+)
+let meltShapes = concat(
+  map(meltCourse("melt-water", meltWater), shape => shape with { blend: "Union" }),
+  churn("churn-fall", meltFoot[0] - 1.6, meltFoot[1]),
+  churn("churn-portal", portalS - 4.2, portalX)
 )

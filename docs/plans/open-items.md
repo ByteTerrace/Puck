@@ -1995,8 +1995,9 @@ intent is in its guide.
 
 - [high] The caldera water fails its reference
   ([caldera pack](../game/art/caldera-water-pack/README.md), intent in
-  `worlds/debug/debug.md#water`). The glacier (`glacierMass`) is one swept
-  tongue and calved blocks that read as a plain white sausage from the rim; the falls are a flat translucent
+  `worlds/debug/debug.md#water`). The glacier (`glacierMass`) is rebuilt as
+  one convex tongue of arc-bent slabs under snow lenses with layered slots, a
+  lobed scalloped toe and a melt channel, and awaits its look critic; the falls are a flat translucent
   slab with visible tile seams and an opaque white impact disc; the pool is
   flat cyan with a hard rectangular edge; the river runs in a concrete trough.
   Rebuild each to its panel, building the rendering features the panels need

@@ -96,18 +96,21 @@ prototypes {
     flow: fallsFlowLayer with { coverageLane: fallsLane },
     coverageLane: fallsLane
   )
-  glacierMass(
-    id: "glacier",
-    lumps: glacierLumps,
-    furrows: glacierFurrows,
-    origin: glacierOrigin,
-    palette: glacierIcePalette
-  )
+  glacierMass(id: "glacier", shapes: glacierShapes, origin: glacierOrigin, relief: glacierRelief, palette: glacierIcePalette)
+  glacierMass(id: "glacier-melt", shapes: meltShapes, origin: glacierOrigin, palette: meltPalette)
   lakeStones(
     id: "lake-stones",
     stones: lakeBedStones,
     palette: lakeStonePalette,
-    beds: [{ y: lakeBowl.y - lakeSite.surface, radii: lakeBowl.radii, thickness: lakeBedThickness, cut: lakeBedCut, material: 0 }]
+    beds: [
+      {
+        y: lakeBowl.y - lakeSite.surface
+        radii: lakeBowl.radii
+        thickness: lakeBedThickness
+        cut: lakeBedCut
+        material: 0
+      }
+    ]
   )
   lakeSurface(
     id: "lake",
@@ -170,16 +173,19 @@ placements {
     position [0, 0, 0]
     yawDegrees: wallYaw
   }
-  // The glacier lies on the lake's ramp, its toe at the lake's back shore and its head, which the ice shrinks toward, up the
-  // trough; the lake and its stones turn with the wall so their +z is out from the ring's centre.
-  placement "glacier" {
-    prototype: "glacier"
-    position [
-      wallWorld(rampRadial + glacierHeadS * rampCos, 0)[0],
-      lakeSite.surface + glacierHeadS * rampSin,
-      wallWorld(rampRadial + glacierHeadS * rampCos, 0)[1]
-    ]
-    yawDegrees: wallYaw
+  // The glacier lies on the lake's ramp, its toe in the lake at its back shore and its head, which the ice shrinks toward, up
+  // the trough; its meltwater shrinks with it about the same head. The lake and its stones turn with the wall so their +z is
+  // out from the ring's centre.
+  for id in ["glacier", "glacier-melt"] {
+    placement $"{id}" {
+      prototype: id
+      position [
+        wallWorld(rampRadial + glacierHeadS * rampCos, 0)[0],
+        lakeSite.surface + glacierHeadS * rampSin,
+        wallWorld(rampRadial + glacierHeadS * rampCos, 0)[1]
+      ]
+      yawDegrees: wallYaw
+    }
   }
   placement "lake" {
     prototype: "lake"

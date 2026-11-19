@@ -296,7 +296,7 @@ alike in X and Z or a plane, at a pose, carrying geometry only (no material, ble
 other facet); entries' weights multiply, and a relief takes at most 8 masks and 32 region shapes. The band snaps to a
 2⁻¹² grid and the weights to 2⁻¹⁶, and the canonical document stores the snapped values (`SdfReliefBand`). Every
 sample of a masked creation evaluates each region, so keep the regions few. They are written through the generic value path (`masks [ { fade: 8, shapes [ { type: "Sphere", … } ] } ]`);
-`worlds/standard/terrain.puck`'s `terrainBasinMask` builds one from the rows `terrainBasin` carves.
+`worlds/standard/terrain.puck`'s `terrainCarveMask` builds one from the rows `terrainBasin` and `terrainCut` carve.
 
 Creation `noise` can ride whole-creation motion, including `sizeBy`, attached roots and body looks.
 The relief bakes once over the composed field in the root's units and keeps its amplitude and wavelength

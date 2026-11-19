@@ -59,8 +59,8 @@ let valleyWedges = map(
 // falls' plunge basin (water-site.puck's plungeHole) and would stand a recovered body in the water.
 let recoveryRadius = 190
 function recoveryCompass(sector) = ((sector.name == "north-west") ? (sector.compass + 15) : sector.compass)
-// Where the `glacier` place stands: metres up the glacier's ramp from the lake, metres beside the trough's axis, and the
-// moraine crest's height there.
+// Where the `glacier` place stands: metres up the glacier's ramp from the lake, metres beside the trough's axis, and a
+// height at or over the moraine's crest there.
 let glacierWatch = { s: 40, across: 25, ground: 361.2 }
 
 spawnPoints: concat(
@@ -88,8 +88,8 @@ spawnPoints: concat(
     }
     // The glacier (glacier-site.puck): on the moraine's crest `glacierWatch.across` metres beside the trough's axis,
     // `glacierWatch.s` metres up its ramp from the lake, facing across the trough, so the chase camera behind her looks
-    // down onto the ice with the trough running left and right of her. The crest's height is the drawn relief's, read
-    // standing (body.where: grounded at 361.14).
+    // down onto the ice with the trough running left and right of her. The height stands at or a little over the moraine's
+    // heaps there, so a body set on it settles onto the drawn relief.
     {
       id: "glacier"
       position [
@@ -122,6 +122,11 @@ placements {
   }
 }
 
+// The relief masks of the sector named `name`: one over every bowl and cut it carves, or none when it carves nothing.
+function sectorCarveMasks(name) = length(filter(valleyBasins, b => b.sector == name)) +
+  length(filter(valleyCuts, c => c.sector == name)) >
+  0 ? [terrainCarveMask(filter(valleyBasins, b => b.sector == name), filter(valleyCuts, c => c.sector == name))] : []
+
 prototypes {
   for sector in valleySectors {
     prototype $"valley-{sector.name}" {
@@ -132,14 +137,10 @@ prototypes {
           [celRock({ color: "#7D7366", roughness: 0.95, specular: 0.02 })],
           sector.name == "north-west" ? wallPalette : []
         )
-        // The relief stays out of the bowls the sector carves (water-site.puck's valleyBasins), so the lake's water,
-        // lining and stones, placed from the analytic bowl, sit on the rock the bake draws and contact reads.
-        terrainRelief(
-          seed: sector.seed,
-          masks: length(filter(valleyBasins, b => b.sector == sector.name)) > 0
-            ? [terrainBasinMask(filter(valleyBasins, b => b.sector == sector.name))]
-            : []
-        )
+        // The relief stays out of the bowls and cuts the sector carves (water-site.puck's valleyBasins, glacier-site.puck's
+        // valleyCuts), so the lake's water, lining and stones and the glacier's ice, placed from the analytic carves, sit
+        // on the rock the bake draws and contact reads.
+        terrainRelief(seed: sector.seed, masks: sectorCarveMasks(sector.name))
         terrainMass(
           label: "main",
           foot: sector.foot,
@@ -185,17 +186,11 @@ prototypes {
           terrainBasin(label: basin.label, lateral: basin.lateral, radial: basin.radial, y: basin.y, radii: basin.radii)
         }
         for cut in filter(valleyCuts, c => c.sector == sector.name) {
-          shape Box $"{cut.label}" {
-            blend: Subtraction
-            material: cut.material
-            rounding: cut.rounding
-            position: cut.position
-            scale: cut.half
-            rotation: cut.rotation
-          }
+          terrainCut(cut: cut)
         }
         for mound in filter(valleyMounds, m => m.sector == sector.name) {
-          shape Ellipsoid $"{mound.label}" {
+          shape Superellipsoid $"{mound.label}" {
+            exponent: mound.exponent
             material: mound.material
             position: mound.position
             scale: mound.radii
