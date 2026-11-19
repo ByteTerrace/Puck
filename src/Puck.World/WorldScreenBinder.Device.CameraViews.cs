@@ -136,7 +136,6 @@ public sealed partial class WorldScreenBinder {
                 CutRevision = registration.CutRevision,
                 Bloom = Settings?.ResolveBloom((BootDefinition()?.Render ?? WorldRenderDefaults.Absent), registration.Row.Rig.Bloom),
                 BloomQuality = (Settings?.BloomQualityOf(view: name) ?? Puck.Hosting.BloomQuality.Off),
-                BloomStandalone = true,
                 Quality = quality,
             });
 

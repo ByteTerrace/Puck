@@ -601,7 +601,7 @@ public static partial class WorldDefinitionValidator {
     // catalog) and travel between worlds, so nothing there can bind to one world's state.
     private static bool IsHexColor(string? value) =>
         HexColor.TryParse(
-            rgb: out _,
+            color: out _,
             value: value
         );
     private static bool IsColor(WorldDefinition definition, string? value) => WorldColor.IsAuthorable(

@@ -286,7 +286,7 @@ public sealed partial class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
 
             WorldMirroredAvatarBand.EmitPalette(
                 accentMaterials: accentMaterials,
-                bodyColor: neighbour.BodyColor(index: index),
+                bodyColor: new DisplayColor(rgb: neighbour.BodyColor(index: index)),
                 bodyMaterials: bodyMaterials,
                 builder: builder,
                 catalogRig: neighbour.CatalogRig(index: index),

@@ -1,7 +1,9 @@
 // The display encode: a working image, sampled 1:1 by fragment coordinate, written in the color space its target
 // displays. Every swapchain compositor draws it into its back buffer, and a float output's preview and capture draw it,
-// in SDR, into RGBA8 (SurfaceEncoder). The working values are the shading's display-referred values, one at SDR white,
-// with float headroom above it.
+// in SDR, into RGBA8 (SurfaceEncoder). A working image holds sRGB-encoded values, one at SDR white, with float headroom
+// above it on the extended curve: a world's view writes them in its own graph's display pass, which converts its scene
+// light exactly once, and an image source's conversion writes them (ImageSourceConversion.LinearToWorking). So the SDR
+// branch writes the value as it is, and each HDR branch decodes it to linear light once before its own encode.
 //
 // Its one group is the pass group, set 3, each register equal to its binding (DisplayEncodeLayout): the source image,
 // its sampler and the encode block, which DisplayEncodeLayout.WriteBlock writes.

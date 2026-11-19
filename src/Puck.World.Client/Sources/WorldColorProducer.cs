@@ -31,7 +31,7 @@ public sealed class WorldColorProducer : IWorldImageProducer {
         }
 
         if (!HexColor.TryParse(
-            rgb: out var rgb,
+            color: out var color,
             value: settings.Color
         )) {
             feed = null;
@@ -40,7 +40,7 @@ public sealed class WorldColorProducer : IWorldImageProducer {
             return false;
         }
 
-        feed = new WorldColorFeed(rgb: rgb);
+        feed = new WorldColorFeed(rgb: color.Rgb);
         fault = null;
 
         return true;

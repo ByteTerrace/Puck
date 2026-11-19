@@ -4,6 +4,7 @@
 #include "../isa/sdf-sky-environment.interface.hlsli"
 #include "../isa/sdf-render.hlsli"
 #include "../frame/sdf-screen-mapping.hlsli"
+#include "Shared/transfer.hlsli"
 
 groupshared float4 sdfScreenSums[64];
 
@@ -24,10 +25,14 @@ void CSMain(uint3 group : SV_GroupID, uint lane : SV_GroupIndex) {
     uint count = grid.x * grid.y;
     float3 sum = 0.0;
     uint samples = 0u;
+    // A display's picture is a working image, which it emits as the linear light it decodes to; an opening's is linear
+    // light already (sampleScreenSurface reads the same split).
+    bool display = (mapping.state.w != 0.0);
     [loop] for (uint pixel = lane % 4u; pixel < count; pixel += 4u) {
         uint2 index = uint2(pixel % grid.x, pixel / grid.x);
         uint2 at = first + ((((index * 2u) + 1u) * size) / (grid * 2u));
-        sum += max(screenSources[screen].Load(int3(at, 0)).rgb, 0.0);
+        float3 value = max(screenSources[screen].Load(int3(at, 0)).rgb, 0.0);
+        sum += (display ? puckSrgbToLinearExtended(value) : value);
         samples++;
     }
     sdfScreenSums[lane] = float4(sum, (float)samples);

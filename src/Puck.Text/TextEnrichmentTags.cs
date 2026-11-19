@@ -151,11 +151,11 @@ public static class TextEnrichmentTags {
             if (
                 (name is "color" or "colour" or "hex" or "tint") &&
                 HexColor.TryParseRgba(
-                rgba: out var tint,
+                color: out var tint,
                 value: parameter.Value.Trim()
             )
             ) {
-                effect = effect with { TintColor = tint };
+                effect = effect with { TintColor = tint.Rgba };
 
                 continue;
             }

@@ -179,7 +179,7 @@ public static partial class WorldDefinitionValidator {
             }
 
             if (!HexColor.TryParseRgba(
-                rgba: out _,
+                color: out _,
                 value: entry.Color
             )) {
                 errors.Add(item: $"{entryPath}.color '{entry.Color}' must be #RRGGBB or #RRGGBBAA.");

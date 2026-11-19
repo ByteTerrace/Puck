@@ -1,4 +1,5 @@
 using System.Numerics;
+using Puck.Maths;
 using Puck.SdfVm;
 using Puck.SdfVm.Views;
 using Puck.SignedDistance;
@@ -128,7 +129,7 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
                 : client.BodyColor(index: index)
             );
 
-            WorldMirroredAvatarBand.EmitMaterials(accentMaterials: avatarAccentMaterials, bodyColor: bodyColor, bodyMaterials: avatarBodyMaterials, builder: builder, materialIndex: index, noseFactor: m_noseFactor);
+            WorldMirroredAvatarBand.EmitMaterials(accentMaterials: avatarAccentMaterials, bodyColor: new DisplayColor(rgb: bodyColor), bodyMaterials: avatarBodyMaterials, builder: builder, materialIndex: index, noseFactor: m_noseFactor);
         }
 
         // The diegetic screens: each a sampled ScreenSlab whose lit face samples its bound source (or shades as dark

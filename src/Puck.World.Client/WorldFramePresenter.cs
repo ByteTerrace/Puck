@@ -1404,8 +1404,6 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
 
         graphs.BeginFrame(
             rate: m_presentationRate,
-            sharpens: (m_settings.Temporal && (m_settings.UpscaleSharpness > 0f)),
-            tonemap: m_client.Definition.Render.Tonemap,
             views: m_client.Definition.Views
         );
     }
@@ -2190,6 +2188,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             Lights = lighting.Lights,
             Exposure = WorldRenderSettings.Pinned(exposure: lighting.Exposure, pin: m_settings.ExposurePin),
             Toon = m_settings.ResolveToon(render: m_client.Definition.Render),
+            Tone = WorldRenderSettings.ToneOf(render: m_client.Definition.Render),
             ShadePrograms = m_settings.ShadePrograms,
             ShadeDefault = m_settings.ResolveShade(m_client.Definition.Render, program),
             ShadeDeclared = WorldRenderSettings.DeclaredShades(definition: m_client.Definition),

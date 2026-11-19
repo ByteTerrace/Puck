@@ -499,10 +499,12 @@ public static class WorldLightingText {
             .Field(key: "ambient", value: Describe(value: environment?.Ambient))
             .Field(key: "reflection", value: Describe(value: environment?.Reflection))
             .Segment()
-            .Head(head: "tonemap")
+            .Head(head: "tone")
             .Field(
-            key: "mode",
-            value: (definition.Render.Tonemap ?? WorldTonemap.None).ToString()
+            key: "curve",
+            value: ((definition.Render.Tone is { } tone)
+                ? string.Create(provider: CultureInfo.InvariantCulture, handler: $"peak={tone.Peak:0.###} contrast={tone.Contrast:0.###} linearStart={tone.LinearStart:0.###} linearLength={tone.LinearLength:0.###} toe={tone.Toe:0.###}")
+                : "none")
         )
             .Segment()
             .Head(head: "exposure")

@@ -381,8 +381,8 @@ public sealed class ImageSourceConversionLawTests {
         Assert.Equal(expected: ((1.055 * Math.Pow(x: (51.0 / 255.0), y: (1.0 / 2.4))) - 0.055), actual: working[1], tolerance: 1e-6);
         Assert.Equal(expected: 1.0, actual: working[2], tolerance: 1e-6);
         Assert.Equal(expected: ((float)(128.0 / 255.0)), actual: working[3]);
-        Assert.Equal(expected: (0.02 / 12.92), actual: ImageSourceConversion.SrgbToLinear(value: 0.02), tolerance: 1e-15);
-        Assert.Equal(expected: Math.Pow(x: (0.555 / 1.055), y: 2.4), actual: ImageSourceConversion.SrgbToLinear(value: 0.5), tolerance: 1e-15);
+        Assert.Equal(expected: (0.02 / 12.92), actual: Puck.Maths.SrgbTransfer.ToLinear(encoded: 0.02), tolerance: 1e-15);
+        Assert.Equal(expected: Math.Pow(x: (0.555 / 1.055), y: 2.4), actual: Puck.Maths.SrgbTransfer.ToLinear(encoded: 0.5), tolerance: 1e-15);
     }
     [Fact]
     public void EachFormatAndTransferNamesOnePass() {

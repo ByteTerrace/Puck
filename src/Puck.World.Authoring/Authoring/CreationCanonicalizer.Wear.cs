@@ -10,7 +10,7 @@ public static partial class CreationCanonicalizer {
         Vector3 Resolve(string color) {
             if (
                 !HexColor.TryParse(
-                rgb: out _,
+                color: out _,
                 value: color
             ) &&
                 !DocumentIdentifier.IsCellReference(value: color)
@@ -166,7 +166,7 @@ public static partial class CreationCanonicalizer {
         }
 
         void Color(string? value, string name) {
-            if ((value is not null) && !HexColor.TryParse(rgb: out _, value: value) && !DocumentIdentifier.IsCellReference(value: value)) {
+            if ((value is not null) && !HexColor.TryParse(color: out _, value: value) && !DocumentIdentifier.IsCellReference(value: value)) {
                 errors.Add(item: new(Message: $"{name} must be #RRGGBB or a state.<row>[.<key>] binding.", Path: $"palette[{index}].{name}"));
             }
         }

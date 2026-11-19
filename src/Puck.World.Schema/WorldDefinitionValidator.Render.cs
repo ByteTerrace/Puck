@@ -14,6 +14,9 @@ public static partial class WorldDefinitionValidator {
         }
         ValidateShadowCoverage(definition.Render.ShadowCoverage, errors);
         ValidateBloom(definition.Render.Bloom, "render.bloom", errors);
+        if (definition.Render.Tone is { IsValid: false }) {
+            errors.Add(item: "render.tone needs finite values: peak, contrast and toe positive, linearStart above zero and below peak, linearLength from 0 to below 1.");
+        }
         ValidateIndirect(definition: definition, errors: errors);
         ValidateRenderLanes(definition: definition, errors: errors);
         ValidateSkyFieldScale(definition.Render.SkyFieldScale, "render.skyFieldScale", errors);

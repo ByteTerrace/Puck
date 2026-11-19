@@ -187,6 +187,17 @@ public sealed partial class WorldRenderSettings {
         m_toonStyled = render.Toon?.IsComplete ?? false;
         return ToonStyleDocument.ResolveDefault(toon: render.Toon, enabled: m_toonOverride);
     }
+    /// <summary>Returns a world's display transform (<c>render.tone</c>), or the neutral one when it authors none.</summary>
+    /// <param name="render">The world's render settings.</param>
+    /// <returns>The display transform.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="render"/> is <see langword="null"/>.</exception>
+    public static SdfToneCurve ToneOf(WorldRenderDefaults render) {
+        ArgumentNullException.ThrowIfNull(render);
+
+        return ((render.Tone is { IsValid: true } tone)
+            ? new SdfToneCurve(Contrast: tone.Contrast, LinearLength: tone.LinearLength, LinearStart: tone.LinearStart, Peak: tone.Peak, Toe: tone.Toe)
+            : SdfToneCurve.None);
+    }
     /// <summary>The sky's quality tier (<c>world.sky-quality</c>): a layer below it writes no entry and counts no work,
     /// and below <see cref="WorldSkyTier.High"/> each kind draws its reduced form. Boots at the definition's
     /// <c>render.skyQuality</c>; a quality preset's <c>sky</c> row sets it.</summary>

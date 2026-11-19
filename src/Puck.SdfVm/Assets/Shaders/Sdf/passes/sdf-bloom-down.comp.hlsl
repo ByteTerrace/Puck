@@ -1,4 +1,4 @@
-#include "../isa/sdf-bloom.interface.hlsli"
+#include "../isa/sdf-optics.interface.hlsli"
 #include "Shared/bloom-filter.hlsli"
 
 float3 bloomTap(BloomAxis x, BloomAxis y, float2 delta, float2 texel) {

@@ -491,7 +491,7 @@ public sealed class WorldFieldRowLawTests {
 
         colors.Begin();
         Assert.Equal(
-            expected: HexColor.Parse(fallback: Vector3.Zero, value: "#102030"),
+            expected: HexColor.Parse(fallback: default, value: "#102030").ToScene().Linear,
             actual: colors.Resolve(fallback: Vector3.One, value: "state.colors.body")
         );
     }
@@ -511,11 +511,11 @@ public sealed class WorldFieldRowLawTests {
 
         colors.Begin();
         Assert.Equal(
-            expected: HexColor.Parse(fallback: Vector3.Zero, value: "#3FAF6F"),
+            expected: HexColor.Parse(fallback: default, value: "#3FAF6F").ToScene().Linear,
             actual: colors.Resolve(fallback: Vector3.One, value: "state.colors.bump")
         );
         Assert.Equal(
-            expected: HexColor.Parse(fallback: Vector3.Zero, value: "#ABCDEF"),
+            expected: HexColor.Parse(fallback: default, value: "#ABCDEF").ToScene().Linear,
             actual: colors.Resolve(fallback: Vector3.One, value: "#ABCDEF")
         );
         Assert.False(condition: colors.TryTakeMove());
@@ -531,7 +531,7 @@ public sealed class WorldFieldRowLawTests {
 
         colors.Begin();
         Assert.Equal(
-            expected: HexColor.Parse(fallback: Vector3.Zero, value: "#112233"),
+            expected: HexColor.Parse(fallback: default, value: "#112233").ToScene().Linear,
             actual: colors.Resolve(fallback: Vector3.One, value: "state.colors.bump")
         );
     }
@@ -607,7 +607,7 @@ public sealed class WorldFieldRowLawTests {
         Assert.False(condition: colors.IsMirrored);
         Assert.False(condition: colors.TryTakeMove());
         Assert.Equal(
-            expected: HexColor.Parse(fallback: Vector3.Zero, value: "#3FAF6F"),
+            expected: HexColor.Parse(fallback: default, value: "#3FAF6F").ToScene().Linear,
             actual: colors.Resolve(fallback: Vector3.One, value: "state.colors.bump")
         );
         Assert.True(condition: colors.IsMirrored);

@@ -130,7 +130,7 @@ public sealed class SdfKernelSet {
         SdfKernel.GlassPlain => "sdf-glass-plain",
         SdfKernel.BloomDown => "sdf-bloom-down",
         SdfKernel.BloomUp => "sdf-bloom-up",
-        SdfKernel.BloomApply => "sdf-bloom-apply",
+        SdfKernel.Display => "sdf-display",
         SdfKernel.SkyEnvironment => "sdf-sky-environment",
         SdfKernel.SkyEnvironmentReduce => "sdf-sky-environment-reduce",
         SdfKernel.ScreenEmission => "sdf-screen-emission",
@@ -155,7 +155,7 @@ public sealed class SdfKernelSet {
             SdfKernel.Resolve => SdfWorldInterfaces.ResolveParameters.Layout,
             SdfKernel.Sky or SdfKernel.Composite => SdfWorldInterfaces.SkyParameters.Layout,
             SdfKernel.Glass or SdfKernel.GlassPlain => SdfWorldInterfaces.GlassParameters.Layout,
-            SdfKernel.BloomDown or SdfKernel.BloomUp or SdfKernel.BloomApply => SdfWorldInterfaces.BloomParameters.Layout,
+            SdfKernel.BloomDown or SdfKernel.BloomUp or SdfKernel.Display => SdfWorldInterfaces.OpticsParameters.Layout,
             SdfKernel.SkyEnvironment or SdfKernel.SkyEnvironmentReduce or SdfKernel.ScreenEmission => SdfWorldInterfaces.EnvironmentParameters.Layout,
             _ => SdfWorldInterfaces.WorldLayout,
         };

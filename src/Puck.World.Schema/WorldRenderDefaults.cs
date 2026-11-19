@@ -130,9 +130,9 @@ public readonly record struct WorldQualityPreset(
 /// section renders the default fog; an authored section contains exactly the kinds it states.</param>
 /// <param name="Environment">The sky's bindable ambient and reflection gains, each defaulting to one.
 /// Zero disables that lighting contribution.</param>
-/// <param name="Tonemap">The tonemap the root graph applies to the SDF scene: each view, as its place pass reconstructs
-/// it. The letterbox color, every pane (display-referred) and the HUD are never tonemapped. Optional; absent is
-/// <see cref="WorldTonemap.None"/> — the stylized shaded color, unchanged.</param>
+/// <param name="Tone">The display transform every view of the world puts its exposed scene light through before the
+/// view's display pass encodes it for the display (<see cref="WorldToneCurve"/>). The letterbox color, every pane
+/// (display-referred) and the HUD are never toned. Optional; absent applies no curve.</param>
 /// <param name="FarDistance">The far distance in world units: the depth at which every view's geometry ends — the
 /// mesh raster's far plane, the reach of the bake and the indirect volume, and the depth the fog and depth ramps are
 /// measured against. Geometry beyond it is never drawn, so an infinite plane ends on a visible horizon curve at this
@@ -175,7 +175,7 @@ public sealed record WorldRenderDefaults(
     WorldRenderSky? Sky = null,
     WorldRenderEnvironment? Environment = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldRenderAtmosphere? Atmosphere = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldTonemap? Tonemap = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldToneCurve? Tone = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? FarDistance = null,
     int ShadowLights = 1,
     int ShadowFadeSlots = 0,
@@ -1066,15 +1066,21 @@ public sealed record WorldRenderMedium(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] BindableColor? Color = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] BindableScalar? Luminance = null
 );
-/// <summary>The tonemap the root graph applies to the frame before the HUD — see
-/// <see cref="WorldRenderDefaults.Tonemap"/>.</summary>
-[JsonConverter(typeof(StrictEnumConverter<WorldTonemap>))]
-public enum WorldTonemap {
-    /// <summary>No remap: the stylized shaded color.</summary>
-    None = 0,
-    /// <summary>A filmic curve (Uchimura's Gran Turismo fit: an open toe, soft midtones and a rolled shoulder) over each
-    /// view, applied by the root graph's place pass for the view.</summary>
-    Filmic = 1,
+/// <summary>A world's display transform (<see cref="WorldRenderDefaults.Tone"/>): Uchimura's toe, linear section and
+/// shoulder over exposed scene light, where one is SDR white. Every value is the author's; the standard package names
+/// one (<c>worlds/standard/tones.puck</c>). Each must be finite, with <see cref="Peak"/>, <see cref="Contrast"/> and
+/// <see cref="Toe"/> positive, <see cref="LinearStart"/> in (0, <see cref="Peak"/>) and <see cref="LinearLength"/> in
+/// [0, 1).</summary>
+/// <param name="Peak">The value the shoulder rolls into.</param>
+/// <param name="Contrast">The linear section's slope.</param>
+/// <param name="LinearStart">The exposed value where the toe gives way to the linear section.</param>
+/// <param name="LinearLength">The share of the range above <paramref name="LinearStart"/> the linear section spans.</param>
+/// <param name="Toe">The toe's power: above one it darkens the shadows, below one it lifts them.</param>
+public sealed record WorldToneCurve(float Peak, float Contrast, float LinearStart, float LinearLength, float Toe) {
+    /// <summary>Returns whether every value lies in its range.</summary>
+    public bool IsValid => float.IsFinite(f: Peak) && float.IsFinite(f: Contrast) && float.IsFinite(f: LinearStart) &&
+        float.IsFinite(f: LinearLength) && float.IsFinite(f: Toe) && (Peak > 0f) && (Contrast > 0f) && (Toe > 0f) &&
+        (LinearStart > 0f) && (LinearStart < Peak) && (LinearLength >= 0f) && (LinearLength < 1f);
 }
 /// <summary>The gains on lighting derived from the lighting-visible sky layers.</summary>
 /// <param name="Ambient">The diffuse irradiance gain. Absent is one; zero disables harmonic lighting.</param>

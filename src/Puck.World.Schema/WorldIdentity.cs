@@ -234,15 +234,16 @@ public sealed partial class WorldIdentity {
     /// <summary>Parses a hex color with a fallback.</summary>
     /// <param name="hex">The <c>#RRGGBB</c> hex color to parse.</param>
     /// <param name="fallbackHex">The <c>#RRGGBB</c> hex color used when <paramref name="hex"/> does not parse.</param>
-    /// <returns>The parsed RGB color, or a neutral gray when neither <paramref name="hex"/> nor <paramref name="fallbackHex"/> parses.</returns>
+    /// <returns>The parsed sRGB-encoded RGB color, a display colour (<see cref="DisplayColor"/>) that a body decodes before
+    /// it shades, or a neutral gray when neither <paramref name="hex"/> nor <paramref name="fallbackHex"/> parses.</returns>
     public static Vector3 ParseColor(string hex, string fallbackHex) =>
         HexColor.Parse(
             fallback: HexColor.Parse(
-                fallback: new Vector3(value: 0.5f),
+                fallback: new DisplayColor(rgb: new Vector3(value: 0.5f)),
                 value: fallbackHex
             ),
             value: hex
-        );
+        ).Rgb;
     /// <summary>Mints a detached replay identity with bit-exact rates.</summary>
     /// <param name="name">The display name.</param>
     /// <param name="moveSpeed">The deterministic locomotion speed, or <see langword="null"/> as recorded.</param>

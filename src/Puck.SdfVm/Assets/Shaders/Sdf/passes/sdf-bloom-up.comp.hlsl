@@ -1,4 +1,4 @@
-#include "../isa/sdf-bloom.interface.hlsli"
+#include "../isa/sdf-optics.interface.hlsli"
 #include "Shared/bloom-filter.hlsli"
 
 [numthreads(8, 8, 1)]

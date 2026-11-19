@@ -1,9 +1,9 @@
-// Generated from shader interface 'place-bloom' (sha256/4f3f0ebbfbfb21bfde0a1efcc9b941b9ec87e9400f6b0961cba9f9f06d9955ba). Regenerate it from the interface; never edit it.
-#ifndef PUCK_SHADER_INTERFACE_PLACE_BLOOM
-#define PUCK_SHADER_INTERFACE_PLACE_BLOOM
+// Generated from shader interface 'sdf-optics' (sha256/e7ea840a6f1f4846f61adf231dc7c4062281660dc063535b1bea7e03a55cb139). Regenerate it from the interface; never edit it.
+#ifndef PUCK_SHADER_INTERFACE_SDF_OPTICS
+#define PUCK_SHADER_INTERFACE_SDF_OPTICS
 
 // The Frame group: descriptor set 0, register space 0.
-struct PlaceBloomFrame {
+struct SdfOpticsFrame {
     [[vk::offset(0)]] float2 pointer;
     [[vk::offset(8)]] uint2 tick;
     [[vk::offset(16)]] float time;
@@ -12,40 +12,33 @@ struct PlaceBloomFrame {
     [[vk::offset(28)]] uint tickRate;
     [[vk::offset(32)]] uint pointerDown;
 };
-[[vk::binding(0, 0)]] ConstantBuffer<PlaceBloomFrame> frameGroup : register(b0, space0);
+[[vk::binding(0, 0)]] ConstantBuffer<SdfOpticsFrame> frameGroup : register(b0, space0);
 
 // The Pass group: descriptor set 3, register space 3.
-struct PlaceBloomPass {
+struct SdfOpticsPass {
     [[vk::offset(0)]] uint2 extent;
     [[vk::offset(8)]] float bloomCutoff;
-    [[vk::offset(12)]] uint bloomOnly;
-    [[vk::offset(16)]] float bloomScatter;
-    [[vk::offset(20)]] uint compareMode;
-    [[vk::offset(24)]] uint _pad24;
-    [[vk::offset(28)]] uint _pad28;
-    [[vk::offset(32)]] float4 crop;
-    [[vk::offset(48)]] float fidelity;
-    [[vk::offset(52)]] uint letterbox;
-    [[vk::offset(56)]] uint _pad56;
-    [[vk::offset(60)]] uint _pad60;
-    [[vk::offset(64)]] float4 letterboxColor;
-    [[vk::offset(80)]] float4 rect;
-    [[vk::offset(96)]] uint sharpen;
-    [[vk::offset(100)]] float sharpness;
-    [[vk::offset(104)]] uint tonemap;
-    [[vk::offset(108)]] float wipe;
-    [[vk::offset(112)]] uint workCounterRow;
-    [[vk::offset(116)]] uint workCounterRowDetail;
+    [[vk::offset(12)]] float bloomMix;
+    [[vk::offset(16)]] float bloomRadius;
+    [[vk::offset(20)]] float bloomScatter;
+    [[vk::offset(24)]] uint displayEncode;
+    [[vk::offset(28)]] float displayFidelity;
+    [[vk::offset(32)]] float displaySharpness;
+    [[vk::offset(36)]] uint _pad36;
+    [[vk::offset(40)]] uint _pad40;
+    [[vk::offset(44)]] uint _pad44;
+    [[vk::offset(48)]] float4 toneShape;
+    [[vk::offset(64)]] float toneToe;
+    [[vk::offset(68)]] uint workCounterRow;
+    [[vk::offset(72)]] uint workCounterRowDetail;
 };
-[[vk::binding(0, 3)]] ConstantBuffer<PlaceBloomPass> passGroup : register(b0, space3);
-[[vk::binding(1, 3)]] Texture2D<float4> bloom : register(t1, space3);
-[[vk::binding(2, 3)]] SamplerState bloomSampler : register(s2, space3);
-[[vk::binding(3, 3)]] Texture2D<float4> base : register(t3, space3);
-[[vk::binding(4, 3)]] SamplerState baseSampler : register(s4, space3);
-[[vk::binding(5, 3)]] Texture2D<float4> source : register(t5, space3);
-[[vk::binding(6, 3)]] SamplerState sourceSampler : register(s6, space3);
-[[vk::binding(7, 3)]] [[vk::image_format("rgba16f")]] RWTexture2D<float4> destination : register(u7, space3);
-[[vk::binding(8, 3)]] RWStructuredBuffer<uint> workCounters : register(u8, space3);
+[[vk::binding(0, 3)]] ConstantBuffer<SdfOpticsPass> passGroupIsa045647A2 : register(b0, space3);
+#define passGroup passGroupIsa045647A2
+[[vk::binding(1, 3)]] Texture2D<float4> bloomSource : register(t1, space3);
+[[vk::binding(2, 3)]] Texture2D<float4> bloomFine : register(t2, space3);
+[[vk::binding(3, 3)]] SamplerState bloomSampler : register(s3, space3);
+[[vk::binding(4, 3)]] [[vk::image_format("rgba16f")]] RWTexture2D<float4> bloomOutput : register(u4, space3);
+[[vk::binding(5, 3)]] RWStructuredBuffer<uint> workCounters : register(u5, space3);
 
 // The pass's own work, added to its row of the node's kernel counters (GpuKernelCounters, which reads the rows
 // back): each counted kind in GpuWork.KernelKinds order, march steps, texels written, sky evaluations, sky hashes,
@@ -131,4 +124,4 @@ void puckCountRejectedHit() {
     puckAddWork(((passGroup.workCounterRow * PuckWorkRowWords) + PuckWorkRejectedHitsWord), 1u);
 }
 
-#endif // PUCK_SHADER_INTERFACE_PLACE_BLOOM
+#endif // PUCK_SHADER_INTERFACE_SDF_OPTICS

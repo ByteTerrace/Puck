@@ -73,10 +73,7 @@ public sealed record VolumeDocument([property: JsonRequired] string Kind, [prope
         (Steps ?? DefaultSteps),
         Ramps.GetValue(key: this, createValueCallback: static volume => [.. volume.Ramp.Select(selector: s => new SdfDensityStop(
             s.Density,
-            HexColor.Parse(
-                value: s.Color,
-                fallback: Vector3.One
-            )
+            (HexColor.TryParse(color: out var color, value: s.Color) ? color.ToScene().Linear : Vector3.One)
         ))]),
         (Intensity ?? DefaultIntensity),
         (Extinction ?? DefaultExtinction),

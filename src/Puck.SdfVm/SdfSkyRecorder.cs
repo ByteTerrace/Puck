@@ -440,7 +440,7 @@ internal sealed class SdfSkyRecorder : IRenderGraphPackageRecorder, IRenderGraph
     private static string WrittenMemberOf(string version) => version switch {
         SdfWorldPackage.Parts.SkyBase => SdfWorldPackage.SkyBaseWritten,
         SdfWorldPackage.Parts.SkyUpper0 or SdfWorldPackage.Parts.SkyUpper1 or SdfWorldPackage.Parts.SkyUpper2 => SdfWorldPackage.SkyUpperWritten[Array.IndexOf(array: ReadParts, value: version)],
-        SdfWorldPackage.Color or SdfWorldPackage.BloomDirect => SdfWorldPackage.Output,
+        SdfWorldPackage.Color or SdfWorldPackage.SceneLight => SdfWorldPackage.Output,
         _ => throw new InvalidOperationException(message: $"The sky interface writes no version '{version}'."),
     };
 }

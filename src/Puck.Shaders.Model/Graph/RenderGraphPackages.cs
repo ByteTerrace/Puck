@@ -231,15 +231,14 @@ public sealed class RenderGraphPackageCatalog {
     /// interface is <c>sdf-film-grain</c>.</summary>
     public const string SdfFilmGrain = "sdf.film-grain";
     /// <summary>The id of the one placement pass: its base image, with its source reconstructed into a destination rect
-    /// over it, an exact copy where the rect has the source's extent, or a contrast-adaptive sharpen of it there when the
-    /// config asks (<see cref="PlaceSharpen"/>), otherwise bilinear at sharpness 0 blending to clamped Catmull-Rom at
-    /// sharpness 1. A rect of the whole output resamples the whole source. Its kernel is
-    /// <c>Assets/Shaders/Graph/place.comp.hlsl</c>, compiled at build; its config is the rect (<see cref="PlaceRect"/>),
-    /// the sharpness (<see cref="PlaceSharpness"/>), whether the destination outside the rect is the letterbox color
-    /// rather than the base (<see cref="PlaceLetterbox"/>), whether the reconstructed source is tonemapped
-    /// (<see cref="PlaceTonemap"/>), the part of the source shown (<see cref="PlaceCrop"/>) and how much of it is written
-    /// as it is (<see cref="PlaceFidelity"/>). <see cref="PlaceCompareMode"/> selects a held/current comparison instead of normal
-    /// placement, with <see cref="PlaceWipe"/> controlling its divider.</summary>
+    /// over it, an exact copy where the rect has the source's extent, otherwise bilinear at sharpness 0 blending to
+    /// clamped Catmull-Rom at sharpness 1. A rect of the whole output resamples the whole source. Both images are working
+    /// images: a view reaches it already converted for the display by its own graph (<c>SdfWorldPackage.WithDisplay</c>),
+    /// so placing changes no value's meaning. Its kernel is <c>Assets/Shaders/Graph/place.comp.hlsl</c>, compiled at
+    /// build; its config is the rect (<see cref="PlaceRect"/>), the sharpness (<see cref="PlaceSharpness"/>), whether the
+    /// destination outside the rect is the letterbox color rather than the base (<see cref="PlaceLetterbox"/>) and the
+    /// part of the source shown (<see cref="PlaceCrop"/>). <see cref="PlaceCompareMode"/> selects a held/current
+    /// comparison instead of normal placement, with <see cref="PlaceWipe"/> controlling its divider.</summary>
     public const string Place = "place";
     /// <summary>The <see cref="Place"/> comparison mode: 0 places normally, 1 wipes, 2 splits and 3 shows absolute
     /// RGB difference. In comparison modes the source is the held rect and the base is the current whole image.</summary>
@@ -249,17 +248,10 @@ public sealed class RenderGraphPackageCatalog {
     /// <summary>The <see cref="Place"/> config field that, at 1, fills the destination outside the rect with the
     /// letterbox color the kernel states rather than the base; 0, the default, keeps the base there.</summary>
     public const string PlaceLetterbox = "letterbox";
-    /// <summary>The <see cref="Place"/> config field holding the letterbox color, linear RGBA, which
-    /// <see cref="PlaceLetterbox"/> writes outside the rect: <see cref="DefaultLetterboxColor"/> unless a host places
-    /// another, such as the fill around an engaged screen's matte.</summary>
+    /// <summary>The <see cref="Place"/> config field holding the letterbox color, a working-image RGBA (sRGB-encoded,
+    /// a display colour), which <see cref="PlaceLetterbox"/> writes outside the rect: <see cref="DefaultLetterboxColor"/>
+    /// unless a host places another, such as the fill around an engaged screen's matte.</summary>
     public const string PlaceLetterboxColor = "letterboxColor";
-    /// <summary>The <see cref="Place"/> config field holding the share, from 0 to 1, of the reconstructed source the
-    /// pass writes as it is, past <see cref="PlaceSharpen"/> and <see cref="PlaceTonemap"/>: a seat framing the screen
-    /// it engaged places its view at its ease's weight, so a framed picture reaches the display untouched. 0, the
-    /// default, applies both as configured.</summary>
-    public const string PlaceFidelity = "fidelity";
-    /// <summary>Placement with an optional camera scatter image as its third input.</summary>
-    public const string PlaceBloom = "place.bloom";
     /// <summary>The <see cref="Place"/> config field holding the part of the source the rect shows, as fractions of the
     /// source's extent: left, top, width, height, each edge rounded to the nearest source pixel. The default, the whole
     /// source, keeps a rect of the source's own extent an exact copy, as does a crop of the rect's own pixel extent: a
@@ -274,17 +266,8 @@ public sealed class RenderGraphPackageCatalog {
     /// left, top, width, height.</summary>
     public const string PlaceRect = "rect";
     /// <summary>The <see cref="Place"/> config field holding the reconstruction's sharpness, from 0 (bilinear) to 1
-    /// (clamped Catmull-Rom), and the strength of the sharpen <see cref="PlaceSharpen"/> asks for.</summary>
+    /// (clamped Catmull-Rom).</summary>
     public const string PlaceSharpness = "sharpness";
-    /// <summary>The <see cref="Place"/> config field that, at 1, sharpens a source shown at the rect's own extent, which
-    /// is otherwise an exact copy, by a contrast-adaptive sharpen of <see cref="PlaceSharpness"/>'s strength: a
-    /// temporally resolved view asks for it. At sharpness 0 the copy stays exact; 0, the default, never sharpens.</summary>
-    public const string PlaceSharpen = "sharpen";
-    /// <summary>The <see cref="Place"/> config field that, at 1, puts the reconstructed source through the filmic curve
-    /// (Uchimura's Gran Turismo fit) inside the rect: a world's root sets it on each view's place pass when
-    /// <c>render.tonemap</c> is <c>Filmic</c>, so the scene is tonemapped where it enters the frame and the base, the
-    /// letterbox color and every pane are not; 0, the default, writes the source as it is.</summary>
-    public const string PlaceTonemap = "tonemap";
     /// <summary>The name of <see cref="Place"/>'s base image in its pass group, the first input.</summary>
     public const string PlaceBase = "base";
     /// <summary>The name of <see cref="Place"/>'s source image in its pass group, the second input.</summary>
@@ -402,9 +385,9 @@ public sealed class RenderGraphPackageCatalog {
         ShaderInterfaceMember.Sampler(group: ShaderInterfaceGroup.Pass, name: "sourceSampler"),
         .. ShaderWorkCounters.Members,
     ];
-    /// <summary>Gets the config schema of <see cref="Place"/>: the letterbox switch, off by default, the rect, whole by
-    /// default, the sharpness, 0 by default, the sharpen switch, off by default, the tonemap switch, off by default, and
-    /// optional comparison mode and wipe.</summary>
+    /// <summary>Gets the config schema of <see cref="Place"/>: the letterbox switch, off by default, its color, the rect,
+    /// whole by default, the crop, whole by default, the sharpness, 0 by default, and optional comparison mode and
+    /// wipe.</summary>
     public static IReadOnlyDictionary<string, ShaderConfigField> PlaceConfig { get; } = new ReadOnlyDictionary<string, ShaderConfigField>(dictionary: new Dictionary<string, ShaderConfigField>(comparer: StringComparer.Ordinal) {
         [PlaceCompareMode] = new ShaderConfigField(
             Default: System.Text.Json.JsonDocument.Parse(json: "0").RootElement.Clone(),
@@ -427,19 +410,9 @@ public sealed class RenderGraphPackageCatalog {
             Min: 0,
             Type: ShaderValueType.Float4
         ),
-        [PlaceFidelity] = new ShaderConfigField(
-            Default: System.Text.Json.JsonDocument.Parse(json: "0").RootElement.Clone(),
-            Description: "The share of the reconstructed source written as it is, past the sharpen and the tonemap.",
-            Max: 1,
-            Min: 0,
-            Type: ShaderValueType.Float
-        ),
-        ["bloomScatter"] = new ShaderConfigField(Default: System.Text.Json.JsonDocument.Parse("0").RootElement.Clone(), Type: ShaderValueType.Float, Min: 0, Max: 1),
-        ["bloomCutoff"] = new ShaderConfigField(Default: System.Text.Json.JsonDocument.Parse("0").RootElement.Clone(), Type: ShaderValueType.Float, Min: 0),
-        ["bloomOnly"] = new ShaderConfigField(Default: System.Text.Json.JsonDocument.Parse("0").RootElement.Clone(), Type: ShaderValueType.Uint, Min: 0, Max: 1),
         [PlaceLetterboxColor] = new ShaderConfigField(
             Default: System.Text.Json.JsonDocument.Parse(json: "[0.015, 0.016, 0.02, 1]").RootElement.Clone(),
-            Description: "The linear RGBA letterbox color the destination shows outside the rect when letterbox is 1.",
+            Description: "The working-image (sRGB-encoded) RGBA letterbox color the destination shows outside the rect when letterbox is 1.",
             Max: 1,
             Min: 0,
             Type: ShaderValueType.Float4
@@ -451,26 +424,12 @@ public sealed class RenderGraphPackageCatalog {
             Min: 0,
             Type: ShaderValueType.Float4
         ),
-        [PlaceSharpen] = new ShaderConfigField(
-            Default: System.Text.Json.JsonDocument.Parse(json: "0").RootElement.Clone(),
-            Description: "1 sharpens a source at the rect's own extent by a contrast-adaptive sharpen of the sharpness's strength; 0 keeps its exact copy.",
-            Max: 1,
-            Min: 0,
-            Type: ShaderValueType.Uint
-        ),
         [PlaceSharpness] = new ShaderConfigField(
             Default: System.Text.Json.JsonDocument.Parse(json: "0").RootElement.Clone(),
             Description: "Reconstruction sharpness: 0 is bilinear, 1 clamped Catmull-Rom.",
             Max: 1,
             Min: 0,
             Type: ShaderValueType.Float
-        ),
-        [PlaceTonemap] = new ShaderConfigField(
-            Default: System.Text.Json.JsonDocument.Parse(json: "0").RootElement.Clone(),
-            Description: "1 puts the reconstructed source through the filmic tonemap inside the rect; the base and the letterbox color are never tonemapped.",
-            Max: 1,
-            Min: 0,
-            Type: ShaderValueType.Uint
         ),
         [PlaceWipe] = new ShaderConfigField(
             Default: System.Text.Json.JsonDocument.Parse(json: "0.5").RootElement.Clone(),
@@ -485,8 +444,6 @@ public sealed class RenderGraphPackageCatalog {
     /// document pass compiling the same kernel derives from ports named for them. The kernel loads every texel, so it
     /// never samples through either sampler.</summary>
     public static IReadOnlyList<ShaderInterfaceMember> PlaceMembers { get; } = [
-        ShaderInterfaceMember.SampledImage(group: ShaderInterfaceGroup.Pass, name: "bloom", type: ShaderValueType.Float4),
-        ShaderInterfaceMember.Sampler(group: ShaderInterfaceGroup.Pass, name: "bloomSampler"),
         ShaderInterfaceMember.SampledImage(group: ShaderInterfaceGroup.Pass, name: PlaceBase, type: ShaderValueType.Float4),
         ShaderInterfaceMember.Sampler(group: ShaderInterfaceGroup.Pass, name: (PlaceBase + ShaderPipelinePassPorts.SamplerSuffix)),
         ShaderInterfaceMember.SampledImage(group: ShaderInterfaceGroup.Pass, name: PlaceSource, type: ShaderValueType.Float4),
@@ -649,16 +606,7 @@ public sealed class RenderGraphPackageCatalog {
             ],
             Outputs: [RenderGraphPackagePort.Image(access: RenderGraphPortAccess.ComputeWrite)],
             Members: PlaceMembers,
-            Summary: "The base image with the source reconstructed into a rect over it, bilinear to clamped Catmull-Rom by sharpness, and tonemapped when asked."
-        ),
-        new RenderGraphPackage(
-            Config: PlaceConfig, Id: PlaceBloom,
-            Inputs: [RenderGraphPackagePort.Image(access: RenderGraphPortAccess.ComputeRead),
-                RenderGraphPackagePort.Image(access: RenderGraphPortAccess.ComputeRead),
-                RenderGraphPackagePort.Image(access: RenderGraphPortAccess.ComputeRead)],
-            Outputs: [RenderGraphPackagePort.Image(access: RenderGraphPortAccess.ComputeWrite)],
-            Members: PlaceMembers,
-            Summary: "The optical endpoint: sharpen direct light, combine its scatter, then tonemap inside the view rect."
+            Summary: "The base image with the source reconstructed into a rect over it, bilinear to clamped Catmull-Rom by sharpness."
         ),
         .. SourceConversions.Select(selector: static id => new RenderGraphPackage(
             Id: id,

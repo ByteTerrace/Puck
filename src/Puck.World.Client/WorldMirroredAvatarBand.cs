@@ -1,4 +1,5 @@
 using System.Numerics;
+using Puck.Maths;
 using Puck.SdfVm;
 using Puck.SignedDistance;
 using Puck.World.Protocol;
@@ -149,20 +150,22 @@ internal static class WorldMirroredAvatarBand {
     }
     /// <summary>Registers one avatar's two catalog materials, its body color and the accent beside it.</summary>
     /// <param name="builder">The program builder.</param>
-    /// <param name="bodyColor">The entity's body color.</param>
+    /// <param name="bodyColor">The entity's identity colour, which the body decodes to the reflectance it shades.</param>
     /// <param name="noseFactor">The accent-material color multiplier (<c>playerDefaults.noseFactor</c>).</param>
     /// <param name="materialIndex">The slot to write the material ids at.</param>
     /// <param name="bodyMaterials">The body material id per material slot.</param>
     /// <param name="accentMaterials">The accent material id per material slot.</param>
-    public static void EmitMaterials(SdfProgramBuilder builder, Vector3 bodyColor, float noseFactor, int materialIndex, Span<int> bodyMaterials, Span<int> accentMaterials) {
-        bodyMaterials[materialIndex] = builder.AddMaterial(material: new SdfMaterial(Albedo: bodyColor));
-        accentMaterials[materialIndex] = builder.AddMaterial(material: new SdfMaterial(Albedo: (bodyColor * noseFactor)));
+    public static void EmitMaterials(SdfProgramBuilder builder, DisplayColor bodyColor, float noseFactor, int materialIndex, Span<int> bodyMaterials, Span<int> accentMaterials) {
+        var albedo = bodyColor.ToScene().Linear;
+
+        bodyMaterials[materialIndex] = builder.AddMaterial(material: new SdfMaterial(Albedo: albedo));
+        accentMaterials[materialIndex] = builder.AddMaterial(material: new SdfMaterial(Albedo: (albedo * noseFactor)));
     }
     /// <summary>Latches one mirrored avatar's look identity (<see cref="LatchIdentity"/>) and registers its catalog
     /// materials (<see cref="EmitMaterials"/>).</summary>
     /// <param name="builder">The program builder.</param>
     /// <param name="look">The entity's resolved look.</param>
-    /// <param name="bodyColor">The entity's body color.</param>
+    /// <param name="bodyColor">The entity's identity colour.</param>
     /// <param name="catalogRig">The entity's own carried catalog rig.</param>
     /// <param name="noseFactor">The accent-material color multiplier (<c>playerDefaults.noseFactor</c>).</param>
     /// <param name="identityIndex">The slot to write the identity at.</param>
@@ -173,7 +176,7 @@ internal static class WorldMirroredAvatarBand {
     /// differ from <paramref name="identityIndex"/> when the palette is reused per band.</param>
     /// <param name="bodyMaterials">The body material id per material slot.</param>
     /// <param name="accentMaterials">The accent material id per material slot.</param>
-    public static void EmitPalette(SdfProgramBuilder builder, WorldLook look, Vector3 bodyColor, byte catalogRig, float noseFactor, int identityIndex, int[] emittedRigs, float[] emittedScales, float[] emittedGaitAmplitudes, int materialIndex, int[] bodyMaterials, int[] accentMaterials) {
+    public static void EmitPalette(SdfProgramBuilder builder, WorldLook look, DisplayColor bodyColor, byte catalogRig, float noseFactor, int identityIndex, int[] emittedRigs, float[] emittedScales, float[] emittedGaitAmplitudes, int materialIndex, int[] bodyMaterials, int[] accentMaterials) {
         LatchIdentity(catalogRig: catalogRig, emittedGaitAmplitudes: emittedGaitAmplitudes, emittedRigs: emittedRigs, emittedScales: emittedScales, identityIndex: identityIndex, look: look);
         EmitMaterials(accentMaterials: accentMaterials, bodyColor: bodyColor, bodyMaterials: bodyMaterials, builder: builder, materialIndex: materialIndex, noseFactor: noseFactor);
     }

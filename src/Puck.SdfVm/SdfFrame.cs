@@ -17,8 +17,6 @@ public readonly record struct SdfViewSnapshot(CameraSnapshot Camera, NormalizedR
     public CameraBloom? Bloom { get; init; }
     /// <summary>The resolved cost gate. Off allocates no pyramid.</summary>
     public BloomQuality BloomQuality { get; init; }
-    /// <summary>A filmed camera without root placement combines its lens scatter into its own output.</summary>
-    public bool BloomStandalone { get; init; }
     /// <summary>A screen-door fade of one stamp's transform-slot range in this view only. Default draws every stamp.</summary>
     public SdfStampFade StampFade { get; init; }
 
@@ -333,6 +331,9 @@ public sealed record SdfFrame(
     /// <summary>The camera exposure every exposed view of the frame maps the luminance it shades to the display by
     /// (<c>render.exposure</c>). The default is the manual exposure an unauthored world renders at.</summary>
     public SdfExposure Exposure { get; init; } = SdfExposure.Default;
+    /// <summary>The display transform every view of the frame that converts for the display puts its exposed light
+    /// through before the encode (<c>render.tone</c>, the display pass); the default applies no curve.</summary>
+    public SdfToneCurve Tone { get; init; }
 
     /// <summary>The world's default cel style, which every material without a style of its own shades with, applied
     /// before temporal reconstruction; the default is off.</summary>
