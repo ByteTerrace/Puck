@@ -11,7 +11,8 @@ namespace Puck.DirectX;
 /// copy row-pitch alignment — are declared exactly once rather than copied into each consumer.
 /// </summary>
 public static unsafe class DirectXConstants {
-    /// <summary><c>D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES</c>: transitions every subresource of a resource at once.</summary>
+    /// <summary>The value a texture barrier's subresource range takes in its first field, with a zero mip count, to name
+    /// every subresource of the texture (<c>D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES</c>).</summary>
     public const uint AllSubresources = 0xFFFFFFFFu;
     /// <summary>The vtable slot of <c>ID3D12Device::CheckFeatureSupport</c> (the three <c>IUnknown</c> methods,
     /// <c>ID3D12Object</c>'s four, then <c>GetNodeCount</c> and the five creation methods preceding it). The CsWin32
