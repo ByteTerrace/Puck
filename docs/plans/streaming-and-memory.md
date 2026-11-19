@@ -2351,7 +2351,19 @@ and the switch stay, so the comparison can be read again.
 
 **Status and scope.** The sm7b continuations answer the review below and land
 the contiguous fallback, one device retirement timeline and destination page
-generation proofs (pieces 1 and 2 below). No sparse backend is enabled yet. The
+generation proofs (pieces 1 and 2 below). Direct3D 12 has a mapped destination
+(`IGpuMappedBuffer`, `DirectXGpuMappedBuffer`, created through
+`IGpuBufferFactory.TryCreateMapped` at reserved resources tier 2 or above): one
+reserved buffer of `GpuRegion.MaxByteCount` whose 16 MiB chunks map to tile runs
+of the heap arena's tile-only heaps (`DirectXHeapArena.PlaceTiles`), each run
+admitted and counted like any heap range. A `GpuRegion` created `mapped` grows
+by mapping chunks and shrinks by unmapping them, with no carry and no
+replacement; the mesh region fits its chunks to its placements
+(`SdfWorldTables.CoverMeshRegion`), so a forgotten mesh's chunk leaves the pool
+wherever it lay, and the probe scene grows in place. The page authority has one
+page a chunk. Reservation credit still counts the whole tile heap a new run
+opens (M2's page-only credit is not built), and nothing compacts physical
+pages. On Vulkan the
 capabilities are support
 readings, not an enabled allocation path: `VulkanLogicalDeviceFactory.BackingOf`
 reads sparse features, but `FeatureIndicesOf` does not enable them and

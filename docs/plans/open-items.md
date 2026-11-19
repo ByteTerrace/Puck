@@ -1297,9 +1297,13 @@ first; then step 0's baseline legs (`puck benchmark --route seams`, both backend
 quiet window), steps 1,
 2 and 3's windowed readings and step 7's remaining implementation after its
 contiguous fallback, shared retirement timeline, destination page proofs,
-native-pool pressure trim and Vulkan's ordered binding door: native sparse
-resource ownership, Direct3D 12 tile mappings, page admission and pressure
-unmapping/compaction. Mesh regions still use contiguous storage.
+native-pool pressure trim, Vulkan's ordered binding door and Direct3D 12's
+mapped regions (`IGpuMappedBuffer`, `DirectXGpuMappedBuffer`: the mesh region
+and the probe scene back 16 MiB chunks of one reserved buffer, grow without a
+second buffer and give back chunks no placement covers): Vulkan sparse
+resource ownership behind the same interface, page-only reservation credit
+with pool-owned slack, and physical compaction. Vulkan mesh regions still use
+contiguous storage.
 The remaining indexed-read prototype window uses frozen `e9c1d485c9`;
 current hardware qualification reads the 4070, 2060 and Deck, then
 [what step 3 left](streaming-and-memory.md#step-3-one-reservation). The plan

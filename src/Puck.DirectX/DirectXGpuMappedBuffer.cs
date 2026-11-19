@@ -21,9 +21,10 @@ public readonly record struct DirectXTilePlacement(GpuMemoryPlacement<nint> Plac
 /// that may write it, and its tiles return to their heap only after the queue no longer reads them. <see cref="Map"/>
 /// queues a chunk's mapping through <see cref="DirectXDeviceContext.CommandQueueHandle"/>, the door that first hands the
 /// open batch's recorded lists to the queue, so every list recorded later executes after the mapping, and only then marks
-/// the chunk writable. <see cref="Unmap"/> revokes a chunk at once and leaves its unmapping and the return of its tiles to
-/// the release its caller retires behind the chunk's readers. The reserved resource holds no memory of its own: every
-/// counted byte is a tile run's.</para>
+/// the chunk writable. <see cref="Unmap"/> revokes a chunk at once and leaves its unmapping to the release its caller
+/// retires behind the chunk's readers; the release queues the unmapping and a signal of the buffer's own fence after it,
+/// and a run returns to its heap only once that fence has passed, so no heap is freed or range reused while the queue may
+/// still map it. The reserved resource holds no memory of its own: every counted byte is a tile run's.</para>
 /// <para>Called on the device's frame thread, as the region that owns it is.</para>
 /// </summary>
 [SupportedOSPlatform("windows10.0.10240")]
@@ -42,14 +43,23 @@ public sealed unsafe class DirectXGpuMappedBuffer : IGpuMappedBuffer {
     private readonly DirectXTilePlacement?[] m_chunks;
     private readonly uint m_tiles;
 
+    // Tile runs whose chunks were released, each with the fence value signaled after the queue's update that took them out
+    // of the buffer; a run returns to its heap only once the fence reaches it, so no heap is freed or range reused while
+    // the buffer may still map it.
+    private readonly Queue<(ulong Value, DirectXTilePlacement Tiles)> m_returning = [];
+    private readonly nint m_fence;
+
     private nint m_resource;
     private ulong m_mapped;
+    private ulong m_fenceValue;
     private bool m_disposed;
 
     private DirectXGpuMappedBuffer(DirectXDeviceContext context, nint resource, ulong sizeBytes, string family) {
         m_context = context;
         m_arena = context.HeapArena;
         m_device = context.Device.Handle;
+        ((ID3D12Device*)m_device)->CreateFence(Flags: default, InitialValue: 0, ppFence: out ID3D12Fence* fence);
+        m_fence = ((nint)fence);
         m_resource = resource;
         m_family = family;
         SizeBytes = sizeBytes;
@@ -114,6 +124,7 @@ public sealed unsafe class DirectXGpuMappedBuffer : IGpuMappedBuffer {
     public void Map(ulong offset, ulong bytes) {
         ObjectDisposedException.ThrowIf(condition: m_disposed, instance: this);
         RequireRange(bytes: bytes, offset: offset);
+        ReturnCompleted();
         if (bytes == 0UL) { return; }
 
         var first = ((int)(offset / ChunkBytes));
@@ -154,6 +165,7 @@ public sealed unsafe class DirectXGpuMappedBuffer : IGpuMappedBuffer {
     public GpuMappedRelease Unmap(ulong offset, ulong bytes) {
         ObjectDisposedException.ThrowIf(condition: m_disposed, instance: this);
         RequireRange(bytes: bytes, offset: offset);
+        ReturnCompleted();
 
         var end = (offset + bytes);
         // A chunk lies wholly inside when the range covers it to its end, or to the buffer's end for the last, partial one.
@@ -177,6 +189,15 @@ public sealed unsafe class DirectXGpuMappedBuffer : IGpuMappedBuffer {
     public void Dispose() {
         if (m_disposed) { return; }
         m_disposed = true;
+        // A queued update may still name the resource and its tiles' heaps: the release waits for it on the fence, which a
+        // removed device completes at once.
+        if ((m_returning.Count > 0) && (DirectXSharedFence.ReadCompletedValue(fence: ((ID3D12Fence*)m_fence)) < m_fenceValue)) {
+            try {
+                ((ID3D12Fence*)m_fence)->SetEventOnCompletion(Value: m_fenceValue, hEvent: default);
+            } catch (System.Runtime.InteropServices.COMException) {
+                // A removed device runs nothing further; its tiles go back with it.
+            }
+        }
         if (m_resource != 0) {
             _ = ((IUnknown*)m_resource)->Release();
             m_resource = 0;
@@ -186,6 +207,8 @@ public sealed unsafe class DirectXGpuMappedBuffer : IGpuMappedBuffer {
             if (m_chunks[chunk] is { } tiles) { m_arena.ReturnTiles(tiles: tiles); }
             m_chunks[chunk] = null;
         }
+        while (m_returning.Count > 0) { m_arena.ReturnTiles(tiles: m_returning.Dequeue().Tiles); }
+        _ = ((IUnknown*)m_fence)->Release();
         m_mapped = 0UL;
     }
 
@@ -197,18 +220,34 @@ public sealed unsafe class DirectXGpuMappedBuffer : IGpuMappedBuffer {
         }
     }
     // Releases revoked chunks once their readers have finished: queues their unmapping, in order after every submission
-    // already made, and returns their tiles. A disposed buffer's resource is gone, so its tiles only go back.
+    // already made, and the fence signal after it, and returns their tiles once the fence reaches it. A chunk mapped again
+    // since its revocation holds new tiles, which the update that mapped them already took its old ones out of, so it
+    // waits on the same signal. A disposed buffer's resource is gone, and a lost device's queue runs nothing, so their
+    // tiles only go back.
     private void Release(List<(int Chunk, DirectXTilePlacement Tiles)> revoked) {
-        if (!m_disposed && (m_context.Device.Handle == m_device)) {
-            var calls = DirectXDeviceCommandCalls.Of(deviceContext: m_context);
-            var queue = ((ID3D12CommandQueue*)m_context.CommandQueueHandle);
+        if (m_disposed || (m_context.Device.Handle != m_device)) {
+            foreach (var (_, tiles) in revoked) { m_arena.ReturnTiles(tiles: tiles); }
 
-            foreach (var (chunk, _) in revoked) {
-                // A chunk mapped again since its revocation holds new tiles, which stay.
-                if (m_chunks[chunk] is not null) { continue; }
-                calls.UpdateTileMappings(firstTile: (((uint)chunk) * ChunkTiles), heap: null, heapFirstTile: 0U, queue: queue, resource: ((ID3D12Resource*)m_resource), tileCount: TilesOf(chunk: chunk));
-            }
+            return;
         }
-        foreach (var (_, tiles) in revoked) { m_arena.ReturnTiles(tiles: tiles); }
+
+        var calls = DirectXDeviceCommandCalls.Of(deviceContext: m_context);
+        var queue = ((ID3D12CommandQueue*)m_context.CommandQueueHandle);
+
+        foreach (var (chunk, _) in revoked) {
+            if (m_chunks[chunk] is not null) { continue; }
+            calls.UpdateTileMappings(firstTile: (((uint)chunk) * ChunkTiles), heap: null, heapFirstTile: 0U, queue: queue, resource: ((ID3D12Resource*)m_resource), tileCount: TilesOf(chunk: chunk));
+        }
+        DirectXCommandCalls.Signal(calls: calls, fence: ((ID3D12Fence*)m_fence), queue: queue, value: ++m_fenceValue);
+        foreach (var (_, tiles) in revoked) { m_returning.Enqueue(item: (m_fenceValue, tiles)); }
+        ReturnCompleted();
+    }
+    // Returns the released tile runs whose update the queue has executed.
+    private void ReturnCompleted() {
+        if (m_returning.Count == 0) { return; }
+
+        var completed = DirectXSharedFence.ReadCompletedValue(fence: ((ID3D12Fence*)m_fence));
+
+        while ((m_returning.Count > 0) && (m_returning.Peek().Value <= completed)) { m_arena.ReturnTiles(tiles: m_returning.Dequeue().Tiles); }
     }
 }
