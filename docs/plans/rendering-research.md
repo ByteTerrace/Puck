@@ -2964,9 +2964,9 @@ masked.**
   is deleted.
 - *Owns.* `src/Puck.World.Authoring/Authoring/CreationMotionPlan.cs`, the
   pooled emitter (`WorldCreationInstances.Emit.cs`),
-  `SdfMeshGeometryBuilder`, `SdfMeshSettle.cs` and
-  `SdfMeshPathBake.Settle.cs`, which go, and the group state only they
-  read.
+  `SdfMeshGeometryBuilder`, and the settle rebake and the group state only
+  it read (landed: both are deleted, and `SdfMeshPathBake.Revisit` re-plans
+  a group when its operand moves a step).
 - *Needs.* Nothing.
 - *Model.* Opus `specialist`.
 - *Finish line.* G1's checks hold
