@@ -133,7 +133,7 @@ public static class WorldStaging {
 
         // Staging consumes its root once. Retain shared imports and bases, without allocating one full root
         // image and per-value origin snapshot for every generated test world in a directory sweep.
-        if (!PuckDocumentComposer.TryComposeWorldDocument(
+        if (!WorldCompileSession.Shared.TryCompose(
             catalog: catalog,
             origins: origins,
             retainRoot: false,

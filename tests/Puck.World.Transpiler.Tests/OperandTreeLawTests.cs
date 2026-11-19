@@ -27,7 +27,7 @@ public class OperandTreeLawTests {
         """;
 
     private static JsonObject Compile(string source) {
-        var result = WorldCompiler.Compile(source, cancellationToken: TestContext.Current.CancellationToken);
+        var result = WorldCompileSession.Shared.Compile(source, cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.False(condition: result.Diagnostics.HasErrors, userMessage: result.Diagnostics.FormatReport(source));
         return result.RequireJson();
@@ -60,7 +60,7 @@ public class OperandTreeLawTests {
 
         Assert.Equal("scores2", effect["state"]!.GetValue<string>());
         Assert.Equal("amount", effect["key"]!.GetValue<string>());
-        var missing = WorldCompiler.Compile((Prefix + "rule r { result = scores[1] }"), cancellationToken: TestContext.Current.CancellationToken);
+        var missing = WorldCompileSession.Shared.Compile((Prefix + "rule r { result = scores[1] }"), cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Contains(collection: missing.Diagnostics, filter: diagnostic => (diagnostic.Code == PuckDiagnosticCodes.FamilyIndexOutOfBounds));
     }
@@ -93,7 +93,7 @@ public class OperandTreeLawTests {
     [InlineData("1 +")]
     [Theory]
     public void InvalidOperandsAreRefusedBeforeDocumentPublication(string expression) {
-        var result = WorldCompiler.Compile((Prefix + $"rule r {{ result = {expression} }}"), cancellationToken: TestContext.Current.CancellationToken);
+        var result = WorldCompileSession.Shared.Compile((Prefix + $"rule r {{ result = {expression} }}"), cancellationToken: TestContext.Current.CancellationToken);
 
         // The parser reports the refusal, and lowering the operand does not report it again.
         _ = Assert.Single(collection: result.Diagnostics, predicate: diagnostic => (diagnostic.Code == PuckDiagnosticCodes.OperandParse));
@@ -122,7 +122,7 @@ public class OperandTreeLawTests {
         var path = Path.Combine(path1: directory.RootPath, path2: "root.puck");
 
         File.WriteAllText(contents: "schema: \"puck.world.definition.v1\"\nimport \"library\" as lib\nuse lib.emit as first()\n", path: path);
-        var compilation = WorldCompiler.CompileFile(path, cancellationToken: TestContext.Current.CancellationToken);
+        var compilation = WorldCompileSession.Shared.CompileFile(path, cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.False(condition: compilation.Diagnostics.HasErrors, userMessage: compilation.Diagnostics.FormatReport(""));
         var expression = compilation.RequireJson()["rules"]![0]!["effects"]![0]!["expression"]!;

@@ -64,11 +64,14 @@ pieces of work begin: the World-side door a small edit enters by (the
 author may live-edit a published world; saved files drive the running World
 first; World Studio stays a browser sandbox and utility.
 
-**The first build step** has landed. It removed three bookkeeping costs that
-were about half of every whole-world compile: the name index that re-read a
-directory for every import, the cache validity check that re-read and hashed
-every input each time, and the origin tracking that ran whether or not
-anything read it ([the build order](#build-order)).
+**The first two build steps** have landed. The first removed three
+bookkeeping costs that were about half of every whole-world compile: the name
+index that re-read a directory for every import, the cache validity check that
+re-read and hashed every input each time, and the origin tracking that ran
+whether or not anything read it. The second made `WorldCompileSession` the one
+door into the compiler for every host, with library parses shared by content,
+and deleted the second watcher, the sweep's second cache and the language
+server's own dependency table ([the build order](#build-order)).
 
 ## What was measured
 
@@ -129,7 +132,7 @@ charging the same budget, so `--measure` reports the whole compile's work.
 A world is more than one source. After its own compile, a root is
 **composed**: `WorldDefinitionFileSource.TryComposeChainWithImports` merges
 the root's `basis` chain and every imported document, each compiled in turn
-through `PuckDocumentComposer`, into one JSON tree
+through the compile session (`WorldCompileSession`), into one JSON tree
 (`WorldDocumentBasis.TryMergeInto`). The composed tree is serialized, read
 into a `WorldDefinition`, **validated** whole
 (`WorldDefinitionValidator.TryValidateLocally`) and, at a boot or a reload,
@@ -146,7 +149,7 @@ code now works this way:
 
 - **Choosing a name's file reads no source again.** An import names a
   document, and any source in the directory may emit that name, so
-  `PuckDocumentComposer.TrySelectCarrier` asks `WorldSourceIndex.Claims` for
+  `WorldCompileSession.TrySelectCarrier` asks `WorldSourceIndex.Claims` for
   every claim in the directory. `Claims` holds each directory's claims while
   its listing and every source's digest are the ones they were built from,
   and holds what a source declares by the digest of its bytes.
@@ -169,10 +172,10 @@ code now works this way:
 | Cache | Holds | Keyed on | What goes wrong |
 |---|---|---|---|
 | Held declarations (`WorldSourceIndex`) | What each source declares it emits | The digest of the source's bytes; on disk, also the compiler's identity | Fine as a table. The reads that feed it are the cost above |
-| Held compiles (`WorldCompileCache`, in memory and under the `compilations` directory) | One source's documents and every file fact its compile read | The compiler's identity, the source's full path, and whether tests are lowered. Served only while every recorded input re-reads the same | The path is in the key, so two checkouts holding the same bytes share nothing. The identity is the build identity of every non-framework assembly the compiler references (`WorldCompileCache.CompilerIdentity`), so any rebuild of any of them empties the cache. A source is compiled twice when one caller wants tests and another does not |
+| Held compiles (`WorldCompileSession.TryCompile`, in memory and under the `compilations` directory) | One source's documents and every file fact its compile read | The compiler's identity, the source's full path, and whether tests are lowered. Served only while every recorded input re-reads the same | The path is in the key, so two checkouts holding the same bytes share nothing. The identity is the build identity of every non-framework assembly the compiler references (`WorldCompileSession.CompilerIdentity`), so any rebuild of any of them empties the cache. A source is compiled twice when one caller wants tests and another does not |
 | Held compositions (`WorldDefinitionFileSource.HoldComposedImage`, persisted through `IWorldCompositionStore`) | A composed document whole, with its chain's bytes | The resolved path, the machine catalog's fingerprint and the source type; valid while every input re-reads the same | Whole-document images: the debug root's is 26 MiB, written again for each compiler build. An edit to any link discards the whole image |
 | Compiled worlds (`CompiledWorldCache`, `.puckb`) | The drawn definition, assets and curves, as chunks | A file named for the document's path; each chunk by the code that derives it (`CompiledWorldChunks.EngineBuild`, a closure over the methods the producers reach) and its recorded inputs | Keyed by reached code, which is the right identity, but one chunk covers the whole definition, so one row's change derives it all again |
-| The device cache (`WorldCacheRoots`) | The three directories above for compiles, compiled worlds and meshes, per user or under `--cache-dir` | — | The compile directory is bounded at 256 MiB (`WorldCompileCache.MaxPersistedBytes`). One compiler build's entries for the debug world are about 75 MiB, so three or four builds fill it and a machine with several worktrees evicts constantly |
+| The device cache (`WorldCacheRoots`) | The three directories above for compiles, compiled worlds and meshes, per user or under `--cache-dir` | — | The compile directory is bounded at 256 MiB (`WorldCompileSession.MaxPersistedBytes`). One compiler build's entries for the debug world are about 75 MiB, so three or four builds fill it and a machine with several worktrees evicts constantly |
 | The mesh store (`SdfMeshStore`) | Baked meshes | Geometry (`SdfMeshGeometryBuilder`) and the bake's identity | The `bake-keys` lane's work, not this memo's |
 | The shade program table (a document's root `shades`) | Each authored shading program once | The program's name and the SHA-256 of its canonical form (`ShadeReference.KeyOf`) | Nothing. It is the model the others should follow: identity is content, so equal programs are one row wherever they are written |
 | Specialized shading kernels (`SdfWorldResidency.PrepareShade`, the shader cache) | Compiled kernels for the active programs | The programs' identities, the op table's fingerprint and the kernel sources' content | Nothing for this loop: the interpreter shows an edited program on the next frame and the specialized kernel follows |
@@ -188,19 +191,23 @@ key; the compile cache does not follow it.
 
 `puck compile`, `puck lint`, `puck format`, `puck test`, `puck decompile`,
 `puck migrate` and `puck lsp` all sit on the same assemblies as the World, so
-there is one implementation of each stage. What differs is the driver:
+there is one implementation of each stage, and since build step 2 every host
+reaches it through one `WorldCompileSession` (`WorldCompiler` is internal to
+it). What still differs is the order a host asks the session for things:
 
-- `CompileCommand.ExecuteWorldCompilation` compiles the root directly, never
-  through the compile cache, then composes and validates when `--validate` is
-  given. It does not lint.
-- `puck lint` and the language server run `WorldSourceDiagnostics`: compile,
-  lint, compose, validate, then lint references over the composed world.
-- A boot runs `WorldCompileCache.TryCompile`, then
-  `WorldSourceLoader.TryLoadForAdmission`. A reload runs
-  `WorldDefinitionLoader.TryLoadFileForAdmission` over the same composer.
-- `world.save` runs its own load, compose and proof (`WorldSourceSave`).
-- `SweepRoute.TryLoad` builds a second in-memory `WorldCompileCache` over
-  the shared directory.
+- `CompileCommand.ExecuteWorldCompilation` compiles the root through the
+  session's `Compile`, unheld, then composes and validates when `--validate`
+  is given. It does not lint.
+- `puck lint` and the language server run `WorldSourceDiagnostics`: the
+  session's `CompileBuffer`, lint, compose, validate, then lint references
+  over the composed world.
+- A boot runs the session's `TryCompile`, then its `TryLoadForAdmission`. A
+  reload runs `WorldDefinitionLoader.TryLoadFileForAdmission` over the
+  session as its document source.
+- `world.save` runs its own load, compose and proof (`WorldSourceSave`),
+  through the session.
+- `puck test` and `SweepRoute.TryLoad` compile through the shared session
+  without holding the generated worlds (`TryCompile` with `hold: false`).
 
 Each run is a new process. Startup is cheap (`puck --help` and a leaf's lint
 or format answer in about half a second), so a one-shot check of one file is
@@ -209,11 +216,9 @@ from the last run, and does the whole-world work above. Agents run exactly
 that check after every `.puck` edit, on a machine where several lanes each do
 the same.
 
-`puck compile --watch` is a second watcher. It uses a `FileSystemWatcher` on
-the source's own directory, so an import from another directory (the standard
-package) is not watched, and it writes a `.world.json` nobody reads, since the
-World boots from source. The World's own `WorldSourceWatch` follows every file
-fact the compile read.
+The World's `WorldSourceWatch` is the one watcher: it follows every file fact
+the compile read, the standard package's included. `puck compile --watch`,
+which watched only the source's own directory, was deleted in build step 2.
 
 Five copies of the CLI can run on one machine. Each is a separate build, and
 a build that differs in any compiler assembly has its own partition of the
@@ -286,11 +291,13 @@ here, since it needs a windowed World
 - **The language server** is one class, `PuckLanguageServer`, hosted over
   stdio by `puck lsp` and inside the browser engine by `BrowserLanguageServer`.
   It diagnoses in two tiers through `WorldSourceDiagnostics`: the source tier
-  compiles the buffer, and the semantic tier composes and validates. It keeps
-  its own table of which open document reads which file
-  (`PuckLanguageServer.ReadDependencies`, a third dependency graph beside the
-  compile's recorded inputs and the import walk). Completion and the outline each
-  parse the buffer again, and a hover or a completion over a state row compiles it.
+  compiles the buffer through the session's `CompileBuffer`, and the semantic
+  tier composes and validates. Which open document reads which file is the
+  session's own record of what each tier read (`CompileInputs`), at any depth,
+  so an edit to a library re-diagnoses every open document that imports it
+  however indirectly. A hover or a completion over a state row reads the
+  buffer's held compile rather than compiling it again. Completion and the
+  outline still parse the buffer again.
 - **A fragment is not checked against its world.** Most sources are fragments
   that some root composes. The semantic tier validates a root only, so an
   author editing `valley.puck` learns of a refusal in the composed world when
@@ -409,10 +416,10 @@ says what holds it and where the guarantee stops.
 and no process keeps what the last compile learned in a form the next can use
 for less than the whole world.
 
-**The proposal.** One type, here called the compile session. It is what
-`WorldCompileCache`, `WorldSourceIndex`, `PuckDocumentComposer`,
-`WorldSourceLoader` and the held images in `WorldDefinitionFileSource` become
-when merged, not a new layer beside them. It keeps the existing project
+**The proposal.** One type, the compile session (`WorldCompileSession`). It is
+what the compile cache, `WorldSourceIndex`, the document composer, the source
+loader and the held images in `WorldDefinitionFileSource` become when merged,
+not a new layer beside them; step 2 merged the first, third and fourth. It keeps the existing project
 seams. Files, parses and the import walk belong to the vocabulary-neutral
 core, `Puck.Transpiler`, so the cartridge vocabulary compiles through the
 same session and stops being a second driver
@@ -727,13 +734,11 @@ a session with edits does not replay (replay), a spelling costs more to tune
 
 | Two of | Where | One home |
 |---|---|---|
-| Drivers that order the stages | `CompileCommand.ExecuteWorldCompilation`, `WorldSourceDiagnostics`, `WorldSourceLoader` with `PuckWorldLoader`, `WorldSourceSave`, `SweepRoute.TryLoad`, and for the cartridge vocabulary `CompileCommand.CompileCartridge` | The session |
-| Dependency graphs of a source | `CompileInputs` records, `ModuleResolver`'s walk, `PuckLanguageServer.ReadDependencies` | The session's read sets |
-| Watchers | `WorldSourceWatch`, `puck compile --watch` | `WorldSourceWatch` over `DependencyWatch` |
-| In-memory compile caches | `WorldCompileCache.Shared`, the one `SweepRoute.TryLoad` constructs, the held images in `WorldDefinitionFileSource` | The session |
+| Drivers that order the stages | The world's are on the session (step 2). Left: the cartridge vocabulary's `CompileCommand.CompileCartridge`, `CartridgeLanguageServices` and `CartridgeSource` | The session |
+| In-memory compile caches | The held images in `WorldDefinitionFileSource`, beside the session's held compiles | The session |
 | Compiles of one source | The document compile and the tests compile | One product |
 | Forms of a document change | The keyed overlay, `WorldReloadDelta`'s whole-document diff, `WorldSourceEdits`'s pointer walk, `WorldProjectionDelta` | The keyed overlay, made by the session |
-| Code identities for a derived product | Assembly identities in `WorldCompileCache`, the closures in `CompiledWorldChunks` and the bake, the shader include closure | One reached-code helper, used per stage |
+| Code identities for a derived product | Assembly identities in `WorldCompileSession`, the closures in `CompiledWorldChunks` and the bake, the shader include closure | One reached-code helper, used per stage |
 | Validations of the same bytes | A preview's `ComposeSource` then `Compile` in the browser engine; a reload's sender and its authority, both whole | Narrowed validation, once per side that must not trust the other |
 | Ways to run the checkout's CLI | The global tool, the lane copy, the MCP install, the build store | The build store behind the stub |
 | Token grammars | `PuckParser` and the VS Code TextMate file | The parser, with the grammar generated or dropped |
@@ -764,13 +769,20 @@ added to that instrument, never to a second one.
    the result). `puck compile --validate --measure` reports the door's
    `file-content-reads`, about the number of files a warm debug compile reads;
    the commit that landed it carries the before and after readings.
-2. **One session, every host through it.** Merge the composition types, give
-   the stages the session's reader in place of a path, move the CLI verbs,
-   the loader, the save, the sweep and the language server onto it, delete
-   `puck compile --watch` and the language server's dependency table, and
-   pass one evaluation budget through a compile. No behaviour changes. *Check:* `puck references` on
-   `WorldCompiler.Compile` names the session alone, and the debug world
-   compiles to the same canonical bytes as before.
+2. **One session, every host through it.** Landed. The compile cache, the
+   document composer and the source loader merged into
+   `WorldCompileSession`, the only caller of the now internal `WorldCompiler`;
+   the import walk reads every library through the session's parses
+   (`PuckSourceTable`, by content digest, which the cartridge vocabulary's walk
+   shares); the CLI verbs, the loader, the save, the sweep and `puck test`, the
+   World's watch and the language server go through it;
+   `puck compile --watch`, the sweep's second cache and the language server's
+   dependency table are deleted. What it did not merge, and where it goes: the
+   held composed images still live in `WorldDefinitionFileSource` (step 3's
+   row composition replaces them), `WorldSourceIndex` stays a static index
+   the session reads, and the cartridge vocabulary still orders its own stages
+   in `CompileCommand.CompileCartridge`, `CartridgeLanguageServices` and
+   `CartridgeSource`. The commit that landed it carries the counted readings.
 3. **Deltas from changed sources.** The session keeps row digests and emits
    the delta between revisions, with unchanged sources stopping early and
    changed ones lowered in parallel. *Check:* for a one-value edit, the
@@ -865,7 +877,7 @@ are removed by the step named or carried by a verification request.
   holds a shading program. Step 8 fixes it.
 - An unchanged reload is not a no-op: it installs fully, clears the journal
   and resets dealt placements. Step 4 takes the reload out of the edit loop.
-- `WorldCompileCache.CompilerIdentity` uses assembly build identities, which
+- `WorldCompileSession.CompilerIdentity` uses assembly build identities, which
   the puck-world skill rules out as a derivation key. Step 6 fixes it.
 - The browser engine's README measures a debug world two orders of magnitude
   smaller than today's. The World Studio verification request refreshes it.
@@ -878,7 +890,7 @@ capability and the technique, not only the expected name.
 
 | Capability | What exists | Verdict |
 |---|---|---|
-| Compile a source once and reuse it | `WorldCompileCache`, `WorldSourceIndex`, `PuckDocumentComposer`, `WorldSourceLoader`, the held images in `WorldDefinitionFileSource`, `CompiledWorldCache` | They are the session's parts. The session merges them and adds row-level state; it is not a new cache beside them |
+| Compile a source once and reuse it | `WorldCompileSession` (once the compile cache, the document composer and the source loader), `WorldSourceIndex`, the held images in `WorldDefinitionFileSource`, `CompiledWorldCache` | They are the session's parts. The session merges them and adds row-level state; it is not a new cache beside them |
 | Know what a compile read | `CompileInputs`, `CompileInputLog` | Reused as the one read door, extended with a stamp-trusting digest |
 | Trust a file by its stamp | `CompileInputs` (`Current`, `Digest`, `List`), which `WorldSourceWatch` polls through | The one home, used by every reader |
 | Watch a dependency set | `DependencyWatch`, `WorldSourceWatch` | Reused. `puck compile --watch` is the duplicate |

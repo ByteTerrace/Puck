@@ -124,7 +124,7 @@ internal sealed class WorldFindingLocator(JsonObject composed, JsonObject? sourc
             return null;
         }
 
-        var compilation = WorldCompiler.Compile(includeTests: false, source: Puck.Confinement.FileContent.Text(content: content), sourceMap: new SourceMap(), sourcePath: path);
+        var compilation = WorldCompileSession.Shared.Compile(includeTests: false, source: Puck.Confinement.FileContent.Text(content: content), sourceMap: new SourceMap(), sourcePath: path);
 
         if ((compilation.Document is null) || (compilation.Json is null)) {
             return null;

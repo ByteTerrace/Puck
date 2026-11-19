@@ -8,7 +8,7 @@ namespace Puck.World.Testing;
 
 /// <summary>The world documents the game ships, the fixture documents its laws boot, and the worlds its canary
 /// manifests boot, enumerated rather than listed, and the door each boots through: a JSON document through <see cref="WorldDefinitionLoader.TryResolve"/>, a
-/// <c>.puck</c> source compiled and admitted through <see cref="WorldSourceLoader"/>, and a composition source staged
+/// <c>.puck</c> source compiled and admitted through <see cref="WorldCompileSession"/>, and a composition source staged
 /// world by world as a composition boot stages one. A shipped document that does not boot on its own is a module
 /// library, which emits no document, or a fragment (<see cref="IsFragment"/>).</summary>
 internal static class WorldDocumentCorpus {
@@ -134,7 +134,7 @@ internal static class WorldDocumentCorpus {
             return true;
         }
 
-        var compilation = WorldCompiler.CompileFile(
+        var compilation = WorldCompileSession.Shared.CompileFile(
             allowMultiple: true,
             path: path
         );
@@ -192,7 +192,7 @@ internal static class WorldDocumentCorpus {
             return false;
         }
 
-        if (!WorldSourceLoader.TryLoadForAdmission(
+        if (!WorldCompileSession.Shared.TryLoadForAdmission(
             admission: out var admission,
             catalog: catalog,
             document: Encoding.UTF8.GetBytes(s: compilation.RequireJson().ToJsonString()),

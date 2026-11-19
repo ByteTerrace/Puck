@@ -3,7 +3,6 @@ using Puck.Abstractions.Documents;
 using Puck.Testing;
 using Puck.World;
 using Puck.World.Transpiler;
-using Puck.World.Transpiler.Composition;
 using Xunit;
 
 namespace Puck.Cli.Worlds.Tests;
@@ -86,7 +85,7 @@ public sealed class WorldDocumentOutputLawTests {
             suffix: WorldDocumentName.SourceSuffix,
             tree: tree
         )) {
-            var compilation = WorldCompiler.CompileFile(
+            var compilation = WorldCompileSession.Shared.CompileFile(
                 allowMultiple: true,
                 cancellationToken: TestContext.Current.CancellationToken,
                 path: source
@@ -244,7 +243,7 @@ public sealed class WorldDocumentOutputLawTests {
         var derived = new HashSet<string>(comparer: StringComparer.OrdinalIgnoreCase);
 
         foreach (var document in shipment.Documents) {
-            if (!WorldSourceLoader.TryCompileWorld(
+            if (!WorldCompileSession.Shared.TryCompileWorld(
                 catalog: machines,
                 catalogFingerprint: CliWorldVocabulary.Fingerprint(catalog: machines),
                 compiledWorld: out var fresh,

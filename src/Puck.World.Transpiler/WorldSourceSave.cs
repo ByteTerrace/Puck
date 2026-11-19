@@ -180,13 +180,13 @@ public static class WorldSourceSave {
             return false;
         }
 
-        var compilation = WorldCompiler.Compile(source: candidate, sourcePath: path);
+        var compilation = WorldCompileSession.Shared.Compile(source: candidate, sourcePath: path);
 
         if (!compilation.Success || (compilation.Json is null)) {
             reason = ("the printed source does not compile: " + compilation.Diagnostics.FormatReport());
             return false;
         }
-        if (!WorldSourceLoader.TryReadAuthored(path: path, document: Encoding.UTF8.GetBytes(s: compilation.Json.ToJsonString()), authored: out var proof, reason: out reason, catalogFingerprint: catalogFingerprint, catalog: catalog, sourceCompilation: WorldCompiledSource.From(compilation: compilation))) {
+        if (!WorldCompileSession.Shared.TryReadAuthored(path: path, document: Encoding.UTF8.GetBytes(s: compilation.Json.ToJsonString()), authored: out var proof, reason: out reason, catalogFingerprint: catalogFingerprint, catalog: catalog, sourceCompilation: WorldCompiledSource.From(compilation: compilation))) {
             return false;
         }
         if (!JsonNode.DeepEquals(node1: JsonNode.Parse(utf8Json: WorldDefinitionSerialization.SerializeBeside(definition: proof, path: path)), node2: target)) {
@@ -204,7 +204,7 @@ public static class WorldSourceSave {
         var bytes = File.ReadAllBytes(path: path);
         var bom = bytes.AsSpan().StartsWith(value: Encoding.UTF8.Preamble);
         var text = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true).GetString(bytes: bytes.AsSpan(start: (bom ? Encoding.UTF8.Preamble.Length : 0)));
-        var compilation = WorldCompiler.Compile(source: text, sourcePath: path);
+        var compilation = WorldCompileSession.Shared.Compile(source: text, sourcePath: path);
 
         if (!compilation.Success || (compilation.Json is null)) {
             reason = $"{WorldDocumentLabel.Of(path: path)} does not compile to one document: {compilation.Diagnostics.FormatReport()}";
@@ -247,7 +247,7 @@ public static class WorldSourceSave {
                 continue;
             }
 
-            var compilation = WorldCompiler.Compile(source: source.Rewritten, sourcePath: source.Path);
+            var compilation = WorldCompileSession.Shared.Compile(source: source.Rewritten, sourcePath: source.Path);
 
             rewritten[source.Path] = new Source { ByteOrderMark = source.ByteOrderMark, Document = compilation.Json!, Path = source.Path, Text = source.Rewritten };
         }
@@ -283,7 +283,7 @@ public static class WorldSourceSave {
     // which is read as that document. It names files of its own, so no composition over it is held.
     private sealed class EditedDocuments(IReadOnlyDictionary<string, Source> sources) : IWorldDocumentSource {
         public bool TryRead(string name, string referrerName, out string resolvedName, out byte[]? content, out string reason) {
-            if (!PuckDocumentComposer.Instance.TryRead(content: out content, name: name, reason: out reason, referrerName: referrerName, resolvedName: out resolvedName)) {
+            if (!WorldCompileSession.Shared.TryRead(content: out content, name: name, reason: out reason, referrerName: referrerName, resolvedName: out resolvedName)) {
                 return false;
             }
             if (sources.TryGetValue(key: PuckPaths.Normalize(path: resolvedName), value: out var source)) {
@@ -444,7 +444,7 @@ public static class WorldSourceSave {
             }
             fragment["schema"] = WorldDefinition.SchemaVersion;
             try {
-                var compiled = WorldCompiler.Compile(source: WorldDecompiler.Decompile(root: (JsonObject)fragment));
+                var compiled = WorldCompileSession.Shared.Compile(source: WorldDecompiler.Decompile(root: (JsonObject)fragment));
 
                 return ((compiled.Success && (DocumentJsonPointer.At(pointer: (pointer + "/0"), root: compiled.Json) is { } lowered)) ? lowered.DeepClone() : bare);
             } catch (WorldDecompileRefusedException) {

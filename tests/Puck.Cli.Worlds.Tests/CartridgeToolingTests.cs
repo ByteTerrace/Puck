@@ -36,7 +36,6 @@ public sealed class CartridgeToolingTests {
             CompileCommand.Run(
                 path,
                 null,
-                false,
                 true,
                 true,
                 false
@@ -73,7 +72,6 @@ public sealed class CartridgeToolingTests {
             CompileCommand.Run(
                 path,
                 null,
-                false,
                 true,
                 true,
                 false

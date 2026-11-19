@@ -186,7 +186,7 @@ public sealed class EnumRowLawTests {
     [Theory]
     public void AnUndeclaredEnumIsRefusedOnceAtTheLineThatNamesIt(string name) {
         var sourceMap = new SourceMap();
-        var compilation = WorldCompiler.Compile(
+        var compilation = WorldCompileSession.Shared.Compile(
             cancellationToken: TestContext.Current.CancellationToken,
             source: (WorldSources.Header + Refusals[name].Body),
             sourceMap: sourceMap
@@ -223,7 +223,7 @@ public sealed class EnumRowLawTests {
 
         File.WriteAllText(contents: source, path: path);
 
-        var compilation = WorldCompiler.Compile(
+        var compilation = WorldCompileSession.Shared.Compile(
             cancellationToken: TestContext.Current.CancellationToken,
             source: source,
             sourceMap: sourceMap,

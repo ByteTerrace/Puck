@@ -500,7 +500,7 @@ full depth adds the semantic tier as a following unit.
 
 The semantic tier composes the root's graph twice (validation and reference
 lint), and each composition proves every `.puck` link in the chain still reads
-(`PuckDocumentComposer.StillReads`) by compiling it again, so a root with a
+(`WorldCompileSession.StillReads`) by compiling it again, so a root with a
 `.puck` basis compiles that unchanged basis twice per diagnosis; for
 `genesis/card.puck` that was 2,338 ms of its semantic tier in an earlier
 stage-by-stage measurement. The rest is the composition's `JsonNode` merge and

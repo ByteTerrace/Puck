@@ -2,48 +2,28 @@ using Puck.Assets;
 using System.Text.Json.Nodes;
 using Puck.Abstractions.Machines;
 using Puck.Transpiler.Diagnostics;
+using Puck.World.Transpiler.Composition;
 
-namespace Puck.World.Transpiler.Composition;
+namespace Puck.World.Transpiler;
 
-/// <summary>The one <see cref="IWorldDocumentSource"/> that resolves a <c>basis</c>/<c>imports</c> document name beside
-/// the referrer to the <c>.puck</c> source there that emits that name, whatever the source's stem, compiled in memory,
-/// and to its <c>.world.json</c> document otherwise (<see cref="WorldDocumentName"/>), before handing the bytes to
-/// <see cref="WorldDefinitionFileSource.TryComposeChainWithImports"/>. A source carries exactly the names it emits
-/// (<see cref="WorldCompilation.EmittedNames"/>): an ordinary source its own stem, a composition the worlds it declares
-/// and not its stem unless it declares a world of that name, and a module library none. Which source emits a name is
-/// read from the directory's one name index (<see cref="WorldSourceIndex"/>), which parses each source and compiles
-/// none. A document file beside the source of its exact name that emits that name is never read; beside a source that
-/// emits another name, it is the name's carrier. Two files that carry one name, other than a source beside its own
-/// document, are refused by name (<see cref="TryCarriers"/> holds a whole directory to the same rule). Both the game boot path (<c>Puck.World.PuckWorldLoader</c>) and <c>puck compile --validate</c>
-/// (<see cref="Validation.WorldSemanticValidator"/>) compose through this one implementation, so a <c>.puck</c>
-/// source and the running game resolve a basis or import chain identically. A supplied root compilation retains
-/// its input facts through composition; other sources compile through the selected <see cref="WorldCompileCache"/>,
-/// so checking provenance does not lower the same root again. Resolved names use forward slashes on every platform.</summary>
-public sealed class PuckDocumentComposer : IWorldDocumentSource {
-    private readonly WorldCompileCache m_cache;
-    private readonly string? m_rootPath;
-    private readonly WorldCompiledSource? m_rootCompilation;
-
-    /// <summary>Creates a document source backed by the selected compile and composition cache.</summary>
-    /// <param name="cache">The compile and composition cache.</param>
-    /// <param name="sourceCompilation">An already compiled root whose output may be supplied to composition.
-    /// Its first input identifies its source; carrier selection, bytes and current facts still govern reuse.</param>
-    public PuckDocumentComposer(WorldCompileCache cache, WorldCompiledSource? sourceCompilation = null) {
-        ArgumentNullException.ThrowIfNull(cache);
-        m_cache = cache;
-        m_rootPath = (((sourceCompilation is { Inputs.Count: > 0 }) && (sourceCompilation.Inputs[0].Kind == CompileInputKind.Content))
-            ? Puck.Abstractions.PuckPaths.Normalize(path: Path.GetFullPath(path: sourceCompilation.Inputs[0].Path))
-            : null);
-        m_rootCompilation = sourceCompilation;
-    }
-
-    /// <summary>Gets the composer over <see cref="WorldCompileCache.Shared"/> that a host installs as its local
-    /// document source (<see cref="WorldDefinitionFileSource.UseLocalDocuments"/>).</summary>
-    public static PuckDocumentComposer Instance { get; } = new(cache: WorldCompileCache.Shared);
+// The session as the one IWorldDocumentSource: it resolves a `basis`/`imports` document name beside the referrer to the
+// `.puck` source there that emits that name, whatever the source's stem, compiled through the session, and to its
+// `.world.json` document otherwise (WorldDocumentName), before handing the bytes to
+// WorldDefinitionFileSource.TryComposeChainWithImports. A source carries exactly the names it emits
+// (WorldCompilation.EmittedNames): an ordinary source its own stem, a composition the worlds it declares and not its
+// stem unless it declares a world of that name, and a module library none. Which source emits a name is read from the
+// directory's one name index (WorldSourceIndex), which parses each source and compiles none. A document file beside the
+// source of its exact name that emits that name is never read; beside a source that emits another name, it is the
+// name's carrier. Two files that carry one name, other than a source beside its own document, are refused by name
+// (TryCarriers holds a whole directory to the same rule). The game's boot path, `puck compile --validate` and the
+// language server compose through here, so a `.puck` source and the running game resolve a basis or import chain
+// identically. A view rooted at a compiled source (WithRoot) retains that compile's input facts through composition.
+// Resolved names use forward slashes on every platform.
+public sealed partial class WorldCompileSession {
     /// <inheritdoc />
     public bool ResolvesFiles => true;
     /// <inheritdoc />
-    public IWorldCompositionStore Compositions => m_cache;
+    public IWorldCompositionStore Compositions => this;
 
     /// <inheritdoc />
     public bool RecordInputs(string resolvedName, byte[] content) => StillReads(content: content, resolvedName: resolvedName);
@@ -67,7 +47,7 @@ public sealed class PuckDocumentComposer : IWorldDocumentSource {
                 compiled = root;
                 return true;
             }
-            return m_cache.TryCompile(
+            return TryCompile(
                 compiled: out compiled,
                 failure: out failure,
                 path: path
@@ -104,7 +84,7 @@ public sealed class PuckDocumentComposer : IWorldDocumentSource {
         var directories = new List<string> { directory };
 
         if (option == SearchOption.AllDirectories) {
-            directories.AddRange(collection: Directory.EnumerateDirectories(
+            directories.AddRange(collection: System.IO.Directory.EnumerateDirectories(
                 enumerationOptions: new EnumerationOptions {
                     AttributesToSkip = 0,
                     RecurseSubdirectories = true,
@@ -291,7 +271,7 @@ public sealed class PuckDocumentComposer : IWorldDocumentSource {
             return false;
         }
     }
-    /// <summary>Composes <paramref name="rootBytes"/>' whole basis-and-imports graph, rooted beside
+    /// <summary>Composes <paramref name="rootBytes"/>' whole basis-and-imports graph through this session, rooted beside
     /// <paramref name="rootResolvedPath"/>, compiling every basis/import whose <c>.puck</c> source exists along the
     /// way. Returns <paramref name="rootBytes"/>'s own re-parse (as <paramref name="composed"/> being
     /// <see langword="null"/>) when the root names neither — see
@@ -311,7 +291,7 @@ public sealed class PuckDocumentComposer : IWorldDocumentSource {
     /// output bytes and every input fact are still checked before composition can retain its provenance.</param>
     /// <returns><see langword="true"/> when the graph composed (or the root names neither basis nor imports).</returns>
     /// <param name="retainRoot">Whether to retain the root image after composition; staging consumes it once and passes false.</param>
-    public static bool TryComposeWorldDocument(
+    public bool TryCompose(
         string rootResolvedPath,
         byte[] rootBytes,
         out JsonObject? composed,
@@ -331,7 +311,7 @@ public sealed class PuckDocumentComposer : IWorldDocumentSource {
             reason: out reason,
             rootBytes: rootBytes,
             rootResolvedName: Puck.Abstractions.PuckPaths.Slashed(path: rootResolvedPath),
-            source: ((sourceCompilation is null) ? Instance : new PuckDocumentComposer(cache: WorldCompileCache.Shared, sourceCompilation: sourceCompilation)),
+            source: ((sourceCompilation is null) ? this : WithRoot(sourceCompilation: sourceCompilation)),
             catalogFingerprint: catalogFingerprint,
             catalog: catalog
         );
@@ -398,7 +378,7 @@ public sealed class PuckDocumentComposer : IWorldDocumentSource {
                 // A source that carries the name emits a document under it, so only a source that does not compile has
                 // none; compiling it again is what says why, with the diagnostic every other door reports.
                 if (compiled?.DocumentNamed(name: found.Name) is not { } document) {
-                    var compilation = (failure ?? WorldCompiler.CompileFile(path: resolvedName));
+                    var compilation = (failure ?? CompileFile(path: resolvedName));
                     var error = compilation.Diagnostics.FirstOrDefault(predicate: static diagnostic => (diagnostic.Severity == DiagnosticSeverity.Error));
 
                     reason = ((error is null)

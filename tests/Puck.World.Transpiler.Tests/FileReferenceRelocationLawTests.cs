@@ -67,7 +67,7 @@ public sealed class FileReferenceRelocationLawTests {
             {use}
             """;
         var path = directory.WriteBytes(bytes: [], name: name);
-        var compilation = WorldCompiler.Compile(
+        var compilation = WorldCompileSession.Shared.Compile(
             source: source,
             sourcePath: path,
             cancellationToken: TestContext.Current.CancellationToken
@@ -118,7 +118,7 @@ public sealed class FileReferenceRelocationLawTests {
         );
 
         var printed = WorldDecompiler.Decompile(root: json);
-        var recompiled = WorldCompiler.Compile(
+        var recompiled = WorldCompileSession.Shared.Compile(
             source: printed,
             sourcePath: path,
             cancellationToken: TestContext.Current.CancellationToken
@@ -144,7 +144,7 @@ public sealed class FileReferenceRelocationLawTests {
         _ = directory.WriteBytes(bytes: "{}"u8, name: "modules/board.graph.json");
         var (path, json) = CompileRoot(directory: directory, import: "../modules/board", name: "root/world.puck");
         var printed = WorldDecompiler.Decompile(root: json);
-        var recompiled = WorldCompiler.Compile(
+        var recompiled = WorldCompileSession.Shared.Compile(
             source: printed,
             sourcePath: path,
             cancellationToken: TestContext.Current.CancellationToken

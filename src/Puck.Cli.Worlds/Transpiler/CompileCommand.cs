@@ -17,13 +17,13 @@ namespace Puck.Cli.Transpiler;
 /// The <c>puck compile</c> verb: compiles <c>.puck</c> DSL sources into canonical JSON definitions in input order, and
 /// writes each world document's compiled world (<c>Puck.World.CompiledWorld</c>) beside it; a <c>.world.json</c>
 /// document given as a path contributes its compiled world alone. Supports resilient diagnostics, dependency
-/// resolution, engine schema validation, and watch mode.
+/// resolution and engine schema validation. The edit loop is the running World's source watch and the editor's language
+/// server, not this verb.
 /// </summary>
 public static partial class CompileCommand {
     public static int Run(
         string path,
         string? output,
-        bool watch,
         bool strict,
         bool validate,
         bool updateAssets = false,
@@ -42,8 +42,8 @@ public static partial class CompileCommand {
         );
 
         if (WorldDocumentName.IsDocumentFile(path: fullPath)) {
-            if (watch || updateAssets) {
-                return CliExit.Refuse(verb: "compile", what: CliPaths.ToDisplay(fullPath: fullPath), why: "--watch and --update-assets apply to .puck sources; a world document compiles only to its compiled world.");
+            if (updateAssets) {
+                return CliExit.Refuse(verb: "compile", what: CliPaths.ToDisplay(fullPath: fullPath), why: "--update-assets applies to .puck sources; a world document compiles only to its compiled world.");
             }
 
             return CompileDocument(
@@ -53,23 +53,13 @@ public static partial class CompileCommand {
             );
         }
 
-        if (!watch) {
-            return ExecuteCompilation(
-                outputPath: outputPath,
-                sourcePath: fullPath,
-                strict: strict,
-                updateAssets: updateAssets,
-                validate: validate,
-                written: written
-            );
-        }
-
-        return RunWatchMode(
+        return ExecuteCompilation(
             outputPath: outputPath,
             sourcePath: fullPath,
             strict: strict,
             updateAssets: updateAssets,
-            validate: validate
+            validate: validate,
+            written: written
         );
     }
 
@@ -216,7 +206,7 @@ public static partial class CompileCommand {
             b: CartridgeDocument.SchemaId,
             comparisonType: StringComparison.Ordinal
         )) {
-            var compilation = WorldCompiler.Compile(
+            var compilation = WorldCompileSession.Shared.Compile(
                 diagnostics: diagnostics,
                 imports: imports,
                 source: sourceText,
@@ -269,7 +259,8 @@ public static partial class CompileCommand {
                 diagnostics: diagnostics,
                 document: documentNode,
                 sourceMap: sourceMap,
-                sourcePath: sourcePath
+                sourcePath: sourcePath,
+                sources: Puck.Transpiler.Modules.PuckSourceTable.Shared
             ));
 
         CompilationMeasurement.Note(path: sourcePath, work: lowered.EvaluationWork);
@@ -288,79 +279,9 @@ public static partial class CompileCommand {
 
         Console.Error.Write(value: report);
     }
-    private static int RunWatchMode(
-        string sourcePath,
-        string? outputPath,
-        bool strict,
-        bool validate,
-        bool updateAssets = false
-    ) {
-        Console.WriteLine(value: $"[puck watch] Monitoring '{CliPaths.ToDisplay(fullPath: sourcePath)}' for changes (Ctrl+C to stop)...");
-
-        // Initial run
-        ExecuteCompilation(
-            outputPath: outputPath,
-            sourcePath: sourcePath,
-            strict: strict,
-            updateAssets: updateAssets,
-            validate: validate
-        );
-
-        var directory = (Path.GetDirectoryName(path: sourcePath) ?? Directory.GetCurrentDirectory());
-        using var watcher = new FileSystemWatcher(path: directory) {
-            Filter = "*.puck",
-            IncludeSubdirectories = true,
-            NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.FileName | NotifyFilters.Size,
-        };
-
-        var debounceLock = new object();
-        var lastTrigger = DateTime.MinValue;
-
-        void OnChanged(object sender, FileSystemEventArgs e) {
-            lock (debounceLock) {
-                var now = DateTime.UtcNow;
-
-                if ((now - lastTrigger).TotalMilliseconds < 250) {
-                    return;
-                }
-
-                lastTrigger = now;
-            }
-
-            Console.WriteLine(value: $"[{DateTime.Now:HH:mm:ss}] Change detected ({e.Name}), recompiling...");
-            ExecuteCompilation(
-                outputPath: outputPath,
-                sourcePath: sourcePath,
-                strict: strict,
-                updateAssets: updateAssets,
-                validate: validate
-            );
-        }
-
-        watcher.Changed += OnChanged;
-        watcher.Created += OnChanged;
-        watcher.Renamed += (s, e) => OnChanged(
-            e: e,
-            sender: s
-        );
-        watcher.EnableRaisingEvents = true;
-
-        using var cancelEvent = new ManualResetEvent(initialState: false);
-
-        Console.CancelKeyPress += (sender, eventArgs) => {
-            eventArgs.Cancel = true;
-            cancelEvent.Set();
-        };
-
-        cancelEvent.WaitOne();
-        Console.WriteLine(value: "[puck watch] Stopped.");
-        return 0;
-    }
-
     public static Command Create() {
         var pathArgument = new Argument<string[]>(name: "paths") { Arity = ArgumentArity.ZeroOrMore, Description = "Paths to .puck sources, or .world.json documents to write only the compiled world of, compiled in input order in one process. Stops on the first failure. Required unless --tree selects every .puck and .world.json under its directory in ordinal order." };
         var outputOption = new Option<string?>(name: "--output") { Description = "Destination JSON path, or destination directory for a source with world declarations; for a .world.json document, the path its compiled world sits beside (or the .puckb file itself)." };
-        var watchOption = new Option<bool>(name: "--watch") { Description = "Recompile whenever a .puck file under the source's own directory changes; an import from outside that directory is not watched." };
         var strictOption = new Option<bool>(name: "--strict") { Description = "Treat warnings as errors." };
         var validateOption = new Option<bool>(name: "--validate") { Description = "Validate semantic engine schema rules on the emitted document. A world source validated without --output writes nothing." };
         var measureOption = new Option<bool>(name: "--measure") { Description = "Report elapsed time, process peak working set and managed allocation for this invocation." };
@@ -375,7 +296,6 @@ public static partial class CompileCommand {
         ) {
             pathArgument,
             outputOption,
-            watchOption,
             strictOption,
             validateOption,
             measureOption,
@@ -386,10 +306,9 @@ public static partial class CompileCommand {
         };
 
         command.Validators.Add(item: result => {
-            if (result.GetValue(option: assetsOption) && result.GetValue(option: watchOption)) { result.AddError(errorMessage: "--update-assets cannot be combined with --watch; asset changes must be accepted explicitly."); }
             if (result.GetValue(option: treeOption) is not null) {
-                if ((result.GetValue(option: outputOption) is null) || result.GetValue(option: watchOption) || result.GetValue(option: assetsOption)) {
-                    result.AddError(errorMessage: "--tree requires --output (the mirrored tree's directory) and cannot be combined with --watch or --update-assets.");
+                if ((result.GetValue(option: outputOption) is null) || result.GetValue(option: assetsOption)) {
+                    result.AddError(errorMessage: "--tree requires --output (the mirrored tree's directory) and cannot be combined with --update-assets.");
                 }
                 if (result.GetValue(option: checkOption) && (result.GetValue(option: writtenOption) is not null)) {
                     result.AddError(errorMessage: "--check writes nothing, so it takes no --written report.");
@@ -400,9 +319,8 @@ public static partial class CompileCommand {
                 result.AddError(errorMessage: "--written reports a --tree run and requires --tree.");
             } else if ((result.GetValue(argument: pathArgument)?.Length ?? 0) == 0) {
                 result.AddError(errorMessage: "At least one source path is required unless --tree is supplied.");
-            } else if ((result.GetValue(argument: pathArgument)?.Length > 1) &&
-                ((result.GetValue(option: outputOption) is not null) || result.GetValue(option: watchOption))) {
-                result.AddError(errorMessage: "--output and --watch require exactly one source file.");
+            } else if ((result.GetValue(argument: pathArgument)?.Length > 1) && (result.GetValue(option: outputOption) is not null)) {
+                result.AddError(errorMessage: "--output requires exactly one source file.");
             }
         });
         command.SetAction(action: parseResult => {
@@ -442,7 +360,6 @@ public static partial class CompileCommand {
                     path: path,
                     strict: parseResult.GetValue(option: strictOption),
                     validate: parseResult.GetValue(option: validateOption),
-                    watch: parseResult.GetValue(option: watchOption),
                     updateAssets: parseResult.GetValue(option: assetsOption)
                 );
 

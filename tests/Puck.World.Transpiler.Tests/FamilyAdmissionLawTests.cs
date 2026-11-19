@@ -8,7 +8,7 @@ namespace Puck.World.Transpiler.Tests;
 /// ceiling, or that would wrap a 32-bit counter is a diagnostic; none is brought inside the range, and no range is
 /// walked to an end its counter cannot reach.</summary>
 public sealed class FamilyAdmissionLawTests {
-    private static DiagnosticBag Diagnose(string declaration) => WorldCompiler.Compile(
+    private static DiagnosticBag Diagnose(string declaration) => WorldCompileSession.Shared.Compile(
         cancellationToken: TestContext.Current.CancellationToken,
         source: $"schema: \"puck.world.definition.v1\"\n\nstate {{\n    world {{\n        {declaration}\n    }}\n}}\n"
     ).Diagnostics;

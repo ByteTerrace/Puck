@@ -19,7 +19,7 @@ public sealed class WorldSourceIndexLawTests {
 
     private static string? ComposedDocumentId(TemporaryDirectory directory, string basis) {
         Assert.True(
-            condition: PuckDocumentComposer.TryComposeWorldDocument(
+            condition: WorldCompileSession.Shared.TryCompose(
                 chainBytes: out _,
                 composed: out var composed,
                 reason: out var reason,
@@ -32,7 +32,7 @@ public sealed class WorldSourceIndexLawTests {
         return composed?["documentId"]?.GetValue<string>();
     }
     // Compiles the source through the cache, returning the compile the cache served or produced.
-    private static WorldCompiledSource Compile(WorldCompileCache cache, string path) {
+    private static WorldCompiledSource Compile(WorldCompileSession cache, string path) {
         Assert.True(
             condition: cache.TryCompile(
                 compiled: out var compiled,
@@ -63,7 +63,7 @@ public sealed class WorldSourceIndexLawTests {
             oldChar: '\\'
         );
 
-        Assert.True(condition: PuckDocumentComposer.TryCarriers(
+        Assert.True(condition: WorldCompileSession.TryCarriers(
             carriers: out var carriers,
             directory: directory.RootPath,
             libraries: out var libraries,
@@ -79,7 +79,7 @@ public sealed class WorldSourceIndexLawTests {
             ]
         );
         Assert.Empty(collection: libraries);
-        Assert.True(condition: PuckDocumentComposer.TryCarriers(
+        Assert.True(condition: WorldCompileSession.TryCarriers(
             carriers: out var top,
             directory: directory.RootPath,
             libraries: out _,
@@ -106,7 +106,7 @@ public sealed class WorldSourceIndexLawTests {
             directory.WriteText(name: second, text: (WorldDocumentName.IsSourceFile(path: second) ? WorldSources.Header : "{}"));
         }
 
-        var carried = PuckDocumentComposer.TryCarriers(
+        var carried = WorldCompileSession.TryCarriers(
             carriers: out var carriers,
             directory: directory.RootPath,
             libraries: out _,
@@ -168,7 +168,7 @@ public sealed class WorldSourceIndexLawTests {
     [Fact]
     public void AHeldCompileStandsOnlyWhileTheIndexItResolvedThroughHolds() {
         using var directory = new TemporaryDirectory();
-        var cache = new WorldCompileCache();
+        var cache = new WorldCompileSession();
         var child = directory.WriteText(name: "child.puck", text: (WorldSources.Header + "basis: \"foo\"\n"));
 
         directory.WriteText(name: "foo.world.json", text: """{ "schema": "puck.world.definition.v1", "documentId": "foo" }""");
@@ -236,7 +236,7 @@ public sealed class WorldSourceIndexLawTests {
     [InlineData("for (name, index) in [\"north\", \"south\"] {\n    world name = room(index)\n}\n", "declared at the top level of its source")]
     [InlineData("let named = \"north\"\nworld $\"{named}\" = room(1)\n", "written as a name or a plain string, never computed")]
     public void AWorldAParseCannotFindIsRefused(string declarations, string refusal) {
-        var compilation = WorldCompiler.Compile(
+        var compilation = WorldCompileSession.Shared.Compile(
             allowMultiple: true,
             cancellationToken: TestContext.Current.CancellationToken,
             source: (Module + declarations)

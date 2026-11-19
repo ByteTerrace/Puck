@@ -1,5 +1,5 @@
-using Puck.World.Transpiler.Composition;
 using Xunit;
+using Puck.World.Transpiler;
 
 namespace Puck.World.Testing;
 
@@ -37,7 +37,7 @@ internal static partial class AuthoredGameFixtures {
         var puckCatalog = (catalog ?? TestMachines.Catalog());
 
         Assert.True(
-            condition: PuckDocumentComposer.TryComposeWorldDocument(
+            condition: WorldCompileSession.Shared.TryCompose(
                 catalog: puckCatalog,
                 rootBytes: rootBytes,
                 rootResolvedPath: path,

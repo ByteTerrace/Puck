@@ -16,13 +16,19 @@ public enum CompileInputKind {
     /// system spells it, so a file added, removed or renamed there, in any letter case, moves the fact. A directory
     /// that does not exist lists no file.</summary>
     Listing = 3,
+    /// <summary>The compile read the file's bytes only to learn what it declares (which document names a source
+    /// emits), not what it lowers to. The fact holds exactly as <see cref="Content"/> does, while the bytes do; it is a
+    /// kind of its own so a reader of a compile's facts can tell the files it composed from the siblings it only asked
+    /// for their names.</summary>
+    Declaration = 4,
 }
 /// <summary>One fact a compile read from the file system, and what must still hold for its output to stand.</summary>
 /// <param name="Path">The path exactly as the compile spelled it; a relative path is resolved against the current
 /// directory when the fact is checked, as it was when the compile probed it.</param>
 /// <param name="Kind">What the compile learned.</param>
-/// <param name="ContentHash">The <see cref="ContentPin.Hex"/> of the bytes read, for <see cref="CompileInputKind.Content"/>,
-/// or of the names listed, for <see cref="CompileInputKind.Listing"/>; empty otherwise.</param>
+/// <param name="ContentHash">The <see cref="ContentPin.Hex"/> of the bytes read, for <see cref="CompileInputKind.Content"/>
+/// and <see cref="CompileInputKind.Declaration"/>, or of the names listed, for <see cref="CompileInputKind.Listing"/>;
+/// empty otherwise.</param>
 public readonly record struct CompileInput(string Path, CompileInputKind Kind, string ContentHash) {
     /// <summary>Returns the current answer to the same filesystem query, without recording a compiler input. A file's
     /// digest or a directory's listing is read again only when its stamp no longer vouches for the answer last read
@@ -221,12 +227,13 @@ public static class CompileInputs {
             return new CompileInput(ContentHash: hash, Kind: CompileInputKind.Listing, Path: query.Path);
         }
 
-        var digest = Answer(path: query.Path, content: out _, read: out read, wantDigest: (query.Kind == CompileInputKind.Content));
+        var digested = (query.Kind is CompileInputKind.Content or CompileInputKind.Declaration);
+        var digest = Answer(path: query.Path, content: out _, read: out read, wantDigest: digested);
 
         return ((digest is null)
             ? new CompileInput(ContentHash: string.Empty, Kind: CompileInputKind.Absent, Path: query.Path)
-            : ((query.Kind == CompileInputKind.Content)
-                ? new CompileInput(ContentHash: digest, Kind: CompileInputKind.Content, Path: query.Path)
+            : (digested
+                ? new CompileInput(ContentHash: digest, Kind: query.Kind, Path: query.Path)
                 : new CompileInput(ContentHash: string.Empty, Kind: CompileInputKind.Present, Path: query.Path)));
     }
     // A file's digest (empty when only existence was asked), or null when no file is there. `content` is the bytes when
@@ -291,17 +298,24 @@ public static class CompileInputs {
     /// <param name="path">The file.</param>
     /// <param name="content">The file's bytes when answering read them; <see langword="null"/> when the remembered
     /// digest answered or no file is there.</param>
+    /// <param name="kind">What the compile reads the file for: <see cref="CompileInputKind.Content"/> (the default), or
+    /// <see cref="CompileInputKind.Declaration"/> for a file read only to learn what it declares.</param>
     /// <returns>The digest, or <see langword="null"/> when no file exists at <paramref name="path"/>.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="kind"/> is neither
+    /// <see cref="CompileInputKind.Content"/> nor <see cref="CompileInputKind.Declaration"/>.</exception>
     /// <exception cref="IOException">The file could not be read.</exception>
     /// <exception cref="UnauthorizedAccessException">The file may not be read.</exception>
-    public static string? Digest(string path, out byte[]? content) {
+    public static string? Digest(string path, out byte[]? content, CompileInputKind kind = CompileInputKind.Content) {
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: path);
+        if (kind is not (CompileInputKind.Content or CompileInputKind.Declaration)) {
+            throw new ArgumentOutOfRangeException(paramName: nameof(kind), message: "A digest is read for a file's content or its declaration.");
+        }
 
         var digest = Answer(content: out content, path: path, read: out _, wantDigest: true);
 
         Add(input: ((digest is null)
             ? new CompileInput(ContentHash: string.Empty, Kind: CompileInputKind.Absent, Path: path)
-            : new CompileInput(ContentHash: digest, Kind: CompileInputKind.Content, Path: path)));
+            : new CompileInput(ContentHash: digest, Kind: kind, Path: path)));
 
         return digest;
     }

@@ -10,7 +10,7 @@ namespace Puck.World.Transpiler.Tests;
 // A sign in front of something that is not a number. Before this, only a NUMERIC LITERAL could carry one, so a
 // mirrored pair had to be written as two constants (`leftX`/`rightX`) instead of one `spread` and its negation.
 public class UnaryOperandTests {
-    private static JsonObject LowerSource(string source) => WorldCompiler.Compile(source: source).RequireJson();
+    private static JsonObject LowerSource(string source) => WorldCompileSession.Shared.Compile(source: source).RequireJson();
     private static JsonArray LoweredOrigin(string source) {
         var placements = Assert.IsType<JsonArray>(@object: LowerSource(source: source)["screens"]);
 

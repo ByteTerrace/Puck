@@ -1,7 +1,6 @@
 using System.Text;
 using System.Text.Json.Nodes;
 using Puck.Testing;
-using Puck.World.Transpiler.Composition;
 using Xunit;
 
 namespace Puck.World.Transpiler.Tests;
@@ -14,7 +13,7 @@ public class CanonicalBasisTests {
 
     private static JsonObject Compose(string rootPath) {
         Assert.True(
-            condition: PuckDocumentComposer.TryComposeWorldDocument(
+            condition: WorldCompileSession.Shared.TryCompose(
                 chainBytes: out _,
                 composed: out var composed,
                 reason: out var reason,
@@ -90,7 +89,7 @@ public class CanonicalBasisTests {
     public void AReferenceSpelledAsAFileIsRefusedByName() {
         using var directory = new TemporaryDirectory();
 
-        Assert.False(condition: PuckDocumentComposer.TryComposeWorldDocument(
+        Assert.False(condition: WorldCompileSession.Shared.TryCompose(
             chainBytes: out _,
             composed: out _,
             reason: out var reason,

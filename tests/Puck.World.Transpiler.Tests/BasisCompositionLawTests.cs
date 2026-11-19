@@ -2,7 +2,6 @@ using System.Text;
 using System.Text.Json.Nodes;
 using Puck.Testing;
 using Puck.Transpiler.Diagnostics;
-using Puck.World.Transpiler.Composition;
 using Puck.World.Transpiler.Validation;
 using Xunit;
 
@@ -24,7 +23,7 @@ public sealed class BasisCompositionLawTests {
 
         return $"{WorldSources.Header}state {{\n{enums}    world {{\n{world}    }}\n}}\n";
     }
-    private static WorldCompilation Compile(string path, SourceMap? sourceMap = null) => WorldCompiler.Compile(
+    private static WorldCompilation Compile(string path, SourceMap? sourceMap = null) => WorldCompileSession.Shared.Compile(
         cancellationToken: TestContext.Current.CancellationToken,
         source: File.ReadAllText(path: path),
         sourceMap: sourceMap,
@@ -116,9 +115,9 @@ public sealed class BasisCompositionLawTests {
             name: "child.puck",
             text: "basis: \"base\"\n\nstate {\n    world {\n        slot left: Element = Air\n    }\n}\n"
         );
-        var cache = new WorldCompileCache();
+        var cache = new WorldCompileSession();
 
-        Assert.True(condition: WorldCompileCache.Shared.TryCompile(compiled: out _, failure: out var basisFailure, path: basis), userMessage: basisFailure?.Diagnostics.FormatReport(filePath: basis));
+        Assert.True(condition: WorldCompileSession.Shared.TryCompile(compiled: out _, failure: out var basisFailure, path: basis), userMessage: basisFailure?.Diagnostics.FormatReport(filePath: basis));
         Assert.True(condition: cache.TryCompile(compiled: out var first, failure: out var childFailure, path: child), userMessage: childFailure?.Diagnostics.FormatReport(filePath: child));
         Assert.Equal(
             expected: 1L,
@@ -256,7 +255,7 @@ public sealed class BasisCompositionLawTests {
                 """
         );
 
-        var compiled = WorldCompiler.CompileFile(
+        var compiled = WorldCompileSession.Shared.CompileFile(
             cancellationToken: TestContext.Current.CancellationToken,
             path: childPath
         );
@@ -309,7 +308,7 @@ public sealed class BasisCompositionLawTests {
                 }
                 """
         );
-        var refused = WorldCompiler.CompileFile(
+        var refused = WorldCompileSession.Shared.CompileFile(
             cancellationToken: TestContext.Current.CancellationToken,
             path: badSlotKeyPath
         );

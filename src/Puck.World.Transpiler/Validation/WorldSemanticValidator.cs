@@ -30,7 +30,7 @@ public static class WorldSemanticValidator {
         );
     }
     /// <summary>Composes <paramref name="loweredJson"/>'s <c>basis</c>/<c>imports</c> graph, rooted beside
-    /// <paramref name="sourcePath"/>, through <see cref="PuckDocumentComposer"/> — the same composition the game
+    /// <paramref name="sourcePath"/>, through <see cref="WorldCompileSession"/> — the same composition the game
     /// boot path runs — and validates the composed document when <paramref name="loweredJson"/> is a root
     /// (<see cref="IsRootDocument"/>; validating a module as a world reports as missing every field the root that
     /// imports it supplies). A document naming neither composes to itself. This is the one compose-and-validate path:
@@ -96,7 +96,7 @@ public static class WorldSemanticValidator {
         return composed;
     }
     /// <summary>Composes <paramref name="loweredJson"/>'s <c>basis</c>/<c>imports</c> graph, rooted beside
-    /// <paramref name="sourcePath"/>, through <see cref="PuckDocumentComposer"/>, and reports a refused composition
+    /// <paramref name="sourcePath"/>, through <see cref="WorldCompileSession"/>, and reports a refused composition
     /// once, as PUCK035 at the <c>basis</c>. Every consumer of a source's composed document composes it here, so one
     /// diagnosis composes it once and reports its refusal once.</summary>
     /// <param name="loweredJson">The lowered JsonObject, not yet composed with its basis or imports.</param>
@@ -126,7 +126,7 @@ public static class WorldSemanticValidator {
 
         var rootBytes = Encoding.UTF8.GetBytes(s: loweredJson.ToJsonString());
 
-        if (!PuckDocumentComposer.TryComposeWorldDocument(
+        if (!WorldCompileSession.Shared.TryCompose(
             catalog: machines,
             catalogFingerprint: catalogFingerprint,
             chainBytes: out _,

@@ -114,7 +114,7 @@ public class ConstructLoweringLawTests {
         );
     }
     private static JsonObject Compile(string source, List<string> failures, string context, string? generatedWorld = null) {
-        var compilation = WorldCompiler.Compile(
+        var compilation = WorldCompileSession.Shared.Compile(
             cancellationToken: TestContext.Current.CancellationToken,
             embeddings: ConstructProbes.Lock,
             source: source

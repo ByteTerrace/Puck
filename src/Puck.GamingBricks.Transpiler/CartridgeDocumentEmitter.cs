@@ -657,12 +657,13 @@ public static class CartridgeDocumentEmitter {
     /// </summary>
     /// <param name="document">The parsed source.</param>
     /// <param name="sourcePath">The source's file path, which its imports resolve against.</param>
+    /// <param name="sources">The compile session's parses, which every imported module is read through.</param>
     /// <param name="diagnostics">The bag refusals are reported into, or <see langword="null"/> for a fresh one.</param>
     /// <param name="sourceMap">The JSON-pointer-to-span map to fill, or <see langword="null"/>.</param>
     /// <param name="cancellationToken">Cancels import traversal, evaluation and expansion.</param>
     /// <returns>The canonical object, or a <see langword="null"/> value when an import does not resolve, paired with
     /// the diagnostics raised.</returns>
-    public static CompilationResult<JsonObject> LowerSource(DocumentNode document, string sourcePath, DiagnosticBag? diagnostics = null, SourceMap? sourceMap = null, CancellationToken cancellationToken = default) {
+    public static CompilationResult<JsonObject> LowerSource(DocumentNode document, string sourcePath, PuckSourceTable sources, DiagnosticBag? diagnostics = null, SourceMap? sourceMap = null, CancellationToken cancellationToken = default) {
         ArgumentNullException.ThrowIfNull(document);
         ArgumentException.ThrowIfNullOrEmpty(sourcePath);
 
@@ -673,8 +674,10 @@ public static class CartridgeDocumentEmitter {
         var withModules = ModuleResolver.ImportModules(
             budget: budget,
             diagnostics: diagnostics,
+            parsed: out _,
             rootDoc: document,
             rootPath: sourcePath,
+            sources: sources,
             vocabulary: CartridgeVocabulary.Instance
         );
 

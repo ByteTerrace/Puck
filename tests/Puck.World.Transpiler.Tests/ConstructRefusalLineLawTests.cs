@@ -122,7 +122,7 @@ public class ConstructRefusalLineLawTests {
     [Theory]
     public void ARefusalInsideADescribedConstructNamesThatConstructsLine(string keyword, string source) {
         var sourceMap = new SourceMap();
-        var compilation = WorldCompiler.Compile(
+        var compilation = WorldCompileSession.Shared.Compile(
             cancellationToken: TestContext.Current.CancellationToken,
             source: source,
             sourceMap: sourceMap

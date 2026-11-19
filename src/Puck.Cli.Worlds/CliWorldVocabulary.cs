@@ -15,7 +15,7 @@ public static class CliWorldVocabulary {
     [System.Runtime.CompilerServices.ModuleInitializer]
     internal static void InstallDocumentSource() {
         WorldSchemaVocabularyHooks.Install(probeKindCheck: WorldProbeKinds.IsShipped);
-        WorldDefinitionFileSource.UseLocalDocuments(source: Puck.World.Transpiler.Composition.PuckDocumentComposer.Instance);
+        WorldDefinitionFileSource.UseLocalDocuments(source: Puck.World.Transpiler.WorldCompileSession.Shared);
     }
 
     /// <summary>Creates an independent catalog and installs the CLI's schema validation hooks.</summary>

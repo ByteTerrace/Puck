@@ -45,7 +45,7 @@ internal static class ShippedWorlds {
             valueFactory: static path => new Lazy<WorldCompilation>(valueFactory: () => {
                 var sourcePath = PathOf(relativePath: path);
 
-                return WorldCompiler.Compile(
+                return WorldCompileSession.Shared.Compile(
                     source: File.ReadAllText(path: sourcePath),
                     sourcePath: sourcePath
                 );

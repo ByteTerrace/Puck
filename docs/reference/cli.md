@@ -99,7 +99,7 @@ half of these rules on every command, with no exemptions.
 | [`puck canary`](#puck-canaryreal-world-behavioral-proofs) | bounded positive-and-discriminating proofs run against one exact Release build of the real `Puck.World`. |
 | [`puck cartridge-cost`](#puck-cartridge-costcartridge-cost-measurement) | measures each cartridge primitive's sustained per-frame capacity on the machine of each target (`cgb`, `dmg`, `agb`), the evidence the cartridge cost model's weights come from. |
 | [`puck cartridges`](#puck-cartridgestool-built-cartridges) | rebuilds the shipped cartridges built by repository tooling: `deck` writes the Humble Gaming Deck's test `.nes` images. |
-| [`puck compile`](#the-puck-dsl-verbs) | compiles `.puck` to canonical world or cartridge JSON according to its schema; `--validate` runs that vocabulary's checks, `--watch` recompiles on change. Default output is `.world.json` or `.cartridge.json`, with each world document's compiled world (`.puckb`) beside it; all three are derived products that `.gitignore` excludes, never committed; a `.world.json` path compiles to its compiled world alone. |
+| [`puck compile`](#the-puck-dsl-verbs) | compiles `.puck` to canonical world or cartridge JSON according to its schema; `--validate` runs that vocabulary's checks. Default output is `.world.json` or `.cartridge.json`, with each world document's compiled world (`.puckb`) beside it; all three are derived products that `.gitignore` excludes, never committed; a `.world.json` path compiles to its compiled world alone. |
 | [`puck counters`](#puck-counterswork-counter-collector) | the work-counter collector: boots the authored counters workload offscreen once per backend, writes a `puck.counters.report.v1` report with every count tagged by class, and checks the deterministic counts agree across backends; `counters compare` holds two reports to each other. |
 | [`puck creation`](#puck-creationcreation-reads) | the offline twin of `creation.shape`: report a creation's shape budget/feature usage, or read each shape's law (exact, bound or uncertified distance, CPU and contact verdicts). |
 | [`puck declarations`](#puck-declarationsdeclaration-inventory) | declaration inventory read off the parsed syntax, with no build. |
@@ -4068,7 +4068,7 @@ sources are formatted by [`puck format`](#puck-formatthe-one-formatter), the one
 formatter for every source kind.
 
 ```text
-puck compile [<source.puck|document.world.json>...] [--output <out.json-or-directory>] [--tree <root> [--written <report>] [--check]] [--validate] [--measure] [--strict] [--watch] [--update-assets]
+puck compile [<source.puck|document.world.json>...] [--output <out.json-or-directory>] [--tree <root> [--written <report>] [--check]] [--validate] [--measure] [--strict] [--update-assets]
 puck decompile <source.json> [--output <out.puck>] [--overwrite] [--embeddings <file.embeddings.json>]
 puck embed lock <path> [--check] [--provider <installed-type>] [--settings <json-file>] [--batch-size <n>]
 puck embed probe <path> <text> [--space <name>] [--top <n>] [--provider <installed-type>] [--settings <json-file>]
