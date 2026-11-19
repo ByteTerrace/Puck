@@ -144,10 +144,11 @@ and shared store before this distribution work.
 
 ##### A true distance under a non-uniform scale
 
-This is the design for gap 11: what the gap is in the code, the two exhibits
-and the reading each fails, the solve for each primitive, why its answer is
-the distance, where it may stop, and the build order with a check for each
-step. The last part lists the claims a review should attack.
+This is the design for gap 11, revised after its adversarial review: what the
+gap is in the code, the two exhibits and the reading each fails, the contract
+a solve answers to, the solve for each primitive, why its interval holds the
+distance, where it stops, the build order with a check for each step, and
+where each of the review's findings is closed.
 
 **What the gap is.** `SdfSolidGeometry.AppendScaledPrimitive` spells a scale
 into a primitive's own dimensions wherever a closed form exists. A capsule,
@@ -191,21 +192,39 @@ ellipse's projection, a bisection of one bracketed root
 (`SdfFieldEvaluator.EllipseRootSteps`, `sdfEllipse2D` in
 `field/sdf-ellipse.hlsli`), held to a double-precision reference by
 `EllipseDistanceLawTests`. It is what makes an elliptic cylinder, a torus
-stretched in Y alone and a revolved ellipse exact. Its interval rule adds a
-fixed slack that is asserted in a comment and not derived. The sweep searches
-its curve by samples and golden-section rounds with no bound on what it
-missed. The reach certificates behind the cull tables (`SdfFieldEvaluator`)
-admit a `Scale` only when it is uniform.
-The bake searches each crossing along its lattice edge and reads a value as a
-distance only over the gradient's length (`SdfSampledLattice.PassesBetween`),
-which is why a hard cut survives a bound as well as it does. Nothing projects
-onto a triaxial ellipsoid, a cone or a torus.
+stretched in Y alone and a revolved ellipse exact. The review and this
+design's emulation of its arithmetic found three limits in it as built, which
+steps 2 and 3 remove:
+
+- Its fixed-point root is searched at the carrier's own resolution. Inside
+  the ellipse beside its major axis the root sits within a few raws of a
+  pole, and the foot cannot be resolved: the emulated answer is 13 mm out for
+  an ellipse of semi-axes 2 and 1 m a millimetre off its axis, and 66 mm
+  out for the lake's meridian, 46 and 17 m, 44 mm off its equator's plane.
+  The engine itself was not run at these points. Its interval rule adds a
+  fixed slack that a comment asserts.
+- Its float bracket squares a ratio of the radii, which overflows binary32 at
+  radii the document's scale floor admits (`2^20` and `2^-13` m), and the
+  solve then answers the distance to the origin.
+- `SdfProgramBuilder.Ellipse` moves a radius by `1e-4` when the two are
+  within `1e-4` of each other, so a near-circle's surface is not the
+  authored one. Both interpreters divide by the difference of the radii's
+  squares only after testing that it is the larger of two quantities, so
+  the move guards nothing.
+
+The sweep searches its curve by samples and golden-section rounds with no
+bound on what it missed. The reach certificates behind the cull tables
+(`SdfFieldEvaluator`) admit a `Scale` only when it is uniform. The bake
+searches each crossing along its lattice edge and reads a value as a distance
+only over the gradient's length (`SdfSampledLattice.PassesBetween`), which is
+why a hard cut survives a bound as well as it does. Nothing projects onto a
+triaxial ellipsoid, a cone or a torus.
 
 **Options weighed.**
 
 | Option | What it gives | Why it is or is not taken |
 |---|---|---|
-| Reduce each primitive to bracketed roots of one variable | The distance on both sides, with an interval from the bracket | Taken. The ellipsoid's reduction is published; the cone's and the torus's are derived below and checked against brute force |
+| Reduce each primitive to bracketed roots of one variable, each answering an interval | The distance on both sides, with an interval that holds whatever the search did | Taken. The ellipsoid's reduction is published; the cone's and the torus's are derived below and checked against brute force and the review's counterexamples |
 | Newton on the surface's two parameters, with a bound afterwards | A nearby surface point quickly | The point is only an upper bound. Outside a convex shape a lower bound exists (claim 1), inside none does, so it cannot answer a cutter's inside |
 | A union of exact pieces (an elliptic cylinder and two ellipsoids for the capsule) | The distance outside | Inside a union the field is the depth in one piece, which is a bound again, and a cutter is read inside |
 | Divide the bound by its gradient's length | The distance to first order at the surface | It has no bound away from the surface, where a blend reads it. The bake already does this where it helps |
@@ -214,28 +233,104 @@ onto a triaxial ellipsoid, a cone or a torus.
 Refusing such scales or changing the surface is ruled out by
 [the decision](../decisions/engine-design.md#a-scaled-primitive-keeps-its-authored-surface-at-a-true-distance).
 
+**The contract.** A solve answers three things about the point it was asked,
+and consumers rely on these, not on a scalar being the distance.
+
+- *A side.* Outside, inside or on the surface, from the shape's own implicit
+  test at the query point (for an ellipsoid, `sum((p_i / e_i)^2)` against
+  one). The root search never decides it. In fixed point the test is rounded
+  both ways, and a test rounding cannot decide answers "on the surface".
+- *An interval.* `lower <= |distance| <= upper`. The upper end is always the
+  distance to a point the solve put on the surface. The lower end comes from
+  the bracket (below) and is zero when the side is undecided. With several
+  candidates of intervals `[L_i, U_i]` the interval is
+  `[min L_i, min U_i]`. The interval is valid at every stop, including a
+  stop that made no progress.
+- *A scalar, with its error.* `side * upper`, and `upper - lower` as its
+  error: it reads no nearer than the surface is and no farther than the
+  error. It is zero only where the side is "on the surface". Two points `a`
+  and `b` read scalars no more than `|a - b|` plus both errors apart. The
+  scalar is not claimed 1-Lipschitz, and no proof may use it as if it were.
+
+Who reads what:
+
+| Consumer | Reads | Stops |
+|---|---|---|
+| The box rule (`TryDistanceBounds`), the certified sweep and line of sight, the cull's reach | The signed interval at the box's centre, widened by the box's half diagonal. Never the scalar | As soon as its own decision is made |
+| The point walk feeding blends, offsets and the audit; the bake's kernel | The scalar. The fixed-point walk also carries the error, and the kernel does not | When the search can go no further in its format |
+| `SdfProgram`'s Lipschitz and gain analyses | Nothing from the solve: the shape is charged a gain of one, and the evaluator's box rule adds the scalar's error where it bounds point answers | |
+
+The kernel claims no certificate. It runs the same search in float to the
+format's resolution, takes no early stop, and answers the `Scale` bound's
+value when its arithmetic is not finite. Its agreement with the fixed-point
+interval is measured by a law, which reads an error at its points and proves
+nothing between them.
+
+**The root.** For semi-axes `e` and a point with no negative coordinate, let
+`m` be a least axis, `gap_i = (e_i - e_m) * (e_i + e_m)`, and
+`w_i(u) = e_i * p_i / (u + gap_i)`. `F(u) = sum(w_i^2) - 1` falls strictly
+for `u > 0`, the foot at `u` is `q_i = e_i * w_i`, and each `q_i` falls as
+`u` rises. `u` is the multiplier measured from the least axis's pole, so no
+step subtracts two like quantities.
+
+- *Scaling.* In float every length is first multiplied by one power of two
+  that puts the largest of `e` and `p` below two; fixed point keeps its
+  raws. In both, the sign of `F` is read without
+  squaring anything above one: a `w_i` at or above one makes it positive,
+  and otherwise every square is below one.
+- *The bracket.* Its lower end is `e_m * p_m`, the largest over tied least
+  axes, where that `w` is one. Its upper end is `|e * p|` outside and
+  `e_m^2` inside. It is halved geometrically while its ends differ by more
+  than two to one and arithmetically after, so the count of halvings is
+  bounded by the format's mantissa plus a few steps for its exponent range.
+- *The pole.* When every least axis's coordinate is zero the lower end is
+  `u = 0`. If the other terms' squares there sum to one or less, the root
+  is the pole: the other coordinates come from `q_i` at `u = 0`, and
+  `e_m * sqrt(1 - sum)` goes to one least axis. That is zero at equality
+  (the evolute's cusp) and `e_m` at the centre. Otherwise the search starts
+  from zero, where `F` is positive.
+- *Certified signs.* The fixed-point search rounds each `w_i` down and up
+  and takes a sign only when both agree. A sign it cannot take ends the
+  search.
+- *The interval from a bracket.* The true foot lies in the box between the
+  feet at the bracket's two ends. `lower` is the distance from `p` to that
+  box. `upper` is the distance to the foot at the bracket's middle after it
+  is scaled back onto the surface, plus what rounding can leave that point
+  off the surface. Outside, `lower` is also at least
+  `n . (p - q)` for that surface point `q` and its outward normal `n`
+  (claim 1).
+- *The carrier.* At the root a foot coordinate moves at most `1 / p_i` per
+  unit of `u`, and a nonzero coordinate is at least one raw, so `u` needs
+  34 fractional bits to hold the foot to a quarter raw. The fixed-point
+  search therefore runs `u` with 48 fractional bits in wide integers, its
+  quotients formed at twice that width; step 3 fixes the widths against the
+  largest `e * p` it admits. In 16 the review's point `(0.5, 2^-16, 0)` of the
+  ellipsoid `(2, 1, 3)` stalls at `[0.527, 1.014]`; in 48 it closes on
+  `0.957412082`.
+- *A faster step.* A Newton or secant step may replace a halving only in a
+  bracket that holds one root with both end signs taken, and only when it
+  lands inside. Two proposals in a row that do not halve the bracket are
+  followed by a halving.
+- *The stop.* The search ends when the bracket has no middle in its format,
+  when a sign cannot be taken, or when a bound consumer has its answer. It
+  returns the interval it holds. An interval wider than a consumer can use
+  is still the answer: the `Scale` bound's own interval, `[g, g / gain]`
+  for its value `g`, is intersected with it, so no stop is worse than
+  today's field.
+
+The exact lowering is taken for scales whose axis ratio the root's law covers
+and whose interval the law finds no wider than a raw; a shape past that keeps
+its `Scale` and `puck creation shape` keeps printing `bound`. Step 3 sets the
+ratio from what the carrier certifies, starting from 1024 to 1.
+
 **The solves.** Every shape here is symmetric in X and in Z, so a point is
 read by its absolute X and Z, and by its absolute Y where the shape is
 symmetric in Y. `s = (sx, sy, sz)` is the scale and `p` the point in the
-shape's own frame.
+shape's own frame. A coordinate that is exactly zero takes the branch written
+for it; nothing is moved toward zero to reach one.
 
-*The quadric root.* For semi-axes `e` and a point with no negative
-coordinate, `F(t) = sum((e_i * p_i / (t + e_i^2))^2) - 1` falls strictly
-for `t` above `-min(e_i)^2`, where it has one root. The foot is
-`q_i = e_i^2 * p_i / (t + e_i^2)`, the root is positive outside and negative
-inside, and with `m` the least axis it lies in
-`[-e_m^2 + e_m * p_m, -e_m^2 + |e * p|]` (zero in place of the upper end
-inside). With two terms this is the ellipse's root, and one routine serves
-both.
-
-*A zero coordinate.* When `p_i` is zero its term vanishes and its pole,
-`t = -e_i^2`, still ends the bracket. If the other terms already sum below one
-at that pole, the root is the pole and `q_i` comes from the surface's own
-equation: the two feet off the plane, which is the branch `sdfEllipse2D` takes
-on its major axis. Every solve below takes this branch at its poles.
-
-*The ellipsoid.* The quadric root with three terms. Two equal radii need no
-new solve: the shape is the ellipse revolved at offset zero.
+*The ellipsoid.* The root with three terms. Two equal radii are the ellipse
+revolved at offset zero, which is the root with two terms.
 
 *The capsule.* The scaled capsule is the segment from the origin to
 `(0, h, 0)`, `h = sy / 2`, swept by the ellipsoid of radii `s`. Its surface
@@ -244,16 +339,25 @@ is the lower half of that ellipsoid, an elliptic cylinder between the planes
 
 - `p.y <= 0`: the ellipsoid about the origin, on both sides. `p.y >= h`: the
   ellipsoid about `(0, h, 0)`.
-- Between the planes and outside: the ellipse's distance of `(p.x, p.z)` in
-  the ellipse `(sx, sz)`.
-- Between the planes and inside: the depth is the least of the ellipse's
-  depth and, only when `sy` is under both `sx` and `sz`, the far foot on each
-  cap. The far foot is the nearest point of a cap from a point on the other
-  side of its equator. With `y'` the height over that cap's centre, `F` over
-  `(x, y', z)` is convex between the poles `-min(sx, sz)^2` and `-sy^2`, has
-  two roots there or none, and the far foot is the larger root. The search
-  halves on the sign of `F'` until it meets a point where `F` is negative,
-  then halves on `F` between that point and `-sy^2`.
+- Between the planes and outside: the ellipse `(sx, sz)` at `(p.x, p.z)`.
+- Between the planes and inside: the least of the ellipse's depth and, only
+  when `sy` is under both `sx` and `sz`, the far foot on each cap: the
+  nearest point of a cap from a point on the other side of its equator. With
+  `y'` the height over that cap's centre and `v = -(t + sy^2)`, the cap's
+  feet are the roots of
+  `F(v) = (sy * y' / v)^2 + (sx * p.x / (sx^2 - sy^2 - v))^2 + (sz * p.z / (sz^2 - sy^2 - v))^2 - 1`
+  over `0 < v < V`, `V = min(sx, sz)^2 - sy^2`. `F` is convex there and
+  unbounded at `v = 0`. At `V` it is unbounded when the coordinate of that
+  pole's axis is not zero, and finite otherwise.
+  - A finite value below zero at `V`: one root, bracketed directly, which
+    is the far foot. On the axis this is the cap's pole, at `y' + sy`.
+  - Otherwise two roots or none. The search halves on the sign of `F'`
+    until it meets a `v` where `F` is negative, then halves on `F` between
+    zero and that `v`. The root nearer zero is the far foot.
+  - A search that ends without a negative `F` and without excluding one
+    adds the cap as a candidate that lowers `lower` only: its distance is
+    bounded below by the distance from `p` to the box of feet over the
+    bracket it ended on.
 
 *The cone.* The scaled cone has its apex at `(0, sy, 0)` and its base, the
 ellipse `(sx, sz)`, in the plane `y = -sy`. With `Y = p.y - sy` and
@@ -262,86 +366,136 @@ ellipse `(sx, sz)`, in the plane `y = -sy`. With `Y = p.y - sy` and
 `(sx^2 * p.x / (sx^2 + k), Y / (1 - k * b), sz^2 * p.z / (sz^2 + k))`, where
 `k` is a root of
 `G(k) = (sx * p.x / (sx^2 + k))^2 + (sz * p.z / (sz^2 + k))^2 - b * Y^2 / (1 - k * b)^2`.
+The foot's normal points out from the solid nappe exactly when `k >= 0`.
 
 - `Y < 0`: `G` falls strictly from the pole `-min(sx, sz)^2` to the pole
-  `1 / b`, so it has one root there, negative inside the nappe.
-- `Y >= 0`: with `u = 1 / k`,
+  `1 / b`, and has one root between. When the coordinate of the lesser
+  horizontal axis is zero and the rest of `G` is zero or less at that
+  pole, the root is the pole and that coordinate comes from the nappe's
+  equation.
+- `Y = 0`: if `p.x` and `p.z` are zero the point is the apex. Otherwise the
+  root is the pole `k = 1 / b`: the horizontal coordinates are
+  `p.x * b * sx^2 / (b * sx^2 + 1)` and its twin in Z, and the height comes
+  from the nappe's equation.
+- `Y > 0`: if `sx^2 * p.x^2 + sz^2 * p.z^2 <= Y^2 / b` the nearest point
+  of the nappe is the apex. Otherwise, with `u = 1 / k`,
   `H(u) = (sx * p.x / (1 + u * sx^2))^2 + (sz * p.z / (1 + u * sz^2))^2 - b * Y^2 / (u - b)^2`
-  falls strictly over `(0, b)`. If
-  `H(0) = sx^2 * p.x^2 + sz^2 * p.z^2 - Y^2 / b` is not above zero the
-  nearest point of the nappe is the apex; otherwise `H` has one root.
-- Inside the cone the depth is the lesser of the height over the base,
-  `Y + 2 * sy`, and the distance to the nappe's foot.
-- Outside, a foot at or above the base is the answer. Otherwise the answer
-  is the base: `-2 * sy - Y` straight down when the point is under the base
-  and `(p.x, p.z)` lies in its ellipse, and else the rim, the root of the
-  squares of `Y + 2 * sy` and the ellipse's distance of `(p.x, p.z)`.
+  falls strictly over `(0, b)` and has one root.
 
-*The torus.* The unit torus has a major radius of one and a tube of ratio
-`r = 0.4`. Its points are
-`(sx * (1 + r * cos a) * cos f, sy * r * sin a, sz * (1 + r * cos a) * sin f)`
-for a tube angle `a` (zero on the outer equator, a quarter turn on top) and an
-azimuth `f`. For a point with `p.y > 0` let `m(a) = sy * (p.y / sin a - sy * r)`,
-`A(a) = sx * (1 + r * cos a) + m * cos a / sx`, and `B(a)` the same with `sz`.
-A foot at tube angle `a` has `cos f = p.x / A` and `sin f = p.z / B`, so the
-feet are the roots of `G(a) = (p.x / A)^2 + (p.z / B)^2 - 1`. `m` is the
-foot's signed reach along its normal: zero or more for a point outside, below
-zero inside.
+The cone's answer, by where the point is:
 
-- Outside there is one root. `G` falls strictly in `cos a` wherever `m` is
-  not negative, which is `sin a <= p.y / (sy * r)`. That is every angle when
-  `p.y >= sy * r`. Otherwise it is an arc at each equator, and the root is
-  in the outer arc when `(p.x / sx)^2 + (p.z / sz)^2 >= 1` and in the inner
-  one when not.
-- Inside, `G` is below zero at the outer end of the arc between and above
-  zero at the inner end. When `sy` is no more than `sx` and `sz`, `A` and
-  `B` rise in `cos a` over the whole arc and there is one root. When it is
-  more, `A` falls where `sin a` is above the cube root of
-  `sy * p.y / (r * (sy^2 - sx^2))` and rises elsewhere, and `B` likewise:
-  the arc is cut there into pieces on which each is monotone. Over a piece
-  the end values of `A` and `B` bound both squares, so a piece whose bounds
-  keep `G` off zero holds no foot; the others are halved until they are
-  narrower than the tolerance. The depth is the least distance over the
-  pieces left.
-- `p.y = 0`: `m` is `-sy^2 * r` at every angle, and the equator feet are
-  the ellipse's distances in the plane, to `(1 + r) * (sx, sz)` and to
-  `(1 - r) * (sx, sz)`.
-
-The root is searched over the tube angle, never over its cosine: near an
-equator the cosine cannot resolve the foot.
+- Inside the cone (inside the nappe and at or above the base): the lesser
+  of the height over the base, `Y + 2 * sy`, and the distance to the
+  nappe's foot.
+- Inside the solid nappe and below the base: the base's answer. That is
+  `-2 * sy - Y` straight down when the point is under the base and
+  `(p.x, p.z)` lies in its ellipse, and otherwise the rim: the root of the
+  squares of `Y + 2 * sy` and the ellipse's distance at `(p.x, p.z)`.
+- Outside the solid nappe: the nappe's foot when it is at or above the
+  base, or the apex. Otherwise the base's answer, by the same rule.
 
 *The round cone.* Its surface is the ellipsoid of radii `s` below the plane
 `y = sy / 2`, the ellipsoid of radii `s / 2` about `(0, sy, 0)` above
 `y = 5 * sy / 4`, and between them a nappe with its apex at `(0, 2 * sy, 0)`
-and `b = 1 / (3 * sy^2)`. Outside, the nappe's foot is the answer when it lies
-between the planes. Otherwise the answer is the nearest point of whichever
-ellipsoid has it on its own cap, which claim 1 confirms for the foot found.
-Its inside is not designed here: step 7 owns it.
+and `b = 1 / (3 * sy^2)`. Outside, the nappe's foot is the answer when the
+point is outside the solid nappe and the foot lies between the planes.
+Otherwise the answer is the nearer of the two ellipsoids' nearest points
+among those that lie on their own caps. Its inside is not designed here:
+step 7 owns it.
 
-**Why the answer is the distance.** Each claim is used where the solves above
-cite a region or skip a candidate.
+*The torus.* The unit torus has a major radius of one and a tube of ratio
+`r = 0.4`. Each half of the tube, outer and inner, is measured from its own
+equator by `t` in `[0, 1]`, the tangent of half the angle from that equator:
+`sin a = 2 * t / (1 + t^2)`, and `cos a = (1 - t^2) / (1 + t^2)` on the outer
+half and its negative on the inner. The top is `t = 1` on both. A latitude is
+the ellipse `(1 + r * cos a) * (sx, sz)` at the height `sy * r * sin a`, and
+`D(t)` is the distance from `p` to it: the root of the squares of the
+height's difference and the ellipse's distance at `(p.x, p.z)`. `D` is a
+distance to the surface at every `t`, and it changes by at most
+`2 * r * max(s)` per unit of `t`.
 
-1. *A convex shape, outside.* For a convex solid `K`, a point `p` outside it,
-   any point `q` of its surface and the outward unit normal `n` there,
-   `n . (p - q) <= distance <= |p - q|`. `K` lies behind the plane through
-   `q`, so the plane is no farther than `K`, and `q` is a point of `K`. When
-   `p - q` is along `n` the two ends meet, so a foot is the nearest point.
-   The capsule, the cone, the round cone and the ellipsoid are convex. So is
-   the torus's hull, and outside it with `(p.x / sx)^2 + (p.z / sz)^2 >= 1`
-   the nearest point of the hull is on the torus's outer half.
+For `p.y > 0` let `m = sy * (p.y / sin a - sy * r)`,
+`A = sx * (1 + r * cos a) + m * cos a / sx`, and `B` the same with `sz`. A
+foot at that latitude has an azimuth `f` with `p.x = A * cos f` and
+`p.z = B * sin f`, so its `t` is a root of
+`G = (p.x / A)^2 + (p.z / B)^2 - 1` where `A` and `B` are positive, or a
+zero of `A` or `B` where that coordinate of `p` is zero. `m` is the foot's
+signed reach along its normal: zero or more outside, below zero inside.
+
+- *Outside, `p.y > 0`.* Feet have `m >= 0`, which is
+  `sin a <= p.y / (sy * r)`: every `t` when `p.y >= sy * r`, and otherwise
+  `t` up to `t_m` on each half. The search runs on the outer half when
+  `(p.x / sx)^2 + (p.z / sz)^2 >= 1` and on the inner half when not. On the
+  outer half `A` and `B` are positive and `G` rises with `t` from below
+  zero at the equator to zero or more at the half's end. On the inner half
+  `G` is zero or less at the half's end and rises as `t` falls, and any
+  `t` at which `A` or `B` is not positive counts as past the root,
+  whatever the point's coordinates. One root or one such edge lies between.
+  The answer is `D` over the final bracket: `[D - 2 * r * max(s) * w, D]`
+  for `D` at its middle and its width `w`.
+- *Outside, `p.y = 0`.* `D` at the outer equator when
+  `(p.x / sx)^2 + (p.z / sz)^2 >= 1`, and at the inner equator when not.
+- *Inside.* Feet have `m < 0`: `t` from `t_m` to one on each half, with
+  `m = -sy^2 * r` and `t_m = 0` when `p.y` is zero. Each half is cut where
+  the derivative of `A` or of `B` changes sign, which is at
+  `sin a = cbrt(sy * p.y / (r * (sy^2 - sx^2)))` for `A` when `sy > sx` and
+  that is below one, and likewise for `B`. On a piece `A` and `B` are each
+  monotone, so their end values bound them, padded for the cut's own
+  rounding. A piece on which `A` or `B` is nowhere positive holds no foot.
+  Otherwise `(p.x / A)^2` lies between its value at the larger end of `A`
+  and its value at the smaller, which is unbounded when the smaller end is
+  not positive, and likewise for `B`. A piece whose bounds keep `G` off
+  zero holds no foot. Any other piece is halved, widest first, until it is
+  as narrow as its consumer needs, until its whole range of `G` is inside
+  the rounding of its bounds, or until the budget of pieces is spent. Each
+  piece left answers `[D - 2 * r * max(s) * w, D]`, and one whose range
+  could not be decided is cut into equal parts for its `D` alone. When
+  `p.y` is zero, `D` at both equators is a candidate too. The depth's
+  interval is the least lower end and the least upper end over all of
+  them.
+- *Inside, `sy` no more than `sx` and `sz`.* `A` and `B` are positive and
+  rise toward the outer equator over the whole arc, so `G` has one root
+  and a plain bracket finds it, unless `A` and `B` are both constant
+  (`p.y = 0`, with `p` on the one horizontal axis whose scale equals `sy`).
+  Then `G` is constant; when it is zero every latitude is a foot at one
+  distance, which `D` at any `t` reads.
+
+**Why the interval holds the distance.** Each claim is used where a solve
+names a region, drops a candidate or bounds a piece.
+
+1. *A convex shape, outside.* For a convex solid `K`, a point `p` outside
+   it, any point `q` of its surface and the outward unit normal `n` of a
+   plane that supports `K` at `q`, `n . (p - q) <= distance <= |p - q|`.
+   `q` is the nearest point exactly when `p - q` is `n` times a multiplier
+   that is zero or more. A foot whose normal points the other way is a
+   point of the surface and no more: for the nappe that is `k < 0`, a point
+   inside the solid nappe. The lower end converges with the foot only at a
+   smooth foot; at the cone's rim and apex the answers are closed forms and
+   take no support plane. The capsule, the cone, the round cone and the
+   ellipsoid are convex. So is the torus's hull, whose flat faces are
+   ellipses' disks, so outside it with
+   `(p.x / sx)^2 + (p.z / sz)^2 >= 1` the hull's nearest point is on the
+   torus's outer half.
 2. *An intersection, inside.* A ball about `p` lies in an intersection of
    sets when it lies in each, so the depth in the intersection is the least
    of the depths. The cone is its base's half-space cut by the solid nappe.
 3. *The octant.* A shape symmetric in a coordinate has a nearest point whose
-   coordinate has the point's sign: reflecting a foot to that side brings it
-   no farther.
-4. *One root.* Each term of `F`, `G` over its interval and `H` falls
-   strictly, so each has one root where its feet keep the point's signs.
-   Eberly's "Distance from a Point to an Ellipse, an Ellipsoid, or a
-   Hyperellipsoid" gives the ellipsoid's root and bracket and the zero
-   branches, and Hart's "Distance to an Ellipsoid" (Graphics Gems IV) the
-   same equation; neither was fetched for this design, and the engine's
-   ellipse follows the first. The nappe's `G` and `H` are derived here.
+   coordinate has the point's sign or is zero: reflecting a point of the
+   surface to that side brings it no farther. A foot on the wrong side of a
+   coordinate the point is strictly off is therefore never the nearest,
+   which is why a negative `A` or `B` is inadmissible. Where the point's
+   coordinate is zero, its nearest latitude is a limit of such feet (the
+   distance is continuous in the point), so it has `A` and `B` zero or
+   more.
+4. *One root, where the search looks.* Each term of `F` falls strictly in
+   `u`, so `F` has one root over `u > 0`, and the pole branch covers the
+   case where it has none. `G` and `H` fall strictly over their intervals
+   by the same argument on their terms. Eberly's "Distance from a Point to
+   an Ellipse, an Ellipsoid, or a Hyperellipsoid" gives the ellipsoid's
+   root, bracket and zero branches, and Hart's "Distance to an Ellipsoid"
+   (Graphics Gems IV) the same equation; neither was fetched for this
+   design, and the engine's ellipse follows the first. The nappe's `G` and
+   `H` and their poles are derived here.
 5. *The capsule's regions.* Outside and under `y = 0`, the nearest point
    cannot lie on the cylinder, whose normals are level, nor on the upper
    cap, whose normals rise, so it is on the lower cap, where it is the
@@ -352,134 +506,154 @@ cite a region or skip a candidate.
    cylinder at the point's own height.
 6. *The far foot.* Between the planes and inside, the nearest point of a cap
    is on its equator, which the cylinder's depth already covers, or at a
-   local minimum on its open half. Those are roots of `F` with
-   `t + sy^2 < 0` and the other two denominators positive, an interval that
-   is empty unless `sy` is under `sx` and `sz`. `F` is convex there, and a
-   root is a local minimum exactly where `F` rises (the bordered Hessian's
-   determinant is the product of the three denominators' signs times `F'`),
-   so it is the larger root. A minimum the search misses lies within its
-   last bracket of the saddle beside it, and from a saddle the distance
-   falls to the equator, so the miss costs no more than that bracket's
-   width in distance.
+   local minimum on its open half. Those are roots of `F` over `0 < v < V`,
+   an interval that is empty unless `sy` is under `sx` and `sz`. `F` is
+   convex there. With one root, it rises through it in `t` and is the
+   minimum. With two, a root is a local minimum exactly where `F` rises in
+   `t` (the bordered Hessian's determinant is the product of the three
+   denominators' signs times the derivative), which is the root nearer
+   `v = 0`; from the other, a saddle, the distance falls to the equator.
+   Only that two-root case uses the saddle, and a search that cannot tell
+   it from none uses the candidate's lower bound instead.
 7. *The torus, outside.* The normal at a surface point is the unit torus's
    normal through the inverse scale, so a foot's point is
    `S u + m * S^-1 v` for the unit point `u` and its unit normal `v`, which
    gives `m`, `A` and `B`. The derivative of `A` in `c = cos a` is
    `r * (sx^2 - sy^2) / sx + sy * p.y / (sx * (1 - c^2)^1.5)`. Where `m`
    is not negative its second term is at least `sy^2 * r / sx`, so the
-   derivative is at least `r * sx`; `B` likewise; `G` falls strictly.
+   derivative is at least `r * sx`, and `B` likewise. `1 / A^2` falls as
+   `A` rises only while `A` is positive, so `G` falls strictly in `c` on
+   the part of the feasible arc where `A` and `B` are positive, which is an
+   interval running from the outer end, and claim 3 leaves no foot beyond
+   it. The squared equation has roots beyond it, which are not feet in the
+   point's octant.
 8. *The torus, inside.* Every foot whose coordinates keep the point's signs
-   is a root of `G` in the arc, or a zero of `A` or `B` where the point's
-   coordinate is zero. The derivative above is even in `c` and rises with
-   its size, so it changes sign at most once on each side, which gives the
-   pieces. Bounds from monotone ends are exact bounds, so no root is in a
-   discarded piece, and every candidate kept is a point of the surface.
-9. *A zero coordinate.* The distance is 1-Lipschitz in the point, so the
-   branch at a pole is the limit of the solve beside it, and a branch taken
-   within a tolerance of zero moves the answer by no more than the
-   tolerance.
+   is at a latitude in a piece the enumeration keeps: the derivative above
+   is even in `c` and rises with its size, so it changes sign at most once
+   on each half, the pieces are monotone, and bounds that become unbounded
+   across a zero of `A` or `B` discard nothing that holds a root or such a
+   zero. The nearest point's latitude is therefore in some piece left, and
+   over a piece of width `w` the distance to any latitude in it is within
+   `2 * r * max(s) * w` of `D` at its middle. Nothing here counts the
+   feet: five occur, the nearest need not be first or last, and a foot may
+   touch zero without crossing it.
+9. *A nearby point.* The distance is 1-Lipschitz in the point. An
+   implementation that evaluates at `p'` in place of `p` widens its
+   interval by `|p' - p|`, the Euclidean length of the whole move, and
+   keeps the side of `p`. This is not used to reach a zero branch.
 
-**Where a solve may stop.** At every step a root lies in a bracket whose ends
-have opposite signs, and that invariant carries the proof, not the count of
-steps. Three interval rules follow from it.
+**The prototypes.** Two double-precision prototypes ran against a brute-force
+closest point (a surface grid, then a zoom about its best samples). Both were
+scratch and are not in the tree: the laws of steps 2 to 6 replace them.
 
-- *Between the bracket's ends.* Each coordinate of a quadric foot is
-  monotone in `t` (or `k`), so the true foot lies in the box spanned by the
-  feet at the bracket's two ends, and the distance lies between the box's
-  nearest and farthest points from `p`. For the torus the box comes from the
-  end values of `A` and `B` on a monotone piece. This holds on both sides of
-  every shape.
-- *Outside a convex shape.* Claim 1's interval holds for any surface point,
-  whatever produced it. The foot from the current estimate, put back on the
-  surface, gives `n . (p - q)` below and `|p - q|` above, and the gap is of
-  second order in the foot's error. In the prototype it fell under
-  `1e-6` of the distance for 99 samples in 100 after twelve halvings, where
-  the bracket alone needs twice that.
-- *A faster step.* A Newton or secant step may replace a halving when it
-  lands inside the bracket, since the bracket still holds the root.
-
-A solve stops when its interval is narrower than its format resolves, or
-sooner at a tolerance its caller's check justifies. It returns the interval's
-lower end in size, so stopping early never reads farther than the surface is.
-A stop on a count of steps alone is not allowed.
-
-The fixed-point evaluator computes the interval in Q48.16 with outward
-rounding (`FixedInterval`) and widens its box rule by the interval's width,
-in place of the ellipse's fixed slack. The kernel runs the same steps in
-float and carries no interval: its error is the format's, and a law holds it
-to the fixed-point answer.
-
-**The prototype.** A double-precision prototype of the capsule, the cone and
-the torus ran against a brute-force closest point (a surface grid, then a
-zoom about its best samples). Over 2,400 points, half of them inside, over
-scales up to 6 to 1 and over flat-capped capsules and tall-tubed tori, no
-solve read farther than the brute force by more than `3e-14`. The brute
-force read farther than a solve by up to `7e-5` at points a few millimetres
-from a rim, where its grid is the coarser of the two. 102 points on axes,
-centres and symmetry planes agreed to `2e-6`, read as the limit claim 9
-allows. Claim 1's interval held at every one of 11,599 early stops. Inside
-tall tubes the scan found one root or three and never more, and the nearest
-foot was always the first or the last. It decided four things: the search
-runs over the tube angle (over its cosine the equator feet were lost at
-`p.y` near zero); the bracket ends at a pole whether or not that coordinate
-is zero; an azimuth with a zero coordinate takes its other component from
-the unit circle; and the far foot is needed, since flat capsules were wrong
-inside without it. The prototype was scratch and is not in the tree: the
-laws of steps 2 to 6 replace it.
+- The first ran the first design over 2,400 points and agreed everywhere,
+  and the review then broke it with points it had not drawn: on axes and
+  planes, under the cone's base, at an equator, and at the formats' edges.
+  Random points in general position did not test the regions, the poles or
+  the arithmetic.
+- The second runs the solves above. Each of the review's counterexamples
+  reads its expected value, to the digits the review gives: the cone
+  under its base `0.25`, at its apex's height `0.707106781` and beside its
+  apex `0.00135520413`; the round cone under its bottom `0.125`; the
+  capsule on its axis `-1.125`; the torus `0.945362405` outside,
+  `-0.165194546` across a zero of `A`, `-0.0697433254` with five feet,
+  `-0.2` on top within `[0.199999998, 0.2]`, `-0.4` at both midplane
+  points, `-0.0741877347` at the foot that touches zero, and `-4915.2` and
+  `-0.15` beside the inner equator; the ellipsoid `-0.5` at the cusp,
+  `-1` at the centre and zero at the near-circle's authored pole. Over
+  1,200 further random points no solve read farther than the brute force
+  by more than `1e-15`, no side differed and no lower end passed the
+  distance.
+- Emulations of the two formats ran the root: the fixed-point search with
+  certified signs in 16 and in 48 fractional bits (above), and the float
+  search at radii `2^20` and `2^-13`, where the bracket as built answers
+  `2097152` with its foot at the origin and the scaled root answers
+  `1048576.1`.
 
 **Steps, each with its check.** The invariant is that a primitive
-`SdfSolidGeometry.AppendScaledPrimitive` emits under any scale answers the
-distance to its authored surface within its reported interval, in both
-interpreters. Step 8 enforces it: that method is the one door a scaled
-primitive is lowered through, and after it no arm of the method reaches a
-`Scale` with unequal components. The guarantee stops at what is not a scaled
-primitive: a superellipsoid past exponent 2 stays a gauge, warps, flares and
-field ops stay bounds, a sweep and a path certify no gain, and a C# caller
-can still write `SdfProgramBuilder.Scale` itself.
+`SdfSolidGeometry.AppendScaledPrimitive` lowers to an exact shape answers,
+in both interpreters, a side from its own implicit test and an interval that
+holds the distance to its authored surface. Two things enforce it. That
+method is the one door a scaled primitive is lowered through
+(`ShapeEmission.Emit` is its one caller for creations), and after step 8 no
+arm of it reaches a `Scale` with unequal components inside the admitted
+ratios. And the fixed-point solve returns the interval as its only result
+type, so a consumer cannot read a scalar without its error. The guarantee
+stops at the kernel, whose float answer has a measured error and no proof;
+at what is not a scaled primitive (a superellipsoid past exponent 2 stays a
+gauge, warps, flares and field ops stay bounds, a sweep and a path certify
+no gain); at scales past the admitted ratios; and at a C# caller that writes
+`SdfProgramBuilder.Scale` itself.
 
-1. Correct the record: the stretched ellipsoid is a bound. The exhibits and
-   this design are that step.
-2. A sphere, ellipsoid or exponent-2 superellipsoid with two equal radii
-   lowers to the ellipse revolved at offset zero, turned so its unequal axis
-   is Y. Check: `puck creation shape` reads `distance=exact` for a spheroid
-   and for the valley's `lake-basin`, `puck creation stats` still reports
-   `contact: accepted`, and a spheroid cutter's `mesh audit --cpu` reads no
-   triangle over the slope deficit's threshold.
-3. One quadric root for both interpreters, with its interval. The ellipse
-   becomes its two-term caller, so there is one implementation. Check:
-   `EllipseDistanceLawTests` passes unchanged, and a law holds the three-term
-   root to a double-precision reference inside, on each axis and plane,
-   beside the surface and far from it, with the reference inside the
-   interval at every stop.
+1. The record is corrected, and the exhibits and this design exist.
+2. **The spheroid, first to build.** It needs no new solve and no new
+   instruction.
+   - `SdfProgramBuilder.Ellipse` keeps both radii as authored: its `1e-4`
+     move of a near-circle goes, with the three places that carry it
+     (`SdfSolidGeometry.GetLocalBounds`'s prism box, `LocalBox`'s factor
+     and `MaxChamfer`'s ellipse arm). Equal radii need no branch: both
+     interpreters' roots take a ratio of one, and their on-axis branch
+     compares against a zero difference without dividing by it.
+   - `AppendScaledPrimitive`'s Sphere, Ellipsoid and exponent-2
+     Superellipsoid arms lower exactly two equal radii to the ellipse
+     revolved at offset zero: the equal radius and the odd one as its
+     semi-axes, under the turn that carries Y onto the odd axis when that
+     axis is X or Z (as the elliptic cylinder is turned).
+   - This is the drawn lowering. The contact lowering keeps the exponent-2
+     gauge, the same surface, until step 3: the ellipse's fixed-point root
+     as built is centimetres out deep inside a metre-sized ellipse, and a
+     cutter's inside is where a body moves. `ShapeEmission.Emit` passes
+     which lowering it emits for.
+   - Checks: `puck creation shape` reads `distance=exact` for a spheroid
+     and for the valley's `lake-basin`; `puck creation stats` reports
+     `contact: accepted`; a law reads zero, within the format's rounding,
+     at the six axis points and at sampled surface points of spheroids
+     that include `(1, 1 - 2^-15, 1)` and the lake's radii, in both
+     interpreters; `EllipseDistanceLawTests` passes with its near-circle
+     case at its authored radii; `puck mesh audit --cpu` of a spheroid cut
+     from a slab reads no triangle over the slope deficit's threshold; and
+     the lead's window reads the valley sector's bake work before and
+     after, since the bowl's samples now each run a root.
+3. One root for both interpreters, as specified above, with its interval as
+   the fixed-point result. The ellipse becomes its two-term caller, so
+   there is one implementation, and the spheroid's contact lowering moves
+   to it. Checks: `EllipseDistanceLawTests` passes; a law holds the two-
+   and three-term roots to a higher-precision reference inside, on each
+   axis and plane, at the evolute's cusp, at the centre, with tied axes,
+   one raw off each plane, beside the surface and far from it, with the
+   reference inside the interval at every stop and the interval no wider
+   than a raw when the search ends; the review's fixed-point and float
+   points are cases of it; and the box rule encloses the point answers
+   with their errors.
 4. The triaxial ellipsoid takes the root, and the gauge is left to exponents
    past 2. Check: `shape-sphere-xyz` and `shape-ellipsoid-xyz` read
-   `distance=exact`, the box rule encloses the point answers
-   (`TryDistanceBounds` over boxes about the law's points), and the two
-   interpreters agree over a lattice.
+   `distance=exact`, and the two interpreters agree over a lattice within
+   the law's error.
 5. The capsule. Check: `shape-capsule-xz` reads `distance=exact` and
-   `contact=admitted`, and the law covers capsules with `sy` under `sx` and
-   `sz`, where the far foot decides.
+   `contact=admitted`, and the law covers capsules with `sy` under `sx`
+   and `sz`, on and off their axis.
 6. The cone, then the torus, each with the same law and the same two reads.
-   The torus's law covers `sy` above `sx` or `sz`, and `p.y` at and near
-   zero.
+   The cone's law covers points under the base, at the apex's height and
+   on its planes. The torus's covers `sy` above `sx` or `sz`, `p.y` at
+   zero and one raw from it, points on its planes, and the review's
+   five-foot and touching-foot points.
 7. The round cone. Its first task is the inside: the capsule's claims 5 and
    6 with each cap ending at its tangent plane instead of its equator,
-   proved and run against brute force as the capsule's were. Until then it
-   keeps its bound and `puck creation shape` says so.
-8. `AppendScaledPrimitive` loses its `Scale` arm for unequal components, and
-   `SdfSolidGeometry.DilationGain` its stretched case. Check:
-   `puck creation shape` over the stretched row prints `bound` for
-   `shape-superellipsoid-xyz` alone.
+   proved and run against brute force and against points on its axis.
+   Until then it keeps its bound and `puck creation shape` says so.
+8. `AppendScaledPrimitive` loses its `Scale` arm for unequal components
+   inside the admitted ratios, and `SdfSolidGeometry.DilationGain` its
+   stretched case. Check: `puck creation shape` over the stretched row
+   prints `bound` for `shape-superellipsoid-xyz` alone.
 9. The exhibits and the cost. `puck mesh audit --cpu` reads no triangle over
    the slope deficit's threshold, no fold and no flip on
    `shape-stretch-cut` and `shape-stretch-smooth`, and the smooth cut's
    fillet reaches 40 mm from each rim. Then, in the lead's window: the same
    audit over the stored bakes on both backends, captures of both exhibits
    and of the lake's bowl, and the field work on the bake's `done` line
-   before and after. That work decides whether the kernel takes the early
-   stop and the faster step, and whether a program of hard unions alone may
-   keep a bound, which would need its own proof that nothing in it reads a
-   distance.
+   before and after. That work decides whether a program of hard unions
+   alone may keep a bound, which would need its own proof that nothing in
+   it reads a distance.
 
 Each new shape is an instruction-set change with every partner in one change
 ([the checklist](../../.claude/skills/rendering/SKILL.md#changing-the-instruction-set)):
@@ -487,23 +661,44 @@ the kernel, the fixed-point evaluator with its bounds and reach rules, the
 shading cost row beside the ellipse's (`SdfShadeCost`), and the contact
 lowering, which reads the same shape.
 
-**What a review should attack.**
+**What the review found, and where each is closed.**
 
-- Claim 5's inside case: that no point of the cylinder or the far cap is
-  nearer than the near ellipsoid's own nearest point.
-- Claim 6: that the open cap holds at most one local minimum, that it is the
-  larger root, and the bound on a missed one.
-- Claim 7's derivative and claim 1's use for the torus: that outside the
-  hull's flat faces the hull's nearest point is on the torus.
-- Claim 8: that the pieces are complete, including where `A` or `B` is not
-  positive, and that three is the most roots a tall tube has. The prototype
-  saw no more; nothing proves it, and the enumeration does not depend on it.
-- The cone's base rule: that a nappe foot below the base leaves only the
-  base's disk and rim.
-- The zero branches of the nappe and the torus, which are derived here and
-  have no published form to check against.
-- The returned lower end: that it is still zero on the surface and keeps the
-  field 1-Lipschitz across the regions' seams.
+| Finding | Closed by |
+|---|---|
+| 1. The cone returned its side for a point under its base | The cone's answer is by region, and the nappe's foot is taken only outside the solid nappe (claim 1's multiplier) |
+| 2. No root at the apex's height | The `Y = 0` branch at the pole `k = 1 / b`, and the apex itself |
+| 3. The outside torus equation has roots that are not feet | The search is clipped to positive `A` and `B` (claims 3 and 7) |
+| 4. A piece lost a foot across a zero of a denominator | Bounds are unbounded across a zero, and a piece with no positive part is the only one dropped for sign |
+| 5. Five feet inside a torus | No count is assumed; the pieces' budget and intervals stand in for one, and five is a law case |
+| 6. A box of end feet missed the distance | Pieces no longer span the top, and a piece answers `D` at its middle less its width's reach, not a box of feet |
+| 7. The round cone took an inward foot | The same multiplier rule, and the caps compared by which holds its own foot |
+| 8. A far foot with one root and no saddle | The end's one-sided value is read first; the saddle argument is kept for two roots |
+| 9. A lower end returned early moved the zero set and broke the Lipschitz bound | The contract: the side from the point, the interval to bound consumers, a scalar with its error and no Lipschitz claim, no early stop for scalar consumers |
+| 10. Q48.16 runs out of multiplier values | The pole-relative parameter in 128 bits with 48 fractional, signs certified, and a stop that returns the interval it holds |
+| 11. The float bracket overflows | Power-of-two scaling, no squared ratio, the term-above-one sign rule, geometric halving, and the `Scale` bound's value when not finite |
+| 12. Snapping coordinates | Zero branches are taken only at zero; a moved point widens the interval by the whole move and keeps its side (claim 9) |
+| 13. The torus's midplane was incomplete | Inside at `p.y = 0` the open arc is searched with the constant `m`, both equators are candidates, and the constant family is named |
+| 14. The support interval does not converge at a rim | Claim 1 limits it to smooth feet; rim and apex are closed forms |
+| 15. A foot that touches zero has no sign change | Pieces are kept by range, not by end signs, and an undecided piece ends at its width; a faster step needs a one-root bracket |
+| 16. An angle from the outer equator loses the inner foot | Each half is measured from its own equator by the half-angle tangent |
+| 17. A secant step can stall | Two proposals that do not halve the bracket are followed by a halving |
+| 18. The pole rule missed equality and ties | The pole branch takes "one or less", allots the rest once among tied least axes, and reads the centre |
+| 19. The spheroid lowering moved the authored surface | Step 2 removes the builder's move and checks the authored poles read zero |
+
+**What a second review should attack.**
+
+- The contract's table: whether any consumer of a point answer in
+  `SdfFieldEvaluator` or the bake treats it as 1-Lipschitz in a way the
+  scalar's error breaks.
+- The root's carrier: the `1 / p_i` bound away from the root, and the count
+  of fractional bits under the admitted ratios.
+- Claim 8's cuts in the tangent parameter and their padding, and the bound
+  `2 * r * max(s)` on `D`.
+- The cone's regions at their seams: the nappe at the base's rim, and a
+  point on the nappe below the base.
+- The round cone's rule for choosing a cap, which is argued from convexity
+  and checked at one point.
+- The far foot's candidate lower bound when its search stalls.
 
 #### Glass
 
