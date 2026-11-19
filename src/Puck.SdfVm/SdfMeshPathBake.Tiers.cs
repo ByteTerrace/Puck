@@ -170,11 +170,8 @@ public sealed partial class SdfMeshPathBake {
         return finest;
     }
     // Retires each replaced group whose replacement has landed and taken the draws (Group.Ahead), and hands back one
-    // whose replacement meshed nothing: the one step every replacement ends in, a settle rebake's (Rebake) and a finer
-    // tier's (Retier) alike. Under the gate.
+    // whose replacement meshed nothing: the one step every tier's replacement (Retier) ends in. Under the gate.
     private void FinishReplacements() {
-        var settles = Library.Settles;
-
         for (var at = (m_replacing.Count - 1); (at >= 0); at--) {
             var (group, index) = m_replacing[at];
 
@@ -185,12 +182,10 @@ public sealed partial class SdfMeshPathBake {
             if (!group.Done || group.Ahead) { continue; }
             m_replacing.RemoveAt(index: at);
             if (group.Mesh is null) {
-                // The replaced group keeps drawing: a settle rebake is not tried again at this pose, a finer tier not until
-                // the demand asks another.
-                if (group.Retiering) { replaced.RetierRefused = true; } else { replaced.Blocked = true; }
+                // The replaced group keeps drawing, and a finer tier is not tried until the demand asks another.
+                replaced.RetierRefused = true;
                 Replace(group: replaced, index: index);
                 m_productRevision++;
-                if (!group.Retiering) { settles.Count(kind: SdfMeshSettle.Refused); }
                 continue;
             }
             // The landed mesh replaces the drawn one: the replaced group retires here, its one place, and releases its mesh
@@ -198,17 +193,11 @@ public sealed partial class SdfMeshPathBake {
             m_retiredGroups.Add(item: replaced);
             replaced.Retired = true;
             group.Replaces = null;
-            if (group.Retiering) {
-                if (group.Tier > replaced.Tier) { m_coarsened++; } else { m_retiers++; }
-                if (group.Stored) { m_retiersReused++; }
-                group.RetierDeltaBytes = 0L;
-                m_worstOwedFrames = Math.Max(val1: m_worstOwedFrames, val2: group.OwedFrames);
-                group.OwedFrames = 0;
-                group.Retiering = false;
-                continue;
-            }
-            settles.Count(kind: SdfMeshSettle.Done);
-            if (group.Stored) { settles.Count(kind: SdfMeshSettle.Reused); }
+            if (group.Tier > replaced.Tier) { m_coarsened++; } else { m_retiers++; }
+            if (group.Stored) { m_retiersReused++; }
+            group.RetierDeltaBytes = 0L;
+            m_worstOwedFrames = Math.Max(val1: m_worstOwedFrames, val2: group.OwedFrames);
+            group.OwedFrames = 0;
         }
     }
     // Measures a frame's share of the demand (MeasureDemands), and once a measure (SdfMeshTier.MeasureFrames frames,
@@ -256,7 +245,6 @@ public sealed partial class SdfMeshPathBake {
         var freed = 0L;
 
         foreach (var (group, _) in m_replacing) {
-            if (!group.Retiering) { continue; }
             if (group.Done) { landing++; } else { inFlight++; }
             if (group.RetierDeltaBytes > 0L) {
                 filled = filled.AddSaturating(right: group.RetierDeltaBytes);
@@ -427,7 +415,6 @@ public sealed partial class SdfMeshPathBake {
 
         // A dynamic slot no active instance rides any more plans nothing; the next program drops the group.
         if (ReferenceEquals(objA: group, objB: old)) { return false; }
-        group.Retiering = true;
         group.RetierDeltaBytes = delta;
         group.OwedFrames = old.OwedFrames;
         group.DemandedTier = old.DemandedTier;

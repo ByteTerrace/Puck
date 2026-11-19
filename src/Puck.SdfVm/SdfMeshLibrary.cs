@@ -61,9 +61,9 @@ public sealed class SdfMeshLibrary(SdfMeshStore? store = null, long? byteBudget 
 
     /// <summary>Gets the store the library keeps its meshes in between runs, or <see langword="null"/>.</summary>
     public SdfMeshStore? Disk { get; } = store;
-    /// <summary>Gets the settle rebakes' counts (<see cref="SdfMeshSettle"/>) every bake holding the library counts
-    /// into, so one source reads a presentation's residencies together.</summary>
-    public WorkCounterSet Settles { get; } = SdfMeshSettle.Counters();
+    /// <summary>Gets the counts of the groups planned again as a frame input moved (<see cref="SdfMeshInputs"/>) every bake
+    /// holding the library counts into, so one source reads a presentation's residencies together.</summary>
+    public WorkCounterSet Inputs { get; } = SdfMeshInputs.Counters();
     /// <summary>Gets the skinned meshes' counts (<see cref="SdfMeshSkin"/>) every bake holding the library counts into:
     /// each skinned mesh a group starts drawing, and its vertices by vertex-stage path.</summary>
     public WorkCounterSet Skins { get; } = SdfMeshSkin.Counters();
@@ -124,7 +124,7 @@ public sealed class SdfMeshLibrary(SdfMeshStore? store = null, long? byteBudget 
     /// stood in (<see cref="SdfMeshGeometryBuilder.Form"/>): the same shapes, which the mesh's skin carries through each
     /// member's slot (<see cref="SdfMesh.Members"/>), renumbered for the taking group's materials as
     /// <see cref="TryTake"/> renumbers. A body crossing into another world mid-stride takes the mesh its other pose
-    /// baked, and settles later (<see cref="SdfMeshSettle"/>).</summary>
+    /// baked.</summary>
     /// <param name="form">The form.</param>
     /// <param name="materials">The taking group's material ids, by their place in the geometry.</param>
     /// <param name="mesh">The mesh, when this returns <see langword="true"/>.</param>

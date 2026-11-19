@@ -99,12 +99,12 @@ public sealed partial class SdfMeshPathBakeLawTests {
         var dresser = bakeRun.Dresser;
         var index = 0L;
 
-        DriveSettle(bake: bake, dresser: dresser, frame: SettleFrame(groups: 1, offset: 0.35f, program: SettleProgram(groups: 1, leadingMaterials: 1), time: 0f), index: ref index);
-        _ = dresser.Dress(frame: SettleFrame(groups: 1, offset: 0.35f, program: bake.Program!, time: 0.1f));
+        DrivePosed(bake: bake, dresser: dresser, frame: PosedFrame(groups: 1, offset: 0.35f, program: PosedProgram(groups: 1, leadingMaterials: 1), time: 0f), index: ref index);
+        _ = dresser.Dress(frame: PosedFrame(groups: 1, offset: 0.35f, program: bake.Program!, time: 0.1f));
         Assert.False(condition: bake.Pending);
 
         bake.Identity = new SdfMeshBakeIdentity(value: 7);
-        _ = dresser.Dress(frame: SettleFrame(groups: 1, offset: 0.353f, program: SettleProgram(groups: 1), time: 0.2f));
+        _ = dresser.Dress(frame: PosedFrame(groups: 1, offset: 0.353f, program: PosedProgram(groups: 1), time: 0.2f));
 
         Assert.True(condition: bake.Pending);
     }
@@ -118,11 +118,11 @@ public sealed partial class SdfMeshPathBakeLawTests {
         var dresser = bakeRun.Dresser;
         var index = 0L;
 
-        DriveSettle(bake: bake, dresser: dresser, frame: SettleFrame(groups: 1, offset: 0.35f, program: SettleProgram(groups: 1), time: 0f), index: ref index);
-        var baked = Assert.Single(collection: dresser.Dress(frame: SettleFrame(groups: 1, offset: 0.35f, program: bake.Program!, time: 0.1f)).DressedDraws()).Mesh;
+        DrivePosed(bake: bake, dresser: dresser, frame: PosedFrame(groups: 1, offset: 0.35f, program: PosedProgram(groups: 1), time: 0f), index: ref index);
+        var baked = Assert.Single(collection: dresser.Dress(frame: PosedFrame(groups: 1, offset: 0.35f, program: bake.Program!, time: 0.1f)).DressedDraws()).Mesh;
 
-        _ = dresser.Dress(frame: SettleFrame(groups: 1, offset: 0.353f, program: bake.Program!, time: 0.2f));
-        var draws = dresser.Dress(frame: SettleFrame(groups: 1, offset: 0.353f, program: SettleProgram(groups: 1), time: 0.3f)).DressedDraws();
+        _ = dresser.Dress(frame: PosedFrame(groups: 1, offset: 0.353f, program: bake.Program!, time: 0.2f));
+        var draws = dresser.Dress(frame: PosedFrame(groups: 1, offset: 0.353f, program: PosedProgram(groups: 1), time: 0.3f)).DressedDraws();
 
         Assert.Same(expected: baked, actual: Assert.Single(collection: draws).Mesh);
         Assert.False(condition: bake.Pending);
@@ -137,15 +137,15 @@ public sealed partial class SdfMeshPathBakeLawTests {
         var dresser = bakeRun.Dresser;
         var index = 0L;
 
-        DriveSettle(bake: bake, dresser: dresser, frame: SettleFrame(groups: 1, offset: 0.35f, program: SettleProgram(groups: 1), time: 0f), index: ref index);
-        var baked = Assert.Single(collection: dresser.Dress(frame: SettleFrame(groups: 1, offset: 0.35f, program: bake.Program!, time: 0.1f)).DressedDraws()).Mesh;
-        var program = SettleProgram(groups: 1);
-        var drawn = SettleFrame(groups: 1, offset: 0.353f, program: program, time: 0.2f);
+        DrivePosed(bake: bake, dresser: dresser, frame: PosedFrame(groups: 1, offset: 0.35f, program: PosedProgram(groups: 1), time: 0f), index: ref index);
+        var baked = Assert.Single(collection: dresser.Dress(frame: PosedFrame(groups: 1, offset: 0.35f, program: bake.Program!, time: 0.1f)).DressedDraws()).Mesh;
+        var program = PosedProgram(groups: 1);
+        var drawn = PosedFrame(groups: 1, offset: 0.353f, program: program, time: 0.2f);
 
         bake.PlanAhead(
             farDistance: drawn.FarDistance,
             program: program,
-            transforms: SettleFrame(groups: 1, offset: 0.35f, program: program, time: 0.15f).DynamicTransforms
+            transforms: PosedFrame(groups: 1, offset: 0.35f, program: program, time: 0.15f).DynamicTransforms
         );
         var draws = dresser.Dress(frame: drawn).DressedDraws();
 
@@ -162,9 +162,9 @@ public sealed partial class SdfMeshPathBakeLawTests {
         var dresser = bakeRun.Dresser;
         var index = 0L;
 
-        DriveSettle(bake: bake, dresser: dresser, frame: SettleFrame(groups: 1, offset: 0.35f, program: SettleProgram(groups: 1, leadingMaterials: 1), time: 0f), index: ref index);
-        var baked = Assert.Single(collection: dresser.Dress(frame: SettleFrame(groups: 1, offset: 0.35f, program: bake.Program!, time: 0.1f)).DressedDraws()).Mesh;
-        var draws = dresser.Dress(frame: SettleFrame(groups: 1, offset: 0.353f, program: SettleProgram(groups: 1), time: 0.2f)).DressedDraws();
+        DrivePosed(bake: bake, dresser: dresser, frame: PosedFrame(groups: 1, offset: 0.35f, program: PosedProgram(groups: 1, leadingMaterials: 1), time: 0f), index: ref index);
+        var baked = Assert.Single(collection: dresser.Dress(frame: PosedFrame(groups: 1, offset: 0.35f, program: bake.Program!, time: 0.1f)).DressedDraws()).Mesh;
+        var draws = dresser.Dress(frame: PosedFrame(groups: 1, offset: 0.353f, program: PosedProgram(groups: 1), time: 0.2f)).DressedDraws();
         var renumbered = Assert.Single(collection: draws).Mesh;
 
         Assert.NotSame(actual: renumbered, expected: baked);
@@ -173,31 +173,24 @@ public sealed partial class SdfMeshPathBakeLawTests {
         Assert.False(condition: bake.Pending);
     }
     // A skinned group arriving in another residency that shares the library (a body crossing into another world) with
-    // its member at a pose no bake keyed takes the mesh its form baked at the other pose: nothing bakes on arrival, and
-    // the group still settles once its member holds still away from the pose that mesh was baked at.
+    // its member at a pose no bake keyed takes the mesh its form baked at the other pose: nothing bakes on arrival.
     [Fact]
-    public void ASkinnedGroupArrivingAtAnUnbakedPoseTakesItsFormsMeshAndSettlesLater() {
+    public void ASkinnedGroupArrivingAtAnUnbakedPoseTakesItsFormsMesh() {
         using var library = new SdfMeshLibrary();
         using var homeRun = new MeshBakeTestRun(new SdfMeshPathBake { Library = library, Residency = "home" }, ownsLibrary: false);
         var home = homeRun.Bake;
         var homeDresser = homeRun.Dresser;
         var index = 0L;
 
-        DriveSettle(bake: home, dresser: homeDresser, frame: SettleFrame(groups: 1, offset: 0.35f, program: SettleProgram(groups: 1), time: 0f), index: ref index);
-        var baked = Assert.Single(collection: homeDresser.Dress(frame: SettleFrame(groups: 1, offset: 0.35f, program: home.Program!, time: 0.1f)).DressedDraws()).Mesh;
+        DrivePosed(bake: home, dresser: homeDresser, frame: PosedFrame(groups: 1, offset: 0.35f, program: PosedProgram(groups: 1), time: 0f), index: ref index);
+        var baked = Assert.Single(collection: homeDresser.Dress(frame: PosedFrame(groups: 1, offset: 0.35f, program: home.Program!, time: 0.1f)).DressedDraws()).Mesh;
         using var awayRun = new MeshBakeTestRun(new SdfMeshPathBake { Library = library, Residency = "away" }, ownsLibrary: false);
         var away = awayRun.Bake;
         var awayDresser = awayRun.Dresser;
-        var program = SettleProgram(groups: 1);
-        var arrived = awayDresser.Dress(frame: SettleFrame(groups: 1, offset: 0.36f, program: program, time: 0f)).DressedDraws();
+        var program = PosedProgram(groups: 1);
+        var arrived = awayDresser.Dress(frame: PosedFrame(groups: 1, offset: 0.36f, program: program, time: 0f)).DressedDraws();
 
         Assert.Same(expected: baked, actual: Assert.Single(collection: arrived).Mesh);
         Assert.False(condition: away.Pending);
-
-        var settled = SettleFrame(groups: 1, offset: 0.5f, program: program, time: 1f);
-
-        _ = awayDresser.Dress(frame: settled);
-        _ = awayDresser.Dress(frame: (settled with { Time = (1f + (2f * SdfMeshSettle.SettleSeconds)) }));
-        Assert.True(condition: away.Pending);
     }
 }

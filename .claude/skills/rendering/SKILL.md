@@ -221,9 +221,23 @@ never enters a cross-owner influence reading. Followers and their descendants in
 partition and cannot enter a finite-envelope blend.
 
 The pool marks its rigid delta-frame instances `SdfInstanceRange.RestPoseSkin`.
-`SdfMeshGeometryBuilder` freezes those slots at identity, includes the opt-in in geometry and form,
-and `SdfMeshPathBake.Settle` excludes them. Do not freeze arbitrary dynamic slots: those may carry
-absolute poses. `MovingBlendRestLawTests` exercises swing, slide and timeline owners through the real packer.
+`SdfMeshGeometryBuilder` freezes those slots at identity and includes the opt-in in geometry and form; a
+skin bakes once, at that rest. Do not freeze arbitrary dynamic slots: those may carry absolute poses.
+`MovingBlendRestLawTests` exercises swing, slide and timeline owners through the real packer.
+
+A cutter whose owner moves alone and only carves is an operand (`CreationMotion.OperandShapes`), never a skin
+member or a crease: the pooled emitter declares it on the instance of the group it cuts
+(`SdfInstanceRange.Operands`), that group rides its one surface owner's slot (`CreationMotionPlan.TryCutSlot`;
+a group of several surface owners beside an operand is partitioned, `CreationMotion.SharedOperandGroups`), and
+`SdfMeshBakeGroup.Seal` refuses an operand beside a skin member. The geometry hashes the operand's pose snapped
+to the group's tier cell once the tier is known (`SdfMeshGeometryBuilder.AppendOperands`), in geometry and form,
+and keeps it in the pose rows the bake samples. `SdfMeshPathBake.Revisit` is the one door for frame inputs that
+move without a program rebuild, sampled snapshots and operand poses: it visits only their readers, snaps and
+compares each operand every frame (`SdfMeshGeometryBuilder.OperandsMatch`), and plans a moved group again
+through `Succeed` or as its in-flight bake's `Successor`. `world.counters sdf.mesh-inputs` counts the re-plans
+and the coalesced successors (`SdfMeshInputs`). `puck mesh audit --cpu --pose` given an operand's slot offset
+plans its group again with the cut there and prints the operand's snapped pose. Contact still reads the cut at
+rest (G5), and relief still refuses any part owner (G2).
 
 `SdfFieldEvaluator.ReadInfluences` shares the point interpreter with culling disabled, carrying owner
 vectors through every composition and scope. `ReadInfluenceGradient` takes fixed central differences
@@ -248,8 +262,7 @@ places (must be zero), and geometry keys. `--pose '1=0,0,0,0,0.05,0,0.9987492'` 
 delta by member slot offset in the group frame and audits against the posed field. Compare both
 envelope extremes. A build cannot prove motion: request a 60-frame presented burst on both backends,
 with motion diagnostics on still parts, as the [moving-blends memo](../../../docs/plans/moving-blends.md) specifies.
-Material rest coordinates remain step 4 and the quiet cost window step 5; settle deletion is gap 8's step G1,
-which also makes a cutter moving against its surface an operand of that surface's group.
+Material rest coordinates remain step 4 and the quiet cost window step 5.
 
 A retained separate bake group must still ride the newly planned `Slot`, even
 when its instance selector and local geometry stay unchanged. Rigid draw poses
@@ -1149,11 +1162,11 @@ wrong. The contracts that bite most often:
   names an `SdfSampledField` by handle; the frame carries its snapshots (`SdfFrame.Sampled`),
   the geometry hashes them, and the bake compares only `SdfSampledSet.Baked` (the handles an
   instruction samples), so a height field's heights moving restart nothing. A moved baked snapshot
-  resamples only the reader groups (`SdfMeshPathBake.Resample`, replanned from each group's
+  resamples only the reader groups (`SdfMeshPathBake.Revisit`, replanned from each group's
   planned box); a reader still baking keeps its bake and the newest plan waits as its
   `Successor`, so a field republished every frame still lands. Never compare the whole set
   in the bake, and never replan from `Low`/`High`, which the lattices narrow. Batch tickets
-  leave `Taken` once through `SdfMeshPathBake.Settle`, which both `Complete` and `Abandon`
+  leave `Taken` once through `SdfMeshPathBake.MoveTicket`, which both `Complete` and `Abandon`
   call, so a partial answer returns exactly its unanswered lattices. Each bake job writes the snapshots its groups sealed into
   its own `sdfSampledValues` table, so a lattice never samples a newer publication; never
   put sampled values back into program words or a shared GPU buffer the bake reads

@@ -102,7 +102,7 @@ public sealed partial class SdfMeshPathBake {
     }
     // Measures every group still owing a mesh by its demand box at the demand points; with none, the priorities stand as
     // they were and the plan's order decides. It runs on the frame's thread with the gate open: the frame's thread alone
-    // replaces the group list and the copy index (Restart, Settle, IndexCopies), and a priority only orders work, never
+    // replaces the group list and the copy index (Restart, Revisit, IndexCopies), and a priority only orders work, never
     // changes a mesh, so a worker reading one mid-measure, or finishing a group this measures, orders no mesh differently.
     private void Prioritize() {
         if (Demand.Count == 0) { return; }
@@ -610,7 +610,7 @@ public sealed partial class SdfMeshPathBake {
                 _ = line.Append(provider: CultureInfo.InvariantCulture, handler: $" near-last={lastNear.Selector}{(lastNear.Dynamic ? "/dynamic" : ((lastNear.Instances > 1) ? $"/union{lastNear.Instances}" : "/static"))}/{(lastNear.Mesh?.TriangleCount ?? 0)}tri");
             }
             _ = line.Append(provider: CultureInfo.InvariantCulture, handler: $" bake-age={((start == 0) ? 0d : Stopwatch.GetElapsedTime(startingTimestamp: start).TotalSeconds):0.000}s loads={m_loadsDone}/{m_loadsQueued} load-span={loadSpan:0.000}s plan-ms={m_planMilliseconds:0.0} restart-ms={m_restartMilliseconds:0.0}");
-            _ = line.Append(provider: CultureInfo.InvariantCulture, handler: $" frames={m_preparedFrames} restarts={m_restarts} restart-groups={m_restartGroups} resamples={m_resamples} resample-groups={m_resampleGroups} sampled-readers={m_sampledReaders.Count} coalesced={m_coalesced} promoted={m_promoted} successors={m_successors} ahead={m_ahead.Count} handed={m_handed} handed-refused={m_handedRefused}");
+            _ = line.Append(provider: CultureInfo.InvariantCulture, handler: $" frames={m_preparedFrames} restarts={m_restarts} restart-groups={m_restartGroups} resamples={m_resamples} resample-groups={m_resampleGroups} input-readers={m_inputReaders.Count} operand-readers={m_operandReaders} operand-replans={m_operandReplans} coalesced={m_coalesced} promoted={m_promoted} successors={m_successors} ahead={m_ahead.Count} handed={m_handed} handed-refused={m_handedRefused}");
             _ = line.Append(provider: CultureInfo.InvariantCulture, handler: $" vertex-bytes={vertexBytes} level0={levelTriangles[0]}tri/{levelBytes[0]}B level1={levelTriangles[1]}tri/{levelBytes[1]}B level2={levelTriangles[2]}tri/{levelBytes[2]}B");
             // The detail budget's debt (SdfMeshTier): the groups drawing a coarser tier than their demand asks, the worst
             // such group's cell in display pixels and the longest wait, now and since the bake started, the finer tiers

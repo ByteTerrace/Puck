@@ -1263,15 +1263,13 @@ and the pose it was baked at, with each vertex's member (`SdfMesh.Members`,
 mesh vertex carries a member's vertex through the inverse of that baked pose and
 out through the slot's transform in the frame, the previous frame's for motion,
 so a hinged part blended into a group swings with its slot. A cut or
-intersection face rides the shape it shapes rather than the cutter. A seam
-between two members that move far apart stretches, since each vertex follows one
-slot rigidly, until the members hold still: once their poses in the group's frame
-have drifted past a centimetre or two degrees from the baked pose and then held
-for half a second, the group is planned again at that pose, snapped to 7.8 mm
-steps so poses that settle near one another share one stored mesh, and its new
-mesh replaces the skinned one when it lands (`SdfMeshSettle`). A pose still
-changing never rebakes, and a residency starts at most two such rebakes at once
-and four a second; `world.counters sdf.mesh-settle` counts them.
+intersection face rides the shape it shapes rather than the cutter. A skin bakes
+once, at the pose its program arrived in, and each vertex follows its member's
+slot from there. A cutter that moves alone is no member: it is an operand of the
+group it cuts (`SdfInstanceRange.Operands`), keyed where it stands snapped to the
+group's tier cell, and the group is planned again each time it moves a step
+(`SdfMeshPathBake.Revisit`), its new mesh replacing the drawn one when it lands;
+`world.counters sdf.mesh-inputs` counts those re-plans.
 
 A finished mesh is merged before the library keeps it (`SdfMeshPlanarMerge`, the
 first level of detail), since the contour leaves a quad a lattice cell on every
@@ -1402,8 +1400,8 @@ The key is taken when a program arrives, from that frame's transforms, so a
 group whose shapes move against one another afterwards (a part follower) keeps
 the mesh of the pose it was keyed at. A program rebuild keeps every group whose geometry held, and a dynamic
 group whose form held (`SdfMeshGeometryBuilder.Form`: its geometry without the other slots' poses), so a body
-standing in another pose when something else in the world changes keeps its skinned mesh and bakes again only
-through the settle rebake. A geometry whose bake found no surface is recorded as such and never baked again in the
+standing in another pose when something else in the world changes keeps its skinned mesh. An operand's snapped pose
+stays in the form, so a group a moving cutter cuts keeps only a mesh cut where the cutter stands. A geometry whose bake found no surface is recorded as such and never baked again in the
 run. A responding static placement registers the palette of every creation it can show
 (`WorldPlacementStamper.EmitStatic`), so a response changes no other group's material ids. Every
 meshed group is stored by its geometry in an `SdfMeshLibrary` every residency of
