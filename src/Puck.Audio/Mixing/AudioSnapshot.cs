@@ -152,15 +152,25 @@ public readonly record struct SynthTrigger(ulong Sequence, string PatchId, ulong
 /// </summary>
 public sealed class AudioSnapshot {
     /// <summary>The default emitter-table capacity.</summary>
-    public const int DefaultMaxEmitters = 32;
+    public const int DefaultMaxEmitters = 2 * VoiceSynth.VoiceCount;
     /// <summary>The default per-snapshot trigger capacity.</summary>
-    public const int DefaultMaxTriggers = 16;
+    public const int DefaultMaxTriggers = DefaultMaxEmitters;
 
     private readonly AudioEmitter[] m_emitters;
     private readonly SynthTrigger[] m_triggers;
 
     private int m_emitterCount;
     private int m_triggerCount;
+
+    /// <summary>Whether the snapshot carries the emitter a bound trigger needs.</summary>
+    public bool ContainsEmitter(int id) => ContainsEmitter(Emitters, id);
+
+    internal static bool ContainsEmitter(ReadOnlySpan<AudioEmitter> emitters, int id) {
+        foreach (ref readonly var emitter in emitters) {
+            if (emitter.Id == id) { return true; }
+        }
+        return false;
+    }
 
     /// <summary>Initializes an empty snapshot slab.</summary>
     /// <param name="maxEmitters">The emitter-table capacity.</param>

@@ -403,6 +403,8 @@ public sealed class AudioMixer {
 
             m_lastTriggerSequence = trigger.Sequence;
 
+            if (trigger.EmitterId >= 0 && !snapshot.ContainsEmitter(trigger.EmitterId)) { continue; }
+
             var patch = FindPatch(id: trigger.PatchId);
 
             if (patch < 0) {
@@ -645,8 +647,8 @@ public sealed class AudioMixer {
             other: MaxBlockFrames
         );
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(value: frames);
-        ConsumeTriggers(snapshot: snapshot);
         m_synth.ReleaseUnbound(emitters: snapshot.Emitters);
+        ConsumeTriggers(snapshot: snapshot);
 
         var emitters = snapshot.Emitters;
 

@@ -170,17 +170,7 @@ public sealed class VoiceSynth {
                 continue;
             }
 
-            var bound = false;
-
-            for (var e = 0; (e < emitters.Length); e++) {
-                if (emitters[e].Id == voice.EmitterId) {
-                    bound = true;
-
-                    break;
-                }
-            }
-
-            if (!bound) {
+            if (!AudioSnapshot.ContainsEmitter(emitters, voice.EmitterId)) {
                 voice.Active = false;
             }
         }

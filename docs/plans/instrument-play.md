@@ -347,7 +347,9 @@ The presentation director matches rule cues after recipient disclosure so
 music cannot announce a withheld firing. A layer carries its authored gain
 into the bed emitter. The synth takes a free slot when possible, then replaces
 the voice with the lowest envelope level weighted by voice gain, oldest first
-on ties. Apply the same rule in offline and live mixing.
+on ties. The live emitter and trigger tables admit a burst larger than the
+voice pool so the mixer can make that choice. Apply the same allocation rule
+in offline and live mixing.
 
 Check an admitted and a withheld recipient against the same firing, including
 a body outside the recipient's entity image. Check a sampled projection with a

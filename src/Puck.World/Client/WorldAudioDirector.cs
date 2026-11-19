@@ -78,7 +78,7 @@ public sealed partial class WorldAudioDirector : IWorldAudioLever, IWorldAudioFr
     /// engine invariant rather than world data: these slots are reserved off <see cref="AudioSnapshot.DefaultMaxEmitters"/>
     /// (the reconcile overflow warning charges them), so a full derived plan can never starve a cue. A cue arriving
     /// with the pool full evicts the transient nearest its own expiry (its voice releases with the departed emitter).</summary>
-    public const int TransientCueCapacity = 4;
+    public const int TransientCueCapacity = VoiceSynth.VoiceCount + 1;
     /// <summary>How many published snapshots a pending trigger rides (see the type remarks).</summary>
     public const int TriggerPublishRetention = 8;
 
@@ -1677,6 +1677,7 @@ public sealed partial class WorldAudioDirector : IWorldAudioLever, IWorldAudioFr
 
             for (var index = 0; (index < m_pendingTriggers.Count); index++) {
                 var pending = m_pendingTriggers[index];
+                if (pending.Trigger.EmitterId >= 0 && !slab.ContainsEmitter(pending.Trigger.EmitterId)) { continue; }
 
                 if (slab.TryAddTrigger(trigger: pending.Trigger)) {
                     pending.RemainingPublishes--;
