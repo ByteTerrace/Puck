@@ -62,6 +62,12 @@ what holds the frame over the bar.
 
 ### Where the frame thread goes
 
+`host.frames` reports mean produce work by part over the same iterations
+as its produce-work line. `HostFrameWork` attributes time exclusively to
+the innermost instrumented part and deducts submission-fence waits. The
+benchmark retains the phases and step counts for each world instance.
+Each breakdown includes an other bucket for time outside its named parts.
+
 At the meadow nearly half the frame thread is CPU field queries inside
 `WorldFramePresenter.CaptureFrame`: the creation effectors' surface probes and
 the chase camera's clearance march, over one evaluator, the client's static

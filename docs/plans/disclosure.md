@@ -1587,10 +1587,12 @@ Implementation choices for step 1:
   `StateArena.DisclosureRevision` a row changes only by a keyed cell write
   (`StateArena.MarkVersion` names the keyed columns; every other write moves the
   revision), so a cell-only tick refreshes the image digests of the rows it
-  wrote and a revision move also their skeletons. The frame is composed from the
-  whole document again only for a new source, a changed policy index, or a
-  change to a withheld row the disclosed placements read
-  (`WorldStateDisclosed.PlacementReads`, recorded as `DisclosePlacements` reads).
+  wrote and a revision move also their skeletons. For a holding-only source
+  change, `WorldDisclosureImages` can patch a directly projected placement
+  when its live response reads are whole and the frame's other disclosure
+  inputs still agree. The placement section reuses the canonical digests of
+  unchanged rows. Other source changes, a changed policy index, or a changed
+  withheld row the placements read trigger a fresh composition.
 
 `DeliveryReviewLawTests` checks physical deltas at both tiers, administrative
 and missed-window readable writes, clock corrections without source

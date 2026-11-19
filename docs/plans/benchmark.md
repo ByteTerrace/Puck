@@ -431,6 +431,7 @@ there.
 | Over budget | Iterations whose work passed the budget, twice it, 50 ms and 100 ms | Built |
 | Pacing | The interval's standard deviation and the mean absolute difference between successive intervals | Built |
 | Simulation | Ticks stepped and ticks shed | Built |
+| Frame-thread work | `frameThread` in `run.json` gives chapter and hitch totals by produce part, tick phase, and stepped world instance. It also counts graph nodes scheduled and reports submission-fence waits separately | Built |
 | Collections | Counts by generation, total and longest pause, bytes allocated per iteration | Built |
 | The chapter's end | Arrived or off course by the body's pose against the position and grounded gates; the gates only the headless test judges are listed; the authority's hash | Built |
 | The hitch list | Each iteration over budget with its tick, the body's position and its phases. The count is of every one; the list is the longest 32 (`frames.csv` holds all). The position is the body's last pose sample, taken every 30 ticks (`SampleTicks`), and names the tick it was sampled at | Built |

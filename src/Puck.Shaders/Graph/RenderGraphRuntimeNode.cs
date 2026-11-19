@@ -92,7 +92,7 @@ public sealed class RenderGraphRuntimeNode : IRenderRoot, ICaptureRequestTarget 
     /// <remarks>The frame's completion is the runtime's (<see cref="RenderGraphRuntime.Render"/>): rendered only when
     /// the root's image shows this frame.</remarks>
     public RootFrame ProduceFrame(in FrameContext context) {
-        Prepare?.Invoke(context: in context);
+        using (HostFrameWork.Measure(HostFrameWorkPart.Pump)) { Prepare?.Invoke(context: in context); }
         m_roots.Clear();
         m_roots.Add(item: new RenderGraphRoot(
             Height: 1.0,
