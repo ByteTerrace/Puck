@@ -13,19 +13,22 @@ public readonly record struct WorldRowReplacement(int Row, WorldRecipientImage I
 /// decides a cut and the one writer of the stream's generation (<see cref="Stamp"/>). A cut is the loss of something the
 /// stream was delivered from a part of the world that can withhold from it, decided from two things the recipient itself
 /// sees: what the stream last delivered and what its view discloses now. It happens when a cell held in a row that can
-/// withhold (by its own policy, a cell policy or a containing zone) is missing from the row's image now, when a row the
-/// stream read whole begins to withhold from it, when the stream stops observing (<see cref="Release"/>), and when the
-/// body policy changes to one that redacts (<see cref="ObserveBodies"/>). A deletion in a row the recipient reads whole,
-/// a body leaving the recipient's projection under an unchanged body policy, and a changed value in a cell it still
-/// reads are not cuts. A placement, a field region or a solid size leaves a recipient's projection only when a row it
-/// reads stops being readable, so the row rules decide those too. Because the rules read nothing but the delivered
-/// images and the current disclosure, a change hidden throughout (a hidden install, a policy the recipient never passed
-/// added or removed, a write to a row it never read) cannot move the generation.</para></remarks>
+/// withhold (by its own policy, a cell policy or a containing zone) is missing from the row's image now (a row the stream
+/// read whole and that begins to withhold among them, which cuts only when a cell it read is unreadable now), when the
+/// stream stops observing (<see cref="Release"/>), and when the body policy changes to one that redacts
+/// (<see cref="ObserveBodies"/>). A deletion in a row the recipient reads whole, a body leaving the recipient's projection
+/// under an unchanged body policy, and a changed value in a cell it still reads are not cuts.</para>
+/// <para>Every row that can withhold is imaged at every ceiling (<see cref="WorldRecipientView.ReadsWhole(int)"/>), so a
+/// placement dealt from a row, a field region or a solid size leaves a recipient's projection only when a cell it reads
+/// stops being readable, and the row rules decide those too. Because the rules read nothing but the delivered images and
+/// the current disclosure, a change hidden throughout (a hidden install, a policy the recipient never passed added or
+/// removed, a write to a row it never read) cannot move the generation.</para></remarks>
 public sealed class WorldDeliveryCursor {
-    // The rows that can withhold from this stream, by name, and the image each last delivered; and the rows it was
-    // delivered whole, whose turning restricted is a cut.
-    private readonly Dictionary<string, WorldRecipientImage> m_rows = [];
-    private readonly HashSet<string> m_wholeRows = new(comparer: StringComparer.Ordinal);
+    // A row's image as the stream last held it, and whether the stream read the row whole then.
+    private readonly record struct HeldRow(WorldRecipientImage Image, bool Whole);
+
+    // Every row of the stream's document, by name, as it last held it.
+    private readonly Dictionary<string, HeldRow> m_rows = new(comparer: StringComparer.Ordinal);
     private readonly HashSet<int> m_metadataPrimers = [];
     // Advance's scratch: the rows a change can move, and the same in row order.
     private readonly Puck.Abstractions.Collections.MarkedIndexSet m_affected = new();
@@ -47,8 +50,6 @@ public sealed class WorldDeliveryCursor {
     public long Sequence { get; private set; }
     /// <summary>Gets the stream's current span: zero at admission, one more at each cut.</summary>
     public long Generation => m_generation;
-    /// <summary>The number of restricted rows retained by this stream.</summary>
-    public int RetainedRows => m_rows.Count;
     /// <summary>Stamps the stream's next record: the stream's identity, its current generation and the next ordinal.
     /// Every record a stream sends takes exactly one stamp, so the ordinals a reader receives rise by one.</summary>
     /// <returns>The record's stamp.</returns>
@@ -105,6 +106,9 @@ public sealed class WorldDeliveryCursor {
         m_cutOwed = false;
         return cut;
     }
+    /// <summary>Gets whether a cut was decided that <see cref="TakeCut"/> has not yet taken: the stream owes its reader
+    /// the cut record and the new generation's primer now, whatever its cadence.</summary>
+    public bool CutOwed => m_cutOwed;
     /// <summary>Forgets the document identity this stream last delivered, so the next <see cref="DeliverDefinition"/>
     /// delivers the whole disclosed document even when its content did not move: a new generation is primed
     /// alone.</summary>
@@ -119,31 +123,29 @@ public sealed class WorldDeliveryCursor {
         var seeded = m_seeded;
         // The previous delivery's rows, consumed as each current row is matched: a held row that is gone now was deleted
         // by an install the recipient sees, which is a loss only when its row could withhold.
-        Dictionary<string, WorldRecipientImage>? previous = (m_rows.Count == 0) ? null : new(m_rows, StringComparer.Ordinal);
-        HashSet<string>? previousWhole = (m_wholeRows.Count == 0) ? null : new(m_wholeRows, StringComparer.Ordinal);
+        Dictionary<string, HeldRow>? previous = (m_rows.Count == 0) ? null : new(m_rows, StringComparer.Ordinal);
         m_rows.Clear();
-        m_wholeRows.Clear();
         m_metadataPrimers.Clear();
         for (var row = 0; row < view.Source.AuthoredState.Count; row++) {
             var name = view.Arena.Rows[row].Name.Value;
-            if (view.ReadsWhole(row)) { m_wholeRows.Add(name); previous?.Remove(name); continue; }
+            var whole = view.HoldsWhole(row);
             var image = view.Image(row);
             // The definition carries no observation header, including when its hidden count is zero. Whether
             // the following primer is owed depends on the row's policy, never on its current hidden members.
-            if (view.Ceiling == Puck.World.Protocol.WorldDisclosureTier.Replica && image.Observation is not null) { m_metadataPrimers.Add(row); }
-            m_rows[name] = image;
+            if (!whole && (view.Ceiling == Puck.World.Protocol.WorldDisclosureTier.Replica) && (image.Observation is not null)) { m_metadataPrimers.Add(row); }
+            m_rows[name] = new HeldRow(image, whole);
             if (!seeded) { continue; }
-            if (previous is not null && previous.Remove(name, out var held)) { cut |= Loses(held, image); }
-            else if (previousWhole?.Contains(name) == true && view.Includes(row)) { cut = true; }
+            if ((previous is not null) && previous.Remove(name, out var held) && !whole) { cut |= Loses(held.Image, image); }
         }
         if (previous is not null) {
-            foreach (var held in previous.Values) { cut |= (held.Cells.Count != 0); }
+            foreach (var held in previous.Values) { cut |= (!held.Whole && (held.Image.Cells.Count != 0)); }
         }
         m_seeded = true;
         if (cut) { Cut(); }
     }
     // Whether an image now lacks a cell the stream was delivered in its held image: a cell withheld or removed, which a
-    // row that can withhold must not let the recipient tell apart.
+    // row that can withhold must not let the recipient tell apart. A row the stream read whole held every cell it had,
+    // so the same test decides a row that turns withholding: it cuts only when a cell the stream read is unreadable now.
     private static bool Loses(WorldRecipientImage held, WorldRecipientImage now) {
         if (ReferenceEquals(held, now) || (held.Cells.Count == 0)) { return false; }
         var current = now.Cells;
@@ -177,19 +179,22 @@ public sealed class WorldDeliveryCursor {
         ordered.Sort();
         foreach (var row in ordered) {
             var name = view.Arena.Rows[row].Name.Value;
-            var whole = view.ReadsWhole(row);
-            if (whole && !m_rows.ContainsKey(name)) { m_wholeRows.Add(name); continue; }
+            var whole = view.HoldsWhole(row);
             var image = view.Images.Image(view, row, audience ??= view.Images.Audience(view));
-            if (whole) { m_rows.Remove(name); m_wholeRows.Add(name); (result ??= []).Add(new(row, image)); continue; }
-            var heldWhole = m_wholeRows.Remove(name);
-            if (m_rows.TryGetValue(name, out var held)) {
-                cut |= Loses(held, image);
-                if (!m_metadataPrimers.Remove(row) && held.Identity == image.Identity) { continue; }
+            var holds = m_rows.TryGetValue(name, out var held);
+            if (whole) {
+                // A row the stream reads whole is held whole; one turning whole replaces its prior restricted image once.
+                m_rows[name] = new HeldRow(image, Whole: true);
+                if (holds && !held.Whole) { m_metadataPrimers.Remove(row); (result ??= []).Add(new(row, image)); }
+                continue;
+            }
+            if (holds) {
+                cut |= Loses(held.Image, image);
+                if (!m_metadataPrimers.Remove(row) && !held.Whole && held.Image.Identity == image.Identity) { continue; }
             } else {
-                cut |= (heldWhole && view.Includes(row));
                 m_metadataPrimers.Remove(row);
             }
-            m_rows[name] = image;
+            m_rows[name] = new HeldRow(image, Whole: false);
             (result ??= []).Add(new(row, image));
         }
         if (cut) { Cut(); }
@@ -208,6 +213,6 @@ public sealed class WorldDeliveryCursor {
     /// sequence continues.</summary>
     public void Release() {
         if (m_seeded) { Cut(); }
-        m_rows.Clear(); m_wholeRows.Clear(); m_metadataPrimers.Clear(); m_definition = null; m_seeded = false;
+        m_rows.Clear(); m_metadataPrimers.Clear(); m_definition = null; m_seeded = false;
     }
 }

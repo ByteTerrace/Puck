@@ -33,6 +33,7 @@ internal sealed class EndingSink(int endAfterDefinitions, int endAfterSnapshots)
     public void DeliverSessionLever(WorldSessionLever lever) {
     }
     public void DeliverCut(in WorldStreamStamp stream, bool terminal) { }
+    public void CloseSpan(ulong stream) { }
     public void DeliverSnapshot(in WorldSnapshot snapshot, in WorldStreamStamp stream) {
         Note();
 

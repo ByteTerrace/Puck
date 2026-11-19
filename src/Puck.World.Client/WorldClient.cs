@@ -919,6 +919,10 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
     public void DeliverCut(in WorldStreamStamp stream, bool terminal) {
     }
     /// <inheritdoc/>
+    /// <remarks>A client holds no span (see <see cref="DeliverCut"/>), so it has none to close.</remarks>
+    public void CloseSpan(ulong stream) {
+    }
+    /// <inheritdoc/>
     public void DeliverSessionLever(WorldSessionLever lever) {
         // Already past the server's Mutate check on the lever's folded-into section (see WorldServer.ApplySessionLever),
         // so this only dispatches the write onto the presentation service the lever names.

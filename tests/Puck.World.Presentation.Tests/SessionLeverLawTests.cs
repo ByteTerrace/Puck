@@ -384,6 +384,7 @@ public sealed class SessionLeverLawTests {
         }
         public void DeliverSessionLever(WorldSessionLever lever) => Levers.Add(item: lever);
         public void DeliverCut(in WorldStreamStamp stream, bool terminal) { }
+        public void CloseSpan(ulong stream) { }
         public void DeliverSnapshot(in WorldSnapshot snapshot, in WorldStreamStamp stream) {
         }
         public void DeliverState(WorldDefinition definition, WorldDocumentVersion version, in WorldStateStamp stamp, in WorldStreamStamp stream) {

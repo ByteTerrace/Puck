@@ -395,6 +395,7 @@ public sealed class ObserverDisclosureLawTests {
         public void DeliverDefinition(WorldDefinition definition, WorldDocumentVersion version, in WorldStreamStamp stream) { }
         public void DeliverSessionLever(WorldSessionLever lever) { }
         public void DeliverCut(in WorldStreamStamp stream, bool terminal) { }
+        public void CloseSpan(ulong stream) { }
         public void DeliverSnapshot(in WorldSnapshot snapshot, in WorldStreamStamp stream) {
             var entries = snapshot.Entries.Span;
             var indices = new int[entries.Length];

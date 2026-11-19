@@ -12,16 +12,20 @@ public readonly record struct WorldStreamSpan(ulong Stream, long Generation, lon
 /// strictly after the last ordinal it took; the first spanned record of an unbound reader binds it. A record of another
 /// stream, a late record of an earlier generation, or one not ahead of the last ordinal is dropped and counted, so it
 /// cannot bring an earlier generation back. A span that closes (a terminal record, or <see cref="Close"/> when the
-/// stream can no longer reach the reader) unbinds the reader, and the stream that held it never binds it again; a new
-/// stream reaches the reader only as a new admission does, with its own identity. An unspanned record (the authority's
-/// own fan-out, <see cref="WorldStreamStamp.Unspanned"/>) moves only a reader no spanned stream holds.</summary>
+/// transport that carried the stream lost it) unbinds the reader, and no stream that ever closed on it binds it again;
+/// a new stream reaches the reader only as a new admission does, with its own identity. An unspanned record (the
+/// authority's own fan-out, <see cref="WorldStreamStamp.Unspanned"/>) moves only a reader no spanned stream has ever
+/// bound: once a reader has held a span it takes spanned records alone, so nothing unordered reaches it after a
+/// close.</summary>
 /// <remarks>Records of one stream arrive from one thread at a time, in the order that stream sends them; the gate makes
-/// each decision whole against a <see cref="Close"/> raised from another thread.</remarks>
+/// each decision whole against a <see cref="Close"/> raised from another thread. Every stream that closed is
+/// remembered for the reader's life: a reader is bound once per admission, so the set grows by one per admitted
+/// stream.</remarks>
 public sealed class WorldStreamIngress {
     private readonly Lock m_gate = new();
     private WorldStreamSpan m_span;
-    // The last stream whose span closed: it never binds this reader again.
-    private ulong m_closed;
+    // Every stream whose span closed on this reader: none binds it again.
+    private readonly HashSet<ulong> m_closed = [];
     private long m_refusals;
 
     /// <summary>Gets the stream the reader is bound to and the span it holds.</summary>
@@ -41,40 +45,44 @@ public sealed class WorldStreamIngress {
     /// to its generation, and a terminal record closes the span.</summary>
     /// <param name="stream">The record's stamp.</param>
     /// <param name="terminal">Whether the record ends its stream.</param>
-    /// <returns><see langword="true"/> when the record belongs to the stream the reader is bound to and was
+    /// <returns><see langword="true"/> when the record belongs to the open span the reader is bound to and was
     /// taken.</returns>
     public bool Cut(in WorldStreamStamp stream, bool terminal) {
         lock (m_gate) {
-            if (!stream.IsSpanned || (m_span.Stream != stream.Stream) || m_span.Closed || !Take(stream: in stream)) {
-                if (stream.IsSpanned && (m_span.Stream != stream.Stream)) { Refuse(); }
+            if (!stream.IsSpanned || (m_span.Stream != stream.Stream) || m_span.Closed) {
+                Refuse();
                 return false;
             }
+            if (!Take(stream: in stream)) { return false; }
             if (terminal) { CloseLocked(); }
             return true;
         }
     }
-    /// <summary>Closes the span the reader holds, when one is open.</summary>
+    /// <summary>Closes the span the reader holds of <paramref name="stream"/>, when that span is open: the transport
+    /// that carried the stream lost it, so the stream can no longer tell the reader of a cut. A close names its stream
+    /// so that a late close of a stream the reader already let go of cannot close the span of the next one.</summary>
+    /// <param name="stream">The stream whose transport ended.</param>
     /// <returns><see langword="true"/> when an open span closed.</returns>
-    public bool Close() {
+    public bool Close(ulong stream) {
         lock (m_gate) {
-            if ((m_span.Stream == 0UL) || m_span.Closed) { return false; }
+            if ((stream == 0UL) || (m_span.Stream != stream) || m_span.Closed) { return false; }
             CloseLocked();
             return true;
         }
     }
 
     private void CloseLocked() {
-        m_closed = m_span.Stream;
+        _ = m_closed.Add(item: m_span.Stream);
         m_span = m_span with { Closed = true };
     }
     private bool Take(in WorldStreamStamp stream) {
         if (!stream.IsSpanned) {
-            if ((m_span.Stream == 0UL) || m_span.Closed) { return true; }
+            if (m_span.Stream == 0UL) { return true; }
             Refuse();
             return false;
         }
         if ((m_span.Stream == 0UL) || m_span.Closed) {
-            if (stream.Stream == m_closed) { Refuse(); return false; }
+            if (m_closed.Contains(item: stream.Stream)) { Refuse(); return false; }
             m_span = new WorldStreamSpan(Closed: false, Generation: stream.Generation, Ordinal: stream.Ordinal, Stream: stream.Stream);
             return true;
         }
