@@ -52,7 +52,8 @@ let uniformRow = [
 ]
 let stretchedRow = [
   "shape-sphere-xyz", "shape-box-xyz", "shape-torus-xz", "shape-torus-y", "shape-cylinder-xz", "shape-capsule-xz",
-  "shape-ellipsoid-xyz", "shape-round-cone-xyz", "shape-cone-xz", "shape-superellipsoid-xyz"
+  "shape-ellipsoid-xyz", "shape-round-cone-xyz", "shape-cone-xz", "shape-superellipsoid-xyz", "shape-stretch-cut",
+  "shape-stretch-smooth"
 ]
 let extrudeRow = [
   "shape-trapezoid", "shape-rounded-rectangle", "shape-polygon-6", "shape-polygon-12", "shape-polygon-12-xy",
@@ -716,6 +717,43 @@ let blendExhibits = [
     note: "a bead laid along the carve's rim"
   }
 ]
+
+// A slab with a capsule, a cone and a torus pressed half way into its front face, each scaled apart in its own X and Z
+// (the torus is turned so its ring faces the label). The three stretched primitives whose field is a bound, as cutters.
+template stretchPrototype(id, label, blend, smooth, note) {
+  prototype $"{id}" {
+    document {
+      shape Box "subject" {
+        material: exhibitMaterial
+        position [0, 1.2, 0]
+        scale [0.56, 0.3, 0.12]
+      }
+      shape Capsule "capsule" {
+        blend: blend
+        material: accentMaterial
+        position [-0.37, 1.16, 0.12]
+        scale [0.12, 0.16, 0.05]
+        smooth: smooth
+      }
+      shape Cone "cone" {
+        blend: blend
+        material: accentMaterial
+        position [0, 1.2, 0.12]
+        scale [0.13, 0.2, 0.05]
+        smooth: smooth
+      }
+      shape Torus "torus" {
+        blend: blend
+        material: accentMaterial
+        position [0.37, 1.2, 0.12]
+        rotation [0.7071068, 0, 0, 0.7071068]
+        scale [0.08, 0.1, 0.17]
+        smooth: smooth
+      }
+      exhibit(label: label, extra: [accent], note: note)
+    }
+  }
+}
 
 template blendPrototypes() {
   for entry in blendExhibits {
@@ -1987,8 +2025,8 @@ template motionPrototypes() {
       exhibit(label: "STATE BLEND", extra: [accent])
     }
   }
-  // A cutter sliding across the face of a still box through a smooth subtraction, inside the envelope: the bowl's
-  // floor rides the cutter and its soft rim blends the two motions, so the cut follows the tool.
+  // A cutter sliding across the face of a still box through a smooth subtraction: it moves alone, so it cuts as an
+  // operand of the box's group, which bakes again each time the cutter moves a step, and the bowl follows the tool.
   prototype "motion-carve" {
     document {
       clockDriver(key: "carve", cadence: 1.2)
@@ -2016,7 +2054,7 @@ template motionPrototypes() {
       exhibit(
         label: "MOVING CUT",
         extra: [accent],
-        note: "a smooth cut by a sliding tool: the orange bowl follows the cutter and its soft rim stretches, never tearing"
+        note: "a smooth cut by a sliding tool: the box bakes again as the cutter moves, so the orange bowl and its soft rim follow it"
       )
     }
   }
@@ -2754,6 +2792,22 @@ template galleryPrototypes() {
       exhibit(label: "SUPER XYZ")
     }
   }
+
+  // The stretched cutters, in a hard cut and in a smooth one.
+  stretchPrototype(
+    id: "shape-stretch-cut",
+    label: "STRETCH CUT",
+    blend: "Subtraction",
+    smooth: 0,
+    note: "a stretched capsule, cone and torus cut from a slab: each rim sharp, each wall smooth"
+  )
+  stretchPrototype(
+    id: "shape-stretch-smooth",
+    label: "STRETCH SMOOTH",
+    blend: "SmoothSubtraction",
+    smooth: 0.04,
+    note: "the same three cut smoothly at 0.04 m: each rim's fillet one width all the way round"
+  )
 
   // Each prism profile, extruded along local Z.
   prototype "shape-trapezoid" {

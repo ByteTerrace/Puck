@@ -40,7 +40,8 @@ public sealed class WorkClassLawTests {
 
         Assert.All(collection: GpuWork.SubmissionKinds.ToArray().Except(second: [.. GpuWork.KernelKinds.ToArray(), .. drawn]), action: static kind => Assert.Equal(actual: kind.Class, expected: WorkClass.Deterministic));
         Assert.All(collection: [.. GpuWork.KernelKinds.ToArray(), .. drawn], action: static kind => Assert.Equal(actual: kind.Class, expected: WorkClass.PerBackendDeterministic));
-        Assert.All(collection: GpuWork.LifetimeKinds.ToArray(), action: static kind => Assert.Equal(actual: kind.Class, expected: WorkClass.PerBackendDeterministic));
+        Assert.All(collection: GpuWork.LifetimeKinds.ToArray().Except(second: [GpuWork.WorkDetailsRefused]), action: static kind => Assert.Equal(actual: kind.Class, expected: WorkClass.PerBackendDeterministic));
+        Assert.Equal(actual: GpuWork.WorkDetailsRefused.Class, expected: WorkClass.Pacing);
         Assert.Equal(actual: PresentationWork.Skipped.Class, expected: WorkClass.Pacing);
     }
     [Fact]

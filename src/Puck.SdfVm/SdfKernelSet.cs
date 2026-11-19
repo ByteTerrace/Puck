@@ -118,6 +118,7 @@ public sealed class SdfKernelSet {
         SdfKernel.MeshBake => "sdf-mesh-bake",
         SdfKernel.MeshPyramid => "sdf-mesh-pyramid",
         SdfKernel.Surface => "sdf-world-surface",
+        SdfKernel.ViewsProbes => "sdf-world-views-probes",
         SdfKernel.Views => "sdf-world-views",
         SdfKernel.ViewsPlain => "sdf-world-views-plain",
         SdfKernel.ViewsFilter => "sdf-world-views-filter",

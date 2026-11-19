@@ -204,7 +204,12 @@ done line; a nested residency's done line is insufficient.
 | Pixel gather, indirect light, reflections and traced-light visibility | `shade/sdf-mesh-irradiance.hlsli` |
 
 - The scene hierarchy fills its packed seven-primitive leaves before adding
-  another pair of boxes. Bounds and triangle tests keep their original precision.
+  another pair of boxes. Triangle tests keep their original precision. A
+  geometry's nodes are 16 bytes (`PackedNode`): each bound is a 16-bit step
+  count of its braid's frame (`BraidFrame`, the braid root's box), rounded
+  outward by the one encoder, and `sdfProbePackedSlab` decodes it with the
+  CPU's float expression, so both walks read one conservative box. The top
+  level keeps float nodes. An entry names its braid's frame beside its node.
   Compare `puck mesh scene`'s hits, lit hits and mean distance after changing its
   storage or traversal, and walk the settled heap to measure retained arrays;
   working set includes temporary build storage and the mesh arrays as well.
@@ -260,10 +265,12 @@ done line; a nested residency's done line is insufficient.
   weight of the lit slots of bounded stages. A shadowing directional (its
   `Shadows` flag) has a bit too, the probe's own ray toward it at the hits' reach,
   marked on every relight (`Relight`, a reused local part included, since a moving
-  sun moves it): `sdfLightResponse` reads it in place of the cascades in a view
-  that draws none (`SdfShadeSurface.cascaded`: `meshShadowCount` zero, or soft
-  shadows disabled, as a session view's `ReducedQuality` and `world.shadows off`
-  are). The gather device law compares the sun's visibility on both backends. `world.probe` prints `level=`,
+  sun moves it): `sdfLightResponse` reads it wherever no cascade holds the point
+  (`sdfShadowRoleAnswer`): past the cascades, blended across the band at their
+  edge by the cascades' coverage, on glass, and in a view that draws none
+  (`SdfShadeSurface.cascaded`: `meshShadowCount` zero, or soft shadows disabled,
+  as `world.shadows off` and a nested view whose `render.nested` row drops its
+  shadows are). The gather device law compares the sun's visibility on both backends. `world.probe` prints `level=`,
   `measured=`, `share=`, `remainder-level=` and `remainder-measured=`, and the
   remainder's eight corners after the chosen eight. An isotropic 8 m level could
   not resolve rooms a few metres tall: it had a probe plane in every other

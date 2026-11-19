@@ -425,7 +425,11 @@ Source first, then structure, then pixels:
    two surfaces, not a bake fault.
    Frayed edges show as face normals off the gradient; a cutter whose field is
    only a lower bound (a stretched ellipsoid, a non-uniform scale) shows as a
-   loose field; give that cutter an exact primitive instead. The
+   loose field; give that cutter an exact primitive instead. A smooth cut by
+   such a cutter spreads its fillet to several times the authored radius, and
+   unevenly round the rim (the gallery's `shape-stretch-smooth`; the
+   [rendering plan](../../../docs/plans/rendering.md#a-true-distance-under-a-non-uniform-scale)
+   designs the true distance). The
    [rendering skill](../rendering/references/mesh-bake.md#auditing-a-bake) owns how the audit
    reads a store.
 

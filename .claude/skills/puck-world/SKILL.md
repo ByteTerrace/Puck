@@ -143,6 +143,12 @@ Every untrusted read and delivery checks `WorldStateDisclosure` again; caching
 a bound address never caches permission. Responses, deals and tenure are
 placement projections. Checkpoints snapshot arena columns directly.
 
+`WorldDisclosureImages` can carry an audience's projection across a holding-only
+placement change. The definition records the preceding source and the changed
+ordinals. The recipient still has to pass the live row checks, and a projected
+placement section is recomposed when its restricted inputs can affect the result.
+Placement identity reuses each unchanged row's canonical digest.
+
 ## Diagnostic reports and pins
 
 Scripted camera framing uses `view.recenter [player]` (1-based), which resets
@@ -242,6 +248,9 @@ it with `puck_world_stop`, which refuses any World the adapter did not start.
 The World runs from the store's build, which holds it while the World runs and
 leaves your `bin/Release` free to rebuild
 ([references/hosting-and-release.md](references/hosting-and-release.md)).
+Finish staging source files before the start. `WorldArtifactKey` reads Git
+status as well as file contents, so staging during the build-lease wait can
+invalidate the start even when no file bytes change.
 
 Codex discovers these tools through the session's tool inventory (search for
 `puck`); its repository MCP configuration uses the same launcher as Claude.

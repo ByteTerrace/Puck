@@ -192,7 +192,7 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
         public double AdvanceClock(double presentedSeconds) {
             var previous = m_clockSeconds;
 
-            var available = (Owner?.ViewScenes?.IsAvailable(view: Name) ?? true);
+            var available = (Owner?.ViewScenes?.AccessOf(view: Name).Available ?? true);
             ApplyPause(node: Node, entry: this, available: available);
             if (
                 !m_clockAnchored ||
@@ -267,6 +267,9 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
     private readonly List<RenderGraphFootprint> m_footprints = [];
     private readonly List<string> m_named = [];
     private readonly Dictionary<string, RenderGraphPlacement> m_placements = new(comparer: StringComparer.Ordinal);
+    // The access epoch each instance was last bound under (BindAccess), for the set they were recorded against.
+    private readonly Dictionary<string, long> m_accessEpochs = new(comparer: StringComparer.Ordinal);
+    private RenderGraphInstanceSet? m_accessSet;
 
     // Whether this frame's lone whole-display view is shown only so its place pass applies the tonemap or the sharpen: the
     // display shows the world itself, as it does when the root stands for the view, so no pane is published for it.
@@ -642,20 +645,44 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
             views: views
         );
         if (m_runtime is { } runtime) {
-            var instances = runtime.Instances.Instances;
-            for (var index = 0; index < instances.Count; index++) {
-                var instance = instances[index];
-                if (runtime.NodeOf(instance: instance.Name) is { } node) {
-                    m_entries.TryGetValue(instance.Name, out var entry);
-                    ApplyPause(node, entry, ViewScenes?.IsAvailable(instance.Name) ?? true);
-                }
-            }
+            BindAccess(runtime: runtime);
         }
         PumpWatches();
         ResetFootprints();
         m_placements.Clear();
         m_framing.Clear();
         m_cameras.Clear();
+    }
+    // The one place a view's access reaches the runtime, once a frame before it schedules, after the screens settled
+    // their sessions' access (WorldScreenBinder.Publish). A view whose epoch moved since the host last saw it has every
+    // output it published withdrawn (IRenderGraphInstances.Withdraw), so no reader binds a picture made under the old
+    // access; an unavailable view is paused as well, so its node renders nothing while it publishes nothing. An instance
+    // seen for the first time has published nothing yet, so its epoch is only recorded.
+    private void BindAccess(IRenderGraphInstances runtime) {
+        var set = runtime.Instances;
+
+        if (!ReferenceEquals(objA: set, objB: m_accessSet)) {
+            m_accessSet = set;
+            foreach (var name in m_accessEpochs.Keys.ToArray()) {
+                if (set.IndexOf(name: name) < 0) { _ = m_accessEpochs.Remove(key: name); }
+            }
+        }
+
+        var instances = set.Instances;
+
+        for (var index = 0; (index < instances.Count); index++) {
+            var name = instances[index].Name;
+            var access = (ViewScenes?.AccessOf(view: name) ?? WorldViewAccess.Open);
+
+            if (m_accessEpochs.TryGetValue(key: name, value: out var seen) && (seen != access.Epoch)) {
+                runtime.Withdraw(instance: name);
+            }
+            m_accessEpochs[name] = access.Epoch;
+            if (runtime.NodeOf(instance: name) is { } node) {
+                _ = m_entries.TryGetValue(key: name, value: out var entry);
+                ApplyPause(available: access.Available, entry: entry, node: node);
+            }
+        }
     }
     private static void ApplyPause(ShaderPipelineRenderNode node, Entry? entry, bool available) =>
         node.Paused = (!available || (entry is not null && (entry.ClockPaused || entry.ClockScale == 0f)));

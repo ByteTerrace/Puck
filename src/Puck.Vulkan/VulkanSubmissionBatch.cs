@@ -7,8 +7,9 @@ namespace Puck.Vulkan;
 /// <summary>
 /// The submissions one logical device defers while a batch is open (<see cref="IGpuQueueSubmitter.BeginBatch"/>): the
 /// shared <see cref="GpuSubmissionBatch{TEntry}"/>, whose entries reach the device's graphics queue in one
-/// <c>vkQueueSubmit</c>, one submit info each, in their order, each with the waits it was given. A <c>vkQueueSubmit</c>
-/// signals one fence, so the batch's owner fence (its last fenced submission's) is the one the submit arms. Every other
+/// <c>vkQueueSubmit</c> a hand-over, one submit info each, in their order, each with the waits it was given. A
+/// <c>vkQueueSubmit</c> signals one fence, so a hand-over's owner fence (its last fenced submission's) is the one the
+/// submit arms, and a background job answered apart from the frame takes a hand-over, and so a submit, of its own. Every other
 /// operation on the device's queue reads it through <see cref="VulkanLogicalDevice.GraphicsQueue"/> or
 /// <see cref="VulkanLogicalDevice.PresentQueue"/>, which split the batch first.
 /// <para>A deferred submission's command buffers and waits are copied into lists the batch keeps, and its entry names
@@ -24,7 +25,9 @@ internal sealed class VulkanSubmissionBatch(VulkanDeviceCommands device, VkQueue
     private Ranges m_handing = new();
 
     /// <summary>Defers a submission when the batch is open and the submission is not empty, as
-    /// <see cref="GpuSubmissionBatch{TEntry}.TryDefer"/> does, copying its command buffers and waits.</summary>
+    /// <see cref="GpuSubmissionBatch{TEntry}.TryDefer"/> does (a background job's submission deferred ahead of it is
+    /// handed to the queue first, <see cref="GpuSubmissionBatch{TEntry}.Admit"/>), copying its command buffers and
+    /// waits.</summary>
     /// <param name="commandBuffers">The native <c>VkCommandBuffer</c> handles.</param>
     /// <param name="waitSemaphores">The timeline semaphores the submission waits on before any of its stages run.</param>
     /// <param name="waitValues">The value each of <paramref name="waitSemaphores"/> must reach, in the same order.</param>
@@ -41,7 +44,8 @@ internal sealed class VulkanSubmissionBatch(VulkanDeviceCommands device, VkQueue
                 paramName: nameof(waitValues)
             );
         }
-        if (!IsOpen || commandBuffers.IsEmpty) { return false; }
+        // Admit's hand-over, when it makes one, submits and clears the lists this copies into, so it comes first.
+        if (commandBuffers.IsEmpty || !Admit(fence: fence)) { return false; }
 
         var entry = new VulkanBatchedSubmission(
             CommandBufferCount: commandBuffers.Length,
@@ -50,12 +54,26 @@ internal sealed class VulkanSubmissionBatch(VulkanDeviceCommands device, VkQueue
             WaitStart: m_deferred.Waits.Count
         );
 
-        // An entry names its ranges by where they start, so lists a refused defer extended only hold words no entry names.
-        m_deferred.CommandBuffers.AddRange(source: commandBuffers);
-        m_deferred.Waits.AddRange(source: waitSemaphores);
-        m_deferred.Values.AddRange(source: waitValues);
+        // An entry names its ranges by where they start, and the waits and their values share one start, so a copy that
+        // fails part way is cut back to where it began before the fence is abandoned.
+        try {
+            m_deferred.CommandBuffers.AddRange(source: commandBuffers);
+            m_deferred.Waits.AddRange(source: waitSemaphores);
+            m_deferred.Values.AddRange(source: waitValues);
+        } catch {
+            m_deferred.Truncate(commandBuffers: entry.CommandBufferStart, waits: entry.WaitStart);
+            Refuse(fence: fence);
 
-        return TryDefer(entries: [entry], fence: fence, lists: commandBuffers.Length);
+            throw;
+        }
+        try {
+            return TryDefer(entries: [entry], fence: fence, lists: commandBuffers.Length);
+        } catch {
+            // The base batch abandoned the fence; its lists took nothing.
+            m_deferred.Truncate(commandBuffers: entry.CommandBufferStart, waits: entry.WaitStart);
+
+            throw;
+        }
     }
 
     /// <inheritdoc/>
@@ -98,6 +116,12 @@ internal sealed class VulkanSubmissionBatch(VulkanDeviceCommands device, VkQueue
         public List<ulong> Values { get; } = [];
         public List<nint> Waits { get; } = [];
 
+        // Cuts the copied lists back to the given lengths; the waits and their values share one length.
+        public void Truncate(int commandBuffers, int waits) {
+            CommandBuffers.RemoveRange(index: commandBuffers, count: (CommandBuffers.Count - commandBuffers));
+            Waits.RemoveRange(index: waits, count: (Waits.Count - waits));
+            Values.RemoveRange(index: waits, count: (Values.Count - waits));
+        }
         public void Clear() {
             CommandBuffers.Clear();
             Stages.Clear();

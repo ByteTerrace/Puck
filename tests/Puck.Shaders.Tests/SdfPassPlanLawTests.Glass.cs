@@ -95,7 +95,7 @@ public sealed partial class SdfPassPlanLawTests {
                 actual: edges,
                 expected: [
                     (SdfWorldPackage.Parts.GlassClear, SdfWorldPackage.Parts.Glass, GpuAccess.TransferWrite, GpuAccess.ShaderRead | GpuAccess.ShaderWrite, GpuStage.Transfer, GpuStage.FragmentShader),
-                    (SdfWorldPackage.Parts.Glass, SdfWorldPackage.Parts.GlassShade, GpuAccess.ShaderRead | GpuAccess.ShaderWrite, GpuAccess.ShaderRead, GpuStage.FragmentShader, GpuStage.ComputeShader),
+                    (SdfWorldPackage.Parts.Glass, SdfWorldPackage.Parts.GlassShade, GpuAccess.ShaderRead | GpuAccess.ShaderWrite, GpuAccess.ShaderRead, GpuStage.FragmentShader, (GpuStage.ComputeShader | GpuStage.FragmentShader)),
                 ]
             );
             Assert.Equal(

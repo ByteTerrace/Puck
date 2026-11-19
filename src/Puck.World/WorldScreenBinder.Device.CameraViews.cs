@@ -11,12 +11,14 @@ using Puck.World.Client;
 namespace Puck.World;
 
 public sealed partial class WorldScreenBinder {
-    /// <summary>Gets the restrictions a camera view adds to the world's quality: a low-resolution diegetic display skips
-    /// ambient occlusion and soft shadows.</summary>
-    public static SdfViewQuality CameraViewQuality { get; } = new() {
-        DisableAmbientOcclusion = true,
-        DisableSoftShadows = true,
-    };
+    // The quality a nested view renders at: the frame's first view's, or full quality in a frame with none, with what the
+    // world's nested-view table gives up at the view's presented size added (WorldRenderSettings.NestedRestriction). It may
+    // add restrictions to the world's quality but never lift one.
+    private SdfViewQuality NestedQuality(List<SdfViewSnapshot> views, string name) {
+        var restriction = (Settings?.NestedRestriction(view: name) ?? default);
+
+        return ((views.Count > 0) ? views[0].Quality.Restrict(other: restriction) : restriction);
+    }
 
     private bool TryResolveRankedAnchor(WorldCamera camera, int slot, out SdfAnchor anchor) {
         var selected = WorldSeatAnchors.SelectAnchor(
@@ -103,8 +105,8 @@ public sealed partial class WorldScreenBinder {
 
     /// <inheritdoc/>
     /// <remarks>Each camera view is a view of the frame after the presentation's own, at the quality of its first view
-    /// with ambient occlusion and soft shadows off (<see cref="CameraViewQuality"/>): a low-resolution diegetic display
-    /// may add restrictions to the world's quality but never lift one. The view's instance renders it from the world's
+    /// with what the world's nested-view table gives up at its presented size added
+    /// (<see cref="WorldRenderSettings.NestedRestriction(string?)"/>). The view's instance renders it from the world's
     /// residency (<see cref="TryResolveView"/>), and the registration's export is set on its node.</remarks>
     public void FilmViews(DynamicTransform[] transforms, ulong authoritativeTick, float presentationSeconds, List<SdfViewSnapshot> views, List<string?> names) {
         ArgumentNullException.ThrowIfNull(argument: transforms);
@@ -116,11 +118,6 @@ public sealed partial class WorldScreenBinder {
         m_hostViewCount = views.Count;
         m_cameraViewIndices.Clear();
         m_hostLevels.Clear();
-
-        var quality = ((views.Count > 0)
-            ? views[0].Quality.Restrict(other: CameraViewQuality)
-            : CameraViewQuality
-        );
 
         foreach (var (name, registration) in m_cameraViews) {
             m_cameraViewIndices[name] = views.Count;
@@ -137,7 +134,7 @@ public sealed partial class WorldScreenBinder {
                 Bloom = Settings?.ResolveBloom((BootDefinition()?.Render ?? WorldRenderDefaults.Absent), registration.Row.Rig.Bloom),
                 BloomQuality = (Settings?.BloomQualityOf(view: name) ?? Puck.Hosting.BloomQuality.Off),
                 BloomStandalone = true,
-                Quality = quality,
+                Quality = NestedQuality(views: views, name: name),
             });
 
             views[^1] = ResolveResolution(views[^1], name, registration.Row.RenderWidth, registration.Row.RenderHeight);

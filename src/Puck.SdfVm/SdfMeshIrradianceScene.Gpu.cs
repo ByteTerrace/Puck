@@ -52,11 +52,11 @@ public sealed partial class SdfMeshIrradianceScene {
         ArgumentNullException.ThrowIfNull(placements);
         arena ??= new GpuArena();
         var content = m_content;
-        var geometries = new Dictionary<Geometry, (int Nodes, int Triangles)>(capacity: m_geometries.Count);
-        var segments = new List<GpuSegment>(capacity: ((2 * m_geometries.Count) + 2));
+        var geometries = new Dictionary<Geometry, (int Nodes, int Triangles, int Frames)>(capacity: m_geometries.Count);
+        var segments = new List<GpuSegment>(capacity: ((3 * m_geometries.Count) + 2));
         var changed = new List<(int Word, int Count)>();
         foreach (var geometry in m_geometries.Values) {
-            var count = checked(geometry.Nodes.Length * SdfMeshProbeTrace.NodeWords + geometry.Triangles.Length);
+            var count = geometry.GpuWords;
             if (count == 0) { continue; }
             if (!arena.Geometries.TryGetValue(geometry, out var placement)) {
                 placement = new GpuPlacement(arena.Allocate(count));
@@ -65,10 +65,12 @@ public sealed partial class SdfMeshIrradianceScene {
             var nodes = placement.Word;
             var written = placement.WrittenWords;
             if (written < count) { changed.Add((nodes + written, count - written)); }
-            var triangles = checked(nodes + geometry.Nodes.Length * SdfMeshProbeTrace.NodeWords);
-            geometries.Add(geometry, (nodes, triangles));
-            segments.Add(new(nodes, geometry.Nodes.Length * SdfMeshProbeTrace.NodeWords, GpuSegmentKind.Nodes, geometry, triangles));
+            var triangles = checked(nodes + geometry.Nodes.Length * SdfMeshProbeTrace.PackedNodeWords);
+            var frames = checked(triangles + geometry.Triangles.Length);
+            geometries.Add(geometry, (nodes, triangles, frames));
+            segments.Add(new(nodes, geometry.Nodes.Length * SdfMeshProbeTrace.PackedNodeWords, GpuSegmentKind.Nodes, geometry, triangles));
             segments.Add(new(triangles, geometry.Triangles.Length, GpuSegmentKind.Triangles, geometry, 0));
+            segments.Add(new(frames, geometry.Frames.Length * SdfMeshProbeTrace.FrameWords, GpuSegmentKind.Frames, geometry, 0));
         }
         // The prefix is allocated last, so a geometry that cannot be placed throws before anything only this export
         // would free; a geometry placed meanwhile stays in the arena, which frees it at the next publication that does
@@ -119,13 +121,20 @@ public sealed partial class SdfMeshIrradianceScene {
                     default:
                         // Fixed-size records: each one the run reaches is written whole and the part it covers copied.
                         while (!target.IsEmpty) {
-                            var (part, start, stride) = (segment.Kind == GpuSegmentKind.Nodes) ? (PrefixPart.None, 0, SdfMeshProbeTrace.NodeWords) : PrefixRecord(offset);
+                            var (part, start, stride) = segment.Kind switch {
+                                GpuSegmentKind.Nodes => (PrefixPart.None, 0, SdfMeshProbeTrace.PackedNodeWords),
+                                GpuSegmentKind.Frames => (PrefixPart.None, 0, SdfMeshProbeTrace.FrameWords),
+                                _ => PrefixRecord(offset),
+                            };
                             if (stride == 0) { target.Clear(); break; }
                             var index = (offset - start) / stride;
                             var within = (offset - start) % stride;
                             var words = record[..stride];
-                            if (segment.Kind == GpuSegmentKind.Nodes) { WriteNodes(segment.Geometry!.Nodes.AsSpan(index, 1), words, segment.Word, segment.Leaves, 1); }
-                            else { WritePrefixRecord(part, index, words); }
+                            switch (segment.Kind) {
+                                case GpuSegmentKind.Nodes: WritePackedNode(segment.Geometry!.Nodes[index], words, segment.Word, segment.Leaves); break;
+                                case GpuSegmentKind.Frames: WriteFrame(segment.Geometry!.Frames[index], words); break;
+                                default: WritePrefixRecord(part, index, words); break;
+                            }
                             var length = Math.Min(target.Length, stride - within);
                             words.Slice(within, length).CopyTo(target);
                             offset += length;
@@ -151,7 +160,9 @@ public sealed partial class SdfMeshIrradianceScene {
                 case PrefixPart.Entry:
                     var entry = content.Entries[index];
                     words[0] = checked((uint)(instances + entry.Instance * SdfMeshProbeTrace.InstanceWords));
-                    words[1] = checked((uint)(geometries[content.Instances[entry.Instance].Geometry].Nodes + entry.Node * SdfMeshProbeTrace.NodeWords));
+                    var placed = geometries[content.Instances[entry.Instance].Geometry];
+                    words[1] = checked((uint)(placed.Nodes + entry.Node * SdfMeshProbeTrace.PackedNodeWords));
+                    words[2] = checked((uint)(placed.Frames + entry.Braid * SdfMeshProbeTrace.FrameWords));
                     break;
                 default:
                     ref readonly var instance = ref content.Instances[index];
@@ -216,7 +227,7 @@ public sealed partial class SdfMeshIrradianceScene {
             foreach (var geometry in export.Geometries.Keys) {
                 var placement = Geometries[geometry];
                 var start = Math.Max(word, placement.Word);
-                var end = Math.Min(word + count, placement.Word + geometry.Nodes.Length * SdfMeshProbeTrace.NodeWords + geometry.Triangles.Length);
+                var end = Math.Min(word + count, placement.Word + geometry.GpuWords);
                 if (start < end) { placement.Written.Add(start - placement.Word, end - start); }
             }
         }
@@ -229,9 +240,9 @@ public sealed partial class SdfMeshIrradianceScene {
         internal int WrittenWords => Written.Count != 0 && Written.Start(0) == 0 ? Written.Length(0) : 0;
     }
 
-    private enum GpuSegmentKind : byte { Root, Prefix, Nodes, Triangles }
-    // A run of the export's words: word zero's root, the prefix, or one geometry's nodes (whose leaves start at Leaves)
-    // or triangle ordinals.
+    private enum GpuSegmentKind : byte { Root, Prefix, Nodes, Triangles, Frames }
+    // A run of the export's words: word zero's root, the prefix, or one geometry's packed nodes (whose leaves start at
+    // Leaves), triangle ordinals or braid frames.
     private readonly record struct GpuSegment(int Word, int Count, GpuSegmentKind Kind, Geometry? Geometry, int Leaves);
     internal delegate void GpuWordWriter(int word, Span<uint> destination);
     internal sealed class GpuExport(int words, GpuWordWriter read) {
@@ -239,8 +250,8 @@ public sealed partial class SdfMeshIrradianceScene {
         internal required List<(int Word, int Count)> Changed { get; init; }
         internal required uint Root { get; init; }
         internal required int Prefix { get; init; }
-        // Each geometry the export names, with its node and triangle words' addresses.
-        internal required IReadOnlyDictionary<Geometry, (int Nodes, int Triangles)> Geometries { get; init; }
+        // Each geometry the export names, with its node, triangle and frame words' addresses.
+        internal required IReadOnlyDictionary<Geometry, (int Nodes, int Triangles, int Frames)> Geometries { get; init; }
         public void Read(int word, Span<uint> destination) => read(word, destination);
     }
 
@@ -254,5 +265,19 @@ public sealed partial class SdfMeshIrradianceScene {
             var first = checked(node.Count == 0 ? nodeBase + node.First * SdfMeshProbeTrace.NodeWords : leafBase + node.First * leafStride);
             record[6] = checked((uint)first * (1u << SdfMeshProbeTrace.NodeCountBits)) | (uint)node.Count;
         }
+    }
+    // A geometry node's record: its three words of steps, then its link as an address (an inner node's first child's
+    // record, a leaf's first triangle ordinal).
+    private static void WritePackedNode(in PackedNode node, Span<uint> words, int nodeBase, int leafBase) {
+        words[0] = node.Word(index: 0);
+        words[1] = node.Word(index: 1);
+        words[2] = node.Word(index: 2);
+        var first = checked(node.Count == 0 ? nodeBase + node.First * SdfMeshProbeTrace.PackedNodeWords : leafBase + node.First);
+        words[3] = checked((uint)first * (1u << SdfMeshProbeTrace.NodeCountBits)) | (uint)node.Count;
+    }
+    private static void WriteFrame(in BraidFrame frame, Span<uint> words) {
+        var floats = MemoryMarshal.Cast<uint, float>(words);
+        floats[0] = frame.Low.X; floats[1] = frame.Low.Y; floats[2] = frame.Low.Z;
+        floats[3] = frame.Step.X; floats[4] = frame.Step.Y; floats[5] = frame.Step.Z;
     }
 }

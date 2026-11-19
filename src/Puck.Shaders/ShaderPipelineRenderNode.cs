@@ -894,6 +894,10 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
     private void Install(GraphBuild built, BuildKey key) {
         var next = key.Pipeline!;
 
+        // An install carries history cursors and replaces the checkpoint a rollback restores, so a frame still owed its
+        // hand-over's result is settled against the installed graph first.
+        SettleHandOver();
+
         // A candidate's descriptor pools are admitted into the device's heaps before it allocates anything; one that
         // does not fit is refused by name, the installed graph keeps presenting, and nothing grows.
         if (
@@ -1006,7 +1010,8 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
             // Last, once nothing else can fail: a failed install restores the replaced graph whole.
             PreserveCarriedStorages(
                 carried: carried,
-                previousPlan: previousPipeline?.Plan
+                previousPlan: previousPipeline?.Plan,
+                previous: previousResources
             );
         } catch (Exception error) {
             m_work.Discard();
@@ -1146,15 +1151,21 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
     }
 
     // Moves the carried storages' instances out of the replaced graph into the installed one, in the states the replaced
-    // graph left them in. History keeps its contents and its ring's cursor; other storage counts as holding nothing, so
-    // the installed graph clears it where its plan says a pass reads it before any writes it.
-    private void PreserveCarriedStorages(IReadOnlyDictionary<int, CarriedStorage> carried, ShaderPipelinePlan? previousPlan) {
+    // graph left them in. Contents that persist across frames (history with its ring's cursor, and storage updated in
+    // place) keep them; other storage counts as holding nothing, so the installed graph clears it where its plan says a
+    // pass reads it before any writes it. Persistent contents are kept only as a set: when one the replaced graph held
+    // under the same name is not carried, none is kept, so every one is cleared and a reader of them (a temporal resolve
+    // reading its history beside its stationary window) restarts as a unit rather than pairing old parts with new zeros.
+    private void PreserveCarriedStorages(IReadOnlyDictionary<int, CarriedStorage> carried, ShaderPipelinePlan? previousPlan, RuntimeResource[] previous) {
+        var keepsContents = m_resources.All(predicate: current => (!current.Storage.PersistsContents || carried.ContainsKey(key: current.Storage.Index) ||
+            !previous.Any(predicate: old => (old.Storage.PersistsContents && string.Equals(a: old.Spec.Name, b: current.Spec.Name, comparisonType: StringComparison.Ordinal)))));
+
         foreach (var (index, carry) in carried) {
             var current = m_resources[index];
             var old = carry.Old;
 
-            if (current.History) {
-                current.HistoryLatest = old.HistoryLatest;
+            if (keepsContents && current.Storage.PersistsContents && (old.Storage.PersistsContents == current.Storage.PersistsContents) && (old.History == current.History)) {
+                if (current.History) { current.HistoryLatest = old.HistoryLatest; }
                 Array.Copy(
                     destinationArray: current.Initialized,
                     length: current.Count,
@@ -1641,6 +1652,9 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
     /// <returns>The latest published surface, or an empty surface before the node has published one or once it is
     /// disposed.</returns>
     public Surface ProduceFrame(in FrameContext context) {
+        // A caller that rendered the previous frame inside a batch settles it after the flush; one that did not is settled
+        // here, before anything reads the history that frame committed.
+        SettleHandOver();
         try {
             return Produce(context: in context);
         } catch {
@@ -1707,7 +1721,7 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
             (m_steps == 0) &&
             m_ready &&
             published &&
-            (!m_outputRefreshRequested || m_installedUnrendered)
+            (!m_outputRefreshRequested || m_installedUnrendered || m_publicationLost)
         ) {
             if (m_frame != 0) {
                 PinStandingCaptureIfOffered();
@@ -1757,7 +1771,7 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
                 exported: exported
             );
         } finally {
-            if ((exported is not null) && !OwesExportCompletion) {
+            if ((exported is not null) && (m_exportOwed is null)) {
                 m_export!.EndWrite(
                     image: exported,
                     written: exportWritten,
@@ -1882,7 +1896,7 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
             slot: slotIndex
         );
         if (job.Previewed) { m_preview!.Submitted(slot: slotIndex); }
-        CommitCadenceFrame();
+        CommitCadenceFrame(fence: slot.Fence!);
         m_frame++;
         m_frameLeases.MoveTo(destination: slot.Leases);
         NoteRenderGrid();
@@ -1924,6 +1938,27 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
             PendingCapturePath
         );
     }
+    /// <summary>Withdraws the node's published image and buffers, as a device loss does, without releasing its graph:
+    /// it publishes nothing until it renders again, a paused node presents nothing and owes no initialization frame, a
+    /// selected output is not presented again from the graph's images, and a capture served without rendering reports
+    /// that no completed output exists. The runtime calls it when a host withdraws what the instance published
+    /// (<see cref="IRenderGraphInstances.Withdraw"/>).</summary>
+    /// <exception cref="ObjectDisposedException">The node is disposed.</exception>
+    public void WithdrawPublication() {
+        ObjectDisposedException.ThrowIf(
+            condition: m_disposed,
+            instance: this
+        );
+        Unpublish();
+        m_publicationLost = true;
+    }
+    // Publishes no image and no buffer, the state a reset and a withdrawal both leave the publication in.
+    private void Unpublish() {
+        ClearBufferPublications();
+        Publish(surface: default);
+        m_publishedStateTick = null;
+        m_publishedFrame = null;
+    }
     /// <summary>Clears all history state and resets the presentation counter. Submissions in flight complete first; the
     /// completed work sample is then withdrawn, and <see cref="ResetSubmission"/> marks where counting since this reset
     /// begins. Every slot holds each pass's current block again, so what the first frame after a reset uploads
@@ -1938,10 +1973,7 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
         m_frame = 0;
         m_steps = 0;
         m_outputRefreshRequested = false;
-        ClearBufferPublications();
-        Publish(surface: default);
-        m_publishedStateTick = null;
-        m_publishedFrame = null;
+        Unpublish();
         SeedPassRegions();
         ResetWork();
     }

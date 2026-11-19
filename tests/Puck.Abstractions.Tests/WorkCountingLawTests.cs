@@ -169,6 +169,7 @@ public sealed class WorkCountingLawTests {
                 "gpu.created.descriptor-pools",
                 "gpu.created.descriptor-sets",
                 "gpu.created.timestamp-pools",
+                "gpu.refused.work-details",
             ],
             actual: GpuWork.LifetimeKinds.ToArray().Select(selector: kind => kind.Name)
         );

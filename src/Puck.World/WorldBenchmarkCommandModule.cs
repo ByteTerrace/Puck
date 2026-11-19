@@ -75,6 +75,8 @@ public sealed partial class WorldBenchmarkCommandModule(WorldTickScript script, 
         "world.counters render.record --json",
         "world.counters gpu.queue --json",
         "world.counters sdf --json",
+        "world.counters world.disclosure --json",
+        "world.counters physics.bodies --json",
         "host.memory",
     ];
 

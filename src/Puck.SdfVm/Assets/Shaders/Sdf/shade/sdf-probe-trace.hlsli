@@ -46,6 +46,30 @@ void sdfProbeChildren(uint node, float3 origin, float3 inverse, float maximum, o
     else if (hitA) { first = left; }
     else if (hitB) { first = right; }
 }
+// A geometry node's bounds, packed as 16-bit steps of its braid's frame (SdfMeshIrradianceScene.PackedNode and
+// BraidFrame): low + steps * step, the same float expression the CPU decodes, kept exact by precise.
+bool sdfProbePackedSlab(uint node, float3 frameLow, float3 frameStep, float3 origin, float3 inverse, float maximum, out float entry) {
+    uint3 words = uint3(sdfProbeScene[node], sdfProbeScene[node + 1], sdfProbeScene[node + 2]);
+    precise float3 low = frameLow + float3(words.x & 0xffffu, words.x >> 16, words.y & 0xffffu) * frameStep;
+    precise float3 high = frameLow + float3(words.y >> 16, words.z & 0xffffu, words.z >> 16) * frameStep;
+    precise float3 a = (low - origin) * inverse;
+    precise float3 b = (high - origin) * inverse;
+    float3 near = min(a, b), far = max(a, b);
+    entry = max(max(near.x, near.y), max(near.z, 0.0));
+    float exit = min(min(far.x, far.y), min(far.z, maximum));
+    return entry <= exit;
+}
+void sdfProbePackedChildren(uint node, float3 frameLow, float3 frameStep, float3 origin, float3 inverse, float maximum, out uint first, out uint second) {
+    uint left = sdfProbeScene[node + 3] >> SDF_PROBE_NODE_COUNT_BITS;
+    uint right = left + SDF_PROBE_PACKED_NODE_WORDS;
+    float a, b;
+    bool hitA = sdfProbePackedSlab(left, frameLow, frameStep, origin, inverse, maximum, a);
+    bool hitB = sdfProbePackedSlab(right, frameLow, frameStep, origin, inverse, maximum, b);
+    first = 0; second = 0;
+    if (hitA && hitB) { first = a <= b ? left : right; second = a <= b ? right : left; }
+    else if (hitA) { first = left; }
+    else if (hitB) { first = right; }
+}
 float3 sdfProbeTransform(uint instance, float3 value, bool isPoint) {
     precise float3 result = (value.x * sdfProbeVector(instance)) + (value.y * sdfProbeVector(instance + 4));
     result = result + value.z * sdfProbeVector(instance + 8);
@@ -108,17 +132,20 @@ bool sdfProbeWalk(float3 origin, float3 direction, float maximum, uint lane, boo
             float3 localOrigin = identity ? origin : sdfProbeTransform(instance, origin, true);
             float3 localDirection = identity ? direction : sdfProbeTransform(instance, direction, false);
             float3 localInverse = identity ? inverse : 1.0 / localDirection;
+            uint frame = sdfProbeScene[entry + i * SDF_PROBE_ENTRY_WORDS + 2];
+            float3 frameLow = sdfProbeVector(frame);
+            float3 frameStep = sdfProbeVector(frame + 3);
             uint depth = 1;
             sdfProbeGeometryStack[lane] = sdfProbeScene[entry + i * SDF_PROBE_ENTRY_WORDS + 1];
             [loop] while (depth > 0) {
                 if (++steps > SDF_PROBE_MAX_WALK_STEPS) { sdfProbeTraversalFault(); return anyHit; }
                 uint inner = sdfProbeGeometryStack[(--depth) * SDF_PROBE_GROUP_SIZE + lane];
-                uint innerLink = sdfProbeScene[inner + 6];
+                uint innerLink = sdfProbeScene[inner + 3];
                 uint innerCount = innerLink & ((1u << SDF_PROBE_NODE_COUNT_BITS) - 1u);
                 uint innerFirst = innerLink >> SDF_PROBE_NODE_COUNT_BITS;
                 if (innerCount == 0) {
                     uint first, second;
-                    sdfProbeChildren(inner, localOrigin, localInverse, distance, first, second);
+                    sdfProbePackedChildren(inner, frameLow, frameStep, localOrigin, localInverse, distance, first, second);
                     if (depth + (first != 0 ? 1u : 0u) + (second != 0 ? 1u : 0u) > SDF_PROBE_STACK_DEPTH) {
                         sdfProbeTraversalFault();
                         return anyHit;

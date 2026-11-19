@@ -145,6 +145,32 @@ its miss is counted, and its door still opens on simulation terms
 Ordinary reachable crossings are closed by fixing throughput, prediction and
 continuity at their cause, never by holding a door or by calling haze seamless.
 
+**Preparing a portal crossing ahead (paintings prototype).** Before scaling
+prediction across authored areas, prototype predicted arrival on the paintings
+by registering the predicted exit as a consumer minimum bounded by how far the
+player can move, by memory, and by what the walker may already see of the
+destination. Carry lighting across the handoff only where what the lighting
+read still matches, give the crossing frame a budget, and never advance the
+destination's simulation or commit a body transfer during prediction.
+
+Read the prototype on three controlled walks — cross and look back at once,
+approach and turn away, and drop through the endless fall repeatedly — each
+run twice with the arrival minimum enabled in both and prediction enabled in
+one. The arrival minimum alone can leave the destination ready, and then
+switching prediction off shows nothing, so the deciding walk is controlled:
+keep the destination's meshes unstored with a short lead time and byte
+budget so the arrival minimum cannot finish alone, and place a marker in the
+destination that only a complete picture shows. Judge completeness on the
+crossing frame, the crossing's slowest frame against 16.7 ms and the walk up
+to it, bytes useful at first turn versus resident bytes, unused predicted
+bytes over the ten seconds after turning away, evictions, missed presents in
+the hall, and crossing-frame work against one world's. A crossing whose
+destination was already resident, or a prediction that fetched nothing, is
+reported as such and does not count as a pass. If prediction moves a hitch into
+the hall, the arrival minimum alone stays. In the debug world, stepping through
+the garden painting, the slowest frame around the crossing is no slower than
+the walk up to it, and turning back at once finds both sides ready.
+
 ### Where a seam can show
 
 Each way a seam can show at a crossing from an open zone into a city, the step
@@ -646,72 +672,317 @@ and outside the sum.
 ### Decision 4: a residency is staged by its demand, not by a render
 
 **The question.** How a world behind a portal becomes resident before its glass
-is seen, without rendering views nobody looks at.
+is seen without rendering views nobody looks at, and how the frame thread stops
+capturing and packing residencies that nothing in this frame reads.
 
-**Evidence.** The render graph's package already pumps and prepares every
-residency it holds each frame, seen or not (`SdfWorldPasses.BeginFrame`), and a
-prepared residency packs its frame. Only a scheduled render stages it
-(`SdfWorldPasses.PrepareRender` calls `SdfWorldResidency.Stage`), and staging
-is where the frame's upload is submitted (`SdfWorldTables.SubmitUpload`).
-Background work binds only after an upload of the current binding revision
-(`SdfWorldTables.BindsBackgroundWork`), so a residency that packs without
-uploading stops landing and counts `unbound` pumps instead **[opened]**. That
-is the whole reason `WorldViewGraphHost.ReserveArrivals` renders hidden windows
-at `WorldPortalVisibility.ArrivalShare`. The demand is not missing: an attached
-window's fitted view is a demand point whether or not it renders, measured by
-the display pixels its glass spans from the viewer **[opened]**.
+**Evidence.** Today `HostLoop.Run` steps simulation and runs produce on the
+same thread. Produce calls `PackagesBeginFrame` before
+`RenderGraphScheduler.Schedule`, so `SdfWorldPasses.BeginFrame` prepares every
+residency it holds whether or not anything shows it (capturing render poses,
+mirroring simulation state, running CPU foot/camera field queries and packing
+GPU tables). `RenderGraphRuntime.WithUnchanged` then asks every package whether
+each view still stands, and `SdfWorldResidency.IsUnchanged` answers by
+preparing again and hashing `SdfWorldTables.ViewSignature`. Meanwhile, only a
+scheduled render stages a residency (`SdfWorldPasses.PrepareRender` ->
+`SdfWorldResidency.Stage` -> `SdfWorldTables.SubmitUpload`), and background
+work binds only after an upload of the current binding revision
+(`SdfWorldTables.BindsBackgroundWork`), which is why
+`WorldViewGraphHost.ReserveArrivals` renders hidden windows at
+`WorldPortalVisibility.ArrivalShare`, and `WorldScreenBinder.FilmHomeViews`
+films every boot-world session whether or not its instance renders. The demand
+itself is already present: an attached window's fitted view is a demand point
+measured by the display pixels its glass spans (`WorldViewGraphHost.MeasureDisplayShares`,
+`SdfUpdateRateTiers.ViewHertz`).
 
 | Option | Fails at |
 |---|---|
-| A. Keep rendering hidden windows at the least share | A render per arriving world per frame; a world behind a rate-held camera view never arrives; the search and its three share cases to maintain |
-| B. Stage every held residency that owes an upload, whether or not a render reads it | Each residency's own GPU budget, until decision 3 shares it |
+| A. Keep rendering hidden windows at the least share and preparing every residency up front | A render per arriving world per frame; frame-thread capture cost scaling with held residencies rather than shown views; a rate-held camera view never arriving |
+| B. Separate upkeep, consumer minimums and demand-driven capture so a residency is captured and staged only when read or owed | Requires closing capture-order edge cases (skies, filming cameras, occlusion refresh, catch-up, view-keyed readbacks and disclosure withdrawal) |
 | C. A second pump outside the render graph | A second owner of uploads and fences |
 
-**Favoured: B.** Staging moves from "a render asked" to "the residency owes an
-upload". Five things make that true, and each is part of the step:
+**Favoured: B.** Keep what is already sound — simulation before produce on the
+same thread, root capture placing seat cameras and publishing footprints before
+scheduling, at-most-once capture/pack per residency per frame, and
+prepare-before-record with reschedule on released stand-ins — and move both
+staging and capture to demand in this order:
 
-- **What "owes" means.** Meshes arriving, or the binding revision ahead of the
-  last upload, or a program or table upload pending. A predicate over mesh
-  bytes alone loses a binding revision and strands the background work again.
-- **A hidden stage pumps and never drives.** `SdfWorldResidency.Stage` drives
-  the background work at the GPU's pace when its frame is withheld
-  (`SdfGpuWork.Drive`). A residency no render reads is staged under the shared
-  budget only, so a world nobody sees cannot hold a frame.
-- **A residency first held this frame is staged this frame.** The package
-  holds a new residency while it refreshes its entries, after the prepare
-  loop, so the stage reaches it there or the frame is counted as one late.
-- **Sight is published, not inferred from a render.** A window's demand point
-  stays whether or not its glass is seen: the pixels the glass spans from the
-  viewer are what its first sight will resolve, so the world behind it is
-  ready before the glass shows. What sight changes is the class of that
-  demand: a world no view observes is speculative
-  ([decision 7](#decision-7-prediction-decides-arrival-and-observation-decides-retention)),
-  admitted into spare and first to leave. The schedule's sight of each window
-  (`WorldViewGraphHost.PortalSightOf`) is what says so.
-- **The wait reads what was admitted.** `world.wait residency` waits on every
-  held residency's admitted demand, where `SdfWorldPasses.PendingMeshesIn`
-  reads only what the latest schedule displays, and it lists a world the
-  selector has let go apart from one that still owes, so a capture never
-  waits on a world that was unloaded on purpose.
+1. **Serve every residency's upkeep first, captured or not.** Keep
+   `SdfWorldResidency.PumpGpuWork` ahead of any pack that could change a
+   binding: collect finished GPU jobs and fire client callbacks (even on a
+   hidden residency whose uploads finished), keeping completion collection
+   separate from permission to submit new jobs; then poll uploads and service
+   memory trims and resource retirements. Upkeep is not a constant cost (a trim
+   walks mesh pages and owed meshes, and installing changed shader pipelines
+   waits for the device to be idle), so count quiet polling separately from
+   requested trims and shader reloads, and keep shader reloads pending on a
+   cold residency until its pipelines and tables exist.
+2. **Seal the render list after cameras are placed.** Assemble
+   `RenderGraphRuntimeNode.ProduceFrame`'s list and
+   `WorldViewGraphHost.RootFilmedViews` at one seal point after root camera
+   placement, so a window seen only by a filming camera is scheduled on the
+   turn that reveals it instead of reading a stale previous frame (demand does
+   not travel along a previous-frame read).
+3. **Close demand over what captures discover.** Freeze the set of render
+   graphs at the frame boundary (publishing graph sets, fits and bindings
+   together while pending replacements keep their prior set). Keep the list of
+   what this frame reads open while captures run: every potential producer is
+   declared ahead so discoveries turn footprints on without adding graphs.
+   Visit each newly reached same-frame producer (such as routed sky worlds and
+   nested screens in `WorldScreenBinder.FitNestedCameraSkies`) until fixed
+   point, ignoring previous-frame history reads, then seal before scheduling.
+4. **Keep visibility read-only while the host composes.** Give
+   `SdfWorldPasses.PortalOccluded` a read-only lookup of completed occlusion
+   evidence that never prepares a newly followed residency mid-capture before
+   cameras and clocks publish. Keep the view when bindings or programs are not
+   yet established, and resolve final view indices and changed bindings after
+   the owning frame publishes its cameras.
+5. **Capture a residency only if something reads it this frame.** "A view with
+   a footprint" is too wide a reason and too narrow a description: the host
+   keeps some entries under consumers that cannot be reached, and a reader of
+   a buffer needs no footprint at all. Derive
+   candidates from current roots and admitted consumer minimums through the
+   scheduler's reach, refresh and extent rules. Ask packages for freshness
+   (`RenderGraphRuntime.WithUnchanged`) only where the answer can change a
+   scheduling decision, across *every* package (including the environment
+   package), staying conservative for forced renders and size changes. Make
+   `SdfWorldPasses.BeginFrame`'s trailing refresh side-effect-free (or scoped
+   to demanded bindings), and change `WorldScreenBinder.FilmHomeViews` to place
+   cheap cameras first and skip filming unread boot-world sessions. Reconcile
+   the final render list and independent minimums once inside
+   prepare-before-record so a reschedule after releasing an unnamed stand-in
+   still stages its newly demanded producer (keeping counted late staging for
+   mid-record installs).
+6. **Stage by demand and serve consumer minimums first, then presented pixels.**
+   A consumer minimum is work owed regardless of on-screen pixels: a predicted
+   arrival's first image and lighting, an out-of-view screen whose glow lights
+   a visible room, picking, and the lighting trace. Count shared consumer work
+   once. Feed per-residency minimums and totals from the view graph host to
+   `SdfResidencySelector`, and only after minimums are satisfied divide
+   optional quality and update rate by presented pixels. Staging moves from "a
+   render asked" to "the residency owes an upload", and five things make that
+   true:
+   - *What "owes" means.* Meshes arriving, or the binding revision ahead of the
+     last upload, or a program or table upload pending. A predicate over mesh
+     bytes alone loses a binding revision and strands the background work
+     again.
+   - *A hidden stage pumps and never drives.* `SdfWorldResidency.Stage` drives
+     the background work at the GPU's pace when its frame is withheld
+     (`SdfGpuWork.Drive`). A residency no render reads is staged under the
+     shared budget only, so a world nobody sees cannot hold a frame.
+   - *A residency first held this frame is staged this frame.* The package
+     holds a new residency while it refreshes its entries, after the prepare
+     loop, so the stage reaches it there or the frame is counted as one late.
+   - *Sight is published, not inferred from a render.* A window's demand point
+     stays whether or not its glass is seen: the pixels the glass spans from
+     the viewer are what its first sight will resolve, so the world behind it
+     is ready before the glass shows. Sight changes the class of that demand:
+     a world no view observes is speculative
+     ([decision 7](#decision-7-prediction-decides-arrival-and-observation-decides-retention)),
+     admitted into spare and first to leave. The schedule's sight of each
+     window (`WorldViewGraphHost.PortalSightOf`) says so.
+   - *The wait reads what was admitted.* `world.wait residency` waits on every
+     held residency's admitted demand, where `SdfWorldPasses.PendingMeshesIn`
+     reads only what the latest schedule displays, and lists a world the
+     selector has let go apart from one that still owes, so a capture never
+     waits on a world unloaded on purpose.
 
-`SdfWorldResidency.MeshesArriving` loses its "only frames that render one of
-its views bring them" clause, and the arrival search, the least-share cases
-and the arriving-world query are deleted once chained portals and a rate-held
-filmed view land without them; the hidden render is not kept as a stand-in.
-`SdfWorldResidency.Staged` keeps its late staging for a graph installed during
-the frame, counted as it is now.
+   The hidden arrival render exists because only a scheduled render moves a
+   residency's data to the GPU, so deleting it with nothing in its place would
+   strand a cold destination: the minimums and the deletion land together, and
+   one render for the arriving consumer can replace the repeated hidden renders
+   that exist only to upload meshes. `SdfWorldResidency.MeshesArriving` loses
+   its "only frames that render one of its views bring them" clause, and
+   `WorldViewGraphHost.ReserveArrivals`, the `WorldPortalVisibility.ArrivalShare`
+   cases and the arriving-world query are deleted once chained portals and a
+   rate-held filmed view land without them; the hidden render is not kept as a
+   stand-in. `SdfWorldResidency.Staged` keeps its late staging for a graph
+   installed during the frame, counted as it is now.
+7. **Give a skipped residency what it missed.** When a residency returns after
+   skipped frames (`WorldSessionFrameSource.CaptureFrame`), catch up by input
+   kind rather than feeding one frame delta or one giant step:
+   - *Time-keyed timelines:* seek to presented time (accounting for pauses,
+     cuts and frozen captures).
+   - *Event- or distance-driven phases:* accumulate movement delivered while
+     hidden (`WorldGaitDrivers` gait phase advances by distance walked, even
+     for an out-and-back walk).
+   - *Adapting state:* reset on return, as exposure adaptation does on a cut.
+8. **Key per-view state by view identity and binding generation across the GPU.**
+   Key exposures, previous occlusion sets, image history and last-rendered
+   signatures by view identity so skipping a view never shifts another's state.
+   Carry view identity and binding generation through async GPU readbacks
+   (`SdfViewExposures.Publish`) and discard readings for retired generations:
+   the meter saves a slot number when it records and publishes by that number
+   when the GPU finishes, so if a bright room's view is skipped and a dark
+   room's view takes its slot before the reading returns, the dark room would
+   receive the bright room's exposure.
+9. **Enforce disclosure at publication, reuse and async job install.** Keep
+   reuse keyed by the content of delivered inputs (`WorldDisclosureImages`),
+   adding recipient identity where rows are unique to one viewer, so viewers
+   delivered the same static rows share one probe volume while differing on
+   bodies. Check disclosure again both when an image is bound to a reader
+   (covering previous-frame reads, aliases, composites and `SdfWorldPasses.Refresh`)
+   and when an in-flight GPU job installs its result; on mismatch, fall back
+   immediately to a permitted picture or authored fallback. The binding and
+   install checks are built for a narrowing between the access levels none,
+   disclosed and everything (`WorldViewGraphHost.BindAccess`,
+   `IRenderGraphInstances.Withdraw`, `WorldScreenBinder.ContentAccess`); what
+   remains, a narrowing inside "disclosed" and results keyed by what each
+   viewer was delivered, is in
+   [the disclosure plan](disclosure.md#presentation-and-derived-product-disclosure).
+10. **Optional: let a shown view stand without capturing.** Only if the
+    [produce breakdown](engine-job-system.md#frame-thread-measurements-owed)
+    shows capturing unchanged visible residencies remains a real cost, let a
+    view stand on client change records
+    ([the presentation view](runtime-and-delivery.md#the-presentation-view)).
+    Keep all non-packed refusals (`SdfWorldTables.ForcesRender`, pending picks,
+    render scale, binding changes, sharpness, image history, runtime freshness,
+    convergence and allocation) outside the shortcut: none of them is a packed
+    byte, so equal hashes cannot stand for them. The audit rules:
+    - *It compares with the full decision.* For each view the shortcut let
+      stand, the audit runs the full freshness decision for that instance
+      against its last actual publication, before any audit work can move the
+      baseline, and counts views eligible, skipped and audited. A shortcut that
+      always captures audits nothing, so the check needs a real stand in a still
+      scene, a wake for each independent kind of change, and a record silenced
+      on purpose that the audit catches. The record to silence is the
+      shortcut's own copy, after the full decision has received the change:
+      silencing an emitter's revision proves nothing, because the full path
+      reads the same revision (`SdfCompositionFrameSource`) and then compares
+      the packed hash, so both answers would agree on the old program. An
+      emitter that never reports a change is caught only by a rebuild forced
+      from the delivered inputs, with a marker that moves when the rebuilt
+      program differs, and the control run keeps its own state so it cannot
+      overwrite what the candidate published.
+    - *It reads what was delivered and what was presented at one tick.* The
+      mirror refreshes the slots bound to rows a delivery named, and also every
+      slot still easing toward rest, on every tick (`WorldStateMirror.Advance`),
+      so the audit's cases include a state value easing on an otherwise quiet
+      delivery, and the sky's clock.
+    - *Nothing enforces that a new input gets a record.* A constructor that
+      takes today's records does not make a future reader of a new input add
+      one. The audit is the only check, so the shortcut stays under adversarial
+      review ([hazards](../development/hazards.md#silent-invariants)).
 
-**Closes.** The stand-in; the one extra view; the world behind a camera view
-that never arrives; `unbound` pumps; `world.wait residency` settling while an
-unseen routed world still owes. **Leaves open.** Lookahead beyond attached
-windows (a door two rooms away) is authored areas' and the velocity lead's, in
-[the build order](#the-build-order). Why `world.wait residency` can time out
-in the painting wing after its bakes finish is not yet known (continuous new
-demand, or an upload that cannot retire); the step reads it again under the
-new wait. **Strongest case against.** An upload for
-a world nobody sees costs GPU time the frame could use. It is bounded by the
-one shared background budget, it is far less than a render, and it is the work
-that makes the crossing free.
+    The shortcut is a second answer to a question the packed hash answers
+    today, and a view that wrongly stands also lowers the capture count the
+    step is judged by, so no counter notices. Its check: the audit reads zero
+    disagreements over the route and over a test world that puts a moving body,
+    a keyed light, a flowing surface, fog, a change of quality setting, a
+    shader reload and a screen whose image changes in place behind a window
+    whose picture is standing; it reports views eligible, skipped and audited,
+    with at least one real skip in a still scene; a record silenced on purpose
+    is caught.
+
+**The invariant, and what enforces it.** A picture bound to a reader was
+produced for that reader's current disclosure, from inputs none of which has
+changed since. Today the packed hash and the rule that a standing view must
+still be bound to the same resolved view enforce the second half
+(`SdfWorldResidency.IsUnchanged`, `SdfWorldPasses.Refresh`); nothing enforces
+the first, which is step 9's defect. To build: the one place a picture is
+bound to a reader checks both. The guarantee stops at pixels already
+delivered.
+
+**Why.** Capture cost today grows with the number of residencies held, not
+with what is on screen. Destiny's renderer extracts only what is visible and
+creates job chains only for views in the frame (Tatarchuk, slides 57 and 73).
+The residencies that cost the most for nothing are the ones no view shows, and
+those need no freshness answer at all. The root capture cannot move, and the
+footprints are already complete before the schedule on the ordinary path:
+steps 2 to 4 close the paths where they are not. Upkeep's cost varies, which
+is why step 1 counts it apart. The produce breakdown may name parts these steps
+do not cover, and the order follows the breakdown. None of the failing cases
+behind steps 2 to 9 has been reproduced in a World; each is a deduction from
+reading the code, and only the runtime's list assembly, the exposure slot, the
+private session's interval and the forced renders were reopened for it.
+
+### Nested views: fitted windows, authored quality and standing feeds
+
+A nested view is the same view at another size, never a special engine-baked
+reduced mode. After consumer minimums and pixel-share demand are in place:
+
+1. **Fit each window's image to the visible part of its glass.** Extend
+   `WorldWindowFrustumFit.TryFitWindow` from the glass's full unclipped opening
+   (`WorldPortalVisibility`) to the visible sliver on screen. Snap the fitted
+   rectangle to a grid fixed on the glass so camera motion does not swim.
+   Publish the crop, projection and opening mapping together with the image so
+   multi-viewer sharing (one covering image or separate ones), picking and next
+   frame's reprojection all agree, including when the window crosses the near
+   plane.
+2. **An authored table for what a nested view gives up.** The first half is
+   built: the two engine constants are deleted, and `render.nested`
+   (`WorldNestedViewQuality` rows by presented share of the display height,
+   read by `WorldRenderSettings.NestedRestriction`) says what a nested view
+   gives up, with a neutral default that restricts nothing and two rows
+   authored in `worlds/standard/quality.puck`. What remains: a threshold has a
+   cost of its own, because whether a view has shadows is part of its render
+   graph, so crossing one builds a replacement graph beside the one in use and
+   the view shows its last image until it is ready. Place the thresholds on the
+   window's existing extent steps or give them a band so views do not flip at
+   the edge; if a full memory pool refuses the replacement, keep the existing
+   graph and quality. Now that the probes answer per pixel where no cascade
+   covers a point ([illumination](illumination.md#direct-light-roles-the-probe-fallback-and-one-cascade-set)),
+   add smooth transitions across the thresholds.
+3. **Let still feeds stand.** Diagnose why a named still feed renders today
+   despite `RenderGraphRuntime.WithUnchanged`, fix that cause and count
+   renders, verifying that an external frame, an exposure change and
+   re-converging lighting still wake the feed.
+
+Two identical constants used to turn ambient occlusion and every cascade off
+for all session and camera views, so a portal that filled the screen was lit
+differently from the room behind it; a merged constant would have kept a
+visible choice in engine code for every author, which is why a table replaced
+both. A window's image is still sized by its slab's projected bounds and
+becomes full size if any corner is at or behind the near plane
+(`WorldPortalVisibility`).
+
+**Why.** The authored table removes a pop in lighting and antialiasing at every
+portal crossing and a look built into the engine twice: the owner has ruled
+that a visible trade-off switches only where it is barely perceptible, by its
+size on screen. Demand by consumer, not by pixels alone, is needed because
+presented pixels cannot tell three cases apart: an idle unseen world, a world
+that owes its first image behind an approaching portal, and a screen out of
+view whose glow lights a visible room (the owner has ruled that a screen lit by
+outside content keeps lighting its room live); picking and the lighting trace
+are consumers too. A fitted window stops a sliver costing a full image and
+stops a window being under-sampled just before the player crosses it.
+
+**Risks.** A fitted rectangle that slides with the camera swims, so it snaps to
+a grid fixed on the glass, and a pick through a fitted window must land where
+it did before the fit. A quality change that swaps the shading fragment
+rebuilds the view's render graph, holds the last image while it does, and can
+be refused for memory. A frozen scene is not enough to let a view stand:
+lighting may still be converging, the antialiasing history may still be
+filling, or an external picture or its mapping may have changed. Not checked:
+that a quality change builds a replacement graph which a full pool can refuse,
+and that delivered rows are stored by content per audience class (a reviewer's
+reading). No outside measurement supports the fitted window.
+
+Options not taken for nested views: stencil portals, planar reflections and
+layered multi-view rendering, which add a second mechanism for nesting views
+(the frame graph keeps views as instances: "Layered views return only if the
+counts call for them",
+[register](../decisions/rendering.md#the-frame-graph-and-nesting)).
+
+**Closes.** The hidden arrival render; frame-thread capture scaling with held
+residencies; `unbound` pumps; `world.wait residency` settling while unseen
+routed worlds still owe; hardcoded nested-view quality pops; full-size images
+for window slivers; and stale cross-view exposure or disclosure leaks.
+**Leaves open.** Lookahead beyond attached windows (a door two rooms away) is
+authored areas' and the velocity lead's, in [the build order](#the-build-order);
+the standing-feed cause is diagnosed before coding; why `world.wait residency`
+can time out in the painting wing after its bakes finish is not yet known
+(continuous new demand, or an upload that cannot retire), and step 4 reads it
+again under the new wait. Presentation cuts only presentation work: a view
+nothing reads costs the frame thread its upkeep, and a world nobody sees costs
+its reduced update rate, its minimums and the uploads it owes, while its
+simulation step and its deliveries are not reduced here.
+**Strongest case against.** An upload for a world nobody sees costs GPU time
+the frame could use; it is bounded by the one shared background budget, it is
+far less than a render, and it is the work that makes the crossing free.
+Demand-driven capture also adds state-machine rules around skies, catch-up and
+readback generations, and a wrong stand-in or skip lowers capture counts
+silently; the step 4 checks below test each path directly rather than trusting
+fallback counts.
 
 ### Decision 5: the unit is a tier, and the coarsest tier is the floor
 
@@ -796,8 +1067,24 @@ everything wanted:
 
 No group nearer than the haze is ever absent, with one exception the mechanism
 admits and counts: a group whose floor has not landed yet or failed to bake
-has no surface to show. Floor-first ordering and prediction are what keep that
-case out of view.
+has no surface to show. On an unpredicted cut into a place whose store is empty,
+keep the last complete scene or show the window's authored fallback until the
+new place's floors and lighting stand — never publish a scene with holes — and
+count three cases apart: floor not ready, floor bake failed, and floor evicted.
+Floor-first ordering and prediction keep that case out of play.
+
+**Policy alternative weighed in measurement.** Under memory pressure step 3
+coarsens every group uniformly by `SdfMeshTier.Biased`. Measure whether
+coarsening first where a byte removes the least visible error outperforms
+uniform bias once per-tier triangle and byte counters exist
+([virtual geometry's step 1](virtual-geometry.md#the-build-order)); uniform bias
+is fair to every group by design, which is what the alternative must beat. An
+option held as an experiment: a drawn floor or parent reports, over step 8's
+observation channel, that a finer tier would have been used, beside the CPU's
+prediction. A hint arrives a few frames late and must never weaken the floor;
+it opens only if over-fetching or slow refinement is still measured once
+observation decides what is kept. A floor can also contour a thin wall away to
+nothing, which the floor's coverage check exists to catch.
 
 **Where the floor stops being a bound.** A floor follows demanded residencies
 and their reach, and that alone bounds neither a hub nor a crowd:
@@ -1205,6 +1492,14 @@ distinct looks, and scale evidence needs both as places
 
 ## The build order
 
+**Source tiles come first** ([the source tile](#the-source-tile-and-its-seam-rule),
+part of step 10). They are a named engine gap: the valley's north-west wall
+cannot reach the 1.56 m spacing its relief declares inside one lattice's
+fine-sample budget (`SdfSampledLattice.MaxFineSamples`), and splitting the
+sector across lattices is the fix at the cause, not a larger budget (the
+terrain pass's report on what set a sector's cell). So the
+tile and its seam rule go ahead of the rows below.
+
 A step's number is its name, which other pages cite, and it stays when the
 order changes. The rows are in landing order. Each step lands on its own
 check, taken in one window under [the recipe](#how-the-bars-are-read) on both
@@ -1220,7 +1515,7 @@ line is the build and a headless run. Evidence goes in the landing commit.
 | [2. Every gigabyte has an owner](#step-2-every-gigabyte-has-an-owner) | The physical rows, their owners and their residuals | Beside 1 |
 | [7. Backing prototype and design](#step-7-the-backing) | Sparse design after the prototype's first reading; contiguous fallback retained | Step 3's admission stands; qualification readings need a GPU grant |
 | [3. One reservation](#step-3-one-reservation) | Admission before allocation; growth that stops at the limit; background work serviced on completion. Built; its windowed readings are owed | 1, 2 |
-| [5. The floor and eviction](#step-5-the-floor-and-eviction) | Floors, the order of what gives way, relocation within the device. The floor is an engine gap, first among the rows that remain | 3; 7 before it claims relief |
+| [5. The floor and eviction](#step-5-the-floor-and-eviction) | Floors, the order of what gives way, relocation within the device. The selection counters and the coarsest-rung floor are built; the coverage check, eviction by priority, the rungs and relocation remain | 3; 7 before it claims relief |
 | [4. Staged by demand](#step-4-staged-by-demand) | Arrival without a render | Nothing; shares its budget once 3 lands |
 | [7. The backing](#step-7-the-backing) | Memory given back without a replacement | The prototype, 3 |
 | [6. CPU copies](#step-6-cpu-copies) | The library, the documents and the widened restore; the static rows after 9 | 2; 5 and 9 for the static rows |
@@ -1808,25 +2103,80 @@ protecting is a call on the frame during a cold boot.
 ### Step 4: staged by demand
 
 **Builds.** [Decision 4](#decision-4-a-residency-is-staged-by-its-demand-not-by-a-render)'s
-five parts: the owes-an-upload predicate, the hidden stage that pumps and
-never drives, the stage of a residency first held this frame, sight published
-to the demand, and the wait over admitted demand.
+capture order (upkeep first, sealed render list after camera placement,
+two-stage demand closure over discovered skies and screens, read-only compose
+visibility, capture-only-if-read across all packages with side-effect-free
+refresh and camera-first home-view filming, consumer minimums before pixel
+share, staging by owed uploads, skipped-residency catch-up, view-keyed state
+with binding generations across async GPU readbacks, and disclosure checks at
+publication, reuse and job install), followed by
+[nested-view fitted windows, the authored quality table and standing feeds](#nested-views-fitted-windows-authored-quality-and-standing-feeds).
 
 **Replaces.** `WorldViewGraphHost.ReserveArrivals` and its reach and kept sets,
-the three `WorldPortalVisibility.ArrivalShare` cases, the arriving-world query
-and the pane-mapping law that pins them.
+the three `WorldPortalVisibility.ArrivalShare` cases, the arriving-world query,
+and the pane-mapping law that pins them. (The two hardcoded nested-view
+quality constants are already gone, replaced by `render.nested`.)
 
 **Check.** Exists: the region line's `owed`, the background work's `unbound`,
-`late-stagings`, the render graph's record counts (`render.record`). In three
-cases (every window onto a routed world out of sight; a chain of portals; a
-world behind a view its rate holds back) the world's `owed` reaches nothing,
-`unbound` and `late-stagings` stay flat, no view of it is scheduled and its
-background work is never driven. A residency attached this frame lands its
-first upload without a render. `world.wait residency` lists an unloaded world
-apart, and in the painting wing it either returns after the bakes finish or
-names the residency and the upload it waits on. Time until the
-occupied area has landed is no worse, and the slowest frame at the stops
-falls by the hidden renders.
+`late-stagings`, the render graph's record counts (`render.record`). Do not
+rely on fallback counts alone (a missing edge can bind no frame or an older
+real picture without counting a fallback). Verify each path directly:
+
+- *Hidden upkeep and staging.* A hidden residency with a job in flight, a trim
+  with claims to reclaim, and a changed shader completes all three while hidden
+  (observed before reappearing). In three arrival cases (every window onto a
+  routed world out of sight; a chain of portals; a world behind a rate-held
+  view), `owed` reaches zero, `unbound` and `late-stagings` stay flat, no view
+  is scheduled and background work is never driven. A residency attached this
+  frame lands its first upload without a render. `world.wait residency` lists
+  unloaded worlds apart, and in the painting wing it either returns after the
+  bakes finish or names the residency and the upload it waits on. Time until
+  the occupied area has landed is no worse, and the slowest frame at the stops
+  falls by the hidden renders. With the hidden arrival render gone, an
+  approaching portal's destination still has its first image and its lighting
+  before its first pixel shows, and a changing screen out of view still moves
+  the light of a visible room. A scratch World holding extra unseen residencies
+  shows the same capture count and a begin-frame time that grows only by the
+  upkeep step.
+- *Discovery, occlusion and reschedule.* Turning a filming camera toward a
+  window no seat sees renders that window on the turn and reads it on the next
+  permitted frame. Turning inside a routed destination with its own sky world
+  (including a sky showing a screen onto another world, and a turn while a
+  graph replacement is pending) brings the hidden moon in. Moving a seat across
+  endpoints with occlusion enabled keeps host clock and resolved view valid.
+  Releasing an output borrowed by a rate-held consumer stages its replacement
+  producer once before recording.
+- *Two-level turn, cold arrival and controls.* Put a distinct changing marker
+  in each destination and verify reader, producer and picture independently of
+  the scheduler list. Test cold arrival apart with an admitted prediction and
+  stated lead so a completed, permitted render and lighting exist before first
+  sight. Count captures, packs and filmed views apart: extra warm private
+  residencies with no reader and nothing owed add zero captures, and extra
+  unread boot-world sessions add zero filmed views.
+- *Catch-up and async readbacks.* Hiding a routed world for several animation
+  frames (plus an out-and-back walk for gait phase and a brightening/darkening
+  light during a pause) matches a continuous viewer on time and gait and resets
+  exposure as on a cut. Skipping a view, letting another take its slot, and
+  changing a route while an exposure readback is in flight delivers each
+  reading only to its matching generation.
+- *Nested views, sharing and disclosure.* Two viewers seeing different slivers
+  of a window each get the right pixels; a window crossing the near plane keeps
+  its mapping and picks land on edge marks. An overloaded nested world leaves
+  the main world's lighting age unchanged. Two sessions at one camera pose with
+  different projections get different pictures; two sessions with different
+  bodies and identical static rows share one probe volume; a change of grant
+  that moves no visible row relights nothing; restricting a viewer while its
+  camera is held still, with the replacement picture deliberately late, or
+  revoking it while another viewer keeps the residency alive, installs nothing
+  forbidden from in-flight jobs, and every frame delivered after the change
+  reflects it, lighting included. A named still feed that renders today stands
+  once its cause is fixed (a count of renders shows it) and wakes on an
+  external frame, an exposure change or re-converging lighting.
+- *Nested quality.* One lit exhibit seen through a full-size portal matches the
+  root view from the same pose; a camera's feed matches a root view placed at
+  the camera's pose; an author's override of the table changes the nested views
+  alone; a walk across each of the table's thresholds, on both backends, is read for
+  its slowest frame, its peak GPU memory and any refused replacement.
 
 ### Step 7: the backing
 
@@ -2531,13 +2881,20 @@ Open readings remain owned, rather than deferred to backend guesswork:
 
 ### Step 5: the floor and eviction
 
-**Builds.** The coverage check that makes a floor admissible; each group in
-reach planning its floor as a kept product, landed first; draws naming the
-floor until detail stands and when detail is evicted or refused; eviction by
-the selector's priority; [the order of what gives
-way](#decision-5-the-unit-is-a-tier-and-the-coarsest-tier-is-the-floor), with
-a residency's tables built on demand and given back; relocation by a copy
-within the device.
+**Builds.** First, per-level and per-tier triangle and byte counters
+([virtual geometry's step 1](virtual-geometry.md#the-build-order)) to size floors and detail tiers,
+and a per-device measured upload rate replacing fixed upload estimates. Then
+the coverage check that makes a floor admissible; each group in reach planning
+its floor as a kept product, landed first (including a floor-first priority
+prototype for creations received cold at the head of the bake queue so
+`world.row.set` shows a coarse shape quickly while finer tiers follow); draws
+naming the floor until detail stands and when detail is evicted or refused (or
+keeping the last complete scene / authored fallback on an unpredicted empty-store
+cut rather than showing holes); eviction by the selector's priority;
+[the order of what gives way](#decision-5-the-unit-is-a-tier-and-the-coarsest-tier-is-the-floor),
+with a residency's tables built on demand and given back; relocation by a copy
+within the device; and a measured comparison of uniform `SdfMeshTier.Biased`
+against error-per-byte coarsening.
 
 **Replaces.** The hole on refusal, on first arrival and on a replacement with
 no room; relocation landing every mesh from the host; coarsening as the only
@@ -2545,21 +2902,69 @@ relief.
 
 **Check.** Adds: floor bytes by class (static, chunked, dynamic, skinned,
 glass, lettering), logical and as blocks; the groups whose floor is finer than
-their coarsest rung; floor shown, floor pending and floor failed; evicted
-groups and bytes; a count for each rung; the reach. Readings: the floor's
-bytes at the hero spawn, the painting wing and the garden at a crowd's count,
-with the fixed cost of a world and of a character printed. Along the lowered
-budget path with wanted demand held fixed, no draw waits out of the frame,
-evictions rise while `retiers` stays flat, and after the fences the ledger's
-held bytes fall. A relocation, which is rare and is read from the landing
-line's `relocations` count and its reason, moves no byte across the bus:
-`owed` does not rise by the kept meshes' words, and their draws stay in the
-frame until the copy completes. Captures from every side of each stop show no
-missing
-surface, the gallery's plaques and glass among them, and a skinned body at the
-ends of its motion holds together at its floor. A cold arrival's burst shows
-the place whole before it is sharp, and counts every frame a group in view
-had no floor.
+their coarsest rung; three separate floor counts (floor not ready, floor bake
+failed, and floor evicted); evicted groups and bytes; a count for each rung;
+the reach; and for cold programs, a baseline cold-bake time/peak memory and
+time from receiving each creation's program to first usable mesh (reporting
+the slowest twentieth, not only the median, with timeouts, failures and
+authored fallbacks counted apart, and time to a floor marked unavailable until
+a qualified floor exists).
+
+*Physical-byte eviction acceptance (two halves, pool full).* First record a
+crowded-walk baseline of what the current code retains, its replacement peak
+and last-reader retirement. Then judge eviction by native physical bytes —
+never by eviction counts alone — under a lowered budget with the pool full,
+running both with a shared block and with contiguous fallback forced:
+1. *Releasable half:* at least one block is known releasable once its last
+   reader retires, and held native bytes must actually fall after retirement
+   (a release the current full-pool shrink cannot make).
+2. *Obstructed half:* an obstruction is placed deliberately, and the report
+   accounts for the bytes that stay pinned or stranded.
+
+Both halves must be seen: without the first, an implementation that never
+frees anything could pass by always naming an obstruction. Deleting a group's
+rows can free nothing while a reader in flight, or a live neighbour, pins its
+block, so a count of evictions proves no relief. Today's renderer already
+passes the first half when the pool has room, because its shrink succeeds
+there; the release that counts is one the current code cannot make, with the
+pool full. Counts of evictions and tier changes are read as diagnostics only.
+
+Readings: the floor's bytes at the hero spawn, the painting wing and the garden
+at a crowd's count, with the fixed cost of a world and of a character printed.
+Along the lowered budget path with wanted demand held fixed, no draw waits out
+of the frame, evictions rise while `retiers` stays flat, and after the fences
+the ledger's held bytes fall. A relocation, which is rare and is read from the
+landing line's `relocations` count and its reason, moves no byte across the
+bus: `owed` does not rise by the kept meshes' words, and their draws stay in
+the frame until the copy completes. Captures from every side of each stop show
+no missing surface, the gallery's plaques and glass among them, and a skinned
+body at the ends of its motion holds together at its floor. A cold arrival's
+burst shows the place whole before it is sharp (and a creation set live via
+`world.row.set` shows its floor quickly and sharpens afterwards, or shows the
+authored fallback and is counted when its floor cannot bake). A cut to a place
+whose meshes are not stored shows the last complete scene or the fallback image
+until the place's floors and lighting stand, and the same holds when a mesh
+cannot be derived at all.
+
+**As built, and what remains.** The rendering plan's decision 8 counters come
+first: every eighth stage of a raster pass marks the draws it selects with the
+level each draws, read back with the portal sight verdicts
+(`SdfWorldTables.ObserveSelectionMarks`), and `world.residency`'s selection
+line prints the triangles each pass draws by level and by tier and the placed
+mesh bytes no pass selected. The floor is the coarsest rung: a group arriving
+with nothing to draw plans it first, starts its demanded tier once it lands,
+keeps it while detail draws (named ahead so its words stay), and falls back to
+it at once when the region refuses its detail (`SdfMeshPathBake.Floor.cs`).
+The floor line prints floors shown, pending, empty and kept, groups with none,
+evictions and their bytes, holes in reach and the frames that had any, and
+floor bytes by class, in logical words. Still to build, in order: a coverage
+check and a finer rung for a floor that meshes nothing or misses what its
+detail covers; a floor for a group taken whole from the library or replanned
+while it drew; placing floors in the arena before detail, so pressure refuses
+detail first; eviction by the selector's priority under a lowered budget, with
+the rungs of what gives way counted; a residency's tables built on demand; and
+relocation by a copy within the device. The readings above are owed to a GPU
+leg.
 
 ### Step 6: CPU copies
 

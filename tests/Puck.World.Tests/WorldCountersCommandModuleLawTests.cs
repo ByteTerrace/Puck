@@ -22,7 +22,7 @@ public sealed class WorldCountersCommandModuleLawTests {
     private static readonly string AllocationJson = (("\"allocation\":{\"gcMode\":\"" + AllocationWindow.GcMode) + "\",\"windows\":{\"world.counters.read\":0}}");
     private static readonly string GpuLegend = string.Join(
         separator: ",",
-        values: GpuWork.SubmissionKinds.ToArray().Concat(second: GpuWork.LifetimeKinds.ToArray()).Select(selector: static kind => (((((("\"" + kind.Name) + "\":{\"unit\":\"") + kind.Unit) + "\",\"class\":\"") + ((kind.Class == WorkClass.Deterministic) ? "deterministic" : "per-backend-deterministic")) + "\"}"))
+        values: GpuWork.SubmissionKinds.ToArray().Concat(second: GpuWork.LifetimeKinds.ToArray()).Select(selector: static kind => (((((("\"" + kind.Name) + "\":{\"unit\":\"") + kind.Unit) + "\",\"class\":\"") + Puck.Abstractions.Documents.EnumWireName<WorkClass>.Of(value: kind.Class)) + "\"}"))
     );
 
     private sealed class FakeSource(string name, (WorkKind Kind, long Value)[] counts, bool allocatesOnRead = false) : IWorkCounterSource {
@@ -172,7 +172,7 @@ public sealed class WorldCountersCommandModuleLawTests {
                 Work: ledger
             )
         );
-        const string Lifetime = "work lifetime: created.pipelines=0 created.shader-modules=0 created.images=0 created.buffers=0 created.descriptor-pools=0 created.descriptor-sets=0 created.timestamp-pools=0\n";
+        const string Lifetime = "work lifetime: created.pipelines=0 created.shader-modules=0 created.images=0 created.buffers=0 created.descriptor-pools=0 created.descriptor-sets=0 created.timestamp-pools=0 refused.work-details=0\n";
 
         Assert.Equal(
             expected: $"[world.counters: {Allocation}gpu device unavailable\nnode world work unavailable\n{Lifetime}owned-bytes=2048\nnode overlay work unavailable\nstate.arena\nstate.arena.visits 12\nworld.boot\nworld.boot.loads 3\nworld.boot.parses 7\n]",
@@ -189,7 +189,7 @@ public sealed class WorldCountersCommandModuleLawTests {
             ).Output
         );
         Assert.Equal(
-            expected: (("""[world.counters: {"sources":[],"gpu":{"device":null,"capabilities":null,"nodes":[{"name":"world","sample":null,"lifetime":{"gpu.created.pipelines":0,"gpu.created.shader-modules":0,"gpu.created.images":0,"gpu.created.buffers":0,"gpu.created.descriptor-pools":0,"gpu.created.descriptor-sets":0,"gpu.created.timestamp-pools":0},"owned-bytes":2048},{"name":"overlay","sample":null,"lifetime":null,"owned-bytes":null}]},"kinds":{""" + GpuLegend) + "}}]"),
+            expected: (("""[world.counters: {"sources":[],"gpu":{"device":null,"capabilities":null,"nodes":[{"name":"world","sample":null,"lifetime":{"gpu.created.pipelines":0,"gpu.created.shader-modules":0,"gpu.created.images":0,"gpu.created.buffers":0,"gpu.created.descriptor-pools":0,"gpu.created.descriptor-sets":0,"gpu.created.timestamp-pools":0,"gpu.refused.work-details":0},"owned-bytes":2048},{"name":"overlay","sample":null,"lifetime":null,"owned-bytes":null}]},"kinds":{""" + GpuLegend) + "}}]"),
             actual: Run(
                 gpu: registry,
                 line: "world.counters gpu --json"

@@ -28,6 +28,7 @@ public sealed partial class WorldScreenBinder {
 
         feed.FrameSource = frameSource;
         feed.Emitter = emitter;
+        feed.Content.Made();
         emitter.Film = views => FilmFeed(
             feed: feed,
             views: views
@@ -70,19 +71,37 @@ public sealed partial class WorldScreenBinder {
         local: feed.Local,
         screen: feed.Row
     );
-    // Settles every session's route for the frame being prepared, before the presenter latches its views. A session
-    // delivered everything its destination holds renders as a view of the one residency that world already renders
-    // through: the boot world's own (the World's residency, which films it after its seats' views, FilmViews), or its
-    // endpoint's scene for any other local world (WorldSessionRoute). Any other session renders its own disclosed session.
+    // Settles every session's and infinity layer's access, then every session's route, for the frame being prepared,
+    // before the presenter latches its views and before the view graph host binds them (WorldViewGraphHost.BeginFrame
+    // reads AccessOf). A session delivered everything its destination holds renders as a view of the one residency that
+    // world already renders through: the boot world's own (the World's residency, which films it after its seats' views,
+    // FilmViews), or its endpoint's scene for any other local world (WorldSessionRoute). Any other session renders its
+    // own disclosed session.
     private void SettleSessionRoutes() {
+        EnsureFeeds();
+
+        foreach (var feed in m_feeds) {
+            var access = AccessOf(observation: feed.Observation);
+
+            _ = feed.Route.SettleAccess(access: access, admission: feed.Observation);
+            if (feed.Content.Settle(access: access, delivered: feed.Mirror, holdsSource: (feed.FrameSource is not null))) {
+                WithdrawOwnSource(feed: feed);
+            }
+        }
+        foreach (var entry in InfinityEntries()) {
+            var access = LayerAccessOf(hosted: entry.Hosted);
+
+            _ = entry.Access.Settle(admission: entry.Hosted?.Observation, level: access);
+            if (entry.Content.Settle(access: access, delivered: entry.Mirror, holdsSource: (entry.Residency is not null))) {
+                WithdrawInfinityResidency(entry: entry);
+            }
+        }
         if (
             (m_viewPipelines is null) ||
             (Presenter is not { } presenter)
         ) {
             return;
         }
-
-        EnsureFeeds();
 
         foreach (var feed in m_feeds) {
             // Only the endpoint of the instance the session observes, and only while it discloses everything.
@@ -104,11 +123,30 @@ public sealed partial class WorldScreenBinder {
 
             feed.Home = home;
             feed.Route.Settle(
-                disclosesEverything: (!home && (endpoint is not null)),
-                endpoint: endpoint,
+                endpoint: (home ? null : endpoint),
                 presenter: presenter
             );
         }
+    }
+    // The install side of a narrowing (ContentAccess). A session's own frame source and the residency that renders it
+    // hold, and their background work (program builds, bakes, probe traces) was submitted over, content delivered under
+    // wider access than the viewer has now: the source goes, and the residency with it (ReconcileViewResidencies
+    // releases a residency whose source is no longer its feed's), so a job either submitted completes into objects
+    // nothing renders.
+    private static void WithdrawOwnSource(SessionFeed feed) {
+        feed.Emitter?.Dispose();
+        feed.Emitter = null;
+        feed.EnvelopeRegistration?.Dispose();
+        feed.EnvelopeRegistration = null;
+        feed.FrameSource = null;
+    }
+    // An infinity layer's residency, holding content delivered under wider access than the layer has now, goes with
+    // every job it submitted.
+    private void WithdrawInfinityResidency(InfinityEntry entry) {
+        if (entry.Residency is not { } residency) { return; }
+        UnregisterViewWork(name: entry.Name);
+        residency.Dispose();
+        entry.Residency = null;
     }
     // The view a session renders its destination with this frame, as a view of a residency it shares: its camera (a
     // window's fit, or its projection's camera) at a window's or a session screen's quality, under the session's
@@ -123,7 +161,7 @@ public sealed partial class WorldScreenBinder {
                 Camera: camera,
                 Region: new NormalizedRect(Height: 1f, Width: 1f, X: 0f, Y: 0f)
             ) {
-                Quality = WorldSessionSceneEmitter.ReducedQuality,
+                Quality = (Settings?.NestedViewQuality(view: feed.RegistrationName) ?? default),
                 // A window shows the luminance beyond its glass, which the view looking through it exposes.
                 Unexposed = (feed.Projection == WorldScreenProjection.Window),
             },
