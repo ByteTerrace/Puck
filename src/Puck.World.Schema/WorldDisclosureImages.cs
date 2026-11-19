@@ -1,3 +1,5 @@
+using System.Buffers;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text.Json;
@@ -57,22 +59,24 @@ public sealed class WorldDisclosureImages {
     /// could not name the rows that moved since the audience was last brought current: every version was reset at
     /// once, or the definition was held against another arena.</summary>
     public static WorkKind FullScans { get; } = new(name: "world.disclosure.full-scans", unit: "count", workClass: WorkClass.Pacing);
-    private static readonly WorkKind[] WorkKindOrder = [RowCompositions, RowBytes, RowSkips, IndexRebuilds, DefinitionCompositions, DefinitionBytes, RowVisits, ContentVisits, FullScans];
+    /// <summary>Gets the kind counting placement rows adopted through a proven holding-only move.</summary>
+    public static WorkKind HoldingRows { get; } = new(name: "world.disclosure.holding-rows", unit: "count", workClass: WorkClass.Pacing);
+    private static readonly WorkKind[] WorkKindOrder = [RowCompositions, RowBytes, RowSkips, IndexRebuilds, DefinitionCompositions, DefinitionBytes, RowVisits, ContentVisits, FullScans, HoldingRows];
 
     private sealed record Entry(ulong Version, ulong Dependencies, WorldRecipientImage Image, int[] Keys);
     // One audience's disclosed definition. Between whole compositions it changes only row by row: a keyed write changes
     // a row's cells, which its image carries, and every other write moves the arena's DisclosureRevision, after which a
     // changed row's skeleton (its declaration and storage, cells removed) is derived again. Everything else in the
-    // document (the frame) moves only with the source, the audience or a withheld row the placements read, and each of
-    // those composes the whole definition again. Identity digests the frame and every row's image and skeleton digest.
-    // The frame's digest is the one part of the identity that serializes the whole document less its rows, so it is taken
-    // only when an identity is first asked for (FrameOf), never by a read of the definition alone: a console read of one
-    // section through a seat's view composes rows and skeletons, not the document's bytes.
+    // document (the frame) moves with the source, the audience or a withheld row the placements read. A holding-only
+    // source change can keep the current projection. Identity digests the frame and every row's image and skeleton.
+    // FrameOf reads canonical bytes only when an identity is first asked for, so a console read of a section through
+    // a seat's view composes rows and skeletons without serializing the frame.
     private sealed class AudienceDefinition(WorldDefinition source, WorldDefinition composed, WorldDefinition frame,
         WorldStateDisclosure.DisclosedFields? fields, bool[] frameRows, WorldStateRow[] rows, WorldRecipientImage[] images, ulong[] versions,
         ulong[] dependencies, long revision, byte[] digests) {
-        public WorldDefinition Source { get; } = source;
-        public WorldDefinition Composed { get; } = composed;
+        public WorldDefinition Source { get; private set; } = source;
+        public WorldDefinition Composed { get; private set; } = composed;
+        private WorldStateSection? FrameState { get; } = frame.StateRaw;
         // The composed document less its rows, whose digest fills the frame slot once (FrameOf); released once digested.
         public WorldDefinition? FrameDocument { get; private set; } = frame;
         public WorldStateDisclosure.DisclosedFields? Fields { get; } = fields;
@@ -103,6 +107,28 @@ public sealed class WorldDisclosureImages {
         public ContentPin Frame { get; private set; }
         public WorldDefinition? Disclosed { get; set; }
         public bool Dirty { get; set; }
+        private Dictionary<string, int>? m_placementOrdinals;
+
+        public int PlacementOrdinal(WorldPlacement previous, int sourceOrdinal) {
+            if (ReferenceEquals(Composed.PlacementsRaw, Source.PlacementsRaw)) { return sourceOrdinal; }
+            if (m_placementOrdinals is null) {
+                m_placementOrdinals = new(Composed.Placements.Count, StringComparer.Ordinal);
+                for (var ordinal = 0; ordinal < Composed.Placements.Count; ordinal++) {
+                    var id = Composed.Placements[ordinal].Id;
+                    if (!m_placementOrdinals.TryAdd(id, ordinal)) { m_placementOrdinals[id] = -1; }
+                }
+            }
+            return m_placementOrdinals.GetValueOrDefault(previous.Id, -1);
+        }
+
+        public void AdoptHoldings(WorldDefinition next, IReadOnlyList<(int Row, int Holding)> projected) {
+            Composed = ReferenceEquals(Composed.PlacementsRaw, Source.PlacementsRaw)
+                ? Composed with { PlacementsRaw = next.PlacementsRaw }
+                : Composed.WithPlacementHoldings(projected);
+            Source = next;
+            FrameDocument = Composed with { StateRaw = FrameState };
+            Disclosed = null;
+        }
 
         public static int ImageSlot(int row) => (1 + (2 * row)) * SHA256.HashSizeInBytes;
         public static int SkeletonSlot(int row) => (2 + (2 * row)) * SHA256.HashSizeInBytes;
@@ -382,22 +408,59 @@ public sealed class WorldDisclosureImages {
     // The entry's frame identity, digesting the composed document less its rows the first time any identity is asked for.
     // A frame is digested in three parts: its placements section, its state section (rows already removed) and everything
     // else. A composition differs from its source only in those two sections (DiscloseDocument re-deals placements and
-    // projects field lattices, nothing more), so everything else is the source's own: digested once per installed
-    // source and shared by every audience and every recomposition, while each composition serializes only its two
-    // sections. Each part is digested apart, so equal frames, and only equal frames, get equal digests.
+    // projects field lattices, nothing more). The rest shares its digest across holding moves and audiences. The
+    // sections have their own digests, and the placement section reuses the canonical digest of each retained row.
     private ContentPin FrameOf(AudienceDefinition entry) {
         if (entry.FrameDocument is { } frame) {
-            if (!ReferenceEquals(m_frameBaseOf, entry.Source)) {
-                m_frameBase = Digest(WorldDefinitionSerialization.SerializeCompact(frame with { PlacementsRaw = null, StateRaw = null }));
-                m_frameBaseOf = entry.Source;
+            var basis = frame with { PlacementsRaw = null, StateRaw = null };
+            if (!basis.Equals(m_frameBaseOf)) {
+                m_frameBase = Digest(WorldDefinitionSerialization.SerializeCompact(basis));
+                m_frameBaseOf = basis;
             }
             Span<byte> parts = stackalloc byte[3 * SHA256.HashSizeInBytes];
             m_frameBase.CopyTo(parts);
-            DigestSection(frame.PlacementsRaw).CopyTo(parts[SHA256.HashSizeInBytes..]);
-            DigestSection(frame.StateRaw).CopyTo(parts[(2 * SHA256.HashSizeInBytes)..]);
+            PlacementDigest(frame.PlacementsRaw).CopyTo(parts[SHA256.HashSizeInBytes..]);
+            StateDigest(frame.StateRaw).CopyTo(parts[(2 * SHA256.HashSizeInBytes)..]);
             entry.FillFrame(SHA256.HashData(parts));
         }
         return entry.Frame;
+    }
+    private static readonly byte[] AbsentSection = SHA256.HashData(ReadOnlySpan<byte>.Empty);
+    private readonly ConditionalWeakTable<WorldPlacement, byte[]> m_placementDigests = new();
+    private readonly ConditionalWeakTable<WorldPlacementsSection, byte[]> m_placementSections = new();
+    private readonly ConditionalWeakTable<WorldStateSection, byte[]> m_stateSections = new();
+    private readonly System.Buffers.ArrayBufferWriter<byte> m_placementLeaves = new();
+
+    private byte[] PlacementDigest(WorldPlacementsSection? section) {
+        if (section is null) { return AbsentSection; }
+        if (m_placementSections.TryGetValue(section, out var stored)) { return stored; }
+        // The header and ordered, fixed-width leaves distinguish absent and empty row lists and preserve row order.
+        // An immutable row reused across a holding patch or a disclosure never serializes its bytes again.
+        var header = section with { Rows = (section.Rows is null ? null : []) };
+        m_placementLeaves.ResetWrittenCount();
+        m_placementLeaves.Write(DigestSection(header));
+        if (section.Rows is { } rows) {
+            for (var index = 0; index < rows.Count; index++) {
+                var row = rows[index];
+                if (!m_placementDigests.TryGetValue(row, out var digest)) {
+                    digest = DigestSection(row);
+                    m_placementDigests.Add(row, digest);
+                }
+                m_placementLeaves.Write(digest);
+            }
+        }
+        stored = SHA256.HashData(m_placementLeaves.WrittenSpan);
+        m_placementSections.Add(section, stored);
+        return stored;
+    }
+
+    private byte[] StateDigest(WorldStateSection? section) {
+        if (section is null) { return AbsentSection; }
+        if (!m_stateSections.TryGetValue(section, out var digest)) {
+            digest = DigestSection(section);
+            m_stateSections.Add(section, digest);
+        }
+        return digest;
     }
     // An absent section digests no bytes, which no serialized section is.
     private byte[] DigestSection<T>(T? section) where T : class => (section is null)
@@ -407,7 +470,7 @@ public sealed class WorldDisclosureImages {
         m_work.Add(DefinitionBytes, bytes.Length);
         return SHA256.HashData(bytes);
     }
-    // The source whose frame, less its placements and state sections, m_frameBase digests.
+    // The last frame with both variable sections removed.
     private WorldDefinition? m_frameBaseOf;
     private byte[] m_frameBase = [];
     // The content identity of the recipient's disclosed document less its state rows: placements and every other
@@ -417,16 +480,19 @@ public sealed class WorldDisclosureImages {
     // sink's per-tick check never asks for.
     internal ContentPin FrameIdentity(WorldRecipientView view) {
         var audience = Audience(view);
-        if (!m_definitions.TryGetValue(audience, out var entry) || !ReferenceEquals(entry.Source, view.Source)) { return FrameOf(Compose(view, audience)); }
+        var entry = DefinitionFor(view, audience);
+        return FrameOf(FrameRowsMoved(view, audience, entry) ? Compose(view, audience) : entry);
+    }
+    private bool FrameRowsMoved(WorldRecipientView view, string audience, AudienceDefinition entry) {
         var arena = view.Arena;
         m_work.Add(RowVisits, entry.FrameRowOrdinals.Length);
         foreach (var row in entry.FrameRowOrdinals) {
             // The entry's row record changes only in Current, which refreshes skeletons with it; here a row whose image
             // stands is left to Current, and the image table answers its repeated reads from its own cache.
             if ((arena.RowVersion(row) == entry.Versions[row]) && (DependencyVersions(arena, row) == entry.Dependencies[row])) { continue; }
-            if (!Image(view, row, audience).Digest.AsSpan().SequenceEqual(entry.Images[row].Digest)) { return FrameOf(Compose(view, audience)); }
+            if (!Image(view, row, audience).Digest.AsSpan().SequenceEqual(entry.Images[row].Digest)) { return true; }
         }
-        return FrameOf(entry);
+        return false;
     }
     // The recipient's disclosed definition, assembled from its current rows only after its identity moved.
     internal WorldDefinition Definition(WorldRecipientView view) {
@@ -440,8 +506,7 @@ public sealed class WorldDisclosureImages {
     // lookup, a changed row refreshes its image digest and, after a revision move, its skeleton digest.
     private AudienceDefinition Current(WorldRecipientView view) {
         var audience = Audience(view);
-        var source = view.Source;
-        if (!m_definitions.TryGetValue(audience, out var entry) || !ReferenceEquals(entry.Source, source)) { return Compose(view, audience); }
+        var entry = DefinitionFor(view, audience);
         var arena = view.Arena;
         var skeletons = (entry.Revision != arena.DisclosureRevision);
         var moved = m_movedScratch;
@@ -471,6 +536,43 @@ public sealed class WorldDisclosureImages {
         entry.MovesRead = place;
         entry.Revision = arena.DisclosureRevision;
         entry.Settle();
+        return entry;
+    }
+
+    private readonly List<(int Row, int Holding)> m_holdingRows = [];
+
+    private AudienceDefinition DefinitionFor(WorldRecipientView view, string audience) {
+        if (!m_definitions.TryGetValue(audience, out var entry)) { return Compose(view, audience); }
+        var source = view.Source;
+        if (ReferenceEquals(entry.Source, source)) { return entry; }
+
+        var changes = source.HoldingsFrom(entry.Source);
+        if (changes.IsEmpty ||
+            !ReferenceEquals(entry.Arena, view.Arena) ||
+            entry.Revision != view.Arena.DisclosureRevision ||
+            FrameRowsMoved(view, audience, entry)) {
+            return Compose(view, audience);
+        }
+
+        // A direct row can be patched even if the audience re-deals other placements. Reuse the existing composer
+        // for derived children, transformed or omitted rows, and newly active bits that read restricted state.
+        bool Restricted(string name, string? _) => !view.ReadsWhole(name);
+        m_holdingRows.Clear();
+        foreach (var (row, holding) in changes) {
+            var previous = entry.Source.Placements[row];
+            var ordinal = entry.PlacementOrdinal(previous, row);
+            if (ordinal < 0 || previous != entry.Composed.Placements[ordinal] ||
+                (previous.Parent is not null && WorldPlacementDeal.TrySplitChildId(previous.Id, out _, out _))) {
+                return Compose(view, audience);
+            }
+            var placement = source.Placements[row];
+            if (!ReferenceEquals(placement, WorldPlacementResponse.Disclosed(placement, Restricted))) {
+                return Compose(view, audience);
+            }
+            m_holdingRows.Add((ordinal, holding));
+        }
+        entry.AdoptHoldings(source, m_holdingRows);
+        m_work.Add(HoldingRows, changes.Length);
         return entry;
     }
     private static bool NoPlace(StateArena arena, out long place) { place = arena.MoveSequence; return false; }

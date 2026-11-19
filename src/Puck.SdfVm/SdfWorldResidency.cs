@@ -598,7 +598,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
                 );
             }
 
-            tables.Pack(frame: frame);
+            using (HostFrameWork.Measure(HostFrameWorkPart.Pack)) { tables.Pack(frame: frame); }
             m_packedFrame = frame;
             m_frame = frame;
             m_pendingFrame = null;
@@ -613,13 +613,17 @@ public sealed partial class SdfWorldResidency : IDisposable {
         PrepareShade(device: device, frame: m_frame!);
         FollowRunningCode();
         MeshPathBake.ObserveResidency(tables: tables);
-        MeshIrradianceParameters = MeshIrradiance.Stage(frame: m_frame!, tables: tables, tier: IndirectTier, bakePending: MeshPathBake.IrradiancePending);
+        using (HostFrameWork.Measure(HostFrameWorkPart.Lighting)) {
+            MeshIrradianceParameters = MeshIrradiance.Stage(frame: m_frame!, tables: tables, tier: IndirectTier, bakePending: MeshPathBake.IrradiancePending);
+        }
         // Latch readiness for this whole frame. A worker finishing after preparation cannot make an image whose
         // exposure was held stand for converged lighting. The next preparation publishes and meters that result.
         LightingPending = (m_frame!.ConvergesLighting && MeshIrradiance.Settling);
         // A locked tick adapts once its complete geometry supplies the meter, not over partial mesh arrivals.
         if ((!m_frame.TickLocked || !MeshPathBake.Pending) && !LightingPending) {
-            Exposures.Stage(frame: m_frame, irradiance: MeshIrradiance, seconds: ExposureSeconds(context: in context, frame: m_frame));
+            using (HostFrameWork.Measure(HostFrameWorkPart.Exposure)) {
+                Exposures.Stage(frame: m_frame, irradiance: MeshIrradiance, seconds: ExposureSeconds(context: in context, frame: m_frame));
+            }
         } else {
             Exposures.Hold();
         }
@@ -910,6 +914,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
 
     // Captures the frame from the frame source when it films one this frame.
     private void Capture(in FrameContext context) {
+        using var work = HostFrameWork.Measure(HostFrameWorkPart.Capture);
         if (!(m_film?.Invoke(arg: context) ?? true)) {
             return;
         }
