@@ -42,6 +42,7 @@ public sealed partial class SessionObservationLawTests {
                 )]
                 : []),
             GrantsRaw = [new WorldGrant(
+                Budget: 64,
                 Capability: WorldCapability.Observe,
                 Exclusive: false,
                 Grantee: Principal.Seat(slot: 0),

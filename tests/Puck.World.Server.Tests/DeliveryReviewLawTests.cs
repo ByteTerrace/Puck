@@ -164,7 +164,7 @@ public sealed class DeliveryReviewLawTests {
         var images = new WorldDisclosureImages();
         var recipient = View(fixture, images);
         var authority = new WorldRecipientView(() => fixture.Server.Definition, () => fixture.Server.Arena,
-            Principal.Console, WorldDisclosureTier.Replica, () => true, images, fixture.Server.AuthorityIdentity, () => fixture.Server.DeliveryTime);
+            Principal.Console, WorldDisclosureTier.Replica, () => true, images, fixture.Server.AuthorityIdentity, () => fixture.Server.DeliveryTime, () => fixture.Server.Grants.IsOperator(Principal.Console));
         var authorityCursor = new WorldDeliveryCursor();
         var recipientCursor = new WorldDeliveryCursor();
         var first = (authorityFirst ? authorityCursor.DeliverDefinition(authority) : recipientCursor.DeliverDefinition(recipient))!;

@@ -197,17 +197,29 @@ public sealed class WorldSeatModeLawTests {
         );
     }
     [Fact]
-    public void SeedsEveryLocalSeat_ToTheFamilysDefaultState() {
-        var bindings = new WorldSeatBindings(definition: DocumentWithFamily(family: Family()));
+    public void SeedsEveryLocalSeat_ToAPresentationFamilysDefaultState_AndLeavesAnAuthoritativeOneToItsPublication() {
+        var presentation = new WorldSeatModeFamily(
+            Name: FamilyName,
+            States: [new WorldSeatModeState(Name: OffState), new WorldSeatModeState(Name: OnState)],
+            DefaultState: OffState
+        );
+        var local = new WorldSeatBindings(definition: DocumentWithFamily(family: presentation));
+        var authoritative = new WorldSeatBindings(definition: DocumentWithFamily(family: Family()));
 
         for (var slot = 0; (slot < WorldSeatBindings.SeatCount); slot++) {
             Assert.Equal(
                 expected: OffState,
-                actual: bindings.ModeState(
+                actual: local.ModeState(
                     family: FamilyName,
                     slot: slot
                 )
             );
+            // A family whose state targets the camera belongs to the seat's authority: nothing seeds it locally.
+            Assert.True(condition: authoritative.IsAuthoritativeMode(slot: slot, family: FamilyName));
+            Assert.Null(@object: authoritative.ModeState(
+                family: FamilyName,
+                slot: slot
+            ));
         }
     }
     [Fact]
