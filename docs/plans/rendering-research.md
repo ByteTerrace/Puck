@@ -1917,7 +1917,7 @@ glacier.
 | 9. A camera inside water sees a flat wash | The four water places, whenever the player swims | A case for an eye inside a medium. Starts now: first wave, `water` | A dive in the pool | [Water](water.md#order) |
 | 15. The falls have no spray or splash | The falls and the plunge pocket | The particle pool, which is designed. Second wave: it waits for `water`, which changes the pass it draws through | The falls from below | [Water](water.md#w3-the-presentation-particle-pool) |
 | 10. A paint does not follow a blended seam between parts that move | The Moth and the swallow | The rest-point mapping for paints. Second wave: it waits for `water` and `shadows`, which change the same shader | A painted marking on a rigged head | [Moving blends](moving-blends.md), its step 4 |
-| 11. A stretched capsule, cone or torus gives a bound, not a distance | A stretched cutter: it frays the surface it cuts | An exhibit and a failing measurement for each of two effects, then the solver's design. Starts now, as read-only work beside the first wave | A stretched cutter in a smooth blend | [Rendering](rendering.md#bake-quality) |
+| 11. A stretched ellipsoid, capsule, cone or torus gives a bound, not a distance | A stretched cutter: a smooth cut's fillet spreads to several times its radius, and a hard cut's rim frays. The lake's bowl is one | The exhibits, their failing readings and the solver's design are done. The spheroid's exact lowering is next and needs no solver | A stretched cutter in a smooth blend | [Rendering](rendering.md#a-true-distance-under-a-non-uniform-scale) |
 | 14. A field row that only the simulation needs is drawn | No place: it costs two baked height fields nobody sees | A way to mark a row as simulation only. Starts now: first wave, `water` | The hidden chain under the valley | [Water](water.md#the-gap-list), its S5 |
 | 12. A frame's light table holds at most 128 lights | No place today | Research on many lights, when a place authors more than the table holds | None yet | [Illumination](illumination.md) |
 
@@ -1969,11 +1969,14 @@ What the code shows for the rows a review corrected:
   cutter that moves relative to what it cuts: the cut stays where it was at
   rest (`CreationMotionPlan.Borrows`), and relief refuses any creation with
   an independently moving part.
-- **Gap 11.** A stretched ellipsoid or sphere and a regular polygon already
-  have exact forms. What still rides a bound is a capsule, cone or torus
-  stretched apart in two axes. A bound is still right at the surface, so
-  two effects are measured apart: the distances a smooth blend reads away
-  from the surface, and defects in the cut's contour.
+- **Gap 11.** A regular polygon already has an exact form. A stretched
+  ellipsoid or sphere does not: it is the exponent-2 superellipsoid gauge
+  (`SdfSolidGeometry.AppendScaledPrimitive`), a bound like the `Scale` a
+  capsule, cone or torus stretched apart in two axes rides, and the lake's
+  bowl is such an ellipsoid. A bound is still right at the surface, so two
+  effects are measured apart, each on its own exhibit: the distances a
+  smooth blend reads away from the surface, and defects in the cut's
+  contour.
 - **Gap 13.** Haze's strength is packed as an amount divided by the far
   distance (`SdfSky.PackAtmosphere`), so changing how far the world draws
   changes the haze on everything nearer.
@@ -3187,7 +3190,6 @@ start as a model is free.
 | Work | Outcome | Model |
 |---|---|---|
 | Terrain research | A research round across the families on seams between tiles, how tiles scale, and far shadows. The terrain pass's plan holds its findings | The lead's research round |
-| The stretched primitive's solver | An exhibit and a failing measurement for each of gap 11's two effects, then the design of the closest-point solve with its certificate | Fable `principal`. Any proof that skips work gets an adversarial review |
 | The fourth bet's memo | What a shared product's name holds, the receiver's check for each attribute, and how fetching is priced against deriving | Astra, or Fable `principal` |
 
 ### The second wave
@@ -3217,7 +3219,7 @@ carries the change, Sonnet where the result is specified.
 | Haze as an authored range (gap 13) | Changing the draw distance changes no nearer pixel | `colour` | [The terrain pass](terrain-pass.md#distance), step 2 | Sonnet |
 | The paint on a blended seam (gap 10) | A painted marking stays fixed to a surface that bends | `water` and `shadows` | [Moving blends](moving-blends.md), step 4 | Opus |
 | The particle pool (gap 15) | Spray at the falls and a splash in the plunge pocket | `water` | [Water](water.md#w3-the-presentation-particle-pool) | Sonnet |
-| The stretched primitive (gap 11) | A true distance for a stretched capsule, cone and torus | Its design | [Rendering](rendering.md#bake-quality) | Opus |
+| The stretched primitive (gap 11) | A true distance for a stretched ellipsoid, capsule, cone and torus, in its design's step order | A free slot, and the adversarial review of its design's claims before step 3 | [Rendering](rendering.md#a-true-distance-under-a-non-uniform-scale) | Opus |
 | Shared allocation | The allocation both backends share is cut at the sources a trace names: the warm loop's re-bakes as the detail level falls, the irradiance volume's whole upload on every window change, scene-rebuild `Node[]` misses in `SharedArrayPool`, and the lift's spikes; and every direct `NativeMemory.Alloc` or `AllocZeroed` call moves onto `IAllocator`, so mimalloc is Puck's one native allocator (two native heaps for one job is a duplicate) | `vkalloc`, whose trace says what is left | [Job system](open-items.md#engine-job-system) | Sonnet |
 | Keys by stage | An edit to the simplifier rebakes with no field sampling (decision 10) | `cutter` and `contour`, which change the same bake code | [Bake proportional to change](open-items.md#bake-proportional-to-change) | Opus |
 | Where the tick runs | A design that weighs the arrangements of decision 3, each with its time from input to display | `frame`'s cost of one more world | [The job system plan](engine-job-system.md#open-questions) | Fable |
