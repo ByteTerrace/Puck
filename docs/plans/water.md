@@ -184,7 +184,7 @@ the code or capture shows, and the lane that closes it.
 
 | Id | Gap | What the code and the run show | Lane |
 |---|---|---|---|
-| S5 | The hidden chain is drawn | `hydroWater` and `hydroBed` carry `heightScale: 1` and a colour, and `WorldFieldEmitter` draws every row with a height scale, so the 24-cell chain 90 m under the floor bakes and draws two height fields nobody sees. The flow cannot drop the scale in data: `FieldLattice.StepFlow` reads a row's own height only when its `heightScale` is above zero, and an `over` row counts only with one, so leveling water against a bed needs both rows to carry a scale, and the emitter draws every row that carries one. Closing it takes a way to mark a lattice row as simulation only (not drawn, not collidable), which is engine code, not data ([open items](open-items.md#water)). | open item |
+| S5 | The hidden chain is simulation only | The chain’s `hydroWater` and `hydroBed` keep their height scales. `simulationOnly` keeps both scales for `FieldLattice.StepFlow` while excluding both rows from surface publication and body contact. | implemented |
 | S7 | No stage checkpoint | A stage is reached live by `water.speed k` or by `replay.drive` to a recorded tick; `world.save` writes the authored document with state as authored, `world.state.cell.set` writes scalar rows only, and no verb writes a lattice cell or saves a live arena with its lattices. | D1 |
 
 #### Geometry
@@ -356,7 +356,7 @@ is the third.
 
 **Check.** The rim view at stages 1, 2 and 4; `creation stats` for the glacier's bake groups; counts.
 
-**As built.** The glacier is one tongue of ice (`glacierMass`, in `worlds/debug/glacier-site.puck`): seven superellipsoid lumps blended into one body lying in a U-shaped trough that runs down a ridge behind the lake to its back shore (the ridge `glacierRidge`, the trough and two grooves `valleyCuts`, the moraine banked on both lips `valleyMounds`, all the north-west wall's own rock in a warm palette). Its section is convex, a relief noise breaks the surface, and the crevasses and one melt channel are tubes swept out of it that open in the middle and close at their ends. It melts by shrinking with `glacierLength` about its head, so the volume is `glacier`'s and the toe retreats up the trough as the ice thins; what is left bare at T is the scoured trough, its grooves and the moraine. The lake is the body of water the bowl holds (`lakeSurface`): a cylinder whose top slides with `lakeLevel`, intersected with the bowl's own ellipsoid, so the water ends where the bowl's floor rises to the level and no side stands bare. The floor under it is a lining laid in the same ellipsoid (`lakeStones`' `beds`), so the stones lie on the authored bowl whatever the terrain's relief leaves of it; the cobbles gather in clusters and the boulders heap on the bank, and the breeze over it is calm. Open: a flow layer carries one velocity, so the flow does not speed up over the sill ([open items](open-items.md#water)); the falls ribbon is lane A3's.
+**As built.** The glacier is one tongue of ice (`glacierMass`, in `worlds/debug/glacier-site.puck`): seven superellipsoid lumps blended into one body lying in a U-shaped trough that runs down a ridge behind the lake to its back shore (the ridge `glacierRidge`, the trough and two grooves `valleyCuts`, the moraine banked on both lips `valleyMounds`, all the north-west wall's own rock in a warm palette). Its section is convex, a relief noise breaks the surface, and the crevasses and one melt channel are tubes swept out of it that open in the middle and close at their ends. It melts by shrinking with `glacierLength` about its head, so the volume is `glacier`'s and the toe retreats up the trough as the ice thins; what is left bare at T is the scoured trough, its grooves and the moraine. The lake is the body of water the bowl holds (`lakeSurface`): a cylinder whose top slides with `lakeLevel`, intersected with the bowl's own ellipsoid, so the water ends where the bowl's floor rises to the level and no side stands bare. The floor under it is a lining laid in the same ellipsoid (`lakeStones`' `beds`), so the stones lie on the authored bowl whatever the terrain's relief leaves of it; the cobbles gather in clusters and the boulders heap on the bank, and the breeze over it is calm. The lake’s mix of slow drift and faster outlet flow comes from its authored `flow.region`. Lane A3 owns the falls ribbon.
 
 ### A3. The falls on the face
 
@@ -412,26 +412,16 @@ Deferred to [open items](open-items.md#water) with its mechanism named: a verb t
 [rendering plan's list](rendering-research.md#engine-gaps-filled-first) stop
 the water reaching its look, and each is filled before the look work that
 would tune around it (the owner's ruling,
-[AGENTS.md](../../AGENTS.md#pucks-purpose)). Five are this plan's to build;
-three belong to other plans and hold lanes here.
+[AGENTS.md](../../AGENTS.md#pucks-purpose)). The remaining gaps below determine which authoring lanes can proceed.
 
 | Gap | In this plan's terms | Owner |
 |---|---|---|
 | 5. Water's colour and opacity do not follow depth over the bed | The glass medium is a function of the path length along the view ray (`sdfGlassThicknessAt`), with one scatter colour and one coefficient per material, and nothing gives shading the water's depth over its bed. The lake, pool, river and plunge read as one flat colour, with no clear shallows and the stones invisible | This plan, as a mechanism under the water |
-| 6. A flow layer carries one velocity | `PaletteFlowDocument` has one `Velocity` for a whole surface, so the lake's outlet sill, the river's winding course and the falls cannot each move at their own speed | This plan, as a mechanism under the water |
-| 9. A camera inside water sees a flat wash | The glass pass has no case for an eye inside a medium ([decision 14](rendering-research.md#14-treat-a-nested-view-as-the-same-view-at-another-size)). It was filed under R4's enhancements and is first | This plan |
-| 14. A field row that only the simulation needs is drawn | The gap list's S5: the hidden chain under the valley bakes and draws two height fields nobody sees, because a row is drawn when its height scale is above zero and the flow needs that scale to level water | This plan |
 | 15. The falls have no spray or splash | The gap list's L4: the particle pool ([W3](#w3-the-presentation-particle-pool)) is not built | This plan, lane R3 |
 | 8. A moving cutter does not re-carve a baked group | The glacier cannot retreat by a cut and melts by sinking, so lane A2's glacier waits on it | [Moving blends](moving-blends.md#engine-gaps-first) |
 | 1 and 4. Terrain bakes coarser than it declares, and relief cannot be masked | The glacier's trough and moraines stair-step and relief buries the lake's bowl, so lane A2's lake and glacier wait on them | [The terrain pass](terrain-pass.md#order-of-work) |
 
-Gaps 5, 6, 9 and 14 start now, as the `water` lane of the rendering plan's
-[first wave](rendering-research.md#the-first-wave), ahead of the look work
-of lanes A3 to A5. Gap 5's first step is a comparison: one known sloping bed
-seen from overhead and from a low angle, with its geometry, the water's
-thickness along the ray and what the material returned, because the glass
-shader already thickens its haze with the ray's length and that alone does
-not explain why the stones disappear. Gap 15 follows `water`, which changes
+The rendering plan’s [first wave](rendering-research.md#the-first-wave) implements outlet flow, transport from a submerged view and simulation-only lattice rows. Gap 5 still calls for a comparison of the same sloping bed from overhead and from a low angle. Record the opaque geometry, the ray’s path through water and the material’s response at each angle. The existing haze grows with path length, so the comparison must isolate why stones disappear before adding a depth input. Gap 15 follows `water`, which changes
 the pass the particles draw through. Lane A2
 is built and awaits its look critic; its remaining misses are gaps 1, 4 and
 8, so no further sculpting of the lake or glacier runs until they land. The
@@ -460,12 +450,9 @@ the light stage. In the standard every water surface wears a glass row:
 (`streamGlass`), the falls (`fallsGlass`) and the lake (`lakeGlass`), each a
 template parameter.
 
-**Invariant and its door.** A glass pixel reads the lit image once
-(`sdfGlassLitAt`, or the frost's disc); the medium, the contact and the
-revealed surface are functions of the thickness, `opaque - t` and the arriving
-light alone. `sdf-glass.comp.hlsl` is the one read site. Where it stops: a
-pixel shades two interfaces ([option 3 as built](#option-3-as-built)), and what
-lies beyond the second is the opaque image.
+The glass stage samples the lit background through `sdfGlassLitAt`. Frost spreads that sample over a disc. The pass shades up to two entrances ([option 3 as built](#option-3-as-built)) and integrates the beginning of a ray that starts within glass before composing the result.
+
+When a ray starts in a closed glass solid, the back faces leave a positive winding in the glass sums. The raster clips each interval at the opaque hit, so an opaque surface under water still receives absorption when it hides the exit. A single homogeneous starting medium also scatters light along the first segment. See the [glass pass](../rendering/sdf/handbook/frame-rendering.md#glass-after-the-opaque-image).
 
 **Owed.** `world.gpu-timing` for the glass passes against the build before
 W1, in a quiet window, and the glass kernel's registers beside the views
@@ -483,8 +470,7 @@ half a cycle apart with triangle weights, a low-frequency per-place phase
 offset against pulsing, the blend renormalized so contrast holds through the
 cross-fade, a stretch along the flow, a coverage that reveals an authored
 surface through `sdfRevealSurface`, and a normal tilt scaled by the flow's
-share along the surface. Sources: the material constant, and a render lane
-scaling it (`lane`). An `Object` velocity rides a slot's frame, or turns by the
+share along the surface. A material can blend its base velocity toward a second velocity inside a world-space sphere (`region`). A render lane (`lane`) scales the resulting velocity. An `Object` velocity rides a slot's frame, or turns by the
 draw's matrix on a draw shading in world space (a static copy); a `World`
 velocity keeps the pattern in world space too.
 
@@ -512,8 +498,7 @@ river is a `waterViews` field body wearing `streamMaterial`, whose flow is
 wearing `fallsFlowLayer`, one world-space downward velocity that runs down
 every sheet at its own slope; each sheet folds about its own flow axis by
 `fallsFlow`, the chain's discharge over the sill, and its foam coverage follows
-world lane 4, which the debug world binds to `state.fallsFlow`. The lake keeps its level slide and wears
-`lakeFlowLayer`. The meadow's grass wears `meadowWind`, the same layer with a
+world lane 4, which the debug world binds to `state.fallsFlow`. The lake keeps its level slide and wears `lakeFlowLayer`. Its outlet sphere is positioned by `lakeOutletXZ` and points toward the falls. A field that follows the river’s course is still open. The meadow's grass wears `meadowWind`, the same layer with a
 wind vector.
 
 ### The river's channel as built
@@ -717,15 +702,11 @@ count holds on the Deck.
 
 ### Eye inside a medium
 
-Not built. Today the atmosphere handles a camera below a level surface, while a
-body of water built as glass shows a flat, dim brown-green wash when the camera
-dives inside because the glass pass has no case for an eye inside a medium.
-Detecting whether a view's eye sits inside a glass medium is one field query
-per view, but colouring the picture takes per-ray path length because different
-rays leave the water at different distances or hit the bed first. Start the
-glass pass's existing per-pixel signed distance sum with the medium the eye is
-in, and cut each ray at its own surface or exit so absorption deepens with
-water length and crossing the waterline does not pop.
+Built for a single closed glass solid in W1 above: when a ray starts inside
+glass, back faces leave a positive winding in the glass pass's signed distance
+sums, each interval clips against the opaque hit so submerged beds still
+receive per-ray absorption, and a single homogeneous starting medium scatters
+light along the first segment.
 
 **Check.** With the eye under water, test two overlapping media and a
 continuous crossing of the waterline, verifying no pop at the boundary and
@@ -739,6 +720,14 @@ text or the shader; a summary row rests on a search engine's digest and
 carries no verdict alone.
 
 ### Transparent surfaces: refraction, absorption, depth colour
+
+Glacial flour gives some real lakes their turquoise colour by scattering
+sunlight. The caldera lake borrows that colour while keeping stone visible
+in its shallow margins. Rare's stylized water likewise varies the shallow
+response with the light's path and view angle. Puck's comparison uses both
+angles to distinguish a material effect from missing bed geometry.
+[Glacier National Park water quality](https://www.nps.gov/glac/learn/nature/waterquality.htm) ·
+[The Technical Art of Sea of Thieves](https://history.siggraph.org/wp-content/uploads/2022/09/2018-Talks-Ang_The-Technical-Art-of-Sea-of-Thieves.pdf)
 
 | Source | What it does | What Puck takes | Audit |
 |---|---|---|---|

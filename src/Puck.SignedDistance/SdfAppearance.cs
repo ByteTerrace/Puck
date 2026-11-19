@@ -15,7 +15,7 @@ namespace Puck.SignedDistance;
 public sealed class SdfAppearance {
     /// <summary>The material float4 stride, written by the packing and read by the kernels' <c>sdfMaterialLoad</c>
     /// (<c>SDF_MATERIAL_VECTORS_PER_ENTRY</c>).</summary>
-    public const int MaterialVectorsPerEntry = 34;
+    public const int MaterialVectorsPerEntry = 36;
     /// <summary>The paint table's float4 stride, read by the views pass's paint layer (<c>SDF_PAINT_VECTORS_PER_ENTRY</c>):
     /// the frame origin and shape, the rotation, the residual scale, the shape's two data vectors, the color and stroke,
     /// the slot and bound center, the bound half-extents, the primitive rotation, with variable side tables stored after the fixed paint entries.</summary>
@@ -401,6 +401,10 @@ public sealed class SdfAppearance {
 
                 Row(row: 27, value: new(value: flow.Velocity, w: flow.Scale));
                 Row(row: 28, value: new(flow.Stretch, flow.CyclesPerClock, flow.Tilt, flow.Coverage));
+                if (flow.Region is { } region) {
+                    Row(row: 34, value: new(value: region.Center, w: region.Radius));
+                    Row(row: 35, value: new(value: region.Velocity, w: 0f));
+                }
                 Row(row: 29, value: new(value: revealed.Color, w: flow.Softness));
                 Row(
                     row: 30,

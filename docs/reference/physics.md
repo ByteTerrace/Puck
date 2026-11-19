@@ -665,6 +665,8 @@ domain.
 
 ## Field lattice (`Fields/`)
 
+Lattice rows marked `simulationOnly` may keep a `heightScale` for leveling against a bed. They publish no surface and take no part in body contact or medium coupling.
+
 `FieldLattice` is the reaction integrator behind a world's live field-lattice
 state—the other half of the seam `FixedFieldContactSolver` sits on: it
 measures a body against a scalar field, and this evolves one. It parses no
