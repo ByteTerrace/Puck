@@ -267,6 +267,7 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
     /// <summary>Releases what the observer's feed holds, its anchor rows included: the observation ended, or its
     /// disclosure is withheld.</summary>
     public void Release() {
+        observation.CloseSceneProof(end: server.DeliveryTime.Tick);
         m_feed.Release();
         m_hydrated = null;
         m_cursor.Release();
@@ -389,6 +390,7 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
 
             if (Tier == WorldDisclosureTier.Replica) {
                 DeliverReplicaDocument(delivered: DiscloseToReplica(definition: definition));
+                observation.SettleSceneProof(tick: server.DeliveryTime.Tick);
             } else {
                 Project(
                     definition: definition,
@@ -472,6 +474,7 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
             redacted = server.PresentCues(redacted, m_view,
                 fullBodies: server.Definition.Population.ObserverDisclosure.Mode == WorldObserverDisclosureMode.All);
             inner.DeliverSnapshot(snapshot: in redacted, stream: m_cursor.Stamp());
+            observation.SettleSceneProof(tick: tick);
             FollowObserverDetach();
         } catch (Exception exception) {
             EndAfterFault(exception: exception);
@@ -527,6 +530,7 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
             } else if (m_cursor.TakeCut()) {
                 Reprime();
             }
+            observation.SettleSceneProof(tick: stamp.Tick);
             FollowObserverDetach();
         } catch (Exception exception) {
             EndAfterFault(exception: exception);
