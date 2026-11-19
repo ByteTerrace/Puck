@@ -64,6 +64,13 @@ public sealed record ShaderPipelinePlannedStorage(
     public string Name => Declaration.Name;
     /// <summary>Gets whether the host supplies the storage.</summary>
     public bool IsExternal => Declaration.IsExternal;
+    /// <summary>Gets whether a pass updates the storage in place across frames: it is zero-initialized, no pass writes a
+    /// version of it (so it is cleared once, <see cref="ShaderPipelineClear.EveryInstance"/>), and the frame leaves it
+    /// written, which only a mutable input can do. Its contents carry from one frame to the next as history's do.</summary>
+    public bool UpdatedInPlace => ((Clear == ShaderPipelineClear.EveryInstance) && (FrameEndKind == ShaderPipelinePriorKind.Pass) && FrameEnd.Writes);
+    /// <summary>Gets whether the storage's contents persist from frame to frame: history, or storage updated in
+    /// place.</summary>
+    public bool PersistsContents => (History || UpdatedInPlace);
 }
 /// <summary>One attachment of a graphics pass's render pass: the version it writes, how the render pass begins it, and
 /// whether its contents outlive the pass.</summary>

@@ -504,11 +504,19 @@ A mutable input preserves and updates the producer's current buffer in place,
 without introducing an output version or transferring allocation ownership.
 Only packages declare it; images, previous-frame reads, owned versions and
 host-upload ports refuse it. The one owned buffer it may name is a fragment's
-own retained package buffer, zero-initialized, that no pass writes as a version
-and nothing forwards (`ShaderPipelineCompiler.UpdatesInPlace`): the planner
+own private retained package buffer (not one of its output versions),
+zero-initialized, that nothing forwards and that no pass reaches except through
+this one mutable input (`ShaderPipelineCompiler.UpdatesInPlace`). The planner
 clears it once when it is new, and each frame's first access orders it after
 the previous frame's update on the queue, so it carries a value from frame to
-frame in one allocation, as the temporal resolve's stationary window does. Across instances, its edge must reach a package
+frame in one allocation, as the temporal resolve's stationary window does
+(`ShaderPipelinePlannedStorage.UpdatedInPlace`). Dependency and liveness
+planning follow versions, which an update in place has none of, so a second
+reader is refused rather than ordered by luck. Such storage persists across
+frames as history does: a compatible graph replacement carries its contents
+with the history it is read beside, and when any of those persistent storages
+cannot be carried, none keeps its contents, so its reader restarts them together
+(`ShaderPipelineRenderNode.PreserveCarriedStorages`). Across instances, its edge must reach a package
 whose writing part supplies one shared buffer through `OwnsBuffer(part)` and
 `BorrowedBuffer`. Other parts of that package may keep graph-owned scratch.
 The consumer plans read/write barriers, and the producer reacquires all

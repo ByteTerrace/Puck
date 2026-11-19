@@ -134,17 +134,18 @@ struct SdfShadeSurface {
 // The probes' answer for a light at a surface: the share of the probes about it that see the light (sdfMeshLightVisibility)
 // when the volume traced the light there (`traced`), otherwise one, times the surface's ambient occlusion, which stands in
 // for the contact-scale shadowing the probes' spacing cannot resolve. A probe not yet measured answers lit, never dark.
-float sdfLightProbeAnswer(SdfShadeSurface surface, int lightIndex, bool traced) {
-    return ((traced ? sdfMeshLightVisibility(surface.probes, (uint)lightIndex) : 1.0) * surface.ambientOcclusion);
+// `known` is that share where the caller has already read it, negative where not, so a light reads the probes once.
+float sdfLightProbeAnswer(SdfShadeSurface surface, int lightIndex, bool traced, float known) {
+    return ((traced ? ((known >= 0.0) ? known : sdfMeshLightVisibility(surface.probes, (uint)lightIndex)) : 1.0) * surface.ambientOcclusion);
 }
 // One shadow role's answer at a surface: its cascades' visibility where they hold the point, the probes' answer where they
 // do not, and across the band at the cascades' edge the two blended by the cascades' coverage (the K row's lanes,
 // sdfShadowVisibility). A role whose lanes the surface pass did not query (a side the light does not reach) answers zero
 // where `surface.shadowMeasured` says so. A slot that holds no role, and a view with no cascade, take the probes' answer
 // whole, so every receiver asks the same question whichever view or pass it is in.
-float sdfShadowRoleAnswer(SdfShadeSurface surface, int role, int lightIndex, bool traced) {
+float sdfShadowRoleAnswer(SdfShadeSurface surface, int role, int lightIndex, bool traced, float known) {
     if ((role < 0) || !surface.cascaded) {
-        return sdfLightProbeAnswer(surface, lightIndex, traced);
+        return sdfLightProbeAnswer(surface, lightIndex, traced, known);
     }
     if (sdfComponent(surface.shadowMeasured, (uint)role) == 0.0) {
         return 0.0;
@@ -153,14 +154,14 @@ float sdfShadowRoleAnswer(SdfShadeSurface surface, int role, int lightIndex, boo
     float cascade = sdfComponent(surface.shadowVisibility, (uint)role);
     float coverage = sdfComponent(surface.shadowVisibility, ((uint)role + SDF_SHADOW_ROLES));
 
-    return ((coverage >= 1.0) ? cascade : lerp(sdfLightProbeAnswer(surface, lightIndex, traced), cascade, coverage));
+    return ((coverage >= 1.0) ? cascade : lerp(sdfLightProbeAnswer(surface, lightIndex, traced, known), cascade, coverage));
 }
 // A directional light's shadow visibility. A slotted light takes the answer of the role its slot holds
 // (sdfShadowRoleAnswer), so the cascades shadow a light only through the role that draws them. A handoff fades a stable
 // slot from its outgoing light to its incoming one: the outgoing light keeps the slot's answer, which its cascades still
 // render, easing toward ambient occlusion (the unslotted answer) with the handoff's weight, and the incoming light, which
 // no cascade renders until it holds the slot, takes the probes' answer. An unslotted directional takes ambient occlusion.
-float sdfLightVisibility(SdfShadeSurface surface, int lightIndex, bool traced) {
+float sdfLightVisibility(SdfShadeSurface surface, int lightIndex, bool traced, float known) {
     if (lightIndex < 0) {
         return surface.ambientOcclusion;
     }
@@ -170,17 +171,17 @@ float sdfLightVisibility(SdfShadeSurface surface, int lightIndex, bool traced) {
         SdfShadowHandoff handoff = sdfShadowHandoffs[fade];
         if (handoff.Slot < 0 || (uint)handoff.Slot >= SDF_MAX_SHADOW_SLOTS) { continue; }
         if (lightIndex == handoff.Outgoing) {
-            return lerp(sdfShadowRoleAnswer(surface, worldShadowRoleOfSlot(handoff.Slot), lightIndex, traced), surface.ambientOcclusion, handoff.Weight);
+            return lerp(sdfShadowRoleAnswer(surface, worldShadowRoleOfSlot(handoff.Slot), lightIndex, traced, known), surface.ambientOcclusion, handoff.Weight);
         }
         if (lightIndex == handoff.Incoming) {
-            return sdfLightProbeAnswer(surface, lightIndex, traced);
+            return sdfLightProbeAnswer(surface, lightIndex, traced, known);
         }
     }
     [loop]
     for (uint shadowSlot = 0u; shadowSlot < SDF_MAX_SHADOW_SLOTS; shadowSlot++) {
         if (shadowSlot >= worldShadowStableCount()) { break; }
         if (lightIndex == sdfComponent(passGroup.shadowSlots, shadowSlot)) {
-            return sdfShadowRoleAnswer(surface, worldShadowRoleOfSlot((int)shadowSlot), lightIndex, traced);
+            return sdfShadowRoleAnswer(surface, worldShadowRoleOfSlot((int)shadowSlot), lightIndex, traced, known);
         }
     }
     return surface.ambientOcclusion;
@@ -331,13 +332,16 @@ SdfLightInputs sdfLightInputs(SdfLightSource light, SdfShadeSurface surface, boo
     }
     bool traced = surface.probed && light.record.Shadows != 0u && light.index >= 0;
     bool lit = (light.weight * inputs.reach > 0.0);
+    // The probes' share read here, or negative where it was not, so a directional's visibility reads the probes once.
+    float known = -1.0;
     if (traced && (authored || ((light.kind == SDF_LIGHT_POINT) && lit))) {
         inputs.probeShare = sdfMeshLightVisibility(surface.probes, (uint)light.index);
+        known = inputs.probeShare;
     }
     if (light.kind == SDF_LIGHT_POINT) {
         inputs.visibility = inputs.probeShare * surface.ambientOcclusion;
     } else if (light.kind == SDF_LIGHT_DIRECTIONAL) {
-        inputs.visibility = sdfLightVisibility(surface, light.index, (traced && lit));
+        inputs.visibility = sdfLightVisibility(surface, light.index, (traced && lit), known);
     }
     return inputs;
 }

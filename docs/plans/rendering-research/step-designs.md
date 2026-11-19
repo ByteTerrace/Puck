@@ -333,10 +333,11 @@ Each item names the work that needs it. Research holds only that work.
 - **Nested views in shipped engines**, and transparency with bounded
   memory, if decision 14 still leaves a portal-crossing frame costing close
   to two views.
-- **Change propagation in incremental systems**, with the first bet's
-  memo. How build systems and incremental compilers (Salsa
-  among them) track what a result read, what tracking costs against the
-  work it saves, and how they recover from a dependency they missed.
+- **Change propagation in incremental systems**, before the first bet's
+  prototype. [The memo](bet1-client-records.md#how-this-compares-with-incremental-build-systems)
+  read how Salsa records what a result read, reuses it and orders its
+  checks. Still to read: *Build systems à la carte*, and what tracking
+  costs against the work it saves.
 - **Light through openings**, before the sixth bet's prototype. Light
   fields sampled on a plane (Levoy and Hanrahan), how shipped engines light
   a room through a portal, and how a published sample's age and scope are

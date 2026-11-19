@@ -9,9 +9,15 @@
 // Whether views averages the occlusion, and the shadow visibilities, over the filter's window in a view mode. Both read
 // only the pass block and the view's mode, so they are uniform across a dispatch and every pass of one view agrees.
 bool sdfViewsFiltersAmbient(int viewMode) {
+#if defined(SDF_VIEWS_OMIT_FILTER)
+    return false;
+#endif
     return (!worldAoDisabled() && (worldFinalShadingMode(viewMode) || (viewMode == SDF_DEBUG_VIEW_AO)));
 }
 bool sdfViewsFiltersShadows(int viewMode) {
+#if defined(SDF_VIEWS_OMIT_FILTER)
+    return false;
+#endif
     return ((passGroup.shadowSlotCount > 0u) && !worldSoftShadowsDisabled()
         && (worldFinalShadingMode(viewMode) || (viewMode == SDF_DEBUG_VIEW_SHADOW)));
 }

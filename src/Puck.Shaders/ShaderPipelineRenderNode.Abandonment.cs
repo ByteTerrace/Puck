@@ -10,7 +10,61 @@ namespace Puck.Shaders;
 // other slot through WaitSlot, after which nothing it submitted is in flight and a drained fence reading signaled is true.
 // Every read of one of the node's fences goes through Signaled or WaitSlot, so a drained abandoned fence never proves the
 // submission it carried.
+//
+// A frame whose submission an open batch defers commits its history, initialization, publication and export before
+// anything reaches the queue, so those commits stand only once that submission's own hand-over took it. The one door
+// that decides is SettleHandOver: the batch's caller settles after its flush, the node settles at the start of its next
+// frame and before installing a graph, and an abandoned slot settles when its wait reports the abandonment. A submission
+// that reached the queue keeps the commits and completes its export; one that did not rolls the frame back to its
+// recording checkpoint (history cursors, instance states, content versions, initialization), withdraws its publication
+// and ends its export unwritten.
 public sealed partial class ShaderPipelineRenderNode {
+    // The fence of the latest frame whose submission an open batch still deferred when it committed, or null once its
+    // hand-over is settled.
+    private IGpuSubmissionFence? m_handOverPending;
+
+    /// <summary>Gets whether the latest frame's hand-over is still to be settled (<see cref="SettleHandOver"/>): its
+    /// submission was deferred in an open batch, or its export's completion was left to the caller.</summary>
+    internal bool OwesSettlement => ((m_handOverPending is not null) || (m_exportOwed is not null));
+
+    /// <summary>Settles the latest frame against its submission's hand-over, once the caller has flushed the batch the
+    /// submission joined: a submission that reached the queue keeps the frame's commits and completes its export for the
+    /// reader; one that never reached the queue (its hand-over failed, in the flush or in an earlier hand-over of the same
+    /// batch) rolls the frame's history and initialization back to its recording checkpoint, withdraws its publication
+    /// and ends its export unwritten. A submission an open batch still defers is handed to the queue first. Does nothing
+    /// when nothing is owed.</summary>
+    /// <exception cref="DeviceLostException">The device was lost.</exception>
+    internal void SettleHandOver() {
+        if (m_handOverPending is { } fence) {
+            try {
+                fence.HandOff();
+            } catch {
+                SettleAs(reached: fence.ReachedQueue);
+
+                throw;
+            }
+        }
+        SettleAs(reached: (m_handOverPending?.ReachedQueue ?? true));
+    }
+    private void SettleAs(bool reached) {
+        var pending = (m_handOverPending is not null);
+
+        m_handOverPending = null;
+        try {
+            if (pending && !reached) { RollBackHandOver(); }
+        } finally {
+            EndOwedExport(reached: reached);
+        }
+    }
+    // Undoes what the frame committed for a submission that never ran: the checkpoint puts the history cursors, instance
+    // states, content versions and initialization back, the frame counter steps back with the cursors (a graphics history
+    // writer's framebuffer ring is indexed by it), and the image and buffers the frame published are withdrawn.
+    private void RollBackHandOver() {
+        RestoreCadenceCheckpoint();
+        m_frame--;
+        Unpublish();
+        m_publicationLost = true;
+    }
     // Whether the fence's submission has completed, settling an abandoned slot of this node first. An abandoned fence the
     // node does not own (another node's latest submission a borrowed publication waits on) reads not signaled, and is left
     // for its owner to drain.
@@ -33,6 +87,8 @@ public sealed partial class ShaderPipelineRenderNode {
     // wait reported the abandonment and drained the fence.
     private void AbandonSlot(int slot) {
         var fence = m_slots[slot].Fence!;
+
+        if (ReferenceEquals(objA: m_handOverPending, objB: fence)) { SettleAs(reached: false); }
 
         m_slots[slot].ReadbacksOwed = false;
         foreach (var pass in m_passes) {

@@ -7,7 +7,8 @@
 #define SDF_PROBE_UNKNOWN_MATERIAL                   65535u
 #define SDF_PROBE_NODE_COUNT_BITS                    3u
 #define SDF_PROBE_NODE_WORDS                         7u
-#define SDF_PROBE_ENTRY_WORDS                        2u
+#define SDF_PROBE_PACKED_NODE_WORDS                  4u
+#define SDF_PROBE_ENTRY_WORDS                        3u
 #define SDF_PROBE_NORMAL_WORD                        16u
 #define SDF_PROBE_GEOMETRY_WORD                      25u
 #define SDF_PROBE_IDENTITY_WORD                      29u
@@ -110,6 +111,8 @@
 #define SDF_SHADE_BINS              2u
 #define SDF_SHADE_TILE_HEADER_WORDS 6u
 #define SDF_VIEWS_FILTER_WORDS      2u
+#define SDF_VIEWS_PROBE_RATE        2u
+#define SDF_VIEWS_PROBE_WORDS       11u
 #define SDF_SHADOW_BITS             8u
 #define SDF_SHADOW_MASK             0x000000FFu
 #define SDF_SHADOW_SLOTS            4u

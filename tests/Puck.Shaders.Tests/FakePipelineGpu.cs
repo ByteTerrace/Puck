@@ -903,6 +903,7 @@ internal sealed class FakePipelineGpu : IGpuDeviceContext,
         // Whether the fence's submission never reached the queue.
         public bool Abandoned;
 
+        public bool ReachedQueue => !Abandoned;
         // The fake queue finishes every submission as it is made, unless the law holds it or stops it at a submission.
         public bool IsSignaled => ((gpu.LoseFenceQueryAfterCreation > 0 && gpu.CreationCount > gpu.LoseFenceQueryAfterCreation)
             ? throw new DeviceLostException("Injected loss during fence query after allocation.")

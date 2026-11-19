@@ -251,7 +251,7 @@ The frame thread and the GPU work at the same time, so each has to fit the
 |---|---|---|---|
 | All GPU memory | Not measured as one figure. The main view's graph holds about 2.5 GB at the bar's size | 8 GB of the card's 12 | Room for the system and other programs (Puck plays nice with its host). The cap is not an engine input today: the limit the engine admits against is the operating system's budget less a tenth (`MemoryAccount.Record`). The first wave makes it one |
 | Resident baked meshes | About 3 GB, growing toward 4 GiB | 3 GB resident around the viewer | Residency evicts by distance and view; the cap is independent of how large the world is |
-| Image history | 196 bytes a pixel in two copies, about 1.4 GB for the main view at 2560 by 1440 | 0.9 GB for the main view | Decision 13, which also gives the arithmetic. A nested view that keeps a history adds its own at its own size, and the lane that splits the history reports that total |
+| Image history | 196 bytes a pixel in two copies, about 1.4 GB for the main view at 2560 by 1440; split, 228 bytes a pixel (32 in two copies, 164 once), about 0.84 GB by arithmetic, not yet read with `pipeline.inspect` | 0.9 GB for the main view | Decision 13, which also gives the arithmetic. A nested view that keeps a history adds its own at its own size, and the lane that splits the history reports that total |
 | Lighting probes | About 72 MB a table in up to four copies, and a hit cache of about 90 MB, for every world shown | 0.6 GB in one shared pool | One pool for every world in view, not a pool per world |
 | Shadow maps | 96 MiB for the cascades, and 144 MB of glass storage for each shadowed view at the highest tier | 0.4 GB | Glass storage shared across views |
 | The bake's own memory while baking | More than 10 GB of the process's private memory in a cold bake | Bounded on every device. On the Steam Deck it counts inside the 10 GB for the process and the GPU together | A walk into a place whose meshes are not stored bakes during play, so this is a play-time cost. The bake's peak has to fall far enough that every device can bake a floor (see [how a shared product is named and trusted](#how-a-shared-product-is-named-and-trusted)) |
@@ -616,7 +616,7 @@ that day. Nothing else waits for a bet.
 
 | Bet | Time box | When it starts |
 |---|---|---|
-| 1. A view that has not changed keeps its picture, decided from the change records the client already reads | Memo 3 days, prototype 7 | The memo now. The prototype only if the breakdown of produce shows that capturing a shown, unchanged world is a real cost |
+| 1. A view that has not changed keeps its picture, decided from the change records the client already reads | Prototype 7 days | [The memo](rendering-research/bet1-client-records.md) is written. The prototype only if the breakdown of produce shows that capturing a shown, unchanged world is a real cost |
 | 2. A portal crossing prepared ahead | 7 days | When decision 2's minimums exist |
 | 3. Worlds merged into one view, and crowds built from shared parts | Memo 4 days, prototype 10 | The memo any time. The prototype when the instance table takes rows from several worlds (decision 11) |
 | 4. Products shared by a name that says what they mean | Memo 4 days, prototype 8 | Now on the desktop: the owner confirmed the design. The exchange between GPU vendors has its own box when the hardware is on hand |
@@ -799,13 +799,35 @@ Two records exist and are read today.
   and never summed, because a sum can cancel.
 
 The bet is that these two, with a few additions, cover every input a view
-reads. Its first step is a memo that lists what
+reads. [The memo](rendering-research/bet1-client-records.md) lists what
 `SdfWorldResidency.Prepare` reads on the client and names, for each input,
-the client record that covers it: the mirror's revision, the scene's
-revision vector, the tick's snapshot, the clock phase evaluated for the
-presented tick, or the camera. Inputs with no record are listed as gaps.
-The prototype then closes gaps in an existing revision vector. It does not
-join the authority to the frame.
+the client record that covers it or says there is none. It was written
+from the source, with nothing run. Four of its findings shape the
+prototype.
+
+- **The two records are narrower than they look.** The mirror's revision
+  does not move when an easing value is presented between two ticks, or
+  when the presented tick moves. The revision vector covers only which
+  geometry exists. Ten inputs have no record that can be read before a
+  capture, and seven of them are small additions to a type that already
+  knows the answer.
+- **The shortcut should skip the capture and leave alone the decision of
+  whether the picture stands.** Everything the residency reads after the
+  capture is then still covered by today's hash and refusals. A world with
+  a running screen can skip its capture, although its picture can never
+  stand.
+- **The boot world's capture is not a candidate.** It resolves the cameras
+  the other views are fitted to, and it publishes the frame's sound,
+  markers and cursor viewports. The candidates are a world a seat is
+  presented in or seen through a window, a session screen, and an infinity
+  view.
+- **The prototype's first step is a count** of the captures that change
+  nothing, which nothing measures today. That count decides whether there
+  is a cost to save.
+
+The prototype then closes the gaps in a second vector kept beside the
+revision vector, under the same contract. It does not join the authority
+to the frame.
 
 Three rules come with it, because its failure is silent: a view that
 wrongly keeps its picture also lowers the count the work is judged by.
@@ -826,9 +848,9 @@ wrongly keeps its picture also lowers the count the work is judged by.
 
 Checked for this section: the three projects' lack of any `StateArena`
 reference, the mirror's summary and its refresh from the stamp's moved
-rows, and the revision vector's contract. Not checked: that every input of
-`Prepare` reaches the client through one of these. That is the memo's
-job.
+rows, and the revision vector's contract. The memo read which inputs of
+`Prepare` reach the client through one of these. Not checked: any of it in
+a running World.
 
 ## The decisions
 
@@ -1590,9 +1612,11 @@ one it writes, which is 392 bytes a pixel.
 
 1. *Split the history.* Forty of the surface history's forty-seven words
    are a window of the last eight frames. That window moves to one buffer
-   updated in place where a pixel did not move, and only the seven words
-   that follow motion stay in two copies, with the colour. That is 160
-   bytes once and 36 bytes twice: 232 bytes a pixel. A pixel that moved
+   updated in place where a pixel did not move, with the phase mask that
+   says which of its phases hold samples, and only the six words that
+   follow motion stay in two copies, with the colour. As built
+   (`SdfWorldPackage.HistoryWindowWords`, `HistorySurfaceWords`) that is
+   164 bytes once and 32 bytes twice: 228 bytes a pixel. A pixel that moved
    restarts its window; it keeps no second store, so the figure holds in
    motion as well as at rest.
 2. *One shading path*, after decision 5 has fixed the colour conversion.
@@ -1604,7 +1628,7 @@ one it writes, which is 392 bytes a pixel.
 
 **Why.** The owner's ruling on the bar's size makes the history the
 largest single store after the meshes: about 1.4 GB for the main view at
-2560 by 1440. The split brings it to about 0.9 GB. It also stops the
+2560 by 1440. The split brings it to about 0.84 GB. It also stops the
 resolve copying the stored window every frame, and the resolve takes 3 ms
 at the bar's size. One shading path removes a second implementation.
 
@@ -1622,7 +1646,7 @@ in-place history, so its design is reviewed as it is built.
 from its own position on the moving route. What a player sees when a
 shading program arrives that has no compiled kernel yet.
 
-**Against the budget.** The history row, from about 1.4 GB to 0.9 GB for
+**Against the budget.** The history row, from about 1.4 GB to 0.84 GB for
 the main view on the RTX 4070. The resolve's row, from 3 ms toward 1.5 ms.
 The shading row, from 10.5 and 13 ms toward 5 ms. A nested view that keeps
 a history pays the same bytes for each of its own pixels, and the lane
@@ -1894,7 +1918,7 @@ glacier.
 | 9. A camera inside water sees a flat wash | The four water places, whenever the player swims | A case for an eye inside a medium. Starts now: first wave, `water` | A dive in the pool | [Water](water.md#order) |
 | 15. The falls have no spray or splash | The falls and the plunge pocket | The particle pool, which is designed. Second wave: it waits for `water`, which changes the pass it draws through | The falls from below | [Water](water.md#w3-the-presentation-particle-pool) |
 | 10. A paint does not follow a blended seam between parts that move | The Moth and the swallow | The rest-point mapping for paints. Second wave: it waits for `water` and `shadows`, which change the same shader | A painted marking on a rigged head | [Moving blends](moving-blends.md), its step 4 |
-| 11. A stretched capsule, cone or torus gives a bound, not a distance | A stretched cutter: it frays the surface it cuts | An exhibit and a failing measurement for each of two effects, then the solver's design. Starts now, as read-only work beside the first wave | A stretched cutter in a smooth blend | [Rendering](rendering.md#bake-quality) |
+| 11. A stretched ellipsoid, capsule, cone or torus gives a bound, not a distance | A stretched cutter: a smooth cut's fillet spreads to several times its radius, and a hard cut's rim frays. The lake's bowl is one | The exhibits, their failing readings and the solver's design are done. The spheroid's exact lowering is next and needs no solver | A stretched cutter in a smooth blend | [Rendering](rendering.md#a-true-distance-under-a-non-uniform-scale) |
 | 14. A field row that only the simulation needs is drawn | No place: it costs two baked height fields nobody sees | A way to mark a row as simulation only. Starts now: first wave, `water` | The hidden chain under the valley | [Water](water.md#the-gap-list), its S5 |
 | 12. A frame's light table holds at most 128 lights | No place today | Research on many lights, when a place authors more than the table holds | None yet | [Illumination](illumination.md) |
 
@@ -1946,11 +1970,14 @@ What the code shows for the rows a review corrected:
   cutter that moves relative to what it cuts: the cut stays where it was at
   rest (`CreationMotionPlan.Borrows`), and relief refuses any creation with
   an independently moving part.
-- **Gap 11.** A stretched ellipsoid or sphere and a regular polygon already
-  have exact forms. What still rides a bound is a capsule, cone or torus
-  stretched apart in two axes. A bound is still right at the surface, so
-  two effects are measured apart: the distances a smooth blend reads away
-  from the surface, and defects in the cut's contour.
+- **Gap 11.** A regular polygon already has an exact form. A stretched
+  ellipsoid or sphere does not: it is the exponent-2 superellipsoid gauge
+  (`SdfSolidGeometry.AppendScaledPrimitive`), a bound like the `Scale` a
+  capsule, cone or torus stretched apart in two axes rides, and the lake's
+  bowl is such an ellipsoid. A bound is still right at the surface, so two
+  effects are measured apart, each on its own exhibit: the distances a
+  smooth blend reads away from the surface, and defects in the cut's
+  contour.
 - **Gap 13.** Haze's strength is packed as an amount divided by the far
   distance (`SdfSky.PackAtmosphere`), so changing how far the world draws
   changes the haze on everything nearer.
@@ -2040,7 +2067,7 @@ technique makes possible for the ones after it.
 | 6 | A completion signal for each background job | The same wait, on every device and on the frame's queue | The CPU learns a job is done 1 to 2 ms after the frame is handed over, not about 25 ms after. Read from the code | First wave, `signal` |
 | 7 | Shadows by ray where no map reaches | Gap 3 on the RTX 4070, and local lights, which have no shadow maps today | A look. Its cost follows the distant share of the screen. Unmeasured | Second wave |
 | 8 | Reflections by ray on glass and water | Glass and water, which reflect only the sky and the probes | A look. One ray for each reflective pixel. Unmeasured | After the second wave |
-| 9 | A vendor's upscaler as an authored alternative to the resolve | The resolve's 3.0 ms and the image history's 1.4 GB | 1 to 2 ms and about 1 GB by arithmetic. Its cost at native size on the RTX 4070 is unverified | After the second wave, with an owner's question |
+| 9 | A vendor's upscaler as an authored alternative to the resolve | The resolve's 3.0 ms and the image history's 0.84 GB after the split | 1 to 2 ms and about 1 GB by arithmetic. Its cost at native size on the RTX 4070 is unverified | After the second wave, with an owner's question |
 | 10 | Texture transitions through enhanced barriers | The gaps between the frame's compute passes on Direct3D 12 | Under half a millisecond, a guess. The sure gain is one barrier model in place of two | First wave, `direct3d` |
 | 11 | Demand counted from what was drawn | The finest level of the resident meshes: about 1.1 GB of the 3 GB, almost never drawn | Memory and bake time, not frame time. Unmeasured | Second wave |
 | 12 | Present timing and the drivers' latency reports | Decision 15's record for every present | No frame time. It is the instrument that reads when a frame showed | Second wave, the record for every present |
@@ -2462,8 +2489,8 @@ CPU thread reads to learn that work on a queue has finished.
 **9. A vendor's upscaler as an authored alternative to the resolve.**
 
 - *What it speeds up.* At native size, where the bar is read: the resolve
-  (3.0 ms) and the image history (about 1.4 GB today, about 0.9 GB after
-  `history`). At a render scale a player's table authors, every pass that
+  (3.0 ms) and the image history (about 0.84 GB with `history`'s split,
+  from about 1.4 GB). At a render scale a player's table authors, every pass that
   scales with rendered pixels.
 - *Evidence.* NVIDIA's DLSS programming guide gives 95 to 204 MB of
   internal memory at a 2560 by 1440 output
@@ -2943,9 +2970,9 @@ masked.**
   is deleted.
 - *Owns.* `src/Puck.World.Authoring/Authoring/CreationMotionPlan.cs`, the
   pooled emitter (`WorldCreationInstances.Emit.cs`),
-  `SdfMeshGeometryBuilder`, `SdfMeshSettle.cs` and
-  `SdfMeshPathBake.Settle.cs`, which go, and the group state only they
-  read.
+  `SdfMeshGeometryBuilder`, and the settle rebake and the group state only
+  it read (landed: both are deleted, and `SdfMeshPathBake.Revisit` re-plans
+  a group when its operand moves a step).
 - *Needs.* Nothing.
 - *Model.* Opus `specialist`.
 - *Finish line.* G1's checks hold
@@ -3163,9 +3190,7 @@ start as a model is free.
 
 | Work | Outcome | Model |
 |---|---|---|
-| The first bet's memo | Every input `SdfWorldResidency.Prepare` reads on the client has a named change record, or is listed as having none ([the first bet](#the-first-bet-stands-on-the-clients-records)) | Fable `principal`, or Astra |
 | Terrain research | A research round across the families on seams between tiles, how tiles scale, and far shadows. The terrain pass's plan holds its findings | The lead's research round |
-| The stretched primitive's solver | An exhibit and a failing measurement for each of gap 11's two effects, then the design of the closest-point solve with its certificate | Fable `principal`. Any proof that skips work gets an adversarial review |
 | The fourth bet's memo | What a shared product's name holds, the receiver's check for each attribute, and how fetching is priced against deriving | Astra, or Fable `principal` |
 
 ### The second wave
@@ -3195,7 +3220,7 @@ carries the change, Sonnet where the result is specified.
 | Haze as an authored range (gap 13) | Changing the draw distance changes no nearer pixel | `colour` | [The terrain pass](terrain-pass.md#distance), step 2 | Sonnet |
 | The paint on a blended seam (gap 10) | A painted marking stays fixed to a surface that bends | `water` and `shadows` | [Moving blends](moving-blends.md), step 4 | Opus |
 | The particle pool (gap 15) | Spray at the falls and a splash in the plunge pocket | `water` | [Water](water.md#w3-the-presentation-particle-pool) | Sonnet |
-| The stretched primitive (gap 11) | A true distance for a stretched capsule, cone and torus | Its design | [Rendering](rendering.md#bake-quality) | Opus |
+| The stretched primitive (gap 11) | A true distance for a stretched ellipsoid, capsule, cone and torus, in its design's step order | A free slot, and the adversarial review of its design's claims before step 3 | [Rendering](rendering.md#a-true-distance-under-a-non-uniform-scale) | Opus |
 | Shared allocation | The allocation both backends share is cut at the sources a trace names: the warm loop's re-bakes as the detail level falls, the irradiance volume's whole upload on every window change, scene-rebuild `Node[]` misses in `SharedArrayPool`, and the lift's spikes; and every direct `NativeMemory.Alloc` or `AllocZeroed` call moves onto `IAllocator`, so mimalloc is Puck's one native allocator (two native heaps for one job is a duplicate) | `vkalloc`, whose trace says what is left | [Job system](open-items.md#engine-job-system) | Sonnet |
 | Keys by stage | An edit to the simplifier rebakes with no field sampling (decision 10) | `cutter` and `contour`, which change the same bake code | [Bake proportional to change](open-items.md#bake-proportional-to-change) | Opus |
 | Where the tick runs | A design that weighs the arrangements of decision 3, each with its time from input to display | `frame`'s cost of one more world | [The job system plan](engine-job-system.md#open-questions) | Fable |

@@ -11,6 +11,7 @@
 // Views samples the bound screens and the glyph atlas their decals draw from.
 #define SDF_SCREEN_SOURCES
 #define SDF_GLYPH_ATLAS
+#include "sdf-views-split.hlsli"
 #endif
 #include "sdf-world.hlsli"
 #include "../frame/sdf-pixel.hlsli"

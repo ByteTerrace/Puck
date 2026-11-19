@@ -1,4 +1,4 @@
-// Generated from shader interface 'sdf-world' (sha256/65f5b55edaab8de7fddb7576793bbd1dca4886d584437a48c1a9a28590a29d2c). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'sdf-world' (sha256/7fd6b22fc40ffe0b34ed323f3464a25edc939e3e26347867bb2ccc5f96e0f9d0). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SDF_WORLD
 #define PUCK_SHADER_INTERFACE_SDF_WORLD
 
@@ -251,8 +251,8 @@ struct SdfWorldPass {
     [[vk::offset(1340)]] uint _pad1340;
     [[vk::offset(1344)]] float4 worldLanes;
 };
-[[vk::binding(0, 3)]] ConstantBuffer<SdfWorldPass> passGroupIsa392A909E : register(b0, space3);
-#define passGroup passGroupIsa392A909E
+[[vk::binding(0, 3)]] ConstantBuffer<SdfWorldPass> passGroupIsaAD8719C0 : register(b0, space3);
+#define passGroup passGroupIsaAD8719C0
 [[vk::binding(1, 3)]] StructuredBuffer<uint> sdfVisibilityRecords : register(t1, space3);
 [[vk::binding(2, 3)]] RWStructuredBuffer<uint> sdfVisibilityRecordsRW : register(u2, space3);
 [[vk::binding(3, 3)]] RWStructuredBuffer<float> reactivityRW : register(u3, space3);
@@ -273,9 +273,11 @@ struct SdfWorldPass {
 [[vk::binding(49, 3)]] RWStructuredBuffer<uint> sdfMeshPyramidRW : register(u49, space3);
 [[vk::binding(50, 3)]] StructuredBuffer<uint> sdfViewsFilterRecords : register(t50, space3);
 [[vk::binding(51, 3)]] RWStructuredBuffer<uint> sdfViewsFilterRecordsRW : register(u51, space3);
-[[vk::binding(52, 3)]] StructuredBuffer<uint> sdfShadeTiles : register(t52, space3);
-[[vk::binding(53, 3)]] RWStructuredBuffer<uint> sdfShadeTilesRW : register(u53, space3);
-[[vk::binding(54, 3)]] RWStructuredBuffer<uint> sdfShadeArgumentsRW : register(u54, space3);
+[[vk::binding(52, 3)]] StructuredBuffer<uint> sdfViewsProbeRecords : register(t52, space3);
+[[vk::binding(53, 3)]] RWStructuredBuffer<uint> sdfViewsProbeRecordsRW : register(u53, space3);
+[[vk::binding(54, 3)]] StructuredBuffer<uint> sdfShadeTiles : register(t54, space3);
+[[vk::binding(55, 3)]] RWStructuredBuffer<uint> sdfShadeTilesRW : register(u55, space3);
+[[vk::binding(56, 3)]] RWStructuredBuffer<uint> sdfShadeArgumentsRW : register(u56, space3);
 
 // The pushed index: Vulkan push constants at offset 0, Direct3D 12 root constants at register b0, space 4.
 struct SdfWorldPushedIndex {
