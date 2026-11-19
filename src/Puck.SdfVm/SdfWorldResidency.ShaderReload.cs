@@ -37,6 +37,9 @@ public sealed partial class SdfWorldResidency {
 
     /// <summary>Gets the latest request outcome, safe to read from the console while rendering continues.</summary>
     public SdfShaderReloadStatus ShaderReloadStatus => Volatile.Read(location: ref m_shaderReloadStatus);
+    /// <summary>Gets how many reload batches have installed a changed pipeline over the residency's life, so the frame
+    /// after the count moves is the first to render with a reloaded kernel. Read on the frame thread.</summary>
+    public long ShaderBatchesInstalled { get; private set; }
 
     /// <summary>Queues a kernel reload. The next produced frame starts reading the kernels the tree carries, compiling
     /// each carried source to this residency's backend alone (<see cref="SdfKernelTreeLoad"/>), and each later frame
@@ -193,6 +196,7 @@ public sealed partial class SdfWorldResidency {
                 m_reloadChanged += changed;
 
                 if (changed > 0) {
+                    ShaderBatchesInstalled++;
                     var kernels = string.Join(separator: ",", values: SdfKernelSet.Kernels.Where(predicate: kernel => !previous[kernel].Span.SequenceEqual(other: m_kernels[kernel].Span)).Select(selector: SdfKernelSet.StemOf));
 
                     Console.Error.WriteLine(value: $"[shaders.reload: request={m_reloadRequest!.RequestId} installed pipelines={changed} kernels={kernels}{((m_reloadLoad is { IsCompleted: false }) ? " more=compiling" : "")}]");

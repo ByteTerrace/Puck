@@ -418,6 +418,23 @@ public sealed partial class SdfMeshPathBake {
         }
     }
 
+    /// <summary>Gets whether every group of the bake's program draws a mesh of its own geometry at some tier, or has
+    /// finished with none: no group draws nothing while it bakes, and none still draws the mesh it took from the group it
+    /// replaced, which shows the geometry before a change. The first frame that finds it true after a change shows the
+    /// changed form whole, though finer tiers may still land. <see langword="false"/> before the first program. It walks
+    /// every group under the bake's lock, so a caller reads it to measure, not every frame.</summary>
+    public bool DrawsOwn {
+        get {
+            lock (m_gate) {
+                if (m_program is null) { return false; }
+                foreach (var group in m_groups) {
+                    if (!group.DrawsOwn) { return false; }
+                }
+                return true;
+            }
+        }
+    }
+
     // Whether the bake still owes the dressed frame a mesh, a slice, a successor or the demanded tier of a floor planned
     // on arrival. Under the gate.
     private bool Owes() {
@@ -1388,7 +1405,10 @@ public sealed partial class SdfMeshPathBake {
     private static void ShowReplaced(Group group, Group? old) {
         if ((old is null) || (old.Dynamic != group.Dynamic)) { return; }
         group.KeepFloorOf(old: old);
-        if (old.Shown is { } shown) { group.Mesh = shown.Acquire(); }
+        if (old.Shown is { } shown) {
+            group.Mesh = shown.Acquire();
+            group.MarkStandIn();
+        }
     }
     // Starts each group, of the listed indices or every one, still waiting on a leader the bake has retired: it starts its
     // geometry itself (Start).
@@ -2528,6 +2548,7 @@ public sealed partial class SdfMeshPathBake {
                     m_shown = null;
                     shown.Release();
                 }
+                if (!ReferenceEquals(objA: next, objB: m_standIn)) { m_standIn = null; }
                 if (owner is not null) {
                     owner.m_productRevision++;
                     if (next is not null) { SdfMeshSkin.Count(counters: owner.Library.Skins, mesh: next); }
@@ -2547,10 +2568,20 @@ public sealed partial class SdfMeshPathBake {
             if (m_shown is not { } shown) { return; }
             m_shown = null;
             shown.Release();
+            if (ReferenceEquals(objA: shown, objB: m_standIn)) { m_standIn = null; }
             if (Owner is { } owner) { owner.m_productRevision++; }
         }
+        // Marks the mesh the group draws as the stand-in it took from the group it replaced (ShowReplaced), which shows
+        // the geometry before the change rather than its own.
+        public void MarkStandIn() => m_standIn = Shown;
+        // Whether the group draws a mesh of its own geometry at some tier, or has finished with none: not the stand-in
+        // it took from the group it replaced, and not nothing while it bakes.
+        public bool DrawsOwn => ((Shown is { } shown) ? !ReferenceEquals(objA: shown, objB: m_standIn) : Done);
 
         private SdfMesh? m_shown;
+        // The replaced group's mesh the group draws until a product of its own takes the draws; held only for that
+        // comparison and cleared once the stand-in no longer draws, so it never keeps a released mesh reachable.
+        private SdfMesh? m_standIn;
 
         public SdfMeshBakeRequest? Next { get; set; }
         public int Refinements { get; set; }
