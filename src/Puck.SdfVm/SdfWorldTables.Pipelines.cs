@@ -6,45 +6,50 @@ public sealed partial class SdfWorldTables {
     // The pipelines the views' passes record with. The owner built them and disposes them; a kernel reload swaps the
     // native objects behind the same slots, so a pass reads each handle when it records.
     private readonly SdfWorldPipelines m_pipelines;
-    // The device's mesh pass pipeline and the render pass it draws in, which a view's mesh pass records with.
-    private readonly IGpuPipeline m_meshPipeline;
-    private readonly IGpuRenderPass m_meshRenderPass;
-    // The shadow cascades' pipeline and the depth-only render pass it draws in.
-    private readonly IGpuPipeline m_shadowPipeline;
-    private readonly IGpuRenderPass m_shadowRenderPass;
-    // The cascades' exit-layer pipeline, drawing the faces turned from the light in the same render pass.
-    private readonly IGpuPipeline m_shadowExitPipeline;
-    private readonly IGpuPipeline m_shadowGlassPipeline;
-    // The glass pass's pipeline, drawing in the mesh render pass.
-    private readonly IGpuPipeline m_glassPipeline;
-    // The mesh pass's occlusion kernel, which binds the mesh pass's set.
-    private readonly IGpuComputePipeline m_occlusionPipeline;
+    // The pass pipelines a view's passes record with, each read only once built (SdfPassPipelineSlot.Built), which
+    // FrameWaiting finds before any view records: the mesh pass's (and the render pass it draws in), the shadow cascades'
+    // (and their depth-only render pass), the cascades' exit layer, drawing the faces turned from the light in the same
+    // render pass, and their glass extinction, the glass pass's, drawing in the mesh render pass, and the mesh pass's
+    // occlusion kernel, which binds the mesh pass's set.
+    private readonly SdfPassPipelineSlot m_meshRaster;
+    private readonly SdfPassPipelineSlot m_shadowRaster;
+    private readonly SdfPassPipelineSlot m_shadowExitRaster;
+    private readonly SdfPassPipelineSlot m_shadowGlassRaster;
+    private readonly SdfPassPipelineSlot m_glassRaster;
+    private readonly SdfPassPipelineSlot m_occlusion;
 
     // The mesh pass's occlusion kernel (SdfMeshOcclusion).
-    internal IGpuComputePipeline OcclusionPipeline => m_occlusionPipeline;
+    internal IGpuComputePipeline OcclusionPipeline => (m_occlusion.Built.Compute ?? throw new InvalidOperationException(message: "The mesh pass occlusion kernel is not a compute pipeline."));
 
     // The glass pass's graphics pipeline: the mesh pass's layout, vertex stage and render pass with the glass fragment
     // stage.
-    internal IGpuPipeline GlassPipeline => m_glassPipeline;
+    internal IGpuPipeline GlassPipeline => GraphicsOf(slot: m_glassRaster);
 
     // The mesh pass's graphics pipeline.
-    internal IGpuPipeline MeshPipeline => m_meshPipeline;
+    internal IGpuPipeline MeshPipeline => GraphicsOf(slot: m_meshRaster);
     // The render pass the mesh pass draws in, which a view's framebuffers are created for.
-    internal IGpuRenderPass MeshRenderPass => m_meshRenderPass;
+    internal IGpuRenderPass MeshRenderPass => RenderPassOf(slot: m_meshRaster);
     // The shadow cascades' pipeline: the mesh pass's layout and vertex stage, writing depth alone.
-    internal IGpuPipeline ShadowPipeline => m_shadowPipeline;
+    internal IGpuPipeline ShadowPipeline => GraphicsOf(slot: m_shadowRaster);
     // The shadow cascades' exit-layer pipeline: the shadow pipeline with the faces toward the light culled.
-    internal IGpuPipeline ShadowExitPipeline => m_shadowExitPipeline;
-    internal IGpuPipeline ShadowGlassPipeline => m_shadowGlassPipeline;
+    internal IGpuPipeline ShadowExitPipeline => GraphicsOf(slot: m_shadowExitRaster);
+    internal IGpuPipeline ShadowGlassPipeline => GraphicsOf(slot: m_shadowGlassRaster);
     // The depth-only render pass a view's cascades draw in, which its cascade framebuffers are created for.
-    internal IGpuRenderPass ShadowRenderPass => m_shadowRenderPass;
-    // A frame waits for the views kernel, the one pipeline the tables are built without (SdfWorldPipelines.PollRequired):
-    // null once it is built, the kernel otherwise, refused (PipelineRefusal) or still building.
-    internal SdfKernel? FrameWaiting() =>
-        (m_pipelines.IsBuilt(kernel: SdfKernel.Views) ? null : SdfKernel.Views);
+    internal IGpuRenderPass ShadowRenderPass => RenderPassOf(slot: m_shadowRaster);
 
-    // Why a frame's kernel was refused (SdfWorldPipelines.IsBuilt), or null when it was not.
-    internal Exception? PipelineRefusal(SdfKernel kernel) => m_pipelines.RefusalOf(kernel: kernel);
+    private static IGpuPipeline GraphicsOf(SdfPassPipelineSlot slot) => (slot.Built.Graphics ?? throw new InvalidOperationException(message: $"The '{slot.Name}' pass pipeline is not a graphics pipeline."));
+    private static IGpuRenderPass RenderPassOf(SdfPassPipelineSlot slot) => (slot.Built.RenderPass ?? throw new InvalidOperationException(message: $"The '{slot.Name}' pass pipeline names no render pass."));
+
+    // A frame waits for every pipeline its views record with, which the tables are built without
+    // (SdfWorldPipelines.PollRequired): null once every one is built, else the first still building or refused, kernels in
+    // their order and then the pass pipelines. Takes each build that has just finished.
+    internal SdfPipelineWait? FrameWaiting() {
+        if (m_pipelines.FirstUnbuilt() is { } kernel) { return new SdfPipelineWait(Name: SdfKernelSet.StemOf(kernel: kernel), Refusal: m_pipelines.RefusalOf(kernel: kernel)); }
+        foreach (var slot in (ReadOnlySpan<SdfPassPipelineSlot>)[m_meshRaster, m_shadowRaster, m_shadowExitRaster, m_shadowGlassRaster, m_glassRaster, m_occlusion]) {
+            if (!slot.PollRefusing()) { return new SdfPipelineWait(Name: slot.Name, Refusal: slot.Refusal); }
+        }
+        return null;
+    }
 
     // One of the per-view compute pipelines by its kernel.
     internal IGpuComputePipeline Pipeline(SdfKernel kernel) => m_pipelines.Pipeline(kernel: kernel);
@@ -56,7 +61,8 @@ public sealed partial class SdfWorldTables {
 
     // Whether a view's passes built against these tables can follow the other tables: the surface kernel covers the
     // compute layout every per-view pass shares, mesh its graphics layout and render pass, and an acquired resolve
-    // requires a ready resolve with compatible groups in the destination.
+    // requires a ready resolve with compatible groups in the destination. Tables whose frame still waits on a pipeline
+    // share nothing yet (FrameWaiting).
     internal bool SharesLayoutsWith(SdfWorldTables other) =>
         (
             ReferenceEquals(
@@ -64,22 +70,24 @@ public sealed partial class SdfWorldTables {
                 objB: other
             ) ||
             (
+                (FrameWaiting() is null) &&
+                (other.FrameWaiting() is null) &&
                 Pipeline(kernel: SdfKernel.Surface).GroupLayoutHandles.SequenceEqual(second: other.Pipeline(kernel: SdfKernel.Surface).GroupLayoutHandles) &&
-                m_meshPipeline.GroupLayoutHandles.SequenceEqual(second: other.m_meshPipeline.GroupLayoutHandles) &&
-                m_shadowPipeline.GroupLayoutHandles.SequenceEqual(second: other.m_shadowPipeline.GroupLayoutHandles) &&
-                m_shadowExitPipeline.GroupLayoutHandles.SequenceEqual(second: other.m_shadowExitPipeline.GroupLayoutHandles) &&
-                m_shadowGlassPipeline.GroupLayoutHandles.SequenceEqual(second: other.m_shadowGlassPipeline.GroupLayoutHandles) &&
-                m_glassPipeline.GroupLayoutHandles.SequenceEqual(second: other.m_glassPipeline.GroupLayoutHandles) &&
+                MeshPipeline.GroupLayoutHandles.SequenceEqual(second: other.MeshPipeline.GroupLayoutHandles) &&
+                ShadowPipeline.GroupLayoutHandles.SequenceEqual(second: other.ShadowPipeline.GroupLayoutHandles) &&
+                ShadowExitPipeline.GroupLayoutHandles.SequenceEqual(second: other.ShadowExitPipeline.GroupLayoutHandles) &&
+                ShadowGlassPipeline.GroupLayoutHandles.SequenceEqual(second: other.ShadowGlassPipeline.GroupLayoutHandles) &&
+                GlassPipeline.GroupLayoutHandles.SequenceEqual(second: other.GlassPipeline.GroupLayoutHandles) &&
                 ((m_pipelines.OptionalPipeline(kernel: SdfKernel.Resolve) is not { } resolve) ||
                     ((other.m_pipelines.OptionalPipeline(kernel: SdfKernel.Resolve) is { } otherResolve) &&
                         resolve.GroupLayoutHandles.SequenceEqual(second: otherResolve.GroupLayoutHandles))) &&
                 ReferenceEquals(
-                    objA: m_meshRenderPass,
-                    objB: other.m_meshRenderPass
+                    objA: MeshRenderPass,
+                    objB: other.MeshRenderPass
                 ) &&
                 ReferenceEquals(
-                    objA: m_shadowRenderPass,
-                    objB: other.m_shadowRenderPass
+                    objA: ShadowRenderPass,
+                    objB: other.ShadowRenderPass
                 )
             )
         );
@@ -156,3 +164,6 @@ public sealed partial class SdfWorldTables {
     /// <summary>One engine pipeline: its description, named by its kernel's stem.</summary>
     internal readonly record struct PipelineSpec(GpuComputePipelineDescription Description);
 }
+// The pipeline a frame waits on (SdfWorldTables.FrameWaiting): its name, a kernel's stem or a pass pipeline's, and why
+// its build was refused, or null while it builds.
+internal readonly record struct SdfPipelineWait(string Name, Exception? Refusal);

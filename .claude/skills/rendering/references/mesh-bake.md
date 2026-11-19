@@ -596,10 +596,15 @@ laws exercise that boundary.
   half a pixel there: the demand is past the budget, which is the reading to
   act on, never a raised limit.
 - **A group arrives at its floor and keeps it.** A residency's group that
-  arrives with nothing to draw (no group at its selector, or one still bringing
-  its floor, `SdfMeshPathBake.Arrives`) plans its coarsest tier first
-  (`SdfMeshPathBake.Tiers`), so a place lands whole and coarse before it is
-  sharp, nearest first by the demand's priority. Once that floor has landed,
+  arrives in view with nothing to draw (no group at its selector, or one still
+  bringing its floor, `SdfMeshPathBake.Arrives`; in view is
+  `SdfMeshDemand.Sees`, every box with no demand point) plans its coarsest
+  tier first (`SdfMeshPathBake.Tiers`), so a place lands whole and coarse
+  before it is sharp. One arriving out of view plans its demanded tier at
+  once and keeps no floor: floors are about a quarter of a cold bake's pool
+  work, and no view waits on that place. Every take and every worker stage
+  orders the groups in view ahead of those out of it, each side by the
+  demand's priority (`SdfMeshPathBake.RankOf`). Once that floor has landed,
   the next tier decision starts the demanded tier as the arrival's own bake
   (`Group.FirstDetail`): no hold, outside `MaxInFlight` and the budget, as a
   first plan at that tier would have baked. Until then the bake owes the frame

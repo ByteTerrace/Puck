@@ -720,7 +720,43 @@ public sealed partial class SdfMeshPathBake {
     /// <param name="heldTaps">The evaluations of the first lattice <paramref name="firstFits"/> held back, which the
     /// next take waits for room for; zero when none was.</param>
     /// <returns><see langword="true"/> when the bake takes a lattice.</returns>
-    public bool TryTake(SdfProgram? field, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out SdfMeshBakeBatch? batch, long mostTaps, bool firstFits, out long heldTaps) {
+    public bool TryTake(SdfProgram? field, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out SdfMeshBakeBatch? batch, long mostTaps, bool firstFits, out long heldTaps) =>
+        TryTake(batch: out batch, field: field, firstFits: firstFits, heldTaps: out heldTaps, mostTaps: mostTaps, owedOnly: false);
+    /// <summary>Takes the lattices of one dispatch as
+    /// <see cref="TryTake(SdfProgram?, out SdfMeshBakeBatch?, long, bool, out long)"/> does, from the groups that owe the
+    /// frame alone (<see cref="OwedGroups"/>), under the allowance of the work the frame owes
+    /// (<see cref="SdfGpuWorkBudget.OwedAllowance"/>). A field slice is never owed.</summary>
+    /// <param name="field">The program whose field the dispatch samples: the tables' uploaded program.</param>
+    /// <param name="batch">The lattices to dispatch and the group each answers.</param>
+    /// <param name="mostTaps">The field evaluations the batch makes at most, as the other take reads it.</param>
+    /// <param name="firstFits">Whether the first lattice is held to <paramref name="mostTaps"/> too.</param>
+    /// <param name="heldTaps">The evaluations of the first lattice <paramref name="firstFits"/> held back; zero when none
+    /// was.</param>
+    /// <returns><see langword="true"/> when the bake takes a lattice.</returns>
+    public bool TryTakeOwed(SdfProgram? field, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out SdfMeshBakeBatch? batch, long mostTaps, bool firstFits, out long heldTaps) {
+        if (OwedGroups == 0) {
+            batch = null;
+            heldTaps = 0L;
+            return false;
+        }
+        return TryTake(batch: out batch, field: field, firstFits: firstFits, heldTaps: out heldTaps, mostTaps: mostTaps, owedOnly: true);
+    }
+    /// <summary>Gets how many groups owed the frame as of the latest prepared frame: an arrival's work, which a boot, a
+    /// world reached through a portal and a form edit start with: a group still bringing its first mesh with nothing of
+    /// its own drawn (a hole where a view looks, or a place none sees yet), or an arrival's first detail replacing the
+    /// floor it landed first (<see cref="SdfMeshTier"/>). Ordinary background work in play (a tier the demand moved to, a
+    /// resample, an eviction's floor) owes nothing. Read from any thread.</summary>
+    public int OwedGroups => Volatile.Read(location: ref m_owedGroups);
+
+    // The groups that owed the frame as of the latest Prioritize.
+    private int m_owedGroups;
+
+    // Whether a group owes the frame work it can bake: not done, baking for itself, and either drawing nothing yet or
+    // an arrival's first detail (Group.FirstDetail). A follower's mesh is its leader's work, which takes the follower's
+    // view (Prioritize); a group waiting on another residency's bake of its geometry holds no lattice.
+    private static bool OwesFrame(Group group) => (!group.Done && !group.Retired && (group.Leader is null) && (group.Joined is null) && ((group.Shown is null) || group.FirstDetail));
+
+    private bool TryTake(SdfProgram? field, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out SdfMeshBakeBatch? batch, long mostTaps, bool firstFits, out long heldTaps, bool owedOnly) {
         batch = null;
         heldTaps = 0L;
         mostTaps = Math.Clamp(value: mostTaps, min: (firstFits ? 0L : 1L), max: BatchTaps);
@@ -742,8 +778,9 @@ public sealed partial class SdfMeshPathBake {
             m_takenSampled.Clear();
             var samples = 0;
             var taps = 0;
-            // A slice's lattices come first, within the same batch, so a long bake never holds a diagnostic back.
-            while ((m_slice is { } slice) && (lattices.Count < SdfWorldPackage.MeshBakeBatch)) {
+            // A slice's lattices come first, within the same batch, so a long bake never holds a diagnostic back; it owes
+            // the frame no hole, so an owed take leaves it to the next.
+            while (!owedOnly && (m_slice is { } slice) && (lattices.Count < SdfWorldPackage.MeshBakeBatch)) {
                 if (slice.Take(instances: (m_program?.Instances.Count ?? 0), ticket: out var lattice, worldSelector: SdfMeshBakeGroup.WorldSelector) is not { } next) { break; }
                 if (((lattices.Count > 0) || firstFits) && (((taps + next.Taps) > mostTaps) || ((samples + next.Samples) > SdfWorldPackage.MeshBakeMaxSamples))) {
                     if (lattices.Count == 0) { heldTaps = next.Taps; }
@@ -776,8 +813,8 @@ public sealed partial class SdfMeshPathBake {
                 working += ((!group.Done && group.Contouring) ? 1 : 0);
                 admitted += ((!group.Done && group.Admitted) ? 1 : 0);
                 awaiting += ((!group.Done && group.AwaitsStage) ? 1 : 0);
-                if (group.Done || group.InFlight || group.Contouring || (group.Next is null)) { continue; }
-                candidates.Add(item: (group.Priority, index));
+                if (group.Done || group.InFlight || group.Contouring || (group.Next is null) || (owedOnly && !OwesFrame(group: group))) { continue; }
+                candidates.Add(item: (RankOf(group: group), index));
             }
             if (pending) {
                 m_accounts.Takes++;
@@ -901,6 +938,10 @@ public sealed partial class SdfMeshPathBake {
     // The groups a take may take a lattice of, by priority, reused take to take.
     private readonly List<(float Priority, int Index)> m_candidates = [];
 
+    // A group's rank among a take's candidates: every group in view (Group.InView) ahead of every group out of it, each
+    // side by its priority. A priority is never negative, so an out-of-view group's rank is taken into [-1, 0) with its
+    // order kept.
+    private static float RankOf(Group group) => (group.InView ? group.Priority : (-1f / (1f + group.Priority)));
     // Higher priority first, then the plan's order.
     private static readonly Comparison<(float Priority, int Index)> ByPriority = static (left, right) =>
         ((right.Priority.CompareTo(value: left.Priority) is var order and not 0) ? order : left.Index.CompareTo(value: right.Index));
@@ -2768,6 +2809,10 @@ public sealed partial class SdfMeshPathBake {
         // The display pixels its demand box projects at the demand point that sees it largest, as of the latest frame
         // that measured it (SdfMeshDemand.Priority); zero with no demand point.
         public float Priority { get; set; }
+        // Whether a view may see the group as of the latest frame that measured it (SdfMeshDemand.Sees), which every group
+        // is before its first measure: the bake takes those in view first (RankOf), and only one arriving in view plans
+        // its floor first (Tiers).
+        public bool InView { get; set; } = true;
         // The tier the demand asked of the group at the latest frame (Retier), the frames in a row it has owed a finer
         // tier than it draws, and whether a finer tier's bake meshed nothing at the demanded tier, so none is tried until
         // the demand asks another.
