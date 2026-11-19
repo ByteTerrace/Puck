@@ -9,8 +9,9 @@ using Puck.Hosting.Jobs;
 namespace Puck.SdfVm;
 
 /// <summary>What one residency's bake reports of a detail decision (<see cref="SdfResidencyGrant.Decide"/>).</summary>
-/// <param name="Over">Whether the bytes the residency's draws name pass its budget, or a finer tier waits within one
-/// replacement of it.</param>
+/// <param name="Over">Whether the bytes the residency's draws name pass its budget, a finer tier waits within one
+/// replacement of it, or its mesh region refuses a mesh the draws name. A pressing report presses the one bias at the
+/// next decision, whichever residency makes it, unless the pool's limit has risen since.</param>
 /// <param name="AnySpare">Whether the residency still has a group drawing a finer tier than its demand asks, landing a
 /// coarser one or waiting its hold: detail it can give up before every demand is coarsened.</param>
 /// <param name="CanLower">Whether the residency would stay under its budget with every demand half a rung finer, with
@@ -74,6 +75,10 @@ public sealed class SdfResidencySelector {
     private int m_biasSinceLowered = int.MaxValue;
 
     private long m_growthRefusals;
+    // Every report's serial, and the serial of the report the latest decision was made on: a report counts toward one
+    // decision only (Decide).
+    private long m_reports;
+    private long m_decidedSerial;
 
     /// <summary>Initializes a new instance of the <see cref="SdfResidencySelector"/> class.</summary>
     /// <param name="account">The account the selector reads its pool from and reserves the regions in.</param>
@@ -263,23 +268,30 @@ public sealed class SdfResidencySelector {
         return Math.Max(val1: 0L, val2: (grant.Filled + ((long)((((double)room) * grant.Filled) / Math.Max(val1: 1L, val2: filled)))));
     }
 
-    // Moves the one bias on the report of the residency that names the most among those reporting: it presses when any
-    // residency names more than the budget holds, rises half a rung once the budget has pressed for the hold with no residency holding
+    // Moves the one bias on the report of the residency that names the most among those reporting: it presses when the
+    // residencies together name more than the budget holds or any fresh report presses (its draws past its own budget,
+    // or a mesh its region refuses), rises half a rung once the budget has pressed for the hold with no residency holding
     // detail it can give up, and falls half a rung once every residency has fit a half rung finer for the quiet wait,
     // which doubles when a rise follows a fall closely.
     internal int Decide(SdfResidencyGrant grant, in SdfDetailReport report) {
         var now = Stopwatch.GetTimestamp();
         var bounded = m_account.TryReadTotals(held: out var held, limit: out var limit, pool: Pool, promised: out var promised);
 
+        var limitNow = (bounded ? limit : long.MaxValue);
+
         lock (m_gate) {
             grant.Report = report;
             grant.ReportedAt = now;
+            grant.ReportSerial = ++m_reports;
+            grant.ReportLimit = limitNow;
 
             var primary = grant;
-            // Whether the budget presses is read here, from the limit as it stands and what every residency names, and
-            // from the deciding residency's own report, made a moment ago against that limit. Another residency's
-            // report was made against the limit of its own last decision: one made before a limit was restored would
-            // press on a budget that no longer does.
+            // Whether the budget presses is read from the limit as it stands and what every residency names, from the
+            // deciding residency's own report, and from each other residency's report made since the last decision
+            // under a limit no higher than now: a residency whose own region refuses a mesh, or whose draws pass its own
+            // budget, presses the one bias even when another residency names more and decides. Each such report
+            // presses one decision; one made before the limit was raised (a cap lifted, a budget restored) presses
+            // none, since it judged a budget that no longer stands.
             var over = report.Over;
             var anySpare = false;
             var canLower = true;
@@ -289,11 +301,13 @@ public sealed class SdfResidencySelector {
                 named += other.Named;
                 if ((other.ReportedAt == 0) || ((now - other.ReportedAt) > FreshTicks)) { continue; }
                 if (other.Named > primary.Named) { primary = other; }
+                if ((other.ReportSerial > m_decidedSerial) && (other.ReportLimit >= limitNow)) { over |= other.Report.Over; }
                 anySpare |= other.Report.AnySpare;
                 canLower &= other.Report.CanLower;
             }
             if (bounded) { over |= (named > ((UsableOf(held: held, limit: limit, promised: promised) / 8L) * SdfMeshTier.BudgetEighths)); }
             if (!ReferenceEquals(objA: primary, objB: grant)) { return m_bias; }
+            m_decidedSerial = grant.ReportSerial;
 
             var elapsed = report.Elapsed;
             var bias = m_bias;
@@ -389,6 +403,9 @@ public sealed class SdfResidencyGrant : IDisposable {
     internal long Filled;
     internal SdfDetailReport Report;
     internal long ReportedAt;
+    // The report's serial among the selector's reports, and the pool limit it was made under (long.MaxValue unbounded).
+    internal long ReportSerial;
+    internal long ReportLimit;
 
     /// <summary>Records the bytes the region's first buffer holds and reserves them with its staging as the
     /// reservation's floor: storage a residency cannot draw without, reserved whatever the pool holds.</summary>

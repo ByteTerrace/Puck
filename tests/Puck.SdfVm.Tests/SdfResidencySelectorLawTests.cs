@@ -331,6 +331,29 @@ public sealed class SdfResidencySelectorLawTests {
         Assert.Equal(expected: 2, actual: selector.Bias);
     }
     [Fact]
+    public void ASmallerResidencysPressureRaisesTheBiasWhenTheLargerOneDecides() {
+        var (account, _, segments) = Discrete();
+        var selector = new SdfResidencySelector(account: account, pool: PhysicalMemory.Device);
+        using var session = selector.Register(name: "session");
+        using var valley = selector.Register(name: "valley");
+        var pressing = new SdfDetailReport(AnySpare: false, CanLower: false, Elapsed: SdfMeshTier.MeasureFrames, Over: true);
+        var fitting = new SdfDetailReport(AnySpare: false, CanLower: false, Elapsed: SdfMeshTier.MeasureFrames, Over: false);
+
+        // The session names more and decides; the valley's region refuses a mesh, so its report presses.
+        Budget(account: account, localBudget: (8L * Gibibyte), segments: segments, serial: 1UL);
+        _ = session.Budget(filled: Gibibyte, named: Gibibyte);
+        _ = valley.Budget(filled: (900L * Mebibyte), named: (900L * Mebibyte));
+        _ = session.Decide(report: in fitting);
+        Assert.Equal(expected: 0, actual: selector.Bias);
+        _ = valley.Decide(report: in pressing);
+        Assert.Equal(expected: 0, actual: selector.Bias);
+        _ = session.Decide(report: in fitting);
+        Assert.Equal(expected: 1, actual: selector.Bias);
+        // The report presses one decision: with no newer report from the valley, the bias stands.
+        _ = session.Decide(report: in fitting);
+        Assert.Equal(expected: (1, (1, 0)), actual: (selector.Bias, selector.BiasSteps));
+    }
+    [Fact]
     public void AMeshRegionsStagingIsAdmittedOnUnifiedMemoryWhereItsGrowthIsRefused() {
         // Unified memory: one segment in the host's pool, which the regions' buffers and their staging share.
         var account = new MemoryAccount(availablePhysicalBytes: static () => null, installedPhysicalBytes: (64L * Gibibyte));
