@@ -608,6 +608,22 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         }
     }
 
+    /// <summary>Gets whether the volume's light has converged for the lighting it is given: it is not settling at all
+    /// (<see cref="Settling"/>), or, under a lighting that changes every frame (a moving sun, a keyed sky), its geometry is
+    /// settled (no scene build, trace or window refill owed and every traced probe written) and the latest relight cycle
+    /// kept every level's oldest probe within its age bound, so the light it shows trails the lighting by no more than
+    /// the budget allows. <see langword="false"/> before a relight cycle has been measured under a changing lighting.</summary>
+    public bool Converged {
+        get {
+            lock (m_gate) {
+                return !Settling || (!GeometrySettling && (m_cycleStart != 0L) && !m_behind);
+            }
+        }
+    }
+
+    // Whether the latest relight cycle (Measure) found a level whose oldest probe exceeds its age bound.
+    private bool m_behind;
+
     // Whether the published geometry is still changing: a scene build, a trace or a window's refill owed. A relight in
     // progress leaves the probes' cells, origins and surface maps as they stand.
     private bool GeometrySettling =>
@@ -2238,6 +2254,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         if (seconds > 0d) { m_cycleRate = ((float)((Counters.Read(kind: Relit) - m_cycleRelit) / seconds)); }
         m_cycleStart = now;
         m_cycleRelit = Counters.Read(kind: Relit);
+        m_behind = false;
         if (m_budget.Age <= 0f) { return; }
         var worst = -1;
         var overrun = 1f;
@@ -2252,6 +2269,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
             if (ratio > overrun) { worst = level; overrun = ratio; }
         }
         if (worst < 0) { return; }
+        m_behind = true;
         Counters.Count(kind: Behind);
         if ((m_behindAt != 0L) && (Stopwatch.GetElapsedTime(endingTimestamp: now, startingTimestamp: m_behindAt) < BehindInterval)) { return; }
         m_behindAt = now;

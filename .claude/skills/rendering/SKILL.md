@@ -1302,15 +1302,14 @@ wrong. The contracts that bite most often:
   the bake's code reaches, across the `Puck` assemblies, read from the build
   (`SdfMeshBakeClosure`), and the entry format's version. No list names the bake's files: code it calls is
   covered, code it does not call is not, a checkout's path is not, and a miss
-  logs the part that changed (`[sdf.mesh-bake] miss …`). Reading a stored mesh
-  back is not covered: a decode edit that changes what an entry's bytes mean
-  changes `SdfMeshStoreCodec.Magic`. A hot-reload update to
+  logs the part that changed (`[sdf.mesh-bake] miss …`). The stage keys cover
+  the decoders that restore their products. A hot-reload update to
   a type the closure declares members of folds into the code identity
   (`SdfMeshBakeClosure.Reads`, `CodeRevision.AppliedTo`), and the residency
   follows it before each plan and stage; an update anywhere else keeps the
   store. `puck mesh identity
-  --build <dir> --against <dir>` names the members that differ between two
-  builds before any boot.
+  --build <dir> --against <dir>` names the changed members and the stages that
+  can reuse products before any boot.
 - **`puck mesh audit --world <file>` checks a bake without a GPU or a person
   looking**, against the CPU field; `--cpu` bakes offline so a contour or field
   change shows with no boot. Run it before calling a bake change done.

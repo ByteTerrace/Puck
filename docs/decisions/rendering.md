@@ -347,12 +347,15 @@ table does not hold, or a row whose key is not its program's identity, is
 refused there. Nothing changes for the renderer: it already compiled programs
 by content and specialized by identity. The bake never reads a program.
 
-**Interpret first, specialize behind.** The interpreter shows an edit on its
-next frame, because a program edit is a table upload, and it renders a program
-the cache has never seen. A specialized kernel replaces it at a frame boundary
-when its background compile arrives. The interpreter renders the correct image,
-so nothing is traded while compiling: a skipped draw or a default material in
-its place is rejected, as the bar forbids. Compiling a views-sized kernel takes
+**Specialize behind, and keep frames smooth while compiling.** A specialized
+kernel replaces the running one at a frame boundary when its background compile
+arrives. Measured on the RTX 4070, the interpreter costs 60 to 420 ms a frame on
+the debug world, which breaks the rapid-iteration ruling more than a few seconds
+of an older look does, so while a compile runs the frame keeps the last
+specialized kernel for the programs it already had and draws plain shading for
+a program no specialization has seen yet; the interpreter runs only when asked
+(`world.shaders.tier interpreted`). Following from the owner's rapid-iteration
+ruling (AGENTS.md). Compiling a views-sized kernel takes
 seconds per target, which is why specialization is never on the edit path. A
 world's programs are declared in its documents, so `world prepare` compiles
 them for a player build and the interpreter covers only edits and misses. Both

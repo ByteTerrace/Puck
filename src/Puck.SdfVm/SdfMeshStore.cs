@@ -35,6 +35,8 @@ public sealed class SdfMeshStore {
     public const long DefaultCapacityBytes = (8L << 30);
     /// <summary>The extension of an entry's file.</summary>
     public const string Extension = ".mesh";
+    private const string CheckpointExtension = ".bake";
+    private const string SampleExtension = ".samples";
 
     private const int ChecksumBytes = 16;
     private const int HeaderBytes = SdfMeshStoreCodec.HeaderBytes;
@@ -133,9 +135,9 @@ public sealed class SdfMeshStore {
     // Reads a geometry's entry into a storage as TryRead does: the entry is stamped when it is sound, and deleted when its
     // bytes are refused. `taking` is the taking group's ids, which the decode writes the triangle materials in when the mesh
     // can be renumbered back by place (SdfMeshStoreCodec.TryDecode); `declined` is set for a sound entry the storage did not take.
-    internal bool TryReadInto(UInt128 identity, SdfMeshGeometry geometry, SdfMeshStorage storage, int[]? taking, out SdfMesh? mesh, out int[] materials, out string? refusal, out bool declined) {
-        var path = PathOf(identity: identity, key: KeyOf(geometry: geometry, identity: identity));
-        var read = TryReadEntry(damaged: out var damaged, declined: out declined, geometry: geometry, identity: identity, materials: out materials, mesh: out mesh, refusal: out refusal, storage: storage, taking: taking);
+    internal bool TryReadInto(UInt128 identity, SdfMeshGeometry geometry, SdfMeshStorage storage, int[]? taking, out SdfMesh? mesh, out int[] materials, out string? refusal, out bool declined, string extension = Extension) {
+        var path = PathOf(identity: identity, key: KeyOf(geometry: geometry, identity: identity), extension: extension);
+        var read = TryReadEntry(damaged: out var damaged, declined: out declined, geometry: geometry, identity: identity, materials: out materials, mesh: out mesh, refusal: out refusal, storage: storage, taking: taking, extension: extension);
 
         if (!read && damaged) { Delete(path: path); }
         if (read || declined) { Puck.Abstractions.CacheRetention.Stamp(path: path); }
@@ -273,9 +275,9 @@ public sealed class SdfMeshStore {
     // Reads an entry into a storage, answering whether a held entry's bytes were refused (damaged) rather than unreadable
     // or sound but not taken by the storage (declined). The entry's bytes are read into owned scratch, as its inflated planes
     // are, and nothing of them outlives the decode.
-    private bool TryReadEntry(UInt128 identity, SdfMeshGeometry geometry, SdfMeshStorage storage, int[]? taking, out SdfMesh? mesh, out int[] materials, out string? refusal, out bool damaged, out bool declined) {
+    private bool TryReadEntry(UInt128 identity, SdfMeshGeometry geometry, SdfMeshStorage storage, int[]? taking, out SdfMesh? mesh, out int[] materials, out string? refusal, out bool damaged, out bool declined, string extension = Extension) {
         var key = KeyOf(geometry: geometry, identity: identity);
-        var path = PathOf(identity: identity, key: key);
+        var path = PathOf(identity: identity, key: key, extension: extension);
         var started = System.Diagnostics.Stopwatch.GetTimestamp();
 
         mesh = null;
@@ -336,17 +338,76 @@ public sealed class SdfMeshStore {
 
         var key = KeyOf(geometry: geometry, identity: identity);
         var path = PathOf(identity: identity, key: key);
-        var bytes = Encode(key: key, materials: materials, mesh: mesh);
+        return WriteEntry(path, Encode(key: key, materials: materials, mesh: mesh));
+    }
 
+    private bool WriteEntry(string path, byte[] bytes) {
         if (!Quietly(action: () => Puck.Confinement.AtomicFile.WriteAllBytes(bytes: bytes, path: path))) { return false; }
         _ = Puck.Abstractions.CacheRetention.EnforceSetsOnWrite(
             bound: new Puck.Abstractions.CacheBound(MaxBytes: CapacityBytes, MaxEntries: MaxSets),
             directory: Directory,
             inUse: path,
-            isEntry: static name => name.EndsWith(comparisonType: StringComparison.Ordinal, value: Extension)
+            isEntry: static name => name.EndsWith(Extension, StringComparison.Ordinal)
+                || name.EndsWith(CheckpointExtension, StringComparison.Ordinal)
+                || name.EndsWith(SampleExtension, StringComparison.Ordinal)
         );
 
         return true;
+    }
+
+    internal bool ContainsCheckpoint(UInt128 identity, SdfMeshGeometry geometry) =>
+        File.Exists(PathOf(identity, KeyOf(identity, geometry), CheckpointExtension));
+
+    internal bool TryReadCheckpoint(UInt128 identity, SdfMeshGeometry geometry, out SdfMesh? mesh) {
+        try {
+            return TryReadInto(identity, geometry, new SdfMeshManagedStorage(), null, out mesh, out _, out _, out _, CheckpointExtension);
+        } catch (OutOfMemoryException) {
+            mesh = null;
+            return false;
+        }
+    }
+
+    internal void WriteCheckpoint(UInt128 identity, SdfMeshGeometry geometry, SdfMesh? mesh) {
+        var key = KeyOf(identity, geometry);
+        try {
+            _ = WriteEntry(PathOf(identity, key, CheckpointExtension), SdfMeshStoreCodec.EncodeExact(key, mesh));
+        } catch (Exception exception) when (exception is OutOfMemoryException or OverflowException) {
+            // The surface is still available to the next stage.
+        }
+    }
+
+    internal bool TryReadSamples(UInt128 identity, UInt128 key, int length, OwnedBuffer<byte> samples) {
+        key = KeyOf(identity, new SdfMeshGeometry(Dynamic: false, Hash: key));
+        var path = PathOf(identity, key, SampleExtension);
+        var workspace = Workspace;
+        using var owner = workspace.CreateOwner("mesh-bake-samples");
+        using var entry = new OwnedBuffer<byte>(m_allocator, owner);
+        try {
+            if (!TryReadEntryBytes(entry, owner, path, in workspace)) { return false; }
+            if (!SdfMeshStoreCodec.TryPayload(entry.GetSpan(), key, out var compressed, out var storedLength, out _) || (storedLength != length)) {
+                Delete(path);
+                return false;
+            }
+            if (!workspace.TryReserve(owner, checked((long)entry.Length + length))) { return false; }
+            samples.Resize(length, clear: false, preserve: false);
+            if (!SdfMeshStoreCodec.TryInflate(compressed, samples.GetSpan())) {
+                Delete(path);
+                return false;
+            }
+            Puck.Abstractions.CacheRetention.Stamp(path);
+            return true;
+        } catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or OutOfMemoryException) {
+            return false;
+        }
+    }
+
+    internal void WriteSamples(UInt128 identity, UInt128 key, ReadOnlySpan<byte> samples) {
+        key = KeyOf(identity, new SdfMeshGeometry(Dynamic: false, Hash: key));
+        try {
+            _ = WriteEntry(PathOf(identity, key, SampleExtension), SdfMeshStoreCodec.EncodePayload(key, samples));
+        } catch (OutOfMemoryException) {
+            // The sample answer is already available to the contour.
+        }
     }
     /// <summary>Records a bake's identity beside the entries: its parts and its code's members, written once
     /// (<see cref="IdentityExtension"/>) and stamped on each later record, so a later bake that misses can name what
@@ -508,7 +569,7 @@ public sealed class SdfMeshStore {
 
         return XxHash128.HashToUInt128(source: key);
     }
-    private string PathOf(UInt128 identity, UInt128 key) => Path.Combine(path1: SetDirectoryOf(identity: identity), path2: (key.ToString(format: "x32", provider: null) + Extension));
+    private string PathOf(UInt128 identity, UInt128 key, string extension = Extension) => Path.Combine(path1: SetDirectoryOf(identity: identity), path2: (key.ToString(format: "x32", provider: null) + extension));
     private static byte[] Encode(UInt128 key, SdfMesh? mesh, int[] materials) => SdfMeshStoreCodec.Encode(key: key, materials: materials, mesh: mesh);
     // Deletes a file the store owns, leaving one another World holds open for a later trim or refusal to remove.
     private static void Delete(string path) => _ = Quietly(action: () => File.Delete(path: path));
