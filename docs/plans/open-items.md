@@ -2368,19 +2368,23 @@ findings are answered in decision 3a. Then the researcher brief's priorities
   `WorldScreenBinder.ContentAccess`, `WorldSessionObservation.DisclosesEverything`).
   An adversarial review found a way around each, and
   [the withdrawal chokepoint](disclosure/withdrawal-chokepoint.md) checks its
-  nine findings against the code and ranks the seven that hold in whole or in
+  nine findings against the code and ranks the eight that hold in whole or in
   part. The worst shows content that
   was never delivered: a replica-tier session in a world with a restricted row
   is drawn from the authority's whole replica. The others keep a picture or a
-  product of one after access narrows: a view that retires skips the
+  product of one after access shrinks: a view that retires skips the
   withdrawal, a replaced session keeps the previous residency, a node's own
-  history and several retained copies survive, and a narrowing inside
-  "disclosed" is not seen at all. The memo designs one door in their place
-  (the stream stamps each delivery with its span of access, and the render
-  graph carries the span on every output) and orders seven steps, each with a
-  check. Next: the Codex design review of the memo, then its step 1, which
-  closes the worst finding. This is decision 14's step 5 (results keyed by
-  what each viewer was delivered) with the withdrawn picture of decision 2.
+  history and several retained copies survive, and a loss inside "disclosed"
+  (a card moved to a zone the viewer cannot read) is not seen at all. The memo
+  designs one door in their place: the authority decides a cut from what a
+  stream was delivered and can no longer read, the cut reaches the viewer in
+  order with the content, and content travels with the right to show it as one
+  value. A design review found sixteen flaws in the first draft, and the memo
+  answers each. It orders eight steps, each with a check, and no step deletes a
+  guard before its replacement owns the same paths. Next: its step 1, which
+  tightens the whole-replica test at once and lands the stream's generation.
+  This is decision 14's step 5 (results keyed by what each viewer was
+  delivered) with the withdrawn picture of decision 2.
 
 - [high] Authored search must plan over what its actor is disclosed. Today an
   actor-less job reads true state under the audience check (an AI can read a
