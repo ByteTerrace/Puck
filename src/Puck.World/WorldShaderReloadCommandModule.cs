@@ -22,7 +22,7 @@ internal sealed class WorldShaderReloadCommandModule(WorldRenderProbe renderProb
             audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "world.shaders.tier",
-            description: "Selects which tier shades authored programs, for comparing them: [automatic|interpreted]. automatic records with the published specialized kernels wherever they hold every active program, and with the engine's default shading (no program) until they do; interpreted records with the interpreter. Changing it re-renders the shading passes; specialization continues in either mode, and world.shaders.status reports each program's state.",
+            description: "Selects which tier shades authored programs, for comparing them: [automatic|interpreted]. automatic records with the published specialized kernels wherever they hold every active program; interpreted records with the interpreter. Changing it re-renders the shading passes; specialization continues in either mode, and world.shaders.status reports each program's state.",
             handler: (_, args) => {
                 if (renderProbe.Residency is not { } node) { return new CommandResult(Output: "[world.shaders.tier: renderer not ready]"); }
                 if ((args.Count > 1) || ((args.Count == 1) && !args.Is(index: 0, value: "automatic") && !args.Is(index: 0, value: "interpreted"))) {
@@ -83,7 +83,7 @@ internal sealed class WorldShaderReloadCommandModule(WorldRenderProbe renderProb
             audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "world.shaders.status",
-            description: "Reports the most recent compiled SDF shader reload: request number, state (idle/pending/applied/unchanged/failed), generation, changed pipeline count, directory and failure reason. A request is complete only after pending changes to an outcome. Then one '[world.shaders.program: ...]' line for each authored program the residency shades or compiles: its identity, author name and state (specialized; compiling or neutral, its surfaces shaded by the engine's default until a specialization holds it, with the failure that left it neutral; or interpreted, while world.shaders.tier interpreted asks for it), after a '[world.shaders.tier: ...]' line.",
+            description: "Reports the most recent compiled SDF shader reload: request number, state (idle/pending/applied/unchanged/failed), generation, changed pipeline count, directory and failure reason. A request is complete only after pending changes to an outcome. Then one '[world.shaders.program: ...]' line for each authored program the residency shades or compiles: its identity, author name and state (specialized, compiling or interpreted, with the failure that left it interpreted), after a '[world.shaders.tier: ...]' line.",
             handler: (_, args) => {
                 if (args.Count != 0) {
                     return CommandResult.Error(output: "[world.shaders.status: no arguments]");
@@ -100,7 +100,7 @@ internal sealed class WorldShaderReloadCommandModule(WorldRenderProbe renderProb
                     $"[world.shaders.program: identity={p.Identity} name={p.Name} state={p.State}{((p.Error is { } error) ? $" error={error}" : string.Empty)}]");
 
                 return reload with {
-                    Output = string.Join(separator: '\n', values: lines.Prepend(element: $"[world.shaders.tier: {(node.InterpretShade ? "interpreted" : "automatic")} programs={programs.Count} specialized={programs.Count(static p => p.State == "specialized")} compiling={programs.Count(static p => p.State == "compiling")} neutral={programs.Count(static p => p.State == "neutral")} interpreted={programs.Count(static p => p.State == "interpreted")} bins={(node.BinShade ? "on" : "off")}]").Prepend(element: reload.Output)),
+                    Output = string.Join(separator: '\n', values: lines.Prepend(element: $"[world.shaders.tier: {(node.InterpretShade ? "interpreted" : "automatic")} programs={programs.Count} specialized={programs.Count(static p => p.State == "specialized")} compiling={programs.Count(static p => p.State == "compiling")} interpreted={programs.Count(static p => p.State == "interpreted")} bins={(node.BinShade ? "on" : "off")}]").Prepend(element: reload.Output)),
                 };
             }
         );
