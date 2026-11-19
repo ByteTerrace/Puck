@@ -139,7 +139,11 @@ demand and priority rather than creating executors.
   a miss ([machine budgets are bytes](rendering.md)), and a device that
   refuses a growth lowers the budget instead of ending the World. A mesh
   region's limit is what its grant reserved for it
-  (`SdfResidencyGrant.ReserveGrowth`), never past `GpuRegion.MaxByteCount`.
+  (`SdfResidencyGrant.ReserveGrowth`), never past `GpuRegion.MaxByteCount`,
+  and the residency's detail budget never passes the limit's share
+  (`SdfResidencyGrant.Budget`): a list the region would refuse presses the
+  budget, so the bake coarsens detail before it leaves a hole, on every
+  backend and whether the region is mapped or grows by copy.
 - **The unit that leaves is a bake tier.** Each group's coarsest tier that
   still covers it stays as its floor, and the tier a view demands is detail
   above it, so evicting hands the draws back to the floor and bakes nothing.

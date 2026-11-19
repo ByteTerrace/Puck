@@ -290,9 +290,7 @@ public sealed partial class SdfWorldTables {
     private void PrepareMeshRegionLimit() {
         var held = ((long)m_meshRegion.DestinationBytes);
         var holes = (m_meshRegion.Mapped ? Math.Max(val1: 0L, val2: (RoundUp(value: m_meshRegion.ByteCount, unit: m_meshRegion.MappedChunkBytes) - held)) : 0L);
-        var most = ((long)MostMeshRegionBytes);
-
-        m_meshArena.SetLimit(limitBytes: ((ulong)Math.Min(val1: most, val2: (m_meshGrant.ReserveGrowth(capacityBytes: held, mostBytes: Math.Max(val1: held, val2: (most - holes))) + holes))));
+        m_meshArena.SetLimit(limitBytes: ((ulong)m_meshGrant.ReserveGrowth(capacityBytes: held, mostBytes: ((long)MostMeshRegionBytes), unbackedBytes: holes)));
 
         static long RoundUp(long value, long unit) => ((((value + unit) - 1L) / unit) * unit);
     }

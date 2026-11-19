@@ -38,9 +38,8 @@ public sealed partial class SdfMeshPathBake {
     // The frames in a row Retier has left the detail alone, counted up to SdfMeshTier.SettleFrames; read off the
     // frame's thread (DetailSettled).
     private int m_detailQuiet;
-    // The residency's mesh region as the frame's thread last read it (ObserveResidency): its limit, zero before the
-    // first reading, the bytes the frame's draws name, and the meshes it refuses.
-    private long m_regionLimitBytes;
+    // The residency's mesh region as the frame's thread last read it (ObserveResidency): the bytes the frame's draws
+    // name, and the meshes it refuses. Its limit bounds the budget through the grant (SdfResidencyGrant.Budget).
     private long m_regionNamedBytes;
     private int m_regionRefused;
     // The groups drawing a finer tier than their demand asks and the finer tiers the budget held back, as of the
@@ -416,7 +415,8 @@ public sealed partial class SdfMeshPathBake {
         }
         m_tiersHeldBack = heldBack;
 
-        var over = ((named > budget) || ((heldBack > 0) && (named > (budget - replacement))));
+        // A mesh the region refuses presses whatever the bytes say: the arena's free runs, not the sum, decide a place.
+        var over = ((named > budget) || ((heldBack > 0) && (named > (budget - replacement))) || (m_regionRefused > 0));
         var anySpare = false;
 
         if (over) {
