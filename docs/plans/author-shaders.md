@@ -220,7 +220,19 @@ temporal resolve at ~3 ms and 392 B/px):
 4. **Exposure meter on a small fixed grid** (measured). Stop meter cost from
    scaling with resolution; drop on devices where compiling the meter out
    saves under 0.1 ms. Keep the meter (centre-weighted percentiles) distinct
-   from screen-glow mean colour, sharing sampling only.
+   from screen-glow mean colour, sharing sampling only: a small bright patch
+   and an evenly dim picture can have the same mean and very different
+   percentiles.
+
+The 35 copied words are the most the split saves each frame: a window still
+filling, or reset by motion, holds fewer samples and copies fewer. A probe
+lookup at a lower rate shows stair-stepping at visibility edges, and we found
+no system that shades below full rate without also filtering (not checked).
+Nothing here has been measured off the RTX 4070. Not checked: the history's
+layout (a research map) and that a screen's glow is a mean of its picture (a
+reviewer's reading). Burns and Hunt's "no more than 10 % of frame time" covers
+building per-material tile lists only, and their tile-size remark concerns a
+separate 16 by 8 lighting kernel, not Puck's 8 by 8 material tiles.
 
 ## Unverified premises
 

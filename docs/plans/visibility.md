@@ -220,7 +220,12 @@ belongs to opposite-facing triangles). Note the earlier packed-vertex layout
 that cut region bytes by 34% but slowed passes and was reverted: indexed draws
 become the baseline format only if every bar device supports them and none is
 slower; if they pay only on stronger hardware, they remain an enhancement
-there.
+there. No source we read measures indexed draws of this kind, and one published
+test (opened by a reviewer, not reverified) found them slower on one GPU and no
+different on an RTX 2060. The bake, visibility and shadow research each
+proposed them separately; they are this one experiment. The streaming
+prototype's "indexed read" is a different thing: buffers reached through a
+descriptor array, not an index buffer.
 
 **The vertex-stage ABI.** A command's identity word, which R2 already pushes
 (the Direct3D 12 command signature's root constant; on Vulkan read through
@@ -379,7 +384,7 @@ limit.
 **Why:** fewer triangles cut bake time and GPU geometry together, especially on
 flat and closed-form parts (cutting a grass blade part from roughly 474
 triangles to about a dozen). Per-level and per-tier triangle counters
-([bake demand tiers](bake-demand-tiers.md#steps-and-checks)) replace earlier
+([virtual geometry's step 1](virtual-geometry.md#the-build-order)) replace earlier
 estimates of coarsest-level triangle share. The raster decision rejected dropping
 outline vertices world-wide at about 1 % of triangles, before thin foliage
 existed; M2's triangles per blade part decide whether it pays now.
@@ -466,14 +471,44 @@ small cost cut; it stays a separate pyramid from the AO one.
 3. **Multi-residency instance table and shared-part crowds.** Write a memo for
    taking rows from several residencies into one instance table — drawing a
    far neighbour's authority-permitted geometry beyond the border with no body
-   there ([valley and moons](valley-and-moons.md)), and composing characters as
+   there ([valley and moons](valley-and-moons.md)), naming who is admitted to
+   observe the neighbour and how the host binds that geometry for each viewer,
+   and composing characters as
    baked parts shared by identity at draw time while pricing smooth blends
    across parts (since a blend creates a distinct shape). Test on an authored
    crowd (both repeated looks and every look distinct from a shared wardrobe)
    at three crowd sizes with fixed camera, moving-body count, tier
    (`SdfMeshBakeGroup` appends tier) and starting store: verify one residency,
    one bake per distinct `(part, tier)` and `(blended seam, tier)`, and rows
-   visited, bytes packed and draws scaling only with visible bodies.
+   visited, bytes packed and draws scaling only with visible bodies; then vary
+   the visible bodies to find the work that truly must grow. A crowd cannot
+   certify the adjacency, so the adjacency is checked on its own in
+   [the valley plan](valley-and-moons.md#phases).
+
+**Why, and the risks.** Empty indirect draws "are actually not free": one
+measurement went from 2.97 ms to 0.9 ms over 125,000 culled objects on a GTX
+1070 (Logdahl). At one stop the far cascade's receiver culling took its full
+refresh from 23,125 draws to 4,138 and from 8.5 ms to 2.9 ms, while the near
+and second cascades are culled by bounding box only, and at the lobby the two
+cascades take 3.9 ms against 1.7 ms for the main mesh pass (each measured
+once). Today's receiver mark starts from the opaque camera mesh
+(`sdfReceiverMark`) and would miss both cascades in a blend band, the blocker
+search and filter footprints, both slots and glass against the sky, which is
+why the union is built by construction. Compaction alone is all that mostly
+unique geometry gains from grouping, and every consumer of a draw's identity
+moves in the same piece of work. The strongest case against compaction is that
+recording is not most of the frame on the RTX 4070: the claim is about scale
+and code health, so compaction is measured apart from grouping. Sessions do not
+map one to one onto residencies, so only the decoding of rows that does not
+vary by view is shared; the frustum, depth, phase and held history differ per
+view, and the late phase depends on the current depth. Every step extends the
+existing classification (`SdfMeshOcclusion`) with a stable order for depth
+ties. Not checked in full: Haar and Aaltonen's 250,000 objects in two indirect
+calls draws fixed 64-vertex clusters, so it supports the cluster experiment,
+not the grouping of whole meshes; Bittner's 1.5 to 2 times was a 2010 GPU with
+CPU occlusion queries; Burns and Hunt's smaller visibility buffer pays with
+several samples a pixel and little or not at all with one, which is Puck's
+case, so nothing here credits it with a gain on the Steam Deck.
 
 Session views take part too. Their schedule decides by frustum, size and the
 glass's occlusion against the consumer's depth (`WorldViewGraphHost.PortalSightOf`
@@ -639,7 +674,7 @@ times are taken in the lead's settle windows, never by a lane under load.
 | V3b. Faster simplifier | rendering | After trying cheaper acceptance search and attribute quadrics inside `SdfMeshCollapse`: an error-aware simplifier under Puck's bounds, measured against `SdfMeshCollapse`, and one of the two kept | Land-stage thread-seconds against the collapse's; `puck mesh audit` scores no worse; `world.detail 1` and `2` stills at the gallery compared tolerantly |
 | V4a. Early-depth variant | rendering | The non-fading pipeline with `[earlydepthstencil]` | Mesh-pass GPU time and shaded fragments at the meadow on the 2060 and at the Deck's resolution; the faded avatar still reveals the room behind her at `debug.go stage` |
 | V4b. Packed visibility target | rendering | The `uint2` target and depth reconstruction | `surface` and `pyramid` GPU time against V4a's; AO and stills compared tolerantly at the gallery and meadow |
-| V5. Views, shadows and shared crowds | rendering | Receiver-conditioned caster culling as a conservative union across cascades; one residency instance-row read per frame shared across views (with glass list from kernel); multi-residency instance table and shared-part crowd memo/checks | Six moving caster-culling cases clean; two views of one other world plus one view of a second (and a restricted-viewer window) read two residencies' rows once each and classify three views; crowd scaling checks clean at three crowd sizes |
+| V5. Views, shadows and shared crowds | rendering | Receiver-conditioned caster culling as a conservative union across cascades; one residency instance-row read per frame shared across views (with glass list from kernel); multi-residency instance table and shared-part crowd memo/checks | Six moving caster-culling cases clean, judged by the casters admitted and the shadow that results; a rigidly skinned draw is culled when it cannot show and still shadows a visible receiver; cascade GPU time and vertices at the meadow and the gallery; `debug.go portals` with nested views: per-view counts, no stale child image; two views of one other world plus one view of a second (and a restricted-viewer window) read two residencies' rows once each and classify three views; crowd scaling checks clean at three crowd sizes |
 
 V2a and V2b run ahead of V1a (M1's verdict), so V2b builds the instance table
 V1b consumes. V3a and V4a share no files with V1 and run beside it. V1b waits

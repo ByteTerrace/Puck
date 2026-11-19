@@ -706,7 +706,10 @@ Built for a single closed glass solid in W1 above: when a ray starts inside
 glass, back faces leave a positive winding in the glass pass's signed distance
 sums, each interval clips against the opaque hit so submerged beds still
 receive per-ray absorption, and a single homogeneous starting medium scatters
-light along the first segment.
+light along the first segment. Knowing the eye is inside such a body is one
+field query for a view, and colouring the picture is not enough: two rays
+from the same eye leave the water at different distances, and one may reach
+the bottom first, which is why each ray is cut at its own surface or exit.
 
 **Check.** With the eye under water, test two overlapping media and a
 continuous crossing of the waterline, verifying no pop at the boundary and

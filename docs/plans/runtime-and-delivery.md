@@ -307,12 +307,19 @@ prototype closing those gaps in the revision vector only if the
 capturing a shown, unchanged world is a real cost (carrying the refusal and
 audit rules in
 [streaming decision 4](streaming-and-memory.md#decision-4-a-residency-is-staged-by-its-demand-not-by-a-render)).
-Check: at a settled gallery view with stable inputs, produce falls to upkeep
-with zero audit disagreements over the route (covering a running cartridge with
-a still camera, settling lighting, a sky over a quiet network, a state value
-easing on a quiet delivery, and a view resumed after a long gap); read savings
-with the audit off as rays traced and bytes uploaded from the same named queue,
-and verify displayed output via replay or visual checks.
+The audit compares every skip with the full decision the residency makes today
+and records why that decision would have redrawn. Check: at a settled gallery
+view with stable inputs, produce falls to upkeep with zero audit disagreements
+over the route (covering a running cartridge with a still camera, settling
+lighting, a sky over a quiet network, a state value easing on a quiet delivery,
+and a view resumed after a long gap); captures are counted by residency and by
+cause with each consumer's changed inputs recorded, so a root capture owed to
+scheduling is told apart from a missed change; a settled view that captures
+for no recorded cause, or a skip the full decision would have redrawn, shows
+the claim false. One lever pulled costs what it reaches, and a screen running
+a cartridge keeps redrawing. Read savings with the audit off as rays traced and
+bytes uploaded from the same named queue, not as a count of jobs, and verify
+displayed output via replay or visual checks.
 
 ### Release pairs
 

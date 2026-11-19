@@ -1,6 +1,6 @@
 # Rendering research: cross-cutting reference
 
-Every decision's and bet's steps, checks and options from [the rendering plan](../rendering-research.md) have been folded into the plans that own them. This page keeps what belongs to no single owning plan: where each decision now lives, the table of missing measurements, the properties the order rests on, where each look is authored, what would change the answer, research still owed, existing systems extended, outside techniques not taken, duplicated work across areas, and the round's sources.
+Every decision's and bet's steps, checks and options from [the rendering plan](../rendering-research.md) have been folded into the plans that own them. This page keeps what belongs to no single owning plan: where each decision now lives, the terms and step names the plans share, the table of missing measurements, the properties the order rests on, where each look is authored, what would change the answer, research still owed, existing systems extended, outside techniques not taken, duplicated work across areas with the out-of-date text still to fix, how the research was checked and where it disagreed, and the round's sources.
 
 | Decision or bet | Owning plan(s) |
 |---|---|
@@ -9,9 +9,9 @@ Every decision's and bet's steps, checks and options from [the rendering plan](.
 | 3. Shorten the tick, and settle where it runs | [The job system plan](../engine-job-system.md#6-build-order) |
 | 4. Background GPU work | [Illumination](../illumination.md#background-gpu-work-and-headroom) and [bake proportional to change](../open-items.md#bake-proportional-to-change) |
 | 5. Convert scene light once | [Rendering](../rendering.md#colour-conversion--scene-light-to-display-values-once) and [the terrain pass](../terrain-pass.md#order-of-work) |
-| 6. One shadow answer | [Illumination](../illumination.md#the-build-order) and [transmission](../transmission.md#implementation-steps) |
-| 7. A lighting change costs what changed | [Illumination](../illumination.md#the-build-order) |
-| 8. One error budget along one chain of meshes | [Virtual geometry](../virtual-geometry.md#the-build-order) and [bake detail bounded by demand](../bake-demand-tiers.md#steps-and-checks) |
+| 6. One shadow answer | [Illumination](../illumination.md#direct-light-roles-the-probe-fallback-and-one-cascade-set), [transmission](../transmission.md#implementation-steps) and [visibility](../visibility.md#v5-multi-view-and-shadow-work) |
+| 7. A lighting change costs what changed | [Illumination](../illumination.md#lighting-proportional-to-change) |
+| 8. One error budget along one chain of meshes | [Virtual geometry](../virtual-geometry.md#the-build-order) (the tiers themselves are [bake detail bounded by demand](../bake-demand-tiers.md)) |
 | 9. Give memory back, and never show a hole | [Streaming and memory](../streaming-and-memory.md#step-5-the-floor-and-eviction) |
 | 10. A bake costs what changed, and contour defects | [Bake proportional to change](../open-items.md#bake-proportional-to-change), [bake detail](../open-items.md#bake-detail) and [visibility](../visibility.md#the-build-order) |
 | 11. One instance table, tested once per pass | [Visibility](../visibility.md#the-build-order) and [virtual geometry](../virtual-geometry.md#the-build-order) |
@@ -27,13 +27,80 @@ Every decision's and bet's steps, checks and options from [the rendering plan](.
 | Bet 6: Light carried across an opening | [Illumination](../illumination.md#the-gaps-the-round-named) and [disclosure](../disclosure.md#presentation-and-derived-product-disclosure) |
 | Bet 7: Tracing light with the field | [Illumination](../illumination.md#after-the-gpu-trace) |
 
+## Words these plans use
+
+The folded steps use a few terms beyond [the rendering plan's
+glossary](../rendering-research.md#words-this-page-uses).
+
+| Term | What it means here |
+|---|---|
+| Group | The unit the bake works on: a set of shapes baked into one mesh. |
+| Chain, rung | The chain is one shape's meshes ordered from fine to coarse. A rung is one mesh in it, with its recorded deviation from the authored field. |
+| Minimum | Work a consumer is owed whatever is on screen: a predicted arrival's first image, the light of a screen out of view, picking, and the lighting trace. |
+| Stands | A view stands when it keeps its last picture for this frame and is not rendered again. |
+| Trace, relight | Tracing finds, for each probe, which surfaces its rays hit; the hits depend on geometry only and are cached. Relighting shades those cached hits again with the current lights. |
+| Lockstep, drain | Lockstep is a mode in which each frame waits for its simulation, bake and lighting work to finish, so two runs give the same picture. Running the lighting to completion this way is a drain. |
+| Round trip | The CPU submits a GPU job, waits for it, and reads the result back before it can submit the next. |
+| The recipe | The one way a bar is measured: on a quiet machine with the display on and composing ([streaming and memory](../streaming-and-memory.md#how-the-bars-are-read)). |
+| Preset | A named set of quality settings. The frame-rate bar is defined at the `world.quality high` preset. |
+
+Short names for steps other plans own:
+
+| Name | Plan | What the step is |
+|---|---|---|
+| C0 | [Job system](../engine-job-system.md#6-build-order) | Give the console and input a guaranteed turn in every loop iteration, and bound every wait. |
+| J1 | Job system | One thread pool for the engine's CPU work, where a fork returns an operation its forking thread owns. |
+| T2, T3 | Job system | Run two parts of the tick in parallel: rigid bodies (T2) and the crossing scan (T3). |
+| R1 | Job system | Record several views' GPU commands in parallel. |
+| V1a, V1b | [Visibility](../visibility.md#the-build-order) | Compact draw commands to the survivors (V1a), then group them by geometry and level on a stable identity (V1b). |
+| V2a, V2b | Visibility | Update far placements less often (V2a), and upload only the instances that changed (V2b). |
+| V3a | Visibility | Remove triangles the bake can prove are redundant. |
+| V5 | [Visibility](../visibility.md#v5-multi-view-and-shadow-work) | Share work between several views and the shadow passes, and cull casters by their receivers. |
+| M2 | Visibility | Whether the meadow is limited by geometry on the RTX 2060 and the Steam Deck. |
+| D1, D3, D4, D8 | [Virtual geometry](../virtual-geometry.md) | Its decisions on the unit of detail (D1), a hierarchy above the draw (D3), clusters inside a draw (D4) and shadows (D8). |
+| G3a, G3b, G4, G7, G9 | [Virtual geometry](../virtual-geometry.md#the-build-order) | Bounding boxes for skinned draws, rigidly skinned first (G3a) then blended (G3b); rigid draws that read their transform slot (G4, the same step as V2b); one mesh baked over many static copies (G7, a "stand parent"); the cluster experiment (G9). |
+| `transmit-identity`, `transmit-plane` | [Transmission](../transmission.md#implementation-steps) | The first gives each shadow-map texel its body's identity and two depth layers; the second rewrites how a receiver resolves its shadow from them, together with the metre-sized filter. |
+| Stage 8 | [Benchmark](../benchmark.md#presentation-timing-and-admission-stage-8) | One record for every attempt to present, and one admission rule. |
+
 ## Missing measurements
 
+Most of the gains the round ranks are arithmetic no counter can confirm, and
+every measurement so far comes from the RTX 4070. Some instruments exist
+(`host.frames`, `world.counters render.record`, `world.gpu-timing`,
+`world.counters gpu`, `world.residency`, [the benchmark](../benchmark.md)'s
+report per chapter); the table lists what is missing. None changes behaviour.
 An instrument is built by the lane that needs it first; a reading ranks or
 sizes the work that uses it and never holds a lane that can show its own
-result. Readings start on the RTX 4070 at 2560 by 1440 on both backends and in
-both topologies; RTX 2060 and Steam Deck rows wait until the RTX 4070 meets
-both bars.
+result. Where a measurement serves only one candidate it is taken when that
+candidate starts: how many probe hits share one surface, the variants of the
+per-pixel probe lookup, how many passes a lighting drain takes, the cost of
+the exposure meter when compiled out, and a per-tier audit of each foliage
+prototype. Readings start on the RTX 4070 at 2560 by 1440 on both backends
+(Direct3D 12 needs Windows, so "both" means the two the platform has) and in
+both topologies; they fill the measured column of
+[the plan's budget table](../rendering-research.md#the-bars-and-the-budget),
+and each step states its claimed gain against it. RTX 2060 and Steam Deck rows
+wait until the RTX 4070 meets both bars; until then each device's authored
+table runs on the RTX 4070, which checks what it selects and submits but not
+its time. Two rows are there for the weak devices' sake: a cold bake's time and
+peak memory, and the time from receiving a creation's program to its first
+usable mesh.
+
+Measuring can become the thing everything waits for, so no lane waits for a
+reading it does not itself need, a timing question goes to the lead's quiet
+window and holds no landing, and no reading waits for the RTX 2060 or the
+Steam Deck. A reading that only explains where cost goes proves nothing about
+whether a later change paid off, so every check that claims frame time names
+the gain it claims and the result that would show it false. A ranking can go
+stale: keying the bake by stage changes its cost, so the cold bake that ranks
+the speed fixes is taken after it. Two options are not taken: building the
+ranked candidates on arithmetic alone (the fastest start, and how a team
+optimizes the wrong thing), and measuring everything first as a stage of its
+own (it holds work that needs no number; the first reading at the bar's size
+was enough to reorder the plan). Not checked: that the cold-bake figure is read
+paused and in lockstep, and the store audit's 238 of 6,544 groups (a
+reviewer's reading); the figures at the bar's size and the 47 collections with
+674 ms of pauses in 600 iterations at a smaller window (measured once).
 
 | Missing measurement | Why it matters | Where it is built | Read on, and what uses it |
 |---|---|---|---|
@@ -62,7 +129,7 @@ both bars.
 | Garbage collections and bytes allocated per iteration, by source | One run had 47 collections that paused the process for 674 ms in 600 iterations | The job system's work packet | The RTX 4070. The `vkalloc` lane is reading Vulkan's, and the sources both backends share follow it |
 | The mesh audit over every stored mesh of the world, at the tier each group is stored at, on each backend | Decision 10's contour rule reaches every bake, and the audit that would judge it does not cover the world today. A store audit over a cold store read 238 of 6,544 groups, and the CPU audit disagrees with the device below cells of about 8 mm ([bake detail](../open-items.md#bake-detail)) | `puck mesh audit` | The RTX 4070, both backends. Used by the contour rule. Groups the audit cannot judge (glyphs and sampled regions, which the CPU evaluator leaves out) and groups it did not sample are counted apart from the groups that passed |
 | Any pass at all on the RTX 2060 and the Steam Deck, on every backend the device runs: Direct3D 12 and Vulkan on the two RTX cards, Vulkan on the Deck | Four plans wait on it: visibility's device measurement (M2), the author-shader matrix, illumination's first step and transmission's budgets | One GPU session that serves all four plans | The RTX 2060 and the Steam Deck, after the RTX 4070 meets both bars |
-| For each bar device: the slowest frame of each chapter against the device's bar, split into the tick, produce, the root view, the cascades, nested views and background work | It says how far each device is from its bar and in which part, so that each later step can state its gain against that distance | The same device session | The RTX 4070 now, on its two backends and in both topologies; the first reading is in the plan's budget table. The other devices after the RTX 4070 meets both bars. Until then each device's authored table is run on the RTX 4070 as an estimate of its counted work |
+| For each bar device: the slowest frame of each chapter against the device's bar, split into the tick, produce, the root view, the cascades, nested views and background work | It says how far each device is from its bar and in which part, so that each later step can state its gain against that distance | The same device session | The RTX 4070 now, on its two backends and in both topologies; the first reading is in the plan's budget table, and it is read again on the RTX 4070 once the instance table and the chain of meshes are in, and at the end with the route's slowest frame against 16.7 ms. The other devices, with the lighting's age and the share it was granted, after the RTX 4070 meets both bars. Until then each device's authored table is run on the RTX 4070 as an estimate of its counted work |
 | The benchmark's route driven against a remote authority, with a witness that the seat's body arrived in the remote world. The report gives the endpoint the route played against, what the local process simulated, what delivery cost and what rendering cost, each apart | The frame bar is read in both topologies, and the route driver reads the seat's body, its places and the navigation mesh from the server of the world the seat is in (`WorldSeatDriver`). A remote world has no server on the client. A run started with `--connect` still steps the boot world and transfers the body, so it reads the wrong topology | The first wave's `bench` lane: a driver that reads what the seat's client was delivered | The RTX 4070, both backends. A run that still observes the boot world does not count |
 | What one more world stepped, and one more nested view in frame, cost the frame thread | Every world instance steps in series on the frame thread, and the budget's tick and nested-view rows assume today's few worlds and one view. The design of where the tick runs starts from this number | `frame`: a scratch world with one more instance, and one with one more nested view | The RTX 4070 |
 | The time from receiving each creation's program to its first usable mesh, with timeouts and failures counted and the slowest reported. A time to a floor is recorded as unavailable until a qualified floor exists | The fifth bet ends on it, and a median alone passes with nearly half the creations missing | A benchmark chapter run from an empty store | The RTX 4070, both backends. Used by the fifth bet |
@@ -373,6 +440,115 @@ places differ for a reason.
 | A motion's value and its bound | An interpreter that looks drivers up by name, the audit's fixed-point pose, a measured reach and a measured speed | 12 |
 | Storing baked meshes | One store per backend | 10 |
 | Reducing an image to a statistic | The composite's histogram for the exposure meter, and the grid that computes a screen's glow. These are two different statistics of two different images, and stay two. They can share a way of sampling | 13 |
+
+### Out-of-date text still to fix
+
+Each is fixed by the step that touches it or by the next documentation sweep.
+
+- The mesh-bake reference and the handbook say the levels keep 11% and 6% of
+  the triangles. A later bake reads otherwise, and virtual geometry's level
+  counter settles which is right.
+- The summary on `SdfMeshIrradiance` still says the views pass multiplies the
+  sky's shares by the live sky.
+- The streaming plan cites the cache reader's spin (`Thread.SpinWait`), which
+  no engine code holds any more: in `src/` only `WaitAnalyzer` names it.
+- The lawn's page says each static row bakes on its own.
+- Open items' note that moving the rule work off the frame thread is the
+  presentation view's last cut.
+
+The bake packet's header no longer says the bake is CPU-bound; the
+critical-path run decides it.
+
+## How the research was checked
+
+The nine passes summarized 166 sources: 140 could be fetched and 26 could not.
+A verification pass then reopened the claims that support each area's first
+three candidates: 63 claims from 35 outside sources, and 12 claims about 10
+files in this repository.
+
+| Area | Confirmed | Partial | Refuted | Unreachable |
+|---|---|---|---|---|
+| Mesh bake, tiers, residency and streaming | 8 | 1 | 0 | 0 |
+| Visibility, culling and draw submission | 5 | 3 | 0 | 0 |
+| Global illumination and probes | 7 | 2 | 0 | 0 |
+| Shadows | 4 | 2 | 0 | 0 |
+| Shading, the temporal resolve and the image | 5 | 4 | 0 | 0 |
+| Glass, water, portals and nested views | 5 | 2 | 1 | 0 |
+| GPU work scheduling and the frame thread | 7 | 0 | 0 | 1 |
+| Foliage, dense landscapes and instancing | 6 | 3 | 0 | 0 |
+| Presentation | 5 | 3 | 1 | 0 |
+| All | 52 | 20 | 2 | 1 |
+
+Of the 75 claims checked, 23 came back partial, refuted or unreachable. Three
+limits follow from how the check was done:
+
+- Most sources were fetched through a summarizing tool. A source the
+  verification pass did not reach is known only by its summary.
+- The pass covered each area's first three candidates. Every candidate ranked
+  below third rests on claims nobody checked.
+- Both refuted claims were about this repository and neither is used. The
+  unreachable claim was a quotation from a slide deck.
+
+### Where the research disagreed, and what was done
+
+1. **Where the tick should run.** The presentation area's first candidate moved
+   the tick to its own thread; the scheduling area rejected running it beside
+   frame building. The question stays open in
+   [the job system plan](../engine-job-system.md#open-questions): the register's
+   ruling against a frame of latency constrains any answer, and neither area
+   measured what a world costs the frame thread or what a hand-off costs.
+2. **What limits the cold bake** is unmeasured under the recipe; the three
+   disagreeing records are in
+   [the bake packet](../open-items.md#bake-proportional-to-change), and neither
+   speed fix is ranked ahead until one recipe run shows the critical path.
+3. **How much the coarser levels save.** The mesh-bake reference and the
+   handbook say 11% and 6% of stored triangles; a later cold bake read 29% and
+   19% of merged triangles. Neither is used; virtual geometry's counter decides.
+4. **A deeper chain of collapse levels** was proposed for distant casters and
+   had already been measured and rejected (an oak fell only from 3,052 to 1,440
+   triangles at 128 cells). The far shadow map gets a coarser tier instead
+   ([virtual geometry](../virtual-geometry.md#the-build-order)).
+5. **Indexed draws were proposed three times** and are one experiment
+   ([visibility](../visibility.md#the-build-order)); the streaming prototype's
+   "indexed read" was a descriptor array, not an index buffer.
+6. **Two refuted premises were dropped**: that the depth pyramid is recorded for
+   a view whose quality turns ambient occlusion off because no pass reads the
+   flag (the surface pass and the views filter do), and that open items records
+   a research gap the file does not hold.
+7. **The cost of recording has two figures**; the newer, about a millisecond
+   since staging moved out of recording, holds, and neither explains the rest
+   of produce ([job system](../engine-job-system.md#frame-thread-measurements-owed)).
+8. **One open item was out of date**: the occlusion test's "visible" bit does
+   reset a draw's history when its generation differs
+   (`sdf-mesh-occlusion.comp.hlsl`).
+9. **One area read sources another could not.** The scheduling area confirmed
+   quotations from the Lumen, Assassin's Creed Shadows and Destiny decks.
+   Karis's notes on temporal supersampling were never read by the judgement
+   that needed them and are treated as unread
+   ([research still owed](#research-still-owed)).
+10. **Three borrowed figures do not carry over.** Cyberpunk's distant shadows
+    refreshed "every few seconds" would need about eleven refreshes a second at
+    the debug world's day speed
+    ([illumination](../illumination.md#direct-light-roles-the-probe-fallback-and-one-cascade-set));
+    precomputed radiance transfer's linearity is exact for interreflection only
+    under distant uniform lighting, so the per-source store rests on Puck's own
+    check; Wihlidal's compaction keeps draw order inside one batch and only
+    optionally across batches.
+11. **The round restated one plan too strongly.** The streaming plan asks, as a
+    first measurement, whether a group's floor alone is good enough for the
+    lighting's tier ([streaming decision 9](../streaming-and-memory.md#decision-9-lighting-reads-the-same-demand-and-pays-on-demand));
+    the research wrote the floor down as the decision. The plan's rule is kept.
+12. **One built fix covers less than its name suggests.** Several probe jobs in
+    flight, one commit per batch and stale relights sharing the worker are
+    built; lighting is still granted work per rendered frame
+    (`SdfMeshIrradiance.Grant`), which
+    [illumination's background step 3](../illumination.md#background-gpu-work-and-headroom)
+    removes.
+
+Items 2, 8 and 12 rest on code and commit messages read for the round. Item 3's
+later figures are measured. Item 10's Cyberpunk quotation is confirmed, the
+eleven-a-second figure is reasoned, and the radiance transfer and Wihlidal
+claims are partial.
 
 ## Sources
 

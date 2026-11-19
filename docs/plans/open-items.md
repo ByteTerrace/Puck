@@ -893,12 +893,25 @@ Stalls and hitches to attribute:
 
 ### Bake proportional to change
 
-Owner: specialist (rendering) · high · Next: follow the six-step order below
+Owner: specialist (rendering) · high · Next: follow the five-step order below
 (edit-wait measurements -> per-stage keys -> frame-sized bake jobs ->
-critical-path cold bake and top speed fix -> shared cross-backend store). What
+critical-path cold bake and top speed fix -> shared cross-backend store). The
+owner's ruling on waits sets the order: the wait between making a change and
+seeing it breaks flow and comes first, and a cold bake is a long start that is
+tolerated while it stays reasonable. The figure of about a minute per backend
+from an empty store exists to stop that time drifting (bake times once grew to
+nearly an hour); it is not a finish line, and it is read again at the close of
+steps 1 to 4 because step 2 and the contour rule change what a bake costs. What
 limits the cold bake under the recipe (quiet machine, display composing, empty
 store; medians ~60.6 s on Direct3D 12 and ~64.7 s on Vulkan with ~4 s GPU work
 in a 68 s span) is not yet measured — do not assume CPU-bound before step 4.
+Three records disagree: one sampled trace had the workers busy 237 of about 660
+thread-seconds and called the bake "paced by takes" (GPU sampling requests it
+waits for); runs with the display composing beside other work read it as
+processor-limited; the quiet runs of that record had the display off and the
+GPU at idle clocks. None is the recipe. The contour rule (gap 7, [bake
+detail](#bake-detail)) and the triangle removal ([visibility V3a](visibility.md#the-build-order))
+are this order's other two parts and stand alone.
 [The bake procedure](../../.claude/skills/rendering/references/mesh-bake.md#reproducing-a-cold-bake)
 says how one is reproduced and profiled.
 
@@ -917,8 +930,12 @@ says how one is reproduced and profiled.
    everything that stage reaches; check stored-contour disk/memory size before
    splitting a stage; amend
    [the derived-product decision](../decisions/engine-design.md#a-derived-product-is-a-cache-never-the-truth)
-   in the same change). Batch bake-kernel edits until stage keys land. Narrower
-   per-operation keys remain a later question.
+   in the same change). A key too narrow is the dangerous direction: an edit
+   that should have invalidated a mesh and did not shows as a stale mesh that
+   nothing reports, so the split changes only which stage a part belongs to.
+   Batch bake-kernel edits until stage keys land. Narrower per-operation keys
+   remain a later question: they depend on whether the interpreter's source can
+   be attributed to each operation, which nobody has looked at.
    - *Check:* editing Land rebakes with zero GPU sampling dispatches and lowers
      the C# edit-wait reading.
 3. **Cut bake jobs to the live frame allowance.** Today `SdfMeshPathBake.BatchTaps`
@@ -936,19 +953,32 @@ says how one is reproduced and profiled.
      sample cap): requires generating or reading `SdfSampledLattice`'s root
      search (bracket, tolerance, round limit, step) from **one single source**
      shared by CPU and GPU, verified on bracket, residual and thin-feature
-     checks on both backends.
+     checks on both backends. Writing the root search again by hand in shader
+     code would make two copies of one rule, whoever is asked to keep them
+     equal. No source measures a root search on the GPU; Dreams ran a
+     hierarchical GPU evaluator on a console, the nearest precedent.
    - *The Land stage on the job pool* (five changes: check the removed vertex
-     first in `SdfMeshCollapse` before laying out the new fan; share one error
-     sample set between `Measure` and `MeasureReverse`; restrict
-     `SdfSampledLattice.CloseSheets`'s second slit pass to neighbours of first-pass
+     first in `SdfMeshCollapse` before laying out the new fan, since the
+     acceptance search makes about five attempts a collapse and `Measure`
+     refuses half at the removed vertex's own samples; share one error sample
+     set between `Measure` and `MeasureReverse`; restrict
+     `SdfSampledLattice.CloseSheets`'s second slit pass, which re-reads every
+     measured fine sample's six neighbours, to neighbours of first-pass
      closings; schedule chunks on `JobPool` ordered by visibility demand before
-     size; move per-group contour allocations to per-worker storage). Try the
-     cheaper collapse and attribute quadrics inside `SdfMeshCollapse` before
-     considering a replacement simplifier ([visibility V3b](visibility.md#the-build-order)).
+     size, largest first only among chunks of equal priority; move per-group
+     contour allocations to per-worker storage). A cheaper collapse whose meshes
+     differ but audit as well is a valid cut: judge changed witnesses with the
+     field audit at each rendered level, raw millimetre errors beside threshold
+     counts. Try the cheaper collapse and a different error measure (attribute
+     quadrics) inside `SdfMeshCollapse` before considering a replacement
+     simplifier ([visibility V3b](visibility.md#the-build-order)). Not checked:
+     Kapoulkine's clustering pipeline falling from about 9 minutes to under 3
+     on the same class of fixes.
    - *Check:* `puck bench startup --bake` under `puck lease quiet` reads about
      a minute or less on each backend from its own empty store, and turning
      into a new place during a bake delivers the first visible surface no
-     later than before.
+     later than before. If the sampling fix is the one that lands, a group
+     takes about four round trips.
 5. **One shared cross-backend store (last, judged separately from cold bake).**
    Key meshes by authored inputs rather than backend bytecode, recording which
    backend derived each entry and accepting cross-backend entries by audit
@@ -973,11 +1003,25 @@ says how one is reproduced and profiled.
      on a stated link, plus rejecting tampered products (removed part, swapped
      material id, flipped normal patch) and a layout-preserving reader-change
      refusal/recheck; (iii) RTX ↔ Steam Deck cross-vendor exchange in both
-     directions once Deck hardware is on hand (unmeasured until then). Amend
+     directions once Deck hardware is on hand (unmeasured until then), because
+     two graphics APIs on one card compare no vendors. Parts (i) and (ii) run on
+     the desktop inside the bet's time box; part (iii) has its own box. Amend
      the decision register when adopted.
+   - *Judged apart from the cold bake.* The cold-bake figure is each backend's
+     own bake from an empty store with floors on, timed with the other
+     backend's store absent. A shared store has three hazards: the same shader
+     source can compile under different options or generated interfaces;
+     whichever backend writes an entry first can hide which backend derived
+     what is drawn; and a warm hit from the other backend's store is not a cold
+     bake. Step 2's keys are local cache keys and are not affected.
+   - *What it shows in the debug world:* the second backend's first frame loads
+     the first backend's meshes, which pass verification, and the fetched mesh
+     is ready sooner than it bakes.
 
 Remaining detailed findings and smaller cuts in this area:
 
+- [high] The frame thread's `SdfWorldResidency.Capture` and the per-view
+  recording while hundreds of views stand during a bake.
 - [high] `CrossingEdges`' per-edge hash set, and `Refine`'s `Thickens` and slot
   numbering. The crossed-cell masks already flow from `CrossingEdges` to
   `ExtractRefined`; add no second topology scan there.
@@ -1086,6 +1130,17 @@ Next: fill the engine gaps first
      beside each fix. State the audit's blind spot: it samples around the
      output mesh box, so vanished parts are caught only by authored-bounds
      deviation ([virtual geometry](virtual-geometry.md#the-build-order)).
+     The fourteen exhibits are not enough because the rule reaches every
+     bake: an earlier attempt that narrowed the lattice along one axis was
+     worse over the whole world, and an empty or missing patch also lowers
+     the wrongly-facing count. Whether the rule holds where a surface folds
+     or a feature disappears is evidence Puck produces itself: no source
+     covers those, or two creases in one cell (Ju and others chose their
+     singular-value cut-off by experiment, which says nothing for or against
+     dropping a blended gradient's plane; Schaefer and others note a manifold
+     criterion "may still contain intersecting polygons"). Not checked: that
+     the refinement takes the finest split that fits and is never skipped
+     silently (a reviewer's reading).
 2. **Non-uniform scale bounds (gap 11,** [rendering](rendering.md#bake-quality))
    and **[moving blends](moving-blends.md#engine-gaps-first) step 4 (gap 10)**
    beside it. Then the remaining triangle-facing items shared by the tour reds

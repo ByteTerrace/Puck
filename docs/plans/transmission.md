@@ -733,9 +733,33 @@ others run beside the second. The remaining review mediums are checks here.
      four blockers: deep directly above, displaced sideways, thin and moving,
      and a soft edge spanning two pyramid levels. Then merge the production
      rewrite into `transmit-plane` after `transmit-identity` supplies the body
-     table and depth layers.
+     table and depth layers, which a wide sample must read consistently.
+   - *Why, and the risks.* The filter removes the seven-fold jump, the moving
+     seam and the short sideways search. Microsoft's cascade guidance describes
+     a band that tests both cascades and interpolates, though it gives no
+     width; NVIDIA's soft-shadow notes name only a minimum clamp on the filter.
+     The pyramid's nearest published relative is a hierarchical shadow map that
+     keeps each block's least and greatest depth and classifies a region before
+     filtering it (Guennebaud, Barthe and Paulin, 2006, opened by a reviewer and
+     not reverified); that paper reports visible steps where the filter changes
+     level, which is why the prototype has that case. A sample from the pyramid
+     darkens slightly, and wide sparse filters lean on the views filter and the
+     temporal resolve to hide noise. A pyramid that keeps only the nearest
+     depth cannot say which body or layer a sample came from, so each reduced
+     texel carries depth, body and layer together. The strongest case against
+     is that nothing outside Puck shows such a filter over a depth pyramid in a
+     moving game scene, which is why the prototype comes first. If it cannot
+     match the brute-force reference within what the views filter leaves, the
+     blend band stays and the pyramid is replaced by more samples in the near
+     cascade only. The widest soft edge and the band are authored members of
+     `render.shadowCoverage` with neutral defaults
+     ([where each look is authored](rendering-research/step-designs.md#where-each-look-is-authored)).
    Checks: the prototype stays inside its stated bound against the brute-force
-   filter on all four blockers; `world.debug-view shadow` on a flat wrapped
+   filter on all four blockers; a walk through the boundary between cascades
+   shows one soft-edge width on either side and no seam; a deep blocker directly
+   above and one displaced to the side both shadow as the brute-force filter
+   does; a thin occluder beside a back face lit by wrapped lighting keeps a
+   correct shadow in motion on both backends; `world.debug-view shadow` on a flat wrapped
    plate at n·l = -0.005 and -0.05 in the open reads 1 across it on both
    backends; the 6 cm slab exit over the panel shadows it; the grazing panel
    behind a sloping sheet a metre ahead reads shadowed, inside its triangle
@@ -789,7 +813,15 @@ others run beside the second. The remaining review mediums are checks here.
      vertices are shared on silhouettes, design this alongside
      [visibility's indexed-draw experiment](visibility.md#the-build-order),
      choosing between unified rasterizer facing across both backends or a
-     per-triangle value stored for the current pose.
+     per-triangle value stored for the current pose. Today's code avoids the
+     rasterizer's facing on purpose, because its sense follows each backend's
+     conventions and not the mesh.
+   - *Why, and what it rests on.* One pane should not cost a full-image clear
+     and shade. Glass is a surface of its own, drawn after opaque visibility
+     (the owner's ruling), and its additive sums are exact, so weighted or
+     moment transparency and per-pixel lists, which approximate them, are not
+     taken. Repacking the sums risks that exactness. Not checked: that glass
+     shades the whole grid (a research map).
    Checks: move a glass pane across separate tiles, remove it and reuse its
    buffer for another view, confirming nothing remains behind and reporting
    cleared bytes against a full clear; verify mirrored, skinned and clipped

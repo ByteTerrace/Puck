@@ -81,7 +81,7 @@ wind and roads are authored Puck programs/data, not feature-specific C# paths.
 | L1. Finish the shared instance/history contract | Finish native cut and filtered-landing qualification on the composed workload. Preserve current sharing, picking, clips, GI semantics and change-proportional staging. Measure a prototype edit's real derivation closure. |
 | L2. Compact the existing GPU path | Use visibility V1a/V1b stable identities, ordered survivors and geometry/detail buckets. Count candidates, survivors, nonempty buckets and initialized/executed commands in every raster pass. Validate cuts, materials, picks and portal straddles on both backends. |
 | L3. Author terrain-following continuous forest | The belt is authored. Measure canopy continuity and route coverage alongside L0 and L1 as memory permits, with native captures and contact checks on the composed woodland. |
-| L4. Scale authored motion and distance | Compile authored motion programs once into a CPU evaluator, GPU kernel ([visibility V2c](visibility.md#the-build-order)), program-derived bounds and per-instance inputs (removing per-tile wind prototypes); evaluate placement cell by cell in placement space for both server collision and presenter drawing (below); thin ground cover with distance by stable occurrence rank and authored curve ([virtual geometry](virtual-geometry.md#the-build-order)). Stand parents ([virtual geometry G7](virtual-geometry.md#the-build-order)) are a measured exception for repeated arrangements compared against the chain of rungs, never adopted ahead of it. |
+| L4. Scale authored motion and distance | Compile authored motion programs once into a CPU evaluator, GPU kernel ([visibility V2c](visibility.md#the-build-order)), program-derived bounds and per-instance inputs (removing per-tile wind prototypes); evaluate placement cell by cell in placement space for both server collision and presenter drawing (below); thin ground cover with distance by stable occurrence rank and authored curve ([virtual geometry](virtual-geometry.md#the-build-order)). Extend eligible placement rate reuse and design the traced canopy's representation and invalidation. Compile or batch authored poses, or derive GPU instance records, only where measured work warrants it and synchronous CPU consumers stay correct; geometry, detail and shadow reductions preserve coverage and quality. The far field is [the virtual geometry plan](virtual-geometry.md#d3-a-hierarchy-above-the-draw)'s stand parent (its step G7), contoured from the field over a stand of copies, judged against the reference from the overlook and against the shared prototype path on bytes, derivation and frame cost; it is a measured exception for repeated arrangements compared against the chain of rungs, never adopted ahead of it. The hybrid mesh-volume tier is briefed only if the stand parent fails the reference at sub-pixel error, and the shared path (with parents kept over repeated arrangements) is the far field where the stand parent costs more. |
 | L5. Qualify the composed landscape | Run the fixed route, wind, cuts, nested view, day changes, edit closure and cold store on both backends and target devices. Close frame, memory, bake and edit bars with current quality and counted-work evidence. |
 
 ### Motion and placement at zone scale
@@ -119,13 +119,35 @@ their bounds without writing grass, wind or terrain code paths in C#:
      candidates still consume their ordinal so remaining items never renumber)
      and mirror image. Both loop and stamp spellings then yield identical
      identities regardless of generation order. Edits changing only survival
-     preserve identities; changing sampler or seed creates a new scatter.
+     preserve identities; changing sampler or seed creates a new scatter, and
+     state keyed to the old one is dropped (before release, ordinary churn). An
+     identity seeded by the cell or by enumeration order would change when the
+     same placements are written through another template or a cell is split,
+     which is why identity comes from the placement's meaning.
    - *Sparse authoritative state keyed by occurrence.* Extend keyed placement
      state (`WorldPlacementDeal`, `WorldPlacementResponse`) from placement row
      to occurrence so play changes (harvested plants, moved objects) live in
      simulation state over the stream. Record a moved occurrence in its
      destination cell and suppress it in its source cell so evicting the
-     source cell never drops it.
+     source cell never drops it. A stable identity alone is not enough: a cell
+     evicted and derived again from the scatter alone would regrow a harvested
+     plant, which is why play changes live in the simulation.
+
+**Why.** Compiled motion removes per-frame interpretation and the posing,
+journalling and re-uploading of every slot the kernel can own, and removes the
+need for one prototype per tile. Outside practice supports the parts: Nanite
+Foliage (experimental) finds bounds computed from skinning matrices beat those
+of a per-vertex offset; Crysis used a per-instance wind vector and stiffness
+with the phase taken from world position (GPU Gems 3, chapter 16); Remedy calls
+per-vertex wobbling "painful if not impossible" for deep hierarchies. Cell
+placement stops the compiled document growing with the population. Both serve
+"Puck code over engine code" and "Ergonomic is optimal": a tile placed sixteen
+times, or a scatter written once, costs what it means. CPU and GPU motion must
+agree closely enough for picking, and a loose bound costs culling. Not checked:
+the facts about swings, gusts and terrain (a research map); that the two
+spellings give different identities today and what the shading table lacks (a
+reviewer's reading); van Muijden's GPU placement being deterministic and
+locally stable.
 
 **Zone-scale checks:**
 - *Motion:* a scratch meadow with four times the tiles (populated and on the

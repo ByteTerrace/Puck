@@ -553,7 +553,23 @@ bar uses one reading:
   same ticks as before. A remote report names the endpoint, splits local
   simulation, delivery and rendering apart, and carries a witness that the
   seat's body arrived in the remote world; a run still observing the boot world
-  says so and is not a remote reading.
+  says so and is not a remote reading. Check: a headless route against an
+  authority in a second process arrives in every chapter, and the same chapters
+  in process arrive in the ticks they took before; the run on the Azure
+  deployment is the lead's.
+- *Where sharing is claimed, the arrangement of worlds is stated.* Every world
+  of the debug world admits every viewer at full disclosure, so a check run
+  there shares as much as can be shared. A check that claims work is shared
+  between viewers is also read with one window onto a world that gives the
+  viewer less than a full replica, in the same process. A remote world's
+  screens show nothing yet, so a check on a nested view of a world served by
+  another process waits for the federation work.
+- *The route covers what the checks name.* The route gains the places later
+  checks name (the meadow, `valley-rim`, a night a route can reach, below),
+  and the windowed benchmark run open items still owes is taken. No lane waits
+  for a reading it does not itself need, a timing question goes to the lead's
+  quiet window and holds no landing, and no reading waits for the RTX 2060 or
+  the Steam Deck.
 
 ### Presentation timing and admission (stage 8)
 
@@ -607,6 +623,22 @@ different ways and keep different numbers of frames in flight.
    input/shutdown response under load first, then add display timing, a
    precision waiter and a display request only where those readings show an
    improvement.
+
+**Why, and the limits.** An even loop interval can hide judder on the display,
+and the frame rate players see is unexplained today. The `VK_EXT_present_timing`
+proposal says the older present-wait extension "lacks important details such
+as the latency of the present operation itself", and it relies on a second
+present-id extension; nobody has checked which of the two each bar device's
+driver exposes ([research still owed](rendering-research/step-designs.md#research-still-owed)).
+Microsoft's swap-chain guidance is that the loop "should wait for the swap
+chain to signal ... before it begins rendering every frame", and NVIDIA
+recommends one or two more buffers than frames queued, which already separates
+buffers from queued frames. Admission cannot promise display: a compositor may
+replace a submitted frame and a surface may be lost. A loop can hold 60 Hz
+while the display skips frames, so on a device with no display time the
+reading states what the host produced and does not show the bar was met on
+screen. The report either explains why the frame rate reads as it does, or
+says it cannot yet.
 
 *Checks:*
 - On Windows, the present-attempt record agrees with a compositor trace

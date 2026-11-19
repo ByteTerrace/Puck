@@ -255,10 +255,15 @@ where scene light becomes a working image:
    read both as scene light and as a direct picture publishes both outputs so
    only the direct picture blooms. The root `place` pass then only places, and
    panes keep their encoded contract.
-3. **Move window adaptation share to authored data.** Carry
-   `SdfPhotometry.WindowAdaptation` (moved from engine constant to authored
-   data) in the window image's declaration so both sides of a portal agree on
-   how much exposure was already applied.
+3. **Move window adaptation share to authored data.** The view beyond the
+   glass multiplies its light by its own exposure raised to a share
+   (`SdfPhotometry.WindowAdaptation`, three quarters today), and the view
+   looking through applies the rest of its own. The register adopted that and
+   rejected a window published unexposed for the viewer to expose, under which
+   a sunlit world seen from a dim room blows to white. The edge is scene light
+   on both sides; the window image's declaration carries the share so the two
+   sides cannot disagree, and the share moves from an engine constant to
+   authored data, with the standard package authoring today's three quarters.
 4. **Decode filmed views on screens.** A filmed view shown on a screen is a
    working image; the screen decodes it before multiplying by brightness in
    nits, and screen-glow reduction applies the same decode.
@@ -276,12 +281,46 @@ where scene light becomes a working image:
    and checking `SdfPhotometry.RangeThreshold` so lamp ranges do not lengthen
    and inflate relighting work.
 
+**Why.** What a pixel value means is correctness, not look: the register rules
+lights, screens and the camera photometric, lights in lux and the frame in nits
+([register](../decisions/rendering.md#lights-screens-and-the-camera-are-photometric)),
+and AGENTS.md puts correctness with the engine. The fix repairs tone at every
+brightness, gives colour one convention, makes the grey card read and fixes
+HDR, and every later judgement of exposure, tonemapping, bloom and materials
+reads through it. It is decided by the evidence, with no owner call: no
+preference for the present tones keeps the present conversion. The terrain
+pass already expects the standard conversion (its grey card reads 118/255, the
+sRGB code for 18% grey). If an author wants today's appearance, they write it
+as a tone transform over the corrected conversion, judged on SDR and HDR.
+
+**Risks.** Every place's look moves at once, which is why the retune is in the
+same merge. A single full-screen view gains a pass it did not have. The sharpen
+measures a pixel's headroom against a value of 2 on linear exposed light and
+keeps reading linear light in its new place, so its constants do not change.
+The display encoder has three outputs (SDR in two cases, depending on whether
+the target encodes sRGB when written; scRGB; and HDR10, which converts
+primaries and applies its own curve), and a neutral grey passes even with that
+matrix transposed, so the check needs coloured patches. The temporal resolve
+averages linear samples and is not changed, but a bright edge in motion is
+where a conversion change shows first. No source we fetched states this
+requirement in so many words: the case rests on the code disagreeing with
+itself and on the transfer functions `transfer.hlsli` cites. Which display
+outputs each bar device exposes is read once the instruments exist. Not
+checked: the two colour resolvers and what must stay encoded, that a presented
+capture is 8-bit, that the debug world's sharpness is zero, and that the
+temporal resolve averages linear samples (a reviewer's reading); the 0.104
+target showing as 1% of white (reasoned).
+
 **Options not taken:** tuning around the missing encode with exposure
-compensation (breaks everywhere except one exposure and leaves HDR wrong);
-declaring views display-referred and fixing HDR alone (contradicts photometric
-shading and mixes linear and encoded samples); leaving sharpen in `place` after
-bloom on encoded values (would reverse the register's bloom-after-sharpen
-ruling, which requires an owner call).
+compensation (tones right at one exposure only, surface colours taken as linear
+reflect too much light, screen pictures multiplied as luminance while still
+encoded, HDR still wrong); declaring views display-referred and fixing HDR
+alone (contradicts photometric shading and mixes linear and encoded samples
+inside one image); leaving sharpen in `place` after bloom on encoded values
+(simpler, and common practice, but it would reverse the register's
+bloom-after-sharpen ruling and need the sharpen's constants restated; the debug
+world authors a sharpness of zero, so neither order shows there today, and the
+reversal would be the owner's call).
 
 **Checks.** Under manual exposure, the grey card reads 118/255 within 3 codes
 across every view path: single world, split view, filmed view on a screen, view

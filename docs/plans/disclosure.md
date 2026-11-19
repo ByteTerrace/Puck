@@ -2183,7 +2183,8 @@ commit, as machine readings are not a repository baseline.
 ## Presentation and derived-product disclosure
 
 Disclosure stops at pixels already delivered, not at the authority's state
-delivery. Three presentation and caching boundaries carry the same viewer-scope
+delivery. No leak through these paths has been reproduced; each case below is
+read from the code. Three presentation and caching boundaries carry the same viewer-scope
 invariant and land beside the rendering work that uses them:
 
 1. **Withdrawn pictures and reused GPU results.** Changing a route makes a

@@ -432,7 +432,13 @@ The Humble Gaming Deck's packages are in [its plan](humble-gaming-deck.md#open-i
   scrolling test cartridge at display rates below, equal to and above the
   machine's rate shows the latest eligible frame at a bounded age against the
   audio clock, counting repeats and skips, with zero uploads of unchanged
-  frames.
+  frames. No display shows every machine frame exactly once at every rate (a
+  60 Hz machine repeats frames on a 120 Hz display and skips some on a 45 Hz
+  one), which is why the contract is the latest eligible frame, and audio
+  follows the same clock. Which frame is shown is a presentation matter: under
+  the machines decision neither visibility nor presentation rate controls how
+  a machine advances. If the trace shows no frames are dropped at the debug
+  world's tick rate, the work shrinks to not uploading unchanged frames.
 
 ---
 

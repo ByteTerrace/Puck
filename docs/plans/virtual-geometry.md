@@ -925,16 +925,32 @@ as noted.
 **One error budget along one chain of meshes.** Today tiers (`SdfMeshTier.PixelShare`
 = 0.5) and collapse levels (`SdfMeshDetail.CoarserPixels` = 1,
 `SdfMeshCollapse.CellShares` at 0.25 and 2 cells) disagree and measure screen
-size differently (`SdfMeshDemand.PixelAt` vs `SdfMeshDetail.Of`), leaving
-level 0 rarely drawn yet occupying GPU memory while one close copy forces every
-distant copy of a shared prototype (`WorldRigidAssets`) to its finest tier.
+size differently: the tier rule uses straight-line distance over the focal
+length (`SdfMeshDemand.PixelAt`), the level rule depth along the view direction
+stretched for the view's corners (`SdfMeshDetail.Of`). Four consequences
+follow. The finest mesh is almost never drawn: at the tier it asked for, a
+group's first coarser level always qualifies and its second about half the
+time, so level 0 is drawn only for boxes touching the eye plane, skinned and
+glass draws, and groups already at their finest tier. It still occupies memory:
+level 0's index and material data are about 1.1 GB of a 3 GB mesh region at 71
+million triangles (reasoned), and building the other levels takes 28.7% of the
+bake's CPU time. One demanding copy sets the detail of every copy: a shared
+prototype is baked once, at its largest placement scale (`WorldRigidAssets`)
+and at the finest tier any copy asks for from any view (`CopiesPixel` in
+`SdfMeshPathBake`), so one fern beside the player sets the detail of every
+fern. And nothing stands in far away: the levels stop at a two-cell error.
 Unify them around one error budget (display pixels for views, texels for shadow
 maps; the recorded one-pixel and one-texel rulings stay the engine defaults and
-authored quality tables may choose others) in five steps:
+authored quality tables may choose others, the one look value whose default is
+a ruling and not a neutral value) in five steps:
 
-1. **Count drawn triangles per level and tier, and unselected-level bytes**
-   ([bake demand tiers](bake-demand-tiers.md#steps-and-checks), built by the
-   `floor` lane).
+1. **Count drawn triangles per level and tier, and unselected-level bytes**:
+   triangles drawn per level and per tier relative to the tier asked for, in
+   `world.counters gpu`, and bytes held by each level no pass selected, in
+   `world.residency`. The first wave's `floor` lane builds them, because they
+   size a floor and a detail tier. Two records disagree on what the levels
+   save (the mesh-bake reference and the handbook say 11% and 6% of the stored
+   triangles; a later cold bake read 29% and 19%), and the counter settles it.
 2. **Unify screen-size projection in one function.** Replace all four separate
    screen-size calculations (`SdfMeshDemand.PixelAt`, `SdfMeshDetail.Of`,
    `WorldCreationInstances`, `WorldSeatViewports.PixelsPerMetre`) with one
@@ -952,8 +968,17 @@ authored quality tables may choose others) in five steps:
      `SdfMeshFieldLevels.Measure` (covering lost parts, materials and normals)
      sampled over the authored group's own bounds, stored under the rung's mesh
      identity. Never qualify a rung with `SdfMeshAudit`, whose grid starts from
-     the output mesh's box and misses vanished parts. Mark groups with features
-     thinner than sampling as not qualified so consumers keep the finer rung.
+     the output mesh's box: if one of two parts vanishes the box shrinks to the
+     part left and the check never samples where the other was, so the audit
+     stays a diagnostic. The measure samples, so a feature thinner than its
+     sampling, or two surface crossings between two samples of the same sign,
+     can be missed; a group with such features is marked not qualified so
+     consumers keep the finer rung. Every rung is measured against the one
+     reference because the errors of two tiers cannot be put in order without
+     measuring both: a collapse's error only grows along one contour's
+     simplifications (`SdfMeshCollapse.Levels`), a level can be missing, a
+     tier contoured afresh starts from different geometry, and the floor's
+     acceptance test certifies coverage, not deviation.
    - *Stepping down and switching.* Step down only when recorded deviation fits
      the consumer's budget, budgeting switches on the sum of both rungs'
      deviations. A coverage-only floor draws only for missing meshes and is
@@ -973,6 +998,31 @@ authored quality tables may choose others) in five steps:
    plants cleanly (never fading pixels), while the ground's shading program
    covers lost density. Check: no popping in a presented walk, in the camera's
    view or in shadows.
+
+The floor then does three jobs: it shows when a mesh has not arrived, it is
+what a far cascade draws, and it is where a distant copy ends up; the lighting
+reads it only where [illumination's lighting check](illumination.md#after-the-gpu-trace)
+passes. Nanite keeps its coarsest page resident for the same reason, and the
+debug world's coarsest tier has about a twentieth of its finest's triangles
+(measured once), so distant draws save much. Puck has an advantage a mesh-only
+engine lacks: every rung is checked against the authored field, so no
+separately authored stand-in is needed. Keeping several tiers costs bytes from
+the mesh library's one budget, a rung that fails its audit keeps its group at a
+finer tier than the chain promised, re-pitching the rules changes the look,
+and the full mesh cannot leave memory before the lighting stops tracing it.
+Still to find out: how many triangles each level and tier draws, whether
+recording a rung's deviation costs too much bake time, and whether switching
+tiers per copy pops on thin parts in motion
+([what would change the answer](rendering-research/step-designs.md#what-would-change-the-answer)).
+Options not taken: keeping both rules; more collapse levels, already measured
+and rejected (four levels down to 128 cells took an oak only from 3,052
+triangles to 1,440, and three field-built experiments are [D1](#d1-the-unit-of-detail)'s),
+so the far shadow map gets a coarser tier instead; one mesh over many copies
+(D3, G7) and clusters inside a draw (D4, G9) stay measured exceptions against
+the chain. Not checked: the other two places that compute size on screen (a
+reviewer's reading); that Nanite selects a cut per instance (the source tests
+parent against child); Dreams' remark that thinning per pixel breaks temporal
+history, which is why thinning removes whole plants.
 
 | Step | Lands | Check on `worlds/debug` | Success line |
 |---|---|---|---|

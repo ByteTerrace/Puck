@@ -137,30 +137,11 @@ seconds on the `[sdf.mesh-gi] done` lines.
 
 ## Steps and checks
 
-The open work for demand tiers splits into the crease merge below and the four
-steps that unify tiers and collapse levels into
-[one chain of meshes](virtual-geometry.md#the-build-order) (with the rest of
-residency owned by [the streaming plan](streaming-and-memory.md#the-decisions)):
-
-1. **Count drawn triangles and unused bytes.** Add counters in
-   `world.counters gpu` and `world.residency` for triangles drawn per level and
-   per tier relative to requested tier, and bytes held by levels no pass
-   selected. Built by the `floor` lane to size floors and detail tiers.
-2. **Unify screen-size projection and reconcile level 0.** Consolidate the four
-   screen-size calculations (`SdfMeshDemand.PixelAt`, `SdfMeshDetail.Of`,
-   `WorldCreationInstances`, `WorldSeatViewports.PixelsPerMetre`) into one
-   straight-line-distance helper (passing the scale to shaders as data). Once
-   unified, either re-pitch `SdfMeshTier.PixelShare` (0.5) against
-   `SdfMeshDetail.CoarserPixels` (1) and `SdfMeshCollapse.CellShares`, or store
-   level-0 index/material data as a separate evictable run once lighting stops
-   tracing level 0 ([illumination](illumination.md#after-the-gpu-trace)).
-3. **Audit every tier offline** (`puck mesh audit --cpu --tier`) before
-   building the chain.
-4. **Record per-rung field deviation and build the chain.** Store bidirectional
-   deviation over authored group bounds via `SdfMeshFieldLevels.Measure` with
-   each rung (never `SdfMeshAudit`'s mesh-box grid) so every copy and cascade
-   selects the coarsest qualified rung for its pixel/texel error budget
-   ([virtual geometry](virtual-geometry.md#the-build-order)).
+The open work for demand tiers is the crease merge below. Unifying tiers and
+collapse levels under one error budget, along one chain of meshes, is
+[the virtual geometry plan's](virtual-geometry.md#the-build-order) (its
+counters, the one size-on-screen function, the tier audit and the chain), and
+the rest of residency is [the streaming plan's](streaming-and-memory.md#the-decisions).
 
 **The crease merge.** `SdfSampledLattice.CurvedSplit` reads second differences,
 and a sharp crease (two faces meeting) concentrates the field's second
