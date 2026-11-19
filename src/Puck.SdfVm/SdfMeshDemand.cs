@@ -141,18 +141,9 @@ public sealed class SdfMeshDemand {
     /// <exception cref="ArgumentNullException"><paramref name="group"/> or <paramref name="transforms"/> is
     /// <see langword="null"/>.</exception>
     public float PixelAt(SdfMeshBakeGroup group, IReadOnlyList<DynamicTransform> transforms) {
-        ArgumentNullException.ThrowIfNull(argument: group);
-        ArgumentNullException.ThrowIfNull(argument: transforms);
+        var (center, half, units) = WorldBoxOf(group: group, transforms: transforms);
 
-        var center = ((group.Low + group.High) * 0.5f);
-        var half = Vector3.Abs(value: ((group.High - group.Low) * 0.5f));
-
-        if (!group.Dynamic || (group.Slot >= transforms.Count)) { return PixelAt(center: center, half: half); }
-
-        var transform = transforms[group.Slot];
-        var box = SdfMeshBox.Carried(center: center, half: half, transform: transform);
-
-        return (PixelAt(center: box.Center, half: box.AxisHalf) / SdfMeshGeometryBuilder.UnitsOf(transform: transform));
+        return (PixelAt(center: center, half: half) / units);
     }
     /// <summary>Returns a box's priority at the demand point that ranks it highest. A box whose diagonal projects past a
     /// pixel there is demanded, and ranks by the pixels a metre covers at its distance, one plus the point's pixels a
@@ -199,17 +190,26 @@ public sealed class SdfMeshDemand {
     /// <exception cref="ArgumentNullException"><paramref name="group"/> or <paramref name="transforms"/> is
     /// <see langword="null"/>.</exception>
     public bool Sees(SdfMeshBakeGroup group, IReadOnlyList<DynamicTransform> transforms) {
+        var (center, half, _) = WorldBoxOf(group: group, transforms: transforms);
+
+        return Sees(center: center, half: half);
+    }
+    // A planned group's box in world space, and the units its lattice is in: a dynamic group's carried out of its slot's
+    // frame by the slot's transform among the plan's, in the slot's units (SdfMeshGeometryBuilder.UnitsOf); any other
+    // group's as planned, in metres.
+    private static (Vector3 Center, Vector3 Half, float Units) WorldBoxOf(SdfMeshBakeGroup group, IReadOnlyList<DynamicTransform> transforms) {
         ArgumentNullException.ThrowIfNull(argument: group);
         ArgumentNullException.ThrowIfNull(argument: transforms);
 
         var center = ((group.Low + group.High) * 0.5f);
         var half = Vector3.Abs(value: ((group.High - group.Low) * 0.5f));
 
-        if (!group.Dynamic || (group.Slot >= transforms.Count)) { return Sees(center: center, half: half); }
+        if (!group.Dynamic || (group.Slot >= transforms.Count)) { return (center, half, 1f); }
 
-        var box = SdfMeshBox.Carried(center: center, half: half, transform: transforms[group.Slot]);
+        var transform = transforms[group.Slot];
+        var box = SdfMeshBox.Carried(center: center, half: half, transform: transform);
 
-        return Sees(center: box.Center, half: box.AxisHalf);
+        return (box.Center, box.AxisHalf, SdfMeshGeometryBuilder.UnitsOf(transform: transform));
     }
     /// <summary>Returns the distance from the nearest demand point's eye to a box, zero inside it, or infinity with no
     /// demand point.</summary>
