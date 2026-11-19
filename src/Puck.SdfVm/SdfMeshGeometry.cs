@@ -277,7 +277,7 @@ public sealed class SdfMeshGeometryBuilder(bool dynamic) {
         if (!range.IsDynamic && (range.Glyphs is { } glyphs)) {
             Hash(fact: Fact.Glyphs, source: MemoryMarshal.AsBytes(span: new ReadOnlySpan<SdfGlyphSpan>(reference: in glyphs)));
         }
-        // So do the parts a dynamic instance declares, each by its slot's offset from the instance's own so one creation's
+        // So do the parts an instance declares, each by its slot's offset from the instance's own so one creation's
         // shapes key alike on every body that wears it.
         foreach (var part in range.Parts) {
             var words = new PartWords(ownSlot: ownSlot, part: part);

@@ -22,31 +22,10 @@ public sealed partial class WorldCreationInstances {
         return true;
     }
 
-    // One pooled shape's part of its instance (SdfInstancePart): its box in the frame of the slot it rides, where it sits
-    // at its authored pose (ShapeEmission.Emit), widened by its smooth blend's reach so the seam it blends refines with it, and its
-    // detail (WorldShapeDetail). The static stamper's own box (CreationStampEmitter.ShapeStampBox) where it holds the shape,
-    // else the cube of its tight bound (ShapeStampBound). A shape carrying domain folds, whose copies leave any shape-local
-    // box, takes the cube about its slot's origin its copies reach, as its own instance's bound does (ShapeBoundRadius).
-    private static SdfInstancePart? PartOf(CreationDocument document, int index, int slot, float scale) {
-        var shape = document.Shapes![index];
-
-        if (shape.Domain is { Count: > 0 } domain) {
-            var reach = ((((shape.Position?.Length() ?? 0f) + ShapeDomainOps.Reach(domain: domain)) * scale) +
-                SdfSolidGeometry.Reach(type: shape.Type, scale: ((shape.Scale ?? Vector3.One) * scale), lift: (shape.Lift ?? SdfLift.Extrude)));
-
-            return new SdfInstancePart(Detail: WorldShapeDetail.Of(scale: scale, shape: shape), High: new Vector3(value: reach), Low: new Vector3(value: -reach), Slot: slot);
-        }
-
-        var identity = new CreationStampTransform(Vector3.Zero, Quaternion.Identity, scale, null);
-        var box = CreationStampEmitter.ShapeStampBox(document: document, shapeIndex: index, transform: identity);
-
-        var (low, high) = (box ?? Cube(bound: CreationStampEmitter.ShapeStampBound(document: document, shapeIndex: index, transform: identity)));
-        var halo = new Vector3(value: ((shape.Smooth ?? 0f) * scale));
-
-        return new SdfInstancePart(Detail: WorldShapeDetail.Of(scale: scale, shape: shape), High: (high + halo), Low: (low - halo), Slot: slot);
-
-        static (Vector3 Low, Vector3 High) Cube((Vector3 Center, float Radius) bound) => ((bound.Center - new Vector3(value: bound.Radius)), (bound.Center + new Vector3(value: bound.Radius)));
-    }
+    // One pooled shape's part of its instance (WorldShapeDetail.PartOf): its box in the frame of the slot it rides, where
+    // it sits at its authored pose (ShapeEmission.Emit).
+    private static SdfInstancePart PartOf(CreationDocument document, int index, int slot, float scale) =>
+        WorldShapeDetail.PartOf(document: document, index: index, slot: slot, transform: new CreationStampTransform(Vector3.Zero, Quaternion.Identity, scale, null));
     // A coupled placement's parts of its one instance: each shown opaque shape's (PartOf), refined over its own box as a
     // blend group's members are, and its engraved text's, over the creation's reach about the root at the text's detail.
     // Its glass shapes bake apart, on instances of their own.
@@ -56,7 +35,7 @@ public sealed partial class WorldCreationInstances {
 
         for (var index = 0; (index < shapes.Count); index++) {
             if (document.IsGlassShape(shape: shapes[index]) || ((hidden is not null) && hidden[index])) { continue; }
-            if (PartOf(document: document, index: index, scale: scale, slot: (rootSlot + motion.ShapeSlots[index])) is { } part) { parts.Add(item: part); }
+            parts.Add(item: PartOf(document: document, index: index, scale: scale, slot: (rootSlot + motion.ShapeSlots[index])));
         }
         if (WorldPlacementStamper.TextDetail(creation: document, scale: scale) is var text and > 0f) {
             parts.Add(item: new SdfInstancePart(Detail: text, High: new Vector3(value: reach), Low: new Vector3(value: -reach), Slot: rootSlot));
@@ -99,7 +78,7 @@ public sealed partial class WorldCreationInstances {
 
             for (var member = fromIndex; (member < shapes.Count); member++) {
                 if (((shapes[member].Group ?? 0) != groupId) || ((hidden is not null) && hidden[member])) { continue; }
-                if (PartOf(document: document, index: member, scale: 1f, slot: (rootSlot + motion.ShapeSlots[member])) is not { } part) { continue; }
+                var part = PartOf(document: document, index: member, scale: 1f, slot: (rootSlot + motion.ShapeSlots[member]));
 
                 parts.Add(item: part);
                 detail = (((part.Detail > 0f) && ((detail <= 0f) || (part.Detail < detail))) ? part.Detail : detail);

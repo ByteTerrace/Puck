@@ -51,7 +51,7 @@ public class SdfMeshBakeGroup(int selector, bool dynamic) {
     public SdfMeshDisplacement? Displacement { get; private set; }
 
     /// <summary>Gets each member of the group's union, in the group's frame: a static instance, a dynamic instance, or each
-    /// part a dynamic instance declares (<see cref="SdfInstanceRange.Parts"/>). Each carries its bounding sphere, which a
+    /// part an instance declares (<see cref="SdfInstanceRange.Parts"/>). Each carries its bounding sphere, which a
     /// union of several sizes its lattice by, the finest feature it declares (<see cref="SdfInstanceRange.Detail"/>),
     /// which refines its lattice, and the box that refinement covers: the sphere's cube, narrowed to a static instance's
     /// own box where it declares one (<see cref="SdfInstanceRange.Box"/>), or a part's box. A group of more than one
@@ -393,11 +393,15 @@ public class SdfMeshBakeGroup(int selector, bool dynamic) {
                 var low = (instance.Center - new Vector3(value: radius));
                 var high = (instance.Center + new Vector3(value: radius));
 
-                if (instance.Box is { } box) {
-                    low = Vector3.Min(value1: high, value2: Vector3.Max(value1: low, value2: box.Low));
-                    high = Vector3.Max(value1: low, value2: Vector3.Min(value1: high, value2: box.High));
+                if (instance.Parts.Count > 0) {
+                    AddStaticMembers(group: group, instance: instance, low: low, high: high);
+                } else {
+                    if (instance.Box is { } box) {
+                        low = Vector3.Min(value1: high, value2: Vector3.Max(value1: low, value2: box.Low));
+                        high = Vector3.Max(value1: low, value2: Vector3.Min(value1: high, value2: box.High));
+                    }
+                    group.Members.Add(item: (instance.Center, radius, instance.Detail, low, high));
                 }
-                group.Members.Add(item: (instance.Center, radius, instance.Detail, low, high));
                 if (instance.Glyphs is { } glyphs) { group.Glyphs = ((group.Glyphs is { } held) ? held.Join(other: glyphs) : glyphs); }
             }
             if (instance.Detail > 0f) {
@@ -445,6 +449,18 @@ public class SdfMeshBakeGroup(int selector, bool dynamic) {
         Low = low;
         High = high;
         Fitted = true;
+    }
+    // A static instance's members of its group's union lattice, in world axes: each part it declares, its box held to the
+    // instance's bound cube (low..high), so a creation emitted as one instance refines each shape's box at its own detail.
+    private static void AddStaticMembers(SdfMeshBakeGroup group, SdfInstanceRange instance, Vector3 low, Vector3 high) {
+        foreach (var part in instance.Parts) {
+            // A part reaches no further than its instance's bound, which the instance's whole field lies inside.
+            var partLow = Vector3.Min(value1: high, value2: Vector3.Max(value1: low, value2: part.Low));
+            var partHigh = Vector3.Max(value1: partLow, value2: Vector3.Min(value1: high, value2: part.High));
+            var reach = (0.5f * (partHigh - partLow));
+
+            group.Members.Add(item: ((partLow + reach), reach.Length(), part.Detail, partLow, partHigh));
+        }
     }
     // A dynamic instance's members of its group's union lattice, in the group's frame: each part it declares, its box
     // carried from its own slot's frame through the pose the geometry hashed for that slot (so the members are a function

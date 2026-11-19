@@ -15,7 +15,7 @@ the rest.
 | Creation relief | `CreationNoiseDocument` (`src/Puck.World.Authoring/Authoring/CreationDocument.cs`), `SdfOp.NoiseDisplace`; GPU `sdfValueNoise3` (`field/sdf-noise.hlsli`), CPU `SdfFieldEvaluator.RenderEditField` (`Queries/SdfFieldEvaluator.RenderOps.cs`) | fBm value noise added to the field: `MaxAmplitude` 4 m, `MaxNoiseOctaves` 8, no ridges, warp or erosion. |
 | Smooth blends | `ShapeDocument.MaxSmooth` | 0.5 m, so a 400 m wall is hard-unioned masses. |
 | The valley | `worlds/debug/valley.puck`, `worlds/standard/terrain.puck` | Eight sectors of three superellipsoids, 4 m fBm at 0.02 cycles/m, one palette slot. `terrainFloorCut` keeps buried halves off the lattice. |
-| Bake detail | `CreationNoiseDocument.DetailSpacing`, `WorldPlacementStamper`'s `ReliefDetail` | The scoped bound is a sphere about the ring's centre and refinement stops at eight cells a coarse axis, so a sector bakes coarser than it declares ([mesh bake](../../.claude/skills/rendering/references/mesh-bake.md#groups-poses-and-materials)): the metre-scale grain. |
+| Bake detail | `CreationNoiseDocument.DetailSpacing`, `WorldShapeDetail.PartsOf` | A scoped creation declares a part a shape and one for its relief, so each refines its own box. One lattice's fine-sample budget (`SdfSampledLattice.MaxFineSamples`) still holds a sector coarser than the 1.56 m its relief declares: the north-west wall bakes at 2.5 m ([mesh bake](../../.claude/skills/rendering/references/mesh-bake.md#groups-poses-and-materials)). |
 | Contact | `WorldColliderSet`, `FixedStaticCollider` (analytic convex kinds and the relief's field collider, `FixedStaticColliderKind.Field`); `FixedFieldContactSolver`, the world-wide field provider the debug world does not select | A relieved copy collides as its fixed-point field, authored blends included; an unrelieved copy keeps analytic primitive unions. Both field paths read one certified surface solve; what remains of it is in [certified field contact](open-items.md#certified-field-contact). |
 | Materials | The fixed weathering layer (`shade/shade-weathering.hlsli`) and the standard's `weathered` program (`worlds/standard/shading.puck`) | No slope or altitude rule, though the weathering's up-facing deposit and its curvature edges are such rules. |
 | Atmosphere | `SdfSky.PackAtmosphere`, `shade/sdf-atmosphere.hlsli`, CPU twin `SdfAir` | Height fog and haze, scalar extinction; haze extinction is `-log(1 - amount) / farDistance`. The valley's fog (`clearDayAir`) fades rock toward a white sky, not toward blue. |
@@ -607,8 +607,12 @@ alone, a measurement request.
 
 ### What the bake needs
 
-1. **A scoped creation's bound about its shapes**, not its origin, so a
-   sector's declared spacing reaches the lattice.
+1. **Each part of a scoped creation refines its own box.** Built: a creation
+   emitted as one instance declares a part a shape and one for its relief
+   (`WorldShapeDetail.PartsOf`), so its group bakes on a union's final lattice
+   and no shape's detail spreads over the creation's bound. What still holds a
+   sector coarser than its relief declares is one lattice's fine-sample budget
+   ([what set the cell](#what-set-a-sectors-cell)); the tiles below lift it.
 2. **Terrain tiles as residency units.** A terrain placement declares a tile
    size and the stamper emits one static instance per tile, bounded by the
    tile's box, each its own group, so a tile is demanded, baked at the tier its
@@ -619,6 +623,35 @@ alone, a measurement request.
    10; terrain consumes it and does not take it early for itself.
 3. **The finest tile spacing is the relief's geometric cut**, so contact and
    the nearest drawn mesh agree within the bake's error.
+
+#### What set a sector's cell
+
+The north-west wall (`valley-north-west`), read with
+`puck mesh audit --cpu --world worlds/debug --prototype valley-north-west`:
+
+- **Its bound** is a sphere of 1269 m about the ring's centre. It sets nothing:
+  the bake's search narrows it in two refinements to the surface's box,
+  769 by 613 by 930 m.
+- **It asked for** 89 mm, the round section of a moraine ellipsoid, over its
+  whole bound, since the one instance declared the finest of its shapes'
+  details. Its relief alone asks 1.56 m.
+- **It got 3.6 m.** The final lattice of one member has 65 samples along its
+  longest axis, so its coarse cell was 14.5 m; the declared detail asked the
+  most refinement, eight-fold, everywhere; and the 4 million fine samples one
+  lattice may measure (`SdfSampledLattice.MaxFineSamples`) allowed a four-fold
+  split. The limit was the detail spread over the bound, through the
+  fine-sample budget, not the bound about the origin.
+- **With a part a shape** the group bakes on a union's 7.5 m lattice and each
+  shape refines its own box. The relief's region covers about 128 thousand
+  coarse cells, which the budget splits in three: 2.5 m cells, and 436 thousand
+  triangles against 205 thousand.
+- **Its declared 1.56 m** needs a five-fold split of those cells, about 26
+  million fine samples and a 2.5 GB workspace in one lattice; a 16 million
+  budget gives a four-fold split (1.87 m, 773 thousand triangles). Reaching
+  the relief's spacing therefore needs the sector split across lattices, which
+  the source tiles do. The relief also contours the sector's buried floor-cut
+  face, which a relief mask over the slab under the floor would leave flat and
+  unrefined.
 
 ## The two standard material sets
 
@@ -652,15 +685,11 @@ this plan's, and each is filled before work that sculpts or tunes around it
 (the owner's ruling,
 [AGENTS.md](../../AGENTS.md#pucks-purpose)). Each is a step below:
 
-- **Step 4's bound fix, with its relative caps (gap 1).** A creation whose parts
-  carve each other, or that carries relief, is emitted as one instance for the
-  whole creation, so a sector's bound, not its declared spacing, sets its
-  cell, and relief and smooth blends are capped at prop sizes. The first
-  action is a report for one sector: its bound, the spacing it asked for
-  and the cell it got, and which of the two limits set it (the bound about
-  the creation's origin, or the eight-fold limit on a member's own
-  refinement). The triangles a bound about the shapes costs are counted
-  with it.
+- **Step 4's bound fix, with its relative caps (gap 1).** The report is
+  [what set a sector's cell](#what-set-a-sectors-cell), and a scoped
+  creation's parts now each refine their own box. The relative caps on relief
+  and smooth blends remain, and the sector's declared spacing waits on the
+  source tiles.
 - **Step 3's `TerrainRelief` op, carrying a mask (gap 4).** A relief has no
   region, so it buries anything set into the terrain (the lake's bowl, the
   pool, the river's channel, the glacier's cradle). The step's first part is

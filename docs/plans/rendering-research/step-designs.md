@@ -2662,9 +2662,11 @@ the code:
   world at once, and a world may hold at most 32,768 colliders from
   placements (`WorldPlacementPolicy.MaxSolidPlacementColliders`). The two
   ways of writing do not give an occurrence the same identity.
-- Terrain sectors bake at 2.8 m cells, not the 1.56 m they declare, because
-  the sampling grid of a scoped creation spans a sphere around its origin.
-  Relief is capped at 4 m, and nothing casts a shadow past 120 m.
+- Terrain sectors bake coarser than the 1.56 m their relief declares: one
+  lattice's fine-sample budget holds the north-west wall at 2.5 m cells, and a
+  surface that large reaches its spacing only split into source tiles
+  ([the terrain pass](../terrain-pass.md#what-the-bake-needs)). Relief is
+  capped at 4 m, and nothing casts a shadow past 120 m.
 
 **What we propose.** The engine speeds up the authored program and derives
 its bounds. It writes no grass, wind or terrain code path in C#.

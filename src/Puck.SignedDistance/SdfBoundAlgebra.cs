@@ -1,3 +1,5 @@
+using System.Numerics;
+
 namespace Puck.SignedDistance;
 
 /// <summary>How the bounds of a field's operands compose through its set operations: the one algebra both the
@@ -83,4 +85,26 @@ public static class SdfBoundAlgebra {
                 ? accumulated
                 : MathF.Max(x: accumulated, y: operand))
         );
+    /// <summary>Composes a box that holds the surface accumulated so far with the next operand's: the box the result's
+    /// surface lies in, by the same rules as <see cref="Compose(float, float, SdfBlendOp)"/>. An intersection's surface
+    /// lies in both operands' boxes, a subtraction's in the accumulated one's, and every other blend's in either, widened
+    /// by the blend's <see cref="Growth"/>.</summary>
+    /// <param name="accumulated">The box of the field so far, its corners in world units; inverted corners for an empty
+    /// field.</param>
+    /// <param name="operand">The box of the operand joining it.</param>
+    /// <param name="blend">The blend that joins them.</param>
+    /// <param name="radius">The blend's radius, in the boxes' units.</param>
+    /// <returns>The box of the result; inverted corners when it holds no surface.</returns>
+    public static (Vector3 Low, Vector3 High) ComposeBox((Vector3 Low, Vector3 High) accumulated, (Vector3 Low, Vector3 High) operand, SdfBlendOp blend, float radius) {
+        if (IsIntersection(blend: blend)) {
+            return (Vector3.Max(value1: accumulated.Low, value2: operand.Low), Vector3.Min(value1: accumulated.High, value2: operand.High));
+        }
+        if (IsSubtraction(blend: blend)) {
+            return accumulated;
+        }
+
+        var growth = new Vector3(value: Growth(blend: blend, radius: radius));
+
+        return ((Vector3.Min(value1: accumulated.Low, value2: operand.Low) - growth), (Vector3.Max(value1: accumulated.High, value2: operand.High) + growth));
+    }
 }
