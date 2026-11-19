@@ -413,7 +413,7 @@ public sealed record SdfContour(float[] Positions, float[] Normals, int[] Quads,
         var positions = Positions;
         var normals = Normals;
         var vertexCount = (positions.Length / 3);
-        var cosine = Math.Cos(d: (CreaseDegrees * (Math.PI / 180.0)));
+        var cosine = Math.Cos(d: double.DegreesToRadians(degrees: CreaseDegrees));
 
         // A quad at a crease vertex folded across the crease, its two triangles facing apart by more than the crease
         // angle (one on each face, as where a crease is shorter than a cell), shades as its two triangles: as one quad it
