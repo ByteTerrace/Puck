@@ -858,7 +858,7 @@ public sealed partial class ShaderPipelineCompiler {
             comparer: StringComparer.Ordinal
         );
 
-        ValidateMutableInputs(diagnostics: diagnostics, packages: packages, resources: resourceByName);
+        ValidateMutableInputs(diagnostics: diagnostics, packages: packages, passes: (definition.Passes ?? []), resources: resourceByName);
         if (diagnostics.Count != 0) { throw new ShaderPipelineCompilationException(diagnostics: diagnostics); }
         var writerByResource = new Dictionary<string, int>(comparer: StringComparer.Ordinal);
 

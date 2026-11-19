@@ -1006,7 +1006,8 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
             // Last, once nothing else can fail: a failed install restores the replaced graph whole.
             PreserveCarriedStorages(
                 carried: carried,
-                previousPlan: previousPipeline?.Plan
+                previousPlan: previousPipeline?.Plan,
+                previous: previousResources
             );
         } catch (Exception error) {
             m_work.Discard();
@@ -1146,15 +1147,21 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
     }
 
     // Moves the carried storages' instances out of the replaced graph into the installed one, in the states the replaced
-    // graph left them in. History keeps its contents and its ring's cursor; other storage counts as holding nothing, so
-    // the installed graph clears it where its plan says a pass reads it before any writes it.
-    private void PreserveCarriedStorages(IReadOnlyDictionary<int, CarriedStorage> carried, ShaderPipelinePlan? previousPlan) {
+    // graph left them in. Contents that persist across frames (history with its ring's cursor, and storage updated in
+    // place) keep them; other storage counts as holding nothing, so the installed graph clears it where its plan says a
+    // pass reads it before any writes it. Persistent contents are kept only as a set: when one the replaced graph held
+    // under the same name is not carried, none is kept, so every one is cleared and a reader of them (a temporal resolve
+    // reading its history beside its stationary window) restarts as a unit rather than pairing old parts with new zeros.
+    private void PreserveCarriedStorages(IReadOnlyDictionary<int, CarriedStorage> carried, ShaderPipelinePlan? previousPlan, RuntimeResource[] previous) {
+        var keepsContents = m_resources.All(predicate: current => (!current.Storage.PersistsContents || carried.ContainsKey(key: current.Storage.Index) ||
+            !previous.Any(predicate: old => (old.Storage.PersistsContents && string.Equals(a: old.Spec.Name, b: current.Spec.Name, comparisonType: StringComparison.Ordinal)))));
+
         foreach (var (index, carry) in carried) {
             var current = m_resources[index];
             var old = carry.Old;
 
-            if (current.History) {
-                current.HistoryLatest = old.HistoryLatest;
+            if (keepsContents && current.Storage.PersistsContents && (old.Storage.PersistsContents == current.Storage.PersistsContents) && (old.History == current.History)) {
+                if (current.History) { current.HistoryLatest = old.HistoryLatest; }
                 Array.Copy(
                     destinationArray: current.Initialized,
                     length: current.Count,

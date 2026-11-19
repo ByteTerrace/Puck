@@ -63,6 +63,9 @@ public sealed partial class ShaderPipelineRenderNode {
         // Previous history feeds a requested write but creates no demand for another one. The package signature
         // states whether a sample is owed. A current read follows the last successful write's content identity.
         if (previous && resource.History) { return true; }
+        // Storage updated in place changes without a new content generation, as a mutable import does, so nothing that
+        // reads it may stand on an earlier reading of it.
+        if (resource.Storage.UpdatedInPlace) { return false; }
         if (resource.Spec.IsExternal) {
             if (resource.Spec.IsHostBuffer || (resource.Spec.Kind != ShaderPipelineResourceKind.Buffer)) { return false; }
             // A mutable import's producer publication cannot describe writes made by this graph.

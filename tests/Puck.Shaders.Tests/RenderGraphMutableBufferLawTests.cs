@@ -38,7 +38,7 @@ public sealed class RenderGraphMutableBufferLawTests {
         Assert.Equal(GpuAccess.ShaderRead | GpuAccess.ShaderWrite, read.Barrier.SourceAccess);
         Assert.Equal(GpuAccess.ShaderRead, read.Barrier.DestinationAccess);
         Assert.Equal(GpuStage.ComputeShader, read.Barrier.SourceStage);
-        Assert.Equal(GpuStage.ComputeShader, read.Barrier.DestinationStage);
+        Assert.Equal(GpuStage.ComputeShader | GpuStage.FragmentShader, read.Barrier.DestinationStage);
         Assert.Equal(ShaderPipelineClear.None, plan.Storages[cache.Storage].Clear);
     }
     [InlineData(ShaderPipelineInitialization.Zero)]
@@ -63,5 +63,52 @@ public sealed class RenderGraphMutableBufferLawTests {
 
         Assert.Contains(collection: refused.Diagnostics, filter: diagnostic => (diagnostic.Code == "RENDERGRAPH_MUTABLE_INPUT"));
         Assert.False(condition: RenderGraphPackagePort.Image(access: RenderGraphPortAccess.ComputeReadWrite).IsValid);
+    }
+
+    // A fragment's own retained, zero-initialized buffer that one part updates in place: the stationary window's shape.
+    private static ShaderPipelineResource Window() => new(Name: "window", Kind: ShaderPipelineResourceKind.Buffer, SizeBytes: 1024, StrideBytes: sizeof(uint),
+        Initialization: ShaderPipelineInitialization.Zero, Retained: true);
+    private static RenderGraphFragmentPass Updater(string output = "result") => new(Name: "update", Inputs: ["window"],
+        InputAccesses: [RenderGraphPortAccess.ComputeReadWrite], Outputs: [output], OutputAccesses: [RenderGraphPortAccess.ComputeWrite]);
+    private static RenderGraphPlan CompileOwned(RenderGraphPackageFragment fragment, RenderGraphPackagePort[] outputs, string[] bound, ShaderPipelineResource[] resources) {
+        var package = new RenderGraphPackage(Id: "window.update", Inputs: [], Outputs: outputs, Members: [], Summary: "Updates its own window.") { Fragment = fragment };
+        var graph = new RenderGraphDefinition(Name: "window-owner", Resources: resources, Outputs: ["out"], Schema: RenderGraphSchemas.Graph,
+            Packages: [new(Name: "owner", Package: "window.update", Inputs: [], Outputs: [.. bound.Select(selector: static name => new ResourceReference(Name: name))])]);
+
+        return new RenderGraphCompiler(new RenderGraphPackageCatalog(packages: [package])).Compile(definition: graph);
+    }
+
+    [Fact]
+    public void AFragmentsOwnBufferUpdatedByOnePartIsClearedOnceAndCarriesFromFrameToFrame() {
+        var plan = CompileOwned(fragment: new(Resources: [Window(), Image(name: "result")], InputVersions: [], OutputVersions: ["result"], Passes: [Updater()]),
+            outputs: [RenderGraphPackagePort.Image(access: RenderGraphPortAccess.ComputeWrite)], bound: ["out"], resources: [Image(name: "out")]).Pipeline;
+        var window = plan.Storages.Single(predicate: storage => storage.Versions.Any(predicate: version => version.EndsWith(value: "window", comparisonType: StringComparison.Ordinal)));
+
+        Assert.Equal(ShaderPipelineClear.EveryInstance, window.Clear);
+        Assert.True(condition: window.UpdatedInPlace);
+        Assert.True(condition: window.PersistsContents);
+    }
+    // Planning follows versions, which an update in place has none of, so no other pass may reach the buffer: a reader
+    // could be ordered before the update, keep a dropped updater's results, or stand on an earlier reading.
+    [Fact]
+    public void AnInPlaceBufferAnotherPartAlsoReadsIsRefused() {
+        var reader = new RenderGraphFragmentPass(Name: "read", Inputs: ["window", "result"],
+            InputAccesses: [RenderGraphPortAccess.ComputeRead, RenderGraphPortAccess.ComputeRead], Outputs: ["final"], OutputAccesses: [RenderGraphPortAccess.ComputeWrite]);
+        var refused = Assert.Throws<ShaderPipelineCompilationException>(testCode: () => CompileOwned(
+            fragment: new(Resources: [Window(), Image(name: "result"), Image(name: "final")], InputVersions: [], OutputVersions: ["final"], Passes: [Updater(), reader]),
+            outputs: [RenderGraphPackagePort.Image(access: RenderGraphPortAccess.ComputeWrite)], bound: ["out"], resources: [Image(name: "out")]));
+
+        Assert.Contains(collection: refused.Diagnostics, filter: diagnostic => (diagnostic.Code == "SHADERPIPE_MUTABLE_INPUT"));
+    }
+    // An output version is spliced onto the enclosing graph's storage, which enters only through a mutable input port.
+    [Fact]
+    public void AFragmentOutputCannotStandInForAMutableInputPort() {
+        var refused = Assert.Throws<ShaderPipelineCompilationException>(testCode: () => CompileOwned(
+            fragment: new(Resources: [Window(), Image(name: "result")], InputVersions: [], OutputVersions: ["result", "window"], Passes: [Updater()]),
+            outputs: [RenderGraphPackagePort.Image(access: RenderGraphPortAccess.ComputeWrite), RenderGraphPackagePort.Buffer(access: RenderGraphPortAccess.ComputeWrite, count: null, strideBytes: sizeof(uint))],
+            bound: ["out", "shared"],
+            resources: [Image(name: "out"), new(Name: "shared", Kind: ShaderPipelineResourceKind.Buffer, SizeBytes: 1024, StrideBytes: sizeof(uint), Initialization: ShaderPipelineInitialization.External)]));
+
+        Assert.Contains(collection: refused.Diagnostics, filter: diagnostic => (diagnostic.Code == "RENDERGRAPH_MUTABLE_INPUT"));
     }
 }

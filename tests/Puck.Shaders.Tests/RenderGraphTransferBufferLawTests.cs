@@ -26,7 +26,7 @@ public sealed class RenderGraphTransferBufferLawTests {
 
         Assert.Equal(GpuStage.Transfer, sampled.Barrier.SourceStage);
         Assert.Equal(GpuAccess.TransferWrite, sampled.Barrier.SourceAccess);
-        Assert.Equal(GpuStage.ComputeShader, sampled.Barrier.DestinationStage);
+        Assert.Equal(GpuStage.ComputeShader | GpuStage.FragmentShader, sampled.Barrier.DestinationStage);
         Assert.Equal(GpuAccess.ShaderRead, sampled.Barrier.DestinationAccess);
     }
     [InlineData(true, true)]

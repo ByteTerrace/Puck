@@ -35,10 +35,11 @@ public sealed partial class SdfPassPlanLawTests {
     // Every buffer transition between two passes of a frame: the buffer, the pass it orders after and the pass it orders
     // before, and the accesses and stages on either side.
     private static readonly (string Buffer, string Producer, string Consumer, GpuAccess SourceAccess, GpuAccess DestinationAccess, GpuStage SourceStage, GpuStage DestinationStage)[] Edges = [
-        (SdfWorldPackage.Parts.MeshPyramid, SdfWorldPackage.Parts.Pyramid, SdfWorldPackage.Parts.Surface, GpuAccess.ShaderWrite, GpuAccess.ShaderRead, GpuStage.ComputeShader, GpuStage.ComputeShader),
+        // A buffer's shader-read barrier reaches every shader stage, so a later fragment reader needs none of its own.
+        (SdfWorldPackage.Parts.MeshPyramid, SdfWorldPackage.Parts.Pyramid, SdfWorldPackage.Parts.Surface, GpuAccess.ShaderWrite, GpuAccess.ShaderRead, GpuStage.ComputeShader, GpuStage.ComputeShader | GpuStage.FragmentShader),
         // The probe lookup, views and the composite only read the records the surface pass wrote.
-        (SdfWorldPackage.Parts.Visibility, SdfWorldPackage.Parts.Surface, SdfWorldPackage.Parts.ViewsProbes, GpuAccess.ShaderWrite, GpuAccess.ShaderRead, GpuStage.ComputeShader, GpuStage.ComputeShader),
-        (SdfWorldPackage.Parts.Probes, SdfWorldPackage.Parts.ViewsProbes, SdfWorldPackage.Parts.Views, GpuAccess.ShaderWrite, GpuAccess.ShaderRead, GpuStage.ComputeShader, GpuStage.ComputeShader),
+        (SdfWorldPackage.Parts.Visibility, SdfWorldPackage.Parts.Surface, SdfWorldPackage.Parts.ViewsProbes, GpuAccess.ShaderWrite, GpuAccess.ShaderRead, GpuStage.ComputeShader, GpuStage.ComputeShader | GpuStage.FragmentShader),
+        (SdfWorldPackage.Parts.Probes, SdfWorldPackage.Parts.ViewsProbes, SdfWorldPackage.Parts.Views, GpuAccess.ShaderWrite, GpuAccess.ShaderRead, GpuStage.ComputeShader, GpuStage.ComputeShader | GpuStage.FragmentShader),
     ];
     // A view's graph: the one pass running the package, publishing its color.
     private static RenderGraphPlan Plan { get; } = new RenderGraphCompiler(packages: RenderGraphPackageCatalog.Engine).Compile(definition: new RenderGraphDefinition(
