@@ -15,6 +15,7 @@ public sealed partial class WorldRenderSettings {
     public Client.WorldSkyAudition SkyLayers { get; } = new();
 
     private bool m_ambientOcclusion;
+    private bool m_rayQueries;
     private bool m_cadenceGate;
     private SdfMeshCullLevel m_cull;
     private SdfMeshDetailLevel m_detail;
@@ -55,6 +56,7 @@ public sealed partial class WorldRenderSettings {
         SkyQuality = defaults.SkyQuality;
         SkyFieldScale = defaults.SkyFieldScale;
         IndirectTier = (defaults.Indirect?.Tier ?? SdfIndirectTier.Medium);
+        RayQueries = defaults.RayQueries;
         DynamicResolution = defaults.DynamicResolution;
         CadenceGate = true;
         Cull = SdfMeshCullLevel.Occlusion;
@@ -65,6 +67,10 @@ public sealed partial class WorldRenderSettings {
     /// world); the <c>world.ao</c> verb toggles it live (it rides each view's
     /// <see cref="Puck.SdfVm.SdfViewQuality.DisableAmbientOcclusion"/> lane, so no rebuild).</summary>
     public bool AmbientOcclusion { get => m_ambientOcclusion; set { m_ambientOcclusion = value; m_revision++; } }
+    /// <summary>Whether the indirect volume's background rays take the device's ray hardware where it has it
+    /// (<see cref="Puck.SdfVm.SdfFrame.RayQueries"/>). Boots at <c>render.rayQueries</c>; the <c>world.rays</c> verb and a
+    /// quality preset's row move it live.</summary>
+    public bool RayQueries { get => m_rayQueries; set { m_rayQueries = value; m_revision++; } }
     /// <summary>The exposure pin (<c>world.exposure pin</c>): an <c>EV100</c> every view the session presents renders
     /// manual at, with no local adaptation (<see cref="SdfExposure.HeldAt"/>), so look comparisons hold one exposure;
     /// <see langword="null"/> (the default) leaves each world's authored and held exposure exactly as it is. Presentation

@@ -50,6 +50,7 @@ public sealed partial class SdfWorldPasses {
                 entry.Check(tables: tables, target: HitTarget.Mesh);
                 entry.Note(tables: tables, target: HitTarget.Visibility);
                 break;
+            case SdfWorldPackage.Parts.ViewsProbes:
             case SdfWorldPackage.Parts.Views:
             case SdfWorldPackage.Resolve:
                 entry.Check(tables: tables, target: HitTarget.Visibility);

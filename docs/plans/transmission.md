@@ -496,10 +496,11 @@ is read against that baseline, re-taken at the start of the work, with the 2060
 and the Deck. The plan:
 
 - **Devices and tiers.** The bar is the highest quality on every bar device
-  ([the register](../decisions/rendering.md#the-pipeline-foundation)), so the
-  Steam Deck is measured at **Full** (2048 texels), as the RTX 2060 and the
-  RTX 4070 are. A Half reading on the Deck is information about the tier, not
-  qualification. Both backends on the desktop cards.
+  ([the register](../decisions/rendering.md#the-pipeline-foundation)), so each
+  bar device is measured at **Full** (2048 texels). The RTX 4070 runs first on
+  both backends; the RTX 2060 and Steam Deck legs run once the RTX 4070 meets
+  both bars. A Half reading on the Deck is information about the tier, not
+  qualification.
 - **Stops.** `debug.go stage` (the step 1 witness), the meadow (the most
   wrapped receivers and the most casters), `debug.go portals` (nested views
   each with cascades), `valley-rim` (the far cascade's draw count).
@@ -710,19 +711,62 @@ others run beside the second. The remaining review mediums are checks here.
    wrapped receiver's shadow unchanged; `world.counters gpu pass
    sdf.world$shadow-near` shows one peel pass; the measurement plan's
    readings recorded here, the Deck at Full among them.
-2. **`transmit-plane`: the resolution rule.** The footprint clamp, the exact
-   gradient, Inside by point-in-triangle, Near by `u1`, Far, the per-tap
-   decisions, `SDF_SHADOW_UNRESOLVED` through the record and the views filter
-   with the body-compatible average; the offsets, constant bias and slope
-   allowance deleted; `S` and `u0` set by measurement.
-   Checks: `world.debug-view shadow` on a flat wrapped plate at n·l = -0.005
-   and -0.05 in the open reads 1 across it on both backends; the 6 cm slab
-   exit over the panel shadows it; the grazing panel behind a sloping sheet a
-   metre ahead reads shadowed, inside its triangle and, as a small panel,
-   unresolved and dark; the Moth's cheek shows no band at its terminator under
-   `world.toon off` and a presented burst shows no flicker there; two
-   coplanar wrapped slabs of different bodies under one roof keep their own
-   visibilities across their seam.
+2. **`transmit-plane` and the metre-sized shadow filter.** Today cascade
+   boundaries jump softness by roughly seven times because blocker search and
+   filter radius clamp in cascade texels (`SdfMeshShadowMaxTexels`) with no
+   blend band, and sideways blocker search stops at 26 cm on the near cascade.
+   Merge the resolution rule (footprint clamp, exact gradient, Inside by
+   point-in-triangle, Near by `u1`, Far, per-tap decisions,
+   `SDF_SHADOW_UNRESOLVED` through the record and body-compatible views filter;
+   deleting offsets, constant bias and slope allowance; setting `S` and `u0` by
+   measurement) with a **metre-sized shadow filter** driven by the light's
+   authored `angularRadius` and an authored maximum (keeping only a one-texel
+   minimum for antialiasing and an authored blend band between cascades).
+   - *Shadow depth pyramid.* Wide taps read a new reduced-resolution pyramid of
+     the cascade keeping both the least and greatest depth of each block
+     together with the body and depth layer each came from (separate from
+     `sdf-mesh-pyramid.hlsli`, which keeps one representative pixel per block
+     and can miss thin blockers).
+   - *Two-part build.* First build a bounded prototype behind a switch leaving
+     the shipped receiver untouched, comparing the metre-sized filter against a
+     brute-force filter in a burst of presented frames at one route stop across
+     four blockers: deep directly above, displaced sideways, thin and moving,
+     and a soft edge spanning two pyramid levels. Then merge the production
+     rewrite into `transmit-plane` after `transmit-identity` supplies the body
+     table and depth layers, which a wide sample must read consistently.
+   - *Why, and the risks.* The filter removes the seven-fold jump, the moving
+     seam and the short sideways search. Microsoft's cascade guidance describes
+     a band that tests both cascades and interpolates, though it gives no
+     width; NVIDIA's soft-shadow notes name only a minimum clamp on the filter.
+     The pyramid's nearest published relative is a hierarchical shadow map that
+     keeps each block's least and greatest depth and classifies a region before
+     filtering it (Guennebaud, Barthe and Paulin, 2006, opened by a reviewer and
+     not reverified); that paper reports visible steps where the filter changes
+     level, which is why the prototype has that case. A sample from the pyramid
+     darkens slightly, and wide sparse filters lean on the views filter and the
+     temporal resolve to hide noise. A pyramid that keeps only the nearest
+     depth cannot say which body or layer a sample came from, so each reduced
+     texel carries depth, body and layer together. The strongest case against
+     is that nothing outside Puck shows such a filter over a depth pyramid in a
+     moving game scene, which is why the prototype comes first. If it cannot
+     match the brute-force reference within what the views filter leaves, the
+     blend band stays and the pyramid is replaced by more samples in the near
+     cascade only. The widest soft edge and the band are authored members of
+     `render.shadowCoverage` with neutral defaults
+     ([where each look is authored](rendering-research/step-designs.md#where-each-look-is-authored)).
+   Checks: the prototype stays inside its stated bound against the brute-force
+   filter on all four blockers; a walk through the boundary between cascades
+   shows one soft-edge width on either side and no seam; a deep blocker directly
+   above and one displaced to the side both shadow as the brute-force filter
+   does; a thin occluder beside a back face lit by wrapped lighting keeps a
+   correct shadow in motion on both backends; `world.debug-view shadow` on a flat wrapped
+   plate at n·l = -0.005 and -0.05 in the open reads 1 across it on both
+   backends; the 6 cm slab exit over the panel shadows it; the grazing panel
+   behind a sloping sheet a metre ahead reads shadowed, inside its triangle
+   and, as a small panel, unresolved and dark; the Moth's cheek shows no band
+   at its terminator under `world.toon off` and a presented burst shows no
+   flicker there; two coplanar wrapped slabs of different bodies under one roof
+   keep their own visibilities across their seam.
 3. **`transmit-authored`: authored meshes.** `MeshOf` draws every authored
    mesh two-sided and records the cascade's single-winding count; the closure
    test with its spatial hash replaces `ClosedOutward`; a `Solid` on `WorldPrototypeMesh`;
@@ -752,6 +796,38 @@ others run beside the second. The remaining review mediums are checks here.
    rendering skill's soft-shadow bullet, the V5 note in
    [visibility](visibility.md#v5-multi-view-and-shadow-work), the mesh GI
    reference, and the packet.
+6. **Glass cost proportional to visible coverage, zero-add skips and triangle
+   facing.** Today a single visible glass pane clears `SdfWorldPackage.GlassSumWords`
+   (16) words across every pixel and shades the whole grid, and every glass
+   fragment resolves three vertex positions to learn triangle facing.
+   - *Visible coverage and tile clears.* Test glass draws against opaque depth,
+     record which tiles hold glass, shade in bins, and clear only tiles written
+     by the *previous* draw of that buffer (stored as a per-buffer tile list,
+     kept apart for camera glass and shadow glass, with first use clearing all
+     tiles — this frame's fragments arrive too late because glass sums are
+     additive). Keep exact additive sums (rejecting weighted/moment
+     transparency and per-pixel lists). Watch the unexplained Vulkan device
+     loss near glass passes and the extra per-fragment atomic.
+   - *Skip atomic zero adds and resolve facing per triangle.* Skip atomic
+     additions of zero. Because triangle facing cannot live per vertex once
+     vertices are shared on silhouettes, design this alongside
+     [visibility's indexed-draw experiment](visibility.md#the-build-order),
+     choosing between unified rasterizer facing across both backends or a
+     per-triangle value stored for the current pose. Today's code avoids the
+     rasterizer's facing on purpose, because its sense follows each backend's
+     conventions and not the mesh.
+   - *Why, and what it rests on.* One pane should not cost a full-image clear
+     and shade. Glass is a surface of its own, drawn after opaque visibility
+     (the owner's ruling), and its additive sums are exact, so weighted or
+     moment transparency and per-pixel lists, which approximate them, are not
+     taken. Repacking the sums risks that exactness. Not checked: that glass
+     shades the whole grid (a research map).
+   Checks: move a glass pane across separate tiles, remove it and reuse its
+   buffer for another view, confirming nothing remains behind and reporting
+   cleared bytes against a full clear; verify mirrored, skinned and clipped
+   glass face the right way, and a rotating glass box reads the same thickness
+   from both sides. (An eye inside a transmissive medium is owned by
+   [the water plan](water.md).)
 
 ## The owner's calls
 

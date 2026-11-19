@@ -27,10 +27,11 @@ namespace Puck.World;
 /// <param name="server">The authority whose live definition and grants the commands inspect.</param>
 /// <param name="link">The existing submission path for authoritative session levers.</param>
 /// <param name="renderProbe">The presentation owner's live renderer.</param>
-public sealed partial class WorldRenderLeverCommandModule(WorldRenderSettings settings, WorldServer server, IServerLink link, WorldRenderProbe renderProbe) : ICommandModule {
+public sealed partial class WorldRenderLeverCommandModule(WorldRenderSettings settings, WorldServer server, IServerLink link, WorldRenderProbe renderProbe) : ICommandModule, IWorldQualityPresets {
     private static readonly CommandForms WorldSkyLayerForms = CommandForms.Of(verb: "world.sky-layer", "[solo <index>|solo off|mute <index> on|off]");
     private static readonly CommandForms WorldShadowsForms = CommandForms.Of(verb: "world.shadows", "[off|low|medium|high]");
     private static readonly CommandForms WorldAoForms = CommandForms.Of(verb: "world.ao", "[on|off]");
+    private static readonly CommandForms WorldRaysForms = CommandForms.Of(verb: "world.rays", "[on|off]");
     private static readonly CommandForms WorldCadenceForms = CommandForms.Of(verb: "world.cadence", "[on|off|status]");
     private static readonly CommandForms WorldCullForms = CommandForms.Of(verb: "world.cull", "[occlusion|camera|frustum|off|status]");
     private static readonly CommandForms WorldDetailForms = CommandForms.Of(verb: "world.detail", "[auto|0|1|2|status]");
@@ -318,6 +319,67 @@ public sealed partial class WorldRenderLeverCommandModule(WorldRenderSettings se
     }
 
     /// <inheritdoc/>
+    public CommandResult Apply(CommandContext context, QualityTier tier, WorldQualityPreset preset) {
+        SubmitLever(
+            link: link,
+            principal: context.Principal,
+            name: WorldSessionLevers.Shadows,
+            a: ((int)preset.Shadows)
+        );
+        SubmitLever(
+            link: link,
+            principal: context.Principal,
+            name: WorldSessionLevers.AmbientOcclusion,
+            a: (preset.AmbientOcclusion
+            ? 1.0
+            : 0.0)
+        );
+        SubmitLever(
+            link: link,
+            principal: context.Principal,
+            name: WorldSessionLevers.Temporal,
+            a: (preset.Temporal
+            ? 1.0
+            : 0.0)
+        );
+        SubmitLever(
+            link: link,
+            principal: context.Principal,
+            name: WorldSessionLevers.RenderScale,
+            b: ((double)(preset.DynamicResolution ? WorldRenderScaleOperation.Auto : WorldRenderScaleOperation.Off)),
+            a: 0.0
+        );
+
+        link.SubmitSessionLever(lever: WorldSessionLevers.ShadowPolicy(preset: preset), principal: context.Principal);
+        SubmitLever(
+            link: link,
+            principal: context.Principal,
+            name: WorldSessionLevers.SkyQuality,
+            a: ((double)preset.Sky)
+        );
+        SubmitLever(link, context.Principal, WorldSessionLevers.SkyFieldScale, preset.SkyFieldScale);
+        SubmitLever(link, context.Principal, WorldSessionLevers.BloomQuality, ((double)preset.Bloom));
+        SubmitLever(link, context.Principal, WorldSessionLevers.RayQueries, (preset.RayQueries ? 1.0 : 0.0));
+        SubmitLever(link, context.Principal, WorldSessionLevers.Indirect, ((double)(preset.Indirect ?? (tier switch {
+            QualityTier.Low or QualityTier.Medium => SdfIndirectTier.Medium,
+            _ => SdfIndirectTier.High,
+        }))));
+        SubmitLever(link, context.Principal, WorldSessionLevers.RenderScale,
+            WorldRenderScaleTiers.Scale(tier: preset.RenderScaleFloor), b: ((double)WorldRenderScaleOperation.Floor),
+            section: WorldSection.Views);
+        // The echo formats inside the last lever's completion — every setting has applied (or the last was
+        // refused) by the time formatEcho runs, since loopback drains each inline before its Submit* returns.
+        return SubmitLever(
+            link: link,
+            principal: context.Principal,
+            name: WorldSessionLevers.RenderScale,
+            a: preset.RenderScale,
+            b: ((double)WorldRenderScaleOperation.Ceiling),
+            formatEcho: () => new CommandResult(Output: DescribeQuality())
+        );
+    }
+
+    /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
         yield return BloomCommand();
         yield return CommandDefinition.WithWireArgs(
@@ -403,6 +465,30 @@ public sealed partial class WorldRenderLeverCommandModule(WorldRenderSettings se
                     formatEcho: () => new CommandResult(Output: $"[world.ao: {(settings.AmbientOcclusion
                     ? "on"
                     : "off")}]")
+                );
+            }
+        );
+        yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
+            bindability: CommandBindability.Bindable,
+            name: "world.rays",
+            forms: WorldRaysForms,
+            description: $"Switches whether the indirect volume's background rays (the probe trace, the relight's shadow rays and the camera sample) take the GPU's ray hardware, live: {WorldRaysForms.Spelling} — no argument echoes the state and whether the device has ray queries (world.counters gpu's capabilities line, optional=). Off, or on a device without them, they take the software walk, which answers the same hits; sdf.mesh-gi's gpu-query-* counters read the hardware's share.",
+            handler: (context, args) => {
+                if (args.Count == 0) {
+                    return new CommandResult(Output: $"[world.rays: {(settings.RayQueries ? "on" : "off")}]");
+                }
+
+                if (ParseOnOff(token: args[0]) is not { } resolved) {
+                    return WorldRaysForms.Refuse(args: in args, got: args[0].ToString());
+                }
+
+                return SubmitLever(
+                    link: link,
+                    principal: context.Principal,
+                    name: WorldSessionLevers.RayQueries,
+                    a: (resolved ? 1.0 : 0.0),
+                    formatEcho: () => new CommandResult(Output: $"[world.rays: {(settings.RayQueries ? "on" : "off")}]")
                 );
             }
         );
@@ -860,62 +946,7 @@ public sealed partial class WorldRenderLeverCommandModule(WorldRenderSettings se
                     return CommandResult.Error(output: $"[world.quality: this world authors no {QualityTiers.Name(tier: tier)} preset]");
                 }
 
-                SubmitLever(
-                    link: link,
-                    principal: context.Principal,
-                    name: WorldSessionLevers.Shadows,
-                    a: ((int)preset.Shadows)
-                );
-                SubmitLever(
-                    link: link,
-                    principal: context.Principal,
-                    name: WorldSessionLevers.AmbientOcclusion,
-                    a: (preset.AmbientOcclusion
-                    ? 1.0
-                    : 0.0)
-                );
-                SubmitLever(
-                    link: link,
-                    principal: context.Principal,
-                    name: WorldSessionLevers.Temporal,
-                    a: (preset.Temporal
-                    ? 1.0
-                    : 0.0)
-                );
-                SubmitLever(
-                    link: link,
-                    principal: context.Principal,
-                    name: WorldSessionLevers.RenderScale,
-                    b: ((double)(preset.DynamicResolution ? WorldRenderScaleOperation.Auto : WorldRenderScaleOperation.Off)),
-                    a: 0.0
-                );
-
-                link.SubmitSessionLever(lever: WorldSessionLevers.ShadowPolicy(preset: preset), principal: context.Principal);
-                SubmitLever(
-                    link: link,
-                    principal: context.Principal,
-                    name: WorldSessionLevers.SkyQuality,
-                    a: ((double)preset.Sky)
-                );
-                SubmitLever(link, context.Principal, WorldSessionLevers.SkyFieldScale, preset.SkyFieldScale);
-                SubmitLever(link, context.Principal, WorldSessionLevers.BloomQuality, ((double)preset.Bloom));
-                SubmitLever(link, context.Principal, WorldSessionLevers.Indirect, ((double)(preset.Indirect ?? (tier switch {
-                    QualityTier.Low or QualityTier.Medium => SdfIndirectTier.Medium,
-                    _ => SdfIndirectTier.High,
-                }))));
-                SubmitLever(link, context.Principal, WorldSessionLevers.RenderScale,
-                    WorldRenderScaleTiers.Scale(tier: preset.RenderScaleFloor), b: ((double)WorldRenderScaleOperation.Floor),
-                    section: WorldSection.Views);
-                // The echo formats inside the last lever's completion — every setting has applied (or the last was
-                // refused) by the time formatEcho runs, since loopback drains each inline before its Submit* returns.
-                return SubmitLever(
-                    link: link,
-                    principal: context.Principal,
-                    name: WorldSessionLevers.RenderScale,
-                    a: preset.RenderScale,
-                    b: ((double)WorldRenderScaleOperation.Ceiling),
-                    formatEcho: () => new CommandResult(Output: DescribeQuality())
-                );
+                return Apply(context: context, preset: preset, tier: tier);
             }
         );
     }

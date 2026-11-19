@@ -7,11 +7,14 @@
 #define SDF_PROBE_UNKNOWN_MATERIAL                   65535u
 #define SDF_PROBE_NODE_COUNT_BITS                    3u
 #define SDF_PROBE_NODE_WORDS                         7u
-#define SDF_PROBE_ENTRY_WORDS                        2u
+#define SDF_PROBE_PACKED_NODE_WORDS                  4u
+#define SDF_PROBE_ENTRY_WORDS                        3u
 #define SDF_PROBE_NORMAL_WORD                        16u
 #define SDF_PROBE_GEOMETRY_WORD                      25u
 #define SDF_PROBE_IDENTITY_WORD                      29u
 #define SDF_PROBE_INSTANCE_INDEX_WORD                30u
+#define SDF_PROBE_INSTANCE_WORDS                     32u
+#define SDF_PROBE_INSTANCE_BASE_WORD                 1u
 #define SDF_PROBE_STACK_DEPTH                        64u
 #define SDF_PROBE_MAX_WALK_STEPS                     65536u
 #define SDF_PROBE_GROUP_SIZE                         32u
@@ -110,9 +113,13 @@
 #define SDF_SHADE_BINS              2u
 #define SDF_SHADE_TILE_HEADER_WORDS 6u
 #define SDF_VIEWS_FILTER_WORDS      2u
+#define SDF_VIEWS_PROBE_RATE        2u
+#define SDF_VIEWS_PROBE_WORDS       11u
 #define SDF_SHADOW_BITS             8u
 #define SDF_SHADOW_MASK             0x000000FFu
 #define SDF_SHADOW_SLOTS            4u
+#define SDF_SHADOW_ROLES            2u
+#define SDF_MESH_SHADOW_ENTRIES     3u
 #define SDF_SHADOW_FADE_CAPACITY    2u
 
 // The visibility record's normal word (SdfVisibility): its SNORM16 scale and the word of a record with no normal.
@@ -164,6 +171,7 @@
 #define SDF_RECEIVER_ROW                  14u
 #define SDF_SIGHT_ROW                     15u
 #define SDF_SIGHT_COUNT_BASE              5u
+#define SDF_MESH_MARK_BASE                64u
 
 // The irradiance volume's probe record and read (SdfMeshIrradianceProbe).
 #define SDF_MESH_IRRADIANCE_PROBE_WORDS                 244u
@@ -192,9 +200,10 @@
 #define SDF_MESH_IRRADIANCE_DEPTH_SHEET_COVERAGE_START  0.0
 #define SDF_MESH_IRRADIANCE_DEPTH_SHEET_COVERAGE_SCALE  8.0
 
-// The temporal resolve: the history surface's words an output pixel (SdfWorldPackage.HistorySurfaceWords), the jitter period in samples (SdfWorldPackage.TemporalPeriod), the weight a history saturates at, one period, and the weight one carrying a remembered sub-pixel feature saturates at (SdfTemporalSamples.FeaturePeriods periods).
-#define SDF_HISTORY_SURFACE_WORDS      47u
-#define SDF_HISTORY_WINDOW_OFFSET      7u
+// The temporal resolve: the history surface's words an output pixel (SdfWorldPackage.HistorySurfaceWords), the stationary window's (SdfWorldPackage.HistoryWindowWords) and its first sample word after the phase mask, the jitter period in samples (SdfWorldPackage.TemporalPeriod), the weight a history saturates at, one period, and the weight one carrying a remembered sub-pixel feature saturates at (SdfTemporalSamples.FeaturePeriods periods).
+#define SDF_HISTORY_SURFACE_WORDS      6u
+#define SDF_HISTORY_WINDOW_WORDS       41u
+#define SDF_HISTORY_WINDOW_OFFSET      1u
 #define SDF_HISTORY_SAMPLE_WORDS       5u
 #define SDF_TEMPORAL_PERIOD            8u
 #define SDF_HISTORY_WEIGHT_CAP         8.0

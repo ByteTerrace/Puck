@@ -184,10 +184,11 @@ public sealed class MemoryAccount {
     /// machine-derived budget.</param>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="bytes"/> is negative.</exception>
     public void SetBudget(long? bytes) => SetBudget(bytes: bytes, pool: PhysicalMemory.Host);
-    /// <summary>Lowers a pool's budget, or restores the value it derives. The host pool's budget is at most
-    /// <see cref="DefaultBudget"/>; a discrete adapter's pool takes the value in place of the sum of its segments' spend
-    /// limits, so a reading can be stood in for by hand. Nothing held is released: a budget below what a pool holds
-    /// refuses the next admission that gives way, and a lowered budget asks the caches to release their claims.</summary>
+    /// <summary>Lowers a pool's budget, or restores the value it derives. The budget is a cap, never a raise: the host
+    /// pool's is at most <see cref="DefaultBudget"/>, and a discrete adapter's pool limit is the smaller of the value and
+    /// the sum of its segments' spend limits (the value alone where no reading names a segment). A device profile's
+    /// memory bar is this cap. Nothing held is released: a budget below what a pool holds refuses the next admission
+    /// that gives way, and a lowered budget asks the caches to release their claims.</summary>
     /// <param name="pool">The pool.</param>
     /// <param name="bytes">The budget, in bytes; <see langword="null"/> restores the derived budget.</param>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="bytes"/> is negative.</exception>
@@ -427,10 +428,11 @@ public sealed class MemoryAccount {
                 Row(backing: MemoryBacking.Managed, bytes: sample?.ManagedCommitted, measured: true, name: "managed", pool: PhysicalMemory.Host),
             };
             // What the walk's private bytes hold beyond the rows that lie in them: the runtime's code and loader heaps,
-            // stacks and the driver's private memory. Device blocks are left in it: whether a driver maps them into the
-            // process's private bytes is the driver's, which the walk cannot tell.
+            // stacks and the driver's private memory. The host's write-combined and uncached views of graphics
+            // allocations are left out: the ledgers count those blocks in the device-blocks rows, and a driver that maps
+            // device memory into the process would otherwise charge the device's blocks to host memory a second time.
             long? runtime = (((sample?.Walk is { } walk) && (sample.AllocatorCommitted is { } allocator))
-                ? (walk.PrivateBytes - ((allocator + direct) + sample.ManagedCommitted))
+                ? ((walk.PrivateBytes - walk.DriverMappedBytes) - ((allocator + direct) + sample.ManagedCommitted))
                 : null);
 
             if (runtime is < 0) { m_negativeResiduals++; runtime = 0; }
@@ -449,7 +451,7 @@ public sealed class MemoryAccount {
             var device = new MemoryPoolReading(
                 Admission: AdmissionOf(pool: PhysicalMemory.Device),
                 Admitted: 0L,
-                Budget: (m_pools[((int)PhysicalMemory.Device)].BudgetOverride ?? ((deviceLimits.Length == 0) ? null : deviceLimits.Sum(selector: static limit => limit.Budget))),
+                Budget: ((deviceLimits.Length == 0) ? m_pools[((int)PhysicalMemory.Device)].BudgetOverride : Math.Min(val1: deviceLimits.Sum(selector: static limit => limit.Budget), val2: (m_pools[((int)PhysicalMemory.Device)].BudgetOverride ?? long.MaxValue))),
                 Pool: PhysicalMemory.Device,
                 Present: ((deviceLimits.Length != 0) || (deviceBlocks != 0)),
                 Reserved: 0L,
@@ -516,8 +518,6 @@ public sealed class MemoryAccount {
 
             return Math.Max(val1: 0L, val2: (budget - Headroom));
         }
-        if (m_pools[((int)pool)].BudgetOverride is { } forced) { return forced; }
-
         long? limit = null;
 
         foreach (var recorded in m_segmentLimits) {
@@ -531,7 +531,8 @@ public sealed class MemoryAccount {
             limit = ((limit ?? 0L) + spend);
         }
 
-        return limit;
+        // A cap lowers the limit the segments' readings derive and bounds a pool no reading names.
+        return (m_pools[((int)pool)].BudgetOverride is { } cap) ? Math.Min(val1: cap, val2: (limit ?? cap)) : limit;
     }
     // Under m_gate: the room a pool has left for a new promise; null where nothing bounds it. Negative when the pool
     // holds and has promised more than its limit.

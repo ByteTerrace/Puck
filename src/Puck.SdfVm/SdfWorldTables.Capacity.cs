@@ -54,6 +54,8 @@ public sealed partial class SdfWorldTables {
         GpuBufferStridedCopy.PoolSizes(frameSlotCount: FrameRingSize, recordingCount: 2),
         SdfMeshBakeGpuWork.PoolSizes,
         SdfMeshProbeGpuWork.PoolSizes,
+        // Created only on a device that runs the probe kernels' ray-query variants; admitted on every device.
+        SdfMeshProbeGpuWork.RaysPoolSizes,
     ];
     /// <summary>Gets the one descriptor pool the tables create themselves, the statement their construction creates the
     /// pool from: the World set per ring slot, holding the World group of <see cref="SdfWorldInterfaces.World"/>.</summary>

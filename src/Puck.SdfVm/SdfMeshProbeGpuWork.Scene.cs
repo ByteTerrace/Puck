@@ -99,7 +99,7 @@ internal sealed partial class SdfMeshProbeGpuWork {
                         offset += take;
                     }
                 }
-                m_root = new SceneChunk(0, [Export.Root], 1);
+                m_root = new SceneChunk(0, [Export.Root, Export.Instances], SdfMeshProbeTrace.RootWords);
                 Chunks.Writer.Complete();
                 offered();
             }, m_cancel.Token);

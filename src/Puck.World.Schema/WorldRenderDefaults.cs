@@ -85,6 +85,8 @@ public static class WorldApplicationDefaults {
 /// <param name="Indirect">The indirect tier override. Absent selects Off for Low, Medium for Medium and High for High.</param>
 /// <param name="SkyFieldScale">The independent sky field grid fraction, one or one half.</param>
 /// <param name="Bloom">The optical scatter cost gate.</param>
+/// <param name="RayQueries">Whether the preset lets the indirect volume's background rays take the device's ray hardware
+/// where it has it (<c>world.rays</c>); the software walk answers the same hits elsewhere.</param>
 [method: JsonConstructor]
 public readonly record struct WorldQualityPreset(
     ShadowTier Shadows,
@@ -100,7 +102,8 @@ public readonly record struct WorldQualityPreset(
     WorldSkyTier Sky = WorldSkyTier.High,
     [property: JsonConverter(typeof(StrictEnumConverter<SdfIndirectTier>)), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] SdfIndirectTier? Indirect = null,
     float SkyFieldScale = 1f,
-    Puck.Hosting.BloomQuality Bloom = Puck.Hosting.BloomQuality.High
+    Puck.Hosting.BloomQuality Bloom = Puck.Hosting.BloomQuality.High,
+    bool RayQueries = false
 );
 /// <summary>The world's render-lever defaults — the boot values <c>Puck.World.WorldRenderSettings</c> wakes on and the
 /// <c>world.quality</c> preset table. Session state, not identity: these are engine-wide levers (shadows, AO, render
@@ -157,10 +160,19 @@ public readonly record struct WorldQualityPreset(
 /// <param name="ShadowCoverage">How far the key light's shadow cascades reach (<see cref="WorldRenderShadowCoverage"/>).
 /// Absent keeps the engine's 16 m near, 120 m far and 200 m caster reach; <c>world.budget</c> prints the coverage with
 /// each cascade's texel.</param>
+/// <param name="Devices">The world's device profiles (<see cref="WorldDeviceProfile"/>): for each graphics device, the
+/// quality table it runs and the memory it may use. The engine selects one by the adapter it runs on and by name
+/// (<c>world.device-profile</c>). Absent authors none, and no cap applies.</param>
 /// <param name="Lanes">The world's render lanes: up to four bindable scalars (a literal, a <c>state.&lt;row&gt;</c>
 /// binding, or keys on a clock), resolved at each frame's presented tick and read by every surface and volume as
 /// render lanes 4 to 7 (<c>SdfLanes</c>), so a static placement sharing one baked mesh follows world state without a
 /// slot. Absent or a missing entry reads zero; <c>world.lighting</c> echoes them as authored.</param>
+/// <param name="Nested">What a nested view gives up at each presented size (<see cref="WorldNestedViewQuality"/>). Absent
+/// gives up nothing.</param>
+/// <param name="RayQueries">Whether the indirect volume's background rays (its probe trace, the relight's shadow rays
+/// and the camera sample) boot taking the device's ray hardware where it has it, through the scene's acceleration
+/// structures (<c>world.rays</c>). The software walk answers the same hits wherever it is off or the device has none.
+/// Absent is off.</param>
 public sealed record WorldRenderDefaults(
     ShadowTier Shadows = ShadowTier.Off,
     bool AmbientOcclusion = false,
@@ -189,7 +201,10 @@ public sealed record WorldRenderDefaults(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] Puck.Hosting.CameraBloom? Bloom = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldRenderShadowCoverage? ShadowCoverage = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<BindableScalar>? Lanes = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] SdfShadeDefinition? Shade = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] SdfShadeDefinition? Shade = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldDeviceProfile>? Devices = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldNestedViewQuality>? Nested = null,
+    bool RayQueries = false
 ) {
     /// <summary>The most world lanes <see cref="Lanes"/> holds (<c>SdfLanes.WorldCount</c>).</summary>
     public const int MaxLanes = SdfLanes.WorldCount;
@@ -359,6 +374,20 @@ public sealed record WorldRenderShadowCoverage(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? Near = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? Far = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? Casters = null);
+/// <summary>One row of the nested-view table (<c>render.nested</c>): what a view shown inside another (through a window or
+/// portal, on a screen a camera films, or a session's screen) gives up while it is presented at or below a share of the
+/// display's height. A nested view takes the first row, in ascending <paramref name="Share"/>, whose share it does not
+/// exceed, and gives up nothing past the last row; a world with no table gives up nothing at any size, so a portal that
+/// fills the screen is lit as the room behind it.</summary>
+/// <param name="Share">The largest share of the display's height, in <c>(0, 1]</c>, at which the row applies; rows ascend
+/// strictly.</param>
+/// <param name="Shadows">The finest shadow tier the view keeps: <see cref="ShadowTier.Off"/> drops its cascades, so its
+/// lights take the probes' answer. Absent keeps the world's.</param>
+/// <param name="AmbientOcclusion">Whether the view keeps ambient occlusion: false drops it. Absent keeps the world's.</param>
+public sealed record WorldNestedViewQuality(
+    float Share,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ShadowTier? Shadows = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] bool? AmbientOcclusion = null);
 /// <summary>Authored tier, sources, bounce depth and receiver application for the baked-mesh path's irradiance volume.</summary>
 /// <param name="Sources">Bindable source gains in [0, 1]; absent gains are one.</param>
 /// <param name="Bounces">Feedback sweeps after the direct sweep, capped by the selected tier. Absent uses that tier's limit.</param>
@@ -480,8 +509,8 @@ public abstract record WorldRenderLight {
     /// <param name="Illuminance">The illuminance on a surface facing the light, in lux: a clear midday sun gives about
     /// 100,000, an overcast day about 10,000, the full moon about 0.3. Absent is the pinned sun's.</param>
     /// <param name="AngularRadius">The light's angular radius, in <c>[0, atan 0.3]</c> radians: the penumbra
-    /// half-slope is its tangent, so 0 casts a hard shadow. Read only when the light shadows. Absent is the pinned
-    /// penumbra.</param>
+    /// half-slope is its tangent, so 0 casts a hard shadow. Read only when the light shadows. Absent is 0, a point
+    /// source: the engine chooses no softness, and the standard package authors the soft edge its own lights cast.</param>
     /// <param name="Shadow">How this light competes for shadow slots. Absent is <see cref="WorldShadowMode.Never"/>.
     /// A directional without a presented shadow slot is scaled by ambient occlusion instead.</param>
     /// <param name="Name">The unique identity a section key and the shadow allocator address. Required when

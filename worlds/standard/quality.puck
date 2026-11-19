@@ -3,7 +3,9 @@
 // preset), its scalar render ceiling, its render-scale floor and its sky tier (`world.sky-quality`) into the live render
 // levers. The independently counted sky field stays Full at every tier; Half remains an authored option. The irradiance
 // volume is Medium at Low and Medium and High at High: its probes occlude the traced lights, the reflected sky and, in a
-// view with no cascade, the sun, so no tier goes without it.
+// view with no cascade, the sun, so no tier goes without it. Every tier lets the volume's background rays take the ray
+// hardware where the device has it (`world.rays`): the software walk answers the same hits, so the row changes cost, not
+// looks, and a device without ray queries ignores it.
 // A world boots on its own render levers and nothing here changes them until a tier is chosen. Until initial development
 // is done every machine runs `high`, the fullest render, and no machine drops to a lower tier to meet its frame-rate bar;
 // `low` and `medium` are what they are only until the tiers below the highest are worked out on the machines that need
@@ -26,6 +28,27 @@ render {
       age: 8
     }
   }
+  // The device profiles: for each graphics device the standard ships for, the quality table it runs and the memory it may
+  // use. The engine selects a profile by the adapter's name (`match`, a case-insensitive part of it) or by name
+  // (`world.device-profile <name>`), applies its table as `world.quality` does and admits memory against its bars: the
+  // device pool's limit is the lower of `deviceMemoryMiB` and the adapter's own budget less a tenth, and
+  // `hostMemoryMiB` bounds the host pool the same way. The RTX 4070 keeps 8 GiB of its 12 for the system and other
+  // programs, the RTX 2060 4.5 GiB of its 6, and the Steam Deck's one pool of 10 GiB holds the process and its GPU
+  // together. Until initial development is done every device runs `high`.
+  devices [
+    { name: "rtx4070", match: "RTX 4070", quality: high, deviceMemoryMiB: 8192 }
+    { name: "rtx2060", match: "RTX 2060", quality: high, deviceMemoryMiB: 4608 }
+    { name: "steamdeck", match: "VANGOGH", quality: high, hostMemoryMiB: 10240 }
+  ]
+  // What a nested view (a window, a portal, a filmed camera's screen, a session's screen) gives up at each share of the
+  // display's height it is presented at, the same at every tier until a device table chooses per device. A view the
+  // size of a postcard on screen keeps every term but draws its cascades at half resolution; one smaller than that
+  // drops its cascades and ambient occlusion, and its lights take the probes' answer, as a point past every cascade does.
+  // A view filling a third of the display or more gives up nothing, so a portal walked up to is lit as the room behind it.
+  nested [
+    { share: 0.125, shadows: Off, ambientOcclusion: false }
+    { share: 0.33, shadows: Medium }
+  ]
   low {
     bloom: Off
     indirect: Medium
@@ -41,6 +64,7 @@ render {
     dynamicResolution: false
     renderScaleFloor: Quarter
     renderScale: 0.70980394
+    rayQueries: true
   }
   medium {
     bloom: Low
@@ -57,6 +81,7 @@ render {
     dynamicResolution: false
     renderScaleFloor: Quarter
     renderScale: 0.8666667
+    rayQueries: true
   }
   high {
     bloom: High
@@ -73,5 +98,6 @@ render {
     dynamicResolution: false
     renderScaleFloor: Quarter
     renderScale: 1
+    rayQueries: true
   }
 }

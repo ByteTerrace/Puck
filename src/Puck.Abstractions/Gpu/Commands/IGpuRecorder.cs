@@ -223,6 +223,36 @@ public interface IGpuRecorder {
     /// <param name="sourceStageMask">The prior stages.</param>
     /// <param name="destinationStageMask">The following stages.</param>
     void TransitionBuffer(nint commandBufferHandle, nint bufferHandle, GpuAccess sourceAccessMask, GpuAccess destinationAccessMask, GpuStage sourceStageMask, GpuStage destinationStageMask);
+    /// <summary>Records an acceleration-structure build (<see cref="IGpuAccelerationStructures"/>) into a structure's
+    /// storage, with the barriers around it: every earlier transfer, compute and build write is visible to the build's
+    /// reads of its inputs and scratch, and the build's write is visible to every later build, copy and compute read.
+    /// The inputs' buffers, the destination and the scratch stay alive until the submission completes.</summary>
+    /// <param name="commandBufferHandle">The command buffer being recorded.</param>
+    /// <param name="inputs">What the build reads.</param>
+    /// <param name="destination">The structure written; of the inputs' level, at least as large as their sizes say.</param>
+    /// <param name="scratch">The scratch the build writes: a device-local buffer of <see cref="GpuBufferUsage.Storage"/>
+    /// and <see cref="GpuBufferUsage.AccelerationStructureInput"/>, at least as large as the inputs' sizes say.</param>
+    /// <exception cref="NotSupportedException">The device was created without ray queries.</exception>
+    void BuildAccelerationStructure(nint commandBufferHandle, in GpuAccelerationStructureInputs inputs, IGpuAccelerationStructure destination, IGpuBuffer scratch) =>
+        throw new NotSupportedException(message: "This recorder builds no acceleration structures.");
+    /// <summary>Records the write of a built bottom level's compacted size, a 64-bit byte count, into a storage buffer,
+    /// after the build's barrier; the buffer is left a transfer source, ready to copy to a readback.</summary>
+    /// <param name="commandBufferHandle">The command buffer being recorded.</param>
+    /// <param name="source">The built bottom level.</param>
+    /// <param name="destination">The storage buffer written.</param>
+    /// <param name="destinationOffsetBytes">The byte offset written, a multiple of eight.</param>
+    /// <exception cref="NotSupportedException">The device was created without ray queries.</exception>
+    void WriteCompactedSize(nint commandBufferHandle, IGpuAccelerationStructure source, IGpuBuffer destination, ulong destinationOffsetBytes) =>
+        throw new NotSupportedException(message: "This recorder builds no acceleration structures.");
+    /// <summary>Records a copy of a built bottom level into another structure's storage, compacted to the size
+    /// <see cref="WriteCompactedSize"/> read, with a barrier making the copy visible to every later build and compute
+    /// read.</summary>
+    /// <param name="commandBufferHandle">The command buffer being recorded.</param>
+    /// <param name="source">The built structure.</param>
+    /// <param name="destination">The structure written, at least the compacted size.</param>
+    /// <exception cref="NotSupportedException">The device was created without ray queries.</exception>
+    void CompactAccelerationStructure(nint commandBufferHandle, IGpuAccelerationStructure source, IGpuAccelerationStructure destination) =>
+        throw new NotSupportedException(message: "This recorder builds no acceleration structures.");
     /// <summary>Opens a run of barriers on a command buffer that a backend may record as one call: until the matching
     /// <see cref="EndBarriers"/>, the caller records nothing on the buffer but <see cref="TransitionImageLayout"/>,
     /// <see cref="MemoryBarrier"/> and <see cref="TransitionBuffer"/>. The default records each barrier as it comes.</summary>

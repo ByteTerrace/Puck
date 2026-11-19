@@ -9,7 +9,7 @@ namespace Puck.Shaders;
 public sealed partial class ShaderPipelineCompiler {
     // Package imports have explicit access contracts: current buffer copies use the transfer stage, and in-place
     // updates preserve producer-owned contents. Neither reaches history or the host's mapped upload region.
-    private static void ValidateMutableInputs(IReadOnlyList<ShaderPipelinePackagePass> packages, IReadOnlyDictionary<string, ShaderPipelineResource> resources, List<ShaderPipelineDiagnostic> diagnostics) {
+    private static void ValidateMutableInputs(IReadOnlyList<ShaderPipelinePackagePass> packages, IReadOnlyList<ShaderPipelinePass> passes, IReadOnlyDictionary<string, ShaderPipelineResource> resources, List<ShaderPipelineDiagnostic> diagnostics) {
         foreach (var package in packages) {
             for (var index = 0; (index < package.Outputs.Count); index++) {
                 if (package.OutputAccess(index: index) != RenderGraphPortAccess.TransferWrite) { continue; }
@@ -39,11 +39,24 @@ public sealed partial class ShaderPipelineCompiler {
 
                 if ((resource.Kind == ShaderPipelineResourceKind.Buffer) && resource.IsExternal && !resource.IsHostBuffer &&
                     !resource.History && !input.PreviousFrame) { continue; }
+                if (UpdatesInPlace(resource: resource, passes: passes, resources: resources) && !input.PreviousFrame) { continue; }
                 Add(diagnostics, "SHADERPIPE_MUTABLE_INPUT",
-                    $"Package pass '{package.Name}' updates '{input.Name}' in place; only a current external buffer outside host-upload ports can be a mutable input.", input.Name);
+                    $"Package pass '{package.Name}' updates '{input.Name}' in place; only a current external buffer outside host-upload ports, or an owned retained package buffer zeroed once that this one reference alone reaches, can be a mutable input.", input.Name);
             }
         }
     }
+    // An owned buffer a package updates in place across frames: one retained allocation shared by every frame slot, so
+    // successive frames' updates are ordered on the queue by the planned barrier of each frame's first use, zeroed once
+    // when it is new (no pass writes a version of it, so the planner clears every instance on initialization), reached
+    // only by package passes, and neither forwarded nor written as a version, which would discard what it carries. Its
+    // updater's one mutable input is the only reference any pass makes to it: dependency and liveness planning follow
+    // versions, which an update in place has none of, so a second reader could be ordered before the update or keep an
+    // updater live that planning dropped, and could stand on an earlier reading with no generation to tell it changed.
+    private static bool UpdatesInPlace(ShaderPipelineResource resource, IReadOnlyList<ShaderPipelinePass> passes, IReadOnlyDictionary<string, ShaderPipelineResource> resources) =>
+        (resource.Kind == ShaderPipelineResourceKind.Buffer) && !resource.IsExternal && resource.Retained && !resource.History &&
+        resource.IsPackageStorage && (resource.Initialization == ShaderPipelineInitialization.Zero) && (resource.From is null) &&
+        !resources.Values.Any(predicate: other => (other.From == resource.Name)) &&
+        (passes.Sum(selector: pass => ReadsOf(pass: pass).Concat(second: pass.OutputReferences).Count(predicate: reference => (reference.Name == resource.Name))) == 1);
     // Everything a pass reads this frame or the previous one: an indirect dispatch's arguments, then its inputs.
     private static IEnumerable<ResourceReference> ReadsOf(ShaderPipelinePass pass) {
         if (pass.DispatchArguments is { } arguments) {

@@ -10,6 +10,7 @@ public sealed partial class WorldEnvironmentResolve {
     private readonly WorldShadowSlot[] m_shadowSlots = new WorldShadowSlot[WorldShadowAllocator.MaxSlots];
     private readonly WorldShadowHandoff[] m_shadowHandoffs = new WorldShadowHandoff[WorldShadowAllocator.MaxFadeSlots];
     private readonly WorldShadowQueued[] m_shadowQueued = new WorldShadowQueued[WorldShadowAllocator.MaxSlots];
+    private readonly int[] m_shadowRoles = new int[SdfShadowSlots.Roles];
 
     private WorldShadowSelection? m_externalShadows;
     private WorldStateMirror? m_shadowMirror;
@@ -79,6 +80,7 @@ public sealed partial class WorldEnvironmentResolve {
                 controls[index] = handoff.Control;
                 if (handoff.Incoming.LightIndex >= 0) { selected[handoff.Incoming.LightIndex] = true; }
             }
+            for (var role = 0; (role < SdfShadowSlots.Roles); role++) { m_shadowRoles[role] = lights.RoleSlot(role: role); }
             gpuSlots.SetHandoffs(handoffs: controls[..readout.FadeCount]);
             for (var index = 0; (index < readout.FadeCount); index++) {
                 gpuSlots.SetIncomingOwner(channel: index, owner: m_shadowHandoffs[index].Incoming.Name);
@@ -108,12 +110,13 @@ public sealed partial class WorldEnvironmentResolve {
         }
         return candidate with { LightIndex = -1 };
     }
-    // A sun disc that names no light follows the first shadow slot's, or the first directional when none shadows.
+    // A sun disc that names no light follows the key light (the primary shadow role's), or the first directional when none
+    // shadows.
     private void ApplySunDiscLight(SdfLights lights, SdfSky sky) {
         if (m_sky?.Layers is not { } layers) { return; }
         for (var index = 0; ((index < layers.Count) && (index < m_skyLayerIndex.Length)); index++) {
             if ((layers[index] is WorldRenderSkyLayer.SunDisc { Light: null }) && (m_skyLayerIndex[index] >= 0)) {
-                sky.Parameters<SdfSkyDisc>(index: m_skyLayerIndex[index]).Light = ((lights.ShadowSlots[0] >= 0) ? lights.ShadowSlots[0] : FirstDirectional(lights: lights));
+                sky.Parameters<SdfSkyDisc>(index: m_skyLayerIndex[index]).Light = ((lights.Key >= 0) ? lights.Key : FirstDirectional(lights: lights));
             }
         }
     }
@@ -133,6 +136,7 @@ public sealed partial class WorldEnvironmentResolve {
 
                 text.Append(CultureInfo.InvariantCulture, $" | shadow[{slot.Slot}] light={slot.Candidate.Name} index={slot.Candidate.LightIndex} reason=");
                 if (slot.Candidate.Mode == WorldShadowMode.Always) { text.Append(value: "always"); } else { text.Append(CultureInfo.InvariantCulture, $"auto rank={slot.Rank}"); }
+                text.Append(value: (m_shadowRoles[SdfShadowSlots.Primary] == slot.Slot) ? " role=primary" : ((m_shadowRoles[SdfShadowSlots.Secondary] == slot.Slot) ? " role=secondary" : " role=probes"));
             }
             for (var index = 0; (index < count.FadeCount); index++) {
                 var fade = m_shadowHandoffs[index];

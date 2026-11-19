@@ -379,6 +379,8 @@ render {
   }
   farDistance: 6000
   temporal: true
+  // As the shipped presets do, the indirect volume's rays take the ray hardware where the device has it.
+  rayQueries: true
   // The standard's celStyle (../standard/styles.puck) as the world's default, booting off so `world.toon on` bands
   // every material without a style of its own. Its values are copied because `.puck` cannot yet override one field of
   // an imported value (the open items' Language packet); keep them equal to celStyle's.

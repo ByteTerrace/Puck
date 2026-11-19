@@ -130,6 +130,11 @@
           ],
           "default": "High",
           "title": "BloomQuality"
+        },
+        "rayQueries": {
+          "description": "Whether the preset lets the indirect volume\u0027s background rays take the device\u0027s ray hardware where it has it (world.rays); the software walk answers the same hits elsewhere.",
+          "type": "boolean",
+          "default": false
         }
       },
       "required": [
@@ -361,7 +366,7 @@
         },
         "angularRadius": {
           "$ref": "#/$defs/BindableAngle",
-          "description": "The light\u0027s angular radius, in [0, atan 0.3] radians: the penumbra half-slope is its tangent, so 0 casts a hard shadow. Read only when the light shadows. Absent is the pinned penumbra.",
+          "description": "The light\u0027s angular radius, in [0, atan 0.3] radians: the penumbra half-slope is its tangent, so 0 casts a hard shadow. Read only when the light shadows. Absent is 0, a point source: the engine chooses no softness, and the standard package authors the soft edge its own lights cast.",
           "default": null
         },
         "shadow": {

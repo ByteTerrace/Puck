@@ -17,7 +17,7 @@
 #include "../shade/sdf-grid.hlsli"
 #include "../shade/sdf-toon-outline.hlsli"
 #ifdef SDF_VIEWS_PASS
-#include "../shade/sdf-mesh-irradiance.hlsli"
+#include "sdf-views-probes.hlsli"
 
 // An unbound screen's face: dark glass with nothing behind it, tinted faintly by the sun.
 static const float3 ScreenGlassColor = float3(0.02, 0.025, 0.03);
@@ -61,6 +61,9 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, SdfMeshHit meshHit, float3 
         return color;
     }
     coverage = 1.0;
+#if defined(SDF_VIEWS_OMIT_SHADING)
+    return (((s.normal * 0.5) + 0.5) / max(passGroup.exposure, 1.0e-12));
+#endif
 
     float3 normal = s.normal;
     bool sampledScreen = false;
@@ -104,15 +107,18 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, SdfMeshHit meshHit, float3 
 #endif
 
     if (useFinalShading && !sampledScreen) {
-        // The surface sample's K row, which views filtered (sdfViewsFilter); with shadows off every light goes unshadowed.
+        // The surface sample's K row, which views filtered (sdfViewsFilter): each shadow role's cascade visibility and
+        // coverage, which the light walk answers through (sdfShadowRoleAnswer); with shadows off every light takes the
+        // probes' answer. The unbound glass's faint tint reads the key light's (the primary role's) cascades alone.
         float4 shadowVisibility = float4(1.0, 1.0, 1.0, 1.0);
         float3 keyDirection = worldSunDirection();
         float sunDiffuse = max(dot(normal, keyDirection), 0.0);
+        bool cascaded = ((passGroup.meshShadowCount > 0u) && !worldSoftShadowsDisabled());
 
-        if ((passGroup.shadowSlotCount > 0u) && !worldSoftShadowsDisabled()) {
+        if (cascaded) {
             shadowVisibility = s.shadows;
+            sunDiffuse *= lerp(1.0, shadowVisibility.x, shadowVisibility.z);
         }
-        sunDiffuse *= sdfLightVisibility(passGroup.shadowSlots.x, shadowVisibility, 1.0);
 
         if (material >= SDF_SCREEN_MATERIAL) {
             // The unbound glass: a declared screen with no source bound this frame (or the plain sentinel), unlit apart
@@ -131,6 +137,9 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, SdfMeshHit meshHit, float3 
             uint paintFirst;
             uint paintCount;
             float3 paintedAlbedo = sdfMaterialPaints(material, paintFirst, paintCount);
+#if defined(SDF_VIEWS_OMIT_MATERIALS)
+            paintCount = 0u;
+#endif
             SdfShadeBinding shadeBinding = sdfShadeBinding(material);
             float paintCoverage;
             bool deferPaint = (sdfShadeReadsOf(shadeBinding) & SDF_SHADE_READ_PAINT) != 0u;
@@ -146,10 +155,14 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, SdfMeshHit meshHit, float3 
             if (sdfShadeBound(shadeBinding)) {
                 sdfShadeSurfacePhase(shadeBinding, shadeStamp, shadeMaterial, normal, revealed);
             } else {
-            applyInset(layerPoint, layerNormal, layerRay, shadeMaterial);
-            applyWeathering(layerPoint, layerNormal, normal.y, s.curvature, p.pixelFootprint * s.t, s.lanes, shadeMaterial);
-            normal = sdfShadeFlow(surfacePoint, normal, layerPoint, layerNormal, frameRotation, s.frameSlot, meshHit, p.pixelFootprint * s.t,
-                s.lanes, 0.0, shadeMaterial, revealed);
+#if defined(SDF_VIEWS_OMIT_MATERIALS)
+                revealed = 0.0;
+#else
+                applyInset(layerPoint, layerNormal, layerRay, shadeMaterial);
+                applyWeathering(layerPoint, layerNormal, normal.y, s.curvature, p.pixelFootprint * s.t, s.lanes, shadeMaterial);
+                normal = sdfShadeFlow(surfacePoint, normal, layerPoint, layerNormal, frameRotation, s.frameSlot, meshHit, p.pixelFootprint * s.t,
+                    s.lanes, 0.0, shadeMaterial, revealed);
+#endif
             }
             sdfApplyEmissiveLane(s.lanes, shadeMaterial);
             sdfShadeSurfaceInputs(shadeStamp, shadeMaterial, normal, revealed);
@@ -169,9 +182,10 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, SdfMeshHit meshHit, float3 
             // probes occlude the traced point and spot lights and the reflected environment, and a surface no probe has
             // measured yet reads the camera sample's light (sdfMeshAnswers). The probes occlude at every indirect tier;
             // the off tier applies none of their light (indirectApply's intensity zero). Direct lights and atmosphere
-            // remain independent.
+            // remain independent. The gather is the probe lookup's at the hit's geometric normal, shared across the
+            // compatible pixels of its cell (sdfViewsProbesAt); the cubes are read along this pixel's shading normal.
             bool indirectSky = ((passGroup.indirectSources & SDF_INDIRECT_SOURCES_SKY) != 0u);
-            SdfMeshProbes probes = sdfMeshProbesAt(surfacePoint, normal);
+            SdfMeshProbes probes = sdfViewsProbesAt(p, surfacePoint, s.normal);
 
             // Every light answers through the one interface (sdfLightResponse): its diffuse term joins the radiance the
             // material shade lights by, and its rim and specular terms and its attenuation of reflected light follow the
@@ -186,7 +200,7 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, SdfMeshHit meshHit, float3 
             shadeSurface.ambientOcclusion = ambientOcclusion;
             shadeSurface.shadowVisibility = shadowVisibility;
             shadeSurface.shadowMeasured = shadowMeasured;
-            shadeSurface.cascaded = ((passGroup.meshShadowCount > 0u) && !worldSoftShadowsDisabled());
+            shadeSurface.cascaded = cascaded;
             shadeSurface.probed = sdfMeshAnswers(probes);
             shadeSurface.probes = probes;
 
@@ -198,6 +212,7 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, SdfMeshHit meshHit, float3 
             float3 rim = float3(0.0, 0.0, 0.0);
             float3 specular = float3(0.0, 0.0, 0.0);
             float attenuation = 1.0;
+#if !defined(SDF_VIEWS_OMIT_LIGHTS)
             SdfLightWalk walk = sdfLightWalkStart();
             SdfLightSource light;
 
@@ -210,6 +225,7 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, SdfMeshHit meshHit, float3 
                 specular += response.specular;
                 attenuation *= response.attenuation;
             }
+#endif
 
             color = sdfMaterialShade(shadeMaterial, radiance, normal, p.rayDirection);
             if (toon) {
@@ -239,6 +255,7 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, SdfMeshHit meshHit, float3 
             // the irradiance volume sees the sky open that way, and the surroundings' light where not.
             float3 environmentTerm = 0.0;
             float3 reflectionTerm = 0.0;
+#if !defined(SDF_VIEWS_OMIT_REFLECTION)
             if ((shadeMaterial.specular > 0.0) || (shadeMaterial.metal > 0.0)) {
                 float3 f0 = lerp(float3(shadeMaterial.specular, shadeMaterial.specular, shadeMaterial.specular), shadeMaterial.albedo, shadeMaterial.metal);
                 float3 viewDirection = -p.rayDirection;
@@ -250,6 +267,7 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, SdfMeshHit meshHit, float3 
                 environmentTerm = ((environment * sdfMaterialEnvironmentBrdf(f0, shadeMaterial.roughness, nDotV)) * ambientOcclusion);
                 color += environmentTerm;
             }
+#endif
 
             // The rim brightens and the point lights' lobes join after the shade: a rim is a look rather than a light the
             // material's specular answers. The occluders then dim reflected light; self-emission stays.

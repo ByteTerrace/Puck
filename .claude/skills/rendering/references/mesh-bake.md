@@ -493,11 +493,10 @@ laws exercise that boundary.
   and takes each group's finest unless `--tier` or `--eye` says otherwise. A
   landed group whose demanded tier has been finer than its own for
   `SdfMeshTier.HoldFrames` frames is planned again at the finer tier and placed
-  as a replacement (`SdfMeshPathBake.Retier`, the settle rebake's `Replaces`
-  path, at most `MaxInFlight` at once, the finest demand first): the coarser
-  mesh draws until the finer is baked and its words stand in the mesh region
-  (`FinishReplacements`, one step for settles and tiers; the swap bullet
-  below). The demand is measured a share of the groups each frame
+  as a replacement (`SdfMeshPathBake.Retier`, its `Replaces` path, at most
+  `MaxInFlight` at once, the finest demand first): the coarser mesh draws
+  until the finer is baked and its words stand in the mesh region
+  (`FinishReplacements`; the swap bullet below). The demand is measured a share of the groups each frame
   (`SdfMeshPathBake.MeasureDemands`, one sweep of every group's boxes in
   `SdfMeshTier.MeasureFrames` frames), so its cost a frame does not grow
   with the resident world; `Retier` decides the tiers from the measured
@@ -528,6 +527,34 @@ laws exercise that boundary.
   A stop that settles with `detail-bias` above zero is drawing coarser than
   half a pixel there: the demand is past the budget, which is the reading to
   act on, never a raised limit.
+- **A group arrives at its floor and keeps it.** A residency's group that
+  arrives with nothing to draw (no group at its selector, or one still bringing
+  its floor, `SdfMeshPathBake.Arrives`) plans its coarsest tier first
+  (`SdfMeshPathBake.Tiers`), so a place lands whole and coarse before it is
+  sharp, nearest first by the demand's priority. Once that floor has landed,
+  the next tier decision starts the demanded tier as the arrival's own bake
+  (`Group.FirstDetail`): no hold, outside `MaxInFlight` and the budget, as a
+  first plan at that tier would have baked. Until then the bake owes the frame
+  (`Owes`, `IrradiancePending`), so a lockstep still or `world.wait bakes`
+  never settles on floors. The detail lands ahead of the draws beside the
+  floor and keeps the floor with a claim of its own (`Group.KeptFloor`, taken
+  in `ShowReplaced`, the one place a replacement inherits from the group it
+  replaces); the kept floors are named ahead with the waiting products so
+  their words stay in the region. A finer tier the region refuses over a
+  standing kept floor is evicted to it at the next frame
+  (`SdfMeshPathBake.Evict`): the floor takes the draws at once where it was
+  baked from the geometry the plan reads, and is baked as a coarser
+  replacement otherwise; an evicted floor takes detail back only through the
+  budget. A group taken whole from the library, or replanned while it drew,
+  keeps no floor until it arrives again. `world.residency`'s floor line
+  (`SdfMeshPathBake.DescribeFloors`) counts floors shown, pending, empty,
+  failed and kept, groups with none, first details owed and landed,
+  evictions and their bytes, `holes` (groups in reach, demanded past a pixel,
+  drawing no standing mesh) and `hole-frames`, and the floors' bytes by
+  class. The floor is the coarsest rung only: a floor that meshes nothing is
+  counted `floor-empty` and its group goes straight to its detail, with no
+  finer rung tried and no coverage check yet
+  ([step 5](../../../../docs/plans/streaming-and-memory.md#step-5-the-floor-and-eviction)).
 - **A region refines only where its surface turns, and each region at its own
   factor.** `SdfSampledLattice.Refine` takes a factor per region
   (`SdfLatticeRegion.Factor`): `UnionFinal` asks each member's own
@@ -657,7 +684,7 @@ laws exercise that boundary.
   scale (`DynamicTransform.Scale`; positions stay world positions, and field
   transforms stay rigid). The geometry builder reads another slot's offset from
   the group's slot in the group's units (`SdfMeshGeometryBuilder.RelativePose`,
-  `UnitsOf`), as the settle watch does, so the key, the detail and the lattice
+  `UnitsOf`), as an operand's snapped pose is, so the key, the detail and the lattice
   are the full-size body's; the group's draw matrix takes the scale
   (`SdfMeshDresser.Dress`), and a member's vertex takes the draw's scale
   (`sdfMeshDrawScale`, the current and previous positions). A body crossing a
@@ -690,10 +717,11 @@ laws exercise that boundary.
   to rigid owner contours through the existing contour pipeline. Current, previous and shadow positions
   share group-relative dual quaternions and corrected normals (`frame/sdf-mesh-skin.hlsli`). See
   [moving blends](../SKILL.md#moving-blends) for the complete contract and checks.
-- **Rest skins never settle-rebake.** `SdfMeshPathBake.Settle` excludes rest-pose skins. The older
-  non-rest dynamic path and `SdfMeshSettle` counters remain until gap 8's step G1 of the moving-blends plan
-  deletes them; no emitter writes a non-rest skin today, so its watch lists no group. Material coordinates still use the nearest member until step 4; geometry continuity
-  alone does not prove that paints and lanes follow the seam.
+- **A skin bakes once.** A skinned group bakes at the pose its program arrived in (a rest skin at rest) and
+  is never baked again for its members' motion. A moving cutter is an operand instead, and its group is
+  planned again through `SdfMeshPathBake.Revisit` as the operand moves a step
+  ([moving blends](../SKILL.md#moving-blends)). Material coordinates still use the nearest member until
+  step 4; geometry continuity alone does not prove that paints and lanes follow the seam.
 - **A landing mesh rebuilds the draws.** A group that bakes again draws the mesh
   it replaces until its own lands, so it counts as drawn already; `Land` and
   `Load` hand the new mesh over through `SdfMeshPathBake.Draw`, which marks the
@@ -832,7 +860,7 @@ laws exercise that boundary.
   group's product and the mesh the frame draws for it are two things
   (`SdfMeshPathBake`'s group: its `Mesh` and its `Shown`). Every product
   arrives through the one setter, whatever made it: a finer or coarser
-  tier, a settle rebake, a resample, a new program's plan, a renumbered
+  tier, a resample, an operand's step, a new program's plan, a renumbered
   mesh. Where a residency's tables land the bake's meshes, a product that
   replaces a drawn mesh waits ahead of the draws: the bake names its pieces
   to the tables (`SdfMeshPathBake.ObserveResidency` into
@@ -1173,7 +1201,8 @@ laws exercise that boundary.
 - **Dressing is outside derivation.** Top-level `SdfMeshDresser` owns retained topology, posed draws, clipping,
   pick maps and draw claims. Its constructor binds one bake; dispose it before retiring that bake or its library.
   `SdfMeshPathBake.PrepareFrame` is the one locked door: restart/reconcile the frame, update the single copy-membership
-  index shared by demand and dressing, prioritize and settle, then return a stack-bound `FrameAccess`. Its consumer
+  index shared by demand and dressing, revisit moved frame inputs, prioritize, finish replacements and retier, then
+  return a stack-bound `FrameAccess`. Its consumer
   claims the landed meshes and publishes draws/picking before acknowledging that access's captured product revision;
   disposal releases the gate without acknowledgment. Every mesh replacement, including a same-count or empty result,
   advances the revision. `Stage` chooses and slices the exact point/pose rows; its caller uploads the returned span
@@ -1272,6 +1301,15 @@ definition carries prepared font assets. Keep this offline scene path aligned wi
   same store proves a fix. `--images <dir>` draws each worst cluster on the
   CPU, shading beside face normals: the offline twin of
   `world.debug-view normals`.
+- **A defect's class and its refinement flag are in the report.** Each flipped
+  triangle, fold, off-surface vertex, open or non-manifold edge and uncovered
+  crossing is sorted by geometry into `SdfMeshDefectClass` (`crease-sliver`,
+  `narrow-face`, `off-surface-vertex`, `short-tip`, `other`), and with `--cpu`
+  each is read through the group's `SdfRefinementMap` (what `SdfSampledLattice.Refine`
+  flagged, `SdfMeshPathBake.RefinementObserver`) into `measured`, `ring`,
+  `unflagged` or `lattice-unrefined`. Run it on a defect before deciding whether
+  the fault is the trigger (items `unflagged`) or the contour (items `measured`
+  or `ring`). The class is the geometry's reading, not the bake's cause.
 - **`--cpu` measures a bake change with no GPU.** It drives `SdfMeshPathBake`
   with each lattice answered through the group's CPU field, so a contour,
   refinement or field change shows in the audit without a boot. Every lattice

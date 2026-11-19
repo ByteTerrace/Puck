@@ -119,6 +119,16 @@ static async Task<int> RunWorldAsync(string[] args, string? script, WorldTestHos
     var softwareGpuOption = new Option<bool>(name: "--software-gpu") {
         Description = "Create the Direct3D 12 device on WARP, the software rasterizer, instead of a hardware adapter. Needs --backend directx.",
     };
+    // A device choice, never world-authored: a withheld optional capability is left off the device even where it
+    // reports it, so the path its kernel variant replaces runs, the comparison a capability-dependent variant is held to.
+    var withholdGpuOption = new Option<string[]>(name: "--withhold-gpu") {
+        AllowMultipleArgumentsPerToken = false,
+        Arity = ArgumentArity.OneOrMore,
+        DefaultValueFactory = static _ => [],
+        Description = "Create the GPU device without an optional capability it reports, so the path that capability's kernel variant replaces runs instead: ray-query (inline ray queries and acceleration structures). Repeat it for several.",
+    };
+
+    withholdGpuOption.AcceptOnlyFromAmong(values: [.. GpuOptionalCapabilitiesSpelling.All]);
     // A developer diagnostic, never world-authored: a capture tool hooks the graphics API from inside the process, so it
     // loads before anything can create a device, and gpu.capture then captures the frames the operator asks for.
     var captureToolOption = new Option<string?>(name: "--capture-tool") {
@@ -224,6 +234,7 @@ static async Task<int> RunWorldAsync(string[] args, string? script, WorldTestHos
         captureToolOption,
         debugLayersOption,
         softwareGpuOption,
+        withholdGpuOption,
         scheduleDirOption,
         unpacedOption,
         workersOption,
@@ -612,6 +623,8 @@ static async Task<int> RunWorldAsync(string[] args, string? script, WorldTestHos
             ? GpuValidation.Basic
             : parseResult.GetValue(option: debugLayersOption)),
         Software = parseResult.GetValue(option: softwareGpuOption),
+        WithheldGpu = (parseResult.GetValue(option: withholdGpuOption) ?? []).Aggregate(seed: GpuOptionalCapabilities.None,
+            func: static (withheld, name) => (GpuOptionalCapabilitiesSpelling.TryParse(name: name, capability: out var capability) ? (withheld | capability) : withheld)),
         ExtensionsConfiguration = extensionsConfiguration,
         FederationKeyFile = parseResult.GetValue(option: federationKeyFileOption),
         ScheduleDirectory = parseResult.GetValue(option: scheduleDirOption),

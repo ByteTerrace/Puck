@@ -85,7 +85,8 @@ public static partial class WorldSessionLevers {
     // The shadow switch keeps the authored tier while it agrees with it; scalar ceilings survive without quantization.
     private static WorldRenderDefaults? FoldRender(WorldRenderDefaults? render, WorldRenderSettings settings) {
         if ((render is null) && (settings.RenderScale == WorldRenderDefaults.Absent.RenderScale) &&
-            (settings.IndirectTier == Puck.SignedDistance.SdfIndirectTier.Medium) && (settings.SkyFieldScale == 1f) && !settings.Toon && settings.ShadeOverride is null) {
+            (settings.IndirectTier == Puck.SignedDistance.SdfIndirectTier.Medium) && (settings.SkyFieldScale == 1f) && !settings.Toon && settings.ShadeOverride is null &&
+            !settings.RayQueries) {
             return null;
         }
 
@@ -100,6 +101,7 @@ public static partial class WorldSessionLevers {
             ShadowFadeTicks = ((uint)settings.ShadowSlots.FadeTicks),
             ShadowOverflow = settings.ShadowSlots.Overflow,
             AmbientOcclusion = settings.AmbientOcclusion,
+            RayQueries = settings.RayQueries,
             RenderScale = settings.RenderScale,
             UpscaleSharpness = settings.UpscaleSharpness,
             Temporal = settings.Temporal,

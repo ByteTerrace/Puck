@@ -30,8 +30,8 @@ design review's findings each section answers.
 
 ## Options
 
-1. **Settle rebake alone (what exists).** A time-driven idle never holds, so it
-   stays torn. Rejected; it is retired by this design (below).
+1. **Settle rebake alone.** A time-driven idle never holds, so it stays torn.
+   Rejected, and deleted.
 2. **A bank of baked poses.** Bake work and bytes grow with the pose space, and
    independent contours share no vertices to interpolate between, so swaps pop.
    Rejected.
@@ -118,10 +118,9 @@ every owner kind (swing, slide, frame).
 This removes the settle rebake's reason to exist. A skin's error is bounded by
 the envelope at every pose, and the reference pose no longer depends on when
 the program arrived, so `TryTakeForm` reuse is exact. The settle rebake and its
-pop are deleted (`SdfMeshPathBake.Settle`, `SdfMeshSettle`, the
-`sdf.mesh-settle` counters) once no group needs them: every moving blend is
-either inside the envelope (skinned) or split (rigid). This narrows the
-continuity guarantee honestly. Within one baked mesh, motion is continuous. A
+pop are deleted: every moving blend is inside the envelope (skinned), split
+(rigid), or a moving cutter read where it stands (an operand, gap 8). This
+narrows the continuity guarantee honestly. Within one baked mesh, motion is continuous. A
 document edit or program rebuild still replaces meshes, as any rebake does.
 
 ### Influences: computed per place, through composition, on the CPU (F4, F5)
@@ -257,11 +256,11 @@ it (the owner's ruling, [AGENTS.md](../../AGENTS.md#pucks-purpose)):
   next step of this plan, and it goes first. The two creations wait for the
   owner's pair session, so the step's own check is the striped palette across a
   moving neck, not either creation.
-- **Gap 8: a cutter that moves against the surface it cuts keeps its rest
-  cut, and a creation with such a cutter takes no relief.** The design is
+- **Gap 8: a creation with a cutter that moves against the surface it cuts
+  takes no relief.** The design is
   [its own section below](#gap-8-a-cutter-that-moves-against-the-surface-it-cuts).
-  Its first step deletes the settle rebake, so step 5 shrinks to its cost
-  window.
+  Its first step is built: the cutter is an operand of the group it cuts, and
+  the settle rebake is deleted, so step 5 is only its cost window.
 
 ## Steps, each with the check that shows it worked
 
@@ -290,8 +289,9 @@ Three invariants hold the skin, each behind one door:
 - **A carve one owner makes in another stays cut in every fallback.** The third-owner
   split keeps every carving shape (`SdfBoundAlgebra.Carves`) in every member's part
   (`SdfMeshAudit.MemberFields`), and a partitioned group borrows every other owner's carve
-  (`CreationMotionPlan.Borrows`), riding its own slot. A carve that moves against the
-  surface it cuts keeps its rest cut there; one that moves with it is exact.
+  (`CreationMotionPlan.Borrows`), riding its own slot. A carve that moves with the surface
+  it cuts is exact; one whose owner moves alone and only cuts is an operand, read where it
+  stands (gap 8's G1, below).
 
 Two shapes move apart only by motion below their nearest common ancestor
 (`CreationMotion.MovingBlends`): a swing, slide or effector on either side, or timeline
@@ -308,8 +308,8 @@ Followers and timeline descendants inherit their actual parent's slot. Unbounded
 followers cannot enter an admitted blend.
 
 Step 4 is next: material coordinates and blended lanes. Steps 1–3 do not claim that
-paints already follow the seam. Rest skins are excluded from the old settle watch now;
-deleting the remaining non-rest settle mechanism and counters belongs to step 5.
+paints already follow the seam. A skin bakes once, at the pose its program arrived in;
+no group is baked again because its members settled.
 
 ### Lead verification request
 
@@ -370,10 +370,9 @@ lead's eval window.
    weathering, and blended lanes, in the opaque and glass passes. Check: a
    striped palette across a moving neck, captured in a presented burst, shows
    stripes fixed to the surface.
-5. **Cost measured.** Gap 8's step G1 deletes the settle rebake and its
-   counters ([below](#relation-to-step-5-the-settle-rebake)). Then run the quiet
-   window above. Check: the frame bar holds in the close-up and the crowd on
-   both backends.
+5. **Cost measured.** Run the quiet window above; the settle rebake it once
+   waited on is deleted ([below](#relation-to-step-5-the-settle-rebake)).
+   Check: the frame bar holds in the close-up and the crowd on both backends.
 
 6. **The envelope as a bound.** The group's admitted separation `D` is published
    in the mesh and its record, so a blended draw's box can be its members' boxes
@@ -403,8 +402,8 @@ creation scales. Relief on a creation that moves as a whole already works: the
 pooled emitter bakes such a creation as one composed field in the root's units
 (`WorldPlacementStamper.EmitRootSurface`). The look critic rejected that
 shrink, because it reads as an object shrinking, not ice wasting back. Ice that
-wastes back needs a cut that moves up the ice, and two restrictions stop that
-today.
+wastes back needs a cut that moves up the ice. Two restrictions stopped that;
+G1 lifted the second, and the first is G2's.
 
 1. **A moving cutter turns off relief.** `CreationMotionPlan` throws when a
    creation has `noise` and any shape moves independently ("Noise relief
@@ -417,31 +416,18 @@ today.
    error PUCK030: prototypes[507].doc.noise requires motion of the creation as a whole — frames, shape drivers or effectors that move its parts cannot share one relief field.
    ```
 
-2. **A moving cutter keeps the cut it makes at rest.** A hard subtraction has
-   no continuous share between its two sides, so its envelope is refused
-   (`CreationMotion.Envelope`, "blend has no continuous share") and the group
-   splits by motion owner (`CreationMotion.CreasedGroups`, then the partition
-   in `CreationMotionPlan`). Each partition borrows the other owner's cutter
-   and emits it riding the partition's own slot (`CreationMotionPlan.Borrows`,
-   used by `WorldCreationInstances.EmitGroup`), so the surface's group bakes
-   the cutter where it was authored and never reads where the cutter is now.
-   The same probe without relief validates with only this warning:
+2. **A moving cutter kept the cut it made at rest.** A hard subtraction has
+   no continuous share between its two sides, so its envelope was refused and
+   the group split by motion owner, each partition borrowing the cutter at
+   rest. G1 made such a cutter an operand of its group (below); the same probe
+   without relief now validates with this warning:
 
    ```text
-   warning PUCK122: prototypes[507].doc.shapes[1].blend: creation 'gap8-slab' joins shape 'cutter' to group 1's shape 'ice' by Subtraction: theta=Infinity deg (limit 60), D=Infinity (limit 0); bakes as a crease; a smooth skin requires bounded motion and a CPU-readable field (blend has no continuous share).
+   warning PUCK122: prototypes[507].doc.shapes[1].blend: creation 'gap8-slab' joins shape 'cutter' to group 1's shape 'ice' by Subtraction: cutter 'cutter' moves alone and cuts as an operand; the group bakes again each time it moves a step of the group's tier cell, so the cut trails it by at most one step, and contact still reads the cut at rest.
    ```
 
-Three things the gap entry named are not the cause:
+Two things the gap entry named are not the cause:
 
-- **The settle watch.** It lists only groups with a skin that are not rest
-  skins (`SdfMeshPathBake.WatchSettles`). Every dynamic instance the pooled
-  emitter writes is a rest skin (`WorldCreationInstances.EmitGroup` and its
-  siblings pass `restPoseSkin: true`), and the other dynamic emitters
-  (`WorldPlacementStamper.EmitRootSurface`, `WorldRigCatalog`) read only their
-  own slot, so no group has a skin to watch. Inferred from the emitters, not
-  read from a running World: `world.counters sdf.mesh-settle` would read zero
-  on the debug world if the inference holds. A partition that borrows a cutter
-  reads no other slot either, so the watch would not see it in any case.
 - **A static group that reads a moving slot.** Such a group exists in the
   geometry (`SdfMeshGeometryBuilder.ReadsSlots`), but it is planned again only
   when a new program arrives (`SdfMeshPathBake.Restart`), never as the slot
@@ -476,30 +462,39 @@ time.
 
 **A moving cutter becomes an operand of the surface's group.** An operand is a
 cutter that rides its own motion owner's slot inside the group of the surface
-it cuts, where today it is borrowed at rest. The group's field is the surface
-with the cutter where the cutter is now, so a bake of the group is a correct
-bake of the carved surface. An operand is not a skin member: no vertex rides
-it, and the group's mesh is drawn rigid in the group's own frame. Every vertex
-of the cut face lies on the surface's owner, so the cut face stays still while
-the cutter moves; only a new bake moves it.
+it cuts. The group's field is the surface with the cutter where the cutter is
+now, so a bake of the group is a correct bake of the carved surface. An operand
+is not a skin member: no vertex rides it, and the group's mesh is drawn rigid
+in the group's own frame. Every vertex of the cut face lies on the surface's
+owner, so the cut face stays still while the cutter moves; only a new bake
+moves it. As built (G1):
 
-- `CreationMotionPlan` classifies an owner as an operand owner when it and
-  every shape it carries cut (`SdfBoundAlgebra.Carves`). An operand owner still
-  gets a slot. It does not partition a group, it does not count as part motion
-  for relief, and its cutter is emitted inside the group that holds the
-  surface, on its own slot.
-- The emitter marks the cutter's read of its slot as an operand
-  (`SdfOp.TransformDynamic` with an operand flag, or the instance's list of
-  operand slots; the implementing lane picks the one the kernel needs no change
-  for, since the bake kernel already samples any slot through the group's pose
-  rows).
-- `SdfMeshGeometryBuilder` is the one door. It hashes an operand slot's pose,
-  relative to the group's own frame and snapped to the group's re-carve step,
-  as a fact of the geometry. It writes that snapped pose into the pose rows the
-  bake samples through, and it keeps operand slots out of the count of skin
-  members (`SdfMeshBakeGroup.Seal`), so an operand alone never gives a group a
-  skin. A rest-skin group (`RestPoseSkin`) freezes its member slots at the
-  identity but never an operand slot.
+- `CreationMotion.OperandShapes` classifies an owner as an operand owner when
+  every shape it carries cuts (`SdfBoundAlgebra.Carves`); the creation root
+  never is. An operand owner still gets a slot. Its pairs neither skin nor
+  crease (`CreationMovingBlend.Operand`), and PUCK122 reports the cutter as an
+  operand. It is emitted inside the group that holds the surface, on its own
+  slot; in a partitioned group every partition takes it there
+  (`CreationMotionPlan.Borrows`), and an authored group left holding operands
+  alone emits nothing (`CreationMotionPlan.HoldsSurface`). Relief still
+  refuses it: that is G2.
+- A group an operand cuts carries no skin. It bakes in the slot of its one
+  surface owner (`CreationMotionPlan.TryCutSlot`), and a group holding more
+  than one owner's surfaces beside an operand is partitioned by owner
+  (`CreationMotion.SharedOperandGroups`), so a smooth seam there creases.
+  `SdfMeshBakeGroup.Seal` refuses a group that reads an operand beside a skin
+  member, the one door every planned group passes.
+- The emitter declares each operand on the instance
+  (`SdfInstanceRange.Operands`, one `SdfInstancePart` an operand shape: its box
+  in its slot's frame), which needs no kernel change, since the bake kernel
+  already samples any slot through the group's pose rows.
+- `SdfMeshGeometryBuilder` is the one door. It hashes an operand slot's offset
+  as each instruction is appended, and once the group's tier is known
+  (`SdfMeshGeometryBuilder.AppendOperands`, called by the seal) its pose,
+  relative to the group's own frame and snapped to the group's step, in the
+  geometry and its form alike. It keeps that snapped pose with the poses the
+  bake samples through. A rest-skin group (`RestPoseSkin`) freezes its member
+  slots at the identity but never an operand slot.
 
 The invariant: **a group's mesh is a function of its geometry, and an operand's
 snapped pose is part of that geometry.** It is enforced in two places that
@@ -519,28 +514,28 @@ point (`SdfMeshTier.PixelShare`), so a swap between two steps moves the surface
 by no more than the error the bake already accepts there. This is the seamless
 guarantee, and it holds while the bake keeps up: while the cutter moves less
 than one step in the time a re-carve takes to land. A cutter faster than that
-lands its newest pose each time, a larger jump. G1 counts both cases in the
-bake's work counters: each operand re-plan, and each plan that replaced a
-waiting successor (the bake already counts coalesced resamples,
-`m_coalesced`), so a reading shows when the bake falls behind.
+lands its newest pose each time, a larger jump. The library's
+`sdf.mesh-inputs` counters (`SdfMeshInputs`) count both cases: each operand
+re-plan (`sdf.mesh-inputs.operand`), and each plan that replaced a waiting
+successor (`sdf.mesh-inputs.coalesced`), so a reading shows when the bake falls
+behind.
 
-**Which changes re-bake.** The bake already re-plans a group when a frame input
-its geometry read has moved: a sampled field's snapshot
-(`SdfMeshPathBake.Resample`). It visits only the groups that read one
-(`m_sampledReaders`), keeps one bake in flight per group, and holds the newest
-plan as the group's successor until that bake lands (`Promote`, `Succeed`). An
-operand's pose is the same kind of input, so G1 extends that door rather than
-writing a second one:
+**Which changes re-bake.** The bake re-plans a group when a frame input its
+geometry read has moved, through one door (`SdfMeshPathBake.Revisit`): a
+sampled field's snapshot, and an operand's pose. It visits only the groups that
+read one (`m_inputReaders`), keeps one bake in flight per group, and holds the
+newest plan as the group's successor until that bake lands (`Promote`,
+`Succeed`):
 
-- The bake lists the groups whose geometry reads an operand beside the sampled
-  readers.
-- Each frame, for each such group, it snaps the operand's current relative
-  pose at the group's step and compares it with the pose the geometry hashed.
-  The cost is one snap and compare a reader group a frame, and none for any
-  other group.
+- Each frame, for each group that reads an operand, it snaps the operand's
+  current relative pose at the group's step and compares it with the pose the
+  geometry hashed (`SdfMeshGeometryBuilder.OperandsMatch`). The cost is one
+  snap and compare an operand a frame, and none for any other group; a frame
+  whose sampled set stands visits only these groups.
 - A group whose operand moved a step is planned again
   (`SdfMeshBakeGroup.Refresh`) and placed through `Succeed`, or held as the
-  successor of a bake still in flight, exactly as a resampled group is.
+  successor of a bake still in flight, exactly as a resampled group is. A group
+  whose successor already holds the frame's inputs is not planned again.
 
 The same door can later admit the other inputs the geometry already hashes but
 the bake never revisits: the lanes a lane erosion (`SdfOp.LaneErode`) or a
@@ -643,36 +638,22 @@ land that fast is a measurement for the lead's quiet window (below).
 
 ### Relation to step 5: the settle rebake
 
-The design replaces the settle rebake and keeps the parts of it that are
-general. Its watch is empty today (above), and its rule of waiting for
-stillness is wrong for an operand, which may never hold still. What it built
-that an operand needs lives outside it: a pose keyed at snapped steps
-(`SdfMeshGeometryBuilder.Snap` and its other-slot pose fact), planning one
-group again at a pose (`SdfMeshBakeGroup.PlanSlot`), and the replacement path
-(`StartReplacement`, `FinishReplacements`), which tiers also use. G1 deletes
-the rest in the same change: `SdfMeshSettle` and its `sdf.mesh-settle`
-counters, the settle partial (`SdfMeshPathBake.Settle.cs`), and the group
-state only it reads (`Blocked`, `StillSince`, the still and baked pose
-arrays). Step 5 then keeps only its cost window. One name needs care: the
-bake's ticket method `Settle(SdfMeshBakeBatch, int, SdfMeshBakeTicket)`, which
-`Complete` and `Abandon` call, is unrelated and stays; G1 renames it so the
-two are no longer confused.
+The settle rebake waited for a skinned group's members to hold still away
+from their baked pose, a rule wrong for an operand, which may never hold
+still, and its watch was empty once every pooled skin baked at rest. G1
+deleted it with its counters, its globally snapped poses, its one-slot plan
+and the group state only it read. The replacement path (`StartReplacement`,
+`FinishReplacements`) remains the tiers' alone, and the bake's ticket
+transition is `SdfMeshPathBake.MoveTicket`. Step 5 keeps only its cost window.
 
 ### Steps, each with its check
 
 - **G1. Operands, re-planned as frame inputs; the settle rebake deleted.**
-  `CreationMotionPlan` classifies operand owners, the pooled emitter emits a
-  cutter of one inside its surface's group on its own slot, the geometry
-  builder keys it at the tier step, and `Resample`'s door re-plans its
-  readers. Checks: the probe without relief (a world on the debug basis with
-  one creation: a box `ice` in group 1 and a sphere `cutter` in group 1 with
-  `blend: Subtraction` and a `linear` slide along X) validates with PUCK122
-  reporting the cutter as an operand, not a crease; `puck mesh audit --cpu
-  --pose` extended to operand slots bakes the ice group at two poses a few
-  steps apart and prints two geometry keys, a cut that moved by the pose's
-  offset, zero open edges and zero skin vertices; in a World,
-  `world.counters` shows the operand re-plans while the cutter moves and no
-  `sdf.mesh-settle` source.
+  Built (the design above; the probe, validator and audit figures are in its
+  commit). Its last check is a running World: `world.counters sdf.mesh-inputs`
+  counts `sdf.mesh-inputs.operand` re-plans while a cutter moves (the gallery's
+  `motion-carve`, or the probe placed in the debug world), and no
+  `sdf.mesh-settle` source remains.
 - **G2. Relief with operands.** Check: the probe with relief validates with
   no PUCK030, and `puck mesh preview` of it shows the relief on the cut face.
 - **G3. Source tiles and reach-clipped keys**, for the static stamper and the
@@ -717,9 +698,9 @@ design, below the steps.
 
 ## Systems considered
 
-The settle rebake (`SdfMeshPathBake.Settle`, `SdfMeshSettle`). The skin members
+The settle rebake, since deleted. The skin members
 (`SdfMesh.Members`, `SdfMesh.VertexMembers`, the bake's skin round and
-the former lifted skin sample). Snapped pose keys and form reuse (`SdfMeshGeometryBuilder.Snap`,
+the former lifted skin sample). Snapped pose keys and form reuse (`SdfMeshGeometryBuilder.AppendOperands`,
 `SdfMeshLibrary.TryTakeForm`). The pooled parts that bound each shape
 (`SdfInstancePart`). The moving-blend warning (`CreationMotion.MovingBlends`)
 and the swing bounds (`ShapeSwingDocument.MaxAmplitude`). Crease and material
@@ -756,3 +737,14 @@ their per-type `Add` overloads serialize different record layouts. Irradiance's
 `RefreshLighting` uses BCL `HashCode.Combine` for a local cache key. Neither is a
 private hash algorithm. Other neighbours compare unrelated record/cell layouts,
 or the two interfaces' sampling attribution wrappers, rather than duplicate kernels.
+
+G1 built no new re-plan mechanism. The operand's re-plan is the sampled field's
+door widened (`SdfMeshPathBake.Revisit`, `Promote`, `Succeed`,
+`SdfMeshBakeGroup.Refresh`); its snap is the geometry's existing relative pose
+and rounding (`SdfMeshGeometryBuilder.RelativePose` and its rounded pose
+record), used at the tier's cell; its declaration reuses the instance part
+(`SdfInstancePart`) rather than a new type or an instruction flag; and its
+classification reuses `SdfBoundAlgebra.Carves` and the motion owners
+(`CreationMotion.Owner`), keyed so the validator and the pooled plan share one
+rule (`CreationMotion.OperandShapes`, `SharedOperandGroups`). The replacement
+path the settle rebake shared with the tiers stays the tiers'.

@@ -163,7 +163,7 @@ public sealed class OffscreenHostPresentation {
                     // The operator's gpu.capture brackets exactly the frame's GPU work.
                     m_gpuCapture?.BeginFrame();
 
-                    var produced = m_root.ProduceFrame(context: in frameContext);
+                    var produced = m_timeline.Produce(root: m_root, context: in frameContext);
 
                     m_gpuCapture?.EndFrame();
                     deviceLoss.NoteFrameProduced();

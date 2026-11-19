@@ -44,7 +44,8 @@ namespace Puck.World;
 /// <param name="instances">The instances a route's seat may stand in.</param>
 /// <param name="seatRouter">The seats' authority routes.</param>
 /// <param name="client">The presentation client whose seat views hold the cameras' facings.</param>
-public sealed partial class WorldBenchmarkCommandModule(WorldTickScript script, Func<InputRouter> router, WorldDefinitionSource source, HostFrameTimeline? timeline = null, PresentPacingControl? pacing = null, WorldStateRoot? stateRoot = null, PresentationReadings? readings = null, WorldGpuTiming? gpuTiming = null, WorldServer? server = null, WorldInstanceHost? instances = null, Puck.World.Client.WorldSeatAuthorityRouter? seatRouter = null, Puck.World.Client.WorldClient? client = null) : ICommandModule {
+/// <param name="deviceProfile">The device profile the process runs under, which the report names; absent reports none.</param>
+public sealed partial class WorldBenchmarkCommandModule(WorldTickScript script, Func<InputRouter> router, WorldDefinitionSource source, HostFrameTimeline? timeline = null, PresentPacingControl? pacing = null, WorldStateRoot? stateRoot = null, PresentationReadings? readings = null, WorldGpuTiming? gpuTiming = null, WorldServer? server = null, WorldInstanceHost? instances = null, Puck.World.Client.WorldSeatAuthorityRouter? seatRouter = null, Puck.World.Client.WorldClient? client = null, WorldDeviceProfileState? deviceProfile = null) : ICommandModule {
     /// <summary>The host work, in milliseconds, past which an iteration is over by default: one 60 Hz period.</summary>
     public const double DefaultBudgetMilliseconds = (1000.0 / 60.0);
     /// <summary>The wall time, in seconds, after which a run that has not finished is ended by default.</summary>
@@ -73,6 +74,8 @@ public sealed partial class WorldBenchmarkCommandModule(WorldTickScript script, 
         "world.counters render.record --json",
         "world.counters gpu.queue --json",
         "world.counters sdf --json",
+        "world.counters world.disclosure --json",
+        "world.counters physics.bodies --json",
         "host.memory",
     ];
 

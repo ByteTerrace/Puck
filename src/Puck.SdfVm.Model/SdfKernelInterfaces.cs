@@ -39,6 +39,9 @@ namespace Puck.SdfVm;
 public sealed class SdfKernelInterfaces {
     /// <summary>Uploaded irradiance scene nodes, leaves and instance records.</summary>
     public const string ProbeScene = "sdfProbeScene";
+    /// <summary>The top-level acceleration structure over the uploaded scene's draws, which a ray-query variant of the
+    /// probe kernels traces in place of the software walk over <see cref="ProbeScene"/>.</summary>
+    public const string ProbeStructure = "sdfProbeStructure";
     /// <summary>Probe origins and reaches, one float4 per probe.</summary>
     public const string ProbeOrigins = "sdfProbeOrigins";
     /// <summary>The CPU reference's angular directions, shared by every probe.</summary>
@@ -86,6 +89,10 @@ public sealed class SdfKernelInterfaces {
     public const int MeshSightRow = 15;
     /// <summary>First portal sight verdict after draw counts.</summary>
     public const int MeshSightCountBase = 5;
+    /// <summary>The first selection mark word in the raster selection's counts, past every portal sight verdict: on a
+    /// marked frame each draw a phase emits a command for ORs its level plus one into two bits, sixteen draws a
+    /// word, the lowest draw in the lowest bits.</summary>
+    public const int MeshMarkBase = 64;
     /// <summary>The selection dispatch's groups per row, within both backends' per-axis limit.</summary>
     public const uint MeshSelectionGroupsPerRow = 65535u;
     /// <summary>The raster pass's GPU selection controls: one header, three level-choice rows, ten cull rows and the
@@ -175,6 +182,10 @@ public sealed class SdfKernelInterfaces {
             Written(element: ShaderValueType.Uint, name: ProbeCacheWritten),
             Read(element: ShaderValueType.Uint, name: ProbeCache),
         ], pushesIndex: false);
+        // The ray-query variants read the same resources at the same bindings, and the scene's top level after them; only
+        // a device with ray queries lays these out.
+        ProbeTraceRays = new ShaderInterface(name: "sdf-probe-trace-rays", members: [.. ProbeTrace.Members, Structure()], pushesIndex: false);
+        ProbeRelightRays = new ShaderInterface(name: "sdf-probe-relight-rays", members: [.. ProbeRelight.Members, Structure()], pushesIndex: false);
         WorldParameters = ShaderPipelineParameterLayout.ForPackage(
             config: null,
             pushesIndex: true,
@@ -252,6 +263,8 @@ public sealed class SdfKernelInterfaces {
         Includes = [
             (IncludePath(shaderInterface: ProbeTrace), ProbeTrace),
             (IncludePath(shaderInterface: ProbeRelight), ProbeRelight),
+            (IncludePath(shaderInterface: ProbeTraceRays), ProbeTraceRays),
+            (IncludePath(shaderInterface: ProbeRelightRays), ProbeRelightRays),
             (IncludePath(shaderInterface: BloomParameters.Interface), BloomParameters.Interface),
             (IncludePath(shaderInterface: World), World),
             (IncludePath(shaderInterface: MeshBake), MeshBake),
@@ -300,6 +313,12 @@ public sealed class SdfKernelInterfaces {
     public ShaderInterface ProbeTrace { get; }
     /// <summary>Gets the software probe relight's captured input and feedback interface.</summary>
     public ShaderInterface ProbeRelight { get; }
+    /// <summary>Gets the ray-query probe trace's interface: <see cref="ProbeTrace"/>'s members and the scene's top level
+    /// (<see cref="ProbeStructure"/>).</summary>
+    public ShaderInterface ProbeTraceRays { get; }
+    /// <summary>Gets the ray-query relight's and camera sample's interface: <see cref="ProbeRelight"/>'s members and the
+    /// scene's top level (<see cref="ProbeStructure"/>).</summary>
+    public ShaderInterface ProbeRelightRays { get; }
     /// <summary>The optical scatter filters, independent of scene and bake tables.</summary>
     public ShaderPipelineParameterLayout BloomParameters { get; }
     /// <summary>Gets the field's instruction set's stamp, which <see cref="MeshBake"/> carries in place of
@@ -349,6 +368,8 @@ public sealed class SdfKernelInterfaces {
 
     private static string IncludePath(ShaderInterface shaderInterface) =>
         $"{KernelDirectory}/isa/{ShaderFrameInterface.IncludeFileName(interfaceName: shaderInterface.Name)}";
+    private static ShaderInterfaceMember Structure() =>
+        ShaderInterfaceMember.AccelerationStructure(group: ShaderInterfaceGroup.Pass, name: ProbeStructure);
     private static ShaderInterfaceMember Read(string name, ShaderValueType element) =>
         ShaderInterfaceMember.ReadOnlyBuffer(
             element: element,

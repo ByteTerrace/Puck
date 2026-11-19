@@ -16,4 +16,6 @@ public static class VulkanDescriptorType {
     public const uint UniformBuffer = 6;
     /// <summary>The <c>VK_DESCRIPTOR_TYPE_STORAGE_BUFFER</c> value.</summary>
     public const uint StorageBuffer = 7;
+    /// <summary><c>VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR</c> (vulkan_core.h, SDK 1.4.363).</summary>
+    public const uint AccelerationStructure = 1000150000;
 }

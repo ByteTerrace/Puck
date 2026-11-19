@@ -81,6 +81,7 @@ public sealed partial class RenderGraphRuntime {
     }
     private void RememberOutput(int index, ShaderPipelineRenderNode node, RenderGraphSchedule schedule, in Surface surface) {
         NotePackageTaint(index: index);
+        SettleWithdrawal(index: index);
         var publication = (((node.PublishedBinding is { } binding) && node.TryGetBoundImage(image: out var input, name: binding))
             ? input.Publication
             : new GpuImagePublication(Owner: node, Sequence: node.SubmissionCount));

@@ -118,7 +118,7 @@ public sealed class SdfMeshDresser : IDisposable {
 
             for (var offset = 0; (offset < count); offset++) {
                 var binding = new DrawBinding(mesh.Piece(index: (offset % mesh.PieceCount)), group,
-                    ((copies is null) ? -1 : copies[(offset / mesh.PieceCount)]), ((copies is null) && (mesh.Chunks.Count > 0)));
+                    ((copies is null) ? -1 : copies[(offset / mesh.PieceCount)]), ((copies is null) && (mesh.Chunks.Count > 0)), access.TierOf(group: group));
 
                 Bind(binding: binding, frame: frame, matrices: ref matrices, offset: offset, run: state.Run);
                 visited++; updated++;
@@ -271,7 +271,8 @@ public sealed class SdfMeshDresser : IDisposable {
     /// <summary>Releases the row table's mesh claims.</summary>
     public void Dispose() { if (m_disposed) { return; } m_disposed = true; StartOver(); }
 
-    private sealed class DrawBinding(SdfMesh mesh, SdfMeshBakeGroup? group, int copyIndex, bool chunked = false) {
+    // A row's draw: one piece of a group's mesh, or a copy's own mesh, and the tier the group's drawn mesh was baked at.
+    private sealed class DrawBinding(SdfMesh mesh, SdfMeshBakeGroup? group, int copyIndex, bool chunked = false, int tier = -1) {
         private object? m_motionSource;
         private object? m_motionIdentity;
         private SdfMeshInstance? m_copy;
@@ -319,6 +320,7 @@ public sealed class SdfMeshDresser : IDisposable {
                     Glass = (group?.Glass ?? false),
                     IsDynamic = copy.IsDynamic,
                     MotionIdentity = m_motionIdentity,
+                    Tier = ((group is null) ? -1 : tier),
                     UsesRootMaterialFrame = copy.UsesRootMaterialFrame,
                 };
             }
@@ -340,6 +342,7 @@ public sealed class SdfMeshDresser : IDisposable {
                 Displacement = group.Displacement,
                 // A displaced surface moves as it is drawn, so it stays out of the irradiance volume's static scene.
                 IsDynamic = (group.Dynamic || (group.Displacement is not null)),
+                Tier = tier,
             };
         }
     }

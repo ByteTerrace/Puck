@@ -191,8 +191,14 @@ public sealed class RenderGraphCompiler(RenderGraphPackageCatalog packages, Shad
                         var port = IndexOf(list: inputFragment.InputVersions, name: part.Inputs[index].Name);
 
                         if ((port >= 0) && (package.Inputs[port].Access == RenderGraphPortAccess.ComputeReadWrite)) { continue; }
+                        // A buffer the fragment declares itself and keeps private is owned storage; the pipeline compiler
+                        // checks that it is one a package may update in place (ValidateMutableInputs). An output version
+                        // is not private: splicing binds it to the enclosing graph's storage, which enters only through
+                        // a mutable input port.
+                        if ((port < 0) && !inputFragment.OutputVersions.Contains(value: part.Inputs[index].Name) &&
+                            inputFragment.Resources.Any(predicate: resource => (resource.Name == part.Inputs[index].Name))) { continue; }
                         Add(diagnostics, "RENDERGRAPH_MUTABLE_INPUT",
-                            $"Fragment pass '{pass.Name}${part.Name}' updates '{part.Inputs[index].Name}' without a mutable package input port.", pass.Name);
+                            $"Fragment pass '{pass.Name}${part.Name}' updates '{part.Inputs[index].Name}' without a mutable package input port or a buffer of its own.", pass.Name);
                     }
                 }
             }

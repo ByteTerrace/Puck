@@ -213,6 +213,7 @@ public sealed class GpuImageLeases {
         ArgumentNullException.ThrowIfNull(argument: services);
 
         return new GpuDeviceServices {
+            AccelerationStructures = services.AccelerationStructures,
             Bindings = services.Bindings,
             BufferFactory = services.BufferFactory,
             CommandPoolFactory = services.CommandPoolFactory,

@@ -4,8 +4,9 @@ using Puck.Abstractions;
 namespace Puck.Cli.Host;
 
 /// <summary>What a start needs of the machine's memory, as <see cref="HostStartTracker.Judge"/> reads it, in two
-/// quantities: private bytes (commit) against the commit headroom less its reserve, and working set (physical residency)
-/// against free physical memory above the pressure floor.</summary>
+/// quantities: private bytes (commit) against the commit headroom less its reserve, and private working set (the residency
+/// it cannot give back without paging) against free physical memory above the pressure floor. The whole working set is
+/// reported beside it, so a refusal shows how much of a start's residency is shareable file pages the system reclaims.</summary>
 /// <param name="CommitCovered">Whether the commit headroom covers <paramref name="NeedGb"/> and the commit reserve, or is
 /// not judged.</param>
 /// <param name="PhysicalCovered">Whether free physical memory less <paramref name="ResidentNeedGb"/> stays at or above the
@@ -16,28 +17,33 @@ namespace Puck.Cli.Host;
 /// <param name="OwnGb">The start's own expected commit peak (private bytes), in gigabytes.</param>
 /// <param name="GrowthGb">What the starts already admitted still have to grow in private bytes to reach their expected
 /// peaks, in gigabytes.</param>
-/// <param name="ResidentNeedGb">The start's own expected working-set peak plus <paramref name="ResidentGrowthGb"/>, in
-/// gigabytes.</param>
-/// <param name="ResidentOwnGb">The start's own expected working-set peak, in gigabytes.</param>
-/// <param name="ResidentGrowthGb">What the starts already admitted still have to grow in working set to reach their
+/// <param name="ResidentNeedGb">The start's own expected private working-set peak plus <paramref name="ResidentGrowthGb"/>,
+/// in gigabytes.</param>
+/// <param name="ResidentOwnGb">The start's own expected private working-set peak, in gigabytes.</param>
+/// <param name="ResidentGrowthGb">What the starts already admitted still have to grow in private working set to reach their
 /// expected peaks, in gigabytes.</param>
 /// <param name="Growing">How many admitted starts are still below their expected commit peak.</param>
 /// <param name="Kind">The start's kind.</param>
-public readonly record struct HostStartDemand(bool CommitCovered, bool PhysicalCovered, double HeadroomGb, double FreeRamGb, double NeedGb, double OwnGb, double GrowthGb, double ResidentNeedGb, double ResidentOwnGb, double ResidentGrowthGb, int Growing, HostStartKind Kind) {
+/// <param name="WorkingSetOwnGb">The start's own expected whole working-set peak, in gigabytes, which admission reports and
+/// never judges; NaN before the kind has an observation.</param>
+public readonly record struct HostStartDemand(bool CommitCovered, bool PhysicalCovered, double HeadroomGb, double FreeRamGb, double NeedGb, double OwnGb, double GrowthGb, double ResidentNeedGb, double ResidentOwnGb, double ResidentGrowthGb, int Growing, HostStartKind Kind, double WorkingSetOwnGb = double.NaN) {
     /// <summary>Gets whether the machine can hold the start: both the commit headroom and free physical memory cover it.</summary>
     public bool Covered => (CommitCovered && PhysicalCovered);
 }
 
 /// <summary>
 /// The single memory-demand calculation: a start's measured peak plus the running starts' remaining growth, in private
-/// bytes for the commit headroom and in working set for free physical memory (above the pressure floor); private bytes
-/// are commit and overstate what a process holds resident, so each is judged against its own quantity.
-/// Before a kind has an observation it uses <see cref="HostLoadThresholds.DefaultPeakGb"/> and, for its working set,
+/// bytes for the commit headroom and in private working set for free physical memory (above the pressure floor). Private
+/// bytes are commit and overstate what a process holds resident (a driver's mirror of device memory charges commit and holds
+/// no page); a whole working set overstates what it needs resident (the clean pages of mapped files and images are shared and
+/// reclaimed under pressure); so commit is judged by private bytes and free memory by the private working set
+/// (<see cref="HostRunningStart.ResidentGb"/>).
+/// Before a kind has an observation it uses <see cref="HostLoadThresholds.DefaultPeakGb"/> and, for its private working set,
 /// <see cref="HostLoadThresholds.ResidentFraction"/> of its expected commit peak. After, a kind's expected peak in each
 /// quantity is the high percentile of its recent distribution (<see cref="HostPeakWindow"/>: the last ten processes of the
 /// kind, each observed at a plateau or for a full plateau window), so one outlier session raises it only until a few
 /// ordinary starts follow, a sustained rise is learned, and the estimate moves down as readily as up. The windows are shared
-/// between CLI processes under the lease root (<c>host-observations/&lt;kind&gt;</c>), where the file decides: a long-lived
+/// between CLI processes under the lease root (<see cref="ObservationDirectory"/>), where the file decides: a long-lived
 /// process adds what it observed since its last write and keeps nothing else of its own. A live process above the
 /// estimate is still counted at its own usage, without clipping it. Growth tapers to zero over <see cref="Plateau"/> without
 /// a material allocation and returns when growth resumes. A World that reported ready reserves no growth. The system commit
@@ -54,11 +60,16 @@ public readonly record struct HostStartDemand(bool CommitCovered, bool PhysicalC
 /// </summary>
 public sealed class HostStartTracker {
     private sealed record Reservation(HostStartKind Kind, long At, double Gb, double ResidentGb, HashSet<(int Id, long StartTicks)> Known);
-    private sealed record Observation(HostStartKind Kind, double PeakGb, double ResidentPeakGb, double AnchorGb, long GrewAt, long FirstAt);
+    private sealed record Observation(HostStartKind Kind, HostPeaks Peaks, double AnchorGb, long GrewAt, long FirstAt);
 
     /// <summary>Without material growth for this long, a live process reserves no further growth.</summary>
     public static readonly TimeSpan Plateau = TimeSpan.FromMinutes(1);
     private const double MaterialGrowthGb = 1.0 / 16;
+    /// <summary>The directory under the lease root that holds each kind's observation window, one file per
+    /// <see cref="HostStartKind"/> name. A change to the files' lines takes a new name and raises <see cref="CliLease.Protocol"/>:
+    /// every CLI copy on the machine rewrites these files on each reading, so two copies that disagree on the lines must not
+    /// share one.</summary>
+    public const string ObservationDirectory = "host-peaks";
     private readonly string? m_root;
 
     /// <summary>Creates a tracker, optionally sharing measured peaks in the machine's lease root.</summary>
@@ -85,19 +96,24 @@ public sealed class HostStartTracker {
 
         return window;
     }
-    // The one expected-peak door: the recent observations' high percentile once the kind has any, else its fallback.
-    private double Expected(HostStartKind kind) => ((m_windows.TryGetValue(kind, out var window) && (window.Count > 0)) ? window.PrivateGb : HostLoadThresholds.DefaultPeakGb(kind: kind));
-    // Until the kind's working set is observed, a fixed share of its expected commit peak.
-    private double ExpectedResident(HostStartKind kind) => ((m_windows.TryGetValue(kind, out var window) && (window.Count > 0)) ? window.ResidentGb : (HostLoadThresholds.ResidentFraction * Expected(kind: kind)));
+    // The one expected-peak door: the recent observations' high percentile once the kind has any, else its fallbacks (the
+    // kind's default commit peak, a fixed share of it as the private working set, and no whole working set, which is
+    // reported only and has nothing to stand in for it).
+    private HostPeaks Expected(HostStartKind kind) => ((m_windows.TryGetValue(kind, out var window) && (window.Count > 0))
+        ? new HostPeaks(PrivateGb: window.PrivateGb, ResidentGb: window.ResidentGb, WorkingSetGb: window.WorkingSetGb)
+        : new HostPeaks(PrivateGb: HostLoadThresholds.DefaultPeakGb(kind: kind), ResidentGb: (HostLoadThresholds.ResidentFraction * HostLoadThresholds.DefaultPeakGb(kind: kind)), WorkingSetGb: double.NaN));
+    // A live process's peaks as one reading shows them.
+    private static HostPeaks Reading(HostRunningStart start) => new(PrivateGb: start.PrivateGb, ResidentGb: start.ResidentGb, WorkingSetGb: start.HeldGb);
 
     // A process is an observation of its kind once it has been seen for a full plateau (live: its growth stopped for one;
     // exited: it was watched for one). Before that it counts only to raise a kind that already has observations, since a
     // short focused check says nothing of an ordinary start's peak. A process already in the window keeps its entry current.
-    private void Record(HostStartKind kind, (int Id, long StartTicks) id, double peakGb, double residentPeakGb, bool settled) {
+    private void Record(HostStartKind kind, (int Id, long StartTicks) id, HostPeaks peaks, bool settled) {
         var window = Window(kind: kind);
 
-        if (window.Contains(id: id.Id, startTicks: id.StartTicks) || settled || ((window.Count > 0) && (peakGb > Expected(kind: kind)))) {
-            window.Observe(id: id.Id, startTicks: id.StartTicks, privateGb: peakGb, residentGb: residentPeakGb);
+        // Only the judged quantities raise a kind early: a reported working set alone never brings a short run in.
+        if (window.Contains(id: id.Id, startTicks: id.StartTicks) || settled || ((window.Count > 0) && (Expected(kind: kind) is var expected) && ((peaks.PrivateGb > expected.PrivateGb) || (peaks.ResidentGb > expected.ResidentGb)))) {
+            window.Observe(id: id.Id, startTicks: id.StartTicks, peaks: peaks);
         }
     }
 
@@ -115,31 +131,23 @@ public sealed class HostStartTracker {
     }
     private void Measurements() {
         if (m_root is null) { return; }
-        var directory = Path.Combine(m_root, "host-observations");
+        var directory = Path.Combine(m_root, ObservationDirectory);
         Directory.CreateDirectory(directory);
         foreach (var kind in Enum.GetValues<HostStartKind>()) {
             Synchronize(Window(kind: kind), Path.Combine(directory, kind.ToString()));
         }
     }
 
-    /// <summary>Returns the kind's expected commit peak (private bytes), the high percentile of its recent observations, or
-    /// its fallback before one exists.</summary>
+    /// <summary>Returns the kind's expected peaks, each the high percentile of its recent observations, read from the shared
+    /// window first. Before the kind has an observation the private bytes are <see cref="HostLoadThresholds.DefaultPeakGb"/>,
+    /// the private working set <see cref="HostLoadThresholds.ResidentFraction"/> of that, and the whole working set, which
+    /// admission reports and never judges, NaN.</summary>
     /// <param name="kind">The start's kind.</param>
-    /// <returns>The expected peak, in gigabytes.</returns>
-    public double ExpectedPeakGb(HostStartKind kind) {
+    /// <returns>The expected peaks, in gigabytes.</returns>
+    public HostPeaks ExpectedPeaks(HostStartKind kind) {
         lock (m_gate) {
             Measurements();
             return Expected(kind: kind);
-        }
-    }
-    /// <summary>Returns the kind's expected working-set peak, the high percentile of its recent observations, or its
-    /// fallback before one exists.</summary>
-    /// <param name="kind">The start's kind.</param>
-    /// <returns>The expected working-set peak, in gigabytes.</returns>
-    public double ExpectedResidentPeakGb(HostStartKind kind) {
-        lock (m_gate) {
-            Measurements();
-            return ExpectedResident(kind: kind);
         }
     }
     /// <summary>Reads what a start of <paramref name="kind"/> needs of the headroom <paramref name="reading"/> shows,
@@ -159,15 +167,15 @@ public sealed class HostStartTracker {
 
             foreach (var start in live) {
                 var id = (start.Id, start.StartTicks);
-                var seen = m_seen.GetValueOrDefault(id) ?? new Observation(start.Kind, start.PrivateGb, start.ResidentGb, start.PrivateGb, clock.GetTimestamp(), clock.GetTimestamp());
+                var seen = m_seen.GetValueOrDefault(id) ?? new Observation(start.Kind, Reading(start: start), start.PrivateGb, clock.GetTimestamp(), clock.GetTimestamp());
                 var grew = start.PrivateGb >= seen.AnchorGb + MaterialGrowthGb;
-                seen = seen with { PeakGb = Math.Max(start.PrivateGb, seen.PeakGb), ResidentPeakGb = Math.Max(start.ResidentGb, seen.ResidentPeakGb),
+                seen = seen with { Peaks = seen.Peaks.Max(other: Reading(start: start)),
                     AnchorGb = grew ? start.PrivateGb : Math.Min(start.PrivateGb, seen.AnchorGb), GrewAt = grew ? clock.GetTimestamp() : seen.GrewAt };
                 m_seen[id] = seen;
-                Record(start.Kind, id, seen.PeakGb, seen.ResidentPeakGb, settled: (clock.GetElapsedTime(seen.GrewAt) >= Plateau));
+                Record(start.Kind, id, seen.Peaks, settled: (clock.GetElapsedTime(seen.GrewAt) >= Plateau));
             }
             foreach (var (id, seen) in m_seen.Where(predicate: pair => !liveIds.Contains(item: pair.Key)).ToArray()) {
-                Record(seen.Kind, id, seen.PeakGb, seen.ResidentPeakGb, settled: (clock.GetElapsedTime(seen.FirstAt) >= Plateau));
+                Record(seen.Kind, id, seen.Peaks, settled: (clock.GetElapsedTime(seen.FirstAt) >= Plateau));
                 _ = m_seen.Remove(key: id);
             }
             Measurements();
@@ -204,8 +212,9 @@ public sealed class HostStartTracker {
             foreach (var start in live) {
                 var seen = m_seen[(start.Id, start.StartTicks)];
                 var remaining = Math.Max(0, 1 - clock.GetElapsedTime(seen.GrewAt).TotalSeconds / Plateau.TotalSeconds);
-                var left = start.Ready ? 0 : (Math.Max(Expected(start.Kind), seen.PeakGb) - start.PrivateGb) * remaining;
-                var residentLeft = start.Ready ? 0 : (Math.Max(ExpectedResident(start.Kind), seen.ResidentPeakGb) - start.ResidentGb) * remaining;
+                var expected = Expected(kind: start.Kind);
+                var left = start.Ready ? 0 : (Math.Max(expected.PrivateGb, seen.Peaks.PrivateGb) - start.PrivateGb) * remaining;
+                var residentLeft = start.Ready ? 0 : (Math.Max(expected.ResidentGb, seen.Peaks.ResidentGb) - start.ResidentGb) * remaining;
 
                 if (left > 0) {
                     growth += left;
@@ -221,8 +230,9 @@ public sealed class HostStartTracker {
                 growing++;
             }
 
-            var own = Expected(kind: kind);
-            var residentOwn = ExpectedResident(kind: kind);
+            var expectedOwn = Expected(kind: kind);
+            var own = expectedOwn.PrivateGb;
+            var residentOwn = expectedOwn.ResidentGb;
             var need = (own + growth);
             var residentNeed = (residentOwn + residentGrowth);
             var commitCovered = thresholds.CommitCovers(reading: reading, needGb: need);
@@ -244,7 +254,8 @@ public sealed class HostStartTracker {
                 PhysicalCovered: physicalCovered,
                 ResidentGrowthGb: residentGrowth,
                 ResidentNeedGb: residentNeed,
-                ResidentOwnGb: residentOwn
+                ResidentOwnGb: residentOwn,
+                WorkingSetOwnGb: expectedOwn.WorkingSetGb
             );
         }
     }

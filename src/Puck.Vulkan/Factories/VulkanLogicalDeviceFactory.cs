@@ -102,6 +102,26 @@ public sealed class VulkanLogicalDeviceFactory : IVulkanLogicalDeviceFactory {
     private const string PageableDeviceLocalMemoryExtension = "VK_EXT_pageable_device_local_memory";
     private const uint StructureTypePhysicalDeviceMemoryPriorityFeatures = 1000238000;
     private const uint StructureTypePhysicalDevicePageableDeviceLocalMemoryFeatures = 1000412000;
+    // Ray queries (GpuOptionalCapabilities.RayQuery): the three extensions, and the three feature structures whose first
+    // VkBool32 is the feature (accelerationStructure, rayQuery, bufferDeviceAddress), verified against the Vulkan SDK
+    // 1.4.363 header (vulkan_core.h). VK_KHR_acceleration_structure requires VK_KHR_deferred_host_operations and the
+    // Vulkan 1.2 bufferDeviceAddress feature, through which a build reads its inputs and a structure is addressed.
+    private static readonly string[] RayQueryExtensions = [
+        "VK_KHR_deferred_host_operations",
+        "VK_KHR_acceleration_structure",
+        RayQueryExtension,
+    ];
+    /// <summary>The extension whose presence among a device's enabled extensions says it was created with ray queries,
+    /// and so with acceleration structures and buffer device addresses.</summary>
+    public const string RayQueryExtension = "VK_KHR_ray_query";
+    private static readonly uint[] RayQueryFeatureStructureTypes = [
+        StructureTypePhysicalDeviceBufferDeviceAddressFeatures,
+        StructureTypePhysicalDeviceAccelerationStructureFeaturesKhr,
+        StructureTypePhysicalDeviceRayQueryFeaturesKhr,
+    ];
+    private const uint StructureTypePhysicalDeviceBufferDeviceAddressFeatures = 1000257000;
+    private const uint StructureTypePhysicalDeviceAccelerationStructureFeaturesKhr = 1000150013;
+    private const uint StructureTypePhysicalDeviceRayQueryFeaturesKhr = 1000348013;
 
     // The base features every device is created with, in index order, the order they are enabled in, each with its name and what needs
     // it; a device reporting any of them absent is refused naming it.
@@ -234,11 +254,29 @@ public sealed class VulkanLogicalDeviceFactory : IVulkanLogicalDeviceFactory {
 
         return backing;
     }
+    /// <summary>Gets the optional capabilities every device this factory creates is created without even where it reports
+    /// them (<see cref="GpuDeviceCapabilities.Withheld"/>). The presenter registration sets it from
+    /// <c>GpuDeviceOptions.Withheld</c>.</summary>
+    public GpuOptionalCapabilities Withheld { get; init; }
+
+    // The optional capabilities a physical device reports: ray queries where the three extensions and their three
+    // features are all present.
+    private GpuOptionalCapabilities OptionalOf(VulkanInstanceCommands instance, nint physicalDeviceHandle) {
+        foreach (var extension in RayQueryExtensions) {
+            if (!m_physicalDeviceApi.HasDeviceExtension(extensionName: extension, instance: instance, physicalDeviceHandle: physicalDeviceHandle)) { return GpuOptionalCapabilities.None; }
+        }
+        foreach (var structureType in RayQueryFeatureStructureTypes) {
+            if (!m_physicalDeviceApi.IsExtensionFeatureSupported(instance: instance, physicalDeviceHandle: physicalDeviceHandle, structureType: structureType)) { return GpuOptionalCapabilities.None; }
+        }
+
+        return GpuOptionalCapabilities.RayQuery;
+    }
     private (IReadOnlyList<string> ExtensionNames, IReadOnlyList<uint> FeatureStructureTypes) ComposeExtensionsAndFeatures(
         VulkanInstanceCommands instance,
         nint physicalDeviceHandle,
         IReadOnlyList<bool> support,
-        bool reportsAddresses
+        bool reportsAddresses,
+        GpuOptionalCapabilities optional
     ) {
         var extensions = new List<string> { SwapchainExtension };
         var featureStructureTypes = new List<uint>();
@@ -359,6 +397,11 @@ public sealed class VulkanLogicalDeviceFactory : IVulkanLogicalDeviceFactory {
             instance: instance,
             physicalDeviceHandle: physicalDeviceHandle
         );
+
+        if ((optional & GpuOptionalCapabilities.RayQuery) != 0) {
+            extensions.AddRange(collection: RayQueryExtensions);
+            featureStructureTypes.AddRange(collection: RayQueryFeatureStructureTypes);
+        }
 
         return (extensions, featureStructureTypes);
     }
@@ -531,13 +574,15 @@ public sealed class VulkanLogicalDeviceFactory : IVulkanLogicalDeviceFactory {
 
         capabilities = (capabilities with {
             Backing = (capabilities.Backing ?? GpuBackingSupport.None) | BackingOf(instance: instance.Commands, physicalDeviceHandle: physicalDevice.Handle, support: support, families: queueFamilies),
-        });
-        Console.Error.WriteLine(value: $"[backing] {GpuDeviceCapabilities.BackingSpelling(backing: capabilities.Backing.Value)} sparse.address-space={capabilities.SparseAddressSpaceBytes} storage-buffer.offset-alignment={capabilities.StorageBufferOffsetAlignment}");
+        }).WithOptional(reported: OptionalOf(instance: instance.Commands, physicalDeviceHandle: physicalDevice.Handle), withheld: Withheld);
+        Console.Error.WriteLine(value: $"[gpu-optional] {GpuOptionalCapabilitiesSpelling.Of(capabilities: capabilities.Optional)} withheld={GpuOptionalCapabilitiesSpelling.Of(capabilities: capabilities.Withheld)}");
+        Console.Error.WriteLine(value: $"[backing] {GpuDeviceCapabilities.BackingSpelling(backing: (capabilities.Backing ?? GpuBackingSupport.None))} sparse.address-space={capabilities.SparseAddressSpaceBytes} storage-buffer.offset-alignment={capabilities.StorageBufferOffsetAlignment}");
         Console.Error.WriteLine(value: $"[backing] sparse-buffer-features={(sparseFamily.HasValue ? "enabled" : "unavailable")} binding-queue-family={(sparseFamily?.ToString(provider: System.Globalization.CultureInfo.InvariantCulture) ?? "none")}");
 
         var (extensionNames, featureStructureTypes) = ComposeExtensionsAndFeatures(
             instance: instance.Commands,
             physicalDeviceHandle: physicalDevice.Handle,
+            optional: capabilities.Optional,
             reportsAddresses: (instance.AddressBindings is not null),
             support: support
         );

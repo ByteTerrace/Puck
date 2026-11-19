@@ -54,6 +54,7 @@ public sealed class VulkanGroupLayouts {
             GpuBindingKind.SampledImage => VulkanDescriptorType.SampledImage,
             GpuBindingKind.StorageImage => VulkanDescriptorType.StorageImage,
             GpuBindingKind.Sampler => VulkanDescriptorType.Sampler,
+            GpuBindingKind.AccelerationStructure => VulkanDescriptorType.AccelerationStructure,
             _ => throw new ArgumentOutOfRangeException(
                 actualValue: kind,
                 message: "The value is not a binding kind.",

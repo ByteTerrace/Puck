@@ -1587,10 +1587,12 @@ Implementation choices for step 1:
   `StateArena.DisclosureRevision` a row changes only by a keyed cell write
   (`StateArena.MarkVersion` names the keyed columns; every other write moves the
   revision), so a cell-only tick refreshes the image digests of the rows it
-  wrote and a revision move also their skeletons. The frame is composed from the
-  whole document again only for a new source, a changed policy index, or a
-  change to a withheld row the disclosed placements read
-  (`WorldStateDisclosed.PlacementReads`, recorded as `DisclosePlacements` reads).
+  wrote and a revision move also their skeletons. For a holding-only source
+  change, `WorldDisclosureImages` can patch a directly projected placement
+  when its live response reads are whole and the frame's other disclosure
+  inputs still agree. The placement section reuses the canonical digests of
+  unchanged rows. Other source changes, a changed policy index, or a changed
+  withheld row the placements read trigger a fresh composition.
 
 `DeliveryReviewLawTests` checks physical deltas at both tiers, administrative
 and missed-window readable writes, clock corrections without source
@@ -2179,6 +2181,79 @@ The auction's highest bid, over-purse bid and tie/replacement scenarios play thr
 and reproduce their authoritative hashes. The full solution builds in Release and the
 debug world boots headlessly. Allocation readings and their revisions are in the completion
 commit, as machine readings are not a repository baseline.
+
+## Presentation and derived-product disclosure
+
+Disclosure stops at pixels already delivered, not at the authority's state
+delivery. No leak through these paths has been reproduced; each case below is
+read from the code. Three presentation and caching boundaries carry the same viewer-scope
+invariant and land beside the rendering work that uses them:
+
+1. **Withdrawn pictures and reused GPU results.** Changing a route makes a
+   view's package report not fresh, and on its own nothing withdrew a picture
+   already published: a rate-held view, a budget-deferred render, an
+   unscheduled screen read, or a paused node returning its last surface could
+   keep showing withdrawn pixels. For a narrowing between the access levels
+   none, disclosed and everything this is built: a session screen's access is
+   settled once a frame before any view of it binds (`WorldViewerAccess`),
+   `WorldViewGraphHost.BindAccess` withdraws an instance whose access epoch
+   moved and every instance that read it (`IRenderGraphInstances.Withdraw`),
+   and `WorldScreenBinder.ContentAccess` releases a source, its residency and
+   its background jobs when they hold wider content than the viewer may now
+   see. An adversarial review found ways around each of those guards, and a
+   narrowing inside "disclosed" moves no level at all.
+   [The withdrawal chokepoint](disclosure/withdrawal-chokepoint.md) checks the
+   review's findings against the code and designs the one door that replaces
+   the guards: the stream stamps each delivery with the span of access it was
+   made under, and the render graph carries that span on every output. Its
+   build order owns the work, and [the security packet](open-items.md#security-review)
+   lists it. Keep reuse keyed by
+   the content of the delivered inputs it read (`WorldDisclosureImages`) so
+   viewers delivered the same static rows still share a probe volume while
+   differing on bodies, and include recipient identity whenever a result read
+   rows only one viewer may see. Because a changed key only prevents new hits,
+   enforce viewer disclosure at two additional gates built together:
+   - *At publication and every reuse:* previous-frame reads, aliases, composites
+     and standing views (`SdfWorldPasses.Refresh`). Invalidate the restricted
+     viewer's old output immediately and bind a permitted picture or authored
+     fallback while leaving other viewers' publications usable.
+   - *At async GPU job install:* a job submitted before a restriction or
+     revocation must install nothing forbidden (nested image, temporal history
+     or derived lighting) when it finishes afterwards.
+   - *Checks:* narrow a full view to a private one on a frame its refresh is
+     held, and revoke a viewer altogether while a second viewer keeps the shared
+     residency alive, each with a detail only the full view shows and a GPU job
+     submitted beforehand finishing afterwards. Read the first frame delivered
+     after the change.
+2. **Who may fetch a shared derived product.** A shared product's content name
+   grants no access
+   ([derived products](../decisions/engine-design.md#a-derived-product-is-a-cache-never-the-truth)).
+   A receiver cannot verify a fetched mesh against an analytic source program it
+   was never delivered, so fetching is admitted only for publications whose
+   source program the viewer is permitted to observe; private or undisclosed
+   programs are never fetched by name.
+   - *Checks:* beside the
+     [shared-store verification prototype](open-items.md#bake-proportional-to-change),
+     test one public gallery mesh fetched from another process beside one
+     refused fetch and one permitted local miss, and verify that a product with
+     the right name but one removed part, one swapped material id, or one
+     flipped patch of normals is refused each time.
+3. **Light carried across an opening between two worlds.** When a destination
+   world publishes pre-exposure light leaving a portal opening into a near world
+   ([illumination](illumination.md#the-build-order)), the destination's
+   authority decides what each viewer may observe through the opening, including
+   whether it transmits light to that viewer at all. Coarse aggregation is not
+   redaction: if two private deals change an opening's mean colour, a spectator
+   can distinguish them from a single average, so an average passes the same
+   disclosure check as directional samples. On revocation, the near world falls
+   back to light permitted on its own (which may be none) before installing any
+   other result.
+   - *Check:* extend `WorldDisclosureRun` on `worlds/debug/shedding-disclosure.puck`
+     to record the light the destination published to each viewer and what the
+     hall computed from it for both deals. The seated player sees the
+     difference, no derived light differs between the spectator's two worlds
+     (for both directional samples and the average), and a light job in flight
+     when the seat loses access installs nothing the seat may no longer see.
 
 ## Open items
 
