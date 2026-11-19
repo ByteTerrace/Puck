@@ -38,6 +38,8 @@ public static class SpirvInterfaceReader {
     private const uint OpTypeRuntimeArray = 29;
     private const uint OpTypeSampledImage = 27;
     private const uint OpTypeSampler = 26;
+    // SpvOpTypeAccelerationStructureKHR (SPIR-V headers 1.4.363).
+    private const uint OpTypeAccelerationStructure = 5341;
     private const uint OpTypeStruct = 30;
     private const uint OpTypeVector = 23;
     private const uint OpVariable = 59;
@@ -234,6 +236,8 @@ public static class SpirvInterfaceReader {
                 return GpuBindingKind.SampledImage;
             case OpTypeSampler:
                 return GpuBindingKind.Sampler;
+            case OpTypeAccelerationStructure:
+                return GpuBindingKind.AccelerationStructure;
             default:
                 throw new InvalidDataException(message: $"SPIR-V variable '{name}' carries a descriptor set but its type (opcode {kind}) is no binding kind.");
         }
@@ -271,7 +275,7 @@ public static class SpirvInterfaceReader {
                 case OpMemberName:
                     module.MemberNames[(operands[0], operands[1])] = ReadString(words: operands[2..]);
                     break;
-                case OpTypeInt or OpTypeFloat or OpTypeVector or OpTypeImage or OpTypeSampler or OpTypeSampledImage or OpTypeArray or OpTypeRuntimeArray or OpTypeStruct or OpTypePointer:
+                case OpTypeInt or OpTypeFloat or OpTypeVector or OpTypeImage or OpTypeSampler or OpTypeSampledImage or OpTypeArray or OpTypeRuntimeArray or OpTypeStruct or OpTypePointer or OpTypeAccelerationStructure:
                     module.Types[operands[0]] = (opcode, operands[1..].ToArray());
                     break;
                 case OpConstant:

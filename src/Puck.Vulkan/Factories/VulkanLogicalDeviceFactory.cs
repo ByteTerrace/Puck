@@ -109,8 +109,11 @@ public sealed class VulkanLogicalDeviceFactory : IVulkanLogicalDeviceFactory {
     private static readonly string[] RayQueryExtensions = [
         "VK_KHR_deferred_host_operations",
         "VK_KHR_acceleration_structure",
-        "VK_KHR_ray_query",
+        RayQueryExtension,
     ];
+    /// <summary>The extension whose presence among a device's enabled extensions says it was created with ray queries,
+    /// and so with acceleration structures and buffer device addresses.</summary>
+    public const string RayQueryExtension = "VK_KHR_ray_query";
     private static readonly uint[] RayQueryFeatureStructureTypes = [
         StructureTypePhysicalDeviceBufferDeviceAddressFeatures,
         StructureTypePhysicalDeviceAccelerationStructureFeaturesKhr,

@@ -15,17 +15,20 @@ namespace Puck.Abstractions.Gpu;
 /// group's sets hold.</param>
 /// <param name="SamplerCount">Total sampler descriptors, which only a group's sets hold: on Direct3D 12 a range of the
 /// device's shader-visible sampler heap rather than of its view heap.</param>
+/// <param name="AccelerationStructureCount">Total top-level acceleration-structure descriptors, which only a group's sets
+/// of a device with ray queries hold: on Direct3D 12 shader resource views in its view heap.</param>
 public readonly record struct GpuDescriptorPoolSizes(
     uint MaxSets,
     uint StorageBufferCount,
     uint StorageImageCount,
     uint ConstantBufferCount = 0,
     uint SampledImageCount = 0,
-    uint SamplerCount = 0
+    uint SamplerCount = 0,
+    uint AccelerationStructureCount = 0
 ) {
     /// <summary>Gets the shader-visible view-heap slots the pool occupies on a backend that packs every view kind into
     /// one heap: the sum of the per-kind counts other than samplers.</summary>
-    public uint HeapDescriptors => checked((((StorageBufferCount + StorageImageCount) + ConstantBufferCount) + SampledImageCount));
+    public uint HeapDescriptors => checked(((((StorageBufferCount + StorageImageCount) + ConstantBufferCount) + SampledImageCount) + AccelerationStructureCount));
     /// <summary>Gets the shader-visible sampler-heap slots the pool occupies on a backend whose samplers live in a heap
     /// of their own: <see cref="SamplerCount"/>.</summary>
     public uint SamplerHeapDescriptors => SamplerCount;
@@ -37,6 +40,7 @@ public readonly record struct GpuDescriptorPoolSizes(
     /// <exception cref="OverflowException">A count overflows.</exception>
     public static GpuDescriptorPoolSizes operator +(GpuDescriptorPoolSizes left, GpuDescriptorPoolSizes right) =>
         new(
+            AccelerationStructureCount: checked((left.AccelerationStructureCount + right.AccelerationStructureCount)),
             ConstantBufferCount: checked((left.ConstantBufferCount + right.ConstantBufferCount)),
             MaxSets: checked((left.MaxSets + right.MaxSets)),
             SampledImageCount: checked((left.SampledImageCount + right.SampledImageCount)),
@@ -57,6 +61,7 @@ public readonly record struct GpuDescriptorPoolSizes(
     public static GpuDescriptorPoolSizes ForGroups(params IReadOnlyList<GpuGroupLayoutDescription> groups) {
         ArgumentNullException.ThrowIfNull(argument: groups);
 
+        var accelerationStructureCount = 0u;
         var constantBufferCount = 0u;
         var sampledImageCount = 0u;
         var samplerCount = 0u;
@@ -91,6 +96,10 @@ public readonly record struct GpuDescriptorPoolSizes(
                         samplerCount = checked((samplerCount + count));
 
                         break;
+                    case GpuBindingKind.AccelerationStructure:
+                        accelerationStructureCount = checked((accelerationStructureCount + count));
+
+                        break;
                     default:
                         throw new InvalidOperationException(message: $"Binding kind '{binding.Kind}' has no pool-size classification.");
                 }
@@ -98,6 +107,7 @@ public readonly record struct GpuDescriptorPoolSizes(
         }
 
         return new GpuDescriptorPoolSizes(
+            AccelerationStructureCount: accelerationStructureCount,
             ConstantBufferCount: constantBufferCount,
             MaxSets: ((uint)groups.Count),
             SampledImageCount: sampledImageCount,

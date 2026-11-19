@@ -285,6 +285,7 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
     private GpuDeviceServices CreateServices(GpuCreationFaults? creationFaults) => GpuCreationFaults.Wrap(
         faults: creationFaults,
         services: new() {
+            AccelerationStructures = new DirectXGpuAccelerationStructures(deviceContext: this),
             Bindings = m_bindings,
             BufferFactory = new DirectXGpuBufferFactory(deviceContext: this),
             Naming = new DirectXGpuObjectNaming(deviceContext: this),

@@ -76,6 +76,11 @@ public static class VulkanPresenterServiceRegistration {
             );
 
             return GpuCreationFaults.Wrap(faults: creationFaults, services: new GpuDeviceServices {
+                AccelerationStructures = new VulkanGpuAccelerationStructures(
+                bufferApi: bufferApi,
+                deviceContext: deviceContext,
+                naming: naming
+            ),
                 Bindings = new VulkanGpuBindings(
                 allocator: descriptorAllocator,
                 deviceContext: deviceContext,
