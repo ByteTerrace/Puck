@@ -117,7 +117,7 @@ The next lead rewrites this section when it hands off in turn.
   owner's.
 - **Restored branches awaiting the owner's word:** `lane/g5` (the
   occlusion-aware rate floor, review answered, needs a merge and its windowed
-  check), `lane/toon-3` (a `world.toon off` fix that lands alone),
+  check), `lane/toon-3` (the third cel model, prior art),
   `lane/companion-v1` (prior art for custody steps 9 and 10), and
   `lane/moth-suit`, `lane/moth-pilot` and `lane/swallow-7` (the owner's pair
   session; their rotation libraries are prior art).
@@ -322,7 +322,7 @@ is filed with `puck measure`.
 | Branch | Holds | Waits for |
 |---|---|---|
 | `lane/g5` | G5, the occlusion-aware rate floor; every review finding answered | a merge of the integration tip, then its windowed recipe |
-| `lane/toon-3` | the third cel model; `world.toon off` suppressing every style | the `world.toon off` fix lands alone; the model resumes with cel, the debug world's treatment ([the visual bar](#the-visual-bar)) |
+| `lane/toon-3` | the third cel model (a form normal per pixel, the shade side restored from the continuous diffuse) | prior art for the cel treatment's shade side ([the visual bar](#the-visual-bar)); its `world.toon off` fix is on the integration branch |
 | `lane/moth-suit` | the suited Moth's rebuild and the shared head | the owner's pair session |
 | `lane/moth-pilot` | the off-suit pilot; `worlds/standard/turns.puck` | the owner's pair session |
 | `lane/swallow-7` | the swallow rebuilt to a cited reference document | the owner's pair session |
@@ -2004,13 +2004,22 @@ intent is in its guide.
   where they are missing ([water](#water)).
 - [high] Cel is the debug world's treatment
   ([the ruling](../decisions/rendering.md#a-light-is-shadowed-wherever-it-lights-and-cel-shading-is-a-style-per-material)):
-  every place opts in through its materials and is judged under it, with
-  `lane/toon-3`'s fix to `world.toon off` (it suppresses every cel style, a
-  material's own included). Owed with the treatment:
-  which of the Moth's slots band (all 31 do today through `toonSelect`), and
-  the third model's record, which fixed the washed-out shade and then broke
-  shade into blotches, with near-black planes where the direction wants warm
-  mid-value mauve.
+  every place opts in through its materials (`celMaterial`) and is judged
+  under it. The valley's rock, the glacier's ice, the gallery hall and the
+  Moth's painted slots are in. Owed: the exhibits' plinths and labels, held by
+  the gap below; the valley walls' shade reading as mass, which the domes'
+  smooth macro form limits more than the shading does; each place's guide
+  naming its outside references for the treatment; and dawn and night legs.
+- [high] A palette row's shade program is copied whole into every creation
+  document that uses it, as an expression graph of about 15,800 budget units
+  (2,262 nodes) for `cel`: opting the 135 exhibits' plinths and labels into
+  `galleryStyle` (`worlds/debug/shapes.puck`'s `galleryPalette`) took one
+  compilation's work from 2M to 26M units, past `DocumentEvaluationBudget.WorkLimit`
+  (PUCK047), and would add megabytes to the world definition. `WorldShadeLowering`
+  already lowers a template call once per compilation; the copies are the cost.
+  Programs need a shared identity across documents (a document-level program
+  table a row names, or a compact canonical form), so a repeated program costs
+  once (AGENTS.md, "Ergonomic is optimal").
 - [held, the owner's ruling] The Moth and the swallow wait for a pair session
   with the owner, and no lane models either until then. Agent modeling did not
   converge: builders passed views the critic failed with pixel evidence, and
@@ -2664,10 +2673,6 @@ hang, then the cost corpus, then the unreproduced language findings.
   exports after the expansion. Merge repeated blocks or admit `export` in a
   template body, and decide whether an import's surface carries its own
   imports' exports.
-- [medium] `.puck` cannot take an imported value and override one field of it,
-  so a world wanting the standard's `celStyle` as a default that boots off
-  copies all eleven values (`worlds/debug/debug.puck`'s `render.toon`). Add an
-  object update over a `let`, or a merge builtin beside `concat`.
 - [medium] No log of author walls exists, though "Ergonomic is optimal"
   (AGENTS.md) asks for one. The walls sit in S11's audit, this packet and the
   sdf-authoring skill's evals: start the one page those link to.
@@ -3571,14 +3576,6 @@ proves itself with `puck compile` lowering to the same document.
   record goes (an `IClientSink` or a wire frame). One stream type writing
   to a record target would hold each rule once; the withdrawal chokepoint's
   step 4 (the mirror per span) is the natural place to make it.
-- [low] Two tone curves in one cel pixel: the standard's `cel` shade program
-  (`worlds/standard/shading.puck`) exposes its colour by `exposureStops` and
-  rolls it off with its own `shoulder` inside the material, and the view's
-  display pass then applies `render.tone`'s shoulder again. The program's
-  compose stage predates `render.tone`; it should hand the display pass scene
-  light and drop its own exposure and shoulder, with the `toon` row's
-  `exposure` and `shoulder` members going with it. Cel is the debug world's
-  treatment, so this is fixed first ([the ruling](../decisions/rendering.md#a-light-is-shadowed-wherever-it-lights-and-cel-shading-is-a-style-per-material)).
 - [low] File-system primitives `AtomicFile` cannot serve yet:
   `ShaderCompiler.Entries.cs` wants a write that refuses to replace;
   `DirectoryObjectBlobStoreBackend` stages through a confined handle; a lock

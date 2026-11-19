@@ -153,7 +153,9 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, SdfMeshHit meshHit, float3 
                 s.curvature, p.pixelFootprint * s.t, s.lanes, 0.0, 0.0, frameRotation, s.frameSlot, meshHit);
             sdfShadeSet_paint_coverage(shadeStamp, paintCoverage);
             float revealed;
-            if (sdfShadeBound(shadeBinding)) {
+            // A program's surface phase replaces the material layers; a program that omits it (the standard's `cel`, which
+            // only lights and composes) keeps the layers as its surface, so a banded material keeps its wear and flow.
+            if (sdfShadeHas(shadeBinding, 0u)) {
                 sdfShadeSurfacePhase(shadeBinding, shadeStamp, shadeMaterial, normal, revealed);
             } else {
 #if defined(SDF_VIEWS_OMIT_MATERIALS)
@@ -196,8 +198,6 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, SdfMeshHit meshHit, float3 
             shadeSurface.normal = normal;
             shadeSurface.rayDirection = p.rayDirection;
             shadeSurface.material = shadeMaterial;
-            shadeSurface.toon = sdfToonStyle(shadeMaterial);
-            if (sdfShadeBound(shadeBinding)) shadeSurface.toon = (SdfToonStyle)0;
             shadeSurface.ambientOcclusion = ambientOcclusion;
             shadeSurface.shadowVisibility = shadowVisibility;
             shadeSurface.shadowMeasured = shadowMeasured;
@@ -207,9 +207,6 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, SdfMeshHit meshHit, float3 
 
             float3 radiance = indirectSky ? 0.0 : worldSkyIrradiance(normal) * ambientOcclusion;
             float3 ambientTerm = radiance;
-            SdfToonStyle style = sdfToonStyle(shadeMaterial);
-            bool toon = !sdfShadeBound(shadeBinding) && sdfToonEnabled(style);
-            if (toon) { radiance *= style.shadow.rgb; }
             float3 rim = float3(0.0, 0.0, 0.0);
             float3 specular = float3(0.0, 0.0, 0.0);
             float attenuation = 1.0;
@@ -229,24 +226,16 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, SdfMeshHit meshHit, float3 
 #endif
 
             color = sdfMaterialShade(shadeMaterial, radiance, normal, p.rayDirection);
-            if (toon) {
-                // The banded lights shade the paint flat, metals included; the environment lobe, the rim and the bounded
-                // highlights join after it as for any material.
-                color = shadeMaterial.albedo * radiance;
-            }
 
             float3 indirect = sdfMeshIndirectSeen(probes, normal);
-            if (toon) { indirect *= style.shadow.rgb; }
             float3 indirectTerm = indirect * passGroup.indirectApply.rgb * (shadeMaterial.receive * passGroup.indirectApply.w
                 * lerp(1.0, ambientOcclusion, passGroup.indirectContact));
-            color += indirectTerm * shadeMaterial.albedo * (toon ? 1.0 : (1.0 - shadeMaterial.metal));
+            color += indirectTerm * shadeMaterial.albedo * (1.0 - shadeMaterial.metal);
             // Authored fill is the indirect-off look: a share of the key light's luminance on a white surface, where no
             // indirect light is applied. It never adds a second approximation to the volume's light.
             if (passGroup.indirectApply.w <= 0.0) {
-                float fill = toon ? 1.0 - sdfToonStep(style, dot(normal, keyDirection))
-                    : 1.0 - max(dot(normal, keyDirection), 0.0);
-                float3 fillTint = toon ? style.shadow.rgb : 1.0;
-                color += shadeMaterial.albedo * shadeMaterial.fill * worldKeyRadiance() * fill * ambientOcclusion * fillTint;
+                float fill = 1.0 - max(dot(normal, keyDirection), 0.0);
+                color += shadeMaterial.albedo * shadeMaterial.fill * worldKeyRadiance() * fill * ambientOcclusion;
             }
 
             // The environment the specular lobe reflects, for a material with a specular response: the lighting-visible
@@ -276,7 +265,7 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, SdfMeshHit meshHit, float3 
             color += specular;
 
             float3 selfEmission = (shadeMaterial.albedo * shadeMaterial.emissive);
-            color = toon ? color * attenuation : selfEmission + (color - selfEmission) * attenuation;
+            color = selfEmission + (color - selfEmission) * attenuation;
 
             // The local adaptation (SdfExposure.Local): the surface's exposure moves that share of the way from the
             // view's toward the one its own illumination would meter, the light arriving at it (the lights' diffuse
@@ -291,15 +280,12 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, SdfMeshHit meshHit, float3 
             color = sdfShadeComposePhase(shadeBinding, shadeStamp, radiance - ambientTerm, rim, specular, attenuation,
                 indirectTerm + ambientTerm, reflectionTerm, environmentTerm, localGain, color);
 
-            // The stylized curvature terms (cavity darkening, ridge light, ink outline) apply to the color the view's
-            // exposure shows, at the strength the surface's exposed illumination reaches against a white surface the
-            // meter aims for: a lit room keeps its edge highlights and ink, and a dim room's edges stay dim.
-            if (toon) {
-                color = sdfToonExpose(style, color);
-                float ink = sdfToonOutline(style, p, s, surfacePoint);
-                color *= lerp(1.0, style.ink, ink);
-                color += selfEmission;
-            } else if (sdfShadeBound(shadeBinding) && sdfToonEnabled(style)) {
+            // A styled material's ink multiplies its scene light, which the display pass alone tones; a material with
+            // no style takes the stylized curvature terms (cavity darkening, ridge light) at the strength the
+            // surface's exposed illumination reaches against a white surface the meter aims for, so a lit room keeps
+            // its edge highlights and a dim room's edges stay dim.
+            SdfToonStyle style = sdfToonStyle(shadeMaterial);
+            if (sdfToonEnabled(style)) {
                 color *= lerp(1.0, style.ink, sdfToonOutline(style, p, s, surfacePoint));
             } else if (curvatureShading) {
                 float lit = saturate(((incoming * localGain) * passGroup.exposure) / SDF_REFERENCE_WHITE);

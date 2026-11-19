@@ -7,7 +7,13 @@ namespace Puck.World.Client;
 // Palette lowering shared by creation and lattice emitters.
 internal static class WorldSurfaceMaterials {
     // Shared palette lowering for creations and lattice surfaces. Callers resolve parented paint frames.
-    internal static SdfMaterial Resolve(PaletteEntryDocument? entry, Vector3 albedo, WorldBakedColors colors, float scale = 1f, SdfPaint[]? paints = null) => new(
+    internal static SdfMaterial Resolve(PaletteEntryDocument? entry, Vector3 albedo, WorldBakedColors colors, float scale = 1f, SdfPaint[]? paints = null) {
+        // A selected look replaces the slot's style and program together; a value naming no case keeps the slot's own.
+        var look = ((entry?.ToonSelect is { } select) ? select.CaseOf(value: colors.ResolveWhole(token: select.State)) : null);
+        var toon = ((look is null) ? entry?.Toon : look.Toon);
+        var shade = ((look is null) ? entry?.Shade : look.Shade);
+
+        return new(
                 Albedo: albedo,
                 Emissive: (entry?.Emissive ?? 0f),
                 Roughness: (entry?.Roughness ?? SdfMaterial.DefaultRoughness),
@@ -28,9 +34,10 @@ internal static class WorldSurfaceMaterials {
                 Paints: paints,
                 EmissiveLane: entry?.EmissiveLane,
                 Glass: entry?.Glass?.ToGlass(resolve: colors.LayerColor, scale: scale),
-                Toon: (((entry?.ToonSelect is { } select) ? select.CaseOf(value: colors.ResolveWhole(token: select.State)) : null) ?? entry?.Toon)?.ToToon(),
+                Toon: toon?.ToToon(),
                 Flow: entry?.Flow?.ToFlow(resolve: colors.LayerColor, scale: scale),
-                Shade: ((entry?.Shade is { } shade) ? SdfShadeProgram.Compile(definition: shade) : null)
+                Shade: ((shade is null) ? null : SdfShadeProgram.Compile(definition: shade))
             );
+    }
 
 }

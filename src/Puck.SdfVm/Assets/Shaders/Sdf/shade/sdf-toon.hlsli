@@ -1,68 +1,44 @@
-// Cel material response in scene luminance. Screens and sky never call this module.
-// A cel style is per material (SdfToon): a material that authors one carries it in its rows 22 to 25, and every other
-// material inherits the world's default style from the pass block (render.toon, which world.toon overrides). Both are
-// laid out alike: bands (mode, threshold, softness, specular size), shadow (tint, exposure gain), outline (width in
-// output pixels, halving distance, crease cosine, shoulder) and ink (tint; the pass block's w is the render grid the
-// outline width scales by). The mode is 0 for off (a material's own -1, so its zero still means inherit), 1 for the band
-// shaping the light's cosine with its visibility kept as a separate factor, 2 for the band over cosine times visibility.
+// A cel style's engine half: whether a material is styled and the ink it outlines with. The banding itself is the
+// material's shade program (the standard's `cel`, worlds/standard/shading.puck), never engine code: a style row only
+// marks its material styled and carries what a per-pixel program cannot express, the outline that reads neighbour depth
+// and normal (sdf-toon-outline.hlsli). Screens and sky never call this module.
+// A material that authors a style carries it in its rows 22 and 25 (SdfToon.WriteRows), and every other material
+// inherits the world's default style from the pass block (render.toon). Both are laid out alike: outline (mode, width in
+// output pixels, halving distance, crease cosine) and ink (tint; the pass block's w is the render grid the outline width
+// scales by, a material's w its glass shadow density). A material's mode is 1 for on, -1 for off (enabled: false) and 0
+// to inherit; the world default's is 1 for on and 0 for off, and minus one less that while the live world.toon off
+// suppresses every style (-1 for a default authored off, -2 for one authored on).
 #ifndef SHADE_SDF_TOON_HLSLI
 #define SHADE_SDF_TOON_HLSLI
 
 struct SdfToonStyle {
-    float4 bands;
-    float4 shadow;
-    float4 outline;
+    float mode;
+    float3 outline;
     float3 ink;
 };
 
-// The style a material shades with: its own when it authors one, else the world's default.
+// Whether the live world.toon off suppresses every style, a material's own included.
+bool sdfToonSuppressed() { return passGroup.toonOutline.x < 0.0; }
+
+// Whether a material is styled as authored, the lever aside: its own style when it authors one, else the world's
+// default. Every reader of a material's style row asks this, so the suppression and the inheritance have one rule.
+bool sdfToonAuthored(float ownMode) {
+    float fallback = passGroup.toonOutline.x;
+    return (ownMode != 0.0) ? (ownMode > 0.0) : ((fallback > 0.0) || (fallback < -1.5));
+}
+
+// The style a material shades with: its own when it authors one, else the world's default; off while suppressed.
 SdfToonStyle sdfToonStyle(SdfMaterialData material) {
     SdfToonStyle style;
-    bool own = (material.toonBands.x != 0.0);
+    bool own = (material.toonOutline.x != 0.0);
 
-    style.bands = (own ? material.toonBands : passGroup.toonBands);
-    style.shadow = (own ? material.toonShadow : passGroup.toonShadow);
-    style.outline = (own ? material.toonOutline : passGroup.toonOutline);
+    style.mode = ((!sdfToonSuppressed() && sdfToonAuthored(material.toonOutline.x)) ? 1.0 : 0.0);
+    style.outline = (own ? material.toonOutline.yzw : passGroup.toonOutline.yzw);
     style.ink = (own ? material.toonInk : passGroup.toonInk.rgb);
-    style.bands.x = max(style.bands.x, 0.0);
     style.outline.x *= passGroup.toonInk.w;
     return style;
 }
 
-bool sdfToonEnabled(SdfToonStyle style) { return style.bands.x > 0.0; }
-
-// The band over a response in [0, 1]: a soft step of the style's softness about its threshold.
-float sdfToonStep(SdfToonStyle style, float response) {
-    float halfWidth = max(style.bands.z * 0.5, 0.0005);
-    return smoothstep(style.bands.y - halfWidth, style.bands.y + halfWidth, saturate(response));
-}
-
-// A light's banded diffuse share at a cosine (a wrapped one included) under its visibility. The default shape bands the
-// cosine alone and multiplies the visibility after, so the cascades' filtered penumbra keeps its softness and the
-// band's edge stays where the surface turns from the light; the combined shape (mode 2) bands both together, the harder
-// look in which a penumbra snaps to the band's edge.
-float sdfToonBand(SdfToonStyle style, float cosine, float visibility) {
-    return ((style.bands.x > 1.5) ? sdfToonStep(style, saturate(cosine) * saturate(visibility))
-        : (sdfToonStep(style, cosine) * saturate(visibility)));
-}
-
-float3 sdfToonSpecular(SdfToonStyle style, SdfMaterialData material, float3 normal, float3 view, float3 light, float radiance, float visibility) {
-    float3 halfway = light + view;
-    float lengthSquared = dot(halfway, halfway);
-    float cosine = dot(normal, halfway * rsqrt(max(lengthSquared, 1.0e-8)));
-    float size = style.bands.w * lerp(0.5, 1.5, material.roughness);
-    // A narrow analytic edge survives subpixel movement without an unbounded GGX peak.
-    float highlight = smoothstep(1.0 - size, 1.0 - size + min(size * 0.15, 0.003), cosine);
-    float3 reflectance = lerp(material.specular.xxx, material.albedo, material.metal);
-    float gain = (1.0 - 0.75 * material.roughness) * 2.0;
-    return reflectance * (highlight * gain * radiance * sdfToonBand(style, dot(normal, light), visibility));
-}
-
-// Compress all channels by the same factor, preserving paint chroma. Emission is added afterwards.
-float3 sdfToonExpose(SdfToonStyle style, float3 reflected) {
-    float3 exposed = max(reflected, 0.0) * (passGroup.exposure * style.shadow.w);
-    float peak = max(exposed.r, max(exposed.g, exposed.b));
-    return exposed / ((1.0 + peak * style.outline.w) * max(passGroup.exposure, 1.0e-12));
-}
+bool sdfToonEnabled(SdfToonStyle style) { return style.mode > 0.0; }
 
 #endif

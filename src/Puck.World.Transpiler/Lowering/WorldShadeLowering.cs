@@ -35,7 +35,17 @@ internal sealed class WorldShadeLowering {
     // The phase whose block is lowering, or null outside a phase block (a template's top-level let).
     private SdfShadePhase? m_phase;
 
+    // One compilation's lowered template calls, keyed by the template and its evaluated arguments: a palette row a let or
+    // a template repeats (every exhibit's plinth) lowers its program once, and each further use costs a copy.
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<DocumentEvaluationBudget, Dictionary<TemplateNode, Dictionary<string, JsonNode>>> Lowered = new();
+
     public static JsonNode? Lower(ExpressionNode expression, DocumentScope scope) {
+        var cacheKey = CacheKeyOf(expression: expression, scope: scope);
+        var lowered = Lowered.GetValue(key: scope.Budget, createValueCallback: static _ => new(comparer: ReferenceEqualityComparer.Instance));
+
+        if ((cacheKey is { } known) && lowered.TryGetValue(key: known.Template, value: out var calls) && calls.TryGetValue(key: known.Arguments, value: out var cached)) {
+            return scope.Budget.Copy(value: cached, span: expression.Span);
+        }
         try {
             var lowering = new WorldShadeLowering();
 
@@ -46,8 +56,13 @@ internal sealed class WorldShadeLowering {
                 lowering.m_outputs.OrderBy(keySelector: p => p.Key.Item1).ThenBy(p => p.Key.Item2, StringComparer.Ordinal)
                     .Select(selector: p => new SdfShadeOutput(p.Key.Item1, p.Key.Item2, p.Value)).ToArray());
             var program = SdfShadeProgram.Compile(definition: definition);
+            var result = JsonSerializer.SerializeToNode(program.Definition, CreationJsonContext.Document.SdfShadeDefinition);
 
-            return JsonSerializer.SerializeToNode(program.Definition, CreationJsonContext.Document.SdfShadeDefinition);
+            if ((cacheKey is { } key) && (result is not null)) {
+                if (!lowered.TryGetValue(key: key.Template, value: out var byArguments)) { lowered[key.Template] = byArguments = new(comparer: StringComparer.Ordinal); }
+                byArguments[key.Arguments] = result.DeepClone();
+            }
+            return result;
         } catch (SdfShadeException error) {
             scope.Diagnostics.ReportError(code: error.Code, message: error.Message, span: expression.Span);
             return null;
@@ -60,6 +75,26 @@ internal sealed class WorldShadeLowering {
         }
     }
 
+    // A shade template call's identity in this compilation: the template and each argument's name and value, which is all
+    // a lowering reads of the call (BindParameter evaluates every argument as data or a structural constant). Null for
+    // anything else, and for a call whose arguments do not evaluate cleanly, which then lowers on its own.
+    private static (TemplateNode Template, string Arguments)? CacheKeyOf(ExpressionNode expression, DocumentScope scope) {
+        if ((expression is not CallExpressionNode call) || !scope.Templates.TryGetValue(key: call.Name, value: out var template) || !template.IsShade) {
+            return null;
+        }
+        var reported = scope.Diagnostics.Count;
+        var text = new System.Text.StringBuilder();
+
+        try {
+            foreach (var argument in call.Arguments) {
+                text.Append(value: argument.Name).Append(value: '=')
+                    .Append(value: (DocumentLowering.EvaluateValue(expr: argument.Value, scope: scope)?.ToJsonString() ?? "null")).Append(value: ';');
+            }
+        } catch (DocumentEvaluationException) {
+            return null;
+        }
+        return ((scope.Diagnostics.Count == reported) ? (template, text.ToString()) : null);
+    }
     // A program is a shade template call, a block of phases, a binding of either, an admitted program held as a value (a
     // palette row's `shade`, read as `base.shade`), or a list of programs composed in order. In a composition each
     // element's outputs replace the same outputs of the elements before it, and its surface phase reads what they wrote

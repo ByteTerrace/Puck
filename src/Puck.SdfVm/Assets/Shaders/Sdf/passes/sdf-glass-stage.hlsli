@@ -111,7 +111,6 @@ float3 sdfGlassReceived(SdfMaterialData material, float3 position, float3 normal
     surface.normal = normal;
     surface.rayDirection = rayDirection;
     surface.material = material;
-    surface.toon = (SdfToonStyle)0;
     surface.ambientOcclusion = 1.0;
     surface.shadowVisibility = float4(1.0, 1.0, 1.0, 1.0);
     surface.shadowMeasured = float4(1.0, 1.0, 1.0, 1.0);
@@ -332,12 +331,15 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
                 curvature, footprint * t, sdfFrameLanes(frameSlot), sdfGlassContact(material, opaque - t), share, layerRotation, frameSlot, hit);
             sdfShadeSet_surface_geometricNormal(shadeStamp, face);
             sdfShadeSet_paint_coverage(shadeStamp, paintCoverage);
-            if (sdfShadeBound(shadeBinding)) {
+            // A program's surface phase replaces the flow layer; a program that omits it (one that only lights or composes)
+            // keeps the layer as its surface, as the views stage does.
+            if (sdfShadeHas(shadeBinding, 0u)) {
                 sdfShadeSurfacePhase(shadeBinding, shadeStamp, material, normal, revealed);
                 roughness = material.roughness;
             } else {
                 normal = sdfShadeFlow(surfacePoint, normal, layerPoint, layerNormal, layerRotation, frameSlot, hit, (footprint * t), sdfFrameLanes(frameSlot),
                     sdfGlassContact(material, (opaque - t)), material, revealed);
+                if (sdfShadeBound(shadeBinding)) { sdfShadeSurfaceInputs(shadeStamp, material, normal, revealed); }
             }
 
             // The medium's share of what the interface shows over its glass, the rest what lies behind. A lone

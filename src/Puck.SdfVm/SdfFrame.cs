@@ -338,8 +338,8 @@ public sealed record SdfFrame(
     /// through before the encode (<c>render.tone</c>, the display pass); the default applies no curve.</summary>
     public SdfToneCurve Tone { get; init; }
 
-    /// <summary>The world's default cel style, which every material without a style of its own shades with, applied
-    /// before temporal reconstruction; the default is off.</summary>
+    /// <summary>The world's default cel style (its ink and styled mark), which every material without a style of its own
+    /// takes, and the live suppression of every style (<see cref="SdfToon.Suppressed"/>); the default is off.</summary>
     public SdfToon Toon { get; init; }
     /// <summary>Measures authored programs beside the material layers, until their migration removes the lever.</summary>
     public bool ShadePrograms { get; init; }
