@@ -30,11 +30,15 @@ internal sealed partial class SdfMeshProbeGpuWork {
         return true;
     }
 
+    // The scene words the region's host copy keeps: the root words the last chunk writes whole (SdfMeshProbeTrace.RootWords),
+    // and the size a region starts at. Every other word is owed from its chunk and never shadowed.
+    private const int RootBytes = SdfMeshProbeTrace.RootWords * sizeof(uint);
+
     private void RecordSceneUpload(SceneChunk chunk, in SdfGpuWorkRecording recording) {
         var upload = m_sceneUpload!;
         var export = upload.Export!;
-        m_sceneRegion ??= m_tables.CreateProbeSceneRegion(sizeof(uint), SdfGpuWork.SlotCount);
-        m_sceneRegion.Shadow(chunk, sizeof(uint));
+        m_sceneRegion ??= m_tables.CreateProbeSceneRegion(RootBytes, SdfGpuWork.SlotCount);
+        m_sceneRegion.Shadow(chunk, RootBytes);
         if (export.Words * 4L > m_sceneRegion.ByteCount) {
             m_sceneCarry = m_sceneRegion.Grow(sizeof(uint) * GpuCapacity.Headroom(required: export.Words, ceiling: (GpuRegion.MaxByteCount / sizeof(uint)), divisor: 8));
         }

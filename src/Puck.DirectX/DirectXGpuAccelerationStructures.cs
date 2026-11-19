@@ -29,8 +29,10 @@ public sealed unsafe class DirectXGpuAccelerationStructures(DirectXDeviceContext
         }
         RequireRayQuery();
 
+        // The prebuild query sees the description the build records, addresses included: a null index or vertex address
+        // describes other geometry than the indexed triangles built.
         var geometry = default(D3D12_RAYTRACING_GEOMETRY_DESC);
-        var description = Describe(geometry: &geometry, inputs: in inputs, addresses: false);
+        var description = Describe(geometry: &geometry, inputs: in inputs);
 
         if (((IUnknown*)Device)->QueryInterface(ppvObject: out ID3D12Device5* device5).Failed) {
             throw new NotSupportedException(message: "This Direct3D 12 device has no ID3D12Device5.");
@@ -93,11 +95,13 @@ public sealed unsafe class DirectXGpuAccelerationStructures(DirectXDeviceContext
     /// tracing and a bottom level for compaction.</summary>
     /// <param name="geometry">Where a bottom level's one geometry description is written; it must outlive the use of
     /// the returned inputs.</param>
-    /// <param name="inputs">The neutral inputs.</param>
-    /// <param name="addresses">Whether to read the source buffer's address; sizing needs none.</param>
+    /// <param name="inputs">The neutral inputs, whose source buffer's address every input address is read from, for a
+    /// prebuild query as for the build.</param>
     /// <returns>The native inputs.</returns>
-    public static D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS Describe(D3D12_RAYTRACING_GEOMETRY_DESC* geometry, in GpuAccelerationStructureInputs inputs, bool addresses) {
-        var source = ((addresses && (inputs.Source is { } buffer)) ? ((ID3D12Resource*)buffer.BufferHandle)->GetGPUVirtualAddress() : 0UL);
+    /// <exception cref="ArgumentNullException"><paramref name="inputs"/> names no source buffer.</exception>
+    public static D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS Describe(D3D12_RAYTRACING_GEOMETRY_DESC* geometry, in GpuAccelerationStructureInputs inputs) {
+        ArgumentNullException.ThrowIfNull(argument: inputs.Source, paramName: nameof(inputs));
+        var source = ((ID3D12Resource*)inputs.Source.BufferHandle)->GetGPUVirtualAddress();
         var description = new D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS {
             DescsLayout = D3D12_ELEMENTS_LAYOUT.D3D12_ELEMENTS_LAYOUT_ARRAY,
             NumDescs = ((inputs.Level == GpuAccelerationStructureLevel.Top) ? inputs.Count : 1U),
@@ -106,7 +110,7 @@ public sealed unsafe class DirectXGpuAccelerationStructures(DirectXDeviceContext
         if (inputs.Level == GpuAccelerationStructureLevel.Top) {
             description.Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE.D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL;
             description.Flags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAGS.D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PREFER_FAST_TRACE;
-            description.Anonymous.InstanceDescs = ((source == 0UL) ? 0UL : (source + inputs.InstanceOffsetBytes));
+            description.Anonymous.InstanceDescs = (source + inputs.InstanceOffsetBytes);
 
             return description;
         }
@@ -116,11 +120,11 @@ public sealed unsafe class DirectXGpuAccelerationStructures(DirectXDeviceContext
             Type = D3D12_RAYTRACING_GEOMETRY_TYPE.D3D12_RAYTRACING_GEOMETRY_TYPE_TRIANGLES,
         };
         geometry->Anonymous.Triangles = new D3D12_RAYTRACING_GEOMETRY_TRIANGLES_DESC {
-            IndexBuffer = ((source == 0UL) ? 0UL : (source + inputs.IndexOffsetBytes)),
+            IndexBuffer = (source + inputs.IndexOffsetBytes),
             IndexCount = checked(inputs.Count * 3U),
             IndexFormat = DXGI_FORMAT.DXGI_FORMAT_R32_UINT,
             VertexBuffer = new D3D12_GPU_VIRTUAL_ADDRESS_AND_STRIDE {
-                StartAddress = ((source == 0UL) ? 0UL : (source + inputs.VertexOffsetBytes)),
+                StartAddress = (source + inputs.VertexOffsetBytes),
                 StrideInBytes = inputs.VertexStrideBytes,
             },
             VertexCount = inputs.VertexCount,

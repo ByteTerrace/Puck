@@ -51,6 +51,8 @@ public sealed partial class SdfWorldTables {
 
     // Resolve joins the same reloadable slot table only when a view needs it.
     internal SdfWorldPipelines Pipelines => m_pipelines;
+    // The device the tables were created on.
+    internal IGpuDeviceContext Device => m_deviceContext;
 
     // Whether a view's passes built against these tables can follow the other tables: the surface kernel covers the
     // compute layout every per-view pass shares, mesh its graphics layout and render pass, and an acquired resolve

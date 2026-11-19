@@ -20,7 +20,7 @@ public sealed partial class SdfWorldTables {
     public int InstanceCapacity => m_instanceCapacity;
 
     /// <summary>Refuses, by name and before anything is allocated, tables whose descriptor pools
-    /// (<see cref="DescriptorPools"/>) the device's heaps cannot admit (<see cref="IGpuBindings.CanAdmit"/>), so nothing
+    /// (<see cref="DescriptorPoolsOf"/>) the device's heaps cannot admit (<see cref="IGpuBindings.CanAdmit"/>), so nothing
     /// grows. The constructor calls it first, with the arguments it was given, so every creation site is admitted and one
     /// building through a pipeline source's refusing build records the refusal like any other.</summary>
     /// <param name="device">The device the tables would be created on.</param>
@@ -34,7 +34,7 @@ public sealed partial class SdfWorldTables {
 
         if (!device.Services.Bindings.CanAdmit(
             owner: "SDF world tables",
-            pools: DescriptorPools,
+            pools: DescriptorPoolsOf(device: device),
             refusal: out var refusal
         )) {
             throw new GpuDescriptorHeapRefusalException(message: refusal);
@@ -54,9 +54,15 @@ public sealed partial class SdfWorldTables {
         GpuBufferStridedCopy.PoolSizes(frameSlotCount: FrameRingSize, recordingCount: 2),
         SdfMeshBakeGpuWork.PoolSizes,
         SdfMeshProbeGpuWork.PoolSizes,
-        // Created only on a device that runs the probe kernels' ray-query variants; admitted on every device.
-        SdfMeshProbeGpuWork.RaysPoolSizes,
     ];
+    /// <summary>Returns every descriptor pool the tables create on a device: <see cref="DescriptorPools"/>, then the probe
+    /// trace's ray-query pool on a device that runs the probe kernels' ray-query variants
+    /// (<see cref="SdfMeshProbeGpuWork.RunsRays"/>), the one predicate the probe client creates that pool by.</summary>
+    /// <param name="device">The device the tables would be created on.</param>
+    /// <returns>The pools.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="device"/> is <see langword="null"/>.</exception>
+    public static GpuDescriptorPoolSizes[] DescriptorPoolsOf(IGpuDeviceContext device) =>
+        SdfMeshProbeGpuWork.RunsRays(device: device) ? [.. DescriptorPools, SdfMeshProbeGpuWork.RaysPoolSizes] : DescriptorPools;
     /// <summary>Gets the one descriptor pool the tables create themselves, the statement their construction creates the
     /// pool from: the World set per ring slot, holding the World group of <see cref="SdfWorldInterfaces.World"/>.</summary>
     public static GpuDescriptorPoolSizes DescriptorPoolSizes {

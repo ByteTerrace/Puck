@@ -1,5 +1,6 @@
 using System.Buffers;
 using System.Buffers.Binary;
+using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using Puck.Abstractions.Gpu;
 
@@ -29,6 +30,14 @@ internal sealed partial class SdfMeshProbeGpuWork {
     private long m_nextSerial = 1;
     private Top? m_top;
     private bool m_structureInFlight;
+    // A structure job the service handed back (no room, a failed recording) waits this long before the next is offered,
+    // doubling to MostStructureBackoff while they keep coming back, so the software walk's queries are taken meanwhile.
+    // A finished structure job or a new published scene clears it.
+    private static readonly TimeSpan LeastStructureBackoff = TimeSpan.FromMilliseconds(250);
+    private static readonly TimeSpan MostStructureBackoff = TimeSpan.FromSeconds(8);
+    private TimeSpan m_structureBackoff;
+    private long m_structureRetryAt;
+    private SdfMeshIrradianceScene? m_structureBackoffScene;
     private long m_structureBytes;
     private long m_topsBuilt;
 
@@ -45,15 +54,23 @@ internal sealed partial class SdfMeshProbeGpuWork {
         }
     }
 
-    // The device's structures when it runs every ray-query variant the client dispatches, or null.
-    private static IGpuAccelerationStructures? StructuresOf(SdfWorldTables tables) {
-        var pipelines = tables.Pipelines;
+    /// <summary>Returns whether a device runs the probe kernels' ray-query variants and has acceleration structures: the
+    /// one predicate the client creates its ray-query pool and sets by, and the tables' admission counts that pool by
+    /// (<see cref="SdfWorldTables.DescriptorPoolsOf"/>).</summary>
+    /// <param name="device">The device.</param>
+    /// <returns><see langword="true"/> when the device runs every variant the client dispatches.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="device"/> is <see langword="null"/>.</exception>
+    internal static bool RunsRays(IGpuDeviceContext device) {
+        ArgumentNullException.ThrowIfNull(argument: device);
 
-        return ((tables.Gpu.AccelerationStructures is { } structures) &&
-            pipelines.Leases(kernel: SdfKernel.ProbeTraceRays) && pipelines.Leases(kernel: SdfKernel.ProbeRelightRays) && pipelines.Leases(kernel: SdfKernel.ProbeCameraSampleRays))
-            ? structures
-            : null;
+        return ((device.Services.AccelerationStructures is not null) &&
+            SdfWorldPipelines.Runs(device: device, kernel: SdfKernel.ProbeTraceRays) && SdfWorldPipelines.Runs(device: device, kernel: SdfKernel.ProbeRelightRays) &&
+            SdfWorldPipelines.Runs(device: device, kernel: SdfKernel.ProbeCameraSampleRays));
     }
+    // The device's structures when it runs every ray-query variant the client dispatches, or null. The pipeline set leases
+    // exactly the variants the device runs (SdfWorldPipelines.Acquire), so this agrees with RunsRays.
+    private static IGpuAccelerationStructures? StructuresOf(SdfWorldTables tables) =>
+        RunsRays(device: tables.Device) ? tables.Gpu.AccelerationStructures : null;
     // The top level a query whose kernel traces takes: the published one when it stands for the published scene, the
     // frame's lever leaves ray queries on and the variant's pipeline is built; null takes the software walk. Under the
     // gate, as TryTake admits the query.
@@ -117,8 +134,12 @@ internal sealed partial class SdfMeshProbeGpuWork {
     private bool TryTakeStructures(SdfWorldTables tables, [NotNullWhen(true)] out object? job, out double estimatedSeconds) {
         job = null;
         estimatedSeconds = 0;
-        if ((m_structures is null) || m_structureInFlight || !m_volume.RayQueries || (m_scene is not { } scene) ||
+        if (m_structures is null) { return false; }
+        ReleaseStaleStructures();
+        if (m_structureInFlight || !m_volume.RayQueries || (m_scene is not { } scene) ||
             ((m_top is { } top) && SdfMeshIrradianceScene.SameGpuContent(first: top.Scene, second: scene))) { return false; }
+        if ((m_structureBackoff != TimeSpan.Zero) && SdfMeshIrradianceScene.SameGpuContent(first: m_structureBackoffScene, second: scene) &&
+            (Stopwatch.GetTimestamp() < m_structureRetryAt)) { return false; }
 
         var count = scene.GpuInstanceCount;
 
@@ -279,6 +300,7 @@ internal sealed partial class SdfMeshProbeGpuWork {
         }
         lock (m_gate) {
             m_structureInFlight = false;
+            m_structureBackoff = TimeSpan.Zero;
             if (readback.GpuSeconds is { } seconds) {
                 m_structureRate.Observe(seconds: seconds, units: Math.Max(val1: 1L, val2: job.Units));
                 m_volume.Counters.Add(SdfMeshIrradiance.GpuStructureNanoseconds, (long)(seconds * 1e9));
@@ -307,7 +329,7 @@ internal sealed partial class SdfMeshProbeGpuWork {
                 default:
                     var replaced = m_top;
 
-                    m_top = new Top(structure: job.Created[0], scene: job.Scene!, instances: job.Instances!);
+                    m_top = new Top(structure: job.Created[0], instances: job.Instances!) { Scene = job.Scene! };
                     job.Scene = null;
                     m_topsBuilt++;
                     if (replaced is not null) {
@@ -321,9 +343,14 @@ internal sealed partial class SdfMeshProbeGpuWork {
             Land(serial: job.Serial);
         }
     }
-    // Hands a structure job back: what it created leaves service unused, and its bottoms are owed again. Under the gate.
+    // Hands a structure job back: what it created leaves service unused, its bottoms are owed again, and structure work
+    // backs off for the scene so the software walk's queries are taken first. Under the gate.
     private void AbandonStructures(StructureJob job) {
         m_structureInFlight = false;
+        m_structureBackoff = ((m_structureBackoff == TimeSpan.Zero) ? LeastStructureBackoff : TimeSpan.FromTicks(Math.Min(MostStructureBackoff.Ticks, 2 * m_structureBackoff.Ticks)));
+        m_structureRetryAt = Stopwatch.GetTimestamp() + (long)(m_structureBackoff.TotalSeconds * Stopwatch.Frequency);
+        m_structureBackoffScene?.Dispose();
+        m_structureBackoffScene = m_scene?.Acquire();
         foreach (var structure in job.Created) { Retire(structure: structure); }
         job.Created.Clear();
         if (job.Builds is { } builds) {
@@ -336,7 +363,33 @@ internal sealed partial class SdfMeshProbeGpuWork {
         job.Scene = null;
         Land(serial: job.Serial);
     }
-    // Retires every bottom neither the published top nor the published scene names. Under the gate.
+    // Takes out of service what the current publication no longer uses: with the lever off, every structure; otherwise a
+    // top level whose scene is no longer the published one, and the bottoms only it named. A top whose scene the client
+    // replaced with one exporting the same words (a trimmed copy) claims the replacement instead, so it pins no scene the
+    // client let go. Under the gate.
+    private void ReleaseStaleStructures() {
+        if (m_top is { } top) {
+            if (!m_volume.RayQueries || !SdfMeshIrradianceScene.SameGpuContent(first: top.Scene, second: m_scene)) {
+                Retire(structure: top.Structure);
+                top.Scene.Dispose();
+                m_top = null;
+                RetireUnnamedBottoms();
+            } else if (!ReferenceEquals(objA: top.Scene, objB: m_scene)) {
+                var adopted = m_scene!.Acquire();
+
+                top.Scene.Dispose();
+                top.Scene = adopted;
+            }
+        }
+        if (!m_volume.RayQueries && (m_bottoms.Count != 0)) { RetireUnnamedBottoms(); }
+        if ((m_structureBackoffScene is { } deferred) && !SdfMeshIrradianceScene.SameGpuContent(first: deferred, second: m_scene)) {
+            deferred.Dispose();
+            m_structureBackoffScene = null;
+            m_structureBackoff = TimeSpan.Zero;
+        }
+    }
+    // Retires every bottom neither the published top nor, while the lever is on, the published scene names. Under the
+    // gate.
     private void RetireUnnamedBottoms() {
         var named = new HashSet<SdfMeshIrradianceScene.Geometry>(comparer: ReferenceEqualityComparer.Instance);
 
@@ -345,7 +398,7 @@ internal sealed partial class SdfMeshProbeGpuWork {
                 if (bottom is not null) { _ = named.Add(item: bottom.Geometry); }
             }
         }
-        if (m_scene is { } scene) {
+        if (m_volume.RayQueries && (m_scene is { } scene)) {
             for (var index = 0; (index < scene.GpuInstanceCount); index++) { _ = named.Add(item: scene.GpuInstance(index: index).Geometry); }
         }
         foreach (var (geometry, bottom) in m_bottoms.ToArray()) {
@@ -373,6 +426,8 @@ internal sealed partial class SdfMeshProbeGpuWork {
             top.Scene.Dispose();
             m_top = null;
         }
+        m_structureBackoffScene?.Dispose();
+        m_structureBackoffScene = null;
         m_structureBytes = 0;
         if (m_raysPool != 0) { m_gpu.Bindings.DestroyPool(m_raysPool); }
     }
@@ -386,11 +441,11 @@ internal sealed partial class SdfMeshProbeGpuWork {
         public IGpuAccelerationStructure? Structure { get; set; }
         public ulong CompactedBytes { get; set; }
     }
-    // The published top level, the scene whose draws are its instances (a claim), and each instance's bottom (null for a
-    // draw of no triangles, which has no instance).
-    private sealed class Top(IGpuAccelerationStructure structure, SdfMeshIrradianceScene scene, Bottom?[] instances) {
+    // The published top level, the scene whose draws are its instances (a claim, moved to an equivalent scene the client
+    // adopts), and each instance's bottom (null for a draw of no triangles, which has no instance).
+    private sealed class Top(IGpuAccelerationStructure structure, Bottom?[] instances) {
         public IGpuAccelerationStructure Structure { get; } = structure;
-        public SdfMeshIrradianceScene Scene { get; } = scene;
+        public required SdfMeshIrradianceScene Scene { get; set; }
         public Bottom?[] Instances { get; } = instances;
     }
     private enum StructureKind { Bottoms, Compaction, Top }

@@ -141,12 +141,15 @@ public sealed partial class SdfWorldTablesWorkLawTests {
         Assert.Null(WorkType.GetField("m_sceneUpload", Members)!.GetValue(client));
     }
 
+    // An upload of the export's words as the producer cuts them: four chunks past the root words, then the root words
+    // whole, the last publication, as SceneUpload queues them.
     private static object SeedUpload<T>(SdfMeshIrradianceScene scene, Dictionary<SdfMesh, SdfMeshRegionMesh> placements, object export, uint[] words) where T : class {
+        const int Root = SdfMeshProbeTrace.RootWords;
         var upload = RuntimeHelpers.GetUninitializedObject(UploadType);
         var channel = Channel.CreateUnbounded<T>();
         for (var part = 0; part < 4; part++) {
-            var start = 1 + part * (words.Length - 1) / 4;
-            var end = 1 + (part + 1) * (words.Length - 1) / 4;
+            var start = Root + part * (words.Length - Root) / 4;
+            var end = Root + (part + 1) * (words.Length - Root) / 4;
             var data = ArrayPool<uint>.Shared.Rent(end - start);
             words.AsSpan(start, end - start).CopyTo(data);
             Assert.True(channel.Writer.TryWrite((T)Chunk(start, data, end - start, export)));
@@ -154,7 +157,7 @@ public sealed partial class SdfWorldTablesWorkLawTests {
         channel.Writer.Complete();
         Set("Scene", scene.Acquire()); Set("Placements", placements); Set("PlacementVersion", 0L);
         Set("Chunks", channel); Set("Work", Task.CompletedTask); Set("Export", export);
-        Set("m_root", Chunk(0, [words[0]], 1)); Set("m_cancel", new CancellationTokenSource());
+        Set("m_root", Chunk(0, words[..Root], Root)); Set("m_cancel", new CancellationTokenSource());
         return upload;
         void Set(string field, object value) => UploadType.GetField(field, Members)!.SetValue(upload, value);
     }
