@@ -1123,6 +1123,9 @@ public sealed class WorldSessionMirror : IClientSink {
     /// <summary>Publishes the exact committed head of a traveler route before its observation socket can deliver the
     /// destination's first ordinary snapshot. This is not prediction: the route answer was read under the final
     /// authority's operation gate after commit. The subsequent snapshot replaces the seed normally.</summary>
+    /// <remarks>A seed is not a record of a stream: it comes from a committed transfer read under its authority's gate,
+    /// or from a route record that its observation session's own ingress admitted. It holds only within the span it was
+    /// seeded into, since every cut and close drops it with the rest of what the mirror held.</remarks>
     public void SeedRoute(in WorldAuthorityRouteDescription route) {
         var index = route.Entity.Index;
 
