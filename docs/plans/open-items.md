@@ -2351,26 +2351,26 @@ the single disclosure build table; the rd2-review
 findings are answered in decision 3a. Then the researcher brief's priorities
 ([security review](../development/security-review.md)).
 
-- [high] A narrowing a session's access cannot see. A viewer's access is
-  settled from its observation as none, disclosed or everything
-  (`WorldViewerAccess`, `WorldScreenBinder.AccessOf`), and a narrowing between
-  those levels withdraws every picture the view published
-  (`IRenderGraphInstances.Withdraw`) and releases the private residency built
-  from wider content (`WorldScreenBinder.ContentAccess`). A narrowing inside
-  "disclosed" (a cell visibility or audience the session loses while it still
-  observes) moves no level, so the old private picture stands until the view
-  next renders, and a cadence hold keeps it. The observation needs a
-  disclosure generation the authority moves whenever what it delivers this
-  session narrows, settled into the same epoch. This is the first half of
-  decision 14's step 5 (results keyed by what each viewer was delivered).
-- [medium] What a withdrawal does not reach. An infinity layer keeps its
-  frame source across a narrowing, so a program composed from the wider
-  content can reach the layer's next residency until the source composes
-  again (`WorldScreenBinder.WithdrawInfinityResidency`). An external producer
-  keeps its own latest output, and an export already copied out of the
-  runtime keeps its copy. A residency's screen emission and sky environment
-  derived from a withdrawn screen image are not shown to be derived again
-  (`SdfWorldTables.ProjectTaintedSourcesAgain` re-derives only tainted ones).
+- [high] A viewer can still be shown what it may no longer see. A session's
+  access is settled on the viewer's side from its observation
+  (`WorldViewerAccess`, `WorldScreenBinder.AccessOf`), and three separate
+  guards act on it (`IRenderGraphInstances.Withdraw`,
+  `WorldScreenBinder.ContentAccess`, `WorldSessionObservation.DisclosesEverything`).
+  An adversarial review found a way around each, and
+  [the withdrawal chokepoint](disclosure/withdrawal-chokepoint.md) checks its
+  nine findings against the code and ranks the seven that hold in whole or in
+  part. The worst shows content that
+  was never delivered: a replica-tier session in a world with a restricted row
+  is drawn from the authority's whole replica. The others keep a picture or a
+  product of one after access narrows: a view that retires skips the
+  withdrawal, a replaced session keeps the previous residency, a node's own
+  history and several retained copies survive, and a narrowing inside
+  "disclosed" is not seen at all. The memo designs one door in their place
+  (the stream stamps each delivery with its span of access, and the render
+  graph carries the span on every output) and orders seven steps, each with a
+  check. Next: the Codex design review of the memo, then its step 1, which
+  closes the worst finding. This is decision 14's step 5 (results keyed by
+  what each viewer was delivered) with the withdrawn picture of decision 2.
 
 - [high] Authored search must plan over what its actor is disclosed. Today an
   actor-less job reads true state under the audience check (an AI can read a
@@ -3911,10 +3911,42 @@ annotate, the `probes` and `exposure` views) are
   switches) and the `puck mesh audit` gaps are the
   [rendering plan](rendering.md)'s.
 
+### Instrument and dance play
+
+Owner: one feature lead lane, which holds every lane of
+[the plan](instrument-play.md) to its stage's checks · high (an owner-requested
+feature) · Next: the plan's first wave, all at once: the research round, the
+concept pack, the engine-gap lanes (pose clips, the timed turn, the beat index
+and calibration, delivered cues, haptics) and the standard package's judge.
+
+- The feature is accepted only by the end-to-end capture series of
+  [stage 6](instrument-play.md#stages-and-acceptance) against the owner's
+  words and the concept pack, never by its lanes' separate evidence.
+- Its engine gaps are lanes of its first wave and are named in the packets
+  that own their areas: [the Moth's motion](#dual-stick-play-and-the-moths-motion),
+  [input channels](#input-channels) and [media and capture](#media-and-capture).
+- Its last stage, a crowd of performers at the frame bar, waits on
+  [virtual geometry](virtual-geometry.md#d2-bounds-for-skinned-and-multi-slot-draws)'s
+  bounds for many-part bodies and on the benchmark's remote route.
+- It is the first of the [play expressions](play-expressions.md). The other
+  two the owner named, play by solving and play by calculating, are open
+  explorations: the lead writes the ideation round's synthesis into that
+  page, and nothing is built for them until the owner chooses.
+
 ### Dual-stick play and the Moth's motion
 
 Owner: play-feel lane, with the owner's feel sittings · ordinary · Next: the
 reversal brake, then a sitting.
+
+- [high] Engine gaps [instrument and dance play](instrument-play.md#the-engine-gaps)
+  names, each with a lane in that plan's first wave and ahead of further rig
+  or move authoring: a creation's poses do not blend and a driver's weight
+  cannot be limited to some shapes (`FrameDocument`, `CreationDocument.MaxDrivers`);
+  an effector cannot aim at a point on its own creation
+  (`CreationEffectorTargetDocument`); no driver reads the seat's input, so a
+  press reaches the rig a tick late; and no motion operation turns a body
+  through an angle or moves it along an eased path over a duration
+  (`BodyMotionOp`, `WorldEffect.PlanarImpulse`).
 
 - A reversal should brake faster than it accelerates: `ShapeWholeVelocityRow`
   converges at the engage rate whenever the stick is deflected, so a full
@@ -3987,7 +4019,15 @@ the model.
 - [medium] Nothing drives controller output: no `Puck.World*` code references
   `IGamepadOutput`, and cartridge rumble (`IFeedbackMachine.MotorLevel`) has
   no consumer outside `Puck.Machines`. Wire a machine's motor to the engaged
-  seat's pad, and authored haptics.
+  seat's pad, and authored haptics. A pulse on the beat is the first authored
+  consumer ([instrument and dance play](instrument-play.md#sound), a lane of
+  its first wave).
+- [high] Two timing gaps [instrument and dance play](instrument-play.md#timing)
+  names, one lane of its first wave: the clock operand answers only the
+  distance to the nearest beat, so no rule can read which beat or bar the
+  clock is on (`MusicClock.CurrentBeat` has no operand); and
+  `WorldCommand.CalibrateInput` is applied by the authority and sent by
+  nothing, so a player has no way to set the calibration the judgement adds.
 - The in-world computer runs programs (the owner's direction): the desktop
   share is one and a typing tutor another, switched on the computer itself
   with the screen showing which is live. The tutor is world-native: lessons
@@ -4123,6 +4163,14 @@ Owner: media lane · ordinary · Next: let an unread capture feed idle.
   downscale on the GPU ahead of the readback.
 - [medium] `CaptureSink` is constructed nowhere in `src`: an unreached capture
   capability to wire, not delete (AGENTS.md).
+- [high] Sound gaps [instrument and dance play](instrument-play.md#sound)
+  names, one designed lane of its first wave: a rule's cue reaches the
+  speakers only through `WorldServer.GameplayCueTap`, a callback inside the
+  authority's process that drops the cue's payload, so a remote client hears
+  none and a cue cannot carry a pitch; `WorldCreationInstances.TriggerCue` has
+  no caller; a score arms only on the three events of
+  `WorldAudioCue.MusicWhenTokens`, never on a rule; and `VoiceSynth`'s 32
+  voices have no rule for which sound when more are asked for.
 
 ### Debug world content
 

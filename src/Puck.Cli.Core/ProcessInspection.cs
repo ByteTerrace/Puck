@@ -3,7 +3,7 @@ using System.Runtime.InteropServices;
 
 namespace Puck.Cli;
 
-/// <summary>Reads another process's parent and command line through the operating system's cheap queries (ntdll on Windows,
+/// <summary>Reads another process's parent, command line and private residency through the operating system's cheap queries (ntdll on Windows,
 /// <c>/proc</c> on Linux), and judges ancestry from them. It starts no process, so inspecting is never itself heavy work.</summary>
 public static partial class ProcessInspection {
     private const uint ProcessBasicInformation = 0;
@@ -17,6 +17,79 @@ public static partial class ProcessInspection {
     private static unsafe partial int NtQueryInformationProcess(nint process, uint informationClass, void* information, uint length, out uint returned);
     [LibraryImport(libraryName: "kernel32.dll", SetLastError = true)]
     private static partial nint OpenProcess(uint access, [MarshalAs(unmanagedType: UnmanagedType.Bool)] bool inherit, uint processId);
+    [LibraryImport(libraryName: "kernel32.dll", EntryPoint = "K32GetProcessMemoryInfo")]
+    [return: MarshalAs(unmanagedType: UnmanagedType.Bool)]
+    private static partial bool GetProcessMemoryInfo(nint process, ref ProcessMemoryCountersEx2 counters, uint size);
+
+    // PROCESS_MEMORY_COUNTERS_EX2 (psapi.h): the documented counters through PrivateUsage, then the private working set and
+    // the shared commit. A system that predates the structure refuses its size, which reads as no answer.
+    [StructLayout(layoutKind: LayoutKind.Sequential)]
+    private struct ProcessMemoryCountersEx2 {
+        public uint Size;
+        public uint PageFaultCount;
+        public nuint PeakWorkingSetSize;
+        public nuint WorkingSetSize;
+        public nuint QuotaPeakPagedPoolUsage;
+        public nuint QuotaPagedPoolUsage;
+        public nuint QuotaPeakNonPagedPoolUsage;
+        public nuint QuotaNonPagedPoolUsage;
+        public nuint PagefileUsage;
+        public nuint PeakPagefileUsage;
+        public nuint PrivateUsage;
+        public nuint PrivateWorkingSetSize;
+        public ulong SharedCommitUsage;
+    }
+
+    /// <summary>Reads how much of another process's working set is its own private memory: the pages no other process
+    /// shares and the system cannot drop without writing them out. On Windows it is the private working set
+    /// (<c>PROCESS_MEMORY_COUNTERS_EX2.PrivateWorkingSetSize</c>), which counts every resident page of a private region, a
+    /// graphics driver's write-combined host views included, and leaves out mapped files and images, whose clean pages the
+    /// system shares between processes and reclaims under pressure (NVIDIA's Direct3D 12 shader disk cache is about a gibibyte
+    /// of a windowed World's working set). On Linux it is <c>/proc/&lt;pid&gt;/status</c>'s <c>RssAnon</c> plus
+    /// <c>RssShmem</c>: shared memory is swap-backed, not a clean file page.</summary>
+    /// <param name="processId">The process to inspect.</param>
+    /// <returns>The bytes, or <see langword="null"/> when they cannot be read (the process exited, belongs to another user,
+    /// or the system predates the counter).</returns>
+    public static long? PrivateResidentBytes(int processId) {
+        if (OperatingSystem.IsLinux()) {
+            try {
+                long? anonymous = null, shared = null;
+
+                foreach (var line in File.ReadLines(path: $"/proc/{processId.ToString(provider: CultureInfo.InvariantCulture)}/status")) {
+                    var parts = line.Split(options: StringSplitOptions.RemoveEmptyEntries, separator: ' ');
+
+                    if ((parts.Length < 2) || !long.TryParse(provider: CultureInfo.InvariantCulture, result: out var kilobytes, s: parts[1], style: NumberStyles.None)) { continue; }
+                    switch (parts[0]) {
+                        case "RssAnon:": anonymous = (kilobytes * 1024); break;
+                        case "RssShmem:": shared = (kilobytes * 1024); break;
+                    }
+                }
+
+                return ((anonymous is { } resident) ? (resident + (shared ?? 0)) : null);
+            } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
+                return null;
+            }
+        }
+        if (!OperatingSystem.IsWindows()) {
+            return null;
+        }
+
+        var process = OpenProcess(access: ProcessQueryLimitedInformation, inherit: false, processId: ((uint)processId));
+
+        if (process == 0) {
+            return null;
+        }
+
+        try {
+            var counters = new ProcessMemoryCountersEx2 { Size = ((uint)Marshal.SizeOf<ProcessMemoryCountersEx2>()) };
+
+            return (GetProcessMemoryInfo(counters: ref counters, process: process, size: counters.Size)
+                ? ((long)Math.Min(val1: ((ulong)counters.PrivateWorkingSetSize), val2: ((ulong)long.MaxValue)))
+                : null);
+        } finally {
+            _ = CloseHandle(handle: process);
+        }
+    }
 
     /// <summary>Reads another process's command line.</summary>
     /// <param name="processId">The process to inspect.</param>

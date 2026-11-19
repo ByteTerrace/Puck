@@ -208,9 +208,10 @@ public sealed class CliLease : IDisposable {
 
     /// <summary>The lease protocol this CLI speaks. Every CLI copy on a machine shares the lease root, so two copies must agree on
     /// what its files mean: holders, tickets and sidecars, rotation, the quiet reservation, the child layout, readiness marks,
-    /// and how host admission classifies the processes it waits on (<c>HostProcesses</c>). Raise it in any change to one of
-    /// those meanings: a copy built before the change then refuses by name instead of deadlocking against a newer one.</summary>
-    public const int Protocol = 3;
+    /// how host admission classifies the processes it waits on (<c>HostProcesses</c>), and the measured peaks it admits by
+    /// (<c>HostStartTracker.ObservationDirectory</c>). Raise it in any change to one of those meanings: a copy built before the
+    /// change then refuses by name instead of deadlocking against a newer one.</summary>
+    public const int Protocol = 4;
 
     private const string ProtocolFile = "protocol";
 

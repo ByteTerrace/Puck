@@ -7,9 +7,10 @@ namespace Puck.Cli.Host;
 
 /// <summary>
 /// Reads the machine for <see cref="HostLoadMonitor"/>: CPU busy time since the previous reading, free physical memory,
-/// the commit charge against its limit, free disk on the checkout's drive, and the running processes <see cref="HostProcesses"/> classifies. It uses only
-/// cheap operating-system queries (kernel time counters, the memory status, the process list and each process's command
-/// line) and never starts a process, so running it is never itself heavy or GPU work. Windows reads through kernel32 and
+/// the commit charge against its limit, free disk on the checkout's drive, and the running processes <see cref="HostProcesses"/> classifies, with
+/// each tracked start's private bytes, working set and private working set. It uses only cheap operating-system queries
+/// (kernel time counters, the memory status, the process list, each process's command line and a tracked start's memory
+/// counters) and never starts a process, so running it is never itself heavy or GPU work. Windows reads through kernel32 and
 /// ntdll; Linux through <c>/proc</c>.
 /// </summary>
 /// <param name="checkoutRoot">The checkout whose drive's free disk is read.</param>
@@ -159,10 +160,12 @@ public sealed partial class HostProbe(string checkoutRoot) {
         foreach (var (id, name, commandLine, privateGb, workingSetGb) in running) {
             var label = $"{name} {id.ToString(provider: CultureInfo.InvariantCulture)}";
 
+            // Only a tracked start pays the handle its private working set is read through.
             if (HostProcesses.RunningStart(commandLine: commandLine, name: name) is { } kind) {
                 var startTicks = tree[id].Started.ToUniversalTime().Ticks;
+                var privateResidentGb = ((ProcessInspection.PrivateResidentBytes(processId: id) is { } bytes) ? (bytes / 1073741824.0) : double.NaN);
 
-                starts.Add(item: new HostRunningStart(Id: id, Kind: kind, PrivateGb: privateGb, Ready: ready.Contains(item: (id, startTicks)), StartTicks: startTicks, WorkingSetGb: workingSetGb));
+                starts.Add(item: new HostRunningStart(Id: id, Kind: kind, PrivateGb: privateGb, PrivateResidentGb: privateResidentGb, Ready: ready.Contains(item: (id, startTicks)), StartTicks: startTicks, WorkingSetGb: workingSetGb));
             }
 
             if ((holder is null) && !own.Contains(item: id) && HostProcesses.IsGpuWork(commandLine: commandLine, name: name)) {

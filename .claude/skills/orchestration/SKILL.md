@@ -595,8 +595,10 @@ direction: concurrent whole-solution builds exhaust a machine's memory.
   headroom covers the start's expected private bytes plus what the Worlds and heavy
   suites already running have left to grow and still holds the commit reserve
   (`HostLoadThresholds.DefaultCommitReservePercent` of the limit; `HostStartTracker`),
-  free physical memory covers the start's expected working set (a separate, smaller
-  measurement than private bytes) plus the running starts' working-set growth and
+  free physical memory covers the start's expected private working set (a separate,
+  smaller measurement than private bytes or the whole working set: it leaves out a
+  driver's device-memory mirror and the clean mapped pages the system reclaims) plus
+  the running starts' private working-set growth and
   still sits at the pressure floor, and free disk is above its pressure floor, and name what holds them
   ([admission](../../../docs/reference/cli.md#puck-host-loadadmission-lines-for-the-machine)).
   Every verb that boots a World process (`puck test`, `canary`, `sweep`, `motion`,
@@ -620,8 +622,9 @@ direction: concurrent whole-solution builds exhaust a machine's memory.
   persist per machine under the lease root and replace that fallback in either
   direction. Unused growth tapers away during a plateau and returns when growth
   resumes. `puck host load` prints each kind's peak, growth and total demand in both
-  private bytes and working set, beside the live starts' private bytes and working
-  sets, so a refusal can be explained numerically.
+  private bytes and private working set, with the kind's whole working set beside
+  them, and each live start's private bytes, private working set and working set, so
+  a refusal can be explained numerically.
   The lead cannot stop another lane's process; it asks the lane. On the lead
   machine, more than about three lanes that
   boot Worlds or heavy suites at once kept commit charge between 80% and 94%
@@ -1033,7 +1036,7 @@ watcher, `puck host load --watch` prints one line per transition (`CAPACITY`,
   it overlapped.
 - On pressure, admit nothing. `puck gate` and `puck affected` admit each heavy
   step only while free memory and free disk are above their pressure thresholds
-  and the step's own expected working set fits in free memory above that floor, so a
+  and the step's own expected private working set fits in free memory above that floor, so a
   running agent waits rather than being killed. No fixed amount of free memory
   gates a start: a small start is admitted beside a windowed World that leaves
   5 to 7 GB free, a second windowed World is not.

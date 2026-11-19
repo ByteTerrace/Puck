@@ -37,7 +37,7 @@ Decisions: [state and language](../decisions/state-and-language.md).
 - [Records and pools](records-and-pools.md): the record traits rows still carry alone, and remote home adoption.
 - [Remaining rule-fault work](rule-faults.md): what the rule-fault design leaves unbuilt, differing or unmeasured.
 - [A body's state behind one write door](body-state-door.md): a body's continuation as versioned sections the compiler will not let a write bypass, and the followers that read those versions.
-- [Disclosure](disclosure.md): one per-recipient view that every read, write admission, layout and delta derives from, with a noninterference harness as the definition of done.
+- [Disclosure](disclosure.md): one per-recipient view that every read, write admission, layout and delta derives from, with a noninterference harness as the definition of done. [The withdrawal chokepoint](disclosure/withdrawal-chokepoint.md) is its presentation half: what a viewer is shown after its access narrows, as one door through delivery and the render graph.
 - [Milestone 1 acceptance laws](acceptance-laws.md): the cross-system scenarios still unbuilt; dormant while test requirements are suspended.
 
 ## Worlds, federation and play
@@ -49,6 +49,8 @@ Decisions: [worlds and federation](../decisions/worlds-and-federation.md), [play
 - [Companion custody protocol](companion-redesign.md): the specification the companion build follows, with the model that checks it.
 - [MMO foundations](mmo-foundations.md): the closed round that settled the federation register, and the records the register cites.
 - [Readable interaction](readable-interaction.md): a motion program's predicted sweep as the telegraph, certified first contact and sub-tick presses, with the fencing salle as its proving ground.
+- [Play expressions](play-expressions.md): the family of ways to play that are defined by what the avatar's hands and body do. The bard is planned; play by solving and play by calculating are open explorations whose ideation round the lead synthesizes there.
+- [Instrument and dance play](instrument-play.md): the bard. The avatar plays a worn wind instrument and fights by dancing, both judged against the world's beat clock; the systems it rests on, the engine gaps it names, and its stages, lanes, research and concept-art brief.
 - [Physics and kernels: lessons from Box3D and OpenBLAS](physics-and-kernels-lessons.md): what those sources teach Puck's fixed-point physics.
 - [The benchmark](benchmark.md): one route through the debug world played in real time by one command and one in-game verb, with a live overlay, a report per chapter and artifacts caught in motion. The route's player and the per-chapter report are built; the overlay and the command are next.
 - [The walkthrough](walkthrough.md): the route segments and the still tour as built, and the open steps the benchmark folds in at its stage 0.

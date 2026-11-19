@@ -29,37 +29,47 @@ public readonly record struct HostSample(DateTimeOffset At, double CpuPercent, d
 /// left to reserve.</param>
 /// <param name="StartTicks">The process's UTC start ticks, which with <paramref name="Id"/> identify it: a recycled id is
 /// another process.</param>
-/// <param name="WorkingSetGb">The process's working set, in gigabytes: the physical memory it holds now; NaN when the
-/// reading does not report it, in which case <see cref="ResidentGb"/> is the private bytes.</param>
-public readonly record struct HostRunningStart(int Id, HostStartKind Kind, double PrivateGb, bool Ready = false, long StartTicks = 0, double WorkingSetGb = double.NaN) {
-    /// <summary>Gets the physical memory the process holds now, in gigabytes: its working set, or its private bytes when
-    /// the reading carries no working set (commit is never less than the touched part of it, so this is the conservative
-    /// stand-in).</summary>
-    public double ResidentGb => (double.IsFinite(d: WorkingSetGb) ? WorkingSetGb : PrivateGb);
+/// <param name="WorkingSetGb">The process's working set, in gigabytes: every page it holds resident now, the clean shareable
+/// pages of mapped files and images included; NaN when the reading does not report it.</param>
+/// <param name="PrivateResidentGb">The process's private working set, in gigabytes
+/// (<see cref="ProcessInspection.PrivateResidentBytes"/>): the resident pages of its private regions, a graphics driver's
+/// write-combined host views included, without the mapped files and images the system shares and reclaims; NaN when the
+/// reading does not report it.</param>
+public readonly record struct HostRunningStart(int Id, HostStartKind Kind, double PrivateGb, bool Ready = false, long StartTicks = 0, double WorkingSetGb = double.NaN, double PrivateResidentGb = double.NaN) {
+    /// <summary>Gets the physical memory the process needs resident now, in gigabytes, the quantity admission judges against
+    /// free memory: its private working set; its whole working set when the reading carries no private working set; its
+    /// private bytes when it carries neither. Each stand-in is never less than the quantity it replaces, so a reading that
+    /// cannot split residency judges conservatively.</summary>
+    public double ResidentGb => (double.IsFinite(d: PrivateResidentGb) ? PrivateResidentGb : (double.IsFinite(d: WorkingSetGb) ? WorkingSetGb : PrivateGb));
+    /// <summary>Gets the process's whole working set, in gigabytes, for reporting: <see cref="WorkingSetGb"/>, or
+    /// <see cref="ResidentGb"/> when the reading carries none.</summary>
+    public double HeldGb => (double.IsFinite(d: WorkingSetGb) ? Math.Max(val1: WorkingSetGb, val2: ResidentGb) : ResidentGb);
 }
 /// <summary>The thresholds that turn readings into admission lines. A threshold left out is never judged, so with
 /// none the monitor reports only GPU transitions. A start's need is its own expected peak (<see cref="HostStartTracker"/>),
 /// judged in two quantities that are not the same: its private bytes (commit) against the commit headroom less a reserve
-/// (<see cref="CommitCovers"/>), and its working set (physical residency) against free memory above the pressure floor
-/// (<see cref="PhysicalCovers"/>). No fixed amount of free memory or of commit gates a start.</summary>
+/// (<see cref="CommitCovers"/>), and its private working set (the residency it cannot give back without paging) against free
+/// memory above the pressure floor (<see cref="PhysicalCovers"/>). No fixed amount of free memory or of commit gates a
+/// start.</summary>
 /// <param name="CapacityCpuPercent">CAPACITY needs the CPU mean below this.</param>
 /// <param name="PressureRamGb">PRESSURE when free memory is below this; a start must also leave this much free once its
-/// own working set and the growth of the starts already running are taken.</param>
+/// own private working set and the growth of the starts already running are taken.</param>
 /// <param name="PressureDiskGb">PRESSURE when free disk is below this.</param>
 /// <param name="CommitReservePercent">The share of the commit limit, in percent, that stays unclaimed after a start's need:
 /// the margin for processes admission does not see (a build, a hand-started suite). The commit headroom itself
 /// below this share is commit pressure and holds every start back. Not judged when the platform reports no commit limit.</param>
-/// <param name="InstalledRamGb">The machine's installed physical memory, in gigabytes, which no start's working set plus the
-/// pressure floor can exceed (<see cref="NeverFits"/>); not judged when null.</param>
+/// <param name="InstalledRamGb">The machine's installed physical memory, in gigabytes, which no start's private working set
+/// plus the pressure floor can exceed (<see cref="NeverFits"/>); not judged when null.</param>
 public sealed record HostLoadThresholds(double? CapacityCpuPercent, double? PressureRamGb, double? PressureDiskGb, double? CommitReservePercent = null, double? InstalledRamGb = null) {
     /// <summary>The commit reserve, in percent of the commit limit: a start is admitted only if the headroom still holds
     /// this much after its need. Allocation fails at the limit with physical memory still free; builds, compilers and
     /// hand-started suites charge commit that admission does not predict, and a tenth of the limit (6.4 GB of a 64 GB
     /// limit) absorbs a typical build.</summary>
     public const double DefaultCommitReservePercent = 10;
-    /// <summary>The share of a kind's expected commit peak assumed resident in physical memory until this machine has
-    /// measured the kind's working set: committed memory a process has not touched holds no physical page (a windowed
-    /// World read 14 GB resident of 20.4 GB private).</summary>
+    /// <summary>The share of a kind's expected commit peak assumed privately resident until this machine has measured the
+    /// kind's private working set: committed memory a process has not touched holds no physical page, and a driver that
+    /// mirrors device memory into the process charges commit for it with no physical page at all (a windowed World read
+    /// 14 GB resident of 20.4 GB private).</summary>
     public const double ResidentFraction = 0.7;
 
     /// <summary>Gets the commit, in gigabytes, the reserve keeps unclaimed in a reading.</summary>
@@ -102,26 +112,28 @@ public sealed record HostLoadThresholds(double? CapacityCpuPercent, double? Pres
     /// <param name="needGb">The commit, in gigabytes, the start and the growth still to come need (private bytes).</param>
     /// <returns><see langword="true"/> when the headroom covers the need and the reserve, or is not judged.</returns>
     public bool CommitCovers(HostSample reading, double needGb) => ((CommitReservePercent is null) || !double.IsFinite(d: reading.CommitLimitGb) || !double.IsFinite(d: reading.CommitChargeGb) || ((reading.CommitLimitGb - reading.CommitChargeGb - needGb) >= CommitReserveGb(reading: reading)));
-    /// <summary>Gets whether a start that needs <paramref name="needGb"/> of physical memory (its own expected working set
-    /// plus the working-set growth the running starts have left) still leaves free memory at or above
+    /// <summary>Gets whether a start that needs <paramref name="needGb"/> of physical memory (its own expected private
+    /// working set plus the private working-set growth the running starts have left) still leaves free memory at or above
     /// <see cref="PressureRamGb"/>. Free memory
     /// here is what the operating system can hand out without writing anything to disk (Windows
     /// <c>ullAvailPhys</c>, the sum of the standby, free and zero lists; Linux <c>MemAvailable</c>), so reclaimable cache
     /// already counts as free. Commit is the hard limit (allocation fails at it); physical memory short of the start
     /// makes every process page, which is why this leaves the pressure floor instead of demanding the start's whole
-    /// need in a fixed free amount. The need is a working set, not private bytes: committed memory a process never
-    /// touches holds no physical page, so private bytes overstate residency. A threshold left out, or a platform that
-    /// reports no free memory, never holds a reading back.</summary>
+    /// need in a fixed free amount. The need is a private working set, neither private bytes nor the whole working set:
+    /// committed memory a process never touches holds no physical page, so private bytes overstate residency, and the clean
+    /// pages of mapped files and images in a working set are shared and handed back to the standby list under pressure,
+    /// where free memory already counts them. A threshold left out, or a platform that reports no free memory, never holds
+    /// a reading back.</summary>
     /// <param name="reading">The reading.</param>
     /// <param name="needGb">The physical memory, in gigabytes, the start and the growth still to come take from free memory.</param>
     /// <returns><see langword="true"/> when the start leaves the pressure floor free or is not judged.</returns>
     public bool PhysicalCovers(HostSample reading, double needGb) => ((PressureRamGb is not { } floor) || !double.IsFinite(d: reading.FreeRamGb) || ((reading.FreeRamGb - needGb) >= floor));
     /// <summary>Names what keeps a start from ever being admitted on this machine however idle it is: its own expected
-    /// private bytes plus the commit reserve exceed the commit limit, or its own expected working set plus the pressure floor
-    /// exceed the installed memory. Waiting cannot help such a start.</summary>
+    /// private bytes plus the commit reserve exceed the commit limit, or its own expected private working set plus the
+    /// pressure floor exceed the installed memory. Waiting cannot help such a start.</summary>
     /// <param name="reading">The reading, whose commit limit is the machine's.</param>
     /// <param name="ownGb">The start's own expected commit peak, in gigabytes.</param>
-    /// <param name="residentOwnGb">The start's own expected working-set peak, in gigabytes.</param>
+    /// <param name="residentOwnGb">The start's own expected private working-set peak, in gigabytes.</param>
     /// <returns>The shortfall as a phrase, or <see langword="null"/> when the machine could hold the start alone or does
     /// not report its totals.</returns>
     public string? NeverFits(HostSample reading, double ownGb, double residentOwnGb) {
@@ -129,7 +141,7 @@ public sealed record HostLoadThresholds(double? CapacityCpuPercent, double? Pres
             return string.Create(provider: CultureInfo.InvariantCulture, handler: $"it expects {ownGb:0.0}GB of commit and the commit reserve is {CommitReserveGb(reading: reading):0.0}GB, over the machine's {reading.CommitLimitGb:0.0}GB commit limit");
         }
         if ((PressureRamGb is { } floor) && (InstalledRamGb is { } installed) && ((residentOwnGb + floor) > installed)) {
-            return string.Create(provider: CultureInfo.InvariantCulture, handler: $"it expects {residentOwnGb:0.0}GB of working set and the pressure floor is {floor:0.0}GB, over the machine's {installed:0.0}GB of memory");
+            return string.Create(provider: CultureInfo.InvariantCulture, handler: $"it expects {residentOwnGb:0.0}GB of private working set and the pressure floor is {floor:0.0}GB, over the machine's {installed:0.0}GB of memory");
         }
 
         return null;
