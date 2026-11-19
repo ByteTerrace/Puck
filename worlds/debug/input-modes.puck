@@ -1,4 +1,6 @@
 // Gameplay eligibility follows body registers and engagement, independently of camera pages.
+import "../standard/instrument"
+
 let movement = ["forward", "strafe", "turn", "faceX", "faceY", "faceZ", "run"]
 let controls = ["jump", "suit", "noclip"]
 let flyingRise = [{ keep ["rise"], from { flight: "flying" }, to { flight: "flying" } }]
@@ -59,5 +61,7 @@ inputModes {
       // Omitted directed rows release everything, including global interaction and auto-actions.
       transitions []
     }
+    // The instrument's vents are offered while the breath holds it up (bard.puck), and a seat engaged anywhere has none.
+    instrumentFamily(suspendedBy: [{ family: "engagement", states ["tabletop", "machine", "screen", "body"] }])
   ]
 }

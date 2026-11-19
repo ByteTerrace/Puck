@@ -1,0 +1,96 @@
+// The standard's rhythm judge on the debug score at 30 Hz (`puck test worlds/debug/instrument-judge30-tests.puck
+// --reproduce`). The score beats every half second, a beat each 15 ticks, so a press in tick 15 k lands on a beat plus its
+// offset, and a press scheduled in tick T lands in interval T plus 2, so each first press is scheduled two ticks early.
+// Y is the breath; J, I, L and K are vents 1 to 4. The judge's windows are 1/32, 1/16 and 1/8 of a second (grades 3, 2
+// and 1).
+schema: "puck.world.definition.v1"
+basis: "instrument-judge-fixture"
+documentId: "instrument-judge30-tests"
+simulation {
+  rateHz: 30
+}
+
+test "each step of a phrase grades by its window, a millisecond either side of the first" {
+  when {
+    ticks 4
+    seat1: player.signal keyboard.y press
+    ticks 9
+    seat1: player.signal keyboard.j press at:0.03025
+    ticks 15
+    seat1: player.signal keyboard.i press at:0.03225
+    ticks 15
+    seat1: player.signal keyboard.l press at:0
+    ticks 18
+    seat1: player.signal keyboard.k press at:0
+    ticks 3
+  }
+  expect {
+    bodyState(body, 0, breathing) == 1
+    judge.grade1_0 == 3
+    judge.grade1_1 == 2
+    judge.grade1_2 == 3
+    judge.grade1_3 == 1
+    judge.strength1 == 9
+    judge.step1 == 4
+    judge.status1 == 1
+  }
+}
+
+test "a wrong note is a miss, two in a row end the phrase, and the next press starts another" {
+  when {
+    ticks 4
+    seat1: player.signal keyboard.y press
+    ticks 9
+    seat1: player.signal keyboard.j press at:0
+    ticks 15
+    seat1: player.signal keyboard.k press at:0
+    ticks 2
+    seat1: player.signal keyboard.k release
+    ticks 13
+    seat1: player.signal keyboard.k press at:0
+    ticks 3
+  }
+  expect {
+    judge.grade1_0 == 3
+    judge.grade1_1 == 0
+    judge.grade1_2 == 0
+    judge.misses1 == 2
+    judge.strength1 == 1
+    judge.status1 == 2
+  }
+}
+
+test "the first press after a phrase ends starts a new phrase from its first step" {
+  when {
+    ticks 4
+    seat1: player.signal keyboard.y press
+    ticks 9
+    seat1: player.signal keyboard.k press at:0
+    ticks 15
+    seat1: player.signal keyboard.l press at:0
+    ticks 15
+    seat1: player.signal keyboard.k release
+    seat1: player.signal keyboard.j press at:0
+    ticks 3
+  }
+  expect {
+    judge.status1 == 0
+    judge.step1 == 1
+    judge.strength1 == 3
+    judge.misses1 == 0
+    judge.grade1_0 == 3
+  }
+}
+
+test "a vent pressed with the instrument down is not judged" {
+  when {
+    ticks 4
+    seat1: player.signal keyboard.j press at:0
+    ticks 20
+  }
+  expect {
+    bodyState(body, 0, breathing) == 0
+    judge.step1 == 0
+    judge.strength1 == 0
+  }
+}

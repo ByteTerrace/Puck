@@ -1,0 +1,16 @@
+{
+  "schema": "puck.music.v1",
+  "name": "debug-score",
+  "tempo": {
+    "beatsPerBar": 4,
+    "ticksPerBeat": 25200
+  },
+  "segments": [
+    {
+      "id": "verse",
+      "transitions": [],
+      "layers": null,
+      "embellishments": null
+    }
+  ]
+}

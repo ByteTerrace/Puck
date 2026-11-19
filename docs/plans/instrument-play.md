@@ -124,6 +124,11 @@ controls keep both:
 - **Fingering** is four buttons under one thumb. Each button is one vent, and
   one finger stops it.
 
+The standard's trigger pages (View, Debug) already hold each trigger alone, so
+the standard's instrument page opens on the squeeze of both, with the right
+trigger as the breath, and a world whose squeezes are taken moves it (the debug
+world's Go and Tour pages hold them, so its breath is Y on the keyboard).
+
 The left stick stays free, so the avatar walks, runs and strafes while it
 plays. Because each button is one finger and the trigger is the breath, the
 motion a press produces is the motion a player expects, which is the owner's
@@ -433,7 +438,7 @@ stop at a gap.
 | Delivered cues and music that follows rules (gaps I, J, K) | A design memo, reviewed, then: rule cues in the delivered tick, with a numeric argument a patch reads as pitch; one lane feeding sound and pose cues; score conditions on rule cues; layer gain in the mix; a voice-stealing rule | Design and build: Sol at `high`. Review: an Opus `specialist`. | It changes what crosses the wire, which is a disclosure question; another family reviews | Now |
 | Body lanes (gap D) | More per-body carriers for shading-time values, or a second carrier, as the design finds | An Opus `specialist` | A C# and HLSL layout pair with a generated side | After the rendering wave's lanes that edit the same pass block land |
 | Haptics (gap L) | A world-authored pulse on a seat's pad, driven by state | Hydrogen | A specified wiring of an existing output interface | Now |
-| Standard package: the judge | Stage 1's channels, mode, bindings, phrase rows and rules in `worlds/standard/`, with the debug world's score | `implementer` | The mechanisms exist and the fixture shows the shape | Now; it meets gap G |
+| Standard package: the judge | Stage 1's channels, mode, bindings, phrase rows and rules in `worlds/standard/` (`rhythm.puck`, `instrument.puck`), with the debug world's score and `bard.puck` | `implementer` | The mechanisms exist and the fixture shows the shape | Built. A step's beat check enters at the marked place in `rhythm.puck` when gap G's operands land; the idle-seat counter reading is the lead's |
 | The instrument and the hands | Stage 2: the creation, the segmented fingers, the playing stance and the fingering poses on the Moth | An Opus `specialist`, as a look lane with the probe rule | A creation built to push the rig; it stops at gaps A, B and E | After the pack's instrument panels; it meets the pose-clip lane |
 | Sound and score | Stage 3's patches, cues, tunes and score layers | `implementer` | Authored data once the cue lane lands | After the delivered-cue lane |
 | The dance | Stage 4's moves: kit actions, footwork, strikes and their clips | An Opus `specialist`, as a look lane | Whole-body motion judged on sheets from every side | After the timed-turn and pose-clip lanes |

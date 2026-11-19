@@ -1,0 +1,33 @@
+// The rhythm judge at 60 Hz (`puck test worlds/debug/instrument-judge60-tests.puck --reproduce`), the same phrase as the 30 Hz
+// scenario with the same grades: a press scheduled in tick T lands in interval T plus 2, a beat is 30 ticks, and a tick is
+// 1/60 of a second, so an offset past 1/60 of a second is a later tick's.
+schema: "puck.world.definition.v1"
+basis: "instrument-judge-fixture"
+documentId: "instrument-judge60-tests"
+simulation {
+  rateHz: 60
+}
+
+test "each step of a phrase grades by its window at 60 Hz, a millisecond either side of the first" {
+  when {
+    ticks 4
+    seat1: player.signal keyboard.y press
+    ticks 25
+    seat1: player.signal keyboard.j press at:0.013583
+    ticks 30
+    seat1: player.signal keyboard.i press at:0.015583
+    ticks 29
+    seat1: player.signal keyboard.l press at:0
+    ticks 36
+    seat1: player.signal keyboard.k press at:0
+    ticks 3
+  }
+  expect {
+    judge.grade1_0 == 3
+    judge.grade1_1 == 2
+    judge.grade1_2 == 3
+    judge.grade1_3 == 1
+    judge.strength1 == 9
+    judge.status1 == 1
+  }
+}

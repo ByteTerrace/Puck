@@ -1,0 +1,113 @@
+// The standard's wind-instrument controls, a library. `instrumentPlay(...)` authors the channels, the binding page and the
+// rule that raises and lowers the instrument, and judges the seat's vents against the world's beat with the standard's
+// rhythm judge. `instrumentFamily(...)` is the input family a world lists in its `inputModes`. Neither names a body shape:
+// the avatar, its look and its pose are an importing world's.
+//
+// Breath is an analog channel and fingering is four buttons, one a vent. Squeezing both triggers (the left trigger or Z
+// held, then the right trigger or X) opens the instrument page, on which the right trigger's pressure is the breath and
+// the face diamond is the four vents, west, north, east and south. Past half a breath the seat's `breathing` register is 1
+// and the `instrument` input family offers the vents; letting go lowers it and the vents are offered no more, which
+// releases any that were held. The binding page only decides what a press means to the host: the register decides what the
+// simulation accepts, so a vent press that arrives with the instrument down is dropped, never judged.
+//
+//   import "../standard/instrument"
+//   inputModes { global [], families [instrumentFamily()] }
+//   instrumentPlay(music: score)
+//
+// An importing world refines everything below by id: the channels, the `instrument` binding overlay and the judge's rows.
+// The two trigger pages the standard's controls author (View on the left trigger, Debug on the right) own each trigger
+// alone, so the instrument takes the squeeze of both, which no page holds.
+
+import "pad-kit"
+import "rhythm"
+
+let ventChannels = ["vent1", "vent2", "vent3", "vent4"]
+
+// The vents in finger order, as the notes of the standard's phrases: west, north, east, south.
+let ventSources = [padWest, padNorth, padEast, padSouth]
+
+// The family that offers the vents while the instrument is up. `suspendedBy` is the families whose selection takes the
+// instrument away (a seat engaged at a table, say), which the importing world names.
+function instrumentFamily(suspendedBy = []) = {
+  name: "instrument"
+  selector { kind: BodyState, name: "breathing" }
+  default: "down"
+  states [
+    { name: "down", values ["0"], channels ["breath"] }
+    { name: "up", values ["1"], channels: concat(["breath"], ventChannels) }
+  ]
+  suspendedBy: suspendedBy
+  transitions [
+    { from: "down", to: "up", keep ["breath"] }
+    { from: "up", to: "down", keep ["breath"] }
+  ]
+}
+
+// `music` names the world's score row, `seats` is the number of local seats that may play (each seat's body is its
+// number minus one), and `phrase` is the notes the judge awaits, each a vent number from 1 to 4. `holds` are the chords
+// of `modifiers` that open the instrument page, one for each press order that opens it (the first carries the entries and
+// the rest inherit it), and `breathSources` are the sources of the breath.
+template instrumentPlay(music, seats = 1, phrase = [1, 2, 3, 4], windows = rhythmWindows, modifiers = padModifiers, holds = [["lt", "rt"], ["rt", "lt"]], breathSources = ["gamepad.rightTrigger", "keyboard.x"]) {
+  channels [
+    { name: "breath", shape: Unipolar, composition: true }
+    { name: "vent1", shape: Binary, composition: true }
+    { name: "vent2", shape: Binary, composition: true }
+    { name: "vent3", shape: Binary, composition: true }
+    { name: "vent4", shape: Binary, composition: true }
+  ]
+
+  state {
+    body [
+      {
+        name: "breathing"
+        kind: "Counter"
+        initial: 0
+        envelope { $type: "set", values [0, 1] }
+      }
+    ]
+  }
+
+  bindingOverlays [
+    {
+      id: "instrument"
+      document {
+        version: "puck.input.bindings.v1"
+        modifiers: modifiers
+        chords: map(range(0, length(holds)), hold => {
+          chord: holds[hold]
+          group: "play"
+          page {
+            id: (hold == 0) ? "instrument" : $"instrument-{hold}"
+            inherits: (hold == 0) ? "base" : "instrument"
+            label: "Instrument"
+            entries: (hold == 0) ? concat(
+              [{ channel: "breath", id: "breath", label: "Breath", scale: 1, sources: breathSources }],
+              map(range(0, 4), i => { channel: ventChannels[i], id: ventChannels[i], label: $"Vent {i + 1}", scale: 1, sources: ventSources[i] })
+            ) : []
+          }
+        })
+      }
+    }
+  ]
+
+  for (seat, index) in range(1, seats) {
+    rule $"breath-up-{seat}" {
+      when channel(seat, breath) >= 0.5 and bodyState(body, index, breathing) == 0
+      mode: Level
+      setBodyState(key: $"{index}", state: "breathing", expression: 1)
+    }
+    rule $"breath-down-{seat}" {
+      when channel(seat, breath) < 0.5 and bodyState(body, index, breathing) == 1
+      mode: Level
+      setBodyState(key: $"{index}", state: "breathing", expression: 0)
+    }
+  }
+
+  rhythmJudge(
+    music: music,
+    presses: map(range(0, 4), i => { channel: ventChannels[i], note: i + 1 }),
+    phrase: phrase,
+    seats: seats,
+    windows: windows
+  )
+}

@@ -1,0 +1,9 @@
+// The debug world's score: 120 beats a minute in 4/4 (`score.music.json`). Every press the world judges is graded against
+// this beat (the standard's rhythm judge, ../standard/rhythm.puck).
+music [
+  {
+    name: "score"
+    source: "score.music.json"
+    hash: "sha256/d210fd80eabcd7b07ee65cdba3afa8e2475e35a9134fd305e821731a6c3e727b"
+  }
+]

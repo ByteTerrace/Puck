@@ -34,7 +34,10 @@ projects one tick's `WorldEventFeed.Edges` into `MusicSenseEdge`s at the
 `WorldServer.Step` call site, immediately after `Collect()`. A rhythm hit
 window is an authored `compareState` range over the `$clock:<music>:phaseError`
 world-rule operand (the signed tick distance from `MusicClock`'s current
-position to the nearest beat) rather than a dedicated grader type.
+position to the nearest beat) rather than a dedicated grader type. The standard
+package's [`rhythm.puck`](../../worlds/standard/rhythm.puck) is that range written
+once as data: windows, grades and a phrase, over `phaseErrorAt`, which measures a
+press at its captured time.
 
 A world names its score, tunes and patches by rows (`music`, `tunes`,
 `patches`, like `tables`), each a name, a `source` and a SHA-256 pin of the

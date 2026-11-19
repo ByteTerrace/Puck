@@ -1,0 +1,14 @@
+// The debug world's seat plays the standard's instrument against its score: the channels, binding page, raise and lower
+// rules and the judge for one local seat. The input family that offers the vents is listed in input-modes.puck.
+//
+// The controller's four trigger pages are spoken for (View, Debug, Go and Tour, controls.puck), so the debug world's
+// breath is Y held on the keyboard, with the face diamond's I, J, K and L the vents.
+import "../standard/pad-kit"
+import "../standard/instrument"
+import "score"
+
+let breathKey = ["keyboard.y"]
+let breathHolds = [["breath"]]
+let breathModifiers = concat(padModifiers, [{ id: "breath", label: "BR", pressThreshold: 0.5, releaseThreshold: 0.35, sources: breathKey }])
+
+instrumentPlay(music: score, modifiers: breathModifiers, holds: breathHolds, breathSources: breathKey)
