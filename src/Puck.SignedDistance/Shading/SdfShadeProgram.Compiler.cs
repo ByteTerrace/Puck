@@ -121,14 +121,21 @@ public sealed partial class SdfShadeProgram {
             }
             var canonicalOutputs = bindings.Select(selector: o => new SdfShadeOutput(o.Phase, o.Name, new("value", Name: $"r{o.Value.Index}"))).ToArray();
 
+            // The straight-line arm a specialized kernel emits computes each canonical value once (no rematerialization,
+            // which only the interpreter's bounded registers need), without the interpreter's per-instruction decode and
+            // register selection (SdfShadeOps.DispatchWork).
+            var straight = phases.Select(selector: static phase => phase.ToArray()).ToArray();
+            var straightBindings = bindings.ToArray();
+            var straightCosts = new uint[3];
+
             for (var phase = 0; (phase < phases.Length); phase++) {
                 phases[phase] = Allocate(phases[phase], ((SdfShadePhase)phase), bindings);
                 costs[phase] = 0;
-                foreach (var instruction in phases[phase]) {
-                    costs[phase] = checked(costs[phase] + SdfShadeOps.Get(instruction.Op).Work + (instruction.Op == SdfShadeOp.Shape
-                        ? SdfShadeCost.Shape(m_shapes.First(s => s.Relative == instruction.Immediate).Shape) : 0u));
-                }
+                foreach (var instruction in phases[phase]) { costs[phase] = checked(costs[phase] + WorkOf(instruction: instruction)); }
+                foreach (var instruction in straight[phase]) { straightCosts[phase] = checked(straightCosts[phase] + (WorkOf(instruction: instruction) - SdfShadeOps.DispatchWork)); }
             }
+            uint WorkOf(SdfShadeInstruction instruction) => checked(SdfShadeOps.Get(instruction.Op).Work + (instruction.Op == SdfShadeOp.Shape
+                ? SdfShadeCost.Shape(m_shapes.First(s => s.Relative == instruction.Immediate).Shape) : 0u));
             if (costs.Aggregate(0UL, static (sum, cost) => checked(sum + cost)) > MaxPhaseWork) { Fail("PUCK129", $"Shade work exceeds {MaxPhaseWork} after register allocation."); }
             var pixelWork = checked(costs[0] + MaxLights * ((ulong)DefaultLightWork + costs[1]) + DefaultComposeWork + costs[2] + EngineWork);
             if (checked(128UL * pixelWork) > MaxWork) { Fail("PUCK129", "Shade work exceeds the dispatch bound for a complete glass group at the maximum light walk."); }
@@ -150,7 +157,12 @@ public sealed partial class SdfShadeProgram {
                 }
             }
             var constantsOffset = ((uint)(words.Count / 4));
+            // The surface phase's fourth header word holds the reads; the light and compose phases' hold their assigned
+            // outputs (AssignedOutputs), which the stage reads before the phase runs to leave out the default terms the
+            // phase replaces.
             words[3] = (uint)m_reads;
+            words[7] = AssignedOutputs(outputs: bindings, phase: SdfShadePhase.Light);
+            words[11] = AssignedOutputs(outputs: bindings, phase: SdfShadePhase.Compose);
 
             words[12] = constantsOffset; words[13] = ((uint)(m_constants.Count / 4));
             words.AddRange(collection: m_constants);
@@ -187,6 +199,12 @@ public sealed partial class SdfShadeProgram {
 
                     phases[phase][i] = new(op.Op, op.Result, op.Operands.ToArray(), words[(((((int)words[(phase * 4)]) * 4) + (i * 12)) + 3)], op.OutputMask);
                 }
+                // The canonical values address their constants and shape descriptors as the allocated stream does.
+                for (var i = 0; (i < straight[phase].Length); i++) {
+                    var op = straight[phase][i];
+
+                    if (op.Op is SdfShadeOp.Constant or SdfShadeOp.Shape) { straight[phase][i] = new(op.Op, op.Result, op.Operands.ToArray(), checked(op.Immediate + constantsOffset)); }
+                }
             }
             var canonical = new SdfShadeDefinition(source.Name,
                 Array.AsReadOnly(array: m_parameters.Select(selector: (p, i) => new SdfShadeParameter($"p{i}", p.Type, Array.AsReadOnly(array: p.Bits.ToArray()))).ToArray()),
@@ -194,7 +212,7 @@ public sealed partial class SdfShadeProgram {
                 Array.AsReadOnly(array: m_canonicalValues.ToArray()));
 
             return new SdfShadeProgram(canonical, words.ToArray(), parameterWords.ToArray(), m_parameters.Select(selector: p => p.Type).ToArray(),
-                phases, bindings.ToArray(), costs, m_reads, new(EverySide: everySide, MaxTiltRadians: tilt, MaxWrap: wrap));
+                phases, bindings.ToArray(), costs, new(straight, straightBindings, straightCosts), m_reads, new(EverySide: everySide, MaxTiltRadians: tilt, MaxWrap: wrap));
 
             SdfShadeExpression Canonical(Node node, SdfShadeOperand[] args) => new(SdfShadeOps.Get(op: node.Op).Name,
                 ((args.Length == 0) ? null : Array.AsReadOnly(array: args.Select(selector: a => new SdfShadeExpression("value", Name: $"r{a.Index}")).ToArray())),
@@ -453,7 +471,20 @@ public sealed partial class SdfShadeProgram {
             ((phase == SdfShadePhase.Light) && (name == "specular"))) ? SdfShadeType.Float3 : SdfShadeType.Float);
     }
 
-    private static uint OutputIndex(SdfShadePhase phase, string name) {
+    /// <summary>Returns the outputs the program assigns in a phase, one bit an output in the phase's output order (a light
+    /// phase's diffuse, rim, specular and attenuation): the default terms the stage leaves out because the phase
+    /// replaces them.</summary>
+    /// <param name="phase">The phase.</param>
+    /// <returns>The mask, zero for a phase the program does not author.</returns>
+    public uint AssignedOutputs(SdfShadePhase phase) => AssignedOutputs(outputs: Outputs, phase: phase);
+    private static uint AssignedOutputs(IEnumerable<SdfShadeBinding> outputs, SdfShadePhase phase) =>
+        outputs.Where(predicate: o => o.Phase == phase).Aggregate(seed: 0u, func: (mask, o) => mask | (1u << (int)OutputIndex(phase: phase, name: o.Name)));
+    /// <summary>Returns an output's position in its phase's output order, the slot the stage reads it from.</summary>
+    /// <param name="phase">The phase.</param>
+    /// <param name="name">The output's name.</param>
+    /// <returns>The position.</returns>
+    /// <exception cref="SdfShadeException"><paramref name="name"/> is no output of <paramref name="phase"/>.</exception>
+    public static uint OutputIndex(SdfShadePhase phase, string name) {
         if (((uint)phase) >= OutputNames.Length) { Fail(code: "PUCK126", message: "Unknown shade phase."); }
         var index = Array.IndexOf(array: OutputNames[((int)phase)], value: name);
 

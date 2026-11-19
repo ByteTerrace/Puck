@@ -1,24 +1,31 @@
 {
-  "note": "The authored-shading decision matrix's stops (docs/plans/author-shaders.md, section 6): the debug sweep's slowest stops and the meadow with authored programs on, each shaded unsplit and in bins (world.shaders.bins), for puck bench frames and puck measure. A stop's pair differs only in the bins lever, so a stop's binned frames and views passes read beside its unsplit twin in one build.",
+  "note": "The authored-shading decision matrix (docs/plans/author-shaders.md#the-decision-matrix) at the gallery's level 1, the north valley slope and the hero spawn, for puck bench frames and puck measure. Each place reads five columns that differ only in the shading levers: the material layers alone (world.shade layers), the interpreter unsplit and in bins (world.shaders.tier interpreted, world.shaders.bins), and the published specialization unsplit and in bins (world.shaders.tier automatic). Read world/sdf.world$views, $views-filter, $views-bins and $glass-shade with --gpu-pass beside the frames; world.shaders.status in the prelude's rows names the specialized programs.",
   "tour": {
-    "note": "Each stop turns authored programs on and sets the bins lever before its pose; the warmup produces the view's rebuilt graph before frames are read.",
-    "prelude": ["world.lockstep on", "world.row.set hud.defaults enabled false", "world.binding-bar off 1", "world.inspect off", "console off 1", "view.annotate off", "world.state.cell.set chessDemo enabled 0", "world.shade programs", "world.wait 300"],
+    "note": "The prelude waits long enough for the specialization to publish before the first specialized column; each stop sets every lever before its pose, and the settle produces the view's rebuilt graph before frames are read.",
+    "prelude": ["world.lockstep on", "world.row.set hud.defaults enabled false", "world.binding-bar off 1", "world.inspect off", "console off 1", "view.annotate off", "world.state.cell.set chessDemo enabled 0", "world.shade programs", "world.wait 300", "world.shaders.status"],
     "reset": ["body.stop 0", "world.debug-view off", "view.override camera auto", "view.override layout play"],
     "frame": ["view.recenter 1", "view.reseed 0"],
     "settle": 45,
     "levelTolerance": 16,
     "amberFraction": 0.02,
-    "columns": 4,
+    "columns": 5,
     "cellWidth": 480,
     "stops": [
-      { "name": "teal-roof-unsplit", "group": "unsplit", "lines": ["world.shaders.bins off", "body.pose -2 0 18 0 0 0"] },
-      { "name": "teal-roof-binned", "group": "binned", "lines": ["world.shaders.bins on", "body.pose -2 0 18 0 0 0"] },
-      { "name": "flight-b-1-unsplit", "group": "unsplit", "lines": ["world.shaders.bins off", "body.pose 16 4.55 30 0 0 0", "view.override camera look 12.6 8.3 39.3 13 9.4 35"] },
-      { "name": "flight-b-1-binned", "group": "binned", "lines": ["world.shaders.bins on", "body.pose 16 4.55 30 0 0 0", "view.override camera look 12.6 8.3 39.3 13 9.4 35"] },
-      { "name": "studio-unsplit", "group": "unsplit", "lines": ["world.shaders.bins off", "debug.go hero"] },
-      { "name": "studio-binned", "group": "binned", "lines": ["world.shaders.bins on", "debug.go hero"] },
-      { "name": "meadow-unsplit", "group": "unsplit", "lines": ["world.shaders.bins off", "debug.go meadow", "view.override camera look 124 2 -60 119.5 0.3 -55.3 55"] },
-      { "name": "meadow-binned", "group": "binned", "lines": ["world.shaders.bins on", "debug.go meadow", "view.override camera look 124 2 -60 119.5 0.3 -55.3 55"] }
+      { "name": "gallery-layers", "group": "layers", "lines": ["world.shade layers", "debug.go gallery-level-1"] },
+      { "name": "gallery-interpreted-unsplit", "group": "interpreted-unsplit", "lines": ["world.shade programs", "world.shaders.tier interpreted", "world.shaders.bins off", "debug.go gallery-level-1"] },
+      { "name": "gallery-interpreted-binned", "group": "interpreted-binned", "lines": ["world.shade programs", "world.shaders.tier interpreted", "world.shaders.bins on", "debug.go gallery-level-1"] },
+      { "name": "gallery-specialized-unsplit", "group": "specialized-unsplit", "lines": ["world.shade programs", "world.shaders.tier automatic", "world.shaders.bins off", "debug.go gallery-level-1"] },
+      { "name": "gallery-specialized-binned", "group": "specialized-binned", "lines": ["world.shade programs", "world.shaders.tier automatic", "world.shaders.bins on", "debug.go gallery-level-1"] },
+      { "name": "slope-layers", "group": "layers", "lines": ["world.shade layers", "debug.go valley-north", "view.override camera look 0 3 175 0 60 260"] },
+      { "name": "slope-interpreted-unsplit", "group": "interpreted-unsplit", "lines": ["world.shade programs", "world.shaders.tier interpreted", "world.shaders.bins off", "debug.go valley-north", "view.override camera look 0 3 175 0 60 260"] },
+      { "name": "slope-interpreted-binned", "group": "interpreted-binned", "lines": ["world.shade programs", "world.shaders.tier interpreted", "world.shaders.bins on", "debug.go valley-north", "view.override camera look 0 3 175 0 60 260"] },
+      { "name": "slope-specialized-unsplit", "group": "specialized-unsplit", "lines": ["world.shade programs", "world.shaders.tier automatic", "world.shaders.bins off", "debug.go valley-north", "view.override camera look 0 3 175 0 60 260"] },
+      { "name": "slope-specialized-binned", "group": "specialized-binned", "lines": ["world.shade programs", "world.shaders.tier automatic", "world.shaders.bins on", "debug.go valley-north", "view.override camera look 0 3 175 0 60 260"] },
+      { "name": "hero-layers", "group": "layers", "lines": ["world.shade layers", "debug.go hero"] },
+      { "name": "hero-interpreted-unsplit", "group": "interpreted-unsplit", "lines": ["world.shade programs", "world.shaders.tier interpreted", "world.shaders.bins off", "debug.go hero"] },
+      { "name": "hero-interpreted-binned", "group": "interpreted-binned", "lines": ["world.shade programs", "world.shaders.tier interpreted", "world.shaders.bins on", "debug.go hero"] },
+      { "name": "hero-specialized-unsplit", "group": "specialized-unsplit", "lines": ["world.shade programs", "world.shaders.tier automatic", "world.shaders.bins off", "debug.go hero"] },
+      { "name": "hero-specialized-binned", "group": "specialized-binned", "lines": ["world.shade programs", "world.shaders.tier automatic", "world.shaders.bins on", "debug.go hero"] }
     ]
   }
 }

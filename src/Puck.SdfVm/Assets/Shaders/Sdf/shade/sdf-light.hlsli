@@ -345,10 +345,12 @@ bool sdfLightNext(inout SdfLightWalk walk, out SdfLightSource light) {
 // a light the irradiance volume traced (its Shadows flag, SdfLight.IsTraced; the probes record every shadowing directional
 // too) takes the share of the probes about the surface that see it (sdfMeshLightVisibility), which resolves only the
 // probes' spacing, times the surface's ambient occlusion; an untraced one takes the ambient occlusion alone. One for every
-// other kind. The authored stamp requests every term; ordinary shading requests only the terms its light kind uses,
-// preserving the no-program path's work.
+// other kind. The authored stamp requests every term its program can read: a point light's visibility whether or not it
+// lights, and the probe share of every traced light only for a program that reads `light.probeShare` (`probeShare`,
+// SdfShadeReads.ProbeShare), since a directional's visibility otherwise reads the probes only where no cascade holds the
+// point. Ordinary shading requests only the terms its light kind uses, preserving the no-program path's work.
 struct SdfLightInputs { float3 direction; float reach; float probeShare; float visibility; };
-SdfLightInputs sdfLightInputs(SdfLightSource light, SdfShadeSurface surface, bool authored) {
+SdfLightInputs sdfLightInputs(SdfLightSource light, SdfShadeSurface surface, bool authored, bool probeShare) {
     SdfLightInputs inputs;
     inputs.direction = light.position;
     inputs.reach = 1.0;
@@ -366,7 +368,7 @@ SdfLightInputs sdfLightInputs(SdfLightSource light, SdfShadeSurface surface, boo
     bool lit = (light.weight * inputs.reach > 0.0);
     // The probes' share read here, or negative where it was not, so a directional's visibility reads the probes once.
     float known = -1.0;
-    if (traced && (authored || ((light.kind == SDF_LIGHT_POINT) && lit))) {
+    if (traced && (probeShare || ((light.kind == SDF_LIGHT_POINT) && (lit || authored)))) {
         inputs.probeShare = sdfMeshLightVisibility(surface.probes, (uint)light.index);
         known = inputs.probeShare;
     }
@@ -377,7 +379,15 @@ SdfLightInputs sdfLightInputs(SdfLightSource light, SdfShadeSurface surface, boo
     }
     return inputs;
 }
-SdfLightResponse sdfLightResponse(SdfLightSource light, SdfShadeSurface surface, SdfLightInputs inputs) {
+// The light outputs an authored light phase writes, as a mask of SdfShadeProgram's light outputs in order (diffuse, rim,
+// specular, attenuation: sdfShadeAssigned), which the default response does not compute. A program that replaces a term
+// pays for its own, as hand-written shading would, never also for the engine's (a cel band beside a GGX lobe it
+// discards); a non-finite authored term then falls back to the neutral value, no light and an attenuation of one.
+static const uint SdfLightReplacesDiffuse = 1u;
+static const uint SdfLightReplacesRim = 2u;
+static const uint SdfLightReplacesSpecular = 4u;
+static const uint SdfLightReplacesAttenuation = 8u;
+SdfLightResponse sdfLightResponse(SdfLightSource light, SdfShadeSurface surface, SdfLightInputs inputs, uint replaced) {
     SdfLightResponse response;
 
     response.diffuse = float3(0.0, 0.0, 0.0);
@@ -392,15 +402,21 @@ SdfLightResponse sdfLightResponse(SdfLightSource light, SdfShadeSurface surface,
         float visibility = inputs.visibility;
 
         if ((radiance * visibility) > 0.0) {
-            float lambert = sdfWrapDiffuse(dot(normal, inputs.direction), surface.material.wrap);
+            if ((replaced & SdfLightReplacesDiffuse) == 0u) {
+                float lambert = sdfWrapDiffuse(dot(normal, inputs.direction), surface.material.wrap);
 
-            response.diffuse = (light.color * ((radiance * lambert) * visibility));
-            response.specular = (light.color * sdfMaterialSpecular(surface.material, normal, -surface.rayDirection, inputs.direction, ((SDF_PI * radiance) * visibility)));
+                response.diffuse = (light.color * ((radiance * lambert) * visibility));
+            }
+            if ((replaced & SdfLightReplacesSpecular) == 0u) {
+                response.specular = (light.color * sdfMaterialSpecular(surface.material, normal, -surface.rayDirection, inputs.direction, ((SDF_PI * radiance) * visibility)));
+            }
         }
     } else if (light.kind == SDF_LIGHT_RIM) {
-        response.rim = ((light.weight * light.color) * pow((1.0 - saturate(dot(normal, -surface.rayDirection))), light.param));
+        if ((replaced & SdfLightReplacesRim) == 0u) {
+            response.rim = ((light.weight * light.color) * pow((1.0 - saturate(dot(normal, -surface.rayDirection))), light.param));
+        }
     } else if (light.kind == SDF_LIGHT_OCCLUDER) {
-        if (light.weight > 0.0) {
+        if ((light.weight > 0.0) && ((replaced & SdfLightReplacesAttenuation) == 0u)) {
             float3 delta = (light.position - surface.position);
             float distanceSquared = dot(delta, delta);
             float facing = ((distanceSquared > 1.0e-12) ? saturate(dot(normal, (delta * rsqrt(distanceSquared)))) : 1.0);
@@ -408,14 +424,14 @@ SdfLightResponse sdfLightResponse(SdfLightSource light, SdfShadeSurface surface,
 
             response.attenuation = (1.0 - saturate(((light.weight * exp((-distanceSquared / (radius * radius)))) * facing)));
         }
-    } else if (light.kind == SdfLightScreen) {
+    } else if ((light.kind == SdfLightScreen) && ((replaced & SdfLightReplacesDiffuse) == 0u)) {
         response.diffuse = light.color * (light.weight * max(dot(normal, inputs.direction), 0.0) * inputs.reach);
     }
 
     return response;
 }
 SdfLightResponse sdfLightResponse(SdfLightSource light, SdfShadeSurface surface) {
-    return sdfLightResponse(light, surface, sdfLightInputs(light, surface, false));
+    return sdfLightResponse(light, surface, sdfLightInputs(light, surface, false, false), 0u);
 }
 
 #endif

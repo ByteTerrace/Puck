@@ -85,7 +85,7 @@ void sdfShadeSurfacePhase(SdfShadeBinding binding, inout SdfShadeStamp stamp, in
     reveal = 0.0;
     if (sdfShadeHas(binding, 0u)) {
         SdfShadeOutputs o;
-        sdfShadeExecute(binding, 0u, stamp, o);
+        sdfShadeExecute(binding, 0u, stamp, (SdfShadeCarry)0, o);
         if ((o.assigned & 1u) != 0u) material.albedo = sdfShadeColor(o.o0, material.albedo);
         if ((o.assigned & 2u) != 0u) material.roughness = sdfShadeUnit(o.o1, material.roughness);
         if ((o.assigned & 4u) != 0u) material.metal = sdfShadeUnit(o.o2, material.metal);
@@ -100,10 +100,17 @@ void sdfShadeSurfacePhase(SdfShadeBinding binding, inout SdfShadeStamp stamp, in
     }
     sdfShadeSurfaceInputs(stamp, material, normal, reveal);
 }
-SdfLightResponse sdfShadeLightPhase(SdfShadeBinding binding, SdfShadeStamp stamp, SdfLightSource light, SdfShadeSurface surface) {
+// The light phase's values that read no light input, computed once before the walk (a specialized arm's carry; the
+// interpreter carries nothing), after the surface phase has written the stamp's surface members.
+SdfShadeCarry sdfShadeLightPrologue(SdfShadeBinding binding, SdfShadeStamp stamp) {
+    SdfShadeCarry carry = (SdfShadeCarry)0;
+    if (sdfShadeHas(binding, 1u)) carry = sdfShadeLightCarry(binding, stamp);
+    return carry;
+}
+SdfLightResponse sdfShadeLightPhase(SdfShadeBinding binding, SdfShadeStamp stamp, SdfShadeCarry carry, SdfLightSource light, SdfShadeSurface surface) {
     bool authored = sdfShadeHas(binding, 1u);
-    SdfLightInputs inputs = sdfLightInputs(light, surface, authored);
-    SdfLightResponse response = sdfLightResponse(light, surface, inputs);
+    SdfLightInputs inputs = sdfLightInputs(light, surface, authored, authored && (sdfShadeReadsOf(binding) & SDF_SHADE_READ_PROBE_SHARE) != 0u);
+    SdfLightResponse response = sdfLightResponse(light, surface, inputs, authored ? sdfShadeAssigned(binding, 1u) : 0u);
     if (!authored) return response;
     sdfShadeSet_light_direction(stamp, inputs.direction);
     sdfShadeSet_light_position(stamp, light.position);
@@ -116,7 +123,7 @@ SdfLightResponse sdfShadeLightPhase(SdfShadeBinding binding, SdfShadeStamp stamp
     sdfShadeSet_light_probeShare(stamp, inputs.probeShare);
     sdfShadeSet_light_cosine(stamp, dot(surface.normal, inputs.direction));
     SdfShadeOutputs o;
-    sdfShadeExecute(binding, 1u, stamp, o);
+    sdfShadeExecute(binding, 1u, stamp, carry, o);
     if ((o.assigned & 1u) != 0u) response.diffuse = sdfShadeColor(o.o0, response.diffuse);
     if ((o.assigned & 2u) != 0u) response.rim = sdfShadeColor(o.o1, response.rim);
     if ((o.assigned & 4u) != 0u) response.specular = sdfShadeColor(o.o2, response.specular);
@@ -136,7 +143,7 @@ float3 sdfShadeComposePhase(SdfShadeBinding binding, SdfShadeStamp stamp, float3
     sdfShadeSet_compose_adaptation(stamp, adaptation);
     sdfShadeSet_compose_exposure(stamp, passGroup.exposure);
     SdfShadeOutputs o;
-    sdfShadeExecute(binding, 2u, stamp, o);
+    sdfShadeExecute(binding, 2u, stamp, (SdfShadeCarry)0, o);
     return (o.assigned & 1u) != 0u ? sdfShadeColor(o.o0, fallback) : fallback;
 }
 """;

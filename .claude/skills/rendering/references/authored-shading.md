@@ -112,8 +112,13 @@ are `precise`; no contraction or reassociation is permitted. Host folding is
 limited to exact IEEE arithmetic, comparisons and literal vector construction;
 transcendentals stay on the device. Integer conversion is explicit: `quantize`
 floors then bitcasts, and `hash` consumes unsigned bits. The shared stage
-sanitizers replace non-finite outputs with defaults, clamp domains and normalize
-normals. `SdfShadeHlsl.Invocation` generates the surface, light and compose doors
+sanitizers replace non-finite outputs with the value the stage holds for that
+output, clamp domains and normalize normals. A light phase's assigned outputs
+(`SdfShadeProgram.AssignedOutputs`, the light and compose phases' fourth header
+word, a constant per arm in a specialized kernel: `sdfShadeAssigned`) are terms
+the default response never computes (`sdfLightResponse`'s `replaced`), so a cel
+band pays for no GGX lobe it discards, and a non-finite authored light term falls
+back to no light. `SdfShadeHlsl.Invocation` generates the surface, light and compose doors
 used by both the views and glass kernels. Glass supplies contact and thickness;
 authored roughness drives both its light response and its optical frost and
 environment. The standard water program keeps the underlying glass smooth while
@@ -155,7 +160,19 @@ checks the allocated phases' `PixelWork` at `MaxLights` for a complete 8x8 group
 including both glass interfaces, against `MaxWork`. This admission bound is provisional;
 it is not a measured timeout margin. `SdfShadeDispatch.Plan` partitions the full
 padded extent into whole groups under that bound and the backend group-count
-limit. Its `Record` door pushes each job's first group; both recorders use it.
+limit, pricing a pixel's walk at the lights its view's mask holds
+(`SdfLightSelection`, which every tile's walk narrows) and the bound screens, and
+pricing the tier the residency records the frame with (`SdfWorldResidency.ShadeTier`,
+an `SdfShadeTier`): no program for the plain kernels, a specialized selection's
+straight-line arms (`SdfShadeStraight.Costs`: each canonical value once, without the
+interpreter's `SdfShadeOps.DispatchWork`), the interpreter otherwise. A plan bounds
+its own tier and every cheaper one, and `SdfShadeSlots.RecordSelection` refuses a
+plan with a costlier tier's kernels; `PrepareShade` invalidates the shading passes
+whenever the tier grows costlier, while a publication moves to a cheaper tier and
+invalidates nothing. A binned views pass records the plan its bins pass last
+committed (`SdfWorldPasses.CommitShadePlan`, `ShadePlanOf`), so it advances by the
+widths its arguments hold while the bins pass stands, as after a publication.
+Its `Record` door pushes each job's first group; both recorders use it.
 The shared pixel entry remaps that ordinal to the original grid, preserving the
 views filter's local lanes and barrier. `SdfWorldResidency.InFlightShadeIdentities`
 holds each submission's identities on the residency that recorded it, until a
@@ -197,7 +214,14 @@ Every views and glass recording takes its kernel from one door,
   `sdf-world-views-shade.shade-<set>`): `SdfShadeHlsl.Specialize` spliced in as
   `isa/sdf-shade.hlsli`, each program an
   arm of straight-line `precise` phases chosen once a pixel by the identity its
-  header carries (`SdfShadeProgram.IdentityVector`). There is no interpreter arm:
+  header carries (`SdfShadeProgram.IdentityVector`). An arm is emitted from the
+  program's straight-line form (`SdfShadeProgram.Straight`: each canonical value
+  once, without the rematerialization only the interpreter's sixteen registers
+  need), and its light phase's values that read no light input (parameters,
+  constants, the surface and material members) are computed once before the walk
+  (`sdfShadeLightPrologue`, the arm's `Carry` function) and read from an
+  `SdfShadeCarry` by every light: DXC leaves loop-invariant work inside a switch arm
+  in the walk, which the hoist hand-written shading has removes. There is no interpreter arm:
   one would keep the interpreter's registers allocated for the whole kernel. A
   set records only a frame whose active programs it holds
   (`SdfShadeKernels.Covers`).
@@ -243,9 +267,10 @@ interpreter shows an edit on its next frame. A recording pins the set it records
 with; the pin moves to its submission and drops only on a completion proof,
 abandonment before submission or a device loss, and a retired set is freed only
 at zero pins (or at device teardown and the residency's final idle drain).
-Publication moves no revision; `world.shaders.tier` and `world.shaders.bins`
-alone invalidate the shading passes, from the frame `PrepareShade` takes them
-on. `world.shaders.status` lists each program's state.
+Publication moves no revision; `world.shaders.tier` and `world.shaders.bins`,
+and a tier that grows costlier (the interpreter after a specialization), alone
+invalidate the shading passes, from the frame `PrepareShade` takes them on.
+`world.shaders.status` lists each program's state.
 `SdfShadeKernels.Plan` refuses a plan whose closure lacks the generated text: the
 closure looks generated includes up by `Path.GetFullPath`'s spelling (derived
 from the stage's path, `passes/../isa/`), and a key spelled otherwise silently
@@ -295,8 +320,12 @@ kernels' lifetime, publication or binning keeps all nine.
    (`SdfWorldPipelineSource.Release`, `CancelShaderReload`; the
    [frame-time findings](../../../../docs/plans/open-items.md#other-frame-time-findings) hold that).
 4. *Publication changes no scene revision and no render history.* Only the
-   comparison levers `world.shaders.tier` and `world.shaders.bins` invalidate
-   the shading passes, from the frame `PrepareShade` takes them on.
+   comparison levers `world.shaders.tier` and `world.shaders.bins`, and a tier
+   that grows costlier (`SdfShadeTier`, whose plans a standing pass's cheaper
+   plan does not bound), invalidate the shading passes, from the frame
+   `PrepareShade` takes them on. A publication moves to a cheaper tier, which a
+   standing pass's plan bounds (`SdfShadeSlots.RecordSelection` refuses the
+   reverse).
 5. *A set compiles exactly the source its interpreter was compiled from.* A
    kernel set carries, beside the views and glass bytecode, the `SdfKernelSource`
    it was compiled from (`SdfKernelSet.SourceOf`): the stage and every include's

@@ -512,20 +512,24 @@ Vulkan fence or timeline signal rides its `vkQueueSubmit`, so Vulkan's
 
 ## Puck's open cases
 
-- **Register-limited pixel passes, set by the shade interpreter.** On Vulkan
-  (RTX 4070) views and glass-shade run at 255 registers, 8 of the SM's 48 warps,
-  resolve at 168 and composite at 96; PIX on Direct3D 12 reads views at 98 %
-  register allocation with 16 % of the warps active. The authored-shading
-  interpreter's light phase, inlined in the light walk with its sixteen named
-  `uint4` registers and the whole stamp, sets the views count: compiled out,
-  views takes 168 registers and spills 144 bytes; with every phase compiled
-  out, 128 and 176 bytes. Taking the probe gather's whole state out of the walk
-  leaves all three counts as they were (255; 168 and 128 bytes; 128 and 176
-  bytes), so less live probe state is not the cure; keeping the interpreter out
-  of the pixels that run no program is
-  ([author shaders](../../../../docs/plans/author-shaders.md#the-remaining-steps),
-  [frame bar](../../../../docs/plans/open-items.md#other-frame-time-findings)). `world.indirect off`
-  still removes a third of views on Vulkan: that share is the gather's work.
+- **Register-limited pixel passes.** On Vulkan (RTX 4070) the plain views,
+  binned views and glass kernels and every specialization of them run at 168
+  registers (12 of the SM's 48 warps), so a specialized set adds no registers
+  over the kernels that run no program; the interpreter's views, binned views
+  and glass run at 255 (8 warps), the probe lookup at 128 and the views filter
+  at 40, and the specialized and plain glass keep 96 and 16 bytes of local
+  memory. The interpreter costs tens of times the specialized kernels where a
+  large program covers the view ([author shaders](../../../../docs/plans/author-shaders.md#the-decision-matrix)).
+  The interpreter's light phase, inlined in the light walk with its sixteen
+  named `uint4` registers and the whole stamp, sets its count, and less live
+  probe state does not lower it; keeping the interpreter out of the pixels
+  that run no program, and specialization, does
+  ([frame bar](../../../../docs/plans/open-items.md#other-frame-time-findings)).
+  Resolve reads 168 and composite 96 on Vulkan; PIX on Direct3D 12 once read
+  the interpreted views at 98 % register allocation with 16 % of the warps
+  active, and no Direct3D 12 occupancy of the specialized or binned kernels has
+  been read. `world.indirect off` still removes a third of views on Vulkan:
+  that share is the gather's work.
 - **The main mesh pass shades several fragments a pixel,** with no
   front-to-back order and no depth prepass ([rendering plan](../../../../docs/plans/rendering.md#gpu-submission-and-routed-worlds)).
 - **Growing the program region waits for the device to go idle**

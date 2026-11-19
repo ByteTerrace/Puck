@@ -213,10 +213,11 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, SdfMeshHit meshHit, float3 
 #if !defined(SDF_VIEWS_OMIT_LIGHTS)
             SdfLightWalk walk = sdfLightWalkStart(lights);
             SdfLightSource light;
+            SdfShadeCarry shadeCarry = sdfShadeLightPrologue(shadeBinding, shadeStamp);
 
             [loop]
             while (sdfLightNext(walk, light)) {
-                SdfLightResponse response = sdfShadeLightPhase(shadeBinding, shadeStamp, light, shadeSurface);
+                SdfLightResponse response = sdfShadeLightPhase(shadeBinding, shadeStamp, shadeCarry, light, shadeSurface);
 
                 radiance += response.diffuse;
                 rim += response.rim;

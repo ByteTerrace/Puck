@@ -108,7 +108,7 @@ public static class SdfShadeOps {
         I("light.color", SdfShadeType.Float3, SdfShadePhase.Light), I("light.weight", phase: SdfShadePhase.Light),
         I("light.kind", SdfShadeType.UInt, SdfShadePhase.Light), I("light.reach", phase: SdfShadePhase.Light),
         I("light.visibility", phase: SdfShadePhase.Light), I("light.occlusion", phase: SdfShadePhase.Light),
-        I("light.probeShare", phase: SdfShadePhase.Light), I("light.cosine", phase: SdfShadePhase.Light),
+        I("light.probeShare", phase: SdfShadePhase.Light, reads: SdfShadeReads.ProbeShare), I("light.cosine", phase: SdfShadePhase.Light),
         I("compose.radiance", SdfShadeType.Float3, SdfShadePhase.Compose), I("compose.rim", SdfShadeType.Float3, SdfShadePhase.Compose),
         I("compose.specular", SdfShadeType.Float3, SdfShadePhase.Compose), I("compose.attenuation", phase: SdfShadePhase.Compose),
         I("compose.indirect", SdfShadeType.Float3, SdfShadePhase.Compose), I("compose.reflection", SdfShadeType.Float3, SdfShadePhase.Compose),

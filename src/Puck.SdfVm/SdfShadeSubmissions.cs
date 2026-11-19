@@ -84,6 +84,13 @@ public sealed class SdfShadeSlots {
         ArgumentNullException.ThrowIfNull(plan);
         var pipelines = residency.ShadeSelection;
 
+        // A plan bounds a job's work only on the kernels it was priced for and those before them (SdfShadeTier): the
+        // interpreter runs a straight-priced plan's pixels at its per-instruction cost, and either runs programs a neutral
+        // plan never priced. Every tier change re-renders the shading passes (SdfWorldResidency.PrepareShade), whose plans
+        // then price the new tier.
+        if (plan.Tier < residency.ShadeTier) {
+            throw new InvalidOperationException(message: $"A shading plan priced for the {plan.Tier} kernels cannot record with the {residency.ShadeTier} kernels.");
+        }
         Capture(pipelines: pipelines, plan: plan, residency: residency, slot: slot);
         return new SdfShadeSelection(pipelines: pipelines, residency: residency);
     }
