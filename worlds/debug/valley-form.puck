@@ -1,6 +1,25 @@
 // The valley's macro form, shared by the walls (valley.puck) and by what stands on them (water-site.puck's falls, glacier and
 // lake). A library: it emits no document.
 
+import "../standard/styles"
+
+// The rock's cel look, every rock row of the walls, the rim and the glacier's trough (celRock): Study B's painted canyon
+// faces (docs/game/art/valley-and-gallery.md), large lit planes over mauve shade, the step soft enough that the relief's
+// metre-scale lumps shade as one mass rather than a speckle, and no ink, as a painted cliff has none.
+let valleyRockStyle = celStyle with {
+  threshold: 0.3
+  softness: 0.3
+  shadowTint [0.82, 0.66, 0.8]
+  specularSize: 0.02
+  ink {
+    outlineWidth: 0
+    outlineDistance: 12
+    outlineNormal: 0.65
+    outlineTint [1, 1, 1]
+  }
+}
+function celRock(base) = celMaterial(base, valleyRockStyle)
+
 // Each sector's macro form: its bearing, where the floor plane cuts its main mass, how high that mass rises, the mass's
 // half-extents out from the centre and along the ring, and the seed of its relief.
 let valleySectors = [

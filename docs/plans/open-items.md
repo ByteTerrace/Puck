@@ -2661,10 +2661,6 @@ hang, then the cost corpus, then the unreproduced language findings.
   exports after the expansion. Merge repeated blocks or admit `export` in a
   template body, and decide whether an import's surface carries its own
   imports' exports.
-- [medium] `.puck` cannot take an imported value and override one field of it
-  outside a function body, so a world wanting one of the standard's styles with
-  one value changed copies every value. Add an object update over a `let`, or a
-  merge builtin beside `concat`.
 - [medium] No log of author walls exists, though "Ergonomic is optimal"
   (AGENTS.md) asks for one. The walls sit in S11's audit, this packet and the
   sdf-authoring skill's evals: start the one page those link to.

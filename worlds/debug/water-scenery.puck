@@ -100,7 +100,8 @@ prototypes {
     id: "glacier",
     lumps: glacierLumps,
     furrows: glacierFurrows,
-    origin: glacierOrigin
+    origin: glacierOrigin,
+    palette: glacierIcePalette
   )
   lakeStones(
     id: "lake-stones",

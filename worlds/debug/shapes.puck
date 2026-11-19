@@ -207,6 +207,23 @@ let galleryHexClip = [
 // a palette channel under test) and slots past it whatever else an exhibit appends.
 let exhibitMaterial = 0
 let accentMaterial = 3
+// The gallery's cel look, its walls, plinths, labels and signs (galleryCel): the shade a near-neutral step, so a lit room
+// still reflects untinted light onto its exhibits and an albedo reads as itself, and a thin cool ink on the building's
+// silhouettes and creases. An exhibit's subject (slot 0 of an exhibit's palette, and the slots it adds) keeps its own
+// shading: the gallery is the engine's self-test, and its plaques say what each subject shows.
+let galleryStyle = celStyle with {
+  threshold: 0.35
+  softness: 0.12
+  shadowTint [0.9, 0.88, 0.92]
+  specularSize: 0.02
+  ink {
+    outlineWidth: 1
+    outlineDistance: 10
+    outlineNormal: 0.6
+    outlineTint [0.42, 0.42, 0.48]
+  }
+}
+function galleryCel(base) = celMaterial(base, galleryStyle)
 let galleryPalette = [
   { color: "#B9C4D0", roughness: 0.45, specular: 0.3 }
   { color: "#3A3F47", roughness: 0.85 }

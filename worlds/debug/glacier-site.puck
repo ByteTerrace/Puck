@@ -39,11 +39,28 @@ function ridgeGround(r, x) = 0 - ridgeHalf * valleySink + ridgeHalf * squareRoot
 )
 let valleyRidges = [glacierRidge]
 
+// The ice's cel look (the standard's icePalette under glacierIceStyle): a wide cool shade step, so the lumps' rounded
+// crowns turn from sunlit white-blue to a clear blue shade as a painted glacier does, the flow layer kept as the ice's
+// surface, and no ink.
+let glacierIceStyle = celStyle with {
+  threshold: 0.3
+  softness: 0.25
+  shadowTint [0.62, 0.78, 1]
+  specularSize: 0.03
+  ink {
+    outlineWidth: 0
+    outlineDistance: 12
+    outlineNormal: 0.65
+    outlineTint [1, 1, 1]
+  }
+}
+let glacierIcePalette = map(icePalette, row => celMaterial(row, glacierIceStyle))
+
 // The wall's rock palette after its own: the trough's polished floor, and the moraine's grey and dark debris.
 let wallPalette = [
-  { color: "#94705A", roughness: 0.55, specular: 0.08 }
-  { color: "#A8876A", roughness: 0.95, specular: 0.02 }
-  { color: "#6B5242", roughness: 0.95, specular: 0.02 }
+  celRock({ color: "#94705A", roughness: 0.55, specular: 0.08 })
+  celRock({ color: "#A8876A", roughness: 0.95, specular: 0.02 })
+  celRock({ color: "#6B5242", roughness: 0.95, specular: 0.02 })
 ]
 
 // The trough: the rock cut away along the ramp in a U, `troughHalf` either side of its axis and rounded at the floor by
