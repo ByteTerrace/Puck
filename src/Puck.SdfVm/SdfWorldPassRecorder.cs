@@ -41,6 +41,8 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         SdfWorldPackage.MeshShadowSecondOptical,
         SdfWorldPackage.ViewsFilterRecords,
         SdfWorldPackage.ViewsFilterRecordsWritten,
+        SdfWorldPackage.ViewsProbeRecords,
+        SdfWorldPackage.ViewsProbeRecordsWritten,
         SdfWorldPackage.ShadeTiles,
         SdfWorldPackage.ShadeTilesWritten,
         SdfWorldPackage.ShadeArgumentsWritten,
@@ -829,11 +831,17 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
                     return;
                 }
             default: {
-                    var pipeline = tables.Pipeline(kernel: ((m_part == SdfWorldPackage.Parts.Pyramid) ? SdfKernel.MeshPyramid : SdfKernel.Surface));
+                    var pipeline = tables.Pipeline(kernel: m_part switch {
+                        SdfWorldPackage.Parts.Pyramid => SdfKernel.MeshPyramid,
+                        SdfWorldPackage.Parts.ViewsProbes => SdfKernel.ViewsProbes,
+                        _ => SdfKernel.Surface,
+                    });
 
                     var (x, y) = m_part switch {
                         // One invocation a texel of the pyramid's first level, half the extent rounded up.
                         SdfWorldPackage.Parts.Pyramid => (recording.Width.CeilingDivide(divisor: 2u).CeilingDivide(divisor: 8u), recording.Height.CeilingDivide(divisor: 2u).CeilingDivide(divisor: 8u)),
+                        // One invocation a cell of the probe lookup, the extent over its rate rounded up.
+                        SdfWorldPackage.Parts.ViewsProbes => (recording.Width.CeilingDivide(divisor: SdfWorldPackage.ViewsProbeRate).CeilingDivide(divisor: SdfVisibility.GroupEdgePixels), recording.Height.CeilingDivide(divisor: SdfWorldPackage.ViewsProbeRate).CeilingDivide(divisor: SdfVisibility.GroupEdgePixels)),
                         _ => (recording.Width.CeilingDivide(divisor: SdfVisibility.GroupEdgePixels), recording.Height.CeilingDivide(divisor: SdfVisibility.GroupEdgePixels)),
                     };
 
@@ -1195,6 +1203,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         SdfWorldPackage.Parts.ShadowFarOptical => SdfWorldPackage.MeshShadowFarOptical,
         SdfWorldPackage.Parts.ShadowSecondOptical => SdfWorldPackage.MeshShadowSecondOptical,
         SdfWorldPackage.Parts.Filter => SdfWorldPackage.ViewsFilterRecords,
+        SdfWorldPackage.Parts.Probes => SdfWorldPackage.ViewsProbeRecords,
         SdfWorldPackage.Parts.ShadeTiles or SdfWorldPackage.Parts.ShadeBinned => SdfWorldPackage.ShadeTiles,
         _ => null,
     };
@@ -1204,6 +1213,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         SdfWorldPackage.Parts.Reactivity => SdfWorldPackage.ReactivityWritten,
         SdfWorldPackage.Parts.MeshPyramid => SdfWorldPackage.MeshPyramidWritten,
         SdfWorldPackage.Parts.Filter => SdfWorldPackage.ViewsFilterRecordsWritten,
+        SdfWorldPackage.Parts.Probes => SdfWorldPackage.ViewsProbeRecordsWritten,
         SdfWorldPackage.Parts.ShadeTiles or SdfWorldPackage.Parts.ShadeBinned => SdfWorldPackage.ShadeTilesWritten,
         SdfWorldPackage.Parts.ShadeArguments => SdfWorldPackage.ShadeArgumentsWritten,
         _ => null,

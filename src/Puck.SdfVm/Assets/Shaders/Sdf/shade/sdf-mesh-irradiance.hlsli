@@ -389,7 +389,8 @@ float sdfMeshIrradianceBeyond(float3 pushed, float3 spacing, int3 low, int3 dims
 // finer level's stage past its window answers in its share times its reach share (sdfMeshIrradianceReachShare).
 // Only the finest level keeps the facing floor (SDF_MESH_IRRADIANCE_BEHIND_SHARE): its depth test resolves the
 // receiver's own surface, while a coarser probe behind the receiver's plane is as likely beyond the receiver's own wall.
-SdfMeshProbes sdfMeshProbesAt(float3 position, float3 normal) {
+// The gather of a receiver no probe answers: every weight and the share zero.
+SdfMeshProbes sdfMeshProbesNone() {
     SdfMeshProbes probes;
 
     probes.cage = 0u;
@@ -400,6 +401,11 @@ SdfMeshProbes sdfMeshProbesAt(float3 position, float3 normal) {
     [unroll] for (uint corner = 0u; (corner < 16u); corner++) {
         probes.weight[corner] = 0.0;
     }
+    return probes;
+}
+SdfMeshProbes sdfMeshProbesAt(float3 position, float3 normal) {
+    SdfMeshProbes probes = sdfMeshProbesNone();
+
     if (any(!isfinite(position))) {
         return probes;
     }
