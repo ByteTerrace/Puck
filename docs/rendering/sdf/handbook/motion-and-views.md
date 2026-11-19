@@ -250,12 +250,14 @@ another world as a view instance (`WorldViewInstances`).
   `routed$<digest>$<screen>…`, the digest naming the authority beneath a world a seat is presented in), fitted
   to the eye of the view one level up, so two portals facing each other end at
   the depth; a face at the depth shows its session's `fallback` colour. A
-  world is resident once, however many views show it: while a session
-  discloses everything, it renders as a view of the residency its destination
-  already renders through, the World's own for the boot world (filmed into the
-  World's frame after its camera views) and its endpoint's scene for any other
-  local world. A session builds a residency of its own only when its session
-  discloses less, and builds its frame source the first time it does. Each view
+  world is resident once, however many views show it: while its authority's
+  proof says a session is handed the whole scene, it renders as a view of the
+  residency its destination already renders through, the World's own for the
+  boot world (filmed into the World's frame after its camera views) and its
+  endpoint's scene for any other local world; sessions proved to be handed one
+  lesser scene share a scene drawn from one of their mirrors. A session builds a
+  residency of its own only when no other session shares its scene, and builds
+  its frame source the first time it does. Each view
   of a residency binds the screens of its own level (`ISdfScreenSources.ReadOf`
   takes the view). Every
   other screen of that world shows its own source: its machines from its own

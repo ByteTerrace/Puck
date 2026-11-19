@@ -1173,14 +1173,17 @@ same endpoint share one residency, with a view each. A window attached to that w
 seats' views, at its own quality; the scene stays while a seat is presented there or a window is
 attached. The presenter latches membership each frame: attachments enter at the next latch, and
 disposal reserves the window's slot through the current frame. A session screen whose session
-discloses everything joins its destination's scene this way (`WorldSessionRoute`), so every
-seat and every such session presenting one endpoint share exactly one residency, and its GPU node
-(`sdf:routed$<endpoint>`) reports that row: residencies made and released, and the bytes its
-tables hold by memory. Any other session screen renders a residency of its own from its own
-observation of the destination. A session of the boot world joins no scene: it renders as a view of the
-World's own residency, filmed after the World's camera views, so the boot world is resident once however
-many windows show it. The rule holds at every depth: a destination shown at two depths, or by a window and
-a seat, shares its one residency while each session discloses everything.
+shares its world's whole scene (`WorldSceneProof.SharesAuthority`) joins its destination's scene this
+way (`WorldSessionRoute`), so every seat and every such session presenting one endpoint share exactly
+one residency, and its GPU node (`sdf:routed$<endpoint>`) reports that row: residencies made and
+released, and the bytes its tables hold by memory. A session of the boot world that does joins no
+scene: it renders as a view of the World's own residency, filmed after the World's camera views. Sessions
+whose proofs carry one scene identity for one world, but less than the whole scene (a spectator of a
+card table whose faces it may not read), share a scene of their own, drawn from the first such
+session's mirror (`WorldFramePresenter.AttachSharedWindow`), joined on a frame whose latched delivery
+both proofs cover. Only a session alone in its scene renders a residency of its own. The rule holds at
+every depth: a destination shown at two depths, or by a window and a seat, shares one residency while
+each session's proof allows it.
 A session's access (none, what it discloses, or everything) is settled once a frame before any view of it
 is bound (`WorldViewerAccess`). When it narrows, the screen shows nothing it was shown before: every picture
 its view published, and every picture rendered over one, is withdrawn from the render graph

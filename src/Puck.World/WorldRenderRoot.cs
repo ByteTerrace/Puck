@@ -133,7 +133,8 @@ public static class WorldRenderRoot {
 
         // The world's views are sdf.world instances. A camera view renders its view of the world's frame, after the
         // presentation's own; a session renders a view of the one residency its destination renders through (this world's,
-        // or its endpoint scene's) while it discloses everything, and a residency of its own otherwise; every other instance
+        // or its endpoint scene's) while its proof says it is handed the whole scene, a scene it shares with sessions proved
+        // to be handed the same one, and a residency of its own otherwise; every other instance
         // renders one of the presentation's own views, the first unless its name numbers a later one (WorldViewNames), or,
         // while that view's seat is presented in another world, the view of that world's scene. The package holds the
         // world's residency for its lifetime, so the frame every other residency films is captured whether or not a view

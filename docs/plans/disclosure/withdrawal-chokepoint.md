@@ -8,7 +8,8 @@ property as one invariant, and designs the structural door that holds it, in
 place of the per-path guards the review kept finding ways around. A design
 review of the first draft found sixteen flaws in that door; this revision
 closes each at its cause and [answers them one by one](#the-design-reviews-findings-answered).
-Step 1 of [the build order](#the-build-order) is built; the rest is a design.
+Steps 1 and 6 of [the build order](#the-build-order) are built; the rest is a
+design.
 
 ## Summary
 
@@ -755,7 +756,7 @@ cut taking effect at the next mixer block after ingress accepts it.
 | A package's per-instance state ends with its generation | A type: the cell is issued per generation | Gets an empty cell |
 | A late completion cannot publish | One door: the runtime compares the completion's generation | Is dropped |
 | Shared lighting is read through its label | One door: the tables' accessor is the only binder of those buffers | Has no buffer to bind |
-| Sharing needs a proof | A type: a shared view is constructed from a proof and nothing else | Does not compile |
+| Sharing needs a proof | One producer each: `TryWindowEndpoint` for an endpoint and `SharedSceneOf` for a shared scene, each reading the current proof (the client cannot name the server's proof type, so no type carries it) | Has no other producer of what a route attaches to |
 | The display replaces a cut frame | One door: the presenter's owed replacement | Is not asked |
 
 ## What stays review-only
@@ -958,6 +959,24 @@ for the display. The second and third kinds are GPU legs the lead schedules.
 6. **Sharing by proof.** The authority issues proofs; a shared view is
    constructed from one; the frame bound and each install check it. Deletes
    `WorldSessionObservation.DisclosesEverything` and step 1's tightened test.
+   *Built, the checks below not yet run:* the session sink issues a
+   `WorldSceneProof` at each `Replica` delivery from
+   `WorldRecipientView.SceneIdentity`, compared with an operator's
+   (`WorldSceneProof.SharesAuthority`), and `WorldInstanceHost.TryWindowEndpoint`
+   lets a window join its destination's scene only on a frame whose endpoint
+   mirror took a delivery the proof covers. Proof by content also lets two
+   sessions share with each other: sessions whose proofs carry one identity for
+   one world render one scene drawn from the first one's mirror, on a frame
+   whose latched delivery both proofs cover
+   (`WorldScreenBinder.SharedSceneOf`). That is the debug world's case: its
+   boot sessions cannot share the boot residency, because the shedding table
+   deals its faces from `sheddingCards`, which withholds from them, but they
+   are one audience and share one scene among themselves. An install needs no
+   separate check: what a job installs reaches a viewer only through the
+   window its route binds, which each frame settles from the current proofs.
+   The door is one producer, not a type: the client may not reference the
+   server, so the shared scene a route attaches to is made only by
+   `SharedSceneOf`, and an endpoint only by `TryWindowEndpoint`.
    *Check, offscreen:* in the debug world the painting wing's windows still
    share (the residency count is what it was), with the positive control that
    each draws. A restricted placement added to the destination by
@@ -1044,8 +1063,12 @@ as `WorldDeliveryCursor.Generation` and `WorldStreamIngress`.
   a remote neighbour, which nothing in the debug world runs yet; the lane
   that next works on remote observation builds it.
 - Whether the scene a mirror hands out can become one type that the proof's
-  comparison walks, which would retire review-only item 3. The step 6 lane
-  decides when it sees the comparison's size.
+  comparison walks, which would retire review-only item 3. Decided for now:
+  no. The comparison is small (the frame identity the disclosure table already
+  keeps, and one term per row a scene reads), and its list of rows is one
+  function, `WorldSceneInputs.Rows`, which a new way to read a state row from a
+  scene owes a term. The scene emitter reads its mirror through many paths, so
+  one type would be a wide refactor of the client for a list of four kinds.
 
 ---
 

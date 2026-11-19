@@ -189,7 +189,7 @@ All paths are under `src/` unless stated.
 
 - A routed scene gets its own residency on first resolve (`RoutedResidencyOf`, Device.Routed.cs:110-126;
   `CreateRoutedResidency`, :132-165) and is disposed when the presenter stops presenting it (:200-215) **[opened]**.
-  A session whose route does not disclose everything gets a residency of its own (`CreateSessionResidency`,
+  A session no scene proof lets share another stream's scene gets a residency of its own (`CreateSessionResidency`,
   Device.Views.cs:11-45) **[opened]**. Each is a full `SdfWorldResidency`: own tables, own mesh region at its own
   quarter-of-device limit (SdfWorldTables.cs:205), own `SdfGpuWork` (SdfWorldTables.cs:400), own irradiance volume
   **[opened]**. Release is whole: `Release` disposes irradiance, tables, dresser, retires the bake
