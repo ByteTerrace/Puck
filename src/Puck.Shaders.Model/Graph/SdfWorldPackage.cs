@@ -134,6 +134,9 @@ public static partial class SdfWorldPackage {
     public const string WorldLanes = "worldLanes";
     /// <summary>The stable shadow slots' light indices; an empty slot holds −1 (<c>int4</c>).</summary>
     public const string ShadowSlots = "shadowSlots";
+    /// <summary>The stable slot each shadow role is held by (<c>SdfLights.RoleSlot</c>): x the primary role's, which carries
+    /// the near and far cascades, y the secondary's; −1 where no slot holds the role, and zw −1 (<c>int4</c>).</summary>
+    public const string ShadowRoles = "shadowRoles";
     /// <summary>The configured stable shadow slot count (<c>uint</c>).</summary>
     public const string ShadowSlotCount = "shadowSlotCount";
     /// <summary>The active incoming shadow march count (<c>uint</c>).</summary>
@@ -341,6 +344,7 @@ public static partial class SdfWorldPackage {
         Value(name: SkyPeakLuminance, type: ShaderValueType.Float),
         Value(name: FlowClock, type: ShaderValueType.Float),
         Value(name: ShadowSlots, type: ShaderValueType.Int4),
+        Value(name: ShadowRoles, type: ShaderValueType.Int4),
         Value(name: ShadowSlotCount, type: ShaderValueType.Uint),
         Value(name: ShadowFadeCount, type: ShaderValueType.Uint),
         Value(name: CurvatureCavity, type: ShaderValueType.Float),
@@ -368,6 +372,8 @@ public static partial class SdfWorldPackage {
         ShaderInterfaceMember.Value(group: ShaderInterfaceGroup.Pass, length: (MeshShadowCascadeCount * MeshShadowCascadeRows), name: MeshShadowCascades, type: ShaderValueType.Float4),
         Value(name: MeshShadowCount, type: ShaderValueType.Uint),
         Value(name: MeshShadowParameters, type: ShaderValueType.Float4),
+        Value(name: MeshShadowSlopes, type: ShaderValueType.Float4),
+        Value(name: MeshShadowRoles, type: ShaderValueType.Uint4),
         Value(name: MeshShadowTexels, type: ShaderValueType.Uint),
         ShaderInterfaceMember.Value(group: ShaderInterfaceGroup.Pass, length: MeshIrradianceLevelCount, name: MeshIrradianceLevels, type: ShaderValueType.Int4),
         ShaderInterfaceMember.Value(group: ShaderInterfaceGroup.Pass, length: MeshIrradianceLevelCount, name: MeshIrradianceSpacings, type: ShaderValueType.Float4),

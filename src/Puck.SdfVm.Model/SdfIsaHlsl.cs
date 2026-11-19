@@ -364,6 +364,8 @@ public static class SdfIsaHlsl {
         declarations.Count(name: "SDF_SHADOW_BITS", value: SdfVisibility.ShadowBits);
         declarations.Bits(name: "SDF_SHADOW_MASK", value: SdfVisibility.ShadowMask);
         declarations.Count(name: "SDF_SHADOW_SLOTS", value: SdfShadowSlots.MaxSlots);
+        declarations.Count(name: "SDF_SHADOW_ROLES", value: SdfShadowSlots.Roles);
+        declarations.Count(name: "SDF_MESH_SHADOW_ENTRIES", value: SdfWorldPackage.MeshShadowEntries);
         declarations.Count(name: "SDF_SHADOW_FADE_CAPACITY", value: SdfShadowSlots.MaxFadeSlots);
         declarations.Section(title: "The visibility record's normal word (SdfVisibility): its SNORM16 scale and the word of a record with no normal.");
         declarations.Real(name: "SDF_VISIBILITY_NORMAL_SCALE", value: SdfOctahedral.SignedScale(bits: SdfVisibility.NormalBits));

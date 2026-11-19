@@ -67,7 +67,7 @@ public sealed partial class SdfWorldTables {
         SdfWorldPackage.GridObjectPatchRadius,
     ]);
     private static readonly (int Offset, int Length)[] ShadowValues = Members(members: [
-        SdfWorldPackage.ShadowSlots, SdfWorldPackage.ShadowSlotCount, SdfWorldPackage.ShadowFadeCount,
+        SdfWorldPackage.ShadowSlots, SdfWorldPackage.ShadowRoles, SdfWorldPackage.ShadowSlotCount, SdfWorldPackage.ShadowFadeCount,
         SdfWorldPackage.DisableSoftShadows,
     ]);
 

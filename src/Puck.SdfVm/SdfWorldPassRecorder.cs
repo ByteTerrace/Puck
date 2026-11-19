@@ -480,7 +480,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
                     var cascades = SdfMeshShadowCascades.Fit(frame: m_view.Residency.Frame!, view: m_view.View);
 
                     return ((cascades.Count == 0) || ((PartDrawCount(tables: tables) == 0) && TargetsHoldClear) ||
-                        ((m_part == SdfWorldPackage.Parts.ShadowSecond) && (cascades.SecondPenumbraSlope <= 0f)));
+                        ((m_part == SdfWorldPackage.Parts.ShadowSecond) && (cascades.Count <= SdfMeshShadowCascades.SecondEntry)));
                 }
             default:
                 return false;

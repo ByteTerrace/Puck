@@ -107,15 +107,18 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, SdfMeshHit meshHit, float3 
 #endif
 
     if (useFinalShading && !sampledScreen) {
-        // The surface sample's K row, which views filtered (sdfViewsFilter); with shadows off every light goes unshadowed.
+        // The surface sample's K row, which views filtered (sdfViewsFilter): each shadow role's cascade visibility and
+        // coverage, which the light walk answers through (sdfShadowRoleAnswer); with shadows off every light takes the
+        // probes' answer. The unbound glass's faint tint reads the key light's (the primary role's) cascades alone.
         float4 shadowVisibility = float4(1.0, 1.0, 1.0, 1.0);
         float3 keyDirection = worldSunDirection();
         float sunDiffuse = max(dot(normal, keyDirection), 0.0);
+        bool cascaded = ((passGroup.meshShadowCount > 0u) && !worldSoftShadowsDisabled());
 
-        if ((passGroup.shadowSlotCount > 0u) && !worldSoftShadowsDisabled()) {
+        if (cascaded) {
             shadowVisibility = s.shadows;
+            sunDiffuse *= lerp(1.0, shadowVisibility.x, shadowVisibility.z);
         }
-        sunDiffuse *= sdfLightVisibility(passGroup.shadowSlots.x, shadowVisibility, 1.0);
 
         if (material >= SDF_SCREEN_MATERIAL) {
             // The unbound glass: a declared screen with no source bound this frame (or the plain sentinel), unlit apart
@@ -197,7 +200,7 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, SdfMeshHit meshHit, float3 
             shadeSurface.ambientOcclusion = ambientOcclusion;
             shadeSurface.shadowVisibility = shadowVisibility;
             shadeSurface.shadowMeasured = shadowMeasured;
-            shadeSurface.cascaded = ((passGroup.meshShadowCount > 0u) && !worldSoftShadowsDisabled());
+            shadeSurface.cascaded = cascaded;
             shadeSurface.probed = sdfMeshAnswers(probes);
             shadeSurface.probes = probes;
 
