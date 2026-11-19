@@ -3,8 +3,11 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Puck.Abstractions;
+using Puck.Abstractions.Memory;
+using Puck.Abstractions.Presentation;
 using Puck.Commands;
 using Puck.Hosting;
+using Puck.Hosting.Jobs;
 using Puck.Launcher;
 
 namespace Puck.World;
@@ -14,6 +17,36 @@ public sealed partial class WorldBenchmarkCommandModule {
 
     // The kind a loop is reported as: the first is cold, the second warm and every later one steady.
     private static string KindOf(int loop) => ((loop < LoopKinds.Length) ? LoopKinds[loop] : "steady");
+
+    // The device profile the run played under: what was selected and how, the table and caps it applied, and the limits
+    // the process account admitted against while it ran.
+    private JsonNode ProfileReport() {
+        var selection = (deviceProfile?.Current ?? WorldDeviceProfileState.Selection.None);
+        var host = MemoryAccount.Shared.ReadAdmission(pool: PhysicalMemory.Host);
+        var device = MemoryAccount.Shared.ReadAdmission(pool: PhysicalMemory.Device);
+
+        return new JsonObject {
+            ["profile"] = selection.Profile,
+            ["source"] = selection.Source,
+            ["adapter"] = selection.Adapter,
+            ["table"] = ((selection.Table is { } tier) ? QualityTiers.Name(tier: tier) : null),
+            ["deviceMemoryCapBytes"] = selection.DeviceMemoryBytes,
+            ["hostMemoryCapBytes"] = selection.HostMemoryBytes,
+            ["deviceMemoryLimitBytes"] = device.Limit,
+            ["hostMemoryLimitBytes"] = host.Limit,
+        };
+    }
+    // The topology the route played in: which authority the seat's body stood in. A seat standing in a world the host
+    // itself runs is the in-process topology; a seat whose authority is another process's endpoint is the remote one.
+    private JsonNode TopologyReport() {
+        var endpoint = seatRouter?.TryRoute(slot: 0)?.Endpoint.Identity;
+        var local = ((endpoint is not null) && (instances is not null) && instances.TryGet(instance: out _, name: endpoint));
+
+        return new JsonObject {
+            ["endpoint"] = endpoint,
+            ["kind"] = ((endpoint is null) ? "none" : (local ? "in-process" : "remote")),
+        };
+    }
 
     // Writes the run's report and frames, whole or partial, and answers with the summary it also narrates on standard error.
     private CommandResult Finish(string? reason, int dropped, HostFrameRecording? recording) {
@@ -34,6 +67,8 @@ public sealed partial class WorldBenchmarkCommandModule {
             ["iterations"] = (recording?.Count ?? 0),
             ["overlay"] = new JsonObject { ["enabledAtEntry"] = m_overlayAtEntry, ["changedDuringRun"] = m_overlayChanged },
             ["gpu"] = (gpuTiming?.Capture() ?? new JsonObject { ["state"] = "absent" }),
+            ["profile"] = ProfileReport(),
+            ["topology"] = TopologyReport(),
         };
 
         gpuTiming?.RequireRecording(false);

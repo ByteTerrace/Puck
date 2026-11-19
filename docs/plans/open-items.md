@@ -1007,10 +1007,13 @@ says how one is reproduced and profiled.
 Owner: specialist (rendering, sdf-authoring) · high, it blocks authoring ·
 Next: the engine gaps this packet holds, filled first
 ([rendering research](rendering-research.md#engine-gaps-filled-first)): a
-feature thinner than a bake cell is lost or faceted (gap 7), which starts with
-decision 10's count: for each failing shape, which of the four defects it
-shows and whether its cell was ever flagged for finer sampling (that plan's
-`contour` lane), then its contour rule, built behind an audit of every stored mesh;
+feature thinner than a bake cell is lost or faceted (gap 7). The count of
+decision 10 is in (`puck mesh audit --cpu` prints each failing shape's defect
+class and whether its cell was flagged for finer sampling): the failing cells of
+the blend exhibits and nearly all of the Moth's were flagged and measured, so the
+fix is a contour rule for a cell that cannot resolve its faces, built behind an
+audit of every stored mesh; only the swallow's streamers were never examined, a
+lattice at its tier's floor on which the refinement scan never runs;
 a primitive under a non-uniform scale gives a bound, not a distance (gap 11,
 [rendering](rendering.md#bake-quality)); and, beside them,
 [moving blends](moving-blends.md#engine-gaps-first)' step 4 (gap 10). Then the
@@ -3198,6 +3201,17 @@ the stages; this packet holds what a stage does not.
   the client. The rendering plan's `bench` lane rebuilds it on what the
   seat's client was delivered
   ([its decision 1](rendering-research.md#1-measure-beside-the-work)).
+  What the driver reads, and what the endpoint delivers instead: the body's
+  pose (`WorldAuthorityEndpoint.Mirror`, presentation floats where the driver
+  reads fixed point), the delivered definition (`WorldAuthorityEndpoint.Definition`,
+  from which places and spawn points follow), and a navigation planner that
+  exists only as `WorldPopulation.PlanSteering`, which needs a resolved
+  population with its contact field and the seat kit's collider. The driver
+  also fails a chapter on `WorldBody.LastObstructionNormal`, a witness no
+  snapshot carries. The report separates the in-process and remote topology
+  (`topology` in the run report) but a run against `--connect` still cannot
+  drive its seat: the driver holds its controls and reports a `seat` failure
+  when the chapter's time limit passes.
 - [medium] A fresh run's first chapter opens on the boot's settling, not on
   its pose: on a headless World armed `at 10` after a `--paused` boot, the
   chapter's first two iterations (ticks 10 and 11) still simulate for

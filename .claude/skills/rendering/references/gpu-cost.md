@@ -466,7 +466,7 @@ signal and present the process makes, on both backends and every device. Each
 execute is counted under who caused it (`graph`, `bake`, `probe`, `upload`,
 `transfer`, `readback`, `present`, `drain`) and why it reached the queue then
 (`unbatched`, `batch-end`, `door`, `fence-wait`, `external-wait`, `drain`,
-`empty-fence`); lists count under the category they were deferred with. Divide
+`empty-fence`, `job-end`); lists count under the category they were deferred with. Divide
 two readings' deltas by the `frames` delta (presents). `unattributed` nonzero
 past boot means a submitter that names no category: give it a
 `GpuQueueWork.Attribute` scope rather than reading it as a category of work. A
@@ -475,7 +475,13 @@ Vulkan fence or timeline signal rides its `vkQueueSubmit`, so Vulkan's
 
 - **One frame should be about two executes plus its background jobs:** the graph
   batch's `batch-end` and the presenter's own. Background `bake` and `probe` jobs
-  submit unbatched at their pumps so they start before the frame records.
+  pumped between frames submit unbatched. Jobs pumped inside the frame's batch
+  (`RenderGraphRuntime`'s package preparation) take one hand-over of their own,
+  counted as `job-end`: the first frame submission deferred behind a run of jobs
+  hands the run to the queue (`GpuSubmissionBatch.Admit`), so the jobs start
+  while the frame records and their fences answer from that hand-over's signal
+  rather than the frame's last. `jobs` counts the jobs' fences batches handed
+  over and `jobs.late` those still answered behind frame work, which reads zero.
   `external-wait` is the cost to watch: on Direct3D 12 an outstanding external
   wait must split the batch, since `ID3D12CommandQueue::Wait` holds everything
   after it on the queue, so every sampling node would split the frame. The

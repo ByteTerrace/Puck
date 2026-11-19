@@ -1,3 +1,5 @@
+using Puck.Abstractions.Presentation;
+
 namespace Puck.World;
 
 public static partial class WorldDefinitionValidator {
@@ -6,6 +8,32 @@ public static partial class WorldDefinitionValidator {
         ValidateShadowPreset(render.LowRaw, "render.low", errors);
         ValidateShadowPreset(render.MediumRaw, "render.medium", errors);
         ValidateShadowPreset(render.HighRaw, "render.high", errors);
+        ValidateDeviceProfiles(render, errors);
+    }
+    private static void ValidateDeviceProfiles(WorldRenderDefaults render, List<string> errors) {
+        var names = new HashSet<string>(comparer: StringComparer.Ordinal);
+
+        foreach (var profile in render.Devices ?? []) {
+            var path = $"render.devices[{profile.Name}]";
+
+            if (string.IsNullOrWhiteSpace(value: profile.Name) || !names.Add(item: profile.Name)) {
+                errors.Add(item: $"{path}: a device profile needs a name no other profile in the world carries.");
+            }
+            if (string.IsNullOrWhiteSpace(value: profile.Match)) {
+                errors.Add(item: $"{path}.match must name text the adapter's name contains.");
+            }
+            if (render.Preset(tier: profile.Quality) is null) {
+                var tier = QualityTiers.Name(tier: profile.Quality);
+
+                errors.Add(item: $"{path}.quality names the {tier} table, which render.{tier} does not author.");
+            }
+            if (profile.DeviceMemoryMiB is <= 0) {
+                errors.Add(item: $"{path}.deviceMemoryMiB must be positive.");
+            }
+            if (profile.HostMemoryMiB is <= 0) {
+                errors.Add(item: $"{path}.hostMemoryMiB must be positive.");
+            }
+        }
     }
     private static void ValidateShadowPreset(WorldQualityPreset? preset, string path, List<string> errors) {
         if (preset is { } value) {

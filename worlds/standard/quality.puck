@@ -26,6 +26,18 @@ render {
       age: 8
     }
   }
+  // The device profiles: for each graphics device the standard ships for, the quality table it runs and the memory it may
+  // use. The engine selects a profile by the adapter's name (`match`, a case-insensitive part of it) or by name
+  // (`world.device-profile <name>`), applies its table as `world.quality` does and admits memory against its bars: the
+  // device pool's limit is the lower of `deviceMemoryMiB` and the adapter's own budget less a tenth, and
+  // `hostMemoryMiB` bounds the host pool the same way. The RTX 4070 keeps 8 GiB of its 12 for the system and other
+  // programs, the RTX 2060 4.5 GiB of its 6, and the Steam Deck's one pool of 10 GiB holds the process and its GPU
+  // together. Until initial development is done every device runs `high`.
+  devices [
+    { name: "rtx4070", match: "RTX 4070", quality: high, deviceMemoryMiB: 8192 }
+    { name: "rtx2060", match: "RTX 2060", quality: high, deviceMemoryMiB: 4608 }
+    { name: "steamdeck", match: "VANGOGH", quality: high, hostMemoryMiB: 10240 }
+  ]
   low {
     bloom: Off
     indirect: Medium
