@@ -62,20 +62,6 @@ uint sdfViewsProbeRecord(uint2 cell, uint viewIndex) {
     return (SDF_VIEWS_PROBE_WORDS * ((((viewIndex * cells.y) + cell.y) * cells.x) + cell.x));
 }
 
-SdfMeshProbes sdfViewsProbesNone() {
-    SdfMeshProbes probes;
-
-    probes.cage = 0u;
-    probes.remainderCage = 0u;
-    probes.share = 0.0;
-    probes.measured = false;
-    probes.remainderMeasured = false;
-    [unroll] for (uint corner = 0u; (corner < 16u); corner++) {
-        probes.weight[corner] = 0.0;
-    }
-    return probes;
-}
-
 #if defined(SDF_VIEWS_PROBES_PASS)
 // Writes a cell's record: the representative's gather and its pixel within the cell, or with `present` false a cell
 // whose every record word but the state is left as it was.
@@ -101,7 +87,7 @@ void sdfViewsProbesStore(uint record, SdfMeshProbes probes, uint lane, bool pres
 bool sdfViewsProbesLoad(uint record, out SdfMeshProbes probes, out uint lane) {
     uint state = sdfViewsProbeRecordBuffer[record + SdfViewsProbeStateWord];
 
-    probes = sdfViewsProbesNone();
+    probes = sdfMeshProbesNone();
     lane = ((state >> SdfViewsProbeLaneShift) & 0xFFu);
     if ((state & SdfViewsProbePresent) == 0u) {
         return false;
@@ -125,7 +111,7 @@ bool sdfViewsProbesLoad(uint record, out SdfMeshProbes probes, out uint lane) {
 // probe lookup gathered the representative at.
 SdfMeshProbes sdfViewsProbesAt(SdfPixel p, float3 surfacePoint, float3 normal) {
 #if defined(SDF_VIEWS_OMIT_PROBES)
-    return sdfViewsProbesNone();
+    return sdfMeshProbesNone();
 #else
 #if !defined(SDF_VIEWS_OMIT_PROBE_SHARING)
     uint2 cell = (p.pixel / SDF_VIEWS_PROBE_RATE);

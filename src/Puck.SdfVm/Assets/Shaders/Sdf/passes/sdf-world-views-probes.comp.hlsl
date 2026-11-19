@@ -43,7 +43,7 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
     }
 #endif
 
-    SdfMeshProbes probes = sdfViewsProbesNone();
+    SdfMeshProbes probes = sdfMeshProbesNone();
 
     if (present) {
         uint2 pixel = (origin + uint2((lane % SDF_VIEWS_PROBE_RATE), (lane / SDF_VIEWS_PROBE_RATE)));
