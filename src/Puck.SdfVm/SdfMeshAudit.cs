@@ -516,7 +516,7 @@ public static class SdfMeshAudit {
         var slivers = 0;
 
         for (var triangle = 0; (triangle < triangles); triangle++) {
-            var (a, b, c) = Corners(indices: indices, positions: positions, triangle: triangle);
+            var (a, b, c) = SdfMeshTriangle.Corners(indices: indices, positions: positions, triangle: triangle);
             var cross = Vector3.Cross(vector1: (b - a), vector2: (c - a));
             var longest = MathF.Max(x: Vector3.DistanceSquared(value1: a, value2: b), y: MathF.Max(x: Vector3.DistanceSquared(value1: b, value2: c), y: Vector3.DistanceSquared(value1: c, value2: a)));
             var centroid = (((a + b) + c) / 3f);
@@ -544,7 +544,7 @@ public static class SdfMeshAudit {
         var shadingErrors = new float[(normals.IsEmpty ? 0 : triangles)];
 
         for (var triangle = 0; (triangle < triangles); triangle++) {
-            var (a, b, c) = Corners(indices: indices, positions: positions, triangle: triangle);
+            var (a, b, c) = SdfMeshTriangle.Corners(indices: indices, positions: positions, triangle: triangle);
 
             // A flat field or a degenerate triangle gives nothing to judge a facing against.
             if ((gradients[triangle] == Vector3.Zero) || (faceNormals[triangle] == Vector3.Zero)) {
@@ -833,8 +833,6 @@ public static class SdfMeshAudit {
         return (open, nonManifold, openTriangles);
     }
 
-    private static (Vector3 A, Vector3 B, Vector3 C) Corners(ReadOnlySpan<uint> indices, ReadOnlySpan<Vector3> positions, int triangle) =>
-        (positions[((int)indices[(3 * triangle)])], positions[((int)indices[((3 * triangle) + 1)])], positions[((int)indices[((3 * triangle) + 2)])]);
     // Each vertex's first vertex at the same position: the contour splits a vertex at creases and material boundaries
     // into copies that share it.
     private static int[] Weld(ReadOnlySpan<Vector3> positions) {
@@ -923,8 +921,8 @@ public static class SdfMeshAudit {
             }
         }
 
-        var triangles = new TriangleGrid(cellSize: (2f * cell), indices: indices, positions: positions);
-        var excused = ((accounted is null) ? null : new TriangleGrid(cellSize: (2f * cell), indices: accounted.Indices.Span, positions: accounted.Positions.Span));
+        var triangles = new SdfMeshTriangleGrid(cellSize: (2f * cell), indices: indices, positions: positions);
+        var excused = ((accounted is null) ? null : new SdfMeshTriangleGrid(cellSize: (2f * cell), indices: accounted.Indices.Span, positions: accounted.Positions.Span));
         var crossings = 0;
         var missing = 0;
 
@@ -1125,57 +1123,5 @@ public static class SdfMeshAudit {
     // The triangles that hold an edge: how many, and the first two.
     private readonly record struct Held(int Count, int First, int Second) {
         public Held With(int triangle) => new(Count: (Count + 1), First: First, Second: ((Count == 1) ? triangle : Second));
-    }
-    // The mesh's triangles bucketed by the cells of a uniform grid their boxes overlap, which answers the distance from a
-    // point to the nearest triangle within a reach.
-    private sealed class TriangleGrid {
-        private readonly float m_cellSize;
-        private readonly Dictionary<(int, int, int), List<int>> m_cells = [];
-
-        public TriangleGrid(ReadOnlySpan<Vector3> positions, ReadOnlySpan<uint> indices, float cellSize) {
-            m_cellSize = cellSize;
-            for (var triangle = 0; (triangle < (indices.Length / 3)); triangle++) {
-                var (a, b, c) = Corners(indices: indices, positions: positions, triangle: triangle);
-                var low = Cell(point: Vector3.Min(value1: a, value2: Vector3.Min(value1: b, value2: c)));
-                var high = Cell(point: Vector3.Max(value1: a, value2: Vector3.Max(value1: b, value2: c)));
-
-                for (var z = low.Z; (z <= high.Z); z++) {
-                    for (var y = low.Y; (y <= high.Y); y++) {
-                        for (var x = low.X; (x <= high.X); x++) {
-                            if (!m_cells.TryGetValue(key: (x, y, z), value: out var held)) {
-                                held = [];
-                                m_cells.Add(key: (x, y, z), value: held);
-                            }
-                            held.Add(item: triangle);
-                        }
-                    }
-                }
-            }
-        }
-
-        // The distance to the nearest triangle within the reach, or the reach when none lies within it.
-        public float Nearest(Vector3 point, float reach, ReadOnlySpan<Vector3> positions, ReadOnlySpan<uint> indices) {
-            var low = Cell(point: (point - new Vector3(value: reach)));
-            var high = Cell(point: (point + new Vector3(value: reach)));
-            var nearest = reach;
-
-            for (var z = low.Z; (z <= high.Z); z++) {
-                for (var y = low.Y; (y <= high.Y); y++) {
-                    for (var x = low.X; (x <= high.X); x++) {
-                        if (!m_cells.TryGetValue(key: (x, y, z), value: out var held)) { continue; }
-                        foreach (var triangle in held) {
-                            var (a, b, c) = Corners(indices: indices, positions: positions, triangle: triangle);
-
-                            nearest = MathF.Min(x: nearest, y: Vector3.Distance(value1: point, value2: SdfMeshTriangle.Closest(a: a, b: b, c: c, p: point)));
-                        }
-                    }
-                }
-            }
-
-            return nearest;
-        }
-
-        private (int X, int Y, int Z) Cell(Vector3 point) => (((int)MathF.Floor(x: (point.X / m_cellSize))), ((int)MathF.Floor(x: (point.Y / m_cellSize))), ((int)MathF.Floor(x: (point.Z / m_cellSize))));
-
     }
 }

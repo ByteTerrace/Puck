@@ -57,7 +57,11 @@ public sealed partial class SdfMeshIrradianceLawTests {
         var normal = Vector3.UnitZ;
         var layout = typeof(SdfMeshIrradiance).GetField(name: "m_layout", bindingAttr: Private)!.GetValue(obj: volume);
         var lows = typeof(SdfMeshIrradiance).GetMethod(name: "Lows", bindingAttr: Private)!.Invoke(obj: volume, parameters: null);
-        var read = (Vector3)typeof(SdfMeshIrradiance).GetMethod(name: "Incoming", bindingAttr: Private)!.Invoke(obj: volume, parameters: [point, normal, layout, lows])!;
+        object?[] arguments = [point, normal, layout, lows, null];
+
+        Assert.True((bool)typeof(SdfMeshIrradiance).GetMethod(name: "TryIncoming", bindingAttr: Private)!.Invoke(obj: volume, parameters: arguments)!);
+
+        var read = (Vector3)arguments[4]!;
 
         using var scene = SdfMeshIrradianceScene.Build(draws: draws);
         var layers = new SdfSkyLayer[SdfSky.MaxLayers];

@@ -1,12 +1,43 @@
 #include "../isa/sdf-probe-relight.interface.hlsli"
 #include "../isa/sdf-render.hlsli"
-// KEEP IN SYNC with SdfMeshIrradiance.Affected and the CPU reference List. The GPU owns eligibility; the host
-// retains the priority sort while it coordinates relocation and the diagnostic cache.
+// KEEP IN SYNC with SdfMeshIrradiance.Affected, the CPU reference List and the rows SdfMeshIrradiance.WriteChanges
+// packs. The GPU owns eligibility; the host retains the priority sort while it coordinates relocation and the
+// diagnostic cache.
 bool probeMeets(float3 origin, float3 direction, float3 low, float3 high, float reach) {
     float3 inverse = 1 / direction;
     float3 a = (low - origin) * inverse, b = (high - origin) * inverse;
     float3 near = min(a, b), far = max(a, b);
     return max(max(near.x, near.y), max(near.z, 0)) <= min(min(far.x, far.y), min(far.z, reach));
+}
+// A recorded hit's reach with the margins a box test grants it.
+float probeExtended(float reach) {
+    return reach + max(SDF_MESH_IRRADIANCE_BOX_MARGIN, reach * SDF_MESH_IRRADIANCE_BOX_MARGIN_SHARE) + SDF_MESH_IRRADIANCE_DEPTH_SHEET_THICKNESS;
+}
+// The distance every ray of a probe ends within: a box farther from its origin meets none of them.
+float probeRayReach(uint hits, float limit) {
+    float far = 0;
+    for (uint ray = 0; ray < SDF_PROBE_HIT_COUNT; ray++) { far = max(far, min(abs(asfloat(sdfProbeCache[hits + 2 * ray])), limit)); }
+    return probeExtended(far);
+}
+bool probeNear(float3 origin, float3 low, float3 high, float radius) {
+    float3 outside = max(max(low - origin, origin - high), 0);
+    return dot(outside, outside) <= radius * radius;
+}
+// Whether a box meets one of the probe's rays before the hit it recorded.
+bool probeRaysMeet(float3 origin, float3 low, float3 high, uint hits, float limit) {
+    float3 toward = (low + high) * 0.5 - origin;
+    float radius = length((high - low) * 0.5);
+    float distance = length(toward);
+    if (distance <= radius) { return true; }
+    float3 axis = toward / distance;
+    float cone = sqrt(1 - radius * radius / (distance * distance));
+    for (uint ray = 0; ray < SDF_PROBE_HIT_COUNT; ray++) {
+        float3 direction = sdfProbeDirections[ray].xyz;
+        if (dot(direction, axis) < cone) { continue; }
+        float reach = min(abs(asfloat(sdfProbeCache[hits + 2 * ray])), limit);
+        if (probeMeets(origin, direction, low, high, probeExtended(reach))) { return true; }
+    }
+    return false;
 }
 [numthreads(SDF_PROBE_SELECT_GROUP_SIZE, 1, 1)]
 void CSMain(uint3 id : SV_DispatchThreadID) {
@@ -32,22 +63,24 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
         float3 origin = center + asfloat(uint3(sdfProbeInput[at + 5], sdfProbeInput[at + 6], sdfProbeInput[at + 7]));
         float3 placement = 1.5 * spacing + SDF_MESH_IRRADIANCE_CLEARANCE;
         uint hits = cache + 2;
-        for (uint box = 0; !trace && box < (uint)limits.y; box++) {
-            float4 low = sdfProbeLighting[SDF_PROBE_SELECT_HEADER_ROWS + 2 * box];
-            float4 high = sdfProbeLighting[SDF_PROBE_SELECT_HEADER_ROWS + 1 + 2 * box];
-            if (asuint(low.w) <= geometry) { continue; }
-            if (high.w != 0 || all(max(low.xyz, center - placement) <= min(high.xyz, center + placement))) { trace = true; break; }
-            float3 toward = (low.xyz + high.xyz) * 0.5 - origin;
-            float radius = length((high.xyz - low.xyz) * 0.5);
-            float distance = length(toward);
-            if (distance <= radius) { trace = true; break; }
-            float3 axis = toward / distance;
-            float cone = sqrt(1 - radius * radius / (distance * distance));
-            for (uint ray = 0; !trace && ray < SDF_PROBE_HIT_COUNT; ray++) {
-                float3 direction = sdfProbeDirections[ray].xyz;
-                if (dot(direction, axis) < cone) { continue; }
-                float reach = min(abs(asfloat(sdfProbeCache[hits + 2 * ray])), limits.w);
-                trace = probeMeets(origin, direction, low.xyz, high.xyz, reach + max(SDF_MESH_IRRADIANCE_BOX_MARGIN, reach * SDF_MESH_IRRADIANCE_BOX_MARGIN_SHARE) + SDF_MESH_IRRADIANCE_DEPTH_SHEET_THICKNESS);
+        float reach = -1;
+        // Each change newer than the probe's trace: one of every probe traces it; any other is a hierarchy walked in
+        // depth-first order, a subtree no placement or ray of the probe can reach skipped to its escape.
+        for (uint change = 0; !trace && change < (uint)limits.x; change++) {
+            float4 head = sdfProbeLighting[SDF_PROBE_SELECT_HEADER_ROWS + change];
+            if (asuint(head.x) <= geometry) { continue; }
+            if ((asuint(head.w) & 1u) != 0) { trace = true; break; }
+            uint first = asuint(head.y);
+            uint nodes = asuint(head.z);
+            if (nodes != 0 && reach < 0) { reach = probeRayReach(hits, limits.w); }
+            for (uint node = 0; !trace && node < nodes;) {
+                float4 low = sdfProbeLighting[first + 2 * node];
+                float4 high = sdfProbeLighting[first + 2 * node + 1];
+                bool placed = all(max(low.xyz, center - placement) <= min(high.xyz, center + placement));
+                if (!placed && !probeNear(origin, low.xyz, high.xyz, reach)) { node = asuint(low.w); continue; }
+                if (high.w == 0) { node++; continue; }
+                trace = placed || probeRaysMeet(origin, low.xyz, high.xyz, hits, limits.w);
+                node = asuint(low.w);
             }
         }
     }

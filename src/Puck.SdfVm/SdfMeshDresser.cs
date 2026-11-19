@@ -16,6 +16,8 @@ public sealed class SdfMeshDresser : IDisposable {
         public int[] Copies = [];
         // The tier the group's drawn mesh was baked at, which its rows carry (SdfMeshDraw.Tier).
         public int Tier = -1;
+        // The mesh the irradiance volume traces in its place, which its rows carry (SdfMeshDraw.Trace).
+        public SdfMesh? Trace;
         public bool Seen;
     }
 
@@ -212,7 +214,8 @@ public sealed class SdfMeshDresser : IDisposable {
             var copies = access.CopiesOf(group: group);
             var count = (mesh.PieceCount * (copies?.Count ?? 1));
             var tier = access.TierOf(group: group);
-            var changed = (!ReferenceEquals(objA: mesh, objB: state.Mesh) || (state.Run.Count != count) || (state.Tier != tier) ||
+            var trace = access.TraceOf(group: group);
+            var changed = (!ReferenceEquals(objA: mesh, objB: state.Mesh) || (state.Run.Count != count) || (state.Tier != tier) || !ReferenceEquals(objA: trace, objB: state.Trace) ||
                 ((m_layout != access.CopyLayoutRevision) && !state.Copies.SequenceEqual(second: (copies ?? Array.Empty<int>()))));
 
             if (!changed) { continue; }
@@ -222,11 +225,12 @@ public sealed class SdfMeshDresser : IDisposable {
             RemoveBindings(run: old);
             state.Mesh = mesh;
             state.Tier = tier;
+            state.Trace = trace;
             state.Copies = (copies?.ToArray() ?? []);
 
             for (var offset = 0; (offset < count); offset++) {
                 var binding = new DrawBinding(mesh.Piece(index: (offset % mesh.PieceCount)), group,
-                    ((copies is null) ? -1 : copies[(offset / mesh.PieceCount)]), ((copies is null) && (mesh.Chunks.Count > 0)), tier);
+                    ((copies is null) ? -1 : copies[(offset / mesh.PieceCount)]), ((copies is null) && (mesh.Chunks.Count > 0)), tier, trace, (offset % mesh.PieceCount));
 
                 Bind(binding: binding, frame: frame, matrices: ref matrices, offset: offset, run: state.Run);
                 visited++; updated++;
@@ -302,7 +306,7 @@ public sealed class SdfMeshDresser : IDisposable {
             var copies = access.CopiesOf(group: group);
 
             for (var c = 0; (c < (copies?.Count ?? 1)); c++) {
-                for (var p = 0; (p < mesh.PieceCount); p++) { expected.Add(item: new DrawBinding(mesh.Piece(index: p), group, ((copies is null) ? -1 : copies[c]), ((copies is null) && (mesh.Chunks.Count > 0))).Pose(frame: frame, matrices: ref matrices)); }
+                for (var p = 0; (p < mesh.PieceCount); p++) { expected.Add(item: new DrawBinding(mesh.Piece(index: p), group, ((copies is null) ? -1 : copies[c]), ((copies is null) && (mesh.Chunks.Count > 0)), access.TierOf(group: group), access.TraceOf(group: group), p).Pose(frame: frame, matrices: ref matrices)); }
             }
         }
         for (var i = 0; (i < frame.MeshInstances.Count); i++) { if (frame.MeshInstances[i].Mesh is { } mesh) { expected.Add(item: new DrawBinding(mesh, null, i).Pose(frame: frame, matrices: ref matrices)); } }
@@ -319,8 +323,9 @@ public sealed class SdfMeshDresser : IDisposable {
     /// <summary>Releases the row table's mesh claims.</summary>
     public void Dispose() { if (m_disposed) { return; } m_disposed = true; StartOver(); }
 
-    // A row's draw: one piece of a group's mesh, or a copy's own mesh, and the tier the group's drawn mesh was baked at.
-    private sealed class DrawBinding(SdfMesh mesh, SdfMeshBakeGroup? group, int copyIndex, bool chunked = false, int tier = -1) {
+    // A row's draw: one piece of a group's mesh, or a copy's own mesh, the tier the group's drawn mesh was baked at, and
+    // the mesh the irradiance volume traces in the placement's place with the piece the row draws.
+    private sealed class DrawBinding(SdfMesh mesh, SdfMeshBakeGroup? group, int copyIndex, bool chunked = false, int tier = -1, SdfMesh? trace = null, int piece = 0) {
         private object? m_motionSource;
         private object? m_motionIdentity;
         private SdfMeshInstance? m_copy;
@@ -368,7 +373,9 @@ public sealed class SdfMeshDresser : IDisposable {
                     Glass = (group?.Glass ?? false),
                     IsDynamic = copy.IsDynamic,
                     MotionIdentity = m_motionIdentity,
+                    Piece = piece,
                     Tier = ((group is null) ? -1 : tier),
+                    Trace = trace,
                     UsesRootMaterialFrame = copy.UsesRootMaterialFrame,
                 };
             }
@@ -390,7 +397,9 @@ public sealed class SdfMeshDresser : IDisposable {
                 // A displaced surface is never static (SdfMeshDraw.IsStatic), whatever its placement does.
                 Displacement = group.Displacement,
                 IsDynamic = group.Dynamic,
+                Piece = piece,
                 Tier = tier,
+                Trace = trace,
             };
         }
     }

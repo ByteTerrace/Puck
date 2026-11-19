@@ -147,7 +147,13 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
             m_disposed = true;
             if (m_trimListening) { Puck.Hosting.Jobs.MemoryAccount.Shared.TrimRequested -= TrimRetained; m_trimListening = false; }
             m_owed = m_traceOwed = m_refillOwed = false;
-            jobs = new[] { m_build, m_refill, m_worker }.OfType<Task>().ToArray();
+            // A scene waiting for a trace unit to end is dropped, so its build ends with the jobs below.
+            if (m_pendingInstall is { } install) {
+                m_pendingInstall = null;
+                install.Scene.Dispose();
+                install.Done.TrySetResult();
+            }
+            jobs = new[] { m_build, m_refill, m_worker, m_drawnBuild }.OfType<Task>().ToArray();
         }
         m_sceneOwner.Dispose();
         m_cacheOwner.Dispose();
@@ -159,6 +165,10 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         lock (m_gate) {
             m_scene?.Dispose();
             m_scene = null;
+            m_drawnScene?.Dispose();
+            m_drawnScene = null;
+            m_drawnDraws = [];
+            m_drawnClaims.Dispose();
             m_materialsScene = null;
             RentedArrays.Return(array: m_diagnosticDraws);
             RentedArrays.Return(array: m_snapshotDraws);
@@ -172,7 +182,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     // the 32 m level reaches past it.
     private static readonly SdfMeshIrradianceLevel StoreyLevel = new(Dims: (32, 24, 32), Sheets: true, Spacing: new Vector3(x: 4f, y: 2f, z: 4f));
     private static readonly SdfMeshIrradianceLevel FarLevel = new(Dims: (32, 12, 32), Sheets: true, Spacing: new Vector3(value: 32f));
-    private static readonly SdfMeshIrradianceLevel[] HighLevels = [new(Dims: (48, 16, 48), Sheets: false, Spacing: Vector3.One), StoreyLevel, FarLevel];
+    private static readonly SdfMeshIrradianceLevel[] HighLevels = [new(Dims: (48, 16, 48), Sheets: false, Spacing: new Vector3(value: SdfMeshIrradianceProbe.FinestSpacing)), StoreyLevel, FarLevel];
     private static readonly SdfMeshIrradianceLevel[] MediumLevels = [new(Dims: (32, 12, 32), Sheets: false, Spacing: new Vector3(value: 2f)), StoreyLevel, FarLevel];
 
     /// <summary>Returns a tier's levels, finest first: each one's cell size and its window's probes along each axis.</summary>
@@ -203,6 +213,9 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     public static readonly WorkKind Traced = Registry.Declare(name: "sdf.mesh-gi.traced", unit: "probes", workClass: WorkClass.Pacing);
     /// <summary>Counts each probe relight: its radiance cubes and light visibility shaded from its cached hits.</summary>
     public static readonly WorkKind Relit = Registry.Declare(name: "sdf.mesh-gi.relit", unit: "probes", workClass: WorkClass.Pacing);
+    /// <summary>Counts each relight of a probe relit before under another geometry that kept the cube its point and
+    /// spot lights send, since no change since reached the shadow segments of its hits.</summary>
+    public static readonly WorkKind LocalKept = Registry.Declare(name: "sdf.mesh-gi.local-kept", unit: "probes", workClass: WorkClass.Pacing);
     /// <summary>Counts rays in completed GPU trace jobs, including placement trials and subsequently invalidated batches.</summary>
     public static readonly WorkKind GpuRays = Registry.Declare(name: "sdf.mesh-gi.gpu-rays", unit: "rays", workClass: WorkClass.Pacing);
     /// <summary>Measured GPU time of completed trace submissions, including their hierarchy upload and readback copy.</summary>
@@ -306,9 +319,9 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     // its own and the memory bandwidth it packs and uploads with.
     private static readonly int DrainWorkers = Math.Max(val1: 1, val2: (Environment.ProcessorCount - 2));
     private static readonly int BackgroundWorkers = Math.Max(val1: 1, val2: (Environment.ProcessorCount / 4));
-    // The least wall time between two scene builds while the bake still lands opaque static meshes, so the trace
-    // measures what has landed without restarting on every arrival. Presentation only: the scene a frame lights by is
-    // never simulation state.
+    // The least wall time between two scene builds of frames that do not converge lighting (ScenePendingDue), so the
+    // trace measures what has landed without restarting on every arrival. Presentation only: the scene a frame lights by
+    // is never simulation state.
     private static readonly TimeSpan PendingSceneInterval = TimeSpan.FromSeconds(value: 4d);
     // Continuous asynchronous captures are throttled because they render and project the sky on the frame thread.
     private static readonly TimeSpan LightingInterval = TimeSpan.FromSeconds(value: 0.1d);
@@ -318,11 +331,6 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     private const int MaxSweeps = 32;
     // The geometry changes the volume remembers; a probe traced before the oldest traces again.
     private const int MaxChanges = 16;
-    // The boxes one geometry change names at most; a change of more draws names the one box that holds them all. A
-    // selection tests a probe's every ray against every box newer than its trace, one box after another on one GPU
-    // thread (sdf-probe-select), so the remembered boxes bound how long a selection job runs however few probes it
-    // holds: thousands of them (a change of detail across the world) made one probe's selection outlast several frames.
-    private const int MaxChangeBoxes = 64;
     // The lighting versions whose capture times the volume remembers.
     private const int MaxVersionTimes = 4096;
     private const float ConvergedShare = 0.02f;
@@ -421,34 +429,72 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     private Action<ReadOnlyMemory<uint>>? m_write;
     private SdfMeshIrradianceScene? m_scene;
 
-    /// <summary>Acquires the opaque static BVH only when it represents the supplied frame's exact draw inputs.</summary>
+    /// <summary>Acquires an opaque static BVH of the supplied frame's exact drawn static meshes: the trace scene where it
+    /// holds them, and otherwise, where the trace scene holds groups' floors in their place (<see cref="SdfMeshDraw.Trace"/>),
+    /// a scene of the drawn meshes this call builds on the thread pool and keeps while they stand.</summary>
     /// <param name="frame">The retained rendered frame.</param>
     /// <returns>The matching scene under a claim the caller disposes, or null while absent or building.</returns>
     public SdfMeshIrradianceScene? DiagnosticScene(SdfFrame frame) {
         ArgumentNullException.ThrowIfNull(frame);
         lock (m_gate) {
-            var counts = new Dictionary<(SdfMesh Mesh, Matrix4x4 ObjectToWorld, int Material), int>(comparer: DrawKeyComparer.Instance);
+            if (m_disposed) { return null; }
+            if (Draws(draws: m_diagnosticDraws, count: m_diagnosticCount, frame: frame)) { return m_scene?.Acquire(); }
+            if ((m_drawnScene is { } drawn) && Draws(draws: m_drawnDraws, count: m_drawnDraws.Length, frame: frame)) { return drawn.Acquire(); }
+            if (m_drawnBuild is { IsCompleted: false }) { return null; }
 
-            for (var i = 0; (i < m_diagnosticCount); i++) {
-                var draw = m_diagnosticDraws[i];
-                var key = (draw.Mesh, draw.ObjectToWorld, draw.Material);
+            var rows = frame.DrawRows;
+            var input = new List<SdfMeshDraw>();
 
-                counts[key] = (counts.GetValueOrDefault(key: key) + 1);
+            for (var row = 0; (row < rows.Count); row++) {
+                if (rows[row] is { IsStatic: true } draw) { input.Add(item: draw); }
             }
-            var draws = frame.DrawRows;
+            m_drawnClaims.Update(draws: input);
 
-            for (var row = 0; (row < draws.Count); row++) {
-                var draw = draws[row];
+            var previous = (m_drawnScene ?? m_scene)?.Acquire();
 
-                if (!draw.IsStatic) { continue; }
-                var key = (draw.Mesh, draw.ObjectToWorld, draw.Material);
+            m_drawnBuild = Task.Run(action: () => {
+                SdfMeshIrradianceScene scene;
 
-                if (!counts.TryGetValue(key: key, value: out var left)) { return null; }
-                if (left == 1) { counts.Remove(key: key); } else { counts[key] = (left - 1); }
-            }
-            return ((counts.Count == 0) ? m_scene?.Acquire() : null);
+                using (previous) { scene = SdfMeshIrradianceScene.Build(draws: input, previous: previous); }
+                lock (m_gate) {
+                    if (m_disposed) { scene.Dispose(); return; }
+                    m_drawnScene?.Dispose();
+                    (m_drawnScene, m_drawnDraws) = (scene, [.. input]);
+                }
+            });
+            return null;
         }
     }
+    // Whether a frame's static draws, as drawn, are the given draws, counted as multisets of their mesh, transform and
+    // material. Under the gate.
+    private static bool Draws(SdfMeshDraw[] draws, int count, SdfFrame frame) {
+        var counts = new Dictionary<(SdfMesh Mesh, Matrix4x4 ObjectToWorld, int Material), int>(comparer: DrawKeyComparer.Instance);
+
+        for (var i = 0; (i < count); i++) {
+            var draw = draws[i];
+            var key = (draw.Mesh, draw.ObjectToWorld, draw.Material);
+
+            counts[key] = (counts.GetValueOrDefault(key: key) + 1);
+        }
+        var rows = frame.DrawRows;
+
+        for (var row = 0; (row < rows.Count); row++) {
+            var draw = rows[row];
+
+            if (!draw.IsStatic) { continue; }
+            var key = (draw.Mesh, draw.ObjectToWorld, draw.Material);
+
+            if (!counts.TryGetValue(key: key, value: out var left)) { return false; }
+            if (left == 1) { counts.Remove(key: key); } else { counts[key] = (left - 1); }
+        }
+        return (counts.Count == 0);
+    }
+    // The diagnostics' scene of the drawn static meshes (DiagnosticScene), its draws, the meshes its build reads, claimed
+    // as it starts, and the build. Under the gate.
+    private SdfMeshIrradianceScene? m_drawnScene;
+    private SdfMeshDraw[] m_drawnDraws = [];
+    private readonly SdfMeshClaims m_drawnClaims = new();
+    private Task? m_drawnBuild;
 
     // The static draws the installed scene was built from (the first m_diagnosticCount of the array), and the array the
     // next build's snapshot is written into, both rented. Builds run one at a time and swap the two as one installs, so
@@ -507,7 +553,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     // draws it added or removed, null for every probe.
     private int m_geometry;
 
-    private readonly List<(int Geometry, Box[]? Boxes)> m_changes = [];
+    private readonly List<(int Geometry, ChangeTree? Tree)> m_changes = [];
     // When each recent lighting version was captured, from the version m_versionBase on: a probe's lighting has been
     // stale since the version after its own was captured.
     private readonly List<long> m_versionTimes = [];
@@ -638,17 +684,18 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         }
     }
 
-    /// <summary>Advances the volume for a frame of the mesh path before the frame's upload: rebuilds the scene when the
-    /// static draws changed (while the bake still lands opaque static meshes, from what has landed, once the previous
-    /// scene's trace has finished), captures a changed lighting, grants the frame's budget, moves each level's window
-    /// with the views' cameras, starts the worker on the probes the windows lack or whose lighting is stale, and writes
-    /// the probes that landed into the tables' volume table.</summary>
+    /// <summary>Advances the volume for a frame of the mesh path before the frame's upload: rebuilds the scene when what
+    /// it holds for the static draws changed (each draw's trace mesh, <see cref="SdfMeshDraw.Trace"/>, else its drawn
+    /// mesh), paced by the installed scene's trace progress and installed between the worker's batches, captures a
+    /// changed lighting, grants the frame's budget, moves each level's window with the views' cameras, starts the worker
+    /// on the probes the windows lack or whose lighting is stale, and writes the probes that landed into the tables'
+    /// volume table.</summary>
     /// <param name="frame">The frame, its baked draws dressed in.</param>
     /// <param name="tables">The residency's tables.</param>
     /// <param name="tier">The indirect tier the views asked for: High measures the fine volume, Medium and Off the coarse
     /// one (Off applies none of its light, <see cref="SdfIndirectTier.Off"/>).</param>
     /// <param name="bakePending">Whether the mesh bake still owes opaque static meshes: a lighting-converged frame then builds no
-    /// scene, and any other frame builds one from the meshes landed so far at most every few seconds.</param>
+    /// scene, and a frame whose bake has landed nothing builds none.</param>
     /// <returns>The parameters the views pass reads.</returns>
     public SdfMeshIrradianceParameters Stage(SdfFrame frame, SdfWorldTables tables, SdfIndirectTier tier, bool bakePending) {
         ArgumentNullException.ThrowIfNull(argument: tables);
@@ -740,7 +787,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         lock (m_gate) {
             m_wrote = false;
             m_geometryWrote = false;
-            if (!bakePending || ScenePendingDue(frame: frame)) { _ = RefreshScene(bakePending: bakePending, frame: frame); }
+            if (ScenePendingDue(frame: frame)) { _ = RefreshScene(bakePending: bakePending, frame: frame); }
             RefreshLighting(frame: frame, layout: layout);
             Grant(budget: frame.IndirectBudget);
             m_camera = WindowCamera(frame: frame);
@@ -975,78 +1022,19 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         m_reported = false;
     }
     // A new geometry: the probes it may change trace again, each keeping its previous measurement for views until its
-    // trace lands. `changed` holds the world boxes of the static draws the new scene added or removed; null changes
-    // every probe (a layout or reach change, or a draw with no box).
-    private void AdvanceGeometry(Box[]? changed = null) {
+    // trace lands. `changed` holds the hierarchy of the world boxes of the static draws the new scene added or removed;
+    // null changes every probe (a layout or reach change, or a draw with no box).
+    private void AdvanceGeometry(ChangeTree? changed = null) {
         m_geometry++;
         m_changes.Add(item: (m_geometry, changed));
         if (m_changes.Count > MaxChanges) { m_changes.RemoveAt(index: 0); }
         Owe();
         m_traceOwed = true;
     }
-    // Whether a probe traced against an earlier geometry may have other hits or another placement under the current
-    // one: some draw a change since added or removed lies in the region its placement searches, or meets one of its
-    // rays before the hit the ray recorded. A probe no change can reach keeps its hits, which a trace would reproduce.
-    private static bool Affected(in ProbeData probe, (int X, int Y, int Z) cell, Vector3 spacing, Layout layout, in Snapshot snapshot) {
-        var changes = snapshot.Changes;
-
-        if ((changes.Length == 0) || (probe.Geometry < (changes[0].Geometry - 1))) { return true; }
-
-        var centre = (new Vector3(x: (cell.X + 0.5f), y: (cell.Y + 0.5f), z: (cell.Z + 0.5f)) * spacing);
-        var placement = ((1.5f * spacing) + new Vector3(value: SdfMeshIrradianceProbe.Clearance));
-        var origin = (centre + probe.Offset);
-        var hits = probe.HitWords;
-        var directions = SdfMeshProbeDepth.RayDirections;
-
-        foreach (var (geometry, boxes) in changes) {
-            if (geometry <= probe.Geometry) { continue; }
-            if (boxes is null) { return true; }
-            foreach (var box in boxes) {
-                if ((Vector3.Max(value1: box.Low, value2: (centre - placement)) is var low) && (Vector3.Min(value1: box.High, value2: (centre + placement)) is var high) &&
-                    (low.X <= high.X) && (low.Y <= high.Y) && (low.Z <= high.Z)) { return true; }
-
-                var toward = (((box.Low + box.High) * 0.5f) - origin);
-                var radius = ((box.High - box.Low) * 0.5f).Length();
-                var distance = toward.Length();
-
-                if (distance <= radius) { return true; }
-
-                var axis = (toward / distance);
-                var cone = MathF.Sqrt(x: (1f - ((radius * radius) / (distance * distance))));
-
-                for (var texel = 0; (texel < SdfMeshProbeDepth.HitCount); texel++) {
-                    var direction = directions[texel];
-
-                    if (Vector3.Dot(vector1: direction, vector2: axis) < cone) { continue; }
-
-                    var reach = MathF.Abs(x: BitConverter.UInt32BitsToSingle(value: hits[(2 * texel)]));
-
-                    // A recorded hit on the box's face lies at its entry: the margin keeps rounding from passing it by. The
-                    // sheet test reads the scene up to a sheet's thickness behind the hit (SdfMeshProbeDepth.Surfaces).
-                    reach = MathF.Min(x: reach, y: layout.Reach);
-                    if (Meets(direction: direction, high: box.High, low: box.Low, origin: origin, reach: ((reach + MathF.Max(x: SdfMeshIrradianceProbe.BoxMargin, y: (reach * SdfMeshIrradianceProbe.BoxMarginShare))) + SdfMeshIrradianceProbe.DepthSheetThickness))) { return true; }
-                }
-            }
-        }
-        return false;
-    }
-    // Whether a ray from an origin meets a box within a reach (slab test).
-    private static bool Meets(Vector3 origin, Vector3 direction, Vector3 low, Vector3 high, float reach) {
-        var inverse = (Vector3.One / direction);
-        var near = ((low - origin) * inverse);
-        var far = ((high - origin) * inverse);
-        var enter = Vector3.Min(value1: near, value2: far);
-        var leave = Vector3.Max(value1: near, value2: far);
-        var start = MathF.Max(x: MathF.Max(x: enter.X, y: enter.Y), y: MathF.Max(x: enter.Z, y: 0f));
-        var end = MathF.Min(x: MathF.Min(x: leave.X, y: leave.Y), y: MathF.Min(x: leave.Z, y: reach));
-
-        return (start <= end);
-    }
-    // The world boxes of the static draws one static draw list holds and the other does not, counted as multisets of their
-    // mesh, transform and material; null when one of them has no box. More than MaxChangeBoxes of them are answered as
-    // the one box that holds them all, which names every probe the boxes named and more. The build's alone: it counts in
-    // workspace kept across builds.
-    private Box[]? ChangedBoxes(ReadOnlySpan<SdfMeshDraw> before, ReadOnlySpan<SdfMeshDraw> after) {
+    // The hierarchy over the world boxes of the static draws one static draw list holds and the other does not, counted
+    // as multisets of their mesh, transform and material (ChangeTree); null when one of them has no box. The build's
+    // alone: it counts in workspace kept across builds.
+    private ChangeTree? ChangedBoxes(ReadOnlySpan<SdfMeshDraw> before, ReadOnlySpan<SdfMeshDraw> after) {
         var counts = m_changeCounts;
         var changed = m_changeBoxes;
 
@@ -1074,13 +1062,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
                 if (!TryBox(box: out var box, draw: in draw)) { return null; }
                 changed.Add(item: box);
             }
-            if (changed.Count > MaxChangeBoxes) {
-                var all = changed[0];
-
-                foreach (var box in changed) { all = new Box(High: Vector3.Max(value1: all.High, value2: box.High), Low: Vector3.Min(value1: all.Low, value2: box.Low)); }
-                return [all];
-            }
-            return [.. changed];
+            return ChangeTree.Of(boxes: changed);
         } finally {
             counts.Clear();
             changed.Clear();
@@ -1504,13 +1486,18 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     private static string SpacingText(Vector3 spacing) => (((spacing.X == spacing.Y) && (spacing.Y == spacing.Z))
         ? spacing.X.ToString(format: "0.##", provider: CultureInfo.InvariantCulture)
         : string.Create(provider: CultureInfo.InvariantCulture, handler: $"{spacing.X:0.##}x{spacing.Y:0.##}x{spacing.Z:0.##}"));
-    // Whether a frame whose bake still lands opaque static meshes builds a scene from what has landed: never a lighting-converged
-    // frame, which renders the whole bake; otherwise once no build runs, the installed scene's trace has finished (or no
-    // scene is installed), and PendingSceneInterval has passed since the last build began. The finished trace paces the
-    // rebuilds, so the probes always finish measuring one landed set before the next replaces it.
+    // Whether a frame that does not converge lighting may build a scene from its static draws: once no build runs, the
+    // installed scene's traces are paid (none owed, or as many traced since it was installed as the windows hold, so a
+    // camera that keeps the windows moving never holds a real change back), and PendingSceneInterval has passed since
+    // the last build began. The trace's progress paces every rebuild, so the probes finish measuring one scene before the
+    // next replaces it; a lighting-converged frame builds its own scene (AwaitScene), and a build that faulted is always
+    // due, so RefreshScene reports it.
     private bool ScenePendingDue(SdfFrame frame) =>
-        (!frame.ConvergesLighting && (m_build is null or { IsCompleted: true }) && ((m_scene is null) || !m_traceOwed) &&
-        (!m_sceneClock.IsRunning || (m_sceneClock.Elapsed >= PendingSceneInterval)));
+        ((m_build is { IsFaulted: true }) ||
+        (!frame.ConvergesLighting && (m_build is null or { IsCompleted: true }) && ((m_scene is null) || !m_traceOwed || (m_tracedSinceScene >= m_layout.TotalCount)) &&
+        (!m_sceneClock.IsRunning || (m_sceneClock.Elapsed >= PendingSceneInterval))));
+    // The probes traced since the installed scene was (Install, Batch).
+    private long m_tracedSinceScene;
     // Rebuilds the scene on the thread pool when the static draws changed, from the scene it replaces so only geometry new
     // to it builds; the old scene traces until the new one lands. While the bake still owes opaque static meshes, a frame
     // with none landed builds nothing: an empty scene would measure open sky where the walls have yet to land.
@@ -1572,25 +1559,49 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         } else { m_keyCursor.Commit(); }
         return (m_keyValue, m_keyStatic);
     }
-    private static int DrawKey(in SdfMeshDraw draw) => DrawKeyComparer.Instance.GetHashCode(obj: (draw.Mesh, draw.ObjectToWorld, draw.Material));
+    // A static row's part of the scene key: what the scene holds for it (TraceDraws), so a row whose drawn mesh moves
+    // to another tier while it traces its group's floor keeps the key.
+    private static int DrawKey(in SdfMeshDraw draw) => ((draw.Trace is { } trace)
+        ? ((draw.Piece == 0) ? DrawKeyComparer.Instance.GetHashCode(obj: (trace, draw.ObjectToWorld, draw.Material)) : 0)
+        : DrawKeyComparer.Instance.GetHashCode(obj: (draw.Mesh, draw.ObjectToWorld, draw.Material)));
+    // Appends what the trace scene holds for one static row: its drawn mesh, or where the row's placement traces its
+    // group's floor (SdfMeshDraw.Trace), every piece of that floor once, at the placement's first piece.
+    private static int TraceDraws(in SdfMeshDraw draw, ref SdfMeshDraw[] into, int count) {
+        if (draw.Trace is not { } trace) {
+            if (count == into.Length) { into = RentedArrays.Grow(array: into, keep: count, minimumLength: Math.Max(val1: 16, val2: (2 * count))); }
+            into[count++] = draw;
+            return count;
+        }
+        if (draw.Piece != 0) { return count; }
+        for (var piece = 0; (piece < trace.PieceCount); piece++) {
+            var traced = (draw with { Mesh = trace.Piece(index: piece), Piece = 0, Trace = null });
+
+            if (!traced.IsStatic) { continue; }
+            if (count == into.Length) { into = RentedArrays.Grow(array: into, keep: count, minimumLength: Math.Max(val1: 16, val2: (2 * count))); }
+            into[count++] = traced;
+        }
+        return count;
+    }
     // Apart from RefreshScene, since the build's closure is made on entry to the method holding it, and nearly every frame
     // matches the installed scene.
     private Task StartSceneBuild(SdfFrame frame, int key, int draws) {
         lock (m_gate) { if (m_disposed) { return Task.CompletedTask; } }
         if (!m_trimListening) { Puck.Hosting.Jobs.MemoryAccount.Shared.TrimRequested += TrimRetained; m_trimListening = true; }
 
-        // The frame's static draws alone, the scene's whole input, into the spare array (indexed: an interface list's
-        // enumerator is an allocation). Its tail past them is cleared, so the pooled array keeps no earlier draw's mesh.
+        // What the scene holds for the frame's static draws, its whole input, into the spare array (indexed: an interface
+        // list's enumerator is an allocation). Its tail past them is cleared, so the pooled array keeps no earlier draw's
+        // mesh.
         var meshDraws = frame.DrawRows;
         var snapshot = ((m_snapshotDraws.Length < draws) ? RentedArrays.Grow(array: m_snapshotDraws, keep: 0, minimumLength: draws) : m_snapshotDraws);
         var count = 0;
+        var floors = 0;
 
         foreach (var index in m_staticRows) {
             var draw = meshDraws[index];
 
             if (!draw.IsStatic) { continue; }
-            if (count == snapshot.Length) { snapshot = RentedArrays.Grow(array: snapshot, keep: count, minimumLength: Math.Max(val1: 16, val2: (2 * count))); }
-            snapshot[count++] = draw;
+            if ((draw.Trace is not null) && (draw.Piece == 0)) { floors++; }
+            count = TraceDraws(count: count, draw: in draw, into: ref snapshot);
         }
         snapshot.AsSpan(start: count).Clear();
         m_snapshotDraws = snapshot;
@@ -1603,15 +1614,19 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
 
         var (previousDraws, previousCount) = (m_diagnosticDraws, m_diagnosticCount);
         var hadScene = (m_scene is not null);
+        var since = (m_sceneClock.IsRunning ? m_sceneClock.Elapsed.TotalSeconds : 0d);
 
         m_buildingKey = key;
         m_sceneClock.Restart();
-        m_build = Task.Run(action: () => {
-            using var previousBorrow = previous;
+        m_build = Task.Run(function: async () => {
             var clock = Stopwatch.StartNew();
-            var scene = SdfMeshIrradianceScene.Build(draws: input, previous: previous, counters: Counters);
-            var changed = (hadScene ? ChangedBoxes(after: snapshot.AsSpan(length: count, start: 0), before: previousDraws.AsSpan(length: previousCount, start: 0)) : null);
+            SdfMeshIrradianceScene scene;
+            ChangeTree? changed;
 
+            using (previous) {
+                scene = SdfMeshIrradianceScene.Build(draws: input, previous: previous, counters: Counters);
+                changed = (hadScene ? ChangedBoxes(after: snapshot.AsSpan(length: count, start: 0), before: previousDraws.AsSpan(length: previousCount, start: 0)) : null);
+            }
             Counters.Count(kind: Scenes);
             Counters.Add(amount: scene.GeometriesBuilt, kind: GeometriesBuilt);
             Counters.Add(amount: scene.GeometriesReused, kind: GeometriesReused);
@@ -1619,21 +1634,63 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
             Counters.Add(amount: scene.DrawCount, kind: StaticDraws);
             Counters.Add(amount: scene.EntryCount, kind: Entries);
             Counters.Raise(kind: PeakEntries, value: scene.EntryCount);
+
+            var install = new SceneInstall(Changed: changed, Count: count, Draws: snapshot, Key: key, Scene: scene);
+            var held = false;
+
             lock (m_gate) {
                 if (m_disposed) { scene.Dispose(); return; }
-                var oldScene = m_scene;
-
-                m_scene = scene;
-                oldScene?.Dispose();
-                // The replaced draws' array becomes the next snapshot's.
-                (m_snapshotDraws, m_diagnosticDraws, m_diagnosticCount) = (m_diagnosticDraws, snapshot, count);
-                m_sceneKey = key;
-                m_buildingKey = 0;
-                AdvanceGeometry(changed: changed);
+                // A trace unit running on the installed scene lands first, then the scene changes (EndUnit).
+                if (m_units > 0) {
+                    m_pendingInstall = install;
+                    held = true;
+                } else {
+                    Install(install: install);
+                }
             }
-            Console.Error.WriteLine(value: $"[sdf.mesh-gi] scene draws={draws} triangles={(scene?.TriangleCount ?? 0)} geometries={(scene?.GeometryCount ?? 0)} built={(scene?.GeometriesBuilt ?? 0)} built-triangles={(scene?.TrianglesBuilt ?? 0)} reused={(scene?.GeometriesReused ?? 0)} retained-triangles={(scene?.TrianglesRetained ?? 0)} prefix-words={(scene?.PrefixWords ?? 0)} seconds={clock.Elapsed.TotalSeconds:0.000}");
+            var built = clock.Elapsed.TotalSeconds;
+
+            if (held) { await install.Done.Task.ConfigureAwait(continueOnCapturedContext: false); }
+            Console.Error.WriteLine(value: string.Create(provider: CultureInfo.InvariantCulture, handler: $"[sdf.mesh-gi] scene draws={count} floors={floors} triangles={scene.TriangleCount} geometries={scene.GeometryCount} built={scene.GeometriesBuilt} built-triangles={scene.TrianglesBuilt} reused={scene.GeometriesReused} retained-triangles={scene.TrianglesRetained} prefix-words={scene.PrefixWords} changed={((changed is null) ? "all" : changed.Boxes.ToString(provider: CultureInfo.InvariantCulture))} change-nodes={(changed?.Nodes.Length ?? 0)} since={since:0.0} seconds={built:0.000} held={(clock.Elapsed.TotalSeconds - built):0.000}"));
         });
         return m_build;
+    }
+    // A built scene waiting to replace the installed one: its input, its key and the change it makes; Done completes
+    // once it is installed, or dropped by a disposed volume.
+    private sealed record SceneInstall(SdfMeshIrradianceScene Scene, int Key, SdfMeshDraw[] Draws, int Count, ChangeTree? Changed) {
+        public TaskCompletionSource Done { get; } = new(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously);
+    }
+    // The trace units in flight (BeginUnit): a listing or a batch the worker runs on the snapshot it took. A scene built
+    // while one runs waits in m_pendingInstall and replaces the installed scene once the last ends, so a rebuild never
+    // drops a batch traced or relit against the scene it replaces, nor cancels its queued GPU jobs: the batch lands with
+    // the geometry it measured, and the next listing decides from the change what traces again. Under the gate.
+    private int m_units;
+    private SceneInstall? m_pendingInstall;
+
+    private void BeginUnit() {
+        lock (m_gate) { m_units++; }
+    }
+    private void EndUnit() {
+        lock (m_gate) {
+            m_units--;
+            if ((m_units > 0) || (m_pendingInstall is not { } install)) { return; }
+            m_pendingInstall = null;
+            if (m_disposed) { install.Scene.Dispose(); } else { Install(install: install); }
+            install.Done.TrySetResult();
+        }
+    }
+    // Installs a built scene as the one the probes trace: the one place the trace scene changes. Under the gate.
+    private void Install(SceneInstall install) {
+        var oldScene = m_scene;
+
+        m_scene = install.Scene;
+        oldScene?.Dispose();
+        // The replaced draws' array becomes the next snapshot's.
+        (m_snapshotDraws, m_diagnosticDraws, m_diagnosticCount) = (m_diagnosticDraws, install.Draws, install.Count);
+        m_sceneKey = install.Key;
+        m_buildingKey = 0;
+        m_tracedSinceScene = 0L;
+        AdvanceGeometry(changed: install.Changed);
     }
 
     // Captures the lighting the probes are relit under, and owes a relight when it changes: the directional lights and the
@@ -1927,7 +1984,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
 
     // The state a worker reads under the gate before it lists or processes probes.
     private readonly record struct Snapshot(SdfMeshIrradianceScene Scene, Lighting Lighting, Layout Layout, (int X, int Y, int Z)[] Lows, Vector3 Camera, int Geometry, int WindowVersion,
-        (int Geometry, Box[]? Boxes)[] Changes, long[] VersionTimes, int VersionBase, int Sweep, float AgeTarget, CameraSnapshot[] ViewCameras);
+        (int Geometry, ChangeTree? Tree)[] Changes, long[] VersionTimes, int VersionBase, int Sweep, float AgeTarget, CameraSnapshot[] ViewCameras);
 
     private Snapshot? TakeSnapshot() {
         lock (m_gate) {
@@ -1971,7 +2028,10 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
             if (!m_listed || (m_listGeometry != snapshot.Geometry) || (m_listWindow != snapshot.WindowVersion) || (m_listLayout != snapshot.Layout) ||
                 (m_listSweep != snapshot.Sweep) || (m_listLighting != snapshot.Lighting.Version)) {
                 var now = Stopwatch.GetTimestamp();
-                var stale = List(ages: m_ages, all: false, candidates: candidates, snapshot: snapshot);
+                bool stale;
+
+                BeginUnit();
+                try { stale = List(ages: m_ages, all: false, candidates: candidates, snapshot: snapshot); } finally { EndUnit(); }
 
                 lock (m_gate) {
                     if (!Stands(snapshot: in snapshot) || (snapshot.Sweep != m_sweep)) { continue; }
@@ -2059,7 +2119,8 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
 
                 var began = Stopwatch.GetTimestamp();
 
-                Batch(candidates: candidates, count: take, first: index, lighting: lighting, parallel: parallel, pass: -1, snapshot: in snapshot);
+                BeginUnit();
+                try { Batch(candidates: candidates, count: take, first: index, lighting: lighting, parallel: parallel, pass: -1, snapshot: in snapshot); } finally { EndUnit(); }
                 if (trace) {
                     m_listTraceCursor += take;
                     m_listTraceTicks += (Stopwatch.GetTimestamp() - began);
@@ -2086,7 +2147,8 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
 
         m_listed = false;
 
-        _ = List(ages: null, all: true, candidates: candidates, snapshot: snapshot);
+        BeginUnit();
+        try { _ = List(ages: null, all: true, candidates: candidates, snapshot: snapshot); } finally { EndUnit(); }
         for (var pass = 0; (pass < MaxSweeps); pass++) {
             bool moved;
 
@@ -2099,7 +2161,8 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
                     if (!DrainStands(snapshot: in snapshot)) { return; }
                     m_drainDone = index;
                 }
-                Batch(candidates: candidates, count: Math.Min(val1: DrainBatchProbes, val2: (candidates.Count - index)), first: index, lighting: snapshot.Lighting, parallel: parallel, pass: pass, snapshot: in snapshot);
+                BeginUnit();
+                try { Batch(candidates: candidates, count: Math.Min(val1: DrainBatchProbes, val2: (candidates.Count - index)), first: index, lighting: snapshot.Lighting, parallel: parallel, pass: pass, snapshot: in snapshot); } finally { EndUnit(); }
             }
             // Every probe holds a trace now; later passes relight them all from the bounce this one left.
             for (var index = 0; (index < candidates.Count); index++) { candidates[index] = (candidates[index] with { Trace = false }); }
@@ -2306,6 +2369,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         var lows = snapshot.Lows;
         var scene = snapshot.Scene;
         var geometry = snapshot.Geometry;
+        var changes = snapshot.Changes;
         var sweep = snapshot.Sweep;
 
         GrowScratch(array: ref m_gpuFresh, length: count);
@@ -2317,7 +2381,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
             _ = Parallel.For(fromInclusive: 0, toExclusive: count, parallelOptions: parallel, body: index => {
                 var candidate = candidates[(first + index)];
 
-                results[index] = Process(candidate: candidate, feedback: feedback, geometry: geometry, hits: hits, index: index, layout: layout, lighting: lighting,
+                results[index] = Process(candidate: candidate, changes: changes, feedback: feedback, geometry: geometry, hits: hits, index: index, layout: layout, lighting: lighting,
                     lights: lights, lows: lows, prepared: prepared?[index], scene: scene, sweep: sweep);
             });
             if (GpuTrace is not null) { committed = RelightGpu(candidates: candidates, count: count, feedback: feedback, first: first, lighting: lighting, lights: lights, probes: results, snapshot: in snapshot); }
@@ -2352,6 +2416,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
                 m_landed.Add(item: (candidate.Level, candidate.Cell));
             }
             m_traced += traced;
+            m_tracedSinceScene += traced;
             m_sweepMoved |= moved;
             m_tracedLanded |= (traced > 0);
             m_relit += relit;
@@ -2412,8 +2477,8 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     }
     // One probe of a batch: its placement and hit buffer, when it lacks a trace against the current geometry, then its
     // relight under the batch's lighting. An invalid probe takes no relight: no view reads it.
-    private ProbeData Process(in Candidate candidate, int geometry, Layout layout, Lighting lighting, (int X, int Y, int Z)[] lows, SdfMeshIrradianceScene scene,
-        bool feedback, ProbeBlock? hits, LightBlock lights, int index, int sweep, ProbeData? prepared) {
+    private ProbeData Process(in Candidate candidate, int geometry, (int Geometry, ChangeTree? Tree)[] changes, Layout layout, Lighting lighting, (int X, int Y, int Z)[] lows,
+        SdfMeshIrradianceScene scene, bool feedback, ProbeBlock? hits, LightBlock lights, int index, int sweep, ProbeData? prepared) {
         var cache = m_levels[candidate.Level].Cache;
         ProbeData probe;
 
@@ -2442,8 +2507,9 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         if (!probe.Invalid && (GpuTrace is null)) {
             var origin = ((new Vector3(x: (candidate.Cell.X + 0.5f), y: (candidate.Cell.Y + 0.5f), z: (candidate.Cell.Z + 0.5f)) * layout.SpacingOf(level: candidate.Level)) + probe.Offset);
 
-            // A rebased probe keeps its hits, but the shadow rays from them toward the point lights may cross the change.
-            var reuseLocal = (!candidate.Trace && (previous.Shading is not null) && (previous.Geometry == geometry) && (previous.LocalVersion == lighting.LocalVersion));
+            var reuseLocal = ReusesLocal(changes: changes, geometry: geometry, lighting: lighting, origin: origin, previous: in previous, trace: candidate.Trace);
+
+            if (reuseLocal && (previous.Geometry != geometry)) { Counters.Count(kind: LocalKept); }
 
             if (reuseLocal) {
                 previous.Local.CopyTo(destination: lights.Local(index: index));
@@ -3076,14 +3142,15 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     // and its radial priority band and Morton cell order within that band.
     private readonly record struct Candidate(int Level, (int X, int Y, int Z) Cell, bool Trace, long LitAt, int Band, uint Morton, bool Overdue, bool Stale, int Urgency);
     // One probe: its geometry (where it stands relative to its cell's centre, the share of its rays that met back faces,
-    // whether it lies inside geometry, the geometry it was traced against, and its hit buffer, sky shares and surface map
-    // in a trace batch's ProbeBlock), and its light (its radiance and sky-light cubes and traced-light visibility in a relight batch's
+    // whether it lies inside geometry, the geometry it was traced against, its hit buffer, sky shares and surface map
+    // in a trace batch's ProbeBlock, and the farthest its rays travelled, which every hit lies within), and its light (its radiance and sky-light cubes and traced-light visibility in a relight batch's
     // LightBlock, the lighting version and capture time it was relit under, and the relights it holds under that
     // version, the sweep it was last relit in and whether that relight moved it past the convergence bound). A batch
     // allocates one block of each rather than arrays a probe; a landed block is never written again, so
     // readers outside the gate read it whole.
     private readonly record struct ProbeData(int Geometry, ProbeBlock? Hits, int HitIndex, bool Invalid, Vector3 Offset, float Inside,
-        LightBlock? Shading = null, int LightIndex = 0, int Lighting = 0, long LitAt = 0L, int Passes = 0, int Sweep = 0, bool Moved = false, int LocalVersion = 0, uint GpuSlot = 0, ulong GpuToken = 0) {
+        LightBlock? Shading = null, int LightIndex = 0, int Lighting = 0, long LitAt = 0L, int Passes = 0, int Sweep = 0, bool Moved = false, int LocalVersion = 0, uint GpuSlot = 0, ulong GpuToken = 0,
+        float Reach = 0f) {
         public ReadOnlySpan<float> Sky => Hits!.Sky(index: HitIndex);
         public ReadOnlySpan<uint> HitWords => Hits!.Hits(index: HitIndex);
         public ReadOnlySpan<uint> Depth => Hits!.Depth(index: HitIndex);

@@ -186,11 +186,7 @@ public sealed partial class SdfMeshIrradiance {
         for (var level = 0; level < m_levels.Length; level++) {
             changes.Add(new(interleave ? 1 : 0, SdfMeshProbeRelight.InterleaveOf(level), SdfMeshProbeRelight.AgeBoundOf(level, snapshot.AgeTarget), BitConverter.Int32BitsToSingle(m_selectionSweep)));
         }
-        foreach (var (geometry, boxes) in snapshot.Changes) {
-            if (boxes is null) { changes.Add(new(0, 0, 0, BitConverter.Int32BitsToSingle(geometry))); changes.Add(new(0, 0, 0, 1)); }
-            else { foreach (var box in boxes) { changes.Add(new(box.Low, BitConverter.Int32BitsToSingle(geometry))); changes.Add(new(box.High, 0)); } }
-        }
-        changes[1] = changes[1] with { Y = (changes.Count - SdfMeshProbeRelight.SelectionHeaderRows) / 2 };
+        changes[1] = changes[1] with { Y = WriteChanges(changes: snapshot.Changes, rows: changes) };
         var selected = GpuTrace!.Select(snapshot.Scene, origins.AsMemory(start: 0, length: layout.TotalCount), input.AsMemory(start: 0, length: inputWords), [.. changes], GpuHitCapacity, reuse: m_gpuAnswer);
         m_gpuAnswer = selected;
         var take = 0;
@@ -309,10 +305,11 @@ public sealed partial class SdfMeshIrradiance {
             row[3] = probe.GpuSlot;
             Compose(in probe, candidate.Cell, row[SdfMeshProbeRelight.RecordInputWord..]);
             var reuses = false;
-            if (!candidate.Trace && m_levels[candidate.Level].Cache.TryGetValue(candidate.Cell, out var previous) && previous.Shading is not null &&
-                previous.Geometry == snapshot.Geometry && previous.LocalVersion == lighting.LocalVersion) {
+            if (!candidate.Trace && m_levels[candidate.Level].Cache.TryGetValue(candidate.Cell, out var previous) &&
+                ReusesLocal(changes: snapshot.Changes, geometry: snapshot.Geometry, lighting: lighting, origin: new Vector3(origins[i].X, origins[i].Y, origins[i].Z), previous: in previous, trace: false)) {
                 row[0] |= 2;
                 reuses = true;
+                if (previous.Geometry != snapshot.Geometry) { Counters.Count(kind: LocalKept); }
                 MemoryMarshal.Cast<Vector3, uint>(previous.Local).CopyTo(row[(SdfMeshProbeRelight.PreviousWord + 18)..]);
                 previous.Lights.CopyTo(row.Slice(SdfMeshProbeRelight.PreviousWord + 36, SdfMeshIrradianceProbe.LightWords));
             }
