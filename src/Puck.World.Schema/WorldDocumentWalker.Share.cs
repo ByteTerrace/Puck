@@ -11,7 +11,8 @@ public sealed partial class WorldDocumentWalker {
     /// <summary>Returns <paramref name="value"/> with every member and keyed row that <paramref name="patch"/> leaves
     /// unchanged replaced by <paramref name="basis"/>'s own instance, so a reference-keyed product derived from the basis
     /// stays valid for whatever the patch did not touch. The values on the paths to a change are copied as
-    /// <see cref="Rewrite{T}"/> copies them; everything off those paths is the basis's.</summary>
+    /// <see cref="Rewrite{T}"/> copies them; everything off those paths is the basis's. An object the patch replaces
+    /// whole shares nothing: the patch lists its members' values, not what changed in them.</summary>
     /// <remarks>The trees are the canonical JSON of the two values (<c>WorldDefinitionSerialization</c>) and the patch is
     /// <see cref="WorldDocumentBasis.Diff"/> of them, with <paramref name="value"/> deserialized from the patch's merge.
     /// Sharing is decided from the patch alone and never compares typed values, so the caller proves the result's
@@ -66,7 +67,7 @@ public sealed partial class WorldDocumentWalker {
             }
 
             switch (shape.Kind) {
-                case JsonTypeInfoKind.Object when shape.Described && (value.GetType() == basis.GetType()) && (patch is JsonObject delta) && !WorldDocumentBasis.IsReplaceMarker(node: delta) &&
+                case JsonTypeInfoKind.Object when shape.Described && (value.GetType() == basis.GetType()) && (patch is JsonObject delta) && !WorldDocumentBasis.ReplacesObject(delta: delta) &&
                     (valueTree is JsonObject valueObject) && (basisTree is JsonObject basisObject):
                     return ShareMembers(basis: basis, basisObject: basisObject, delta: delta, shape: shape, value: value, valueObject: valueObject);
                 case JsonTypeInfoKind.Enumerable when (patch is JsonArray rows) && ((rows.Count == 0) || !WorldDocumentBasis.IsReplaceMarker(node: rows[0])) &&

@@ -75,7 +75,8 @@ public sealed record WorldReloadDelta(WorldDocumentVersion BaseVersion, string B
                 var hasRight = rightMembers.MoveNext();
 
                 if (!hasLeft && !hasRight) { return path; }
-                if (!hasLeft || !hasRight) { return $"{path} (member {(hasLeft ? leftMembers.Current.Key : rightMembers.Current.Key)} on one side only)"; }
+                if (!hasLeft) { return $"{path} (the target holds member {rightMembers.Current.Key}, {(rightMembers.Current.Value?.ToJsonString() ?? "null")}, which the merge lacks)"; }
+                if (!hasRight) { return $"{path} (the merge holds member {leftMembers.Current.Key}, {(leftMembers.Current.Value?.ToJsonString() ?? "null")}, which the target lacks)"; }
                 if (!string.Equals(leftMembers.Current.Key, rightMembers.Current.Key, StringComparison.Ordinal)) {
                     return $"{path} (member {leftMembers.Current.Key} where the target holds {rightMembers.Current.Key})";
                 }
