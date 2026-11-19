@@ -1,15 +1,17 @@
 namespace Puck.State.Rules;
 
 /// <summary>A gate's deadline conjunct: a comparison of the tick against a value read from state (<c>$tick &gt;= X</c>,
-/// <c>$tick &gt; X</c>, or the same spelled with the tick on the right) whose falsehood alone closes the gate. While
-/// the gate's other reads hold, its truth can change only when the tick crosses X, so a closed verdict carries the
-/// tick it must be judged again at instead of making the rule volatile.</summary>
+/// <c>$tick &gt; X</c>, <c>$tick == X</c>, or the same spelled with the tick on the right) whose falsehood alone closes
+/// the gate. While the gate's other reads hold, its truth can change only when the tick reaches X (and, for an
+/// equality, leaves it), so a verdict carries the tick it must be judged again at instead of making the rule volatile.
+/// An equality is how a rule names "on the tick this event landed" (<c>inputTick(...) == $tick</c>).</summary>
 /// <param name="Token">The comparison's index in the gate.</param>
 /// <param name="TickOnLeft">Whether the tick is the comparison's left side.</param>
 /// <param name="Strict">Whether the tick must exceed X rather than reach it.</param>
 /// <param name="Scale">The raw value one tick reads as on the comparison's side: 1 for an integer read, 1 &lt;&lt; 16 for a
 /// Q48.16 read.</param>
-public sealed record RuleDeadline(int Token, bool TickOnLeft, bool Strict, long Scale) {
+/// <param name="Exact">Whether the comparison is an equality, which holds on the one tick X names.</param>
+public sealed record RuleDeadline(int Token, bool TickOnLeft, bool Strict, long Scale, bool Exact = false) {
     /// <summary>Finds a gate's deadline conjunct, when it has one: the first comparison of the tick alone against a
     /// side that reads no tick, ordered so the gate holds only at or after a tick, whose falsehood closes the gate
     /// whatever its other comparisons answer.</summary>
@@ -29,10 +31,10 @@ public sealed record RuleDeadline(int Token, bool TickOnLeft, bool Strict, long 
             var rightScale = TickScale(source: token.RightSource, kind: token.ValueKind);
             RuleDeadline? found = null;
 
-            if ((leftScale > 0L) && !ReadsTick(source: token.RightSource) && (token.Comparison is (ExpressionOp.GreaterOrEqual or ExpressionOp.Greater))) {
-                found = new RuleDeadline(Scale: leftScale, Strict: (token.Comparison == ExpressionOp.Greater), TickOnLeft: true, Token: index);
-            } else if ((rightScale > 0L) && !ReadsTick(source: token.LeftSource) && (token.Comparison is (ExpressionOp.LessOrEqual or ExpressionOp.Less))) {
-                found = new RuleDeadline(Scale: rightScale, Strict: (token.Comparison == ExpressionOp.Less), TickOnLeft: false, Token: index);
+            if ((leftScale > 0L) && !ReadsTick(source: token.RightSource) && (token.Comparison is (ExpressionOp.GreaterOrEqual or ExpressionOp.Greater or ExpressionOp.Equal))) {
+                found = new RuleDeadline(Exact: (token.Comparison == ExpressionOp.Equal), Scale: leftScale, Strict: (token.Comparison == ExpressionOp.Greater), TickOnLeft: true, Token: index);
+            } else if ((rightScale > 0L) && !ReadsTick(source: token.LeftSource) && (token.Comparison is (ExpressionOp.LessOrEqual or ExpressionOp.Less or ExpressionOp.Equal))) {
+                found = new RuleDeadline(Exact: (token.Comparison == ExpressionOp.Equal), Scale: rightScale, Strict: (token.Comparison == ExpressionOp.Less), TickOnLeft: false, Token: index);
             }
             if ((found is not null) && Closes(gate: gate, token: index)) {
                 return found;
@@ -48,6 +50,12 @@ public sealed record RuleDeadline(int Token, bool TickOnLeft, bool Strict, long 
     public ulong FirstHoldingTick(in Fact x) {
         if (!x.Outcome.TryFinite(raw: out var raw)) {
             return ulong.MaxValue;
+        }
+        if (Exact) {
+            // An equality holds only on a tick X spells exactly.
+            return (((raw < 0L) || ((raw % Scale) != 0L))
+                ? ulong.MaxValue
+                : (ulong)(raw / Scale));
         }
 
         var first = (Strict
