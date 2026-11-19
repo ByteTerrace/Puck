@@ -95,10 +95,10 @@ The same session's own stream is filtered by more than that. Its document comes
 from the cursor's disclosed images, and each snapshot's fields, solid sizes and
 inputs are filtered for the recipient:
 
-`src/Puck.World.Server/WorldSessionSink.cs:438-440`
+`src/Puck.World.Server/WorldSessionSink.cs:459-461`
 
 ```csharp
-                FieldCells = m_rows.Advance(m_view, m_cursor, redacted.FieldCells, (Tier == WorldDisclosureTier.Replica)),
+                FieldCells = m_rows.Advance(m_view, m_cursor, cells, replica),
                 SolidScales = m_scales.Filter(m_view, redacted.SolidScales),
                 Inputs = WorldInputPublication.ForOwner(redacted.Inputs, observation.Session, ref m_inputDisclosure),
 ```
