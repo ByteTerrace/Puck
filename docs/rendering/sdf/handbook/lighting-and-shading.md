@@ -232,7 +232,11 @@ in the frame.
   their surfaces. This keeps flat and curved receivers visible, including grazing angles,
   where interpolating radial distances incorrectly shadowed it. Misses never
   inflate a blocker. Blocked angular coverage closes smoothly; a minority hit
-  tap cannot extend a finite block over the opening. There are no whole-sphere
+  tap cannot extend a finite block over the opening. At the finest level, once a
+  tap blocks, a tap whose ray never got past that blocker's surface (the ground
+  outside a wall, in front of its base, or a ray running clear past the wall's
+  end) counts neither way: only taps that saw past the blocker share the
+  coverage with it. There are no whole-sphere
   lattice-ray planes, front/back fallback or neighbour separation vetoes.
   Gather multiplies visibility by trilinear share and a smooth distance fade from
   zero on/behind the receiver's tangent plane to one half the cell's extent along
@@ -427,7 +431,14 @@ of it at the surface. The range is where the light shows
 (`SdfPhotometry.RangeOf`). Each view's pass block carries a mask of the table's
 lights it shades (`SdfLightSelection`): a light whose sphere of range the view's
 frustum cannot see changes none of its pixels and is skipped, so a world holds up
-to 128 lights and a view pays only for those near what it shows.
+to 128 lights and a view pays only for those near what it shows. The views pass
+narrows the mask once more for each 8×8 tile (`sdfViewsTileLights` in
+`passes/sdf-views-lights.hlsli`): it bounds the tile's hit points by two boxes,
+the hits nearer than the middle of the tile's depth range and the rest, and keeps
+a light whose sphere of range meets a box and, for a spot, whose cone meets the
+sphere about it. A bound screen is kept where a box reaches in front of its
+face and its mean luminance is above zero. A pixel then walks only the lights
+and screens that can reach its tile.
 
 ## Photometric units and exposure
 

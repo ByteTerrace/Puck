@@ -395,7 +395,7 @@ public sealed class WorldRuleExtensionLawTests {
             WireProtocolKey: WorldProtocol.WireProtocolKey
         )).Accepted);
         var sink = new RecordingSink();
-        using var delivery = fixture.Server.AttachSeatPresentation(sink, Principal.Seat(0));
+        using var delivery = fixture.Server.AttachLocalPresentation(sink);
         fixture.Step();
 
         Assert.Empty(sink.LastCues);
@@ -1090,7 +1090,7 @@ public sealed class WorldRuleExtensionLawTests {
             WireProtocolKey: WorldProtocol.WireProtocolKey
         )).Accepted);
         var sink = new RecordingSink();
-        using var delivery = fixture.Server.AttachSeatPresentation(sink, Principal.Seat(0));
+        using var delivery = fixture.Server.AttachLocalPresentation(sink);
         fixture.Step();
 
         var cue = Assert.Single(sink.LastCues);
@@ -1113,7 +1113,7 @@ public sealed class WorldRuleExtensionLawTests {
         );
         var frame = WorldFederationCodec.EncodeSnapshot(new WorldSnapshot(cue.Tick, 0, 1, default, Cues: new[] { cue }));
         Assert.True(WorldFederationCodec.TryDecodeSnapshot(frame, out var decoded, out _));
-        Assert.Equal(cue, Assert.Single(decoded.Cues.ToArray()));
+        Assert.Equal(cue with { Audience = 0UL }, Assert.Single(decoded.Cues.ToArray()));
         Assert.Equal(440000L, cue.Argument);
     }
     [Fact]

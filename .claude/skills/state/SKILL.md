@@ -197,6 +197,14 @@ its scope validation is in `WorldDefinitionValidator.BodyGates.cs`. No body gate
   reserves cell-policy storage on empty rows and makes the row restricted for
   every recipient's writes; row-level visibility alone does not, so an owner's
   private inbox reads whole ([decision 3](../../../docs/plans/disclosure.md#3-a-writer-that-cannot-read-a-row-whole-cannot-write-it)).
+- **A transient derived from a firing is disclosed by what the firing read.**
+  A rule cue reaches a recipient only when it holds every dependency
+  `WorldRuleDisclosure` collects: the rule's read and write rows, each host
+  fact's own `CollectReads`, and what each fact declares on its type through
+  `IWorldDisclosedFact` (bodies, field regions, placements, machine screens).
+  A new host fact declares its own disclosure; `WorldFactOperand`,
+  `WorldFactEffect` make it abstract, and a facet fact with no declaration
+  reaches only the authority. Never classify facts by a list of types.
 
 ## Where each contract is enforced
 
@@ -212,6 +220,7 @@ its scope validation is in `WorldDefinitionValidator.BodyGates.cs`. No body gate
 | Worst-case work fits a tick | `RuleWorkBudget` against `RuleCapacity.MaxWorkUnitsPerTick`, at load; the evaluator's deferred locals and the sheet read one `CompiledRule.Deferred`. Nothing checks that a host's line places (`RuleWorkContributor.Order`) match the order it evaluates in |
 | A price is a function of declarations | `RuleCompileContext.RowCapacity`, the one room `IRuleCostContext` serves every fact, search price and rewind estimate; `RecipientOracleLawTests` compares two hidden-member variants. Nothing refuses a new price that reads storage instead |
 | A read audience encloses the destination's | `StateArena.ReadAudienceEncloses`, called by search and the disclosure transforms |
+| A host fact declares what a derived transient discloses | the compiler, through the abstract `CollectDisclosure` on `WorldFactOperand` and `WorldFactEffect`; `WorldRuleDisclosure.Classify` withholds an undeclared facet fact from every recipient but the authority; `CueDisclosureLawTests` |
 | Same input, same state | row digests in `StateArena.ComputeHash`; `puck test --reproduce` compares two runs and recomputes every tick |
 
 ## Open gaps

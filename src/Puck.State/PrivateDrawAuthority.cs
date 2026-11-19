@@ -36,15 +36,10 @@ public abstract class PrivateDrawAuthority : IJournalParticipant {
     private readonly Dictionary<long, Func<long, ulong, ulong, long, uint?>> m_scopedReplay = [];
     private Action<PrivateDrawWord>? m_observer;
     private Func<long, ulong, ulong, long, uint?>? m_recorded;
-    private sealed class Scope(Action end) : IDisposable {
-        private Action? m_end = end;
-        public void Dispose() => Interlocked.Exchange(ref m_end, null)?.Invoke();
-    }
-
     /// <summary>Observes the words an authority reads during capture.</summary>
     protected IDisposable Capture(Action<PrivateDrawWord> observe) {
         m_observer += observe;
-        return new Scope(() => m_observer -= observe);
+        return new Puck.Abstractions.DisposeOnce(action: () => m_observer -= observe);
     }
 
     /// <summary>Substitutes the words actually consumed at each address for one replay tick.</summary>
@@ -63,11 +58,11 @@ public abstract class PrivateDrawAuthority : IJournalParticipant {
             var installed = sites.ToArray();
             if (installed.Any(m_scopedReplay.ContainsKey)) { throw new InvalidOperationException("Overlapping private draw replay sites."); }
             foreach (var site in installed) { m_scopedReplay.Add(site, Read); }
-            return new Scope(() => { foreach (var site in installed) { m_scopedReplay.Remove(site); } });
+            return new Puck.Abstractions.DisposeOnce(action: () => { foreach (var site in installed) { m_scopedReplay.Remove(site); } });
         }
         m_recorded = Read;
         if (historical) { m_observer = null; }
-        return new Scope(() => {
+        return new Puck.Abstractions.DisposeOnce(action: () => {
             m_recorded = prior;
             if (historical) { m_observer = observing; }
         });

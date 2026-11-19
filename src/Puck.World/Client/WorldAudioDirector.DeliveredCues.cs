@@ -1,5 +1,4 @@
 using Puck.Audio.Simulation;
-using Puck.World.Authoring;
 using Puck.World.Protocol;
 using Puck.World.Server;
 
@@ -50,18 +49,20 @@ public sealed partial class WorldAudioDirector {
         }
     }
 
+    // A local delivery serves every seat, so a cue is heard only when the listener's seat may be told it; a routed or
+    // remote delivery was already admitted for its one recipient. Every definition reaching here passed a validating
+    // door (the authority's own validator, the replica decode or the projection hydration), so the score compiles.
     private void PresentDeliveredCues(WorldDefinition definition, WorldPresentationCueTick tick) {
-        foreach (var delivered in tick.Cues) { SubmitCue(delivered.Cue.Name, delivered.Site, delivered.Cue.Argument); }
+        var listener = m_listenerSeat;
+        foreach (var delivered in tick.Cues) {
+            if (delivered.Cue.AdmitsSeat(listener)) { SubmitCue(delivered.Cue.Name, delivered.Site, delivered.Cue.Argument); }
+        }
 
         var score = definition.Music is { Count: > 0 } music &&
             (m_routedAudio is null || WorldAssetRowLoader.IsEmbeddedAudio(music[0].Source)) ? music[0] : null;
         if (!string.Equals(score?.Hash, m_deliveredScoreHash, StringComparison.Ordinal)) {
             m_deliveredScoreHash = score?.Hash;
-            m_deliveredMusic = score is not null && WorldAssetRowLoader.TryLoadMusic(definition.DocumentDirectory, score, out var document, out _) &&
-                MusicCanonicalizer.Validate(document!).Count == 0 && document!.Segments.All(segment =>
-                    (segment.Transitions ?? []).All(x => WorldAudioCue.IsMusicWhenToken(x.When)) &&
-                    (segment.Layers ?? []).All(x => x.When is null || WorldAudioCue.IsMusicWhenToken(x.When)) &&
-                    (segment.Embellishments ?? []).All(x => WorldAudioCue.IsMusicWhenToken(x.When)))
+            m_deliveredMusic = score is not null && WorldAssetRowLoader.TryLoadMusic(definition.DocumentDirectory, score, out var document, out _)
                 ? new MusicDirector(MusicDirectorFactory.CompileGraph(document!)) : null;
         }
         if (m_deliveredMusic is not { } director) { SetActiveMusicLayers([]); return; }
@@ -70,7 +71,9 @@ public sealed partial class WorldAudioDirector {
         for (var family = 0; family <= (int)MusicSenseFamily.SeatJoin; family++) {
             if ((tick.MusicSenses & (1 << family)) != 0) { m_deliveredSenses.Add(new((MusicSenseFamily)family, 0, 0)); }
         }
-        foreach (var delivered in tick.Cues) { m_deliveredSenses.Add(new(MusicSenseFamily.RuleCue, 0, 0, delivered.Cue.Name)); }
+        foreach (var delivered in tick.Cues) {
+            if (delivered.Cue.AdmitsSeat(listener)) { m_deliveredSenses.Add(new(MusicSenseFamily.RuleCue, 0, 0, delivered.Cue.Name)); }
+        }
 
         director.Step(tick.Tick, (MusicClockBoundary)tick.MusicBoundary, m_deliveredSenses);
         SetActiveMusicLayers(director.ActiveLayers);

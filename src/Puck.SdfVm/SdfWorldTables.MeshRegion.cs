@@ -54,10 +54,12 @@ public sealed partial class SdfWorldTables {
         version = m_meshPlacementVersion;
         return (BindsBackgroundWork && (m_meshRequiredUpload <= m_uploads) && scene.HasGpuPlacements(placements, m_meshesOwed.Set));
     }
-    internal GpuRegion CreateProbeSceneRegion(int bytes, int slots = 1) => new(
+    // A mapped region (GpuRegion.Mapped) grows in place; only one no kernel sizes by its buffer's length may be one, since
+    // a mapped buffer's length is the range it reserves.
+    internal GpuRegion CreateProbeSceneRegion(int bytes, int slots = 1, bool mapped = false) => new(
         policy: GpuResidencyPolicy.Staged, memory: GpuResidency.RingMemory(profile: m_deviceContext.MemoryProfile),
         byteCount: bytes, slotCount: slots, buffers: m_gpu.BufferFactory, bindings: m_gpu.Bindings,
-        recorder: m_gpu.Recorder, copyPipeline: m_regionCopyPipeline, name: NameOf("probe-scene"));
+        recorder: m_gpu.Recorder, copyPipeline: m_regionCopyPipeline, name: NameOf("probe-scene"), mapped: mapped);
 
     private SdfMeshClaims? m_meshClaims;
     private bool m_meshTrimListening;
@@ -78,6 +80,9 @@ public sealed partial class SdfWorldTables {
         try {
             SdfRowChecks.ProcessWork.Count(kind: SdfRowChecks.Trims);
             m_meshArena.TrimUnused();
+            // A mapped region gives the forgotten meshes' chunks back now, under the pressure that asked for the trim.
+            m_meshPlacementVersion++;
+            CoverMeshRegion();
             foreach (var mesh in m_meshPages.Keys) {
                 if (!m_meshArena.Placements.ContainsKey(key: mesh)) { m_meshPages.Remove(key: mesh); }
             }
@@ -240,7 +245,7 @@ public sealed partial class SdfWorldTables {
     /// (<see cref="GpuRegion.MaxByteCount"/>): the ceiling of the limit its grant reserves for it
     /// (<see cref="MeshRegionLimitBytes"/>).</summary>
     public const ulong MostMeshRegionBytes = ((ulong)GpuRegion.MaxByteCount);
-    /// <summary>The unit a grown mesh region's size is rounded up to: 16 MiB.</summary>
+    /// <summary>The unit a grown mesh region's size is rounded up to: 16 MiB. A mapped region rounds to its chunk instead.</summary>
     public const ulong MeshRegionGranuleBytes = (16UL << 20);
 
     /// <summary>Gets the bytes the mesh region holds, which its buffers are allocated for: one draw record's until a frame
@@ -265,7 +270,18 @@ public sealed partial class SdfWorldTables {
 
     // Reserves room for the region to grow before a plan places meshes, and holds the arena to what was reserved, so no
     // mesh is placed in words the region could not be grown to hold.
-    private void PrepareMeshRegionLimit() => m_meshArena.SetLimit(limitBytes: ((ulong)m_meshGrant.ReserveGrowth(capacityBytes: m_meshRegion.ByteCount, mostBytes: ((long)MostMeshRegionBytes))));
+    // A mapped region's grant reserves the chunks it backs; the chunks inside its size that an earlier fit gave back
+    // (CoverMeshRegion) hold no device bytes, so they widen the words the arena may place without widening the
+    // reservation, and backing one again is admitted by the ledger when a placement needs it.
+    private void PrepareMeshRegionLimit() {
+        var held = ((long)m_meshRegion.DestinationBytes);
+        var holes = (m_meshRegion.Mapped ? Math.Max(val1: 0L, val2: (RoundUp(value: m_meshRegion.ByteCount, unit: m_meshRegion.MappedChunkBytes) - held)) : 0L);
+        var most = ((long)MostMeshRegionBytes);
+
+        m_meshArena.SetLimit(limitBytes: ((ulong)Math.Min(val1: most, val2: (m_meshGrant.ReserveGrowth(capacityBytes: held, mostBytes: Math.Max(val1: held, val2: (most - holes))) + holes))));
+
+        static long RoundUp(long value, long unit) => ((((value + unit) - 1L) / unit) * unit);
+    }
     // A plan forgot these meshes: their words are free for the next mesh they hold, so they owe none and their landing
     // starts again should a list place them later.
     private void ForgetArenaMeshes() {
@@ -299,20 +315,25 @@ public sealed partial class SdfWorldTables {
     private long m_meshRefusals;
     private long m_meshForgotten;
 
-    /// <summary>Returns the size a mesh region grows to when its meshes need <paramref name="needBytes"/>: the need plus an
-    /// eighth, rounded up to <see cref="MeshRegionGranuleBytes"/> and capped at <paramref name="mostBytes"/>. The size is
-    /// never below the need and is a whole number of words.</summary>
+    /// <summary>Returns the size a mesh region grows to when its meshes need <paramref name="needBytes"/>: for a region that
+    /// grows by replacement, the need plus an eighth rounded up to <see cref="MeshRegionGranuleBytes"/>; for a mapped one
+    /// (<see cref="GpuRegion.Mapped"/>), whose growth copies nothing, the need alone rounded up to its chunk. Either is
+    /// capped at <paramref name="mostBytes"/>, never below the need and a whole number of words.</summary>
     /// <param name="needBytes">The bytes the planned draws and meshes use; at most <paramref name="mostBytes"/>.</param>
     /// <param name="mostBytes">The most bytes the region may hold, a whole number of words; at most
     /// <see cref="MostMeshRegionBytes"/>.</param>
+    /// <param name="mappedChunkBytes">The chunk a mapped region backs (<see cref="GpuRegion.MappedChunkBytes"/>), a whole
+    /// number of words; zero for a region that grows by replacement.</param>
     /// <returns>The region's new size in bytes.</returns>
     /// <exception cref="InvalidOperationException"><paramref name="needBytes"/> is past <paramref name="mostBytes"/>.</exception>
-    public static ulong MeshRegionGrownBytes(ulong needBytes, ulong mostBytes = MostMeshRegionBytes) {
+    public static ulong MeshRegionGrownBytes(ulong needBytes, ulong mostBytes = MostMeshRegionBytes, long mappedChunkBytes = 0L) {
         if (needBytes > mostBytes) {
             throw new InvalidOperationException(message: $"The baked meshes need {needBytes} bytes of mesh region, past the {mostBytes} the region may hold.");
         }
 
-        return ((ulong)GpuCapacity.Headroom(ceiling: ((long)mostBytes), divisor: 8, granule: ((long)MeshRegionGranuleBytes), required: ((long)needBytes)));
+        return ((ulong)((mappedChunkBytes > 0L)
+            ? GpuCapacity.Headroom(ceiling: ((long)mostBytes), divisor: long.MaxValue, granule: mappedChunkBytes, required: ((long)needBytes))
+            : GpuCapacity.Headroom(ceiling: ((long)mostBytes), divisor: 8L, granule: ((long)MeshRegionGranuleBytes), required: ((long)needBytes))));
     }
 
     /// <summary>Gets the draws the latest frame's mesh passes rasterize in each view, the glass draws among them.</summary>
@@ -462,6 +483,7 @@ public sealed partial class SdfWorldTables {
                 FitMeshRegion(bytes: (((ulong)m_meshArena.Words) * sizeof(uint)));
             }
             EnsureMeshRegionCapacity(bytes: (((ulong)m_meshArena.Words) * sizeof(uint)));
+            CoverMeshRegion();
             ShadowMeshRecords();
             // Every mesh is owed again when the arena moved them or none was written yet, since no mesh's words
             // stand where its draw reads them, and lands through the background work. Otherwise the meshes a grown
@@ -667,6 +689,7 @@ public sealed partial class SdfWorldTables {
             ForgetArenaMeshes();
             if (m_meshArena.Words > 0) {
                 EnsureMeshRegionCapacity(bytes: (((ulong)m_meshArena.Words) * sizeof(uint)));
+                CoverMeshRegion();
                 ShadowMeshRecords();
             }
             Volatile.Write(location: ref m_meshRegionUsedBytes, value: (((ulong)m_meshArena.Words) * sizeof(uint)));
@@ -815,24 +838,34 @@ public sealed partial class SdfWorldTables {
     }
 
     // Grows the region to MeshRegionGrownBytes of the need, refusing by name past what a region holds, without waiting for
-    // the device (GpuRegion.Grow): the next upload clears the new buffer and copies the words the old one held into it on
-    // the GPU, so every placed mesh stands where it was written and nothing it held is staged again, and the old buffer is
-    // disposed once that upload completes (Retire). The region keeps its reserved copy sets, so growing takes no
-    // descriptor range.
-    // Shrinks the region to MeshRegionGrownBytes of the need when a relocation leaves it holding more than half as much
-    // again, so the meshes no list names any more give back their device-local, staging and host-copy bytes. The shrunk
-    // region owes its draw records; a relocation owes every mesh, which lands through the background work.
+    // the device (GpuRegion.Grow). A mapped region backs the chunks the new size reaches in place, so every placed mesh
+    // stands where it was written and nothing is replaced. Any other region's next upload clears a new buffer and copies
+    // the words the old one held into it on the GPU, so nothing it held is staged again, and the old buffer is disposed
+    // once that upload completes (Retire). The region keeps its reserved copy sets, so growing takes no descriptor range.
+    // Shrinks the region to MeshRegionGrownBytes of the need: a mapped region whenever its size passes the need, giving
+    // its chunks past it back behind their readers with nothing allocated, so a full pool gets its bytes back; any other
+    // only when a relocation leaves it holding more than half as much again and the pool has room for the smaller buffer
+    // beside it. A replacing shrink owes its draw records; a relocation owes every mesh, which lands through the
+    // background work.
     private void FitMeshRegion(ulong bytes) {
-        var fitted = MeshRegionGrownBytes(needBytes: bytes, mostBytes: Math.Max(val1: bytes, val2: MeshRegionLimitBytes));
+        var mapped = m_meshRegion.Mapped;
+        var fitted = MeshRegionGrownBytes(mappedChunkBytes: m_meshRegion.MappedChunkBytes, mostBytes: Math.Max(val1: bytes, val2: MeshRegionLimitBytes), needBytes: bytes);
         var held = m_meshRegion.ByteCount;
 
+        if (mapped) {
+            if (((ulong)held) <= fitted) { return; }
+            ReplacedMeshRegion(newBytes: fitted, replaced: m_meshRegion.Shrink(byteCount: ((long)fitted)));
+            SdfRowChecks.ProcessWork.Count(kind: SdfRowChecks.Shrinks);
+
+            return;
+        }
         // A shrink holds both buffers until the old one's readers finish: one the pool has no room for waits for a
         // later relocation, and the region keeps what it holds.
         if ((((ulong)held) <= (fitted + (fitted / 2UL))) || !m_meshGrant.TryReserveReplacement(newBytes: ((long)fitted))) {
             return;
         }
 
-        IGpuBuffer replaced;
+        IDisposable replaced;
 
         try {
             replaced = m_meshRegion.Shrink(byteCount: ((long)fitted));
@@ -842,32 +875,89 @@ public sealed partial class SdfWorldTables {
             return;
         }
 
-        ReplacedMeshRegion(newBytes: fitted, oldBytes: held, replaced: replaced);
-        // A shrink empties storage even when a tail was forgotten without relocating any surviving address.
+        ReplacedMeshRegion(newBytes: fitted, replaced: replaced);
+        // A replacing shrink empties storage even when a tail was forgotten without relocating any surviving address.
         m_meshSectionWritten = false;
         m_owedDraws.Add(0, m_currentDrawRows.Count);
         SdfRowChecks.ProcessWork.Count(kind: SdfRowChecks.Shrinks);
     }
-    // The region's buffer was replaced by one of another size: the next upload carries what the old one held, the old one
-    // is retired behind that upload and leaves the grant's reservation when it is released, and every binding of the
-    // region is written again.
-    private void ReplacedMeshRegion(IDisposable replaced, long oldBytes, ulong newBytes) {
+    // The placement version the mapped region's chunks were last fitted to, and the chunks the placements cover.
+    private long m_meshCoveredVersion = -1L;
+    private bool[] m_meshCovered = [];
+
+    // Fits a mapped region's chunks to its placements, the one place its interior backing follows the arena: a chunk
+    // that holds a placed mesh's words or a draw record is backed, and one that holds none is given back behind its
+    // readers, so a forgotten mesh's device bytes leave the pool wherever it lay, not only at the region's end.
+    // Invariant: every word a draw or a landing may name lies in a backed chunk. The arena places a mesh only inside
+    // ByteCount, which EnsureMeshRegionCapacity backs as it grows; this restores the backing of an interior chunk an
+    // earlier fit gave back before any landing leases its words (a landing leases only backed pages, GpuRegion.TryLease).
+    private void CoverMeshRegion() {
+        if (!m_meshRegion.Mapped || (m_meshCoveredVersion == m_meshPlacementVersion)) { return; }
+        m_meshCoveredVersion = m_meshPlacementVersion;
+
+        var chunk = m_meshRegion.MappedChunkBytes;
+        var size = m_meshRegion.ByteCount;
+        var chunks = ((int)(((size + chunk) - 1L) / chunk));
+
+        if (m_meshCovered.Length < chunks) { m_meshCovered = new bool[chunks]; }
+        Array.Clear(array: m_meshCovered, index: 0, length: chunks);
+        Cover(bytes: Math.Max(val1: (((long)m_meshArena.DrawCapacity) * SdfMeshRegion.DrawBytes), val2: SdfMeshRegion.DrawBytes), offset: 0L);
+        foreach (var (mesh, placement) in m_meshArena.Placements) {
+            Cover(bytes: (((long)SdfMeshRegion.WordsOf(mesh: mesh)) * sizeof(uint)), offset: (((long)placement.VertexWord) * sizeof(uint)));
+        }
+        for (var index = 0; (index < chunks); index++) {
+            var offset = (index * chunk);
+            var bytes = Math.Min(val1: chunk, val2: (size - offset));
+            var backed = m_meshRegion.IsBacked(bytes: bytes, offset: offset);
+
+            if (m_meshCovered[index] && !backed) {
+                try {
+                    m_meshRegion.MapRange(bytes: bytes, offset: offset);
+                } catch (GpuMemoryRefusedException) {
+                    // The meshes there stay owed, their rows absent, until a later fit backs the chunk.
+                    m_meshGrant.Kept(refused: true);
+                    m_meshCoveredVersion = -1L;
+                    continue;
+                }
+                ReplacedMeshRegion(newBytes: ((ulong)size), replaced: GpuMappedRelease.None);
+            } else if (!m_meshCovered[index] && backed && (bytes == chunk)) {
+                ReplacedMeshRegion(newBytes: ((ulong)size), replaced: m_meshRegion.UnmapRange(bytes: bytes, offset: offset));
+            }
+        }
+
+        void Cover(long offset, long bytes) {
+            if (bytes <= 0L) { return; }
+            var last = Math.Min(val1: (chunks - 1), val2: ((int)(((offset + bytes) - 1L) / chunk)));
+
+            for (var index = ((int)(offset / chunk)); (index <= last); index++) { m_meshCovered[index] = true; }
+        }
+    }
+    // The region changed size. The device bytes it gave up (a replaced buffer, or a mapped region's chunks past its new
+    // size) are retired behind the next upload and leave the grant's reservation when they are released. A replaced
+    // buffer is carried by that upload and every binding of the region is written again; a mapped region keeps its
+    // buffer, its bindings and its words.
+    private void ReplacedMeshRegion(IDisposable replaced, ulong newBytes) {
+        var mapped = m_meshRegion.Mapped;
+        var released = ((replaced is GpuMappedRelease release) ? ((long)release.Bytes) : (mapped ? 0L : m_meshGrant.Capacity));
+
         RequireMeshUpload();
-        Retire(replaced: new ReplacedRegion(bytes: oldBytes, grant: m_meshGrant, replaced: replaced), carryingRegion: m_meshRegion);
-        m_meshGrant.Grown(newBytes: ((long)newBytes), oldBytes: oldBytes);
-        m_seedMeshHistory = true;
-        m_bindingRevision++;
+        Retire(replaced: new ReplacedRegion(bytes: released, grant: m_meshGrant, replaced: replaced), carryingRegion: m_meshRegion);
+        m_meshGrant.Grown(newBytes: ((long)m_meshRegion.DestinationBytes), oldBytes: released);
+        if (!mapped) {
+            m_seedMeshHistory = true;
+            m_bindingRevision++;
+        }
         Volatile.Write(
             location: ref m_meshRegionBytes,
             value: newBytes
         );
     }
     // The growth is reserved before the plan that asks for it (PrepareMeshRegionLimit), so the ledger admits the new
-    // buffer against the grant. A growth refused all the same (the pool had no room for a replacement beside the
-    // standing buffer, or the device said no) leaves the region as it is: the placements past what it holds are taken
-    // back and refused (SdfMeshRegionArena.Clip), their draws wait, and nothing throws. Draw records the buffer cannot
-    // hold are the floor, which a residency cannot draw without: their growth is reserved whatever the pool holds and
-    // admitted past the limit, counted. Only a device that refuses that too is an error.
+    // backing against the grant. A growth refused all the same (the pool had no room for it, or the device said no) leaves
+    // the region as it is: the placements past what it holds are taken back and refused (SdfMeshRegionArena.Clip), their
+    // draws wait, and nothing throws. Draw records the buffer cannot hold are the floor, which a residency cannot draw
+    // without: their growth is reserved whatever the pool holds and admitted past the limit, counted. Only a device that
+    // refuses that too is an error.
     private void EnsureMeshRegionCapacity(ulong bytes) {
         var current = ((ulong)m_meshRegion.ByteCount);
 
@@ -877,7 +967,7 @@ public sealed partial class SdfWorldTables {
             return;
         }
 
-        var grown = MeshRegionGrownBytes(needBytes: bytes, mostBytes: Math.Max(val1: bytes, val2: MeshRegionLimitBytes));
+        var grown = MeshRegionGrownBytes(mappedChunkBytes: m_meshRegion.MappedChunkBytes, mostBytes: Math.Max(val1: bytes, val2: MeshRegionLimitBytes), needBytes: bytes);
         IDisposable replaced;
 
         try {
@@ -893,7 +983,7 @@ public sealed partial class SdfWorldTables {
                 return;
             }
 
-            grown = MeshRegionGrownBytes(needBytes: floor);
+            grown = MeshRegionGrownBytes(mappedChunkBytes: m_meshRegion.MappedChunkBytes, needBytes: floor);
             m_meshGrant.ReserveFloorGrowth(newBytes: ((long)grown));
             try {
                 replaced = m_meshRegion.Grow(byteCount: ((long)grown));
@@ -903,6 +993,6 @@ public sealed partial class SdfWorldTables {
             }
         }
 
-        ReplacedMeshRegion(newBytes: grown, oldBytes: ((long)current), replaced: replaced);
+        ReplacedMeshRegion(newBytes: grown, replaced: replaced);
     }
 }

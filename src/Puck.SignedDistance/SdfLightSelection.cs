@@ -10,7 +10,9 @@ namespace Puck.SignedDistance;
 /// sphere misses cannot show any of its light and skips it; an occluder likewise past three of its radii, where its
 /// Gaussian is below a ten-thousandth. A directional or rim light reaches every surface and is always kept; a light of
 /// no strength is never kept. A positional light that rides a dynamic transform, whose position the host does not hold,
-/// is always kept.
+/// is always kept. The views pass narrows this mask again for each tile it shades, by the same reaches against the
+/// tile's hit points (<c>sdfViewsTileLights</c>, which reads <see cref="OccluderReach"/> as
+/// <c>SDF_LIGHT_OCCLUDER_REACH</c>).
 /// </summary>
 public static class SdfLightSelection {
     /// <summary>The fraction the view's frustum sides are widened by: past any temporal jitter or render-scale rounding,

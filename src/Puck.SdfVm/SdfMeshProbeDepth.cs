@@ -194,7 +194,8 @@ public static class SdfMeshProbeDepth {
     }
 
     /// <summary>Tests signed surface gaps only in the four reflected angular taps. Coplanar receivers stay visible
-    /// at grazing angles. A missed ray supplies no fictitious far blocker. KEEP IN SYNC with
+    /// at grazing angles. A missed ray supplies no fictitious far blocker. Where a tap blocks the receiver, the taps whose
+    /// rays never got past that blocker carry no evidence and leave the coverage. KEEP IN SYNC with
     /// <c>sdfMeshProbeDepthVisibility</c>; there are no cross-probe or whole-sphere plane vetoes.</summary>
     /// <param name="surfaces">The packed surface map of one probe.</param>
     /// <param name="toward">Receiver minus probe position, after normal bias.</param>
@@ -218,6 +219,11 @@ public static class SdfMeshProbeDepth {
         Span<float> weights = stackalloc float[4];
         Span<float> curvatures = stackalloc float[4];
         Span<bool> sheets = stackalloc bool[4];
+        Span<float> taps = stackalloc float[4];
+        Span<Vector3> reaches = stackalloc Vector3[4];
+        Span<float> closures = stackalloc float[4];
+        Span<Vector3> crossings = stackalloc Vector3[4];
+        Span<Vector3> sides = stackalloc Vector3[4];
         var firstCode = uint.MaxValue;
         var firstNormal = Vector3.Zero;
         var planar = true;
@@ -228,6 +234,8 @@ public static class SdfMeshProbeDepth {
         var sheetWeight = 0f;
 
         weights.Clear();
+        taps.Clear();
+        closures.Clear();
 
         for (var corner = 0; (corner < 4); corner++) {
             var highX = corner & 1;
@@ -242,9 +250,13 @@ public static class SdfMeshProbeDepth {
 
             if (depth < 0f) {
                 if (bounded && (distance > -depth)) { return 0f; }
+                taps[corner] = weight;
+                reaches[corner] = (Directions[index] * MathF.Min(x: -depth, y: distance));
                 continue;
             }
             points[corner] = (Directions[index] * depth);
+            taps[corner] = weight;
+            reaches[corner] = (Directions[index] * MathF.Min(x: depth, y: distance));
             var packedCurvature = ((ushort)(surfaces[(Directions.Length + (index >> 1))] >> (16 * (index & 1))));
             var curvature = ((float)BitConverter.UInt16BitsToHalf(value: ((ushort)(packedCurvature & ~SheetBit))));
 
@@ -268,17 +280,25 @@ public static class SdfMeshProbeDepth {
             planeSum += (weight * plane);
             planeWeight += weight;
         }
-        // This is the exact planar form of the quadratic. Flat walls dominate CPU bounce reads and pixels.
-        if (planar && (planeWeight > 0f) && ((planeHigh - planeLow) <= (0.5f * SdfMeshIrradianceProbe.DepthSurfaceJoinGap))) {
-            var gap = (Vector3.Dot(vector1: firstNormal, vector2: toward) - (planeSum / planeWeight));
-            var closed = Math.Clamp(max: 1f, min: 0f, value: (-gap / SdfMeshIrradianceProbe.DepthSurfaceFade));
-
-            return SdfMeshProbeCoverage.Visibility(blocked: (planeWeight * closed), finest: finest, sheets: (sheetWeight * closed));
-        }
         var blocked = 0f;
         var blockedSheets = 0f;
 
-        for (var corner = 0; (corner < 4); corner++) {
+        // This is the exact planar form of the quadratic. Flat walls dominate CPU bounce reads and pixels.
+        var flat = (planar && (planeWeight > 0f) && ((planeHigh - planeLow) <= (0.5f * SdfMeshIrradianceProbe.DepthSurfaceJoinGap)));
+
+        if (flat) {
+            var offset = (planeSum / planeWeight);
+            var closed = Math.Clamp(max: 1f, min: 0f, value: ((offset - Vector3.Dot(vector1: firstNormal, vector2: toward)) / SdfMeshIrradianceProbe.DepthSurfaceFade));
+
+            for (var corner = 0; (corner < 4); corner++) {
+                closures[corner] = ((weights[corner] > 0f) ? closed : 0f);
+                crossings[corner] = (firstNormal * offset);
+                sides[corner] = firstNormal;
+            }
+            blocked = (planeWeight * closed);
+            blockedSheets = (sheetWeight * closed);
+        }
+        for (var corner = 0; !flat && (corner < 4); corner++) {
             if (weights[corner] <= 0f) { continue; }
             var quadratic = 0f;
             var linear = Vector3.Zero;
@@ -316,15 +336,48 @@ public static class SdfMeshProbeDepth {
 
             if ((along <= 0f) || (along >= 1f)) { continue; }
             var hit = (toward * along);
-            var gradient = (linear + ((2f * quadratic) * hit));
-            var gap = Vector3.Dot(vector1: Vector3.Normalize(value: gradient), vector2: (toward - hit));
+            var side = Vector3.Normalize(value: (linear + ((2f * quadratic) * hit)));
+            var gap = Vector3.Dot(vector1: side, vector2: (toward - hit));
 
-            var share = (weights[corner] * Math.Clamp(max: 1f, min: 0f, value: (-gap / SdfMeshIrradianceProbe.DepthSurfaceFade)));
+            var closure = Math.Clamp(max: 1f, min: 0f, value: (-gap / SdfMeshIrradianceProbe.DepthSurfaceFade));
+            var share = (weights[corner] * closure);
 
+            closures[corner] = closure;
+            crossings[corner] = hit;
+            sides[corner] = side;
             blocked += share;
             blockedSheets += (sheets[corner] ? share : 0f);
         }
-        return SdfMeshProbeCoverage.Visibility(blocked: blocked, finest: finest, sheets: blockedSheets);
+        var evidence = (finest ? (1f - Unresolved(closures: closures, crossings: crossings, reaches: reaches, sides: sides, taps: taps, weights: weights)) : 1f);
+
+        return SdfMeshProbeCoverage.Visibility(blocked: (blocked / evidence), finest: finest, sheets: (blockedSheets / evidence));
+    }
+    // The tap weight that carries no evidence about a receiver another tap blocks: the unblocked part of each tap (a hit, a
+    // miss or an unsupported hit) whose ray, at its hit or at the receiver's distance if it runs that far, still stands on
+    // the probe's side of a blocking tap's surface, or on its plane within the join gap. Such a ray never got past the
+    // blocker before the receiver's depth: it met a surface in front of the blocker (the ground outside a wall, seen in
+    // front of the wall's base) or ran clear beside a blocker it saw at grazing (past the end of the wall the receiver
+    // stands behind), so the receiver standing in front of its surface says nothing of a view past the blocker. A ray that
+    // crossed the blocker's plane clear (over a finite block's edge) keeps its weight, so a receiver still eases over a
+    // texel past a block's silhouette. A tap loses its weight in the measure the blocker closes the receiver (`closures`,
+    // the surface-gap fade), so a receiver on a blocker's own plane, which that blocker barely closes, keeps the evidence
+    // of the taps beside it. The coverage is then the blocked share of the taps that carry evidence. Zero where no tap
+    // blocks. KEEP IN SYNC with the second loop of sdfMeshProbeDepthVisibility.
+    private static float Unresolved(ReadOnlySpan<float> taps, ReadOnlySpan<Vector3> reaches, ReadOnlySpan<float> weights,
+        ReadOnlySpan<float> closures, ReadOnlySpan<Vector3> crossings, ReadOnlySpan<Vector3> sides) {
+        var unresolved = 0f;
+
+        for (var corner = 0; (corner < 4); corner++) {
+            var before = 0f;
+
+            for (var blocker = 0; (blocker < 4); blocker++) {
+                if ((closures[blocker] > 0f) && (Vector3.Dot(vector1: sides[blocker], vector2: (reaches[corner] - crossings[blocker])) > -SdfMeshIrradianceProbe.DepthSurfaceJoinGap)) {
+                    before = MathF.Max(x: before, y: closures[blocker]);
+                }
+            }
+            unresolved += (MathF.Max(x: (taps[corner] - (weights[corner] * closures[corner])), y: 0f) * before);
+        }
+        return unresolved;
     }
 
     /// <summary>Writes the sky's mean radiance over each hit texel's solid angle: what a ray of that texel that misses every

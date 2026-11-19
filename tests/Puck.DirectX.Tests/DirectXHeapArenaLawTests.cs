@@ -189,6 +189,8 @@ public sealed unsafe class DirectXHeapArenaLawTests {
 
             return (FailPlacement ? OutOfMemory : Ok);
         }
+        public HRESULT CreateReservedResource(D3D12_RESOURCE_DESC* description, D3D12_RESOURCE_STATES initialState, ID3D12Resource** resource) => throw new NotSupportedException();
+        public void UpdateTileMappings(ID3D12CommandQueue* queue, ID3D12Resource* resource, uint firstTile, uint tileCount, ID3D12Heap* heap, uint heapFirstTile) => throw new NotSupportedException();
         public void ReleaseHeap(ID3D12Heap* heap) => Log.Add(item: $"release heap {((nint)heap)}");
         public void ReleaseResource(ID3D12Resource* resource) => Log.Add(item: $"release resource {((nint)resource)}");
         public HRESULT Tag(ID3D12Resource* resource, Guid key, long value) {

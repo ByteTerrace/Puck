@@ -280,8 +280,11 @@ declared cost, never by opening the bounds.
 
 **A surface function the engine lights, in three phases.** A program has a
 `surface` phase before the light walk (the material's final response and
-shading normal), a `light` phase once per light and a `compose` phase after
-the fold. A phase it omits takes the standard's default. The engine keeps what
+shading normal), a `light` phase once per light the walk visits and a
+`compose` phase after the fold. The walk leaves out lights that cannot reach
+the view or the 8×8 tile (past a light's range or outside a spot's cone), so a
+light phase cannot rely on running where its light's `reach` is zero. A phase it omits takes
+the standard's default. The engine keeps what
 a per-pixel program cannot express: the shadow filter, the irradiance gather,
 the cel outline (it reads neighbour depth and normal), local adaptation and the
 atmosphere. One generated invocation serves opaque and glass shading. The
@@ -497,7 +500,14 @@ The lights follow the same rule: each view shades only the lights that can
 reach a surface it shows (`SdfLightSelection`), tested with the same
 `CameraSnapshot.MaySee`, a light's sphere of range against the view's frustum.
 Skipping one changes no pixel, since a point or spot light's falloff is exactly
-zero at its range (below).
+zero at its range (below). The views pass narrows that mask again for each 8×8
+tile it shades (`sdfViewsTileLights`): a light is kept where its sphere of range
+meets a box about the tile's hit points, and a spot where its cone also meets
+them, and a bound screen where some of those points lie in front of its face
+and its picture is not black, so a pixel walks only the lights that reach near
+it. The boxes hold the
+very points the light stage shades, so a tile's mask changes no pixel either,
+and no light can pop at a tile edge.
 
 Work that changes every frame updates less often where it is far or small on
 screen (the owner's request), by the same rule: a reduced rate is a visible
@@ -1444,7 +1454,18 @@ and its measured reach. Neighbouring samples fit a cached normal-gradient
 curvature per texel. Four reflected angular taps reconstruct local surface
 patches and test the receiver against them, with a smooth surface-gap and
 coverage fade. A finite blocker affects its sampled angular footprint rather
-than extending an infinite plane through the scene.
+than extending an infinite plane through the scene. At the finest level,
+where a tap blocks the receiver, a tap whose ray never got past that
+blocker's surface by the receiver's distance carries no evidence about the
+receiver and leaves the coverage: the receiver standing in front of the
+surface that tap met says nothing of a view past the blocker. Counting such
+taps as clear lets the ground outside a wall, seen in front of the wall's
+base, and the rays running clear past the end of a wall seen at grazing light
+the inside of the wall's foot and of a room's corner with the outdoor probe's
+sky. A tap whose ray crossed the blocker's plane clear still counts, so a
+receiver eases over a texel past a finite block's edge. Coarser levels close
+walls on sheets instead, since their metres-wide taps would close a hill's far
+slope under this rule.
 
 [`SdfMeshProbeDepth`](../../src/Puck.SdfVm/SdfMeshProbeDepth.cs) and the views
 shader's `sdfMeshProbeDepthVisibility` share that rule. Gather weight is the

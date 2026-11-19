@@ -39,7 +39,9 @@ public sealed unsafe class DirectXHeapArena {
     private readonly IDirectXCommandCalls m_calls;
     private readonly nint m_device;
     private readonly GpuDeviceMemoryWork? m_memory;
-    private readonly GpuMemoryPool<(D3D12_HEAP_TYPE Type, D3D12_HEAP_FLAGS Category, GpuMemoryRole Role), nint> m_pool;
+    // A key's Tiles marks the heaps that back reserved buffers' tiles (PlaceTiles), kept apart from placed resources, so
+    // a resource that never moves cannot pin a heap whose tiles a shrinking buffer gives back.
+    private readonly GpuMemoryPool<(D3D12_HEAP_TYPE Type, D3D12_HEAP_FLAGS Category, GpuMemoryRole Role, bool Tiles), nint> m_pool;
 
     /// <summary>Initializes a new instance of the <see cref="DirectXHeapArena"/> class.</summary>
     /// <param name="calls">The device calls it makes.</param>
@@ -86,7 +88,7 @@ public sealed unsafe class DirectXHeapArena {
 
         // The resource is created and registered under the pool's lock, so FreeAll, which takes it too, never releases its
         // heap between the placement and the creation, and its sweep of Placed sees every resource the arena created.
-        return ((ID3D12Resource*)m_pool.Place(alignment: info.Alignment, key: (heapType, category, role), payer: family, size: info.SizeInBytes, bind: placement => {
+        return ((ID3D12Resource*)m_pool.Place(alignment: info.Alignment, key: (heapType, category, role, false), payer: family, size: info.SizeInBytes, bind: placement => {
             var placedDescription = resourceDescription;
             var placedClear = clear;
             ID3D12Resource* resource = null;
@@ -111,6 +113,34 @@ public sealed unsafe class DirectXHeapArena {
 
             return ((nint)resource);
         }));
+    }
+    /// <summary>Places a run of 64 KiB tiles a reserved buffer maps (<see cref="DirectXGpuMappedBuffer"/>): a range of a
+    /// default-heap buffer heap kept for tiles alone, admitted and counted as any heap is, and named to the family in the
+    /// counts. The caller maps it and gives it back through <see cref="ReturnTiles"/> once no queue reads it.</summary>
+    /// <param name="bytes">The run's bytes; a whole number of tiles, at most half of <see cref="HeapBytes"/> to share a
+    /// heap.</param>
+    /// <param name="family">The family the run is named to in the counts (<see cref="GpuObjectName.MemoryFamily"/>),
+    /// whose reservation pays for a heap the run makes.</param>
+    /// <returns>The run's placement: its heap and offset.</returns>
+    /// <exception cref="GpuMemoryRefusedException">The account or the device refused a new heap; nothing was placed.</exception>
+    /// <exception cref="ObjectDisposedException">The arena was retired (<see cref="FreeAll"/>).</exception>
+    public DirectXTilePlacement PlaceTiles(ulong bytes, string family) => m_pool.Place(
+        alignment: DirectXGpuMappedBuffer.TileBytes,
+        key: (D3D12_HEAP_TYPE.D3D12_HEAP_TYPE_DEFAULT, D3D12_HEAP_FLAGS.D3D12_HEAP_FLAG_ALLOW_ONLY_BUFFERS, GpuMemoryRole.DeviceLocal, true),
+        payer: family,
+        size: bytes,
+        bind: placement => new DirectXTilePlacement(
+            Name: (m_memory?.CountPlaced(allocation: placement.Native, bytes: checked((long)placement.Size), device: m_device, family: family) ?? 0L),
+            Placement: placement
+        )
+    );
+    /// <summary>Gives back a run of tiles <see cref="PlaceTiles"/> placed, once no queue reads it: its name leaves the
+    /// counts and its range returns to its heap, which the arena frees when it empties. A retired arena takes nothing
+    /// back.</summary>
+    /// <param name="tiles">The run's placement.</param>
+    public void ReturnTiles(DirectXTilePlacement tiles) {
+        if (tiles.Name != 0) { _ = m_memory?.CountUnplaced(token: tiles.Name); }
+        m_pool.Return(placement: tiles.Placement);
     }
     /// <summary>Returns the range a placed resource held, as the resource is released.</summary>
     /// <param name="resource">The resource.</param>
@@ -142,7 +172,7 @@ public sealed unsafe class DirectXHeapArena {
 
     // Asks the ledger for the heap at its size, creates it and counts it in the segment its type's memory pool lies in.
     // A heap the account or the device refuses is never created, and its grant is handed back.
-    private nint Allocate(GpuMemoryBlockRequest<(D3D12_HEAP_TYPE Type, D3D12_HEAP_FLAGS Category, GpuMemoryRole Role)> request) {
+    private nint Allocate(GpuMemoryBlockRequest<(D3D12_HEAP_TYPE Type, D3D12_HEAP_FLAGS Category, GpuMemoryRole Role, bool Tiles)> request) {
         var key = request.Key;
         var description = new D3D12_HEAP_DESC {
             Flags = key.Category,

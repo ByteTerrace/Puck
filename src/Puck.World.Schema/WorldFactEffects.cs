@@ -42,8 +42,23 @@ public readonly record struct WorldBodyAction(BodyMotionOp Operation, FixedQ4816
 /// <see cref="IWorldFacts"/> as an argument.</summary>
 /// <remarks>Every world effect but the identity-fact write lands outside the arena, so it declares
 /// <see cref="EffectNeeds.Irreversible"/> and the compiler defers it to after the firing's scope commits.</remarks>
-public abstract class WorldFactEffect : EffectFact<IWorldFacts>, IRuleEffect {
-    private protected WorldFactEffect(string describe) : base(describe: describe) { }
+public abstract class WorldFactEffect : EffectFact<IWorldFacts>, IRuleEffect, IWorldDisclosedFact {
+    /// <summary>Initializes the effect with its read-back spelling and what whether it lands depends on.</summary>
+    /// <param name="describe">The authored spelling, for the rules read-back.</param>
+    /// <param name="reach">What whether the firing lands depends on beyond the rows it reads: an arm that refuses on an
+    /// inactive body declares <see cref="WorldDisclosureReach.Bodies"/>, and one that paints a field
+    /// <see cref="WorldDisclosureReach.Fields"/>.</param>
+    private protected WorldFactEffect(string describe, WorldDisclosureReach reach) : base(describe: describe) => Reach = reach;
+
+    /// <summary>Gets what whether the firing lands depends on beyond the rows it reads.</summary>
+    public WorldDisclosureReach Reach { get; }
+
+    /// <inheritdoc/>
+    public void CollectDisclosure(WorldDisclosureNeeds into) {
+        ArgumentNullException.ThrowIfNull(argument: into);
+
+        into.Add(reach: Reach);
+    }
 
     /// <inheritdoc/>
     public IReadOnlyList<IRuleEffect[]> Arms => [];
@@ -94,7 +109,9 @@ public sealed class WorldDocumentEffect : WorldFactEffect {
     /// <param name="placement">The placement the write installs, or <see langword="null"/>.</param>
     /// <param name="cost">The conservative work units one firing costs.</param>
     /// <param name="describe">The authored spelling, for the rules read-back.</param>
-    public WorldDocumentEffect(WorldDocumentWrite write, string id, WorldHudPanel? panel, WorldPlacement? placement, RuleWork cost, string describe) : base(describe: describe) {
+    public WorldDocumentEffect(WorldDocumentWrite write, string id, WorldHudPanel? panel, WorldPlacement? placement, RuleWork cost, string describe)
+        // A placement write reconciles the population inside its transaction and refuses when the reconcile cannot hold.
+        : base(describe: describe, reach: (write is WorldDocumentWrite.UpsertPlacement or WorldDocumentWrite.RemovePlacement) ? WorldDisclosureReach.Bodies : WorldDisclosureReach.None) {
         HudPanel = panel;
         Id = id;
         Placement = placement;
@@ -131,7 +148,10 @@ public sealed class WorldCueEffect : WorldFactEffect {
     /// <see langword="null"/> for a cue about no body.</param>
     /// <param name="describe">The authored spelling, for the rules read-back.</param>
     /// <param name="argument">The optional compiled integer argument.</param>
-    public WorldCueEffect(string cue, string? payload, (CellKey Key, CompiledCellRef? KeyFrom)? body, string describe, CompiledExpressionToken[]? argument = null) : base(describe: describe) {
+    public WorldCueEffect(string cue, string? payload, (CellKey Key, CompiledCellRef? KeyFrom)? body, string describe, CompiledExpressionToken[]? argument = null)
+        // A cue whose body is absent is not emitted and refuses nothing; the delivery admits a body cue only to a
+        // recipient whose snapshot carries the body.
+        : base(describe: describe, reach: WorldDisclosureReach.None) {
         Body = body;
         Cue = cue;
         Payload = payload;
@@ -177,7 +197,7 @@ public sealed class WorldPoseEffect : WorldFactEffect {
     /// <param name="keyFrom">The addressed body's live indirection, or <see langword="null"/>.</param>
     /// <param name="pose">The literal pose, or <see langword="null"/>.</param>
     /// <param name="describe">The authored spelling, for the rules read-back.</param>
-    public WorldPoseEffect(string spawnPoint, int index, CompiledCellRef? keyFrom, CompiledWorldPose? pose, string describe) : base(describe: describe) {
+    public WorldPoseEffect(string spawnPoint, int index, CompiledCellRef? keyFrom, CompiledWorldPose? pose, string describe) : base(describe: describe, reach: WorldDisclosureReach.Bodies) {
         Index = index;
         KeyFrom = keyFrom;
         Pose = pose;
@@ -205,6 +225,7 @@ public sealed class WorldPoseEffect : WorldFactEffect {
     /// <inheritdoc/>
     public override bool SubmitsMutation => false;
 
+
     /// <inheritdoc/>
     public override void CollectReads(List<CellAccess> into) => CompiledCellRef.CollectReference(
         into: into,
@@ -220,7 +241,7 @@ public sealed class WorldBodyMotionEffect : WorldFactEffect {
     /// <param name="keyFrom">The addressed body's live indirection, or <see langword="null"/>.</param>
     /// <param name="action">The compiled action.</param>
     /// <param name="describe">The authored spelling, for the rules read-back.</param>
-    public WorldBodyMotionEffect(CellKey key, CompiledCellRef? keyFrom, WorldBodyAction action, string describe) : base(describe: describe) {
+    public WorldBodyMotionEffect(CellKey key, CompiledCellRef? keyFrom, WorldBodyAction action, string describe) : base(describe: describe, reach: WorldDisclosureReach.Bodies) {
         Action = action;
         Key = key;
         KeyFrom = keyFrom;
@@ -273,7 +294,7 @@ public sealed class WorldRigidImpulseEffect : WorldFactEffect {
     /// <param name="heading">The heading body.</param>
     /// <param name="magnitude">The live magnitude operand.</param>
     /// <param name="describe">The authored spelling, for the rules read-back.</param>
-    public WorldRigidImpulseEffect(WorldBodyRef target, WorldBodyRef heading, Puck.State.Rules.IRuleOperand magnitude, string describe) : base(describe: describe) {
+    public WorldRigidImpulseEffect(WorldBodyRef target, WorldBodyRef heading, Puck.State.Rules.IRuleOperand magnitude, string describe) : base(describe: describe, reach: WorldDisclosureReach.Bodies) {
         ArgumentNullException.ThrowIfNull(argument: magnitude);
 
         Heading = heading;
@@ -298,6 +319,7 @@ public sealed class WorldRigidImpulseEffect : WorldFactEffect {
     /// <summary>Gets the struck body.</summary>
     public WorldBodyRef Target { get; }
 
+
     /// <inheritdoc/>
     public override void CollectReads(List<CellAccess> into) => Magnitude.CollectReads(into: into);
     /// <inheritdoc/>
@@ -308,12 +330,13 @@ public sealed class WorldPaintFieldEffect : WorldFactEffect {
     /// <summary>Initializes the effect.</summary>
     /// <param name="paint">The compiled paint.</param>
     /// <param name="describe">The authored spelling, for the rules read-back.</param>
-    public WorldPaintFieldEffect(CompiledWorldFieldPaint paint, string describe) : base(describe: describe) => Paint = paint;
+    public WorldPaintFieldEffect(CompiledWorldFieldPaint paint, string describe) : base(describe: describe, reach: WorldDisclosureReach.Fields) => Paint = paint;
 
     /// <summary>Gets the compiled paint.</summary>
     public CompiledWorldFieldPaint Paint { get; }
     /// <inheritdoc/>
     public override bool SubmitsMutation => false;
+
 
     /// <inheritdoc/>
     public override RuleWork Cost(IRuleCostContext context) {
@@ -325,14 +348,14 @@ public sealed class WorldPaintFieldEffect : WorldFactEffect {
 /// <summary>Writes one <c>state.body</c> counter of a world-addressed body, in the arena's participant lane.</summary>
 /// <remarks>The lane cell is an arena row, so this arm is rewound by the firing's own scope and declares nothing. A
 /// <c>bodyState</c> read is a fact rather than a row read, so the write declares no row either.</remarks>
-public sealed class WorldBodyStateEffect : WorldFactEffect {
+public sealed class WorldBodyStateEffect : WorldFactEffect, IValueSourcedEffect {
     /// <summary>Initializes a new instance of the <see cref="WorldBodyStateEffect"/> class.</summary>
     /// <param name="key">The addressed body's literal key, or the invalid default.</param>
     /// <param name="keyFrom">The addressed body's live indirection, or <see langword="null"/>.</param>
     /// <param name="slot">The register's slot in the world's action-state register file.</param>
     /// <param name="source">The compiled value source, in raw <see cref="FixedQ4816"/> bits.</param>
     /// <param name="describe">The authored spelling, for the rules read-back.</param>
-    public WorldBodyStateEffect(CellKey key, CompiledCellRef? keyFrom, int slot, in CompiledValueSource source, string describe) : base(describe: describe) {
+    public WorldBodyStateEffect(CellKey key, CompiledCellRef? keyFrom, int slot, in CompiledValueSource source, string describe) : base(describe: describe, reach: WorldDisclosureReach.Bodies) {
         Key = key;
         KeyFrom = keyFrom;
         Slot = slot;
@@ -403,7 +426,7 @@ public sealed class WorldBodyStateEffect : WorldFactEffect {
 /// identity's persisted row together.</summary>
 /// <remarks>The lane cell is an arena row, so this arm is rewound by the firing's own scope and declares
 /// nothing.</remarks>
-public sealed class WorldIdentityFactEffect : WorldFactEffect {
+public sealed class WorldIdentityFactEffect : WorldFactEffect, IValueSourcedEffect {
     /// <summary>Initializes the effect.</summary>
     /// <param name="key">The addressed body's literal key, or the invalid default.</param>
     /// <param name="keyFrom">The addressed body's live indirection, or <see langword="null"/>.</param>
@@ -411,7 +434,7 @@ public sealed class WorldIdentityFactEffect : WorldFactEffect {
     /// <param name="laneOrdinal">The identity lane row's catalog ordinal.</param>
     /// <param name="source">The compiled value source.</param>
     /// <param name="describe">The authored spelling, for the rules read-back.</param>
-    public WorldIdentityFactEffect(CellKey key, CompiledCellRef? keyFrom, CellName fact, int laneOrdinal, in CompiledValueSource source, string describe) : base(describe: describe) {
+    public WorldIdentityFactEffect(CellKey key, CompiledCellRef? keyFrom, CellName fact, int laneOrdinal, in CompiledValueSource source, string describe) : base(describe: describe, reach: WorldDisclosureReach.Bodies) {
         Fact = fact;
         Key = key;
         KeyFrom = keyFrom;

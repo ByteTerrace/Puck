@@ -13,23 +13,89 @@ namespace Puck.World;
 /// </summary>
 public static class WorldAssetRowLoader {
     private const string InlineJson = "data:application/json;base64,";
+    // Bounds the embedding cache and the once-per-row failure reports; a full table is cleared and refilled, never
+    // grown, since every entry is derived again from its row on a miss.
+    private const int MaxEmbeddings = 4096;
 
-    private static string? EmbeddedSource<T>(CanonicalDocument<T> content, string expectedHash) =>
-        string.Equals(content.Hash, expectedHash, StringComparison.Ordinal)
-            ? InlineJson + Convert.ToBase64String(content.Bytes) : null;
+    // A validated embedding by content pin: the canonical bytes of a document whose canonical hash is the pin, as the
+    // inline source every delivery of that row carries. The key is the content's identity, so an entry can never go
+    // stale; a miss loads, canonicalizes and checks the pin again.
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<(AudioFamily Family, string Hash), string> Embeddings = new();
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<(AudioFamily Family, string Name, string Hash), byte> Reported = new();
+
+    /// <summary>The audio asset families a world delivers embedded.</summary>
+    internal enum AudioFamily : byte {
+        /// <summary>A <c>puck.synthesizer-patch.v1</c> row.</summary>
+        Patch,
+        /// <summary>A <c>puck.tune.v1</c> row.</summary>
+        Tune,
+        /// <summary>A <c>puck.music.v1</c> row.</summary>
+        Music,
+    }
 
     /// <summary>Whether the source is a self-contained audio asset rather than a filesystem path.</summary>
     public static bool IsEmbeddedAudio(string source) => source.StartsWith(InlineJson, StringComparison.Ordinal);
 
-    /// <summary>Materializes the published audio assets so a remote listener needs no authority filesystem path.</summary>
-    public static WorldDefinition EmbedAudio(WorldDefinition definition) => definition with {
-        PatchesRaw = [.. definition.Patches.Select(patch => TryLoadPatch(definition.DocumentDirectory, patch, out var document, out _) &&
-            EmbeddedSource(SynthPatchCanonicalizer.Canonicalize(document!), patch.Hash) is { } source ? patch with { Source = source } : null).OfType<WorldPatch>()],
-        TunesRaw = [.. definition.Tunes.Select(tune => TryLoadTune(definition.DocumentDirectory, tune, out var document, out _) &&
-            EmbeddedSource(AudioCanonicalizer.Canonicalize(document!), tune.Hash) is { } source ? tune with { Source = source } : null).OfType<WorldTune>()],
-        Music = definition.Music?.Select(row => TryLoadMusic(definition.DocumentDirectory, row, out var document, out _) &&
-            EmbeddedSource(MusicCanonicalizer.Canonicalize(document!), row.Hash) is { } source ? row with { Source = source } : null).OfType<WorldMusicRow>().ToArray(),
-    };
+    /// <summary>Materializes the published audio assets so a remote or routed listener needs no authority filesystem
+    /// path. A row whose document no longer loads or no longer matches its pin is dropped from the delivery and reported
+    /// once on standard error, naming the row.</summary>
+    /// <param name="definition">The authority's definition.</param>
+    /// <returns>The definition with every deliverable audio row carrying its canonical content inline.</returns>
+    public static WorldDefinition EmbedAudio(WorldDefinition definition) {
+        ArgumentNullException.ThrowIfNull(argument: definition);
+
+        var directory = definition.DocumentDirectory;
+
+        return definition with {
+            PatchesRaw = [.. definition.Patches.Select(patch => Embed(AudioFamily.Patch, patch.Name, patch.Source, patch.Hash,
+                () => TryLoadPatch(directory, patch, out var document, out var error) ? Loaded.From(SynthPatchCanonicalizer.Canonicalize(document!)) : Loaded.Failed(error))
+                is { } source ? patch with { Source = source } : null).OfType<WorldPatch>()],
+            TunesRaw = [.. definition.Tunes.Select(tune => Embed(AudioFamily.Tune, tune.Name, tune.Source, tune.Hash,
+                () => TryLoadTune(directory, tune, out var document, out var error) ? Loaded.From(AudioCanonicalizer.Canonicalize(document!)) : Loaded.Failed(error))
+                is { } source ? tune with { Source = source } : null).OfType<WorldTune>()],
+            Music = definition.Music?.Select(row => Embed(AudioFamily.Music, row.Name, row.Source, row.Hash,
+                () => TryLoadMusic(directory, row, out var document, out var error) ? Loaded.From(MusicCanonicalizer.Canonicalize(document!)) : Loaded.Failed(error))
+                is { } source ? row with { Source = source } : null).OfType<WorldMusicRow>().ToArray(),
+        };
+    }
+
+    // One row's loaded canonical content, or why it did not load.
+    private readonly record struct Loaded(string? Hash, byte[]? Bytes, string? Error) {
+        public static Loaded From<T>(CanonicalDocument<T> canonical) => new(canonical.Hash, canonical.Bytes, null);
+        public static Loaded Failed(string? error) => new(null, null, error);
+    }
+
+    private static string? Embed(AudioFamily family, string name, string source, string hash, Func<Loaded> load) {
+        if (Embeddings.TryGetValue(key: (family, hash), value: out var known)) { return known; }
+        if (IsEmbeddedAudio(source: source)) { return source; }
+        var loaded = load();
+        if ((loaded.Bytes is not { } bytes) || !string.Equals(loaded.Hash, hash, StringComparison.Ordinal)) {
+            if (Reported.Count >= MaxEmbeddings) { Reported.Clear(); }
+            if (Reported.TryAdd(key: (family, name, hash), value: 0)) {
+                Console.Error.WriteLine(value: $"[world.audio: {family.ToString().ToLowerInvariant()}[{name}] is withheld from deliveries: {(loaded.Error ?? "its canonical content no longer matches its pin.")}]");
+            }
+            return null;
+        }
+        var embedded = InlineJson + Convert.ToBase64String(inArray: bytes);
+        RememberEmbedding(family: family, hash: hash, source: embedded);
+        return embedded;
+    }
+
+    /// <summary>Records an embedded source as the validated content of its pin.</summary>
+    /// <param name="family">The asset family.</param>
+    /// <param name="hash">The content pin.</param>
+    /// <param name="source">The inline source.</param>
+    internal static void RememberEmbedding(AudioFamily family, string hash, string source) {
+        if (Embeddings.Count >= MaxEmbeddings) { Embeddings.Clear(); }
+        Embeddings[(family, hash)] = source;
+    }
+    /// <summary>Determines whether an embedded source is one this process already validated for its pin.</summary>
+    /// <param name="family">The asset family.</param>
+    /// <param name="hash">The content pin.</param>
+    /// <param name="source">The inline source.</param>
+    /// <returns><see langword="true"/> when the source is byte-for-byte a validated embedding of the pin.</returns>
+    internal static bool IsKnownEmbedding(AudioFamily family, string hash, string source) =>
+        Embeddings.TryGetValue(key: (family, hash), value: out var known) && string.Equals(known, source, StringComparison.Ordinal);
 
     private static bool TryLoad<TDocument>(string? documentDirectory, string source, out TDocument? document, out string? error, string? hash = null) where TDocument : class {
         document = null;
