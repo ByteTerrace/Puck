@@ -90,8 +90,9 @@ The next lead rewrites this section when it hands off in turn.
   - a reduction pass over the orchestration skill (about 100,000
     characters; it repeats several rules three or four times): every rule
     kept, repetition cut, as AGENTS.md's consolidation did;
-  - the rendering plan's step designs folded into the plans that own them,
-    as the plan says happens after the owner's discussion.
+  - the rendering plan's step designs folded into the plans that own them.
+    The owner's discussion that the fold waited for has happened, so the
+    fold runs now, beside the wave.
 - **In flight:** nothing. The GPU capabilities research round is in the
   rendering plan: its ranked list, its three first-wave lanes and its five
   second-wave lanes.

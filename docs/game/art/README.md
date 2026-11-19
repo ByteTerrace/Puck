@@ -44,9 +44,14 @@ to." The bar stands beside the frame bar, and a place meets both at once.
 **The direction.** Painterly, with The Wind Waker and quality toon animation as
 the character of the treatment; cartoony and slightly futuristic; Study B's
 warm layered canyon cliffs, cream and ochre modules and deep teal
-([valley and gallery](valley-and-gallery.md)). The concept packs here are the
-references, and where a place has none, real-world reference and what a modern
-stylized game shows supply it.
+([valley and gallery](valley-and-gallery.md)). The concept packs here set the
+direction, but the repository holds no quality reference for most places (the
+owner's ruling). Whoever judges a place gathers its own reference from context:
+real-world photographs of the thing the place is, and frames from shipped
+stylized games that show it at the quality the bar asks for. Those images are
+other people's work, so they stay out of the repository. The place's guide
+names each reference by its source and states the traits to hit, so the next
+reader can find the same images.
 
 **The bar.** Every place in the debug world:
 

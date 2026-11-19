@@ -1760,7 +1760,18 @@ engine counts:
   `host.frames` split it moves, read in a short windowed run at 2560 by
   1440 on the lane's build beside the build it started from. The full
   `puck benchmark` route is the lead's, run once per integration batch on
-  the merged tip (below), never once per lane.
+  the merged tip (below), never once per lane;
+- a direction review on the merged tip after each batch that changes what
+  a player sees: presented frames while moving at the glacier, the forest,
+  the portals and the gallery's collection of objects, each read against
+  quality references the lead gathers from context, since the repository
+  holds none for these scenes ([the visual bar](../game/art/README.md#the-visual-bar)).
+  Looks are expected to change through these waves (the owner's ruling),
+  so the review asks whether each scene moved toward its reference or
+  away from it, never whether it matches the previous build. A scene that
+  moved away goes back as a fix to the lane whose change did it, and a
+  look critic is called only when the direction is in doubt. Lanes that
+  change looks may land in the same batch.
 
 A lane lands on its build and boot; this evidence is gathered across the batch. Test requirements are lifted for the
 refactoring campaign ([AGENTS.md](../../AGENTS.md#puck-is-pre-release)): no
@@ -2696,8 +2707,11 @@ Twelve came from the research round on the renderer, and three from
 [the round on GPU capabilities](#gpu-capabilities-puck-does-not-use-yet):
 `direct3d`, `signal` and `rays`, whose files none of the twelve owns.
 Each owns the files its entry names. Where two lanes meet in a file, the
-merge order is given after the entries, and the later lane merges the
-integration tip before it hands back.
+merge order is given after the entries. It says who resolves the conflict,
+never who waits: whichever lane is ready lands first, and the other merges
+the integration tip and resolves the meeting before it hands back. Avoiding
+waits is imperative (the owner's ruling), and the lead keeps it so by
+watching where lanes meet, not by holding a ready lane.
 
 Every lane finishes on code written properly, a build of what it touched
 and one boot of the debug world (code first, verification after). An
@@ -3090,6 +3104,13 @@ Where lanes meet, and who merges first:
   adds the row that turns ray queries on.
 - **The device's capabilities** (`GpuDeviceCapabilities` and
   `DirectXFeatureSupport`): `direct3d`, then `rays`.
+- **The recorder** (`IGpuRecorder` and `DirectXGpuRecorder*.cs`): no
+  acceleration-structure seam exists yet, so `rays` adds its build and
+  compaction commands to the recorder that `direct3d` reworks. `direct3d`,
+  then `rays`.
+- **The places' `.puck` values** (`worlds/debug/valley.puck`,
+  `worlds/standard/water.puck` and the other places `colour` retunes):
+  `terrain` and `water`, then `colour`.
 - **Where a mesh sits on the GPU** (`SdfWorldTables.MeshRegion.cs`, which
   the lighting's scene reads placements from): `floor`, then `rays`.
 - **The view's graph** (`SdfWorldPackage.cs`): `history`, then `views`,
