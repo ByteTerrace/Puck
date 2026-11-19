@@ -160,6 +160,9 @@ public readonly record struct WorldQualityPreset(
 /// <param name="ShadowCoverage">How far the key light's shadow cascades reach (<see cref="WorldRenderShadowCoverage"/>).
 /// Absent keeps the engine's 16 m near, 120 m far and 200 m caster reach; <c>world.budget</c> prints the coverage with
 /// each cascade's texel.</param>
+/// <param name="Devices">The world's device profiles (<see cref="WorldDeviceProfile"/>): for each graphics device, the
+/// quality table it runs and the memory it may use. The engine selects one by the adapter it runs on and by name
+/// (<c>world.device-profile</c>). Absent authors none, and no cap applies.</param>
 /// <param name="Lanes">The world's render lanes: up to four bindable scalars (a literal, a <c>state.&lt;row&gt;</c>
 /// binding, or keys on a clock), resolved at each frame's presented tick and read by every surface and volume as
 /// render lanes 4 to 7 (<c>SdfLanes</c>), so a static placement sharing one baked mesh follows world state without a
@@ -197,6 +200,7 @@ public sealed record WorldRenderDefaults(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldRenderShadowCoverage? ShadowCoverage = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<BindableScalar>? Lanes = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] SdfShadeDefinition? Shade = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldDeviceProfile>? Devices = null,
     bool RayQueries = false
 ) {
     /// <summary>The most world lanes <see cref="Lanes"/> holds (<c>SdfLanes.WorldCount</c>).</summary>

@@ -114,14 +114,6 @@ public sealed partial class SdfWorldTables {
 
     // Device teardown after drain/loss releases even unsubmitted carries.
     private void DisposeRetired(ulong completed) => m_retired.Release(completed: completed, release: static replaced => replaced.Dispose());
-    // Waits until every upload in flight has retired: what a rewrite of the only table no view reads, a bake request,
-    // pays.
-    private void WaitForUploads() {
-        foreach (var fence in m_frameFences) {
-            fence.Wait();
-        }
-        m_completedUploads = m_uploads;
-    }
     // Moves the fillers from their first, undefined layout to the ones a pass binds them in, once, before any pass can
     // bind them: the sampled filler shader-readable and the storage filler General, both cleared, so a screen whose source
     // is missing from a frame samples black.
