@@ -488,6 +488,24 @@ starts. None is a look value or a number.
    table, hidden information among forty moving players becomes the third
    thing the engine is forced to do well.
 
+### What the owner chose
+
+The owner answered all four (the owner's rulings):
+
+1. **Both, mixing first.** Action alchemy is built first, on the ground and
+   the Alchemy table; fitting follows as a second expression, and its design
+   (geometry that changes on a body during a fight, with contact reading the
+   change) opens as a design lane once the bard's first wave is under way.
+2. **The player does the sum.** The Reckoner direction: the player watches,
+   reads the pattern and commits a position, and may be wrong. Forecasting
+   moving bodies is not required of the engine for this expression.
+3. **The middle ground on the beat.** Every tool may answer the world's beat;
+   only the bard must. The bard is the group's hub without being required.
+4. **Table play leaves the table.** Cards and boards enter the fight, so
+   hidden information among many moving players is a forcing function: the
+   Dealer joins the build order after the mender and alchemy, and the
+   withdrawal chokepoint's build is a dependency.
+
 ## What a search of the engine found
 
 These are findings for a chosen expression's plan to check and use, not parts
