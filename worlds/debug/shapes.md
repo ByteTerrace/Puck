@@ -263,7 +263,7 @@ for the moving ones; the rows' arrays in `shapes.puck` list them in order, and
 | Row | Level, z | Exhibits, from x = 23 |
 |---|---|---|
 | Uniform | 0, 16 | sphere, box, torus, cylinder, capsule, ellipsoid, round cone, cone, superellipsoid (exponent 4), plane (a sphere intersected with a tilted plane) |
-| Stretched | 0, 22 | sphere, box, torus with X ≠ Z, torus with Y alone stretched, cylinder with X ≠ Z, capsule with X ≠ Z, ellipsoid, round cone, cone with X ≠ Z, superellipsoid (exponent 3) |
+| Stretched | 0, 22 | sphere, box, torus with X ≠ Z, torus with Y alone stretched, cylinder with X ≠ Z, capsule with X ≠ Z, ellipsoid, round cone, cone with X ≠ Z, superellipsoid (exponent 3), a stretched capsule, cone and torus cut from a slab, the same three cut smoothly |
 | Extruded profiles | 0, 28 | trapezoid, rounded rectangle, polygon 6, polygon 12, polygon 12 with X ≠ Y, ellipse, chamfered rectangle, convex pentagon, path fill, path stroke, path stroke with X ≠ Y |
 | Revolved profiles | 0, 34 | trapezoid, rounded rectangle, polygon 6, ellipse, chamfered rectangle, convex pentagon |
 | Sweeps and facets | 1, 17 | sweep, tapered sweep, three-strand sweep, rounding, chamfer, onion, dilate, flare, shear, bumps, cells F1, cells F2 − F1, polar fold |
@@ -301,6 +301,7 @@ The inventory comes from the code: `SdfSolidPrimitive`, `SdfBlendOp`,
 | Superellipsoid `exponent` 2, 3, 4, 8 | `shape-superellipsoid-2`, `-xyz`, uniform, `-8` |
 | Sweep, tapered with bulge, three strands, four braided strands | facet row, `shape-sweep-braid` |
 | Non-uniform scale on every primitive that admits it | stretched row, `shape-polygon-12-xy`, `shape-path-stroke-xy` |
+| A stretched primitive as a cutter, hard and smooth | `shape-stretch-cut`, `shape-stretch-smooth` |
 | Path revolve | not exhibited: refused by name (a path extrudes only) |
 
 ### Blends
