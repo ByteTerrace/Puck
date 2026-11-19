@@ -228,11 +228,11 @@ world's bake at most. Tighter bounds act where the bake's time is.
   and world group −7623 and session group −7419 both land 3,287,580 triangles
   to 32,192; on Vulkan both residencies land 4,039,824 triangles to 38,630 in
   the same group. The geometry key makes one body in two programs hash alike
-  (`SdfMeshGeometryBuilder`), but residencies share only finished meshes: the
-  table of groups already baking a geometry is local to one residency's
-  restart (`leaders` in `SdfMeshPathBake.Restart`), and another residency can
-  take only a mesh the library already holds (`SdfMeshLibrary.TryTake`). Two
-  residencies that plan the same geometry before either lands it both bake it.
+  (`SdfMeshGeometryBuilder`), but at the time residencies shared only finished
+  meshes: the table of groups already baking a geometry was local to one
+  residency's restart, so two residencies that planned the same geometry before
+  either landed it both baked it. The library now names the bake running each
+  geometry (`SdfMeshBakeShare`), and a group of another residency waits on it.
 - **Every chain repeats its creation's root frame.** In the glacier's program
   209 of 1,866 instructions are resets, 209 dynamic transforms into the one
   slot it rides, and 209 each of translate, rotate and scale that repeat the
@@ -249,15 +249,16 @@ world's bake at most. Tighter bounds act where the bake's time is.
 
 ## What the numbers say to build
 
-1. Share a geometry being baked across residencies, not only within one: the
-   library, which every residency already asks for finished meshes, also names
-   the group baking each geometry, and a second residency's group waits on it
-   as a group in the same residency does. It removes up to 0.89 G samples,
-   2.4 to 3.8 s of GPU time and the same share of contouring and landing from a
-   cold bake of the debug world, more than any change to the walk. *Check:* in
-   a cold bake the session residency's start line counts these groups as
-   shared, its `samples=` falls by the matching amount, and the slow-stage
-   lines no longer repeat a lattice under two residencies.
+1. Share a geometry being baked across residencies, not only within one. Built:
+   `SdfMeshLibrary.Share` names the bake running each geometry and a second
+   residency's group waits on it (`SdfMeshBakeShare`; the
+   [mesh bake reference](../../../.claude/skills/rendering/references/mesh-bake.md)
+   holds its lifetime). It removes up to 0.89 G samples, 2.4 to 3.8 s of GPU
+   time and the same share of contouring and landing from a cold bake of the
+   debug world. *Check:* in a cold bake the session residency's start line
+   counts these groups as `joined=`, its `samples=` falls by the matching
+   amount, and the slow-stage lines no longer repeat a lattice under two
+   residencies.
 2. Compile each chain's shared prefix once: drop identity point ops in the
    builder and hoist the root frame and dynamic transform out of every chain,
    a program-builder change both interpreters read. *Check:* `puck creation

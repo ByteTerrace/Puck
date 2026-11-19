@@ -501,6 +501,17 @@ not a presentation-only mutation. What the install itself still costs on the tic
 (state settlement, the in-place arena load, disclosure composition) is the next
 edit-to-running work item.
 
+**A saved file reaches the World only as a reload.** `world.watch on`
+(`WorldSourceWatch`, off by default) polls every file fact the last compile read
+and queues an ordinary `world.reload` after a quiet moment. A reload composes,
+validates and installs the whole world for one changed value, is always a full
+install, clears the journal, and refuses (`world.reload.delta-unrepresentable`)
+while a live creation palette edit is in the journal (`world.undo` clears it).
+A value you only want to try goes
+through `world.row.set`, which installs by kind (`WorldDocument.InstallKindOf`).
+[The authoring loop](../../../docs/plans/iteration/authoring-loop.md) holds the
+measurements and the design that joins the two doors.
+
 **An import names; the named file decides what it brings.** `import "skies"`,
 never `import "skies.puck"` (PUCK121). A module library (a source emitting no
 document) hands its `let`s and templates to the compile; anything else is a
