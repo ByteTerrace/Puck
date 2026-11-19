@@ -81,14 +81,7 @@ public sealed partial class WorldBody {
             var scaled = new FixedBodyColliderVolume[volumes.Length];
 
             for (var index = 0; (index < volumes.Length); index++) {
-                var volume = volumes[index];
-
-                scaled[index] = (volume with {
-                    Center = (volume.Center * m_scale),
-                    Endpoint = (volume.Endpoint * m_scale),
-                    HalfExtents = (volume.HalfExtents * m_scale),
-                    Radius = (volume.Radius * m_scale),
-                });
+                scaled[index] = volumes[index].Scaled(scale: m_scale);
             }
 
             m_scaledColliderVolumes = scaled;

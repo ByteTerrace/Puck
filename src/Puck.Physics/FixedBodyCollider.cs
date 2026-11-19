@@ -28,6 +28,16 @@ public readonly record struct FixedBodyColliderVolume(
     FixedQuaternion Rotation,
     FixedQ4816 Radius
 ) {
+    /// <summary>Returns the volume scaled uniformly about the body root: every length and offset multiplied, its
+    /// orientation kept.</summary>
+    /// <param name="scale">The scale multiplier.</param>
+    /// <returns>The scaled volume.</returns>
+    public FixedBodyColliderVolume Scaled(FixedQ4816 scale) => (this with {
+        Center = (Center * scale),
+        Endpoint = (Endpoint * scale),
+        HalfExtents = (HalfExtents * scale),
+        Radius = (Radius * scale),
+    });
     /// <summary>Creates a sphere volume.</summary>
     /// <param name="center">The body-local center, in metres.</param>
     /// <param name="radius">The radius, in metres.</param>

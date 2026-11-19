@@ -132,14 +132,7 @@ public sealed class WorldSeatSenses(WorldSeatAuthorityRouter routes, WorldClient
 
         if (scale != FixedQ4816.One) {
             for (var index = 0; (index < volumes.Length); index++) {
-                var volume = volumes[index];
-
-                volumes[index] = (volume with {
-                    Center = (volume.Center * scale),
-                    Endpoint = (volume.Endpoint * scale),
-                    HalfExtents = (volume.HalfExtents * scale),
-                    Radius = (volume.Radius * scale),
-                });
+                volumes[index] = volumes[index].Scaled(scale: scale);
             }
         }
 

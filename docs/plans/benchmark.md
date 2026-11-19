@@ -658,23 +658,19 @@ bar uses one reading:
   the slowest frame with its cause) beside the time. A single lane run suffices
   to land; timing claims that steer a later choice go to a quiet `puck measure`
   window.
-- *Remote authority route driver.* `WorldSeatDriver.TryRead` currently reads the
-  body, places and navigation mesh from the server of the world the seat stands
-  in, which does not exist on a remote client (and `--connect` still steps the
-  boot world and transfers the body, mixing local simulation, a transfer and a
-  remote world). Rebuild the driver so it reads what the seat's client was
-  delivered: the body's pose from the delivered snapshot, and places and
-  navigation from the client's world document. One driver then serves both
-  topologies, with the in-process route checking that chapters arrive in the
-  same ticks as before. A remote report names the endpoint, splits local
+- *Remote authority route driver.* One driver serves both topologies: it reads
+  what the seat's client was delivered, the body from the delivered snapshot
+  and places and navigation from the delivered document
+  ([the ruling](#the-route-against-a-remote-authority)). The in-process route
+  arrives in every chapter through it. A report names the endpoint, gives local
   simulation, delivery and rendering apart, and carries a witness that the
-  seat's body arrived in the remote world; a run still observing the boot world
-  says so and is not a remote reading. Check: a headless route against an
-  authority in a second process arrives in every chapter, and the same chapters
-  in process arrive in the ticks they took before; the run on the Azure
-  deployment is the lead's. The driver is not built: the first wave's `bench`
-  lane stopped at a design call, and what the endpoint delivers in place of
-  each thing the driver reads is in [the benchmark's packet](open-items.md#the-benchmark).
+  seat's body is at the authority it names; a run still in a world this process
+  steps says so and is not a remote reading. Still open: a headless route
+  against an authority in a second process arriving in every chapter, which
+  waits on the federation defects in
+  [the benchmark's packet](open-items.md#the-benchmark), a remote traveller's
+  input not driving its body first among them; the run on the Azure deployment
+  is the lead's.
 - *Where sharing is claimed, the arrangement of worlds is stated.* Every world
   of the debug world admits every viewer at full disclosure, so a check run
   there shares as much as can be shared. A check that claims work is shared
