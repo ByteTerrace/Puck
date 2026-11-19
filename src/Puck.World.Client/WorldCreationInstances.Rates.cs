@@ -131,6 +131,21 @@ public sealed partial class WorldCreationInstances {
         live.RateHertz = hertz;
         live.RatePixelsPerMetre = pixelsPerMetre;
 
+        // A body another registration's rig reads (CreationRigReadKind.Body) is rated no slower than its fastest reader,
+        // so a pose it reads is at least as fresh as the reader. The decision above is held first, so a pair that reads
+        // each other ends.
+        if ((live.BodyIndex is { } body) && m_bodyReaders.TryGetValue(key: body, value: out var readers)) {
+            foreach (var reader in readers) {
+                if (ReferenceEquals(objA: reader, objB: live) || (reader.PackedRoot is not { } root)) {
+                    continue;
+                }
+
+                hertz = Math.Max(val1: hertz, val2: RateOf(center: root.Position, live: reader, placementScale: root.Scale, radius: RateReach(live: reader, placementScale: root.Scale)).Hertz);
+            }
+
+            live.RateHertz = hertz;
+        }
+
         return (hertz, pixelsPerMetre);
     }
     // Whether a row-rooted registration's author lets it take the reduced tiers.
@@ -210,9 +225,14 @@ public sealed partial class WorldCreationInstances {
     // Records that something outside the pack read a body registration's part pose, slot or latch this frame. Every
     // accessor that hands one out calls this, and it is the only record of a pose's consumers the bodies lever holds by.
     private void NotePoseRead(Registration live) => live.PoseReadPack = m_packCount;
-    // A body's reach for rating, in metres: the larger of its creation's rest reach and the farthest any pack has posed
-    // a part of it from its root (MotionReach), so a part a driver slides past the rest bound still counts.
-    private static float RateReach(Registration live, float placementScale) => (MathF.Max(x: ReachOf(live: live), y: live.MotionReach) * placementScale);
+    // A body's reach for rating, in metres: the reach its rig derives from the document (CreationRig.Reach), which no pose
+    // the rig can reach exceeds, or the farthest any pack has posed a part of it from its root (MotionReach) where a
+    // follower carried one past it. A rig with no finite reach rates by its rest reach and the poses drawn.
+    private static float RateReach(Registration live, float placementScale) {
+        var derived = live.Rig.Reach;
+
+        return (MathF.Max(x: (float.IsFinite(f: derived) ? derived : ReachOf(live: live)), y: live.MotionReach) * placementScale);
+    }
     // A body's largest pixels per metre over the views that may see the sphere it reaches, at its nearest point: infinity
     // when no view is known yet or one holds it at or inside its near plane, zero when none may see it.
     private float BodyPixelsPerMetre(Vector3 center, float radius) {

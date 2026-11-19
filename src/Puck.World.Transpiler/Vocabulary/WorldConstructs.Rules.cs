@@ -249,7 +249,7 @@ public static partial class WorldConstructs {
                     Name: "expression",
                     Position: WorldMemberPosition.Header,
                     Required: true,
-                    Summary: "What the local evaluates to, in declaration order before the gate and effects."
+                    Summary: "What the local evaluates to, in declaration order: before the gate when the gate reads it, and otherwise only when the rule fires."
                 ),
             ],
             Shape: WorldConstructShape.Statement,

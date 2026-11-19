@@ -34,7 +34,12 @@ public sealed partial class WorldRuleHost {
         refusal = EffectRefusal.Of(code: RuleEffectRefusal.MutationRejected, reason: reason); return false;
     }
     /// <inheritdoc/>
-    public void CommitStateTransaction(int mark) => Host.CommitStateTransaction(mark: mark);
+    /// <remarks>A commit may switch input owners (the selection a written register drives), so the input versions are
+    /// derived again before the next read of one.</remarks>
+    public void CommitStateTransaction(int mark) {
+        Host.CommitStateTransaction(mark: mark);
+        m_inputsStale = true;
+    }
     /// <inheritdoc/>
     public void RewindStateTransaction(int mark) => Host.RewindStateTransaction(mark: mark);
 

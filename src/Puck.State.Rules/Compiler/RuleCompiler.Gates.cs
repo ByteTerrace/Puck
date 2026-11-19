@@ -75,7 +75,8 @@ public static partial class RuleCompiler {
             key: cacheKey,
             value: out var cached
         )) {
-            return cached;
+            context.LocalReads?.UnionWith(other: cached.Locals);
+            return cached.Reference;
         }
         if (!ExpressionSpelling.TryParse(
             error: out var error,
@@ -88,13 +89,24 @@ public static partial class RuleCompiler {
                 ruleName: ruleName
             );
         }
-        var program = CompileExpression(
-            context: context,
-            expression: parsed,
-            kind: CellKind.Int,
-            ruleName: ruleName,
-            verb: $"{where} key expression"
-        );
+
+        var outer = context.LocalReads;
+        var reads = new HashSet<int>();
+        CompiledExpressionToken[] program;
+
+        context.LocalReads = reads;
+        try {
+            program = CompileExpression(
+                context: context,
+                expression: parsed,
+                kind: CellKind.Int,
+                ruleName: ruleName,
+                verb: $"{where} key expression"
+            );
+        } finally {
+            context.LocalReads = outer;
+        }
+        outer?.UnionWith(other: reads);
 
         var reference = new CompiledCellRef(
             Key: default,
@@ -102,7 +114,7 @@ public static partial class RuleCompiler {
             RowOrdinal: -1
         );
 
-        context.KeyExpressions.Add(key: cacheKey, value: reference);
+        context.KeyExpressions.Add(key: cacheKey, value: (reference, [.. reads]));
         return reference;
     }
 

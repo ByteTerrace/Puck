@@ -224,7 +224,7 @@ public sealed class WorldInputCatalog {
             numeric = Math.Max(val1: numeric, val2: tupleNumeric);
             buttons = Math.Max(val1: buttons, val2: tupleButtons);
         }
-        var capacity = (history?.EventCapacity ?? 256);
+        var capacity = (history ?? new WorldInputHistory()).EventCapacity;
 
         return $"input {m_channels.Length}/{MaximumLogicalChannels} logical actions, {m_mappings.Length}/{MaximumTuples} tuples, active maxima {numeric}/{ChannelLimits.MaxAxes} numeric and {buttons}/{ChannelLimits.MaxButtons} buttons; history {capacity} ingress + {m_cancellationReserve} terminal records, {capacity} boundaries with at most {(numeric + buttons)} action decisions each";
     }

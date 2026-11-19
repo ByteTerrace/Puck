@@ -309,7 +309,7 @@ can settle. Omission keeps continuous target following. Intermediate values in
 [0, 1] retain partial contact influence during the swing. Releasing the effector's
 `when` gate clears its latched world point, so a later landing acquires a fresh one.
 
-A creation's `effectors` list (≤ `CreationDocument.MaxEffectors`, 8) corrects the
+A creation's `effectors` list (any number; `CreationRig.Effectors` holds each one's bones) corrects the
 driver-posed skeleton so a named tip reaches a target. The drivers still decide the
 pose; the solve bends it.
 

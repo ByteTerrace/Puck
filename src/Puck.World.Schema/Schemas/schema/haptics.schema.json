@@ -1,0 +1,63 @@
+{
+  "type": [
+    "array",
+    "null"
+  ],
+  "items": {
+    "description": "One row of the haptics document section: a world-authored pad pulse driven by presentation state.",
+    "type": [
+      "object",
+      "null"
+    ],
+    "properties": {
+      "id": {
+        "description": "The row\u0027s stable id, unique within haptics.",
+        "type": "string"
+      },
+      "low": {
+        "$ref": "./common.schema.json#/$defs/BindableScalar",
+        "description": "The low-frequency motor intensity, in [0, 1]."
+      },
+      "high": {
+        "$ref": "./common.schema.json#/$defs/BindableScalar",
+        "description": "The high-frequency motor intensity, in [0, 1]."
+      },
+      "durationSeconds": {
+        "description": "The finite pulse duration, in seconds ((0, MaxDurationSeconds]).",
+        "type": "number"
+      },
+      "signal": {
+        "$ref": "./common.schema.json#/$defs/BindableScalar",
+        "description": "The state-driven trigger scalar for Rise and Change modes; omitted in Level mode.",
+        "default": null
+      },
+      "mode": {
+        "description": "How the row fires (WorldHapticMode).",
+        "enum": [
+          "Level",
+          "Rise",
+          "Change"
+        ],
+        "default": "Level",
+        "title": "WorldHapticMode"
+      },
+      "seat": {
+        "description": "Optional target seat (seat1..seat4), or null for every local joined seat.",
+        "type": [
+          "string",
+          "null"
+        ],
+        "default": null
+      }
+    },
+    "required": [
+      "id",
+      "low",
+      "high",
+      "durationSeconds"
+    ],
+    "additionalProperties": false,
+    "title": "WorldHapticRow"
+  },
+  "default": null
+}

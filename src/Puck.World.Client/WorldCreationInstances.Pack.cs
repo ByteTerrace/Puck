@@ -243,7 +243,10 @@ public sealed partial class WorldCreationInstances {
                     !moved.Everything &&
                     !m_owners.Reseats(owner: index) &&
                     // A held pose carries its slots rigidly, so a registration whose scale changed packs in full.
-                    (transforms[rootSlot].Scale == placementScale)
+                    (transforms[rootSlot].Scale == placementScale) &&
+                    // A rig with no finite reach cannot be judged unseen by its sphere, so a changed read poses it in
+                    // full: a part the read moves may be the one a view would see.
+                    (float.IsFinite(f: live.Rig.Reach) || (live.WakeRevision == live.ReadRevision))
                 );
 
                 if (!mayHold) {
@@ -307,6 +310,8 @@ public sealed partial class WorldCreationInstances {
                         transforms: transforms
                     );
                     RecordPose(deltaSeconds: deltaSeconds, live: live);
+                    live.ReadRevision = live.WakeRevision;
+                    if (slotsMoved) { live.PoseSerial++; }
                     WidenMotionReach(live: live, placementScale: placementScale, rootPosition: transforms[rootSlot].Position, shapeCount: shapeCount, transforms: transforms, rootSlot: rootSlot);
                     // A pack that may not hold (a new owner, a reseat, a scale change, the whole table owed) or that
                     // resumes an unseen hold is a cut the part speed is not measured across.
@@ -431,7 +436,7 @@ public sealed partial class WorldCreationInstances {
     private static float SizeOf(Registration live, IWorldStampSource client) =>
         ((live.Row is { Solid: not null } solidRow)
             ? (client.SolidScale(placementId: solidRow.Id.ToString()) ?? 0f)
-            : (float)WorldCreationSize.Of(value: live.Reads.Sample(slot: live.Reads.Slot(live.Creation.EngineDocument.SizeBy!, truth: true)).Value));
+            : (float)WorldCreationSize.Of(value: live.View.Sample(read: live.Rig.SizeBy!).Value));
     // Records one pool entry's draw, noting whether it changed.
     private void SetMeshDraw(int index, SdfMeshDraw? draw) {
         if (m_meshDraws[index] != draw) {
@@ -468,6 +473,12 @@ public sealed partial class WorldCreationInstances {
             first: live.Creation,
             second: live.Look
         );
+        live.View.Bind(
+            body: (live.BodyIndex ?? -1),
+            client: client,
+            poseSerial: m_poseSerialOf
+        );
+        live.WakeRevision = live.View.Revision;
 
         var wake = m_owners.Wake(
             deltaSeconds: deltaSeconds,
@@ -479,7 +490,7 @@ public sealed partial class WorldCreationInstances {
             version: HashCode.Combine(
             value1: live.EffectiveCursor,
             value2: facts,
-            value3: live.Reads.Changed
+            value3: live.WakeRevision
         )
         );
 
@@ -610,11 +621,10 @@ public sealed partial class WorldCreationInstances {
         // Every slot carries the registration's scale: the creation's geometry is emitted in its slots' own units
         // (EmitOne), and the bake and the draws read the scale off the slot.
         var document = live.Creation.EngineDocument;
-        var drivers = document.Drivers;
 
         live.PoseFrame = SelectPose(live: live);
         live.Kinematics.Resolve(
-            drivers: drivers,
+            drivers: live.Rig.Drivers,
             rows: client.Definition.Dynamics
         );
 
@@ -622,8 +632,8 @@ public sealed partial class WorldCreationInstances {
             live.DriverActivity = WorldGaitDrivers.Advance(
                 address: ((live.BodyIndex is { } drivenBody) ? client.EntityAddress(index: drivenBody) : new WorldEntityAddress(Authority: string.Empty, Generation: 0, Index: -1)),
                 deltaSeconds: deltaSeconds,
-                drivers: drivers,
-                facts: ((live.BodyIndex is { } factBody) ? client.Facts(index: factBody) : default),
+                rig: live.Rig,
+                facts: live.View.Facts,
                 easedSpeed: ref live.DriverSpeed,
                 lastAddress: ref live.DriverAddress,
                 lastOrientation: ref live.DriverOrientation,
@@ -633,7 +643,7 @@ public sealed partial class WorldCreationInstances {
                 position: rootPosition,
                 seeded: ref live.DriverSeeded,
                 weights: live.DriverWeight,
-                reads: live.Reads,
+                reads: live.View,
                 kinematics: live.Kinematics,
                 definition: client.Definition
             );
@@ -671,12 +681,13 @@ public sealed partial class WorldCreationInstances {
             );
         }
 
+        var terms = 0;
+
         for (var shapeIndex = 0; (shapeIndex < shapeCount); shapeIndex++) {
-            WorldGaitDrivers.ComposeDelta(
-                drivers: drivers,
+            terms += WorldGaitDrivers.ComposeDelta(
                 phases: live.DriverPhase,
                 rotation: out var ownRotation,
-                shape: shapes[shapeIndex],
+                terms: live.Rig.Terms(shape: shapeIndex),
                 translation: out var ownTranslation,
                 weights: live.DriverWeight,
                 definition: client.Definition
@@ -685,6 +696,7 @@ public sealed partial class WorldCreationInstances {
             live.PartOwnRotation[shapeIndex] = ownRotation;
             live.PartOwnTranslation[shapeIndex] = ownTranslation;
         }
+        WorldCreationWork.ProcessWork.Add(amount: terms, kind: WorldCreationWork.TermsEvaluated);
 
         ChainPartDeltas(
             live: live,
@@ -693,9 +705,7 @@ public sealed partial class WorldCreationInstances {
         // The effectors correct the driver-posed chain, then everything downstream of a corrected bone re-chains off
         // the corrected own delta — so a hand parented to a solved forearm rides the solve with no effector of its own.
         if (ApplyEffectors(
-            client: client,
             deltaSeconds: deltaSeconds,
-            document: document,
             live: live,
             placementScale: placementScale,
             poses: poses,

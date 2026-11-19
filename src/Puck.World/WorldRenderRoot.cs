@@ -265,6 +265,9 @@ public static class WorldRenderRoot {
         // The overlay node and scene the capture companions were last made for.
         object? companionNode = null;
         object? companionScene = null;
+        // Whether the device profile's memory bars were bound for the device this root renders on.
+        var profiles = sp.GetService<WorldDeviceProfileState>();
+        var profileBound = (profiles is null);
         var display = new WorldDisplayExtent(
             binder: binder,
             height: height,
@@ -293,6 +296,17 @@ public static class WorldRenderRoot {
             // The specializations those residencies retired unfinished are waited out last, while the device lives.
             Holdings = [compareCapture, host, binder, residency, pipelines.RetiredShadeBuilds],
             Prepare = (in FrameContext context) => {
+                // The memory bars of the profile the world authors for this adapter bind once the device is up and has
+                // named its adapter, before the first frame's residencies stage anything; the device opens lazily, so
+                // it may have no identity when the root is composed. The quality table waits for
+                // `world.device-profile`, since a world boots on its own render levers.
+                if (!profileBound && (device.Identity is { } identity)) {
+                    profileBound = true;
+                    profiles?.ApplyAtBoot(
+                        adapter: identity.AdapterName,
+                        profile: WorldDeviceProfiles.Select(adapterName: identity.AdapterName, render: sp.GetRequiredService<Puck.World.Server.WorldServer>().Definition.Render)
+                    );
+                }
                 display.Follow(
                     context: in context,
                     root: node!
@@ -322,18 +336,6 @@ public static class WorldRenderRoot {
         var probe = sp.GetRequiredService<WorldRenderProbe>();
 
         probe.Device = device;
-        // The memory bars of the profile the world authors for this adapter bind as the device opens; the quality table
-        // waits for `world.device-profile`, since a world boots on its own render levers.
-        if (sp.GetService<WorldDeviceProfileState>() is { } profiles) {
-            var adapter = device.Identity?.AdapterName;
-
-            _ = profiles.Apply(
-                adapter: adapter,
-                profile: WorldDeviceProfiles.Select(adapterName: adapter, render: sp.GetRequiredService<Puck.World.Server.WorldServer>().Definition.Render),
-                source: "auto",
-                table: null
-            );
-        }
         probe.Residency = residency;
         probe.Views = host.Pickers;
         probe.MeshIrradiance.Retarget(target: residency.MeshIrradiance.Counters);
