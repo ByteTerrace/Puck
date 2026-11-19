@@ -75,7 +75,7 @@ internal sealed class WorldReload(WorldServer server, IServerLink link, WorldDef
     /// <param name="context">The issuing line's context.</param>
     /// <returns>A result settling with the authority's verdict, or with the refusal preparation reached.</returns>
     public CommandResult Run(CommandContext context) {
-        _ = iterations.Begin(name: Verb, named: false);
+        var loop = iterations.Begin(name: Verb, named: false);
         var path = definitionSource.SourcePath;
         var reads = sourceWatch.RecordReads(path: path);
         var pending = new Pending(owner: this, context: context, path: path, reads: reads);
@@ -87,6 +87,9 @@ internal sealed class WorldReload(WorldServer server, IServerLink link, WorldDef
 
         pending.Start(prepare: () => Prepare(basis: basis, documents: documents, instanceIdentity: instanceIdentity, neighbours: neighbours, path: path, reads: reads, version: version));
         m_preparing.Add(item: pending);
+        pending.Verdict.OnSettled(continuation: verdict => {
+            if (verdict.IsError) { iterations.Refuse(number: loop, refusal: verdict.Output); }
+        });
         // The session's hold and the host step (Poll) both take the preparation, so it submits even once a caller's
         // answer deadline has ended the hold.
         context.TextSession?.HoldWhile(

@@ -16,8 +16,9 @@ namespace Puck.World;
 /// <c>shown</c>: every mesh group of that program draws its own geometry at some tier
 /// (<see cref="SdfMeshPathBake.DrawsOwn"/>), the moment a changed form shows whole. <c>meshes</c>: the bakes are settled
 /// at the detail their demand asks and resident in the mesh region (<see cref="IWorldBakeReadiness.IsResidentSince"/>),
-/// counted from the frame the edit reached. <c>lit</c>: the world residency's irradiance volume has stopped tracing and
-/// relighting (<see cref="SdfMeshIrradiance.Settling"/>), the settled frame.
+/// counted from the frame the edit reached. <c>lit</c>: the world residency's irradiance volume has converged
+/// (<see cref="SdfMeshIrradiance.Converged"/>: no tracing or relighting left, or under a lighting that changes every
+/// frame, its geometry settled and its relight keeping up), the settled frame.
 /// A loop settles at <c>lit</c> and prints its line on stderr as <c>[world.iteration] …</c>, so a lane or a batch reads
 /// every loop from the World's log; <c>world.iteration</c> reads them all, and <c>world.wait iteration</c> waits for the
 /// latest. The stages are presentation facts read on the host pump after each produced frame; nothing here touches
@@ -121,6 +122,16 @@ public sealed class WorldIterationClock(WorldServer server) : IWorldIterationRea
         return loop.Number;
     }
 
+    /// <summary>Ends a loop whose edit was refused, so no frame will ever show it, naming the refusal. A loop that has
+    /// already reached its frame or stopped is left as it stands. Call on the host pump.</summary>
+    /// <param name="number">The loop's number, as <see cref="Begin"/> returned it.</param>
+    /// <param name="refusal">The refusal's text.</param>
+    public void Refuse(long number, string refusal) {
+        if ((Latest is { Number: var latest, Frame: null, Ended: null } loop) && (latest == number)) {
+            loop.Ended = $"refused: {refusal}";
+        }
+    }
+
     private Loop? Latest => ((m_loops.Count > 0) ? m_loops[^1] : null);
 
     /// <summary>Advances every open loop over the frame just produced. Call on the host pump after the render graph's
@@ -155,7 +166,7 @@ public sealed class WorldIterationClock(WorldServer server) : IWorldIterationRea
             if (!bakes.IsResidentSince(mark: loop.ContentMark) || ShaderPending(loop: loop, residency: residency)) { return; }
             loop.Meshes = now;
         }
-        if (residency.MeshIrradiance.Settling) { return; }
+        if (!residency.MeshIrradiance.Converged) { return; }
         loop.Lit = now;
         Console.Error.WriteLine(value: $"[world.iteration] {Line(loop: loop, probe: probe)}");
     }
@@ -212,7 +223,7 @@ public sealed class WorldIterationClock(WorldServer server) : IWorldIterationRea
         Stage(name: "frame", at: loop.Frame, why: () => FrameWaits(loop: loop, probe: probe));
         Stage(name: "shown", at: loop.Shown, why: static () => "a mesh group still draws the geometry before the edit, or nothing, while it bakes");
         Stage(name: "meshes", at: loop.Meshes, why: () => (m_bakes?.PendingResidencyReasonSince(mark: loop.ContentMark) ?? "the kernel reload is still installing"));
-        Stage(name: "lit", at: loop.Lit, why: static () => "the irradiance volume is still tracing or relighting");
+        Stage(name: "lit", at: loop.Lit, why: static () => "the irradiance volume is still tracing, or its relight trails the lighting past its age bound");
         _ = text.Append(culture, $" presented={loop.Presented} builds={loop.Builds}");
         if (loop.Ended is { } ended) { _ = text.Append(culture, $" ended=({ended})"); }
         return text.ToString();
