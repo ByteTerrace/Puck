@@ -2263,9 +2263,9 @@ public sealed partial class SdfMeshPathBake {
             double Patch(int vertex, int axis) => ((((3 * vertex) + axis) < contour.Patches.Length) ? contour.Patches[((3 * vertex) + axis)] : 0.0);
             void Add(int a, int b, int c, sbyte axis) {
                 if ((a == b) || (a == c) || (b == c)) { return; }
-                var pa = At(contour: contour, vertex: a);
-                var pb = At(contour: contour, vertex: b);
-                var pc = At(contour: contour, vertex: c);
+                var pa = contour.PositionOf(vertex: a);
+                var pb = contour.PositionOf(vertex: b);
+                var pc = contour.PositionOf(vertex: c);
                 var normal = Area(a: pa, b: pb, c: pc);
                 var longest = Math.Max(val1: Vector3.DistanceSquared(value1: pa, value2: pb), val2: Math.Max(val1: Vector3.DistanceSquared(value1: pa, value2: pc), val2: Vector3.DistanceSquared(value1: pb, value2: pc)));
 
@@ -2314,7 +2314,7 @@ public sealed partial class SdfMeshPathBake {
             return new Vector3(x: ((float)x), y: ((float)y), z: ((float)z));
         }
         public Vector3 Move(SdfContour contour, int vertex, Vector3 displacement, out float amount) {
-            var original = At(contour: contour, vertex: vertex);
+            var original = contour.PositionOf(vertex: vertex);
             var target = (original + displacement);
 
             amount = 0f;
@@ -2362,11 +2362,10 @@ public sealed partial class SdfMeshPathBake {
             return original;
         }
 
-        private static Vector3 At(SdfContour contour, int vertex) => new(x: contour.Positions[(3 * vertex)], y: contour.Positions[((3 * vertex) + 1)], z: contour.Positions[((3 * vertex) + 2)]);
         private static double Facing(SdfContour contour, Triangle triangle, int vertex, Vector3 point) => Dot(a: triangle.Reference, b: Area(
-            a: ((triangle.A == vertex) ? point : At(contour: contour, vertex: triangle.A)),
-            b: ((triangle.B == vertex) ? point : At(contour: contour, vertex: triangle.B)),
-            c: ((triangle.C == vertex) ? point : At(contour: contour, vertex: triangle.C))));
+            a: ((triangle.A == vertex) ? point : contour.PositionOf(vertex: triangle.A)),
+            b: ((triangle.B == vertex) ? point : contour.PositionOf(vertex: triangle.B)),
+            c: ((triangle.C == vertex) ? point : contour.PositionOf(vertex: triangle.C))));
         // The triangle's area normal along its quad's lattice edge with `vertex` at `point` (SdfContourFacing.Along).
         private static double Along(SdfContour contour, Triangle triangle, int vertex, Vector3 point) {
             var (a, b, c) = Corners(contour: contour, point: point, triangle: triangle, vertex: vertex);
@@ -2383,9 +2382,9 @@ public sealed partial class SdfMeshPathBake {
         }
         // The triangle's corners with `vertex` at `point`.
         private static ((double X, double Y, double Z) A, (double X, double Y, double Z) B, (double X, double Y, double Z) C) Corners(SdfContour contour, Triangle triangle, int vertex, Vector3 point) {
-            var a = ((triangle.A == vertex) ? point : At(contour: contour, vertex: triangle.A));
-            var b = ((triangle.B == vertex) ? point : At(contour: contour, vertex: triangle.B));
-            var c = ((triangle.C == vertex) ? point : At(contour: contour, vertex: triangle.C));
+            var a = ((triangle.A == vertex) ? point : contour.PositionOf(vertex: triangle.A));
+            var b = ((triangle.B == vertex) ? point : contour.PositionOf(vertex: triangle.B));
+            var c = ((triangle.C == vertex) ? point : contour.PositionOf(vertex: triangle.C));
 
             return ((a.X, a.Y, a.Z), (b.X, b.Y, b.Z), (c.X, c.Y, c.Z));
         }

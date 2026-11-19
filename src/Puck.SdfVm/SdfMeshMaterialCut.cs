@@ -426,8 +426,8 @@ internal sealed class SdfMeshMaterialCut {
 
         return (Vector3.Lerp(value1: Position(vertex: low), value2: Position(vertex: high), amount: t), Vector3.Lerp(value1: Normal(vertex: low), value2: Normal(vertex: high), amount: t));
     }
-    private Vector3 Position(int vertex) => new(x: m_contour.Positions[(3 * vertex)], y: m_contour.Positions[((3 * vertex) + 1)], z: m_contour.Positions[((3 * vertex) + 2)]);
-    private Vector3 Normal(int vertex) => new(x: m_contour.Normals[(3 * vertex)], y: m_contour.Normals[((3 * vertex) + 1)], z: m_contour.Normals[((3 * vertex) + 2)]);
+    private Vector3 Position(int vertex) => m_contour.PositionOf(vertex: vertex);
+    private Vector3 Normal(int vertex) => m_contour.NormalOf(vertex: vertex);
     private static Vector3 Bilinear(Vector3 a, Vector3 b, Vector3 c, Vector3 d, Vector2 at) =>
         Vector3.Lerp(value1: Vector3.Lerp(amount: at.X, value1: a, value2: b), value2: Vector3.Lerp(amount: at.X, value1: d, value2: c), amount: at.Y);
     // A surface point lifted along its normal to where a field hit would read its material.

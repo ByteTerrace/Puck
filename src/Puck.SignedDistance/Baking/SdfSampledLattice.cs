@@ -390,8 +390,16 @@ public sealed record SdfContour(float[] Positions, float[] Normals, int[] Quads,
 
         return ((corners[2] == corners[3]) ? 3 : 4);
     }
-    // A vertex's position or normal, three floats a vertex.
-    private static Vector3 At(float[] values, int vertex) => new(x: values[(3 * vertex)], y: values[((3 * vertex) + 1)], z: values[((3 * vertex) + 2)]);
+    /// <summary>Returns a vertex's position.</summary>
+    /// <param name="vertex">The vertex's index.</param>
+    /// <returns>The position.</returns>
+    public Vector3 PositionOf(int vertex) => At(values: Positions, vertex: vertex);
+    /// <summary>Returns a vertex's normal.</summary>
+    /// <param name="vertex">The vertex's index.</param>
+    /// <returns>The normal, as the contour stores it.</returns>
+    public Vector3 NormalOf(int vertex) => At(values: Normals, vertex: vertex);
+    // A vertex's three floats in an array of positions or normals.
+    internal static Vector3 At(float[] values, int vertex) => new(x: values[(3 * vertex)], y: values[((3 * vertex) + 1)], z: values[((3 * vertex) + 2)]);
     /// <summary>Returns the contour with its crease vertices split: a vertex two of whose quads face
     /// apart by more than 25 degrees gives each quad corner a vertex of its own at the same place, whose normal is the
     /// area-weighted facing of the vertex's quads within 25 degrees of that quad's, so a sharp edge shades as the two faces
@@ -2633,7 +2641,7 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
     // corner; split the other, the crease vertex is a corner of both triangles and each lies on one face. Every quad of a
     // contour splits by this one rule.
     private static bool SplitsAlongFirstDiagonal(float[] positions, float[] normals, float[] patches, bool[] features, ReadOnlySpan<int> quad, sbyte axis) {
-        var (v0, v1, v2, v3) = (Vertex(values: positions, vertex: quad[0]), Vertex(values: positions, vertex: quad[1]), Vertex(values: positions, vertex: quad[2]), Vertex(values: positions, vertex: quad[3]));
+        var (v0, v1, v2, v3) = (SdfContour.At(values: positions, vertex: quad[0]), SdfContour.At(values: positions, vertex: quad[1]), SdfContour.At(values: positions, vertex: quad[2]), SdfContour.At(values: positions, vertex: quad[3]));
 
         if (axis != 0) {
             var (first, second) = SdfContourFacing.Splits(axis: axis, patches: patches, positions: positions, quad: quad);
@@ -2641,7 +2649,7 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
             if (first != second) { return first; }
         }
 
-        var (n0, n1, n2, n3) = (Vertex(values: normals, vertex: quad[0]), Vertex(values: normals, vertex: quad[1]), Vertex(values: normals, vertex: quad[2]), Vertex(values: normals, vertex: quad[3]));
+        var (n0, n1, n2, n3) = (SdfContour.At(values: normals, vertex: quad[0]), SdfContour.At(values: normals, vertex: quad[1]), SdfContour.At(values: normals, vertex: quad[2]), SdfContour.At(values: normals, vertex: quad[3]));
         var outward = (
             X: (((((double)n0.X) + n1.X) + n2.X) + n3.X),
             Y: (((((double)n0.Y) + n1.Y) + n2.Y) + n3.Y),
@@ -2697,7 +2705,6 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
 
         return turn;
     }
-    private static Vector3 Vertex(float[] values, int vertex) => new(x: values[(3 * vertex)], y: values[((3 * vertex) + 1)], z: values[((3 * vertex) + 2)]);
     // Twice triangle (a, b, c)'s area over its longest edge squared: its height as a share of that edge, zero for a line.
     private static double Thinness(Vector3 a, Vector3 b, Vector3 c) {
         var longest = Math.Max(val1: DistanceSquared(a: a, b: b), val2: Math.Max(val1: DistanceSquared(a: b, b: c), val2: DistanceSquared(a: c, b: a)));
