@@ -14,6 +14,8 @@ public sealed class SdfMeshDresser : IDisposable {
         public SdfMeshRows.Run Run;
         public SdfMesh? Mesh;
         public int[] Copies = [];
+        // The tier the group's drawn mesh was baked at, which its rows carry (SdfMeshDraw.Tier).
+        public int Tier = -1;
         public bool Seen;
     }
 
@@ -26,14 +28,22 @@ public sealed class SdfMeshDresser : IDisposable {
     private readonly GpuUploadRuns m_candidates = new(GpuRegion.MaxCopyRuns);
     private readonly GpuUploadRuns m_slots = new(GpuRegion.MaxCopyRuns);
     private readonly GpuUploadRuns m_hostChanges = new(GpuRegion.MaxCopyRuns);
+    private readonly GpuUploadRuns m_copyRuns = new(GpuRegion.MaxCopyRuns);
     private readonly GpuRowCursor m_slotCursor = new();
     private readonly GpuRowCursor m_hostCursor = new();
+    private readonly GpuRowCursor m_copyCursor = new();
+    // The copies as the last dress read them, at the copy journal's endpoint m_copyCursor committed.
     private SdfMeshInstance[] m_copies = [];
     private int[] m_copyFrames = [];
 
     private SdfProgram? m_program;
 
+    // The bake's copy layout revision and product revision the last dress reconciled every group at. The group walk
+    // stands while both do: the bake moves its product revision on every change to its group list, a group's drawn mesh
+    // or the tier it was baked at (SdfMeshPathBake.Replace, Group.Mesh, Group.ShowOwn, FinishReplacements), and its copy
+    // layout revision on every change to a group's copies (IndexCopies), which are all a group's rows read.
     private long m_layout = -1;
+    private long m_product = -1;
 
     private SdfMeshRows.Run m_host;
     private bool m_pending;
@@ -49,7 +59,7 @@ public sealed class SdfMeshDresser : IDisposable {
     }
 
     /// <summary>Gets logical retained scratch and index bytes.</summary>
-    public long ScratchBytes => ((((((m_rows.ClipIndexBytes + m_bindingsByOwner.StorageBytes) + m_candidates.StorageBytes) + m_slots.StorageBytes) + m_hostChanges.StorageBytes) + (((long)m_bindings.Length) * IntPtr.Size)) + (((long)m_copies.Length) * (IntPtr.Size + sizeof(int))));
+    public long ScratchBytes => ((((((m_rows.ClipIndexBytes + m_bindingsByOwner.StorageBytes) + m_candidates.StorageBytes) + m_slots.StorageBytes) + m_hostChanges.StorageBytes + m_copyRuns.StorageBytes) + (((long)m_bindings.Length) * IntPtr.Size)) + (((long)m_copies.Length) * (IntPtr.Size + sizeof(int))));
 
     /// <summary>Reconciles products, copy membership and poses without moving unrelated owners.</summary>
     public SdfFrame Dress(SdfFrame frame) {
@@ -78,9 +88,15 @@ public sealed class SdfMeshDresser : IDisposable {
         if (hostWhole) { SdfRowChecks.ProcessWork.Count(kind: SdfRowChecks.HostWhole); }
         _ = m_slotCursor.Collect(frame.MovedTransforms?.Changes, frame.MovedTransformsSerial, frame.DynamicTransforms,
             frame.DynamicTransforms.Count, 0, m_slots, force: (startOver || programChanged));
+        // The copies the producer's journal names changed since the last dress, or every copy when it cannot prove that
+        // window: m_copyRuns holds the runs to read either way.
+        var copiesWhole = m_copyCursor.Collect(frame.MeshCopyChanges, frame.MeshCopyChangesSerial, frame.MeshInstances,
+            frame.MeshInstances.Count, 0, m_copyRuns, force: (startOver || programChanged || (frame.MeshCopyChanges is null) || (m_copies.Length != frame.MeshInstances.Count)));
         var matrices = 0;
         var visited = 0;
         var updated = 0;
+        var groupsVisited = 0;
+        var copiesVisited = 0;
 
         if (hostNew) {
             var old = m_host;
@@ -96,53 +112,31 @@ public sealed class SdfMeshDresser : IDisposable {
                 Write(m_host, i, draw, new(Host: i));
             }
         }
-        foreach (var state in m_groups.Values) { state.Seen = false; }
-        for (var g = 0; (g < access.GroupCount); g++) {
-            var group = access.GroupAt(index: g);
-
-            if (access.MeshOf(group: group) is not { } mesh) { continue; }
-            if (!m_groups.TryGetValue(key: group, value: out var state)) { m_groups.Add(key: group, value: state = new()); }
-            state.Seen = true;
-            var copies = access.CopiesOf(group: group);
-            var count = (mesh.PieceCount * (copies?.Count ?? 1));
-            var changed = (!ReferenceEquals(objA: mesh, objB: state.Mesh) || (state.Run.Count != count) ||
-                ((m_layout != access.CopyLayoutRevision) && !state.Copies.SequenceEqual(second: (copies ?? Array.Empty<int>()))));
-
-            if (!changed) { continue; }
-            var old = state.Run;
-
-            if (old.Count != count) { state.Run = m_writer.Allocate(count: count); }
-            RemoveBindings(run: old);
-            state.Mesh = mesh;
-            state.Copies = (copies?.ToArray() ?? []);
-
-            for (var offset = 0; (offset < count); offset++) {
-                var binding = new DrawBinding(mesh.Piece(index: (offset % mesh.PieceCount)), group,
-                    ((copies is null) ? -1 : copies[(offset / mesh.PieceCount)]), ((copies is null) && (mesh.Chunks.Count > 0)), access.TierOf(group: group));
-
-                Bind(binding: binding, frame: frame, matrices: ref matrices, offset: offset, run: state.Run);
+        if (!startOver && !programChanged && (m_product == access.Revision) && (m_layout == access.CopyLayoutRevision)) {
+            SdfMeshHistory.ProcessWork.Count(kind: SdfMeshHistory.DressGroupsStood);
+        } else {
+            groupsVisited = access.GroupCount;
+            DressGroups(access: in access, frame: frame, matrices: ref matrices, updated: ref updated, visited: ref visited);
+        }
+        // A copy's own mesh: read at every copy the journal names, and dropped where the list ended before it.
+        if (copiesWhole) {
+            m_removedOwn.Clear();
+            foreach (var i in m_own.Keys) { if (i >= frame.MeshInstances.Count) { m_removedOwn.Add(item: i); } }
+            foreach (var i in m_removedOwn) { DropOwn(index: i); }
+        }
+        for (var run = 0; (run < m_copyRuns.Count); run++) {
+            for (var i = m_copyRuns.Start(index: run); (i < (m_copyRuns.Start(index: run) + m_copyRuns.Length(index: run))); i++) {
+                copiesVisited++;
+                if (frame.MeshInstances[i].Mesh is not { } mesh) { DropOwn(index: i); continue; }
+                if (!m_own.TryGetValue(key: i, value: out var state)) { m_own.Add(key: i, value: state = new()); }
+                if (ReferenceEquals(objA: mesh, objB: state.Mesh)) { continue; }
+                if (state.Run.Count == 0) { state.Run = m_writer.Allocate(count: 1); }
+                RemoveBindings(run: state.Run);
+                state.Mesh = mesh;
+                Bind(state.Run, 0, new DrawBinding(mesh, null, i), frame, ref matrices);
                 visited++; updated++;
             }
-            if (old != state.Run) { m_writer.Free(run: old); }
         }
-        m_removedGroups.Clear();
-        foreach (var (group, state) in m_groups) { if (!state.Seen) { RemoveBindings(run: state.Run); m_writer.Free(run: state.Run); m_removedGroups.Add(item: group); } }
-        foreach (var group in m_removedGroups) { _ = m_groups.Remove(key: group); }
-        foreach (var state in m_own.Values) { state.Seen = false; }
-        for (var i = 0; (i < frame.MeshInstances.Count); i++) {
-            if (frame.MeshInstances[i].Mesh is not { } mesh) { continue; }
-            if (!m_own.TryGetValue(key: i, value: out var state)) { m_own.Add(key: i, value: state = new()); }
-            state.Seen = true;
-            if (ReferenceEquals(objA: mesh, objB: state.Mesh)) { continue; }
-            if (state.Run.Count == 0) { state.Run = m_writer.Allocate(count: 1); }
-            RemoveBindings(run: state.Run);
-            state.Mesh = mesh;
-            Bind(state.Run, 0, new DrawBinding(mesh, null, i), frame, ref matrices);
-            visited++; updated++;
-        }
-        m_removedOwn.Clear();
-        foreach (var (i, state) in m_own) { if (!state.Seen) { RemoveBindings(run: state.Run); m_writer.Free(run: state.Run); m_removedOwn.Add(item: i); } }
-        foreach (var i in m_removedOwn) { _ = m_own.Remove(key: i); }
         m_candidates.Clear();
         if (programChanged) {
             for (var row = 0; (row < m_bindings.Length); row++) { if (m_bindings[row] is not null) { m_candidates.Add(length: 1, start: row); } }
@@ -150,8 +144,10 @@ public sealed class SdfMeshDresser : IDisposable {
         for (var run = 0; (run < m_slots.Count); run++) {
             for (var slot = m_slots.Start(index: run); (slot < (m_slots.Start(index: run) + m_slots.Length(index: run))); slot++) { AddCandidates(key: (false, slot)); }
         }
-        for (var i = 0; (i < frame.MeshInstances.Count); i++) {
-            if (programChanged || (i >= m_copies.Length) || !ReferenceEquals(objA: m_copies[i], objB: frame.MeshInstances[i]) || (m_copyFrames[i] != frame.MeshInstances[i].FrameSlot)) { AddCandidates(key: (true, i)); }
+        for (var run = 0; (run < m_copyRuns.Count); run++) {
+            for (var i = m_copyRuns.Start(index: run); (i < (m_copyRuns.Start(index: run) + m_copyRuns.Length(index: run))); i++) {
+                if (programChanged || (i >= m_copies.Length) || !ReferenceEquals(objA: m_copies[i], objB: frame.MeshInstances[i]) || (m_copyFrames[i] != frame.MeshInstances[i].FrameSlot)) { AddCandidates(key: (true, i)); }
+            }
         }
         for (var r = 0; (r < m_candidates.Count); r++) {
             for (var row = m_candidates.Start(index: r); (row < (m_candidates.Start(index: r) + m_candidates.Length(index: r))); row++) {
@@ -180,20 +176,72 @@ public sealed class SdfMeshDresser : IDisposable {
 
         result.AdoptDressing(rows: m_rows, picks: m_map);
 
+        // A whole answer resizes to the list (a count change always answers whole), and every answer rewrites the copies
+        // its runs name, so m_copies is the list at the endpoint the cursor commits.
         if (m_copies.Length != frame.MeshInstances.Count) { m_copies = new SdfMeshInstance[frame.MeshInstances.Count]; m_copyFrames = new int[m_copies.Length]; }
-        for (var i = 0; (i < m_copies.Length); i++) { m_copies[i] = frame.MeshInstances[i]; m_copyFrames[i] = m_copies[i].FrameSlot; }
+        for (var run = 0; (run < m_copyRuns.Count); run++) {
+            for (var i = m_copyRuns.Start(index: run); (i < (m_copyRuns.Start(index: run) + m_copyRuns.Length(index: run))); i++) { m_copies[i] = frame.MeshInstances[i]; m_copyFrames[i] = m_copies[i].FrameSlot; }
+        }
         if (SdfRowChecks.SkipHostRequested) { m_skipHostThrough = ((m_rows.Serial + SdfMovedTransforms.History) + 2); SdfRowChecks.SkipHostRequested = false; }
         if (m_rows.Serial <= m_skipHostThrough) { SdfRowChecks.ProcessWork.Count(kind: SdfRowChecks.HostSkipped); } else { m_hostCursor.Commit(); }
         m_slotCursor.Commit();
+        m_copyCursor.Commit();
         m_program = frame.Program;
         m_layout = access.CopyLayoutRevision;
+        m_product = access.Revision;
         m_pending = false;
         access.Acknowledge();
 
         SdfMeshHistory.ProcessWork.Add(SdfMeshHistory.DressBindingsVisited, visited);
         SdfMeshHistory.ProcessWork.Add(SdfMeshHistory.DressMatricesComputed, matrices);
         SdfMeshHistory.ProcessWork.Add(SdfMeshHistory.DressedRecordsUpdated, updated);
+        SdfMeshHistory.ProcessWork.Add(SdfMeshHistory.DressGroupsVisited, groupsVisited);
+        SdfMeshHistory.ProcessWork.Add(SdfMeshHistory.DressCopiesVisited, copiesVisited);
         return result;
+    }
+    // Reconciles every group the bake lists with the mesh it draws, its copies and the tier its mesh was baked at,
+    // rebinding a group's rows only where one of those changed, and frees the rows of groups the bake no longer lists.
+    private void DressGroups(in SdfMeshPathBake.FrameAccess access, SdfFrame frame, ref int matrices, ref int visited, ref int updated) {
+        foreach (var state in m_groups.Values) { state.Seen = false; }
+        for (var g = 0; (g < access.GroupCount); g++) {
+            var group = access.GroupAt(index: g);
+
+            if (access.MeshOf(group: group) is not { } mesh) { continue; }
+            if (!m_groups.TryGetValue(key: group, value: out var state)) { m_groups.Add(key: group, value: state = new()); }
+            state.Seen = true;
+            var copies = access.CopiesOf(group: group);
+            var count = (mesh.PieceCount * (copies?.Count ?? 1));
+            var tier = access.TierOf(group: group);
+            var changed = (!ReferenceEquals(objA: mesh, objB: state.Mesh) || (state.Run.Count != count) || (state.Tier != tier) ||
+                ((m_layout != access.CopyLayoutRevision) && !state.Copies.SequenceEqual(second: (copies ?? Array.Empty<int>()))));
+
+            if (!changed) { continue; }
+            var old = state.Run;
+
+            if (old.Count != count) { state.Run = m_writer.Allocate(count: count); }
+            RemoveBindings(run: old);
+            state.Mesh = mesh;
+            state.Tier = tier;
+            state.Copies = (copies?.ToArray() ?? []);
+
+            for (var offset = 0; (offset < count); offset++) {
+                var binding = new DrawBinding(mesh.Piece(index: (offset % mesh.PieceCount)), group,
+                    ((copies is null) ? -1 : copies[(offset / mesh.PieceCount)]), ((copies is null) && (mesh.Chunks.Count > 0)), tier);
+
+                Bind(binding: binding, frame: frame, matrices: ref matrices, offset: offset, run: state.Run);
+                visited++; updated++;
+            }
+            if (old != state.Run) { m_writer.Free(run: old); }
+        }
+        m_removedGroups.Clear();
+        foreach (var (group, state) in m_groups) { if (!state.Seen) { RemoveBindings(run: state.Run); m_writer.Free(run: state.Run); m_removedGroups.Add(item: group); } }
+        foreach (var group in m_removedGroups) { _ = m_groups.Remove(key: group); }
+    }
+    // Lets go of the rows a copy's own mesh held at an index, if any.
+    private void DropOwn(int index) {
+        if (!m_own.Remove(key: index, value: out var state)) { return; }
+        RemoveBindings(run: state.Run);
+        m_writer.Free(run: state.Run);
     }
 
     private void Write(SdfMeshRows.Run run, int offset, in SdfMeshDraw draw, SdfMeshRows.Owner owner) {
@@ -220,7 +268,7 @@ public sealed class SdfMeshDresser : IDisposable {
     private void StartOver() {
         m_writer.StartOver();
         m_groups.Clear(); m_own.Clear(); m_bindingsByOwner.Clear(); Array.Clear(array: m_bindings);
-        m_host = default; m_program = null; m_layout = -1;
+        m_host = default; m_program = null; m_layout = -1; m_product = -1;
     }
     private void RemoveBindings(SdfMeshRows.Run run) {
         for (var row = run.Start; (row < (run.Start + run.Count)); row++) { if (row < m_bindings.Length) { m_bindings[row] = null; m_bindingsByOwner.Remove(row: row); } }
@@ -339,9 +387,9 @@ public sealed class SdfMeshDresser : IDisposable {
                 ObjectToWorld: matrix) {
                 FrameSlot = (group.Dynamic ? group.Slot : null),
                 Glass = group.Glass,
+                // A displaced surface is never static (SdfMeshDraw.IsStatic), whatever its placement does.
                 Displacement = group.Displacement,
-                // A displaced surface moves as it is drawn, so it stays out of the irradiance volume's static scene.
-                IsDynamic = (group.Dynamic || (group.Displacement is not null)),
+                IsDynamic = group.Dynamic,
                 Tier = tier,
             };
         }

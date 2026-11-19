@@ -27,7 +27,7 @@ public readonly record struct SdfIndirectLightingGrid(float DirectionDegrees, fl
         if (light.Kind != SdfLightKind.Directional || !Enabled) { return light; }
         if (DirectionDegrees > 0) {
             var direction = SdfLights.UnitDirection(light.Direction);
-            var step = (double)DirectionDegrees * Math.PI / 180;
+            var step = double.DegreesToRadians(degrees: DirectionDegrees);
             var azimuth = Math.Round(Math.Atan2(direction.Z, direction.X) / step) * step;
             var elevation = Math.Clamp(Math.Round(Math.Asin(Math.Clamp((double)direction.Y, -1, 1)) / step) * step, -Math.PI / 2, Math.PI / 2);
             var radius = Math.Cos(elevation);

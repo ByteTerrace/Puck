@@ -178,8 +178,8 @@ public sealed class SdfResidencySelectorLawTests {
             for (var service = 0; (service < 2); service++) {
                 budget.Accrue();
                 while (budget.Holds) {
-                    budget.ChargeGpu(seconds: SdfGpuWork.FrameShareSeconds);
-                    charged += SdfGpuWork.FrameShareSeconds;
+                    budget.ChargeGpu(seconds: (SdfGpuWork.GpuShare * SdfGpuWorkBudget.ReferencePeriodSeconds));
+                    charged += (SdfGpuWork.GpuShare * SdfGpuWorkBudget.ReferencePeriodSeconds);
                 }
                 budget.Want();
             }
@@ -193,17 +193,56 @@ public sealed class SdfResidencySelectorLawTests {
         var idle = new SdfGpuWorkBudget(clock: () => now);
 
         idle.Accrue();
-        idle.ChargeGpu(seconds: SdfGpuWork.FrameShareSeconds);
+        idle.ChargeGpu(seconds: (SdfGpuWork.GpuShare * SdfGpuWorkBudget.ReferencePeriodSeconds));
         now += (10L * Stopwatch.Frequency);
         idle.Accrue();
 
         var jobs = 0;
 
         while (idle.Holds) {
-            idle.ChargeGpu(seconds: SdfGpuWork.FrameShareSeconds);
+            idle.ChargeGpu(seconds: (SdfGpuWork.GpuShare * SdfGpuWorkBudget.ReferencePeriodSeconds));
             jobs++;
         }
         Assert.Equal(actual: jobs, expected: 1);
+    }
+    [Fact]
+    public void TheWorkBudgetsShareFollowsTheTimeTheFrameLeavesFree() {
+        const double Period = (1.0 / 60.0);
+        var now = Stopwatch.Frequency;
+        var budget = new SdfGpuWorkBudget(clock: () => now);
+
+        void Frames(double frameSeconds, int windows) {
+            for (var frame = 0; (frame < (windows * SdfGpuWorkBudget.FollowFrames)); frame++) { budget.Observe(frameSeconds: frameSeconds, periodSeconds: Period); }
+        }
+
+        // Unread, the budget takes its cap of a 60 Hz period.
+        Assert.Equal(expected: SdfGpuWork.GpuShare, actual: budget.Share);
+        Assert.Equal(expected: (SdfGpuWork.GpuShare * Period), actual: budget.FrameAllowanceSeconds, precision: 12);
+        // A frame whose own work fills the period leaves background work the least a period grants, at once.
+        Frames(frameSeconds: (25.0 / 1000.0), windows: 1);
+        Assert.Equal(expected: (SdfGpuWorkBudget.LeastFrameSeconds / Period), actual: budget.Share, precision: 12);
+        Assert.Equal(expected: SdfGpuWorkBudget.LeastFrameSeconds, actual: budget.FrameAllowanceSeconds, precision: 12);
+        // A light frame raises it, not on the step after the fall, then by at most a step at a time, up to the cap.
+        Frames(frameSeconds: 0.002, windows: 1);
+        Assert.Equal(expected: (SdfGpuWorkBudget.LeastFrameSeconds / Period), actual: budget.Share, precision: 12);
+        Frames(frameSeconds: 0.002, windows: 1);
+        Assert.Equal(expected: ((SdfGpuWorkBudget.LeastFrameSeconds / Period) + SdfGpuWorkBudget.RiseShare), actual: budget.Share, precision: 12);
+        Frames(frameSeconds: 0.002, windows: 20);
+        Assert.Equal(expected: SdfGpuWork.GpuShare, actual: budget.Share);
+        // A frame of 12 ms in a 16.7 ms period leaves what the headroom keeps clear of the rest.
+        Frames(frameSeconds: 0.012, windows: 1);
+        Assert.Equal(expected: SdfGpuWorkBudget.ShareOf(frameSeconds: 0.012, periodSeconds: Period), actual: budget.Share, precision: 12);
+        Assert.InRange(actual: budget.Share, high: (SdfGpuWork.GpuShare - SdfGpuWorkBudget.RiseShare), low: (SdfGpuWorkBudget.LeastFrameSeconds / Period));
+        // Credit accrues at the live share: a second a service waited on banks the share of MostBankSeconds, no more.
+        budget.Accrue();
+        budget.Want();
+        now += Stopwatch.Frequency;
+        budget.Accrue();
+        Assert.InRange(actual: budget.GpuCredit, high: (SdfGpuWorkBudget.MostBankSeconds * budget.Share) + 1e-12, low: 0.0);
+        // A frame with no reading returns to the cap and names why.
+        budget.Unread(periodSeconds: 0.0, reason: "untimed");
+        Assert.Equal(expected: SdfGpuWork.GpuShare, actual: budget.Share);
+        Assert.Contains(expectedSubstring: "follows:untimed,", actualString: budget.Describe());
     }
     [Fact]
     public void TheWorkBudgetsDebtIsBoundedWhateverAJobReports() {
@@ -211,15 +250,15 @@ public sealed class SdfResidencySelectorLawTests {
         var budget = new SdfGpuWorkBudget(clock: () => now);
 
         budget.Accrue();
-        var debited = budget.ChargeGpu(seconds: SdfGpuWork.FrameShareSeconds);
+        var debited = budget.ChargeGpu(seconds: (SdfGpuWork.GpuShare * SdfGpuWorkBudget.ReferencePeriodSeconds));
 
         // A timestamp pair read end before start wraps to nearly the counter's range: seconds no job in flight for a
         // few milliseconds ran. The job is charged its estimate, and the measurement is counted.
-        var charged = budget.SettleGpu(debited: debited, estimate: SdfGpuWork.FrameShareSeconds, inFlight: 0.004, measured: 1.8e10);
+        var charged = budget.SettleGpu(debited: debited, estimate: (SdfGpuWork.GpuShare * SdfGpuWorkBudget.ReferencePeriodSeconds), inFlight: 0.004, measured: 1.8e10);
 
         Assert.Equal(expected: 0.004, actual: charged);
         Assert.Contains(expectedSubstring: "clamped:1,", actualString: budget.Describe());
-        Assert.True(condition: (budget.GpuCredit > -SdfGpuWork.FrameShareSeconds));
+        Assert.True(condition: (budget.GpuCredit > -(SdfGpuWork.GpuShare * SdfGpuWorkBudget.ReferencePeriodSeconds)));
         // Neither is a negative measurement or one that is not a number, and a measurement within the time in flight is
         // charged as it reads.
         Assert.Equal(expected: 0.002, actual: SdfGpuWorkBudget.MeasuredWithin(clamped: out var clamped, estimate: 0.002, inFlight: 1.0, measured: -5.0));

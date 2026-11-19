@@ -171,6 +171,17 @@ cel pixel passes one tone curve (the display pass's `render.tone`), never one
 inside the material as well. The cel work the
 [illumination plan](../plans/illumination.md#cel-shading) had scheduled resumes.
 
+**Ink is edge signals the engine computes and an ink phase authors write (the
+owner's ruling).** Outlines are meant to be performant and expressive. The
+engine computes a view's edge signals once (depth discontinuity, normal crease,
+object and material boundaries, and the distance to the nearest edge) and keeps
+them correct in motion, across dynamic resolution and temporal reprojection.
+What an edge looks like (which edges ink, width, taper, colour, breakup) is an
+authored ink phase of the shade program in the standard package, run only where
+an edge is near. No look's vocabulary names the mechanism: the cel and toon
+names in engine schemas, kernels, levers and verbs are a leak, removed by the
+[ink plan](../plans/ink.md).
+
 - **Shadow where the response is.** The surface pass queries a light's cascades
   wherever that light's diffuse response is non-zero, a wrapped material's side
   past the terminator included, and filters what it queried. A side it skips
@@ -314,6 +325,27 @@ canonical stream, its parameter layout and the op table's fingerprint, never
 its parameter values, so two materials that differ by a seed or a colour share
 one program, one kernel and one bin, and sweeping a colour compiles nothing.
 Every spelling that lowers to the same stream costs the same.
+
+**A world holds each program once, and a use names it by content.** A style
+used on a hundred creations is one program and a hundred references, in the
+compilation, the world definition, its projection and the renderer alike
+(AGENTS.md, "Ergonomic is optimal"). Copied into every palette row, the
+standard's `cel` alone would be thousands of expression nodes a row, and the
+gallery's plinths and labels together would pass one compilation's work limit.
+Two shapes were weighed: a deduplicating compact form of each inline
+copy, and a table the uses name. A compact form still repeats the program in
+every creation document and in every reader's memory, so the table was taken:
+the world's `shades` table holds each program under its identity, the
+SHA-256 of its canonical definition, and a palette row, a look case and
+`render.shade` each write that key. The identity is computed from the program,
+never authored or recorded, so equal programs from any document are one row,
+composition adopts rows whole, and a creation's canonical hash, which covers
+its keys, covers what it shades with. The table a definition writes is derived
+from its uses, so it never holds a program nothing names. Every door that turns
+bytes into a live world resolves the keys against the table, and a key the
+table does not hold, or a row whose key is not its program's identity, is
+refused there. Nothing changes for the renderer: it already compiled programs
+by content and specialized by identity. The bake never reads a program.
 
 **Interpret first, specialize behind.** The interpreter shows an edit on its
 next frame, because a program edit is a table upload, and it renders a program

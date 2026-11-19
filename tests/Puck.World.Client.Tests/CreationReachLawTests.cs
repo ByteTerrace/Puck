@@ -149,6 +149,32 @@ public sealed class CreationReachLawTests {
         Assert.True(condition: (worst < 1e-4f), userMessage: $"the worst error over 200 ticks is {worst} m");
         Assert.True(condition: (moved > 0.05f), userMessage: $"the target moved only {moved} m, so the law tested a still target");
     }
+    /// <summary>The cell that names a reached body is a row the scene reads, as every cell a pose reads is: a scene shared
+    /// between two streams is shared on the rows it reads (<see cref="WorldSceneInputs.Rows"/>), so a stream that may not
+    /// read the cell whole is never handed the scene of one that may, and a presentation-tier peer is delivered the cell
+    /// it may read (<see cref="WorldSceneInputs.CreationRows"/>).</summary>
+    [Fact]
+    public void TheCellThatSelectsAReachedBodyIsARowTheSceneReads() {
+        var document = new CreationDocument(
+            Drivers: null,
+            Effectors: [new CreationEffectorDocument(
+                Chain: ["upper", "lower"],
+                Name: "hand",
+                Target: new CreationEffectorTargetDocument(Kind: CreationEffectorTargetDocument.KindBody, Reference: $"state.{AimRow}"),
+                Tip: "tip",
+                When: [CreationDriverDocument.WhenAlways]
+            )],
+            Frames: null,
+            Name: "reacher",
+            Palette: null,
+            Schema: CreationDocument.CurrentSchema,
+            Shapes: [.. Arm()]
+        );
+        var definition = World(aim: 1L, document: document);
+
+        Assert.Contains(expected: AimRow, collection: WorldSceneInputs.CreationRows(definition: definition));
+        Assert.Contains(expected: AimRow, collection: WorldSceneInputs.Rows(definition: definition));
+    }
     /// <summary>Clearing the cell that names a reached body releases the effector in that frame: it reads no target, its
     /// weight eases out, and the hand fades toward the last goal it drew in its own creation's frame, so moving the former
     /// target during the fade moves the hand by nothing, bit for bit, against a run where the target stays put.</summary>

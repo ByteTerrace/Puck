@@ -29,6 +29,10 @@ public sealed class SdfViewExposures {
     private float[] m_metered = [];
     private string[] m_meterSources = [];
     private long[] m_cuts = [];
+    // Each slot's occupant (its view's source and cut) and generation, which moves whenever another occupant takes the
+    // slot: a reading carries the generation its view was recorded under, and one from a retired generation is discarded.
+    private object?[] m_occupants = [];
+    private long[] m_generations = [];
     // A cut owes the camera sample a fresh reading at the camera and the meter a reading rendered after it.
     private bool[] m_sampleOwed = [];
     private bool[] m_meterOwed = [];
@@ -56,7 +60,7 @@ public sealed class SdfViewExposures {
 
     private sealed class Reading {
         internal readonly uint[] Words = new uint[SdfExposure.MeterWords];
-        internal long Cut;
+        internal long Generation;
         internal float Multiplier;
         internal float Reference;
         internal float Local;
@@ -86,9 +90,10 @@ public sealed class SdfViewExposures {
             : frameSeconds);
     }
     /// <summary>Hands over the image meter of a frame a view's composite drew, once its submission completed: the view's
-    /// newest reading, which the view's next staging reads, replacing any reading not yet staged.</summary>
+    /// newest reading, which the view's next staging reads, replacing any reading not yet staged, and discards unless the
+    /// slot still holds the generation the reading was recorded under.</summary>
     /// <param name="view">The view's index in the frame the composite drew.</param>
-    /// <param name="cut">The view's cut revision in that frame (<see cref="SdfViewSnapshot.CutRevision"/>).</param>
+    /// <param name="generation">The slot's generation when the composite recorded (<see cref="GenerationOf"/>).</param>
     /// <param name="multiplier">The exposure multiplier the composite binned the image at.</param>
     /// <param name="reference">The metered <c>EV100</c> the frame's local adaptation shaded against
     /// (<see cref="MeteredOf"/>), or <see cref="float.NaN"/> for none.</param>
@@ -96,7 +101,7 @@ public sealed class SdfViewExposures {
     /// <param name="words">The readback, <see cref="SdfExposure.MeterWords"/> words: the histogram, then the covered
     /// weight.</param>
     /// <exception cref="ArgumentException"><paramref name="words"/> is not <see cref="SdfExposure.MeterWords"/> long.</exception>
-    public void Publish(int view, long cut, float multiplier, float reference, float local, ReadOnlySpan<uint> words) {
+    public void Publish(int view, long generation, float multiplier, float reference, float local, ReadOnlySpan<uint> words) {
         if (words.Length != SdfExposure.MeterWords) { throw new ArgumentException(message: $"The image meter's readback is {SdfExposure.MeterWords} words.", paramName: nameof(words)); }
         if (view < 0) { return; }
         lock (m_readingGate) {
@@ -104,24 +109,33 @@ public sealed class SdfViewExposures {
             var reading = (m_readings[view] ??= new Reading());
 
             words.CopyTo(destination: reading.Words);
-            reading.Cut = cut;
+            reading.Generation = generation;
             reading.Multiplier = multiplier;
             reading.Reference = reference;
             reading.Local = local;
             reading.Fresh = true;
         }
     }
-    // Takes a view's newest published reading not yet staged.
-    private bool TakeReading(int view, Span<uint> words, out long cut, out float multiplier, out float reference, out float local) {
+    // Takes a view's newest published reading not yet staged, discarding one recorded under a retired generation of the slot.
+    private bool TakeReading(int view, Span<uint> words, out float multiplier, out float reference, out float local) {
         lock (m_readingGate) {
-            (cut, multiplier, reference, local) = (0, 0f, float.NaN, 0f);
+            (multiplier, reference, local) = (0f, float.NaN, 0f);
             if ((view >= m_readings.Length) || (m_readings[view] is not { Fresh: true } reading)) { return false; }
-            reading.Words.CopyTo(destination: words);
-            (cut, multiplier, reference, local) = (reading.Cut, reading.Multiplier, reading.Reference, reading.Local);
             reading.Fresh = false;
+            if (reading.Generation != m_generations[view]) { return false; }
+            reading.Words.CopyTo(destination: words);
+            (multiplier, reference, local) = (reading.Multiplier, reading.Reference, reading.Local);
             return true;
         }
     }
+    /// <summary>Returns the generation of the view a slot holds: it moves whenever another view (another source, or
+    /// another cut, <see cref="SdfViewSnapshot.Source"/>, <see cref="SdfViewSnapshot.CutRevision"/>) takes the slot,
+    /// once that view is staged. A meter recorded under it (<see cref="Publish"/>) is read only while the slot holds that
+    /// generation, so a reading of a view the slot no longer shows never sets another's exposure. Zero for a slot the
+    /// frame does not hold.</summary>
+    /// <param name="view">The view's index in the frame's views.</param>
+    /// <returns>The generation.</returns>
+    public long GenerationOf(int view) => (((view < 0) || (view >= m_count)) ? 0L : m_generations[view]);
     /// <summary>Opens a frame's exposures: each view is staged on its first read in the frame (<see cref="MultiplierOf"/>,
     /// <see cref="AirLightOf"/>, <see cref="MeteredOf"/>, <see cref="LightOf"/>), its <c>EV100</c> eased toward its target
     /// over the presentation time since it was last staged, so a view nothing renders or reads meters nothing and a view
@@ -148,6 +162,8 @@ public sealed class SdfViewExposures {
             Array.Resize(array: ref m_metered, newSize: grown);
             Array.Resize(array: ref m_meterSources, newSize: grown);
             Array.Resize(array: ref m_cuts, newSize: grown);
+            Array.Resize(array: ref m_occupants, newSize: grown);
+            Array.Resize(array: ref m_generations, newSize: grown);
             Array.Resize(array: ref m_sampleOwed, newSize: grown);
             Array.Resize(array: ref m_meterOwed, newSize: grown);
             Array.Resize(array: ref m_multipliers, newSize: grown);
@@ -195,8 +211,11 @@ public sealed class SdfViewExposures {
         var seconds = (float.IsFinite(f: m_ev100[index]) ? ((float)(m_clock - m_stagedAt[index])) : 0f);
 
         m_stagedAt[index] = m_clock;
-        if (view.CutRevision != m_cuts[index]) {
+        // Another view in the slot is a cut: a new generation, whose camera sample and meter the slot owes afresh.
+        if ((view.CutRevision != m_cuts[index]) || !ReferenceEquals(objA: view.Source, objB: m_occupants[index])) {
             m_cuts[index] = view.CutRevision;
+            m_occupants[index] = view.Source;
+            m_generations[index]++;
             m_sampleOwed[index] = true;
             m_meterOwed[index] = true;
         }
@@ -259,8 +278,7 @@ public sealed class SdfViewExposures {
     private bool Meter(in SdfExposure exposure, int index) {
         Span<uint> words = stackalloc uint[SdfExposure.MeterWords];
 
-        if (TakeReading(cut: out var cut, local: out var local, multiplier: out var multiplier, reference: out var reference, view: index, words: words) &&
-            (!m_meterOwed[index] || (cut == m_cuts[index])) &&
+        if (TakeReading(local: out var local, multiplier: out var multiplier, reference: out var reference, view: index, words: words) &&
             exposure.Meter(bins: words[..SdfExposure.MeterBins], luminance: out var luminance, multiplier: multiplier)) {
             var total = 0d;
 

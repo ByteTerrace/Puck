@@ -317,14 +317,30 @@ views and screens one frame updated over the same window.
 ## What each pass costs
 
 The passes scale with different things. The bake's two kernels are no pass of
-the frame: they run as the residency's background GPU work, at most
-`SdfGpuWork.GpuShare` of the GPU's time by each job's measured timestamps, and
-only while a bake is pending ([the bake](#the-bake)). The queue runs a background
-job whole before the frame submitted after it, so the share is also a bound per
-job: a client cuts its jobs to `SdfGpuWork.FrameShareSeconds` at its kind's
-measured rate (`SdfGpuWorkRate`), as the irradiance volume's traces and relights
-do, and `world.residency`'s `gpu-work` line counts the jobs measured past it
-(`over-frame-share`) and names the longest (`most-job`). A frame the graph
+the frame: they run as the residency's background GPU work, by each job's
+measured timestamps, and only while a bake is pending ([the bake](#the-bake)).
+Background work takes the share of the GPU's time the frame's own work leaves
+free (`SdfGpuWorkBudget.Share`): each frame the presentation hands the budget
+the display's period and the GPU time every node of the render graph took, read
+from their timestamps (`WorldBackgroundAllowance`), and the share follows what
+their mean leaves of the period short of a tenth, between one millisecond a
+period (`SdfGpuWorkBudget.LeastFrameSeconds`) and `SdfGpuWork.GpuShare`. It
+falls at once when the frame needs more and climbs back by steps. Background
+jobs are timed apart from the frame, so they never push their own share down,
+and dynamic resolution, which reads the same views, moves the render grid only
+once their passes alone overrun the period. A World with no display period or
+no timestamps keeps the fixed share and says why: `world.residency`'s
+`work-budget` line prints the live share, one frame's allowance, the frame's
+GPU time it read (`follows:frame`, or the reason it read none), and the GPU
+time it granted beside what the jobs were charged. The queue runs a background
+job whole before the frame submitted after it, so a job is cut to one frame's
+allowance (`SdfGpuWorkBudget.FrameAllowanceSeconds`, handed to every client's
+take) at its kind's measured rate (`SdfGpuWorkRate`): the irradiance volume's
+traces and relights, and the bake's batches, whose rate follows the mean
+because a batch mixes groups whose evaluations differ in cost. The `gpu-work`
+line counts the budgeted jobs measured past their allowance (`over-allowance`,
+which a bake lattice larger than the allowance still reaches, since a lattice
+is never split) and names the longest (`most-job`). A frame the graph
 withholds (`SdfWorldResidency.FrameWithheld`: a locked tick completing its
 meshes, or a frame held for its lighting) queues nothing behind the work: its
 staging drives the jobs outside the share (`SdfGpuWork.Drive`, and its
@@ -1026,9 +1042,12 @@ samples up to 240 lattices through the interpreter, one call site, with only
 the group's instances in the walk (`sdfMapOmitWorldSegments` drops the unowned
 segments from it). The work keeps a ring of slots, each submitted on its own
 fence and refilled once its job completed and its samples were copied off, and
-takes at most `SdfGpuWork.GpuShare` of the GPU's time by each job's own
+takes the background budget's live share of the GPU's time
+(`SdfGpuWorkBudget.Share`, at most `SdfGpuWork.GpuShare`) by each job's own
 timestamps, so a cold bake samples as fast as its groups ask for lattices
-rather than one batch a rendered frame. The work is stepped at the frame's
+rather than one batch a rendered frame. A batch in play is cut to one frame's
+allowance at the bake's measured rate; a held frame's batch takes up to
+`SdfMeshPathBake.BatchTaps`, since no frame queues behind it. The work is stepped at the frame's
 pumps and inside the host's wait between frames (`HostWaits.Pace`), which a
 job's fence, a readied lattice and the budget's next credit end early, so a
 slow present does not pace it either. Every lattice is chunked to
@@ -1555,7 +1574,9 @@ cascades no precision. A view's shadow tier halves its texels as it does the
 cascades', down to 256.
 
 The `shadow-distant` pass draws only the static scene
-(`SdfMeshIrradianceScene.IsStatic`; the selection kernel rejects a draw whose
+(`SdfMeshDraw.IsStatic`, derived from the draw: never a skinned or displaced
+draw, which moves without its record changing, whatever its `IsDynamic` says;
+the selection kernel rejects a draw whose
 record carries `SdfMeshRecord.DynamicFlag` when the pass stages `staticOnly`),
 every caster in its light box whichever way the view faces
 (`SdfMeshCull.OfLightBox`), at the coarsest level whose error fits its texel.
@@ -1570,8 +1591,11 @@ pass's signature (`SdfWorldPasses.Distant`): the camera the frame chose, the
 static revision, the texels, the cull and detail levers and the instance's
 bindings, so the pass stands whatever forces the frame's other passes. Like the
 far cascade, the camera a recording drew from is staged by
-`SdfWorldPasses.RecordDistant` and committed by `SubmittedDistant`, and readers
-read the committed camera, or no distant entry until one is committed.
+`SdfWorldPasses.RecordDistant` and committed by `SubmittedDistant` once the
+frame's submission has reached the queue, and readers read the committed
+camera, or no distant entry until one is committed. A change to the map's reach
+or any other input of the cascade fit changes the view's signature, since the
+cadence signs the fitted cascade set (`SdfWorldTables.ViewSignature`).
 `world.rates shadow-distant off` lets it follow every turn of the light, and
 `world.rates` counts `shadow-distant.rendered` and `.held`.
 

@@ -537,6 +537,70 @@ public static class RenderGraphScheduler {
         : (positionOf[left] < positionOf[right])
     );
 
+    /// <summary>Marks every instance a schedule of the frame could render: each root the display shows at an extent, and
+    /// in turn each producer a marked consumer shows over a same-frame footprint of nonzero extent or reads as a
+    /// same-frame buffer, by the rules <see cref="Schedule"/> passes demand by, before any refresh, cadence, budget or
+    /// unchanged declaration is weighed. Whatever <see cref="Schedule"/> renders for the frame is marked; an instance left
+    /// unmarked renders in no schedule of it, so nothing it would read needs preparing. A root or footprint naming no
+    /// instance of the set, or a footprint naming no declared read, marks nothing (<see cref="Schedule"/> refuses
+    /// it).</summary>
+    /// <param name="set">The instances.</param>
+    /// <param name="frame">What the frame shows.</param>
+    /// <param name="reached">The marks, one per instance of <paramref name="set"/>, cleared on entry.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="set"/> or <paramref name="reached"/> is
+    /// <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException"><paramref name="reached"/> does not hold one mark per instance.</exception>
+    public static void Readers(RenderGraphInstanceSet set, in RenderGraphFrame frame, bool[] reached) {
+        ArgumentNullException.ThrowIfNull(argument: set);
+        ArgumentNullException.ThrowIfNull(argument: reached);
+        if (reached.Length != set.Instances.Count) {
+            throw new ArgumentException(message: $"The marks hold {reached.Length} instances; the set declares {set.Instances.Count}.", paramName: nameof(reached));
+        }
+
+        Array.Clear(array: reached);
+        if (frame.Roots is { } roots) {
+            for (var position = 0; (position < roots.Count); position++) {
+                var root = roots[position];
+
+                if ((root.Width > 0) && (root.Height > 0) && (set.IndexOf(name: root.Instance) is var index and >= 0)) { reached[index] = true; }
+            }
+        }
+
+        var footprints = (frame.Footprints ?? []);
+
+        for (var grew = true; grew;) {
+            grew = false;
+            for (var position = 0; (position < footprints.Count); position++) {
+                var footprint = footprints[position];
+
+                if (!(footprint.Width > 0) || !(footprint.Height > 0) || (set.IndexOf(name: footprint.Consumer) is not (var consumer and >= 0)) || !reached[consumer] || set.Instances[consumer].IsSource ||
+                    (set.IndexOf(name: footprint.Producer) is not (var producer and >= 0)) || reached[producer]) {
+                    continue;
+                }
+                var reads = set.Reads[consumer];
+
+                for (var read = 0; (read < reads.Count); read++) {
+                    if ((reads[read].Producer == producer) && !reads[read].PreviousFrame && (reads[read].Kind != ShaderPipelineResourceKind.Buffer)) {
+                        reached[producer] = true;
+                        grew = true;
+                        break;
+                    }
+                }
+            }
+            for (var index = 0; (index < reached.Length); index++) {
+                if (!reached[index] || set.Instances[index].IsSource) { continue; }
+                var reads = set.Reads[index];
+
+                for (var read = 0; (read < reads.Count); read++) {
+                    if ((reads[read].Kind == ShaderPipelineResourceKind.Buffer) && !reads[read].PreviousFrame && !reached[reads[read].Producer]) {
+                        reached[reads[read].Producer] = true;
+                        grew = true;
+                    }
+                }
+            }
+        }
+    }
+
     /// <summary>Schedules one frame into a schedule the caller owns.</summary>
     /// <param name="set">The instances.</param>
     /// <param name="frame">What the frame shows.</param>

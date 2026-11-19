@@ -405,7 +405,7 @@ done line; a nested residency's done line is insufficient.
   two boxes a swapped draw.
 - A selection is cut like a trace (`SdfMeshProbeGpuWork.Select`): jobs of
   the probes whose box tests (`SelectTestsOf`) fit
-  `SdfGpuWork.FrameShareSeconds` at the measured rate, each answered before
+  the live frame allowance (`SdfGpuWorkBudget.FrameAllowanceSeconds`) at the measured rate, each answered before
   the next is submitted. `most-job` prints a selection's `boxes` and
   `tests`.
 - Four reflected angular taps reconstruct local surface patches from first-hit
@@ -601,7 +601,7 @@ done line; a nested residency's done line is insufficient.
   probes that lack a trace against the current geometry (finest level and
   nearest first), then those whose lighting is stale or whose bounce has not
   converged (oldest lighting first), and works through the list a batch at a
-  time while the frames' budget (`render.indirect.budget`, `SdfIndirectBudget`)
+  time while the budget (`render.indirect.budget`, `SdfIndirectBudget`), a rate a second of wall time whatever the frame rate,
   grants relights and traces. A lighting that changes every frame keeps the
   relight cycling over the window; overload lengthens the lighting's age, not
   the frame. Each cycle's start records the window's age (median and oldest,

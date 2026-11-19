@@ -34,6 +34,11 @@ SdfMeshSkinSlots sdfMeshSkinSlotsOf(uint record, uint vertex) {
     slots.root = asuint(asint(sdfMeshRecordWord(record + SDF_MESH_FRAME_SLOT_WORD)));
     slots.s0 = slots.first == 0u ? slots.root : sdfMeshMemberSlot(record, slots.first);
     slots.s1 = slots.second == 0u ? slots.root : sdfMeshMemberSlot(record, slots.second);
+    // Each frame's rows are read through the view's overlay, so a member moves relative to the overlay's root and the
+    // caller's carry (sdfViewPoseCarry) places that root.
+    slots.root = sdfViewPoseSlot(slots.root);
+    slots.s0 = sdfViewPoseSlot(slots.s0);
+    slots.s1 = sdfViewPoseSlot(slots.s1);
     return slots;
 }
 // A skinned vertex in the group's frame under one frame's transforms (the current table or the previous one, read by the

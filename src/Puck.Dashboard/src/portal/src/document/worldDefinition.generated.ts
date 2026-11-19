@@ -83,6 +83,12 @@ export type WorldDefinition = {
   seatPrograms?: (WorldSeatProgram | null)[] | null;
   routes?: (WorldRoute | null)[] | null;
   /**
+   * Gets or initializes the world's shade programs, each under its computed identity: read, the table a document carried, which resolves the uses that name a program by key; written, every program this definition's uses name (Of), so a row no use names is never written and a use that holds its program carries it. ABSENT when nothing uses a program.
+   */
+  shades?: {
+    [k: string]: SdfShadeDefinitionVariant2 | null;
+  } | null;
+  /**
    * Gets the basis document this file layers over, as a file path resolved against this document's own directory — the document-composition member (see WorldDocumentBasis). A file naming a basis is a delta: it authors only what differs, inheriting every omitted member from the (recursively composed) basis chain. Unrelated to the coordinate basis the validator's geometry speaks of.
    */
   basis?: string | null;
@@ -1455,12 +1461,7 @@ export type CreationDocument = {
         /**
          * The case's program, or null for none.
          */
-        shade?: {
-          name: string;
-          parameters: (ShapeNullable11 | null)[];
-          outputs: (ShapeNullable16 | null)[];
-          values?: (ShapeNullable16 | null)[] | null;
-        } | null;
+        shade?: unknown;
       } | null)[];
     } | null;
     /**
@@ -1534,19 +1535,14 @@ export type CreationDocument = {
       } | null;
     } | null;
     /**
-     * The authored presentation program and runtime parameters.
+     * The slot's shade program (ShadeReference), or null for the world's default.
      */
-    shade?: {
-      name: string;
-      parameters: (ShapeNullable11 | null)[];
-      outputs: (ShapeNullable18 | null)[];
-      values?: (ShapeNullable18 | null)[] | null;
-    } | null;
+    shade?: unknown;
   } | null)[] | null;
   /**
    * The authored shapes (null = empty).
    */
-  shapes?: (ShapeNullable36 | null)[] | null;
+  shapes?: (ShapeNullable28 | null)[] | null;
   /**
    * The animation timeline frames (null = none).
    */
@@ -1760,11 +1756,11 @@ export type CreationDocument = {
     /**
      * Scales Cadence each frame by a curve of an earlier driver's phase, or null to keep it fixed. A stride on planar travel that takes its radians per metre from a curve of the body's speed lengthens its stride as the body speeds up, so its step rate rises less than its speed does.
      */
-    cadenceBy?: ShapeNullable37 | null;
+    cadenceBy?: ShapeNullable29 | null;
     /**
      * Sets the level the weight eases toward while the gate holds, from a curve of an earlier driver's phase clamped to [0, 1], or null for 1. Two drivers reading one stride's phase through SignalDriverPrefix, one weighted by a falling curve of speed and one by a rising one, cross-fade a walk into a run without their legs ever leaving step.
      */
-    weightBy?: ShapeNullable37 | null;
+    weightBy?: ShapeNullable29 | null;
     /**
      * The driver's mask: ids of the creation's parts (CreationPartDocument). The driver's swings, slides and clip poses play only on shapes those parts cover, and a replacing driver reduces earlier drivers only there. Null is the shapes the driver itself poses.
      */
@@ -1888,7 +1884,7 @@ export type CreationDocument = {
     /**
      * The level the effector's weight eases toward while its gate holds, from a curve of a driver's phase clamped to [0, 1], read as a driver's WeightBy reads one (null = 1). The driver it names owns the effector: the effector's layer share is that driver's share over every shape the effector writes (EffectorShare), and a driver with no Parts covers what its effectors write. Any declared driver may own one, since every driver advances before any effector solves.
      */
-    weightBy?: ShapeNullable37 | null;
+    weightBy?: ShapeNullable29 | null;
     /**
      * The exponential time constant the weight rises over, as a driver's (null = WeightSeconds; zero is immediate).
      */
@@ -2032,7 +2028,7 @@ export type CreationNoiseDocument = {
     /**
      * The region's shapes, at least one: geometry only (type, name, pose, scale, exponent, rounding), each a box, a sphere, an ellipsoid, a superellipsoid, a capsule scaled alike in X and Z or a plane (Lower). A relief's masks hold at most MaxRegions shapes in all.
      */
-    shapes: (ShapeNullable36 | null)[];
+    shapes: (ShapeNullable28 | null)[];
     /**
      * The band's width, in creation units, at least 2⁻¹²; snapped to a multiple of 2⁻¹² (SdfReliefBand).
      */
@@ -2817,9 +2813,9 @@ export type PaletteEntryDocument = {
    */
   flow?: PaletteFlowDocument | null;
   /**
-   * The authored presentation program and runtime parameters.
+   * The slot's shade program (ShadeReference), or null for the world's default.
    */
-  shade?: SdfShadeDefinition | null;
+  shade?: ShadeReference;
 };
 
 export type PaletteFlowDocument = {
@@ -2974,7 +2970,7 @@ export type PalettePaintDocument = {
   /**
    * Prism only: the cross-section; a path profile is refused.
    */
-  profile?: SdfPrismProfileNullable | null;
+  profile?: SdfPrismProfile | null;
   /**
    * Prism only: extrude or revolve.
    */
@@ -3032,7 +3028,7 @@ export type PaletteToonCaseDocument = {
   /**
    * The case's program, or null for none.
    */
-  shade?: SdfShadeDefinition | null;
+  shade?: ShadeReference;
 };
 
 export type PaletteToonSelectDocument = {
@@ -3323,16 +3319,16 @@ export type SdfLift = "Revolve" | "Extrude";
  */
 export type SdfPathContour = {
   start: [number, number];
-  segments: (SdfPathSegment | null)[];
+  segments: SdfPathSegment[];
   closed?: boolean;
 };
 
 /**
  * A continuous contour. Filled contours close implicitly; stroked contours remain open unless Closed.
  */
-export type SdfPathContourNonNullable = {
+export type SdfPathContourNullable = {
   start: [number, number];
-  segments: SdfPathSegmentNonNullable[];
+  segments: (SdfPathSegmentNullable | null)[];
   closed?: boolean;
 };
 
@@ -3340,7 +3336,7 @@ export type SdfPathContourNonNullable = {
  * A bounded presentation profile. Filled contours use even/odd fill, including holes. Curves are flattened once at composition, with a local-space geometric error at most Tolerance (apart from floating-point rounding). Strokes approximate the union of disks along the curve, including their varying radius, to the same tolerance. The emitted polygon/rounded-segment field is 1-Lipschitz; no margin moves its zero surface. At most 128 edges are emitted; exceeding that budget refuses instead of silently relaxing the requested tolerance.
  */
 export type SdfPathProfile = {
-  contours: (SdfPathContour | null)[];
+  contours: SdfPathContour[];
   tolerance?: number;
   stroke?: SdfPathStroke | null;
   shear?: SdfPathShear | null;
@@ -3350,7 +3346,7 @@ export type SdfPathProfile = {
  * A bounded presentation profile. Filled contours use even/odd fill, including holes. Curves are flattened once at composition, with a local-space geometric error at most Tolerance (apart from floating-point rounding). Strokes approximate the union of disks along the curve, including their varying radius, to the same tolerance. The emitted polygon/rounded-segment field is 1-Lipschitz; no margin moves its zero surface. At most 128 edges are emitted; exceeding that budget refuses instead of silently relaxing the requested tolerance.
  */
 export type SdfPathProfileNullable = {
-  contours: SdfPathContourNonNullable[];
+  contours: (SdfPathContourNullable | null)[];
   tolerance?: number;
   stroke?: SdfPathStroke | null;
   shear?: SdfPathShear | null;
@@ -3370,7 +3366,7 @@ export type SdfPathSegment = {
 /**
  * A line, quadratic/cubic Bezier, or circular arc ending at End. An arc uses ArcCenter and Clockwise; Beziers use Control and optionally Control2. Controls are in the profile's local XY frame.
  */
-export type SdfPathSegmentNonNullable = {
+export type SdfPathSegmentNullable = {
   end: [number, number];
   control?: [number, number];
   control2?: [number, number];
@@ -3452,7 +3448,7 @@ export type SdfPrismProfileNullable = {
   /**
    * Convex only: 3 to MaxConvexVertices local XY points, clockwise (X right, Y up — each turn's 2D cross product of consecutive edges strictly negative), no coincident or collinear vertices, and convex. Ignored by every other kind.
    */
-  vertices?: Vector2List | null;
+  vertices?: [number, number][] | null;
   /**
    * Required only for Path; its points are normalized profile coordinates.
    */
@@ -3464,9 +3460,9 @@ export type SdfPrismProfileNullable = {
  */
 export type SdfShadeDefinition = {
   name: string;
-  parameters: SdfShadeParameterList;
-  outputs: SdfShadeOutputList;
-  values?: SdfShadeValueList | null;
+  parameters: SdfShadeParameter[];
+  outputs: SdfShadeOutput[];
+  values?: SdfShadeValue[] | null;
 };
 
 export type SdfShadeDefinitionVariant2 = {
@@ -3503,9 +3499,9 @@ export type SdfShadeExpression = {
   shape?: SdfShadeShape | null;
 };
 
-export type SdfShadeExpressionList = (SdfShadeExpression | null)[];
+export type SdfShadeExpressionList = SdfShadeExpression[];
 
-export type SdfShadeExpressionListNullable = SdfShadeExpressionNonNullable2[];
+export type SdfShadeExpressionListNullable = (SdfShadeExpressionNullable | null)[];
 
 /**
  * An expression supplied to shade admission, never executable words. The compiler validates every field.
@@ -3540,7 +3536,7 @@ export type SdfShadeExpressionNonNullable = {
 /**
  * An expression supplied to shade admission, never executable words. The compiler validates every field.
  */
-export type SdfShadeExpressionNonNullable2 = {
+export type SdfShadeExpressionNullable = {
   /**
    * An op-table spelling, or constant, parameter, or input.
    */
@@ -3573,8 +3569,6 @@ export type SdfShadeOutput = {
   value: SdfShadeExpressionNonNullable;
 };
 
-export type SdfShadeOutputList = SdfShadeOutput[];
-
 /**
  * A runtime slot's type and initial data. Names bind source references and do not enter program identity.
  */
@@ -3583,8 +3577,6 @@ export type SdfShadeParameter = {
   type: SdfShadeType;
   bits: number[];
 };
-
-export type SdfShadeParameterList = SdfShadeParameter[];
 
 /**
  * The three entry points of a material's presentation program.
@@ -3639,8 +3631,6 @@ export type SdfShadeValue = {
   value: SdfShadeExpressionNonNullable;
 };
 
-export type SdfShadeValueList = SdfShadeValue[];
-
 /**
  * The solid primitive vocabulary — the shapes carrying a unit-size law (SdfSolidGeometry), a finite local bound, and one rigid-copy spelling every consumer reads the same way: the renderer emitting a program, the contact field evaluating one, and an analytic collider compiler reading world-axis extents off it.
  */
@@ -3688,6 +3678,11 @@ export type SdfSweepParameters = {
 export type SearchMethod = "Negamax" | "MonteCarlo";
 
 export type SeatActivationPolicy = "Eager" | "OnDemand";
+
+/**
+ * A shade program a document uses (a palette row's, a look case's or the world's default): the program's identity, and the program once the document's table has supplied it. The identity is computed from the program's canonical bytes (KeyOf), never authored, so every use of one program names one row of the world's shades table and a program used by many creations is held, written and compiled once.
+ */
+export type ShadeReference = string | SdfShadeDefinition;
 
 export type ShadowTier = "Off" | "Low" | "Medium" | "High";
 
@@ -3950,65 +3945,7 @@ export type ShapeNonNullable50 = "Sphere" | "Box" | "Torus" | "Cylinder" | "Caps
 
 export type ShapeNonNullable51 = "Trapezoid" | "RoundedRectangle" | "Polygon" | "Ellipse" | "ChamferedRectangle" | "Convex" | "Path";
 
-export type ShapeNonNullable52 = "Float" | "Float2" | "Float3" | "Float4" | "UInt" | "UInt3";
-
-export type ShapeNonNullable53 = "Revolve" | "Extrude";
-
-export type ShapeNonNullable54 = {
-  /**
-   * An op-table spelling, or constant, parameter, or input.
-   */
-  op: string;
-  /**
-   * The expression's operands.
-   */
-  arguments?: (ShapeNullable14 | null)[] | null;
-  /**
-   * A stamp member or runtime parameter name.
-   */
-  name?: string | null;
-  /**
-   * The type of a literal, validated against its bits.
-   */
-  type?: ShapeNonNullable52;
-  /**
-   * 32-bit literal components; integer components are never float converted.
-   */
-  bits?: number[] | null;
-  /**
-   * The structural descriptor of a shape operation.
-   */
-  shape?: ShapeNullable13 | null;
-};
-
-export type ShapeNonNullable55 = {
-  /**
-   * An op-table spelling, or constant, parameter, or input.
-   */
-  op: string;
-  /**
-   * The expression's operands.
-   */
-  arguments?: (ShapeNullable17 | null)[] | null;
-  /**
-   * A stamp member or runtime parameter name.
-   */
-  name?: string | null;
-  /**
-   * The type of a literal, validated against its bits.
-   */
-  type?: ShapeNonNullable52;
-  /**
-   * 32-bit literal components; integer components are never float converted.
-   */
-  bits?: number[] | null;
-  /**
-   * The structural descriptor of a shape operation.
-   */
-  shape?: ShapeNullable13 | null;
-};
-
-export type ShapeNonNullable56 = {
+export type ShapeNonNullable52 = {
   $type?: "symmetry";
   /**
    * The plane normal, in the shape's creation-space frame (normalized at canonicalization; a zero/non-finite normal falls back to UnitX — the retired Mirror: true flag's exact fold).
@@ -4020,7 +3957,7 @@ export type ShapeNonNullable56 = {
   offset?: number | null;
 };
 
-export type ShapeNonNullable57 = {
+export type ShapeNonNullable53 = {
   $type?: "repeat";
   /**
    * The per-axis cell spacing, creation units (clamped to >= 0.001 per axis, matching the builder's own floor).
@@ -4040,7 +3977,7 @@ export type ShapeNonNullable57 = {
   isUnbounded?: boolean;
 };
 
-export type ShapeNonNullable58 = {
+export type ShapeNonNullable54 = {
   $type?: "polar";
   /**
    * The sector count around the axis (clamped >= 1).
@@ -4049,7 +3986,7 @@ export type ShapeNonNullable58 = {
   /**
    * The rotation axis (null = Y, the XZ ground plane).
    */
-  axis?: ShapeNullable20 | null;
+  axis?: ShapeNullable12 | null;
   /**
    * Whether adjacent sectors mirror across their shared bisector (null = false).
    */
@@ -4064,20 +4001,14 @@ export type ShapeNonNullable58 = {
   origin?: unknown;
 };
 
-export type ShapeNonNullable59 = "P1" | "P2" | "Pm" | "Pg" | "Cm" | "Pmm" | "Pmg" | "Pgg" | "Cmm" | "P4" | "P4M" | "P4G" | "P3" | "P3M1" | "P31M" | "P6" | "P6M";
+export type ShapeNonNullable55 = "P1" | "P2" | "Pm" | "Pg" | "Cm" | "Pmm" | "Pmg" | "Pgg" | "Cmm" | "P4" | "P4M" | "P4G" | "P3" | "P3M1" | "P31M" | "P6" | "P6M";
 
-export type ShapeNonNullable6 = {
-  at: number;
-  value: [number, number];
-  ease?: "Linear" | "Smooth" | "Step";
-};
-
-export type ShapeNonNullable60 = {
+export type ShapeNonNullable56 = {
   $type?: "wallpaper";
   /**
    * The wallpaper group: one whose fold is continuous (PMM, P4M, P3M1, P6M; see IsContinuous). A program refuses any other group by name when it builds.
    */
-  group: ShapeNonNullable59;
+  group: ShapeNonNullable55;
   /**
    * The lattice cell extents in the fold plane, creation units.
    */
@@ -4089,14 +4020,14 @@ export type ShapeNonNullable60 = {
   /**
    * The fold plane (null = XZ).
    */
-  plane?: ShapeNullable21 | null;
+  plane?: ShapeNullable13 | null;
   /**
    * The parity-material stride (null = 0, geometric only).
    */
   materialStride?: number | null;
 };
 
-export type ShapeNonNullable61 = {
+export type ShapeNonNullable57 = {
   $type?: "jitter";
   /**
    * The per-axis cell spacing, creation units (clamped to at least 0.001 per axis).
@@ -4121,14 +4052,14 @@ export type ShapeNonNullable61 = {
   /**
    * How the displacement is distributed over the cell (null = White).
    */
-  flavor?: ShapeNullable22 | null;
+  flavor?: ShapeNullable14 | null;
   /**
    * The point the lattice folds around, creation units (null = the creation origin).
    */
   origin?: unknown;
 };
 
-export type ShapeNonNullable62 = {
+export type ShapeNonNullable58 = {
   $type?: "logSphere";
   /**
    * The ratio between neighbouring shells' radii, above 1 (clamped to at least MinShellRatio).
@@ -4144,9 +4075,15 @@ export type ShapeNonNullable62 = {
   origin?: unknown;
 };
 
-export type ShapeNonNullable63 = number | string | boolean;
+export type ShapeNonNullable59 = number | string | boolean;
 
-export type ShapeNonNullable64 = {
+export type ShapeNonNullable6 = {
+  at: number;
+  value: [number, number];
+  ease?: "Linear" | "Smooth" | "Step";
+};
+
+export type ShapeNonNullable60 = {
   epochTick?: number;
   epochEngineTick?: number;
   y0?: string;
@@ -4195,152 +4132,17 @@ export type ShapeNullable10 = {
   outlineTint?: unknown;
 };
 
-export type ShapeNullable11 = {
-  name: string;
-  type: ShapeNonNullable52;
-  bits: number[];
-};
+export type ShapeNullable11 = "Union" | "SmoothUnion" | "Subtraction" | "Intersection" | "Xor" | "SmoothIntersection" | "SmoothSubtraction" | "ChamferUnion" | "ChamferIntersection" | "ChamferSubtraction" | "GrooveUnion" | "PipeUnion" | "Morph" | "GrooveSubtraction" | "PipeSubtraction" | "StairsUnion" | "StairsSubtraction";
 
-export type ShapeNullable12 = {
-  /**
-   * The curve's first control point, in creation units.
-   */
-  a?: [number, number, number];
-  /**
-   * The curve's middle control point.
-   */
-  b?: [number, number, number];
-  /**
-   * The curve's last control point.
-   */
-  c?: [number, number, number];
-  /**
-   * The sweep radius at t = 0.
-   */
-  radiusStart?: number;
-  /**
-   * The sweep radius at t = 1.
-   */
-  radiusEnd?: number;
-  /**
-   * The mid-span radius bulge amplitude.
-   */
-  bulge?: number;
-  /**
-   * The strand count, 1..MaxSweepStrands.
-   */
-  strands?: number;
-  /**
-   * The strand orbit rate, in turns along the curve.
-   */
-  twist?: number;
-  /**
-   * The strand orbit radius, in creation units.
-   */
-  strandOffset?: number;
-};
+export type ShapeNullable12 = "X" | "Y" | "Z";
 
-export type ShapeNullable13 = {
-  type: ShapeNonNullable50;
-  x?: number;
-  y?: number;
-  z?: number;
-  taper?: number;
-  profile?: ShapeNullable7 | null;
-  lift?: ShapeNonNullable53;
-  rounding?: number;
-  chamfer?: number;
-  exponent?: number;
-  curve?: ShapeNullable12 | null;
-};
+export type ShapeNullable13 = "XZ" | "XY" | "YZ";
 
-export type ShapeNullable14 = {
-  /**
-   * An op-table spelling, or constant, parameter, or input.
-   */
-  op: string;
-  /**
-   * The expression's operands.
-   */
-  arguments?: ShapeNullable15 | null;
-  /**
-   * A stamp member or runtime parameter name.
-   */
-  name?: string | null;
-  /**
-   * The type of a literal, validated against its bits.
-   */
-  type?: ShapeNonNullable52;
-  /**
-   * 32-bit literal components; integer components are never float converted.
-   */
-  bits?: number[] | null;
-  /**
-   * The structural descriptor of a shape operation.
-   */
-  shape?: ShapeNullable13 | null;
-};
+export type ShapeNullable14 = "White" | "Blue" | "Gaussian";
 
-export type ShapeNullable15 = (ShapeNullable14 | null)[];
+export type ShapeNullable15 = ShapeNonNullable52 | ShapeNonNullable53 | ShapeNonNullable54 | ShapeNonNullable56 | ShapeNonNullable57 | ShapeNonNullable58 | null;
 
 export type ShapeNullable16 = {
-  phase: "Surface" | "Light" | "Compose";
-  name: string;
-  value: ShapeNonNullable54;
-};
-
-export type ShapeNullable17 = {
-  /**
-   * An op-table spelling, or constant, parameter, or input.
-   */
-  op: string;
-  /**
-   * The expression's operands.
-   */
-  arguments?: (ShapeNullable14 | null)[] | null;
-  /**
-   * A stamp member or runtime parameter name.
-   */
-  name?: string | null;
-  /**
-   * The type of a literal, validated against its bits.
-   */
-  type?: ShapeNonNullable52;
-  /**
-   * 32-bit literal components; integer components are never float converted.
-   */
-  bits?: number[] | null;
-  /**
-   * The structural descriptor of a shape operation.
-   */
-  shape?: ShapeNullable13 | null;
-};
-
-export type ShapeNullable18 = {
-  phase: "Surface" | "Light" | "Compose";
-  name: string;
-  value: ShapeNonNullable55;
-};
-
-export type ShapeNullable19 = "Union" | "SmoothUnion" | "Subtraction" | "Intersection" | "Xor" | "SmoothIntersection" | "SmoothSubtraction" | "ChamferUnion" | "ChamferIntersection" | "ChamferSubtraction" | "GrooveUnion" | "PipeUnion" | "Morph" | "GrooveSubtraction" | "PipeSubtraction" | "StairsUnion" | "StairsSubtraction";
-
-export type ShapeNullable2 = {
-  end: [number, number];
-  control?: unknown;
-  control2?: unknown;
-  arcCenter?: unknown;
-  clockwise?: boolean;
-};
-
-export type ShapeNullable20 = "X" | "Y" | "Z";
-
-export type ShapeNullable21 = "XZ" | "XY" | "YZ";
-
-export type ShapeNullable22 = "White" | "Blue" | "Gaussian";
-
-export type ShapeNullable23 = ShapeNonNullable56 | ShapeNonNullable57 | ShapeNonNullable58 | ShapeNonNullable60 | ShapeNonNullable61 | ShapeNonNullable62 | null;
-
-export type ShapeNullable24 = {
   /**
    * The Name supplying (φ, w). An unresolvable name is refused at canonicalization.
    */
@@ -4367,7 +4169,7 @@ export type ShapeNullable24 = {
   wave?: string | null;
 };
 
-export type ShapeNullable25 = {
+export type ShapeNullable17 = {
   /**
    * The Name supplying (φ, w). An unresolvable name is refused at canonicalization.
    */
@@ -4390,7 +4192,7 @@ export type ShapeNullable25 = {
   wave?: string | null;
 };
 
-export type ShapeNullable26 = {
+export type ShapeNullable18 = {
   /**
    * How far the panel copy shrinks on every local axis before it is placed — the copy's own scale is shape scale − Inset per axis (floored at MinimumScale), a sharp-cornered shrink rather than a rounded Minkowski erosion. The panel recipe changes the copy's primitive dimensions rather than applying Dilate to its field. Creation units. Finite and non-negative; refused by name past the shape's smallest local half-extent (the smallest of HalfExtent over the X, Y, and Z local axes) — past that the eroded copy is empty everywhere.
    */
@@ -4409,7 +4211,7 @@ export type ShapeNullable26 = {
   face?: unknown;
 };
 
-export type ShapeNullable27 = {
+export type ShapeNullable19 = {
   /**
    * The Name of another shape in the same creation, declared EARLIER in shapes (so a chain resolves in one pass and can never cycle — mirrors Parent's own rule). A Subtraction cutter riding the host's own Group is the common case; a plain plane-like Box with blend Union works too. Only the reference's own primitive geometry (type, scale, taper, profile, lift, rounding, chamfer) and pose are re-read; its own blend, domain, panel, and trims play no part in the band.
    */
@@ -4428,7 +4230,15 @@ export type ShapeNullable27 = {
   inset?: number;
 };
 
-export type ShapeNullable28 = {
+export type ShapeNullable2 = {
+  end: [number, number];
+  control?: unknown;
+  control2?: unknown;
+  arcCenter?: unknown;
+  clockwise?: boolean;
+};
+
+export type ShapeNullable20 = {
   /**
    * The linear flare rate at the far end of the span (dimensionless; s(1) = StartScale + Amount). Clamped to [MinAmount, MaxAmount].
    */
@@ -4455,7 +4265,7 @@ export type ShapeNullable28 = {
   startScale?: number;
 };
 
-export type ShapeNullable29 = {
+export type ShapeNullable21 = {
   /**
    * The bump's local center, in creation units.
    */
@@ -4470,13 +4280,7 @@ export type ShapeNullable29 = {
   push: unknown;
 };
 
-export type ShapeNullable3 = {
-  start: [number, number];
-  segments: (ShapeNullable2 | null)[];
-  closed?: boolean;
-};
-
-export type ShapeNullable30 = {
+export type ShapeNullable22 = {
   linear: number;
   quadratic?: number;
   cubic?: number;
@@ -4484,7 +4288,7 @@ export type ShapeNullable30 = {
   driver?: number;
 };
 
-export type ShapeNullable31 = {
+export type ShapeNullable23 = {
   /**
    * Which dynamic-slot lane drives the erosion.
    */
@@ -4503,7 +4307,7 @@ export type ShapeNullable31 = {
   noise?: number | null;
 };
 
-export type ShapeNullable32 = {
+export type ShapeNullable24 = {
   frequency: number;
   amplitude: number;
   seed: number;
@@ -4511,7 +4315,7 @@ export type ShapeNullable32 = {
   randomness: number;
 };
 
-export type ShapeNullable33 = {
+export type ShapeNullable25 = {
   /**
    * The per-axis angular frequency, radians per creation unit (each clamped to [-MaxFrequency, MaxFrequency]).
    */
@@ -4526,7 +4330,7 @@ export type ShapeNullable33 = {
   reach?: number;
 };
 
-export type ShapeNullable34 = {
+export type ShapeNullable26 = {
   /**
    * The per-axis angular frequency, radians per creation unit (each clamped to [-MaxFrequency, MaxFrequency]).
    */
@@ -4541,7 +4345,7 @@ export type ShapeNullable34 = {
   reach?: number;
 };
 
-export type ShapeNullable35 = {
+export type ShapeNullable27 = {
   /**
    * Which dynamic-slot lane drives the morph, in [0, 3].
    */
@@ -4556,7 +4360,7 @@ export type ShapeNullable35 = {
   to: number;
 };
 
-export type ShapeNullable36 = {
+export type ShapeNullable28 = {
   /**
    * The shape's stable id.
    */
@@ -4588,7 +4392,7 @@ export type ShapeNullable36 = {
   /**
    * The blend op name (null = Union).
    */
-  blend?: ShapeNullable19 | null;
+  blend?: ShapeNullable11 | null;
   /**
    * The smooth-blend radius (null = 0).
    */
@@ -4616,15 +4420,15 @@ export type ShapeNullable36 = {
   /**
    * The ordered SDF VM domain operators (ShapeDomainOp) applied to the shape's point in creation space, before its own translate/rotate/scale (null = none). Every op the copy expansion covers reaches contact as well as render; wallpaper does not expand, and a solid placement carrying one is refused at validation.
    */
-  domain?: (ShapeNullable23 | null)[] | null;
+  domain?: (ShapeNullable15 | null)[] | null;
   /**
    * The driver-fed rotations this shape rides (ShapeSwingDocument), any number (null = none), composed in the order written.
    */
-  swings?: (ShapeNullable24 | null)[] | null;
+  swings?: (ShapeNullable16 | null)[] | null;
   /**
    * The driver-fed translations this shape rides (ShapeSlideDocument), any number (null = none). Applied after every swing, along the authored axis. Both facets are presentation-only — composed onto the shape's per-frame dynamic transform and read nowhere else, so the SDF program, the colliders, the solid field, and simulation state are all blind to them. A shape carrying Domain rides its own slot packed with its Parent chain's rigid delta (the identity with no parent), leaving nowhere for its OWN swing/slide to compose, so they are refused alongside a domain list at validation.
    */
-  slides?: (ShapeNullable25 | null)[] | null;
+  slides?: (ShapeNullable17 | null)[] | null;
   /**
    * The Name of the shape this one hangs from (null = the creation root): the parent's animated motion carries this shape and its own pivots with it, so a forearm swung at the elbow also rides the upper arm's swing at the shoulder. The parent must be declared earlier in shapes (so a chain resolves in one pass and can never cycle); presentation-only on the same terms as the swings it composes with.
    */
@@ -4652,7 +4456,7 @@ export type ShapeNullable36 = {
   /**
    * The shape's second-material inset face region (null = none) — see ShapePanelDocument. Render-only; refused by name on a Plane, on a shape carrying Domain ops or a non-zero Group, and on a creation that otherwise needs its own field scope.
    */
-  panel?: ShapeNullable26 | null;
+  panel?: ShapeNullable18 | null;
   /**
    * Only for Box, Cylinder and Prism (an extruded prism only — a revolve has no cap seam to bevel): the 45-degree edge-chamfer radius in the creation's own units, finite and non-negative. Refused by name past MaxChamfer, and refused by name alongside a nonzero Rounding on the same shape.
    */
@@ -4660,7 +4464,7 @@ export type ShapeNullable36 = {
   /**
    * The shape's second-material surface bands against other, earlier-declared shapes (null = none), at most MaxTrims — see ShapeTrimDocument. Render-only, like Panel; refused by name on a shape carrying Domain ops, a non-zero Group, or on a creation that otherwise needs its own field scope.
    */
-  trims?: (ShapeNullable27 | null)[] | null;
+  trims?: (ShapeNullable19 | null)[] | null;
   /**
    * Whether this shape is a detail shape (null = false): excluded from contact (it never carves the contact field or the collider) while the baked frame samples it like any other shape, so a seam (a thin subtraction) or a rivet (a small union, its own material) bakes into the mesh and paints its footprint through the bake's point-sampled materials. Refused by name alongside Panel or Trims on the same shape.
    */
@@ -4668,7 +4472,7 @@ export type ShapeNullable36 = {
   /**
    * The shape's radial flare warp (null = none) — see ShapeFlareDocument. Admitted on every primitive; applies to the shape's own local point after Twist/Bend, in that order (twist, then bend, then flare), before the primitive's own scale. Render-only, like Twist/Bend.
    */
-  flare?: ShapeNullable28 | null;
+  flare?: ShapeNullable20 | null;
   /**
    * Only for Superellipsoid: the generalizing exponent, finite in [MinSuperellipsoidExponent, MaxSuperellipsoidExponent] (null = MinSuperellipsoidExponent, the ellipsoid limit — an unauthored Superellipsoid is a plain ellipsoid).
    */
@@ -4676,11 +4480,11 @@ export type ShapeNullable36 = {
   /**
    * The shape's Gaussian domain-push bumps (null = none), at most MaxBumps — see ShapeBumpDocument. Applied to the shape's own local point after Shear, before the primitive's own scale. Render-only, like Twist/Bend/Flare.
    */
-  bumps?: (ShapeNullable29 | null)[] | null;
+  bumps?: (ShapeNullable21 | null)[] | null;
   /**
    * A polynomial point shear with explicit target and driver axes.
    */
-  shear?: ShapeNullable30 | null;
+  shear?: ShapeNullable22 | null;
   /**
    * The shape's swept-curve geometry (null = none) — see ShapeCurveDocument. Admitted only, and required, on Sweep (refused elsewhere, by name; a Sweep with no curve is refused, by name); refused alongside Panel, Trims, Flare, Shear, Bumps, or Domain on the same shape.
    */
@@ -4688,19 +4492,19 @@ export type ShapeNullable36 = {
   /**
    * The shape's per-instance lane-driven erosion (null = none) — see ShapeErodeDocument. Admitted on every primitive; its reach is this shape's own Reach, so it needs no separate authored magnitude.
    */
-  erode?: ShapeNullable31 | null;
+  erode?: ShapeNullable23 | null;
   /**
    * Shape-local cellular relief, evaluated after geometry within its own field scope.
    */
-  cells?: ShapeNullable32 | null;
+  cells?: ShapeNullable24 | null;
   /**
    * The shape's cross-coupled sinusoidal domain warp (null = none) — see ShapeWarpDocument. Applied to the shape's own local point after Bumps, before Elongate. Render-only.
    */
-  warp?: ShapeNullable33 | null;
+  warp?: ShapeNullable25 | null;
   /**
    * The shape's sine relief (null = none) — see ShapeDisplaceDocument. Added to the shape's own field inside its own scope. Render-only.
    */
-  displace?: ShapeNullable34 | null;
+  displace?: ShapeNullable26 | null;
   /**
    * The half-extents the primitive's cross-section is swept over, creation units (null = none): Elongate, the capsule-from-sphere operator, applied last to the shape's own local point. Each component is clamped to [0, MaxElongate]. Render-only.
    */
@@ -4712,10 +4516,10 @@ export type ShapeNullable36 = {
   /**
    * Only with a MorphBlend, and required by it: the lane and range the morph runs over — see ShapeMorphDocument.
    */
-  morph?: ShapeNullable35 | null;
+  morph?: ShapeNullable27 | null;
 };
 
-export type ShapeNullable37 = {
+export type ShapeNullable29 = {
   /**
    * A driver declared before the one this curve modulates.
    */
@@ -4724,6 +4528,12 @@ export type ShapeNullable37 = {
    * The world's curves row: open and drawn left to right, each knot further along X than the last with its tangent pointing toward +X. The world validator refuses a row that is not.
    */
   curve: string;
+};
+
+export type ShapeNullable3 = {
+  start: [number, number];
+  segments: (ShapeNullable2 | null)[];
+  closed?: boolean;
 };
 
 export type ShapeNullable4 = {
@@ -5686,8 +5496,6 @@ export type TopologyElementAlias = {
 };
 
 export type TopologyWrap = "None" | "X" | "Y" | "Both";
-
-export type Vector2List = [number, number][];
 
 /**
  * One term of a Mix: a vector operand with an integer weight.
@@ -11278,7 +11086,7 @@ export type WorldRenderDefaults = {
   /**
    * The default shading program inherited by materials without their own.
    */
-  shade?: SdfShadeDefinitionVariant2 | null;
+  shade?: ShadeReference;
   /**
    * The world's device profiles (WorldDeviceProfile): for each graphics device, the quality table it runs and the memory it may use. The engine selects one by the adapter it runs on and by name (world.device-profile). Absent authors none, and no cap applies.
    */
@@ -11411,7 +11219,7 @@ export type WorldRenderIndirect = {
    */
   tier?: SdfIndirectTier;
   /**
-   * The irradiance work each frame grants the volume and the lighting age it reports past; absent bounds nothing.
+   * The irradiance work each second grants the volume and the lighting age it reports past; absent bounds nothing.
    */
   budget?: WorldRenderIndirectBudget | null;
   /**
@@ -11437,13 +11245,13 @@ export type WorldRenderIndirectApply = {
 
 export type WorldRenderIndirectBudget = {
   /**
-   * The probes relit per frame, at least one.
+   * The probes relit each second, at least one.
    */
-  relight?: number | null;
+  relightPerSecond?: number | null;
   /**
-   * The probes whose hits are traced per frame, at least one.
+   * The probes whose hits are traced each second, at least one.
    */
-  trace?: number | null;
+  tracePerSecond?: number | null;
   /**
    * The lighting age, in seconds, past which the volume reports it is behind; positive.
    */
@@ -14172,13 +13980,13 @@ export type WorldStateRow = {
    * The closed set of cell value kinds a state row declares, shared by every cell the row carries. Carries no float kind: simulation state is float-free by the determinism contract (see Fixed for how a fractional value still rides here). A counter is represented as Fixed; a timer is Int declaring min zero.
    */
   kind: "Int" | "Fixed" | "Bool" | "Text" | "Vector";
-  value?: ShapeNonNullable63;
+  value?: ShapeNonNullable59;
   /**
    * The row's current cells (default empty). Refused past its effective capacity, and on a duplicate key, by name — unless Evicts is set, in which case a write that would grow past capacity evicts the oldest cell instead of refusing (see Evicts). A slot-shaped row (see IsSlot) holds exactly one cell keyed SlotKey; a keyed row may hold any author-chosen keys except SlotKey itself, which is reserved for the value sugar and refused as an authored cell key.
    */
   cells?: {
     key: string;
-    value: ShapeNonNullable63;
+    value: ShapeNonNullable59;
     advance?: StateAdvance;
     dynamics?: StateDynamics;
     cycle?: StateCycle;
@@ -14186,7 +13994,7 @@ export type WorldStateRow = {
      * Whether a cell's effective value-over-time behavior is its carrying row's own default, or an explicit opt-out — see Behavior and Resolve.
      */
     behavior?: "Inherit" | "None";
-    clock?: ShapeNonNullable64;
+    clock?: ShapeNonNullable60;
     visibility?: StateVisibility;
     /**
      * When a stored token property was last seen and whether the latest observation still sees it.
@@ -14326,7 +14134,7 @@ export type WorldStateRow = {
   };
   dynamics?: StateDynamics;
   cycle?: StateCycle;
-  clock?: ShapeNonNullable64;
+  clock?: ShapeNonNullable60;
   /**
    * The vector space name.
    */

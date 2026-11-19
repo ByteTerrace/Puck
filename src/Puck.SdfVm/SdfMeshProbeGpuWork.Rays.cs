@@ -131,9 +131,8 @@ internal sealed partial class SdfMeshProbeGpuWork {
     }
 
     // Takes the next structure job the published scene owes, one at a time: the bottoms its geometries lack, cut to
-    // background work's share of a frame by the measured rate; then their compaction; then the top level over its draws.
-    // Under the gate.
-    private bool TryTakeStructures(SdfWorldTables tables, [NotNullWhen(true)] out object? job, out double estimatedSeconds) {
+    // the allowance by the measured rate; then their compaction; then the top level over its draws. Under the gate.
+    private bool TryTakeStructures(SdfWorldTables tables, double allowanceSeconds, [NotNullWhen(true)] out object? job, out double estimatedSeconds) {
         job = null;
         estimatedSeconds = 0;
         if (m_structures is null) { return false; }
@@ -149,7 +148,7 @@ internal sealed partial class SdfMeshProbeGpuWork {
 
         var build = new List<(Bottom Bottom, SdfMesh Mesh)>();
         var compact = new List<Bottom>();
-        var most = Math.Max(val1: 1L, val2: m_structureRate.UnitsWithin(most: long.MaxValue, seconds: SdfGpuWork.FrameShareSeconds));
+        var most = Math.Max(val1: 1L, val2: m_structureRate.UnitsWithin(most: long.MaxValue, seconds: allowanceSeconds));
         var units = 0L;
         var ready = true;
 

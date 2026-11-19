@@ -97,8 +97,6 @@ internal sealed class SdfGlassRecorder : IRenderGraphPackageRecorder, IRenderGra
         m_shadePlan.Record(in recording, pipeline);
         return RenderGraphPackageOutcome.Drew;
     }
-    public void Submitted() {
-    }
     public ulong ReadbackBytes => 0;
     public bool TryReadback(int slot, int index, out RenderGraphBufferReadback readback) { readback = default; return false; }
     public void Submitted(int slot) => m_shade.Submitted(slot: slot);

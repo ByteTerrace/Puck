@@ -130,7 +130,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
     private readonly IGpuBuffer?[][] m_occlusionSetBuffers = [];
     private readonly nint[] m_occlusionSetTargets = [];
     // Whether each instance of the mesh part's or a cascade's target has been drawn or cleared once, and for a cascade
-    // whether that instance's exit layer has too: a layer drawn in no frame of this graph has no contents.
+    // whether that instance's exit layer has too: a layer drawn in no submitted frame of this graph has no contents.
     private readonly bool[] m_targetsWritten = [];
     private readonly bool[] m_exitsWritten = [];
     // Whether each instance's target, and a cascade's exit layer, last recorded a frame holding none of the part's draws,
@@ -138,9 +138,11 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
     private readonly bool[] m_targetsClear = [];
     private readonly bool[] m_exitsClear = [];
 
-    // What the latest recording writes into its target instance's layers (null for a layer it leaves), which the
-    // instance holds once that recording is submitted (Submitted): an abandoned recording changes no target.
-    private (int Index, bool? Depth, bool? Exit)? m_recordedClear;
+    // The layers the latest recording writes into its target instance (null for a layer it leaves), each with whether
+    // it writes the clear of a frame holding none of the part's draws. Only Submitted applies it to the four arrays
+    // above, and the node calls Submitted only once the recording's submission reached the queue, so a recording whose
+    // submission never ran marks no layer written or clear.
+    private (int Index, bool? Depth, bool? Exit)? m_recordedLayers;
     private bool m_disposed;
     // What made the latest views render read external content, or null when nothing did.
     private string? m_sourceTaint;
@@ -515,10 +517,10 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
 
     public void Submitted() {
         m_notedMeshRows = false;
-        if (m_recordedClear is { } recorded) {
-            if (recorded.Depth is { } depth) { m_targetsClear[recorded.Index] = depth; }
-            if (recorded.Exit is { } exit) { m_exitsClear[recorded.Index] = exit; }
-            m_recordedClear = null;
+        if (m_recordedLayers is { } recorded) {
+            if (recorded.Depth is { } depth) { m_targetsWritten[recorded.Index] = true; m_targetsClear[recorded.Index] = depth; }
+            if (recorded.Exit is { } exit) { m_exitsWritten[recorded.Index] = true; m_exitsClear[recorded.Index] = exit; }
+            m_recordedLayers = null;
         }
         if (m_part == SdfWorldPackage.Parts.ShadowFar) {
             m_owner.SubmittedFar(instance: m_context.Instance);
@@ -532,7 +534,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         if ((m_part == SdfWorldPackage.Parts.Views) && !m_resolved) { m_owner.MarkSampleRendered(instance: m_context.Instance); }
     }
     public RenderGraphPackageOutcome Record(in RenderGraphPackageRecording recording) {
-        m_recordedClear = null;
+        m_recordedLayers = null;
         Follow();
 
         var residency = m_view.Residency;
@@ -939,9 +941,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
                 framebuffer = m_framebuffers[index];
                 lateFramebuffer = ((m_lateFramebuffers.Length > 0) ? m_lateFramebuffers[index] : null);
                 entryLateFramebuffer = ((m_entryLateFramebuffers.Length > 0) ? m_entryLateFramebuffers[index] : lateFramebuffer);
-                m_targetsWritten[index] |= drawsDepth;
-                m_exitsWritten[index] |= (IsShadowCascade && drawsExit);
-                m_recordedClear = (index, (drawsDepth ? (PartDrawCount(tables: tables) == 0) : null), ((IsShadowCascade && drawsExit) ? (PartDrawCount(tables: tables) == 0) : null));
+                m_recordedLayers = (index, (drawsDepth ? (PartDrawCount(tables: tables) == 0) : null), ((IsShadowCascade && drawsExit) ? (PartDrawCount(tables: tables) == 0) : null));
                 if (HasShadowOptical) { shadowGlassFramebuffer = m_shadowGlassFramebuffers[index]; }
             }
         }
@@ -1012,7 +1012,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
             }
         }
 
-        // A frame holding none of the part's draws certifies its target clear (m_recordedClear), so later empty frames
+        // A frame holding none of the part's draws certifies its target clear (m_recordedLayers), so later empty frames
         // skip: it clears the whole allocation, since the render grid can later grow within it and a render pass clears
         // only its area. A cascade covers its whole depth, whatever the view's render extent.
         var area = ((PartDrawCount(tables: tables) == 0)

@@ -68,6 +68,14 @@ public sealed class SdfMeshHistory {
     public static WorkKind DressBindingsVisited { get; } = Registry.Declare(name: "sdf.instances.dress.bindings-visited", unit: "count", workClass: WorkClass.Pacing);
     /// <summary>Counts object-to-world matrix constructions while dressing, before reuse by surfaces or chunks.</summary>
     public static WorkKind DressMatricesComputed { get; } = Registry.Declare(name: "sdf.instances.dress.matrices-computed", unit: "count", workClass: WorkClass.Pacing);
+    /// <summary>Counts bake groups a dress walked to reconcile their drawn meshes and copies; a dress whose bake
+    /// product and copy layout stand walks none.</summary>
+    public static WorkKind DressGroupsVisited { get; } = Registry.Declare(name: "sdf.instances.dress.groups-visited", unit: "count", workClass: WorkClass.Pacing);
+    /// <summary>Counts dresses that kept every group's rows because the bake's product and copy layout stood.</summary>
+    public static WorkKind DressGroupsStood { get; } = Registry.Declare(name: "sdf.instances.dress.groups-stood", unit: "count", workClass: WorkClass.Pacing);
+    /// <summary>Counts rigid copies the dresser and the bake read to find the copies that changed: every copy when the
+    /// copy journal cannot prove an incremental window, otherwise the journal's changed runs.</summary>
+    public static WorkKind DressCopiesVisited { get; } = Registry.Declare(name: "sdf.instances.dress.copies-visited", unit: "count", workClass: WorkClass.Pacing);
     /// <summary>Counts draw rows walked to refresh the staging owner's mesh claims.</summary>
     public static WorkKind StagingClaimRecords { get; } = Registry.Declare(name: "sdf.instances.staging.claim-records", unit: "count", workClass: WorkClass.Pacing);
     /// <summary>Counts draw rows submitted to the mesh placement planner.</summary>

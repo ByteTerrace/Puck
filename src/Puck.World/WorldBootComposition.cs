@@ -184,6 +184,7 @@ public static class WorldBootComposition {
         services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationInstance: WorldFieldQueryWork.Process);
         services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationInstance: Puck.SdfVm.SdfMeshHistory.ProcessWork);
         services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationInstance: Puck.SdfVm.SdfRowChecks.ProcessWork);
+        services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationInstance: Puck.SdfVm.SdfCaptureWork.ProcessWork);
 
         // The owned-world catalog (files under the state root; the storage.* verbs sync it to the per-user cloud
         // container): loaded once at startup, malformed documents refused by name — the roster and the settings verbs

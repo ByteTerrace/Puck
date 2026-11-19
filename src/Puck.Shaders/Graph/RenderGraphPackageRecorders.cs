@@ -135,9 +135,11 @@ public interface IRenderGraphPackageRecorder : IDisposable {
     /// <param name="recording">The frame's command buffer and bound versions.</param>
     /// <returns>Whether the recording wrote its outputs, or left each to stand for its input.</returns>
     RenderGraphPackageOutcome Record(in RenderGraphPackageRecording recording);
-    /// <summary>Commits package-owned history metadata after the frame's submission succeeds. Called only for a pass
-    /// that recorded, before any export handoff. Recording and submission failures, skipped passes and standing passes
-    /// call nothing. The default has no metadata to commit.</summary>
+    /// <summary>Commits package-owned history metadata once the frame's submission has reached the queue. Called only for
+    /// a pass that recorded, before its export handoff: when the frame commits, or, for a submission an open batch
+    /// defers, once that batch's hand-over has taken it, which may be after other instances of the frame have recorded
+    /// but always before this pass records again. Recording failures, a submission that never reaches the queue, skipped
+    /// passes and standing passes call nothing. The default has no metadata to commit.</summary>
     void Submitted() { }
     /// <summary>Notifies a pass that its retained outputs stood for this frame. No work or barriers were recorded.</summary>
     void Stood() { }
@@ -332,6 +334,15 @@ public interface IRenderGraphPackageFactory {
     /// whether an instance is unchanged and before any instance renders.</summary>
     /// <param name="context">The host's frame context of the frame being produced.</param>
     void BeginFrame(in FrameContext context) { }
+    /// <summary>Prepares what an instance one of whose passes runs the factory's package reads this frame (an SDF view's
+    /// captured and packed frame), before the runtime asks whether the instance is unchanged and before the frame is
+    /// scheduled. The runtime calls it on the frame thread once a frame for each instance something reads this frame (a
+    /// root, a same-frame footprint of a read consumer, a buffer or bound input of one), after
+    /// <see cref="BeginFrame"/>, in turn until preparing finds no new reader; an instance nothing reads is neither
+    /// prepared nor asked whether it is unchanged, since no schedule of the frame can render it.</summary>
+    /// <param name="instance">The instance something reads this frame.</param>
+    /// <param name="context">The host's frame context of the frame being produced.</param>
+    void PrepareRead(string instance, in FrameContext context) { }
     /// <summary>Prepares a scheduled render of an instance one of whose passes runs the factory's package: the frame's
     /// shared work its recording reads (an upload, a background pump), done once here so that no node's recording pays
     /// for it. The runtime calls it on the frame thread once the frame is scheduled, for every render the schedule
