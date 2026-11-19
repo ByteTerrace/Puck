@@ -1503,7 +1503,11 @@ play. When no written contract settles it, rule by the long-term principle in
 [AGENTS.md](../../../AGENTS.md#core-rules), write the ruling into the contract's
 owning document in the same change, and let the owner review it with the
 delivered batch; take it to the owner first only when it is a product
-trade-off. Change a test only to match the ruled behavior.
+trade-off. Change a test only to match the ruled behavior. Each lane passing
+its gates alone says nothing about the pair: the fix lands only once it is
+shown working on the merged code, built and run with the evidence the collision
+touches (`--reproduce` for a determinism contract, the allocation counters for
+an allocation law).
 
 ## Message partners
 
