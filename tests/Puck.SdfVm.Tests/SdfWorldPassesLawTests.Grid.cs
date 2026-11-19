@@ -35,8 +35,10 @@ public sealed partial class SdfWorldPassesLawTests {
         // A frame of the default lights holds one stable shadow slot, so the view runs no second slot's cascade.
         var passes = ((ceiling < 1f) ? ReconstructingPasses : NativePasses);
 
-        TestLiveness.Until(step: () => (view.Produce(context: in context) && (node.Plan!.Passes.Count == passes) && !node.IsBuildingCandidate),
-            reason: () => node.LastSwapError?.ToString(), wait: view.Residency.WaitPipelineBuilds);
+        // The irradiance volume's first lighting, which creates its GPU work's objects as it starts and lands in wall time,
+        // settles before the dip is measured.
+        TestLiveness.Until(step: () => (view.Produce(context: in context) && (node.Plan!.Passes.Count == passes) && !node.IsBuildingCandidate &&
+            !view.Residency.MeshIrradiance.Settling), reason: () => node.LastSwapError?.ToString(), wait: view.Residency.WaitPipelineBuilds);
         _ = view.Produce(context: in context);
         var buffers = gpu.BufferBytes;
         var pools = gpu.PoolsCreated.Count;

@@ -278,6 +278,7 @@ public sealed partial class SdfWorldPassesLawTests {
             .. ((lit && reduced) ? new[] { SdfWorldPackage.Resolve } : []), SdfWorldPackage.Parts.Sky, SdfWorldPackage.Parts.Composite, SdfWorldPackage.Display];
 
         Assert.Equal(expected: expected, actual: Executed(work: CadenceWork(rig: rig)));
+        rig.SettleLighting();
         rig.Produce();
         Assert.True(condition: rig.Stood());
     }

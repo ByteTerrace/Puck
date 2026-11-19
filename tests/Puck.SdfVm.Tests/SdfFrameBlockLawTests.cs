@@ -131,6 +131,7 @@ public sealed class SdfFrameBlockLawTests {
                     Quality = Restricted,
                     ScreenFidelity = 0.75f,
                     StampFade = new SdfStampFade(FirstSlot: 41, Opacity: 0.5f, SlotCount: 368),
+                    PoseOverlay = new SdfPoseOverlay(FirstSlot: 12, SlotCount: 3, OverlaySlot: 200),
                 },
             ],
             Time: 7f
