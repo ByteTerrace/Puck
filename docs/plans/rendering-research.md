@@ -1764,8 +1764,8 @@ engine counts:
 - a direction review on the merged tip after each batch that changes what
   a player sees: presented frames while moving at the glacier, the forest,
   the portals and the gallery's collection of objects, each read against
-  quality references the lead gathers from context, since the repository
-  holds none for these scenes ([the visual bar](../game/art/README.md#the-visual-bar)).
+  the concept packs widened by references the lead gathers from context,
+  since the packs are few ([the visual bar](../game/art/README.md#the-visual-bar)).
   Looks are expected to change through these waves (the owner's ruling),
   so the review asks whether each scene moved toward its reference or
   away from it, never whether it matches the previous build. A scene that
