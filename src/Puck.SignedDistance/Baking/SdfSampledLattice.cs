@@ -310,6 +310,9 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
     private readonly OwnedBuffer<Vector3> m_gradients;
 
     private int m_factor = 1;
+    // The factor Refine was last asked for, zero until it is: a lattice Refine scanned and left whole has m_factor one all
+    // the same.
+    private int m_asked;
     // Division by the fine lattice's row length, its rows per slab and m_factor (FineCoordinates, FineCell), set with
     // m_factor: the fine-sample scans divide every key they read.
     private ReciprocalDivisor32 m_byFineRow;
@@ -456,6 +459,22 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
     /// <summary>Gets the spacing the contour's finest cells have along each axis, in world units.</summary>
     public Vector3 ContourCell => (m_cell / m_factor);
 
+    /// <summary>Copies which coarse cells <see cref="Refine"/> flagged, the cells that contour fine around them and the cells
+    /// a thin sheet crosses, for a diagnostic to read after the lattice is gone.</summary>
+    /// <returns>The map; of a lattice <see cref="Refine"/> left whole, a map that names every cell unrefined.</returns>
+    public SdfRefinementMap RefinementMap() => new(
+        asked: m_asked,
+        cell: m_cell,
+        cellsX: (m_samplesX - 1),
+        cellsY: (m_samplesY - 1),
+        cellsZ: (m_samplesZ - 1),
+        factor: m_factor,
+        measured: ((m_factor > 1) ? m_measured.GetSpan().ToArray() : []),
+        origin: m_origin,
+        refined: ((m_factor > 1) ? m_refined.GetSpan().ToArray() : []),
+        thin: ((m_factor > 1) ? m_thin.GetSpan().ToArray() : [])
+    );
+
     /// <summary>
     /// Chooses the cells the samples cannot resolve and returns the fine samples that resolve them, <paramref name="factor"/>
     /// to a cell along each axis: a cell next to a lattice edge a sheet or gap thinner than a cell crosses (a run of one
@@ -493,6 +512,8 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
         if (m_factor != 1) {
             throw new InvalidOperationException(message: "The lattice is already refined.");
         }
+
+        m_asked = factor;
 
         var cellsX = (m_samplesX - 1);
         var cellsY = (m_samplesY - 1);

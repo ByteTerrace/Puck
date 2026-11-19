@@ -3800,6 +3800,26 @@ position at rest and in the creation's author frame, with its extent and the
 shapes whose own surfaces lie nearest. The output is a pure function of the
 world, the stored meshes and the options, so a later run proves a fix.
 
+A group with a flipped triangle, a fold, a vertex off the surface, an open or
+non-manifold edge or an uncovered crossing also prints a `defects:` line, and
+the report closes with `defects by group` and `defects total`. Each item is
+sorted into a class by its geometry alone (`SdfMeshDefectClass`): an
+`off-surface-vertex`; a `crease-sliver`, a flipped triangle or fold whose
+smallest height is under a tenth of the mesh's cell (the median edge); a
+`narrow-face`, one under a whole cell; a `short-tip`, an uncovered crossing; and
+`other`, a taller flipped triangle or fold and every open or non-manifold edge.
+The class reads the mesh, so it is an inference about which defect the geometry
+shows, not a record of why the bake made it. Beside each class the line gives
+what the bake's refinement did with the lattice cell holding each item
+(`SdfRefinementMap`): `measured` (flagged for fine samples), `ring` (contoured
+fine from interpolated coarse values beside a flagged cell), `unflagged`,
+`scanned-nothing-flagged` (the scan ran and flagged no cell in the group) or
+`not-scanned` (the bake never ran the scan on that lattice, whose `refinement:`
+line then reads `scan asked 0`), plus `thin`,
+items in a cell a sheet thinner than the cell crosses. The flags exist only with
+`--cpu`, where the bake is this tool's own; a stored mesh reports `no-map`, and a
+posed audit reports it too, since a posed mesh is out of the lattice's frame.
+
 The field is read through `SdfFieldEvaluator`'s render reading
 (`SdfFieldReading.Render`), which admits a non-uniform scale, every warp, fold
 and relief the renderer draws, a sweep of any strand count and a path's edges;

@@ -1006,10 +1006,13 @@ says how one is reproduced and profiled.
 Owner: specialist (rendering, sdf-authoring) · high, it blocks authoring ·
 Next: the engine gaps this packet holds, filled first
 ([rendering research](rendering-research.md#engine-gaps-filled-first)): a
-feature thinner than a bake cell is lost or faceted (gap 7), which starts with
-decision 10's count: for each failing shape, which of the four defects it
-shows and whether its cell was ever flagged for finer sampling (that plan's
-`contour` lane), then its contour rule, built behind an audit of every stored mesh;
+feature thinner than a bake cell is lost or faceted (gap 7). The count of
+decision 10 is in (`puck mesh audit --cpu` prints each failing shape's defect
+class and whether its cell was flagged for finer sampling): the failing cells of
+the blend exhibits and nearly all of the Moth's were flagged and measured, so the
+fix is a contour rule for a cell that cannot resolve its faces, built behind an
+audit of every stored mesh; only the swallow's streamers were never examined, a
+lattice at its tier's floor on which the refinement scan never runs;
 a primitive under a non-uniform scale gives a bound, not a distance (gap 11,
 [rendering](rendering.md#bake-quality)); and, beside them,
 [moving blends](moving-blends.md#engine-gaps-first)' step 4 (gap 10). Then the
