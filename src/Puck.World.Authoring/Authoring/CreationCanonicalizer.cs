@@ -2056,8 +2056,6 @@ public static partial class CreationCanonicalizer {
             return;
         }
 
-        var priorErrorCount = errors.Count;
-
         if (
             !float.IsFinite(f: noise.Frequency) ||
             (noise.Frequency <= 0f) ||
@@ -2101,13 +2099,82 @@ public static partial class CreationCanonicalizer {
             ));
         }
 
-        if (errors.Count > priorErrorCount) {
+        for (var index = 0; (index < (noise.Masks?.Count ?? 0)); index++) {
+            ValidateReliefMask(errors: errors, mask: noise.Masks![index], path: $"noise.masks[{index}]");
+        }
+    }
+    // A relief mask's band, weights and region shapes. A region shape carries geometry alone: every facet that composes,
+    // paints, moves, groups or warps a shape means nothing for a region, so each is refused by name, as is a type the
+    // contact field cannot read, since drawing and contact read one masked field. A member written at its default (as a
+    // shape row's lowering or the canonical form writes it) is absent. The mask is new, so these refusals turn away no
+    // document that could be written before it.
+    private static void ValidateReliefMask(CreationReliefMaskDocument mask, string path, List<DocumentValidationError> errors) {
+        if (!(float.IsFinite(f: mask.Fade) && (mask.Fade > 0f))) {
+            errors.Add(item: new DocumentValidationError(Message: $"a relief mask's fade must be finite and above zero; got {mask.Fade}.", Path: $"{path}.fade"));
+        }
+        if ((mask.Start is { } start) && !float.IsFinite(f: start)) {
+            errors.Add(item: new DocumentValidationError(Message: $"a relief mask's start must be finite; got {start}.", Path: $"{path}.start"));
+        } else if (float.IsFinite(f: mask.Fade) && !(((mask.Start ?? 0f) + mask.Fade) > 0f)) {
+            errors.Add(item: new DocumentValidationError(Message: $"a relief mask's band must end beyond its region's surface (start + fade > 0); got {((mask.Start ?? 0f) + mask.Fade)}.", Path: $"{path}.start"));
+        }
+        foreach (var (name, weight) in (ReadOnlySpan<(string, float?)>)[("inside", mask.Inside), ("outside", mask.Outside)]) {
+            if ((weight is { } value) && !((value >= 0f) && (value <= 1f))) {
+                errors.Add(item: new DocumentValidationError(Message: $"a relief mask's {name} weight must lie in [0, 1], so a mask only lowers relief; got {value}.", Path: $"{path}.{name}"));
+            }
+        }
+        if (mask.Shapes is not { Count: > 0 } shapes) {
+            errors.Add(item: new DocumentValidationError(Message: "a relief mask needs at least one shape: its region is their union.", Path: $"{path}.shapes"));
             return;
         }
 
-        var stepFactor = noise.StepFactor();
+        for (var index = 0; (index < shapes.Count); index++) {
+            var shape = shapes[index];
+            var at = $"{path}.shapes[{index}]";
 
+            if (shape.Type == SdfSolidPrimitive.Sweep) {
+                errors.Add(item: new DocumentValidationError(Message: "a relief mask's shape cannot be a Sweep: contact reads no sweep, and drawing and contact read one masked field.", Path: $"{at}.type"));
+            }
+            if (shape.Lift == SdfLift.Revolve) {
+                errors.Add(item: new DocumentValidationError(Message: "a relief mask's shape cannot revolve its profile: contact reads no revolve, and drawing and contact read one masked field.", Path: $"{at}.lift"));
+            }
+            if (shape.Profile is { Kind: SdfPrismProfileKind.Polygon }) {
+                errors.Add(item: new DocumentValidationError(Message: "a relief mask's shape cannot take a regular polygon profile: contact reads none, and drawing and contact read one masked field.", Path: $"{at}.profile"));
+            }
 
+            foreach (var facet in RefusedMaskFacets(shape: shape)) {
+                errors.Add(item: new DocumentValidationError(Message: $"a relief mask's shape carries geometry alone; '{facet}' means nothing for a region.", Path: $"{at}.{facet}"));
+            }
+        }
+    }
+    // The members a relief mask's region shape may not carry, each named as the document spells it; a member at its
+    // default is absent.
+    private static IEnumerable<string> RefusedMaskFacets(ShapeDocument shape) {
+        if (shape.Material is { } material and not 0) { yield return "material"; }
+        if (shape.Blend is { } blend and not SdfBlendOp.Union) { yield return "blend"; }
+        if (shape.Smooth is { } smooth and not 0f) { yield return "smooth"; }
+        if (shape.Group is { } group and not 0) { yield return "group"; }
+        if (shape.Twist is { } twist and not 0f) { yield return "twist"; }
+        if (shape.Bend is { } bend and not 0f) { yield return "bend"; }
+        if (shape.Onion is { } onion and not 0f) { yield return "onion"; }
+        if (shape.Dilate is { } dilate and not 0f) { yield return "dilate"; }
+        if (shape.Domain is { Count: > 0 }) { yield return "domain"; }
+        if (shape.Swings is { Count: > 0 }) { yield return "swings"; }
+        if (shape.Slides is { Count: > 0 }) { yield return "slides"; }
+        if (shape.Parent is not null) { yield return "parent"; }
+        if (shape.Joint is not null) { yield return "joint"; }
+        if (shape.Panel is not null) { yield return "panel"; }
+        if (shape.Trims is { Count: > 0 }) { yield return "trims"; }
+        if (shape.Detail == true) { yield return "detail"; }
+        if (shape.Flare is not null) { yield return "flare"; }
+        if (shape.Bumps is { Count: > 0 }) { yield return "bumps"; }
+        if (shape.Shear is not null) { yield return "shear"; }
+        if (shape.Curve is not null) { yield return "curve"; }
+        if (shape.Erode is not null) { yield return "erode"; }
+        if (shape.Cells is not null) { yield return "cells"; }
+        if (shape.Warp is not null) { yield return "warp"; }
+        if (shape.Displace is not null) { yield return "displace"; }
+        if (shape.Steps is not null) { yield return "steps"; }
+        if (shape.Morph is not null) { yield return "morph"; }
     }
     // An inert facet (zero/non-finite frequency or amplitude after clamping) drops to null so absence and inertness
     // share one spelling; every optional resolves to its documented default so the round-trip is idempotent.
@@ -2149,7 +2216,16 @@ public static partial class CreationCanonicalizer {
                 max: SdfProgramBuilder.MaxNoiseOctaves,
                 min: 1
             ),
-            Seed: (noise.Seed ?? 0u)
+            Seed: (noise.Seed ?? 0u),
+            Masks: ((noise.Masks is { Count: > 0 } masks)
+                ? [.. masks.Select(selector: static mask => new CreationReliefMaskDocument(
+                    Fade: mask.Fade,
+                    Inside: (mask.Inside ?? 0f),
+                    Outside: (mask.Outside ?? 1f),
+                    Shapes: [.. mask.Shapes.Select(selector: NormalizeShape)],
+                    Start: (mask.Start ?? 0f)
+                ))]
+                : null)
         );
     }
     private static Vector3 NormalizeSpacing(Vector3 value) =>
@@ -2258,7 +2334,16 @@ public static partial class CreationCanonicalizer {
         var shapeIds = new HashSet<int>();
 
         foreach (var shape in (document.Shapes ?? [])) {
-            shapes.Add(item: shape with {
+            shapes.Add(item: NormalizeShape(shape: shape));
+            _ = shapeIds.Add(item: shape.Id);
+        }
+
+        return NormalizeRest(document: document, shapes: shapes, shapeIds: shapeIds);
+    }
+    // One shape's canonical form: every optional member at its clamp or default. A relief mask's region shapes take the
+    // same form as the creation's own (NormalizeMasks).
+    private static ShapeDocument NormalizeShape(ShapeDocument shape) =>
+            shape with {
                 Domain = NormalizeDomain(domain: shape.Domain),
                 Slides = NormalizeSlides(slides: shape.Slides),
                 Swings = NormalizeSwings(swings: shape.Swings),
@@ -2314,10 +2399,9 @@ public static partial class CreationCanonicalizer {
                 Displace = NormalizeDisplace(displace: shape.Displace),
                 Elongate = NormalizeElongate(elongate: shape.Elongate),
                 Steps = ((shape.Steps is { } steps) ? Math.Clamp(max: ShapeScope.MaxSteps, min: 1, value: steps) : null),
-            });
-            _ = shapeIds.Add(item: shape.Id);
-        }
-
+            };
+    // Normalize's members past the shapes, given the normalized shapes and their ids.
+    private static CreationDocument NormalizeRest(CreationDocument document, List<ShapeDocument> shapes, HashSet<int> shapeIds) {
         List<ChainDocument>? chains = null;
 
         if (document.Chains is { Count: > 0 } sourceChains) {

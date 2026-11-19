@@ -111,7 +111,14 @@ prototypes {
           [{ color: "#7D7366", roughness: 0.95, specular: 0.02 }],
           sector.name == "north-west" ? wallPalette : []
         )
-        terrainRelief(seed: sector.seed)
+        // The relief stays out of the bowls the sector carves (water-site.puck's valleyBasins), so the lake's water,
+        // lining and stones, placed from the analytic bowl, sit on the rock the bake draws and contact reads.
+        terrainRelief(
+          seed: sector.seed,
+          masks: length(filter(valleyBasins, b => b.sector == sector.name)) > 0
+            ? [terrainBasinMask(filter(valleyBasins, b => b.sector == sector.name))]
+            : []
+        )
         terrainMass(
           label: "main",
           foot: sector.foot,

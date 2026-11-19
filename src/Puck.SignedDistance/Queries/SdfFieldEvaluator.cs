@@ -429,7 +429,7 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
             }
 
             compiled[index] = new CompiledInstruction(
-                Aux: ((instruction.Op == SdfOp.GaussianPush)
+                Aux: (((instruction.Op == SdfOp.GaussianPush) || SdfProgram.IsReliefMaskPush(instruction: instruction))
                 ? FixedQ4816.FromDouble(value: BitConverter.UInt32BitsToSingle(value: instruction.Shape))
                 : FixedQ4816.Zero),
                 Blend: instruction.Blend,
@@ -446,7 +446,11 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
                 Data0Y: FixedQ4816.FromDouble(value: instruction.Data0.Y),
                 Data0Z: FixedQ4816.FromDouble(value: instruction.Data0.Z),
                 Data1W: FixedQ4816.FromDouble(value: instruction.Data1.W),
-                Data1X: FixedQ4816.FromDouble(value: instruction.Data1.X),
+                // A relief mask's 1/L is floored, so the region's compiled distance stays 1-Lipschitz as the band's
+                // slope in the step bound assumes (SdfProgram.NoiseDisplaceStepFactor).
+                Data1X: (((instruction.Op == SdfOp.ReliefWeight) && FixedDirectedRounding.TryFloorFromDouble(result: out var floored, value: instruction.Data1.X))
+                    ? floored
+                    : FixedQ4816.FromDouble(value: instruction.Data1.X)),
                 Data1Y: FixedQ4816.FromDouble(value: instruction.Data1.Y),
                 Data1Z: FixedQ4816.FromDouble(value: instruction.Data1.Z),
                 Detail: instruction.Detail,
@@ -562,6 +566,7 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
                 case SdfOp.Dilate:
                 case SdfOp.Displace:
                 case SdfOp.NoiseDisplace:
+                case SdfOp.ReliefWeight:
                 case SdfOp.CellDisplace:
                 case SdfOp.GaussianPush: {
                         ok[at] = false;
@@ -1733,8 +1738,8 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
         FixedQ4816 Data1Z,
         FixedQ4816 Data1W,
         bool Detail = false,
-        // Only for SdfOp.GaussianPush: the push's Z component, which the packed instruction carries as float bits in its
-        // Shape lane.
+        // Only for SdfOp.GaussianPush: the push's Z component, and for a relief mask's PushField its seed
+        // (SdfProgram.IsReliefMaskPush), each of which the packed instruction carries as float bits in its Shape lane.
         FixedQ4816 Aux = default,
         // Only for SdfShapeType.ConvexPolygon: the shape's own vertex list, pre-converted once (matching every other
         // baked lane above). Data0X carries no usable value for this shape (the packed program reinterprets it as a

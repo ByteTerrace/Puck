@@ -101,6 +101,7 @@ let guideCopy = {
   "shape-wallpaper-p6m" { title: "WALLPAPER P6M", note: "The richest hex group: twelve images per cell." }
   "shape-wallpaper-stride" { title: "WALLPAPER STRIDE", note: "P4M with a material stride: a checkerboard." }
   "shape-erode" { title: "ERODE", note: "A lane erodes the sphere, here halfway through." }
+  "shape-noise-mask" { title: "RELIEF MASK", note: "A mask keeps the pressed bowl smooth while the slab around it stays rough." }
   "shape-noise" { title: "NOISE", note: "Noise lumps the sphere; the plinth stays clean." }
   "motion-spin" { title: "SPIN", note: "A rigid rotation on a linear wave." }
   "motion-rock" { title: "ROCK", note: "A sine swing about a pivot." }

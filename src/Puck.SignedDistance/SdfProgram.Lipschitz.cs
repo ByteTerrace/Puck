@@ -110,10 +110,14 @@ public sealed partial class SdfProgram {
         return -1;
     }
     private static float AnalyzeLipschitz(SdfInstruction[] instructions, (int InstructionIndex, Vector2[] Vertices)[] convexPolygonProfiles, SdfSweepCurve[] sweepCurves, out List<float> chainFactors) {
+        // Each relief's masks widen its step bound by their band slopes (ReliefMaskSlope); both passes read the one table.
+        var maskSlopes = ReliefMaskSlopes(instructions: instructions);
+
         chainFactors = AnalyzeChainLipschitz(
             chainHasShape: out var chainHasShape,
             convexPolygonProfiles: convexPolygonProfiles,
             instructions: instructions,
+            maskSlopes: maskSlopes,
             sweepCurves: sweepCurves
         );
         // mapCore's seed is the SDF_FAR_DISTANCE CONSTANT — a zero-gradient function, hence L = 0, which is what makes
@@ -122,6 +126,8 @@ public sealed partial class SdfProgram {
         var accumulator = 0.0f;
         // A push saves the immediate parent's bound before reseeding the child.
         Span<float> savedAccumulators = stackalloc float[SdfProgramBuilder.MaxFieldScopeDepth];
+        // Each open scope's push, so a relief mask's weight can rescale its seed by the scope's bound.
+        Span<int> pushes = stackalloc int[SdfProgramBuilder.MaxFieldScopeDepth];
         var scopeDepth = 0;
         var cellPointFactors = AnalyzeCellPointFactors(instructions: instructions);
         var chainIndex = 0;
@@ -147,7 +153,29 @@ public sealed partial class SdfProgram {
                         break;
                     }
                 case SdfOp.PushField: {
+                        pushes[scopeDepth] = index;
                         savedAccumulators[scopeDepth++] = accumulator;
+                        accumulator = 0.0f;
+                        break;
+                    }
+                case SdfOp.ReliefWeight: {
+                        // The region's distance is the mask scope's accumulator times the scope's 1/L, baked here as a pop's
+                        // candidate scale is, so it is 1-Lipschitz as ReliefMaskSlope assumes; the seed, the band's end,
+                        // scales by L with it, so the scope's clamp still sits exactly where the weight reaches its outside.
+                        // The weight then leaves the far distance, a constant (L = 0), so the scope's pop composes nothing
+                        // and stays unpatched. A factor-1 region keeps the builder's words byte-identical.
+                        var regionLipschitz = MathF.Max(x: accumulator, y: 1.0f);
+
+                        if (!float.IsFinite(f: regionLipschitz)) {
+                            throw new InvalidOperationException(message: $"A relief mask's Lipschitz accumulator became non-finite ({regionLipschitz}) at ReliefWeight instruction {index}.");
+                        }
+                        if (regionLipschitz > 1.0f) {
+                            var push = pushes[(scopeDepth - 1)];
+
+                            instructions[index] = (instruction with { Data1 = instruction.Data1 with { X = (1.0f / regionLipschitz) } });
+                            instructions[push] = (instructions[push] with { Shape = BitConverter.SingleToUInt32Bits(value: ((instruction.Data0.X + instruction.Data0.Y) * regionLipschitz)) });
+                        }
+
                         accumulator = 0.0f;
                         break;
                     }
@@ -161,7 +189,7 @@ public sealed partial class SdfProgram {
                         if (!chainHasShape[chainIndex]) {
                             accumulator += ((((instruction.Op == SdfOp.Displace)
                                 ? DisplaceWarpLipschitz(instruction: instruction)
-                                : NoiseDisplaceLipschitz(instruction: instruction)) - 1.0f) * chainFactors[chainIndex]);
+                                : NoiseDisplaceLipschitz(instruction: instruction, maskSlope: (maskSlopes?[index] ?? 0f))) - 1.0f) * chainFactors[chainIndex]);
                         }
 
                         break;
@@ -259,7 +287,7 @@ public sealed partial class SdfProgram {
     //
     // A blend's own factor is deliberately ABSENT here: composition is not a property of the chain a candidate was
     // built in, and folding chamfer in at this level is precisely the latch AnalyzeLipschitz's remarks retire.
-    private static List<float> AnalyzeChainLipschitz(SdfInstruction[] instructions, out List<bool> chainHasShape, (int InstructionIndex, Vector2[] Vertices)[] convexPolygonProfiles, SdfSweepCurve[] sweepCurves) {
+    private static List<float> AnalyzeChainLipschitz(SdfInstruction[] instructions, out List<bool> chainHasShape, (int InstructionIndex, Vector2[] Vertices)[] convexPolygonProfiles, SdfSweepCurve[] sweepCurves, float[]? maskSlopes) {
         var chainFactors = new List<float>();
         var hasShapeByChain = new List<bool>();
         var chainHasShapeBlend = false;
@@ -446,7 +474,7 @@ public sealed partial class SdfProgram {
                 case SdfOp.NoiseDisplace: {
                         // The fBm value-noise relief's gradient is bounded reach-independently (see NoiseDisplaceLipschitz),
                         // so it multiplies the whole chain like Displace's factor. A FIELD op, so it adds no reach.
-                        chainDisplaceWarpProduct *= NoiseDisplaceLipschitz(instruction: instruction);
+                        chainDisplaceWarpProduct *= NoiseDisplaceLipschitz(instruction: instruction, maskSlope: (maskSlopes?[index] ?? 0f));
                         break;
                     }
                 case SdfOp.LaneErode: {

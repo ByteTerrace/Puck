@@ -1515,466 +1515,7 @@ export type CreationDocument = {
   /**
    * The authored shapes (null = empty).
    */
-  shapes?: ({
-    /**
-     * The shape's stable id.
-     */
-    id: number;
-    /**
-     * The optional player-given name, authored literally or through a containing world's Text state cell.
-     */
-    name?: unknown;
-    /**
-     * The primitive.
-     */
-    type: ShapeNonNullable50;
-    /**
-     * The shape's position (the author frame's workbench space).
-     */
-    position: unknown;
-    /**
-     * The orientation.
-     */
-    rotation: unknown;
-    /**
-     * The per-axis scale — the primitive's size (see CreationGeometry).
-     */
-    scale: unknown;
-    /**
-     * The palette slot (null = 0).
-     */
-    material?: number | null;
-    /**
-     * The blend op name (null = Union).
-     */
-    blend?: "Union" | "SmoothUnion" | "Subtraction" | "Intersection" | "Xor" | "SmoothIntersection" | "SmoothSubtraction" | "ChamferUnion" | "ChamferIntersection" | "ChamferSubtraction" | "GrooveUnion" | "PipeUnion" | "Morph" | "GrooveSubtraction" | "PipeSubtraction" | "StairsUnion" | "StairsSubtraction" | null;
-    /**
-     * The smooth-blend radius (null = 0).
-     */
-    smooth?: number | null;
-    /**
-     * The composition group (null = ungrouped).
-     */
-    group?: number | null;
-    /**
-     * The shape's local twist rate (null = 0).
-     */
-    twist?: number | null;
-    /**
-     * The shape's shell thickness (null = 0, solid).
-     */
-    onion?: number | null;
-    /**
-     * The shape's local bend rate about Y (null = 0).
-     */
-    bend?: number | null;
-    /**
-     * The shape's inflation radius (null = 0).
-     */
-    dilate?: number | null;
-    /**
-     * The ordered SDF VM domain operators (ShapeDomainOp) applied to the shape's point in creation space, before its own translate/rotate/scale (null = none). Every op the copy expansion covers reaches contact as well as render; wallpaper does not expand, and a solid placement carrying one is refused at validation.
-     */
-    domain?: ({
-      $type?: "symmetry";
-      /**
-       * The plane normal, in the shape's creation-space frame (normalized at canonicalization; a zero/non-finite normal falls back to UnitX — the retired Mirror: true flag's exact fold).
-       */
-      normal: unknown;
-      /**
-       * The plane's signed offset along Normal (null = 0, through the creation origin).
-       */
-      offset?: number | null;
-    } | {
-      $type?: "repeat";
-      /**
-       * The per-axis cell spacing, creation units (clamped to >= 0.001 per axis, matching the builder's own floor).
-       */
-      spacing: unknown;
-      /**
-       * The per-axis repeat-cell limit — the lattice spans cell indices -limit..+limit (null = UnboundedRepeatLimit per axis, a lattice with no edge).
-       */
-      limit?: unknown;
-      /**
-       * The point the lattice folds around, creation units (null = the creation origin, the fold this op has always used). Cell selection centres on this point instead of the creation root — the lattice of physical copies is unchanged, so a null origin is byte-identical to today's fold.
-       */
-      origin?: unknown;
-      /**
-       * Whether the lattice has no edge: its limit, or an absent one, reaches UnboundedRepeatLimit on any axis. The program's own answer (IsUnboundedRepeat) decides it.
-       */
-      isUnbounded?: boolean;
-    } | {
-      $type?: "polar";
-      /**
-       * The sector count around the axis (clamped >= 1).
-       */
-      count: number;
-      /**
-       * The rotation axis (null = Y, the XZ ground plane).
-       */
-      axis?: "X" | "Y" | "Z" | null;
-      /**
-       * Whether adjacent sectors mirror across their shared bisector (null = false).
-       */
-      mirror?: boolean | null;
-      /**
-       * The per-sector palette stride (null = 0, geometric only).
-       */
-      materialStride?: number | null;
-      /**
-       * The point the sector fold pivots around, creation units (null = the creation origin, the pivot this op has always used). A null origin is byte-identical to today's fold.
-       */
-      origin?: unknown;
-    } | {
-      $type?: "wallpaper";
-      /**
-       * The wallpaper group: one whose fold is continuous (PMM, P4M, P3M1, P6M; see IsContinuous). A program refuses any other group by name when it builds.
-       */
-      group: "P1" | "P2" | "Pm" | "Pg" | "Cm" | "Pmm" | "Pmg" | "Pgg" | "Cmm" | "P4" | "P4M" | "P4G" | "P3" | "P3M1" | "P31M" | "P6" | "P6M";
-      /**
-       * The lattice cell extents in the fold plane, creation units.
-       */
-      cell: unknown;
-      /**
-       * The repeat-cell limit per plane axis (null = UnboundedLimit per axis): a non-negative whole number of cells for a square group, and unbounded for a hex group, which is bounded by intersecting it with a bounding shape instead (LimitRefusal).
-       */
-      limit?: unknown;
-      /**
-       * The fold plane (null = XZ).
-       */
-      plane?: "XZ" | "XY" | "YZ" | null;
-      /**
-       * The parity-material stride (null = 0, geometric only).
-       */
-      materialStride?: number | null;
-    } | {
-      $type?: "jitter";
-      /**
-       * The per-axis cell spacing, creation units (clamped to at least 0.001 per axis).
-       */
-      spacing: unknown;
-      /**
-       * The peak-to-peak hashed displacement per axis, creation units; it must stay under the least spacing, and the shape's reach plus half of it under half the least spacing, or the copies cross their cell walls and the program refuses them.
-       */
-      amount: number;
-      /**
-       * The hash seed (null = 0).
-       */
-      seed?: number | null;
-      /**
-       * The hashed rotation's share of a half turn, in [0, 1] (null = 0, every copy upright).
-       */
-      tumble?: number | null;
-      /**
-       * The hashed palette rows a copy's material strides over (null = 0, geometric only); the palette must hold the rows the stride reaches.
-       */
-      materialVariants?: number | null;
-      /**
-       * How the displacement is distributed over the cell (null = White).
-       */
-      flavor?: "White" | "Blue" | "Gaussian" | null;
-      /**
-       * The point the lattice folds around, creation units (null = the creation origin).
-       */
-      origin?: unknown;
-    } | {
-      $type?: "logSphere";
-      /**
-       * The ratio between neighbouring shells' radii, above 1 (clamped to at least MinShellRatio).
-       */
-      shellRatio: number;
-      /**
-       * The spin each shell turns about the fold's Z axis, in radians per shell (null = 0, concentric shells).
-       */
-      twist?: number | null;
-      /**
-       * The point the shells centre on, creation units (null = the creation origin).
-       */
-      origin?: unknown;
-    } | null)[] | null;
-    /**
-     * The driver-fed rotations this shape rides (ShapeSwingDocument), at most MaxSwings (null = none).
-     */
-    swings?: ({
-      /**
-       * The Name supplying (φ, w). An unresolvable name is refused at canonicalization.
-       */
-      driver: string;
-      /**
-       * The joint the shape turns about, in the creation's author frame (see CreationFrame) — a shoulder or a hip, not the shape's own centre.
-       */
-      pivot: unknown;
-      /**
-       * The rotation axis, in the creation's author frame; normalized at canonicalization. A positive angle turns right-handed about it.
-       */
-      axis: unknown;
-      /**
-       * The peak angle in radians, magnitude at most MaxAmplitude. A negative amplitude mirrors the swing, which is how a limb on the body's other side reads.
-       */
-      amplitude: unknown;
-      /**
-       * The phase offset added to the driver's phase, radians (null = 0) — how two limbs on one driver are put out of step (contralateral arms differ by π).
-       */
-      phase?: unknown;
-      /**
-       * The waveform name (null = Sine); see CreationWave.
-       */
-      wave?: string | null;
-    } | null)[] | null;
-    /**
-     * The driver-fed translations this shape rides (ShapeSlideDocument), at most MaxSlides (null = none). Applied after every swing, along the authored axis. Both facets are presentation-only — composed onto the shape's per-frame dynamic transform and read nowhere else, so the SDF program, the colliders, the solid field, and simulation state are all blind to them. A shape carrying Domain rides its own slot packed with its Parent chain's rigid delta (the identity with no parent), leaving nowhere for its OWN swing/slide to compose, so they are refused alongside a domain list at validation.
-     */
-    slides?: ({
-      /**
-       * The Name supplying (φ, w). An unresolvable name is refused at canonicalization.
-       */
-      driver: string;
-      /**
-       * The slide direction, in the creation's author frame; normalized at canonicalization.
-       */
-      axis: unknown;
-      /**
-       * The peak offset in creation units, magnitude at most MaxAmplitude.
-       */
-      amplitude: unknown;
-      /**
-       * The phase offset added to the driver's phase, radians (null = 0).
-       */
-      phase?: unknown;
-      /**
-       * The waveform name (null = Sine); see CreationWave.
-       */
-      wave?: string | null;
-    } | null)[] | null;
-    /**
-     * The Name of the shape this one hangs from (null = the creation root): the parent's animated motion carries this shape and its own pivots with it, so a forearm swung at the elbow also rides the upper arm's swing at the shoulder. The parent must be declared earlier in shapes (so a chain resolves in one pass and can never cycle); presentation-only on the same terms as the swings it composes with.
-     */
-    parent?: string | null;
-    /**
-     * The point this shape hinges about when it acts as a bone of a CreationEffectorDocument chain and declares no Swings (null = the pivot of the first swing, or the shape's own position when it has neither). Author-frame, like every other point here. Read only by the effector solve, so it changes no pose on its own.
-     */
-    joint?: unknown;
-    /**
-     * Only for Prism: top width divided by bottom width, finite in [0, 1]. Null uses 0.5; zero makes a triangular profile and one a rectangular profile. Scale holds bottom half-width, half-height and extrusion half-depth. Rotate the prism to reverse its taper.
-     */
-    taper?: number | null;
-    /**
-     * Optional Prism cross-section controls. Null uses a trapezoid; other profiles expose rounded rectangles, polygons, and ellipses with flat extruded caps.
-     */
-    profile?: ShapeNullable7 | null;
-    /**
-     * Only for Prism: how the XY profile becomes a solid. Null or extrude sweeps it along local Z to scale.z. revolve sweeps it about the local Y axis with scale.z as the radial offset — zero gives a solid of revolution (a cowl, a boot cuff, a pauldron dome), a positive offset a ring. Renderable for every profile; a solid placement refuses it, because both contact compilers read a per-axis-scaled local box and a revolve reads scale.z as an offset rather than an extent.
-     */
-    lift?: ShapeNullable8 | null;
-    /**
-     * Only for Box, Prism, Cylinder and Cone: the edge-rounding radius in the creation's own units, finite and non-negative. The profile (and, for an extruded prism, its half-depth) insets by it and the field offsets back out, so the shape keeps its authored extent and its edges fillet; a Box without it is sharp, so boxes that touch meet as one solid, and a solid placement collides as the same rounded or sharp box. Refused by name past MaxRounding.
-     */
-    rounding?: number | null;
-    /**
-     * The shape's second-material inset face region (null = none) — see ShapePanelDocument. Render-only; refused by name on a Plane, on a shape carrying Domain ops or a non-zero Group, and on a creation that otherwise needs its own field scope.
-     */
-    panel?: {
-      /**
-       * How far the panel copy shrinks on every local axis before it is placed — the copy's own scale is shape scale − Inset per axis (floored at MinimumScale), a sharp-cornered shrink rather than a rounded Minkowski erosion. The panel recipe changes the copy's primitive dimensions rather than applying Dilate to its field. Creation units. Finite and non-negative; refused by name past the shape's smallest local half-extent (the smallest of HalfExtent over the X, Y, and Z local axes) — past that the eroded copy is empty everywhere.
-       */
-      inset: number;
-      /**
-       * How far the panel's own face sits from the plate's face along Face, in creation units, exact whatever the Inset. Positive recesses it: the eroded copy is composed with Subtraction so its near face becomes the recess floor exactly Depth below the plate's face — the floor and walls shade with Material, the subtraction-shades-with-the-subtrahend convention the Moth's hood opening rides. Negative raises the panel proud by |Depth| instead: the copy is composed with Union, its far face standing |Depth| past the plate's own and its back end buried inside the plate. Finite; refused by name past ±2·h′, the eroded copy's own full extent along Face — deeper, a recess carves an enclosed void and a raise floats detached, both silent no-ops on the surface. See Resolve for the offset each case translates the copy by.
-       */
-      depth: number;
-      /**
-       * The panel's own palette slot — see Material. Clamped into [0, CreationDocument.PaletteSize) at normalization.
-       */
-      material: number;
-      /**
-       * The local direction the panel erodes and offsets against, read in the primitive's own local frame — before its placement transform, the same frame Domain ops read. Null defaults to +Z (the Prism extrude axis / a Box's front); a non-finite or zero-length authored value is refused by name, and a finite non-unit one is normalized at canonicalization, mirroring a domain op's own normal. Any primitive may author a curved face (a Cylinder's +X rim, say) — the erode/translate/blend recipe reads only Support along the axis, never the primitive's curvature.
-       */
-      face?: unknown;
-    } | null;
-    /**
-     * Only for Box, Cylinder and Prism (an extruded prism only — a revolve has no cap seam to bevel): the 45-degree edge-chamfer radius in the creation's own units, finite and non-negative. Refused by name past MaxChamfer, and refused by name alongside a nonzero Rounding on the same shape.
-     */
-    chamfer?: number | null;
-    /**
-     * The shape's second-material surface bands against other, earlier-declared shapes (null = none), at most MaxTrims — see ShapeTrimDocument. Render-only, like Panel; refused by name on a shape carrying Domain ops, a non-zero Group, or on a creation that otherwise needs its own field scope.
-     */
-    trims?: ({
-      /**
-       * The Name of another shape in the same creation, declared EARLIER in shapes (so a chain resolves in one pass and can never cycle — mirrors Parent's own rule). A Subtraction cutter riding the host's own Group is the common case; a plain plane-like Box with blend Union works too. Only the reference's own primitive geometry (type, scale, taper, profile, lift, rounding, chamfer) and pose are re-read; its own blend, domain, panel, and trims play no part in the band.
-       */
-      shape: string;
-      /**
-       * How far outward from the reference shape's own surface the band reaches, in creation units. Finite and positive; refused by name otherwise. Baked into the reference copy's own scale (a sharp-cornered growth — the mirror image of, and the same imprecision, Inset's own erosion already accepts) rather than a field-op dilation: it is the only way the reference's own offset survives composing through the macro's Intersection blend inside the one field scope both copies share — a field op applied after that blend would dilate the ALREADY-INTERSECTED result (eroding the host's own copy a second time by Width too), not the reference alone.
-       */
-      width: number;
-      /**
-       * The trim's own palette slot — see Material. Clamped into [0, CreationDocument.PaletteSize) at normalization. Used for both copies the macro composes, so whichever term the blend resolves to at a given point still paints the same color.
-       */
-      material: number;
-      /**
-       * The margin the trim's own scope must beat the host's already-present, unmodified surface by to render at all — a real Dilate field op at a POSITIVE radius on the host's own copy (exact and isolated: the copy is alone in the trim's scope at that point, so nothing else is affected). The scope pops via Union into the accumulator the host's own plain shape already folded into, and max(a, b) >= a makes a genuine erosion (a negative radius) provably always lose to that plain surface — the trim would never render — so the copy is instead nudged narrowly CLOSER than the plain surface by Inset, imperceptibly proud rather than inward: it loses everywhere by default (small) and wins only where the reference's own dilated copy does not additionally push the Intersection candidate past it, i.e. near the reference. Creation units, finite, in [0, MaxInset]; refused by name otherwise. Default 0.003 — just enough to clear the plain surface without z-fighting, the pipeline's own shin margin.
-       */
-      inset?: number;
-    } | null)[] | null;
-    /**
-     * Whether this shape is a detail shape (null = false): excluded from contact (it never carves the contact field or the collider) while the baked frame samples it like any other shape, so a seam (a thin subtraction) or a rivet (a small union, its own material) bakes into the mesh and paints its footprint through the bake's point-sampled materials. Refused by name alongside Panel or Trims on the same shape.
-     */
-    detail?: boolean | null;
-    /**
-     * The shape's radial flare warp (null = none) — see ShapeFlareDocument. Admitted on every primitive; applies to the shape's own local point after Twist/Bend, in that order (twist, then bend, then flare), before the primitive's own scale. Render-only, like Twist/Bend.
-     */
-    flare?: {
-      /**
-       * The linear flare rate at the far end of the span (dimensionless; s(1) = StartScale + Amount). Clamped to [MinAmount, MaxAmount].
-       */
-      amount: number;
-      /**
-       * The mid-span sinusoidal bulge amplitude (dimensionless, peaks at the span's midpoint). Clamped to [-MaxBulge, MaxBulge].
-       */
-      bulge: number;
-      /**
-       * The axial distance the profile runs over, in creation units; finite and strictly greater than zero, or the shape is refused at validation.
-       */
-      span: number;
-      /**
-       * The axial coordinate where the profile begins, in creation units (null = 0).
-       */
-      top?: number | null;
-      /**
-       * Profile axis in [0, 2].
-       */
-      axis?: number;
-      /**
-       * Positive radial scale at the span origin.
-       */
-      startScale?: number;
-    } | null;
-    /**
-     * Only for Superellipsoid: the generalizing exponent, finite in [MinSuperellipsoidExponent, MaxSuperellipsoidExponent] (null = MinSuperellipsoidExponent, the ellipsoid limit — an unauthored Superellipsoid is a plain ellipsoid).
-     */
-    exponent?: number | null;
-    /**
-     * The shape's Gaussian domain-push bumps (null = none), at most MaxBumps — see ShapeBumpDocument. Applied to the shape's own local point after Shear, before the primitive's own scale. Render-only, like Twist/Bend/Flare.
-     */
-    bumps?: ({
-      /**
-       * The bump's local center, in creation units.
-       */
-      center: unknown;
-      /**
-       * The per-axis Gaussian falloff radii, in creation units — clamped away from zero at normalization (GaussianPushMinRadius) so the exponent's divisor is never zero. Refused by name if any authored component is negative or non-finite (a magnitude is what the field reads; a negative radius states nothing a positive one does not).
-       */
-      radii: unknown;
-      /**
-       * The peak displacement at the center, in creation units (zero = an exact identity, still admitted — it still charges the per-copy instance count).
-       */
-      push: unknown;
-    } | null)[] | null;
-    /**
-     * A polynomial point shear with explicit target and driver axes.
-     */
-    shear?: {
-      linear: number;
-      quadratic?: number;
-      cubic?: number;
-      target?: number;
-      driver?: number;
-    } | null;
-    /**
-     * The shape's swept-curve geometry (null = none) — see ShapeCurveDocument. Admitted only, and required, on Sweep (refused elsewhere, by name; a Sweep with no curve is refused, by name); refused alongside Panel, Trims, Flare, Shear, Bumps, or Domain on the same shape.
-     */
-    curve?: ShapeNullable9 | null;
-    /**
-     * The shape's per-instance lane-driven erosion (null = none) — see ShapeErodeDocument. Admitted on every primitive; its reach is this shape's own Reach, so it needs no separate authored magnitude.
-     */
-    erode?: {
-      /**
-       * Which dynamic-slot lane drives the erosion.
-       */
-      lane: number;
-      /**
-       * The lane value where erosion begins (t = 0).
-       */
-      from: number;
-      /**
-       * The lane value where the shape is fully eroded (t = 1); may be less than From to run the fold in reverse (the shape grows IN as the lane rises — the torn-fabric use). Must differ from From.
-       */
-      to: number;
-      /**
-       * The erosion front's noise lattice frequency, cells per world unit (null = 1).
-       */
-      noise?: number | null;
-    } | null;
-    /**
-     * Shape-local cellular relief, evaluated after geometry within its own field scope.
-     */
-    cells?: {
-      frequency: number;
-      amplitude: number;
-      seed: number;
-      mode: "F1" | "F2MinusF1";
-      randomness: number;
-    } | null;
-    /**
-     * The shape's cross-coupled sinusoidal domain warp (null = none) — see ShapeWarpDocument. Applied to the shape's own local point after Bumps, before Elongate. Render-only.
-     */
-    warp?: {
-      /**
-       * The per-axis angular frequency, radians per creation unit (each clamped to [-MaxFrequency, MaxFrequency]).
-       */
-      frequency: unknown;
-      /**
-       * The farthest the point moves per axis, creation units (clamped to [-MaxAmplitude, MaxAmplitude]).
-       */
-      amplitude: number;
-      /**
-       * The farthest the warp carries any point: the amplitude on every axis at once.
-       */
-      reach?: number;
-    } | null;
-    /**
-     * The shape's sine relief (null = none) — see ShapeDisplaceDocument. Added to the shape's own field inside its own scope. Render-only.
-     */
-    displace?: {
-      /**
-       * The per-axis angular frequency, radians per creation unit (each clamped to [-MaxFrequency, MaxFrequency]).
-       */
-      frequency: unknown;
-      /**
-       * The relief's height either way, creation units (clamped to [-MaxAmplitude, MaxAmplitude]).
-       */
-      amplitude: number;
-      /**
-       * The farthest the relief carries the surface outward.
-       */
-      reach?: number;
-    } | null;
-    /**
-     * The half-extents the primitive's cross-section is swept over, creation units (null = none): Elongate, the capsule-from-sphere operator, applied last to the shape's own local point. Each component is clamped to [0, MaxElongate]. Render-only.
-     */
-    elongate?: unknown;
-    /**
-     * Only with a stairs Blend (StairsUnion, StairsSubtraction): the steps the seam takes over the blend radius Smooth, in [1, MaxSteps] (null = DefaultSteps).
-     */
-    steps?: number | null;
-    /**
-     * Only with a MorphBlend, and required by it: the lane and range the morph runs over — see ShapeMorphDocument.
-     */
-    morph?: {
-      /**
-       * Which dynamic-slot lane drives the morph, in [0, 3].
-       */
-      lane: number;
-      /**
-       * The lane value where the field before the shape shows alone (t = 0).
-       */
-      from: number;
-      /**
-       * The lane value where the shape shows alone (t = 1); must differ from From.
-       */
-      to: number;
-    } | null;
-  } | null)[] | null;
+  shapes?: (ShapeNullable33 | null)[] | null;
   /**
    * The animation timeline frames (null = none).
    */
@@ -2180,11 +1721,11 @@ export type CreationDocument = {
     /**
      * Scales Cadence each frame by a curve of an earlier driver's phase, or null to keep it fixed. A stride on planar travel that takes its radians per metre from a curve of the body's speed lengthens its stride as the body speeds up, so its step rate rises less than its speed does.
      */
-    cadenceBy?: ShapeNullable16 | null;
+    cadenceBy?: ShapeNullable34 | null;
     /**
      * Sets the level the weight eases toward while the gate holds, from a curve of an earlier driver's phase clamped to [0, 1], or null for 1. Two drivers reading one stride's phase through SignalDriverPrefix, one weighted by a falling curve of speed and one by a rising one, cross-fade a walk into a run without their legs ever leaving step.
      */
-    weightBy?: ShapeNullable16 | null;
+    weightBy?: ShapeNullable34 | null;
   } | null)[] | null;
   /**
    * The inverse-kinematics effectors (null = none), at most MaxEffectors — see CreationEffectorDocument. Each corrects a chain of this creation's own shapes so its tip reaches a target, composing after the drivers and the parent chain. Presentation-only, like the drivers.
@@ -2349,6 +1890,31 @@ export type CreationNoiseDocument = {
    * The hash seed folded into every lattice corner (null = 0).
    */
   seed?: number | null;
+  /**
+   * The regions that scale the relief's displacement down (null = none), in authored order: each entry's weight multiplies the relief, so a basin, a pad or a path stands where its shapes put it (CreationReliefMaskDocument).
+   */
+  masks?: ({
+    /**
+     * The region's shapes, at least one: geometry only (type, name, pose, scale, exponent, rounding, chamfer, elongate, a prism's profile and lift), of a type contact admits.
+     */
+    shapes: (ShapeNullable33 | null)[];
+    /**
+     * The band's width, in creation units, above zero.
+     */
+    fade: number;
+    /**
+     * Where the band starts, as a distance in creation units from the region's surface; negative starts it inside the region (null = 0).
+     */
+    start?: number | null;
+    /**
+     * The weight on and inside the region, in [0, 1] (null = 0).
+     */
+    inside?: number | null;
+    /**
+     * The weight past the band, in [0, 1] (null = 1).
+     */
+    outside?: number | null;
+  } | null)[] | null;
 };
 
 /**
@@ -4236,20 +3802,150 @@ export type ShapeNonNullable55 = {
   shape?: ShapeNullable12 | null;
 };
 
-export type ShapeNonNullable56 = number | string | boolean;
+export type ShapeNonNullable56 = {
+  $type?: "symmetry";
+  /**
+   * The plane normal, in the shape's creation-space frame (normalized at canonicalization; a zero/non-finite normal falls back to UnitX — the retired Mirror: true flag's exact fold).
+   */
+  normal: unknown;
+  /**
+   * The plane's signed offset along Normal (null = 0, through the creation origin).
+   */
+  offset?: number | null;
+};
 
 export type ShapeNonNullable57 = {
-  epochTick?: number;
-  epochEngineTick?: number;
-  y0?: string;
-  v0?: string;
-  substepTicks?: number;
+  $type?: "repeat";
+  /**
+   * The per-axis cell spacing, creation units (clamped to >= 0.001 per axis, matching the builder's own floor).
+   */
+  spacing: unknown;
+  /**
+   * The per-axis repeat-cell limit — the lattice spans cell indices -limit..+limit (null = UnboundedRepeatLimit per axis, a lattice with no edge).
+   */
+  limit?: unknown;
+  /**
+   * The point the lattice folds around, creation units (null = the creation origin, the fold this op has always used). Cell selection centres on this point instead of the creation root — the lattice of physical copies is unchanged, so a null origin is byte-identical to today's fold.
+   */
+  origin?: unknown;
+  /**
+   * Whether the lattice has no edge: its limit, or an absent one, reaches UnboundedRepeatLimit on any axis. The program's own answer (IsUnboundedRepeat) decides it.
+   */
+  isUnbounded?: boolean;
 };
+
+export type ShapeNonNullable58 = {
+  $type?: "polar";
+  /**
+   * The sector count around the axis (clamped >= 1).
+   */
+  count: number;
+  /**
+   * The rotation axis (null = Y, the XZ ground plane).
+   */
+  axis?: ShapeNullable17 | null;
+  /**
+   * Whether adjacent sectors mirror across their shared bisector (null = false).
+   */
+  mirror?: boolean | null;
+  /**
+   * The per-sector palette stride (null = 0, geometric only).
+   */
+  materialStride?: number | null;
+  /**
+   * The point the sector fold pivots around, creation units (null = the creation origin, the pivot this op has always used). A null origin is byte-identical to today's fold.
+   */
+  origin?: unknown;
+};
+
+export type ShapeNonNullable59 = "P1" | "P2" | "Pm" | "Pg" | "Cm" | "Pmm" | "Pmg" | "Pgg" | "Cmm" | "P4" | "P4M" | "P4G" | "P3" | "P3M1" | "P31M" | "P6" | "P6M";
 
 export type ShapeNonNullable6 = {
   at: number;
   value: [number, number];
   ease?: "Linear" | "Smooth" | "Step";
+};
+
+export type ShapeNonNullable60 = {
+  $type?: "wallpaper";
+  /**
+   * The wallpaper group: one whose fold is continuous (PMM, P4M, P3M1, P6M; see IsContinuous). A program refuses any other group by name when it builds.
+   */
+  group: ShapeNonNullable59;
+  /**
+   * The lattice cell extents in the fold plane, creation units.
+   */
+  cell: unknown;
+  /**
+   * The repeat-cell limit per plane axis (null = UnboundedLimit per axis): a non-negative whole number of cells for a square group, and unbounded for a hex group, which is bounded by intersecting it with a bounding shape instead (LimitRefusal).
+   */
+  limit?: unknown;
+  /**
+   * The fold plane (null = XZ).
+   */
+  plane?: ShapeNullable18 | null;
+  /**
+   * The parity-material stride (null = 0, geometric only).
+   */
+  materialStride?: number | null;
+};
+
+export type ShapeNonNullable61 = {
+  $type?: "jitter";
+  /**
+   * The per-axis cell spacing, creation units (clamped to at least 0.001 per axis).
+   */
+  spacing: unknown;
+  /**
+   * The peak-to-peak hashed displacement per axis, creation units; it must stay under the least spacing, and the shape's reach plus half of it under half the least spacing, or the copies cross their cell walls and the program refuses them.
+   */
+  amount: number;
+  /**
+   * The hash seed (null = 0).
+   */
+  seed?: number | null;
+  /**
+   * The hashed rotation's share of a half turn, in [0, 1] (null = 0, every copy upright).
+   */
+  tumble?: number | null;
+  /**
+   * The hashed palette rows a copy's material strides over (null = 0, geometric only); the palette must hold the rows the stride reaches.
+   */
+  materialVariants?: number | null;
+  /**
+   * How the displacement is distributed over the cell (null = White).
+   */
+  flavor?: ShapeNullable19 | null;
+  /**
+   * The point the lattice folds around, creation units (null = the creation origin).
+   */
+  origin?: unknown;
+};
+
+export type ShapeNonNullable62 = {
+  $type?: "logSphere";
+  /**
+   * The ratio between neighbouring shells' radii, above 1 (clamped to at least MinShellRatio).
+   */
+  shellRatio: number;
+  /**
+   * The spin each shell turns about the fold's Z axis, in radians per shell (null = 0, concentric shells).
+   */
+  twist?: number | null;
+  /**
+   * The point the shells centre on, creation units (null = the creation origin).
+   */
+  origin?: unknown;
+};
+
+export type ShapeNonNullable63 = number | string | boolean;
+
+export type ShapeNonNullable64 = {
+  epochTick?: number;
+  epochEngineTick?: number;
+  y0?: string;
+  v0?: string;
+  substepTicks?: number;
 };
 
 export type ShapeNonNullable7 = {
@@ -4409,16 +4105,13 @@ export type ShapeNullable15 = {
   value: ShapeNonNullable55;
 };
 
-export type ShapeNullable16 = {
-  /**
-   * A driver declared before the one this curve modulates.
-   */
-  driver: string;
-  /**
-   * The world's curves row: open and drawn left to right, each knot further along X than the last with its tangent pointing toward +X. The world validator refuses a row that is not.
-   */
-  curve: string;
-};
+export type ShapeNullable16 = "Union" | "SmoothUnion" | "Subtraction" | "Intersection" | "Xor" | "SmoothIntersection" | "SmoothSubtraction" | "ChamferUnion" | "ChamferIntersection" | "ChamferSubtraction" | "GrooveUnion" | "PipeUnion" | "Morph" | "GrooveSubtraction" | "PipeSubtraction" | "StairsUnion" | "StairsSubtraction";
+
+export type ShapeNullable17 = "X" | "Y" | "Z";
+
+export type ShapeNullable18 = "XZ" | "XY" | "YZ";
+
+export type ShapeNullable19 = "White" | "Blue" | "Gaussian";
 
 export type ShapeNullable2 = {
   end: [number, number];
@@ -4428,10 +4121,392 @@ export type ShapeNullable2 = {
   clockwise?: boolean;
 };
 
+export type ShapeNullable20 = ShapeNonNullable56 | ShapeNonNullable57 | ShapeNonNullable58 | ShapeNonNullable60 | ShapeNonNullable61 | ShapeNonNullable62 | null;
+
+export type ShapeNullable21 = {
+  /**
+   * The Name supplying (φ, w). An unresolvable name is refused at canonicalization.
+   */
+  driver: string;
+  /**
+   * The joint the shape turns about, in the creation's author frame (see CreationFrame) — a shoulder or a hip, not the shape's own centre.
+   */
+  pivot: unknown;
+  /**
+   * The rotation axis, in the creation's author frame; normalized at canonicalization. A positive angle turns right-handed about it.
+   */
+  axis: unknown;
+  /**
+   * The peak angle in radians, magnitude at most MaxAmplitude. A negative amplitude mirrors the swing, which is how a limb on the body's other side reads.
+   */
+  amplitude: unknown;
+  /**
+   * The phase offset added to the driver's phase, radians (null = 0) — how two limbs on one driver are put out of step (contralateral arms differ by π).
+   */
+  phase?: unknown;
+  /**
+   * The waveform name (null = Sine); see CreationWave.
+   */
+  wave?: string | null;
+};
+
+export type ShapeNullable22 = {
+  /**
+   * The Name supplying (φ, w). An unresolvable name is refused at canonicalization.
+   */
+  driver: string;
+  /**
+   * The slide direction, in the creation's author frame; normalized at canonicalization.
+   */
+  axis: unknown;
+  /**
+   * The peak offset in creation units, magnitude at most MaxAmplitude.
+   */
+  amplitude: unknown;
+  /**
+   * The phase offset added to the driver's phase, radians (null = 0).
+   */
+  phase?: unknown;
+  /**
+   * The waveform name (null = Sine); see CreationWave.
+   */
+  wave?: string | null;
+};
+
+export type ShapeNullable23 = {
+  /**
+   * How far the panel copy shrinks on every local axis before it is placed — the copy's own scale is shape scale − Inset per axis (floored at MinimumScale), a sharp-cornered shrink rather than a rounded Minkowski erosion. The panel recipe changes the copy's primitive dimensions rather than applying Dilate to its field. Creation units. Finite and non-negative; refused by name past the shape's smallest local half-extent (the smallest of HalfExtent over the X, Y, and Z local axes) — past that the eroded copy is empty everywhere.
+   */
+  inset: number;
+  /**
+   * How far the panel's own face sits from the plate's face along Face, in creation units, exact whatever the Inset. Positive recesses it: the eroded copy is composed with Subtraction so its near face becomes the recess floor exactly Depth below the plate's face — the floor and walls shade with Material, the subtraction-shades-with-the-subtrahend convention the Moth's hood opening rides. Negative raises the panel proud by |Depth| instead: the copy is composed with Union, its far face standing |Depth| past the plate's own and its back end buried inside the plate. Finite; refused by name past ±2·h′, the eroded copy's own full extent along Face — deeper, a recess carves an enclosed void and a raise floats detached, both silent no-ops on the surface. See Resolve for the offset each case translates the copy by.
+   */
+  depth: number;
+  /**
+   * The panel's own palette slot — see Material. Clamped into [0, CreationDocument.PaletteSize) at normalization.
+   */
+  material: number;
+  /**
+   * The local direction the panel erodes and offsets against, read in the primitive's own local frame — before its placement transform, the same frame Domain ops read. Null defaults to +Z (the Prism extrude axis / a Box's front); a non-finite or zero-length authored value is refused by name, and a finite non-unit one is normalized at canonicalization, mirroring a domain op's own normal. Any primitive may author a curved face (a Cylinder's +X rim, say) — the erode/translate/blend recipe reads only Support along the axis, never the primitive's curvature.
+   */
+  face?: unknown;
+};
+
+export type ShapeNullable24 = {
+  /**
+   * The Name of another shape in the same creation, declared EARLIER in shapes (so a chain resolves in one pass and can never cycle — mirrors Parent's own rule). A Subtraction cutter riding the host's own Group is the common case; a plain plane-like Box with blend Union works too. Only the reference's own primitive geometry (type, scale, taper, profile, lift, rounding, chamfer) and pose are re-read; its own blend, domain, panel, and trims play no part in the band.
+   */
+  shape: string;
+  /**
+   * How far outward from the reference shape's own surface the band reaches, in creation units. Finite and positive; refused by name otherwise. Baked into the reference copy's own scale (a sharp-cornered growth — the mirror image of, and the same imprecision, Inset's own erosion already accepts) rather than a field-op dilation: it is the only way the reference's own offset survives composing through the macro's Intersection blend inside the one field scope both copies share — a field op applied after that blend would dilate the ALREADY-INTERSECTED result (eroding the host's own copy a second time by Width too), not the reference alone.
+   */
+  width: number;
+  /**
+   * The trim's own palette slot — see Material. Clamped into [0, CreationDocument.PaletteSize) at normalization. Used for both copies the macro composes, so whichever term the blend resolves to at a given point still paints the same color.
+   */
+  material: number;
+  /**
+   * The margin the trim's own scope must beat the host's already-present, unmodified surface by to render at all — a real Dilate field op at a POSITIVE radius on the host's own copy (exact and isolated: the copy is alone in the trim's scope at that point, so nothing else is affected). The scope pops via Union into the accumulator the host's own plain shape already folded into, and max(a, b) >= a makes a genuine erosion (a negative radius) provably always lose to that plain surface — the trim would never render — so the copy is instead nudged narrowly CLOSER than the plain surface by Inset, imperceptibly proud rather than inward: it loses everywhere by default (small) and wins only where the reference's own dilated copy does not additionally push the Intersection candidate past it, i.e. near the reference. Creation units, finite, in [0, MaxInset]; refused by name otherwise. Default 0.003 — just enough to clear the plain surface without z-fighting, the pipeline's own shin margin.
+   */
+  inset?: number;
+};
+
+export type ShapeNullable25 = {
+  /**
+   * The linear flare rate at the far end of the span (dimensionless; s(1) = StartScale + Amount). Clamped to [MinAmount, MaxAmount].
+   */
+  amount: number;
+  /**
+   * The mid-span sinusoidal bulge amplitude (dimensionless, peaks at the span's midpoint). Clamped to [-MaxBulge, MaxBulge].
+   */
+  bulge: number;
+  /**
+   * The axial distance the profile runs over, in creation units; finite and strictly greater than zero, or the shape is refused at validation.
+   */
+  span: number;
+  /**
+   * The axial coordinate where the profile begins, in creation units (null = 0).
+   */
+  top?: number | null;
+  /**
+   * Profile axis in [0, 2].
+   */
+  axis?: number;
+  /**
+   * Positive radial scale at the span origin.
+   */
+  startScale?: number;
+};
+
+export type ShapeNullable26 = {
+  /**
+   * The bump's local center, in creation units.
+   */
+  center: unknown;
+  /**
+   * The per-axis Gaussian falloff radii, in creation units — clamped away from zero at normalization (GaussianPushMinRadius) so the exponent's divisor is never zero. Refused by name if any authored component is negative or non-finite (a magnitude is what the field reads; a negative radius states nothing a positive one does not).
+   */
+  radii: unknown;
+  /**
+   * The peak displacement at the center, in creation units (zero = an exact identity, still admitted — it still charges the per-copy instance count).
+   */
+  push: unknown;
+};
+
+export type ShapeNullable27 = {
+  linear: number;
+  quadratic?: number;
+  cubic?: number;
+  target?: number;
+  driver?: number;
+};
+
+export type ShapeNullable28 = {
+  /**
+   * Which dynamic-slot lane drives the erosion.
+   */
+  lane: number;
+  /**
+   * The lane value where erosion begins (t = 0).
+   */
+  from: number;
+  /**
+   * The lane value where the shape is fully eroded (t = 1); may be less than From to run the fold in reverse (the shape grows IN as the lane rises — the torn-fabric use). Must differ from From.
+   */
+  to: number;
+  /**
+   * The erosion front's noise lattice frequency, cells per world unit (null = 1).
+   */
+  noise?: number | null;
+};
+
+export type ShapeNullable29 = {
+  frequency: number;
+  amplitude: number;
+  seed: number;
+  mode: "F1" | "F2MinusF1";
+  randomness: number;
+};
+
 export type ShapeNullable3 = {
   start: [number, number];
   segments: (ShapeNullable2 | null)[];
   closed?: boolean;
+};
+
+export type ShapeNullable30 = {
+  /**
+   * The per-axis angular frequency, radians per creation unit (each clamped to [-MaxFrequency, MaxFrequency]).
+   */
+  frequency: unknown;
+  /**
+   * The farthest the point moves per axis, creation units (clamped to [-MaxAmplitude, MaxAmplitude]).
+   */
+  amplitude: number;
+  /**
+   * The farthest the warp carries any point: the amplitude on every axis at once.
+   */
+  reach?: number;
+};
+
+export type ShapeNullable31 = {
+  /**
+   * The per-axis angular frequency, radians per creation unit (each clamped to [-MaxFrequency, MaxFrequency]).
+   */
+  frequency: unknown;
+  /**
+   * The relief's height either way, creation units (clamped to [-MaxAmplitude, MaxAmplitude]).
+   */
+  amplitude: number;
+  /**
+   * The farthest the relief carries the surface outward.
+   */
+  reach?: number;
+};
+
+export type ShapeNullable32 = {
+  /**
+   * Which dynamic-slot lane drives the morph, in [0, 3].
+   */
+  lane: number;
+  /**
+   * The lane value where the field before the shape shows alone (t = 0).
+   */
+  from: number;
+  /**
+   * The lane value where the shape shows alone (t = 1); must differ from From.
+   */
+  to: number;
+};
+
+export type ShapeNullable33 = {
+  /**
+   * The shape's stable id.
+   */
+  id: number;
+  /**
+   * The optional player-given name, authored literally or through a containing world's Text state cell.
+   */
+  name?: unknown;
+  /**
+   * The primitive.
+   */
+  type: ShapeNonNullable50;
+  /**
+   * The shape's position (the author frame's workbench space).
+   */
+  position: unknown;
+  /**
+   * The orientation.
+   */
+  rotation: unknown;
+  /**
+   * The per-axis scale — the primitive's size (see CreationGeometry).
+   */
+  scale: unknown;
+  /**
+   * The palette slot (null = 0).
+   */
+  material?: number | null;
+  /**
+   * The blend op name (null = Union).
+   */
+  blend?: ShapeNullable16 | null;
+  /**
+   * The smooth-blend radius (null = 0).
+   */
+  smooth?: number | null;
+  /**
+   * The composition group (null = ungrouped).
+   */
+  group?: number | null;
+  /**
+   * The shape's local twist rate (null = 0).
+   */
+  twist?: number | null;
+  /**
+   * The shape's shell thickness (null = 0, solid).
+   */
+  onion?: number | null;
+  /**
+   * The shape's local bend rate about Y (null = 0).
+   */
+  bend?: number | null;
+  /**
+   * The shape's inflation radius (null = 0).
+   */
+  dilate?: number | null;
+  /**
+   * The ordered SDF VM domain operators (ShapeDomainOp) applied to the shape's point in creation space, before its own translate/rotate/scale (null = none). Every op the copy expansion covers reaches contact as well as render; wallpaper does not expand, and a solid placement carrying one is refused at validation.
+   */
+  domain?: (ShapeNullable20 | null)[] | null;
+  /**
+   * The driver-fed rotations this shape rides (ShapeSwingDocument), at most MaxSwings (null = none).
+   */
+  swings?: (ShapeNullable21 | null)[] | null;
+  /**
+   * The driver-fed translations this shape rides (ShapeSlideDocument), at most MaxSlides (null = none). Applied after every swing, along the authored axis. Both facets are presentation-only — composed onto the shape's per-frame dynamic transform and read nowhere else, so the SDF program, the colliders, the solid field, and simulation state are all blind to them. A shape carrying Domain rides its own slot packed with its Parent chain's rigid delta (the identity with no parent), leaving nowhere for its OWN swing/slide to compose, so they are refused alongside a domain list at validation.
+   */
+  slides?: (ShapeNullable22 | null)[] | null;
+  /**
+   * The Name of the shape this one hangs from (null = the creation root): the parent's animated motion carries this shape and its own pivots with it, so a forearm swung at the elbow also rides the upper arm's swing at the shoulder. The parent must be declared earlier in shapes (so a chain resolves in one pass and can never cycle); presentation-only on the same terms as the swings it composes with.
+   */
+  parent?: string | null;
+  /**
+   * The point this shape hinges about when it acts as a bone of a CreationEffectorDocument chain and declares no Swings (null = the pivot of the first swing, or the shape's own position when it has neither). Author-frame, like every other point here. Read only by the effector solve, so it changes no pose on its own.
+   */
+  joint?: unknown;
+  /**
+   * Only for Prism: top width divided by bottom width, finite in [0, 1]. Null uses 0.5; zero makes a triangular profile and one a rectangular profile. Scale holds bottom half-width, half-height and extrusion half-depth. Rotate the prism to reverse its taper.
+   */
+  taper?: number | null;
+  /**
+   * Optional Prism cross-section controls. Null uses a trapezoid; other profiles expose rounded rectangles, polygons, and ellipses with flat extruded caps.
+   */
+  profile?: ShapeNullable7 | null;
+  /**
+   * Only for Prism: how the XY profile becomes a solid. Null or extrude sweeps it along local Z to scale.z. revolve sweeps it about the local Y axis with scale.z as the radial offset — zero gives a solid of revolution (a cowl, a boot cuff, a pauldron dome), a positive offset a ring. Renderable for every profile; a solid placement refuses it, because both contact compilers read a per-axis-scaled local box and a revolve reads scale.z as an offset rather than an extent.
+   */
+  lift?: ShapeNullable8 | null;
+  /**
+   * Only for Box, Prism, Cylinder and Cone: the edge-rounding radius in the creation's own units, finite and non-negative. The profile (and, for an extruded prism, its half-depth) insets by it and the field offsets back out, so the shape keeps its authored extent and its edges fillet; a Box without it is sharp, so boxes that touch meet as one solid, and a solid placement collides as the same rounded or sharp box. Refused by name past MaxRounding.
+   */
+  rounding?: number | null;
+  /**
+   * The shape's second-material inset face region (null = none) — see ShapePanelDocument. Render-only; refused by name on a Plane, on a shape carrying Domain ops or a non-zero Group, and on a creation that otherwise needs its own field scope.
+   */
+  panel?: ShapeNullable23 | null;
+  /**
+   * Only for Box, Cylinder and Prism (an extruded prism only — a revolve has no cap seam to bevel): the 45-degree edge-chamfer radius in the creation's own units, finite and non-negative. Refused by name past MaxChamfer, and refused by name alongside a nonzero Rounding on the same shape.
+   */
+  chamfer?: number | null;
+  /**
+   * The shape's second-material surface bands against other, earlier-declared shapes (null = none), at most MaxTrims — see ShapeTrimDocument. Render-only, like Panel; refused by name on a shape carrying Domain ops, a non-zero Group, or on a creation that otherwise needs its own field scope.
+   */
+  trims?: (ShapeNullable24 | null)[] | null;
+  /**
+   * Whether this shape is a detail shape (null = false): excluded from contact (it never carves the contact field or the collider) while the baked frame samples it like any other shape, so a seam (a thin subtraction) or a rivet (a small union, its own material) bakes into the mesh and paints its footprint through the bake's point-sampled materials. Refused by name alongside Panel or Trims on the same shape.
+   */
+  detail?: boolean | null;
+  /**
+   * The shape's radial flare warp (null = none) — see ShapeFlareDocument. Admitted on every primitive; applies to the shape's own local point after Twist/Bend, in that order (twist, then bend, then flare), before the primitive's own scale. Render-only, like Twist/Bend.
+   */
+  flare?: ShapeNullable25 | null;
+  /**
+   * Only for Superellipsoid: the generalizing exponent, finite in [MinSuperellipsoidExponent, MaxSuperellipsoidExponent] (null = MinSuperellipsoidExponent, the ellipsoid limit — an unauthored Superellipsoid is a plain ellipsoid).
+   */
+  exponent?: number | null;
+  /**
+   * The shape's Gaussian domain-push bumps (null = none), at most MaxBumps — see ShapeBumpDocument. Applied to the shape's own local point after Shear, before the primitive's own scale. Render-only, like Twist/Bend/Flare.
+   */
+  bumps?: (ShapeNullable26 | null)[] | null;
+  /**
+   * A polynomial point shear with explicit target and driver axes.
+   */
+  shear?: ShapeNullable27 | null;
+  /**
+   * The shape's swept-curve geometry (null = none) — see ShapeCurveDocument. Admitted only, and required, on Sweep (refused elsewhere, by name; a Sweep with no curve is refused, by name); refused alongside Panel, Trims, Flare, Shear, Bumps, or Domain on the same shape.
+   */
+  curve?: ShapeNullable9 | null;
+  /**
+   * The shape's per-instance lane-driven erosion (null = none) — see ShapeErodeDocument. Admitted on every primitive; its reach is this shape's own Reach, so it needs no separate authored magnitude.
+   */
+  erode?: ShapeNullable28 | null;
+  /**
+   * Shape-local cellular relief, evaluated after geometry within its own field scope.
+   */
+  cells?: ShapeNullable29 | null;
+  /**
+   * The shape's cross-coupled sinusoidal domain warp (null = none) — see ShapeWarpDocument. Applied to the shape's own local point after Bumps, before Elongate. Render-only.
+   */
+  warp?: ShapeNullable30 | null;
+  /**
+   * The shape's sine relief (null = none) — see ShapeDisplaceDocument. Added to the shape's own field inside its own scope. Render-only.
+   */
+  displace?: ShapeNullable31 | null;
+  /**
+   * The half-extents the primitive's cross-section is swept over, creation units (null = none): Elongate, the capsule-from-sphere operator, applied last to the shape's own local point. Each component is clamped to [0, MaxElongate]. Render-only.
+   */
+  elongate?: unknown;
+  /**
+   * Only with a stairs Blend (StairsUnion, StairsSubtraction): the steps the seam takes over the blend radius Smooth, in [1, MaxSteps] (null = DefaultSteps).
+   */
+  steps?: number | null;
+  /**
+   * Only with a MorphBlend, and required by it: the lane and range the morph runs over — see ShapeMorphDocument.
+   */
+  morph?: ShapeNullable32 | null;
+};
+
+export type ShapeNullable34 = {
+  /**
+   * A driver declared before the one this curve modulates.
+   */
+  driver: string;
+  /**
+   * The world's curves row: open and drawn left to right, each knot further along X than the last with its tangent pointing toward +X. The world validator refuses a row that is not.
+   */
+  curve: string;
 };
 
 export type ShapeNullable4 = {
@@ -13760,13 +13835,13 @@ export type WorldStateRow = {
    * The closed set of cell value kinds a state row declares, shared by every cell the row carries. Carries no float kind: simulation state is float-free by the determinism contract (see Fixed for how a fractional value still rides here). A counter is represented as Fixed; a timer is Int declaring min zero.
    */
   kind: "Int" | "Fixed" | "Bool" | "Text" | "Vector";
-  value?: ShapeNonNullable56;
+  value?: ShapeNonNullable63;
   /**
    * The row's current cells (default empty). Refused past its effective capacity, and on a duplicate key, by name — unless Evicts is set, in which case a write that would grow past capacity evicts the oldest cell instead of refusing (see Evicts). A slot-shaped row (see IsSlot) holds exactly one cell keyed SlotKey; a keyed row may hold any author-chosen keys except SlotKey itself, which is reserved for the value sugar and refused as an authored cell key.
    */
   cells?: {
     key: string;
-    value: ShapeNonNullable56;
+    value: ShapeNonNullable63;
     advance?: StateAdvance;
     dynamics?: StateDynamics;
     cycle?: StateCycle;
@@ -13774,7 +13849,7 @@ export type WorldStateRow = {
      * Whether a cell's effective value-over-time behavior is its carrying row's own default, or an explicit opt-out — see Behavior and Resolve.
      */
     behavior?: "Inherit" | "None";
-    clock?: ShapeNonNullable57;
+    clock?: ShapeNonNullable64;
     visibility?: StateVisibility;
     /**
      * When a stored token property was last seen and whether the latest observation still sees it.
@@ -13914,7 +13989,7 @@ export type WorldStateRow = {
   };
   dynamics?: StateDynamics;
   cycle?: StateCycle;
-  clock?: ShapeNonNullable57;
+  clock?: ShapeNonNullable64;
   /**
    * The vector space name.
    */

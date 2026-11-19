@@ -101,6 +101,12 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
     // otherwise, a world-unit additive erosion. Consumed and cleared there; reset with the chain.
     bool laneErodeSkipShape = false;
     float laneErodeAmount = 0.0;
+    // The relief weight the relief masks since the last relief multiplied (KEEP IN SYNC with SdfFieldEvaluator's
+    // reliefWeight): SDF_OP_RELIEF_WEIGHT multiplies it, the next SDF_OP_NOISE_DISPLACE consumes it and resets it to one.
+    // maskSeed is the open mask scope's seed, its band's end. Neither resets with the chain: a mask and its relief stand
+    // in different chains.
+    float reliefWeight = 1.0;
+    float maskSeed = 0.0;
     // The texturing half of an active wallpaper fold: the cell key times the fold's material stride, added to the
     // material id of later shape wins in the chain (never to the screen sentinel). Reset with the chain.
     int parityMaterialDelta = 0;
@@ -702,7 +708,26 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                         q *= data0.w;
                         octaveAmplitude *= data0.z;
                     }
-                    result.distance += ((data0.y * data1.x) * noiseSum);
+                    // A relief its masks left at weight one adds exactly what an unmasked one adds.
+                    result.distance += (((data0.y * data1.x) * noiseSum) * reliefWeight);
+                    reliefWeight = 1.0;
+                    break;
+                }
+                // A relief mask's weight (KEEP IN SYNC with SdfProgramBuilder.EndReliefMask and SdfFieldEvaluator's
+                // ReliefMaskWeight). data0 = (start, fade, inside, outside), data1.x = the mask scope's HOST-BAKED 1/L.
+                // The scope's accumulator is the region's distance, clamped at the seed (the band's end), where the weight
+                // is exactly its outside; below it the weight follows smoothstep over the band and is exactly its inside
+                // at or below start. Then the accumulator holds the far distance, so the scope's union pop composes nothing.
+                case SDF_OP_RELIEF_WEIGHT: {
+                    SDF_VM_LOAD_DATA0;
+                    SDF_VM_LOAD_DATA1;
+                    float maskWeight = data0.w;
+                    if (result.distance < maskSeed) {
+                        float maskStep = smoothstep(data0.x, (data0.x + data0.y), (result.distance * data1.x));
+                        maskWeight = ((maskStep >= 1.0) ? data0.w : ((maskStep <= 0.0) ? data0.z : (data0.z + ((data0.w - data0.z) * maskStep))));
+                    }
+                    reliefWeight *= maskWeight;
+                    result.distance = SDF_FAR_DISTANCE;
                     break;
                 }
                 case SDF_OP_WALLPAPER_FOLD: {
@@ -804,7 +829,10 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                     if (fieldDepth >= SDF_MAX_FIELD_SCOPE_DEPTH) { return sdfIsaErrorHit(); }
                     fieldParents[fieldDepth] = result;
                     fieldDepth++;
-                    result.distance = SDF_FAR_DISTANCE;
+                    // A relief mask's push carries its seed's float bits in the Shape lane; every other push reads zero
+                    // there and seeds the far distance.
+                    maskSeed = asfloat(SDF_INSTRUCTION_SHAPE(instructionHeader));
+                    result.distance = ((maskSeed > 0.0) ? maskSeed : SDF_FAR_DISTANCE);
                     if (trackMaterial) {
                         result.material = 0;
                         result.lanes = float4(0.0, 0.0, 0.0, 0.0);

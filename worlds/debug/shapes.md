@@ -341,6 +341,7 @@ The inventory comes from the code: `SdfSolidPrimitive`, `SdfBlendOp`,
 | `wallpaper` Pmm, P4M (bounded), P3M1, P6M (clipped), material stride | `shape-wallpaper-pmm`, `-p4m`, `-p3m1`, `-p6m`, `-stride` |
 | Folds riding a moving parent | `motion-mirror`, `motion-polar` |
 | Creation `noise` | `shape-noise` and `shape-noise-subject` (noise displaces every shape and text run of the creation it sits in, so the lumpy sphere is its own creation placed over the plinth's, which stays clean) |
+| Creation `noise` under relief masks | `shape-noise-mask`: one mask over the bowl pressed into the slab (inside 0, so the bowl keeps its authored surface) and one about the slab (inside 1, outside 0, so plinth and plaque stay clean in the same creation) |
 | The other thirteen wallpaper groups | not exhibited: the program refuses every group whose walls are not all mirrors |
 | `jitter` (CellJitter: hashed displacement, tumble, material variants, a noise flavour), `logSphere` (LogSphere) | `shape-jitter`, `shape-jitter-tumble`, `shape-log-sphere`: render only, each clipped by an intersection inside the creation scope, since neither lattice has an edge |
 | Shape types Vesica, Star | not exhibited: no creation primitive lowers to them; they are builder-only |

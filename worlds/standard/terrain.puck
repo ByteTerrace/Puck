@@ -61,8 +61,9 @@ template terrainFloorCut(top, below = 10, reach = 2000) {
 }
 
 // The fBm relief over a sector's union: amplitude in metres, frequency in cells per metre. Six octaves of lacunarity 2
-// put the finest at 32 times the base frequency.
-template terrainRelief(seed, amplitude = 4, frequency = 0.02, octaves = 6) {
+// put the finest at 32 times the base frequency. `masks` lists the regions the relief stays out of (terrainBasinMask),
+// so a bowl, a pad or a path stands where its shapes put it.
+template terrainRelief(seed, amplitude = 4, frequency = 0.02, octaves = 6, masks = []) {
   noise {
     frequency: frequency
     amplitude: amplitude
@@ -70,5 +71,21 @@ template terrainRelief(seed, amplitude = 4, frequency = 0.02, octaves = 6) {
     gain: 0.5
     lacunarity: 2
     seed: seed
+    masks: masks
   }
+}
+
+// One relief mask over the bowls terrainBasin carves, one region for every row, so a basin and the outlet that cuts its
+// lip form one region and the relief is exactly zero on and under their floors. `fade` is the band, in metres, over which
+// the relief returns past the bowls' surfaces; at least 9/8 of the relief's amplitude keeps a hidden pocket from opening
+// under a thin carved floor, and the default is twice the standard relief's 4 m.
+function terrainBasinMask(basins, fade = 8) = {
+  fade: fade
+  shapes: map(basins, basin => {
+    type: "Superellipsoid"
+    name: basin.label
+    exponent: 2
+    position [basin.lateral, basin.y, basin.radial]
+    scale: basin.radii
+  })
 }

@@ -293,11 +293,26 @@ public static class SdfMeshAudit {
         var instructions = program.Instructions;
         var shapes = new List<(int Instruction, SdfProgram Field)>();
         var chain = new List<int>();
+        // The scope depth a relief mask opened at (SdfProgram.IsReliefMaskPush), zero outside one: a mask's shapes draw
+        // a region, never a surface, so none is a shape the audit names.
+        var depth = 0;
+        var maskDepth = 0;
 
         for (var at = 0; (at < indices.Count); at++) {
             var index = indices[at];
             var op = instructions[index].Op;
 
+            if (op == SdfOp.PushField) {
+                depth++;
+                if ((maskDepth == 0) && SdfProgram.IsReliefMaskPush(instruction: instructions[index])) { maskDepth = depth; }
+                continue;
+            }
+            if (op == SdfOp.PopField) {
+                if (depth == maskDepth) { maskDepth = 0; }
+                depth--;
+                continue;
+            }
+            if (maskDepth > 0) { continue; }
             if (op == SdfOp.ResetPoint) {
                 chain.Clear();
                 chain.Add(item: index);

@@ -119,9 +119,11 @@ The `.puck` form uses the same row syntax as the creation's shapes. A `mask`
 block is one entry of `noise.masks`, and the `shape` rows inside it are that
 entry's `shapes`. The world vocabulary gains one `mask` construct. It reuses
 the existing `shape` construct for its rows rather than defining a second
-shape grammar. Unchecked: whether the `shape` construct in
-`WorldConstructs.Sections.cs` already resolves inside a nested block, or needs
-its enclosing rule widened.
+shape grammar: the lowering dispatches `shape` by keyword at any nesting
+(`WorldDocumentEmitter.LowerBlock`), and every `ShapeDocument` array takes
+the row defaults by type (`WorldDocumentMembers`), a mask's included. The
+construct is still to be added; until it is, a mask is written through the
+generic value path below.
 
 ```text
 noise {
@@ -300,9 +302,10 @@ The design rests on five invariants.
    `a · (w ∇n + n ∇w)` with `|n| ≤ 1` and `w ≤ 1`, and smoothstep's slope is
    at most 1.5 per band width. The 1/L baked onto ReliefWeight makes the
    region's distance 1-Lipschitz. *Enforced* by computing B in one public
-   formula on `SdfProgram`, beside `SdfProgram.NoiseDisplaceStepFactor`.
-   `AnalyzeLipschitz` and the canonicalizer's budget check both call it, as
-   they share the unmasked formula today.
+   formula, `SdfProgram.NoiseDisplaceStepFactor`'s mask slope
+   (`SdfProgram.ReliefMaskSlope`), which `AnalyzeLipschitz` bakes and
+   `CreationNoiseDocument.StepFactor` reports. The canonicalizer has no budget
+   check that reads it.
 
 **Where the guarantee stops.** Wherever an entry's `inside` is 0, the relief's
 term is exactly zero on the region's surface and inside it. A carve or pad
@@ -445,38 +448,32 @@ dearest:
 
 #### Steps to build it
 
-- **Step A: the mask, CPU and kernel together.** This step covers the record
-  and the canonicalizer, the `mask` construct and its spelling pair, the
-  builder's mask API, `SdfProgram` validation, the op's role, the Lipschitz
-  term, both interpreters' arms, the bounds and cull arms, EmitNoise, and the
-  kernel's ReliefWeight, seeded push and register read. The rendering skill's
-  rule is that an instruction touches every partner in one change, so the
-  kernel arm is part of this step. Build and check it now with the CPU bake;
-  it lands in the bake batch. If TerrainRelief is ready by then, it lands
-  together with it and reads the register. If TerrainRelief is not ready, the
-  mask lands on NoiseDisplace, and TerrainRelief takes over the read later.
-  *Checks:*
-  - The spelling pair compiles to identical documents.
-  - Outside every band, a masked program and its unmasked twin read
-    bit-identical fixed-point values. The weight there is exactly 1, and
-    multiplying by exactly 1 changes no bits.
-  - On a mask region's surface with `inside: 0`, the masked field equals the
-    creation's unrelieved field exactly.
-  - `puck creation stats` prints the scoped clamp B predicts.
-  - The north-west sector's CPU bake sample count, with and without the mask,
-    decides the step-bound formula as described above.
+- **Step A: the mask, CPU and kernel together.** Built on `NoiseDisplace`
+  (`SdfOp.ReliefWeight`, `SdfProgramBuilder.BeginReliefMask`,
+  `SdfProgram.RequireReliefMasks`, `CreationReliefMaskDocument`); the sync
+  pair is in the [rendering skill](../../.claude/skills/rendering/references/sync-pairs.md#instruction-semantics-shared-by-both-interpreters).
+  `TerrainRelief` takes over the register's read when it lands. Its checks
+  read: outside every band the masked and unmasked fields agree bit for bit,
+  and on and inside a region of inside weight zero the masked field is the
+  unrelieved one (`SdfReliefMaskLawTests`); `puck creation stats` prints the
+  north-west sector's clamp as 3.33×, as B predicts; and the sector's CPU bake
+  measured 8.91 million samples with the mask against 9.45 million without,
+  inside the 1.5× budget, so the sum formula stays. Still open: the `mask`
+  construct and its spelling pair; the generic value path carries the mask
+  meanwhile.
 - **Step B: kernel agreement.** This is step 3's existing target applied to a
   masked sector: a fixed-point CPU bake and a kernel bake agree within the
   bake's tolerance, on Direct3D 12 and on Vulkan. *Check:* `puck mesh audit`
   against the kernel bake, both backends (a GPU leg).
-- **Step C: the exhibit and the gallery.** Author the lake's mask in
-  `worlds/standard/terrain.puck` and `worlds/debug/valley.puck`. Add the
-  headless test. Add a gallery exhibit beside NOISE in
-  `worlds/debug/shapes.puck`, so the gallery tests the mechanism the way it
-  tests every other shared system: a relieved slab with a bowl pressed into it
-  under a mask, and its plaque saying the bowl stays smooth while the slab
-  stays rough. *Checks:* the proof exhibit's three checks, and the gallery
-  exhibit's capture in the same window.
+- **Step C: the exhibit and the gallery.** The lake's mask is authored
+  (`terrainBasinMask` in `worlds/standard/terrain.puck`, the sector's call in
+  `worlds/debug/valley.puck`), and the gallery's RELIEF MASK exhibit
+  (`shape-noise-mask` in `worlds/debug/shapes.puck`) stands before NOISE: a
+  relieved slab with a bowl pressed into it, under one mask over the bowl and
+  one that keeps the relief on the slab, so plinth and plaque stay clean in
+  the same creation. Still open: the headless test, and the windowed checks.
+  *Checks:* the proof exhibit's three checks, and the gallery exhibit's
+  capture in the same window.
 - The glacier's cradle, the falls' corridor and the overlook belong to step 8
   and the water plan's place lanes. Each reuses the mask with no engine work.
 

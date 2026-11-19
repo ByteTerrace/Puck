@@ -97,6 +97,11 @@ public static class SdfEncodingProbe {
         Call(name: "dilate", inputs: [0.06f], emit: static (b, m, v) => Shape(b: b.ResetPoint(), material: m).Dilate(radius: v[0]));
         Call(name: "displace", inputs: [0.51f, 0.53f, 0.57f, 0.04f], emit: static (b, m, v) => Shape(b: b.ResetPoint(), material: m).Displace(amplitude: v[3], frequency: new Vector3(x: v[0], y: v[1], z: v[2])));
         Call(name: "noise-displace", inputs: [0.9f, 0.03f, 3f, 0.45f, 2.25f, 13f], emit: static (b, m, v) => Shape(b: b.ResetPoint(), material: m).NoiseDisplace(amplitude: v[1], frequency: v[0], gain: v[3], lacunarity: v[4], octaves: ((int)v[2]), seed: ((uint)v[5])));
+        // A relief mask: the region (a second unit sphere) inside its seeded scope, then the relief it weights, all inside
+        // the scope that holds the shape it relieves, as CreationStampEmitter.EmitNoise emits it.
+        Call(name: "relief-weight", inputs: [0.25f, 0.5f, 0.2f, 0.9f, 0.9f, 0.03f], emit: static (b, m, v) => Shape(b: b.ResetPoint().PushField().ResetPoint(), material: m)
+            .BeginReliefMask(fade: v[1], inside: v[2], outside: v[3], start: v[0]).ResetPoint().Sphere(material: m, radius: 1f).EndReliefMask()
+            .ResetPoint().NoiseDisplace(amplitude: v[5], frequency: v[4]).PopField());
         foreach (var mode in Enum.GetValues<SdfCellMode>()) {
             Call(name: $"cell-displace {mode}", inputs: [0.95f, 0.02f, 17f, 0.15f], emit: (b, m, v) => Shape(b: b.ResetPoint(), material: m).CellDisplace(amplitude: v[1], frequency: v[0], mode: mode, randomness: v[3], seed: ((uint)v[2])));
         }
