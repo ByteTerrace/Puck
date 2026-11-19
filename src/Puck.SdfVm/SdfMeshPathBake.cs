@@ -1284,7 +1284,7 @@ public sealed partial class SdfMeshPathBake {
         }
         // Geometry an earlier bake found no surface in meshes nothing again.
         if (Library.HoldsEmpty(geometry: group.Sealed, identity: identity)) {
-            group.Outcome = "no surface, as baked before";
+            group.FoundNoSurface(how: ", as baked before");
             group.Done = true;
             return true;
         }
@@ -1497,7 +1497,7 @@ public sealed partial class SdfMeshPathBake {
             if (!m_groups.Contains(item: group)) { return; }
             m_accounts.KindSamples[0] += request.Samples;
             if (empty) {
-                group.Outcome = $"no surface after {group.Refinements} refinements";
+                group.FoundNoSurface(how: $" after {group.Refinements} refinements");
                 group.Next = null;
                 group.Done = true;
                 group.Mesh = null;
@@ -2209,7 +2209,7 @@ public sealed partial class SdfMeshPathBake {
             m_accounts.Loaded++;
             group.Done = true;
             group.Stored = true;
-            if (mesh is null) { group.Outcome = "no surface, as stored before"; }
+            if (mesh is null) { group.FoundNoSurface(how: ", as stored before"); }
             Draw(group: group, mesh: mesh);
             Finish();
         }
@@ -2513,6 +2513,11 @@ public sealed partial class SdfMeshPathBake {
         public FinalLattice? Final { get; set; }
         // Why a finished group has no mesh, or null.
         public string? Outcome { get; set; }
+        // Records that the group found no surface, `how` saying where the answer came from. A group whose bound the plan
+        // clamped to the frame's far distance (a world that authors none bakes 40 m about each instance's centre) says so,
+        // since its empty answer is about the clamp, not the geometry.
+        public void FoundNoSurface(string how) =>
+            Outcome = (Clamped ? $"no surface{how} (bound clamped to the far distance)" : $"no surface{how}");
         // The identity of the bake the group started under, and the coarse lattice it bakes from when its load fails.
         public UInt128 Identity { get; set; }
         public SdfMeshBakeRequest? Deferred { get; set; }

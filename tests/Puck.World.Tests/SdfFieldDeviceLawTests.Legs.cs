@@ -51,6 +51,15 @@ public sealed partial class SdfFieldDeviceLawTests {
             }
 
             var (distances, materials) = Reference(evaluator: evaluator);
+            // A scope that holds the whole program and composes by union is deferred by the evaluator: it answers the
+            // scope's field unscaled and carries the scope's 1/L in its own step scale instead, where the kernel scales
+            // the scope's candidate. Over such a program the kernel answers the evaluator's distance times the ratio of
+            // the two step scales (one, to the evaluator's rounding, for a program with no deferred scope).
+            var deferred = ((float)(((double)evaluator.StepScale) / program.StepScale));
+
+            for (var point = 0; (point < distances.Length); point++) {
+                distances[point] *= deferred;
+            }
 
             yield return new SdfFieldLeg(
                 Distances: distances,

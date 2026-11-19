@@ -1321,6 +1321,21 @@ and every memory owner are its steps. This packet holds the defects beside it.
   arriving residency, which is right once windows share. Still to read: the
   residency count, the device pool's held and peak bytes, and the cascade
   families at the hero spawn and in the painting wing.
+- [high] On Direct3D 12 the debug world's mesh region refuses meshes instead of
+  coarsening, so the valley's lake (water, stones, lining), the glacier's ice and
+  the falls do not draw there, while Vulkan draws them. After a settled cold bake
+  on the RTX 4070, `world.residency` on Direct3D 12 read `region-budget=1755015471B
+  region-named=1417497668B region-limit=1286602752B region-refused=398 holes=157
+  detail-bias=0`; on Vulkan `region-limit=1728053248B region-named=1109669796B
+  region-refused=0 detail-bias=1 coarsened=300`. The Direct3D 12 region (mapped,
+  `DirectXGpuMappedBuffer`) stopped growing below its budget and the selector
+  refused placements rather than raising the detail bias
+  (`SdfResidencySelector`, `SdfMeshRegionArena.Clip`). Vulkan's raised bias is
+  not free either: plaque lettering in the gallery drops strokes there ("RO ND
+  CONE", "ELLIPSO D"), which Direct3D 12 draws whole. Find why the mapped
+  region's limit stays under its grant and why refusal wins over the bias; the
+  check is `region-refused=0` and the lake drawn on both backends from the
+  `glacier` place.
 - [medium] Before sparse external targets are used, retain the exact host-word
   coverage of disjoint writes across remapping. `GpuRegion.StageOwed`
   (`src/Puck.Abstractions/Gpu/Residency/GpuRegion.cs`) re-owes the known prefix;
