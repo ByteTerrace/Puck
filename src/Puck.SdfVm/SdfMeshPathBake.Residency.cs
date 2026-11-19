@@ -149,23 +149,46 @@ public sealed partial class SdfMeshPathBake {
     }
     // The closure lives here so that Follow's scan of every group allocates none: a lambda capturing the loop variable
     // allocates its closure on entering each iteration, before the skip checks.
-    private void ScheduleFollowed(Group group) => Schedule(group: group, work: () => TakeFollowed(group: group));
-    // Takes the mesh a follower's leader landed, renumbered for the follower's materials; a follower whose mesh the library
-    // no longer holds starts it itself.
-    private void TakeFollowed(Group group) {
+    private void ScheduleFollowed(Group group) => Schedule(group: group, work: () => TakeLanded(group: group, share: null));
+    // Queues the take of a waiter whose share resolved, on the pool, off the leader's gate; false for a waiter retired since.
+    private bool ScheduleJoined(Group group, SdfMeshBakeShare share) => Schedule(group: group, work: () => TakeLanded(group: group, share: share));
+    // Takes the mesh another group of the group's geometry landed, renumbered for the group's materials, or the empty
+    // result it found: a follower's leader in this bake (no share), or the leader of the share the group waits on. A group
+    // whose leader left nothing in the library (it retired or failed, or the library let its mesh go) starts its geometry
+    // again (Start), waiting on another group that started it meanwhile or leading it itself. On the pool.
+    private void TakeLanded(Group group, SdfMeshBakeShare? share) {
         var taken = Library.TryTake(geometry: group.Sealed, identity: group.Identity, materials: group.MaterialOrder, mesh: out var mesh);
 
         lock (m_gate) {
+            // A waiter that already took, deserted or retired is no longer this share's to finish.
+            if (!m_groups.Contains(item: group) || ((share is not null) && (!ReferenceEquals(objA: group.Joined, objB: share) || group.Done || group.Retired))) { mesh?.Release(); return; }
             group.Contouring = false;
-            if (!m_groups.Contains(item: group)) { mesh?.Release(); return; }
-            if (!taken) {
-                CountStarted(how: Start(group: group));
+            group.Joined = null;
+            group.Waiter = null;
+
+            var empty = (!taken && Library.HoldsEmpty(geometry: group.Sealed, identity: group.Identity));
+
+            if (taken || empty) {
+                if (empty) { group.FoundNoSurface(how: ", as another group baked it"); }
+                group.Done = true;
+                group.Stored = taken;
+                Draw(group: group, mesh: mesh);
+                if (share is not null) {
+                    Library.Shares.Count(kind: SdfMeshBakeShare.Landed);
+                    m_accounts.JoinedLanded++;
+                    if (taken) {
+                        Library.Shares.Add(amount: share.Samples, kind: SdfMeshBakeShare.SamplesSaved);
+                        m_accounts.SamplesSaved += share.Samples;
+                    }
+                }
+                Finish();
                 return;
             }
-            group.Done = true;
-            group.Stored = true;
-            Draw(group: group, mesh: mesh);
-            Finish();
+            if (share is not null) {
+                Library.Shares.Count(kind: SdfMeshBakeShare.Abandoned);
+                m_accounts.JoinedAbandoned++;
+            }
+            CountStarted(how: Start(group: group));
         }
     }
     // How a group the library held no mesh of began (Start): a bake, a load from the store, or a wait on another group's
@@ -213,43 +236,6 @@ public sealed partial class SdfMeshPathBake {
     // Counts a start outside a restart's, resample's or promotion's own counts (PlaceCounts) into the bake's done line.
     private void CountStarted(Started how) {
         if (how == Started.Joined) { m_accounts.Joined++; }
-    }
-    // Queues the take of a waiter whose share resolved, on the pool, off the leader's gate; false for a waiter retired since.
-    private bool ScheduleJoined(Group group, SdfMeshBakeShare share) => Schedule(group: group, work: () => TakeJoined(group: group, share: share));
-    // Takes the mesh a waiter's leader landed, renumbered for the waiter's materials, or the empty result it found; a waiter
-    // whose leader left nothing in the library (it retired or failed, or the library let its mesh go) starts its geometry
-    // again, waiting on another group that started it meanwhile or leading it itself.
-    private void TakeJoined(Group group, SdfMeshBakeShare share) {
-        var taken = Library.TryTake(geometry: group.Sealed, identity: group.Identity, materials: group.MaterialOrder, mesh: out var mesh);
-
-        lock (m_gate) {
-            if (!ReferenceEquals(objA: group.Joined, objB: share) || group.Done || group.Retired || !m_groups.Contains(item: group)) { mesh?.Release(); return; }
-            group.Joined = null;
-            group.Waiter = null;
-            if (taken) {
-                group.Done = true;
-                group.Stored = true;
-                Draw(group: group, mesh: mesh);
-                Library.Shares.Count(kind: SdfMeshBakeShare.Landed);
-                Library.Shares.Add(amount: share.Samples, kind: SdfMeshBakeShare.SamplesSaved);
-                m_accounts.JoinedLanded++;
-                m_accounts.SamplesSaved += share.Samples;
-                Finish();
-                return;
-            }
-            if (Library.HoldsEmpty(geometry: group.Sealed, identity: group.Identity)) {
-                group.FoundNoSurface(how: ", as another group baked it");
-                group.Done = true;
-                Draw(group: group, mesh: null);
-                Library.Shares.Count(kind: SdfMeshBakeShare.Landed);
-                m_accounts.JoinedLanded++;
-                Finish();
-                return;
-            }
-            Library.Shares.Count(kind: SdfMeshBakeShare.Abandoned);
-            m_accounts.JoinedAbandoned++;
-            CountStarted(how: Start(group: group));
-        }
     }
     // Starts its geometry itself each waiter whose leader's bake has been asked no take while this bake was asked
     // StallAsks takes over StallSeconds: the leader's residency renders no view, so its background work never binds and

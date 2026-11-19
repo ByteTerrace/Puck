@@ -416,12 +416,29 @@ laws exercise that boundary.
   (`Group.Leader`, `Follow`) and takes the library's mesh, renumbered, when the
   leader lands; the debug world plans 1,115 of its 2,090 groups that way. The
   renumbering shares immutable geometry and allocates remapped triangle materials, so it runs on the pool
-  (`TakeFollowed`), outside the gate the frame takes; a leader that found no
+  (`TakeLanded`), outside the gate the frame takes; a leader that found no
   surface lands the follower empty too (`Draw(group, null)`), or it would keep
   drawing the mesh it had before the rebake. An offline bake of chosen groups
   (`puck mesh audit --cpu --group`) names them in `SdfMeshPathBake.Selection`:
   an unselected group finishes unbaked and leads none, where answering it as
   empty space handed its empty result to a selected follower.
+- **One geometry bakes once across residencies.** A group the restart's index
+  does not cover starts through `SdfMeshPathBake.Start`, the one caller of
+  `Begin`, which asks the library (`SdfMeshLibrary.Share`) whether a bake of its
+  geometry and identity already runs in any residency holding the library. If
+  one does, the group waits on that `SdfMeshBakeShare` (holding no lattice) and
+  takes the leader's mesh from the library when it lands (`TakeLanded`, the
+  same take a follower in one restart makes, on the pool); otherwise it leads a share of its own. The leader's `Done` and
+  `Retired` setters are the one door a share resolves by, under the library's
+  gate, so no group joins a resolved share. A waiter whose leader left nothing
+  in the library (retired, failed, mesh trimmed) starts again, and one whose
+  leader's bake was asked no take while its own was (`DesertStalled`: a
+  residency no frame renders) deserts and leads. A waiter's priority raises its
+  leader's. The start line counts `joined=`, the done line
+  `joined=[groups,landed,abandoned,stalled,samples-saved]`, and
+  `world.counters sdf.mesh-shares` reads the library's totals. The share is a
+  stop type of the bake's code identity: who bakes a geometry never changes what
+  it meshes.
 - **Large static groups draw in chunks.** A union, and one shape whose contour reaches
   `SdfMeshChunks.WholeTriangles` (a 500,000-triangle terrain held one worker for its whole collapse), is chunked;
   a smaller single shape stays whole, since locked seams tripled a terrain sector's first level. A mesh that would
