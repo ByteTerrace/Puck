@@ -125,8 +125,26 @@ public sealed partial class WorldRecipientView(Func<WorldDefinition> definition,
     public bool Discloses(int row, string? key) => Includes(row) && Observer.Discloses(row, key);
     /// <summary>Resolves a named row inside the capability, exposing no arena.</summary>
     public bool Discloses(string row, string? key) => Arena.Catalog.TryResolve(StateLane.Document, row, out var handle) && Discloses(handle.Ordinal, key);
+    // Whether the row's content reaches the recipient at its ceiling as rows do: every row at a replica, and below it a
+    // presented row and every row that can withhold, whether by its own policy, a cell policy or a containing zone's. A
+    // row restricted only by its zone is a restricted row like any other: what is dealt, varied or sized from it reaches
+    // a presentation recipient, so its image, the recipient's document identity and its stream's cuts follow it.
     internal bool Includes(int row) => Observes && (ceiling == WorldDisclosureTier.Replica ||
-        (Arena.Rows[row].HostOwned || Arena.Rows[row].Visibility is not null || Arena.DeclaresCellVisibility(row) || images.Presented(Source).Contains(Arena.Rows[row].Name.Value)));
+        (Arena.Rows[row].HostOwned || Arena.Rows[row].Visibility is not null || Arena.DeclaresCellVisibility(row) || ZoneRestricted(row) ||
+        images.Presented(Source).Contains(Arena.Rows[row].Name.Value)));
+    // Whether nothing on the row's path can withhold a member from the recipient, whatever its ceiling carries of the row:
+    // a delivery cursor holds such a row whole, so a row that stops crossing (a zone removed from a row nobody presents)
+    // is no loss. At a replica it answers as ReadsWhole does.
+    internal bool HoldsWhole(int row) => Observes && Observer.ReadsWhole(row);
+    // Whether a zone containing the row declares a policy of its own or per cell, so that membership can withhold the
+    // row's members.
+    private bool ZoneRestricted(int row) {
+        var arena = Arena;
+        foreach (var zone in arena.Catalog.ContainingZones(row)) {
+            if ((arena.Rows[zone].Visibility is not null) || arena.DeclaresCellVisibility(zone)) { return true; }
+        }
+        return false;
+    }
     /// <summary>Reads a stored value at this ceiling; absent and withheld values return the same empty carrier.</summary>
     public bool TryRead(string row, string? key, out CellValue value) {
         value = default;

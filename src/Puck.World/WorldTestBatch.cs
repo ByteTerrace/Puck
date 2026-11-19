@@ -371,6 +371,7 @@ internal sealed class WorldTestBatch {
         public void DeliverComposition(WorldComposition composition) { }
         public void DeliverDefinition(WorldDefinition definition, WorldDocumentVersion version, in WorldStreamStamp stream) { }
         public void DeliverCut(in WorldStreamStamp stream, bool terminal) { }
+        public void CloseSpan(ulong stream) { }
         public void DeliverSessionLever(WorldSessionLever lever) { }
         public void DeliverState(WorldDefinition definition, WorldDocumentVersion version, in WorldStateStamp stamp, in WorldStreamStamp stream) { }
 

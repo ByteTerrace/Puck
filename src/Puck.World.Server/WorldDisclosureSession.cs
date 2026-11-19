@@ -175,6 +175,10 @@ public sealed class WorldDisclosureSession : IClientSink, IDisposable {
     public void DeliverCut(in WorldStreamStamp stream, bool terminal) => m_transcript.RecordText(door: CutDoor, principal: m_label,
         text: string.Create(provider: CultureInfo.InvariantCulture, handler: $"{Spell(stream: stream)} terminal={terminal}"));
     /// <inheritdoc/>
+    /// <remarks>The transcript records what the authority delivers; a transport's end is the reader's and never a
+    /// record.</remarks>
+    public void CloseSpan(ulong stream) { }
+    /// <inheritdoc/>
     public void DeliverAnswer(in QueryAnswer answer) => m_transcript.RecordText(door: "deliver.answer", principal: m_label, text: Answer(answer: answer));
     /// <inheritdoc/>
     public void DeliverDefinition(WorldDefinition definition, WorldDocumentVersion version, in WorldStreamStamp stream) => m_transcript.RecordText(door: "deliver.definition", principal: m_label,

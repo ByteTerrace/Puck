@@ -540,7 +540,7 @@ public sealed partial class WorldGrants {
     internal void EndSessionsForRebuild() {
         foreach (var session in m_sessions.Values) { Host.Input.Reset(session.Principal); }
         m_sessions.Clear();
-        Host.DetachSessionSinks();
+        Host.DetachSessionSinks(reason: "world.session.rebuilt");
     }
     /// <summary>Revokes the rows any session holds over a body a later generation now occupies, and forgets that
     /// embodiment: the incarnation it drove has left, so it never drives the next occupant. Every door that activates

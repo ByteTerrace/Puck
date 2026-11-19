@@ -270,6 +270,7 @@ public sealed class DeliveryReviewLawTests {
         }
         public void DeliverState(WorldDefinition definition, WorldDocumentVersion version, in WorldStateStamp stamp, in WorldStreamStamp stream) => DeliverDefinition(definition, version, stream: default);
         public void DeliverCut(in WorldStreamStamp stream, bool terminal) { }
+        public void CloseSpan(ulong stream) { }
         public void DeliverSnapshot(in WorldSnapshot snapshot, in WorldStreamStamp stream) {
             Deltas.AddRange(snapshot.FieldCells.ToArray());
             Versions.Add(snapshot.Revision);

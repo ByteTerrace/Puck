@@ -915,6 +915,7 @@ public sealed partial class SessionObservationLawTests {
         public void DeliverDefinition(WorldDefinition definition, WorldDocumentVersion version, in WorldStreamStamp stream) => throw new InvalidOperationException(message: "faulting observer");
         public void DeliverSessionLever(WorldSessionLever lever) => throw new InvalidOperationException(message: "faulting observer");
         public void DeliverCut(in WorldStreamStamp stream, bool terminal) { }
+        public void CloseSpan(ulong stream) { }
         public void DeliverSnapshot(in WorldSnapshot snapshot, in WorldStreamStamp stream) => throw new InvalidOperationException(message: "faulting observer");
         public void DeliverState(WorldDefinition definition, WorldDocumentVersion version, in WorldStateStamp stamp, in WorldStreamStamp stream) => throw new InvalidOperationException(message: "faulting observer");
     }
@@ -936,6 +937,7 @@ public sealed partial class SessionObservationLawTests {
         public void DeliverSessionLever(WorldSessionLever lever) {
         }
         public void DeliverCut(in WorldStreamStamp stream, bool terminal) { }
+        public void CloseSpan(ulong stream) { }
         public void DeliverSnapshot(in WorldSnapshot snapshot, in WorldStreamStamp stream) {
             if (!m_primed) {
                 m_primed = true;
@@ -971,6 +973,7 @@ public sealed partial class SessionObservationLawTests {
         public void DeliverSessionLever(WorldSessionLever lever) {
         }
         public void DeliverCut(in WorldStreamStamp stream, bool terminal) { }
+        public void CloseSpan(ulong stream) { }
         public void DeliverSnapshot(in WorldSnapshot snapshot, in WorldStreamStamp stream) {
             if (++m_snapshots > 1) {
                 throw new InvalidOperationException(message: "faulting observer");
@@ -995,6 +998,7 @@ public sealed partial class SessionObservationLawTests {
         public void DeliverSessionLever(WorldSessionLever lever) {
         }
         public void DeliverCut(in WorldStreamStamp stream, bool terminal) { }
+        public void CloseSpan(ulong stream) { }
         public void DeliverSnapshot(in WorldSnapshot snapshot, in WorldStreamStamp stream) {
         }
         public void DeliverState(WorldDefinition definition, WorldDocumentVersion version, in WorldStateStamp stamp, in WorldStreamStamp stream) {
