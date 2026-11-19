@@ -73,9 +73,24 @@ namespace Puck.SdfVm;
 /// <see cref="SdfGpuWork.GpuShare"/> of the period and never more than one period. Owed jobs enter the queue ahead of
 /// the next frame as every charged job does, so the jobs queued ahead of one frame fit the owed allowance and the
 /// ordinary jobs still fit <see cref="FrameAllowanceSeconds"/>; they never draw on the credit, so the ordinary work
-/// (landing, lighting) keeps its share beside them (<see cref="ChargeGpu"/>).
+/// (landing, lighting) keeps its share beside them (<see cref="ChargeGpu"/>). The landing of a mesh a staged draw waits for
+/// and the first light a shown view reads before its volume publishes (<see cref="SdfMeshIrradiance.OwesFirstLight"/>) are
+/// an arrival's work too: one rule, the work a shown view displays missing, takes the GPU the frame leaves idle.
 /// </para>
-/// <para>The services take from it first come, in the order their residencies are pumped. Thread-safe.</para>
+/// <para>
+/// Invariant: the services draw on the budget in proportion to what the player sees of their residencies, never in the
+/// order they are pumped. Each service holds a turn (<see cref="Join"/>) weighted by its residency's share of the
+/// display's pixels (<see cref="Weigh"/>, at least <see cref="LeastWeight"/>), and every charged job, owed or not, moves
+/// its turn's virtual time by its GPU seconds over that weight (<see cref="ChargeGpu"/>, <see cref="SettleGpu"/>). A
+/// service takes a budgeted job only while its turn is no more than one frame allowance ahead of the least virtual time
+/// among the other turns that took work within <see cref="ActiveSeconds"/> (<see cref="Takes"/>), so two services that
+/// both have work divide the GPU by their weights, and one alone takes everything. A turn that comes back after taking
+/// nothing joins the others' pace and banks none of the time it left unused. The one door is <see cref="Takes"/>, which
+/// the service asks before any budgeted take; a held frame's own work is unbudgeted and takes no turn. It stops at the
+/// weight: the service is weighed by its residency's latest captured frame, so a glass that leaves the view is weighed
+/// at its old share until the residency next captures or goes a frame unread.
+/// </para>
+/// <para>Thread-safe.</para>
 /// </summary>
 /// <param name="clock">Reads the time, in <see cref="Stopwatch"/> ticks; <see langword="null"/> reads
 /// <see cref="Stopwatch.GetTimestamp"/>.</param>
@@ -114,6 +129,14 @@ public sealed class SdfGpuWorkBudget(Func<long>? clock = null) {
     /// before it on the queue, whose fences signaled before its timestamps were written, have been answered and their spans
     /// handed over.</summary>
     public const int JudgeAfter = 2;
+    /// <summary>The least weight a turn takes (<see cref="Weigh"/>): a sixty-fourth, so a residency no view shows still
+    /// brings the meshes and lighting it owes before its glass shows, at a sixty-fourth of the pace of a residency the
+    /// display shows whole.</summary>
+    public const double LeastWeight = (1.0 / 64.0);
+    /// <summary>The wall time, in seconds, since a turn's last charge during which it holds the other turns to its pace
+    /// (<see cref="Takes"/>) unless it found nothing to take since (<see cref="Idle"/>): a tenth of a second, several
+    /// frames, so a service whose next job waits on a deadline or a fence keeps its place.</summary>
+    public const double ActiveSeconds = 0.1;
 
     // The host payload bytes the budget banks at most: a full slot ring of the largest jobs.
     private const double MostUploadCreditBytes = (SdfGpuWork.SlotCount * ((double)SdfGpuWork.MostUploadJobBytes));
@@ -161,6 +184,8 @@ public sealed class SdfGpuWorkBudget(Func<long>? clock = null) {
     // frame. The length reads zero whenever the count does, so rounding left by entries and leavings never holds work.
     private double m_queued;
     private int m_queuedJobs;
+    // Every service's turn (Join), in the order they joined.
+    private readonly List<SdfGpuWorkTurn> m_turns = [];
 
     // The latest background jobs' spans on the queue's clock (a ring), the frames awaiting judgement with the reading
     // they were taken at, and what the judgements counted.
@@ -432,26 +457,108 @@ public sealed class SdfGpuWorkBudget(Func<long>? clock = null) {
             m_wants++;
         }
     }
+    /// <summary>Gives a service a turn on the budget, at full weight, until it parts (<see cref="Part"/>).</summary>
+    /// <param name="name">The service's name, which <see cref="Describe"/> prints the turn under.</param>
+    /// <returns>The turn.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="name"/> is <see langword="null"/>.</exception>
+    public SdfGpuWorkTurn Join(string name) {
+        ArgumentNullException.ThrowIfNull(argument: name);
+
+        var turn = new SdfGpuWorkTurn(name: name);
+
+        lock (m_gate) { m_turns.Add(item: turn); }
+        return turn;
+    }
+    /// <summary>Takes a service's turn off the budget: it holds no other turn back from then on.</summary>
+    /// <param name="turn">The turn <see cref="Join"/> gave.</param>
+    public void Part(SdfGpuWorkTurn turn) {
+        lock (m_gate) { _ = m_turns.Remove(item: turn); }
+    }
+    /// <summary>Returns the weight a turn takes for a residency's share of the display's pixels: the share, held between
+    /// <see cref="LeastWeight"/> and one; one for a share that is not a number.</summary>
+    /// <param name="share">The share, in [0, 1].</param>
+    /// <returns>The weight.</returns>
+    public static double WeightOf(double share) => (double.IsNaN(d: share) ? 1.0 : Math.Clamp(max: 1.0, min: LeastWeight, value: share));
+    /// <summary>Weighs a turn by its residency's share of the display's pixels (<see cref="WeightOf"/>), which the jobs it
+    /// charges from now on move its virtual time over.</summary>
+    /// <param name="turn">The turn.</param>
+    /// <param name="share">The share, in [0, 1]; zero for a residency no view shows.</param>
+    public void Weigh(SdfGpuWorkTurn turn, double share) {
+        ArgumentNullException.ThrowIfNull(argument: turn);
+
+        lock (m_gate) { turn.Weight = WeightOf(share: share); }
+    }
+    /// <summary>Returns whether a service may take a budgeted job now: its turn's virtual time is within one frame
+    /// allowance of the least among the other turns that took work within <see cref="ActiveSeconds"/> and have not found
+    /// nothing to take since, or no other turn has. A turn that has not taken work in that span is first brought up to
+    /// one frame allowance behind that least, so the time it left unused is never banked.</summary>
+    /// <param name="turn">The service's turn.</param>
+    /// <returns><see langword="true"/> when the service may take a job.</returns>
+    public bool Takes(SdfGpuWorkTurn turn) {
+        ArgumentNullException.ThrowIfNull(argument: turn);
+
+        var now = m_clock();
+        var active = ((long)(ActiveSeconds * Stopwatch.Frequency));
+
+        lock (m_gate) {
+            var least = double.PositiveInfinity;
+
+            foreach (var other in m_turns) {
+                if (!ReferenceEquals(objA: other, objB: turn) && Active(candidate: other)) { least = Math.Min(val1: least, val2: other.Virtual); }
+            }
+            if (double.IsPositiveInfinity(d: least)) { return true; }
+
+            var slack = (m_share * m_period);
+
+            if (!Active(candidate: turn)) { turn.Virtual = Math.Max(val1: turn.Virtual, val2: (least - slack)); }
+            if (turn.Virtual <= (least + slack)) { return true; }
+            turn.Holds++;
+            return false;
+        }
+
+        bool Active(SdfGpuWorkTurn candidate) => ((candidate.ActiveAt != 0L) && ((now - candidate.ActiveAt) <= active));
+    }
+    /// <summary>Marks that a service found nothing to take: its turn holds no other turn to its pace until it next takes
+    /// work.</summary>
+    /// <param name="turn">The service's turn.</param>
+    public void Idle(SdfGpuWorkTurn turn) {
+        ArgumentNullException.ThrowIfNull(argument: turn);
+
+        lock (m_gate) { turn.ActiveAt = 0L; }
+    }
     /// <summary>Charges a submitted job's estimated GPU time and enters it among the jobs queued ahead of the next frame
     /// (<see cref="Allowance"/>, <see cref="OwedAllowance"/>) until its charge leaves (<see cref="Leave"/>). A job the
     /// frame owes enters the queue alone and debits nothing: it is held to the owed allowance, not the credit.</summary>
     /// <param name="seconds">The estimate, in seconds.</param>
     /// <param name="owed">Whether the job is work the frame owes, taken under <see cref="OwedAllowance"/>.</param>
+    /// <param name="turn">The submitting service's turn (<see cref="Join"/>), whose virtual time the job moves by its
+    /// estimate over the turn's weight, and which counts as having taken work now; <see langword="null"/> for none.</param>
     /// <returns>The charge: the seconds it debited (the estimate, less what the debt's floor dropped; zero for an owed
     /// job), which the job's settlement (<see cref="SettleGpu"/>) replaces, and the seconds it entered the queue with,
     /// which its leaving takes out.</returns>
-    public SdfGpuWorkCharge ChargeGpu(double seconds, bool owed = false) {
+    public SdfGpuWorkCharge ChargeGpu(double seconds, bool owed = false, SdfGpuWorkTurn? turn = null) {
         var queued = ((double.IsFinite(d: seconds) && (seconds > 0.0)) ? seconds : 0.0);
+        var now = m_clock();
 
         lock (m_gate) {
             m_queued += queued;
             m_queuedJobs++;
+
+            var weight = 1.0;
+
+            if (turn is not null) {
+                weight = turn.Weight;
+                turn.Virtual += (queued / weight);
+                turn.Charged += queued;
+                // Zero marks an idle turn (Idle), which a clock that reads zero must not.
+                turn.ActiveAt = Math.Max(val1: now, val2: 1L);
+            }
             if (owed) {
                 m_owedJobs++;
-                return new SdfGpuWorkCharge(Debited: 0.0, Queued: queued) { Owed = true };
+                return new SdfGpuWorkCharge(Debited: 0.0, Queued: queued) { Owed = true, Turn = turn, Weight = weight };
             }
 
-            return new SdfGpuWorkCharge(Debited: Charge(seconds: seconds), Queued: queued);
+            return new SdfGpuWorkCharge(Debited: Charge(seconds: seconds), Queued: queued) { Turn = turn, Weight = weight };
         }
     }
     /// <summary>Takes a charged job out of the jobs queued ahead of the next frame: its job completed or was abandoned.
@@ -479,6 +586,10 @@ public sealed class SdfGpuWorkBudget(Func<long>? clock = null) {
 
         lock (m_gate) {
             if (clamped) { m_clamped++; }
+            if (charge.Turn is { } turn) {
+                turn.Virtual += ((seconds - charge.Queued) / charge.Weight);
+                turn.Charged += (seconds - charge.Queued);
+            }
             if (charge.Owed) {
                 m_owedSeconds += seconds;
             } else {
@@ -516,11 +627,17 @@ public sealed class SdfGpuWorkBudget(Func<long>? clock = null) {
     /// how often one found it empty, the measurements no job could have made and the charges dropped at the debt's
     /// floor; then the work queued ahead of the next frame, and the frames judged against the background jobs' spans:
     /// those behind background work, those it may have cost (<see cref="FramesMissedBehind"/>), and the background
-    /// GPU time ahead of the frames behind it, in all and at most.</summary>
+    /// GPU time ahead of the frames behind it, in all and at most; then each service's turn: its weight, the GPU time its
+    /// jobs were charged and the takes its turn held back.</summary>
     /// <returns>One space-led field.</returns>
     public string Describe() {
         lock (m_gate) {
-            return string.Create(provider: CultureInfo.InvariantCulture, handler: $" work-budget=[gpu-share:{m_share:0.000},share-cap:{SdfGpuWork.GpuShare:0.00},frame-allowance:{(m_share * m_period * 1000.0):0.00}ms,period:{(m_period * 1000.0):0.00}ms,frame-gpu:{(m_frameSeconds * 1000.0):0.00}ms,interval:{(m_interval * 1000.0):0.00}ms,owed-allowance:{(m_owedFrame * 1000.0):0.00}ms,owed-jobs:{m_owedJobs},owed-gpu:{(m_owedSeconds * 1000.0):0}ms,follows:{m_follows},falls:{m_falls},rises:{m_rises},gpu-credit:{(m_credit * 1000.0):0.00}ms,gpu-granted:{(m_granted * 1000.0):0}ms,gpu-charged:{(m_charged * 1000.0):0}ms,upload-rate:{SdfGpuWork.UploadBytesPerSecond:0}B/s,upload-credit:{m_uploadCredit:0}B,uploaded:{m_uploaded:0}B,wants:{m_wants},clamped:{m_clamped},floored:{m_floored},queued:{m_queuedJobs}/{(m_queued * 1000.0):0.00}ms] frames-behind=[judged:{m_framesJudged},behind:{m_framesBehind},missed:{m_framesMissed},behind-gpu:{(m_behindSeconds * 1000.0):0.0}ms,most-behind:{(m_mostBehindSeconds * 1000.0):0.00}ms]");
+            var turns = new System.Text.StringBuilder();
+
+            foreach (var turn in m_turns) {
+                _ = turns.Append(provider: CultureInfo.InvariantCulture, handler: $"{((turns.Length == 0) ? string.Empty : ",")}{turn.Name}:{turn.Weight:0.000}/{(turn.Charged * 1000.0):0}ms/{turn.Holds}");
+            }
+            return string.Create(provider: CultureInfo.InvariantCulture, handler: $" work-turns=[{turns}] work-budget=[gpu-share:{m_share:0.000},share-cap:{SdfGpuWork.GpuShare:0.00},frame-allowance:{(m_share * m_period * 1000.0):0.00}ms,period:{(m_period * 1000.0):0.00}ms,frame-gpu:{(m_frameSeconds * 1000.0):0.00}ms,interval:{(m_interval * 1000.0):0.00}ms,owed-allowance:{(m_owedFrame * 1000.0):0.00}ms,owed-jobs:{m_owedJobs},owed-gpu:{(m_owedSeconds * 1000.0):0}ms,follows:{m_follows},falls:{m_falls},rises:{m_rises},gpu-credit:{(m_credit * 1000.0):0.00}ms,gpu-granted:{(m_granted * 1000.0):0}ms,gpu-charged:{(m_charged * 1000.0):0}ms,upload-rate:{SdfGpuWork.UploadBytesPerSecond:0}B/s,upload-credit:{m_uploadCredit:0}B,uploaded:{m_uploaded:0}B,wants:{m_wants},clamped:{m_clamped},floored:{m_floored},queued:{m_queuedJobs}/{(m_queued * 1000.0):0.00}ms] frames-behind=[judged:{m_framesJudged},behind:{m_framesBehind},missed:{m_framesMissed},behind-gpu:{(m_behindSeconds * 1000.0):0.0}ms,most-behind:{(m_mostBehindSeconds * 1000.0):0.00}ms]");
         }
     }
 
@@ -609,4 +726,24 @@ public readonly record struct SdfGpuWorkCharge(double Debited, double Queued) {
     internal bool Entered { get; } = true;
     // Whether the job is work the frame owes, whose time the credit never carries (SdfGpuWorkBudget.ChargeGpu).
     internal bool Owed { get; init; }
+    // The turn the job moved and the weight it moved it at, which its settlement moves it at again.
+    internal SdfGpuWorkTurn? Turn { get; init; }
+    internal double Weight { get; init; } = 1.0;
+}
+/// <summary>A service's turn on a <see cref="SdfGpuWorkBudget"/> (<see cref="SdfGpuWorkBudget.Join"/>): its weight, its
+/// residency's share of the display's pixels, and the virtual time its charged jobs moved, by which the budget orders the
+/// services' takes (<see cref="SdfGpuWorkBudget.Takes"/>). Its state is read and written only under the budget's
+/// gate.</summary>
+public sealed class SdfGpuWorkTurn {
+    internal SdfGpuWorkTurn(string name) { Name = name; }
+
+    /// <summary>Gets the name of the service that holds the turn.</summary>
+    public string Name { get; }
+    // The weight (SdfGpuWorkBudget.Weigh), the GPU seconds charged over the weight, the seconds charged, when the turn
+    // last took work (a Stopwatch timestamp, zero once it found nothing to take) and the takes it was held back from.
+    internal double Weight { get; set; } = 1.0;
+    internal double Virtual { get; set; }
+    internal double Charged { get; set; }
+    internal long ActiveAt { get; set; }
+    internal long Holds { get; set; }
 }

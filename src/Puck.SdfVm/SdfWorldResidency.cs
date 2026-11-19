@@ -465,7 +465,11 @@ public sealed partial class SdfWorldResidency : IDisposable {
     /// presentation clock. A frame that captured nothing hands its interval to the next capture, so a residency nothing
     /// read for several frames advances its source by all of them when it is read again.</param>
     public void BeginFrame(double frameSeconds = 0) {
-        if (m_begun && !m_captured) { m_skippedSeconds += m_frameSeconds; }
+        if (m_begun && !m_captured) {
+            m_skippedSeconds += m_frameSeconds;
+            // A frame nothing read shows the player nothing of the residency: its background work takes the least weight.
+            m_tables?.GpuWork.Weigh(share: 0d);
+        }
         m_begun = true;
         m_frameSeconds = Math.Max(val1: frameSeconds, val2: 0);
         m_captured = false;
@@ -520,6 +524,8 @@ public sealed partial class SdfWorldResidency : IDisposable {
             // upload a still view renders from is read back even though no later upload follows it.
             m_work.Poll();
             m_renders = PrepareOnce(context: in context);
+            // The background work draws on the presentation's budget by the share of the display the frame is shown over.
+            if ((m_tables is { } weighed) && (m_frame is { } shown)) { weighed.GpuWork.Weigh(share: shown.DisplayShare); }
             // Tables whose frame waits on a pipeline still serve their background work: the upload is what lets the bake
             // bind the program the construction uploaded, so it samples while the driver compiles the rest.
             if (!m_renders && (m_tables is { } tables) && (m_pipelineWaiting is not null)) { SubmitOnce(tables: tables); }

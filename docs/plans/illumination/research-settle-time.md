@@ -308,7 +308,9 @@ and runs above; none is measured on changed code.
    the grant and never finished its first fill in 900 s; alone (legs 1, 2) it published level 0 in 75 to 89 s.
    The session's 16.1 s of GPU and the garden's 49,152-probe window for 74 draws are the work to cut. *Check:*
    leg 3 repeated: the world's `probe-cache-probes` reaches 49,152 and its level 0 publishes within leg 1's time,
-   and the session's and garden's `trace-jobs` units fall to their coarse levels.
+   and the session's and garden's `trace-jobs` units fall to their coarse levels. *Built:* the services' turns
+   (`SdfGpuWorkBudget.Takes`) and the nested-view table's `indirectLevels` (`SdfFrame.IndirectLevels`); the check is
+   owed.
 2. **Trace a scene neither the view nor the pool moves.** Build the irradiance scene from a per-group trace mesh
    the plan chooses (the floor where a lighting check admits it, a probe-spacing tier where it does not), not from
    `Group.Shown`; keep it resident as floors are now. This is the plan's stable trace mesh and streaming step 9.
@@ -349,6 +351,9 @@ and runs above; none is measured on changed code.
    the allowance rather than admitting a 17 to 19 ms compaction whole. *Saving:* a still-scene settle is 3 to 4 s of
    GPU that the 1 ms floor stretches to minutes; the frames the floor's oversized jobs cost. *Check:* leg 1 repeated:
    level 0 publishes in seconds behind a held first frame, and `most-behind` falls under the frame's headroom.
+   *Built differently:* no frame is held; a seen volume's first light takes the owed allowance an arrival's bake work takes,
+   the GPU time the frame leaves idle (`SdfMeshIrradiance.OwesFirstLight`, `SdfGpuWorkBudget.OwedFrameSecondsOf`), and
+   compactions are cut to the allowance by their own measured rate; the check is owed.
 8. **Pace every rebuild by trace progress, not only while the bake owes meshes.** Apply `ScenePendingDue`'s gate
    whatever `bakePending` says. *Saving:* bounds the loss while fixes 2 and 4 are built, at the cost of lighting a
    scene up to one trace behind the drawn one; worth landing only with them. *Check:* no two `[sdf.mesh-gi] scene`

@@ -131,8 +131,10 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
 
             return new Job(scene.Acquire(), origins.Slice(start: start, length: count)) { CacheSlots = cacheSlots.Slice(start: start, length: count), HitCapacity = hitCapacity };
         });
-    // The GPU time one job is cut to: the presentation budget's live frame allowance, read again for every job.
-    private double FrameAllowanceSeconds => m_tables.GpuWork.FrameAllowanceSeconds;
+    // The GPU time one job is cut to, read again for every job: the presentation budget's live owed allowance while the
+    // volume owes the views their first light, whose jobs the service takes under it (TryTakeOwed), and its frame
+    // allowance otherwise.
+    private double FrameAllowanceSeconds => (m_volume.OwesFirstLight ? m_tables.GpuWork.OwedAllowanceSeconds : m_tables.GpuWork.FrameAllowanceSeconds);
     // The origins one trace job holds at most: those whose measured cost fits the frame allowance.
     private int TraceOriginsPerJob => (int)m_rates[(int)JobKind.Trace].UnitsWithin(most: int.MaxValue, seconds: FrameAllowanceSeconds);
     // The predicted rays one relight job holds at most: those whose measured cost fits the frame allowance,
@@ -316,6 +318,10 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
     // starts only when none is in flight and no query is taken while it runs, and an exclusive query runs alone. Every
     // job is cut to the live frame allowance, a held frame's too: the coordinator cuts queries before any take knows
     // whose frame it serves, and a structure build held to the same span keeps a held frame's submissions as short.
+    /// <inheritdoc/>
+    /// <remarks>While the volume owes the views their first light (<see cref="SdfMeshIrradiance.OwesFirstLight"/>) every
+    /// job it has serves that light.</remarks>
+    public bool OwesAll => m_volume.OwesFirstLight;
     public bool TryTake(SdfWorldTables tables, int uploadBytes, SdfGpuWorkAllowance allowance, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out object? job, out double estimatedSeconds) {
         job = null;
         estimatedSeconds = 0;

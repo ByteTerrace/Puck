@@ -734,7 +734,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
             return Converging(stage: SdfMeshConvergenceStage.Scene);
         }
 
-        var layout = Layout.Of(tier: tier, bounces: frame.IndirectBounces, reach: MathF.Max(x: 1f, y: frame.FarDistance));
+        var layout = Layout.Of(tier: tier, bounces: frame.IndirectBounces, levels: frame.IndirectLevels, reach: MathF.Max(x: 1f, y: frame.FarDistance));
         bool drain;
 
         lock (m_gate) {
@@ -763,9 +763,15 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
                 m_published = default;
             }
             if (resizing || (layout.Reach != m_layout.Reach)) { AdvanceGeometry(); }
-            m_layout = layout;
 
-            var moved = resizing;
+            // A level the views come to read is refilled and listed as a moved window is: its slots may hold another
+            // cell's probe, or none.
+            var moved = (resizing || (layout.Finest != m_layout.Finest));
+            var finest = m_layout.Finest;
+
+            m_layout = layout;
+            // The slots of a level the views read again reach the tables whole: a withdrawn level's changes were dropped.
+            for (var level = layout.Finest; (!resizing && (level < finest)); level++) { OweSlots(level: level); }
 
             foreach (var level in m_levels) {
                 var low = WindowLow(current: level.Low, frame: frame, layout: layout, level: level.Index, resizing: resizing);
@@ -827,6 +833,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
             // frame starts afresh.
             if (drain && (stage == SdfMeshConvergenceStage.None) && (m_owed || (m_drained != DrainKey()))) { stage = SdfMeshConvergenceStage.Drain; }
             Publish(layout: layout, write: write);
+            Volatile.Write(location: ref m_owesFirstLight, value: OwesFirstLightOf(layout: layout, seen: ((frame.DisplayShare > 0f) && (tier != SdfIndirectTier.Off))));
         }
         ScheduleGpuCameraSamples(frame: frame);
         // A frame that does not converge lighting ends any convergence one left behind.
@@ -1103,8 +1110,18 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     // darkness and filling it with sky would invent a leak. The volume is disabled until a level first publishes, and
     // views then light as without it.
     // After a device reattach nothing publishes until RepublishAll has owed every slot.
+    // A level the frame's views do not read (Layout.Measures) is withdrawn: its slots stay, and the views stop reading it.
     private void Publish(Layout layout, Action<ReadOnlyMemory<uint>> write) {
         foreach (var level in m_levels) {
+            if (!layout.Measures(level: level.Index)) {
+                level.Changed.Clear();
+                if (level.Published.Present) {
+                    level.Published = default;
+                    m_wrote = true;
+                }
+                continue;
+            }
+
             var window = layout.WindowOf(level: level.Index, low: level.Low);
 
             if (m_republishOwed || (level.Unwritten > 0) || ((level.Changed.Count == 0) && (level.Published == window))) { continue; }
@@ -1145,6 +1162,24 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         var extent = (layout.SpacingOf(level: level) * new Vector3(x: layout.DimsOf(level: level).X, y: 0f, z: layout.DimsOf(level: level).Z));
 
         return (m_camera + ((ahead / length) * (0.25f * MathF.Min(x: extent.X, y: extent.Z))));
+    }
+    /// <summary>Gets whether the volume owes the views their first light, as of the latest staged frame: a view shows the
+    /// frame (<see cref="SdfFrame.DisplayShare"/> above zero) at a tier that applies the volume's light, and a level the
+    /// views read (<see cref="SdfFrame.IndirectLevels"/>) has not published under the current layout, so the views light
+    /// those surfaces by the camera sample's stand-in. The probe service takes the volume's work under the budget's owed
+    /// allowance while it holds (<see cref="SdfGpuWorkBudget.OwedAllowance"/>), as the bake takes a lattice a view sees
+    /// drawn with nothing: both are work whose absence a shown view displays. Safe to read from any thread.</summary>
+    public bool OwesFirstLight => Volatile.Read(location: ref m_owesFirstLight);
+
+    private bool m_owesFirstLight;
+
+    // Under the gate, after a publication: whether a seen frame's views read a level that has not published.
+    private bool OwesFirstLightOf(Layout layout, bool seen) {
+        if (!seen || (m_scene is null)) { return false; }
+        foreach (var level in m_levels) {
+            if (layout.Measures(level: level.Index) && !level.Published.Present) { return true; }
+        }
+        return false;
     }
     // A level's published window; one not yet published carries its probe counts at zero spacing, so the views pass skips
     // it yet places the coarser levels' slots after its own.
@@ -1422,7 +1457,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
 
             foreach (var level in m_levels) { cached += level.Cache.Count; }
 
-            return string.Create(provider: CultureInfo.InvariantCulture, handler: $"[sdf.mesh-gi] spacing={SpacingText(spacing: m_layout.Spacing)} dims={m_layout.Dims.X}x{m_layout.Dims.Y}x{m_layout.Dims.Z} levels={string.Join(separator: ',', values: m_layout.Levels.Select(selector: static level => SpacingText(spacing: level.Spacing)))} rays={SdfMeshProbeDepth.HitCount} bounce={(m_layout.Bounce ? "on" : "off")} triangles={(m_scene?.TriangleCount ?? 0)} lights={(m_lighting?.Points.Length ?? 0)} cached={cached} lighting-version={m_lightingVersion} local-version={m_localVersion} traced={m_traced} relit={m_relit} traced-rays={m_rays} {DescribeAge()} record-bytes={(SdfMeshIrradianceProbe.ProbeWords * sizeof(uint))} volume-bytes={(m_volume.LongLength * sizeof(uint))} table-device-bytes={buffers.DeviceLocal}");
+            return string.Create(provider: CultureInfo.InvariantCulture, handler: $"[sdf.mesh-gi] spacing={SpacingText(spacing: m_layout.Spacing)} dims={m_layout.Dims.X}x{m_layout.Dims.Y}x{m_layout.Dims.Z} levels={string.Join(separator: ',', values: m_layout.Levels.Select(selector: static level => SpacingText(spacing: level.Spacing)))} measured-from={m_layout.Finest} first-light-owed={(OwesFirstLight ? "yes" : "no")} rays={SdfMeshProbeDepth.HitCount} bounce={(m_layout.Bounce ? "on" : "off")} triangles={(m_scene?.TriangleCount ?? 0)} lights={(m_lighting?.Points.Length ?? 0)} cached={cached} lighting-version={m_lightingVersion} local-version={m_localVersion} traced={m_traced} relit={m_relit} traced-rays={m_rays} {DescribeAge()} record-bytes={(SdfMeshIrradianceProbe.ProbeWords * sizeof(uint))} volume-bytes={(m_volume.LongLength * sizeof(uint))} table-device-bytes={buffers.DeviceLocal}");
         }
     }
 
@@ -1781,7 +1816,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     private void OweRefill() {
         m_windowVersion++;
         m_refillOwed = true;
-        foreach (var level in m_levels) { level.Unwritten = m_layout.CountOf(level: level.Index); }
+        foreach (var level in m_levels) { level.Unwritten = (m_layout.Measures(level: level.Index) ? m_layout.CountOf(level: level.Index) : 0); }
         if (!m_refillRunning) {
             m_refillRunning = true;
             m_refill = Task.Run(action: Refill);
@@ -1803,6 +1838,11 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
                 version = m_windowVersion;
                 m_refillCells.Clear();
                 foreach (var level in m_levels) {
+                    if (!m_layout.Measures(level: level.Index)) {
+                        level.Unwritten = 0;
+                        continue;
+                    }
+
                     var low = level.Low;
                     var dims = m_layout.DimsOf(level: level.Index);
                     var unwritten = m_layout.CountOf(level: level.Index);
@@ -2158,7 +2198,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         var now = Stopwatch.GetTimestamp();
 
         candidates.Clear();
-        for (var level = 0; (level < m_levels.Length); level++) {
+        for (var level = layout.Finest; (level < m_levels.Length); level++) {
             var cache = m_levels[level].Cache;
             var low = snapshot.Lows[level];
             var dims = layout.DimsOf(level: level);
@@ -3329,12 +3369,16 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     // intensity over pi, range, cone and bounce gain.
     private readonly record struct TracedLight(int Index, Vector3 Position, Vector3 Color, float Weight, float Range, Vector3 SpotAxis, float SpotOffset, float Bounce);
     // A tier's volume: its levels (LevelsOf), each level's slots after the finer levels' in the volume, whether hits
-    // reflect the bounce the volume holds about them (any bounce the frame asks for), and the reach of its rays (the
-    // frame's far distance).
-    private readonly record struct Layout(SdfMeshIrradianceLevel[] Levels, bool Bounce, float Reach) {
+    // reflect the bounce the volume holds about them (any bounce the frame asks for), the reach of its rays (the
+    // frame's far distance), and the finest level it measures (SdfFrame.IndirectLevels). A finer level keeps its slots,
+    // so every level's offset stands whatever the frame reads, but is never listed, refilled or published, and the
+    // relight reads it as unpublished (zero spacing).
+    private readonly record struct Layout(SdfMeshIrradianceLevel[] Levels, bool Bounce, float Reach, int Finest) {
         public Vector3 Spacing => Levels[0].Spacing;
         public (int X, int Y, int Z) Dims => Levels[0].Dims;
 
+        // Whether the volume measures a level: one the frame's views read.
+        public bool Measures(int level) => (level >= Finest);
         public Vector3 SpacingOf(int level) => Levels[level].Spacing;
         public (int X, int Y, int Z) DimsOf(int level) => Levels[level].Dims;
         public int CountOf(int level) => Levels[level].Count;
@@ -3349,12 +3393,21 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
 
         public SdfMeshIrradianceWindow WindowOf(int level, (int X, int Y, int Z) low) =>
             new(Dims: DimsOf(level: level), Low: low, Spacing: SpacingOf(level: level));
-        public static Layout Of(SdfIndirectTier tier, int? bounces, float reach) => new(
+        // The layout a frame asks for; `levels` is how many levels its views read from the coarsest, zero for every one.
+        public static Layout Of(SdfIndirectTier tier, int? bounces, float reach, int levels) => new(
             Bounce: ((bounces ?? 1) > 0),
+            Finest: FinestOf(levels: levels),
             Levels: ((tier == SdfIndirectTier.High) ? HighLevels : MediumLevels),
             Reach: reach
         );
     }
+
+    /// <summary>Returns the finest level a volume measures for a frame whose views read <paramref name="levels"/> of its
+    /// levels counted from the coarsest (<see cref="SdfFrame.IndirectLevels"/>).</summary>
+    /// <param name="levels">The levels read, counted from the coarsest; zero or less, or past
+    /// <see cref="SdfMeshIrradianceProbe.Levels"/>, reads every level.</param>
+    /// <returns>The finest level measured, zero (the finest of all) for every level.</returns>
+    public static int FinestOf(int levels) => (((levels <= 0) || (levels >= SdfMeshIrradianceProbe.Levels)) ? 0 : (SdfMeshIrradianceProbe.Levels - levels));
     // Lighting.Capture's workspace: the frame thread's lists, sky map and sky layer table, which every capture refills.
     private sealed class CaptureScratch {
         public List<SdfLight> Lights { get; } = [];

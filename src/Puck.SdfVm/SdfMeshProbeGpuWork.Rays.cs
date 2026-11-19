@@ -27,8 +27,10 @@ internal sealed partial class SdfMeshProbeGpuWork {
     private readonly HashSet<Bottom> m_takenBottoms = new(ReferenceEqualityComparer.Instance);
     private readonly GpuRetirementQueue<IGpuAccelerationStructure> m_retired = new();
     private readonly List<long> m_flying = [];
-    // Seconds a structure job takes a triangle (a bottom's build or copy) or an instance (a top's build).
-    private readonly SdfGpuWorkRate m_structureRate = new(priorSecondsPerUnit: 2e-8);
+    // Seconds a structure job takes a unit, by its kind (StructureKind): a triangle of a bottom's build or of its
+    // compaction's copy, or an instance of a top's build. Each kind is measured apart, since a compaction copies a
+    // built structure while a build sorts its triangles, and one rate over both sizes neither.
+    private readonly SdfGpuWorkRate[] m_structureRates = [new(priorSecondsPerUnit: 2e-8), new(priorSecondsPerUnit: 2e-8), new(priorSecondsPerUnit: 2e-8)];
     private long m_nextSerial = 1;
     private Top? m_top;
     private bool m_structureInFlight;
@@ -130,9 +132,10 @@ internal sealed partial class SdfMeshProbeGpuWork {
         return structure;
     }
 
-    // Takes the next structure job the published scene owes, one at a time: the bottoms its geometries lack, cut to
-    // the allowance by the measured rate; then their compaction; then the top level over its draws. While work is queued a
-    // job past what is left of the allowance waits, decided before any bottom changes state. Under the gate.
+    // Takes the next structure job the published scene owes, one at a time: the bottoms its geometries lack, then their
+    // compaction, each cut to the allowance by its kind's measured rate (a bottom is never split, so one costlier than the
+    // allowance goes alone); then the top level over its draws. While work is queued a job past what is left of the
+    // allowance waits, decided before any bottom changes state. Under the gate.
     private bool TryTakeStructures(SdfWorldTables tables, SdfGpuWorkAllowance allowance, [NotNullWhen(true)] out object? job, out double estimatedSeconds) {
         job = null;
         estimatedSeconds = 0;
@@ -149,10 +152,16 @@ internal sealed partial class SdfMeshProbeGpuWork {
 
         var build = new List<(Bottom Bottom, SdfMesh Mesh)>();
         var compact = new List<Bottom>();
-        var most = allowance.UnitsWithin(most: long.MaxValue, rate: m_structureRate);
+        var buildRate = m_structureRates[(int)StructureKind.Bottoms];
+        var compactRate = m_structureRates[(int)StructureKind.Compaction];
+        var topRate = m_structureRates[(int)StructureKind.Top];
+        var most = allowance.UnitsWithin(most: long.MaxValue, rate: buildRate);
+        var mostCompacted = allowance.UnitsWithin(most: long.MaxValue, rate: compactRate);
         var units = 0L;
-        // The first bottom held back while work is queued, whose build the next take waits for room for.
+        var compacted = 0L;
+        // The first bottom held back while work is queued, whose build or compaction the next take waits for room for.
         var held = 0L;
+        var heldCompaction = 0L;
         var ready = true;
 
         // Many instances share one geometry's bottom: each bottom is taken once, whichever instance names it first.
@@ -175,8 +184,14 @@ internal sealed partial class SdfMeshProbeGpuWork {
                 if (!m_takenBottoms.Add(item: bottom)) { continue; }
                 build.Add(item: (bottom, mesh));
                 units += geometry.Count;
-            } else if ((bottom.State == BottomState.Built) && m_takenBottoms.Add(item: bottom)) {
+            } else if ((bottom.State == BottomState.Built) && !m_takenBottoms.Contains(item: bottom)) {
+                if (((compact.Count != 0) || allowance.Queued) && ((compacted + geometry.Count) > mostCompacted)) {
+                    if ((compact.Count == 0) && (heldCompaction == 0L)) { heldCompaction = geometry.Count; }
+                    continue;
+                }
+                _ = m_takenBottoms.Add(item: bottom);
                 compact.Add(item: bottom);
+                compacted += geometry.Count;
             }
         }
         if (build.Count != 0) {
@@ -200,16 +215,12 @@ internal sealed partial class SdfMeshProbeGpuWork {
             }
             job = new StructureJob(serial: Admit(), kind: StructureKind.Bottoms) { Builds = builds, Units = units };
         } else if (compact.Count != 0) {
-            units = compact.Sum(selector: static bottom => (long)bottom.Geometry.Count);
-            if (!allowance.Admits(seconds: m_structureRate.SecondsOf(units: units))) {
-                estimatedSeconds = m_structureRate.SecondsOf(units: units);
-                return false;
-            }
+            units = compacted;
             foreach (var bottom in compact) { bottom.State = BottomState.Compacting; }
             job = new StructureJob(serial: Admit(), kind: StructureKind.Compaction) { Compactions = [.. compact], Units = units };
         } else if (ready) {
-            if (!allowance.Admits(seconds: m_structureRate.SecondsOf(units: count))) {
-                estimatedSeconds = m_structureRate.SecondsOf(units: count);
+            if (!allowance.Admits(seconds: topRate.SecondsOf(units: count))) {
+                estimatedSeconds = topRate.SecondsOf(units: count);
                 return false;
             }
             var bottoms = new Bottom?[count];
@@ -221,12 +232,12 @@ internal sealed partial class SdfMeshProbeGpuWork {
             }
             job = new StructureJob(serial: Admit(), kind: StructureKind.Top) { Scene = scene.Acquire(), Instances = bottoms, Units = count };
         } else {
-            estimatedSeconds = m_structureRate.SecondsOf(units: held);
+            estimatedSeconds = ((held != 0L) ? buildRate.SecondsOf(units: held) : compactRate.SecondsOf(units: heldCompaction));
             return false;
         }
 
         m_structureInFlight = true;
-        estimatedSeconds = m_structureRate.SecondsOf(units: ((StructureJob)job).Units);
+        estimatedSeconds = m_structureRates[(int)((StructureJob)job).Kind].SecondsOf(units: ((StructureJob)job).Units);
 
         return true;
     }
@@ -320,7 +331,7 @@ internal sealed partial class SdfMeshProbeGpuWork {
             m_structureInFlight = false;
             m_structureBackoff = TimeSpan.Zero;
             if (readback.GpuSeconds is { } seconds) {
-                m_structureRate.Observe(seconds: seconds, units: Math.Max(val1: 1L, val2: job.Units));
+                m_structureRates[(int)job.Kind].Observe(seconds: seconds, units: Math.Max(val1: 1L, val2: job.Units));
                 m_volume.Counters.Add(SdfMeshIrradiance.GpuStructureNanoseconds, (long)(seconds * 1e9));
             }
             switch (job.Kind) {

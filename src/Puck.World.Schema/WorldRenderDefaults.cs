@@ -430,10 +430,14 @@ public sealed record WorldDistantShadows(float Reach, int Texels, float TurnDegr
 /// <param name="Shadows">The finest shadow tier the view keeps: <see cref="ShadowTier.Off"/> drops its cascades, so its
 /// lights take the probes' answer. Absent keeps the world's.</param>
 /// <param name="AmbientOcclusion">Whether the view keeps ambient occlusion: false drops it. Absent keeps the world's.</param>
+/// <param name="IndirectLevels">How many of the viewed world's irradiance-volume levels the view reads, counted from the
+/// coarsest, at least one: that world traces, relights and publishes those alone, so a world seen through a small glass
+/// measures only its coarse light. Absent, or at least the volume's level count, reads every level.</param>
 public sealed record WorldNestedViewQuality(
     float Share,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ShadowTier? Shadows = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] bool? AmbientOcclusion = null);
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] bool? AmbientOcclusion = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? IndirectLevels = null);
 /// <summary>Authored tier, sources, bounce depth and receiver application for the baked-mesh path's irradiance volume.</summary>
 /// <param name="Sources">Bindable source gains in [0, 1]; absent gains are one.</param>
 /// <param name="Bounces">Feedback sweeps after the direct sweep, capped by the selected tier. Absent uses that tier's limit.</param>

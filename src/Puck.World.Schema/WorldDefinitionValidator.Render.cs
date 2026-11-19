@@ -66,6 +66,9 @@ public static partial class WorldDefinitionValidator {
             if ((row.Shadows is { } shadows) && !Enum.IsDefined(value: shadows)) {
                 errors.Add(item: $"render.nested[{index}].shadows names no shadow tier.");
             }
+            if (row.IndirectLevels is <= 0) {
+                errors.Add(item: $"render.nested[{index}].indirectLevels is {row.IndirectLevels}; a view reads at least the coarsest level.");
+            }
             previous = (float.IsFinite(f: row.Share) ? Math.Max(val1: previous, val2: row.Share) : previous);
         }
     }

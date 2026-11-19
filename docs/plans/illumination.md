@@ -368,6 +368,25 @@ viewers permitted the same delivered static rows
 Counters report age per residency, so a nested world that falls behind says so
 without moving the main world's age.
 
+Built of this: the order and the sizing, on the one budget. Each residency's
+background service holds a turn weighted by its share of the display's pixels
+(`SdfFrame.DisplayShare`, from `WorldViewGraphHost.DisplayAreaOf`), and two
+services that both have work divide the budget by their weights
+(`SdfGpuWorkBudget.Takes`, printed as `work-turns` on `world.residency`'s
+selector line); a residency nothing read last frame takes the least weight
+(`SdfGpuWorkBudget.LeastWeight`) rather than none, so a world being arrived at
+still brings its meshes and light before its glass shows. The minimum is a
+seen volume's first light: while a level the views read has not published,
+the volume's jobs take the owed allowance an arrival's bake work takes
+(`SdfMeshIrradiance.OwesFirstLight`, `SdfGpuWorkBudget.OwedAllowance`).
+A glass's world measures only the levels the presenting world's nested-view
+table keeps at the glass's presented height (`render.nested`'s
+`indirectLevels`, `SdfFrame.IndirectLevels`); the standard keeps the storey and
+far levels up to half the display's height and the far level alone below a
+postcard. Still to build: the shared probe pool, the levels moved into authored
+data, staleness weighed within the ordinary share, and per-residency age
+counters.
+
 **The exposure meters the image; the camera sample stays a volume read.** The
 exposure meters each view's own image (the
 [rendering decision](../decisions/rendering.md#lights-screens-and-the-camera-are-photometric)),
@@ -588,7 +607,11 @@ Six steps run in order:
    bake. The scheduler already honours a ceiling on passes times pixels that
    no caller sets (`RenderGraphFrame.PassPixelBudget`), and that is where
    nested views join. This is a design round, held until the background share
-   is actively used.
+   is actively used. Across residencies the budget is already ordered by what
+   the player sees (`SdfGpuWorkBudget.Takes`, weighted by display share) and
+   work whose absence a shown view displays (a hole, a waiting mesh, a volume's
+   first light) takes the owed allowance; the round prices the frame's own
+   nested views in the same unit.
 
 Steps 4 and 5 sit in two classes of defect only review catches: a GPU job whose
 inputs are freed while it runs, and a GPU read at a position another GPU job

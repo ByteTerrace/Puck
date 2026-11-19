@@ -1080,7 +1080,10 @@ destination's own sky and lighting, its keys read on the destination's own clock
 (star twinkle, cloud drift) is the destination's delivered engine tick. Its view renders at the
 viewer's quality, giving up only what the viewer's nested-view table (`render.nested`) says at the
 share of the display the view is presented at (`WorldRenderSettings.NestedViewQuality`), and with no
-far bound.
+far bound. The same table names the irradiance-volume levels the destination measures
+(`WorldRenderSettings.NestedIndirectLevels`), and the destination's background work draws on the
+presentation's one budget by the share of the display's pixels the view covers
+(`WorldRenderSettings.NestedDisplayShare`).
 
 A projected destination draws its own screens wherever it is rendered, as the boot world does: a
 portal inside it shows its own destination, whose portals show theirs, recursively, to the
