@@ -12,13 +12,10 @@ namespace Puck.World.Server.Tests;
 public sealed class InputReadBackObserveLawTests {
     [Fact]
     public void AnInputReadBackIsRefusedToAPrincipalWithoutObserveAndAnsweredToTheConsole() {
-        using var fixture = Fixtures.FreshServer();
+        // A peer is answered only while its session lives, and an admitted one holds no grant.
+        using var fixture = Fixtures.FreshServerWithPeer(Fixtures.BuildDocument(), out var peer);
 
         var transport = new LoopbackTransport(server: fixture.Server);
-        var peer = Principal.Peer(
-            generation: 1,
-            index: 5
-        );
 
         foreach (var query in new WorldQuery[] {
             new WorldQuery.PlayerInput(Index: 0),

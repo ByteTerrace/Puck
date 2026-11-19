@@ -22,6 +22,15 @@ namespace Puck.World.Testing;
 /// parse of a JSON fixture nobody is watching — the whole point of the shape.
 /// </summary>
 internal static partial class Fixtures {
+    /// <summary>Returns the linear light an authored hex colour means: its encoded components decoded
+    /// (<see cref="DisplayColor.ToScene"/>), as the environment resolves one.</summary>
+    /// <param name="red">The encoded red, 0 to 255.</param>
+    /// <param name="green">The encoded green, 0 to 255.</param>
+    /// <param name="blue">The encoded blue, 0 to 255.</param>
+    /// <returns>The linear red, green and blue.</returns>
+    public static Vector3 SceneLight(int red, int green, int blue) =>
+        new DisplayColor(rgb: new Vector3(x: (red / 255f), y: (green / 255f), z: (blue / 255f))).ToScene().Linear;
+
     /// <summary>How far off vertical (as a fraction of <see cref="BallSurfaceRadius"/>) the flank point
     /// <c>GradientUpContactLawTests</c> grounds on sits — 0.9 puts the surface normal at
     /// <c>acos(sqrt(1-0.9^2))</c> ~= 64 degrees off world +Y, comfortably past the fixture's 60-degree

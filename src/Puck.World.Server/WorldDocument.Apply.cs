@@ -1018,6 +1018,7 @@ public sealed partial class WorldDocument {
             FieldsFull: fieldsFull,
             EngineTick: Host.CompletedEngineTicks,
             Inputs: Host.Input.Publish(),
+            InputAnswers: Host.Input.Answers(),
             SolidScales: Host.Population.SolidScales()
         );
     }

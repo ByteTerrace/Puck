@@ -1,3 +1,5 @@
+using System.Numerics;
+
 using Puck.Commands;
 using Xunit;
 
@@ -27,7 +29,20 @@ public sealed class SessionLeverLawTests {
         Assert.False(condition: settings.Toon);
         Assert.Null(@object: settings.ToonOverride);
 
-        render = render with { Toon = new ToonStyleDocument(Enabled: true, OutlineWidth: 2f) };
+        // A style bands only when it authors every value (ToonStyleDocument.IsComplete); the engine supplies none.
+        render = render with { Toon = new ToonStyleDocument(
+            Enabled: true,
+            Threshold: 0.5f,
+            Softness: 0.1f,
+            ShadowTint: new Vector3(x: 0.5f, y: 0.5f, z: 0.5f),
+            OutlineWidth: 2f,
+            OutlineDistance: 50f,
+            OutlineNormal: 0.5f,
+            OutlineTint: new Vector3(x: 0.2f, y: 0.2f, z: 0.2f),
+            SpecularSize: 0.1f,
+            Exposure: 0f,
+            Shoulder: 0f
+        ) };
         Assert.True(condition: settings.ResolveToon(render: render).Enabled);
         Assert.True(condition: settings.Toon);
 
@@ -346,10 +361,14 @@ public sealed class SessionLeverLawTests {
             WorldSessionLevers.CadenceGate,
             WorldSessionLevers.Cull,
             WorldSessionLevers.Detail,
+            WorldSessionLevers.ExposurePin,
             WorldSessionLevers.Indirect,
             WorldSessionLevers.MasterVolume,
             WorldSessionLevers.Rates,
+            WorldSessionLevers.RayQueries,
             WorldSessionLevers.RenderScale,
+            WorldSessionLevers.ShadeDefault,
+            WorldSessionLevers.ShadePrograms,
             WorldSessionLevers.ShadowSlots,
             WorldSessionLevers.Shadows,
             WorldSessionLevers.SkyMute,

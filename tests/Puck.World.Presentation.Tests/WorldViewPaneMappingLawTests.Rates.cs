@@ -113,7 +113,8 @@ public sealed partial class WorldViewPaneMappingLawTests {
             Assert.Equal(expected: 0L, actual: settings.RateCounts.Read(kind: SdfUpdateRateCounts.ViewsRated));
             Assert.Null(@object: settings.RateIntervals.Longest(hertz: 15, lever: SdfUpdateRates.Views));
             Assert.Empty(collection: settings.RateReadings.Latest(lever: SdfUpdateRates.Views));
-            Assert.Null(@object: m_host.DisplayShareOf(instance: BootSession));
+            // The share is measured every frame, since what a nested view gives up follows its presented size, whether or not a lever rates.
+            Assert.InRange(actual: (m_host.DisplayShareOf(instance: BootSession) ?? 0d), high: 1d, low: 0.01d);
 
             // Nothing rated tints nothing, and a host showing no screens tints none.
             var codes = new byte[] { 9, 9, 9, 9 };

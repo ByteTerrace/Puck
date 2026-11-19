@@ -98,9 +98,12 @@ public sealed class WorldTickScriptLawTests {
                 registry: () => registry!,
                 source: () => Source!
             );
+            // The wait and script verbs are operator verbs: they run only where the registry's authority says the console operates.
+            var authority = new FixedAuthority(instance: m_row.Instance);
+
             registry = new CommandRegistry(modules: [
                 new WorldWaitCommandModule(
-                    authority: new FixedAuthority(instance: m_row.Instance),
+                    authority: authority,
                     gates: new FixedGate(gate: gate)
                 ),
                 new WorldTickScriptCommandModule(script: Script),
@@ -108,7 +111,7 @@ public sealed class WorldTickScriptLawTests {
                     completed: Completed,
                     log: Log
                 ),
-            ]);
+            ], authority: authority);
             Router = new InputRouter(
                 bindings: new NoBindings(),
                 clock: new AheadClock(),

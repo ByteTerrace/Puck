@@ -246,8 +246,8 @@ public sealed class SdfPipelineBuildLivenessLawTests {
         driver.WaitUntilFull();
 
         // A release that leaves another holder cancels nothing and returns while the build is still held. The set leases
-        // every kernel a view does not acquire on demand, and names the ones still building in kernel order.
-        var leased = SdfWorldPipelines.BuildOrder(kernels: SdfTestPipelines.Kernels()).Order().ToArray();
+        // every kernel a view does not acquire on demand and the device runs, and names the ones still building in kernel order.
+        var leased = SdfWorldPipelines.BuildOrder(kernels: SdfTestPipelines.Kernels()).Where(predicate: kernel => SdfWorldPipelines.Runs(device: gpu, kernel: kernel)).Order().ToArray();
 
         first.Dispose();
         Assert.Equal(

@@ -31,7 +31,7 @@ public sealed class WorldCreationInstancesRateLawTests {
             Palette: null,
             Shapes: [
                 Box(id: 0, name: "body", position: Vector3.Zero),
-                Box(id: 1, name: "head", position: new Vector3(x: 0f, y: 1f, z: 0f)),
+                Box(id: 1, name: "head", position: new Vector3(x: 0f, y: 1f, z: 0f)) with { Swings = [new ShapeSwingDocument(Amplitude: 0.5f, Axis: Vector3.UnitY, Driver: "clock", Pivot: new Vector3(x: 0.5f, y: 1f, z: 0f))] },
             ],
             Frames: null,
             Drivers: [new CreationDriverDocument(
@@ -305,7 +305,9 @@ public sealed class WorldCreationInstancesRateLawTests {
         for (var tick = 1UL; (tick <= 5UL); tick++) {
             _ = Walk(client: client, pool: pool, tick: tick, transforms: transforms);
             codes.Add(item: ((SdfUpdateRateCode)pool.SlotRateCodes.Span[0]));
-            Assert.Single(collection: pool.SlotRateCodes.ToArray());
+            // The root and the swinging head each have a slot, and a body's slots share its tier.
+            Assert.Equal(expected: 2, actual: pool.SlotRateCodes.Length);
+            Assert.Equal(expected: pool.SlotRateCodes.Span[0], actual: pool.SlotRateCodes.Span[1]);
         }
 
         var posed = SdfUpdateRateTiers.CodeOf(hertz: 15, updated: true);
