@@ -20,22 +20,33 @@ buffers and images, shared-surface export, and queue submission. Swapchains and 
 `Puck.DirectX.Presentation`, mirroring the split between `Puck.Vulkan` and
 `Puck.Vulkan.Presentation`.
 
+Every barrier is an enhanced barrier; the backend records no legacy resource
+barrier. Device creation checks EnhancedBarriersSupported. Layouts persist
+across command lists, so no promotion or decay is assumed.
+
 Image transitions take their before layout from the caller. Private textures start
 in COMMON; render-graph access plans and the owners of standalone images carry
-their actual layouts across reuse and reset. Shader-readable images permit
-pixel and compute reads. Render-pass callers put attachments in their declared
-attachment layouts; ending a pass applies its color attachment's final layout.
+their actual layouts across reuse and reset. A transition is a texture barrier
+over every subresource (`DirectXBarriers.Texture`) that states the accesses the
+two layouts permit, which the specification limits per layout, and takes its
+synchronization from the caller's stage masks, widened to every stage when the
+masks are empty or cannot perform a permitted access. A transition out of the
+undefined layout discards the contents and makes no access before it. Adjacent
+transitions of an open run (`BeginBarriers`) record as one barrier group.
+Shader-readable images permit pixel and compute reads. Render-pass callers put
+attachments in their declared attachment layouts; ending a pass applies its color
+attachment's final layout. A swap chain's back buffer is created in the common
+layout, which presentation also names (`DirectXBarriers.Present`). A
+simultaneous-access texture is in the common layout for life, so its transition is a
+global barrier over the same stages.
 
-Buffers use enhanced access barriers, without persistent resource states or a
-decay assumption between command lists. Device creation checks
-EnhancedBarriersSupported. Stage and access declarations supply the dependency
+Buffers have no layout. Stage and access declarations supply the dependency
 scopes. A buffer's host/first-use source uses ALL/COMMON: a prior command list in
 the same execution may already have accessed it. Fixed-state upload and readback
-heaps use global dependencies. Image layout transitions remain legacy barriers.
-The two barrier types never transition the same resource. Pending image barriers
-flush before an enhanced dependency, preserving recording order.
+heaps use global dependencies. Pending texture barriers flush before a buffer or
+global dependency, preserving recording order.
 [Microsoft's specification](https://microsoft.github.io/DirectX-Specs/d3d/D3D12EnhancedBarriers.html)
-defines this interoperation and the lack of buffer layouts.
+defines the layouts, their accesses and the lack of buffer layouts.
 
 The submitter collects a render-graph batch into one ExecuteCommandLists and one
 completion signal. Each deferred fence refers to that completion until its own
@@ -75,8 +86,8 @@ The layering mirrors `Puck.Vulkan` so the two backends read the same way:
 
 The neutral-contract implementations (`DirectXGpu*`) sit at the project root.
 So do the four builders every call site uses, in `Puck.DirectX` and its
-presentation project alike: `DirectXBarriers.Transition` (a whole-resource
-transition, no flags), `DirectXDescriptorHeaps.Create` (node mask zero; type,
+presentation project alike: `DirectXBarriers.Texture` (a whole-texture transition
+between two layouts), `DirectXDescriptorHeaps.Create` (node mask zero; type,
 size and shader visibility vary), `DirectXBuffers.Create` (a
 format-less row-major buffer with no heap flags; size, heap type, initial state
 and resource flags vary), and `DirectXTextures.Create` (a single-mip,
@@ -100,7 +111,7 @@ pass is disallowed; a depth attachment clears to its
 `GpuDepthAttachment.ClearDepth`), begins a first-class render pass whose
 ending access stores or discards, and sets the viewport and scissor to the
 area the pass draws; `EndRenderPass` leaves a color attachment declared
-shader-readable in the shader-read state and every other attachment where it
+shader-readable in the shader-read layout and every other attachment where it
 was. A geometry buffer is an upload-heap buffer bound by its GPU virtual address,
 so it needs no view object of its own: `BindVertexBuffer` and `BindIndexBuffer`
 build a vertex and an index view over ranges of it, and `DrawIndexed` records
@@ -523,7 +534,7 @@ service, so it waits on a UAC prompt and fails with `0x800704C7` when nobody
 answers it. RenderDoc reads a Direct3D 12 capture with neither: open it in
 `qrenderdoc`, or export it with `renderdoccmd convert -f <file>.rdc -o
 <file>.zip.xml -c zip.xml`, whose XML lists every call of the frame
-(`ExecuteCommandLists`, `ResourceBarrier` with each transition's states,
+(`ExecuteCommandLists`, `Barrier` with each barrier's syncs, accesses and layouts,
 `ResolveQueryData`, copies) with the objects' debug names, as
 [Vulkan's captures](vulkan.md#gpu-captures) describe.
 

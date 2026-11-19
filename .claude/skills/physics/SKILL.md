@@ -158,6 +158,8 @@ same change.
 | Field-program dependency edges mean the same on both sides | `ReadWriteHazard.Conflicts`, called by the lattice and the Schema compiler |
 | Same input, same poses | the population's checkpoint codecs and `puck test --reproduce` |
 
+A field row’s `simulationOnly` flag keeps the height scale in `FieldLattice.StepFlow` and excludes the row from body contact and medium queries. Presentation checks `WorldFieldRow.DrawsSurface` before it subscribes to the row or allocates a height field.
+
 ## Open gaps
 
 - **The adjacency sweep's remote side reads a neighbour's unscaled collider**:

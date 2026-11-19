@@ -7,10 +7,10 @@ using Windows.Win32.Graphics.Direct3D12;
 namespace Puck.DirectX.Presentation;
 
 /// <summary>
-/// Default <see cref="IDirectXCommandListRecorder"/> for Direct3D 12: transitions the back buffer to
-/// render-target state, sets up the RTV, viewport, scissor, and primitive topology, replays each
+/// Default <see cref="IDirectXCommandListRecorder"/> for Direct3D 12: moves the back buffer to the
+/// render-target layout, sets up the RTV, viewport, scissor, and primitive topology, replays each
 /// <see cref="DirectXDrawCommand"/> (binding the pipeline, the view and sampler heaps, and the group's view and sampler
-/// tables as indicated by non-zero fields), then transitions back to present state.
+/// tables as indicated by non-zero fields), then moves it back to the present layout.
 /// </summary>
 [SupportedOSPlatform("windows10.0.10240")]
 public sealed unsafe class DirectXCommandListRecorder : IDirectXCommandListRecorder {
@@ -33,15 +33,14 @@ public sealed unsafe class DirectXCommandListRecorder : IDirectXCommandListRecor
         var commandList = ((ID3D12GraphicsCommandList*)commandListHandle);
         var backBuffer = ((ID3D12Resource*)backBufferHandle);
 
-        var toRenderTarget = DirectXBarriers.Transition(
-            after: D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_RENDER_TARGET,
-            before: D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_PRESENT,
-            resource: backBuffer
+        var toRenderTarget = DirectXBarriers.Present(
+            backBuffer: backBuffer,
+            toPresent: false
         );
 
-        commandList->ResourceBarrier(
-            NumBarriers: 1,
-            pBarriers: &toRenderTarget
+        DirectXBarriers.Record(
+            barriers: new ReadOnlySpan<D3D12_TEXTURE_BARRIER>(reference: in toRenderTarget),
+            commandList: commandList
         );
 
         var rtv = new D3D12_CPU_DESCRIPTOR_HANDLE { ptr = ((nuint)rtvCpuHandle), };
@@ -152,15 +151,14 @@ public sealed unsafe class DirectXCommandListRecorder : IDirectXCommandListRecor
             );
         }
 
-        var toPresent = DirectXBarriers.Transition(
-            after: D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_PRESENT,
-            before: D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_RENDER_TARGET,
-            resource: backBuffer
+        var toPresent = DirectXBarriers.Present(
+            backBuffer: backBuffer,
+            toPresent: true
         );
 
-        commandList->ResourceBarrier(
-            NumBarriers: 1,
-            pBarriers: &toPresent
+        DirectXBarriers.Record(
+            barriers: new ReadOnlySpan<D3D12_TEXTURE_BARRIER>(reference: in toPresent),
+            commandList: commandList
         );
     }
 }

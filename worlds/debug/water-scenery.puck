@@ -29,6 +29,9 @@ function wallWorld(radial, lateral) = [
   radial * cosine(wallSector.compass * compassRadians) - lateral * sine(wallSector.compass * compassRadians)
 ]
 
+let lakeOutletXZ = wallWorld(lakeSite.radial - lakeSite.radius + 3, 0)
+let lakeOutletDirection = wallWorld(-4, 0)
+
 // The river runs from the plunge basin's east wall to the pool's north bank (water-site.puck's course) in a channel cut in
 // the ground (`riverChannel`). Its water is one lattice body over the cut ground that the chain's `riverDepth` raises and
 // lowers, flowing along the course's mean heading at the stream's pace.
@@ -110,7 +113,11 @@ prototypes {
     radius: lakeSite.radius,
     depth: lakeSite.depth,
     bowl: { y: lakeBowl.y - lakeSite.surface, radii: lakeBowl.radii },
-    flow: lakeFlowLayer with { velocity [0.5, 0, -0.5] }
+    outlet: {
+      center [lakeOutletXZ[0], lakeSite.surface, lakeOutletXZ[1]]
+      radius: outletRadii[0]
+      velocity [lakeOutletDirection[0], 0, lakeOutletDirection[1]]
+    }
   )
   riverChannel(
     id: "river-channel",
