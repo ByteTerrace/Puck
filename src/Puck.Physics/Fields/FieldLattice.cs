@@ -159,7 +159,7 @@ public sealed class FieldLattice {
             m_min[field] = row.Minimum;
             m_max[field] = row.Maximum;
             m_heightScale[field] = row.HeightScale;
-            m_isMedium[field] = row.IsMedium;
+            m_isMedium[field] = (row.IsMedium && !row.SimulationOnly);
             m_values[field] = new FixedQ4816[CellCount];
             m_deltaDirty[field] = new bool[CellCount];
 
@@ -1171,7 +1171,8 @@ public sealed class FieldLattice {
                 (current.Minimum != candidate.Minimum) ||
                 (current.Maximum != candidate.Maximum) ||
                 (current.HeightScale != candidate.HeightScale) ||
-                (current.IsMedium != candidate.IsMedium)
+                (current.IsMedium != candidate.IsMedium) ||
+                (current.SimulationOnly != candidate.SimulationOnly)
             ) {
                 reason = $"field declaration {index} differs from the live allocation; restart the host to load it";
 
@@ -1240,7 +1241,7 @@ public sealed class FieldLattice {
     }
     // A field raises solid columns when it bears height and is no medium (a medium provides immersion, not contact).
     // ColumnHeight and BodyReadRevision read this one predicate, so contact and the stamp of what contact reads agree.
-    private bool IsSolidField(int field) => (!m_isMedium[field] && (m_heightScale[field] != FixedQ4816.Zero));
+    private bool IsSolidField(int field) => (!m_input.Fields[field].SimulationOnly && !m_isMedium[field] && (m_heightScale[field] != FixedQ4816.Zero));
     /// <summary>Describes the lattice for a console read-back.</summary>
     /// <returns>One line.</returns>
     public string Describe() {

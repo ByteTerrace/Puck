@@ -1497,6 +1497,23 @@ export type CreationDocument = {
        * The render lane, as Lane, whose value saturated to [0, 1] scales Coverage. Null keeps the coverage constant.
        */
       coverageLane?: number | null;
+      /**
+       * A sphere in world coordinates within which the velocity varies.
+       */
+      region?: {
+        /**
+         * Centre in world coordinates.
+         */
+        center: unknown;
+        /**
+         * Radius in world units over which the velocity blends back to the base, finite and positive.
+         */
+        radius: number;
+        /**
+         * Velocity at the centre in the flow's velocity frame, before placement scaling.
+         */
+        velocity: unknown;
+      } | null;
     } | null;
     /**
      * The authored presentation program and runtime parameters.
@@ -3170,6 +3187,25 @@ export type PaletteFlowDocument = {
    * The render lane, as Lane, whose value saturated to [0, 1] scales Coverage. Null keeps the coverage constant.
    */
   coverageLane?: number | null;
+  /**
+   * A sphere in world coordinates within which the velocity varies.
+   */
+  region?: PaletteFlowRegionDocument | null;
+};
+
+export type PaletteFlowRegionDocument = {
+  /**
+   * Centre in world coordinates.
+   */
+  center: DocumentVector3;
+  /**
+   * Radius in world units over which the velocity blends back to the base, finite and positive.
+   */
+  radius: number;
+  /**
+   * Velocity at the centre in the flow's velocity frame, before placement scaling.
+   */
+  velocity: DocumentVector3;
 };
 
 export type PaletteGlassContactDocument = {
@@ -13955,6 +13991,10 @@ export type WorldStateRow = {
      * Optional surface material using the creation palette vocabulary.
      */
     material?: PaletteEntryDocument | null;
+    /**
+     * Keep this row in lattice reactions and omit its surface and body coupling.
+     */
+    simulationOnly?: boolean;
     /**
      * The initial fills, applied in order over Initial.
      */

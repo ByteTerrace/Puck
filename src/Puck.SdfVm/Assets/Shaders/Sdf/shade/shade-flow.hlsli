@@ -95,6 +95,11 @@ float3 sdfShadeFlow(float3 surfacePoint, float3 normal, float3 layerPoint, float
     bool worldFlow = ((material.flowControl & SDF_FLOW_WORLD_FRAME) != 0u);
     bool slotFlow = (!worldFlow && (frameSlot != SDF_TRANSFORM_SLOT_NONE));
     float3 flowVelocity = material.flowVelocity.xyz;
+    if (material.flowRegion.w > 0.0) {
+        float distance = length(surfacePoint - material.flowRegion.xyz);
+        float blend = 1.0 - smoothstep(0.0, material.flowRegion.w, distance);
+        flowVelocity = lerp(flowVelocity, material.flowRegionVelocity, blend);
+    }
     if (!worldFlow && !slotFlow) {
         flowVelocity = sdfMeshCarryDirection(hit.record, sdfMeshWorldDirection(hit.record, flowVelocity));
     }

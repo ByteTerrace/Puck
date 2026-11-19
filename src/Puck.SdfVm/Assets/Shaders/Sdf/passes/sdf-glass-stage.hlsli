@@ -1,6 +1,5 @@
-// The glass shading pass, one invocation a pixel of the render grid, after views and before the sky, the resolve and the
-// composite: writes the lit image views wrote over again, every pixel copied as it stands but one the glass target holds a
-// front face at before its opaque hit. Such a pixel is shaded as glass (SdfWorldPackage.WithGlass), through up to two
+// The glass shading pass rewrites the lit image after views and before sky and resolve. It copies pixels that have neither a
+// front face before its opaque hit or a ray that starts inside a solid. The pass shades up to two
 // interfaces: the nearest front face (the glass target's) and the second-nearest, which the sums' second record names
 // (sdfGlassSecondInterface). Each interface is shaded alike (one loop body, never a copy):
 // - its surface is the glass draw's triangle at the ray's hit, normal and material resolved as the surface pass resolves
@@ -38,7 +37,7 @@
 // Where it stops: transmission integrates every glass material before the opaque hit, but only two interfaces reflect,
 // refract and scatter. A third front face's glass absorbs within the far interface's share and what lies beyond it is
 // the opaque image, never shaded as glass; past SdfGlassFrontEntries front faces the record names no second interface
-// and the near one alone is shaded. The eye inside a glass solid sees no front face, so the pixel passes through.
+// and the near one alone is shaded. A ray that starts in glass takes its starting segment in front of these interfaces.
 #define SDF_DYNAMIC_TRANSFORMS
 #include "../isa/sdf-glass.interface.hlsli"
 #include "../frame/sdf-viewport.hlsli"
@@ -194,6 +193,13 @@ bool sdfGlassSecondInterface(uint word, uint nearDraw, uint nearTriangle, float3
     return found;
 }
 
+// The same homogeneous transport applies between the camera and an exit and behind an entrance.
+float3 sdfGlassTransmission(SdfMaterialData material, float3 opticalDepth, float distance, out float3 scattered) {
+    float unscattered = exp(-max(material.scattering, 0.0) * distance);
+    scattered = material.scatter * (1.0 - unscattered);
+    return exp(-opticalDepth) * unscattered;
+}
+
 [numthreads(8, 8, 1)]
 void CSMain(uint3 id : SV_DispatchThreadID) {
     uint across = (passGroup.extent.x + 7u) / 8u;
@@ -218,19 +224,41 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
     if (seen) {
         seen = sdfMeshResolveHit(nearDraw, nearTriangle, nearHit);
     }
-    bool glass = (sdfDebugComposesFinal(passGroup.debugMode) && seen);
+    uint word = sdfGlassSumWord(pixel, extent);
+    bool final = sdfDebugComposesFinal(passGroup.debugMode);
+    bool glass = (final && seen);
+    int winding = final ? sdfGlassWindingAt(word) : 0;
     if ((passGroup.debugMode == SDF_DEBUG_VIEW_SHADE_COST || passGroup.debugMode == SDF_DEBUG_VIEW_SHADE_TIER) && seen) {
         color = float4(sdfShadeDiagnostic(sdfMeshMaterial(nearHit), passGroup.debugMode), 1.0);
     }
     float reactive = 0.0;
+    float3 origin = view.position.xyz;
+    float3 rayDirection = cameraRayDirection(view, ((float2(pixel) + 0.5) / float2(extent)));
+    float insideDistance = 0.0;
+    float3 insideDepth = 0.0;
+    SdfMaterialData insideMaterial = (SdfMaterialData)0;
+    if (winding > 0) {
+        float start = worldSurfaceNearDistance(view) / dot(rayDirection, view.forward.xyz);
+        float end = seen ? front.x : opaque;
+        float back = sdfGlassNearestBackAt(word);
+        insideDistance = max(min(back, end) - start, 0.0);
+        float3 totalDepth = max(sdfGlassOpticalDepthAt(word), 0.0);
+        // A single homogeneous medium has a material key. Several overlapping solids still contribute absorption.
+        if (winding == 1) {
+            insideMaterial = sdfMaterialLoad(sdfGlassInsideMaterialAt(word));
+        }
+        insideDepth = !seen ? totalDepth : min(totalDepth, insideMaterial.absorption * insideDistance);
+        if (seen && !sdfMaterialIsGlass(insideMaterial)) {
+            float thickness = sdfGlassThicknessAt(word, start, opaque);
+            insideDepth = totalDepth * saturate(insideDistance / max(thickness, 1.0e-6));
+        }
+    }
 
     if (glass) {
         float nearT = front.x;
-        float3 origin = view.position.xyz;
-        float3 rayDirection = cameraRayDirection(view, ((float2(pixel) + 0.5) / float2(extent)));
-        uint word = sdfGlassSumWord(pixel, extent);
-        float thickness = sdfGlassThicknessAt(word, nearT, opaque);
-        float3 depth = max(sdfGlassOpticalDepthAt(word), 0.0);
+        float start = winding > 0 ? worldSurfaceNearDistance(view) / dot(rayDirection, view.forward.xyz) : nearT;
+        float thickness = clamp(sdfGlassThicknessAt(word, start, opaque) - insideDistance, 0.0, opaque - nearT);
+        float3 depth = max(sdfGlassOpticalDepthAt(word) - insideDepth, 0.0);
         float footprint = ((2.0 * view.right.w) / max(float(extent.y), 1.0));
         SdfMeshHit farHit;
         float farT;
@@ -316,9 +344,8 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
             // interface absorbs the whole optical depth; of two, the near absorbs its own material over its share and
             // the far the rest.
             float3 absorbed = (second ? (isNear ? (material.absorption * share) : max((depth - nearDepth), 0.0)) : depth);
-            float haze = (1.0 - exp(-(max(material.scattering, 0.0) * share)));
-            float3 transmittance = (exp(-absorbed) * (1.0 - haze));
-            float3 medium = (material.scatter * haze);
+            float3 medium;
+            float3 transmittance = sdfGlassTransmission(material, absorbed, share, medium);
 
             nearDepth = (isNear ? absorbed : nearDepth);
             offset += ((refract(rayDirection, normal, (1.0 / ior)) - rayDirection) * share);
@@ -433,8 +460,29 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
         reactive = saturate(length(at - own));
     }
 
+    if (insideDistance > 0.0) {
+        float3 scattered;
+        float3 transmitted = sdfGlassTransmission(insideMaterial, insideDepth, insideDistance, scattered);
+        float3 added = 0.0;
+        if (any(scattered > 0.0)) {
+            float3 normal = -rayDirection;
+            float start = worldSurfaceNearDistance(view) / dot(rayDirection, view.forward.xyz);
+            float3 scatterPoint = origin + rayDirection * (start + 0.5 * insideDistance);
+            SdfMeshProbes probes = sdfMeshProbesAt(scatterPoint, normal);
+            float3 highlights, radiance, indirect, rim;
+            float incoming, attenuation;
+            float3 received = sdfGlassReceived(insideMaterial, scatterPoint, normal, rayDirection, probes,
+                (SdfShadeBinding)0, (SdfShadeStamp)0, highlights, incoming, radiance, indirect, rim, attenuation);
+            added = scattered * received * sdfLocalAdaptationGain(incoming);
+        }
+        color.rgb = added + transmitted * color.rgb;
+        color.a = 1.0 - (1.0 - color.a) * dot(transmitted, PuckRec709Luminance);
+        reactive = 1.0;
+        sdfWorkSteps++;
+    }
+
     output[pixel] = float4(min(color.rgb, SDF_LUMINANCE_CEILING), color.a);
-    if ((passGroup.temporal != 0u) && glass) {
+    if ((passGroup.temporal != 0u) && (glass || insideDistance > 0.0)) {
         uint index = sdfReactivityIndex(pixel, 0u, extent);
 
         reactivityRW[index] = max(reactivityRW[index], reactive);
