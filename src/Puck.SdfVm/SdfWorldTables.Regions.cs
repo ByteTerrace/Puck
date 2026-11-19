@@ -92,7 +92,10 @@ public sealed partial class SdfWorldTables {
             hostCopies: m_regionHostCopies,
             staging: new GpuObjectName(owner: SdfResidencySelector.RegionStagingOwner, part: "mesh-region"),
             // The probe scene's bottom levels read their triangles from the region in place (SdfMeshProbeGpuWork.Rays).
-            destinationUsage: ((m_deviceContext.Capabilities?.Has(required: GpuOptionalCapabilities.RayQuery) ?? false) ? GpuBufferUsage.AccelerationStructureInput : GpuBufferUsage.None)
+            destinationUsage: ((m_deviceContext.Capabilities?.Has(required: GpuOptionalCapabilities.RayQuery) ?? false) ? GpuBufferUsage.AccelerationStructureInput : GpuBufferUsage.None),
+            // Grows and shrinks in place where the device can back a buffer a chunk at a time, so a growth never holds
+            // two regions at once (SdfResidencySelector leaves no replacement's room for it).
+            mapped: true
         )
         : new GpuRegion(
             bindings: m_gpu.Bindings,

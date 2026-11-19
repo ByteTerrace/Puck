@@ -61,6 +61,11 @@ public sealed unsafe class DirectXGpuBufferFactory(DirectXDeviceContext deviceCo
         );
     }
     /// <inheritdoc/>
+    /// <remarks>A reserved buffer (<see cref="DirectXGpuMappedBuffer"/>) on a device at reserved resources tier 2 or
+    /// above.</remarks>
+    public IGpuMappedBuffer? TryCreateMapped(ulong reservedBytes, GpuBufferUsage usage, in GpuObjectName name) =>
+        DirectXGpuMappedBuffer.TryCreate(context: deviceContext, name: in name, sizeBytes: reservedBytes, usage: usage);
+    /// <inheritdoc/>
     public IGpuStorageBuffer CreateHostVisible(ulong sizeBytes, GpuBufferUsage usage, in GpuObjectName name) =>
         CreateMapped(
             heapType: D3D12_HEAP_TYPE.D3D12_HEAP_TYPE_UPLOAD,
