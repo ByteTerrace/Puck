@@ -18,3 +18,18 @@ test "60 Hz judges opposite sides of a half-millisecond beat window" {
     outsideError == 0.0005035400390625
   }
 }
+test "the beat, bar and beat in bar read the clock and a press" {
+  when {
+    ticks 4
+    seat1: player.signal keyboard.u press at:0.00048828125
+    ticks 3
+  }
+  expect {
+    insideBeat == 6
+    insideBar == 1
+    insideBeatInBar == 2
+    liveBeat == 7
+    liveBar == 1
+    liveBeatInBar == 3
+  }
+}

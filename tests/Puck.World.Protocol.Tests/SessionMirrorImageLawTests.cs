@@ -117,7 +117,7 @@ public sealed class SessionMirrorImageLawTests {
         using var release = new ManualResetEventSlim();
         var stall = false;
 
-        mirror.DeliverSnapshot(snapshot: Snapshot(value: 1));
+        mirror.DeliverSnapshot(snapshot: Snapshot(value: 1), stream: default);
         // A completed-delivery observer runs inside the writer's gate; this one holds the writer there until released.
         using var observation = mirror.ObserveDeliveredState(observer: (_, _, _) => {
             if (Volatile.Read(location: ref stall)) {
@@ -129,7 +129,7 @@ public sealed class SessionMirrorImageLawTests {
         Volatile.Write(location: ref stall, value: true);
         try {
             // A snapshot delivery stalled in its tail: its image is complete before the tail, so the copy reads it.
-            var delivery = Task.Run(action: () => mirror.DeliverSnapshot(snapshot: Snapshot(value: 2)), cancellationToken: token);
+            var delivery = Task.Run(action: () => mirror.DeliverSnapshot(snapshot: Snapshot(value: 2), stream: default), cancellationToken: token);
 
             Assert.True(condition: stalled.Wait(cancellationToken: token, timeout: TimeSpan.FromSeconds(seconds: 30)));
             await CopyWithin(copy: copy, mirror: mirror, token: token);
@@ -176,9 +176,9 @@ public sealed class SessionMirrorImageLawTests {
         var copy = new Copy();
         var done = 0;
 
-        mirror.DeliverSnapshot(snapshot: Snapshot(value: 1));
+        mirror.DeliverSnapshot(snapshot: Snapshot(value: 1), stream: default);
         var snapshots = Task.Run(action: () => {
-            for (var value = 2; (value <= Rounds); value++) { mirror.DeliverSnapshot(snapshot: Snapshot(value: value)); }
+            for (var value = 2; (value <= Rounds); value++) { mirror.DeliverSnapshot(snapshot: Snapshot(value: value), stream: default); }
         }, cancellationToken: token);
         var seeds = Task.Run(action: () => {
             for (var value = 1; (value <= Rounds); value++) { mirror.SeedRoute(route: Route(value: value)); }

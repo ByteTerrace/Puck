@@ -37,7 +37,10 @@ public sealed partial class SdfProgram {
                 reach = MathF.Max(x: reach, y: MathF.Max(x: (edge.A.Length() + edge.RadiusA), y: (edge.B.Length() + edge.RadiusB)));
             }
             if (instruction.Data1.Y == 0f) { SdfPathCompiler.ValidateFill(edges: path.Edges); }
-            if (!float.IsFinite(f: reach) || (instruction.Data0.Z < reach)) { throw new ArgumentException(message: "Path bound does not cover its edges."); }
+            // The reach is a derived lane (SdfLaneContract.Derived): the builder writes this very maximum.
+            if (!float.IsFinite(f: reach) || (BitConverter.SingleToUInt32Bits(value: instruction.Data0.Z) != BitConverter.SingleToUInt32Bits(value: reach))) {
+                throw new ArgumentException(message: $"Path instruction {index} carries reach {instruction.Data0.Z} in Data0.z, but its edges derive {reach}.");
+            }
         }
         for (var i = 0; (i < m_instructions.Length); i++) {
             if ((m_instructions[i].Op == SdfOp.ShapeBlend) && (m_instructions[i].Shape == ((uint)SdfShapeType.Path)) && !owners.Contains(item: i)) {

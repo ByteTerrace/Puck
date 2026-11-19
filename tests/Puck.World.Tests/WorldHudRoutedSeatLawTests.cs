@@ -82,7 +82,7 @@ public sealed class WorldHudRoutedSeatLawTests {
             Revision: 0,
             StepTicks: 1680UL,
             Tick: 1UL
-        ));
+        ), stream: default);
 
         var resolver = new WorldHudBindingResolver(
             client: client,

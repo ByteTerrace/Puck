@@ -198,14 +198,14 @@ public sealed partial class ProjectionAnchorLawTests {
         });
 
         var pending = sink.PendingDeliveries;
-        sink.DeliverDefinition(definition: unflattenable, version: fixture.Server.DocumentVersion);
+        sink.DeliverDefinition(definition: unflattenable, version: fixture.Server.DocumentVersion, stream: default);
         Assert.Equal(pending, sink.PendingDeliveries);
         Assert.Null(@object: sink.DetachReason);
 
         // An uninstalled policy cannot change the live capability either.
         var hidden = installed.WithWorldState(rows: [.. installed.State.Where(predicate: static row => (row.Name.Value != Clock)), Row(raw: 0L, visibility: new StateVisibility(Readers: ["seat1"]))]);
 
-        sink.DeliverDefinition(definition: hidden, version: fixture.Server.DocumentVersion);
+        sink.DeliverDefinition(definition: hidden, version: fixture.Server.DocumentVersion, stream: default);
         Assert.Equal(pending, sink.PendingDeliveries);
         Assert.Null(sink.DetachReason);
     }
@@ -222,10 +222,10 @@ public sealed partial class ProjectionAnchorLawTests {
         var mirror = new WorldSessionMirror(placeholder: initial!);
         var version = new WorldDocumentVersion(Activation: Guid.NewGuid(), Sequence: 0L);
 
-        mirror.DeliverDefinition(definition: initial!, version: version);
+        mirror.DeliverDefinition(definition: initial!, version: version, stream: default);
         var snapshot = new WorldSnapshot(Authority: "boot", EngineTick: 0UL, Entries: ReadOnlyMemory<EntitySnapshot>.Empty, Revision: 1, StepTicks: 1UL, Tick: 0UL);
 
-        mirror.DeliverSnapshot(snapshot: in snapshot);
+        mirror.DeliverSnapshot(snapshot: in snapshot, stream: default);
         _ = mirror.FollowState();
 
         if (followOnDelivery) {
@@ -244,7 +244,7 @@ public sealed partial class ProjectionAnchorLawTests {
                 TimelineRaw = new WorldTimelineSection(Clocks: [new WorldClock(Name: Clock, Anchor: new WorldClockAnchor(Phase: (tick << 56), Rate: (1L << 56), Step: 1UL, Tick: tick))]),
             };
 
-            mirror.DeliverState(definition: anchored, stamp: new WorldStateStamp(EngineTick: tick, Everything: false, MovedRows: default, Tick: tick), version: version);
+            mirror.DeliverState(definition: anchored, stamp: new WorldStateStamp(EngineTick: tick, Everything: false, MovedRows: default, Tick: tick), version: version, stream: default);
         }
 
         var state = mirror.FollowState();
@@ -549,9 +549,9 @@ public sealed partial class ProjectionAnchorLawTests {
             Assert.True(condition: frame.Ok);
 
             if (frame.Kind == ((byte)WorldFederationResponse.Definition)) {
-                Assert.True(condition: WorldFederationCodec.TryDecodeDocument(body: frame.Body.Span, definition: out _, failure: out var failure, hold: hold, tier: out _, version: out _), userMessage: failure.ToString());
+                Assert.True(condition: WorldFederationCodec.TryDecodeDocument(body: frame.Body.Span[WorldFederationCodec.StreamStampBytes..], definition: out _, failure: out var failure, hold: hold, tier: out _, version: out _), userMessage: failure.ToString());
             } else if (frame.Kind == ((byte)WorldFederationResponse.ProjectionDelta)) {
-                Assert.True(condition: WorldFederationCodec.TryDecodeProjectionDelta(body: frame.Body.Span, definition: out _, failure: out var failure, hold: hold, stamp: out _, valuesOnly: out _, version: out _), userMessage: failure.ToString());
+                Assert.True(condition: WorldFederationCodec.TryDecodeProjectionDelta(body: frame.Body.Span[WorldFederationCodec.StreamStampBytes..], definition: out _, failure: out var failure, hold: hold, stamp: out _, valuesOnly: out _, version: out _), userMessage: failure.ToString());
             }
 
             heldAtJoin |= (AnchorOf(definition: hold.Definition!)?.Tick == joined);

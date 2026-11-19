@@ -13,6 +13,8 @@ import "motion"
 import "camera"
 import "kits"
 
+walkMotion()
+
 chaseCamera(
   rig: "walker-camera",
   pivotOffset: [0, 0.9, 0],

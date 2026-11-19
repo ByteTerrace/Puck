@@ -66,6 +66,7 @@ public sealed partial class WorldOutputHub {
         public readonly IClientSink Sink = sink;
         public readonly IWorldDetachableSink? Detachable = (sink as IWorldDetachableSink);
         public WorldSinkDisclosure Disclosure = disclosure;
+        public Func<WorldSnapshot, WorldSnapshot>? Present;
         // Per-sink redaction scratch, grown once to the widest snapshot this sink ever saw. Never shared with the
         // server's own borrowed backing array, which the redacted delivery must not write into.
         public EntitySnapshot[] Redacted = [];
@@ -229,7 +230,7 @@ public sealed partial class WorldOutputHub {
             callSite: nameof(DeliverDefinition),
             deliver: static (sink, payload) => sink.DeliverDefinition(
                 definition: payload.Definition,
-                version: payload.Version
+                version: payload.Version, stream: WorldStreamStamp.Unspanned
             ),
             payload: (Definition: definition, Version: version)
         );
@@ -250,7 +251,7 @@ public sealed partial class WorldOutputHub {
             deliver: static (sink, payload) => sink.DeliverState(
                 definition: payload.Definition,
                 stamp: payload.Stamp,
-                version: payload.Version
+                version: payload.Version, stream: WorldStreamStamp.Unspanned
             ),
             payload: (Definition: definition, Stamp: stamp, Version: version)
         );
@@ -330,16 +331,9 @@ public sealed partial class WorldOutputHub {
                 }
 
                 try {
-                    if (subscription.Disclosure.IsFull) {
-                        subscription.Sink.DeliverSnapshot(snapshot: in snapshot);
-                    } else {
-                        var redacted = Redact(
-                            snapshot: in snapshot,
-                            subscription: subscription
-                        );
-
-                        subscription.Sink.DeliverSnapshot(snapshot: in redacted);
-                    }
+                    var delivered = subscription.Disclosure.IsFull ? snapshot : Redact(snapshot: in snapshot, subscription: subscription);
+                    if (subscription.Present is { } present) { delivered = present(delivered); }
+                    subscription.Sink.DeliverSnapshot(snapshot: in delivered, stream: WorldStreamStamp.Unspanned);
                 } catch (Exception exception) {
                     Detach(
                         subscription: subscription,
@@ -429,7 +423,9 @@ public sealed partial class WorldOutputHub {
     /// <returns>A lease that detaches <paramref name="sink"/> when disposed.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="sink"/> is <see langword="null"/>.</exception>
     /// <exception cref="InvalidOperationException">Called from within a <c>Deliver*</c> callback.</exception>
-    public IDisposable Subscribe(IClientSink sink, in WorldSinkDisclosure disclosure) {
+    public IDisposable Subscribe(IClientSink sink, in WorldSinkDisclosure disclosure) => Subscribe(sink, disclosure, null);
+
+    internal IDisposable Subscribe(IClientSink sink, in WorldSinkDisclosure disclosure, Func<WorldSnapshot, WorldSnapshot>? present) {
         ArgumentNullException.ThrowIfNull(argument: sink);
 
         if (m_deliveryDepth != 0) {
@@ -440,7 +436,7 @@ public sealed partial class WorldOutputHub {
             disclosure: disclosure,
             hub: this,
             sink: sink
-        );
+        ) { Present = present };
 
         m_typed.Add(item: subscription);
         m_activeCount++;

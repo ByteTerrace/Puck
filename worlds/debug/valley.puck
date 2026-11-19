@@ -54,8 +54,14 @@ let valleyWedges = map(
   }
 )
 
-// The floor spot a fallen body is stood back on: 190 m out toward its sector, facing the centre.
+// The floor spot a fallen body is stood back on: 190 m out toward its sector, facing the centre. The north-west's spot
+// stands 15 degrees round toward north, still inside its wedge, since on the sector's own bearing the spot lies in the
+// falls' plunge basin (water-site.puck's plungeHole) and would stand a recovered body in the water.
 let recoveryRadius = 190
+function recoveryCompass(sector) = ((sector.name == "north-west") ? (sector.compass + 15) : sector.compass)
+// Where the `glacier` place stands: metres up the glacier's ramp from the lake, metres beside the trough's axis, and the
+// moraine crest's height there.
+let glacierWatch = { s: 40, across: 25, ground: 361.2 }
 
 spawnPoints: concat(
   map(
@@ -63,11 +69,11 @@ spawnPoints: concat(
     sector => {
       id: $"valley-{sector.name}"
       position [
-        (recoveryRadius * sine((sector.compass * compassRadians)))
+        (recoveryRadius * sine((recoveryCompass(sector) * compassRadians)))
         0.05,
-        (recoveryRadius * cosine((sector.compass * compassRadians)))
+        (recoveryRadius * cosine((recoveryCompass(sector) * compassRadians)))
       ]
-      yawDegrees: sector.compass
+      yawDegrees: recoveryCompass(sector)
     }
   ),
   [
@@ -79,6 +85,21 @@ spawnPoints: concat(
         (((overlookFace - deckReach) + 4) * cosine((overlookSector.compass * compassRadians)))
       ]
       yawDegrees: overlookSector.compass
+    }
+    // The glacier (glacier-site.puck): on the moraine's crest `glacierWatch.across` metres beside the trough's axis,
+    // `glacierWatch.s` metres up its ramp from the lake, facing across the trough, so the chase camera behind her looks
+    // down onto the ice with the trough running left and right of her. The crest's height is the drawn relief's, read
+    // standing (body.where: grounded at 361.14).
+    {
+      id: "glacier"
+      position [
+        ((rampPoint(glacierWatch.s, 0, 0)[2] * sine((wallSector.compass * compassRadians))) +
+          (glacierWatch.across * cosine((wallSector.compass * compassRadians)))),
+        glacierWatch.ground,
+        ((rampPoint(glacierWatch.s, 0, 0)[2] * cosine((wallSector.compass * compassRadians))) -
+          (glacierWatch.across * sine((wallSector.compass * compassRadians))))
+      ]
+      yawDegrees: (wallSector.compass - 270)
     }
   ]
 )

@@ -129,6 +129,9 @@ public readonly record struct EntitySnapshot(
 /// from <see cref="Tick"/> at a simulation rate.</param>
 /// <param name="Inputs">Authority-issued input epochs and continuation decisions, disclosed only to their owner.</param>
 /// <param name="SolidScales">The sizes contact sampled before this tick's body motion.</param>
+/// <param name="Cues">The one-shot rule effects disclosed to this recipient for this tick.</param>
+/// <param name="MusicBoundary">The score's beat and bar boundary flags for this step.</param>
+/// <param name="MusicSenses">The ambient score conditions disclosed to this recipient.</param>
 /// <remarks>Machine engagement pads do not ride this snapshot: <c>Server.WorldEngagement.FoldTick</c>'s per-screen
 /// pad fold is read directly by <c>Server.WorldMachineHost.Advance</c> (in <c>Puck.World.Machines</c>) inside <c>WorldServer.Step</c>, in-process,
 /// since machine stepping runs server-side and needs no wire lane to a presentation-side consumer.</remarks>
@@ -142,8 +145,20 @@ public readonly record struct WorldSnapshot(
     bool FieldsFull = false,
     ulong EngineTick = 0UL,
     ReadOnlyMemory<WorldInputPublication> Inputs = default,
-    ReadOnlyMemory<WorldSolidScale> SolidScales = default
-);
+    ReadOnlyMemory<WorldSolidScale> SolidScales = default,
+    ReadOnlyMemory<WorldGameplayCue> Cues = default,
+    byte MusicBoundary = 0,
+    byte MusicSenses = 0
+) {
+    /// <summary>Finds an entity incarnation in this snapshot's own delivered body table.</summary>
+    public bool TryFindEntity(int body, int generation, out EntitySnapshot entity) {
+        foreach (ref readonly var entry in Entries.Span) {
+            if (entry.Active && entry.Index == body && entry.Generation == generation) { entity = entry; return true; }
+        }
+        entity = default;
+        return false;
+    }
+}
 /// <summary>One lattice or typed document-cell write carried on a snapshot.</summary>
 /// <param name="Cell">The lattice cell index (z, then layer, then x), or declared document-cell ordinal.</param>
 /// <param name="Field">The field's index within its named region.</param>

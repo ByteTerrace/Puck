@@ -131,8 +131,8 @@ public sealed partial class WorldServer {
         set => m_tick.MusicTransitionTap = value;
     }
 
-    /// <inheritdoc cref="WorldTick.ReadClockPhaseError"/>
-    public long ReadClockPhaseError() => m_tick.ReadClockPhaseError();
+    /// <inheritdoc cref="WorldTick.ReadClock"/>
+    public long ReadClock(ClockFacet facet) => m_tick.ReadClock(facet: facet);
     /// <inheritdoc cref="WorldTick.ReleaseFederatedIntents"/>
     public void ReleaseFederatedIntents(long leaseId) => m_tick.ReleaseFederatedIntents(leaseId: leaseId);
     /// <summary>Restarts lattice stores alongside a whole-document state rebuild.</summary>

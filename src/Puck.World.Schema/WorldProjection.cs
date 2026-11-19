@@ -88,6 +88,7 @@ public sealed record WorldProjectionProvenance(string Authority, string? Documen
 /// <param name="Tunes">The tune assets.</param>
 /// <param name="Patches">The synth patch assets.</param>
 /// <param name="Audio">The audio defaults.</param>
+/// <param name="Music">The authored score assets.</param>
 /// <param name="Collision">The contact tuning — a client reads body radius/height from it to frame and interpolate.</param>
 /// <param name="Views">The authored window composition (slots, layouts, seat framing), or <see langword="null"/>
 /// when the document authors none — a seatless world composes no seat view.</param>
@@ -153,6 +154,7 @@ public sealed record WorldProjectionDocument(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldObservedRow>? Observations = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<StateSpace>? Spaces = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldTimelineSection? Timeline = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldMusicRow>? Music = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldHapticRow>? Haptics = null
 ) {
     /// <summary>The document schema version. A reader refuses any other value; the canonical writer always emits it.</summary>
@@ -295,6 +297,7 @@ public static class WorldProjection {
             );
         }
 
+        var audio = WorldAssetRowLoader.EmbedAudio(definition);
         var projection = new WorldProjectionDocument(
             Provenance: new WorldProjectionProvenance(
                 Authority: authority,
@@ -318,8 +321,9 @@ public static class WorldProjection {
             Creations: ReferencePrototypes(definition, arena, recipient, unrestricted, (content ?? WorldProjectionContent.Shared)),
             Placements: placements,
             Speakers: definition.Speakers,
-            Tunes: definition.Tunes,
-            Patches: definition.Patches,
+            Tunes: audio.Tunes,
+            Patches: audio.Patches,
+            Music: audio.Music,
             Audio: definition.Audio,
             Collision: definition.Collision,
             Views: definition.ViewsRaw,
@@ -799,6 +803,7 @@ public static class WorldProjection {
             TunesRaw: projection.Tunes,
             PatchesRaw: projection.Patches,
             AudioRaw: projection.Audio,
+            Music: projection.Music,
             CollisionRaw: projection.Collision,
             HostRaw: null,
             ViewsRaw: projection.Views,

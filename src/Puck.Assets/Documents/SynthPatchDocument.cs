@@ -55,6 +55,7 @@ public enum SynthOscillator {
 /// 1..<see cref="MaxPitchMillihertz"/>.</param>
 /// <param name="DurationFrames">The voice's total length in audio frames, 1..<see cref="MaxFrames"/>; null = loop
 /// until released.</param>
+/// <param name="PitchFromCueArgument">Whether a valid numeric cue argument overrides the base pitch in millihertz.</param>
 public sealed record SynthPatchDocument(
     string? Schema,
     string? Name,
@@ -69,7 +70,8 @@ public sealed record SynthPatchDocument(
     int? SweepMillihertzPerFrame = null,
     int? VibratoDepthMillihertz = null,
     int? VibratoRateMillihertz = null,
-    int? DurationFrames = null
+    int? DurationFrames = null,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingDefault)] bool PitchFromCueArgument = false
 ) {
     /// <summary>The version tag every saved document carries.</summary>
     public const string CurrentSchema = "puck.synthesizer-patch.v1";
@@ -96,6 +98,7 @@ public sealed record SynthPatchDocument(
 /// </summary>
 public static class SynthPatchCanonicalizer {
     private static readonly HashSet<string> KnownMemberNames = new(comparer: StringComparer.OrdinalIgnoreCase) {
+        "pitchFromCueArgument",
         "schema", "name", "oscillator", "dutyThousandths", "polynomial", "attackFrames", "decayFrames",
         "sustainThousandths", "releaseFrames", "pitchMillihertz", "sweepMillihertzPerFrame",
         "vibratoDepthMillihertz", "vibratoRateMillihertz", "durationFrames",

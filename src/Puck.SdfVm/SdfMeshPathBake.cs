@@ -259,6 +259,8 @@ public sealed partial class SdfMeshPathBake {
     // The fewest samples along any axis of a refining lattice, and of the final one, so a thin axis keeps an inside sample.
     private const int RefineMinimum = 17;
     private const int FinalMinimum = 9;
+    // The fewest samples along any axis of a fitted text group's final lattice: one through the middle of its slab.
+    private const int TextMinimum = 3;
     private const int MaxRefinements = 5;
 
     /// <summary>The finest spacing, in metres, of a final lattice along its longest axis: a part smaller than the lattice
@@ -1537,18 +1539,23 @@ public sealed partial class SdfMeshPathBake {
     // field is a bound past its atlas band (SdfLatticeRegion.Bound); the rest of the group refines toward its own detail,
     // so lettering engraved in a large creation refines that creation's surface no finer than the creation asks.
     private static FinalLattice OwnFinal(Group group) {
-        var lattice = (Lattice(gradients: true, group: group, longest: FinalSamples, minimum: FinalMinimum) with { Gradients = false });
+        // A fitted group holding glyphs is text alone: its glyphs' box is its own (a dynamic one's included), at its detail.
+        var text = (group.Fitted && group.Geometry.ContainsGlyph);
+        // Every cell of text the surface can enter refines (its glyph region is a bound's), so the slab's thin axis needs
+        // only a sample through its middle; FinalMinimum there would have the refinement split cells already finer than
+        // the stroke detail as many times again, spending the fine-sample budget across the slab's depth.
+        var minimum = (text ? TextMinimum : FinalMinimum);
+        var lattice = (Lattice(gradients: true, group: group, longest: FinalSamples, minimum: minimum) with { Gradients = false });
         var coarse = MathF.Max(x: lattice.Cell.X, y: MathF.Max(x: lattice.Cell.Y, y: lattice.Cell.Z));
         // The group's tier floors every spacing it asks: a view that resolves no finer cell is baked none.
         var tierCell = SdfMeshTier.Cell(tier: group.Tier);
-        // A fitted group holding glyphs is text alone: its glyphs' box is its own (a dynamic one's included), at its detail.
-        var glyphs = (group.Glyphs ?? ((group.Fitted && group.Geometry.ContainsGlyph && (group.Detail > 0f)) ? new SdfGlyphSpan(Detail: group.Detail, High: group.High, Low: group.Low) : null));
+        var glyphs = (group.Glyphs ?? ((text && (group.Detail > 0f)) ? new SdfGlyphSpan(Detail: group.Detail, High: group.High, Low: group.Low) : null));
         var detail = ((group.Detail > 0f) ? MathF.Max(x: group.Detail, y: tierCell) : float.PositiveInfinity);
         var glyphDetail = ((glyphs is { Detail: > 0f } span) ? MathF.Max(x: span.Detail, y: tierCell) : float.PositiveInfinity);
         var finest = MathF.Min(x: detail, y: glyphDetail);
 
         if (group.Fitted && float.IsFinite(f: finest) && ((finest * MaxDetailRefinement) < coarse)) {
-            lattice = BudgetedLattice(finest: (finest * MaxDetailRefinement), group: group, widest: coarse);
+            lattice = BudgetedLattice(finest: (finest * MaxDetailRefinement), group: group, minimum: minimum, widest: coarse);
             coarse = MathF.Max(x: lattice.Cell.X, y: MathF.Max(x: lattice.Cell.Y, y: lattice.Cell.Z));
         }
 
@@ -1636,8 +1643,8 @@ public sealed partial class SdfMeshPathBake {
     // A final lattice over a group's box with cubic cells past the per-axis cap: `finest` apart where that fits
     // UnionSamples and coarser where it does not, never coarser than `widest`; then no plane along Z holds more than
     // UnionPlaneSamples and no axis more samples than a slab's first plane can name (SdfMeshBakeBlock.MaxSlabPlanes),
-    // whatever `widest` says. Every axis keeps FinalMinimum samples.
-    private static SdfMeshBakeRequest BudgetedLattice(Group group, float widest, float finest) {
+    // whatever `widest` says. Every axis keeps `minimum` samples.
+    private static SdfMeshBakeRequest BudgetedLattice(Group group, float widest, float finest, int minimum = FinalMinimum) {
         var extent = Vector3.Max(value1: (group.High - group.Low), value2: new Vector3(value: 1.0e-4f));
         var longest = MathF.Max(x: extent.X, y: MathF.Max(x: extent.Y, y: extent.Z));
         var cell = MathF.Max(
@@ -1648,7 +1655,7 @@ public sealed partial class SdfMeshPathBake {
             y: (longest / (SdfMeshBakeBlock.MaxSlabPlanes - 2))
         );
 
-        return Spanning(dims: SdfMeshLattice.Dims(cell: cell, extent: extent, minimum: FinalMinimum), extent: extent, gradients: false, group: group);
+        return Spanning(dims: SdfMeshLattice.Dims(cell: cell, extent: extent, minimum: minimum), extent: extent, gradients: false, group: group);
     }
     // The spacing a static member's own final lattice would have: its bounding sphere's box at FinalSamples a side, no finer
     // than MinimumCell.

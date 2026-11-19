@@ -337,7 +337,7 @@ internal sealed class WorldTestBatch {
             m_recording = false;
             Interlocked.Exchange(location1: ref m_lease, value: null)?.Dispose();
         }
-        public void DeliverSnapshot(in WorldSnapshot snapshot) {
+        public void DeliverSnapshot(in WorldSnapshot snapshot, in WorldStreamStamp stream) {
             if (!m_recording) { return; }
             var hash = Puck.Maths.Fnv1aHash.Create();
 
@@ -369,9 +369,10 @@ internal sealed class WorldTestBatch {
         }
         public void DeliverAnswer(in QueryAnswer answer) { }
         public void DeliverComposition(WorldComposition composition) { }
-        public void DeliverDefinition(WorldDefinition definition, WorldDocumentVersion version) { }
+        public void DeliverDefinition(WorldDefinition definition, WorldDocumentVersion version, in WorldStreamStamp stream) { }
+        public void DeliverCut(in WorldStreamStamp stream, bool terminal) { }
         public void DeliverSessionLever(WorldSessionLever lever) { }
-        public void DeliverState(WorldDefinition definition, WorldDocumentVersion version, in WorldStateStamp stamp) { }
+        public void DeliverState(WorldDefinition definition, WorldDocumentVersion version, in WorldStateStamp stamp, in WorldStreamStamp stream) { }
 
         private static void Add(ref Puck.Maths.Fnv1aHash hash, System.Numerics.Vector3 value) {
             hash.Add(value: BitConverter.SingleToUInt32Bits(value: value.X));

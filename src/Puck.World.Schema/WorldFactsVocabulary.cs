@@ -513,6 +513,7 @@ public static partial class WorldFactsVocabulary {
             BodyMotionArm<WorldEffect.SetVerticalVelocity>(discriminator: "setVerticalVelocity"),
             BodyMotionArm<WorldEffect.ScaleVerticalVelocity>(discriminator: "scaleVerticalVelocity"),
             BodyMotionArm<WorldEffect.PlanarImpulse>(discriminator: "planarImpulse"),
+            BodyMotionArm<WorldEffect.TimedMove>(discriminator: "timedMove"),
             BodyProgramArm<WorldEffect.StartTimer>(discriminator: "startTimer"),
             BodyMotionArm<WorldEffect.Designate>(discriminator: "designate"),
             new WorldFactsEffectArm(
