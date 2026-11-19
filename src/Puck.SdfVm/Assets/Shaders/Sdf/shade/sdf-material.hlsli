@@ -61,6 +61,8 @@ struct SdfMaterialData {
     float2 flowResponse;
     uint flowSeed;
     uint flowControl;
+    float4 flowRegion;
+    float3 flowRegionVelocity;
 };
 
 // The GGX roughness floor: alpha2 = roughness^2 + SdfRoughnessFloorSquared, so a bare light direction (no authored
@@ -172,6 +174,8 @@ SdfMaterialData sdfMaterialLoad(int material) {
     data.flowResponse = asfloat(sdfWords[materialBase + 30u].xy);
     data.flowSeed = sdfWords[materialBase + 30u].z;
     data.flowControl = sdfWords[materialBase + 30u].w;
+    data.flowRegion = asfloat(sdfWords[materialBase + 34u]);
+    data.flowRegionVelocity = (data.flowRegion.w > 0.0 ? asfloat(sdfWords[materialBase + 35u].xyz) : float3(0.0, 0.0, 0.0));
 
     return data;
 }

@@ -739,10 +739,7 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   never accumulate a sum in floats, whose rounding follows raster order and whose
   per-face terms cancel badly against the far sky. Transmission integrates every
   glass material before the opaque hit; two interfaces reflect, refract and
-  scatter: the target's nearest front face and the second the sums' second
-  record names (`sdfGlassSecondInterface`, exact up to three front faces), each
-  shaded by the one loop body, the far one composed inside the near one's
-  transmission. `SdfGlassSumsDeviceLawTests` runs the accumulation in many orders on
+  scatter: the target’s nearest front face and the second the sums’ record names (`sdfGlassSecondInterface`, exact up to three front faces). Both use the same loop. Positive winding means a ray starts in glass. Its scatter and absorption compose in front of both entrances, through `sdfGlassTransmission`. The winding includes an exit hidden by opaque geometry. `SdfGlassSumsDeviceLawTests` runs the accumulation in many orders on
   both backends. The glass pass reuses the opaque path's mechanisms, never a copy:
   one probe gather an interface (`sdfMeshProbesAt`) for its reflection (`worldEnvironmentReflection`,
   `shade/sdf-sky-reflection.hlsli`, then `sdfMeshReflection`, the sky alone where
@@ -781,7 +778,7 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   src/Puck.SdfVm/Assets/Shaders/Sdf` finds nothing. An `Object` velocity on a
   draw shading in world space (a static copy) turns by the draw's matrix;
   `World` keeps the velocity and the pattern in world space. On glass the
-  revealed coverage covers the glass as a diffusely lit surface.
+  revealed coverage covers the glass as a diffusely lit surface. `SdfFlow.Region` blends the velocity inside a world-space sphere before its lane multiplier and projection onto the surface.
 - **A shading-time lane is a slot's or the world's.** Lanes 0 to 3 are the
   draw's frame-slot lanes (a body's look lanes; zero on a static copy or an
   animated placement), lanes 4 to 7 the world's `render.lanes`, which
