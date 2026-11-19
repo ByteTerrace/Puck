@@ -4184,14 +4184,6 @@ Owner: media lane · ordinary · Next: let an unread capture feed idle.
   downscale on the GPU ahead of the readback.
 - [medium] `CaptureSink` is constructed nowhere in `src`: an unreached capture
   capability to wire, not delete (AGENTS.md).
-- [high] Sound gaps [instrument and dance play](instrument-play.md#sound)
-  names, one designed lane of its first wave: a rule's cue reaches the
-  speakers only through `WorldServer.GameplayCueTap`, a callback inside the
-  authority's process that drops the cue's payload, so a remote client hears
-  none and a cue cannot carry a pitch; `WorldCreationInstances.TriggerCue` has
-  no caller; a score arms only on the three events of
-  `WorldAudioCue.MusicWhenTokens`, never on a rule; and `VoiceSynth`'s 32
-  voices have no rule for which sound when more are asked for.
 
 ### Debug world content
 

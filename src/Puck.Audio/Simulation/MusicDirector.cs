@@ -15,18 +15,22 @@ public enum MusicTransitionBoundary : byte {
 /// <param name="ToSegmentId">The segment to switch to.</param>
 /// <param name="When">The sense family that arms this transition.</param>
 /// <param name="At">The boundary the armed transition waits for.</param>
-public readonly record struct MusicTransition(string ToSegmentId, MusicSenseFamily When, MusicTransitionBoundary At);
+/// <param name="Cue">The cue name when matching a rule cue.</param>
+public readonly record struct MusicTransition(string ToSegmentId, MusicSenseFamily When, MusicTransitionBoundary At, string? Cue = null);
 /// <summary>One compiled conditional audio layer: a tune id, and the sense family that gates it on top of segment
 /// membership — never queued, level-triggered every tick.</summary>
 /// <param name="TuneId">The tune the layer plays while active.</param>
 /// <param name="When">The gating sense family, or <see langword="null"/> for "active whenever the owning segment is
 /// current" (the unconditional case).</param>
-public readonly record struct MusicLayer(string TuneId, MusicSenseFamily? When);
+/// <param name="GainThousandths">The level of the layer in the mix.</param>
+/// <param name="Cue">The cue name when matching a rule cue.</param>
+public readonly record struct MusicLayer(string TuneId, MusicSenseFamily? When, int GainThousandths = 1000, string? Cue = null);
 /// <summary>One compiled director embellishment: a patch id, and the sense family that fires it — instantaneous, no
 /// boundary wait.</summary>
 /// <param name="PatchId">The patch voiced when this embellishment fires.</param>
 /// <param name="When">The firing sense family.</param>
-public readonly record struct MusicEmbellishment(string PatchId, MusicSenseFamily When);
+/// <param name="Cue">The cue name when matching a rule cue.</param>
+public readonly record struct MusicEmbellishment(string PatchId, MusicSenseFamily When, string? Cue = null);
 /// <summary>One compiled segment: its stable id, the transitions it can arm, its conditional audio layers, and its
 /// director embellishments — each list evaluated in declared order (for transitions, the first whose
 /// <see cref="MusicTransition.When"/> matches this tick's edges arms; a later match this same tick is not evaluated
@@ -86,6 +90,7 @@ public sealed record MusicSegmentGraph(IReadOnlyList<MusicSegment> Segments) {
 /// per matching edge, recorded in <see cref="LastEmbellishmentPatchId"/>/<see cref="LastEmbellishmentTick"/>.</summary>
 public sealed class MusicDirector {
     private readonly List<string> m_activeLayerTuneIds = [];
+    private readonly List<MusicLayer> m_activeLayers = [];
     private readonly MusicSegmentGraph m_graph;
 
     private MusicTransition? m_armed;
@@ -113,6 +118,8 @@ public sealed class MusicDirector {
     /// <see cref="PendingSegmentId"/>, nothing here survives to a tick that does not re-satisfy it), in the owning
     /// segment's declared order. Empty before the first <see cref="Step"/>.</summary>
     public IReadOnlyList<string> ActiveLayerTuneIds => m_activeLayerTuneIds;
+    /// <summary>The active layers and their authored gains in declared order.</summary>
+    public IReadOnlyList<MusicLayer> ActiveLayers => m_activeLayers;
     /// <summary>Gets the currently active segment's id.</summary>
     public string CurrentSegmentId => m_currentSegmentId;
     /// <summary>Gets the patch id the most recently fired embellishment voiced, or <see langword="null"/> before the
@@ -146,7 +153,8 @@ public sealed class MusicDirector {
         foreach (var transition in segment.Transitions) {
             if (Matches(
                 family: transition.When,
-                edges: edges
+                edges: edges,
+                cue: transition.Cue
             )) {
                 m_armed = transition;
 
@@ -174,7 +182,8 @@ public sealed class MusicDirector {
         foreach (var embellishment in segment.Embellishments) {
             if (Matches(
                 family: embellishment.When,
-                edges: edges
+                edges: edges,
+                cue: embellishment.Cue
             )) {
                 LastEmbellishmentPatchId = embellishment.PatchId;
                 LastEmbellishmentTick = tick;
@@ -183,9 +192,9 @@ public sealed class MusicDirector {
             }
         }
     }
-    private static bool Matches(MusicSenseFamily family, IReadOnlyList<MusicSenseEdge> edges) {
+    private static bool Matches(MusicSenseFamily family, IReadOnlyList<MusicSenseEdge> edges, string? cue) {
         foreach (var edge in edges) {
-            if (edge.Family == family) {
+            if (edge.Family == family && string.Equals(edge.Cue, cue, StringComparison.Ordinal)) {
                 return true;
             }
         }
@@ -197,6 +206,7 @@ public sealed class MusicDirector {
     // active set allocates nothing steady-state.
     private void RecomputeActiveLayers(IReadOnlyList<MusicSenseEdge> edges) {
         m_activeLayerTuneIds.Clear();
+        m_activeLayers.Clear();
 
         if (m_graph.Find(id: m_currentSegmentId) is not { } segment) {
             return;
@@ -207,10 +217,12 @@ public sealed class MusicDirector {
                 (layer.When is not { } when) ||
                 Matches(
                 edges: edges,
-                family: when
+                family: when,
+                cue: layer.Cue
             )
             ) {
                 m_activeLayerTuneIds.Add(item: layer.TuneId);
+                m_activeLayers.Add(layer);
             }
         }
     }
@@ -246,6 +258,7 @@ public sealed class MusicDirector {
         // sticky state, so a restore leaves the list empty until the next Step recomputes it, the same posture
         // PendingSegmentId already takes before its first Arm.
         m_activeLayerTuneIds.Clear();
+        m_activeLayers.Clear();
     }
     /// <summary>Evaluates one tick: arms a matching transition off this tick's edges (if none is already armed),
     /// fires any embellishment whose condition this tick's edges satisfy, commits an armed transition whose boundary

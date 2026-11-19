@@ -305,28 +305,64 @@ which is a second-wave lane there.
 
 ### Sound
 
-**A rule's cue stays in the authority's process and carries no pitch (gap
-I).** `WorldServer.GameplayCueTap` is a callback the composition root wires to
-the local audio director, and it passes the cue's name and site and drops its
-payload. A client of a remote authority hears no rule cue, and a melody needs
-a patch for each pitch. `WorldCreationInstances.TriggerCue`, the door that
-plays a look's pose cue on demand, has no caller at all. One delivered cue
-lane should feed both the speakers and the pose.
+**Delivered rule cues (gap I).** The [design below](#delivered-cues-and-music-design)
+replaces the authority's local audio callback with the recipient's tick. One
+cue can drive a sound and the look frame of the same name. An authored patch
+can use the cue argument for pitch.
 
-**Music cannot follow a rule (gap J).** A score's transitions, layers and
-embellishments arm on three world events (`WorldAudioCue.MusicWhenTokens`):
-entering a region, leaving one, and a seat joining. A phrase gaining strength
-cannot bring a layer in. A layer's authored gain also does not reach the mix
-(`MusicLayerDocument.GainThousandths`).
+**Music conditions and layer gain (gap J).** A score can match a delivered
+rule cue alongside region and seat events, and a layer's authored gain reaches
+its tune emitter.
 
-**Thirty-two voices (gap K).** `VoiceSynth` holds 32 voices in a fixed array.
-A stage of bards, each sounding notes over a layered score, needs a rule for
-which voices sound when more are asked for than exist.
+**Thirty-two voices (gap K).** `VoiceSynth` uses the current envelope and
+authored gain to select the voice it replaces when all slots are occupied.
 
 **Nothing drives a controller's motors (gap L).** No world code calls
 `IGamepadOutput` ([input packet](open-items.md#input-channels)). A beat felt in
 the hands is the clearest non-visual metronome a pad offers, and it is an
 unreached capability to wire.
+
+#### Delivered cues and music design
+
+`RuleEvaluator.Commit` already delivers external effects after a successful
+firing. `WorldRuleHost.FireGameplayCue` will use that door to collect one-tick
+events. A snapshot primer starts without events. The event carries the name,
+optional authored text, an optional integer expression result, and the source
+tick. A body target also carries its generation. The integer has no prescribed
+unit in the event. A synth patch can opt in to reading it as base pitch in
+millihertz. The creation look can use the same event name as an on-demand
+frame. A missing or replaced body must never redirect the event to its successor.
+
+Only the recipient's snapshot delivery can materialize wire cues. It checks
+the firing's readable state dependencies through `WorldRecipientView` and the
+target against the same entity image the recipient receives. The event's
+presence, tick and payload all have the same audience. Authority narration
+stays on the authority. Filter before any cue can affect the projection cadence,
+and do not put cues in the primer or carry withheld events into a later tick.
+The rule footprint includes its gate, bindings, effects, decision options and
+group trigger. Cells with variable audiences and host facts whose disclosure
+cannot be proved use conservative visibility. Explicit writes across audiences
+remain authored disclosures under the
+[disclosure decision](disclosure.md#where-the-boundary-stands).
+
+Scores match `cue:<name>` alongside the existing world event conditions.
+Transitions still wait for the chosen beat or bar, layers hold while the
+condition matches, and embellishments use the existing one-shot voice path.
+The presentation director matches rule cues after recipient disclosure so
+music cannot announce a withheld firing. A layer carries its authored gain
+into the bed emitter. The synth takes a free slot when possible, then replaces
+the voice with the lowest envelope level weighted by voice gain, oldest first
+on ties. The live emitter and trigger tables admit a burst larger than the
+voice pool so the mixer can make that choice. Apply the same allocation rule
+in offline and live mixing.
+
+Check an admitted and a withheld recipient against the same firing, including
+a body outside the recipient's entity image. Check a sampled projection with a
+cue between its ordinary snapshots and attach a new client after the cue.
+Use one patch to play two argument values and use a same-named look cue to
+verify pose and sound. Arm a beat-boundary transition and an embellishment by
+name, read the active layer's gain in the emitter table, and exercise more than
+32 overlapping voices to check which voice is replaced.
 
 ### The crowd
 
@@ -375,7 +411,7 @@ by 1440 on Direct3D 12, with a Vulkan boot of the same stops.
 | | | Chase: the default boom | The stance reads as playing in silhouette from behind and from three-quarter view, and the gait's leg cycle is unchanged against the build before. |
 | | | In motion | An eight-frame presented burst of a fast phrase shows the fingers with no trail behind them and no flicker on the still hand. `world.debug-view shadow` shows each finger's shadow on the gauntlet at the close camera. |
 | | | Counter | Draws, vertices and transform rows for one Moth before and after, from `world.counters gpu` and `sdf.instances`. |
-| 3. It sounds, and the music answers | A press sounds its pitch at the avatar. The score adds a layer as a phrase gains strength and marks its completion. The pad pulses on the beat. | State and read-back | `speaker.state` shows the cue for each graded note with its pitch. `music.state` shows the layer enter on the tick the phrase's strength crosses its threshold. The tick of each note's cue equals the tick its finger cell changed. |
+| 3. It sounds, and the music answers | A press sounds its pitch at the avatar. The score adds a layer as a phrase gains strength and marks its completion. The pad pulses on the beat. | State and read-back | The delivered note's argument matches the pitch in the audio capture. `speaker.state` shows the note's patch and the layer emitter. The tick of each note's cue equals the tick its finger cell changed. |
 | | | Clip | A `capture.start` clip of an eight-beat phrase, inspected: each note is heard as its finger lands, and no note is doubled or dropped. |
 | | | Topology | The same script against an authority in another process gives the same `speaker.state` cues on the client. |
 | 4. The body dances | The dance input mode, three moves with real travel (a step, a spin, a leap), and strikes on their active ticks. | State | A scripted move on flat ground ends at its authored displacement and facing. The same move into a wall, up a kerb and down a slope ends where contact allows, with no `sweep=refused` in `body.where`. A strike on the beat and one off it write different damage to a target's state. All of it reproduces. |

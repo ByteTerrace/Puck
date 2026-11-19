@@ -232,6 +232,7 @@ public sealed partial class WorldRuleHost {
     //
     // The arena stays authoritative; one journal-driven delivery follows a tick that moved anything.
     internal void EvaluateWorldRules(ulong tick, ulong stepTicks) {
+        BeginCueReads();
         m_decisionWork = default;
         AdvanceHost(
             engineTick: Host.CompletedEngineTicks,

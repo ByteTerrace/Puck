@@ -257,14 +257,25 @@ public sealed partial class WorldRuleHost {
 
         var tick = firing.Tick;
 
+        long? argument = null;
+        if (effect.Argument is not null && firing.Values[effect.Body is null ? 0 : 1].TryFinite(out var value)) {
+            argument = value;
+        }
+        if (effect.Body is not null && body is null) { return true; }
+
         var cue = new WorldGameplayCue(
+            Argument: argument,
             Body: body,
+            Generation: body is { } target ? Host.Population.Generation(index: target) : 0,
             Name: effect.Cue,
             Payload: effect.Payload,
             Tick: tick
         );
 
-        Host.GameplayCueTap?.Invoke(obj: cue);
+        if (ReferenceEquals(Arena, m_cueArena) && ReferenceEquals(m_tickCueReads, m_cueReads) &&
+            m_tickCueReads.TryGetValue(firing.RuleName, out var reads)) {
+            Host.Tick.RecordCue(cue, reads, Arena);
+        }
         if (Host.Output.HasNarrationSink) {
             Host.Output.Narrate(
                 channel: "world.cue",
