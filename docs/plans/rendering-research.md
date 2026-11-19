@@ -3030,8 +3030,9 @@ one barrier model.**
   split of one shadow pass into command processing, vertex work and
   rasterization, and the command change stays only if it removed code. A
   route run on Direct3D 12 with `--debug-layers` prints no barrier message,
-  no texture reaches `DirectXBarriers.Transition`, and presented frames on
-  the route show nothing new.
+  and presented frames on the route show nothing new. (Landed: the legacy
+  transition path is deleted and every texture transition is an enhanced
+  barrier; the windowed reading and the debug-layer route are the lead's.)
 
 **`signal`: a background job is known finished when it finishes.**
 
