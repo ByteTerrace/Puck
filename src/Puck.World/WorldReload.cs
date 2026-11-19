@@ -22,7 +22,8 @@ namespace Puck.World;
 /// <param name="definitionSource">The source the running world was loaded from.</param>
 /// <param name="machineCatalog">The machine catalog admission validates against.</param>
 /// <param name="sourceWatch">The source watch that follows the reload's compiler inputs.</param>
-internal sealed class WorldReload(WorldServer server, IServerLink link, WorldDeferredVerbEchoes echoes, WorldDefinitionSource definitionSource, WorldMachineCatalog machineCatalog, WorldSourceWatch sourceWatch) {
+/// <param name="iterations">The edit-loop clock each reload begins a loop on.</param>
+internal sealed class WorldReload(WorldServer server, IServerLink link, WorldDeferredVerbEchoes echoes, WorldDefinitionSource definitionSource, WorldMachineCatalog machineCatalog, WorldSourceWatch sourceWatch, WorldIterationClock iterations) {
     private const string Verb = "world.reload";
 
     // The preparations' text catalog: its font cache is not thread-safe, so preparations take turns on it.
@@ -74,6 +75,7 @@ internal sealed class WorldReload(WorldServer server, IServerLink link, WorldDef
     /// <param name="context">The issuing line's context.</param>
     /// <returns>A result settling with the authority's verdict, or with the refusal preparation reached.</returns>
     public CommandResult Run(CommandContext context) {
+        _ = iterations.Begin(name: Verb, named: false);
         var path = definitionSource.SourcePath;
         var reads = sourceWatch.RecordReads(path: path);
         var pending = new Pending(owner: this, context: context, path: path, reads: reads);

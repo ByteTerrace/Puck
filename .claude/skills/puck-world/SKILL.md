@@ -722,6 +722,16 @@ check the flag: the owner may be holding the pad.
   bare `world.wait ready` is refused as not a tick count, and the script then
   runs on without waiting. End a script with `quit`. Blank lines and `#`
   comments are skipped.
+- **Time the edit loop.** `world.iteration` reads every edit loop the World
+  has timed (`WorldIterationClock`): the boot from process start, each
+  `world.reload` and `world.shaders.reload`, and a loop a script begins with
+  `world.iteration begin <name>` before its own edit. Each line gives the
+  seconds to the first frame from the edited content (`frame`), every mesh
+  drawing its own geometry (`shown`), the bakes settled and resident
+  (`meshes`) and the lighting converged (`lit`); a settled loop also prints
+  `[world.iteration] …` on stderr. `world.wait iteration <seconds>` waits for
+  the latest loop. A change that slows a loop says so with these lines
+  ([the iteration plan](../../../docs/plans/iteration.md)).
 - **Encoding.** Pin `[Console]::OutputEncoding` and `$OutputEncoding` to UTF-8
   without a BOM (`[System.Text.UTF8Encoding]::new($false)`): a BOM written into
   piped stdin corrupts the first command.
