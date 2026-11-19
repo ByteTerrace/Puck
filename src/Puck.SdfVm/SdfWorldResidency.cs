@@ -200,6 +200,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
             MeshPathBake.DescribeResidency(radius: radius),
             $"{(MeshPathBake.Library.Disk?.DescribeReads() ?? "store=none")} {SdfMesh.DescribeRestores()}",
             (m_tables?.DescribeLanding() ?? "region=none"),
+            (m_tables?.DescribeSelection() ?? "selection=none"),
             ((m_tables is { } tables) ? $"{tables.Grant.Selector.Describe()}{tables.Grant.Selector.Work.Describe()}" : "selector=none"),
             (m_tables?.DescribeFixedCost() ?? "fixed-cost=none"),
             $"{(m_tables?.GpuWork.DescribeBytes() ?? "gpu-work=none")} late-stagings={LateStagings}{(m_tables?.GpuWork.Describe() ?? string.Empty)}",

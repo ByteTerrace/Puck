@@ -14,6 +14,9 @@
 //   visible set takes the verdict, and a visible candidate the first phase did not draw is drawn by the second phase.
 //
 // Draws are counted on the GPU, into the pass's drawn counts past the work counter rows (GpuKernelCounters.DrawnWords).
+// On a marked frame (flag 8 of the header's fourth word) each draw a phase emits a command for ORs its level plus one
+// into its two bits of the counts' mark words from SDF_MESH_MARK_BASE, sixteen draws a word, which the host reads back
+// (SdfMeshOcclusion, SdfMeshSelectionMarks).
 // The controls' header holds the draw count and pyramid levels; each phase writes one GpuDrawIndirectCommand a
 // candidate at the candidate's place, empty where it draws nothing, with the identity first and first instance zero.
 // KEEP IN SYNC with SdfMeshOcclusion. Bounds, levels and mesh identity come from the retained mesh region.
@@ -96,6 +99,21 @@ void sdfOcclusionEmit(uint phase, uint candidate, uint identity, uint vertices, 
         sdfMeshOcclusionDrawsRW[(word + 2u)] = (emit ? 1u : 0u);
         sdfMeshOcclusionDrawsRW[(word + 3u)] = 0u;
         sdfMeshOcclusionDrawsRW[(word + 4u)] = 0u;
+    }
+}
+
+// Marks a draw a phase selected for submission: its level plus one in its two bits of the counts' mark words. Every
+// phase of a draw draws the level the early step chose, so two phases' marks OR to that level's.
+void sdfOcclusionMark(uint draw, uint level) {
+    uint words;
+    uint stride;
+
+    sdfMeshOcclusionCountsRW.GetDimensions(words, stride);
+
+    uint word = (SDF_MESH_MARK_BASE + (draw >> 4u));
+
+    if (word < words) {
+        InterlockedOr(sdfMeshOcclusionCountsRW[word], (min((level + 1u), 3u) << ((draw & 15u) * 2u)));
     }
 }
 
@@ -217,6 +235,7 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
     uint exitVertices = 0u;
     uint receiverRejected = 0u;
     uint entryRejected = 0u;
+    bool marking = (header.w & 8u) != 0u;
 
     // Each phase draws one command a candidate, empty or not.
     if (id.x == 0u) {
@@ -296,10 +315,12 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
             // Optical draws execute once, independently of the two entry phases.
             draws += glassEmit ? 1u : 0u;
             vertices += glassEmit ? count : 0u;
+            if (marking && (exitEmit || glassEmit)) { sdfOcclusionMark(draw, level); }
         }
         emit = opaqueEmit && depthLayer;
         draws += emit ? 1u : 0u;
         vertices += emit ? count : 0u;
+        if (marking && emit) { sdfOcclusionMark(draw, level); }
         }
     }
 

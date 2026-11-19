@@ -381,6 +381,7 @@ public sealed partial class SdfWorldTables {
                     ((draws.Rows is not null) && !ReferenceEquals(objA: m_meshCauseSource, objB: draws.Roster)));
 
                 if (ReferenceEquals(objA: old, objB: mesh) && !occupantChanged) { continue; }
+                RowChanged(row: row);
                 if (occupantChanged && ReferenceEquals(objA: old, objB: mesh) && (mesh is not null)) { m_meshArena.NameRow(index: row, mesh: null); }
                 m_meshArena.NameRow(index: row, mesh: mesh);
                 if (mesh is not null) { m_meshClaims.Claim(mesh: mesh); m_rowsByMesh.Set(key: mesh, row: row); } else { m_rowsByMesh.Remove(row: row); }
@@ -413,6 +414,7 @@ public sealed partial class SdfWorldTables {
         FinishMeshStaging(frame: frame);
     }
     private void Unname(int row) {
+        RowChanged(row: row);
         if (m_stagedDraws[row].Mesh is { } mesh) { m_meshClaims!.Release(mesh: mesh); }
         m_rowsByMesh.Remove(row: row); m_absentRows.Remove(item: row); m_glassIndices.Remove(item: row);
         m_stagedDraws[row] = default; m_stagedOccupancies[row] = 0;

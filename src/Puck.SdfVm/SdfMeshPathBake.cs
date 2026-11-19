@@ -539,6 +539,8 @@ public sealed partial class SdfMeshPathBake {
 
         internal SdfMeshBakeGroup GroupAt(int index) => m_owner.m_groups[index];
         internal SdfMesh? MeshOf(SdfMeshBakeGroup group) => ((Group)group).Shown;
+        // The tier the mesh a group draws was baked at: the replaced group's while a replacement lands ahead.
+        internal int TierOf(SdfMeshBakeGroup group) => (((Group)group).Replaces ?? group).Tier;
         internal IReadOnlyList<int>? CopiesOf(SdfMeshBakeGroup group) => m_owner.CopiesOf(group: group);
         internal void Acknowledge() => m_owner.m_dressedRevision = Revision;
 
