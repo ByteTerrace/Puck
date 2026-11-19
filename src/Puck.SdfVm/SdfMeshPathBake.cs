@@ -566,7 +566,11 @@ public sealed partial class SdfMeshPathBake {
             // The bake reads only the baked handles: a frame whose height fields' heights alone moved changes nothing here.
             // A lost mesh (SdfMeshLibrary.Lose) restarts the bake on the same program, which bakes again only the groups
             // whose meshes were lost (Keeps). An operand moves with the frame's transforms, so its readers are visited every
-            // frame.
+            // frame. A program that shares the held one's field (SdfProgram.SharesField: only its appearance moved) is
+            // adopted as it stands: every group, plan and bake in flight reads the field alone.
+            if (!ReferenceEquals(objA: frame.Program, objB: m_program) && frame.Program.SharesField(other: m_program)) {
+                m_program = frame.Program;
+            }
             if (!ReferenceEquals(objA: frame.Program, objB: m_program) || (Library.LostRevision != m_lostRevision)) {
                 m_lostRevision = Library.LostRevision;
                 Restart(frame: frame);

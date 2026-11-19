@@ -500,9 +500,9 @@ public sealed class SdfMeshGeometryBuilder(bool dynamic) {
             Hash(fact: Fact.SideTable, source: MemoryMarshal.AsBytes(span: table));
         }
 
-        var words = new InstructionWords(instruction: instruction);
+        var words = new SdfInstructionWords(instruction: instruction);
 
-        Hash(fact: Fact.Instruction, source: MemoryMarshal.AsBytes(span: new ReadOnlySpan<InstructionWords>(reference: in words)));
+        Hash(fact: Fact.Instruction, source: MemoryMarshal.AsBytes(span: new ReadOnlySpan<SdfInstructionWords>(reference: in words)));
     }
     // Appends a fact to the geometry and its form.
     private void Hash(Fact fact, ReadOnlySpan<byte> source) {
@@ -648,16 +648,5 @@ public sealed class SdfMeshGeometryBuilder(bool dynamic) {
     private readonly record struct Pose(Rounded4 Position, Rounded4 Orientation) {
         public static Pose Identity => new(Orientation: new Rounded4(steps: OrientationSteps, value: new Vector4(w: 1f, x: 0f, y: 0f, z: 0f)), Position: default);
         public static Pose Missing => new(Orientation: Rounded4.Missing, Position: Rounded4.Missing);
-    }
-    // An instruction's fields as the bytes the geometry hashes.
-    [StructLayout(LayoutKind.Sequential)]
-    private readonly struct InstructionWords(in SdfInstruction instruction) {
-        private readonly uint m_op = ((uint)instruction.Op);
-        private readonly uint m_shape = instruction.Shape;
-        private readonly uint m_blend = instruction.Blend;
-        private readonly uint m_material = instruction.Material;
-        private readonly Vector4 m_data0 = instruction.Data0;
-        private readonly Vector4 m_data1 = instruction.Data1;
-        private readonly uint m_flags = (instruction.Detail ? 1u : 0u);
     }
 }

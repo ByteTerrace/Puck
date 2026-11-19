@@ -155,8 +155,19 @@ public sealed partial class SdfCompositionFrameSource : ISdfFrameSource {
     public long Frames { get; private set; }
     /// <summary>Gets the program the frames carry, or <see langword="null"/> before the first frame.</summary>
     public SdfProgram? Program => m_program;
-    /// <summary>Gets the number of completed program builds, separate from per-frame instance poses.</summary>
+    /// <summary>Gets the number of completed program builds that derived a field, separate from per-frame instance poses.
+    /// A rebuild whose emission left the field as it stood derives none (<see cref="SdfProgram.SharesField"/>) and counts
+    /// under <see cref="AppearanceBuilds"/> instead, or under neither when it emitted the held program exactly.</summary>
     public long ProgramBuilds { get; private set; }
+    /// <summary>Gets the number of completed rebuilds that took the held program's field with another appearance: a look
+    /// value (a colour, a material value, a shade parameter) packed without a field build.</summary>
+    public long AppearanceBuilds { get; private set; }
+
+    // Counts an adopted build against the program it replaced.
+    private void CountBuild(SdfProgram built, SdfProgram? held) {
+        if (ReferenceEquals(objA: built, objB: held)) { return; }
+        if (built.SharesField(other: held)) { AppearanceBuilds++; } else { ProgramBuilds++; }
+    }
 
     private bool Converging => (m_convergence is { Completion.IsCompleted: false });
     private bool WaitsForBuild => (Converging || m_dresser.TickLocked);
@@ -272,9 +283,11 @@ public sealed partial class SdfCompositionFrameSource : ISdfFrameSource {
         return builder;
     }
     // A build packs, validates and analyses the emitted builder, which owns everything it reads, so it runs on any thread.
-    private SdfProgram Build(SdfProgramBuilder builder) {
+    // Handed the program it replaces, it derives no field the builder holds unchanged: an emission whose field stands
+    // takes that program's derivation with its own appearance, or is that program (SdfProgram.Of).
+    private SdfProgram Build(SdfProgramBuilder builder, SdfProgram? replaces) {
         var started = System.Diagnostics.Stopwatch.GetTimestamp();
-        var program = builder.Build();
+        var program = builder.Build(replaces: replaces);
 
         Volatile.Write(location: ref m_buildMilliseconds, value: System.Diagnostics.Stopwatch.GetElapsedTime(startingTimestamp: started).TotalMilliseconds);
         return program;
@@ -297,8 +310,10 @@ public sealed partial class SdfCompositionFrameSource : ISdfFrameSource {
     private bool AdoptBuild(ref bool moved) {
         if ((m_building is { } building) && building.IsCompleted) {
             m_building = null;
+            var held = m_program;
+
             (m_program, m_programDelta) = building.GetAwaiter().GetResult();
-            ProgramBuilds++;
+            CountBuild(built: m_program, held: held);
             m_programLayout = m_buildingLayout;
             Array.Copy(
                 sourceArray: m_buildingRevisions,
@@ -589,11 +604,13 @@ public sealed partial class SdfCompositionFrameSource : ISdfFrameSource {
         // The build also finds the words its program differs in from the one held, so the tables that hold
         // that program upload the new one without comparing it on the frame thread, and hands the program to its
         // observer before the frame that adopts it.
+        // A program sharing the held one's field has the plans the held one's observers made already, so only a new field
+        // is observed.
         m_building = Task.Run(function: () => {
-            var built = Build(builder: builder);
-            var delta = ((held is null) ? null : ((SdfProgramDelta?)SdfProgramDelta.Between(from: held, to: built)));
+            var built = Build(builder: builder, replaces: held);
+            var delta = (((held is null) || ReferenceEquals(objA: held, objB: built)) ? null : ((SdfProgramDelta?)SdfProgramDelta.Between(from: held, to: built)));
 
-            observer?.Invoke(arg1: built, arg2: emittedUnder);
+            if (!built.SharesField(other: held)) { observer?.Invoke(arg1: built, arg2: emittedUnder); }
 
             return (built, delta);
         });
@@ -672,8 +689,10 @@ public sealed partial class SdfCompositionFrameSource : ISdfFrameSource {
             m_buildingLayout = m_layout;
 
             if (!BuildsInBackground) {
-                m_program = Build(builder: builder);
-                ProgramBuilds++;
+                var held = m_program;
+
+                m_program = Build(builder: builder, replaces: held);
+                CountBuild(built: m_program, held: held);
                 m_programDelta = null;
                 m_programLayout = m_buildingLayout;
                 Array.Copy(

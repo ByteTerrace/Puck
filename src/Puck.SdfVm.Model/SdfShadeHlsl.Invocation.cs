@@ -7,7 +7,9 @@ public static partial class SdfShadeHlsl {
     // construction and folds to a constant. While the live world.toon off suppresses every cel style, a styled
     // material's binding is unstyled (sdfToonAuthored, shade/sdf-toon.hlsli, which every includer reaches first): its
     // program's surface phase still runs, so a terrain or weathered surface under cel keeps its surface, and its light and
-    // compose phases read as omitted (sdfShadeHas), so the engine's continuous response lights it.
+    // compose phases read as omitted (sdfShadeHas), so the engine's continuous response lights it. A specialized kernel
+    // binds none for a program it holds no arm of, so a program edited or added while its set compiles shades as a
+    // material with no program, exactly as the plain kernels shade it, rather than as a program with no phases.
     private const string Invocation = """
 SdfShadeBinding sdfShadeBinding(int material) {
     SdfShadeBinding binding = (SdfShadeBinding)0;
@@ -18,6 +20,7 @@ SdfShadeBinding sdfShadeBinding(int material) {
     uint4 own = asuint(sdfWords[address + 32u]);
     binding.range = own.y != 0u ? own : passGroup.shadeDefault;
     if (binding.range.y != 0u) binding.arm = sdfShadeArm(binding.range.xy);
+    if ((SDF_SHADE_ARMS != 0u) && (binding.arm == 0u)) return (SdfShadeBinding)0;
 #endif
     return binding;
 }

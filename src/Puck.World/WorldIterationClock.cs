@@ -10,9 +10,12 @@ namespace Puck.World;
 /// <summary>
 /// Times every edit loop from the edit to the presented frames that show it: the boot (from process start), each
 /// <c>world.reload</c> (by hand or from the source watch), each <c>world.shaders.reload</c>, and each loop a script
-/// begins by name before its own edit (<c>world.iteration begin</c>), such as a row set. A loop passes four stages,
+/// begins by name before its own edit (<c>world.iteration begin</c>), such as a row set. A loop passes five stages,
 /// each timed in seconds from the edit to the first produced frame that finds it true. <c>frame</c>: the frame renders
 /// the edited document (or a reloaded kernel) with the program its content calls for, the moment a look value shows.
+/// <c>shaded</c>: every shading program the frame runs draws with its own kernel
+/// (<see cref="SdfWorldResidency.ShadesWhole"/>), the moment an edited shading program's look shows once its
+/// specialization compiles; the line's <c>worst-frame</c> is the longest wait between produced frames until then.
 /// <c>shown</c>: every mesh group of that program draws its own geometry at some tier
 /// (<see cref="SdfMeshPathBake.DrawsOwn"/>), the moment a changed form shows whole. <c>meshes</c>: the bakes are settled
 /// at the detail their demand asks and resident in the mesh region (<see cref="IWorldBakeReadiness.IsResidentSince"/>),
@@ -65,6 +68,9 @@ public sealed class WorldIterationClock(WorldServer server) : IWorldIterationRea
         public bool Named { get; } = named;
         public long ShaderRequest { get; set; }
         public long? Frame { get; set; }
+        public long? Shaded { get; set; }
+        // The longest wait between two produced frames from the edit until the shaded stage held, in stopwatch ticks.
+        public long WorstFrame { get; set; }
         public long? Shown { get; set; }
         public long? Meshes { get; set; }
         public long? Lit { get; set; }
@@ -74,6 +80,8 @@ public sealed class WorldIterationClock(WorldServer server) : IWorldIterationRea
         public long Presented { get; set; }
         public long BuildsAtStart { get; set; } = -1;
         public long Builds { get; set; }
+        public long AppearancesAtStart { get; set; } = -1;
+        public long Appearances { get; set; }
         // The ledger's Work counts when the loop began (zero for the boot), and when it settled.
         public long[] WorkAtStart { get; init; } = new long[Work.Length];
         public long[]? WorkAtLit { get; set; }
@@ -127,7 +135,7 @@ public sealed class WorldIterationClock(WorldServer server) : IWorldIterationRea
             number: ++m_count,
             shaderInstalls: (m_probe?.Residency?.ShaderBatchesInstalled ?? 0L),
             started: Stopwatch.GetTimestamp()
-        ) { ShaderRequest = shaderRequest, PresentedAtStart = (m_probe?.Root?.FramesProduced ?? -1L), BuildsAtStart = (m_probe?.Composition?.ProgramBuilds ?? -1L), WorkAtStart = ReadWork() };
+        ) { ShaderRequest = shaderRequest, PresentedAtStart = (m_probe?.Root?.FramesProduced ?? -1L), BuildsAtStart = (m_probe?.Composition?.ProgramBuilds ?? -1L), AppearancesAtStart = (m_probe?.Composition?.AppearanceBuilds ?? -1L), WorkAtStart = ReadWork() };
 
         m_loops.Add(item: loop);
         if (m_loops.Count > Kept) { m_loops.RemoveAt(index: 0); }
@@ -151,17 +159,25 @@ public sealed class WorldIterationClock(WorldServer server) : IWorldIterationRea
     public void ObserveFrame() {
         if ((m_probe is not { } probe) || (m_bakes is not { } bakes)) { return; }
         var now = Stopwatch.GetTimestamp();
+        var previous = m_lastFrame;
 
-        if (m_boot is { Open: true } boot) { Advance(bakes: bakes, loop: boot, now: now, probe: probe); }
-        if (Latest is { Open: true } latest) { Advance(bakes: bakes, loop: latest, now: now, probe: probe); }
+        m_lastFrame = now;
+        if (m_boot is { Open: true } boot) { Advance(bakes: bakes, loop: boot, now: now, previous: previous, probe: probe); }
+        if (Latest is { Open: true } latest) { Advance(bakes: bakes, loop: latest, now: now, previous: previous, probe: probe); }
     }
 
-    private void Advance(Loop loop, long now, WorldRenderProbe probe, IWorldBakeReadiness bakes) {
+    // When the latest produced frame was observed, zero before the first.
+    private long m_lastFrame;
+
+    private void Advance(Loop loop, long now, long previous, WorldRenderProbe probe, IWorldBakeReadiness bakes) {
         if ((probe.Residency is not { } residency) || (probe.Composition is not { } composition)) { return; }
         if (loop.PresentedAtStart < 0) { loop.PresentedAtStart = (probe.Root?.FramesProduced ?? 0L); }
         if (loop.BuildsAtStart < 0) { loop.BuildsAtStart = composition.ProgramBuilds; }
+        if (loop.AppearancesAtStart < 0) { loop.AppearancesAtStart = composition.AppearanceBuilds; }
         loop.Presented = ((probe.Root?.FramesProduced ?? 0L) - loop.PresentedAtStart);
         loop.Builds = (composition.ProgramBuilds - loop.BuildsAtStart);
+        loop.Appearances = (composition.AppearanceBuilds - loop.AppearancesAtStart);
+        if (loop.Shaded is null) { loop.WorstFrame = Math.Max(val1: loop.WorstFrame, val2: (now - Math.Max(val1: previous, val2: loop.Started))); }
 
         if (loop.Frame is null) {
             if (EndedUnchanged(loop: loop, residency: residency)) { return; }
@@ -169,6 +185,12 @@ public sealed class WorldIterationClock(WorldServer server) : IWorldIterationRea
             if (composition.Building || !ReferenceEquals(objA: frame.Program, objB: composition.Program)) { return; }
             loop.Frame = now;
             loop.ContentMark = bakes.Frames;
+        }
+        // The edit's look: every shading program the frame runs draws with its own kernel, not as a material with no
+        // program while the specialization that holds it compiles.
+        if (loop.Shaded is null) {
+            if (!residency.ShadesWhole) { return; }
+            loop.Shaded = now;
         }
         if (loop.Shown is null) {
             if (!ReferenceEquals(objA: residency.MeshPathBake.Program, objB: composition.Program) || !residency.MeshPathBake.DrawsOwn) { return; }
@@ -237,10 +259,11 @@ public sealed class WorldIterationClock(WorldServer server) : IWorldIterationRea
 
         _ = text.Append(culture, $"#{loop.Number} {loop.Name}");
         Stage(name: "frame", at: loop.Frame, why: () => FrameWaits(loop: loop, probe: probe));
+        Stage(name: "shaded", at: loop.Shaded, why: static () => "a shading program draws as a material with no program while the specialization that holds it compiles");
         Stage(name: "shown", at: loop.Shown, why: static () => "a mesh group still draws the geometry before the edit, or nothing, while it bakes");
         Stage(name: "meshes", at: loop.Meshes, why: () => (m_bakes?.PendingResidencyReasonSince(mark: loop.ContentMark) ?? "the kernel reload is still installing"));
         Stage(name: "lit", at: loop.Lit, why: static () => "the irradiance volume is still tracing, or its relight trails the lighting past its age bound");
-        _ = text.Append(culture, $" presented={loop.Presented} builds={loop.Builds}");
+        _ = text.Append(culture, $" presented={loop.Presented} builds={loop.Builds} appearances={loop.Appearances} worst-frame={Stopwatch.GetElapsedTime(startingTimestamp: 0L, endingTimestamp: loop.WorstFrame).TotalMilliseconds:0.0}ms");
 
         var work = (loop.WorkAtLit ?? ReadWork());
 

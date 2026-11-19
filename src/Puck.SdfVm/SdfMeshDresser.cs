@@ -82,7 +82,8 @@ public sealed class SdfMeshDresser : IDisposable {
             SdfMeshHistory.ProcessWork.Count(kind: SdfMeshHistory.TopologyBuildsOf(reason: (retry ? SdfMeshTopologyReason.Retry : (forced ? SdfMeshTopologyReason.Forced : (frame.TickLocked ? SdfMeshTopologyReason.Locked : SdfMeshTopologyReason.FreeShare)))));
             SdfRowChecks.ProcessWork.Count(kind: (retry ? SdfRowChecks.Retry : (frame.TickLocked ? SdfRowChecks.Locked : SdfRowChecks.Packs)));
         }
-        var programChanged = !ReferenceEquals(objA: m_program, objB: frame.Program);
+        // A program sharing the dressed one's field has its groups, slots and copies: only its appearance moved.
+        var programChanged = !frame.Program.SharesField(other: m_program);
         var hostNew = (m_host.Count != frame.MeshDraws.Count);
         var hostWhole = m_hostCursor.Collect(frame.MeshDrawChanges, frame.MeshDrawChangesSerial, frame.MeshDraws,
             frame.MeshDraws.Count, frame.MeshDrawsRevision, m_hostChanges, force: (startOver || hostNew));

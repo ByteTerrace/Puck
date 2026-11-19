@@ -111,7 +111,8 @@ public sealed partial class SdfProgram {
     // What the field may know of its appearance: the material count, the glass materials, the declared screens and the
     // appearance section's size. No material value: the field derivation never reads one.
     private readonly SdfAppearanceOutline m_outline;
-    private readonly uint[] m_words;
+    // Written by the constructor, and replaced only on a fresh copy that takes another appearance (WithAppearance).
+    private uint[] m_words;
 
     /// <summary>Gets the content identity of the pixels the program's <see cref="SdfShapeType.Glyph"/> shapes sample: the
     /// value of the one atlas image's hash their builder laid them out against

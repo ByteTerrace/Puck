@@ -103,7 +103,7 @@ internal sealed class WorldShaderReloadCommandModule(WorldRenderProbe renderProb
                     $"[world.shaders.program: identity={p.Identity} name={p.Name} state={p.State}{((p.Error is { } error) ? $" error={error}" : string.Empty)}]");
 
                 return reload with {
-                    Output = string.Join(separator: '\n', values: lines.Prepend(element: $"[world.shaders.tier: {(node.InterpretShade ? "interpreted" : "automatic")} programs={programs.Count} specialized={programs.Count(static p => p.State == "specialized")} compiling={programs.Count(static p => p.State == "compiling")} interpreted={programs.Count(static p => p.State == "interpreted")} bins={(node.BinShade ? "on" : "off")}]").Prepend(element: reload.Output)),
+                    Output = string.Join(separator: '\n', values: lines.Prepend(element: $"[world.shaders.tier: {(node.InterpretShade ? "interpreted" : "automatic")} programs={programs.Count} specialized={programs.Count(static p => p.State == "specialized")} compiling={programs.Count(static p => p.State == "compiling")} interpreted={programs.Count(static p => p.State == "interpreted")} plain={programs.Count(static p => p.State == "plain")} bins={(node.BinShade ? "on" : "off")}]").Prepend(element: reload.Output)),
                 };
             }
         );

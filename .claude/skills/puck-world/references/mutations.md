@@ -187,7 +187,10 @@ otherwise only the solid consumers compile again
 `WorldClient.ResponseRevision` for a face-free change, which recomposes the
 program once and rebuilds the presentation field, and its definition revision
 only when a creation shown before or after carries a face, camera or sound
-(`WorldPlacementResponse.CompareHoldings`). A checkpoint carries the masks in
+(`WorldPlacementResponse.ComparePlacements`). The same comparison covers every
+placement projection a value delivery carries: a dealt child added, moved or
+removed by the deal sweep, and a contribution, are rows it replaces, adds or
+removes, and each recomposes the program on the tick it lands. A checkpoint carries the masks in
 the exported rows. A console upsert that writes `holding` is an ordinary
 placement edit, and the next sweep derives the mask again.
 

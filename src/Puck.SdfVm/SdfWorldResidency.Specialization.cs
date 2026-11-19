@@ -7,20 +7,23 @@ namespace Puck.SdfVm;
 /// <summary>The execution state of one admitted shading program on a residency.</summary>
 /// <param name="Identity">The program identity (<see cref="SdfShadeProgram.Identity"/>).</param>
 /// <param name="Name">The author name, for reporting.</param>
-/// <param name="State"><c>specialized</c> when the published kernels shade it, <c>compiling</c> while the kernels
-/// that will run it compile, otherwise <c>interpreted</c>.</param>
+/// <param name="State"><c>specialized</c> when the published kernels hold it, <c>compiling</c> while the kernels that
+/// will hold it compile, otherwise <c>interpreted</c> under <c>world.shaders.tier interpreted</c> and <c>plain</c>
+/// without it. A program the published kernels do not hold draws as a material with no program, unless the interpreter is
+/// asked for.</param>
 /// <param name="Error">Why the latest specialization holding it failed, or <see langword="null"/>.</param>
 public sealed record SdfShadeStatus(string Identity, string Name, string State, string? Error);
 
 /// <summary>The kernels a frame's shading passes record with, in the order of the work a dispatch plan prices for them:
 /// a plan priced for a tier bounds every tier before it.</summary>
 public enum SdfShadeTier {
-    /// <summary>The plain kernels, which run no program: a frame with no active program.</summary>
+    /// <summary>The plain kernels, which run no program: a frame with no active program, or one whose programs no
+    /// specialization has been published for yet.</summary>
     Neutral,
-    /// <summary>A published specialization's straight-line arms.</summary>
+    /// <summary>A published specialization's straight-line arms: every program it holds, and a program it does not hold
+    /// shaded as a material with no program until the specialization that holds it publishes.</summary>
     Straight,
-    /// <summary>The interpreter: a frame whose active programs no published specialization holds, or one
-    /// <c>world.shaders.tier interpreted</c> asks for.</summary>
+    /// <summary>The interpreter, run only when <c>world.shaders.tier interpreted</c> asks for it.</summary>
     Interpreted,
 }
 
@@ -88,9 +91,11 @@ public sealed partial class SdfWorldResidency {
             m_shadeActiveIdentities = new HashSet<string>(collection: m_shadeActive.Select(selector: static p => p.Identity), comparer: StringComparer.Ordinal);
             var interpreter = SdfShadeKernels.InterpreterOf(kernels: m_kernels);
 
-            // A set that no longer holds every active program, or was compiled against kernels or sources a reload
-            // replaced, stops shading at once: the interpreter shows an edit on its next frame.
-            if ((m_shadeCurrent is { } current) && ((current.Request.Interpreter != interpreter) || !current.Request.Covers(active: m_shadeActiveIdentities))) {
+            // A set compiled against kernels or sources a reload replaced stops shading at once. A set that no longer holds
+            // every active program keeps shading the ones it holds while the set that holds them all compiles: its arms
+            // are chosen by program identity, and a program it holds no arm of shades as a material with no program
+            // (arm zero), so the frame never drops to the interpreter's cost while an edit compiles.
+            if ((m_shadeCurrent is { } current) && (current.Request.Interpreter != interpreter)) {
                 RetireShade();
             }
             if (m_shadeActive.Length != 0) {
@@ -125,15 +130,18 @@ public sealed partial class SdfWorldResidency {
                 Console.Error.WriteLine(value: $"[world.shaders: specialized {ready.Request.Programs.Count} program(s) set={ready.Request.Identity[..12]}]");
             }
         }
-        if (changed) { PublishShadeStatus(); }
+        if (changed || (m_interpretShade != m_shadeLevers.Interpret)) { PublishShadeStatus(); }
         // The levers and a publication move the selection only here, so a frame's passes all record one. A lever, or a
-        // tier whose kernels cost more than the last frame's (the interpreter after a specialization, which a program or
-        // kernel change already re-renders), invalidates the shading passes, whose dispatch plans then price the new tier;
-        // a publication, which moves to a cheaper tier, invalidates nothing: a standing pass's interpreter-priced plan
-        // bounds the specialized kernels too (SdfShadeTier).
+        // tier whose kernels cost more than the last frame's (a first publication over the plain kernels, or the
+        // interpreter lever), invalidates the shading passes, whose dispatch plans then price the new tier; a move to a
+        // cheaper tier invalidates nothing: a standing pass's plan bounds every tier before its own (SdfShadeTier).
+        // The interpreter runs only when asked for: with no published set the frame shades every program as a material
+        // with no program, on the plain kernels, until the set that holds them arrives.
         var levers = (Interpret: m_interpretShade, Bins: m_binShade);
         var tier = ((m_shadeActive.Length == 0) ? SdfShadeTier.Neutral
-            : ((levers.Interpret || (m_shadeCurrent is null)) ? SdfShadeTier.Interpreted : SdfShadeTier.Straight));
+            : levers.Interpret ? SdfShadeTier.Interpreted
+            : (m_shadeCurrent is null) ? SdfShadeTier.Neutral
+            : SdfShadeTier.Straight);
 
         if ((levers != m_shadeLevers) || (tier > m_shadeTier)) {
             m_shadeLevers = levers;
@@ -142,7 +150,16 @@ public sealed partial class SdfWorldResidency {
         m_shadeTier = tier;
         m_shadeSelection = ((tier == SdfShadeTier.Straight) ? m_shadeCurrent : null);
         m_shadesInBins = (levers.Bins && (m_shadeActive.Length != 0));
+        m_shadesWhole = ((m_shadeActive.Length == 0) || levers.Interpret || (m_shadeCurrent?.Request.Covers(active: m_shadeActiveIdentities) == true));
     }
+
+    private bool m_shadesWhole = true;
+
+    /// <summary>Gets whether the frame the passes last recorded shades every active program with its own program: none
+    /// is active, the interpreter is asked for, or the published specialization holds them all. While it is false an edited
+    /// or new program draws as a material with no program until the specialization that holds it compiles and
+    /// publishes, so an edit loop's look stage waits on it.</summary>
+    public bool ShadesWhole => m_shadesWhole;
 
     // Kept apart from PrepareShade, which runs every frame: the build's closure captures a parameter, so a method
     // holding it allocates the closure on entry whether or not it starts a build.
@@ -179,7 +196,7 @@ public sealed partial class SdfWorldResidency {
         Volatile.Write(location: ref m_shadeStatus, value: [.. programs.Select(selector: p => {
             if (m_shadeCurrent?.Request.Holds(identity: p.Identity) == true) { return new SdfShadeStatus(Error: null, Identity: p.Identity, Name: p.Name, State: "specialized"); }
             if ((m_shadeRequest?.Holds(identity: p.Identity) == true) && m_shadeBuild.IsPending) { return new SdfShadeStatus(Error: null, Identity: p.Identity, Name: p.Name, State: "compiling"); }
-            return new SdfShadeStatus(Error: ((m_shadeRequest?.Holds(identity: p.Identity) == true) ? m_shadeFailure : null), Identity: p.Identity, Name: p.Name, State: "interpreted");
+            return new SdfShadeStatus(Error: ((m_shadeRequest?.Holds(identity: p.Identity) == true) ? m_shadeFailure : null), Identity: p.Identity, Name: p.Name, State: (m_interpretShade ? "interpreted" : "plain"));
         })]);
     }
 

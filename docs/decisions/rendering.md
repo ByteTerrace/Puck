@@ -368,9 +368,11 @@ threshold-sensitive corpus holds on both backends.
 kernel holds every program the frame's set names and selects a pixel's arm
 once. An interpreter default arm was set aside: registers are allocated for
 the whole kernel, so it would keep the interpreter's register count in every
-specialized kernel. A frame whose active programs the published set does not
-hold records with the interpreter kernel while the new set compiles. A frame
-with no program records plain kernels that hold no program state.
+specialized kernel. A frame whose active programs the published set holds only
+in part records with that set while the new one compiles: a program with no arm
+binds none and shades as a material with no program, so the default arm is the
+plain shading, which costs no registers. A frame with no program, or with no
+published set yet, records plain kernels that hold no program state.
 
 **Pixels shade in bins by whole tiles.** A frame that runs programs classifies
 8×8 tiles after the tile-coherent filter and shades the tiles with no program
