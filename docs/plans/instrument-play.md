@@ -180,8 +180,9 @@ the document named. The searches are listed in
 |---|---|---|
 | A beat clock in the simulation | `MusicClock` counts engine ticks into beats and bars from a score's authored tempo. The server steps it and hashes it. | `Puck.Audio.Simulation`; a `music` row naming a `puck.music.v1` document ([audio reference](../reference/audio.md)) |
 | A press timed inside a tick | The host quantizes each device event to a tick and an offset in Q48.16 seconds on the 50,400 Hz engine clock. Several presses in one tick stay ordered. | `WorldInputInterval`, `WorldInputEvent`; [sub-tick time](../decisions/input-channels.md#sub-tick-time-and-clocks) |
-| A press judged against a beat | The rule operand `$clock:<music>:phaseErrorAt:<owner>:<channel>:<kind>:<occurrence>` returns the signed distance in seconds from the press, at its captured time, to the nearest beat. | `WorldInputMusicSegment.PhaseError`; the worked rule is [`input-clock-fixture.puck`](../../worlds/debug/input-clock-fixture.puck) |
-| Latency compensation | Each input owner carries a signed calibration offset that the judgement adds. It is authority state, hashed and replayed, bounded by `inputHistory.calibrationLimitSeconds`. | `WorldInputHistory`, `WorldInputRecord` |
+| A press judged against a beat | The rule operand `$clock:<music>:phaseErrorAt:<owner>:<channel>:<kind>:<occurrence>` returns the signed distance in seconds from the press, at its captured time, to the nearest beat. `beatAt`, `barAt` and `beatInBarAt` take the same arguments and return the index of that nearest beat, its bar and its place in the bar. | `WorldInputMusicSegment.PhaseError`, `WorldInputMusicSegment.NearestBeat`; the worked rule is [`input-clock-fixture.puck`](../../worlds/debug/input-clock-fixture.puck) |
+| Which beat the music is on | `$clock:<music>:beat`, `bar` and `beatInBar` read the clock's current beat, bar and zero-based place in its bar. | `WorldTick.ReadClock`, `MusicClock.CurrentBeat` |
+| Latency compensation | Each input owner carries a signed calibration offset that the judgement adds. It is authority state, hashed and replayed, bounded by `inputHistory.calibrationLimitSeconds`. The bindable verb `player.calibrate <seconds> [seat]` sends it. | `WorldInputHistory`, `WorldInputRecord`, `PlayerCommandModule.CalibrateHandler` |
 | A late press over a network | A late event keeps its captured time and is judged by it, within an authored lateness bound. | `WorldInputHistory.MaximumLatenessSeconds`, `WorldInputJudgement` |
 | Tap, hold, a held note, a motion, a buffered press | Authored `inputPatterns` rows over timed history, read with `inputMatch` and claimed with `consumeInput`. Axis crossings give stick flicks. | `WorldInputPattern`; [`input-pattern-tests.puck`](../../worlds/debug/input-pattern-tests.puck), [`input-continuity-tests.puck`](../../worlds/debug/input-continuity-tests.puck) |
 | Buttons that mean notes only while the instrument is up | `inputModes` families selected by authoritative state, with keep sets that decide what survives a switch. Trigger pages and held modifiers in the standard's bindings. | `WorldInputModes`; [`controls.puck`](../../worlds/standard/controls.puck), [`pad-kit.puck`](../../worlds/standard/pad-kit.puck) |
@@ -290,16 +291,10 @@ waits for that plan's steps 1 and 2.
 
 ### Timing
 
-**Rules cannot read which beat it is (gap G).** The clock operand has two
-forms, and both answer the distance to the nearest beat. `MusicClock` knows
-its current beat and bar and no operand reads them. A phrase that says "vent
-two on beat three" and a rule that notices a beat passed with no press both
-need the beat's index.
-
-**Calibration has no door, and nothing measures latency (gap H).**
-`WorldCommand.CalibrateInput` is decoded and applied by the authority, and no
-verb, binding or client code sends it. The measurement a player would
-calibrate from is the rendering plan's record for every present
+**Nothing measures latency (gap H).** A player sets the calibration by hand
+with `player.calibrate`, and the engine offers no number to start from. The
+measurement a player would calibrate from is the rendering plan's record for
+every present
 ([decision 15](rendering-research.md#15-present-frames-the-display-has-room-for-and-know-when-they-showed)),
 which is a second-wave lane there.
 
@@ -463,11 +458,10 @@ stop at a gap.
 | Research round | The six topics in [research owed](#research-owed), one researcher a topic across the families, one synthesis, one adversarial review | Researchers: Sol, Neon, an Opus `specialist`. Synthesis: `principal`. Review: Astra. | A round wants divergent sources and a reviewer from another family than the author | Now |
 | Concept art | The pack in [the brief](#the-concept-art-brief) | Codex art lane (Sol with `image_generation`), a Claude partner checking constraints | Codex is the primary artist and judge by ruling | Now |
 | Pose clips (gaps A, B, C) | [A design memo](instrument-play/pose-clips.md), reviewed, then the mechanism: interpolated key poses played by a driver with a weight and a shape mask; an effector target on the creation's own shape; the decision on a presentation-side input signal | Design: `principal`. Review: Astra. Build: an Opus `specialist`. | The rig's layering is invariant-heavy (the skin envelope and the bounds read swings), and a wrong design costs every later stage | Now |
-| Beat index and calibration (gaps G, H) | Clock operands for the beat and bar; a calibration verb and binding that send `WorldCommand.CalibrateInput` | `implementer` | Both extend an existing operand and wire an existing command | Now |
 | Delivered cues and music that follows rules (gaps I, J, K) | A design memo, reviewed, then: rule cues in the delivered tick, with a numeric argument a patch reads as pitch; one lane feeding sound and pose cues; score conditions on rule cues; layer gain in the mix; a voice-stealing rule | Design and build: Sol at `high`. Review: an Opus `specialist`. | It changes what crosses the wire, which is a disclosure question; another family reviews | Now |
 | Body lanes (gap D) | More per-body carriers for shading-time values, or a second carrier, as the design finds | An Opus `specialist` | A C# and HLSL layout pair with a generated side | After the rendering wave's lanes that edit the same pass block land |
 | Haptics (gap L) | A world-authored pulse on a seat's pad, driven by state | Hydrogen | A specified wiring of an existing output interface | Now |
-| Standard package: the judge | Stage 1's channels, mode, bindings, phrase rows and rules in `worlds/standard/`, with the debug world's score | `implementer` | The mechanisms exist and the fixture shows the shape | Now; it meets gap G |
+| Standard package: the judge | Stage 1's channels, mode, bindings, phrase rows and rules in `worlds/standard/`, with the debug world's score | `implementer` | The mechanisms exist and the fixture shows the shape | Now |
 | The instrument and the hands | Stage 2: the creation, the segmented fingers, the playing stance and the fingering poses on the Moth | An Opus `specialist`, as a look lane with the probe rule | A creation built to push the rig; it stops at gaps A, B and E | After the pack's instrument panels; it meets the pose-clip lane |
 | Sound and score | Stage 3's patches, cues, tunes and score layers | `implementer` | Authored data once the cue lane lands | After the delivered-cue lane |
 | The dance | Stage 4's moves: kit actions, footwork, strikes and their clips | An Opus `specialist`, as a look lane | Whole-body motion judged on sheets from every side | After the pose-clip lane |
@@ -587,7 +581,8 @@ tables above owns it.
   `WorldInputHistory` and the rule host's clock read. A text search for
   `phaseError` across the sources, worlds and documents found the two operand
   forms, the fixture and no dedicated grader. A search for `Calibrat` found
-  the command, its codec and its apply, and no sender.
+  the command, its codec and its apply, and no sender; `player.calibrate` is
+  that sender, shaped like `player.mode`'s authority submission.
 - **Poses and layering.** Read the `sdf-authoring` skill and its
   [rig reference](../../.claude/skills/sdf-authoring/references/rig.md), the
   Moth's limbs, drivers and look in `moth.puck`, `WorldLookMotion` and

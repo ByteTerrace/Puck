@@ -4043,12 +4043,6 @@ the model.
   seat's pad, and authored haptics. A pulse on the beat is the first authored
   consumer ([instrument and dance play](instrument-play.md#sound), a lane of
   its first wave).
-- [high] Two timing gaps [instrument and dance play](instrument-play.md#timing)
-  names, one lane of its first wave: the clock operand answers only the
-  distance to the nearest beat, so no rule can read which beat or bar the
-  clock is on (`MusicClock.CurrentBeat` has no operand); and
-  `WorldCommand.CalibrateInput` is applied by the authority and sent by
-  nothing, so a player has no way to set the calibration the judgement adds.
 - The in-world computer runs programs (the owner's direction): the desktop
   share is one and a typing tutor another, switched on the computer itself
   with the screen showing which is live. The tutor is world-native: lessons

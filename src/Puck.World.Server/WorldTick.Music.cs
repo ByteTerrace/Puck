@@ -22,16 +22,26 @@ public sealed partial class WorldTick {
             : "none"
         );
 
-        return $"[music.state: segment={director.CurrentSegmentId} pending={(director.PendingSegmentId ?? "none")} elapsedTicks={clock.ElapsedTicks} transitions={director.TransitionCount} lastTick={(director.LastTransitionTick?.ToString(provider: System.Globalization.CultureInfo.InvariantCulture) ?? "none")} lastFrom={(director.LastTransitionFromSegmentId ?? "none")} lastTo={(director.LastTransitionToSegmentId ?? "none")} layers={layers} lastEmbellishment={(director.LastEmbellishmentPatchId ?? "none")} lastEmbellishmentTick={(director.LastEmbellishmentTick?.ToString(provider: System.Globalization.CultureInfo.InvariantCulture) ?? "none")} phaseError={ReadClockPhaseError()}]";
+        return $"[music.state: segment={director.CurrentSegmentId} pending={(director.PendingSegmentId ?? "none")} elapsedTicks={clock.ElapsedTicks} transitions={director.TransitionCount} lastTick={(director.LastTransitionTick?.ToString(provider: System.Globalization.CultureInfo.InvariantCulture) ?? "none")} lastFrom={(director.LastTransitionFromSegmentId ?? "none")} lastTo={(director.LastTransitionToSegmentId ?? "none")} layers={layers} lastEmbellishment={(director.LastEmbellishmentPatchId ?? "none")} lastEmbellishmentTick={(director.LastEmbellishmentTick?.ToString(provider: System.Globalization.CultureInfo.InvariantCulture) ?? "none")} phaseError={ReadClock(facet: ClockFacet.PhaseError)} beat={clock.CurrentBeat} bar={clock.CurrentBar}]";
     }
-    // $clock:<music>:phaseError — the signed tick distance from the clock's CURRENT position (not the tick argument
-    // every other operand reads through: MusicClock's own domain is engine ticks, already advanced this Step by the
-    // time a rule fires) to the nearest beat. Positive after the beat, negative ahead of the next one, tied toward
-    // "after" at exactly half a beat. A world with no music row has no clock and reads 0 — the compiler already
-    // refuses this operand for such a world, so a live read only ever reaches here with one declared.
-    internal long ReadClockPhaseError() {
+    // $clock:<music>:phaseError|beat|bar|beatInBar read the clock's CURRENT position, not the tick argument every other
+    // operand reads through: MusicClock's own domain is engine ticks, already advanced this Step by the time a rule
+    // fires. The phase error is the signed tick distance to the nearest beat, positive after the beat, negative ahead of
+    // the next one, tied toward "after" at exactly half a beat; beat and bar are indices since the music began, and
+    // beatInBar is zero-based. A world with no music row has no clock and reads 0: the compiler already refuses these
+    // operands for such a world, so a live read only ever reaches here with one declared.
+    internal long ReadClock(ClockFacet facet) {
         if (m_musicClock is not { } clock) {
             return 0L;
+        }
+
+        switch (facet) {
+            case ClockFacet.Beat:
+                return ((long)clock.CurrentBeat);
+            case ClockFacet.Bar:
+                return ((long)clock.CurrentBar);
+            case ClockFacet.BeatInBar:
+                return ((long)(clock.CurrentBeat % ((ulong)clock.BeatsPerBar)));
         }
 
         var ticksPerBeat = ((ulong)clock.TicksPerBeat);
