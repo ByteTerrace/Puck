@@ -60,10 +60,9 @@ pieces of work begin: the World-side door a small edit enters by (the
    check, a release, a test). The edit loop belongs to the World and the
    editor. `puck compile --watch` goes.
 
-**What is the owner's to decide** ([owner-level questions](#owner-level-questions)):
-whether an author may live-edit a published world or only release to it,
-whether an unsaved editor buffer may drive the running World, and what World
-Studio is for once the World serves the editor.
+**What the owner settled** ([below](#what-the-owner-settled)): a granted
+author may live-edit a published world; saved files drive the running World
+first; World Studio stays a browser sandbox and utility.
 
 **The first build step** removes three bookkeeping costs that are about half
 of every whole-world compile and need no design change: the name index that
@@ -822,34 +821,25 @@ added to that instrument, never to a second one.
     *Check:* an error introduced in `valley.puck` that only the composed
     world refuses appears on its line in the editor without a reload.
 
-## Owner-level questions
+## What the owner settled
 
-These decide what the engine does, so they are the owner's. Each has a
-recommendation the build order assumes until answered.
-
-1. **May an author live-edit a published world?** The mechanism is the same
-   either way: a delta through the world's own door under the world's own
-   grants. The question is whether a published authority offers it. One answer
-   is that published worlds change only by release, and live editing is for a
-   local or development authority. The other is that a granted author edits
-   the live world, the edit is durable in its journal, and a release refuses
-   to overwrite a live row it conflicts with, which the runtime plan already
-   requires. *Recommended:* allow it, gated by the grant the disclosure plan
-   designs, because every zone being a world with its own authors is the
-   point of the model. Nothing in steps 1 to 8 depends on the answer.
-2. **May an unsaved buffer drive the running World?** With the editor
-   attached to the World's session, a keystroke can become a delta before the
-   file is saved. That is the fastest loop there is, and it means the World
-   can show a state no file holds. *Recommended:* saved files only at first,
-   since the file is the truth and Git sees it, with type-through preview as a
-   later opt-in the author switches on.
-3. **What is World Studio for?** It can stay a browser sandbox over official
-   builds, where a visitor reads and tries a world's rules with nothing
-   installed. Or it can become the text editor for a running World, in a
-   browser pane or on an in-world screen, served by the World's session. The
-   second makes its separate preview engine redundant for looks, which it
-   cannot show today. *Recommended:* both roles, one after the other: keep the
-   sandbox, and build the attached editor on step 11.
+1. **A granted author may live-edit a published world (the owner's ruling).**
+   The edit is a delta through the world's own door under its own grants,
+   durable in its journal, and a release refuses to overwrite a live row it
+   conflicts with, as the runtime plan already requires. The grant is the one
+   the disclosure plan designs. Every zone being a world with its own authors is
+   the point of the model.
+2. **Saved files drive the running World first (the lead's call, which the
+   owner delegated).** The file is the truth and Git sees it; type-through
+   preview from an unsaved buffer is a later opt-in the author switches on.
+3. **World Studio stays a browser sandbox and utility (the owner's ruling):**
+   a visitor reads and tries a world's rules over official builds with nothing
+   installed. It does not become the editor for a running World; an editor
+   attached to a World's session, step 11, is its own tool and shares the one
+   compiler rather than World Studio's preview engine.
+4. **A World a local operator boots from a source tree watches its sources from
+   boot (the lead's call):** `world.watch` starts on for that case and stays off
+   for a published or remote authority.
 
 ## Verification requests
 
