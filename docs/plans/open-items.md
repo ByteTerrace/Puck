@@ -893,42 +893,143 @@ Stalls and hitches to attribute:
 
 ### Bake proportional to change
 
-Owner: specialist (rendering) · high · Next: key one store for both backends
-from the HLSL source closure of `MeshBake` and `MeshBakeMask`, then cut the
-collapse's acceptance search (`SdfMeshCollapse`), the bake's largest CPU
-stage, toward the owner's bar: one minute at most per backend from an empty
-store, and work proportional to change. The cold bake is CPU-bound on both
-backends; [the bake procedure](../../.claude/skills/rendering/references/mesh-bake.md#reproducing-a-cold-bake)
+Owner: specialist (rendering) · high · Next: follow the five-step order below
+(edit-wait measurements -> per-stage keys -> frame-sized bake jobs ->
+critical-path cold bake and top speed fix -> shared cross-backend store). The
+owner's ruling on waits sets the order: the wait between making a change and
+seeing it breaks flow and comes first, and a cold bake is a long start that is
+tolerated while it stays reasonable. The figure of about a minute per backend
+from an empty store exists to stop that time drifting (bake times once grew to
+nearly an hour); it is not a finish line, and it is read again at the close of
+steps 1 to 4 because step 2 and the contour rule change what a bake costs. What
+limits the cold bake under the recipe (quiet machine, display composing, empty
+store; medians ~60.6 s on Direct3D 12 and ~64.7 s on Vulkan with ~4 s GPU work
+in a 68 s span) is not yet measured — do not assume CPU-bound before step 4.
+Three records disagree: one sampled trace had the workers busy 237 of about 660
+thread-seconds and called the bake "paced by takes" (GPU sampling requests it
+waits for); runs with the display composing beside other work read it as
+processor-limited; the quiet runs of that record had the display off and the
+GPU at idle clocks. None is the recipe. The contour rule (gap 7, [bake
+detail](#bake-detail)) and the triangle removal ([visibility V3a](visibility.md#the-build-order))
+are this order's other two parts and stand alone.
+[The bake procedure](../../.claude/skills/rendering/references/mesh-bake.md#reproducing-a-cold-bake)
 says how one is reproduced and profiled.
 
-- [high] Each backend keeps its own store, because `SdfMeshBakeIdentity`
-  hashes the mask and bake kernel bytes. A source identity or a product shared
-  across backends is judged by whether every backend's mesh is correct
-  (`puck mesh audit`), never by byte equality with today's products. The
-  native forest legs' aggregate triangle counts differ by backend, so a shared
-  identity alone does not halve the cold cost.
-- [high] The CPU cuts, by their share of the World's processor samples while
-  baking:
-  - the collapse's acceptance search, about five attempts a collapse with half
-    refused by `Measure` at the removed vertex's own samples: an attempt order
-    that refuses on the removed vertex before laying out the new fan, or a
-    witness structure `Measure` and `MeasureReverse` share. A cheaper collapse
-    whose meshes differ but audit as well is a valid cut; judge changed
-    witnesses with the field audit at each rendered level, raw millimetre
-    errors beside threshold counts;
-  - `SdfSampledLattice.CloseSheets`, whose second slit pass re-reads every
-    measured fine sample's six neighbours though only samples near the first
-    pass's closings can change;
-  - `CrossingEdges`' per-edge hash set, and `Refine`'s `Thickens` and slot
-    numbering. The crossed-cell masks already flow from `CrossingEdges` to
-    `ExtractRefined`; add no second topology scan there;
-  - admission: a third to a half of the bake's takes found no lattice to
-    dispatch while hundreds of groups waited on the pool's backlog or on the
-    memory account. The backlog is now wall time (`SdfMeshBakeBacklog`); read
-    the done line's `idle` and `per-take` again, and what is left is the
-    memory account's;
-  - the frame thread's `SdfWorldResidency.Capture` and the per-view recording
-    while hundreds of views stand.
+1. **Measure edit-to-running waits end to end.** Record time from saving an
+   edit to seeing it in the running debug world by phase — alongside work done
+   (groups rebaked, kernels recompiled, projects rebuilt) — for three edit
+   kinds: `.puck` document (~15 s compile + reload tick stall), shader, and
+   C#. This is the wait the owner's ruling puts first.
+2. **Key each bake stage by what it reads.** The bake has three stages: GPU
+   field sampling, contouring, and Land (simplifying and storing; ~34% of bake
+   CPU with collapse at ~28.7%). Today `SdfMeshBakeIdentity` hashes the whole
+   C# closure plus both kernel bytecodes, so one Land or contour edit forces a
+   full cold bake. Build per-stage keys on `SdfMeshBakeClosure` and
+   `SdfMeshStore.ExplainMisses` so a Land edit starts from stored contours
+   without re-sampling on GPU (keeping each stage's key conservative over
+   everything that stage reaches; check stored-contour disk/memory size before
+   splitting a stage; amend
+   [the derived-product decision](../decisions/engine-design.md#a-derived-product-is-a-cache-never-the-truth)
+   in the same change). A key too narrow is the dangerous direction: an edit
+   that should have invalidated a mesh and did not shows as a stale mesh that
+   nothing reports, so the split changes only which stage a part belongs to.
+   Batch bake-kernel edits until stage keys land. Narrower per-operation keys
+   remain a later question: they depend on whether the interpreter's source can
+   be attributed to each operation, which nobody has looked at.
+   - *Check:* editing Land rebakes with zero GPU sampling dispatches and lowers
+     the C# edit-wait reading.
+3. **Cut bake jobs to the live frame allowance.** Today `SdfMeshPathBake.BatchTaps`
+   and fixed `SdfMeshPathBake.NanosecondsPerTap` submit full 8M-sample batches
+   (~32 ms against a 4.2 ms allowance), stalling play frames on RTX 4070. A
+   prior single worst-group rate shrank batches to a third of concurrency; use
+   a per-lattice-kind rate or mean rate instead, and re-measure the cold bake.
+4. **Rank and build the top cold-bake speed fix.** After stage keys (and
+   contour/triangle fixes) land, run one quiet cold bake under the recipe
+   recording worker activity, GPU wait per request, GPU timestamps and total
+   time together. Build whichever candidate ranks on the critical path first
+   (GPU contouring is rejected as a second mesher):
+   - *GPU sampling in one round trip per stage* (cutting ~20 round trips per
+     group to ~4 by moving root search and gradients onto GPU with a per-stage
+     sample cap): requires generating or reading `SdfSampledLattice`'s root
+     search (bracket, tolerance, round limit, step) from **one single source**
+     shared by CPU and GPU, verified on bracket, residual and thin-feature
+     checks on both backends. Writing the root search again by hand in shader
+     code would make two copies of one rule, whoever is asked to keep them
+     equal. No source measures a root search on the GPU; Dreams ran a
+     hierarchical GPU evaluator on a console, the nearest precedent.
+   - *The Land stage on the job pool* (five changes: check the removed vertex
+     first in `SdfMeshCollapse` before laying out the new fan, since the
+     acceptance search makes about five attempts a collapse and `Measure`
+     refuses half at the removed vertex's own samples; share one error sample
+     set between `Measure` and `MeasureReverse`; restrict
+     `SdfSampledLattice.CloseSheets`'s second slit pass, which re-reads every
+     measured fine sample's six neighbours, to neighbours of first-pass
+     closings; schedule chunks on `JobPool` ordered by visibility demand before
+     size, largest first only among chunks of equal priority; move per-group
+     contour allocations to per-worker storage). A cheaper collapse whose meshes
+     differ but audit as well is a valid cut: judge changed witnesses with the
+     field audit at each rendered level, raw millimetre errors beside threshold
+     counts. Try the cheaper collapse and a different error measure (attribute
+     quadrics) inside `SdfMeshCollapse` before considering a replacement
+     simplifier ([visibility V3b](visibility.md#the-build-order)). Not checked:
+     Kapoulkine's clustering pipeline falling from about 9 minutes to under 3
+     on the same class of fixes.
+   - *Check:* `puck bench startup --bake` under `puck lease quiet` reads about
+     a minute or less on each backend from its own empty store, and turning
+     into a new place during a bake delivers the first visible surface no
+     later than before. If the sampling fix is the one that lands, a group
+     takes about four round trips.
+5. **One shared cross-backend store (last, judged separately from cold bake).**
+   Key meshes by authored inputs rather than backend bytecode, recording which
+   backend derived each entry and accepting cross-backend entries by audit
+   within recorded error (never byte equality; `SdfMeshCpuField.TapSpacing`
+   already differs near creases, and native forest triangle counts differ by
+   backend). This is the first use of
+   [shared product naming and verification](../decisions/engine-design.md#a-derived-product-is-a-cache-never-the-truth)
+   (with fetch disclosure owned by
+   [disclosure](disclosure.md#presentation-and-derived-product-disclosure)).
+   - *Memo and three-part prototype:* write a memo fixing (a) what goes into a
+     shared product's name (source program, authored parameters, byte-format
+     version), (b) attribute-by-attribute verification against the analytic
+     source at receiver tolerance/coverage and inconclusive handling, (c)
+     format version computed from both writer and reader code so a
+     layout-preserving reader change still moves it, and (d) unified pricing of
+     fetching versus local derivation (keeping local store reuse distinct from
+     machine-to-machine exchange). Prototype over every stored debug-world
+     group at route tiers: (i) one desktop store read by both D3D12 and Vulkan
+     in both directions (verified by audit, materials, seams and motion); (ii)
+     one public gallery mesh fetched from another process beside one refused
+     fetch, one permitted local miss, timing cold bake vs warm read vs fetch
+     on a stated link, plus rejecting tampered products (removed part, swapped
+     material id, flipped normal patch) and a layout-preserving reader-change
+     refusal/recheck; (iii) RTX ↔ Steam Deck cross-vendor exchange in both
+     directions once Deck hardware is on hand (unmeasured until then), because
+     two graphics APIs on one card compare no vendors. Parts (i) and (ii) run on
+     the desktop inside the bet's time box; part (iii) has its own box. Amend
+     the decision register when adopted.
+   - *Judged apart from the cold bake.* The cold-bake figure is each backend's
+     own bake from an empty store with floors on, timed with the other
+     backend's store absent. A shared store has three hazards: the same shader
+     source can compile under different options or generated interfaces;
+     whichever backend writes an entry first can hide which backend derived
+     what is drawn; and a warm hit from the other backend's store is not a cold
+     bake. Step 2's keys are local cache keys and are not affected.
+   - *What it shows in the debug world:* the second backend's first frame loads
+     the first backend's meshes, which pass verification, and the fetched mesh
+     is ready sooner than it bakes.
+
+Remaining detailed findings and smaller cuts in this area:
+
+- [high] The frame thread's `SdfWorldResidency.Capture` and the per-view
+  recording while hundreds of views stand during a bake.
+- [high] `CrossingEdges`' per-edge hash set, and `Refine`'s `Thickens` and slot
+  numbering. The crossed-cell masks already flow from `CrossingEdges` to
+  `ExtractRefined`; add no second topology scan there.
+- [high] Admission: a third to a half of the bake's takes found no lattice to
+  dispatch while hundreds of groups waited on the pool's backlog or on the
+  memory account. The backlog is now wall time (`SdfMeshBakeBacklog`); read
+  the done line's `idle` and `per-take` again, and what is left is the
+  memory account's.
 - [high] A cold bake's private memory climbs far past the Deck tier's 10 GB in
   its first minute, and its allocation is a frame cost too (hundreds of
   collections while it bakes). Splitting the bake into its stages needs a cold
@@ -1005,17 +1106,50 @@ says how one is reproduced and profiled.
 ### Bake detail
 
 Owner: specialist (rendering, sdf-authoring) · high, it blocks authoring ·
-Next: the engine gaps this packet holds, filled first
-([rendering research](rendering-research.md#engine-gaps-filled-first)): a
-feature thinner than a bake cell is lost or faceted (gap 7), which starts with
-decision 10's count: for each failing shape, which of the four defects it
-shows and whether its cell was ever flagged for finer sampling (that plan's
-`contour` lane), then its contour rule, built behind an audit of every stored mesh;
-a primitive under a non-uniform scale gives a bound, not a distance (gap 11,
-[rendering](rendering.md#bake-quality)); and, beside them,
-[moving blends](moving-blends.md#engine-gaps-first)' step 4 (gap 10). Then the
-three kinds of triangle the lattice's facing does not judge, which the tour's
-remaining reds and the Moth's shin groups share.
+Next: fill the engine gaps first
+([rendering research](rendering-research.md#engine-gaps-filled-first)):
+
+1. **Contour rule for unresolvable cells (gap 7): a feature thinner than a bake
+   cell is lost or faceted.** The count is in: `puck mesh audit --cpu` prints
+   each failing shape's defect class (vertex off the surface at a crease,
+   sliver beside a crease, face narrower than the cell, or thin tip stopping
+   short) and whether its cell was flagged for finer sampling
+   (`SdfSampledLattice.Refine`). The failing cells of the blend exhibits and
+   nearly all of the Moth's were flagged and measured, so the fix is the
+   contour rule, not a trigger; only the swallow's streamers were never
+   examined, a lattice at its tier's floor on which the refinement scan never
+   runs. Implement the rule inside the existing `SdfSampledLattice.Refine` and
+   `SdfDualContouring.ExtractRefined` (never a second mesher): a crossing whose
+   gradient blends two faces contributes no plane, a near-crease row takes the
+   crease's vertices, and a sub-cell face either closes to one crease or
+   refines.
+   - *Whole-world stored-mesh audit check:* audit every stored mesh of the
+     world at the tier each group was stored at on both backends (fixing the
+     238-of-6544 tier-0 audit gap below). Count groups the audit cannot judge
+     (glyphs and sampled regions) and unsampled groups apart from passed
+     groups. Require no defect class worse than before, zero wrongly facing
+     triangles on the fourteen blend exhibits, every audited group non-empty,
+     `open` and `uncovered` no higher than before, blend seams and the Moth's
+     rim captured in motion from failing sides, and cold-bake time reported
+     beside each fix. State the audit's blind spot: it samples around the
+     output mesh box, so vanished parts are caught only by authored-bounds
+     deviation ([virtual geometry](virtual-geometry.md#the-build-order)).
+     The fourteen exhibits are not enough because the rule reaches every
+     bake: an earlier attempt that narrowed the lattice along one axis was
+     worse over the whole world, and an empty or missing patch also lowers
+     the wrongly-facing count. Whether the rule holds where a surface folds
+     or a feature disappears is evidence Puck produces itself: no source
+     covers those, or two creases in one cell (Ju and others chose their
+     singular-value cut-off by experiment, which says nothing for or against
+     dropping a blended gradient's plane; Schaefer and others note a manifold
+     criterion "may still contain intersecting polygons"). Not checked: that
+     the refinement takes the finest split that fits and is never skipped
+     silently (a reviewer's reading).
+2. **Non-uniform scale bounds (gap 11,** [rendering](rendering.md#bake-quality))
+   and **[moving blends](moving-blends.md#engine-gaps-first) step 4 (gap 10)**
+   beside it. Then the three kinds of triangle the lattice's facing does not
+   judge, which the tour's remaining reds and the Moth's shin groups share
+   (below).
 
 - [medium] `SdfMeshLattice.Dims` reports two samples along a million-metre
   axis requested at 0.1 mm. The cell count saturates to `int.MaxValue` and
@@ -1101,8 +1235,7 @@ remaining reds and the Moth's shin groups share.
   it.
 - [high] [Moving blends](moving-blends.md) steps 4 and 5: paints, insets and
   lanes across a blended seam, then the quiet-window cost of a skinned
-  close-up and a crowd on both backends. Retiring the settle rebake moved to
-  gap 8's step G1.
+  close-up and a crowd on both backends.
 - [medium] The curvature gate refines sharp creases as turns (toes and soles
   about twice over): the samples cannot tell a crease from a fillet narrower
   than a cell. A measured cell whose fine samples are two affine faces takes
@@ -2218,23 +2351,26 @@ the single disclosure build table; the rd2-review
 findings are answered in decision 3a. Then the researcher brief's priorities
 ([security review](../development/security-review.md)).
 
-- [high, unconfirmed] A route change does not withdraw a picture already
-  published. When a viewer's disclosure narrows (a full replica becomes a
-  private view, or observation is revoked while a second viewer keeps the
-  shared residency alive), route settlement leaves the shared scene and
-  package freshness goes false, but nothing withdraws the published image. A
-  cadence hold, a budget deferral, an unscheduled screen read, or a paused
-  node returning its last surface can show the old pixels
-  (`WorldSessionRoute`, `SdfWorldPasses`, `RenderGraphScheduler`,
-  `WorldScreenBinder`, `WorldViewGraphHost`, `ShaderPipelineRenderNode`).
-  Enforce the current viewer's disclosure at publication and reuse,
-  previous-frame reads, aliases and retained composites included. Invalidate
-  that viewer's old output at once, and show an authorized replacement or an
-  authored fallback while the private graph builds. The other viewer's
-  publication stays usable. Verify on the first delivered frame of both cases
-  with a detail visible only in the full replica. Found by the rendering
-  research's decision-2 review; the code paths are cited there and not yet
-  reproduced.
+- [high] A narrowing a session's access cannot see. A viewer's access is
+  settled from its observation as none, disclosed or everything
+  (`WorldViewerAccess`, `WorldScreenBinder.AccessOf`), and a narrowing between
+  those levels withdraws every picture the view published
+  (`IRenderGraphInstances.Withdraw`) and releases the private residency built
+  from wider content (`WorldScreenBinder.ContentAccess`). A narrowing inside
+  "disclosed" (a cell visibility or audience the session loses while it still
+  observes) moves no level, so the old private picture stands until the view
+  next renders, and a cadence hold keeps it. The observation needs a
+  disclosure generation the authority moves whenever what it delivers this
+  session narrows, settled into the same epoch. This is the first half of
+  decision 14's step 5 (results keyed by what each viewer was delivered).
+- [medium] What a withdrawal does not reach. An infinity layer keeps its
+  frame source across a narrowing, so a program composed from the wider
+  content can reach the layer's next residency until the source composes
+  again (`WorldScreenBinder.WithdrawInfinityResidency`). An external producer
+  keeps its own latest output, and an export already copied out of the
+  runtime keeps its copy. A residency's screen emission and sky environment
+  derived from a withdrawn screen image are not shown to be derived again
+  (`SdfWorldTables.ProjectTaintedSourcesAgain` re-derives only tainted ones).
 
 - [high] Authored search must plan over what its actor is disclosed. Today an
   actor-less job reads true state under the audience check (an AI can read a
@@ -3136,8 +3272,9 @@ runs.
   timing and boot and work counts.
 - The temporal reconstruction's quiet-machine frame and memory qualification:
   rerun the integrated tour, standing and walking frame readings and the
-  gallery and lift body patrol; history is 47 words per output pixel
-  (`HistorySurfaceWords`), so measure the view and slot allocation.
+  gallery and lift body patrol; history is `HistorySurfaceWords` words per
+  output pixel in two copies and `HistoryWindowWords` in one, so measure the
+  view and slot allocation.
 - [medium] The sweep compares no per-tick allocation: `SweepSignals.ReadFrames`
   keeps `host.frames`' header and phases and drops its frame thread allocated
   line, and the `memory` signal reads after a collection. Keep that line as
@@ -3169,8 +3306,11 @@ the stages; this packet holds what a stage does not.
   The partial navigation bake now runs on a worker, and response swaps keep the
   attached door's sampled pose so its new collider does not wake remote rigid
   bodies. Profile the remaining spikes with `puck benchmark --headless --route
-  debug --chapter "the lift"` and make the remaining contact install and recipient
-  delivery cost follow the changed rows.
+  debug --chapter "the lift"` using its `frameThread` report. The frame digest
+  now reuses unchanged placement rows, and analytic contact installs reuse
+  compiled variants of the changed doors. Isolate cold rigid contact work
+  from the remaining delivery hitches. The replica wire still encodes the
+  whole definition when an observable frame changes.
 - [low] A route chapter's control-line refusals are counted when the chapter
   ends (`WorldSeatDriver.Refused`), so a line still settling then is not
   counted; count each line's verdict as it arrives.
@@ -3195,6 +3335,17 @@ the stages; this packet holds what a stage does not.
   the client. The rendering plan's `bench` lane rebuilds it on what the
   seat's client was delivered
   ([its decision 1](rendering-research.md#1-measure-beside-the-work)).
+  What the driver reads, and what the endpoint delivers instead: the body's
+  pose (`WorldAuthorityEndpoint.Mirror`, presentation floats where the driver
+  reads fixed point), the delivered definition (`WorldAuthorityEndpoint.Definition`,
+  from which places and spawn points follow), and a navigation planner that
+  exists only as `WorldPopulation.PlanSteering`, which needs a resolved
+  population with its contact field and the seat kit's collider. The driver
+  also fails a chapter on `WorldBody.LastObstructionNormal`, a witness no
+  snapshot carries. The report separates the in-process and remote topology
+  (`topology` in the run report) but a run against `--connect` still cannot
+  drive its seat: the driver holds its controls and reports a `seat` failure
+  when the chapter's time limit passes.
 - [medium] A fresh run's first chapter opens on the boot's settling, not on
   its pose: on a headless World armed `at 10` after a `--paused` boot, the
   chapter's first two iterations (ticks 10 and 11) still simulate for
@@ -3490,14 +3641,12 @@ Looks and rules of play held in engine code:
   `SdfSky.DefaultLuminance` (`WorldEnvironmentResolve.cs`). Make the
   unauthored default neutral, author the atmosphere in each debug-world place
   that leans on it, and look at the places on both backends before and after.
-- [medium] Four looks the rendering research found in engine code, each with
+- [medium] Three looks the rendering research found in engine code, each with
   the authored home [its looks table](rendering-research/step-designs.md#where-each-look-is-authored)
   names: the filmic curve's constants in `place.comp.hlsl`; the share of its
   own exposure a window's world applies (`SdfPhotometry.WindowAdaptation`);
-  the shares of the display at which a nested view's update rate steps down
-  (`SdfUpdateRateTiers.ViewHertz`); and what a nested view gives up, held as
-  two constants (`WorldSessionSceneEmitter.ReducedQuality`,
-  `WorldScreenBinder.CameraViewQuality`).
+  and the shares of the display at which a nested view's update rate steps
+  down (`SdfUpdateRateTiers.ViewHertz`).
 - [medium] The opening ripple's feel and look are engine constants: reach,
   margin and strengths in `WorldOpeningRipples`, the lifetime and clock period
   mirrored in C# and HLSL (`SdfScreenRipple`), and the amplitudes, speeds,

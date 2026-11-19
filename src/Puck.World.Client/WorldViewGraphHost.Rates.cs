@@ -45,6 +45,7 @@ public sealed partial class WorldViewGraphHost {
     // Each instance's extent as a share of the display's. BeginFrame measures the previous frame for pose rates;
     // CompleteFootprints measures current placements for view and screen demand.
     private readonly Dictionary<string, (double Width, double Height)> m_displayShares = new(comparer: StringComparer.Ordinal);
+    private readonly Dictionary<string, (double Width, double Height)> m_presentedShares = new(comparer: StringComparer.Ordinal);
     // The frame's presentation rate; an unpaced rate rates nothing.
     private PresentationRate m_presentationRate;
     // The most frequent refresh this frame's views asked for each source they show on screens.
@@ -119,18 +120,16 @@ public sealed partial class WorldViewGraphHost {
 
     // Measures each instance's shares of the display's extent from the current footprint list: a root's
     // share is its own, and a producer's is the largest over its consumers of the consumer's share times the footprint's.
+    // Every frame measures them (m_presentedShares), since what a nested view gives up follows its presented size
+    // (WorldRenderSettings.NestedRestriction); the rates read them (m_displayShares) only while a lever rates.
     private void MeasureDisplayShares(SdfUpdateRates rates) {
+        m_presentedShares.Clear();
         m_displayShares.Clear();
         m_sourceRefresh.Clear();
-
-        if ((rates & (SdfUpdateRates.Bodies | SdfUpdateRates.Views | SdfUpdateRates.Screens)) == 0) {
-            return;
-        }
-
-        m_displayShares[WorldViewGraphs.MainInstance] = (1d, 1d);
+        m_presentedShares[WorldViewGraphs.MainInstance] = (1d, 1d);
         foreach (var root in m_roots) {
-            var previous = m_displayShares.GetValueOrDefault(key: root.Instance);
-            m_displayShares[root.Instance] = (Math.Max(root.Width, previous.Width), Math.Max(root.Height, previous.Height));
+            var previous = m_presentedShares.GetValueOrDefault(key: root.Instance);
+            m_presentedShares[root.Instance] = (Math.Max(root.Width, previous.Width), Math.Max(root.Height, previous.Height));
         }
 
         // The footprints form a graph without cycles, so each pass settles at least one more level of nesting.
@@ -138,15 +137,15 @@ public sealed partial class WorldViewGraphHost {
             var changed = false;
 
             foreach (var footprint in m_footprints) {
-                if (!m_displayShares.TryGetValue(key: footprint.Consumer, value: out var consumer)) {
+                if (!m_presentedShares.TryGetValue(key: footprint.Consumer, value: out var consumer)) {
                     continue;
                 }
 
                 var share = (Width: consumer.Width * footprint.Width, Height: consumer.Height * footprint.Height);
-                var previous = m_displayShares.GetValueOrDefault(key: footprint.Producer);
+                var previous = m_presentedShares.GetValueOrDefault(key: footprint.Producer);
 
                 if ((share.Width > previous.Width) || (share.Height > previous.Height)) {
-                    m_displayShares[footprint.Producer] = (Math.Max(share.Width, previous.Width), Math.Max(share.Height, previous.Height));
+                    m_presentedShares[footprint.Producer] = (Math.Max(share.Width, previous.Width), Math.Max(share.Height, previous.Height));
                     changed = true;
                 }
             }
@@ -155,15 +154,19 @@ public sealed partial class WorldViewGraphHost {
                 break;
             }
         }
+
+        if ((rates & (SdfUpdateRates.Bodies | SdfUpdateRates.Views | SdfUpdateRates.Screens)) != 0) {
+            foreach (var (instance, share) in m_presentedShares) { m_displayShares[instance] = share; }
+        }
     }
     /// <summary>Returns the latest measured share of the display's height an instance reaches through footprints: a
     /// root's its own, and a producer's its largest consumer's share times the footprint's.</summary>
     /// <param name="instance">The instance's name.</param>
-    /// <returns>The share, zero for an instance no footprint showed, or <see langword="null"/> while no lever measures
-    /// the shares.</returns>
-    public double? DisplayShareOf(string instance) => ((m_displayShares.Count == 0)
+    /// <returns>The share, zero for an instance no footprint showed, or <see langword="null"/> before the first
+    /// measurement.</returns>
+    public double? DisplayShareOf(string instance) => ((m_presentedShares.Count == 0)
         ? null
-        : m_displayShares.GetValueOrDefault(key: instance).Height);
+        : m_presentedShares.GetValueOrDefault(key: instance).Height);
     // The refresh a footprint showing a nested view asks for: every frame unless the views lever is on and the view covers
     // few enough pixels of the display (SdfUpdateRateTiers.ViewHertz).
     private RenderGraphRefresh ViewRefresh(string consumer, string producer, double coverage, int glass, SdfUpdateRates rates) {

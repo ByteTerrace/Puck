@@ -64,6 +64,12 @@ public readonly record struct SdfInstanceRange(
     /// declares (<see cref="SdfInstancePart"/>): the members its group's union lattice refines one by one, as a static union
     /// refines each instance's box. Empty where the instance's bound alone describes it.</summary>
     public IReadOnlyList<SdfInstancePart> Parts { get; init; } = [];
+    /// <summary>Gets the cutters a dynamic instance holds that ride a slot of their own against the surface they cut, each
+    /// the box the cutter occupies in its slot's frame (<see cref="SdfInstancePart"/>): an operand of the instance's group.
+    /// The group's mesh is baked with each operand where its slot stands, snapped to a step of the group's tier, and is
+    /// planned again when an operand moves a step; no vertex rides an operand's slot. A slot several entries name is one
+    /// operand. Empty for an instance with no moving cutter.</summary>
+    public IReadOnlyList<SdfInstancePart> Operands { get; init; } = [];
     /// <summary>Gets the height field a static instance draws (<see cref="SdfProgramBuilder.HeightField"/>), whose
     /// heights displace its baked reference as it is drawn (<see cref="SdfProgram.HeightFields"/>); <see langword="null"/>
     /// for an instance drawn as it was baked.</summary>

@@ -8,8 +8,17 @@ run-name: WebAssembly payload — ${{ github.ref_name }}
 # Puck.World.Browser's own dependency closure, which declares no shader and no world compile, and publishes it once; the
 # uploaded AppBundle is the exact payload the application bundle ships and the Node harness below runs.
 
+# `stage` splits the two jobs for a caller that must not hold a release on the harness: the Azure release calls this
+# workflow with `publish` for the payload its bundle ships, and again with `verify`, which only runs the harness against
+# the payload the first call uploaded to the same run. Any other value, and a standalone run, does both.
+
 on:
   workflow_call:
+    inputs:
+      stage:
+        default: all
+        description: publish (build and upload the payload), verify (run the harness on the uploaded payload) or all
+        type: string
   workflow_dispatch:
 
 permissions:
@@ -21,6 +30,7 @@ env:
 
 jobs:
   publish:
+    if: ${{ inputs.stage != 'verify' }}
     name: Publish the WebAssembly payload (Windows)
     runs-on: windows-2025
     steps:
@@ -49,6 +59,7 @@ jobs:
     # The ahead-of-time publish alone measured nine to eleven minutes on this runner.
     timeout-minutes: 45
   verify:
+    if: ${{ !cancelled() && inputs.stage != 'publish' && (needs.publish.result == 'success' || needs.publish.result == 'skipped') }}
     name: Verify the deployed WebAssembly payload
     needs: publish
     runs-on: ubuntu-24.04

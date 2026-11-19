@@ -312,7 +312,7 @@ The inventory comes from the code: `SdfSolidPrimitive`, `SdfBlendOp`,
 | SmoothUnion, SmoothSubtraction, SmoothIntersection | `shape-smooth-union`, `-subtraction`, `-intersection` |
 | ChamferUnion, ChamferSubtraction, ChamferIntersection | `shape-chamfer-union`, `-subtraction`, `-intersection` |
 | GrooveUnion, PipeUnion, GrooveSubtraction, PipeSubtraction | `shape-groove-union`, `shape-pipe-union`, `shape-groove-subtraction`, `shape-pipe-subtraction` |
-| Blends between moving shapes (pooled `group`): a skinned smooth union, a skinned smooth subtraction, a swing, three owners split rigid, a paint across a seam | `motion-smooth-blend`, `motion-carve`, `motion-nod`, `motion-three`, `motion-seam-paint` |
+| Blends between moving shapes (pooled `group`): a skinned smooth union, a moving cutter as an operand, a swing, three owners split rigid, a paint across a seam | `motion-smooth-blend`, `motion-carve`, `motion-nod`, `motion-three`, `motion-seam-paint` |
 | StairsUnion, StairsSubtraction (`steps`), Morph (`morph { lane, from, to }`) | `shape-stairs-union`, `shape-stairs-subtraction`, `shape-morph`: each composes at the pop of a scope the shape opens for itself, inside its creation's or group's scope too; a static placement reads the morph's lane as zero, halfway through its −1..1 window |
 
 ### Per-shape facets
@@ -378,7 +378,7 @@ The inventory comes from the code: `SdfSolidPrimitive`, `SdfBlendOp`,
 | Slide (translation) | `motion-slide`, `motion-smooth-blend`, `motion-carve`, `motion-pulse`, `motion-seam-paint` |
 | `parent` chains | `motion-chain`, `motion-mirror`, `motion-polar` |
 | A moving shape through a smooth blend with a still one, skinned | `motion-smooth-blend` (a slide), `motion-nod` (a swing) |
-| A moving cutter through a smooth subtraction, skinned | `motion-carve` |
+| A moving cutter through a smooth subtraction, an operand of the box's group | `motion-carve` |
 | Three moving owners meeting in one blend: the split fallback | `motion-three` |
 | A paint across a skinned seam | `motion-seam-paint`, expected to fail until [moving blends](../../docs/plans/moving-blends.md) step 4 |
 | Mirrored and folded shapes in motion | `motion-mirror`, `motion-polar` |
@@ -528,12 +528,13 @@ Each recipe frames a row's first three exhibits; move the x of both points by
   tear, and the audit scores the missing fillet as off-surface error against
   the blended field. Raise the clock's rate
   (`perSecondNumerator` 6) to see a whole cycle in a 60-frame presented burst.
-- **Moving cut.** `motion-carve` at x = 38.6: the smooth bowl's floor rides the
-  cutter's slot and its soft rim blends the two, so `world.debug-view motion`
-  shows the bowl moving with the cutter while the rest of the box stays still.
-  A hard cut across owners has no share to skin: its group creases, and the
-  partitioned box keeps the cut where the cutter rests
-  (`CreationMotionPlan.Borrows`).
+- **Moving cut.** `motion-carve` at x = 38.6: the cutter moves alone and
+  carves, so it is an operand of the box's group
+  (`CreationMotionPlan.IsOperand`): the group bakes again each time the cutter
+  moves a step of its tier's cell, and the bowl and its soft rim follow the
+  cutter up to one step behind, the box drawn rigid. `world.counters
+  sdf.mesh-inputs` counts the operand's re-plans. A hard cut moving alone is an
+  operand the same way.
 - **Paint across a moving seam.** `motion-seam-paint` at x = 46.4 on the z 25
   row: one stripe crosses box, fillet and sphere. On the box and the sphere it
   holds; on the fillet's blended band it shades in the box's frame, so it
@@ -589,7 +590,7 @@ field, in millimetres, and what the exhibit's score is made of:
 | Erode (LaneErode), creation noise (NoiseDisplace) | `shape-erode`, `shape-noise` | 0.05, 0.27 | correct |
 | Smooth, chamfer, groove, pipe blends | `shape-smooth-*`, `-chamfer-*`, `-groove-*`, `-pipe-*` | 0.1 to 0.5 | correct; creases score as normal error at hard seams |
 | Subtraction, intersection, xor | `shape-blend-*` | 0.2 to 0.7 | correct; `shape-blend-union` bakes 48 open edges where box and sphere meet (open) |
-| Moving blends, twist, bend | `motion-smooth-blend`, `motion-carve`, `motion-nod`, `motion-twist`, `motion-bend` | 0.15 to 0.4 | correct at rest; the blends skin inside their envelopes, and `puck mesh audit --pose` measures a posed skin against its posed field |
+| Moving blends, twist, bend | `motion-smooth-blend`, `motion-carve`, `motion-nod`, `motion-twist`, `motion-bend` | 0.15 to 0.4 | correct at rest; the blends skin inside their envelopes and the moving cutter is an operand, and `puck mesh audit --pose` measures a posed skin against its posed field, or plans an operand's group again at the posed cut |
 | Domain warp, sine relief, elongate, jitter, log sphere, stairs, morph | `shape-warp` and the rest of the z 69 row | CPU bake only until the owner's World boots this document | field correct by `SdfRenderOpsLawTests` and `SeamBlendLawTests`; see the GPU capture list under open items |
 
 ## Known defects the gallery shows

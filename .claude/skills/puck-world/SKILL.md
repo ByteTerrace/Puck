@@ -143,6 +143,12 @@ Every untrusted read and delivery checks `WorldStateDisclosure` again; caching
 a bound address never caches permission. Responses, deals and tenure are
 placement projections. Checkpoints snapshot arena columns directly.
 
+`WorldDisclosureImages` can carry an audience's projection across a holding-only
+placement change. The definition records the preceding source and the changed
+ordinals. The recipient still has to pass the live row checks, and a projected
+placement section is recomposed when its restricted inputs can affect the result.
+Placement identity reuses each unchanged row's canonical digest.
+
 ## Diagnostic reports and pins
 
 Scripted camera framing uses `view.recenter [player]` (1-based), which resets
@@ -242,6 +248,9 @@ it with `puck_world_stop`, which refuses any World the adapter did not start.
 The World runs from the store's build, which holds it while the World runs and
 leaves your `bin/Release` free to rebuild
 ([references/hosting-and-release.md](references/hosting-and-release.md)).
+Finish staging source files before the start. `WorldArtifactKey` reads Git
+status as well as file contents, so staging during the build-lease wait can
+invalidate the start even when no file bytes change.
 
 Codex discovers these tools through the session's tool inventory (search for
 `puck`); its repository MCP configuration uses the same launcher as Claude.
@@ -766,6 +775,13 @@ check the flag: the owner may be holding the pad.
   standard's `walker` seat program through seat 1's own controls (`WorldSeatDriver`). A chapter fails, naming the kind,
   the tick and the place, on a driven wall contact or a step out of its path's places; `puck benchmark --headless --route
   debug --loops 2` is the headless proof ([the plan](../../../docs/plans/benchmark.md#the-route-is-places-played-by-an-authored-seat-program-stage-4)).
+- **A device profile is data, selected by adapter.** A world's `render.devices` rows (the standard's, in
+  `worlds/standard/quality.puck`) each name a device's quality table and memory bars. A windowed boot selects the row
+  whose `match` the adapter's name contains and caps the device and host pools at its bars
+  (`WorldDeviceProfileState.Apply`, over `MemoryAccount.SetBudget`, which only lowers a limit); `world.device-profile
+  [auto|none|<name>]` selects by name and also writes the table through the `world.quality` levers
+  (`IWorldQualityPresets`). `puck benchmark --profile` sends it before the first chapter, and the run report's
+  `profile` and `topology` objects name what applied. No device name or figure is engine code.
 - `puck test <source>` boots each `.puck` `test` block headless and prints one
   verdict per line ([references/schedules-and-tests.md](references/schedules-and-tests.md)).
   A scenario is for an invariant that running cannot show: a replay or

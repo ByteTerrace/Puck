@@ -25,6 +25,15 @@ public interface IRenderGraphInstances {
     /// <param name="instance">The instance's name.</param>
     /// <returns>The node.</returns>
     ShaderPipelineRenderNode? NodeOf(string instance);
+    /// <summary>Withdraws every picture an instance published, from the next frame the runtime produces: the image its
+    /// node publishes, the outputs the runtime records for it, and every output another instance rendered over them, so
+    /// no reader, capture or display binds any of them again. Each instance withdrawn renders again before anything
+    /// shows it, over a stand-in for what was withdrawn, and readers bind a stand-in until it has. A host calls it when
+    /// the viewer an instance renders for may no longer see what it showed.</summary>
+    /// <param name="instance">The instance's name.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="instance"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException">The set has no instance of that name.</exception>
+    void Withdraw(string instance);
     /// <summary>Installs a graph on one graph instance, keeping the graph it has when the graph is refused.</summary>
     /// <param name="instance">The graph instance's name.</param>
     /// <param name="graph">The graph.</param>

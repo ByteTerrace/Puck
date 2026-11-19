@@ -7,7 +7,7 @@ namespace Puck.World.Schema.Tests;
 /// <summary>The document load boundary owns shadow identities, policy bounds, and handoff progress refusals.</summary>
 public sealed class ShadowAuthoringLawTests {
     [Fact]
-    public void ZeroDirectionalAngularRadiusRefusesWhileAPositivePenumbraLoads() {
+    public void AZeroDirectionalAngularRadiusLoadsAsAPointSourceWhileAWiderOneThanTheCeilingRefuses() {
         var document = Fixtures.BuildDocument() with {
             RenderRaw = new WorldRenderDefaults(Lighting: new WorldRenderLighting(Lights: [new WorldRenderLight.Directional(Name: "sun", Shadow: WorldShadowMode.Always)])),
         };
@@ -16,6 +16,8 @@ public sealed class ShadowAuthoringLawTests {
         var json = JsonNode.Parse(WorldDefinitionSerialization.Serialize(definition: document))!;
 
         json["render"]!["lighting"]!["lights"]![0]!["angularRadius"] = 0;
+        Assert.True(condition: WorldDefinitionLoader.TryLoad(utf8: Encoding.UTF8.GetBytes(s: json.ToJsonString()), sourceName: "light-view.world.json", definition: out _, reason: out _));
+        json["render"]!["lighting"]!["lights"]![0]!["angularRadius"] = 1;
         Assert.False(condition: WorldDefinitionLoader.TryLoad(utf8: Encoding.UTF8.GetBytes(s: json.ToJsonString()), sourceName: "light-view.world.json", definition: out _, reason: out var reason));
         Assert.Contains(actualString: reason, comparisonType: StringComparison.Ordinal, expectedSubstring: "angularRadius");
     }

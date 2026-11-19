@@ -9,9 +9,11 @@ public enum GpuQueueCategory : byte {
     Unattributed = 0,
     /// <summary>A render graph's frame: its nodes' passes, region copies, readbacks and timing.</summary>
     Graph,
-    /// <summary>The background service's mesh-bake sampling jobs.</summary>
+    /// <summary>The background service's mesh-bake sampling jobs, a background job's category
+    /// (<see cref="GpuQueueWork.IsBackground"/>).</summary>
     Bake,
-    /// <summary>The background service's irradiance probe jobs.</summary>
+    /// <summary>The background service's irradiance probe jobs, a background job's category
+    /// (<see cref="GpuQueueWork.IsBackground"/>).</summary>
     Probe,
     /// <summary>Host data reaching the device: a residency's table upload, a source's surface upload, a stand-in's fill.</summary>
     Upload,
@@ -42,6 +44,10 @@ public enum GpuQueueCause : byte {
     Drain,
     /// <summary>An empty fenced submission split the batch so its fence follows every earlier submission.</summary>
     EmptyFence,
+    /// <summary>Work that is not a background job's was deferred behind a background job's fenced submission, so the
+    /// batch went to the queue where the job ends, and the job's fence answers from a signal of its own rather than the
+    /// frame's last (<see cref="GpuSubmissionBatch{TEntry}.Admit"/>).</summary>
+    JobEnd,
 }
 
 /// <summary>
@@ -52,14 +58,17 @@ public enum GpuQueueCause : byte {
 /// with <see cref="Attribute"/> around the code that submits; a batch remembers each deferred list's category, so one
 /// batched execute counts its lists by their owners and the execute by what split the batch. <c>frames</c> counts
 /// presents, the interval a reading divides by; <c>waits</c> counts external waits put on a queue and
-/// <c>waits-reached</c> those dropped because their fence had already reached its value.
+/// <c>waits-reached</c> those dropped because their fence had already reached its value. <c>jobs</c> counts the background
+/// jobs' fenced submissions a batch handed to the queue (<see cref="IsBackground"/>), and <c>jobs.late</c> those among
+/// them whose fence answers from a signal queued behind later work that is not a background job's: zero means every job
+/// deferred in a batch was answered from its own hand-over's signal, ahead of the batch's owner.
 /// <para>The counts are process-wide: every device of every backend, on any thread. A Vulkan fence or timeline signal
 /// rides its <c>vkQueueSubmit</c>, so <c>signals</c> counts the completions a submission carries there, not separate
 /// native calls.</para>
 /// </summary>
 public sealed class GpuQueueWork : IWorkCounterSource {
     private static readonly string[] CategoryNames = ["unattributed", "graph", "bake", "probe", "upload", "transfer", "readback", "present", "drain"];
-    private static readonly string[] CauseNames = ["unbatched", "batch-end", "door", "fence-wait", "external-wait", "drain", "empty-fence"];
+    private static readonly string[] CauseNames = ["unbatched", "batch-end", "door", "fence-wait", "external-wait", "drain", "empty-fence", "job-end"];
     [ThreadStatic] private static GpuQueueCategory CurrentCategory;
 
     private readonly WorkKind m_executes = Kind(name: "gpu.queue.executes");
@@ -69,6 +78,8 @@ public sealed class GpuQueueWork : IWorkCounterSource {
     private readonly WorkKind m_batches = Kind(name: "gpu.queue.batches");
     private readonly WorkKind m_waits = Kind(name: "gpu.queue.waits");
     private readonly WorkKind m_waitsReached = Kind(name: "gpu.queue.waits-reached");
+    private readonly WorkKind m_jobs = Kind(name: "gpu.queue.jobs");
+    private readonly WorkKind m_jobsLate = Kind(name: "gpu.queue.jobs.late");
     private readonly WorkKind[] m_listsBy;
     private readonly WorkKind[] m_signalsBy;
     private readonly WorkKind[] m_executesBy;
@@ -89,7 +100,7 @@ public sealed class GpuQueueWork : IWorkCounterSource {
                 m_executesBy[(category * causes) + cause] = Kind(name: $"gpu.queue.executes.{CategoryNames[category]}.{CauseNames[cause]}");
             }
         }
-        m_kinds = [m_frames, m_batches, m_waits, m_waitsReached, m_executes, m_lists, m_signals, .. m_executesBy, .. m_listsBy, .. m_signalsBy];
+        m_kinds = [m_frames, m_batches, m_waits, m_waitsReached, m_jobs, m_jobsLate, m_executes, m_lists, m_signals, .. m_executesBy, .. m_listsBy, .. m_signalsBy];
         m_counts = new WorkCounterSet(name: "gpu.queue", kinds: m_kinds);
     }
 
@@ -104,6 +115,12 @@ public sealed class GpuQueueWork : IWorkCounterSource {
     /// <inheritdoc/>
     public bool TryRead(WorkKind kind, out long value) => m_counts.TryRead(kind, out value);
 
+    /// <summary>Gets whether <paramref name="category"/> names a background job: GPU work no pass of a frame waits on and
+    /// whose completion host code waits for (a bake's samples, a probe's answers). A batch gives such a job's fenced
+    /// submission a signal of its own (<see cref="GpuSubmissionBatch{TEntry}.Admit"/>).</summary>
+    /// <param name="category">The category.</param>
+    /// <returns>Whether it is <see cref="GpuQueueCategory.Bake"/> or <see cref="GpuQueueCategory.Probe"/>.</returns>
+    public static bool IsBackground(GpuQueueCategory category) => (category is GpuQueueCategory.Bake or GpuQueueCategory.Probe);
     /// <summary>Counts the calling thread's queue work under <paramref name="category"/> until the returned scope is
     /// disposed, when the previous category returns: scopes nest, and the innermost names the work.</summary>
     /// <param name="category">The category.</param>
@@ -137,6 +154,14 @@ public sealed class GpuQueueWork : IWorkCounterSource {
     public void Signal() {
         m_counts.Count(m_signals);
         m_counts.Count(m_signalsBy[(int)CurrentCategory]);
+    }
+    /// <summary>Counts the background jobs' fenced submissions one hand-over of a batch carried.</summary>
+    /// <param name="handed">The background jobs' fences the hand-over carried.</param>
+    /// <param name="late">Those among them deferred ahead of work that is not a background job's, whose fences therefore
+    /// answer from a signal queued behind that work.</param>
+    public void Jobs(int handed, int late) {
+        m_counts.Add(m_jobs, handed);
+        m_counts.Add(m_jobsLate, late);
     }
     /// <summary>Counts one present, the interval a reading divides by.</summary>
     public void Present() => m_counts.Count(m_frames);

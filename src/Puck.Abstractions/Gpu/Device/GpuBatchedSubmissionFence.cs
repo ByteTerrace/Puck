@@ -4,7 +4,7 @@ namespace Puck.Abstractions.Gpu;
 
 /// <summary>
 /// The state every backend's <see cref="IGpuSubmissionFence"/> shares: a fence is drained, deferred in an open
-/// <see cref="GpuSubmissionBatch"/>, answering from the fence its batch armed (aliased), armed on the queue itself,
+/// <see cref="GpuSubmissionBatch"/>, answering from the fence its batch's hand-over armed (aliased), armed on the queue itself,
 /// abandoned, or faulted. A backend supplies only its native signal: whether it has reached the armed value, a blocking
 /// wait for it, and the reset after that wait. An aliased fence is signaled once its owner's native fence is, or once the
 /// owner has drained (its generation moves on every successful drain). A fence whose batch's hand-off failed before
@@ -95,7 +95,7 @@ public abstract class GpuBatchedSubmissionFence : IGpuSubmissionFence {
     }
     /// <inheritdoc/>
     /// <remarks>Splits the batch (<see cref="GpuSubmissionBatch.Split"/>) under <see cref="GpuQueueCause.FenceWait"/>, as
-    /// a wait on the deferred fence does, so the hand-off arms this fence or answers it from the batch's owner and settles
+    /// a wait on the deferred fence does, so the hand-off arms this fence or answers it from the hand-off's owner and settles
     /// a completion signal it owed. A split that fails before this fence's submission reaches the queue leaves it
     /// abandoned, which its next <see cref="IsSignaled"/> or <see cref="Wait"/> reports.</remarks>
     public void HandOff() {
@@ -104,7 +104,7 @@ public abstract class GpuBatchedSubmissionFence : IGpuSubmissionFence {
     }
     /// <inheritdoc/>
     /// <remarks>A fence deferred in an open batch keeps the signal until the batch's hand-off arms it or answers it from
-    /// the batch's owner.</remarks>
+    /// the hand-off's owner.</remarks>
     public void SignalOnCompletion(EventWaitHandle signal) {
         ArgumentNullException.ThrowIfNull(signal);
         if ((m_failure is not null) || m_abandoned || m_disposed) {

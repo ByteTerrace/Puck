@@ -51,13 +51,23 @@ which other plans cite:
    the renderer subtracts an exact render origin before narrowing to float,
    for interpolation, cameras, views, shading, shadows, GI and picking. Gravity
    arithmetic is widened. The 8192 m cap rises only after the precision work.
-4. **Residency.** Terrain tiles as residency units, admitted and evicted across
-   all views and planned against the authored flight speed and braking, then
-   the moons through routed residency. The unit and its seam rule are the
-   streaming plan's
+4. **Residency and merged world adjacency.** Terrain tiles as residency units,
+   admitted and evicted across all views and planned against the authored
+   flight speed and braking, then the moons through routed residency. The unit
+   and its seam rule are the streaming plan's
    ([the source tile and its seam rule](streaming-and-memory.md#the-source-tile-and-its-seam-rule)),
    built in its [step 10](streaming-and-memory.md#step-10-areas-tiles-then-the-moons);
-   this phase is that step read on the valley.
+   this phase is that step read on the valley. Beside it, author an adjacency
+   between two worlds of the debug world so a far neighbour's ridges draw from
+   its floors beyond the border-crossing band using the geometry the
+   neighbour's authority permits onward to this viewer, with no body acquired
+   there, feeding [visibility V5's multi-residency instance table](visibility.md#v5-multi-view-and-shadow-work).
+   Check: from the valley's rim, test one draw the neighbour admits and one it
+   refuses for this viewer (recording any extra view or pass cost); a viewer
+   allowed only pictures sees pictures; withdrawing permission while a floor is
+   resident drops it; public scenery published into the near world draws for
+   everyone; and across the border, a ridge in one world casts its shadow into
+   the next while a body hands across in motion.
 5. **Atmosphere, clouds and flight.** A body-frame spherical-shell atmosphere
    with surface occlusion, keeping local valley mist; bounded clouds before
    flying through them; exposure continuous into vacuum. Flight reuses the
