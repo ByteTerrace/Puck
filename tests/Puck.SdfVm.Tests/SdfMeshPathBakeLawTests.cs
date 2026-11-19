@@ -297,21 +297,30 @@ public sealed partial class SdfMeshPathBakeLawTests : IClassFixture<SdfMeshPathB
                 return bakeRun;
             } catch { bakeRun.Dispose(); throw; }
         }
+        // Rows are allocated as groups' meshes arrive (SdfMeshDresser.Dress), so a group the store refused and baked
+        // again lands after the ones it loaded: the law pairs each draw with the other run's draw of the same mesh, in
+        // whatever row it stands.
+        static bool Same(SdfMesh source, SdfMesh decoded) {
+            if (!source.Indices.Span.SequenceEqual(other: decoded.Indices.Span) ||
+                !source.TriangleMaterials.Span.SequenceEqual(other: decoded.TriangleMaterials.Span) ||
+                (source.Positions.Length != decoded.Positions.Length)) {
+                return false;
+            }
+            for (var vertex = 0; (vertex < source.Positions.Length); vertex++) {
+                if (Vector3.Distance(value1: source.Positions.Span[vertex], value2: decoded.Positions.Span[vertex]) > (source.BakeCell.Length() / 1024f)) { return false; }
+            }
+            return true;
+        }
         void SameMeshes(MeshBakeTestRun expected, MeshBakeTestRun actual) {
             var first = expected.Dresser.Dress(frame: frame).DressedDraws();
-            var second = actual.Dresser.Dress(frame: frame).DressedDraws();
+            var second = actual.Dresser.Dress(frame: frame).DressedDraws().ToList();
 
             Assert.Equal(first.Count, second.Count);
-            for (var draw = 0; (draw < first.Count); draw++) {
-                var source = first[draw].Mesh;
-                var decoded = second[draw].Mesh;
+            foreach (var draw in first) {
+                var match = second.FindIndex(match: other => Same(decoded: other.Mesh, source: draw.Mesh));
 
-                Assert.Equal(source.Indices.ToArray(), decoded.Indices.ToArray());
-                Assert.Equal(source.TriangleMaterials.ToArray(), decoded.TriangleMaterials.ToArray());
-                Assert.Equal(source.Positions.Length, decoded.Positions.Length);
-                for (var vertex = 0; (vertex < source.Positions.Length); vertex++) {
-                    Assert.InRange(Vector3.Distance(value1: source.Positions.Span[vertex], value2: decoded.Positions.Span[vertex]), 0f, (source.BakeCell.Length() / 1024f));
-                }
+                Assert.True(condition: (match >= 0), userMessage: $"No draw of the second run holds the first run's mesh of {draw.Mesh.TriangleCount} triangles.");
+                second.RemoveAt(index: match);
             }
         }
 
