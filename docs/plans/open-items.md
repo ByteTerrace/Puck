@@ -3940,8 +3940,13 @@ and calibration, delivered cues, haptics) and the standard package's judge.
   bounds for many-part bodies and on the benchmark's remote route.
 - It is the first of the [play expressions](play-expressions.md). The other
   two the owner named, play by solving and play by calculating, are open
-  explorations: the lead writes the ideation round's synthesis into that
-  page, and nothing is built for them until the owner chooses.
+  explorations: that page holds
+  [the ideation round's synthesis](play-expressions.md#the-synthesis), and
+  nothing is built for them until the owner answers
+  [its four questions](play-expressions.md#the-questions-the-owner-chooses).
+  The synthesis asks the pose-clip and delivered-cue designs to be written
+  for the whole family
+  ([what the bard's first wave should take](play-expressions.md#what-the-bards-first-wave-should-take-from-this)).
 
 ### Dual-stick play and the Moth's motion
 
