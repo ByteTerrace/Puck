@@ -200,7 +200,7 @@ let glacierOrigin = rampPoint(glacierHeadS, 0, 0)
 // Every mass bottoms out `iceBed` under the trough's floor, so the ice is held by the rock wherever it meets it.
 let iceBed = -3
 // How far neighbouring segments of a row overlap, so a row is one body with no seam between its blocks.
-let iceSeam = 0.8
+let iceSeam = 1.6
 // How far a core stands inside the slab over it, so a slot's lower walls step in under a lip.
 let iceInset = 0.35
 // A snow lens: its half thickness, a superellipsoid's, which leaves a flat-topped dome thinning to nothing at its rim.
@@ -241,9 +241,9 @@ let toeRow = {
   snowAlong: 0.62
   snowShift: -0.15
   rise: 0.3
-  round: 1.0
+  round: 1.6
   stripe: 0
-  bow [2.0, 2.6, 1.8]
+  bow [2.4, 3.0, 2.2]
   lead [0.8, -0.8, 0.5]
   waterline: 1
 }
