@@ -47,20 +47,10 @@ public sealed partial class RenderGraphRuntime {
     private bool PrepareRead(int index, in FrameContext context) {
         if ((m_producers[index] is not null) || (m_sources[index] is not null) || (m_graphs[index] is not { } graph)) { return false; }
 
-        var passes = graph.Pipeline.Plan.Passes;
         var instance = m_set.Instances[index].Name;
 
-        m_readFactories.Clear();
-        for (var pass = 0; (pass < passes.Count); pass++) {
-            if (
-                (passes[pass].Package is { } step) &&
-                m_packages.TryGetFactory(factory: out var factory, package: step.Package) &&
-                !m_readFactories.Contains(item: factory)
-            ) {
-                m_readFactories.Add(item: factory);
-                factory.PrepareRead(context: in context, instance: instance);
-            }
-        }
+        FactoriesOf(graph: graph, into: m_readFactories);
+        foreach (var factory in m_readFactories) { factory.PrepareRead(context: in context, instance: instance); }
         return (m_readFactories.Count > 0);
     }
     // Whether the frame reads an instance: false for one PrepareReaders left unmarked, whose package is not asked.

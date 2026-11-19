@@ -309,22 +309,27 @@ public sealed partial class RenderGraphRuntime {
                 continue;
             }
 
-            var passes = graph.Pipeline.Plan.Passes;
             var instance = m_set.Instances[index].Name;
 
-            m_preparing.Clear();
-            for (var pass = 0; (pass < passes.Count); pass++) {
-                if (
-                    (passes[pass].Package is { } step) &&
-                    m_packages.TryGetFactory(factory: out var factory, package: step.Package) &&
-                    !m_preparing.Contains(item: factory)
-                ) {
-                    m_preparing.Add(item: factory);
-                    factory.PrepareRender(context: in context, instance: instance);
-                }
-            }
+            FactoriesOf(graph: graph, into: m_preparing);
+            foreach (var factory in m_preparing) { factory.PrepareRender(context: in context, instance: instance); }
         }
         RenderRecordWork.Process.PreparedPackages(ticks: (System.Diagnostics.Stopwatch.GetTimestamp() - began));
+    }
+    // Fills a list with the factory of each package a graph's passes run, once each, in pass order.
+    private void FactoriesOf(RenderGraphRuntimeGraph graph, List<IRenderGraphPackageFactory> into) {
+        var passes = graph.Pipeline.Plan.Passes;
+
+        into.Clear();
+        for (var pass = 0; (pass < passes.Count); pass++) {
+            if (
+                (passes[pass].Package is { } step) &&
+                m_packages.TryGetFactory(factory: out var factory, package: step.Package) &&
+                !into.Contains(item: factory)
+            ) {
+                into.Add(item: factory);
+            }
+        }
     }
     // Starts the frame for every package's factory.
     private void PackagesBeginFrame(in FrameContext context) {
