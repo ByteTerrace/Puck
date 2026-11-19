@@ -1307,6 +1307,13 @@ world.counters gpu.queue      # native executes, lists, signals and presents by 
 world.counters render.record  # record jobs' host time per phase, serial sum and per-frame critical path
 ```
 
+The bodies lever rates every stamp pool the presentation packs: the boot world's
+and each routed scene's (a shared session scene among them), each by the views and
+shadow cascades of its own frame (`WorldCreationInstances.ShadowBy`). A pool no view
+rates poses every registration every frame and re-stages each of its mesh rows, which
+shows as `capture` and `pack` in `host.frames` and as `sdf.creations.slots.posed` far
+above the transform rows `sdf.transforms` packs.
+
 Divide `gpu.queue` and `render.record` deltas by their `frames` deltas; [gpu
 cost](references/gpu-cost.md#count-queue-work-and-record-jobs) reads them, and
 [runtime contracts](references/runtime-contracts.md#1-image-lifetime-is-leased-per-image-and-per-reader)

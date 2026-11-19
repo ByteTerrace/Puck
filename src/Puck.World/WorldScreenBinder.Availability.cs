@@ -125,13 +125,14 @@ public sealed partial class WorldScreenBinder {
         public bool MayMake(WorldSessionAccess access) => (Mirror <= access);
         public void Made() => Source = Mirror;
     }
-    // A mirror's deliveries so far: its definition and snapshot revisions, either of which moves with a delivery, and the
-    // span its ingress holds.
-    private readonly record struct DeliveryMark(int Definition, int Snapshot, ulong Stream, long Generation, bool Closed) {
+    // A mirror's deliveries so far: the definitions, snapshots and state deliveries it applied, one of which moves with
+    // every delivery, and the span its ingress holds.
+    private readonly record struct DeliveryMark(long Definitions, long Snapshots, long States, ulong Stream, long Generation, bool Closed) {
         public static DeliveryMark Of(WorldSessionMirror mirror) {
             var span = mirror.Span;
+            var applied = mirror.DeliveryWork;
 
-            return new(Definition: mirror.DefinitionRevision, Snapshot: mirror.SnapshotRevision, Stream: span.Stream, Generation: span.Generation, Closed: span.Closed);
+            return new(Definitions: applied.Definitions, Snapshots: applied.Snapshots, States: applied.States, Stream: span.Stream, Generation: span.Generation, Closed: span.Closed);
         }
         // Whether the mirror's span moved since an earlier mark: its stream, its generation or its close.
         public bool MovedSpan(DeliveryMark earlier) => (Stream != earlier.Stream) || (Generation != earlier.Generation) || (Closed != earlier.Closed);
