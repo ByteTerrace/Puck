@@ -57,6 +57,15 @@ public static partial class SdfShadeHlsl {
         // A material's program as the stage holds it: its slice and parameter ranges, and the straight-line arm a
         // specialized kernel selected for it once a pixel (zero for the interpreter, and for none).
         text.Append(value: "};\nstruct SdfShadeBinding { uint4 range; uint arm; bool unstyled; };\n");
+        // The light phase's values a specialized arm computes once a pixel for the whole walk, as many as the arm that
+        // carries most; the interpreter carries nothing.
+        var plans = (programs ?? []).Select(selector: LightPlan.Of).ToArray();
+        var carried = plans.Select(selector: static plan => plan.Carried.Length).DefaultIfEmpty(0).Max();
+
+        text.Append(value: "struct SdfShadeCarry { ");
+        if (carried == 0) { text.Append(value: "uint unused; "); }
+        for (var i = 0; (i < carried); i++) { text.Append(value: "uint4 c").Append(value: i).Append(value: "; "); }
+        text.Append(value: "};\n");
         text.Append(value: "uint4 sdfShadeInput(SdfShadeStamp stamp, uint index) { switch(index) {\n");
         for (var i = 0; (i < SdfShadeOps.Inputs.Count); i++) { text.Append(value: "case ").Append(value: i).Append(value: "u: return stamp.i").Append(value: i).Append(value: ";\n"); }
         text.Append(value: "default: return 0u; } }\nuint4 sdfShadeRegister(SdfShadeRegisters regs, uint index) { switch(index & (SDF_SHADE_MAX_REGISTERS - 1u)) {\n");
@@ -93,7 +102,7 @@ public static partial class SdfShadeHlsl {
         if (programs is null) {
             Interpreter(signatures: signatures, text: text);
         } else {
-            Arms(programs: programs, text: text);
+            Arms(plans: plans, programs: programs, text: text);
         }
         text.Append(Invocation).Append("\n#endif\n");
         return text.ToString();
@@ -146,7 +155,8 @@ uint sdfShadeArm(uint2 slice) { return 0u; }
 bool sdfShadeHas(SdfShadeBinding binding, uint phase) { return binding.range.y != 0u && (phase == 0u || !binding.unstyled) && sdfShadeRead(binding.range.xy, phase).y != 0u; }
 uint sdfShadeReadsOf(SdfShadeBinding binding) { return binding.range.y != 0u ? sdfShadeRead(binding.range.xy, 0u).w : 0u; }
 uint sdfShadeAssigned(SdfShadeBinding binding, uint phase) { return phase != 0u && binding.range.y != 0u ? sdfShadeRead(binding.range.xy, phase).w : 0u; }
-void sdfShadeExecute(SdfShadeBinding binding, uint phase, SdfShadeStamp stamp, out SdfShadeOutputs outputs) {
+SdfShadeCarry sdfShadeLightCarry(SdfShadeBinding binding, SdfShadeStamp stamp) { return (SdfShadeCarry)0; }
+void sdfShadeExecute(SdfShadeBinding binding, uint phase, SdfShadeStamp stamp, SdfShadeCarry carry, out SdfShadeOutputs outputs) {
     sdfShadeInterpret(binding.range.xy, binding.range.zw, phase, stamp, outputs);
 }
 #else
@@ -154,23 +164,42 @@ uint sdfShadeArm(uint2 slice) { return 0u; }
 bool sdfShadeHas(SdfShadeBinding binding, uint phase) { return false; }
 uint sdfShadeReadsOf(SdfShadeBinding binding) { return 0u; }
 uint sdfShadeAssigned(SdfShadeBinding binding, uint phase) { return 0u; }
-void sdfShadeExecute(SdfShadeBinding binding, uint phase, SdfShadeStamp stamp, out SdfShadeOutputs outputs) { outputs = (SdfShadeOutputs)0; }
+SdfShadeCarry sdfShadeLightCarry(SdfShadeBinding binding, SdfShadeStamp stamp) { return (SdfShadeCarry)0; }
+void sdfShadeExecute(SdfShadeBinding binding, uint phase, SdfShadeStamp stamp, SdfShadeCarry carry, out SdfShadeOutputs outputs) { outputs = (SdfShadeOutputs)0; }
 #endif
 
 """);
     }
     // Tier 2. Each program is an arm of straight-line phases; the arm is chosen once a pixel by the identity the program's
-    // header carries (SdfShadeProgram.IdentityVector), and a phase the program does not declare is statically absent.
-    private static void Arms(SdfShadeProgram[] programs, StringBuilder text) {
+    // header carries (SdfShadeProgram.IdentityVector), and a phase the program does not declare is statically absent. A
+    // light phase's values that read no light input are the same for every light the walk visits, so the arm computes
+    // them once a pixel before the walk (sdfShadeArm{n}Carry, through sdfShadeLightCarry) and each light reads them from
+    // the carry: the loop-invariant hoist hand-written shading has, which the shader compiler does not make out of a
+    // switch arm inside the walk.
+    private static void Arms(SdfShadeProgram[] programs, IReadOnlyList<LightPlan> plans, StringBuilder text) {
         for (var arm = 1; (arm <= programs.Length); arm++) {
             var program = programs[arm - 1];
+            var plan = plans[arm - 1];
 
             for (var phase = 0; (phase < 3); phase++) {
                 if (program.Phases[phase].Count == 0) { continue; }
+                if (phase == ((int)SdfShadePhase.Light)) {
+                    text.Append(System.Globalization.CultureInfo.InvariantCulture, $"void sdfShadeArm{arm}Carry(uint2 slice, uint2 parameters, SdfShadeStamp stamp, inout SdfShadeCarry carry) {{\n")
+                        .Append(value: EmitCarry(plan: plan, program: program)).Append(value: "}\n");
+                    text.Append(System.Globalization.CultureInfo.InvariantCulture, $"SdfShadeOutputs sdfShadeArm{arm}Phase{phase}(uint2 slice, uint2 parameters, SdfShadeStamp stamp, SdfShadeCarry carry) {{\n")
+                        .Append(value: EmitValues(program: program, phase: SdfShadePhase.Light, plan: plan)).Append(value: "return outputs;\n}\n");
+                    continue;
+                }
                 text.Append(System.Globalization.CultureInfo.InvariantCulture, $"SdfShadeOutputs sdfShadeArm{arm}Phase{phase}(uint2 slice, uint2 parameters, SdfShadeStamp stamp) {{\n")
                     .Append(value: Emit(program: program, phase: ((SdfShadePhase)phase))).Append(value: "return outputs;\n}\n");
             }
         }
+        text.Append(value: "SdfShadeCarry sdfShadeLightCarry(SdfShadeBinding binding, SdfShadeStamp stamp) {\nSdfShadeCarry carry = (SdfShadeCarry)0;\nswitch (binding.arm) {\n");
+        for (var arm = 1; (arm <= programs.Length); arm++) {
+            if (plans[arm - 1].Carried.Length == 0) { continue; }
+            text.Append(System.Globalization.CultureInfo.InvariantCulture, $"case {arm}u: sdfShadeArm{arm}Carry(binding.range.xy, binding.range.zw, stamp, carry); break;\n");
+        }
+        text.Append(value: "default: break;\n}\nreturn carry;\n}\n");
         text.Append(value: "uint sdfShadeArm(uint2 slice) {\n");
         if (programs.Length != 0) {
             text.Append(System.Globalization.CultureInfo.InvariantCulture, $"uint4 a = sdfShadeRead(slice, {SdfShadeProgram.IdentityVector}u), b = sdfShadeRead(slice, {(SdfShadeProgram.IdentityVector + 1)}u);\n");
@@ -197,51 +226,113 @@ void sdfShadeExecute(SdfShadeBinding binding, uint phase, SdfShadeStamp stamp, o
             text.Append(System.Globalization.CultureInfo.InvariantCulture, $"case {arm}u: return phase == 1u ? {programs[arm - 1].AssignedOutputs(SdfShadePhase.Light)}u : phase == 2u ? {programs[arm - 1].AssignedOutputs(SdfShadePhase.Compose)}u : 0u;\n");
         }
         text.Append(value: "default: return 0u;\n}\n}\nbool sdfShadeHas(SdfShadeBinding binding, uint phase) { return (phase == 0u || !binding.unstyled) && ((sdfShadeArmPhases(binding.arm) >> phase) & 1u) != 0u; }\n");
-        text.Append(value: "void sdfShadeExecute(SdfShadeBinding binding, uint phase, SdfShadeStamp stamp, out SdfShadeOutputs outputs) {\noutputs = (SdfShadeOutputs)0;\nswitch (binding.arm) {\n");
+        text.Append(value: "void sdfShadeExecute(SdfShadeBinding binding, uint phase, SdfShadeStamp stamp, SdfShadeCarry carry, out SdfShadeOutputs outputs) {\noutputs = (SdfShadeOutputs)0;\nswitch (binding.arm) {\n");
         for (var arm = 1; (arm <= programs.Length); arm++) {
             text.Append(System.Globalization.CultureInfo.InvariantCulture, $"case {arm}u:\n");
             for (var phase = 0; (phase < 3); phase++) {
                 if (programs[arm - 1].Phases[phase].Count == 0) { continue; }
-                text.Append(System.Globalization.CultureInfo.InvariantCulture, $"if (phase == {phase}u) outputs = sdfShadeArm{arm}Phase{phase}(binding.range.xy, binding.range.zw, stamp);\n");
+                var carry = ((phase == ((int)SdfShadePhase.Light)) ? ", carry" : "");
+                text.Append(System.Globalization.CultureInfo.InvariantCulture, $"if (phase == {phase}u) outputs = sdfShadeArm{arm}Phase{phase}(binding.range.xy, binding.range.zw, stamp{carry});\n");
             }
             text.Append(value: "break;\n");
         }
         text.Append(value: "default: break;\n}\n}\n");
     }
-    /// <summary>Emits one admitted phase as precise locals using exactly the interpreter's generated op functions.</summary>
+    /// <summary>Emits one admitted phase in its straight-line form (<see cref="SdfShadeProgram.Straight"/>): each canonical
+    /// value once, as a precise local computed by exactly the interpreter's generated op function, then the phase's
+    /// outputs.</summary>
     /// <param name="program">The admitted program.</param>
-    /// <param name="phase">The phase whose instructions are emitted.</param>
-    /// <returns>The statements, which declare <c>regs</c> and <c>outputs</c> and read <c>slice</c>, <c>parameters</c> and
+    /// <param name="phase">The phase whose values are emitted.</param>
+    /// <returns>The statements, which declare <c>outputs</c> and read <c>slice</c>, <c>parameters</c> and
     /// <c>stamp</c>.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="program"/> is <see langword="null"/>.</exception>
     public static string Emit(SdfShadeProgram program, SdfShadePhase phase) {
         ArgumentNullException.ThrowIfNull(program);
+
+        return EmitValues(phase: phase, plan: null, program: program);
+    }
+
+    // A program's light phase split for the walk: Invariant marks each value that reads no light input (a constant, a
+    // parameter, a stamp member of another phase, or an op over such values only), and Carried lists, in order, the
+    // invariant values other than constants that a light-dependent value or an output reads, which the carry holds.
+    // Constants are re-emitted where they are read, costing no carried register.
+    internal sealed record LightPlan(bool[] Invariant, int[] Carried) {
+        public static LightPlan Of(SdfShadeProgram program) {
+            var values = program.Straight.Phases[(int)SdfShadePhase.Light];
+            var invariant = new bool[values.Count];
+
+            for (var i = 0; (i < values.Count); i++) {
+                var value = values[i];
+
+                invariant[i] = value.Op switch {
+                    SdfShadeOp.Constant or SdfShadeOp.Parameter => true,
+                    SdfShadeOp.Input => (SdfShadeOps.Inputs[(int)value.Immediate].Phase != SdfShadePhase.Light),
+                    _ => value.Operands.All(predicate: operand => invariant[operand.Index]),
+                };
+            }
+            var read = new bool[values.Count];
+
+            for (var i = 0; (i < values.Count); i++) {
+                if (invariant[i]) { continue; }
+                foreach (var operand in values[i].Operands) { read[operand.Index] = true; }
+            }
+            foreach (var output in program.Straight.Outputs.Where(predicate: static o => (o.Phase == SdfShadePhase.Light))) { read[output.Value.Index] = true; }
+            return new(invariant, [.. Enumerable.Range(start: 0, count: values.Count).Where(predicate: i => (invariant[i] && read[i] && (values[i].Op != SdfShadeOp.Constant)))]);
+        }
+    }
+
+    // The arm's carry: every invariant value of its light phase, computed once, the carried ones written to the carry.
+    private static string EmitCarry(SdfShadeProgram program, LightPlan plan) {
+        var values = program.Straight.Phases[(int)SdfShadePhase.Light];
         var text = new StringBuilder();
 
-        text.Append(value: "SdfShadeRegisters regs = (SdfShadeRegisters)0;\nSdfShadeOutputs outputs = (SdfShadeOutputs)0;\n");
-        var ordinal = 0;
+        for (var i = 0; (i < values.Count); i++) {
+            if (plan.Invariant[i]) { AppendValue(program: program, text: text, value: values[i]); }
+        }
+        for (var slot = 0; (slot < plan.Carried.Length); slot++) {
+            var value = values[plan.Carried[slot]];
 
-        foreach (var instruction in program.Phases[((int)phase)]) {
-            var result = instruction.Result;
-            var args = instruction.Operands.Select(selector: a => Decode($"regs.r{a.Index}", a.Type)).ToArray();
-            // A constant is folded into the code from the words the interpreter reads, bit for bit.
-            var value = instruction.Op switch {
-                SdfShadeOp.Constant => Decode("uint4(" + string.Join(",", program.Words.Slice(checked((int)instruction.Immediate * 4), 4).ToArray().Select(w => $"{w}u")) + ")", result.Type),
-                SdfShadeOp.Parameter => Decode($"sdfShadeRead(parameters, {instruction.Immediate}u)", result.Type),
-                SdfShadeOp.Input => Decode($"stamp.i{instruction.Immediate}", result.Type),
-                SdfShadeOp.Component => SdfShadeOps.Width(instruction.Operands[0].Type) == 1 ? args[0] : $"{args[0]}[{instruction.Immediate}u]",
-                _ => $"{Function(op: instruction.Op, types: instruction.Operands.Select(selector: a => a.Type).ToArray())}(slice, stamp, {instruction.Immediate}u, {string.Join(", ", args)})",
-            };
-
-            var local = $"v{ordinal++}";
-
-            text.Append(value: "precise ").Append(value: Type(type: result.Type)).Append(value: ' ').Append(value: local).Append(value: " = ").Append(value: value).Append(value: ";\n");
-            text.Append(value: "regs.r").Append(value: result.Index).Append(value: " = ").Append(value: Encode(local, result.Type)).Append(value: ";\n");
-            if (instruction.OutputMask != 0) { text.Append(value: "sdfShadeWriteOutputs(outputs, ").Append(value: instruction.OutputMask).Append(value: "u, regs.r").Append(value: result.Index).Append(value: ");\n"); }
-            text.Append("sdfWorkSteps++;\n");
+            text.Append(System.Globalization.CultureInfo.InvariantCulture, $"carry.c{slot} = {Encode($"v{value.Result.Index}", value.Result.Type)};\n");
         }
         return text.ToString();
     }
+    // A phase's values and outputs. With a light plan, the carried values are read from `carry` and only the values that
+    // read a light input are computed, beside the constants they read.
+    private static string EmitValues(SdfShadeProgram program, SdfShadePhase phase, LightPlan? plan) {
+        var values = program.Straight.Phases[(int)phase];
+        var text = new StringBuilder(value: "SdfShadeOutputs outputs = (SdfShadeOutputs)0;\n");
+
+        for (var i = 0; (i < values.Count); i++) {
+            var value = values[i];
+
+            if ((plan is null) || !plan.Invariant[i] || (value.Op == SdfShadeOp.Constant)) {
+                AppendValue(program: program, text: text, value: value);
+            } else if (Array.IndexOf(array: plan.Carried, value: i) is var slot and >= 0) {
+                text.Append(System.Globalization.CultureInfo.InvariantCulture, $"precise {Type(value.Result.Type)} v{i} = {Decode($"carry.c{slot}", value.Result.Type)};\n");
+            }
+        }
+        foreach (var output in program.Straight.Outputs.Where(predicate: o => (o.Phase == phase))) {
+            var index = OutputIndexOf(phase: phase, name: output.Name);
+
+            text.Append(System.Globalization.CultureInfo.InvariantCulture, $"outputs.assigned |= {1u << index}u;\noutputs.o{index} = {Encode($"v{output.Value.Index}", output.Value.Type)};\n");
+        }
+        return text.ToString();
+    }
+    private static void AppendValue(SdfShadeProgram program, StringBuilder text, SdfShadeInstruction value) {
+        var result = value.Result;
+        var args = value.Operands.Select(selector: static a => $"v{a.Index}").ToArray();
+        // A constant is folded into the code from the words the interpreter reads, bit for bit.
+        var expression = value.Op switch {
+            SdfShadeOp.Constant => Decode("uint4(" + string.Join(",", program.Words.Slice(checked((int)value.Immediate * 4), 4).ToArray().Select(w => $"{w}u")) + ")", result.Type),
+            SdfShadeOp.Parameter => Decode($"sdfShadeRead(parameters, {value.Immediate}u)", result.Type),
+            SdfShadeOp.Input => Decode($"stamp.i{value.Immediate}", result.Type),
+            SdfShadeOp.Component => SdfShadeOps.Width(value.Operands[0].Type) == 1 ? args[0] : $"{args[0]}[{value.Immediate}u]",
+            _ => $"{Function(op: value.Op, types: value.Operands.Select(selector: a => a.Type).ToArray())}(slice, stamp, {value.Immediate}u, {string.Join(", ", args)})",
+        };
+
+        text.Append(System.Globalization.CultureInfo.InvariantCulture, $"precise {Type(result.Type)} v{result.Index} = {expression};\nsdfWorkSteps++;\n");
+    }
+    private static int OutputIndexOf(SdfShadePhase phase, string name) => (int)SdfShadeProgram.OutputIndex(name: name, phase: phase);
 
     private static string Function(SdfShadeOp op, SdfShadeType[] types) => $"sdfShade_{op}_{Signature(types: types)}";
     private static uint Signature(SdfShadeType[] types) { var value = 0U; for (var i = 0; (i < types.Length); i++) { value |= (((uint)types[i]) << (4 * i)); } return value; }

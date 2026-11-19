@@ -7,10 +7,25 @@ namespace Puck.SdfVm;
 /// <summary>The execution state of one admitted shading program on a residency.</summary>
 /// <param name="Identity">The program identity (<see cref="SdfShadeProgram.Identity"/>).</param>
 /// <param name="Name">The author name, for reporting.</param>
-/// <param name="State"><c>specialized</c> when the published kernels shade it, <c>compiling</c> while the kernels
-/// that will run it compile, otherwise <c>interpreted</c>.</param>
+/// <param name="State"><c>interpreted</c> while <c>world.shaders.tier interpreted</c> runs every program through the
+/// interpreter; otherwise <c>specialized</c> when the published kernels shade it, <c>compiling</c> while the kernels
+/// that will run it compile, and <c>neutral</c> when no kernel holds it (its surfaces take the engine's default shading,
+/// <see cref="SdfShadeTier.Neutral"/>).</param>
 /// <param name="Error">Why the latest specialization holding it failed, or <see langword="null"/>.</param>
 public sealed record SdfShadeStatus(string Identity, string Name, string State, string? Error);
+
+/// <summary>The kernels a frame's shading passes record with, in the order of the work a dispatch plan prices for them:
+/// a plan priced for a tier bounds every tier before it.</summary>
+public enum SdfShadeTier {
+    /// <summary>The plain kernels, which run no program: a frame with no active program, or one whose programs no
+    /// published specialization holds yet (or failed to), whose surfaces take the engine's default shading until one
+    /// arrives, since the interpreter costs tens of times the specialized kernels.</summary>
+    Neutral,
+    /// <summary>A published specialization's straight-line arms.</summary>
+    Straight,
+    /// <summary>The interpreter, only while <c>world.shaders.tier interpreted</c> asks for it.</summary>
+    Interpreted,
+}
 
 public sealed partial class SdfWorldResidency {
     private readonly BackgroundBuild<SdfShadePipelines> m_shadeBuild = new();
@@ -29,6 +44,7 @@ public sealed partial class SdfWorldResidency {
     private SdfShadePipelines? m_shadeSelection;
     private bool m_shadesInBins;
     private (bool Interpret, bool Bins) m_shadeLevers = (false, true);
+    private SdfShadeTier m_shadeTier;
 
     /// <summary>Gets or sets whether the residency's active programs run through the interpreter even when published
     /// specialized kernels hold them, for comparing the tiers. The next produced frame takes it and re-renders the shading
@@ -112,16 +128,21 @@ public sealed partial class SdfWorldResidency {
                 Console.Error.WriteLine(value: $"[world.shaders: specialized {ready.Request.Programs.Count} program(s) set={ready.Request.Identity[..12]}]");
             }
         }
-        if (changed) { PublishShadeStatus(); }
-        // The levers move the selection only here, so a frame's passes all record one, and only a lever, never a
-        // publication, invalidates the shading passes.
+        // The levers and a publication move the selection only here, so a frame's passes all record one. A change of tier
+        // re-renders the shading passes: it changes what they draw (the neutral default becomes the programs' shading)
+        // and the work their dispatch plans price.
         var levers = (Interpret: m_interpretShade, Bins: m_binShade);
+        var tier = ((m_shadeActive.Length == 0) ? SdfShadeTier.Neutral
+            : (levers.Interpret ? SdfShadeTier.Interpreted : ((m_shadeCurrent is null) ? SdfShadeTier.Neutral : SdfShadeTier.Straight)));
 
-        if (levers != m_shadeLevers) {
+        if ((levers != m_shadeLevers) || (tier != m_shadeTier)) {
             m_shadeLevers = levers;
+            m_shadeTier = tier;
             m_tables?.InvalidateShadeSelection();
+            changed = true;
         }
-        m_shadeSelection = ((levers.Interpret || (m_shadeActive.Length == 0)) ? null : m_shadeCurrent);
+        if (changed) { PublishShadeStatus(); }
+        m_shadeSelection = ((tier == SdfShadeTier.Straight) ? m_shadeCurrent : null);
         m_shadesInBins = (levers.Bins && (m_shadeActive.Length != 0));
     }
 
@@ -158,17 +179,22 @@ public sealed partial class SdfWorldResidency {
             .DistinctBy(keySelector: static p => p.Identity).OrderBy(keySelector: static p => p.Identity, comparer: StringComparer.Ordinal);
 
         Volatile.Write(location: ref m_shadeStatus, value: [.. programs.Select(selector: p => {
+            var error = ((m_shadeRequest?.Holds(identity: p.Identity) == true) ? m_shadeFailure : null);
+
+            if (m_shadeTier == SdfShadeTier.Interpreted) { return new SdfShadeStatus(Error: error, Identity: p.Identity, Name: p.Name, State: "interpreted"); }
             if (m_shadeCurrent?.Request.Holds(identity: p.Identity) == true) { return new SdfShadeStatus(Error: null, Identity: p.Identity, Name: p.Name, State: "specialized"); }
             if ((m_shadeRequest?.Holds(identity: p.Identity) == true) && m_shadeBuild.IsPending) { return new SdfShadeStatus(Error: null, Identity: p.Identity, Name: p.Name, State: "compiling"); }
-            return new SdfShadeStatus(Error: ((m_shadeRequest?.Holds(identity: p.Identity) == true) ? m_shadeFailure : null), Identity: p.Identity, Name: p.Name, State: "interpreted");
+            return new SdfShadeStatus(Error: error, Identity: p.Identity, Name: p.Name, State: "neutral");
         })]);
     }
 
     // Read only by SdfShadeSlots, which pins the set before a native handle reaches a recorder. Null selects the fixed
-    // kernels (ShadeFallback): the plain ones for a frame with no active program, the interpreter otherwise. PrepareShade
-    // takes it once a frame, so every pass of a frame records one selection whatever the levers do meanwhile.
+    // kernels (ShadeFallback): the interpreter while the lever asks for it, the plain ones otherwise. PrepareShade takes it
+    // and the tier once a frame, so every pass of a frame records one selection whatever the levers do meanwhile.
     internal SdfShadePipelines? ShadeSelection => m_shadeSelection;
-    internal IGpuComputePipeline ShadeFallback(SdfKernel kernel) => m_tables!.Pipeline(kernel: ((m_shadeActive.Length != 0) ? kernel : PlainOf(kernel: kernel)));
+    // The kernels this frame's shading passes record with, which their dispatch plans price (SdfShadeDispatch.For).
+    internal SdfShadeTier ShadeTier => m_shadeTier;
+    internal IGpuComputePipeline ShadeFallback(SdfKernel kernel) => m_tables!.Pipeline(kernel: ((m_shadeTier == SdfShadeTier.Interpreted) ? kernel : PlainOf(kernel: kernel)));
     // The fixed kernel that shades no program in a specialized kernel's place, whatever the frame runs.
     internal IGpuComputePipeline ShadePlain(SdfKernel kernel) => m_tables!.Pipeline(kernel: PlainOf(kernel: kernel));
     private static SdfKernel PlainOf(SdfKernel kernel) => kernel switch {
@@ -194,6 +220,7 @@ public sealed partial class SdfWorldResidency {
         m_shadeActive = [];
         m_shadeActiveIdentities = new HashSet<string>(comparer: StringComparer.Ordinal);
         m_shadeSelection = null;
+        m_shadeTier = SdfShadeTier.Neutral;
         m_shadesInBins = false;
     }
 }

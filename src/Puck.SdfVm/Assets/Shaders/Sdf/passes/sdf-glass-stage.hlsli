@@ -122,13 +122,14 @@ float3 sdfGlassReceived(SdfMaterialData material, float3 position, float3 normal
     radiance = (indirectSky ? float3(0.0, 0.0, 0.0) : worldSkyIrradiance(normal));
     SdfLightWalk walk = sdfLightWalkStart();
     SdfLightSource light;
+    SdfShadeCarry shadeCarry = sdfShadeLightPrologue(shadeBinding, shadeStamp);
 
     highlights = float3(0.0, 0.0, 0.0);
     rim = 0.0;
     attenuation = 1.0;
     [loop]
     while (sdfLightNext(walk, light)) {
-        SdfLightResponse response = sdfShadeLightPhase(shadeBinding, shadeStamp, light, surface);
+        SdfLightResponse response = sdfShadeLightPhase(shadeBinding, shadeStamp, shadeCarry, light, surface);
 
         radiance += response.diffuse;
         highlights += response.specular;

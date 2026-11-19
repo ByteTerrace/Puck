@@ -794,7 +794,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
                     m_shadePlan = (m_binned
                         ? m_owner.ShadePlanOf(instance: m_context.Instance, frame: residency.Frame!, width: recording.Width, height: recording.Height, screens: tables.PassValues.ScreenCount)
                         : SdfShadeDispatch.For(previous: m_shadePlan, frame: residency.Frame!, view: m_view.View, width: recording.Width, height: recording.Height,
-                            screens: tables.PassValues.ScreenCount, glass: false, straight: (residency.ShadeSelection is not null)));
+                            screens: tables.PassValues.ScreenCount, glass: false, tier: residency.ShadeTier));
                     var selection = m_shade.RecordSelection(plan: m_shadePlan, residency: residency, slot: slot);
 
                     if (!m_shadePlan.Binned) {

@@ -521,7 +521,7 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
         var entry = Refresh(instance: instance);
         var residency = entry.View?.Residency;
         var plan = SdfShadeDispatch.For(previous: entry.ShadePlan, frame: frame, view: (entry.View?.View ?? 0), glass: false, height: height, screens: screens,
-            width: width, straight: (residency?.ShadeSelection is not null), binned: (residency?.ShadesInBins ?? false));
+            width: width, tier: (residency?.ShadeTier ?? SdfShadeTier.Neutral), binned: (residency?.ShadesInBins ?? false));
 
         entry.ShadePlan = plan;
         return plan;

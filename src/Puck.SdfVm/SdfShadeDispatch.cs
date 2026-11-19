@@ -31,7 +31,7 @@ public sealed class SdfShadeDispatch {
     private readonly IReadOnlyList<string> m_identities;
     // The extent's tiles, a binned job's argument record's stride between bins.
     private readonly uint m_tiles;
-    private (SdfProgram? Scene, SdfShadeProgram? Default, bool Enabled, uint Width, uint Height, uint Lights, bool Glass, bool Binned, bool Straight)? m_key;
+    private (SdfProgram? Scene, SdfShadeProgram? Default, bool Enabled, uint Width, uint Height, uint Lights, bool Glass, bool Binned, SdfShadeTier Tier)? m_key;
 
     private SdfShadeDispatch(Job[] jobs, Bin[] bins, string[] identities, uint tiles) {
         m_jobs = jobs;
@@ -52,19 +52,21 @@ public sealed class SdfShadeDispatch {
     /// <summary>The canonical identities any job may execute, retained through submission retirement.</summary>
     public IReadOnlyList<string> Identities => m_identities;
 
-    /// <summary>Whether the plan prices the specialized kernels' straight-line arms (<see cref="SdfShadeProgram.StraightCosts"/>),
-    /// which only a specialized selection may record (<c>SdfShadeSlots.RecordSelection</c>); an interpreter-priced plan
-    /// may record with either.</summary>
-    public bool Straight { get; private set; }
+    /// <summary>The kernels whose work the plan bounds: <see cref="SdfShadeTier.Neutral"/> for a plan that prices no program,
+    /// <see cref="SdfShadeTier.Straight"/> for one priced at the specialized kernels' straight-line arms
+    /// (<see cref="SdfShadeStraight.Costs"/>), <see cref="SdfShadeTier.Interpreted"/> at the interpreter. A plan records only
+    /// with a tier no later than its own (<c>SdfShadeSlots.RecordSelection</c>).</summary>
+    public SdfShadeTier Tier { get; private set; }
 
-    // A frame's plan for a pass of the given extent and view: binned when asked for and the frame runs programs, unsplit
-    // otherwise, priced for the tier that records it (straight for a specialized selection). The same inputs give the same
-    // plan, so every pass of one frame agrees.
-    internal static SdfShadeDispatch For(SdfShadeDispatch? previous, SdfFrame frame, int view, uint width, uint height, uint screens, bool glass, bool straight, bool binned = false) {
+    // A frame's plan for a pass of the given extent and view: binned when asked for and the tier runs programs, unsplit
+    // otherwise, priced for the tier the residency records the frame with. The same inputs give the same plan, so every
+    // pass of one frame agrees.
+    internal static SdfShadeDispatch For(SdfShadeDispatch? previous, SdfFrame frame, int view, uint width, uint height, uint screens, bool glass, SdfShadeTier tier, bool binned = false) {
         var lights = checked(ViewLights(frame: frame, view: view) + (frame.DisableScreenLights ? 0u : screens));
-        var key = ((SdfProgram?)frame.Program, frame.ShadeDefault, frame.ShadePrograms, width, height, lights, glass, binned, straight);
+        var key = ((SdfProgram?)frame.Program, frame.ShadeDefault, frame.ShadePrograms, width, height, lights, glass, binned, tier);
         if (previous is not null && previous.m_key == key) { return previous; }
-        var programs = (frame.ShadePrograms ? frame.ShadingPrograms.ToArray() : []);
+        var programs = ((frame.ShadePrograms && (tier != SdfShadeTier.Neutral)) ? frame.ShadingPrograms.ToArray() : []);
+        var straight = (tier == SdfShadeTier.Straight);
         var plan = ((binned && (programs.Length != 0))
             ? PlanBins(height: height, lights: lights, programs: programs, width: width, straight: straight)
             : Plan(width: width, height: height, programs: programs, lights: lights, glass: glass, straight: straight));
@@ -73,7 +75,7 @@ public sealed class SdfShadeDispatch {
     }
     // The plan of an extent's pass that runs no program (a binned view's filter): one dispatch of its groups.
     internal static SdfShadeDispatch ForEngine(SdfShadeDispatch? previous, uint width, uint height) {
-        var key = ((SdfProgram?)null, (SdfShadeProgram?)null, false, width, height, 0u, false, false, false);
+        var key = ((SdfProgram?)null, (SdfShadeProgram?)null, false, width, height, 0u, false, false, SdfShadeTier.Neutral);
         if (previous is not null && previous.m_key == key) { return previous; }
         var plan = Plan(width, height, [], 0u, glass: false);
         plan.m_key = key;
@@ -117,7 +119,7 @@ public sealed class SdfShadeDispatch {
             jobs.Add(new(first, count, checked(count * groupWork)));
             first += count;
         }
-        return new(jobs.ToArray(), [], identities, total) { Straight = straight };
+        return new(jobs.ToArray(), [], identities, total) { Tier = TierOf(identities: identities, straight: straight) };
     }
     /// <summary>Plans a binned views extent: bin zero, the tiles no pixel of which has a program, which run only the
     /// engine's fixed stage and are bounded by the group-count limit alone; bin one, every other tile, priced at the
@@ -140,8 +142,10 @@ public sealed class SdfShadeDispatch {
         var tiles = Tiles(width: width, height: height);
         Bin[] bins = [BinOf(authored: false, pixelWork: DefaultWork(lights: lights), tiles: tiles), BinOf(authored: true, pixelWork: shadedWork, tiles: tiles)];
 
-        return new([], bins, identities, tiles) { Straight = straight };
+        return new([], bins, identities, tiles) { Tier = TierOf(identities: identities, straight: straight) };
     }
+    private static SdfShadeTier TierOf(string[] identities, bool straight) =>
+        ((identities.Length == 0) ? SdfShadeTier.Neutral : (straight ? SdfShadeTier.Straight : SdfShadeTier.Interpreted));
 
     // Only these doors record a shade dispatch. The pushed ordinal remaps whole groups into the original 2D grid,
     // preserving the views filter's local lanes, apron and barrier even across a partial group row.

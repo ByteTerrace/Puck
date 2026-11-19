@@ -84,11 +84,12 @@ public sealed class SdfShadeSlots {
         ArgumentNullException.ThrowIfNull(plan);
         var pipelines = residency.ShadeSelection;
 
-        // A plan priced for the straight-line arms bounds a job's work only on the specialized kernels; the interpreter
-        // runs the same pixels at its per-instruction cost. Every selection change that leaves the specialized tier (the
-        // tier lever, a program or kernel change) re-renders the shading passes, whose plans then price the interpreter.
-        if (plan.Straight && (pipelines is null)) {
-            throw new InvalidOperationException(message: "A shading plan priced for the specialized kernels cannot record with the interpreter.");
+        // A plan bounds a job's work only on the kernels it was priced for and those before them (SdfShadeTier): the
+        // interpreter runs a straight-priced plan's pixels at its per-instruction cost, and either runs programs a neutral
+        // plan never priced. Every tier change re-renders the shading passes (SdfWorldResidency.PrepareShade), whose plans
+        // then price the new tier.
+        if (plan.Tier < residency.ShadeTier) {
+            throw new InvalidOperationException(message: $"A shading plan priced for the {plan.Tier} kernels cannot record with the {residency.ShadeTier} kernels.");
         }
         Capture(pipelines: pipelines, plan: plan, residency: residency, slot: slot);
         return new SdfShadeSelection(pipelines: pipelines, residency: residency);

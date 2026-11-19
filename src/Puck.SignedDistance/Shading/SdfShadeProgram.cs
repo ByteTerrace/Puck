@@ -40,12 +40,12 @@ public sealed partial class SdfShadeProgram {
     private readonly byte[] m_identityBytes;
 
     private SdfShadeProgram(SdfShadeDefinition definition, uint[] words, uint[] parameters, SdfShadeType[] layout,
-        SdfShadeInstruction[][] phases, SdfShadeBinding[] outputs, uint[] costs, uint[] straightCosts, SdfShadeReads reads, SdfShadeDemand demand) {
+        SdfShadeInstruction[][] phases, SdfShadeBinding[] outputs, uint[] costs, SdfShadeStraight straight, SdfShadeReads reads, SdfShadeDemand demand) {
         _ = RegisterBoundProof;
         Name = definition.Name; Definition = definition; m_words = words; m_parameters = parameters;
         ParameterLayout = Array.AsReadOnly(array: layout);
         Phases = Array.AsReadOnly(array: phases.Select(selector: p => Array.AsReadOnly(array: p)).ToArray());
-        Outputs = Array.AsReadOnly(array: outputs); Costs = Array.AsReadOnly(array: costs); StraightCosts = Array.AsReadOnly(array: straightCosts);
+        Outputs = Array.AsReadOnly(array: outputs); Costs = Array.AsReadOnly(array: costs); Straight = straight;
         Reads = reads; Demand = demand;
         // Words include the parameter types, never their data. The table's identity covers templates and helpers.
         using var hash = IncrementalHash.CreateHash(hashAlgorithm: HashAlgorithmName.SHA256);
@@ -88,9 +88,8 @@ public sealed partial class SdfShadeProgram {
     public ReadOnlyCollection<SdfShadeBinding> Outputs { get; }
     /// <summary>Gets explicit per-phase work as the interpreter runs it, excluding the default phases.</summary>
     public ReadOnlyCollection<uint> Costs { get; }
-    /// <summary>Gets explicit per-phase work as a specialized kernel's straight-line arm runs it: the same instructions
-    /// without the interpreter's per-instruction <see cref="SdfShadeOps.DispatchWork"/>.</summary>
-    public ReadOnlyCollection<uint> StraightCosts { get; }
+    /// <summary>Gets the straight-line form a specialized kernel's arm emits.</summary>
+    public SdfShadeStraight Straight { get; }
     /// <summary>Gets reads derived from surviving input ops.</summary>
     public SdfShadeReads Reads { get; }
     /// <summary>Gets the conservative shadow-demand envelope.</summary>
@@ -103,12 +102,12 @@ public sealed partial class SdfShadeProgram {
     /// <summary>Returns logical work per pixel with checked arithmetic, including default phases and engine work.</summary>
     /// <param name="lights">The lights each pixel's walk may visit, at most <see cref="MaxLights"/>.</param>
     /// <param name="straight"><see langword="true"/> to price the specialized kernel's straight-line arm
-    /// (<see cref="StraightCosts"/>), <see langword="false"/> to price the interpreter (<see cref="Costs"/>).</param>
+    /// (<see cref="SdfShadeStraight.Costs"/>), <see langword="false"/> to price the interpreter (<see cref="Costs"/>).</param>
     /// <returns>The work.</returns>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="lights"/> exceeds <see cref="MaxLights"/>.</exception>
     public ulong PixelWork(uint lights, bool straight = false) {
         ArgumentOutOfRangeException.ThrowIfGreaterThan(lights, MaxLights);
-        var costs = (straight ? StraightCosts : Costs);
+        var costs = (straight ? Straight.Costs : Costs);
         // The stage computes the default terms for the outputs a phase leaves unassigned too.
         return checked(costs[0] + lights * ((ulong)DefaultLightWork + costs[1]) + DefaultComposeWork + costs[2] + EngineWork);
     }
@@ -116,6 +115,24 @@ public sealed partial class SdfShadeProgram {
     public static bool ContainsRange(uint sliceLength, uint offset, uint length) => ((offset <= sliceLength) && (length <= (sliceLength - offset)));
     /// <summary>Reads a word only within this program's slice; a refused read yields zero.</summary>
     public uint ReadWord(uint relativeWord) => ((relativeWord < m_words.Length) ? m_words[relativeWord] : 0u);
+}
+/// <summary>The straight-line form of an admitted program, which a specialized kernel emits: each phase's canonical values
+/// once, in dependency order, with operands naming earlier values of the phase by index and constants and shape
+/// descriptors addressed in the program's words as its instructions address them. Only the compiler constructs one.</summary>
+public sealed class SdfShadeStraight {
+    internal SdfShadeStraight(SdfShadeInstruction[][] phases, SdfShadeBinding[] outputs, uint[] costs) {
+        Phases = Array.AsReadOnly(array: phases.Select(selector: static p => Array.AsReadOnly(array: p)).ToArray());
+        Outputs = Array.AsReadOnly(array: outputs); Costs = Array.AsReadOnly(array: costs);
+    }
+
+    /// <summary>Gets each phase's values in dependency order; a value's <see cref="SdfShadeInstruction.Result"/> index is
+    /// its position.</summary>
+    public ReadOnlyCollection<ReadOnlyCollection<SdfShadeInstruction>> Phases { get; }
+    /// <summary>Gets each output's binding to the value it takes.</summary>
+    public ReadOnlyCollection<SdfShadeBinding> Outputs { get; }
+    /// <summary>Gets each phase's work as the arm runs it: its values' work without the interpreter's per-instruction
+    /// <see cref="SdfShadeOps.DispatchWork"/>.</summary>
+    public ReadOnlyCollection<uint> Costs { get; }
 }
 /// <summary>A typed output assignment to one phase.</summary>
 public sealed record SdfShadeBinding(SdfShadePhase Phase, string Name, SdfShadeOperand Value);
