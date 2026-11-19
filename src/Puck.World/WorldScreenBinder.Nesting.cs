@@ -224,7 +224,7 @@ public sealed partial class WorldScreenBinder {
             var via = (feed.Home
                 ? "world"
                 : ((RoutedWindowOf(feed: feed) is { } window)
-                    ? $"endpoint:{window.Scene.Endpoint.Identity}"
+                    ? ((window.Scene.Endpoint is null) ? $"shared:{window.Scene.Name}" : $"endpoint:{window.Scene.Authority}")
                     : (feed.Registered
                         ? "own"
                         : "unregistered")));

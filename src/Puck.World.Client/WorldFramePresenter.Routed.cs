@@ -12,7 +12,7 @@ public sealed partial class WorldFramePresenter {
     // Each endpoint's scene, the scenes a Dress found no seat or window in, each view's routed scene and its index
     // among that scene's views (a view no seat routes elsewhere has none), and the frame the Dress returned, whose clock
     // a routed scene's frame takes.
-    private readonly Dictionary<WorldAuthorityEndpoint, WorldRoutedScene> m_routedScenes = new(comparer: ReferenceEqualityComparer.Instance);
+    private readonly Dictionary<object, WorldRoutedScene> m_routedScenes = new(comparer: ReferenceEqualityComparer.Instance);
     private readonly List<WorldRoutedScene> m_retiredScenes = [];
     private readonly List<(WorldRoutedScene? Scene, int Index)> m_viewRoutes = new(capacity: PlayerRoster.MaxSlots);
     // Each seat's routed scene and its view's index there, as the last Dress latched it; none for a seat presented
@@ -82,10 +82,41 @@ public sealed partial class WorldFramePresenter {
 
         return SceneOf(endpoint: endpoint).Attach();
     }
+    /// <summary>Attaches a session screen's window to the scene several session screens share: the scene drawn from one
+    /// session's mirror, which every session whose stream its authority proved is handed the same scene inputs renders
+    /// from, each at its own quality. The scene is created by the first window and leaves the table once no window is
+    /// attached.</summary>
+    /// <param name="mirror">The mirror of the session whose stream the scene draws.</param>
+    /// <param name="authority">The identity of the world the session observes.</param>
+    /// <param name="name">The scene's own name, unique among the presentation's scenes.</param>
+    /// <returns>The window, which its holder frames each frame and disposes when it closes.</returns>
+    /// <remarks>Call it on the frame thread. It enters the next presenter latch; until then its index is -1.</remarks>
+    /// <exception cref="ArgumentNullException"><paramref name="mirror"/> is <see langword="null"/>.</exception>
+    public WorldRoutedWindow AttachSharedWindow(WorldSessionMirror mirror, string authority, string name) {
+        ArgumentNullException.ThrowIfNull(argument: mirror);
+
+        if (!m_routedScenes.TryGetValue(key: mirror, value: out var scene)) {
+            scene = new WorldRoutedScene(
+                authority: authority,
+                bodyColor: mirror.BodyColor,
+                buildsInBackground: true,
+                domains: m_domains,
+                hostFrame: () => m_dressedFrame,
+                mirror: mirror,
+                name: name,
+                session: m_settings,
+                shadowSettings: () => m_settings.ShadowSlots,
+                skyLayers: m_settings.SkyLayers
+            );
+            m_routedScenes.Add(key: mirror, value: scene);
+        }
+
+        return scene.Attach();
+    }
 
     /// <summary>Gets the scene of every world a seat is presented in or a window is attached to, as the last Dress left
     /// them, enumerated without allocating.</summary>
-    public Dictionary<WorldAuthorityEndpoint, WorldRoutedScene>.ValueCollection RoutedScenes => m_routedScenes.Values;
+    public Dictionary<object, WorldRoutedScene>.ValueCollection RoutedScenes => m_routedScenes.Values;
 
     /// <summary>Returns whether a routed scene is still the scene of a world a seat is presented in or a window is
     /// attached to, as the last Dress latched it.</summary>
@@ -94,7 +125,7 @@ public sealed partial class WorldFramePresenter {
     /// to it.</returns>
     public bool Presents(WorldRoutedScene scene) => (
         m_routedScenes.TryGetValue(
-            key: scene.Endpoint,
+            key: scene.Key,
             value: out var current
         ) &&
         ReferenceEquals(
@@ -121,7 +152,7 @@ public sealed partial class WorldFramePresenter {
             }
         }
         foreach (var scene in m_retiredScenes) {
-            _ = m_routedScenes.Remove(key: scene.Endpoint);
+            _ = m_routedScenes.Remove(key: scene.Key);
             scene.Dispose();
         }
 

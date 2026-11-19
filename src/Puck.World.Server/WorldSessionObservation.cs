@@ -72,7 +72,7 @@ public sealed class WorldSessionObservation : IDisposable {
         if ((previous?.SharesAuthority ?? !shares) != shares) {
             m_server.Output.Narrate(channel: "world.session", text: (shares
                 ? $"[world.session: {Session.Describe()} is handed its world's whole scene; a window may draw it from that world's residency]"
-                : $"[world.session: {Session.Describe()} is handed less than its world's whole scene ({WhyNotWhole()}); a window draws it from a residency of its own]"));
+                : $"[world.session: {Session.Describe()} is handed less than its world's whole scene ({WhyNotWhole()}); a window draws it from the residency of the sessions handed scene {identity.Hex[..12]}]"));
         }
     }
     // Ends the stream's proof: it stops observing, so nothing it was handed may be shared from now.

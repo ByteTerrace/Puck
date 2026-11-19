@@ -39,7 +39,7 @@ public sealed partial class WorldScreenBinder {
         if (Presenter is { } presenter) {
             foreach (var scene in presenter.RoutedScenes) {
                 if (presenter.Presents(scene: scene)) {
-                    _ = InfinityRootOf(scene.Endpoint.Mirror, scene.Endpoint.Identity, 0, name: null, routed: scene);
+                    _ = InfinityRootOf(scene.Mirror, scene.Authority, 0, name: null, routed: scene);
                 }
             }
         }
