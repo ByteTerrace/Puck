@@ -2200,10 +2200,14 @@ invariant and land beside the rendering work that uses them:
    moved and every instance that read it (`IRenderGraphInstances.Withdraw`),
    and `WorldScreenBinder.ContentAccess` releases a source, its residency and
    its background jobs when they hold wider content than the viewer may now
-   see. What remains is in [the security packet](open-items.md#security-review):
-   a narrowing inside "disclosed" moves no level, and an infinity layer, an
-   external producer's output and a copied export are outside the withdrawal.
-   Keep reuse keyed by
+   see. An adversarial review found ways around each of those guards, and a
+   narrowing inside "disclosed" moves no level at all.
+   [The withdrawal chokepoint](disclosure/withdrawal-chokepoint.md) checks the
+   review's findings against the code and designs the one door that replaces
+   the guards: the stream stamps each delivery with the span of access it was
+   made under, and the render graph carries that span on every output. Its
+   build order owns the work, and [the security packet](open-items.md#security-review)
+   lists it. Keep reuse keyed by
    the content of the delivered inputs it read (`WorldDisclosureImages`) so
    viewers delivered the same static rows still share a probe volume while
    differing on bodies, and include recipient identity whenever a result read
