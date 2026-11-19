@@ -100,7 +100,7 @@ public sealed record SdfContour(float[] Positions, float[] Normals, int[] Quads,
 
             for (var corner = 0; (corner < count); corner++) {
                 var (a, b) = (raw[corner], raw[((corner + 1) % count)]);
-                var length = DistanceSquared(a: a, b: b, positions: positions);
+                var length = Vector3.DistanceSquared(value1: At(values: positions, vertex: a), value2: At(values: positions, vertex: b));
 
                 if ((a != b) && (length < limit) && seen.Add(item: PackedIntPair.Pack(high: Math.Min(val1: a, val2: b), low: Math.Max(val1: a, val2: b)))) {
                     candidates.Add(item: (length, Math.Min(val1: a, val2: b), Math.Max(val1: a, val2: b)));
@@ -202,7 +202,7 @@ public sealed record SdfContour(float[] Positions, float[] Normals, int[] Quads,
 
             // Only a crease's crowding welds: two vertices no crease placed lie on one smooth face or a closed sheet, whose
             // short edges are the surface's own detail.
-            if ((a == b) || !(DistanceSquared(a: a, b: b, positions: positions) < limit)) { continue; }
+            if ((a == b) || !(Vector3.DistanceSquared(value1: At(values: positions, vertex: a), value2: At(values: positions, vertex: b)) < limit)) { continue; }
 
             affected.Clear();
             foreach (var quad in Around(vertex: a)) { affected.Add(item: quad); }
@@ -390,11 +390,8 @@ public sealed record SdfContour(float[] Positions, float[] Normals, int[] Quads,
 
         return ((corners[2] == corners[3]) ? 3 : 4);
     }
-    private static float DistanceSquared(int a, int b, float[] positions) {
-        var (dx, dy, dz) = ((positions[(3 * a)] - positions[(3 * b)]), (positions[((3 * a) + 1)] - positions[((3 * b) + 1)]), (positions[((3 * a) + 2)] - positions[((3 * b) + 2)]));
-
-        return (((dx * dx) + (dy * dy)) + (dz * dz));
-    }
+    // A vertex's position or normal, three floats a vertex.
+    private static Vector3 At(float[] values, int vertex) => new(x: values[(3 * vertex)], y: values[((3 * vertex) + 1)], z: values[((3 * vertex) + 2)]);
     /// <summary>Returns the contour with its crease vertices split: a vertex two of whose quads face
     /// apart by more than 25 degrees gives each quad corner a vertex of its own at the same place, whose normal is the
     /// area-weighted facing of the vertex's quads within 25 degrees of that quad's, so a sharp edge shades as the two faces
@@ -409,8 +406,6 @@ public sealed record SdfContour(float[] Positions, float[] Normals, int[] Quads,
         var normals = Normals;
         var vertexCount = (positions.Length / 3);
         var cosine = Math.Cos(d: (CreaseDegrees * (Math.PI / 180.0)));
-
-        Vector3 At(float[] values, int vertex) => new(x: values[(3 * vertex)], y: values[((3 * vertex) + 1)], z: values[((3 * vertex) + 2)]);
 
         // A quad at a crease vertex folded across the crease, its two triangles facing apart by more than the crease
         // angle (one on each face, as where a crease is shorter than a cell), shades as its two triangles: as one quad it
