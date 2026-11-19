@@ -6,6 +6,7 @@ using System.Runtime.InteropServices;
 using Puck.Shaders;
 using Puck.SignedDistance;
 using Puck.SignedDistance.Baking;
+using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Memory;
 using Puck.Hosting.Jobs;
 using BakeStage = Puck.SdfVm.SdfMeshBakeReport.Stage;
@@ -464,6 +465,9 @@ public sealed partial class SdfMeshPathBake {
     private IReadOnlyList<SdfMeshInstance> m_demandCopies = [];
     private CopyLayout[] m_copyLayout = [];
     private int[] m_copyAssetSlots = [];
+    // The copy journal's endpoint the layout was last compared at, and the runs it named.
+    private readonly GpuRowCursor m_copyCursor = new();
+    private readonly GpuUploadRuns m_copyRuns = new(GpuRegion.MaxCopyRuns);
 
     private long m_copyLayoutRevision;
 
@@ -518,6 +522,7 @@ public sealed partial class SdfMeshPathBake {
             m_demandTransforms = frame.DynamicTransforms;
             m_demandCopies = frame.MeshInstances;
             if (!SameCopyLayout(frame: frame)) { IndexCopies(frame: frame); }
+            m_copyCursor.Commit();
             // The bake reads only the baked handles: a frame whose height fields' heights alone moved changes nothing here.
             // A lost mesh (SdfMeshLibrary.Lose) restarts the bake on the same program, which bakes again only the groups
             // whose meshes were lost (Keeps). An operand moves with the frame's transforms, so its readers are visited every
@@ -569,17 +574,28 @@ public sealed partial class SdfMeshPathBake {
         public void Dispose() => m_scope.Dispose();
     }
 
+    // Whether the frame's copies keep the layout the index was built from: compared at the copies the producer's journal
+    // names changed since the last prepared frame, or at every copy when it cannot prove that window (a frame whose
+    // template slots moved owes every copy). It collects the cursor PrepareFrame commits.
     private bool SameCopyLayout(SdfFrame frame) {
-        if ((m_copyLayout.Length != frame.MeshInstances.Count) || (m_copyAssetSlots.Length != frame.MeshAssetSlots.Count)) { return false; }
-        for (var index = 0; (index < m_copyAssetSlots.Length); index++) { if (m_copyAssetSlots[index] != frame.MeshAssetSlots[index]) { return false; } }
-        for (var index = 0; (index < m_copyLayout.Length); index++) {
-            var old = m_copyLayout[index];
-            var copy = frame.MeshInstances[index];
+        var whole = m_copyCursor.Collect(frame.MeshCopyChanges, frame.MeshCopyChangesSerial, frame.MeshInstances, frame.MeshInstances.Count, 0,
+            m_copyRuns, force: ((frame.MeshCopyChanges is null) || (m_copyLayout.Length != frame.MeshInstances.Count)));
 
-            if ((old.AssetSlot != copy.AssetSlot) || (old.TemplateRange != copy.TemplateRange) || (old.IsDynamic != copy.IsDynamic) || (old.HasMesh != (copy.Mesh is not null)) ||
-                (old.OtherAssetSlots.Length != copy.OtherAssetSlots.Count)) { return false; }
-            for (var surface = 0; (surface < old.OtherAssetSlots.Length); surface++) {
-                if (old.OtherAssetSlots[surface] != copy.OtherAssetSlots[surface]) { return false; }
+        if ((m_copyLayout.Length != frame.MeshInstances.Count) || (m_copyAssetSlots.Length != frame.MeshAssetSlots.Count)) { return false; }
+        if (whole) {
+            for (var index = 0; (index < m_copyAssetSlots.Length); index++) { if (m_copyAssetSlots[index] != frame.MeshAssetSlots[index]) { return false; } }
+        }
+        for (var run = 0; (run < m_copyRuns.Count); run++) {
+            SdfMeshHistory.ProcessWork.Add(kind: SdfMeshHistory.DressCopiesVisited, amount: m_copyRuns.Length(index: run));
+            for (var index = m_copyRuns.Start(index: run); (index < (m_copyRuns.Start(index: run) + m_copyRuns.Length(index: run))); index++) {
+                var old = m_copyLayout[index];
+                var copy = frame.MeshInstances[index];
+
+                if ((old.AssetSlot != copy.AssetSlot) || (old.TemplateRange != copy.TemplateRange) || (old.IsDynamic != copy.IsDynamic) || (old.HasMesh != (copy.Mesh is not null)) ||
+                    (old.OtherAssetSlots.Length != copy.OtherAssetSlots.Count)) { return false; }
+                for (var surface = 0; (surface < old.OtherAssetSlots.Length); surface++) {
+                    if (old.OtherAssetSlots[surface] != copy.OtherAssetSlots[surface]) { return false; }
+                }
             }
         }
         return true;
@@ -1067,10 +1083,12 @@ public sealed partial class SdfMeshPathBake {
         }
     }
 
-    // Puts a group at an index of the list, under the gate.
+    // Puts a group at an index of the list, under the gate: with Restart's clear, the list's one writer, so it moves the
+    // product revision the dresser stands its group walk on (SdfMeshDresser).
     private void Replace(int index, Group group) {
         m_allResident = false;
         m_floorRevision++;
+        m_productRevision++;
         group.Owner = this;
         m_groups[index] = group;
         m_doneThrough = Math.Min(val1: m_doneThrough, val2: index);
@@ -1091,6 +1109,7 @@ public sealed partial class SdfMeshPathBake {
         m_program = program;
         m_sampled = sampled;
         m_groups.Clear();
+        m_productRevision++;
         m_doneThrough = 0;
         // A slice samples one program and set: a new one takes every lattice again.
         m_slice?.Reset();
@@ -1135,12 +1154,11 @@ public sealed partial class SdfMeshPathBake {
         // A program rebuilt with a group's instructions unchanged keeps that group, its bake and any lattice in flight; only
         // a group whose geometry moved bakes again (Place).
         var started = new PlaceCounts();
-        var replaced = (previous.Count != m_groups.Count);
         // The group of this bake baking each geometry, which every later group of that geometry waits on (Follow).
         var leaders = new Dictionary<SdfMeshGeometry, Group>();
 
         for (var index = 0; (index < m_groups.Count); index++) {
-            replaced |= Place(group: m_groups[index], identity: identity, index: index, leaders: leaders, old: previous.GetValueOrDefault(key: m_groups[index].Selector), started: ref started);
+            _ = Place(group: m_groups[index], identity: identity, index: index, leaders: leaders, old: previous.GetValueOrDefault(key: m_groups[index].Selector), started: ref started);
         }
         // A previous group this program does not keep is retired: its queued work is dropped (TakeWork).
         var planned = new HashSet<Group>(collection: m_groups, comparer: ReferenceEqualityComparer.Instance);
@@ -1153,12 +1171,6 @@ public sealed partial class SdfMeshPathBake {
         m_firstDetailsOwed = m_groups.Count(predicate: static group => group.FirstDetailOwed);
         Prioritize();
         BeginAccounts(cause: "program", fresh: true, instances: program.Instances.Count, restarted: restarted, started: started);
-        // The draws name their groups, so they are rebuilt only when a group was replaced, renumbered or dropped; a
-        // program change that keeps every group (a palette value) leaves the drawn meshes, and the mesh revision, alone.
-        // A replacement taken wholly from cache lands no later bake callback to invalidate these draws.
-        if (replaced) {
-            m_productRevision++;
-        }
         m_restartMilliseconds = Stopwatch.GetElapsedTime(startingTimestamp: restarted).TotalMilliseconds;
     }
     // Starts each successor whose group has landed in that group's place (Revisit): the landed mesh draws until the
@@ -1167,7 +1179,6 @@ public sealed partial class SdfMeshPathBake {
         var restarted = Stopwatch.GetTimestamp();
         var identity = Identity.Value;
         var started = new PlaceCounts();
-        var replaced = false;
         Dictionary<SdfMeshGeometry, Group>? leaders = null;
 
         foreach (var index in m_inputReaders) {
@@ -1175,12 +1186,11 @@ public sealed partial class SdfMeshPathBake {
 
             if (!old.Done || (old.Successor is not { } plan)) { continue; }
             m_promoted++;
-            replaced |= Succeed(identity: identity, index: index, leaders: (leaders ??= Leaders()), old: old, plan: plan, started: ref started);
+            _ = Succeed(identity: identity, index: index, leaders: (leaders ??= Leaders()), old: old, plan: plan, started: ref started);
         }
         if (leaders is null) { return; }
         BeginOrphans(indices: m_inputReaders, started: ref started);
         BeginAccounts(cause: "promote", fresh: false, instances: frame.Program.Instances.Count, restarted: restarted, started: started);
-        if (replaced) { m_productRevision++; }
     }
     // Puts a reader's newer plan in the place of the reader, which has landed (Place), dropping any successor the reader
     // held, which the plan replaces, and retiring the reader once its place holds another group. The one door a replanned

@@ -87,7 +87,6 @@ public sealed partial class SdfMeshPathBake {
             _ = StartReplacement(group: floor, index: index, old: group);
         }
         m_evictions.Clear();
-        m_productRevision++;
     }
     // Counts the groups in reach that draw no standing mesh: one still bringing its first mesh, or one whose drawn mesh's
     // words the region owes or refuses, demanded past a pixel at a demand point (SdfMeshDemand.Priority). A group with

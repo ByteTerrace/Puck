@@ -197,11 +197,25 @@ public sealed record SdfFrame(
     /// <param name="meshAssetSlots">The baked template slots.</param>
     /// <param name="meshInstances">The copies of local geometry assets.</param>
     /// <param name="sampled">The snapshots the program's sampled fields hold this frame.</param>
-    internal void Compose(IReadOnlyList<int> meshAssetSlots, IReadOnlyList<SdfMeshInstance> meshInstances, SdfSampledSet sampled) {
+    /// <param name="copyChanges">The journal of the copies that changed in <paramref name="meshInstances"/>, or
+    /// <see langword="null"/> when a consumer must compare the whole list.</param>
+    /// <param name="copyChangesSerial">The journal's endpoint captured with <paramref name="meshInstances"/>.</param>
+    internal void Compose(IReadOnlyList<int> meshAssetSlots, IReadOnlyList<SdfMeshInstance> meshInstances, SdfSampledSet sampled,
+        GpuRowChanges? copyChanges = null, long copyChangesSerial = 0) {
         m_meshAssetSlots = meshAssetSlots;
         m_meshInstances = meshInstances;
         m_sampled = sampled;
+        MeshCopyChanges = copyChanges;
+        MeshCopyChangesSerial = copyChangesSerial;
     }
+    /// <summary>Gets the producer's journal of the rigid copies that changed in <see cref="MeshInstances"/> (another copy
+    /// at an index, or the copy at an index moved to another frame slot), or <see langword="null"/> when a consumer must
+    /// compare the whole list. A frame whose template slots or copy count changed owes the whole list. The list and journal
+    /// are borrowed together until their producer next rewrites them, so a consumer reads them while it dresses the frame
+    /// (<see cref="SdfMeshDresser.Dress"/>), each through its own <see cref="GpuRowCursor"/>.</summary>
+    public GpuRowChanges? MeshCopyChanges { get; private set; }
+    /// <summary>Gets the copy journal's endpoint captured with <see cref="MeshInstances"/>.</summary>
+    public long MeshCopyChangesSerial { get; private set; }
     /// <summary>The host's immutable document version, retained through bake dressing for matching-state diagnostics.
     /// Compared by value: a delivered client document need not be the authority's object.</summary>
     public object? DiagnosticSource { get; init; }
