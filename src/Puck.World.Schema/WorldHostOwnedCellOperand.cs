@@ -11,7 +11,7 @@ public sealed class WorldHostOwnedCellOperand : WorldFactOperand, IStateAddresse
     /// <param name="key">The literal key, or invalid for an indirect read.</param>
     /// <param name="keyFrom">The live key indirection, or <see langword="null"/> for a literal key.</param>
     /// <param name="valueKind">The row's own cell kind.</param>
-    public WorldHostOwnedCellOperand(int rowOrdinal, CellKey key, CompiledCellRef? keyFrom, CellKind valueKind) : base(valueKind: valueKind) {
+    public WorldHostOwnedCellOperand(int rowOrdinal, CellKey key, CompiledCellRef? keyFrom, CellKind valueKind) : base(reach: WorldDisclosureReach.None, valueKind: valueKind) {
         Key = key;
         KeyFrom = keyFrom;
         RowOrdinal = rowOrdinal;
@@ -30,9 +30,6 @@ public sealed class WorldHostOwnedCellOperand : WorldFactOperand, IStateAddresse
     /// <inheritdoc/>
     public CompiledCellRef? KeyFrom { get; }
 
-    /// <summary>Declares nothing beyond the host-owned row the read addresses, which its read set carries.</summary>
-    /// <param name="into">The dependencies being collected.</param>
-    public override void CollectDisclosure(WorldDisclosureNeeds into) { }
     /// <inheritdoc/>
     public override RuleWork Cost(IRuleCostContext context) => 1L;
     /// <inheritdoc/>

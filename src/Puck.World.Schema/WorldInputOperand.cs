@@ -65,7 +65,7 @@ public sealed class WorldInputOperand : WorldOperandFact {
     public int Pattern { get; }
 }
 /// <summary>Transactional consumption of one named pattern's selected range.</summary>
-public sealed class WorldInputConsumeEffect(WorldInputOwnerReference owner, int pattern, long work, string describe) : WorldFactEffect(describe) {
+public sealed class WorldInputConsumeEffect(WorldInputOwnerReference owner, int pattern, long work, string describe) : WorldFactEffect(describe, WorldDisclosureReach.Bodies) {
     /// <summary>Semantic input owner.</summary>
     public WorldInputOwnerReference Owner { get; } = owner;
     /// <summary>Compiled pattern index.</summary>
@@ -78,12 +78,4 @@ public sealed class WorldInputConsumeEffect(WorldInputOwnerReference owner, int 
     public override RuleWork Cost(IRuleCostContext context) => work;
     /// <inheritdoc/>
     public override void CollectReads(List<CellAccess> into) => Owner.CollectReads(into: into);
-    /// <summary>Declares the bodies: an input owner named by a body reference resolves through the population, and an
-    /// input fact is disclosed with the bodies its owner drives, as every input read is.</summary>
-    /// <param name="into">The dependencies being collected.</param>
-    public override void CollectDisclosure(WorldDisclosureNeeds into) {
-        ArgumentNullException.ThrowIfNull(argument: into);
-
-        into.Add(reach: WorldDisclosureReach.Bodies);
-    }
 }
