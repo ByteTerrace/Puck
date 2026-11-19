@@ -272,8 +272,6 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `render.exposure.compensation` | State | Binding | Binding | `WorldRenderExposure.Compensation` |
 | `render.exposure.hold` | State | Binding | Binding | `WorldRenderExposure.Hold` |
 | `render.lanes` | State | Binding | Binding | `WorldRenderDefaults.Lanes` |
-| `render.shade.outputs[].value.arguments[]…` | | | | re-enters `SdfShadeExpression` |
-| `render.shade.values[].value.arguments[]…` | | | | re-enters `SdfShadeExpression` |
 | `screens[].source[machine].instance` | Machine | Names | Read | `WorldScreenSource.Machine.Instance` |
 | `screens[].magazine.entries[][machine].instance` | Machine | Names | Read | `WorldScreenSource.Machine.Instance` |
 | `screens[].material` | ScreenMaterial | Names | Binding | `WorldScreen.Material` |
@@ -550,10 +548,28 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onPress.effects[][setVerticalVelocity].key` | State | Key | Read | `WorldEffect.SetVerticalVelocity.Key` |
 | `kits.rows[].actions{*}.onPress.effects[][scaleVerticalVelocity].key` | State | Key | Read | `WorldEffect.ScaleVerticalVelocity.Key` |
 | `kits.rows[].actions{*}.onPress.effects[][planarImpulse].key` | State | Key | Read | `WorldEffect.PlanarImpulse.Key` |
+| `kits.rows[].actions{*}.onPress.effects[][timedMove].key` | State | Key | Read | `WorldEffect.TimedMove.Key` |
 | `kits.rows[].actions{*}.onPress.effects[][startTimer].state` | State | Names | Action | `WorldEffect.StartTimer.State` |
 | `kits.rows[].actions{*}.onPress.effects[][designate].key` | State | Key | Read | `WorldEffect.Designate.Key` |
 | `kits.rows[].actions{*}.onPress.effects[][designate].targetKey` | State | Key | Read | `WorldEffect.Designate.TargetKey` |
 | `kits.rows[].actions{*}.onPress.effects[][emitCue].key` | State | Key | Read | `WorldEffect.EmitCue.Key` |
+| `kits.rows[].actions{*}.onPress.effects[][emitCue].argument` | State | Expression | Read | `WorldEffect.EmitCue.Argument` |
+| `kits.rows[].actions{*}.onPress.effects[][emitCue].argument{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `kits.rows[].actions{*}.onPress.effects[][emitCue].argument{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `kits.rows[].actions{*}.onPress.effects[][emitCue].argument{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `kits.rows[].actions{*}.onPress.effects[][emitCue].argument{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `kits.rows[].actions{*}.onPress.effects[][emitCue].argument{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onPress.effects[][emitCue].argument{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onPress.effects[][emitCue].argument{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onPress.effects[][emitCue].argument{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onPress.effects[][emitCue].argument{subprograms}{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `kits.rows[].actions{*}.onPress.effects[][emitCue].argument{subprograms}{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `kits.rows[].actions{*}.onPress.effects[][emitCue].argument{subprograms}{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `kits.rows[].actions{*}.onPress.effects[][emitCue].argument{subprograms}{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `kits.rows[].actions{*}.onPress.effects[][emitCue].argument{subprograms}{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onPress.effects[][emitCue].argument{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onPress.effects[][emitCue].argument{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onPress.effects[][emitCue].argument{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
 | `kits.rows[].actions{*}.onPress.effects[][applyRigidImpulse].key` | State | Key | Read | `WorldEffect.ApplyRigidImpulse.Key` |
 | `kits.rows[].actions{*}.onPress.effects[][applyRigidImpulse].headingKey` | State | Key | Read | `WorldEffect.ApplyRigidImpulse.HeadingKey` |
 | `kits.rows[].actions{*}.onPress.effects[][applyRigidImpulse].magnitudeState` | State | Names | Read | `WorldEffect.ApplyRigidImpulse.MagnitudeState` |
@@ -859,10 +875,28 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onRelease.effects[][setVerticalVelocity].key` | State | Key | Read | `WorldEffect.SetVerticalVelocity.Key` |
 | `kits.rows[].actions{*}.onRelease.effects[][scaleVerticalVelocity].key` | State | Key | Read | `WorldEffect.ScaleVerticalVelocity.Key` |
 | `kits.rows[].actions{*}.onRelease.effects[][planarImpulse].key` | State | Key | Read | `WorldEffect.PlanarImpulse.Key` |
+| `kits.rows[].actions{*}.onRelease.effects[][timedMove].key` | State | Key | Read | `WorldEffect.TimedMove.Key` |
 | `kits.rows[].actions{*}.onRelease.effects[][startTimer].state` | State | Names | Action | `WorldEffect.StartTimer.State` |
 | `kits.rows[].actions{*}.onRelease.effects[][designate].key` | State | Key | Read | `WorldEffect.Designate.Key` |
 | `kits.rows[].actions{*}.onRelease.effects[][designate].targetKey` | State | Key | Read | `WorldEffect.Designate.TargetKey` |
 | `kits.rows[].actions{*}.onRelease.effects[][emitCue].key` | State | Key | Read | `WorldEffect.EmitCue.Key` |
+| `kits.rows[].actions{*}.onRelease.effects[][emitCue].argument` | State | Expression | Read | `WorldEffect.EmitCue.Argument` |
+| `kits.rows[].actions{*}.onRelease.effects[][emitCue].argument{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `kits.rows[].actions{*}.onRelease.effects[][emitCue].argument{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `kits.rows[].actions{*}.onRelease.effects[][emitCue].argument{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `kits.rows[].actions{*}.onRelease.effects[][emitCue].argument{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `kits.rows[].actions{*}.onRelease.effects[][emitCue].argument{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onRelease.effects[][emitCue].argument{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onRelease.effects[][emitCue].argument{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onRelease.effects[][emitCue].argument{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onRelease.effects[][emitCue].argument{subprograms}{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `kits.rows[].actions{*}.onRelease.effects[][emitCue].argument{subprograms}{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `kits.rows[].actions{*}.onRelease.effects[][emitCue].argument{subprograms}{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `kits.rows[].actions{*}.onRelease.effects[][emitCue].argument{subprograms}{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `kits.rows[].actions{*}.onRelease.effects[][emitCue].argument{subprograms}{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onRelease.effects[][emitCue].argument{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onRelease.effects[][emitCue].argument{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onRelease.effects[][emitCue].argument{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
 | `kits.rows[].actions{*}.onRelease.effects[][applyRigidImpulse].key` | State | Key | Read | `WorldEffect.ApplyRigidImpulse.Key` |
 | `kits.rows[].actions{*}.onRelease.effects[][applyRigidImpulse].headingKey` | State | Key | Read | `WorldEffect.ApplyRigidImpulse.HeadingKey` |
 | `kits.rows[].actions{*}.onRelease.effects[][applyRigidImpulse].magnitudeState` | State | Names | Read | `WorldEffect.ApplyRigidImpulse.MagnitudeState` |
@@ -1168,10 +1202,28 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onFact[].effects[][setVerticalVelocity].key` | State | Key | Read | `WorldEffect.SetVerticalVelocity.Key` |
 | `kits.rows[].actions{*}.onFact[].effects[][scaleVerticalVelocity].key` | State | Key | Read | `WorldEffect.ScaleVerticalVelocity.Key` |
 | `kits.rows[].actions{*}.onFact[].effects[][planarImpulse].key` | State | Key | Read | `WorldEffect.PlanarImpulse.Key` |
+| `kits.rows[].actions{*}.onFact[].effects[][timedMove].key` | State | Key | Read | `WorldEffect.TimedMove.Key` |
 | `kits.rows[].actions{*}.onFact[].effects[][startTimer].state` | State | Names | Action | `WorldEffect.StartTimer.State` |
 | `kits.rows[].actions{*}.onFact[].effects[][designate].key` | State | Key | Read | `WorldEffect.Designate.Key` |
 | `kits.rows[].actions{*}.onFact[].effects[][designate].targetKey` | State | Key | Read | `WorldEffect.Designate.TargetKey` |
 | `kits.rows[].actions{*}.onFact[].effects[][emitCue].key` | State | Key | Read | `WorldEffect.EmitCue.Key` |
+| `kits.rows[].actions{*}.onFact[].effects[][emitCue].argument` | State | Expression | Read | `WorldEffect.EmitCue.Argument` |
+| `kits.rows[].actions{*}.onFact[].effects[][emitCue].argument{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `kits.rows[].actions{*}.onFact[].effects[][emitCue].argument{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `kits.rows[].actions{*}.onFact[].effects[][emitCue].argument{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `kits.rows[].actions{*}.onFact[].effects[][emitCue].argument{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `kits.rows[].actions{*}.onFact[].effects[][emitCue].argument{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onFact[].effects[][emitCue].argument{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onFact[].effects[][emitCue].argument{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onFact[].effects[][emitCue].argument{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onFact[].effects[][emitCue].argument{subprograms}{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `kits.rows[].actions{*}.onFact[].effects[][emitCue].argument{subprograms}{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `kits.rows[].actions{*}.onFact[].effects[][emitCue].argument{subprograms}{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `kits.rows[].actions{*}.onFact[].effects[][emitCue].argument{subprograms}{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `kits.rows[].actions{*}.onFact[].effects[][emitCue].argument{subprograms}{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onFact[].effects[][emitCue].argument{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onFact[].effects[][emitCue].argument{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onFact[].effects[][emitCue].argument{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
 | `kits.rows[].actions{*}.onFact[].effects[][applyRigidImpulse].key` | State | Key | Read | `WorldEffect.ApplyRigidImpulse.Key` |
 | `kits.rows[].actions{*}.onFact[].effects[][applyRigidImpulse].headingKey` | State | Key | Read | `WorldEffect.ApplyRigidImpulse.HeadingKey` |
 | `kits.rows[].actions{*}.onFact[].effects[][applyRigidImpulse].magnitudeState` | State | Names | Read | `WorldEffect.ApplyRigidImpulse.MagnitudeState` |
@@ -1482,8 +1534,6 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `hud.panels[].elements[].sources[].when[near].of[placement].placementId` | Placement | Names | Read | `OverlaySubject.Placement.PlacementId` |
 | `hud.panels[].elements[].sources[].when[state].binding` | State | Binding | Binding | `OverlayPredicate.State.Binding` |
 | `state.world[].field.material.toonSelect.state` | State | Binding | Read | `PaletteToonSelectDocument.State` |
-| `state.world[].field.material.shade.outputs[].value.arguments[]…` | | | | re-enters `SdfShadeExpression` |
-| `state.world[].field.material.shade.values[].value.arguments[]…` | | | | re-enters `SdfShadeExpression` |
 | `state.world[].field.paint[][draw].source` | Generator | Names | Read | `WorldLatticeFill.Draw.Source` |
 | `state.world[].witness` | State | Names | Read | `WorldStateRow.Witness` |
 | `state.world[].draw.source` | Generator | Names | Read | `Draw.Source` |
@@ -1567,6 +1617,9 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `markers[].style.ringColor` | State | Binding | Binding | `WorldMarkerStyle.RingColor` |
 | `markers[].style.ringAlpha` | State | Binding | Binding | `WorldMarkerStyle.RingAlpha` |
 | `markers[].ring.field` | Field | Names | Read | `WorldMarkerRing.Field` |
+| `haptics[].low` | State | Binding | Binding | `WorldHapticRow.Low` |
+| `haptics[].high` | State | Binding | Binding | `WorldHapticRow.High` |
+| `haptics[].signal` | State | Binding | Binding | `WorldHapticRow.Signal` |
 | `rules[].name` | Rule | Declares |  | `Rule.Name` |
 | `rules[].effects[][setState].state` | State | Names | Action | `ActionEffect.SetState.State` |
 | `rules[].effects[][setState].key` | State | Key | Read | `ActionEffect.SetState.Key` |
@@ -1731,10 +1784,28 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].effects[][setVerticalVelocity].key` | State | Key | Read | `WorldEffect.SetVerticalVelocity.Key` |
 | `rules[].effects[][scaleVerticalVelocity].key` | State | Key | Read | `WorldEffect.ScaleVerticalVelocity.Key` |
 | `rules[].effects[][planarImpulse].key` | State | Key | Read | `WorldEffect.PlanarImpulse.Key` |
+| `rules[].effects[][timedMove].key` | State | Key | Read | `WorldEffect.TimedMove.Key` |
 | `rules[].effects[][startTimer].state` | State | Names | Action | `WorldEffect.StartTimer.State` |
 | `rules[].effects[][designate].key` | State | Key | Read | `WorldEffect.Designate.Key` |
 | `rules[].effects[][designate].targetKey` | State | Key | Read | `WorldEffect.Designate.TargetKey` |
 | `rules[].effects[][emitCue].key` | State | Key | Read | `WorldEffect.EmitCue.Key` |
+| `rules[].effects[][emitCue].argument` | State | Expression | Read | `WorldEffect.EmitCue.Argument` |
+| `rules[].effects[][emitCue].argument{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `rules[].effects[][emitCue].argument{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `rules[].effects[][emitCue].argument{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `rules[].effects[][emitCue].argument{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `rules[].effects[][emitCue].argument{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].effects[][emitCue].argument{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].effects[][emitCue].argument{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].effects[][emitCue].argument{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].effects[][emitCue].argument{subprograms}{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `rules[].effects[][emitCue].argument{subprograms}{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `rules[].effects[][emitCue].argument{subprograms}{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `rules[].effects[][emitCue].argument{subprograms}{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `rules[].effects[][emitCue].argument{subprograms}{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].effects[][emitCue].argument{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].effects[][emitCue].argument{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].effects[][emitCue].argument{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
 | `rules[].effects[][applyRigidImpulse].key` | State | Key | Read | `WorldEffect.ApplyRigidImpulse.Key` |
 | `rules[].effects[][applyRigidImpulse].headingKey` | State | Key | Read | `WorldEffect.ApplyRigidImpulse.HeadingKey` |
 | `rules[].effects[][applyRigidImpulse].magnitudeState` | State | Names | Read | `WorldEffect.ApplyRigidImpulse.MagnitudeState` |
@@ -2058,10 +2129,28 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].decision.options[].effects[][setVerticalVelocity].key` | State | Key | Read | `WorldEffect.SetVerticalVelocity.Key` |
 | `rules[].decision.options[].effects[][scaleVerticalVelocity].key` | State | Key | Read | `WorldEffect.ScaleVerticalVelocity.Key` |
 | `rules[].decision.options[].effects[][planarImpulse].key` | State | Key | Read | `WorldEffect.PlanarImpulse.Key` |
+| `rules[].decision.options[].effects[][timedMove].key` | State | Key | Read | `WorldEffect.TimedMove.Key` |
 | `rules[].decision.options[].effects[][startTimer].state` | State | Names | Action | `WorldEffect.StartTimer.State` |
 | `rules[].decision.options[].effects[][designate].key` | State | Key | Read | `WorldEffect.Designate.Key` |
 | `rules[].decision.options[].effects[][designate].targetKey` | State | Key | Read | `WorldEffect.Designate.TargetKey` |
 | `rules[].decision.options[].effects[][emitCue].key` | State | Key | Read | `WorldEffect.EmitCue.Key` |
+| `rules[].decision.options[].effects[][emitCue].argument` | State | Expression | Read | `WorldEffect.EmitCue.Argument` |
+| `rules[].decision.options[].effects[][emitCue].argument{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `rules[].decision.options[].effects[][emitCue].argument{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `rules[].decision.options[].effects[][emitCue].argument{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `rules[].decision.options[].effects[][emitCue].argument{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `rules[].decision.options[].effects[][emitCue].argument{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].decision.options[].effects[][emitCue].argument{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].decision.options[].effects[][emitCue].argument{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].decision.options[].effects[][emitCue].argument{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].decision.options[].effects[][emitCue].argument{subprograms}{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `rules[].decision.options[].effects[][emitCue].argument{subprograms}{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `rules[].decision.options[].effects[][emitCue].argument{subprograms}{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `rules[].decision.options[].effects[][emitCue].argument{subprograms}{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `rules[].decision.options[].effects[][emitCue].argument{subprograms}{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].decision.options[].effects[][emitCue].argument{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].decision.options[].effects[][emitCue].argument{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].decision.options[].effects[][emitCue].argument{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
 | `rules[].decision.options[].effects[][applyRigidImpulse].key` | State | Key | Read | `WorldEffect.ApplyRigidImpulse.Key` |
 | `rules[].decision.options[].effects[][applyRigidImpulse].headingKey` | State | Key | Read | `WorldEffect.ApplyRigidImpulse.HeadingKey` |
 | `rules[].decision.options[].effects[][applyRigidImpulse].magnitudeState` | State | Names | Read | `WorldEffect.ApplyRigidImpulse.MagnitudeState` |
@@ -2408,10 +2497,28 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].decision.onNoChoice[][setVerticalVelocity].key` | State | Key | Read | `WorldEffect.SetVerticalVelocity.Key` |
 | `rules[].decision.onNoChoice[][scaleVerticalVelocity].key` | State | Key | Read | `WorldEffect.ScaleVerticalVelocity.Key` |
 | `rules[].decision.onNoChoice[][planarImpulse].key` | State | Key | Read | `WorldEffect.PlanarImpulse.Key` |
+| `rules[].decision.onNoChoice[][timedMove].key` | State | Key | Read | `WorldEffect.TimedMove.Key` |
 | `rules[].decision.onNoChoice[][startTimer].state` | State | Names | Action | `WorldEffect.StartTimer.State` |
 | `rules[].decision.onNoChoice[][designate].key` | State | Key | Read | `WorldEffect.Designate.Key` |
 | `rules[].decision.onNoChoice[][designate].targetKey` | State | Key | Read | `WorldEffect.Designate.TargetKey` |
 | `rules[].decision.onNoChoice[][emitCue].key` | State | Key | Read | `WorldEffect.EmitCue.Key` |
+| `rules[].decision.onNoChoice[][emitCue].argument` | State | Expression | Read | `WorldEffect.EmitCue.Argument` |
+| `rules[].decision.onNoChoice[][emitCue].argument{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `rules[].decision.onNoChoice[][emitCue].argument{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `rules[].decision.onNoChoice[][emitCue].argument{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `rules[].decision.onNoChoice[][emitCue].argument{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `rules[].decision.onNoChoice[][emitCue].argument{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].decision.onNoChoice[][emitCue].argument{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].decision.onNoChoice[][emitCue].argument{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].decision.onNoChoice[][emitCue].argument{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].decision.onNoChoice[][emitCue].argument{subprograms}{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `rules[].decision.onNoChoice[][emitCue].argument{subprograms}{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `rules[].decision.onNoChoice[][emitCue].argument{subprograms}{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `rules[].decision.onNoChoice[][emitCue].argument{subprograms}{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `rules[].decision.onNoChoice[][emitCue].argument{subprograms}{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].decision.onNoChoice[][emitCue].argument{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].decision.onNoChoice[][emitCue].argument{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].decision.onNoChoice[][emitCue].argument{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
 | `rules[].decision.onNoChoice[][applyRigidImpulse].key` | State | Key | Read | `WorldEffect.ApplyRigidImpulse.Key` |
 | `rules[].decision.onNoChoice[][applyRigidImpulse].headingKey` | State | Key | Read | `WorldEffect.ApplyRigidImpulse.HeadingKey` |
 | `rules[].decision.onNoChoice[][applyRigidImpulse].magnitudeState` | State | Names | Read | `WorldEffect.ApplyRigidImpulse.MagnitudeState` |
@@ -2700,10 +2807,28 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `interactions.interactions[].effects[][setVerticalVelocity].key` | State | Key | Read | `WorldEffect.SetVerticalVelocity.Key` |
 | `interactions.interactions[].effects[][scaleVerticalVelocity].key` | State | Key | Read | `WorldEffect.ScaleVerticalVelocity.Key` |
 | `interactions.interactions[].effects[][planarImpulse].key` | State | Key | Read | `WorldEffect.PlanarImpulse.Key` |
+| `interactions.interactions[].effects[][timedMove].key` | State | Key | Read | `WorldEffect.TimedMove.Key` |
 | `interactions.interactions[].effects[][startTimer].state` | State | Names | Action | `WorldEffect.StartTimer.State` |
 | `interactions.interactions[].effects[][designate].key` | State | Key | Read | `WorldEffect.Designate.Key` |
 | `interactions.interactions[].effects[][designate].targetKey` | State | Key | Read | `WorldEffect.Designate.TargetKey` |
 | `interactions.interactions[].effects[][emitCue].key` | State | Key | Read | `WorldEffect.EmitCue.Key` |
+| `interactions.interactions[].effects[][emitCue].argument` | State | Expression | Read | `WorldEffect.EmitCue.Argument` |
+| `interactions.interactions[].effects[][emitCue].argument{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `interactions.interactions[].effects[][emitCue].argument{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `interactions.interactions[].effects[][emitCue].argument{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `interactions.interactions[].effects[][emitCue].argument{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `interactions.interactions[].effects[][emitCue].argument{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `interactions.interactions[].effects[][emitCue].argument{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `interactions.interactions[].effects[][emitCue].argument{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `interactions.interactions[].effects[][emitCue].argument{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `interactions.interactions[].effects[][emitCue].argument{subprograms}{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `interactions.interactions[].effects[][emitCue].argument{subprograms}{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `interactions.interactions[].effects[][emitCue].argument{subprograms}{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `interactions.interactions[].effects[][emitCue].argument{subprograms}{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `interactions.interactions[].effects[][emitCue].argument{subprograms}{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `interactions.interactions[].effects[][emitCue].argument{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `interactions.interactions[].effects[][emitCue].argument{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `interactions.interactions[].effects[][emitCue].argument{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
 | `interactions.interactions[].effects[][applyRigidImpulse].key` | State | Key | Read | `WorldEffect.ApplyRigidImpulse.Key` |
 | `interactions.interactions[].effects[][applyRigidImpulse].headingKey` | State | Key | Read | `WorldEffect.ApplyRigidImpulse.HeadingKey` |
 | `interactions.interactions[].effects[][applyRigidImpulse].magnitudeState` | State | Names | Read | `WorldEffect.ApplyRigidImpulse.MagnitudeState` |
@@ -2937,6 +3062,8 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `replays[].control` | State | Names | Action | `WorldScopedReplay.Control` |
 | `replays[].inputs[].cells[].row` | State | Names | Action | `WorldScopedReplayCell.Row` |
 | `replays[].inputs[].cells[].key` | State | Key | Read | `WorldScopedReplayCell.Key` |
+| `shades{*}.outputs[].value.arguments[]…` | | | | re-enters `SdfShadeExpression` |
+| `shades{*}.values[].value.arguments[]…` | | | | re-enters `SdfShadeExpression` |
 | `exports.reads` | Any | Names | Read | `WorldExports.Reads` |
 | `exports.actions` | Any | Names | Action | `WorldExports.Actions` |
 | `exports.bindings` | Any | Names | Binding | `WorldExports.Bindings` |
@@ -2978,12 +3105,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `render.sky.keys[].layers{*}[panel].name` | `WorldRenderSkyLayer.Panel.Name` | a sky layer name a section key addresses |
 | `render.sky.keys[].layers{*}[view].name` | `WorldRenderSkyLayer.View.Name` | a sky layer name a section key addresses |
 | `render.sky.keys[].layers{*}[far].name` | `WorldRenderSkyLayer.Far.Name` | a sky layer name a section key addresses |
-| `render.shade.name` | `SdfShadeDefinition.Name` | a shade program's label, local to the material that carries it |
-| `render.shade.parameters[].name` | `SdfShadeParameter.Name` | a parameter local to its shade program |
-| `render.shade.outputs[].name` | `SdfShadeOutput.Name` | a stage output in the shading vocabulary |
-| `render.shade.outputs[].value.name` | `SdfShadeExpression.Name` | a stamp member or a parameter or value local to its shade program |
-| `render.shade.values[].name` | `SdfShadeValue.Name` | a value local to its shade program |
-| `render.shade.values[].value.name` | `SdfShadeExpression.Name` | a stamp member or a parameter or value local to its shade program |
+| `render.devices[].name` | `WorldDeviceProfile.Name` | a device profile's name, which a host selects the profile by (WorldDeviceProfiles.Find) |
 | `screens[].source[producer].id` | `WorldScreenSource.Producer.Id` | an image producer id |
 | `screens[].source[probe].id` | `WorldScreenSource.Probe.Id` | a probe id |
 | `screens[].magazine.entries[][producer].id` | `WorldScreenSource.Producer.Id` | an image producer id |
@@ -3216,12 +3338,6 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `icons.badges[].source` | `WorldIconBadgeRow.Source` | an input source id |
 | `icons.badges[].overrides[].family` | `WorldIconBadgeOverride.Family` | a badge override family is a controller family name, not a state row |
 | `state.world[].field.material.paints[].parent` | `PalettePaintDocument.Parent` | a shape of the creation the paint's palette slot belongs to, local to that creation |
-| `state.world[].field.material.shade.name` | `SdfShadeDefinition.Name` | a shade program's label, local to the material that carries it |
-| `state.world[].field.material.shade.parameters[].name` | `SdfShadeParameter.Name` | a parameter local to its shade program |
-| `state.world[].field.material.shade.outputs[].name` | `SdfShadeOutput.Name` | a stage output in the shading vocabulary |
-| `state.world[].field.material.shade.outputs[].value.name` | `SdfShadeExpression.Name` | a stamp member or a parameter or value local to its shade program |
-| `state.world[].field.material.shade.values[].name` | `SdfShadeValue.Name` | a value local to its shade program |
-| `state.world[].field.material.shade.values[].value.name` | `SdfShadeExpression.Name` | a stamp member or a parameter or value local to its shade program |
 | `state.world[].field.paint[].field` | `WorldLatticeFill.Field` | compile-stamped from the carrying row, never authored |
 | `state.world[].field.paint[][rect].field` | `WorldLatticeFill.Field` | compile-stamped from the carrying row, never authored |
 | `state.world[].field.paint[][noise].field` | `WorldLatticeFill.Field` | compile-stamped from the carrying row, never authored |
@@ -3266,6 +3382,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `state.pairPools[].snapshot.live[].values[].field` | `StatePoolValue.Field` | a field local to its record |
 | `state.pairPools[].initial[].values[].field` | `StatePoolValue.Field` | a field local to its record |
 | `markers[].id` | `WorldMarkerRow.Id` | a marker id |
+| `haptics[].id` | `WorldHapticRow.Id` | a haptic row id |
 | `rules[].effects[][transformState].transform[setRay].direction` | `StateTransform.SetRay.Direction` | a direction local to the row's topology |
 | `rules[].effects[][transformState].transform[pushRay].cell` | `StateTransform.PushRay.Cell` | a field local to its pool record |
 | `rules[].effects[][transformState].transform[pushRay].value` | `StateTransform.PushRay.Value` | a field local to its pool record |
@@ -3480,3 +3597,9 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `seatPrograms[].operations[][tap].source` | `WorldSeatProgramOp.Tap.Source` | an input-source id, in the input vocabulary |
 | `routes[].name` | `WorldRoute.Name` | a route's name, which world.benchmark and puck benchmark take |
 | `routes[].chapters[].name` | `WorldRouteChapter.Name` | a chapter's name, local to its route |
+| `shades{*}.name` | `SdfShadeDefinition.Name` | a shade program's label, local to the material that carries it |
+| `shades{*}.parameters[].name` | `SdfShadeParameter.Name` | a parameter local to its shade program |
+| `shades{*}.outputs[].name` | `SdfShadeOutput.Name` | a stage output in the shading vocabulary |
+| `shades{*}.outputs[].value.name` | `SdfShadeExpression.Name` | a stamp member or a parameter or value local to its shade program |
+| `shades{*}.values[].name` | `SdfShadeValue.Name` | a value local to its shade program |
+| `shades{*}.values[].value.name` | `SdfShadeExpression.Name` | a stamp member or a parameter or value local to its shade program |

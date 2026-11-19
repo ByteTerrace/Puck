@@ -237,6 +237,9 @@
     "routes": {
       "$ref": "./schema/routes.schema.json"
     },
+    "shades": {
+      "$ref": "./schema/shades.schema.json"
+    },
     "basis": {
       "$ref": "./schema/basis.schema.json"
     },

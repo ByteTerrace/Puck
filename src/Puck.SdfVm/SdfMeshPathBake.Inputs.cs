@@ -70,7 +70,6 @@ public sealed partial class SdfMeshPathBake {
         );
 
         var started = new PlaceCounts();
-        var replaced = false;
         var leaders = Leaders();
         var counts = Library.Inputs;
 
@@ -95,11 +94,10 @@ public sealed partial class SdfMeshPathBake {
                 old.Successor = plan;
                 continue;
             }
-            replaced |= Succeed(identity: Identity.Value, index: indices![at], leaders: leaders, old: old, plan: plan, started: ref started);
+            _ = Succeed(identity: Identity.Value, index: indices![at], leaders: leaders, old: old, plan: plan, started: ref started);
         }
         BeginOrphans(indices: m_inputReaders, started: ref started);
         BeginAccounts(cause: (resampled ? "resample" : "operand"), fresh: false, instances: frame.Program.Instances.Count, restarted: restarted, started: started);
-        if (replaced) { m_productRevision++; }
     }
     // Whether a geometry holds a frame's inputs: the snapshots its sampled set carries and its operands' steps.
     private static bool Holds(SdfMeshGeometryBuilder geometry, SdfSampledSet sampled, IReadOnlyList<DynamicTransform> transforms) =>

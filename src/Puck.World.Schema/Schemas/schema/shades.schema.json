@@ -1,0 +1,117 @@
+{
+  "description": "Gets or initializes the world\u0027s shade programs, each under its computed identity: read, the table a document carried, which resolves the uses that name a program by key; written, every program this definition\u0027s uses name (Of), so a row no use names is never written and a use that holds its program carries it. ABSENT when nothing uses a program.",
+  "type": [
+    "object",
+    "null"
+  ],
+  "additionalProperties": {
+    "description": "The source-level expression graph serialized in a material. Admission always compiles it afresh.",
+    "type": [
+      "object",
+      "null"
+    ],
+    "properties": {
+      "name": {
+        "type": "string"
+      },
+      "parameters": {
+        "type": "array",
+        "items": {
+          "description": "A runtime slot\u0027s type and initial data. Names bind source references and do not enter program identity.",
+          "type": [
+            "object",
+            "null"
+          ],
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "type": {
+              "$ref": "./common.schema.json#/$defs/SdfShadeType"
+            },
+            "bits": {
+              "type": "array",
+              "items": {
+                "type": "integer"
+              }
+            }
+          },
+          "required": [
+            "name",
+            "type",
+            "bits"
+          ],
+          "additionalProperties": false,
+          "title": "SdfShadeParameter"
+        }
+      },
+      "outputs": {
+        "type": "array",
+        "items": {
+          "description": "An output expression; omitted outputs retain the stage\u0027s default.",
+          "type": [
+            "object",
+            "null"
+          ],
+          "properties": {
+            "phase": {
+              "$ref": "./common.schema.json#/$defs/SdfShadePhase"
+            },
+            "name": {
+              "type": "string"
+            },
+            "value": {
+              "$ref": "./common.schema.json#/$defs/SdfShadeExpressionNonNullable"
+            }
+          },
+          "required": [
+            "phase",
+            "name",
+            "value"
+          ],
+          "additionalProperties": false,
+          "title": "SdfShadeOutput"
+        }
+      },
+      "values": {
+        "type": [
+          "array",
+          "null"
+        ],
+        "items": {
+          "description": "A dependency-ordered value in the canonical document. Reads may name only earlier values of this phase.",
+          "type": [
+            "object",
+            "null"
+          ],
+          "properties": {
+            "phase": {
+              "$ref": "./common.schema.json#/$defs/SdfShadePhase"
+            },
+            "name": {
+              "type": "string"
+            },
+            "value": {
+              "$ref": "./common.schema.json#/$defs/SdfShadeExpressionNonNullable"
+            }
+          },
+          "required": [
+            "phase",
+            "name",
+            "value"
+          ],
+          "additionalProperties": false,
+          "title": "SdfShadeValue"
+        },
+        "default": null
+      }
+    },
+    "required": [
+      "name",
+      "parameters",
+      "outputs"
+    ],
+    "additionalProperties": false,
+    "title": "SdfShadeDefinition"
+  }
+}

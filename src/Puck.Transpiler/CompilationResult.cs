@@ -9,6 +9,10 @@ namespace Puck.Transpiler;
 public sealed record CompilationResult<T>(T? Value, DiagnosticBag Diagnostics) {
     /// <summary>Gets whether the step succeeded without fatal errors.</summary>
     public bool Success => (!Diagnostics.HasErrors && (Value is not null));
+    /// <summary>Gets the work units the step charged its <see cref="Lowering.DocumentEvaluationBudget"/>, of the
+    /// <see cref="Lowering.DocumentEvaluationBudget.WorkLimit"/> a compilation may spend; zero for a step that
+    /// evaluates nothing.</summary>
+    public long EvaluationWork { get; init; }
 
     /// <summary>Deconstructs the compilation result into its value and diagnostic bag.</summary>
     public void Deconstruct(out T? value, out DiagnosticBag diagnostics) {

@@ -20,6 +20,12 @@ public sealed partial class WorldRenderSettings {
     /// <returns>The program, or <see langword="null"/> when <paramref name="definition"/> is.</returns>
     /// <exception cref="SdfShadeException"><paramref name="definition"/> is refused.</exception>
     public static SdfShadeProgram? CompileShade(SdfShadeDefinition? definition) => definition is null ? null : SdfShadeProgram.Compile(definition);
+    /// <summary>Compiles the program a document's use names, which its world's shades table resolved.</summary>
+    /// <param name="shade">The use, or <see langword="null"/> for none.</param>
+    /// <returns>The admitted program, or <see langword="null"/> for none.</returns>
+    /// <exception cref="SdfShadeException">The program is refused.</exception>
+    /// <exception cref="InvalidOperationException"><paramref name="shade"/> names a program no table resolved.</exception>
+    public static SdfShadeProgram? CompileShade(Puck.World.Authoring.ShadeReference? shade) => CompileShade(definition: shade?.Definition);
 
     /// <summary>Returns every palette slot a world's documents declare that can shade: each creation's palette and each
     /// field region's material, with the program it runs (its own, or the document's <c>render.shade</c> default when it

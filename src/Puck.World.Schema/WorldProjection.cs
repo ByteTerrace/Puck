@@ -117,6 +117,9 @@ public sealed record WorldProjectionProvenance(string Authority, string? Documen
 /// value keys on does not cross.</param>
 /// <param name="Haptics">The world's authored haptic pulse rows driven by delivered state, evaluated per local
 /// seat by the haptic director.</param>
+/// <param name="Shades">The shade programs the render defaults and the prototype bodies name by key
+/// (<see cref="WorldShadeTable"/>): a body travels naming its programs, never holding them, so each program crosses
+/// once however many bodies use it.</param>
 public sealed record WorldProjectionDocument(
     WorldProjectionProvenance Provenance,
     WorldMotionDefaults Motion,
@@ -155,7 +158,8 @@ public sealed record WorldProjectionDocument(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<StateSpace>? Spaces = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldTimelineSection? Timeline = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldMusicRow>? Music = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldHapticRow>? Haptics = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldHapticRow>? Haptics = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyDictionary<string, Puck.SignedDistance.SdfShadeDefinition>? Shades = null
 ) {
     /// <summary>The document schema version. A reader refuses any other value; the canonical writer always emits it.</summary>
     public const string SchemaVersion = "puck.world.projection.v1";
@@ -350,7 +354,8 @@ public static class WorldProjection {
                 keyed: keyed,
                 time: in time
             ),
-            Haptics: definition.HapticsRaw
+            Haptics: definition.HapticsRaw,
+            Shades: definition.ShadesRaw
         );
 
         WorldStateDisclosure.ValidateBindings(
@@ -472,23 +477,22 @@ public static class WorldProjection {
             throw new WorldDisclosureException(message: $"{path} binds state row '{binding.Row}' this recipient may not read; a hidden source sends no derived value.");
         }
     }
-    // The rows a presented bindable reads, which cross as observations so the recipient reads the value the authority
-    // presents rather than its fallback; a field row crosses as the field it is, never also as an observation.
+    // The rows a presented bindable or a creation's pose reads (WorldSceneInputs.CreationRows), which cross as
+    // observations so the recipient reads the value the authority presents rather than its fallback; a row a policy
+    // restricts still crosses only to a recipient the policy admits (WorldStateDisclosure.ComposeRow), and a field row
+    // crosses as the field it is, never also as an observation.
     internal static HashSet<string>? PresentedRows(WorldDefinition definition, IReadOnlyList<WorldBoundValue> bound) {
-        if (bound.Count == 0) {
+        var read = new HashSet<string>(collection: WorldSceneInputs.CreationRows(definition: definition), comparer: StringComparer.Ordinal);
+
+        foreach (var (_, binding, _, _) in bound) { _ = read.Add(item: binding.Row); }
+        if (read.Count == 0) {
             return null;
         }
 
         var rows = new HashSet<string>(comparer: StringComparer.Ordinal);
 
-        foreach (var (_, binding, _, _) in bound) {
-            if (definition.State.FirstOrDefault(predicate: row => string.Equals(
-                a: row.Name.Value,
-                b: binding.Row,
-                comparisonType: StringComparison.Ordinal
-            )) is { Field: null }) {
-                _ = rows.Add(item: binding.Row);
-            }
+        foreach (var row in definition.State) {
+            if ((row.Field is null) && read.Contains(item: row.Name.Value)) { _ = rows.Add(item: row.Name.Value); }
         }
 
         return rows;
@@ -837,6 +841,7 @@ public static class WorldProjection {
             HapticsRaw: projection.Haptics
         ) {
             DocumentId = projection.Provenance.DocumentId,
+            ShadesRaw = projection.Shades,
         };
 
         if (Uncarried(definition: hydrated) is { } uncarried) {

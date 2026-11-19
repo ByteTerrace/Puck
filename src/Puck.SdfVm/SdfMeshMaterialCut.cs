@@ -31,9 +31,6 @@ internal sealed class SdfMeshMaterialCut {
     /// boundary and centre points, and the middles of the at most three edges each of its triangles splits at.</summary>
     public const int MaxVerticesPerQuad = 64;
 
-    // The cosine past which a boundary point's two edge ends face apart as a crease's two sides do (thirty-two degrees, the
-    // turn SdfContour.SplitAtCreases splits a crease at).
-    private const float CreaseCosine = 0.848f;
     // The offset, in metres, outside the surface a material point lies, where a field hit would be accepted.
     private const float Lift = 0.0005f;
     // How far along an edge from a crease vertex, as a share of the edge, a boundary is taken to lie at the vertex
@@ -232,10 +229,10 @@ internal sealed class SdfMeshMaterialCut {
         }
 
         // Each searched edge's boundary point, between the last interval's ends, as a vertex for the pieces it bounds, its
-        // normal blended between the vertices of the triangle that names it. Where those two normals turn apart past
-        // CreaseCosine the boundary runs along a crease (a raised plate's foot, a bezel's rim), and each piece takes its own
-        // end's normal there: a normal blended across the crease shades the piece on the face as a spike of the face beyond
-        // it. Every vertex of one edge lies at its one point. An interval still touching an end after every round puts the
+        // normal blended between the vertices of the triangle that names it. Where those two normals turn apart past the
+        // turn the contour split its creases at (SdfContour.CreaseCosine) the boundary runs along a crease (a raised
+        // plate's foot, a bezel's rim), and each piece takes its own end's normal there: a normal blended across the
+        // crease shades the piece on the face as a spike of the face beyond it. Every vertex of one edge lies at its one point. An interval still touching an end after every round puts the
         // boundary at that end's vertex: a piece a thirty-second of an edge wide is a sliver whose facing is rounding noise,
         // and the triangle that would hold it has no area and is dropped on both sides of its edges.
         var boundary = new Dictionary<(int Edge, int Low, int High, int Side), uint>();
@@ -246,7 +243,7 @@ internal sealed class SdfMeshMaterialCut {
             var middle = Boundary(edge: edge);
 
             var (aNormal, bNormal) = (Vector3.Normalize(value: Normal(vertex: a)), Vector3.Normalize(value: Normal(vertex: b)));
-            var creased = (Vector3.Dot(vector1: aNormal, vector2: bNormal) < CreaseCosine);
+            var creased = (Vector3.Dot(vector1: aNormal, vector2: bNormal) < SdfContour.CreaseCosine);
             var key = (edge, Math.Min(val1: a, val2: b), Math.Max(val1: a, val2: b), (creased ? a : -1));
 
             if (!boundary.TryGetValue(key: key, value: out var vertex)) {

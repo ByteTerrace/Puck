@@ -38,9 +38,8 @@ public sealed partial class SdfMeshPathBake {
     // The frames in a row Retier has left the detail alone, counted up to SdfMeshTier.SettleFrames; read off the
     // frame's thread (DetailSettled).
     private int m_detailQuiet;
-    // The residency's mesh region as the frame's thread last read it (ObserveResidency): its limit, zero before the
-    // first reading, the bytes the frame's draws name, and the meshes it refuses.
-    private long m_regionLimitBytes;
+    // The residency's mesh region as the frame's thread last read it (ObserveResidency): the bytes the frame's draws
+    // name, and the meshes it refuses. Its limit bounds the budget through the grant (SdfResidencyGrant.Budget).
     private long m_regionNamedBytes;
     private int m_regionRefused;
     // The groups drawing a finer tier than their demand asks and the finer tiers the budget held back, as of the
@@ -207,14 +206,15 @@ public sealed partial class SdfMeshPathBake {
                 // The replaced group keeps drawing, and a finer tier is not tried until the demand asks another.
                 replaced.RetierRefused = true;
                 Replace(group: replaced, index: index);
-                m_productRevision++;
                 continue;
             }
             // The landed mesh replaces the drawn one: the replaced group retires here, its one place, and releases its mesh
-            // once its last work ends.
+            // once its last work ends. The tier the group's draws carry is its own from now on (FrameAccess.TierOf), a
+            // change of what the dresser reads, so the product revision moves.
             m_retiredGroups.Add(item: replaced);
             replaced.Retired = true;
             group.Replaces = null;
+            m_productRevision++;
             if (group.FirstDetail) { m_floorsRaised++; } else if (group.Tier > replaced.Tier) { m_coarsened++; } else { m_retiers++; }
             group.FirstDetail = false;
             if (group.Stored) { m_retiersReused++; }
@@ -416,7 +416,8 @@ public sealed partial class SdfMeshPathBake {
         }
         m_tiersHeldBack = heldBack;
 
-        var over = ((named > budget) || ((heldBack > 0) && (named > (budget - replacement))));
+        // A mesh the region refuses presses whatever the bytes say: the arena's free runs, not the sum, decide a place.
+        var over = ((named > budget) || ((heldBack > 0) && (named > (budget - replacement))) || (m_regionRefused > 0));
         var anySpare = false;
 
         if (over) {
@@ -443,7 +444,6 @@ public sealed partial class SdfMeshPathBake {
                 Over: over
             )));
         }
-        if (replaced) { m_productRevision++; }
         Volatile.Write(
             location: ref m_detailQuiet,
             value: ((replaced || (inFlight > 0) || (landing > 0) || (owedWaiting > 0) || (firstsInFlight > 0) || (firstsOwed > 0) || pressing) ? 0 : Math.Min(val1: (m_detailQuiet + elapsed), val2: SdfMeshTier.SettleFrames))

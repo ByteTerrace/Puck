@@ -28,8 +28,8 @@ internal sealed record MeshPreviewView(string Name, float Azimuth, float Elevati
     /// <summary>Gets the direction from the creation toward the camera.</summary>
     public Vector3 Toward {
         get {
-            var azimuth = (Azimuth * (MathF.PI / 180f));
-            var elevation = (Elevation * (MathF.PI / 180f));
+            var azimuth = float.DegreesToRadians(degrees: Azimuth);
+            var elevation = float.DegreesToRadians(degrees: Elevation);
 
             return new Vector3(x: (MathF.Sin(x: azimuth) * MathF.Cos(x: elevation)), y: MathF.Sin(x: elevation), z: (MathF.Cos(x: azimuth) * MathF.Cos(x: elevation)));
         }

@@ -55,7 +55,7 @@ public sealed class DualSenseController : IGamepadParser, IRumbleParser, ILedPar
     private const byte Flag2LightbarSetup = 0x02;
     // The nominal gyro scale is 1/16 deg/s per LSB: the 1024 LSB per deg/s resolution times the ~64 sensitivity
     // a factory calibration carries. A calibration whose scale strays more than half from it is rejected (SDL).
-    private const float GyroRadiansPerSecondPerLsbNominal = ((64f * (MathF.PI / 180f)) / 1024f);
+    private static readonly float GyroRadiansPerSecondPerLsbNominal = (float.DegreesToRadians(degrees: 64f) / 1024f);
     // Firmware 2.24 and newer emulates rumble more faithfully through the second compatible-vibration flag; older
     // firmware needs the first flag and drives the motors about twice as hard for the same byte (SDL).
     private const ushort ImprovedRumbleFirmwareVersion = 0x0224;
@@ -456,7 +456,7 @@ public sealed class DualSenseController : IGamepadParser, IRumbleParser, ILedPar
             return false;
         }
 
-        var gyroScale = (new Vector3(value: (speed * (MathF.PI / 180f))) / gyroSpan);
+        var gyroScale = (new Vector3(value: float.DegreesToRadians(degrees: speed)) / gyroSpan);
         var accelerometerBias = (accelerometerPlus - (accelerometerSpan / 2f));
         var accelerometerScale = (new Vector3(value: 2f) / accelerometerSpan);
 

@@ -16,8 +16,10 @@ void sdfProbeLightingSetup() {
 bool probeClear(float3 positionWorld, float3 direction, float reach, uint lane) {
     return !sdfProbeOccluded(positionWorld, direction, reach, lane);
 }
-// One shading mechanism for lattice relight and camera-meter fallback; CPU Shade remains the reference.
-float3 sdfProbeShade(float3 positionWorld, float3 normal, uint material, bool reuse, uint lane, out float3 local) {
+// One shading mechanism for lattice relight and camera-meter fallback; CPU Shade remains the reference. `unanswered` is
+// the reflectance (times the bounce gain) a hit no probe answers leaves without its bounce, zero where the volume answers
+// or the bounce is off: the camera sample closes it with its own light (sdf-probe-camera-sample-stage.hlsli).
+float3 sdfProbeShade(float3 positionWorld, float3 normal, uint material, bool reuse, uint lane, out float3 local, out float3 unanswered) {
     float4 counts = sdfProbeLighting[0], sources = sdfProbeLighting[1], gains = sdfProbeLighting[2];
     uint lightBase = SDF_PROBE_RELIGHT_HEADER_ROWS + (uint)counts.x * SDF_PROBE_RELIGHT_MATERIAL_ROWS;
     uint lightCount = (uint)(counts.y + counts.z);
@@ -26,6 +28,7 @@ float3 sdfProbeShade(float3 positionWorld, float3 normal, uint material, bool re
     float3 lifted = positionWorld + normal * 0.001;
     float3 varying = 0;
     local = 0;
+    unanswered = 0;
     if (sources.x != 0 && any(surface.xyz != 0)) {
         for (uint light = 0; light < (reuse ? (uint)counts.y : lightCount); light++) {
             uint row = lightBase + light * SDF_PROBE_RELIGHT_LIGHT_ROWS;
@@ -57,7 +60,9 @@ float3 sdfProbeShade(float3 positionWorld, float3 normal, uint material, bool re
         local += sdfProbeLighting[SDF_PROBE_RELIGHT_HEADER_ROWS + material * SDF_PROBE_RELIGHT_MATERIAL_ROWS + 1].xyz * gains.y;
     }
     if (sources.z != 0 && any(surface.xyz != 0)) {
-        varying += surface.xyz * sdfMeshIndirect(sdfMeshProbesAt(positionWorld, normal), normal) * gains.z;
+        SdfMeshProbes probes = sdfMeshProbesAt(positionWorld, normal);
+        if (probes.share > 0) { varying += surface.xyz * sdfMeshIndirect(probes, normal) * gains.z; }
+        else { unanswered = surface.xyz * gains.z; }
     }
     return varying;
 }

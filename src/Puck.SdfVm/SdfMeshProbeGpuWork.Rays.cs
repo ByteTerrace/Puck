@@ -131,9 +131,9 @@ internal sealed partial class SdfMeshProbeGpuWork {
     }
 
     // Takes the next structure job the published scene owes, one at a time: the bottoms its geometries lack, cut to
-    // background work's share of a frame by the measured rate; then their compaction; then the top level over its draws.
-    // Under the gate.
-    private bool TryTakeStructures(SdfWorldTables tables, [NotNullWhen(true)] out object? job, out double estimatedSeconds) {
+    // the allowance by the measured rate; then their compaction; then the top level over its draws. While work is queued a
+    // job past what is left of the allowance waits, decided before any bottom changes state. Under the gate.
+    private bool TryTakeStructures(SdfWorldTables tables, SdfGpuWorkAllowance allowance, [NotNullWhen(true)] out object? job, out double estimatedSeconds) {
         job = null;
         estimatedSeconds = 0;
         if (m_structures is null) { return false; }
@@ -149,8 +149,10 @@ internal sealed partial class SdfMeshProbeGpuWork {
 
         var build = new List<(Bottom Bottom, SdfMesh Mesh)>();
         var compact = new List<Bottom>();
-        var most = Math.Max(val1: 1L, val2: m_structureRate.UnitsWithin(most: long.MaxValue, seconds: SdfGpuWork.FrameShareSeconds));
+        var most = allowance.UnitsWithin(most: long.MaxValue, rate: m_structureRate);
         var units = 0L;
+        // The first bottom held back while work is queued, whose build the next take waits for room for.
+        var held = 0L;
         var ready = true;
 
         // Many instances share one geometry's bottom: each bottom is taken once, whichever instance names it first.
@@ -166,7 +168,10 @@ internal sealed partial class SdfMeshProbeGpuWork {
             if (bottom.State == BottomState.Ready) { continue; }
             ready = false;
             if (bottom.State == BottomState.Wanted) {
-                if ((build.Count != 0) && ((units + geometry.Count) > most)) { continue; }
+                if (((build.Count != 0) || allowance.Queued) && ((units + geometry.Count) > most)) {
+                    if ((build.Count == 0) && (held == 0L)) { held = geometry.Count; }
+                    continue;
+                }
                 if (!m_takenBottoms.Add(item: bottom)) { continue; }
                 build.Add(item: (bottom, mesh));
                 units += geometry.Count;
@@ -196,9 +201,17 @@ internal sealed partial class SdfMeshProbeGpuWork {
             job = new StructureJob(serial: Admit(), kind: StructureKind.Bottoms) { Builds = builds, Units = units };
         } else if (compact.Count != 0) {
             units = compact.Sum(selector: static bottom => (long)bottom.Geometry.Count);
+            if (!allowance.Admits(seconds: m_structureRate.SecondsOf(units: units))) {
+                estimatedSeconds = m_structureRate.SecondsOf(units: units);
+                return false;
+            }
             foreach (var bottom in compact) { bottom.State = BottomState.Compacting; }
             job = new StructureJob(serial: Admit(), kind: StructureKind.Compaction) { Compactions = [.. compact], Units = units };
         } else if (ready) {
+            if (!allowance.Admits(seconds: m_structureRate.SecondsOf(units: count))) {
+                estimatedSeconds = m_structureRate.SecondsOf(units: count);
+                return false;
+            }
             var bottoms = new Bottom?[count];
 
             for (var index = 0; (index < count); index++) {
@@ -208,6 +221,7 @@ internal sealed partial class SdfMeshProbeGpuWork {
             }
             job = new StructureJob(serial: Admit(), kind: StructureKind.Top) { Scene = scene.Acquire(), Instances = bottoms, Units = count };
         } else {
+            estimatedSeconds = m_structureRate.SecondsOf(units: held);
             return false;
         }
 

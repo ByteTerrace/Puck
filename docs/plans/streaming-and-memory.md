@@ -707,7 +707,7 @@ prepare-before-record with reschedule on released stand-ins — and move both
 staging and capture to demand in this order:
 
 1. **Serve every residency's upkeep first, captured or not.** Keep
-   `SdfWorldResidency.PumpGpuWork` ahead of any pack that could change a
+   `SdfWorldResidency.Upkeep` ahead of any pack that could change a
    binding: collect finished GPU jobs and fire client callbacks (even on a
    hidden residency whose uploads finished), keeping completion collection
    separate from permission to submit new jobs; then poll uploads and service
@@ -872,6 +872,32 @@ staging and capture to demand in this order:
     whose picture is standing; it reports views eligible, skipped and audited,
     with at least one real skip in a still scene; a record silenced on purpose
     is caught.
+
+**As built.** The frame runs in this order (`RenderGraphRuntime.ProduceFrame`):
+`SdfWorldPasses.BeginFrame` serves every held residency's upkeep
+(`SdfWorldResidency.Upkeep`: background completions and submissions, upload
+polling, retirements and a requested trim), starts every residency's frame,
+captures the host residency, which places the cameras, and then prepares each
+residency that owes its minimum (`SdfWorldResidency.OwesPreparation`: meshes
+arriving or lighting settling). The runtime then seals the roots and footprints
+(`RenderGraphFrame.Seal`, which `RenderGraphRuntimeNode` uses to rebuild its
+roots after the captures, closing step 2's stale filming-camera list) and
+prepares only what the frame reads (`RenderGraphRuntime.PrepareReaders` over
+`RenderGraphScheduler.Readers`, then `IRenderGraphPackageFactory.PrepareRead`),
+in rounds until a round prepares nothing new; the freshness question
+(`RenderGraphRuntime.WithUnchanged`) is asked only of instances read. A residency
+read again after frames nothing read advances its source by those frames
+(`SdfWorldResidency.BeginFrame`'s carried interval, step 7's time-keyed part).
+Exposure readings carry the slot's generation, which moves when another view
+(`SdfViewSnapshot.Source`) or cut takes the slot (`SdfViewExposures.GenerationOf`,
+step 8's exposure part). `world.counters sdf.captures` reads residencies held
+against captures run. Still open: the hidden arrival render
+(`WorldViewGraphHost.ReserveArrivals`) is not yet replaced by staging by demand
+(step 6), so a minimum prepares but only a render stages; standalone session
+screens and boot-world sessions are still filmed in the host's capture
+(`WorldScreenBinder.FilmHomeViews`, step 5); visibility during composition
+(step 4), distance-keyed catch-up and exposure reset on return (step 7), and the
+camera sample and occlusion history keyed by slot (step 8) are unbuilt.
 
 **The invariant, and what enforces it.** A picture bound to a reader was
 produced for that reader's current disclosure, from inputs none of which has
@@ -1992,7 +2018,7 @@ first is built.
   form is confined to the time the frame thread is busy or blocked in a
   driver call, which is under a frame.
 - A second queue would let the driver's scheduler interleave a long job with
-  the frame, in place of cutting jobs to `SdfGpuWork.FrameShareSeconds`. That
+  the frame, in place of cutting jobs to `SdfGpuWorkBudget.FrameAllowanceSeconds`. That
   is a rendering gain, not a servicing one, and it is what would justify the
   cost above; the leases are what such a queue needs, so it moves the
   service's submit and keeps the rest.

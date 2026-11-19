@@ -54,11 +54,15 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
         ArgumentNullException.ThrowIfNull(argument: resolve);
 
         m_resolve = resolve;
+        m_host = host;
 
         if (host is not null) {
             Hold(residency: host);
         }
     }
+
+    // The residency whose capture places the frame's cameras, prepared first every frame (BeginFrame).
+    private readonly SdfWorldResidency? m_host;
 
     /// <inheritdoc/>
     /// <remarks>A view's screens sample them.</remarks>
@@ -454,9 +458,12 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
         }
     }
     /// <inheritdoc/>
-    /// <remarks>Gives back the holds of instances whose residency its host has released, and starts and prepares the frame
-    /// of every residency the package still holds, so a residency builds its tables before any pass of its views is
-    /// installed, and while a capture keeps the runtime from asking whether its view is unchanged.</remarks>
+    /// <remarks>Gives back the holds of instances whose residency its host has released, serves every held residency's
+    /// upkeep whether or not anything reads it this frame (<see cref="SdfWorldResidency.Upkeep"/>), starts every held
+    /// residency's frame, and prepares the host residency, whose capture places the cameras and windows the frame's roots
+    /// and footprints name, then each residency that owes its minimum (<see cref="SdfWorldResidency.OwesPreparation"/>).
+    /// Every other residency is prepared only for an instance the frame reads (<see cref="PrepareRead"/>), or when a
+    /// recording or a new binding reaches it.</remarks>
     public void BeginFrame(in FrameContext context) {
         m_context = context;
         ShadeReleases.BeginFrame();
@@ -471,37 +478,43 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
         // Each residency's background GPU work answers what completed and submits more against its latest upload, before
         // any residency prepares a frame that moves what that upload's World set binds.
         foreach (var residency in m_residencies.Keys) {
-            residency.PumpGpuWork();
+            residency.Upkeep();
         }
 
         m_frame++;
 
+        // A routed residency captures its host while preparing, so every residency starts before any is prepared.
         foreach (var residency in m_residencies.Keys) {
             if (!residency.IsReleased) {
                 Begin(residency: residency);
             }
         }
-        // A routed residency captures its host while preparing, so every residency must start before any is prepared.
+        SdfCaptureWork.ProcessWork.Add(kind: SdfCaptureWork.Held, amount: m_residencies.Count);
+        if (m_host is { IsReleased: false } host) {
+            _ = host.Prepare(context: in context);
+        }
+        // A residency's minimum, after the host has placed the cameras its routes read: meshes arriving or lighting
+        // settling is served whatever reads it.
         foreach (var residency in m_residencies.Keys) {
-            if (!residency.IsReleased) {
+            if (!residency.IsReleased && residency.OwesPreparation) {
                 _ = residency.Prepare(context: in context);
             }
         }
-
-        // A capture bypasses cadence, and an installed graph need not ask for its counter. Resolve its view before
-        // recording anyway, after the host's capture has latched the routes this frame presents.
-        foreach (var instance in m_entries.Keys) {
-            _ = Refresh(instance: instance);
-        }
     }
+    /// <inheritdoc/>
+    /// <remarks>Resolves the instance's view and prepares its residency: captures its frame (a routed residency its host's
+    /// first) and packs it, once a frame whichever reader asks first.</remarks>
+    public void PrepareRead(string instance, in FrameContext context) => _ = BegunResidencyOf(instance: instance)?.Prepare(context: in context);
     /// <inheritdoc/>
     /// <remarks>Stages the residency the instance renders this frame (<see cref="SdfWorldResidency.Stage"/>): its upload
     /// is submitted and its background GPU work pumped here, before any pass records, so no pass's recording pays for
     /// them.</remarks>
-    public void PrepareRender(string instance, in FrameContext context) {
-        if (Refresh(instance: instance).View is not { } view) { return; }
+    public void PrepareRender(string instance, in FrameContext context) => _ = BegunResidencyOf(instance: instance)?.Stage(context: in context);
+    // The residency of the view an instance resolves this frame, its frame started; null for an instance that resolves none.
+    private SdfWorldResidency? BegunResidencyOf(string instance) {
+        if (Refresh(instance: instance).View is not { } view) { return null; }
         Begin(residency: view.Residency);
-        _ = view.Residency.Stage(context: in context);
+        return view.Residency;
     }
 
     // Starts a residency's frame the first time the package meets it in this frame.
@@ -511,7 +524,7 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
         }
         if (residency.PackageFrame != m_frame) {
             residency.PackageFrame = m_frame;
-            residency.BeginFrame();
+            residency.BeginFrame(frameSeconds: m_context.FrameDeltaSeconds);
         }
     }
     // The plan a binned view's bins pass writes its jobs' arguments for, made from the frame, the view and the passes'

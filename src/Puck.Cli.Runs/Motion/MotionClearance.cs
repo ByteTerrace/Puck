@@ -107,7 +107,7 @@ public sealed class MotionClearance : IMotionClearance {
             return false;
         }
 
-        var anchor = new SdfAnchor(Orientation: Quaternion.CreateFromAxisAngle(angle: ((float)(yawDegrees * (Math.PI / 180d))), axis: Vector3.UnitY), Position: position);
+        var anchor = new SdfAnchor(Orientation: Quaternion.CreateFromAxisAngle(angle: ((float)double.DegreesToRadians(degrees: yawDegrees)), axis: Vector3.UnitY), Position: position);
 
         (eye, target, _) = rig.Resolve(anchor: in anchor, clock: new SdfCameraClock(AuthoritativeTick: 0UL, PresentationSeconds: 0f));
 
