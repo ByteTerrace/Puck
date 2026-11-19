@@ -30,6 +30,7 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
     private readonly WorldDeliveryCursor m_cursor = new();
     private readonly WorldDeliveryRows m_rows = new();
     private readonly WorldSolidScaleDisclosure m_scales = new();
+    private readonly WorldDeclaredRoster m_roster = new();
     private readonly WorldRecipientView m_view = observation.View;
 
     private WorldDocumentVersion Version => server.DocumentVersion with { Sequence = m_cursor.Sequence };
@@ -271,6 +272,7 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
         m_feed.Release();
         m_hydrated = null;
         m_cursor.Release();
+        m_roster.Forget();
         server.DetachCursor(observation.Session, m_cursor);
     }
 
@@ -468,7 +470,9 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
             if (PrimeAfterCut()) {
                 redacted = redacted with { FieldCells = m_rows.Advance(m_view, m_cursor, cells, replica) };
             }
-            redacted = redacted with { Revision = checked((int)m_cursor.Sequence) };
+            // The authority's declared-set revision moves for bodies the stream may never be shown, so the stream carries
+            // its own, moved only by the roster it is delivered.
+            redacted = redacted with { Revision = m_roster.Observe(entries: redacted.Entries.Span) };
             redacted = server.PresentCues(redacted, m_view,
                 fullBodies: server.Definition.Population.ObserverDisclosure.Mode == WorldObserverDisclosureMode.All);
             inner.DeliverSnapshot(snapshot: in redacted, stream: m_cursor.Stamp());
