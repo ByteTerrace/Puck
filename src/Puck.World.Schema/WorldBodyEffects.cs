@@ -17,15 +17,16 @@ public enum WorldBodyEffectScope : byte {
 /// rule's compiled body action are each built from this, never from the authored record directly.</summary>
 /// <param name="Verb">The effect's <c>$type</c> discriminator, for refusal and trace text.</param>
 /// <param name="Operation">The motion operation.</param>
-/// <param name="Value">The velocity, factor, or speed the operation takes; zero for a designation.</param>
-/// <param name="Direction">The unit body-frame direction a planar impulse rides; zero otherwise.</param>
-/// <param name="DurationTicks">The planar impulse's duration, in engine ticks; zero otherwise.</param>
+/// <param name="Value">The operation's velocity, factor, speed, or relative yaw in radians.</param>
+/// <param name="Direction">The planar impulse's unit direction or the timed move's body-frame displacement.</param>
+/// <param name="DurationTicks">The duration of a planar impulse or timed move, in engine ticks.</param>
 /// <param name="Target">The participant a kit's action addresses; always <see cref="ActionTarget.Self"/> in a rule.</param>
 /// <param name="Register">The target register a designation writes, or <see langword="null"/>.</param>
 /// <param name="Designation">Whether a designation fills or clears its register.</param>
 /// <param name="Key">The body a rule names, or <see langword="null"/> in a kit.</param>
 /// <param name="TargetKey">The body a rule designates, or <see langword="null"/>.</param>
 /// <param name="UseMoveDirection">Whether a planar impulse prefers the normalized current movement command.</param>
+/// <param name="Curve">The timed move's progress curve.</param>
 public readonly record struct WorldBodyEffectForm(
     string Verb,
     BodyMotionOp Operation,
@@ -37,11 +38,12 @@ public readonly record struct WorldBodyEffectForm(
     WorldBodyDesignationKind Designation,
     StateChannelRef? Key,
     StateChannelRef? TargetKey,
-    bool UseMoveDirection = false
+    bool UseMoveDirection = false,
+    BodyMotionCurve Curve = BodyMotionCurve.Linear
 );
-/// <summary>The one check and lowering of the four body-motion effects — <see cref="WorldEffect.SetVerticalVelocity"/>,
+/// <summary>The one check and lowering of the body-motion effects — <see cref="WorldEffect.SetVerticalVelocity"/>,
 /// <see cref="WorldEffect.ScaleVerticalVelocity"/>, <see cref="WorldEffect.PlanarImpulse"/> and
-/// <see cref="WorldEffect.Designate"/> — that a kit's action and a world rule both author. The document validator
+/// <see cref="WorldEffect.Designate"/> and <see cref="WorldEffect.TimedMove"/> — that a kit's action and a world rule both author. The document validator
 /// refuses a kit's effect through it, the kit compiler lowers through it, and the rule compiler refuses and lowers a
 /// rule's effect through it, so an effect admitted in one scope means the same thing in the other.
 /// <para>A kit's effect names no body: it acts on its own, or on the participant its <c>target</c> picks. A rule's
@@ -55,12 +57,12 @@ public static class WorldBodyEffects {
     /// tolerance sits well above that floor and far below any unnormalized axis ((3, 0, 4) is off by 4).</summary>
     public const float UnitDirectionTolerance = 1e-4f;
 
-    /// <summary>Returns whether <paramref name="effect"/> is one of the four body-motion effects.</summary>
+    /// <summary>Returns whether <paramref name="effect"/> is a body-motion effect.</summary>
     /// <param name="effect">The authored effect.</param>
     /// <returns><see langword="true"/> for a body-motion effect.</returns>
-    public static bool IsBodyMotion(ActionEffect? effect) => (effect is WorldEffect.SetVerticalVelocity or WorldEffect.ScaleVerticalVelocity or WorldEffect.PlanarImpulse or WorldEffect.Designate);
+    public static bool IsBodyMotion(ActionEffect? effect) => (effect is WorldEffect.SetVerticalVelocity or WorldEffect.ScaleVerticalVelocity or WorldEffect.PlanarImpulse or WorldEffect.TimedMove or WorldEffect.Designate);
     /// <summary>Checks one body-motion effect against its scope and lowers it.</summary>
-    /// <param name="effect">The authored effect; one of the four <see cref="IsBodyMotion"/> admits.</param>
+    /// <param name="effect">The authored effect, as admitted by <see cref="IsBodyMotion"/>.</param>
     /// <param name="scope">The scope it is authored in.</param>
     /// <param name="registerDeclared">Answers whether a target-register name is declared, or <see langword="null"/>
     /// when the caller holds no register table because the document validator already checked it.</param>
@@ -77,6 +79,7 @@ public static class WorldBodyEffects {
             WorldEffect.SetVerticalVelocity set => ("setVerticalVelocity", set.Key, set.Target),
             WorldEffect.ScaleVerticalVelocity scale => ("scaleVerticalVelocity", scale.Key, scale.Target),
             WorldEffect.PlanarImpulse impulse => ("planarImpulse", impulse.Key, impulse.Target),
+            WorldEffect.TimedMove move => ("timedMove", move.Key, ActionTarget.Self),
             WorldEffect.Designate designate => ("designate", designate.Key, ActionTarget.AffectingSubject),
             _ => throw new ArgumentException(
                 message: $"'{effect?.GetType().Name}' is not a body-motion effect",
@@ -98,6 +101,7 @@ public static class WorldBodyEffects {
         var value = FixedQ4816.Zero;
         var direction = default(FixedVector3);
         var durationTicks = 0UL;
+        var curve = BodyMotionCurve.Linear;
         string? register = null;
         var designation = WorldBodyDesignationKind.Body;
         StateChannelRef? targetKey = null;
@@ -140,16 +144,27 @@ public static class WorldBodyEffects {
                 if (!TryFixed(value: impulse.Speed, field: "speed", verb: verb, result: out value, reason: out reason)) {
                     return false;
                 }
-                if (!FixedTickConversion.TryDurationEngineTicksExact(
-                    seconds: impulse.DurationSeconds,
-                    ticks: out durationTicks
-                )) {
-                    refusal = RuleRefusal.DurationNotExactEngineTicks;
-                    reason = $"'{verb}' durationSeconds {impulse.DurationSeconds.ToString(provider: CultureInfo.InvariantCulture)} is not a non-negative exact whole-engine-tick duration";
-
+                if (!TryDuration(impulse.DurationSeconds, verb, allowZero: true, out durationTicks, ref refusal, out reason)) {
                     return false;
                 }
 
+                break;
+            case WorldEffect.TimedMove move:
+                operation = BodyMotionOp.TimedMove;
+                curve = move.Curve;
+                if (!Enum.IsDefined(curve)) {
+                    reason = $"'{verb}' curve '{curve}' is not defined";
+                    return false;
+                }
+                if (!TryFixed(move.Right, "right", verb, out var right, out reason)
+                    || !TryFixed(-move.Forward, "forward", verb, out var back, out reason)
+                    || !TryFixed(move.YawDegrees, "yawDegrees", verb, out var yawDegrees, out reason)
+                    || !TryDuration(move.DurationSeconds, verb, allowZero: false, out durationTicks, ref refusal, out reason)) {
+                    return false;
+                }
+
+                direction = new FixedVector3(X: right, Y: FixedQ4816.Zero, Z: back);
+                value = FixedQ4816.FromDegrees(yawDegrees);
                 break;
             default:
                 var designate = ((WorldEffect.Designate)effect);
@@ -173,6 +188,7 @@ public static class WorldBodyEffects {
         }
 
         form = new WorldBodyEffectForm(
+            Curve: curve,
             Designation: designation,
             Direction: direction,
             UseMoveDirection: (effect is WorldEffect.PlanarImpulse { UseMoveDirection: true }),
@@ -188,6 +204,18 @@ public static class WorldBodyEffects {
         reason = string.Empty;
 
         return true;
+    }
+
+    private static bool TryDuration(decimal seconds, string verb, bool allowZero, out ulong ticks, ref RuleRefusal refusal, out string reason) {
+        if (FixedTickConversion.TryDurationEngineTicksExact(seconds: seconds, ticks: out ticks) && (allowZero || (ticks != 0))) {
+            reason = string.Empty;
+            return true;
+        }
+
+        refusal = RuleRefusal.DurationNotExactEngineTicks;
+        var range = (allowZero ? "non-negative" : "positive");
+        reason = $"'{verb}' durationSeconds {seconds.ToString(provider: CultureInfo.InvariantCulture)} is not a {range} exact whole-engine-tick duration";
+        return false;
     }
 
     // Who the effect acts on. A kit's action names no body — its own is the one whose trigger fired — and a rule, which

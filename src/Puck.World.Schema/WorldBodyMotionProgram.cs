@@ -130,7 +130,7 @@ public static class BodyMotionProgramRoles {
 public static partial class BodyActionSpecFactory {
     private static CompiledBodyInstruction CompileEffect(ActionEffect effect, IReadOnlyDictionary<string, int> stateSlots, CompiledBodyMotionProgram program, string actionName) {
         var instruction = effect switch {
-            WorldEffect.SetVerticalVelocity or WorldEffect.ScaleVerticalVelocity or WorldEffect.PlanarImpulse or WorldEffect.Designate => CompileBodyMotion(
+            _ when WorldBodyEffects.IsBodyMotion(effect) => CompileBodyMotion(
                 actionName: actionName,
                 effect: effect
             ),
@@ -226,7 +226,9 @@ public static partial class BodyActionSpecFactory {
             throw new BodyMotionProgramException(
                 refusal: BodyMotionProgramRefusal.OpcodeInadmissible,
                 programName: program.Name,
-                detail: $"action '{actionName}' opcode '{instruction.Operation}' is inadmissible for program kind '{program.Kind}'"
+                detail: ((instruction.Operation == BodyMotionOp.TimedMove)
+                    ? $"action '{actionName}' timedMove requires a yaw-frame program with CommitPose"
+                    : $"action '{actionName}' opcode '{instruction.Operation}' is inadmissible for program kind '{program.Kind}'")
             );
         }
 
@@ -247,6 +249,7 @@ public static partial class BodyActionSpecFactory {
         }
 
         return new CompiledBodyInstruction(
+            Curve: form.Curve,
             Direction: form.Direction,
             UseMoveDirection: form.UseMoveDirection,
             DurationTicks: form.DurationTicks,

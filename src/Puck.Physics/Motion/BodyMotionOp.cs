@@ -53,4 +53,5 @@ public enum BodyMotionOp : byte {
     StartTimer,
     Designate,
     Generate,
+    TimedMove,
 }
