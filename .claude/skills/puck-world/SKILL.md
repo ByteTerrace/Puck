@@ -143,6 +143,12 @@ Every untrusted read and delivery checks `WorldStateDisclosure` again; caching
 a bound address never caches permission. Responses, deals and tenure are
 placement projections. Checkpoints snapshot arena columns directly.
 
+`WorldDisclosureImages` can carry an audience's projection across a holding-only
+placement change. The definition records the preceding source and the changed
+ordinals. The recipient still has to pass the live row checks, and a projected
+placement section is recomposed when its restricted inputs can affect the result.
+Placement identity reuses each unchanged row's canonical digest.
+
 ## Diagnostic reports and pins
 
 Scripted camera framing uses `view.recenter [player]` (1-based), which resets

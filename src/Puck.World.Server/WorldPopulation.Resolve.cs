@@ -128,7 +128,7 @@ public sealed partial class WorldPopulation {
     // activation and a live body read; the field provider's program is handed in pre-built at runtime, and at boot it
     // is compiled here), the line-of-sight field and the navigation runtime over them. A whole rebuild and a response
     // swap that moves a solid row (TryInstallResponseSolids) both compile them through here.
-    private void CompileSolidConsumers(WorldDefinition definition, WorldSolidField? solids, NavigationRuntime? previousNavigation) {
+    private void CompileSolidConsumers(WorldDefinition definition, WorldSolidField? solids, NavigationRuntime? previousNavigation, WorldDefinition? previousDefinition = null) {
         var previousMoving = MovingSolids;
 
         m_contactCensus = null;
@@ -153,7 +153,8 @@ public sealed partial class WorldPopulation {
         }
         m_baseContactField = ResolveContactField(
             definition: definition,
-            solids: derivedSolids
+            solids: derivedSolids,
+            previousDefinition: previousDefinition
         );
         MovingSolids?.CarrySamplesFrom(previous: previousMoving);
         if ((derivedSolids is not null) && (m_baseContactField is WorldColliderSet analytic)) {
@@ -437,7 +438,7 @@ public sealed partial class WorldPopulation {
     // server hands the pre-built field (built once at apply time for its loud excluded-op rejection); at boot (solids ==
     // null) the field is compiled here and a bad-op world fails loudly.
     // An analytic set reuses the colliders of each row that stands from the set it replaces.
-    private IContactField? ResolveContactField(WorldDefinition definition, WorldSolidField? solids) {
+    private IContactField? ResolveContactField(WorldDefinition definition, WorldSolidField? solids, WorldDefinition? previousDefinition) {
         if (WorldContactSelection.RequiresField(collision: definition.Collision)) {
             if (solids is not null) {
                 return solids;
@@ -448,7 +449,8 @@ public sealed partial class WorldPopulation {
 
         return WorldColliderSet.Build(
             definition: definition,
-            previous: (m_baseContactField as WorldColliderSet)
+            previous: (m_baseContactField as WorldColliderSet),
+            previousDefinition: previousDefinition
         );
     }
     // The kit name an inhabited placement resolves: its explicit Inhabit.Kit, or the creation's Locomotion token as a

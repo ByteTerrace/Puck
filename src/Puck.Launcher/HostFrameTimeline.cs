@@ -3,6 +3,7 @@ using System.Globalization;
 using System.Text;
 using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Presentation;
+using Puck.Hosting;
 using Puck.Maths;
 
 namespace Puck.Launcher;
@@ -48,6 +49,7 @@ public sealed class HostFrameTimeline {
     private readonly long[] m_allocated = new long[Capacity];
     private readonly long[] m_threadAllocated = new long[Capacity];
     private readonly long[] m_produceBlocked = new long[Capacity];
+    private readonly HostFrameWorkTimes[] m_workParts = new HostFrameWorkTimes[Capacity];
     private readonly long[] m_open = new long[PhaseCount];
     private readonly long[] m_tickCosts = new long[Capacity];
     private readonly long[] m_controlGaps = new long[Capacity];
@@ -92,6 +94,12 @@ public sealed class HostFrameTimeline {
     public HostFrameRecording Boot { get; }
     /// <summary>Gets the recording every closing iteration is also written to, or <see langword="null"/>.</summary>
     public HostFrameRecording? Recording => m_recording;
+    internal HostFrameWork FrameWork { get; } = new();
+
+    internal RootFrame Produce(IRenderRoot root, in FrameContext context) {
+        using var binding = FrameWork.Bind();
+        return root.ProduceFrame(context: in context);
+    }
 
     /// <summary>Registers interval and work readings over this timeline's closed iterations. Both the latest value
     /// and the recent series use the same ring and units as <c>host.frames</c>; reading never resets it.</summary>
@@ -156,6 +164,7 @@ public sealed class HostFrameTimeline {
             m_allocated[slot] = (allocated - m_allocatedStart);
             m_threadAllocated[slot] = (threadAllocated - m_threadAllocatedStart);
             m_produceBlocked[slot] = m_openProduceBlocked;
+            m_workParts[slot] = FrameWork.Times;
             m_steps[slot] = m_openSteps;
             m_late[slot] = m_openLate;
             m_controlGaps[slot] = m_openControlGap;
@@ -176,6 +185,8 @@ public sealed class HostFrameTimeline {
                 Present = m_open[((int)HostFramePhase.Present)],
                 Produce = m_open[((int)HostFramePhase.Produce)],
                 ProduceBlocked = m_openProduceBlocked,
+                Parts = m_workParts[slot],
+                ScheduledRenders = FrameWork.ScheduledRenders,
                 Simulate = m_open[((int)HostFramePhase.Simulate)],
                 Steps = m_openSteps,
                 ThreadAllocated = m_threadAllocated[slot],
@@ -183,7 +194,7 @@ public sealed class HostFrameTimeline {
             };
 
             Boot.Add(sample: sample, start: m_iterationStart);
-            m_recording?.Add(sample: sample, start: m_iterationStart);
+            m_recording?.Add(sample: sample, start: m_iterationStart, worlds: FrameWork.Worlds);
             Array.Copy(
                 destinationArray: m_phases,
                 destinationIndex: (slot * PhaseCount),
@@ -195,6 +206,7 @@ public sealed class HostFrameTimeline {
         }
 
         Array.Clear(array: m_open);
+        FrameWork.Clear();
         m_openSteps = 0;
         m_openLate = 0L;
         m_openControlGap = 0L;
@@ -390,6 +402,7 @@ public sealed class HostFrameTimeline {
         // work it did (produce-work); the two sum to produce for each iteration.
         AppendPhases(builder: builder, first: HostFramePhase.Produce, indices: indices, label: "produce", second: null);
         AppendPhases(builder: builder, first: HostFramePhase.Produce, indices: indices, label: "produce-work", second: null, lessBlocked: true);
+        AppendProduceParts(builder: builder, indices: indices);
         AppendSeries(builder: builder, indices: indices, label: "produce-fence", values: m_produceBlocked);
         // The longest time between two control phases ending in each iteration: the control plane's latency bound.
         AppendSeries(builder: builder, indices: indices, label: "control-gap", values: m_controlGaps);
@@ -444,6 +457,24 @@ public sealed class HostFrameTimeline {
 
     // Appends one phase's (or two phases' summed) distribution over the iterations, or over those that ran a step or
     // none when stepped says which, less produce's fence waits when lessBlocked; nothing when no iteration qualifies.
+    private void AppendProduceParts(StringBuilder builder, long[] indices) {
+        var total = 0.0;
+        HostFrameWorkTimes parts = default;
+        foreach (var index in indices) {
+            var slot = (int)(index % Capacity);
+            total += Milliseconds(m_phases[slot * PhaseCount + (int)HostFramePhase.Produce] - m_produceBlocked[slot]);
+            for (var part = 0; part < (int)HostFrameWorkPart.TickIngress; part++) { parts[part] += m_workParts[slot][part]; }
+        }
+        var named = 0.0;
+        builder.Append("\n  produce-work parts mean [ms]");
+        for (var part = 0; part < (int)HostFrameWorkPart.TickIngress; part++) {
+            var milliseconds = HostFrameRecording.WorkMilliseconds(parts[part]);
+            named += milliseconds;
+            builder.Append(CultureInfo.InvariantCulture, $" {((HostFrameWorkPart)part).ToString().ToLowerInvariant()} {milliseconds / indices.Length:0.###}");
+        }
+        builder.Append(CultureInfo.InvariantCulture, $" other {(total - named) / indices.Length:0.###}");
+    }
+
     private void AppendPhases(StringBuilder builder, long[] indices, string label, HostFramePhase first, HostFramePhase? second, bool? stepped = null, bool lessBlocked = false) {
         var values = new List<double>(capacity: indices.Length);
 

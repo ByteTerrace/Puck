@@ -566,7 +566,7 @@ public sealed class WindowHostPresentation {
                                     TargetWidth: width
                                 );
                                 // A locked tick owes a rendered frame before the next tick may advance.
-                                var produced = m_root.ProduceFrame(context: in frameContext);
+                                var produced = m_timeline.Produce(root: m_root, context: in frameContext);
                                 var surface = produced.Surface;
 
                                 holdingTick = (tickLocked && HostLoop.HoldsTick(hasSimulation: iteration.HasSimulation, completion: produced.Render.Completion));

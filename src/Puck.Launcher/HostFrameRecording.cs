@@ -1,4 +1,7 @@
 using Puck.Maths;
+using Puck.Hosting;
+using System.Runtime.InteropServices;
+using System.Diagnostics;
 
 namespace Puck.Launcher;
 
@@ -25,6 +28,12 @@ public struct HostFrameSample {
     public long Wait;
     /// <summary>The part of <see cref="Produce"/> the frame thread spent blocked on submission fences.</summary>
     public long ProduceBlocked;
+    /// <summary>Exclusive work at the named render and tick boundaries, in stopwatch ticks.</summary>
+    public HostFrameWorkTimes Parts;
+    /// <summary>The number of scheduled render nodes.</summary>
+    public int ScheduledRenders;
+    internal int FirstWorld;
+    internal int WorldCount;
     /// <summary>The garbage collector's pause time inside the iteration.</summary>
     public long Pause;
     /// <summary>How late the pacer woke.</summary>
@@ -116,6 +125,7 @@ public sealed class HostFrameRecording {
     public const int MaxCapacity = (1 << 20);
 
     private readonly HostFrameSample[] m_samples;
+    private readonly List<HostWorldWork> m_worlds = [];
     private long m_origin;
 
     /// <summary>Creates a recording.</summary>
@@ -143,7 +153,7 @@ public sealed class HostFrameRecording {
     /// <summary>Gets the held iterations, oldest first.</summary>
     public ReadOnlySpan<HostFrameSample> Samples => m_samples.AsSpan(start: 0, length: Count);
 
-    internal void Add(HostFrameSample sample, long start) {
+    internal void Add(HostFrameSample sample, long start, ReadOnlySpan<HostWorldWork> worlds = default) {
         if (Count == 0) {
             m_origin = start;
         }
@@ -156,13 +166,24 @@ public sealed class HostFrameRecording {
         sample.Start = (start - m_origin);
         sample.Flags = (Flags?.Invoke() ?? 0);
         sample.Tick = (Ticks?.Invoke() ?? 0UL);
+        sample.FirstWorld = m_worlds.Count;
+        sample.WorldCount = worlds.Length;
+        m_worlds.AddRange(worlds);
         m_samples[Count++] = sample;
+    }
+
+    /// <summary>Gets the per-world timings of one recorded iteration.</summary>
+    public ReadOnlySpan<HostWorldWork> Worlds(int iteration) {
+        ref readonly var sample = ref Samples[iteration];
+        return CollectionsMarshal.AsSpan(m_worlds).Slice(sample.FirstWorld, sample.WorldCount);
     }
 
     /// <summary>Converts clock ticks to milliseconds.</summary>
     /// <param name="ticks">The ticks.</param>
     /// <returns>The milliseconds.</returns>
     public double Milliseconds(long ticks) => ((ticks * 1000.0) / Frequency);
+    /// <summary>Converts named work's stopwatch ticks to milliseconds.</summary>
+    public static double WorkMilliseconds(long ticks) => ticks * 1000.0 / Stopwatch.Frequency;
     /// <summary>Reads the statistics of a span of the recording.</summary>
     /// <param name="from">The first iteration.</param>
     /// <param name="to">The end of the span, exclusive.</param>

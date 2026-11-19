@@ -4,6 +4,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using Puck.Abstractions;
 using Puck.Commands;
+using Puck.Hosting;
 using Puck.Launcher;
 
 namespace Puck.World;
@@ -161,12 +162,66 @@ public sealed partial class WorldBenchmarkCommandModule {
             }
             if (recording is not null) {
                 node["hitches"] = Hitches(chapter: chapter, recording: recording);
+                node["frameThread"] = DescribeFrameThread(recording, chapter.BeginIndex,
+                    chapter.EndIndex < 0 ? recording.Count : chapter.EndIndex);
             }
         }
         node["gpu"] = DescribeGpu(chapter: chapter);
         node["reads"] = DescribeReads(chapter: chapter);
 
         return node;
+    }
+
+    private static JsonObject DescribeFrameThread(HostFrameRecording recording, int first, int end) {
+        first = Math.Clamp(first, 0, recording.Count);
+        end = Math.Clamp(end, first, recording.Count);
+        var worlds = new Dictionary<string, HostWorldWork>(StringComparer.Ordinal);
+        HostFrameWorkTimes parts = default;
+        long produce = 0, blocked = 0, simulate = 0, renders = 0;
+        var samples = recording.Samples;
+        for (var index = first; index < end; index++) {
+            ref readonly var sample = ref samples[index];
+            produce += sample.Produce;
+            blocked += sample.ProduceBlocked;
+            simulate += sample.Simulate;
+            renders += sample.ScheduledRenders;
+            for (var part = 0; part < (int)HostFrameWorkPart.Count; part++) { parts[part] += sample.Parts[part]; }
+            foreach (ref readonly var world in recording.Worlds(index)) {
+                ref var total = ref System.Runtime.InteropServices.CollectionsMarshal.GetValueRefOrAddDefault(worlds, world.World, out _);
+                total.Steps += world.Steps;
+                total.Ticks += world.Ticks;
+                for (var part = (int)HostFrameWorkPart.TickIngress; part < (int)HostFrameWorkPart.Count; part++) {
+                    total.Parts[part] += world.Parts[part];
+                }
+            }
+        }
+        var worldTimes = new JsonObject();
+        foreach (var (name, world) in worlds) {
+            worldTimes[name] = new JsonObject {
+                ["steps"] = world.Steps,
+                ["stepMs"] = HostFrameRecording.WorkMilliseconds(world.Ticks),
+                ["partsMs"] = DescribeParts(world.Parts, HostFrameWorkPart.TickIngress, HostFrameWorkPart.Count, HostFrameRecording.WorkMilliseconds(world.Ticks)),
+            };
+        }
+        return new JsonObject {
+            ["iterations"] = end - first,
+            ["scheduledRenders"] = renders,
+            ["produceFenceMs"] = recording.Milliseconds(blocked),
+            ["producePartsMs"] = DescribeParts(parts, HostFrameWorkPart.Pump, HostFrameWorkPart.TickIngress, recording.Milliseconds(produce - blocked)),
+            ["simulatePartsMs"] = DescribeParts(parts, HostFrameWorkPart.TickIngress, HostFrameWorkPart.Count, recording.Milliseconds(simulate)),
+            ["worlds"] = worldTimes,
+        };
+    }
+
+    private static JsonObject DescribeParts(in HostFrameWorkTimes parts, HostFrameWorkPart first, HostFrameWorkPart end, double total) {
+        var result = new JsonObject();
+        for (var part = (int)first; part < (int)end; part++) {
+            var milliseconds = HostFrameRecording.WorkMilliseconds(parts[part]);
+            result[((HostFrameWorkPart)part).ToString()] = milliseconds;
+            total -= milliseconds;
+        }
+        result["other"] = total;
+        return result;
     }
 
     // The chapter's iterations whose work passed the budget, the longest first: each with its tick, the body's last
@@ -208,6 +263,7 @@ public sealed partial class WorldBenchmarkCommandModule {
                 ["pauseMs"] = recording.Milliseconds(ticks: sample.Pause),
                 ["steps"] = sample.Steps,
                 ["collections"] = (sample.Gen0 + sample.Gen1 + sample.Gen2),
+                ["frameThread"] = DescribeFrameThread(recording, index, index + 1),
             };
 
             if ((place is not null) && (Pose().Match(input: place.Answer) is { Success: true } pose)) {
