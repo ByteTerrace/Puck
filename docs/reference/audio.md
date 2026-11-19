@@ -35,7 +35,9 @@ projects one tick's `WorldEventFeed.Edges` into `MusicSenseEdge`s at the
 window is an authored `compareState` range over the `$clock:<music>:phaseError`
 world-rule operand (the signed tick distance from `MusicClock`'s current
 position to the nearest beat) rather than a dedicated grader type; the
-[clock operands](#clock-operands) below hold the rest of the family.
+[clock operands](#clock-operands) below hold the rest of the family. The standard
+package's [`rhythm.puck`](../../worlds/standard/rhythm.puck) writes that range once
+as data: windows, grades and a phrase of steps on beats.
 
 A world names its score, tunes and patches by rows (`music`, `tunes`,
 `patches`, like `tables`), each a name, a `source` and a SHA-256 pin of the

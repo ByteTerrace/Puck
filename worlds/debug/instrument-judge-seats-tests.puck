@@ -1,0 +1,54 @@
+// The instrument expanded for two local seats with the standard's own controls (`puck test
+// worlds/debug/instrument-judge-seats-tests.puck --reproduce`): Z then X squeeze both triggers and breathe. Seat 1 plays a
+// phrase through its bindings while seat 2 holds the instrument down, and seat 2's judge cells and register stay as they
+// were. A press scheduled in tick T lands in interval T plus 2 (see the 30 Hz scenarios).
+schema: "puck.world.definition.v1"
+basis: "avatars/moth"
+documentId: "instrument-judge-seats-tests"
+import "../standard/standard"
+import "../standard/instrument"
+import "score"
+
+simulation {
+  rateHz: 30
+}
+bodies {
+  localSeats: 2
+  seatActivation [Eager, Eager]
+  seatSpawns ["stage", "stage"]
+}
+inputModes {
+  global []
+  families [instrumentFamily()]
+}
+
+instrumentPlay(music: score, seats: 2)
+
+test "a seat's phrase is graded on its squeeze and leaves the other seat's cells alone" {
+  when {
+    ticks 4
+    seat1: player.signal keyboard.z press
+    seat1: player.signal keyboard.x press
+    ticks 9
+    seat1: player.signal keyboard.j press at:0
+    ticks 15
+    seat1: player.signal keyboard.i press at:0.03225
+    ticks 15
+    seat1: player.signal keyboard.l press at:0
+    ticks 3
+  }
+  expect {
+    bodyState(body, 0, breathing) == 1
+    bodyState(body, 1, breathing) == 0
+    judgeGrade1[0] == 3
+    judgeGrade1[1] == 2
+    judgeGrade1[2] == 3
+    judge.strength1 == 8
+    judge.step1 == 3
+    judge.status1 == 0
+    judge.step2 == 0
+    judge.strength2 == 0
+    judge.misses2 == 0
+    judge.status2 == 0
+  }
+}
