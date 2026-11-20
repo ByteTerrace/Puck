@@ -76,6 +76,11 @@ public sealed class MachineVideoSourceUpload : IRenderGraphSourceUpload, IImageS
         }
     }
 
+    /// <inheritdoc/>
+    /// <remarks>A machine the resolver does not name is not running: its screen draws that state itself, so the source is
+    /// absent rather than faulted.</remarks>
+    public bool IsAbsent => (m_output() is null);
+
     /// <summary>Gets the descriptor of the image the source last wrote, which its reference states; before the first write,
     /// the descriptor it declares now.</summary>
     /// <exception cref="InvalidOperationException">The source has written nothing and declares no image.</exception>

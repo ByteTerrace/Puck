@@ -108,7 +108,8 @@ public sealed partial class WorldDocument {
         WorldRuleCompilation? compilation,
         StateArena? arena,
         WorldSolidField? solids,
-        bool solidAffecting,
+        WorldProductPlan products,
+        (WorldDocumentInputs? Envelope, WorldDocumentInputs? Addons, WorldDocumentInputs? Machines) productInputs,
         IWorldAddonPreparedPlan? addonPlan,
         IWorldMachinePreparedPlan? machinePlan,
         int[]? tickWrittenEntity,
@@ -133,7 +134,11 @@ public sealed partial class WorldDocument {
         public IWorldMachinePreparedPlan? MachinePlan { get; } = machinePlan;
         public WorldMutation Mutation { get; } = mutation;
         public WorldGrants.PreparedAuthorityTransition Authority { get; } = authority;
-        public bool SolidAffecting { get; } = solidAffecting;
+        /// <summary>Gets which compiled products the install rebuilds (<see cref="PlanProducts"/>).</summary>
+        public WorldProductPlan Products { get; } = products;
+        /// <summary>Gets what the envelope's fit and the hosts' preparations read of the candidate, each
+        /// <see langword="null"/> when the install keeps that product.</summary>
+        public (WorldDocumentInputs? Envelope, WorldDocumentInputs? Addons, WorldDocumentInputs? Machines) ProductInputs { get; } = productInputs;
         public WorldSolidField? Solids { get; } = solids;
         public ulong Tick { get; } = tick;
         public bool[]? TickCollided { get; } = tickCollided;

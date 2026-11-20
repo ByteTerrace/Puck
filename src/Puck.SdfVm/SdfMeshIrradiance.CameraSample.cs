@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Numerics;
 using System.Runtime.InteropServices;
 
@@ -72,7 +71,7 @@ public sealed partial class SdfMeshIrradiance {
             if (sameClient && sameScene && m_gpuCameraSampleKey == key && !moved && !cut) { return; }
             // A camera sample shares the service's one admitted job with the relight, so movement and lighting are read at
             // most every LightingInterval; a cut is read at once, since its view's exposure waits for it.
-            if (!frame.ConvergesLighting && !cut && Stopwatch.GetElapsedTime(m_gpuCameraSampleAt) < LightingInterval) { return; }
+            if (!frame.ConvergesLighting && !cut && Time.GetElapsedTime(m_gpuCameraSampleAt) < LightingInterval) { return; }
             if (TakeSnapshot() is not { } captured) { return; }
             snapshot = captured;
             // Rewritten in place only here, with the one camera sample a volume runs at a time completed (above), so no job in
@@ -90,7 +89,7 @@ public sealed partial class SdfMeshIrradiance {
             m_gpuCameraSampleKey = key;
             m_gpuCameraSampleScene = m_scene;
             m_gpuCameraSampleAskedOf = client;
-            m_gpuCameraSampleAt = Stopwatch.GetTimestamp();
+            m_gpuCameraSampleAt = Time.GetTimestamp();
         }
         m_gpuCameraSampleTask = ReadCameraSample(gpu, snapshot, origins, lighting, words, positions, rows, cuts);
     }

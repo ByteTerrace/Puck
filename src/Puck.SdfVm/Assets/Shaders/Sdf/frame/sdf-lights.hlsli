@@ -4,7 +4,7 @@
 #ifndef FRAME_SDF_LIGHTS_HLSLI
 #define FRAME_SDF_LIGHTS_HLSLI
 #include "sdf-environment.hlsli"
-#include "sdf-component.hlsli"
+#include "../field/sdf-component.hlsli"
 
 // Both the declared count and the actual bound buffer constrain a read.
 uint worldLightCount() {

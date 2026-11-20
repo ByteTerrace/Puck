@@ -274,7 +274,7 @@ a constant-buffer one included (`passGroup.lightMask[i >> 5]`, a float4 of
 slot visibilities), makes DXC copy the vector into a local array on every
 evaluation: inside the views light walk that was PIX's 21 million local-memory
 sectors a frame. Pick the component with `sdfComponent`
-([`frame/sdf-component.hlsli`](../../../../src/Puck.SdfVm/Assets/Shaders/Sdf/frame/sdf-component.hlsli)).
+([`field/sdf-component.hlsli`](../../../../src/Puck.SdfVm/Assets/Shaders/Sdf/field/sdf-component.hlsli)).
 
 ## Keep a wave on one path
 
@@ -536,12 +536,12 @@ Vulkan fence or timeline signal rides its `vkQueueSubmit`, so Vulkan's
   ([hot reload](../../../../docs/plans/open-items.md#edit-to-running-hot-reload-and-boot)).
 - **Tick-bound views record on tick frames,** beside the tick itself
   ([simulation tick](../../../../docs/plans/open-items.md#engine-job-system)).
-- **The sky reduction's bank conflict,** **the views filter tile's 2-way
-  conflict** and **the bake's `SdfBakeTaps`,**
-  indexed by the `[loop]` counter, the shape the local-array rule forbids: the
-  bake kernel reads 128 registers and 224 bytes of local memory on Vulkan
-  ([frame time](../../../../docs/plans/open-items.md#engine-job-system),
-  [cold bake](../../../../docs/plans/open-items.md#bake-proportional-to-change)).
+- **The sky reduction and the views filter tile have bank conflicts.** The
+  filter tile's conflict is 2-way ([frame time](../../../../docs/plans/open-items.md#engine-job-system)).
+- **Bake register pressure.** `mapCore` switches between named parent fields,
+  and `sdfBakeTap` selects each stencil direction. Read the driver's register,
+  local and shared memory counts on the resulting pipeline
+  ([field programs](../../../../docs/plans/field-programs.md#build-order)).
 - **Probe arrays leave registers.** The gather's arrays (`SdfMeshProbes`'
   sixteen weights, a stage's eight in `SdfMeshProbeCage`) live in memory rather
   than registers: shared memory on NVIDIA's Vulkan driver (`Shared Memory Size`

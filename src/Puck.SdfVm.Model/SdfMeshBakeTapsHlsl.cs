@@ -11,7 +11,7 @@ public static class SdfMeshBakeTapsHlsl {
     public const string FileName = "sdf-bake-taps.hlsli";
 
     /// <summary>Generates the include.</summary>
-    /// <returns>The HLSL text: <c>SdfBakeTaps</c>, the taps' directions, one <c>float3</c> per tetrahedron vertex.</returns>
+    /// <returns>The HLSL function that selects a tetrahedral tap direction by sample index, with zero for the centre.</returns>
     public static string Generate() {
         var text = new StringBuilder();
 
@@ -23,11 +23,17 @@ public static class SdfMeshBakeTapsHlsl {
         Line(line: "#define SDF_BAKE_TAPS_HLSLI");
         Line();
         Line(line: "// The bake kernel's gradient stencil: a corner of the unit cube per tetrahedron vertex, scaled by the lattice's tap spacing.");
-        Line(line: $"static const float3 SdfBakeTaps[{SdfMeshBakeTaps.Offsets.Length}] = {{");
-        foreach (var tap in SdfMeshBakeTaps.Offsets) {
-            Line(line: $"    float3({Real(value: tap.X)}, {Real(value: tap.Y)}, {Real(value: tap.Z)}),");
+        var offsets = SdfMeshBakeTaps.Offsets;
+        Line(line: $"#define SDF_BAKE_GRADIENT_TAPS {offsets.Length}u");
+        Line(line: "float3 sdfBakeTap(uint tap) {");
+        Line(line: "    switch (tap) {");
+        for (var i = 0; i < offsets.Length; i++) {
+            var tap = offsets[i];
+            Line(line: $"        case {i + 1}u: return float3({Real(value: tap.X)}, {Real(value: tap.Y)}, {Real(value: tap.Z)});");
         }
-        Line(line: "};");
+        Line(line: "        default: return 0.0;");
+        Line(line: "    }");
+        Line(line: "}");
         Line();
         Line(line: "#endif");
 

@@ -39,10 +39,7 @@ public sealed partial class WorldDocument {
 
         // Every creation a row may show was admitted with the row, so the field compiles; were it not to, the population
         // compiles it again below and refuses by name.
-        if (
-            WorldContactSelection.RequiresField(collision: definition.Collision) ||
-            WorldTargetSelection.RequiresLineOfSight(definition: definition)
-        ) {
+        if (RequiresSolidField(definition: definition)) {
             _ = TryBuildSolids(
                 definition: definition,
                 reason: out _,

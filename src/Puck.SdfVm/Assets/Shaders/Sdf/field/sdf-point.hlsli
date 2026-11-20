@@ -1,11 +1,10 @@
 // The hit record, the point transforms, the per-invocation map channels and the wallpaper folds.
 #ifndef FIELD_SDF_POINT_HLSLI
 #define FIELD_SDF_POINT_HLSLI
-// The winning candidate's anonymous values and dynamic frame travel with its material.
+// The winning candidate's instance and dynamic frame travel with its material.
 struct SdfHit {
     float distance;
     int material;
-    float4 lanes;
     int instanceIndex;
     int frameSlot;
 };
@@ -14,13 +13,13 @@ SdfHit sdfIsaErrorHit() {
     SdfHit result;
     result.distance = 0.0;
     result.material = SDF_ISA_ERROR_MATERIAL;
-    result.lanes = float4(0.0, 0.0, 0.0, 0.0);
     result.instanceIndex = -1;
     result.frameSlot = SDF_TRANSFORM_SLOT_NONE;
     return result;
 }
 
 #include "sdf-quaternion.hlsli"
+#include "sdf-component.hlsli"
 
 // The point warps the general walk (mapCore) and the compiled part walk (sdfPartEvaluate) both apply, one arithmetic for
 // both; each caller validates the instruction's axes and propagates its own error first.
@@ -32,21 +31,22 @@ SdfHit sdfIsaErrorHit() {
 // scale takes, the size correction; the residual shear from the axis-varying scale is bounded separately by
 // SdfProgram.AnalyzeLipschitz's chain step clamp, not corrected per candidate. axis is below 3.
 float sdfAxialProfile(inout float3 localPosition, uint axis, float4 data0, float4 data1) {
-    float rawT = (data0.z - localPosition[axis]) * data0.w;
+    float axial = sdfComponent(localPosition, axis);
+    float rawT = (data0.z - axial) * data0.w;
     float t = saturate(rawT);
     float rawS = data1.y + data0.x * t + data0.y * sin(SDF_PI * t);
     float scale = max(rawS, SDF_FLARE_MIN_SCALE);
     float invScale = 1.0 / scale;
-    [unroll] for (uint component = 0u; component < 3u; component++) {
-        if (component != axis) { localPosition[component] *= invScale; }
-    }
+    localPosition *= invScale;
+    sdfSetComponent(localPosition, axis, axial);
     return data1.x;
 }
 // Polynomial shear (KEEP IN SYNC with SdfProgramBuilder.Shear): only the target axis moves, by an exact (not small-angle)
 // polynomial of the driver axis, coefficients = (linear, quadratic, cubic). Both axes are below 3.
 void sdfShear(inout float3 localPosition, uint target, uint driver, float3 coefficients) {
-    float t = localPosition[driver];
-    localPosition[target] += ((coefficients.z * t + coefficients.y) * t + coefficients.x) * t;
+    float t = sdfComponent(localPosition, driver);
+    float offset = ((coefficients.z * t + coefficients.y) * t + coefficients.x) * t;
+    sdfSetComponent(localPosition, target, sdfComponent(localPosition, target) + offset);
 }
 
 // GLSL-style FLOOR modulo. HLSL's fmod truncates toward zero, so it disagrees with GLSL's mod for negative

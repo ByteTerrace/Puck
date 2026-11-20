@@ -4,6 +4,7 @@ using Puck.Abstractions.Cameras;
 using Puck.Abstractions.Presentation;
 using Puck.Abstractions.Waiting;
 using Puck.SignedDistance;
+using Puck.Testing;
 using Xunit;
 
 namespace Puck.SdfVm.Tests;
@@ -25,13 +26,16 @@ public sealed partial class SdfMeshIrradianceLawTests : IDisposable {
         foreach (var volume in m_volumes) { volume.Dispose(); }
         m_volumes.Clear();
     }
-    // A volume the law owns, disposed with it.
+    // A volume the law owns, disposed with it, on a clock the law steps by frames (Step), so the grants its budget makes
+    // are the frames the law drives, never the wall time they take.
     private SdfMeshIrradiance Volume() {
-        var volume = new SdfMeshIrradiance();
+        var volume = new SdfMeshIrradiance { Time = VirtualClock.ForDevice() };
 
         m_volumes.Add(item: volume);
         return volume;
     }
+    // Lets a span of the volume's clock pass, a frame by default.
+    private static void Step(SdfMeshIrradiance volume, TimeSpan? span = null) => ((VirtualClock)volume.Time).Advance(by: (span ?? VirtualClock.Frame));
 
     [Fact]
     public void ASparselySampledSphereKeepsItsVisibleSurfaceLit() {
@@ -222,9 +226,9 @@ public sealed partial class SdfMeshIrradianceLawTests : IDisposable {
         // MostGrantSeconds of the rate, a hundred probes.
         var dimmed = frame with { Lights = lights, IndirectBudget = new SdfIndirectBudget(RelightPerSecond: 400, TracePerSecond: 0, Age: 0f) };
 
-        Thread.Sleep(millisecondsTimeout: (int)((SdfMeshIrradiance.MostGrantSeconds * 1000.0) + 50.0));
+        Step(volume: volume, span: TimeSpan.FromSeconds(value: (SdfMeshIrradiance.MostGrantSeconds + 0.05)));
         _ = volume.Stage(bakePending: false, frame: dimmed, tier: SdfIndirectTier.Medium, write: _ => { });
-        _ = SpinWait.SpinUntil(condition: () => (volume.Counters.Read(kind: SdfMeshIrradiance.Relit) >= (relit + 100)), millisecondsTimeout: 30_000);
+        TestLiveness.Until(reason: () => $"relit {(volume.Counters.Read(kind: SdfMeshIrradiance.Relit) - relit)} of the 100 the grant funds", step: () => (volume.Counters.Read(kind: SdfMeshIrradiance.Relit) >= (relit + 100)));
         // One frame's grant bounds the relights before the next frame grants more.
         Assert.Equal(expected: 100L, actual: (volume.Counters.Read(kind: SdfMeshIrradiance.Relit) - relit));
         _ = Trace(frame: dimmed with { IndirectBudget = SdfIndirectBudget.Unbounded }, tier: SdfIndirectTier.Medium, volume: volume);
@@ -571,11 +575,12 @@ public sealed partial class SdfMeshIrradianceLawTests : IDisposable {
     private static (SdfMeshIrradianceParameters Parameters, uint[] Words) Trace(SdfMeshIrradiance volume, SdfFrame frame, SdfIndirectTier tier = SdfIndirectTier.High) {
         var words = Array.Empty<uint>();
         var parameters = default(SdfMeshIrradianceParameters);
-        var deadline = DateTime.UtcNow.AddSeconds(value: 120d);
 
-        do {
+        // One frame a step; the worker that traces runs on the thread pool, which the liveness bound waits for.
+        TestLiveness.Until(reason: volume.Describe, step: () => {
             var wrote = false;
 
+            Step(volume: volume);
             parameters = volume.Stage(bakePending: false, frame: frame, tier: tier, write: memory => {
                 wrote = true;
                 words = memory.ToArray();
@@ -600,10 +605,9 @@ public sealed partial class SdfMeshIrradianceLawTests : IDisposable {
                     first += window.Count;
                 }
             }
-            Thread.Sleep(millisecondsTimeout: 20);
-        } while (volume.Settling && (DateTime.UtcNow < deadline));
+            return !volume.Settling;
+        });
 
-        Assert.False(condition: volume.Settling);
         Assert.True(condition: (words.Length > 0), userMessage: volume.Describe());
 
         return (parameters, words);
@@ -665,7 +669,7 @@ public sealed partial class SdfMeshIrradianceLawTests : IDisposable {
         const BindingFlags Private = (BindingFlags.Instance | BindingFlags.NonPublic);
         var finest = SdfMeshIrradiance.LevelsOf(tier: tier)[0];
         var volume = Volume();
-        var layout = typeof(SdfMeshIrradiance).GetNestedType(name: "Layout", bindingAttr: BindingFlags.NonPublic)!.GetMethod(name: "Of", bindingAttr: (BindingFlags.Static | BindingFlags.Public))!.Invoke(obj: null, parameters: [tier, 0, 60f]);
+        var layout = typeof(SdfMeshIrradiance).GetNestedType(name: "Layout", bindingAttr: BindingFlags.NonPublic)!.GetMethod(name: "Of", bindingAttr: (BindingFlags.Static | BindingFlags.Public))!.Invoke(obj: null, parameters: [tier, 0, 60f, Frame().IndirectLevels]);
         var windowLow = typeof(SdfMeshIrradiance).GetMethod(name: "WindowLow", bindingAttr: Private)!;
         var camera = typeof(SdfMeshIrradiance).GetField(name: "m_camera", bindingAttr: Private)!;
         var view = Frame().Views[0];
@@ -1122,12 +1126,12 @@ public sealed partial class SdfMeshIrradianceLawTests : IDisposable {
             Views = [lit.Views[0] with { Camera = CameraSnapshot.LookAt(fieldOfViewRadians: 1f, position: new Vector3(x: 0.5f, y: 5.5f, z: 0.5f), target: new Vector3(x: 1.5f, y: 5.5f, z: 0.5f), viewportHeight: 4u, viewportWidth: 4u) }],
         };
         var volume = Volume();
-        var deadline = DateTime.UtcNow.AddSeconds(value: 120d);
 
-        do {
+        TestLiveness.Until(reason: volume.Describe, step: () => {
+            Step(volume: volume);
             _ = volume.Stage(bakePending: true, frame: frame, tier: SdfIndirectTier.Medium, write: static _ => { });
-            Thread.Sleep(millisecondsTimeout: 20);
-        } while (volume.Settling && (DateTime.UtcNow < deadline));
+            return !volume.Settling;
+        });
 
         Assert.NotNull(@object: volume.DiagnosticScene(frame: frame));
         Assert.True(condition: volume.SampleLuminance(forward: Vector3.UnitX, luminance: out var luminance, position: frame.Views[0].Camera.Position, skyVisibility: out _, source: out var source));

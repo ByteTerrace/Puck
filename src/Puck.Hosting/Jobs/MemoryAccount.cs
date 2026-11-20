@@ -129,7 +129,7 @@ public sealed class MemoryAccount {
 
         m_clock = (clock ?? Stopwatch.GetTimestamp);
         m_readAvailable = (availablePhysicalBytes ?? HostMemory.AvailablePhysicalBytes);
-        DefaultBudget = Math.Max(val1: 0, val2: ((installed * 3) / 4));
+        DefaultBudget = DefaultBudgetOf(installedPhysicalBytes: installed);
         Headroom = Math.Clamp(max: (512L << 20), min: (16L << 20), value: (installed / 32));
     }
 
@@ -172,6 +172,12 @@ public sealed class MemoryAccount {
 
     /// <summary>Gets the machine-derived budget, leaving failure, cancellation and allocator headroom.</summary>
     public long DefaultBudget { get; }
+    /// <summary>Returns the host budget a process's account derives on a machine of a given size: three quarters of its
+    /// installed memory, the rest left to the system and other programs. A host that admits Puck processes before they
+    /// start (the CLI's admission) expects none to plan past it.</summary>
+    /// <param name="installedPhysicalBytes">The machine's installed physical memory, in bytes.</param>
+    /// <returns>The budget, in bytes.</returns>
+    public static long DefaultBudgetOf(long installedPhysicalBytes) => Math.Max(val1: 0, val2: ((installedPhysicalBytes * 3) / 4));
     /// <summary>Gets the unspendable failure and allocator reserve.</summary>
     public long Headroom { get; }
     /// <summary>Gets the default cache allowance, governed by the same authority as job admission.</summary>

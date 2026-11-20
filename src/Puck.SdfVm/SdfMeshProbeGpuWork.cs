@@ -357,8 +357,8 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
                 // The scene's meshes normally land within an upload or two. A head that waits past AdmissionWait is
                 // cancelled like any obsolete job, so its coordinator and the camera sample behind it are never held without
                 // bound; the coordinator lists again on its next grant and asks for the scene as it then stands.
-                if (!ReferenceEquals(m_waiting, pending)) { m_waiting = pending; m_waitingSince = Stopwatch.GetTimestamp(); }
-                else if (Stopwatch.GetElapsedTime(m_waitingSince) > AdmissionWait) {
+                if (!ReferenceEquals(m_waiting, pending)) { m_waiting = pending; m_waitingSince = m_volume.Time.GetTimestamp(); }
+                else if (m_volume.Time.GetElapsedTime(m_waitingSince) > AdmissionWait) {
                     m_pending.Dequeue();
                     m_waiting = null;
                     Cancel(job: pending);
@@ -393,7 +393,7 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
                     if (m_feedback is not null) { tables.RetireBackgroundResource(m_feedback); }
                     // A slot of the service is the region's slot its job flushes through (Record), so a staging buffer
                     // is rewritten only once the job that last staged through it completed.
-                    m_feedback = tables.CreateProbeSceneRegion(pending.VolumeWords * 4, SdfGpuWork.SlotCount);
+                    m_feedback = tables.CreateProbeRegion("probe-feedback", pending.VolumeWords * 4, SdfGpuWork.SlotCount);
                     m_feedbackWords = pending.VolumeWords;
                 }
                 var updates = pending.Updates;

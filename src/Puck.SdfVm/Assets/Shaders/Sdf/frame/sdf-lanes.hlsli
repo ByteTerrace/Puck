@@ -7,7 +7,7 @@
 #define SDF_LANES_HLSLI
 
 #include "../isa/sdf-render.hlsli"
-#include "sdf-component.hlsli"
+#include "../field/sdf-component.hlsli"
 
 // The value of render lane `lane` in [0, SDF_LANE_COUNT); `slotLanes` are the surface's frame-slot lanes.
 float sdfLane(float4 slotLanes, uint lane) {

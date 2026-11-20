@@ -140,6 +140,25 @@ public sealed class WorldBootWork : WorkLedger<WorkCounterSet> {
     /// <summary>Gets the kind counting the installs of a live document that changed only what presentation reads,
     /// keeping the arena, every compiled product and the population.</summary>
     public static WorkKind PresentationInstalls { get; } = Registry.Declare(name: "world.boot.presentation-installs", unit: "count", workClass: WorkClass.Deterministic);
+    /// <summary>Gets the kind counting the installs that judged the compiled products against the parts of the
+    /// document they were built from: a full install of a mutation or a reload, an undo, and a presentation install
+    /// fitting the render envelope.</summary>
+    public static WorkKind ProductPlans { get; } = Registry.Declare(name: "world.boot.product-plans", unit: "count", workClass: WorkClass.Deterministic);
+    /// <summary>Gets the kind counting the render envelope fits an install ran because a part the last fit read
+    /// changed.</summary>
+    public static WorkKind EnvelopeFits { get; } = Registry.Declare(name: "world.boot.envelope-fits", unit: "count", workClass: WorkClass.Deterministic);
+    /// <summary>Gets the kind counting the solid field builds an install ran because a part the field was built from
+    /// changed.</summary>
+    public static WorkKind SolidBuilds { get; } = Registry.Declare(name: "world.boot.solid-builds", unit: "count", workClass: WorkClass.Deterministic);
+    /// <summary>Gets the kind counting the addon host preparations an install ran because a part the last one read
+    /// changed.</summary>
+    public static WorkKind AddonPrepares { get; } = Registry.Declare(name: "world.boot.addon-prepares", unit: "count", workClass: WorkClass.Deterministic);
+    /// <summary>Gets the kind counting the machine host preparations an install ran because a part the last one read
+    /// changed.</summary>
+    public static WorkKind MachinePrepares { get; } = Registry.Declare(name: "world.boot.machine-prepares", unit: "count", workClass: WorkClass.Deterministic);
+    /// <summary>Gets the kind counting the population rebuilds an install ran because a part the population was built
+    /// from changed, or it received a new solid field.</summary>
+    public static WorkKind PopulationRebuilds { get; } = Registry.Declare(name: "world.boot.population-rebuilds", unit: "count", workClass: WorkClass.Deterministic);
     /// <summary>Gets the kind counting the state-bound document values a rewrite replaced with a resolved, bound or
     /// flattened copy (<see cref="WorldStateDocumentValues"/>), each on a copied path; a value a server already bound
     /// is kept and counts nothing.</summary>

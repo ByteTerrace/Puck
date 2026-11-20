@@ -591,7 +591,7 @@ public sealed partial class WorldDocument {
 
         // A reload that changes nothing the simulation reads, or only state values, installs as the edit it is and keeps
         // every compiled product; anything else takes the full install below.
-        var changedMembers = ((request.Kind == WorldRebuildKind.Reload) ? DescribeChanged(changed: ChangedMembers(candidate: candidate, live: priorDefinition)) : string.Empty);
+        var changedMembers = ((request.Kind == WorldRebuildKind.Reload) ? DescribeChanged(changed: WorldDocumentInputs.Changed(after: candidate, before: priorDefinition)) : string.Empty);
 
         if ((request.Kind == WorldRebuildKind.Reload) && keepAuthority) {
             var kind =((prepared is not null) ? prepared.Kind : ReloadInstallKindOf(candidate: candidate, live: priorDefinition, rows: out _));
@@ -703,18 +703,25 @@ public sealed partial class WorldDocument {
             return false;
         }
 
-        if (!Host.Envelope.TryFit(
-            candidate: candidate,
-            reason: out var capacityReason
-        )) {
-            RejectRebuild(
-                connectionId: connectionId,
-                correlationId: correlationId,
-                reason: capacityReason,
-                verb: verb
-            );
+        // A reload rebuilds the products whose inputs its candidate changed, by the rule a mutation's install follows;
+        // a load or a reset replaces the document whole, which changes every part.
+        var products = PlanProducts(candidate: candidate, previous: priorDefinition, whole: (request.Kind != WorldRebuildKind.Reload));
+        WorldDocumentInputs? envelopeInputs = null;
+        WorldDocumentInputs? addonInputs = null;
+        WorldDocumentInputs? machineInputs = null;
 
-            return false;
+        if (!products.Envelope.IsEmpty) {
+            if (!TryFitEnvelope(candidate: candidate, inputs: out var fitted, reason: out var capacityReason)) {
+                RejectRebuild(
+                    connectionId: connectionId,
+                    correlationId: correlationId,
+                    reason: capacityReason,
+                    verb: verb
+                );
+
+                return false;
+            }
+            envelopeInputs = fitted;
         }
 
         if (!Host.Population.CanInstallFields(
@@ -731,10 +738,9 @@ public sealed partial class WorldDocument {
             return false;
         }
 
-        // A rebuild rebuilds the field wholesale (loud rejection on an unsupported solid, definition unchanged) —
-        // same as a whole-document swap always has.
-        if (!TryBuildSolids(
-            definition: candidate,
+        if (!TryStageSolids(
+            candidate: candidate,
+            products: products,
             reason: out var rebuildSolidReason,
             solids: out var rebuildSolids
         )) {
@@ -748,14 +754,10 @@ public sealed partial class WorldDocument {
             return false;
         }
 
-        // Reconcile the addon runtime against the CANDIDATE document — unconditional, never gated on a per-mutation
-        // classification the way TryApplyMutation's own AffectsAddons predicate is: a whole-document swap can move
-        // ANY section, including the channel table TryPrepare's own dependency check watches for. Unconditional is
-        // cheap here too — a reused row costs a structural compare, never a recompile. A server with no addon host
-        // attached (a test double; production hosts attach WorldAddonRuntime)
-        // is vacuous only for a candidate whose addon rows are all absent or disabled — an ENABLED row is refused by
-        // name below, the identical shape TryApplyMutation's own no-host gate uses,
-        // rather than installing a candidate that claims a mounted addon no host can ever run.
+        // Reconcile the addon runtime against the candidate when a part its last preparation read changed: a reused
+        // row costs a structural compare, never a recompile. A server with no addon host attached (a test double;
+        // production hosts attach WorldAddonRuntime) refuses a candidate holding an enabled row by name, the shape a
+        // mutation's install uses, rather than installing a candidate that claims a mounted addon no host can run.
         IWorldAddonPreparedPlan? rebuildAddonPlan = null;
         int[]? newRebuildTickWrittenEntity = null;
         Principal[]? newRebuildTickWrittenPrincipal = null;
@@ -772,10 +774,14 @@ public sealed partial class WorldDocument {
         // disposes an uncommitted plan. Replay restores the complete guest image through the checkpoint boundary.
 
         try {
-            if (Host.Addons is { } addonsForRebuild) {
-                if (!addonsForRebuild.TryPrepare(
+            if (products.Addons.IsEmpty) {
+                // The addon host's last preparation read no part this candidate changed.
+            } else if (Host.Addons is { } addonsForRebuild) {
+                if (!TryPrepareAddons(
+                    addons: addonsForRebuild,
                     candidate: candidate,
                     current: m_definition,
+                    inputs: out var preparedAddons,
                     plan: out rebuildAddonPlan,
                     reason: out var rebuildAddonReason
                 )) {
@@ -788,6 +794,7 @@ public sealed partial class WorldDocument {
 
                     return false;
                 }
+                addonInputs = preparedAddons;
 
                 if (rebuildAddonPlan is not null) {
                     StageAddonContentionArrays(
@@ -811,21 +818,25 @@ public sealed partial class WorldDocument {
                 return false;
             }
 
-            if (!Host.Machines.TryPrepare(
-                admission: admitted,
-                candidate: candidate,
-                current: m_definition,
-                plan: out rebuildMachinePlan,
-                reason: out var rebuildMachineReason
-            )) {
-                RejectRebuild(
-                    connectionId: connectionId,
-                    correlationId: correlationId,
-                    reason: $"screen machine {rebuildMachineReason}",
-                    verb: verb
-                );
+            if (!products.Machines.IsEmpty) {
+                if (!TryPrepareMachines(
+                    admission: admitted,
+                    candidate: candidate,
+                    current: m_definition,
+                    inputs: out var preparedMachines,
+                    plan: out rebuildMachinePlan,
+                    reason: out var rebuildMachineReason
+                )) {
+                    RejectRebuild(
+                        connectionId: connectionId,
+                        correlationId: correlationId,
+                        reason: $"screen machine {rebuildMachineReason}",
+                        verb: verb
+                    );
 
-                return false;
+                    return false;
+                }
+                machineInputs = preparedMachines;
             }
 
             // Candidate refusals precede arena preparation, which carries the boot-sized session lanes. Nothing
@@ -909,9 +920,11 @@ public sealed partial class WorldDocument {
                 compilation: compilation,
                 continuity: ((reloadEdit is null) ? WorldArenaContinuity.Load : WorldArenaContinuity.Edit),
                 definition: installed,
-                rebuildPopulation: true,
+                rebuildPopulation: products.RebuildsPopulation,
                 rebuildKind: request.Kind
             );
+            AdoptProductInputs(addons: addonInputs, envelope: envelopeInputs, machines: machineInputs);
+            NarrateProducts(plan: products, population: products.RebuildsPopulation);
             // A lattice keeps its cells through an install whose state it kept; only a row whose draw pass the source
             // changed repaints. An install of the document's state whole restarts every lattice with it.
             if (reloadEdit is null) {
@@ -1293,11 +1306,10 @@ public sealed partial class WorldDocument {
         // tick's later intent drain reads it (Install always runs before the intents loop within one Step).
         Host.GrantTable.SyncState(definition: definition, arena: Host.Arena);
 
-        // Field reactions are a compiled runtime product even when the mutation does not require a population
-        // rebuild. A compatible replacement swaps the typed plan in place and retains every lattice cell.
-        if (!rebuildPopulation) {
-            Host.Population.InstallFields(definition: definition);
-        }
+        // Field reactions are a compiled runtime product of their own, installed on every full install before the
+        // population's build reads the lattices. A compatible replacement swaps the typed plan in place and retains
+        // every lattice cell.
+        Host.Population.InstallFields(definition: definition);
 
         // Reconcile the machine host to the (possibly changed) screens section on EVERY install — cheap (a
         // dictionary diff over a handful of declared screens), and the one choke point every screen-affecting
@@ -1639,7 +1651,7 @@ public sealed partial class WorldDocument {
             objA: solids,
             objB: m_solids
         )) {
-            m_solids = solids;
+            SetSolids(solids: solids);
             m_solidRevision++;
         }
     }
@@ -1736,10 +1748,7 @@ public sealed partial class WorldDocument {
     internal static bool TryBuildSolids(WorldDefinition definition, out WorldSolidField? solids, out string reason) {
         reason = string.Empty;
 
-        if (
-            !WorldContactSelection.RequiresField(collision: definition.Collision) &&
-            !WorldTargetSelection.RequiresLineOfSight(definition: definition)
-        ) {
+        if (!RequiresSolidField(definition: definition)) {
             solids = null;
 
             return true;

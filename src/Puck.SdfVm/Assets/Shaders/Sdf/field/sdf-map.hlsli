@@ -96,6 +96,13 @@ float sdfMaskProduct(uint firstRow, uint rowCount, float3 q, uint dataOffset) {
     }
     return weight;
 }
+float sdfFieldLane(int slot, uint lane) {
+#ifdef SDF_DYNAMIC_TRANSFORMS
+    if (slot >= 0) { return sdfComponent(sdfDynamicTransformRow(3u * (uint)slot + 2u), lane); }
+#endif
+    return 0.0;
+}
+
 SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) {
     // Layout offsets/counts — decoded ONCE per invocation by sdfLoadProgramLayout (see the struct above), not
     // re-derived here. The host-baked bounding-sphere tables sit right after the instruction data (2 uint4 per data pair):
@@ -154,10 +161,6 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
     // from the per-program stepScale above — that one clamps only the FINAL returned distance to keep a marcher's
     // steps 1-Lipschitz-safe and never touches a candidate mid-walk. Keep the two distinct.
     float distanceScale = 1.0;
-    // The riding dynamic slot's per-instance carrier (DynamicTransform.Lanes: components 0 through 3),
-    // read by any op evaluating under that slot — currently SDF_OP_LANE_ERODE. Reset with the chain (RESET), set by
-    // TRANSFORM_DYNAMIC, exactly like localPosition; zero under no dynamic slot.
-    float4 currentLanes = float4(0.0, 0.0, 0.0, 0.0);
     int currentSlot = SDF_TRANSFORM_SLOT_NONE;
     // SDF_OP_LANE_ERODE's pending effect on the NEXT SDF_OP_SHAPE_BLEND: a cheap early-out skip (no field cost) or,
     // otherwise, a world-unit additive erosion. Consumed and cleared there; reset with the chain.
@@ -170,12 +173,14 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
 
     result.distance = SDF_FAR_DISTANCE;
     result.material = 0;
-    result.lanes = float4(0.0, 0.0, 0.0, 0.0);
     result.instanceIndex = -1;
     result.frameSlot = SDF_TRANSFORM_SLOT_NONE;
 
     // Each validated scope saves its immediate parent's complete field.
-    SdfHit fieldParents[SDF_MAX_FIELD_SCOPE_DEPTH];
+#if SDF_MAX_FIELD_SCOPE_DEPTH != 4
+#error Update the switched parent slots for the new scope depth.
+#endif
+    SdfHit parent0 = result, parent1 = result, parent2 = result, parent3 = result;
     uint fieldDepth = 0u;
     // Walk ResetPoint segments in directory order, merging world and visible-instance ranges in ascending order.
     // A Union chain can be skipped when its sphere's lower bound cannot beat the running minimum; the next ResetPoint
@@ -288,13 +293,11 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
 
             if (planReady) {
                 float3 rigidBasePosition = worldPosition;
-                float4 rigidLanes = 0.0;
                 int rigidSlot = SDF_TRANSFORM_SLOT_NONE;
 
 #ifdef SDF_DYNAMIC_TRANSFORMS
                 if (plan.z != SDF_TRANSFORM_SLOT_STATIC_WORD) {
                     uint dynamicSlot = (uint)SDF_TRANSFORM_SLOT_UNPACK(plan.z);
-                    rigidLanes = sdfDynamicTransformRow(3u * dynamicSlot + 2u);
                     rigidSlot = (int)dynamicSlot;
                     float4 dynamicPosition = sdfDynamicTransformRow(3u * dynamicSlot);
                     float4 dynamicOrientation = sdfDynamicTransformRow((3u * dynamicSlot) + 1u);
@@ -349,7 +352,7 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                     float candidate = evaluateShape(SDF_INSTRUCTION_SHAPE(shapeHeader), rigidPosition, shapeData0, shapeData1);
                     int material = (trackMaterial ? (int)SDF_INSTRUCTION_MATERIAL(shapeHeader) : 0);
 
-                    sdfComposeCandidate(result, candidate, SDF_INSTRUCTION_BLEND(shapeHeader), material, rigidLanes, segmentInstance, rigidSlot, shapeData1.x, trackMaterial);
+                    sdfComposeCandidate(result, candidate, SDF_INSTRUCTION_BLEND(shapeHeader), material, segmentInstance, rigidSlot, shapeData1.x, trackMaterial);
                 }
 
                 continue;
@@ -371,7 +374,6 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
             float composeCandidate = SDF_FAR_DISTANCE;
             uint composeBlend = SDF_BLEND_UNION;
             int composeMaterial = 0;
-            float4 composeLanes = float4(0.0, 0.0, 0.0, 0.0);
             int composeInstance = -1;
             int composeSlot = SDF_TRANSFORM_SLOT_NONE;
             float composeSmooth = 0.0;
@@ -380,7 +382,6 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                 case SDF_OP_RESET_POINT: {
                     localPosition = worldPosition;
                     distanceScale = 1.0;
-                    currentLanes = float4(0.0, 0.0, 0.0, 0.0);
                     currentSlot = SDF_TRANSFORM_SLOT_NONE;
                     laneErodeSkipShape = false;
                     laneErodeAmount = 0.0;
@@ -447,14 +448,12 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                 case SDF_OP_TRANSFORM_DYNAMIC: {
                     // A rigid transform sourced from a per-frame buffer slot (data0.x): place the shape at the slot's world
                     // position + orientation by moving the sample point into the shape's local frame (translate then
-                    // inverse-rotate), exactly like an immediate Translate + Rotate would. Also rides the slot's Lanes
-                    // row into currentLanes, so a later SDF_OP_LANE_ERODE on this chain reads it.
+                    // inverse-rotate), exactly like an immediate Translate + Rotate would.
                     SDF_VM_LOAD_DATA0;
                     uint dynamicSlot = (uint)data0.x;
                     float4 dynamicPosition = sdfDynamicTransformRow((3u * dynamicSlot));
                     float4 dynamicOrientation = sdfDynamicTransformRow(((3u * dynamicSlot) + 1u));
                     localPosition = rotatePointByInverseQuaternion((localPosition - dynamicPosition.xyz), dynamicOrientation);
-                    currentLanes = sdfDynamicTransformRow(((3u * dynamicSlot) + 2u));
                     currentSlot = (int)dynamicSlot;
                     break;
                 }
@@ -635,11 +634,11 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                     uint v = (SDF_INSTRUCTION_SHAPE(instructionHeader) == SDF_PLANE_XY) ? SDF_AXIS_Y : SDF_AXIS_Z;
                     uint driver = SDF_INSTRUCTION_BLEND(instructionHeader);
                     if (driver >= 3u) { return sdfIsaErrorHit(); }
-                    float angle = data0.x * (localPosition[driver] - data0.y);
+                    float angle = data0.x * (sdfComponent(localPosition, driver) - data0.y);
                     float c = cos(angle), sn = sin(angle);
-                    float pu = localPosition[u], pv = localPosition[v];
-                    localPosition[u] = c * pu + sn * pv;
-                    localPosition[v] = -sn * pu + c * pv;
+                    float pu = sdfComponent(localPosition, u), pv = sdfComponent(localPosition, v);
+                    sdfSetComponent(localPosition, u, c * pu + sn * pv);
+                    sdfSetComponent(localPosition, v, -sn * pu + c * pv);
                     break;
                 }
                 // Radial flare warp (sdfAxialProfile): distanceScale takes the size correction, the same channel
@@ -683,7 +682,7 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                 case SDF_OP_LANE_ERODE: {
                     SDF_VM_LOAD_DATA0;
                     SDF_VM_LOAD_DATA1;
-                    float lane = ((data0.x < 0.5) ? currentLanes.x : ((data0.x < 1.5) ? currentLanes.y : ((data0.x < 2.5) ? currentLanes.z : currentLanes.w)));
+                    float lane = sdfFieldLane(currentSlot, (uint)data0.x);
                     float t = saturate((lane - data0.y) / (data0.z - data0.y));
 
                     if (t >= 1.0) {
@@ -787,13 +786,14 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                     // parity-material stride. The fold is an isometry, so distanceScale is untouched.
                     uint group = SDF_INSTRUCTION_SHAPE(instructionHeader);
                     uint plane = SDF_INSTRUCTION_BLEND(instructionHeader);
-                    int axisA = ((plane == SDF_PLANE_YZ) ? 1 : 0);
-                    int axisB = ((plane == SDF_PLANE_XY) ? 1 : 2);
+                    uint axisA = ((plane == SDF_PLANE_YZ) ? SDF_AXIS_Y : SDF_AXIS_X);
+                    uint axisB = ((plane == SDF_PLANE_XY) ? SDF_AXIS_Y : SDF_AXIS_Z);
                     float2 cellIndex;
-                    float2 folded = sdfWallpaperFoldCell(float2(localPosition[axisA], localPosition[axisB]), group, data0.xy, data0.zw, data1.xy, cellIndex);
+                    float2 cellPoint = float2(sdfComponent(localPosition, axisA), sdfComponent(localPosition, axisB));
+                    float2 folded = sdfWallpaperFoldCell(cellPoint, group, data0.xy, data0.zw, data1.xy, cellIndex);
 
-                    localPosition[axisA] = folded.x;
-                    localPosition[axisB] = folded.y;
+                    sdfSetComponent(localPosition, axisA, folded.x);
+                    sdfSetComponent(localPosition, axisB, folded.y);
 
                     // The stride recolors the shapes the fold repeats: the cell key strides their declared material, so
                     // each lattice cell selects its own row of the palette. Distances never depend on it.
@@ -866,7 +866,6 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                         }
 
                         composeMaterial = material;
-                        composeLanes = currentLanes;
                         composeInstance = segmentInstance;
                         composeSlot = currentSlot;
                     }
@@ -876,13 +875,17 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                 // the FIELD — never localPosition / distanceScale / parityMaterialDelta — so the point chain is untouched
                 // and ResetPoint semantics are unchanged.
                 case SDF_OP_PUSH_FIELD: {
-                    if (fieldDepth >= SDF_MAX_FIELD_SCOPE_DEPTH) { return sdfIsaErrorHit(); }
-                    fieldParents[fieldDepth] = result;
+                    switch (fieldDepth) {
+                        case 0u: parent0 = result; break;
+                        case 1u: parent1 = result; break;
+                        case 2u: parent2 = result; break;
+                        case 3u: parent3 = result; break;
+                        default: return sdfIsaErrorHit();
+                    }
                     fieldDepth++;
                     result.distance = SDF_FAR_DISTANCE;
                     if (trackMaterial) {
                         result.material = 0;
-                        result.lanes = float4(0.0, 0.0, 0.0, 0.0);
                         result.instanceIndex = -1;
                         result.frameSlot = SDF_TRANSFORM_SLOT_NONE;
                     }
@@ -891,11 +894,6 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                 case SDF_OP_POP_FIELD: {
                     if (fieldDepth == 0u) { return sdfIsaErrorHit(); }
                     fieldDepth--;
-                    float savedFieldDistance = fieldParents[fieldDepth].distance;
-                    int savedFieldMaterial = fieldParents[fieldDepth].material;
-                    float4 savedFieldLanes = fieldParents[fieldDepth].lanes;
-                    int savedFieldInstance = fieldParents[fieldDepth].instanceIndex;
-                    int savedFieldSlot = fieldParents[fieldDepth].frameSlot;
                     SDF_VM_LOAD_DATA1;
                     // The scope's accumulated field IS the candidate — ALREADY in world units (its shapes were
                     // distance-scaled as they blended in), so it is NOT re-multiplied by distanceScale, and the point
@@ -913,32 +911,27 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                     }
                     if (trackMaterial) {
                         composeMaterial = result.material;
-                        composeLanes = result.lanes;
                         composeInstance = result.instanceIndex;
                         composeSlot = result.frameSlot;
                     }
                     composeSmooth = data1.x;
-                    result.distance = savedFieldDistance;
-                    if (trackMaterial) {
-                        result.material = savedFieldMaterial;
-                        result.lanes = savedFieldLanes;
-                        result.instanceIndex = savedFieldInstance;
-                        result.frameSlot = savedFieldSlot;
+                    switch (fieldDepth) {
+                        case 0u: result = parent0; break;
+                        case 1u: result = parent1; break;
+                        case 2u: result = parent2; break;
+                        default: result = parent3; break;
                     }
 
                     if (composeBlend == SDF_BLEND_MORPH) {
                         SDF_VM_LOAD_DATA0;
-                        float lane = ((data0.x < 0.5) ? currentLanes.x : ((data0.x < 1.5) ? currentLanes.y : ((data0.x < 2.5) ? currentLanes.z : currentLanes.w)));
+                        float lane = sdfFieldLane(currentSlot, (uint)data0.x);
                         float t = saturate((lane - data0.y) / (data0.z - data0.y));
-                        result.distance = lerp(savedFieldDistance, composeCandidate, t);
-                        if (trackMaterial) {
-                            bool candidateWins = (t >= 0.5);
-                            result.material = candidateWins ? composeMaterial : savedFieldMaterial;
-                            result.lanes = candidateWins ? composeLanes : savedFieldLanes;
-                            result.instanceIndex = candidateWins ? composeInstance : savedFieldInstance;
-                            result.frameSlot = candidateWins ? composeSlot : savedFieldSlot;
+                        result.distance = lerp(result.distance, composeCandidate, t);
+                        if (trackMaterial && t >= 0.5) {
+                            result.material = composeMaterial;
+                            result.instanceIndex = composeInstance;
+                            result.frameSlot = composeSlot;
                         }
-                        composePending = false;
                         break;
                     }
 
@@ -949,7 +942,7 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                             float s = r / n;
                             float period = 2.0 * s;
                             bool isSub = (composeBlend == SDF_BLEND_STAIRS_SUBTRACTION);
-                            float a = savedFieldDistance;
+                            float a = result.distance;
                             float b = composeCandidate;
                             float u = isSub ? (-b - r) : (b - r);
                             float arg = u - a + s;
@@ -958,31 +951,24 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                             float dStairs = 0.5 * (u + a + abs(w));
                             if (isSub) {
                                 result.distance = max(max(a, -b), -dStairs);
-                                if (trackMaterial) {
-                                    bool candidateWins = (-b > a);
-                                    result.material = candidateWins ? composeMaterial : savedFieldMaterial;
-                                    result.lanes = candidateWins ? composeLanes : savedFieldLanes;
-                                    result.instanceIndex = candidateWins ? composeInstance : savedFieldInstance;
-                                    // A cut face rides the shape it cuts (sdfComposeCandidate).
-                                    result.frameSlot = savedFieldSlot;
+                                if (trackMaterial && -b > a) {
+                                    // A cut face keeps the parent's frame slot (sdfComposeCandidate).
+                                    result.material = composeMaterial;
+                                    result.instanceIndex = composeInstance;
                                 }
                             } else {
                                 result.distance = min(min(a, b), dStairs);
-                                if (trackMaterial) {
-                                    bool candidateWins = (b < a);
-                                    result.material = candidateWins ? composeMaterial : savedFieldMaterial;
-                                    result.lanes = candidateWins ? composeLanes : savedFieldLanes;
-                                    result.instanceIndex = candidateWins ? composeInstance : savedFieldInstance;
-                                    result.frameSlot = candidateWins ? composeSlot : savedFieldSlot;
+                                if (trackMaterial && b < a) {
+                                    result.material = composeMaterial;
+                                    result.instanceIndex = composeInstance;
+                                    result.frameSlot = composeSlot;
                                 }
                             }
-                            composePending = false;
                             break;
                         }
                     }
 
-                    sdfComposeCandidate(result, composeCandidate, composeBlend, composeMaterial, composeLanes, composeInstance, composeSlot, composeSmooth, trackMaterial);
-                    composePending = false;
+                    composePending = true;
                     break;
                 }
                 default: {
@@ -997,7 +983,7 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
             // is a contact locus of ties). Then blend the candidate into result.distance. composePending is false for
             // every point/field op AND for a bound-skipped SHAPE, so those paths are byte-for-byte the pre-scope walk.
             if (composePending) {
-                sdfComposeCandidate(result, composeCandidate, composeBlend, composeMaterial, composeLanes, composeInstance, composeSlot, composeSmooth, trackMaterial);
+                sdfComposeCandidate(result, composeCandidate, composeBlend, composeMaterial, composeInstance, composeSlot, composeSmooth, trackMaterial);
             }
         }
     }

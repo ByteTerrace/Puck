@@ -68,7 +68,11 @@ internal sealed class FakeGpuDevice :
     /// <see cref="Memory"/>.</param>
     /// <param name="naming">The naming every creating member hands its object to, as a backend's do, or
     /// <see langword="null"/> for <see cref="GpuObjectNaming.Off"/>.</param>
-    public FakeGpuDevice(bool countCalls = false, bool holdFences = false, bool trackObjects = false, GpuObjectNaming? naming = null) {
+    /// <param name="clock">The clock the device hands its background work (<see cref="IGpuDeviceContext.Time"/>), which a
+    /// law steps by frames so the frames it drives decide when background work lands; <see langword="null"/> for the
+    /// host's.</param>
+    public FakeGpuDevice(bool countCalls = false, bool holdFences = false, bool trackObjects = false, GpuObjectNaming? naming = null, TimeProvider? clock = null) {
+        Clock = (clock ?? TimeProvider.System);
         m_countCalls = countCalls;
         m_naming = (naming ?? GpuObjectNaming.Off);
         m_holdFences = holdFences;
@@ -182,6 +186,10 @@ internal sealed class FakeGpuDevice :
     /// <summary>Gets or sets the memory profile the device reports; the default reports nothing.</summary>
     public GpuMemoryProfile MemoryProfile { get; set; }
     public GpuMemoryReading MemoryReading => GpuMemoryReading.Absent;
+    /// <summary>Gets the clock the device hands its background work (<see cref="IGpuDeviceContext.Time"/>): the one it was
+    /// made with, the host's when it was made with none.</summary>
+    public TimeProvider Clock { get; }
+    TimeProvider IGpuDeviceContext.Time => Clock;
 
     public void RefreshMemoryReading() { }
 

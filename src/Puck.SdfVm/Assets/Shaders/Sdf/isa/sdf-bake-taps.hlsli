@@ -3,11 +3,15 @@
 #define SDF_BAKE_TAPS_HLSLI
 
 // The bake kernel's gradient stencil: a corner of the unit cube per tetrahedron vertex, scaled by the lattice's tap spacing.
-static const float3 SdfBakeTaps[4] = {
-    float3(1, -1, -1),
-    float3(-1, -1, 1),
-    float3(-1, 1, -1),
-    float3(1, 1, 1),
-};
+#define SDF_BAKE_GRADIENT_TAPS 4u
+float3 sdfBakeTap(uint tap) {
+    switch (tap) {
+        case 1u: return float3(1, -1, -1);
+        case 2u: return float3(-1, -1, 1);
+        case 3u: return float3(-1, 1, -1);
+        case 4u: return float3(1, 1, 1);
+        default: return 0.0;
+    }
+}
 
 #endif

@@ -5,10 +5,18 @@ namespace Puck.World;
 public static partial class WorldDefinitionValidator {
     private static void ValidateShadowPolicies(WorldRenderDefaults render, List<string> errors) {
         ValidateShadowPolicy(render.ShadowLights, render.ShadowFadeSlots, render.ShadowFadeTicks, render.ShadowOverflow, "render", errors);
-        ValidateShadowPreset(render.LowRaw, "render.low", errors);
-        ValidateShadowPreset(render.MediumRaw, "render.medium", errors);
-        ValidateShadowPreset(render.HighRaw, "render.high", errors);
+        foreach (var tier in Enum.GetValues<QualityTier>()) {
+            if (render.Preset(tier: tier) is { } preset) { ValidatePreset(preset: preset, path: $"render.{QualityTiers.Name(tier: tier)}", errors: errors); }
+        }
         ValidateDeviceProfiles(render, errors);
+    }
+    // Every quality table, a tier's preset or a device's own, is judged by this one rule set.
+    private static void ValidatePreset(WorldQualityPreset preset, string path, List<string> errors) {
+        ValidateShadowPolicy(preset.ShadowLights, preset.ShadowFadeSlots, preset.ShadowFadeTicks, preset.ShadowOverflow, path, errors);
+        RequireRange(preset.RenderScale, 0.125f, 1f, $"{path}.renderScale", errors);
+        ValidateSkyFieldScale(preset.SkyFieldScale, $"{path}.skyFieldScale", errors);
+        if (preset.DistantShadows?.Refusal(path: $"{path}.distantShadows") is { } distant) { errors.Add(item: distant); }
+        if ((preset.Indirect is { } chosen) && !Enum.IsDefined(value: chosen)) { errors.Add(item: $"{path}.indirect must be off, medium or high."); }
     }
     private static void ValidateDeviceProfiles(WorldRenderDefaults render, List<string> errors) {
         var names = new HashSet<string>(comparer: StringComparer.Ordinal);
@@ -22,10 +30,12 @@ public static partial class WorldDefinitionValidator {
             if (string.IsNullOrWhiteSpace(value: profile.Match)) {
                 errors.Add(item: $"{path}.match must name text the adapter's name contains.");
             }
-            if (render.Preset(tier: profile.Quality) is null) {
+            if (profile.Table is { } table) {
+                ValidatePreset(preset: table, path: $"{path}.table", errors: errors);
+            } else if (render.Preset(tier: profile.Quality) is null) {
                 var tier = QualityTiers.Name(tier: profile.Quality);
 
-                errors.Add(item: $"{path}.quality names the {tier} table, which render.{tier} does not author.");
+                errors.Add(item: $"{path}.quality names the {tier} table, which render.{tier} does not author and the profile authors no table of its own.");
             }
             if (profile.DeviceMemoryMiB is <= 0) {
                 errors.Add(item: $"{path}.deviceMemoryMiB must be positive.");
@@ -33,11 +43,6 @@ public static partial class WorldDefinitionValidator {
             if (profile.HostMemoryMiB is <= 0) {
                 errors.Add(item: $"{path}.hostMemoryMiB must be positive.");
             }
-        }
-    }
-    private static void ValidateShadowPreset(WorldQualityPreset? preset, string path, List<string> errors) {
-        if (preset is { } value) {
-            ValidateShadowPolicy(value.ShadowLights, value.ShadowFadeSlots, value.ShadowFadeTicks, value.ShadowOverflow, path, errors);
         }
     }
     private static void ValidateShadowPolicy(int slots, int fadeSlots, uint fadeTicks, WorldShadowOverflow overflow, string path, List<string> errors) {

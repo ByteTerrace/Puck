@@ -8,6 +8,13 @@ the MCP contracts by [`Puck.Mcp`](../../src/Puck.Mcp/README.md).
 
 ## The game
 
+**Local games reveal the MMO (the owner's ruling).** A player starts in local
+games that run on their own machine; completing them reveals that the MMO
+exists, and the same worlds then run against a hosted server. So every world
+must run well both locally and from the server, and testing the hosted
+deployment and connecting to it is part of the ordinary work, not a later
+phase.
+
 **The debug world is the proving ground.** The reference game was once one
 document, the island with its districts, and before that a quilt of ground
 corner authorities. Those worlds (the quilt, the island and the One World) are

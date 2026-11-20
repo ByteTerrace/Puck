@@ -15,6 +15,34 @@ session.
 
 Load [lane work](references/lane-work.md) before branch operations, delegation or a long run; it owns the detailed procedures.
 
+## The rhythm
+
+Everything works in concert to drive development (the owner's ruling): lanes
+relentlessly improve the engine, CI/CD deploys what lands, and a consumer
+machine plays each release. The lead keeps four loops turning at once, and no
+loop waits on another:
+
+1. **Engine work.** Lanes code continuously from the plans; the lead merges as
+   they hand back and pushes the integration branch every few merges.
+2. **The bulk window**, every few hours or eight to ten merges, on the pushed
+   tip: the full build, the test suites, boots on both backends, the counter
+   checks, stills and quiet timing ([below](#spend-verification-not-writing)).
+   Failures go to fix lanes.
+3. **A release.** A green window starts the Azure validation run on the
+   integration branch; when it is green, the integration branch goes to `main`,
+   which deploys, and the lead watches the release to the end. A red pipeline
+   is fixed on the integration branch as ordinary work, and the pipeline itself
+   is kept fast.
+4. **The consumer machine.** Each release's player build (a prepared release
+   with prewarmed caches and prebuilt cartridges) goes to the RTX 2060 machine,
+   which plays it locally and against the hosted server, as a player meets the
+   game: local games first, then the MMO they reveal. Its readings come back
+   through its session, judged against the 2060's own bar, and go to fix lanes.
+
+Greenfield holds throughout: when a game direction or a constraint asks for
+it, the lead refactors and rethinks the abstraction rather than working
+around it.
+
 ## Plan from the milestone
 
 Plan backward from the milestone's critical path. Find the least-prepared item
