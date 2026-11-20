@@ -291,9 +291,9 @@ own authored content actually diverging, refuses. An empty list an import author
 it merges with a sibling's rows rather than refusing (the debug world's `devices.puck` authors `hud { panels [] }`
 beside the addons' panels). See `WorldDocumentBasis.TryMergeImports`'s remarks for the exact recursive algorithm.
 
-The content pin folds every touched file's raw bytes (`ComputeChainContentHash`, length-delimited, derived-first,
-basis chain then each import's own touched bytes in authored order), so editing a template or an imported fragment
-moves every dependent document's pin — flat documents keep the undelimited single-file pin unchanged. `world.save`
+`WorldDefinitionFileSource.TryComposeChainBytes` returns the content pin with the composed bytes. It folds each
+distinct document's SHA-256 digest once, starting with the root, then its basis, then its imports in authored
+order. A flat document's pin hashes its own bytes directly. `world.save`
 preserves the derivation of the file it OVERWRITES (`SavePreservingBasis`): it peeks the target's `basis` AND
 `imports` at save time (the file is the one truth — nothing caches derivation between load and save), composes the
 full basis-plus-imports stack (`WorldDefinitionFileSource.TryComposeStackTree`), computes the merge-inverse diff

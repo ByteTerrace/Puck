@@ -784,8 +784,8 @@ on every file load—boot, `world.load`/`world.reload`, replay re-drives, and
 neighbour resolution—strips the consumed `basis`/`imports` members, and hands
 the composed tree to the one strict parse → migrate → validate gate, so a live
 document never carries either and every wire egress is self-contained. A
-derived document's content pin folds every touched file's raw bytes
-(`ComputeChainContentHash`), so a template or import edit moves every dependent
+derived document's content pin folds each distinct document's SHA-256 digest in
+first-read order (`TryComposeChainBytes`), so a template or import edit moves every dependent
 pin. Callers that need the effective scalar's authored file, JSON pointer and
 original value supply `WorldDocumentOrigins` to composition. The existing merge
 carries that sidecar through retained fields and file-path relocation; overwritten
