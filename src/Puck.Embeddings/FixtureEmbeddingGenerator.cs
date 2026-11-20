@@ -1,3 +1,4 @@
+using System.Buffers.Text;
 using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
@@ -95,31 +96,32 @@ public sealed class FixtureEmbeddingGenerator : IEmbeddingGenerator<string, Embe
         var prefixLength = (((((((modelBytes.Length + 1) + revisionBytes.Length) + 1) + dimsBytes.Length) + 1) + textBytes.Length) + 1);
         var blockCount = dims.CeilingDivide(divisor: 32);
 
+        // Every block hashes the same prefix followed by its decimal index, so the prefix is written once. An int index
+        // has at most ten digits.
+        var buffer = new byte[(prefixLength + 10)];
+        var offset = 0;
+
+        Array.Copy(sourceArray: modelBytes, sourceIndex: 0, destinationArray: buffer, destinationIndex: offset, length: modelBytes.Length);
+        offset += modelBytes.Length;
+        buffer[offset++] = 0;
+
+        Array.Copy(sourceArray: revisionBytes, sourceIndex: 0, destinationArray: buffer, destinationIndex: offset, length: revisionBytes.Length);
+        offset += revisionBytes.Length;
+        buffer[offset++] = 0;
+
+        Array.Copy(sourceArray: dimsBytes, sourceIndex: 0, destinationArray: buffer, destinationIndex: offset, length: dimsBytes.Length);
+        offset += dimsBytes.Length;
+        buffer[offset++] = 0;
+
+        Array.Copy(sourceArray: textBytes, sourceIndex: 0, destinationArray: buffer, destinationIndex: offset, length: textBytes.Length);
+        offset += textBytes.Length;
+        buffer[offset++] = 0;
+
+        Span<byte> hash = stackalloc byte[SHA256.HashSizeInBytes];
+
         for (var b = 0; (b < blockCount); b++) {
-            var blockStrBytes = Encoding.UTF8.GetBytes(s: b.ToString(provider: CultureInfo.InvariantCulture));
-            var totalLength = (prefixLength + blockStrBytes.Length);
-            var buffer = new byte[totalLength];
-            var offset = 0;
-
-            Array.Copy(sourceArray: modelBytes, sourceIndex: 0, destinationArray: buffer, destinationIndex: offset, length: modelBytes.Length);
-            offset += modelBytes.Length;
-            buffer[offset++] = 0;
-
-            Array.Copy(sourceArray: revisionBytes, sourceIndex: 0, destinationArray: buffer, destinationIndex: offset, length: revisionBytes.Length);
-            offset += revisionBytes.Length;
-            buffer[offset++] = 0;
-
-            Array.Copy(sourceArray: dimsBytes, sourceIndex: 0, destinationArray: buffer, destinationIndex: offset, length: dimsBytes.Length);
-            offset += dimsBytes.Length;
-            buffer[offset++] = 0;
-
-            Array.Copy(sourceArray: textBytes, sourceIndex: 0, destinationArray: buffer, destinationIndex: offset, length: textBytes.Length);
-            offset += textBytes.Length;
-            buffer[offset++] = 0;
-
-            Array.Copy(sourceArray: blockStrBytes, sourceIndex: 0, destinationArray: buffer, destinationIndex: offset, length: blockStrBytes.Length);
-
-            var hash = SHA256.HashData(source: buffer);
+            _ = Utf8Formatter.TryFormat(value: b, destination: buffer.AsSpan(start: prefixLength), bytesWritten: out var indexBytes);
+            _ = SHA256.HashData(source: buffer.AsSpan(start: 0, length: (prefixLength + indexBytes)), destination: hash);
 
             for (var byteIdx = 0; (byteIdx < 32); byteIdx++) {
                 var componentIndex = ((b * 32) + byteIdx);
