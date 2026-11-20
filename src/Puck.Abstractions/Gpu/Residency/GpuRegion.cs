@@ -471,10 +471,7 @@ public sealed unsafe class GpuRegion : IDisposable {
         );
         Policy = policy;
         SlotCount = slotCount;
-        m_contents = ((byte*)NativeMemory.AllocZeroed(byteCount: ((nuint)byteCount)));
-        m_shadowBytes = byteCount;
         m_hostCopies = hostCopies;
-        m_hostCopies?.Change(backing: MemoryBacking.NativeDirect, bytes: byteCount);
         m_copyPipeline = copyPipeline;
         m_bindings = bindings;
         m_buffers = buffers;
@@ -503,6 +500,8 @@ public sealed unsafe class GpuRegion : IDisposable {
         m_hostBuffers = [];
 
         try {
+            m_contents = AllocateContents(byteCount, zero: true);
+            m_shadowBytes = byteCount;
             m_hostBuffers = CreateHostBuffers(
                 byteCount: byteCount,
                 memory: Memory,
@@ -881,8 +880,7 @@ public sealed unsafe class GpuRegion : IDisposable {
 
         m_ownedBuffers.Clear();
         m_carrySource = null;
-        NativeMemory.Free(ptr: m_contents);
-        m_hostCopies?.Change(backing: MemoryBacking.NativeDirect, bytes: -m_shadowBytes);
+        FreeContents(m_contents, m_shadowBytes);
         m_contents = null;
         m_shadowBytes = 0;
     }
@@ -1074,19 +1072,31 @@ public sealed unsafe class GpuRegion : IDisposable {
     // asked. With the constructor and Dispose, the only place the host copy's storage changes, and each change is
     // reported to its observer.
     private void ReplaceContents(long byteCount, bool zero) {
-        var contents = ((byte*)(zero ? NativeMemory.AllocZeroed(byteCount: ((nuint)byteCount)) : NativeMemory.Alloc(byteCount: ((nuint)byteCount))));
-        var kept = Math.Min(val1: m_shadowBytes, val2: byteCount);
-        var released = m_shadowBytes;
+        if (byteCount != m_shadowBytes) { InstallContents(CopyContents(byteCount, zero), byteCount); }
+    }
 
-        m_hostCopies?.Change(backing: MemoryBacking.NativeDirect, bytes: byteCount);
-        System.Buffer.MemoryCopy(
-            destination: contents,
-            destinationSizeInBytes: byteCount,
-            source: m_contents,
-            sourceBytesToCopy: kept
-        );
-        NativeMemory.Free(ptr: m_contents);
-        m_hostCopies?.Change(backing: MemoryBacking.NativeDirect, bytes: -released);
+    private byte* AllocateContents(long byteCount, bool zero) {
+        if (m_hostCopies is not null && !m_hostCopies.TryAcquire(byteCount, MemoryBacking.NativeDirect)) {
+            throw new GpuMemoryRefusedException(byteCount, "host", m_hostCopies.Name, byDevice: false);
+        }
+        try {
+            return (byte*)(zero ? NativeMemory.AllocZeroed((nuint)byteCount) : NativeMemory.Alloc((nuint)byteCount));
+        } catch {
+            m_hostCopies?.Change(-byteCount, MemoryBacking.NativeDirect);
+            throw;
+        }
+    }
+    private byte* CopyContents(long byteCount, bool zero) {
+        var contents = AllocateContents(byteCount, zero);
+        System.Buffer.MemoryCopy(m_contents, contents, byteCount, Math.Min(m_shadowBytes, byteCount));
+        return contents;
+    }
+    private void FreeContents(byte* contents, long bytes) {
+        NativeMemory.Free(contents);
+        m_hostCopies?.Change(-bytes, MemoryBacking.NativeDirect);
+    }
+    private void InstallContents(byte* contents, long byteCount) {
+        FreeContents(m_contents, m_shadowBytes);
         m_contents = contents;
         m_shadowBytes = byteCount;
     }
@@ -1095,13 +1105,18 @@ public sealed unsafe class GpuRegion : IDisposable {
     // GPU (RecordCarry).
     private IDisposable GrowDestination(long byteCount) {
         if (m_destination is IGpuMappedBuffer mapped) {
-            // Backing first: a refusal leaves the region as it was.
-            mapped.Map(bytes: ((ulong)(byteCount - ByteCount)), offset: ((ulong)ByteCount));
-            if (m_source is null) {
+            var contents = m_source is null ? CopyContents(byteCount, zero: true) : null;
+            try {
+                mapped.Map(bytes: ((ulong)(byteCount - ByteCount)), offset: ((ulong)ByteCount));
+            } catch {
+                if (contents is not null) { FreeContents(contents, byteCount); }
+                throw;
+            }
+            if (contents is not null) {
                 var known = ((int)(ByteCount / sizeof(uint)));
 
                 // A newly backed chunk holds nothing defined, so the zeroed tail of the host copy is owed to it.
-                GrowContents(byteCount: byteCount);
+                InstallContents(contents, byteCount);
                 Owe(endWord: ((int)(byteCount / sizeof(uint))), startWord: known);
                 m_stagedSlot = -1;
             }
@@ -1202,7 +1217,12 @@ public sealed unsafe class GpuRegion : IDisposable {
             val2: byteCount
         );
 
-        ReplaceContents(byteCount: shadow, zero: false);
+        try {
+            ReplaceContents(byteCount: shadow, zero: false);
+        } catch {
+            replacement.Dispose();
+            throw;
+        }
         _ = m_ownedBuffers.Remove(item: replaced);
         m_ownedBuffers.Add(item: replacement);
         m_carrySource = null;
@@ -1300,7 +1320,6 @@ public sealed unsafe class GpuRegion : IDisposable {
     // Shrinks a mapped destination in place: the chunks wholly past the new size are revoked now and released behind
     // their readers, every word below it stays where it stands, and only the debt past the new size is dropped.
     private GpuMappedRelease ShrinkMapped(long byteCount, IGpuMappedBuffer mapped) {
-        var release = mapped.Unmap(bytes: (mapped.SizeBytes - ((ulong)byteCount)), offset: ((ulong)byteCount));
         var words = ((int)(byteCount / sizeof(uint)));
         var shadow = Math.Min(
             val1: m_shadowBytes,
@@ -1311,7 +1330,15 @@ public sealed unsafe class GpuRegion : IDisposable {
             mergeGap: StagedMergeGapWords
         );
 
-        ReplaceContents(byteCount: shadow, zero: false);
+        var contents = shadow < m_shadowBytes ? CopyContents(shadow, zero: false) : null;
+        GpuMappedRelease release;
+        try {
+            release = mapped.Unmap(bytes: (mapped.SizeBytes - ((ulong)byteCount)), offset: ((ulong)byteCount));
+        } catch {
+            if (contents is not null) { FreeContents(contents, shadow); }
+            throw;
+        }
+        if (contents is not null) { InstallContents(contents, shadow); }
         kept.Append(limit: words, source: m_owed[0]);
         m_owed[0].Clear();
         m_owed[0].Append(source: kept);
@@ -1418,17 +1445,14 @@ public sealed unsafe class GpuRegion : IDisposable {
             );
         }
 
-        m_source = source;
-        if (shadowBytes == m_shadowBytes) {
-            return;
-        }
-
         // The destination holds the host copy no further than both copies reach.
-        m_knownWords = Math.Min(
+        var knownWords = Math.Min(
             val1: m_knownWords,
             val2: ((int)(Math.Min(val1: m_shadowBytes, val2: shadowBytes) / sizeof(uint)))
         );
         ReplaceContents(byteCount: shadowBytes, zero: true);
+        m_source = source;
+        m_knownWords = knownWords;
     }
     /// <summary>Owes the words of <paramref name="length"/> bytes from <paramref name="offset"/>, past the host copy, in
     /// every buffer, comparing nothing: the region's source (<see cref="Shadow"/>) holds what they are, and the next flush

@@ -26,9 +26,9 @@ public static partial class HostMemory {
     [return: MarshalAs(unmanagedType: UnmanagedType.Bool)]
     private static partial bool GlobalMemoryStatusEx(ref MemoryStatusEx status);
     // A /proc/meminfo field in bytes, or null when the file or the field cannot be read.
-    private static long? MemInfoBytes(string field) {
+    private static long? MemInfoBytes(string field, string path = "/proc/meminfo") {
         try {
-            var line = File.ReadLines(path: "/proc/meminfo").FirstOrDefault(predicate: line => line.StartsWith(comparisonType: StringComparison.Ordinal, value: field));
+            var line = File.ReadLines(path: path).FirstOrDefault(predicate: line => line.StartsWith(comparisonType: StringComparison.Ordinal, value: field));
 
             return (((line is not null) && long.TryParse(provider: CultureInfo.InvariantCulture, result: out var kilobytes, s: line.Split(options: StringSplitOptions.RemoveEmptyEntries, separator: ' ')[1], style: NumberStyles.None))
                 ? (kilobytes * 1024)
@@ -44,6 +44,18 @@ public static partial class HostMemory {
         return (GlobalMemoryStatusEx(status: ref status) ? status : null);
     }
 
+    /// <summary>Reads the process charge used for host admission without walking its pages.</summary>
+    /// <returns>Private commit on Windows, resident anonymous bytes and swap on Linux, or null on other hosts.</returns>
+    public static long? ProcessPrivateBytes() {
+        if (OperatingSystem.IsWindows()) {
+            using var process = System.Diagnostics.Process.GetCurrentProcess();
+            return process.PrivateMemorySize64;
+        }
+        if (OperatingSystem.IsLinux()) {
+            return MemInfoBytes(field: "RssAnon:", path: "/proc/self/status") + MemInfoBytes(field: "VmSwap:", path: "/proc/self/status");
+        }
+        return null;
+    }
     /// <summary>Returns the physical memory free now, in bytes.</summary>
     /// <returns>The bytes, or <see langword="null"/> when this platform or this moment cannot say.</returns>
     public static long? AvailablePhysicalBytes() {

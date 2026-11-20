@@ -5,6 +5,13 @@ changing indirect light, probe visibility, the volume boundary or the camera sam
 meters each view's image (`SdfExposure.Meter`, the composite's histogram), never the volume; local
 adaptation still reads the volume's gather at each surface.
 
+`host.memory owners 0` reports the trace hierarchy under `sdf.mesh-gi.trace-scene`,
+the arrays used to build it under `sdf.mesh-gi.scene-build`, and the CPU probe
+volume under `sdf.mesh-gi.volume`. A geometry reused by two scenes keeps one
+charge until its last scene releases it. A host refusal leaves the installed
+scene available and the volume retries on its scene-build cadence. The GPU
+upload retries its refused chunk before publishing the new root.
+
 The software trace device law compares scene instance and original
 mesh triangle ordinals through a diagnostic output separate from the hit words.
 Hit/miss, material, normal bytes and back-face flags are exact; distance and

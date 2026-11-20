@@ -26,6 +26,7 @@ public sealed partial class WorldServer {
     [Replaces(root: typeof(StateArena))]
     public void FreezeForRetirement() {
         lock (m_authorityGate) {
+            ThrowIfTickPending();
             if (m_authorityRetiring) { return; }
             if (Extensions.ExternalOperationsInFlight != 0) {
                 throw new InvalidOperationException(message: "Authority retirement requires external operations to settle first.");
@@ -57,6 +58,7 @@ public sealed partial class WorldServer {
         ArgumentNullException.ThrowIfNull(argument: admits);
 
         lock (m_authorityGate) {
+            if (m_tick.BlockedReason is not null) { return false; }
             if (m_authorityRetiring) { return true; }
             if ((Extensions.ExternalOperationsInFlight != 0) || !admits()) { return false; }
             FreezeForRetirement();
@@ -83,7 +85,7 @@ public sealed partial class WorldServer {
             m_document.RefusePending(reason: reason);
             // A stopped world delivers nothing further, so every session observing it ends now: each stream sends its
             // terminal record, and a screen showing this world through a session shows it no longer.
-            DetachSessionSinks(reason: StoppedCode);
+            if (m_tick.BlockedReason is null) { DetachSessionSinks(reason: StoppedCode); }
         }
 
         m_stopped.Cancel();

@@ -1,4 +1,5 @@
 using Puck.Abstractions.Machines;
+using Puck.Abstractions.Waiting;
 using Puck.Maths;
 
 namespace Puck.Machines;
@@ -185,7 +186,7 @@ public sealed class LinkedMachineGroup : IMachineLink, IMachineCoreLender {
     /// before the in-flight step finishes. Handlers must not block or call back into the link.</summary>
     public event Action? SeverWaiting;
 
-    private QueuedMachineSubmission EnqueueStep(ulong deltaTicks, ReadOnlySpan<MachinePadState> inputs, bool forceStage) {
+    private QueuedMachineSubmission EnqueueStep(ulong deltaTicks, ReadOnlySpan<MachinePadState> inputs, bool forceStage, ref ulong generation, WaitDeadline deadline) {
         if (
             (0 != Volatile.Read(location: ref m_disposed)) ||
             (m_lifecycle.Worker is null) ||
@@ -201,11 +202,10 @@ public sealed class LinkedMachineGroup : IMachineLink, IMachineCoreLender {
             );
         }
 
-        return m_lifecycle.Submit(item: GroupWorkItem.Step(
-            deltaTicks: deltaTicks,
-            forceStage: forceStage,
-            inputs: MachinePads.From(inputs: inputs)
-        ));
+        var item = GroupWorkItem.Step(deltaTicks: deltaTicks, forceStage: forceStage, inputs: MachinePads.From(inputs: inputs));
+        return forceStage
+            ? m_lifecycle.Step(in item, ref generation, deadline)
+            : m_lifecycle.Submit(in item, deadline);
     }
     // Each member publishes through its OWN worker's surfaces, so a linked machine's framebuffer, audio ring, feedback,
     // and step count stay the same objects a host already reads.
@@ -251,7 +251,7 @@ public sealed class LinkedMachineGroup : IMachineLink, IMachineCoreLender {
 
                         break;
                     case GroupWorkKind.Barrier:
-                        current.Completion!.Set();
+                        m_lifecycle.CompleteBarrier(current.BarrierGeneration);
 
                         break;
                     case GroupWorkKind.Stop:
@@ -389,29 +389,26 @@ public sealed class LinkedMachineGroup : IMachineLink, IMachineCoreLender {
         Dispose();
     /// <inheritdoc/>
     public void Step(ulong deltaTicks, ReadOnlySpan<MachinePadState> inputs) {
-        if (EnqueueStep(
-            deltaTicks: deltaTicks,
-            forceStage: true,
-            inputs: inputs
-        ) == QueuedMachineSubmission.Rejected) {
-            m_lifecycle.ThrowIfFaulted();
-
-            return;
-        }
-
-        m_lifecycle.Drain();
+        var generation = 0UL;
+        var result = StepSegment(deltaTicks: deltaTicks, inputs: inputs, generation: ref generation,
+            deadline: QueuedWorkerLifecycle<GroupWorkItem>.StandaloneDeadline());
+        _ = QueuedWorkerLifecycle<GroupWorkItem>.RequireSettled(result);
     }
     /// <summary>Accepts one exact tick/seat-input segment for ordered execution, applying producer backpressure at the
     /// group's pending-segment capacity.</summary>
     /// <param name="deltaTicks">The segment's fixed-step tick budget, shared by every member.</param>
     /// <param name="inputs">Each member's controller image, in cable order.</param>
     /// <returns>The observable submission outcome.</returns>
-    public QueuedMachineSubmission Submit(ulong deltaTicks, ReadOnlySpan<MachinePadState> inputs) =>
-        EnqueueStep(
-            deltaTicks: deltaTicks,
-            forceStage: false,
-            inputs: inputs
-        );
+    public QueuedMachineSubmission Submit(ulong deltaTicks, ReadOnlySpan<MachinePadState> inputs) {
+        var generation = 0UL;
+        var result = EnqueueStep(deltaTicks: deltaTicks, inputs: inputs, forceStage: false, generation: ref generation,
+            deadline: QueuedWorkerLifecycle<GroupWorkItem>.StandaloneDeadline());
+        return QueuedWorkerLifecycle<GroupWorkItem>.RequireSettled(result);
+    }
+
+    /// <summary>Submits or resumes a segment within the caller’s deadline.</summary>
+    public QueuedMachineSubmission StepSegment(ulong deltaTicks, ReadOnlySpan<MachinePadState> inputs, ref ulong generation, WaitDeadline deadline) =>
+        EnqueueStep(deltaTicks: deltaTicks, inputs: inputs, forceStage: true, generation: ref generation, deadline: deadline);
 
     private enum GroupWorkKind {
         Step,
@@ -425,11 +422,13 @@ public sealed class LinkedMachineGroup : IMachineLink, IMachineCoreLender {
         MachinePads Inputs,
         bool ForceStage,
         Action? Invoke,
-        ManualResetEventSlim? Completion
+        ManualResetEventSlim? Completion,
+        ulong BarrierGeneration = 0
     ) : IQueuedWorkItem<GroupWorkItem> {
-        public static GroupWorkItem Barrier(ManualResetEventSlim completion) =>
+        public static GroupWorkItem Barrier(ulong generation) =>
             new(
-                Completion: completion,
+                BarrierGeneration: generation,
+                Completion: null,
                 DeltaTicks: 0UL,
                 ForceStage: false,
                 Inputs: default,

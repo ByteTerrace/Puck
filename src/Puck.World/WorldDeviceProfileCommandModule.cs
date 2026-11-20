@@ -119,7 +119,7 @@ public sealed class WorldDeviceProfileState {
     // one whose bars the account holds.
     private Selection ApplyLocked(WorldDeviceProfile? profile, string source, string? adapter, string? table) {
         MemoryAccount.Shared.SetBudget(bytes: profile?.DeviceMemoryBytes, pool: PhysicalMemory.Device);
-        MemoryAccount.Shared.SetBudget(bytes: profile?.HostMemoryBytes, pool: PhysicalMemory.Host);
+        MemoryAccount.Shared.SetHostBar(bytes: profile?.HostMemoryBytes);
 
         var selection = new Selection(Profile: profile?.Name, Source: source, Adapter: adapter, Table: table, DeviceMemoryBytes: profile?.DeviceMemoryBytes, HostMemoryBytes: profile?.HostMemoryBytes);
 

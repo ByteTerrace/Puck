@@ -9,7 +9,7 @@ namespace Puck.SdfVm;
 // the draws so its words stay in the mesh region (ServeAhead). A finer tier the region refuses under its limit is
 // evicted to that floor at once (Evict), which then takes its detail back only through the budget.
 //
-// The invariant: a group in reach either draws a mesh whose words stand, or is counted as a hole (CountHoles). The one
+// The invariant: a group in reach either draws a mesh whose words stand, or is counted as a hole (ObserveResidency, with Prioritize's count of those still bringing a first mesh). The one
 // door every drawn mesh passes is Group.Shown, read by the dresser through FrameAccess.MeshOf; the floor reaches it as
 // the arrival's own product, as the replaced group's shown mesh while a finer tier lands ahead (ShowReplaced, the one
 // place a replacement keeps its predecessor's floor), and as the product an eviction puts in a refused group's place.
@@ -94,25 +94,6 @@ public sealed partial class SdfMeshPathBake {
             _ = StartReplacement(group: floor, index: index, old: group);
         }
         m_evictions.Clear();
-    }
-    // Counts the groups in reach that draw no standing mesh: one still bringing its first mesh, or one whose drawn mesh's
-    // words the region owes or refuses, demanded past a pixel at a demand point (SdfMeshDemand.Priority). A group with
-    // nothing to draw once done (no surface) is no hole. Under the gate, on the frame's thread.
-    private void CountHoles(SdfWorldTables tables) {
-        var holes = 0;
-
-        foreach (var group in m_groups) {
-            if (group.Retired) { continue; }
-            if (group.Shown is { } shown) {
-                if (!AnyPiece(mesh: shown, tables: tables, test: static (region, piece) => region.OwesMesh(mesh: piece))) { continue; }
-            } else if (group.Done) {
-                continue;
-            }
-            if (!group.HasDemandBox || ((group.Done ? MeasureDemand(group, priority: true) : group.Priority) <= 1f)) { continue; }
-            holes++;
-        }
-        m_holes = holes;
-        if (holes > 0) { m_holeFrames++; }
     }
     // What the trace judge said of a kept floor (Group.FloorVerdict). Written by the judge's task, read on the frame's
     // thread.

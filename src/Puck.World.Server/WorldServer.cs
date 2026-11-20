@@ -272,10 +272,12 @@ public sealed partial class WorldServer : IWorldServerHost {
         Tick = m_tick.DeliveryTick,
     });
     /// <summary>Gets the live world definition this server runs — swapped in place as buffered edits apply.</summary>
-    public WorldDefinition Definition => m_document.Definition;
+    public WorldDefinition Definition { get { ThrowIfTickPending(); return m_document.Definition; } }
 
     /// <summary>Materializes gameplay cells only for an explicit export or edit boundary.</summary>
-    public WorldDefinition ExportDefinition() => MaterializeArena();
+    public WorldDefinition ExportDefinition() {
+        lock (AuthorityGate) { ThrowIfTickPending(); return MaterializeArena(); }
+    }
 
     /// <summary>Gets installed declarations without exporting tick values. State reads use the arena or
     /// <see cref="Definition"/>; scheduling and other declaration-only work use this view.</summary>
@@ -313,7 +315,7 @@ public sealed partial class WorldServer : IWorldServerHost {
     /// every <see cref="WorldSnapshot"/>), and the screen-removal admin cleanup
     /// (<c>Puck.World.WorldScreenBinder.ReconcileScreens</c> calls <see cref="Server.WorldEngagement.DissolveScreen"/>
     /// directly — loopback-only, like every other client↔server call that has not yet crossed a wire).</summary>
-    public WorldEngagement Engagement => m_engagement;
+    public WorldEngagement Engagement { get { ThrowIfTickPending(); return m_engagement; } }
     /// <summary>Gets this instance's own render-capacity oracle — configured by whatever presentation-side content
     /// source renders this instance (the boot world's own <c>WorldFramePresenter</c>, or an observing destination's
     /// session or continuum view), so a document mutation the same instance receives is checked against the same
@@ -324,7 +326,7 @@ public sealed partial class WorldServer : IWorldServerHost {
     /// (collision pairs, region enter/exit, seat join/leave, route/engagement transitions). Read by
     /// <see cref="IWorldAddonHost"/>'s read pump; a diagnostic/delivery surface, never itself hashed (the
     /// underlying state it derives from already is).</summary>
-    public WorldEventFeed Events => m_events;
+    public WorldEventFeed Events { get { ThrowIfTickPending(); return m_events; } }
     /// <summary>Gets the capability table's <see cref="IWorldGrantsView"/> — the one grant primitive the engagement view, the
     /// addon runtime, and the grant/mutation command modules read (plus the two engagement-route writes the view
     /// carries). Reads are loopback-local today; a socket transport moves grant changes onto the wire. Deliberately not
@@ -348,7 +350,7 @@ public sealed partial class WorldServer : IWorldServerHost {
     /// surface (<see cref="IWorldMachineHost"/> extends <see cref="IWorldMachineMemoryPeek"/> directly), and the
     /// screen-op verb surface's runtime target. Always present (never null): machines are booted and stepped in
     /// every boot shape.</summary>
-    public IWorldMachineHost Machines => m_machines;
+    public IWorldMachineHost Machines { get { ThrowIfTickPending(); return m_machines; } }
     /// <summary>Gets or sets an optional durable-journal tap fired with a mutation's own tick and engine tick right
     /// after it is applied and folded into the in-memory undo journal — the same call site, so an entry this tap
     /// sees is exactly the entry a restart's journal-tail replay reapplies. Fires synchronously on the tick thread;
@@ -420,7 +422,7 @@ public sealed partial class WorldServer : IWorldServerHost {
     /// <summary>Gets the tick a durable input submitted during the current command window must name.</summary>
     public ulong NextInputTick => (m_tick.CompletedTick + 1UL);
     /// <summary>Gets the entity table this server advances.</summary>
-    public WorldPopulation Population => m_population;
+    public WorldPopulation Population { get { ThrowIfTickPending(); return m_population; } }
     /// <summary>Gets the profile catalog (the routed store persists through it).</summary>
     public WorldOwnedWorlds Profiles => m_profiles;
     /// <summary>Gets or sets the composition-owned factory for proving a replacement document relative to that
@@ -483,34 +485,36 @@ public sealed partial class WorldServer : IWorldServerHost {
 
     /// <summary>Returns the body at a 0-based entity index, or <see langword="null"/> when the index holds no live body.</summary>
     /// <param name="index">The 0-based entity index.</param>
-    public WorldBody? Body(int index) => ((((uint)index) < ((uint)m_population.Capacity))
-        ? m_population.EntryBody(index: index)
-        : null
-    );
+    public WorldBody? Body(int index) {
+        var population = Population;
+        return (uint)index < (uint)population.Capacity ? population.EntryBody(index) : null;
+    }
     /// <summary>Compacts the journal: the live definition becomes the new base and the edit history is cleared (the
     /// <c>world.save</c> half — a saved world is clean). Reads/writes only journal state, so it runs on the Immediate
     /// console path behind the stdin barrier.</summary>
-    public void Compact() => m_document.Compact();
+    public void Compact() {
+        lock (AuthorityGate) { ThrowIfTickPending(); m_document.Compact(); }
+    }
     /// <summary>Executes a narrow authority operation without racing the fixed-step population fold.</summary>
     /// <exception cref="InvalidOperationException">This activation has frozen for retirement.</exception>
     public T ExecuteAuthorityOperation<T>(Func<T> operation) {
         ArgumentNullException.ThrowIfNull(operation);
         EnterAuthorityGate();
-        try { ThrowIfAuthorityRetiring(); return operation(); } finally { m_authorityGate.Exit(); }
+        try { return operation(); } finally { m_authorityGate.Exit(); }
     }
     /// <summary>Executes a void authority operation under the same gate.</summary>
     /// <exception cref="InvalidOperationException">This activation has frozen for retirement.</exception>
     public void ExecuteAuthorityOperation(Action operation) {
         ArgumentNullException.ThrowIfNull(operation);
         EnterAuthorityGate();
-        try { ThrowIfAuthorityRetiring(); operation(); } finally { m_authorityGate.Exit(); }
+        try { operation(); } finally { m_authorityGate.Exit(); }
     }
 
     /// <summary>Runs a stateful operation under the authority gate without a boundary closure.</summary>
     internal void ExecuteAuthorityAction<T>(T state, Action<T> operation) {
         ArgumentNullException.ThrowIfNull(operation);
         EnterAuthorityGate();
-        try { ThrowIfAuthorityRetiring(); operation(state); } finally { m_authorityGate.Exit(); }
+        try { operation(state); } finally { m_authorityGate.Exit(); }
     }
 
     /// <summary>Gets or sets a callback invoked on a thread whose <see cref="ExecuteAuthorityOperation{T}"/> finds the
@@ -519,12 +523,24 @@ public sealed partial class WorldServer : IWorldServerHost {
     /// time; it runs outside the gate and must not enter it.</summary>
     public Action? AuthorityGateContended { get; set; }
 
-    private void EnterAuthorityGate() {
-        if (m_authorityGate.TryEnter()) {
-            return;
+    internal void ThrowIfTickPending() {
+        if (m_tick?.BlockedDetail is { } reason) {
+            throw new InvalidOperationException($"Authority tick is incomplete while waiting for {reason}.");
         }
-        AuthorityGateContended?.Invoke();
-        m_authorityGate.Enter();
+    }
+
+    private void EnterAuthorityGate() {
+        if (!m_authorityGate.TryEnter()) {
+            AuthorityGateContended?.Invoke();
+            m_authorityGate.Enter();
+        }
+        try {
+            ThrowIfTickPending();
+            ThrowIfAuthorityRetiring();
+        } catch {
+            m_authorityGate.Exit();
+            throw;
+        }
     }
 
     /// <summary>The installed authority sampler.</summary>

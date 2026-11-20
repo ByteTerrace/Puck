@@ -57,8 +57,9 @@ clocks. So:
   mechanism: the debug world's process plus GPU memory at or under 10 GB on
   the Deck tier at every settled checkpoint. The RTX 2060 machine, a 6 GB
   card in a 16 GB host, is the third, and the first whose host memory has
-  bound in practice ([what it showed](#what-the-rtx-2060-showed)); its figure
-  is not yet written ([open questions](#open-questions-and-their-owners)).
+  bound in practice. Its host bar is 6 GiB and its device bar is 4.5 GiB.
+  The 4070 table allows 8 GiB in each of its two pools. The
+  [device tables](../../worlds/standard/quality.puck) author these limits.
   Each is read from the disjoint physical rows of
   [the account](#what-adds-and-what-only-names), never by adding observations
   that overlap.
@@ -235,13 +236,13 @@ What the memory side holds today:
   `MemoryAccount.DeviceReservation.TryReserve`, and the ledger's grant before
   each native device allocation (`GpuDeviceMemoryWork.TryAdmit`). Its host
   owners are mesh payloads, bake workspaces, the store's transient scratch,
-  the regions' host copies, the trace scene and the probe cache; a payload's
-  charge never refuses (`MemoryAccount.Owner.Change`). The managed heap beyond
-  those owners, the allocator's slack and the runtime are measured rows, not
-  admitted ones.
+  the regions' host copies, the trace scene, the irradiance volume and idle
+  large rentals. `MemoryAccount.Owner.TryAcquire` checks new storage,
+  including the overlap when replacing an allocation. The probe cache is
+  sampled. Process memory outside these owners reduces room for admission.
 - **Progress is forced once in the process.** A bake with nothing admitted
-  admits its next group whatever the pool holds only while no other owner
-  holds the allowance (`MemoryAccount.Owner.TryReserveForced`, reported by
+  can spend headroom on its next group while the authored host bar has room
+  and no other owner holds the allowance (`MemoryAccount.Owner.TryReserveForced`, reported by
   `SdfMeshBakeReport.AdmittedAlone`).
 - **Device bytes are admitted before they exist.** `GpuDeviceMemoryWork`
   counts an allocation only under a grant, at the driver's size, in the
@@ -328,7 +329,31 @@ The next reading is the prewarmed player build through the player channel at
 families, `world.residency`'s refusals and holes, and a `gc-verbose` trace
 beside `host.frames`' frame-thread allocation. It decides whether the envelope
 still dominates once no bake runs, how much elastic room the 2060's table
-gives back, and the 2060's memory figure.
+gives back, and whether play stays within its two bars.
+
+The standard budgets **6 GiB of host RAM for the RTX 2060 World**. On a
+16 GiB player machine that leaves 10 GiB for the OS, an open browser and
+other work. This is a working budget chosen below the process size at which
+the earlier run ended. On the 4070 table the World can use half of a
+16 GiB host for higher-resolution presentation. The Deck keeps its 10 GiB
+combined allowance because both the CPU and GPU draw from the same RAM.
+A smaller machine or a busy host can offer less on any profile.
+
+With a profile selected, `MemoryAccount.SetHostBar` makes the account sample
+the process's private commit on Windows, or resident anonymous memory plus
+swap on Linux, alongside free physical memory. The part beyond the host
+owners' charges reduces the space that can be promised. Host-placed GPU
+blocks still spend their own bytes. A driver mapping can therefore make
+admission conservative. Read `private-beyond-held` as a deduction from
+the budget and use the disjoint physical rows to attribute actual storage.
+Forced work, fixed allocations and region floors may use emergency headroom
+only while their next acquisition fits the host bar. A refusal reports its
+owner in `host.memory`; a mesh entry refused during decode stays in the store.
+
+The account controls engine allocations that pass its doors. The CLR,
+driver and other uninstrumented allocations can grow between samples. A
+headless boot exercises host admission without a renderer. Qualification
+requires the physical rows and peak private bytes during a windowed run.
 
 ## How the research was weighed
 
@@ -385,19 +410,20 @@ What enforces the first, at one door each:
   `GpuMemoryPool.BlockBytes` or a resource's own block), not at the size of the
   resource that prompted it; a resource placed in a block that has room asks
   for nothing.
-- **Native storage.** An elastic owner grows only through
-  `MemoryAccount.Owner.TryReserve`.
+- **Host storage.** An owner can reserve a peak with
+  `MemoryAccount.Owner.TryReserve`. Its buffers charge their acquisition
+  through `MemoryAccount.Owner.TryAcquire` before growing. Existing promises
+  cover the same owner's charges.
 - **Forced progress.** One job in the process, not one per bake, may be
-  admitted past the budget so work always settles
+  admitted into headroom when the authored host bar permits it
   (`MemoryAccount.Owner.TryReserveForced`,
   [decision 3](#decision-3-one-reservation-across-residencies-with-floors-and-classes)).
 
 Where it stops: an allocation a door makes without counting is invisible to
 the account, and the reading that shows one is the API's usage against the
-ledger; swapchain images and driver memory never reach a door; the envelope is
-measured, and until it is sampled at a rate (it is sampled when `host.memory`
-asks) the host pool's limit is its budget and the machine's free memory, not
-the budget less the envelope. Admission stops growth and gives nothing back: a
+ledger. Swapchain images and driver memory never reach a door. The
+process sample reduces admission room between detailed `host.memory` walks.
+Admission stops new work and gives nothing back. A
 limit that falls under what a pool holds leaves it standing and read as over
 the limit until [step 7](#step-7-the-backing) and
 [step 5](#step-5-the-floor-and-eviction).
@@ -465,7 +491,7 @@ means measured and printed with no bound: it is what the envelope still holds.
 | The probe cache's blocks | A cached owner in bytes, trimmed first | 9 |
 | The composed-document store | Released after boot where nothing reads it | 6 |
 | Speculative work: bakes, loads and decodes for a predicted demand | A share of the workspace class, cancelled when the demand leaves or pressure asks | 3, 10 |
-| Rented arrays the shared pool keeps | `RentedArrays` limits shared buckets by payload size. Larger reference-free rentals come from a bounded large pool, trimmed when a bake ends | 2, 11 |
+| Rented arrays the shared pool keeps | `RentedArrays` limits shared buckets by payload size. All element types share one retention limit for larger reference-free arrays. The cache admits each returned array against host room and releases its charge on reuse or trim. | 2, 11 |
 | Native allocator slack | Collected when an arrival settles and on pressure (`IAllocatorStatistics`); named | 2 |
 | The managed heap's other tenants | Named by a heap walk; each one past a stated size becomes an owner with a capacity. No hard limit on the heap: it would turn pressure into an exception where everything else turns it into a coarser picture | 2, then per tenant |
 | Runtime code and loader heaps | Named; not controllable at run time | 2 |
@@ -526,11 +552,10 @@ allocations always charge host memory.
 fallback placement debited to the wrong pool; a pool with room admitting an
 allocation into a heap that has none. **Leaves open.** A limit is only as good
 as its reading ([decision 2](#decision-2-what-is-read-how-often-and-how-much-is-spent)).
-**Strongest case against.** `MemoryAccount.Owner.Change` never refuses, and a
-count made after an allocation cannot refuse either, so a pool is a ledger
-until allocations ask first. That is true, and it is why the ledger
-([step 1](#step-1-as-a-brief)) and admission (step 3) are separate steps and
-the first claims nothing of the second.
+**Strongest case against.** A count made after an allocation cannot refuse the
+allocation. A pool enforces a budget only where allocations ask first. The ledger
+([step 1](#step-1-as-a-brief)) measures held bytes. Admission (step 3)
+checks requests before an owner commits more.
 
 ### Decision 2: what is read, how often, and how much is spent
 
@@ -558,7 +583,8 @@ Puck admits.
 **How the limits are formed.** A segment's limit is its reported budget less
 the larger of a tenth of it and the account's headroom. The host pool's limit
 is the smaller of `MemoryAccount.DefaultBudget` and what the host has
-available plus what Puck's physical rows already hold, less the headroom. A
+available plus what Puck already holds, less the headroom. A device profile
+also deducts private bytes outside the host owners from its authored host bar. A
 discrete card's device pool is limited by its segments.
 On unified memory the one pool takes the host's limit, because it is the
 host's memory, and a device allocation obeys its segment's limit as well: host
@@ -1808,10 +1834,12 @@ residual.
   `owned-bytes` gauges: the families come from the ledger, at placement, for
   every creator alike, and add to the segment rows by construction.
 - **Host owners.** The tables' region host copies
-  (`sdf.world.region-host-copies`, native direct); the trace scene's CPU
-  hierarchy and the probe caches, as sampled owners in the managed row
-  (`MemoryAccount.CreateSampledOwner`, read at each measure). The irradiance
-  volume's device memory is named by its families.
+  (`sdf.world.region-host-copies`, native direct) include the trace upload and
+  probe feedback shadows. The trace hierarchy arrays, their build workspace
+  and the published probe volume take managed charges before allocation.
+  Shared geometry keeps one charge through its last scene reader. The probe
+  cache retains a spatial window and reports its table and blocks through
+  `MemoryAccount.CreateSampledOwner`. Device allocations have separate families.
 - **Fixed cost.** `world.residency` prints each residency's fixed cost
   (`SdfWorldTables.DescribeFixedCost`): its tables' bytes and region host
   copies less the mesh region, beside the mesh region's own.
@@ -1934,7 +1962,9 @@ the fixed shares are gone.
 - **The host pool.** Its limit is the budget, or the machine's free memory with
   what the pool held when that was read, when that is smaller, less the
   headroom: what the pool takes after a reading comes out of it, so one
-  reading is spent once. The account reads the free memory itself
+  reading is spent once. A device profile further bounds both ordinary and
+  forced work by the [authored host bar](#what-the-rtx-2060-showed).
+  The account reads the free memory itself
   (`MemoryAccount.AvailableInterval`), and the bake's own reading is gone. A
   mesh store read reserves the scratch it reads and expands an entry in
   before it allocates it, under one owner
@@ -3123,7 +3153,7 @@ than the authored far distance.
 | Question | Owner | Decides |
 |---|---|---|
 | The Deck's numbers: RADV's heaps and budgets, how far the GPU reaches into system memory under SteamOS, free memory with the Steam client running, and whether GPU pages count against the host's free memory | A lane with the hardware, after step 1 | Which limit binds in decision 2's formula; the 10 GB target becomes a qualification on a real reading |
-| The RTX 2060 machine's memory figure: what its process and its 6 GB card are held to at every settled checkpoint, on a 16 GB host | The lead, from the prewarmed player build's first reading ([what the 2060 showed](#what-the-rtx-2060-showed)) | The third device's memory bar; whether the account's derived host budget (three quarters of installed memory) is the figure or only its ceiling |
+| Does the 16 GiB RTX 2060 machine stay within its host and device bars through the gallery and garden crossing? | The lead, from the prewarmed player build on both backends ([what the 2060 showed](#what-the-rtx-2060-showed)) | Compare the peak private bytes and disjoint physical rows with the device table. Identify any owner still growing after admission defers work. |
 | Whether Vulkan's budget on an RTX card tracks the DXGI budget | Step 1's windowed reading | Whether one spend margin fits both backends |
 | The spend margin | Step 2 | The constant in decision 2 |
 | What happens over budget on an RTX card under Linux | A Linux boot of an RTX machine | How strictly Linux discrete must reserve before allocating |

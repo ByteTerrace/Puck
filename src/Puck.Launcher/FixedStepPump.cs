@@ -52,6 +52,11 @@ public sealed class FixedStepPump {
     private bool m_iterationDrained;
     private ulong m_accumulatorTicks;
     private ulong m_completedStepCount;
+    private FixedStepContext m_pendingContext;
+    private CommandSnapshot m_pendingCommands;
+
+    /// <summary>Whether this pump has applied the input for a tick still in progress.</summary>
+    public bool StepPending => m_pendingContext.StepTicks != 0;
     private ulong m_elapsedTicks;
 
     /// <summary>Initializes the pump over one simulation/router/registry triple and wires the Simulation-phase console
@@ -226,7 +231,7 @@ public sealed class FixedStepPump {
         var ratePerSecond = m_simulation.RatePerSecond;
         var burstStartTicks = (m_wallClock?.NowTicks ?? 0UL);
 
-        while (m_accumulatorTicks >= stepTicks) {
+        while (StepPending || (m_accumulatorTicks >= stepTicks)) {
             var heldTicks = ((m_accumulatorTicks / stepTicks) * stepTicks);
             var gate = Gate(
                 ratePerSecond: ratePerSecond,
@@ -246,13 +251,15 @@ public sealed class FixedStepPump {
                 break;
             }
 
-            m_accumulatorTicks -= stepTicks;
-            Step(stepTicks: stepTicks);
+            var resuming = StepPending;
+            var width = resuming ? m_pendingContext.StepTicks : stepTicks;
+            if (!Step(stepTicks: width)) { break; }
+            m_accumulatorTicks -= Math.Min(m_accumulatorTicks, width);
             stepCount++;
 
             // A step that owes the host a frame (a capture armed for its tick) ends the burst here, keeping the
             // time still due: the host composes the frame showing this tick, and its next call resumes the catch-up.
-            if (m_simulation.AwaitsFrame) {
+            if (resuming || m_simulation.AwaitsFrame) {
                 break;
             }
 
@@ -289,6 +296,11 @@ public sealed class FixedStepPump {
     /// (<c>mayStep</c>), the drain changed the simulation's rate, or a holding pump's simulation withheld the
     /// step.</returns>
     public bool TryStep(ulong intervalTicks, ulong stepTicks) {
+        if (StepPending) {
+            CaptureOriginTicks += intervalTicks;
+            _ = Gate(ratePerSecond: m_simulation.RatePerSecond, withheldTicks: intervalTicks);
+            return Step(m_pendingContext.StepTicks);
+        }
         var unstepped = ((intervalTicks > stepTicks)
             ? (intervalTicks - stepTicks)
             : 0UL);
@@ -304,9 +316,7 @@ public sealed class FixedStepPump {
             return false;
         }
 
-        Step(stepTicks: stepTicks);
-
-        return true;
+        return Step(stepTicks: stepTicks);
     }
     /// <summary>Spends a host interval without stepping, for a host that holds its tick while the tick's frame has not
     /// rendered: the simulation steps none of that time, so it rebases <see cref="CaptureOriginTicks"/> by all of it,
@@ -329,6 +339,8 @@ public sealed class FixedStepPump {
     private StepGate Gate(uint ratePerSecond, ulong withheldTicks) {
         if (m_iterationDrained) { m_iterationDrained = false; } else { m_beforeStep?.Invoke(); }
 
+        if (StepPending) { return StepGate.Steps; }
+
         if (m_simulation.RatePerSecond != ratePerSecond) {
             return StepGate.RateChanged;
         }
@@ -341,36 +353,23 @@ public sealed class FixedStepPump {
             : StepGate.Steps
         );
     }
-    // Snapshots, applies and steps one tick.
-    private void Step(ulong stepTicks) {
-        var started = (m_timeline?.Time.GetTimestamp() ?? 0L);
-        var tick = m_completedStepCount;
-
+    // Apply input once, then retain the same coordinates and commands until the simulation completes.
+    private bool Step(ulong stepTicks) {
+        var started = m_timeline?.Time.GetTimestamp() ?? 0L;
+        if (!StepPending) {
+            var stepElapsedTicks = m_elapsedTicks + stepTicks;
+            var windowEndTick = CaptureOriginTicks + stepElapsedTicks;
+            m_pendingCommands = m_inputRouter.SnapshotForTick(tick: m_completedStepCount, windowEndTick: windowEndTick,
+                windowStartTick: windowEndTick - stepTicks);
+            m_registry.ApplySnapshot(snapshot: in m_pendingCommands);
+            m_pendingContext = new FixedStepContext(ElapsedTicks: stepElapsedTicks, StepTicks: stepTicks, Tick: m_completedStepCount);
+        }
+        if (!m_simulation.TryStep(in m_pendingContext, in m_pendingCommands)) { return false; }
+        m_elapsedTicks = m_pendingContext.ElapsedTicks;
         m_completedStepCount++;
-        // The running elapsed-tick total is already rate-independent; never `tick * stepTicks`, which is only
-        // valid while `stepTicks` has been constant for every step `tick` counts.
-        m_elapsedTicks += stepTicks;
-
-        var stepElapsedTicks = m_elapsedTicks;
-        var windowEndTick = (CaptureOriginTicks + stepElapsedTicks);
-        var commands = m_inputRouter.SnapshotForTick(
-            tick: tick,
-            windowEndTick: windowEndTick,
-            windowStartTick: (windowEndTick - stepTicks)
-        );
-
-        m_registry.ApplySnapshot(snapshot: in commands);
-
-        var fixedStep = new FixedStepContext(
-            ElapsedTicks: stepElapsedTicks,
-            StepTicks: stepTicks,
-            Tick: tick
-        );
-
-        m_simulation.Step(
-            commands: in commands,
-            context: in fixedStep
-        );
-        if (m_timeline is { } timeline) { timeline.NoteTick(ticks: (timeline.Time.GetTimestamp() - started)); }
+        m_pendingContext = default;
+        m_pendingCommands = default;
+        if (m_timeline is { } timeline) { timeline.NoteTick(ticks: timeline.Time.GetTimestamp() - started); }
+        return true;
     }
 }

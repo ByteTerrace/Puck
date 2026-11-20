@@ -1,3 +1,4 @@
+using Puck.Abstractions.Waiting;
 using Puck.Hosting;
 using Puck.World.Client;
 using Puck.World.Server;
@@ -52,7 +53,7 @@ internal sealed class WorldHostStep(WorldServer server, WorldReplayTape replayTa
     // boot runs immediately after its own step, reading boot's own just-settled state — never when boot did not
     // step at all, so a paused/stopped boot's latched "inside" occupancy neither fires nor is re-evaluated until a
     // genuine resume produces a new edge.
-    private void StepBoot(in FixedStepContext context, bool stepsBoot) {
+    private bool StepBoot(in FixedStepContext context, bool stepsBoot, WaitDeadline deadline) {
         if (stepsBoot) {
             // Host work advances only when this authority steps. The server independently advances from its
             // checkpointed clock; restoring a replay timeline rewinds that clock without rewinding console waits.
@@ -62,19 +63,22 @@ internal sealed class WorldHostStep(WorldServer server, WorldReplayTape replayTa
                 Tick: m_completedHostSteps
             );
 
-            var stepTick = WorldServerStepShell.Step(
+            var stepTick = WorldServerStepShell.TryStep(
                 context: in bootContext,
                 pacing: pacing,
                 publishTick: m_publishStep,
                 server: m_server,
-                tape: m_replayTape
+                tape: m_replayTape,
+                deadline: deadline,
+                pending: out var pending
             );
+
+            m_completedHostEngineTicks += ((stepTick - m_completedHostSteps) * context.StepTicks);
+            m_completedHostSteps = stepTick;
+            if (pending is not null) { return false; }
 
             m_instances.ScanBootBoundaryTriggers();
             m_instances.SettleBootScreenSessions(stepped: true);
-            // Count actual host work, including fast-forward bursts, but never paused pump calls.
-            m_completedHostEngineTicks += ((stepTick - m_completedHostSteps) * context.StepTicks);
-            m_completedHostSteps = stepTick;
         } else {
             _ = m_server.DrainAdministrative();
             m_instances.SettleBootScreenSessions(stepped: false);
@@ -88,14 +92,38 @@ internal sealed class WorldHostStep(WorldServer server, WorldReplayTape replayTa
                 Console.Error.WriteLine(value: "[world.wait: released — the boot world stopped stepping (paused, rateHz 0, or a rate change the fixed-step pump has not caught up to yet) before its requested tick count was reached; resume it (world.rate resume) before arming a new wait]");
             }
         }
+        return true;
     }
 
-    /// <summary>Runs one fixed step.</summary>
+    private enum StepPhase { Prepare, Boot, Rows }
+    private StepPhase m_phase;
+    private bool m_stepsBoot;
+
+    /// <summary>Runs one fixed step, resuming after the next control phase if a dependency exceeds the slice.</summary>
     /// <param name="context">The pump's tick context; only its step width reaches the server.</param>
     /// <param name="afterInstances">The shell's own post-step, run after every instance has stepped and before the
     /// seat intents finish: every shape syncs seat bindings and publishes seat context here, and a headless or
     /// offscreen shell then publishes logical wheel state.</param>
-    public void Step(in FixedStepContext context, Action? afterInstances) {
+    public bool TryStep(in FixedStepContext context, Action? afterInstances) {
+        var deadline = WaitDeadline.In(HostWaits.PumpAllowance ?? TimeSpan.FromSeconds(30));
+        if (m_phase == StepPhase.Prepare) {
+            PrepareStep(in context);
+            m_phase = StepPhase.Boot;
+        }
+        if (m_phase == StepPhase.Boot) {
+            if (!StepBoot(in context, m_stepsBoot, deadline)) { return false; }
+            m_phase = StepPhase.Rows;
+        }
+        if (m_instances.TryStepInstances(context.StepTicks, deadline) is not null) { return false; }
+        _ = m_seatRouter.DeliverRouteChanges();
+        afterInstances?.Invoke();
+        m_instances.FinishSeatIntents();
+        extensions.Pump(tick: Tick);
+        m_phase = StepPhase.Prepare;
+        return true;
+    }
+
+    private void PrepareStep(in FixedStepContext context) {
         sourceWatch.Poll();
         reload.Poll();
         // A seat claim can be published off this thread (a federated observer reporting an onward handoff) or by a
@@ -107,7 +135,7 @@ internal sealed class WorldHostStep(WorldServer server, WorldReplayTape replayTa
         // Computed first, before intents are submitted below: whether boot will actually step THIS call decides
         // whether its seats' input is consumed now or held untouched. context.StepTicks is threaded in so
         // ShouldStepBoot can refuse a call whose pump-supplied width no longer matches boot's current rate.
-        var stepsBoot = m_instances.ShouldStepBoot(stepTicks: context.StepTicks);
+        m_stepsBoot = m_instances.ShouldStepBoot(stepTicks: context.StepTicks);
 
         // Seat intents are simulation input, submitted only when boot will actually consume them this call. A
         // paused/rate-0 boot world behaves as if no ticks existed: held seat input is never buffered into the
@@ -116,7 +144,7 @@ internal sealed class WorldHostStep(WorldServer server, WorldReplayTape replayTa
         // WorldServerStepShell.Step is about to report as the completed tick — never context.Tick + 1, the pump's
         // raw un-frozen cursor.
         m_instances.PrepareBootSeatIntents(
-            stepsBoot: stepsBoot,
+            stepsBoot: m_stepsBoot,
             tick: (Tick + 1UL),
             stepTicks: context.StepTicks
         );
@@ -129,24 +157,5 @@ internal sealed class WorldHostStep(WorldServer server, WorldReplayTape replayTa
         m_instances.DrainPendingTransfers();
         _ = m_seatRouter.DeliverRouteChanges();
         m_instances.SubmitExternallyClockedSeatIntents();
-        StepBoot(
-            context: in context,
-            stepsBoot: stepsBoot
-        );
-
-        // Every world instance running beside the boot one (world.instance.start) advances on its own authored
-        // schedule, folded into the same fixed-step call rather than a second pump. masterDeltaTicks is the host's
-        // own per-call engine-time advance, never a second clock. Each instance's own portal faces are scanned
-        // per-step inside this call — once per actual Server.Step, which can run several times here for a fast
-        // instance, or zero times for a paused/rate-0 one — never once for the whole call regardless of how many
-        // times an instance actually advanced.
-        m_instances.StepInstances(masterDeltaTicks: context.StepTicks);
-        _ = m_seatRouter.DeliverRouteChanges();
-        afterInstances?.Invoke();
-
-        // Machine stepping runs INSIDE WorldServerStepShell.Step (Server.WorldMachineHost.Advance, called from
-        // WorldServer.Step right after WorldEngagement.FoldTick), so its cost is already folded into this phase.
-        m_instances.FinishSeatIntents();
-        extensions.Pump(tick: Tick);
     }
 }
