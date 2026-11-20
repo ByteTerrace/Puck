@@ -1148,6 +1148,8 @@ not "religious"):
 - the environment the work needs;
 - measured results on that kind of task.
 
+**An optimization found is dispatched at once** (the owner's ruling in AGENTS.md). Every hand-back's Found list and every research hunt is read for optimizations the same session, and each goes to a lane before the next wave: a specified one (an index rebuilt per call, a hand-rolled helper with a shared home, a copy, an allocation in a loop) to a cheap model (Haiku or Sonnet `implementer`), batched by area; one whose correctness rests on an invariant (GPU retirement, determinism, a cache's invalidation) to Opus or Codex. `lead-owed.md` holds one only between waves.
+
 No model is reserved or conserved by standing rule, and the brief states the
 one-line reason for its choice.
 Codex's two models are Astra (`gpt-6.2-astra`, the frontier model, Fable's
