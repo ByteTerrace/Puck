@@ -90,6 +90,7 @@ fn verdict_name(verdict: Option<puck_stdlib::Verdict>) -> &'static str {
         Some(Verdict::MalformedPayload) => "MalformedPayload",
         Some(Verdict::PayloadTooLarge) => "PayloadTooLarge",
         Some(Verdict::Rejected) => "Rejected",
+        Some(Verdict::NotDisclosed) => "NotDisclosed",
     }
 }
 
