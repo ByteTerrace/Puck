@@ -10,6 +10,7 @@ public sealed partial class WorldServer {
     public WorldOperatorAuthority AcquireOperatorAuthority(OperatorContext context) {
         ArgumentNullException.ThrowIfNull(context);
         lock (AuthorityGate) {
+            ThrowIfTickPending();
             if (!Grants.IsOperator(context.Invocation.Principal)) {
                 throw new InvalidOperationException("The invocation does not operate this world.");
             }

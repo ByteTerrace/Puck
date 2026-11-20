@@ -9,6 +9,7 @@ public sealed partial class WorldServer {
     /// fold and its read-back, and the per-tick engagement, transfer, field, music, response, placement-deal and
     /// board-enforcement work.</summary>
     public WorldTick Tick => m_tick;
+    internal IDisposable? PendingReplayInputs { get; set; }
     /// <summary>Gets whether this activation has frozen for retirement, without taking the authority gate — the
     /// raw read a caller already holding it needs.</summary>
     public bool AuthorityRetiring => m_authorityRetiring;

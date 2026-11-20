@@ -1,3 +1,4 @@
+using Puck.Abstractions.Waiting;
 using Puck.Commands;
 using System.Collections.Concurrent;
 using Puck.Abstractions;
@@ -732,13 +733,25 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
     /// fixed-step pump already produced (<see cref="FixedStepContext.StepTicks"/> from the call that invoked this),
     /// never a second clock this type samples on its own.</param>
     public void StepInstances(ulong masterDeltaTicks) {
+        if (TryStepInstances(masterDeltaTicks, WaitDeadline.In(TimeSpan.FromSeconds(30))) is { } pending) {
+            throw new TimeoutException(pending.ToString());
+        }
+    }
+
+    private IReadOnlyList<string>? m_stepNames;
+    private int m_stepNameIndex;
+    private WorldInstance? m_pendingStepInstance;
+    private ulong m_pendingStepWidth;
+
+    /// <summary>Advances rows on the master tick, retaining the current row if its tick exceeds the slice.</summary>
+    public WaitReason? TryStepInstances(ulong masterDeltaTicks, WaitDeadline deadline) {
         // Ordinal name order, so the step sequence is a property of the names rather than of insertion history.
         // Rows never observe one another, so the order carries no cross-row meaning — only each one's own
         // trajectory matters, and that is what makes iterating a hash map by sorted key honest here.
-        var names = Names;
+        var names = m_stepNames ??= Names;
 
-        for (var nameIndex = 0; (nameIndex < names.Count); nameIndex++) {
-            var name = names[nameIndex];
+        for (; m_stepNameIndex < names.Count; m_stepNameIndex++) {
+            var name = names[m_stepNameIndex];
 
             if (string.Equals(
                 a: name,
@@ -762,17 +775,16 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
             // Retirement is a separate permanent hold; it must not bank ticks or run the paused-world edit drain.
             if (
                 instance.AwaitingMirrors ||
-                instance.Server.IsRetiring
+                instance.Server.IsRetiring ||
+                instance.Server.Tick.ExecutionInterrupted
             ) {
                 continue;
             }
 
+            var resuming = ReferenceEquals(instance, m_pendingStepInstance);
             var rateHz = instance.Server.Configuration.SimulationRateHz;
 
-            if (
-                (rateHz <= 0) ||
-                instance.IsPaused
-            ) {
+            if (!resuming && ((rateHz <= 0) || instance.IsPaused)) {
                 _ = instance.Server.DrainAdministrative();
                 SettleScreenSessions(
                     instance: instance,
@@ -782,13 +794,11 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
                 continue;
             }
 
-            instance.ScheduleAccumulatorTicks += masterDeltaTicks;
+            if (!resuming) { instance.ScheduleAccumulatorTicks += masterDeltaTicks; }
 
-            var stepWidth = FixedTickConversion.PerRate(ratePerSecond: ((uint)rateHz));
+            var stepWidth = resuming ? m_pendingStepWidth : FixedTickConversion.PerRate(ratePerSecond: ((uint)rateHz));
 
             while (instance.ScheduleAccumulatorTicks >= stepWidth) {
-                instance.ScheduleAccumulatorTicks -= stepWidth;
-
                 var tick = instance.CompletedTicks;
                 // Accumulated, never re-derived from (tick + 1) * stepWidth — a product re-derivation breaks
                 // the instant this instance's own rate changes (see WorldInstance.ElapsedEngineTicks).
@@ -799,23 +809,37 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
                     Tick: tick
                 );
 
-                m_seats.SubmitAuthorityIntents(
-                    endpoint: EndpointFor(instance: instance),
-                    tick: (tick + 1UL)
-                );
+                if (!resuming) {
+                    m_seats.SubmitAuthorityIntents(endpoint: EndpointFor(instance: instance), tick: tick + 1UL);
+                }
 
                 WorldNarrationScope.Current = name;
 
                 try {
-                    _ = WorldServerStepShell.Step(
+                    var completed = WorldServerStepShell.TryStep(
                         // An instance steps on its own accumulator, banking the boot pump's delta at its own rate, so
                         // its time is elapsed engine time whatever the boot world's host steps per frame.
                         pacing: m_pacing,
                         context: in context,
                         publishTick: instance.PublishTick,
                         server: instance.Server,
-                        tape: instance.Tape
+                        tape: instance.Tape,
+                        deadline: deadline,
+                        pending: out var pending
                     );
+                    if (pending is { } reason) {
+                        if (instance.Server.Tick.ExecutionInterrupted) {
+                            m_pendingStepInstance = null;
+                            break;
+                        }
+                        m_pendingStepInstance = instance;
+                        m_pendingStepWidth = stepWidth;
+                        return reason;
+                    }
+                    m_pendingStepInstance = null;
+                    resuming = false;
+                    instance.ScheduleAccumulatorTicks -= stepWidth;
+                    if (completed == tick) { break; }
                 } catch (TimeoutException error) when (instance.Server.Tick.ExecutionInterrupted) {
                     instance.Server.Output.Narrate("world.instance", $"[world.instance: '{name}' execution interrupted; recover from its last checkpoint: {error.Message}]");
                     break;
@@ -842,6 +866,10 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
                 }
             }
         }
+        m_stepNameIndex = 0;
+        m_stepNames = null;
+        m_pendingStepInstance = null;
+        return null;
     }
     /// <summary>
     /// Submits each externally clocked authority once at the next tick announced by its observation stream. The

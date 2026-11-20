@@ -1,3 +1,5 @@
+using Puck.Abstractions.Waiting;
+
 namespace Puck.Abstractions.Machines;
 
 /// <summary>
@@ -23,4 +25,10 @@ public interface IMachineLink : IDisposable {
     /// <param name="deltaTicks">The shared fixed-step tick budget for this frame.</param>
     /// <param name="inputs">Each member's controller image, in cable order (length equals <see cref="Machines"/>).</param>
     void Step(ulong deltaTicks, ReadOnlySpan<MachinePadState> inputs);
+
+    /// <summary>Steps an inline link, or submits and resumes a queued link's ordered drain.</summary>
+    QueuedMachineSubmission StepSegment(ulong deltaTicks, ReadOnlySpan<MachinePadState> inputs, ref ulong generation, WaitDeadline deadline) {
+        Step(deltaTicks, inputs);
+        return QueuedMachineSubmission.Accepted;
+    }
 }
