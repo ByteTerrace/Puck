@@ -14,7 +14,6 @@ public class CanonicalBasisTests {
     private static JsonObject Compose(string rootPath) {
         Assert.True(
             condition: WorldCompileSession.Shared.TryCompose(
-                chainBytes: out _,
                 composed: out var composed,
                 reason: out var reason,
                 rootBytes: Encoding.UTF8.GetBytes(s: Root),
@@ -90,7 +89,6 @@ public class CanonicalBasisTests {
         using var directory = new TemporaryDirectory();
 
         Assert.False(condition: WorldCompileSession.Shared.TryCompose(
-            chainBytes: out _,
             composed: out _,
             reason: out var reason,
             rootBytes: Encoding.UTF8.GetBytes(s: """{ "schema": "puck.world.definition.v1", "basis": "avatars/moth.world.json" }"""),

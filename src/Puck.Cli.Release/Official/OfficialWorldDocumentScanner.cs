@@ -318,7 +318,6 @@ public static class OfficialWorldDocumentScanner {
         if (!WorldCompileSession.Shared.TryCompose(
             catalog: machines,
             catalogFingerprint: catalogFingerprint,
-            chainBytes: out _,
             composed: out var tree,
             reason: out reason,
             rootBytes: root.Bytes,

@@ -46,6 +46,7 @@ public sealed class WorldIterationClock(WorldServer server) : IWorldIterationRea
         WorldBootWork.CompositionMembers,
         WorldBootWork.DocumentsRead,
         WorldBootWork.Validations,
+        WorldBootWork.CompileStampReads,
     ];
 
     private readonly List<Loop> m_loops = [];

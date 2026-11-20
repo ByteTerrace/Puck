@@ -42,7 +42,7 @@ public static partial class WorldDefinitionValidator {
 
         RequireUnitInterval(
             value: authoring.MultiSeatAlpha,
-            name: $"{path}.multiSeatAlpha",
+            name: new Subject(Member: ".multiSeatAlpha", Path: path),
             errors: errors
         );
 
@@ -122,7 +122,7 @@ public static partial class WorldDefinitionValidator {
         void ValidateAnchor(WorldBindingBarAnchor anchor, string anchorPath) {
             RequireNonNegative(
                 value: anchor.Inset,
-                name: $"{anchorPath}.inset",
+                name: new Subject(Member: ".inset", Path: anchorPath),
                 errors: errors
             );
         }
@@ -222,67 +222,67 @@ public static partial class WorldDefinitionValidator {
 
             RequireOptionalPositive(
                 errors: errors,
-                name: $"{layoutPath}.buttonSize",
+                name: new Subject(Member: ".buttonSize", Path: layoutPath),
                 value: layout.ButtonSize
             );
             RequireOptionalNonNegative(
                 errors: errors,
-                name: $"{layoutPath}.glyphOffsetRatio",
+                name: new Subject(Member: ".glyphOffsetRatio", Path: layoutPath),
                 value: layout.GlyphOffsetRatio
             );
             RequireOptionalPositive(
                 errors: errors,
-                name: $"{layoutPath}.glyphSizeRatio",
+                name: new Subject(Member: ".glyphSizeRatio", Path: layoutPath),
                 value: layout.GlyphSizeRatio
             );
             RequireOptionalPositive(
                 errors: errors,
-                name: $"{layoutPath}.modifierHalfRatio",
+                name: new Subject(Member: ".modifierHalfRatio", Path: layoutPath),
                 value: layout.ModifierHalfRatio
             );
             RequireOptionalPositive(
                 errors: errors,
-                name: $"{layoutPath}.modifierSpacingRatio",
+                name: new Subject(Member: ".modifierSpacingRatio", Path: layoutPath),
                 value: layout.ModifierSpacingRatio
             );
             RequireOptionalPositive(
                 errors: errors,
-                name: $"{layoutPath}.modifierGlyphRatio",
+                name: new Subject(Member: ".modifierGlyphRatio", Path: layoutPath),
                 value: layout.ModifierGlyphRatio
             );
             RequireOptionalPositive(
                 errors: errors,
-                name: $"{layoutPath}.labelCellRatio",
+                name: new Subject(Member: ".labelCellRatio", Path: layoutPath),
                 value: layout.LabelCellRatio
             );
             RequireOptionalPositive(
                 errors: errors,
-                name: $"{layoutPath}.labelCellMinPx",
+                name: new Subject(Member: ".labelCellMinPx", Path: layoutPath),
                 value: layout.LabelCellMinPx
             );
             RequireOptionalFinite(
                 errors: errors,
-                name: $"{layoutPath}.labelGapRatio",
+                name: new Subject(Member: ".labelGapRatio", Path: layoutPath),
                 value: layout.LabelGapRatio
             );
             RequireOptionalPositive(
                 errors: errors,
-                name: $"{layoutPath}.hintCellRatio",
+                name: new Subject(Member: ".hintCellRatio", Path: layoutPath),
                 value: layout.HintCellRatio
             );
             RequireOptionalPositive(
                 errors: errors,
-                name: $"{layoutPath}.hintCellMinPx",
+                name: new Subject(Member: ".hintCellMinPx", Path: layoutPath),
                 value: layout.HintCellMinPx
             );
             RequireOptionalPositive(
                 errors: errors,
-                name: $"{layoutPath}.hintLineStepRatio",
+                name: new Subject(Member: ".hintLineStepRatio", Path: layoutPath),
                 value: layout.HintLineStepRatio
             );
             RequireOptionalFinite(
                 errors: errors,
-                name: $"{layoutPath}.hintBaseGapRatio",
+                name: new Subject(Member: ".hintBaseGapRatio", Path: layoutPath),
                 value: layout.HintBaseGapRatio
             );
         }
@@ -358,14 +358,14 @@ public static partial class WorldDefinitionValidator {
 
                 RequireUnitInterval(
                     value: bank.Alpha,
-                    name: $"{bankPath}.alpha",
+                    name: new Subject(Member: ".alpha", Path: bankPath),
                     errors: errors
                 );
 
                 if (bank.ActiveAlpha is { } activeAlpha) {
                     RequireUnitInterval(
                         errors: errors,
-                        name: $"{bankPath}.activeAlpha",
+                        name: new Subject(Member: ".activeAlpha", Path: bankPath),
                         value: activeAlpha
                     );
                 }
@@ -399,7 +399,7 @@ public static partial class WorldDefinitionValidator {
 
         return BadgeValidity.Valid;
     }
-    private static void RequireOptionalFinite(float? value, string name, List<string> errors) {
+    private static void RequireOptionalFinite(float? value, Subject name, List<string> errors) {
         if (value is { } authored) {
             RequireFinite(
                 errors: errors,
@@ -408,7 +408,7 @@ public static partial class WorldDefinitionValidator {
             );
         }
     }
-    private static void RequireOptionalNonNegative(float? value, string name, List<string> errors) {
+    private static void RequireOptionalNonNegative(float? value, Subject name, List<string> errors) {
         if (value is { } authored) {
             RequireNonNegative(
                 errors: errors,
@@ -417,7 +417,7 @@ public static partial class WorldDefinitionValidator {
             );
         }
     }
-    private static void RequireOptionalPositive(float? value, string name, List<string> errors) {
+    private static void RequireOptionalPositive(float? value, Subject name, List<string> errors) {
         if (value is { } authored) {
             RequirePositive(
                 errors: errors,
@@ -508,7 +508,7 @@ public static partial class WorldDefinitionValidator {
         if (preferences?.Scale is { } scale) {
             RequirePositive(
                 errors: errors,
-                name: $"{path}.scale",
+                name: new Subject(Member: ".scale", Path: path),
                 value: scale
             );
         }
@@ -518,7 +518,7 @@ public static partial class WorldDefinitionValidator {
                 value: contrastBoost,
                 min: 1f,
                 max: 2f,
-                name: $"{path}.contrastBoost",
+                name: new Subject(Member: ".contrastBoost", Path: path),
                 errors: errors
             );
         }
@@ -528,7 +528,7 @@ public static partial class WorldDefinitionValidator {
                 value: uiScale,
                 min: 0.5f,
                 max: 2f,
-                name: $"{path}.uiScale",
+                name: new Subject(Member: ".uiScale", Path: path),
                 errors: errors
             );
         }
@@ -986,14 +986,14 @@ public static partial class WorldDefinitionValidator {
             );
             RequirePositive(
                 value: register.MaximumRange,
-                name: $"{path}.maximumRange",
+                name: new Subject(Member: ".maximumRange", Path: path),
                 errors: errors
             );
             RequireRange(
                 value: register.MaximumHalfAngleDegrees,
                 min: 0f,
                 max: 180f,
-                name: $"{path}.maximumHalfAngleDegrees",
+                name: new Subject(Member: ".maximumHalfAngleDegrees", Path: path),
                 errors: errors,
                 minExclusive: true
             );

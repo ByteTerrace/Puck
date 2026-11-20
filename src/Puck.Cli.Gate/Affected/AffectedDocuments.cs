@@ -8,7 +8,7 @@ namespace Puck.Cli.Affected;
 /// The documents a canary reaches through its manifest, read with the documents' own readers over one
 /// <see cref="IAffectedTree"/>, the working tree or the tree a revision recorded, and never the file system: a world
 /// document, or the <c>.puck</c> source it lowers from, reaches every layer it composes (<see cref="WorldDefinitionFileSource.TryDescribeComposition"/>) and, from its
-/// composed and parsed document (<see cref="WorldDefinitionFileSource.TryParseDocument"/>, unvalidated), the neighbour
+/// composed and parsed document (<see cref="WorldDefinitionFileSource.TryParseDocument(ReadOnlyMemory{byte}, string, out WorldDefinition?, out string)"/>, unvalidated), the neighbour
 /// worlds its adjacencies name and the graph documents its <c>views.graphs</c> rows name, each resolved as the host
 /// resolves it (<see cref="WorldDocumentPaths.TryResolve"/>), its basis and imports through the tree's own document
 /// source (<see cref="IAffectedTree.Documents"/>), and the files of each post-process package its <c>views.post</c> rows

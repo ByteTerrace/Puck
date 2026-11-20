@@ -20,7 +20,7 @@ public static partial class WorldDefinitionValidator {
             value: contribution.GraceSeconds,
             min: 0f,
             max: WorldContributionCapacity.MaxGraceSeconds,
-            name: $"{path}.graceSeconds",
+            name: new Subject(Member: ".graceSeconds", Path: path),
             errors: errors
         );
 

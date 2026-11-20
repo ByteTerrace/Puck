@@ -119,6 +119,11 @@ public static class CompileInputs {
     // Each declarer by name: from a file's digest, and a reader of its bytes for a digest the declarer does not hold,
     // the canonical text of what the file declares.
     private static readonly ConcurrentDictionary<string, Func<string, Func<byte[]>, string>> Declarers = new(comparer: StringComparer.Ordinal);
+    // A declaration fact's hash by declarer and file digest: what a file declares is a function of its bytes alone, so
+    // its canonical text is built and digested once per declarer and digest, under the running code.
+    private static readonly CodeDerivedCache<(string Declarer, string Digest), string> DeclaredHashes = new(capacity: MaxRememberedPaths);
+    // The pass the calling flow runs in, when one is open (Pass).
+    private static readonly AsyncLocal<PassMemo?> Passing = new();
     private static long StampReadCount;
     private static long ContentReadCount;
 
@@ -138,6 +143,15 @@ public static class CompileInputs {
     // The digest last read for a path under the stamp it had then, the names a listing held, and whether that stamp
     // was too recent to vouch for anything.
     private sealed record Known(Stamp Stamp, string Hash, string[]? Names, bool Racy);
+    // What one file answered in a pass: whether it exists, and its digest once a question asked for it.
+    private readonly record struct FileAnswer(bool Exists, string? Digest);
+    // The answers a pass read, by full path: each file's existence and digest, each directory's names and their digest,
+    // and each listing's joined paths by the directory as spelled.
+    private sealed class PassMemo {
+        public ConcurrentDictionary<string, FileAnswer> Files { get; } = new(comparer: Puck.Abstractions.PuckPaths.Comparer);
+        public ConcurrentDictionary<string, (string[] Names, string Hash)> Listings { get; } = new(comparer: Puck.Abstractions.PuckPaths.Comparer);
+        public ConcurrentDictionary<string, IReadOnlyList<string>> Joined { get; } = new(comparer: StringComparer.Ordinal);
+    }
 
     private static void Add(CompileInput input) {
         for (var frame = Recording.Value; (frame is not null); frame = frame.Parent) {
@@ -186,6 +200,7 @@ public static class CompileInputs {
         hash = ContentPin.Compute(content: content).Hex;
         if (trusted && stamp.Exists) {
             Remember(hash: hash, key: FileKey(fullPath: fullPath), names: null, stamp: stamp);
+            Passing.Value?.Files.TryAdd(key: fullPath, value: new FileAnswer(Digest: hash, Exists: true));
         }
 
         return content;
@@ -194,12 +209,21 @@ public static class CompileInputs {
     // last write moves when a file directly in it is added, removed or renamed.
     private static string[] Names(string directory, out string hash, out bool read) {
         var fullPath = System.IO.Path.GetFullPath(path: directory);
+        var pass = Passing.Value;
+
+        read = false;
+        if ((pass is not null) && pass.Listings.TryGetValue(key: fullPath, value: out var answered)) {
+            hash = answered.Hash;
+
+            return answered.Names;
+        }
+
         var key = ListingKey(fullPath: fullPath);
         var stamp = DirectoryStamp(fullPath: fullPath);
 
         if (Vouched(key: key, stamp: stamp) is { Names: { } held } known) {
             hash = known.Hash;
-            read = false;
+            pass?.Listings.TryAdd(key: fullPath, value: (held, hash));
 
             return held;
         }
@@ -221,6 +245,7 @@ public static class CompileInputs {
         hash = ListingHash(names: names);
         read = true;
         Remember(hash: hash, key: key, names: names, stamp: stamp);
+        pass?.Listings.TryAdd(key: fullPath, value: (names, hash));
 
         return names;
     }
@@ -263,7 +288,7 @@ public static class CompileInputs {
             }
 
             var wasRead = read;
-            var declared = declarer(fileDigest, () => {
+            var hash = DeclaredHash(declare: declarer, declarer: prefix[..^1], digest: fileDigest, read: () => {
                 wasRead = true;
 
                 return (bytes ??= ReadRemembering(hash: out _, path: query.Path));
@@ -271,7 +296,7 @@ public static class CompileInputs {
 
             read = wasRead;
 
-            return new CompileInput(ContentHash: DeclarationHash(declared: declared, prefix: prefix), Kind: CompileInputKind.Declaration, Path: query.Path);
+            return new CompileInput(ContentHash: hash, Kind: CompileInputKind.Declaration, Path: query.Path);
         }
 
         var digested = (query.Kind == CompileInputKind.Content);
@@ -283,8 +308,24 @@ public static class CompileInputs {
                 ? new CompileInput(ContentHash: digest, Kind: query.Kind, Path: query.Path)
                 : new CompileInput(ContentHash: string.Empty, Kind: CompileInputKind.Present, Path: query.Path)));
     }
-    // A declaration fact's hash: its declarer's name and slash, then the digest of what the file declares.
-    private static string DeclarationHash(string prefix, string declared) => (prefix + ContentPin.OfText(text: declared).Hex);
+    // A declaration fact's hash: its declarer's name and slash, then the digest of what the file declares, which the
+    // declarer reads from the file's digest and, for a digest it does not hold, the file's bytes. Held by declarer and
+    // digest unless the bytes read no longer digest to `digest` (the file moved since its digest was answered), since
+    // what they declare then belongs to other bytes.
+    private static string DeclaredHash(string declarer, Func<string, Func<byte[]>, string> declare, string digest, Func<byte[]> read) {
+        if (DeclaredHashes.TryGetValue(key: (declarer, digest), value: out var held)) {
+            return held;
+        }
+
+        byte[]? bytes = null;
+        var hash = string.Concat(str0: declarer, str1: "/", str2: ContentPin.OfText(text: declare(arg1: digest, arg2: () => (bytes = read()))).Hex);
+
+        if ((bytes is null) || (ContentPin.Compute(content: bytes).Hex == digest)) {
+            DeclaredHashes.Set(key: (declarer, digest), value: hash);
+        }
+
+        return hash;
+    }
     // The declarer a declaration fact's hash names, with its trailing slash; empty when it names none.
     internal static string DeclarerPrefix(string contentHash) {
         var slash = contentHash.IndexOf(value: '/');
@@ -313,20 +354,30 @@ public static class CompileInputs {
             return ContentPin.Compute(content: content).Hex;
         }
 
+        var pass = Passing.Value;
+
+        if ((pass is not null) && pass.Files.TryGetValue(key: fullPath, value: out var answered) && (!answered.Exists || !wantDigest || (answered.Digest is not null))) {
+            return (!answered.Exists ? null : (wantDigest ? answered.Digest : string.Empty));
+        }
+
         var stamp = FileStamp(fullPath: fullPath);
 
         if (!stamp.Exists) {
+            pass?.Files.TryAdd(key: fullPath, value: new FileAnswer(Digest: null, Exists: false));
             return null;
         }
         if (!wantDigest) {
+            pass?.Files.TryAdd(key: fullPath, value: new FileAnswer(Digest: null, Exists: true));
             return string.Empty;
         }
         if (Vouched(key: FileKey(fullPath: fullPath), stamp: stamp) is { } known) {
+            pass?.Files[fullPath] = new FileAnswer(Digest: known.Hash, Exists: true);
             return known.Hash;
         }
 
         read = true;
         content = ReadRemembering(hash: out var hash, path: path);
+        pass?.Files[fullPath] = new FileAnswer(Digest: hash, Exists: true);
 
         return hash;
     }
@@ -384,25 +435,26 @@ public static class CompileInputs {
 
         _ = Declarers.TryAdd(key: name, value: declare);
     }
-    /// <summary>Reads what the file at <paramref name="path"/> declares through <paramref name="declare"/>, recording
+    /// <summary>Reads what the file at <paramref name="path"/> declares through <paramref name="learn"/>, recording
     /// the declaration (<see cref="CompileInputKind.Declaration"/>) under the registered declarer named
     /// <paramref name="declarer"/> as what the compile read there, or recording the file's absence. A compile that
     /// reads a file only through here stands while the file declares the same. The file is read only when its stamp
-    /// does not vouch for the digest last read and <paramref name="declare"/> asks for its bytes.</summary>
+    /// does not vouch for the digest last read and <paramref name="learn"/> or the declarer asks for its bytes; the
+    /// declaration's digest is computed once per declarer and file digest.</summary>
     /// <typeparam name="T">What the caller learns from the declaration.</typeparam>
     /// <param name="path">The file.</param>
     /// <param name="declarer">The registered declarer's name (<see cref="RegisterDeclarer"/>).</param>
-    /// <param name="declare">From the file's digest and a reader of its bytes, what the caller learns and the canonical
-    /// text the registered declarer answers for the same bytes.</param>
+    /// <param name="learn">From the file's digest and a reader of its bytes, what the caller learns; the fact recorded
+    /// is what the registered declarer answers for the same bytes.</param>
     /// <param name="digest">The digest of the file's bytes, or <see langword="null"/> when no file is there.</param>
-    /// <returns>What <paramref name="declare"/> returned, or the default when no file is there.</returns>
+    /// <returns>What <paramref name="learn"/> returned, or the default when no file is there.</returns>
     /// <exception cref="ArgumentException"><paramref name="declarer"/> is not registered.</exception>
     /// <exception cref="IOException">The file could not be read.</exception>
     /// <exception cref="UnauthorizedAccessException">The file may not be read.</exception>
-    public static T? Declare<T>(string path, string declarer, Func<string, Func<byte[]>, (T Value, string Declared)> declare, out string? digest) {
+    public static T? Declare<T>(string path, string declarer, Func<string, Func<byte[]>, T> learn, out string? digest) {
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: path);
-        ArgumentNullException.ThrowIfNull(argument: declare);
-        if (!Declarers.ContainsKey(key: declarer)) {
+        ArgumentNullException.ThrowIfNull(argument: learn);
+        if (!Declarers.TryGetValue(key: declarer, value: out var declare)) {
             throw new ArgumentException(message: $"No declarer named '{declarer}' is registered.", paramName: nameof(declarer));
         }
 
@@ -414,9 +466,10 @@ public static class CompileInputs {
             return default;
         }
 
-        var (value, declared) = declare(digest, () => (content ??= ReadRemembering(hash: out _, path: path)));
+        byte[] Read() => (content ??= ReadRemembering(hash: out _, path: path));
+        var value = learn(arg1: digest, arg2: Read);
 
-        Add(input: new CompileInput(ContentHash: DeclarationHash(declared: declared, prefix: (declarer + "/")), Kind: CompileInputKind.Declaration, Path: path));
+        Add(input: new CompileInput(ContentHash: DeclaredHash(declare: declare, declarer: declarer, digest: digest, read: Read), Kind: CompileInputKind.Declaration, Path: path));
 
         return value;
     }
@@ -439,7 +492,9 @@ public static class CompileInputs {
             Path: directory
         ));
 
-        return [.. names.Select(selector: name => System.IO.Path.Join(path1: directory, path2: name))];
+        IReadOnlyList<string> Join() => [.. names.Select(selector: name => System.IO.Path.Join(path1: directory, path2: name))];
+
+        return ((Passing.Value is { } pass) ? pass.Joined.GetOrAdd(key: directory, valueFactory: _ => Join()) : Join());
     }
 
     /// <summary>Records <paramref name="content"/> as what the compile read from <paramref name="path"/> through a
@@ -544,6 +599,40 @@ public static class CompileInputs {
         );
 
         return new Scope(previous: previous);
+    }
+
+    /// <summary>Opens a pass on the calling flow, and every flow it starts, until the returned scope is disposed: within
+    /// it each file's existence and digest and each directory's listing is read from the file system at most once, the
+    /// first time a question asks for it, and every later question about the same path is answered as that read
+    /// answered. A pass is one snapshot of what a single load or reload reads (a reload proves a held composition's
+    /// inputs, then every import's, then compiles, reading the same files again and again); a file written during it
+    /// is seen by the next pass. Facts are still recorded in every enclosing <see cref="Record"/> scope as they are
+    /// answered. A pass opened inside another joins it.</summary>
+    /// <returns>The scope that ends the pass.</returns>
+    public static PassScope Pass() {
+        if (Passing.Value is not null) {
+            return new PassScope(opened: false);
+        }
+
+        Passing.Value = new PassMemo();
+
+        return new PassScope(opened: true);
+    }
+
+    /// <summary>Ends a <see cref="Pass"/> when disposed.</summary>
+    public readonly struct PassScope : IDisposable {
+        private readonly bool m_opened;
+
+        internal PassScope(bool opened) {
+            m_opened = opened;
+        }
+
+        /// <summary>Ends the pass this scope opened, or does nothing for a scope that joined an enclosing pass.</summary>
+        public void Dispose() {
+            if (m_opened) {
+                Passing.Value = null;
+            }
+        }
     }
 
     internal sealed record Frame(CompileInputLog Log, Frame? Parent);

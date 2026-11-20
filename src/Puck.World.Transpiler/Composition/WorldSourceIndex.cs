@@ -16,6 +16,51 @@ public sealed record WorldDocumentClaims(string Path, IReadOnlyList<string> Name
     /// <summary>Gets whether the file is a <c>.puck</c> source rather than a document.</summary>
     public bool IsSource => WorldDocumentName.IsSourceFile(path: Path);
 }
+/// <summary>The claims one directory's files make (<see cref="WorldSourceIndex.Index"/>), indexed by the names they
+/// claim and by each source's stem, so resolving one name reads the files that claim it rather than every file.</summary>
+public sealed class WorldDirectoryClaims {
+    private readonly Dictionary<string, WorldDocumentCarrier[]> m_carriers;
+    private readonly Dictionary<string, WorldDocumentClaims> m_stems;
+
+    /// <summary>Initializes a new instance of the <see cref="WorldDirectoryClaims"/> class over one directory's
+    /// claims.</summary>
+    /// <param name="files">The claims, one per carrying file, in ordinal order of its path.</param>
+    public WorldDirectoryClaims(IReadOnlyList<WorldDocumentClaims> files) {
+        ArgumentNullException.ThrowIfNull(argument: files);
+
+        var carriers = new Dictionary<string, List<WorldDocumentCarrier>>(comparer: Puck.Assets.Documents.DocumentName.Comparer);
+
+        m_stems = new Dictionary<string, WorldDocumentClaims>(comparer: Puck.Assets.Documents.DocumentName.Comparer);
+        foreach (var file in files) {
+            foreach (var name in file.Names) {
+                if (!carriers.TryGetValue(key: name, value: out var named)) {
+                    carriers[name] = named = [];
+                }
+                named.Add(item: new WorldDocumentCarrier(Name: name, Path: file.Path));
+            }
+            if (file.IsSource && (WorldDocumentName.OfSourceFile(path: System.IO.Path.GetFileName(path: file.Path)) is var stem) &&
+                !file.Names.Contains(value: stem, comparer: Puck.Assets.Documents.DocumentName.Comparer)) {
+                m_stems[stem] = file;
+            }
+        }
+        m_carriers = carriers.ToDictionary(comparer: carriers.Comparer, elementSelector: static pair => pair.Value.ToArray(), keySelector: static pair => pair.Key);
+        Files = files;
+    }
+
+    /// <summary>Gets the claims, one per carrying file, in ordinal order of its path.</summary>
+    public IReadOnlyList<WorldDocumentClaims> Files { get; }
+
+    /// <summary>Returns every claim to <paramref name="name"/>, ignoring letter case, in the order of the files that
+    /// make them.</summary>
+    /// <param name="name">The document name, relative to the directory.</param>
+    /// <returns>The claims; empty when no file claims the name.</returns>
+    public IReadOnlyList<WorldDocumentCarrier> Carrying(string name) => (m_carriers.TryGetValue(key: name, value: out var claims) ? claims : []);
+    /// <summary>Returns the source whose stem spells <paramref name="name"/>, ignoring letter case, when it claims no
+    /// name that spelling matches: a module library or a composition that declares no world of that name.</summary>
+    /// <param name="name">The document name, relative to the directory.</param>
+    /// <returns>The source's claims, or <see langword="null"/> when no such source is there.</returns>
+    public WorldDocumentClaims? PassedSource(string name) => (m_stems.TryGetValue(key: name, value: out var source) ? source : null);
+}
 /// <summary>
 /// The one index of the document names a directory carries: each <c>.world.json</c> document its own name, and each
 /// <c>.puck</c> source exactly the names it emits, read by parsing it and nothing more
@@ -57,8 +102,8 @@ public static class WorldSourceIndex {
     private static readonly CodeDerivedCache<string, HeldClaims> HeldDirectories = new(capacity: MaxHeldDirectories);
 
     // The claims a directory's files made: the files listed, each source's digest in listing order (null for one that
-    // could not be read), and the claims built from them.
-    private sealed record HeldClaims(IReadOnlyList<string> Files, string?[] Digests, IReadOnlyList<WorldDocumentClaims> Claims);
+    // could not be read), and the claims built from them, indexed by name.
+    private sealed record HeldClaims(IReadOnlyList<string> Files, string?[] Digests, WorldDirectoryClaims Claims);
 
     /// <summary>Returns the names every carrying file directly in <paramref name="directory"/> claims, one entry per
     /// file in ordinal order of its path. A source that cannot be read or does not parse cannot say what it emits, so
@@ -68,7 +113,16 @@ public static class WorldSourceIndex {
     /// there; a source of another vocabulary claims nothing.</returns>
     /// <exception cref="IOException">The directory could not be listed.</exception>
     /// <exception cref="UnauthorizedAccessException">The directory may not be listed.</exception>
-    public static IReadOnlyList<WorldDocumentClaims> Claims(string directory) {
+    public static IReadOnlyList<WorldDocumentClaims> Claims(string directory) => Index(directory: directory).Files;
+    /// <summary>Returns the claims every carrying file directly in <paramref name="directory"/> makes, as
+    /// <see cref="Claims"/> reads them, indexed by the names they claim. The index is held while the directory's
+    /// listing and every source's declaration are the ones it was built from, and reading it records both, exactly as
+    /// <see cref="Claims"/> does.</summary>
+    /// <param name="directory">The directory. One that does not exist carries nothing.</param>
+    /// <returns>The directory's claims.</returns>
+    /// <exception cref="IOException">The directory could not be listed.</exception>
+    /// <exception cref="UnauthorizedAccessException">The directory may not be listed.</exception>
+    public static WorldDirectoryClaims Index(string directory) {
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: directory);
 
         var files = CompileInputs.List(directory: directory);
@@ -109,9 +163,11 @@ public static class WorldSourceIndex {
             }
         }
 
-        HeldDirectories.Set(key: directory, value: new HeldClaims(Claims: claims, Digests: digests, Files: files));
+        var indexed = new WorldDirectoryClaims(files: claims);
 
-        return claims;
+        HeldDirectories.Set(key: directory, value: new HeldClaims(Claims: indexed, Digests: digests, Files: files));
+
+        return indexed;
     }
     // What one source's bytes declare: whether it is a world source, and the names it emits when it is (null for one
     // that does not parse).
@@ -139,11 +195,7 @@ public static class WorldSourceIndex {
     private static Known? TryKnow(string path, out string? digest) {
         try {
             var known = CompileInputs.Declare<Known?>(
-                declare: static (digest, read) => {
-                    var known = Know(digest: digest, read: read);
-
-                    return (known, Canonical(known: known));
-                },
+                learn: static (digest, read) => Know(digest: digest, read: read),
                 declarer: DeclarerName,
                 digest: out digest,
                 path: path

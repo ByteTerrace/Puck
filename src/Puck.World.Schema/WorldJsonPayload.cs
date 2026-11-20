@@ -117,31 +117,7 @@ public static class WorldJsonPayload {
         }
 
         try {
-            if (JsonSerializer.Deserialize(
-                json: json,
-                jsonTypeInfo: info
-            ) is not { } parsed) {
-                refusal = WorldPayloadRefusal.Whole(detail: NullPayload);
-
-                return false;
-            }
-
-            if (parsed is WorldDefinition definition) {
-                if (!WorldStateDocumentValues.TryResolve(
-                    deferDrawSites: deferDrawSites,
-                    definition: definition,
-                    reason: out var spatialReason,
-                    resolved: out var resolved
-                )) {
-                    throw new InvalidOperationException(message: spatialReason);
-                }
-
-                parsed = (T)(object)resolved;
-            }
-
-            value = parsed;
-
-            return true;
+            return TryFinish(deferDrawSites: deferDrawSites, parsed: JsonSerializer.Deserialize(json: json, jsonTypeInfo: info), refusal: out refusal, value: out value);
         } catch (Exception exception) when (IsParseFailure(exception: exception)) {
             refusal = WorldPayloadRefusal.Of(
                 exception: exception,
@@ -151,6 +127,68 @@ public static class WorldJsonPayload {
 
             return false;
         }
+    }
+    /// <summary>Parses a required row from UTF-8 JSON exactly as <see cref="TryRead{T}(string, JsonTypeInfo{T}, out T, out WorldPayloadRefusal?, bool)"/>
+    /// parses its text, reading the bytes directly: the text is decoded only to place a refusal.</summary>
+    /// <typeparam name="T">The row type.</typeparam>
+    /// <param name="utf8">The payload, as a file holds it (<see cref="Puck.Confinement.FileContent.Utf8"/>).</param>
+    /// <param name="info">The source-generated contract.</param>
+    /// <param name="value">The parsed row on success.</param>
+    /// <param name="refusal">The structured refusal, or <see langword="null"/> on success.</param>
+    /// <param name="deferDrawSites">For a <see cref="WorldDefinition"/> payload, whether a state reference into a draw
+    /// site that has not filled yet stays attached for the loader's post-draw pass rather than refusing.</param>
+    /// <returns><see langword="true"/> when the payload parsed to a non-null row.</returns>
+    public static bool TryRead<T>(ReadOnlyMemory<byte> utf8, JsonTypeInfo<T> info, out T value, out WorldPayloadRefusal? refusal, bool deferDrawSites = false) {
+        value = default!;
+        refusal = null;
+
+        var text = Puck.Confinement.FileContent.Utf8(content: utf8);
+
+        if (text.Span.Trim(" \t\r\n"u8).IsEmpty) {
+            refusal = WorldPayloadRefusal.Whole(detail: EmptyPayload);
+
+            return false;
+        }
+
+        try {
+            return TryFinish(deferDrawSites: deferDrawSites, parsed: JsonSerializer.Deserialize(utf8Json: text.Span, jsonTypeInfo: info), refusal: out refusal, value: out value);
+        } catch (Exception exception) when (IsParseFailure(exception: exception)) {
+            refusal = WorldPayloadRefusal.Of(
+                exception: exception,
+                json: System.Text.Encoding.UTF8.GetString(bytes: text.Span),
+                type: info.Type
+            );
+
+            return false;
+        }
+    }
+    // A deserialized row as a parse returns it: refused when null, and a world document's state values resolved.
+    private static bool TryFinish<T>(T? parsed, bool deferDrawSites, out T value, out WorldPayloadRefusal? refusal) {
+        value = default!;
+        refusal = null;
+
+        if (parsed is null) {
+            refusal = WorldPayloadRefusal.Whole(detail: NullPayload);
+
+            return false;
+        }
+
+        if (parsed is WorldDefinition definition) {
+            if (!WorldStateDocumentValues.TryResolve(
+                deferDrawSites: deferDrawSites,
+                definition: definition,
+                reason: out var spatialReason,
+                resolved: out var resolved
+            )) {
+                throw new InvalidOperationException(message: spatialReason);
+            }
+
+            parsed = (T)(object)resolved;
+        }
+
+        value = parsed;
+
+        return true;
     }
     /// <summary>Parses a required row from an inline-JSON argument through reflection-backed options.</summary>
     /// <typeparam name="T">The row type.</typeparam>

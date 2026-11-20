@@ -45,22 +45,21 @@ public static partial class WorldDefinitionLoader {
 
     // Every byte-level load door decodes here, so the boot ledger counts each such load once; a file load counts in
     // WorldDefinitionFileSource.TryLoadParsed instead.
-    private static bool TryDecode(ReadOnlyMemory<byte> utf8, string sourceName, out string json, out string reason) {
-        json = string.Empty;
+    // The document is read from its bytes as the text they decode to (Puck.Confinement.FileContent.Utf8), never decoded
+    // into a string.
+    private static bool TryDecode(ReadOnlyMemory<byte> utf8, string sourceName, out ReadOnlyMemory<byte> json, out string reason) {
+        json = default;
         WorldBootWork.Count(kind: WorldBootWork.Loads);
 
         try {
-            json = Puck.Confinement.FileContent.Text(content: utf8.ToArray());
+            json = Puck.Confinement.FileContent.Utf8(content: utf8);
         } catch (Exception exception) {
             reason = $"cannot decode {sourceName}: {exception.Message.ReplaceLineEndings(replacementText: " ")}";
 
             return false;
         }
 
-        if (json.Contains(
-            comparisonType: StringComparison.Ordinal,
-            value: $"\"{WorldDocumentBasis.BasisMemberName}\""
-        )) {
+        if (json.Span.IndexOf(value: "\"basis\""u8) >= 0) {
             reason = $"{sourceName} names a '{WorldDocumentBasis.BasisMemberName}' — this entry loads only an already-composed document.";
 
             return false;
@@ -205,9 +204,9 @@ public static partial class WorldDefinitionLoader {
         ) ||
             !WorldDefinitionFileSource.TryParseDocument(
             definition: out var parsed,
-            json: json,
             reason: out reason,
-            sourceName: sourceName
+            sourceName: sourceName,
+            utf8: json
         )
         ) { return (null, reason); }
         var input = parsed! with { DocumentDirectory = documentDirectory };

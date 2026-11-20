@@ -319,7 +319,7 @@ public static partial class WorldDefinitionValidator {
                 }
                 RequireNonNegative(
                     value: timer.Seconds,
-                    name: $"{path}.seconds",
+                    name: new Subject(Member: ".seconds", Path: path),
                     errors: errors
                 );
                 break;
@@ -452,7 +452,7 @@ public static partial class WorldDefinitionValidator {
 
         RequireNonNegative(
             value: trigger.LatchSeconds,
-            name: $"{path}.latchSeconds",
+            name: new Subject(Member: ".latchSeconds", Path: path),
             errors: errors
         );
 

@@ -20,7 +20,6 @@ public sealed class WorldSourceIndexLawTests {
     private static string? ComposedDocumentId(TemporaryDirectory directory, string basis) {
         Assert.True(
             condition: WorldCompileSession.Shared.TryCompose(
-                chainBytes: out _,
                 composed: out var composed,
                 reason: out var reason,
                 rootBytes: Encoding.UTF8.GetBytes(s: $$"""{ "schema": "puck.world.definition.v1", "basis": "{{basis}}" }"""),

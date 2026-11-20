@@ -403,7 +403,7 @@ public static class WorldDocumentBasis {
 
         return true;
     }
-    private static JsonArray MergeList(JsonArray basis, JsonArray overlay, string path, WorldDocumentOrigins? origins) {
+    private static JsonArray MergeList(JsonArray basis, JsonArray overlay, string path, WorldDocumentOrigins? origins, bool consume) {
         if (
             (overlay.Count > 0) &&
             IsReplaceMarker(node: overlay[index: 0])
@@ -446,7 +446,7 @@ public static class WorldDocumentBasis {
                 );
             }
 
-            return ((JsonArray)WorldDocumentOrigins.Clone(node: overlay, origins: origins)!);
+            return ((JsonArray)Take(consume: consume, node: overlay, origins: origins)!);
         }
 
         var positions = new List<(JsonNode? Row, JsonNode? Before)>();
@@ -511,6 +511,7 @@ public static class WorldDocumentBasis {
                 merged[basisIndex] = WorldDocumentOrigins.Clone(node: overlayRow, origins: origins);
             } else {
                 MergeObject(
+                    consume: consume,
                     origins: origins,
                     target: basisObject,
                     overlay: overlayRow,
@@ -579,15 +580,15 @@ public static class WorldDocumentBasis {
         foreach (var row in order) { rows.Add(row); }
         return rows;
     }
-    private static void MergeObject(JsonObject target, JsonObject overlay, string path, WorldDocumentOrigins? origins) {
+    private static void MergeObject(JsonObject target, JsonObject overlay, string path, WorldDocumentOrigins? origins, bool consume) {
         if (IsTrue(overlay[ReplaceMemberName])) {
             target.Clear();
-            foreach (var (name, value) in overlay) {
-                if (name != ReplaceMemberName) { target.Add(name, WorldDocumentOrigins.Clone(node: value, origins: origins)); }
+            foreach (var (name, value) in Members(consume: consume, overlay: overlay)) {
+                if (name != ReplaceMemberName) { target.Add(name, Take(consume: consume, node: value, origins: origins)); }
             }
             return;
         }
-        foreach (var (name, value) in overlay) {
+        foreach (var (name, value) in Members(consume: consume, overlay: overlay)) {
             if (
                 string.Equals(
                 a: name,
@@ -634,9 +635,10 @@ public static class WorldDocumentBasis {
                     basis: basisObject,
                     overlay: overlayObject
                 )) {
-                    target[propertyName: name] = WorldDocumentOrigins.Clone(node: overlayObject, origins: origins);
+                    target[propertyName: name] = Take(consume: consume, node: overlayObject, origins: origins);
                 } else {
                     MergeObject(
+                        consume: consume,
                         origins: origins,
                         overlay: overlayObject,
                         path: memberPath,
@@ -653,6 +655,7 @@ public static class WorldDocumentBasis {
             ) {
                 target[propertyName: name] = MergeList(
                     basis: basisList,
+                    consume: consume,
                     origins: origins,
                     overlay: overlayList,
                     path: memberPath
@@ -661,24 +664,19 @@ public static class WorldDocumentBasis {
                 continue;
             }
 
-            target[propertyName: name] = WorldDocumentOrigins.Clone(node: value, origins: origins);
+            target[propertyName: name] = Take(consume: consume, node: value, origins: origins);
         }
     }
-    private static JsonArray MergeSiblingArray(JsonArray existing, JsonArray overlay, JsonNode? restated, string overlayName, Dictionary<string, string> owners, string path, WorldDocumentOrigins? origins) {
+    private static JsonArray MergeSiblingArray(JsonArray existing, JsonArray overlay, JsonNode? restated, string overlayName, Dictionary<JsonNode, string> owners, string path, WorldDocumentOrigins? origins, bool consume) {
         // An empty list contributes no row to collide with: siblings each own the rows they author.
         if (overlay.Count == 0) {
             return existing;
         }
 
         if (existing.Count == 0) {
-            var adopted = ((JsonArray)WorldDocumentOrigins.Clone(node: overlay, origins: origins)!);
+            var adopted = ((JsonArray)Take(consume: consume, node: overlay, origins: origins)!);
 
-            RecordFreshOwnership(
-                node: adopted,
-                overlayName: overlayName,
-                owners: owners,
-                path: path
-            );
+            owners[adopted] = overlayName;
 
             return adopted;
         }
@@ -701,10 +699,7 @@ public static class WorldDocumentBasis {
             }
 
             if (restated is not JsonArray) {
-                var earlier = owners.GetValueOrDefault(
-                    defaultValue: "an earlier import",
-                    key: path
-                );
+                var earlier = OwnerOf(node: existing, owners: owners);
 
                 throw new JsonException(message: $"{path}: '{earlier}' and '{overlayName}' both author this list, and it cannot merge by row identity — restate the whole list in the importing file to resolve the collision.");
             }
@@ -723,9 +718,11 @@ public static class WorldDocumentBasis {
             var existingIndex = existingRows.GetValueOrDefault(rowKey!, -1);
 
             if (existingIndex < 0) {
+                var adoptedRow = WorldDocumentOrigins.Clone(node: rowObject, origins: origins)!;
+
                 existingRows.Add(rowKey!, merged.Count);
-                merged.Add(value: WorldDocumentOrigins.Clone(node: rowObject, origins: origins));
-                owners[$"{path}[{DescribeKey(value: rowKey)}]"] = overlayName;
+                merged.Add(value: adoptedRow);
+                owners[adoptedRow] = overlayName;
 
                 continue;
             }
@@ -748,10 +745,7 @@ public static class WorldDocumentBasis {
             );
 
             if (!restatesRow) {
-                var earlier = owners.GetValueOrDefault(
-                    defaultValue: "an earlier import",
-                    key: $"{path}[{DescribeKey(value: rowKey)}]"
-                );
+                var earlier = OwnerOf(node: merged[index: existingIndex], owners: owners);
 
                 throw new JsonException(message: $"{path}[{key}={DescribeKey(value: rowKey)}]: '{earlier}' and '{overlayName}' both author this row — restate it in the importing file to resolve the collision.");
             }
@@ -759,8 +753,8 @@ public static class WorldDocumentBasis {
 
         return merged;
     }
-    private static void MergeSiblingObject(JsonObject target, JsonObject overlay, JsonNode? restated, string overlayName, Dictionary<string, string> owners, string path, WorldDocumentOrigins? origins) {
-        foreach (var (name, value) in overlay) {
+    private static void MergeSiblingObject(JsonObject target, JsonObject overlay, JsonNode? restated, string overlayName, Dictionary<JsonNode, string> owners, string path, WorldDocumentOrigins? origins, bool consume) {
+        foreach (var (name, value) in Members(consume: consume, overlay: overlay)) {
             var memberPath = $"{path}.{name}";
             var childRestated = ((restated as JsonObject)?[name]);
 
@@ -768,13 +762,10 @@ public static class WorldDocumentBasis {
                 jsonNode: out var existing,
                 propertyName: name
             )) {
-                target[propertyName: name] = WorldDocumentOrigins.Clone(node: value, origins: origins);
-                RecordFreshOwnership(
-                    node: target[propertyName: name],
-                    owners: owners,
-                    overlayName: overlayName,
-                    path: memberPath
-                );
+                var adoptedMember = Take(consume: consume, node: value, origins: origins);
+
+                target[propertyName: name] = adoptedMember;
+                if (adoptedMember is not null) { owners[adoptedMember] = overlayName; }
 
                 continue;
             }
@@ -796,6 +787,7 @@ public static class WorldDocumentBasis {
             )
             ) {
                 MergeSiblingObject(
+                    consume: consume,
                     origins: origins,
                     overlay: overlayObject,
                     overlayName: overlayName,
@@ -813,6 +805,7 @@ public static class WorldDocumentBasis {
                 (value is JsonArray overlayArray)
             ) {
                 target[propertyName: name] = MergeSiblingArray(
+                    consume: consume,
                     existing: existingArray,
                     origins: origins,
                     overlay: overlayArray,
@@ -833,47 +826,38 @@ public static class WorldDocumentBasis {
             }
 
             if (childRestated is null) {
-                var earlier = owners.GetValueOrDefault(
-                    defaultValue: "an earlier import",
-                    key: memberPath
-                );
+                var earlier = OwnerOf(node: (existing ?? target), owners: owners);
 
                 throw new JsonException(message: $"{memberPath}: '{earlier}' and '{overlayName}' both author this member — restate it in the importing file to resolve the collision.");
             }
         }
     }
-    // Registers ownership at EVERY path reachable inside a freshly-added subtree, not just its own top-level path —
-    // a later import's collision may land on a nested leaf ("$.metadata.title") this one never touched directly,
-    // and the refusal must still name the ORIGINAL contributor rather than falling back to a generic description.
-    private static void RecordFreshOwnership(JsonNode? node, string path, string overlayName, Dictionary<string, string> owners) {
-        owners[path] = overlayName;
+    // An overlay node to place in a merge's target: the node itself, detached from the overlay object that holds it, when
+    // the merge consumes its overlay (the composer owns every tree it merges and reads none again); a copy otherwise. A
+    // list's row is always copied, since the list walks read an overlay's rows by index to its end.
+    private static JsonNode? Take(JsonNode? node, WorldDocumentOrigins? origins, bool consume) {
+        if (consume && (node?.Parent is JsonObject holder)) {
+            _ = holder.Remove(propertyName: node.GetPropertyName());
 
-        if (node is JsonObject nested) {
-            foreach (var (name, value) in nested) {
-                RecordFreshOwnership(
-                    node: value,
-                    overlayName: overlayName,
-                    owners: owners,
-                    path: $"{path}.{name}"
-                );
-            }
-
-            return;
+            return node;
         }
 
-        if (
-            (node is JsonArray array) &&
-            TryFindSingleListRowKey(
-            key: out var key,
-            list: array
-        )
-        ) {
-            foreach (var row in array) {
-                if (row is JsonObject rowObject) {
-                    owners[$"{path}[{DescribeKey(value: RowIdentity(key: key, row: rowObject))}]"] = overlayName;
-                }
+        return WorldDocumentOrigins.Clone(node: node, origins: origins);
+    }
+    // An overlay object's members as a merge walks them: a copy of the list when the merge consumes the overlay, since
+    // taking a member detaches it from the object the walk enumerates.
+    private static IEnumerable<KeyValuePair<string, JsonNode?>> Members(JsonObject overlay, bool consume) => (consume ? overlay.ToArray() : overlay);
+    // The import that authored a node of a sibling merge's target: the nearest node at or above it that an import's
+    // subtree was adopted at. Ownership is recorded once per adopted subtree and read only when a collision is refused,
+    // so the walk up a refused node's parents is paid only by a refusal.
+    private static string OwnerOf(JsonNode? node, Dictionary<JsonNode, string> owners) {
+        for (var current = node; (current is not null); current = current.Parent) {
+            if (owners.TryGetValue(key: current, value: out var owner)) {
+                return owner;
             }
         }
+
+        return "an earlier import";
     }
     private static void RefuseRowMarkers(JsonNode? node, string path, string context) {
         if (node is not JsonObject row) {
@@ -964,22 +948,6 @@ public static class WorldDocumentBasis {
         return false;
     }
 
-    private static bool TryFindSingleListRowKey(JsonArray list, out string key) {
-        foreach (var candidate in RowKeyPrecedence) {
-            if (ListCarriesKey(
-                key: candidate,
-                list: list
-            )) {
-                key = candidate;
-
-                return true;
-            }
-        }
-
-        key = string.Empty;
-
-        return false;
-    }
     private static bool TypeDiscriminatorsDiffer(JsonObject basis, JsonObject overlay) {
         return (
             (basis[propertyName: "$type"] is { } basisType) &&
@@ -1253,7 +1221,7 @@ public static class WorldDocumentBasis {
         ArgumentNullException.ThrowIfNull(argument: overlay);
 
         var target = ((JsonObject)WorldDocumentOrigins.Clone(node: basis, origins: origins)!);
-        if (TryMergeInto(target, overlay, out reason, origins)) {
+        if (TryMergeInto(target: target, overlay: overlay, reason: out reason, origins: origins)) {
             composed = target;
             return true;
         }
@@ -1264,10 +1232,12 @@ public static class WorldDocumentBasis {
     // The file composer exclusively owns each parsed/cache-served tree. Mutate that tree across layers instead
     // of cloning inherited content at every merge. Public TryMerge enters through a private copy; callers needing
     // both the pre-body stack and final tree take that one snapshot at their fork. A refused target is discarded.
-    internal static bool TryMergeInto(JsonObject target, JsonObject overlay, out string reason, WorldDocumentOrigins? origins = null) {
+    // With `consume`, the overlay is the caller's to give up: its subtrees move into the target rather than being copied,
+    // and the overlay is left partly emptied.
+    internal static bool TryMergeInto(JsonObject target, JsonObject overlay, out string reason, WorldDocumentOrigins? origins = null, bool consume = false) {
         try {
-
             MergeObject(
+                consume: consume,
                 origins: origins,
                 overlay: overlay,
                 path: "$",
@@ -1300,17 +1270,20 @@ public static class WorldDocumentBasis {
     /// <param name="origins">Optional authored scalar origins carried through retained values.</param>
     /// <param name="composed">The folded layer on success; <see langword="null"/> on refusal.</param>
     /// <param name="reason">The one-line refusal reason, or empty on success.</param>
+    /// <param name="consume">Whether the import trees are the caller's to give up: their subtrees move into the folded
+    /// layer rather than being copied, and the trees are left partly emptied.</param>
     /// <returns><see langword="true"/> when every import folded without an unresolved collision.</returns>
-    public static bool TryMergeImports(IReadOnlyList<(string Name, JsonObject Tree)> imports, JsonObject restated, out JsonObject? composed, out string reason, WorldDocumentOrigins? origins = null) {
+    public static bool TryMergeImports(IReadOnlyList<(string Name, JsonObject Tree)> imports, JsonObject restated, out JsonObject? composed, out string reason, WorldDocumentOrigins? origins = null, bool consume = false) {
         ArgumentNullException.ThrowIfNull(argument: imports);
         ArgumentNullException.ThrowIfNull(argument: restated);
 
         var target = new JsonObject();
-        var owners = new Dictionary<string, string>(comparer: StringComparer.Ordinal);
+        var owners = new Dictionary<JsonNode, string>(comparer: ReferenceEqualityComparer.Instance);
 
         try {
             foreach (var (name, tree) in imports) {
                 MergeSiblingObject(
+                    consume: consume,
                     origins: origins,
                     overlay: tree,
                     overlayName: name,

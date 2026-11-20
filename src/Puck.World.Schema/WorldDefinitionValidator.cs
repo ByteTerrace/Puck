@@ -1916,7 +1916,7 @@ public static partial class WorldDefinitionValidator {
                 if (screen.Solid is { } screenSolid) {
                     RequireFinite(
                         value: screenSolid.Margin,
-                        name: $"{path}.solid.margin",
+                        name: new Subject(Member: ".solid.margin", Path: path),
                         errors: errors
                     );
                     RequirePositiveEffectiveExtent(
@@ -2067,7 +2067,7 @@ public static partial class WorldDefinitionValidator {
         )) {
             RequirePositive(
                 value: sequence.Step,
-                name: $"{path}.step",
+                name: new Subject(Member: ".step", Path: path),
                 errors: errors
             );
         } else if (sequence.Step != 0f) {

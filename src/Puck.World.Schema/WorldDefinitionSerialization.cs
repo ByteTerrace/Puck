@@ -1530,7 +1530,6 @@ public static partial class WorldDefinitionSerialization {
         if (!WorldDefinitionFileSource.TryComposeChainWithImports(
             catalog: catalog,
             catalogFingerprint: catalogFingerprint,
-            chainBytes: out _,
             composed: out var composed,
             reason: out reason,
             rootBytes: written,
