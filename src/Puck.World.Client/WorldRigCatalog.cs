@@ -141,8 +141,6 @@ public static class WorldRigCatalog {
     /// <param name="avatar">The 0-based body index.</param>
     /// <returns>The range's first slot and its length.</returns>
     public static (int Start, int Count) BodySlots(int avatar) => (BodySlotBase(avatar), MaxLeafCount);
-    /// <summary>Gets the actual part count of the pinned catalog look.</summary>
-    public static int TransformSlotsFor(int rig) => Ranges[rig].Count;
 
     private static int BodySlotBase(int avatar) => checked((avatar * MaxLeafCount));
     private static AvatarLeaf BuildLeaf(int avatar, int bone) {
@@ -435,22 +433,6 @@ public static class WorldRigCatalog {
             }
         }
     }
-    /// <summary>Returns the literal rig-local eyeball attachment point for a first-person camera. It follows the
-    /// catalog's authored head leaf, so camera and morphology cannot silently drift apart.</summary>
-    /// <param name="avatar">The appearance catalog index, not a population slot.</param>
-    public static Vector3 EyeOffset(int avatar) {
-        var head = Leaves[(Ranges[avatar].First + 3)];
-
-        return ((head.Anchor + head.AuthoredOffset) + new Vector3(
-            x: 0f,
-            y: 0.015f,
-            z: -0.12f
-        ));
-    }
-    /// <summary>Returns the rig's stable descriptor identity. The digest folds the Puck.Maths R1/R2 source samples
-    /// that author the rig, and catalog construction rejects a collision across the built-in 128.</summary>
-    /// <param name="avatar">The appearance catalog index, not a population slot.</param>
-    public static ulong IdentityHash(int avatar) => IdentityHashes[avatar];
     /// <summary>Returns the exact authored instruction count for a catalog rig.</summary>
     /// <param name="avatar">The appearance catalog index, not a population slot.</param>
     public static int InstructionCount(int avatar) => (Ranges[avatar].Count * InstructionsPerLeaf);

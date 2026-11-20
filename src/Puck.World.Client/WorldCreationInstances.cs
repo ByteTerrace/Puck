@@ -1344,35 +1344,6 @@ public sealed partial class WorldCreationInstances : IWorldBodyPoses {
         slotCount = SlotsAt(index: poolIndex);
         return true;
     }
-    /// <summary>Resolves a body-rooted creation look's authored part id to its absolute packed transform slot.</summary>
-    /// <param name="bodyIndex">The population entity index.</param>
-    /// <param name="partId">The ordinal, case-sensitive authored part identifier.</param>
-    /// <param name="transformSlot">The absolute composed-buffer slot, or -1 when unresolved.</param>
-    /// <returns><see langword="true"/> when the live creation look publishes the part and its pool range has packed.</returns>
-    public bool TryBodyPartTransformSlot(int bodyIndex, string partId, out int transformSlot) {
-        if (Rigid.ContainsBody(body: bodyIndex)) { return Rigid.TryPartSlot(body: bodyIndex, partId: partId, slot: out transformSlot); }
-        if (
-            (m_packedSlotBase < 0) ||
-            !TryFindBody(
-            bodyIndex: bodyIndex,
-            live: out var live,
-            poolIndex: out var poolIndex
-        ) ||
-            !live.Parts.TryResolve(
-            partId: partId,
-            transformSlot: out var shapeSlot
-        )
-        ) {
-            transformSlot = -1;
-
-            return false;
-        }
-
-        NotePoseRead(live: live);
-        transformSlot = ((m_packedSlotBase + RootSlotOffset(index: poolIndex)) + live.Motion.ShapeSlots[shapeSlot]);
-
-        return true;
-    }
     /// <summary>Resolves a live registration's world position for one of its shapes (or its root when
     /// <paramref name="shapeId"/> is null or names no shape) as the last <see cref="PackTransforms"/> drew it — the
     /// placement-anchor seam the audio director, the overlay facts and placement-anchored camera views ride. A shape's

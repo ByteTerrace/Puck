@@ -1671,9 +1671,6 @@ public sealed partial class PlayerRoster : IInputSlotResolver, IPrincipalResolve
 
         return accepted;
     }
-    /// <summary>The render nose color for the slot.</summary>
-    /// <param name="slot">The slot index (0-based).</param>
-    public Vector3 NoseColor(int slot) => (BodyColor(slot: slot) * m_noseFactor);
     /// <summary>The client-visible seat-occupied fact — <see cref="VacateSeat"/>'s mirror: the slot starts holding an
     /// active participant on <paramref name="profile"/>, and that identity's binding layer is pushed to the seat.
     /// Emits no session request, because the caller has already seated this body on the server; the ordinary

@@ -655,11 +655,8 @@ public static class WorldCameraRigCompiler {
 }
 /// <summary>An anchor source that resolves one fixed pose for every id.</summary>
 public sealed class FixedAnchorSource(SdfAnchor anchor) : ISdfAnchorSource {
-    private SdfAnchor m_anchor = anchor;
+    private readonly SdfAnchor m_anchor = anchor;
 
-    /// <summary>Repoints the fixed pose.</summary>
-    /// <param name="anchor">The new pose.</param>
-    public void Set(SdfAnchor anchor) => m_anchor = anchor;
     /// <inheritdoc/>
     public bool TryResolveAnchor(int anchorId, out SdfAnchor anchor) {
         anchor = m_anchor;
