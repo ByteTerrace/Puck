@@ -2810,13 +2810,6 @@ state, the shader cache and the GC-hole retirement.
   The opposite direction (a refused row on a machine that now prepares) was
   fixed to boot it from power-on.
 
-- [high] Production deploy fails at "Publish containers and apply application
-  configuration": `az acr repository list` answers "authentication required",
-  because `ReusePublishedContainerAsync` begins with a catalog listing
-  (`AzureContainerRetention.cs`) the publishing identity deliberately cannot
-  make. Ask for the known tag (`az acr repository show --image
-  <repo>:<commit>`) and treat only a not-found answer as "not published"; do
-  not grant the catalog role.
 - [medium] Cold debug-world silo activation spends most of its time before
   checkpoint decode, in storage and definition admission (`WorldSiloHost`'s
   per-step timers; `WorldAuthorityBlobStore`). Profile that phase and compare
