@@ -23,6 +23,7 @@ public sealed class GeneratedNameReversalLawTests {
 
     private const string Captures = "src/Puck.World.Schema/WorldCaptures.cs";
     private const string Catalog = "src/Puck.State/StateCatalog.cs";
+    private const string Deal = "src/Puck.World.Schema/WorldPlacementDeal.cs";
     private const string Endpoints = "src/Puck.World.Transpiler/Lowering/WorldDocumentEmitter.CompositionEndpoints.cs";
     private const string Expansion = "src/Puck.World.Transpiler/Lowering/WorldDocumentEmitter.cs";
     private const string Extensions = "src/Puck.World.Server/WorldConfiguredExtensions.Hosting.cs";
@@ -51,8 +52,9 @@ public sealed class GeneratedNameReversalLawTests {
         new(Calls: 1, File: InstanceHost, Mints: "the authority identity a later lifetime of a started instance takes, its name joined to the lifetime's ordinal"),
         new(Calls: 1, File: Extensions, Mints: "an extension runtime's directory"),
         new(Calls: 1, File: Captures, Mints: "a capture's frame file"),
-        new(Calls: 13, File: Views, Mints: "a residency environment producer, an infinity view's instance name under the viewer's own sky and under a deeper view's, a session screen's view name, a session seen through it one level deeper and the head a routed world's sessions are named under, a camera of a world shown through a screen under its level, a camera seat's view name, a screen source's instance name from its producer and settings digest, a later view's world producer, and the synthesized root graph's own versions and passes, which exist only at run time"),
+        new(Calls: 14, File: Views, Mints: "a residency environment producer, the scene a group of session screens shares, an infinity view's instance name under the viewer's own sky and under a deeper view's, a session screen's view name, a session seen through it one level deeper and the head a routed world's sessions are named under, a camera of a world shown through a screen under its level, a camera seat's view name, a screen source's instance name from its producer and settings digest, a later view's world producer, and the synthesized root graph's own versions and passes, which exist only at run time"),
         new(Calls: 1, File: Probes, Mints: "a seat-relative probe's instance key, which exists only at run time"),
+        new(Calls: 1, File: Deal, Mints: "the key of a placeholder a recipient's view deals for a withheld cell, which exists only in that view"),
     ];
     private static readonly Regex MintingCall = new(
         options: RegexOptions.CultureInvariant | RegexOptions.ExplicitCapture,
@@ -391,6 +393,8 @@ public sealed class GeneratedNameReversalLawTests {
         new(Label: "infinity view name a hand document spells", Site: Views, Check: static () => RefusedDocument(document: HandDocument(row: GeneratedName.Join("sky", "lobby")), name: GeneratedName.Join("sky", "lobby"))),
         new(Label: "nested infinity view name a hand document spells", Site: Views, Check: static () => RefusedDocument(document: HandDocument(row: GeneratedName.Join("session", "0", "sky", "lobby")), name: GeneratedName.Join("session", "0", "sky", "lobby"))),
         new(Label: "source instance name a hand document spells", Site: Views, Check: static () => RefusedDocument(document: HandDocument(row: GeneratedName.Join("source", "qr", "0123456789abcdef")), name: GeneratedName.Join("source", "qr", "0123456789abcdef"))),
+        new(Label: "shared scene name a hand document spells", Site: Views, Check: static () => RefusedDocument(document: HandDocument(row: GeneratedName.Append(name: GeneratedName.Join("session", "0"), part: "shared")), name: GeneratedName.Append(name: GeneratedName.Join("session", "0"), part: "shared"))),
+        new(Label: "placeholder key a hand document spells", Site: Deal, Check: static () => RefusedDocument(document: HandDocument(row: GeneratedName.Join(WorldPlacementDeal.PlaceholderHead, "0")), name: GeneratedName.Join(WorldPlacementDeal.PlaceholderHead, "0"))),
         new(Label: "probe instance key a hand document spells", Site: Probes, Check: static () => RefusedDocument(document: HandDocument(row: GeneratedName.Join("head", "2")), name: GeneratedName.Join("head", "2"))),
     ];
 
