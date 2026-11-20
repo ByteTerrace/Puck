@@ -2197,9 +2197,7 @@ Owner: specialist, transfers and server · high · Next: the
 lease-missed recall; then the uncertain crossing, opened by a two-silo
 failover witness. [The register](../decisions/worlds-and-federation.md#building-it)
 routes the federation work here and names where each check lives. The scale
-limits below depend on none of the protocol's steps and run beside them;
-interest management comes first among them, because every session's cost per
-tick rests on it.
+limits below depend on none of the protocol's steps and run beside them. The [recipient view](../decisions/worlds-and-federation.md#body-interest-and-acknowledgements) owns body interest for every transport.
 
 Federation and transfers:
 
@@ -2300,19 +2298,6 @@ Federation and transfers:
 Scale at MMO size, what limits one remote authority as sessions and worlds
 grow:
 
-- [high] Every tick sends every active body to every session, with no
-  interest management and no deltas. `WorldDocument.BuildSnapshotCore` writes
-  every active body, `WorldOutputHub` hands the snapshot to every sink and
-  redacts it per sink by a linear scan (`WorldOutputHub.Redact`), and the
-  radius disclosure is a plain distance test (`WorldSnapshot`). The federation
-  sink redacts every tick before its sampler decides the frame is due, then
-  again in `WriteSnapshot` (`WorldFederationProjectionSink`), and each encoded
-  sample is allocated twice (`WorldFederationCodec.EncodeSnapshot`'s writer and
-  its framed copy), both on the large object heap at 4096 bodies. Cost:
-  sessions times bodies, every tick. Build one spatial grid per tick with an
-  interest set per sink that it diffs, deltas against the last baseline the
-  client acknowledged, one encoding per interest cell or audience with its
-  bytes shared, and redaction moved behind `TryProject`.
 - [high] A shape change sends the whole document to every sink.
   `WorldDocument.DeliverPending` broadcasts the full definition
   (`WorldOutputHub.DeliverDefinition`); each `WorldDeliveryCursor` walks every

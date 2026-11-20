@@ -2119,6 +2119,16 @@ the local client and authority simulation remain full-rate. For large remote
 crowds, combine cadence with `radius` or `selfOnly` disclosure rather than
 shipping every visible body unnecessarily.
 
+The server queries the tick's spatial index when a sample is due. A receiver
+acknowledges the stream stamp after applying the body image. Later frames
+name a retained baseline and carry the slots that left the view and the
+entries that changed. A missing baseline starts a full image. The body bytes
+are shared among peers with the same projected entries and baseline. Each
+peer's input, cues, cell writes and stamp travel separately from those bytes.
+The `world.tick.interest-bodies`, `world.tick.interest-bytes` and
+`world.tick.interest-candidates` counters measure body encoding and spatial
+queries. [Body interest and acknowledgements](../../docs/decisions/worlds-and-federation.md#body-interest-and-acknowledgements).
+
 A transferred seat instead opens `ObserveTraveler` with its source-scoped mobility
 credential. Its authenticated entry authority relays the current owner's
 projection through the committed forwarding chain, including local worlds with

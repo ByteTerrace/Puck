@@ -127,19 +127,11 @@ packet (its scale items) or in the plan named, and the register's
 [building it](../decisions/worlds-and-federation.md#building-it) list does not
 yet route them.
 
-- **Interest management and deltas.** The register maps interest onto the
-  disclosure tiers: `Presentation` is the recipient view's rows plus a body set
-  under radius, hysteresis and cadence tiers, joined with a spatial grid
-  ([seams](../decisions/worlds-and-federation.md#seams)). The code sends every
-  active body to every session each tick (`WorldDocument.BuildSnapshotCore`,
-  `WorldOutputHub`), redacts per sink by a linear scan
-  (`WorldOutputHub.Redact`), and has no deltas, so its cost is sessions times
-  bodies every tick. This is the decision unbuilt, not a different answer. Two
-  plans hold parts of it: the disclosure plan's I1 item folds the grid,
-  hysteresis and the unembodied observer into the recipient view
-  ([disclosure, open items](disclosure.md#open-items)), and open items' scale
-  item adds the per-sink interest set, deltas against an acknowledged
-  baseline, and one encoding per audience.
+- **Interest management and deltas.** The disclosure view owns body selection for
+  sessions and federation. The server shares spatial queries and encodings, and
+  the receiver acknowledges the baseline used for its next body delta. The
+  remaining I1 work covers observer anchors, hysteresis and cadence tiers.
+  [Body interest and acknowledgements](../decisions/worlds-and-federation.md#body-interest-and-acknowledgements).
 - **Whole-document delivery.** The register gives only `Replica` the whole
   disclosed document. The code delivers the whole definition to every sink on
   any shape change (`WorldDocument.DeliverPending`), serializing and hashing it

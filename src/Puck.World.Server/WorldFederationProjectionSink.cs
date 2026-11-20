@@ -1,4 +1,5 @@
 using Puck.Commands;
+using Puck.Networking;
 using System.Text;
 using System.Threading.Channels;
 using Puck.World.Protocol;
@@ -22,7 +23,7 @@ namespace Puck.World.Server;
 /// <param name="view">An ingress-minted view with live admission, or null to mint it from the server and tier.</param>
 public sealed class WorldFederationProjectionSink(WorldDisclosureTier tier, string authority,
     Func<WorldSinkDisclosure> disclosure, Func<bool>? isCurrent = null, Principal? recipient = null, WorldServer? server = null,
-    WorldRecipientView? view = null) : IWorldDetachableSink {
+    WorldRecipientView? view = null) : IWorldDetachableSink, IWorldInterestSink {
     /// <summary>The maximum encoded records one projection subscriber retains while its wire consumer is behind.</summary>
     public const int PendingDeliveryLimit = 8;
     /// <summary>The named reason for detaching an observer whose wire queue fills.</summary>
@@ -32,7 +33,7 @@ public sealed class WorldFederationProjectionSink(WorldDisclosureTier tier, stri
     /// <summary>The named reason for detaching a projection whose dependencies are no longer disclosed.</summary>
     public const string DisclosureDetachReason = "world.observation.disclosure";
 
-    private readonly Channel<(WorldFederationResponse Kind, byte[] Body)> m_frames = Channel.CreateBounded<(WorldFederationResponse, byte[])>(options: new BoundedChannelOptions(capacity: PendingDeliveryLimit) { FullMode = BoundedChannelFullMode.Wait, SingleReader = true, SingleWriter = true });
+    private readonly Channel<Record> m_frames = Channel.CreateBounded<Record>(options: new BoundedChannelOptions(capacity: PendingDeliveryLimit) { FullMode = BoundedChannelFullMode.Wait, SingleReader = true, SingleWriter = true });
     private readonly WorldProjectionSampler m_sampler = new(updateSeconds: disclosure().Policy.UpdateSeconds);
     private readonly WorldProjectionFeed? m_feed = ((tier == WorldDisclosureTier.Presentation)
         ? new WorldProjectionFeed(
@@ -40,7 +41,20 @@ public sealed class WorldFederationProjectionSink(WorldDisclosureTier tier, stri
             seeds: (server ?? throw new ArgumentNullException(paramName: nameof(server), message: "A presentation-tier projection reads its authority's store, clock and document.")).ClockSeeds
         )
         : null);
-    private EntitySnapshot[] m_redacted = [];
+    private readonly WorldBodyHistory m_history = new();
+
+    private readonly record struct Record(WorldFederationResponse Kind, ReadOnlyMemory<byte> Head,
+        ReadOnlyMemory<byte> Bodies = default, ReadOnlyMemory<byte> Tail = default) {
+        public async Task WriteAsync(Stream output, CancellationToken ct) {
+            var prefix = new byte[FrameCodec.PrefixBytes + Head.Length];
+            FrameCodec.WritePrefix(prefix, (byte)Kind, checked(Head.Length + Bodies.Length + Tail.Length));
+            Head.CopyTo(prefix.AsMemory(FrameCodec.PrefixBytes));
+            await output.WriteAsync(prefix, ct).ConfigureAwait(false);
+            if (!Bodies.IsEmpty) { await output.WriteAsync(Bodies, ct).ConfigureAwait(false); }
+            if (!Tail.IsEmpty) { await output.WriteAsync(Tail, ct).ConfigureAwait(false); }
+            await output.FlushAsync(ct).ConfigureAwait(false);
+        }
+    }
     private readonly WorldDeliveryCursor m_cursor = new();
     private readonly WorldDeliveryRows m_rows = new();
     private readonly WorldSolidScaleDisclosure m_scales = new();
@@ -73,12 +87,7 @@ public sealed class WorldFederationProjectionSink(WorldDisclosureTier tier, stri
     }
     private async Task PumpAsync(Stream output, CancellationToken ct) {
         await foreach (var item in m_frames.Reader.ReadAllAsync(cancellationToken: ct).ConfigureAwait(continueOnCapturedContext: false)) {
-            await WorldFederationCodec.WriteResponseAsync(
-                body: item.Body,
-                ct: ct,
-                kind: item.Kind,
-                stream: output
-            ).ConfigureAwait(continueOnCapturedContext: false);
+            await item.WriteAsync(output, ct).ConfigureAwait(false);
         }
         if (m_invalidated) {
             await WorldFederationCodec.WriteResponseAsync(
@@ -130,6 +139,7 @@ public sealed class WorldFederationProjectionSink(WorldDisclosureTier tier, stri
         if (!m_cursor.TakeCut()) {
             return false;
         }
+        m_history.Clear();
         Write(WorldFederationResponse.Cut, WorldFederationCodec.EncodeCut(stream: m_cursor.Stamp(), terminal: false));
 
         return true;
@@ -159,11 +169,13 @@ public sealed class WorldFederationProjectionSink(WorldDisclosureTier tier, stri
                 payload: WorldDefinitionSerialization.SerializeCompact(definition: whole), tier: tier, version: Version));
         }
     }
-    private void Write(WorldFederationResponse kind, byte[] body) {
+    private void Write(WorldFederationResponse kind, byte[] body) => Write(new Record(kind, body));
+
+    private void Write(Record record) {
         if (m_invalidated) {
             return;
         }
-        if (!m_frames.Writer.TryWrite(item: (kind, body))) {
+        if (!m_frames.Writer.TryWrite(record)) {
             // The stream's primer, definition revisions, and authority route cannot be reconstructed from a lone
             // latest snapshot. Detach so the peer reopens with a fresh primer instead of accepting an ambiguous gap.
             // Completing the channel successfully keeps the queued records ahead of the terminal reason; the hub
@@ -238,7 +250,8 @@ public sealed class WorldFederationProjectionSink(WorldDisclosureTier tier, stri
         }
         var primer = server.Document.BuildPrimerSnapshot();
 
-        WriteSnapshot(projected: primer with { Cues = default, MusicBoundary = 0, MusicSenses = 0 }, currentDisclosure: disclosure());
+        var frame = WorldInterestFrame.ForPrimer(primer);
+        WriteSnapshot(primer with { Entries = frame.Project(disclosure()), Cues = default, MusicBoundary = 0, MusicSenses = 0 }, frame);
     }
     public void DeliverSessionLever(WorldSessionLever lever) { }
 
@@ -246,6 +259,11 @@ public sealed class WorldFederationProjectionSink(WorldDisclosureTier tier, stri
     private WorldInputAnswer[] m_answerDisclosure = [];
 
     public void DeliverSnapshot(in WorldSnapshot snapshot, in WorldStreamStamp stream) {
+        DeliverSnapshot(snapshot, WorldInterestFrame.ForPrimer(snapshot));
+    }
+    void IWorldInterestSink.DeliverSnapshot(in WorldSnapshot snapshot, WorldInterestFrame frame) => DeliverSnapshot(snapshot, frame);
+
+    private void DeliverSnapshot(in WorldSnapshot snapshot, WorldInterestFrame frame) {
         if (!Current()) {
             return;
         }
@@ -268,29 +286,18 @@ public sealed class WorldFederationProjectionSink(WorldDisclosureTier tier, stri
         // at once rather than at the cadence's next sample.
         m_cursor.ObserveBodies(mode: currentDisclosure.Policy.Mode, radius: currentDisclosure.Policy.Radius);
 
-        var projected = snapshot;
-        if (!currentDisclosure.IsFull) {
-            projected = WorldOutputHub.Redact(
-                disclosure: in currentDisclosure,
-                scratch: ref m_redacted,
-                snapshot: in projected
-            );
+        var bodies = new WorldBodyView(frame, currentDisclosure);
+        var atCadence = m_view is null ? snapshot : server!.PresentCues(snapshot, m_view, currentDisclosure.IsFull, bodies);
+        m_sampler.SetUpdateSeconds(currentDisclosure.Policy.UpdateSeconds);
+        if (m_sampler.TryProject(atCadence, out var projected, m_cursor.CutOwed, bodies)) {
+            WriteSnapshot(projected, frame);
         }
-        if (m_view is not null) { projected = server!.PresentCues(projected, m_view, currentDisclosure.IsFull); }
-        var atCadence = snapshot with { Cues = projected.Cues, MusicBoundary = projected.MusicBoundary, MusicSenses = projected.MusicSenses };
-        m_sampler.SetUpdateSeconds(updateSeconds: currentDisclosure.Policy.UpdateSeconds);
-        // A cut owes its primer now, whatever the cadence.
-        if (!m_sampler.TryProject(snapshot: in atCadence, due: m_cursor.CutOwed, projected: out projected)) { return; }
-        WriteSnapshot(projected: projected, currentDisclosure: currentDisclosure);
     }
     // Writes one sampled or primer snapshot as the peer may see it: redacted under the live body policy, its cells and
     // sizes as its view discloses them. A cut the rows or the body policy decided primes the peer alone first, and this
     // snapshot completes it, its rows advanced again against the generation's whole document so that every observation
     // the document owes the peer rides it.
-    private void WriteSnapshot(WorldSnapshot projected, in WorldSinkDisclosure currentDisclosure) {
-        if (!currentDisclosure.IsFull) {
-            projected = WorldOutputHub.Redact(currentDisclosure, projected, ref m_redacted);
-        }
+    private void WriteSnapshot(WorldSnapshot projected, WorldInterestFrame frame) {
         var cells = projected.FieldCells;
         var replica = (tier == WorldDisclosureTier.Replica);
 
@@ -305,10 +312,23 @@ public sealed class WorldFederationProjectionSink(WorldDisclosureTier tier, stri
             if (m_view is not null) { projected = projected with { FieldCells = m_rows.Advance(m_view, m_cursor, cells, replica) }; }
         }
         projected = projected with { Revision = checked((int)m_cursor.Sequence) };
-        WriteRecord(
-            WorldFederationResponse.Snapshot,
-            WorldFederationCodec.EncodeSnapshot(snapshot: in projected)
-        );
+        var stamp = m_cursor.Stamp();
+        var (ordinal, baseline) = m_history.Baseline(stamp);
+        var image = frame.Capture(projected.Entries);
+        var changes = frame.Changes(image, baseline);
+        var head = new WireWriter();
+        head.WriteBytes(WorldFederationCodec.Stamped(stamp, []));
+        if (baseline is not null) {
+            head.WriteInt64(ordinal);
+            head.WriteInt32(changes.Removed.Length);
+            foreach (var slot in changes.Removed) { head.WriteInt32(slot); }
+        }
+        WorldFederationCodec.WriteSnapshotHeader(head, projected, changes.Count);
+        var tail = new WireWriter();
+        WorldFederationCodec.WriteSnapshotTail(tail, projected);
+        m_history.Remember(stamp, image);
+        Write(new Record(baseline is null ? WorldFederationResponse.Snapshot : WorldFederationResponse.SnapshotDelta,
+            head.WrittenMemory, changes.Bytes, tail.WrittenMemory));
     }
     // The replica wire carries one definition-frame kind, so a value-only delivery rides the same encode; a
     // presentation-tier peer is owed only the members of its projection that the values moved.
@@ -328,6 +348,7 @@ public sealed class WorldFederationProjectionSink(WorldDisclosureTier tier, stri
     /// <summary>Releases what the peer's feed holds, its anchor rows included: the peer is gone. Called under the
     /// authority gate once the sink is detached, so no delivery follows it.</summary>
     public void Release() {
+        m_history.Clear();
         m_feed?.Release(); m_cursor.Release(); server?.DetachCursor(cursor: m_cursor, recipient: recipient);
     }
     public Task StreamAsync(Stream output, CancellationToken ct) =>
@@ -337,20 +358,27 @@ public sealed class WorldFederationProjectionSink(WorldDisclosureTier tier, stri
                 ct: token,
                 output: output
             ),
+            (stamp, _, _) => { m_history.Acknowledge(stamp); return ValueTask.CompletedTask; },
             ct
         );
 }
 
-/// <summary>Ends a one-way projection when either its producer ends or its consumer disconnects.</summary>
+/// <summary>Pumps projection records and receives their acknowledgements until either half closes.</summary>
 internal static class WorldProjectionStream {
-    public static async Task RunAsync(Stream output, Func<CancellationToken, Task> produce, CancellationToken ct) {
+    public static async Task RunAsync(Stream output, Func<CancellationToken, Task> produce,
+        Func<WorldStreamStamp, ReadOnlyMemory<byte>, CancellationToken, ValueTask> acknowledge, CancellationToken ct) {
         using var lifetime = CancellationTokenSource.CreateLinkedTokenSource(token: ct);
         var pump = produce(lifetime.Token);
-        // Projection is one-way. EOF or unexpected input terminates it even while the world is paused.
-        var closed = output.ReadAsync(
-            buffer: new byte[1],
-            cancellationToken: lifetime.Token
-        ).AsTask();
+        var closed = ReadAcknowledgements();
+        async Task ReadAcknowledgements() {
+            var bytes = new byte[WorldFederationCodec.StreamStampBytes];
+            while (!lifetime.IsCancellationRequested) {
+                try { await output.ReadExactlyAsync(bytes, lifetime.Token).ConfigureAwait(false); }
+                catch (EndOfStreamException) { return; }
+                if (!WorldFederationCodec.TryReadStamped(bytes, out var stamp, out _, out _)) { return; }
+                await acknowledge(stamp, bytes, lifetime.Token).ConfigureAwait(false);
+            }
+        }
 
         await Task.WhenAny(
             task1: pump,

@@ -38,3 +38,18 @@ public sealed record WorldObserverDisclosure(
     /// <summary>Gets the disclose-all policy an unauthored world resolves to.</summary>
     public static WorldObserverDisclosure Default { get; } = new();
 }
+
+/// <summary>What one recipient is delivered from each tick's snapshot.</summary>
+/// <param name="Policy">The world's authored per-observer disclosure policy.</param>
+/// <param name="ObserverBodyIndex">The observer's own 0-based body index, or a negative value when the observer has
+/// no body in this world.</param>
+public readonly record struct WorldSinkDisclosure(WorldObserverDisclosure Policy, int ObserverBodyIndex) {
+    /// <summary>Gets the unfiltered delivery — every active body, with no per-sink copy taken at all. Local and
+    /// colocated sinks attach with this: colocated trust is home trust.</summary>
+    public static WorldSinkDisclosure Full { get; } = new(
+        Policy: WorldObserverDisclosure.Default,
+        ObserverBodyIndex: -1
+    );
+    /// <summary>Gets a value indicating whether this sink receives every active body unfiltered.</summary>
+    public bool IsFull => (Policy.Mode == WorldObserverDisclosureMode.All);
+}
