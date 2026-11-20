@@ -342,11 +342,23 @@ public sealed partial class WorldCreationInstances : IWorldBodyPoses {
     public int RegistrationCount => m_pool.Length;
 
     public int SlotsAt(int index) => (m_pool[index]?.Slots ?? 0);
-    public int RootSlotOffset(int index) {
+    // The dynamic-transform slots the registrations before a pool index reserve: a prefix sum over the pool's slot counts,
+    // refilled by ReconcileSlots, the only writer of the pool and of a registration's motion plan. Index m_pool.Length
+    // is the whole pool's count.
+    public int RootSlotOffset(int index) => m_rootSlotOffsets[index];
+    private int[] m_rootSlotOffsets = [0];
+    private void RefillRootSlotOffsets() {
+        if (m_rootSlotOffsets.Length != (m_pool.Length + 1)) {
+            m_rootSlotOffsets = new int[(m_pool.Length + 1)];
+        }
+
         var offset = 0;
 
-        for (var entry = 0; (entry < index); entry++) { offset = checked((offset + SlotsAt(index: entry))); }
-        return offset;
+        for (var entry = 0; (entry < m_pool.Length); entry++) {
+            m_rootSlotOffsets[entry] = offset;
+            offset = checked((offset + SlotsAt(index: entry)));
+        }
+        m_rootSlotOffsets[m_pool.Length] = offset;
     }
 
     // The Registration-cached text layout for hasText's (document, scale): a cache hit when the last layout this
@@ -1138,6 +1150,8 @@ public sealed partial class WorldCreationInstances : IWorldBodyPoses {
                 dynamics: dynamics
             );
         }
+
+        RefillRootSlotOffsets();
     }
 
     /// <summary>Advances every live replay cursor on the render clock (hold-style: each frame holds
