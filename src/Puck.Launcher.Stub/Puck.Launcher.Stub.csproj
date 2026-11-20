@@ -6,6 +6,15 @@
         <PuckKind>Production</PuckKind>
         <PuckLayer>Composition roots</PuckLayer>
         <RootNamespace>Puck.Launcher.Stub</RootNamespace>
+        <!-- The stub sits in an install root on a machine with no .NET: a player build (`puck world player`) publishes it
+             as one self-contained file. The switch is this project's alone, as Puck.World's is. -->
+        <RuntimeIdentifiers>win-x64;linux-x64</RuntimeIdentifiers>
+        <SelfContained Condition="'$(PuckSelfContained)' == 'true'">true</SelfContained>
+        <PublishSingleFile Condition="'$(PuckSelfContained)' == 'true'">true</PublishSingleFile>
+        <!-- The single-file analyzer would add the ILLink package only to a self-contained restore, which the portable
+             locked restore does not record. -->
+        <EnableSingleFileAnalyzer>false</EnableSingleFileAnalyzer>
+        <EnableCompressionInSingleFile Condition="'$(PuckSelfContained)' == 'true'">true</EnableCompressionInSingleFile>
     </PropertyGroup>
     <ItemGroup>
         <!-- The update lease and the launched version's registration are the same handle-held directories the

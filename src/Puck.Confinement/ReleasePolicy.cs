@@ -232,4 +232,5 @@ public sealed record InstallRecord(long Sequence, string Rid, int StateGeneratio
     UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow)]
 [JsonSerializable(typeof(ReleasePolicy.Document))]
 [JsonSerializable(typeof(InstallRecord))]
+[JsonSerializable(typeof(StubConfiguration))]
 internal sealed partial class InstallJsonContext : JsonSerializerContext;

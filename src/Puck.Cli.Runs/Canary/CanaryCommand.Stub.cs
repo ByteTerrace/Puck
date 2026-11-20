@@ -211,14 +211,11 @@ public static partial class CanaryCommand {
         var stubOutput = Path.GetDirectoryName(path: stubArtifact)!;
 
         CliFiles.CopyDirectory(destination: installDirectory, files: Directory.EnumerateFiles(path: stubOutput), source: stubOutput);
-        File.WriteAllText(
-            contents: JsonSerializer.Serialize(value: new StubConfigurationFile(
-                AppExecutableFileName: "Puck.World.exe",
-                MaxAttempts: 1
-            )),
+        File.WriteAllBytes(
+            bytes: new Puck.Confinement.StubConfiguration(AppExecutableFileName: "Puck.World.exe", MaxAttempts: 1).Serialize(),
             path: Path.Combine(
                 path1: installDirectory,
-                path2: "stub.json"
+                path2: Puck.Confinement.InstallLayout.StubConfigFileName
             )
         );
     }
@@ -234,7 +231,7 @@ public static partial class CanaryCommand {
         if (exit != 0) { throw new IOException(message: $"puck publish exited {exit}"); }
         var path = Path.Combine(path1: releaseDirectory, path2: StubReleaseChannel, path3: "manifest.json");
         var unsigned = JsonSerializer.Deserialize<ReleaseManifest>(File.ReadAllBytes(path: path), DocumentJsonOptions.Shared)!;
-        var signed = DevelopmentReleaseSigner.Sign(manifest: unsigned, root: key, sequence: sequence);
+        var signed = ReleaseSigner.Sign(manifest: unsigned, root: key, sequence: sequence);
 
         File.WriteAllBytes(path, JsonSerializer.SerializeToUtf8Bytes(signed.Manifest, DocumentJsonOptions.Shared));
         return signed.TrustAnchor;
@@ -287,5 +284,4 @@ public static partial class CanaryCommand {
         return ((policy.Current is { } current) && policy.ProvenInstalls.Any(predicate: proof => (proof.Version == current)) &&
             policy.ProvenInstalls.Where(predicate: proof => (proof.Version == current)).All(predicate: proof => (policy.AttemptsFor(payloadPin: proof.PayloadPin) == 0)));
     }
-    private sealed record StubConfigurationFile(string AppExecutableFileName, int MaxAttempts);
 }

@@ -1691,6 +1691,16 @@ module frontDoor_waf_rateLimit 'br/public:avm/res/network/front-door-web-applica
               selector: 'Host'
               transforms: []
             }
+            {
+              // A release channel's objects are immutable content-addressed files served from the edge cache, and one
+              // install fetches thousands of them (a player build's mesh store alone is thousands of entries), so they
+              // are outside the per-client rate limit; the channel's manifests and every other path stay inside it.
+              matchValue: ['/official/releases/objects/']
+              matchVariable: 'RequestUri'
+              negateCondition: true
+              operator: 'Contains'
+              transforms: ['Lowercase']
+            }
           ]
           name: 'RateLimit'
           priority: 1

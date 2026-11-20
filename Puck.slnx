@@ -46,6 +46,7 @@
         <Project Path="src/Puck.Launcher/Puck.Launcher.csproj" />
         <Project Path="src/Puck.Launcher.Linux/Puck.Launcher.Linux.csproj" />
         <Project Path="src/Puck.Launcher.Windows/Puck.Launcher.Windows.csproj" />
+        <Project Path="src/Puck.Launcher.Setup/Puck.Launcher.Setup.csproj" />
         <Project Path="src/Puck.Launcher.Stub/Puck.Launcher.Stub.csproj" />
         <Project Path="src/Puck.Maths/Puck.Maths.csproj" />
         <Project Path="src/Puck.Networking/Puck.Networking.csproj" />

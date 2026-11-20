@@ -1,9 +1,10 @@
 namespace Puck.Launcher.Release;
 
-// Both transports bound bytes before allocation. A manifest's attestation payload is itself bounded; this
-// larger envelope cap leaves room for JSON/base64 and the two bindings without trusting an HTTP Content-Length.
+// Both transports bound bytes before allocation, without trusting an HTTP Content-Length. The attestation signs the
+// manifest's content pin, never its inventory, so the cap bounds the inventory: a player release lists every file of its
+// prewarmed caches (a backend's mesh store alone is thousands of entries) at about two hundred bytes each.
 internal static class ReleaseSourceReader {
-    public const int MaximumManifestBytes = 1024 * 1024;
+    public const int MaximumManifestBytes = 8 * 1024 * 1024;
 
     public static async Task<long?> CopyBoundedAsync(Stream source, Stream destination, long maximumBytes, CancellationToken cancellationToken) {
         ArgumentOutOfRangeException.ThrowIfNegative(value: maximumBytes);

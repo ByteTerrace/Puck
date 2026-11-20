@@ -19,6 +19,15 @@ public sealed class HttpReleaseSource(HttpClient httpClient, Uri baseUri) : IRel
     private readonly Uri m_baseUri = new(uriString: (baseUri.OriginalString.TrimEnd(trimChar: '/') + "/"));
     private readonly HttpClient m_httpClient = httpClient;
 
+    /// <summary>Gets the process's one client for release sources, created on first use and never disposed: connections
+    /// are pooled and recycled every few minutes so a long-running process follows a channel host's DNS changes. Its
+    /// timeout bounds each request, headers and body (<see cref="TryGetFileAsync"/>).</summary>
+    public static HttpClient SharedClient => LazyShared.Value;
+
+    private static readonly Lazy<HttpClient> LazyShared = new(valueFactory: static () => new HttpClient(handler: new SocketsHttpHandler {
+        PooledConnectionLifetime = TimeSpan.FromMinutes(minutes: 5),
+    }) { Timeout = TimeSpan.FromMinutes(minutes: 5) });
+
     // ResponseHeadersRead stops HttpClient's timeout at the headers; keep the same deadline over the streamed body.
     private OperationDeadline RequestDeadline(CancellationToken cancellationToken) => new(
         caller: cancellationToken,

@@ -9,9 +9,13 @@ which also holds the release record and supplies `AtomicFile` to the updater.
 ## Usage
 
 The installation root is the stub executable's own directory. Configuration
-beside the stub (`StubInstall.StubConfigFileName`) selects the application executable and the
-startup attempts a payload may use; command-line arguments are forwarded to the
-selected application rather than used to redirect the installation root.
+beside the stub (`InstallLayout.StubConfigFileName`, in the one format
+`StubConfiguration` reads and writes, which whoever installs the stub writes)
+selects the application executable and the startup attempts a payload may use;
+command-line arguments are forwarded to the selected application rather than
+used to redirect the installation root. A player build carries the stub
+published self-contained as one file (`-p:PuckSelfContained=true`), since a
+consumer machine has no .NET; the installer lays it in the root.
 
 The stub begins an `InstallTransaction` (waiting up to `StubInstall.LeaseWait`
 for `update.lock`) and calls `InstallTransaction.SelectLaunch`, its only policy

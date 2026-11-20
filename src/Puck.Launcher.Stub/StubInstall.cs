@@ -3,14 +3,13 @@ using Puck.Confinement;
 namespace Puck.Launcher.Stub;
 
 /// <summary>
-/// The stub's own pieces of the install root's layout: its configuration file's name, where a version's executable lives,
-/// and holding the launched version. Every selection decision belongs to <see cref="InstallTransaction.SelectLaunch"/>;
-/// the stub parses no release manifest and references no launcher implementation.
+/// The stub's own pieces of the install root's layout: where a version's executable lives, and holding the launched
+/// version. Its configuration's name and shape are <see cref="InstallLayout.StubConfigFileName"/> and
+/// <see cref="StubConfiguration"/>, which an installer writes. Every selection decision belongs to
+/// <see cref="InstallTransaction.SelectLaunch"/>; the stub parses no release manifest and references no launcher
+/// implementation.
 /// </summary>
 public static class StubInstall {
-    /// <summary>The stub's own configuration file name, beside the stub executable (the install root itself).</summary>
-    public const string StubConfigFileName = "stub.json";
-
     /// <summary>Gets how long the stub waits for the install root's update lease before refusing the launch.</summary>
     public static TimeSpan LeaseWait { get; } = TimeSpan.FromSeconds(seconds: 10);
 

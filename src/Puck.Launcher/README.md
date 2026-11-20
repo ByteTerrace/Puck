@@ -110,9 +110,17 @@ to wait through lock contention; permanent I/O, permission and platform failures
 
 The signed attestation carries the canonical unsigned manifest's content pin,
 which authenticates its complete file inventory without putting that inventory
-inside the attestation's bounded payload. Development releases use a separate
-local key and the same attestation verifier, stager and applier. They grant no
-publisher trust. `SelfUpdateConfigFile.Channel` can select a local development
+inside the attestation's bounded payload. `ReleaseSigner` signs a manifest with
+a root key that vouches for fresh issuing and application keys; who holds the
+root is the caller's (a development key file, a channel host's key custody), and
+the verifier treats every root alike. An install root that follows a channel
+holds its subscription (`ChannelSubscription`, in the file `ChannelSubscription.FileName` names): the channel's
+address, name and the root anchor pinned at first install. The installer
+([Puck.Launcher.Setup](../Puck.Launcher.Setup/README.md)) writes it, and a
+`Puck.World` running from that install reads it to update from the same channel
+through `HttpReleaseSource` (or `DirectoryReleaseSource` for a directory
+address). `PlayerBuildLayout` names the parts of a player build its producer,
+publisher and installer share. `SelfUpdateConfigFile.Channel` can select a local development
 channel alongside its explicit source, trust anchor and install root.
 `LocalBuildReleaseSource` publishes completed local application builds through
 `DirectoryReleaseSource`'s content-addressed layout, signed by a development

@@ -4,7 +4,7 @@ using System.Text.Json.Nodes;
 namespace Puck.Cli.Azure;
 
 public static partial class AzureCommand {
-    private static async Task<string> LoadWorldSigningKeyAsync(string vault, string secret, JsonArray secrets, string temporary) {
+    private static async Task<string> LoadSigningKeyAsync(string vault, string secret, JsonArray secrets, string temporary) {
         if (!secrets.Any(predicate: value => (Text(value: value) == secret))) {
             using var generated = ECDsa.Create(curve: ECCurve.NamedCurves.nistP256);
             var encoded = Convert.ToBase64String(inArray: generated.ExportPkcs8PrivateKey());
@@ -56,7 +56,7 @@ public static partial class AzureCommand {
             bytesRead: out var consumed,
             source: bytes
         );
-        if (consumed != bytes.Length) { throw new InvalidDataException(message: "world signing key contains trailing bytes"); }
+        if (consumed != bytes.Length) { throw new InvalidDataException(message: $"signing key {secret} contains trailing bytes"); }
         return retained;
     }
 }

@@ -17,6 +17,9 @@ public static class InstallLayout {
     public const string SequenceMarkFileName = "sequence-mark";
     /// <summary>The install's durable state directory, directly under the install root.</summary>
     public const string StateDirectoryName = "state";
+    /// <summary>The stub's configuration file (<see cref="StubConfiguration"/>), beside the stub executable, the install
+    /// root itself. Whoever installs a stub writes it; only the stub reads it.</summary>
+    public const string StubConfigFileName = "stub.json";
     /// <summary>Where a version waits for deletion after leaving <see cref="VersionsDirectoryName"/>.</summary>
     public const string TrashDirectoryName = "trash";
     /// <summary>The update lease's file name, directly under the install root. <see cref="InstallTransaction"/> holds it.</summary>
@@ -24,6 +27,11 @@ public static class InstallLayout {
     /// <summary>The version directories' parent, directly under the install root.</summary>
     public const string VersionsDirectoryName = "versions";
 
+    /// <summary>Returns an executable's file name on this platform, as a stub's configuration and an installer name it:
+    /// <c>.exe</c> appended on Windows, the name itself elsewhere.</summary>
+    /// <param name="name">The executable's name without an extension (<c>Puck.World</c>).</param>
+    /// <returns>The file name.</returns>
+    public static string ExecutableFileName(string name) => (OperatingSystem.IsWindows() ? $"{name}.exe" : name);
     /// <summary>Gets how two version directory names are compared: ignoring case on Windows, where such names name one
     /// directory, and ordinally on Linux. Every comparison of a version name with another (a registration, the release
     /// record's current version, a proof of health, a pruner entry) uses it.</summary>

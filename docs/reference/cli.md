@@ -99,6 +99,7 @@ half of these rules on every command, with no exemptions.
 | [`puck canary`](#puck-canaryreal-world-behavioral-proofs) | bounded positive-and-discriminating proofs run against one exact Release build of the real `Puck.World`. |
 | [`puck cartridge-cost`](#puck-cartridge-costcartridge-cost-measurement) | measures each cartridge primitive's sustained per-frame capacity on the machine of each target (`cgb`, `dmg`, `agb`), the evidence the cartridge cost model's weights come from. |
 | [`puck cartridges`](#puck-cartridgestool-built-cartridges) | rebuilds the shipped cartridges built by repository tooling: `deck` writes the Humble Gaming Deck's test `.nes` images. |
+| [`puck channel`](#automation-commands) | `push` signs a `puck publish` tree's release with a channel host's root key and writes the tree through that host, objects before the manifest. |
 | [`puck compile`](#the-puck-dsl-verbs) | compiles `.puck` to canonical world or cartridge JSON according to its schema; `--validate` runs that vocabulary's checks. Default output is `.world.json` or `.cartridge.json`, with each world document's compiled world (`.puckb`) beside it; all three are derived products that `.gitignore` excludes, never committed; a `.world.json` path compiles to its compiled world alone. |
 | [`puck counters`](#puck-counterswork-counter-collector) | the work-counter collector: boots the authored counters workload offscreen once per backend, writes a `puck.counters.report.v1` report with every count tagged by class, and checks the deterministic counts agree across backends; `counters compare` holds two reports to each other. |
 | [`puck creation`](#puck-creationcreation-reads) | the offline twin of `creation.shape`: report a creation's shape budget/feature usage, or read each shape's law (exact, bound or uncertified distance, CPU and contact verdicts). |
@@ -304,7 +305,10 @@ puck docs build [--output <directory>] [--site <path>]
 puck bundle create <directory> <commit>
 puck bundle verify <directory> <commit>
 puck world prepare <primary-world> --output <directory>
-puck world player <package> --output <directory> [--extension <project>...] [--backend directx vulkan] [--target [profile@]WIDTHxHEIGHT...] [--no-bake] [--bake-seconds <seconds>]
+puck world player <package> --output <directory> [--extension <project>...] [--backend directx vulkan] [--target [profile@]WIDTHxHEIGHT...] [--no-bake] [--bake-seconds <seconds>] [--channel-url <url> [--channel-name <name>]]
+puck world caches produce <player folder> [--output <directory>] [--push]
+puck world caches fetch <player folder> [--notes <file>]
+puck channel push --tree <tree> --channel <name> --sequence <n> [--host <installed-host> | --to <directory> --signing-key <file>] [--validity-days <days>]
 puck world release prepare <package-directory> --silo <silo.json> [--output <manifest>] --label <label> --source-revision <sha> --engine-image-digest <sha256:digest> --persistence-contract <name> --peer-protocol-contract <name>
 puck world release status [group-file] [--json] [--host <installed-host>]
 puck world release finalize [--host <installed-host>]
@@ -363,7 +367,8 @@ it automatically.
 from source, compiles a cartridge or cold-bakes. It builds `Puck.World` in Release
 with SPIR-V under the build lease and publishes it self-contained for this
 machine's runtime (that publish runs `prewarm` into `derived/`, so it needs the
-toolchains above); publishes each `--extension` project into
+toolchains above); publishes the stub and the installer (`Puck.Launcher.Setup`)
+self-contained, one file each, into `launcher/`; publishes each `--extension` project into
 `extensions/<name>/`, where the host discovers it (a hosted authority's sign-in
 provider is one); compiles the package's parent directory into `worlds/` as
 `compile --tree` does; and exports the package's specialized shading kernels into
@@ -374,9 +379,11 @@ the published engine itself, windowed and paused at its first tick, once per
 target's device profile (a name of the world's `render.devices`, or `auto`) at
 the target's window size and waits for its bakes to settle, which fills `cache/`
 with the baked meshes, compiled worlds and compiles a consumer's boot of the same
-folder reads. After each boot it removes the mesh store's bake intermediates
-(its checkpoint and sample sets), which a consumer never reads and which share
-the store's retention bound with the meshes. A second boot of each pair over the finished store reports the
+folder reads. The bakes' intermediates (stage checkpoints and sample sets) land
+in `cache/meshes-intermediates/` under their own bound, where a rerun reuses them
+and a release leaves them out. With `--no-bake` (a machine without a GPU) one
+headless boot fills the device-free caches instead, and the mesh store stays
+empty until `world caches fetch` fills it. A second boot of each pair over the finished store reports the
 groups it baked and the groups it loaded, which `player.json` keeps under
 `checked`; a store that hits bakes none. The
 mesh store keys by the bake's code and kernel bytecode, never the adapter, but the
@@ -388,7 +395,37 @@ its first write (incomplete) and again at its end, and rebuilds only a folder
 that holds one: everything but `cache/` is replaced, and the caches stay, since
 each entry is keyed by its inputs and the code that derives it, so a rerun bakes
 only what changed or was never baked. It prints each part's size and keeps each
-boot's logs in `player-logs/`.
+boot's logs in `player-logs/`. Its `README.md` names how to install the build from
+its channel: with `--channel-url`, the one command that downloads the installer
+from `<url>/<channel-name>/<rid>/` and installs the channel's newest release.
+
+`world caches` carries a baked mesh store from a machine with a GPU to a release
+built without one ([the player channel](../decisions/runtime-and-delivery.md#the-player-channel)).
+`produce` reads a complete player folder's backends from `player.json`, computes
+each backend's mesh bake identity from the folder's own build (as `mesh identity
+--build` does), and packs that identity's mesh set into
+`<output>/<backend>-<identity>/cache-set.zip` with a `cache-set.json` listing every
+file's content pin; `--push` runs `gh` to create the prerelease
+`caches/<backend>-<identity>` when it is missing and replace its asset. `fetch`
+computes the same identities for a folder built with `--no-bake`, downloads each
+matching asset with `gh`, refuses an archive whose record names another backend
+or identity, lists an entry outside the set or holds a file whose bytes miss its
+pin, and unpacks a verified set into `cache/meshes/<identity>/`. It records each
+backend's outcome under `caches` in `player.json`, and `--notes` writes a
+release-notes line naming each set or the miss. Exit 0 handled every backend,
+1 a download or archive failed, 2 an invalid folder.
+
+`channel push` signs the release a `puck publish` tree holds and writes the tree
+through a channel host: a deployment provider's installed host (`--host`, which
+also keeps the root key), or a local mirror directory (`--to`, signed by the
+`--signing-key` file, created on first use). It signs
+`<tree>/<channel>/manifest.json` with a fresh issuing and application key vouched
+for by the root, valid for `--validity-days` (at most the consumers' replay
+horizon), writes the root's anchor as `<tree>/<channel>/trust.json`, then writes
+every object the host lacks, the channel directory's other files, and the
+manifest last. `--sequence` must exceed every sequence the root signed for the
+application before. Exit 0 pushed, 1 the host failed, 2 an unreadable tree or
+usage error.
 
 `world release prepare` loads the validated silo inventory, requires one canonical
 composed `*.world.json` output for every owner/world row, and writes a
@@ -539,15 +576,19 @@ verbs in process.
 ## `puck publish`—unsigned release-source trees
 
 ```sh
-puck publish --app <id> --channel <name> --version <semver> --rid <rid> --input <built output> --output <tree> [--minimum-supported <semver>] [--notes <text>] [--rollout-percent <percent>] [--state-generation <n>]
+puck publish --app <id> --channel <name> --version <semver> --rid <rid> --input <built output> --output <tree> [--minimum-supported <semver>] [--notes <text>] [--rollout-percent <percent>] [--state-generation <n>] [--exclude <path>...] [--bootstrap <directory>]
 ```
 
 Walks one runtime identifier's built output into a `puck.release.manifest.v1`
 release-source tree: `<tree>/<channel>/manifest.json`, canonical and unsigned,
 and every payload file under `<tree>/objects/sha256/<hex[0..2]>/<hex64>`.
 `Puck.Launcher.Release.DirectoryReleaseSource` rooted at `<tree>` reads it as
-written. Signing and upload are not part of this verb. An unreadable input or an
-unwritable output exits 2.
+written. `--exclude` leaves a file or directory under the input out of the
+payload (a player build's `player-logs`, `cache/meshes-intermediates` and
+`player-caches`). `--bootstrap` also copies one input directory's files to
+`<tree>/<channel>/<rid>/`, the stable path a first install downloads its
+installer from (a player build's `launcher`). Signing and upload belong to
+`channel push`. An unreadable input or an unwritable output exits 2.
 
 ## `puck official`—the local official tree producer
 

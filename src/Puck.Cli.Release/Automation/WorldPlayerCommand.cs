@@ -17,9 +17,10 @@ namespace Puck.Cli.Automation;
 public static class WorldPlayerCommand {
     private const string Verb = "world player";
     // Written first as incomplete and last as complete; a rerun rebuilds only a folder that holds it.
-    private const string MarkerName = "player.json";
-    private const string CacheName = "cache";
-    private const string LogsName = "player-logs";
+    private const string MarkerName = Puck.Launcher.Release.PlayerBuildLayout.RecordName;
+    private const string CacheName = Puck.Launcher.Release.PlayerBuildLayout.CacheDirectoryName;
+    private const string LogsName = Puck.Launcher.Release.PlayerBuildLayout.LogsDirectoryName;
+    private const string LauncherName = Puck.Launcher.Release.PlayerBuildLayout.LauncherDirectoryName;
     private static readonly TimeSpan BuildTimeout = TimeSpan.FromMinutes(minutes: 45);
 
     /// <summary>One baking boot: the device profile it applies (or the adapter's own, <c>auto</c>) and its window size.</summary>
@@ -59,22 +60,27 @@ public static class WorldPlayerCommand {
         var extensions = new Option<string[]>(name: "--extension") { AllowMultipleArgumentsPerToken = true, Description = "An extension project to install beside the engine (extensions/<name>/), such as src/Puck.World.Azure for a hosted authority's sign-in. Repeatable." };
         var backends = new Option<string[]>(name: "--backend") { AllowMultipleArgumentsPerToken = true, Description = "The backends whose caches are prewarmed, each baked in its own windowed boot: directx and vulkan. Omitted bakes both on Windows and vulkan elsewhere." };
         var targets = new Option<string[]>(name: "--target") { AllowMultipleArgumentsPerToken = true, Description = "A baking boot's device profile and window size, [profile@]WIDTHxHEIGHT (rtx2060@1920x1080); a profile is a name of the world's render.devices, or auto for this adapter's own. Repeatable; omitted bakes once at auto@2560x1440." };
-        var noBake = new Option<bool>(name: "--no-bake") { Description = "Skip the baking boots: the folder carries the engine, the compiled package and the shipping cache, and its mesh store is empty." };
+        var noBake = new Option<bool>(name: "--no-bake") { Description = "Skip the baking boots, which need a GPU: one headless boot derives the device-free caches instead, and the mesh store stays empty until a cache set fills it (puck world caches fetch)." };
         var bakeSeconds = CliOptions.Count(defaultValue: 600, description: "Seconds each baking boot waits for its bakes to settle, 1 to 600.", maximum: 600, minimum: 1, name: "--bake-seconds");
-        var command = new Command(name: "player", description: "Assemble the folder a consumer machine runs: a self-contained Release engine, the package compiled, and its caches prewarmed (the AGB BIOS and Rust guests, specialized shading kernels, compiled worlds and compiles, prepared cartridges and the baked mesh store per backend and target).") {
-            package, output, extensions, backends, targets, noBake, bakeSeconds,
+        var channel = new Option<string?>(name: "--channel-url") { Description = "The release channel this build is published to (a release tree's root URL, with --channel-name): the README then names the one command that installs it. Absent, the README says how to install from a channel without naming one." };
+        var channelName = new Option<string>(name: "--channel-name") { DefaultValueFactory = static _ => "player", Description = "The release channel's name under --channel-url." };
+        var command = new Command(name: "player", description: "Assemble the folder a consumer machine runs: a self-contained Release engine, its launcher (stub and installer), the package compiled, and its caches prewarmed (the AGB BIOS and Rust guests, specialized shading kernels, compiled worlds and compiles, prepared cartridges and the baked mesh store per backend and target).") {
+            package, output, extensions, backends, targets, noBake, bakeSeconds, channel, channelName,
         };
 
         command.Detail(detail: """
             Steps, in order: build Puck.World in Release (SPIR-V included) under the build lease and publish it
             self-contained for this machine's runtime, which runs its player prewarm (the AGB BIOS and every Rust guest
-            into derived/; needs clang, ld.lld and Rust with wasm32-unknown-unknown); publish each --extension into
-            extensions/<name>/; compile the package's parent directory into worlds/ (documents, compiled worlds and the
-            shader package store); compose the package's worlds and export their specialized shading kernels into
-            derived/; then boot the published engine windowed, paused at its first tick, once per backend and --target,
-            with --cache-dir cache, applying the target's device profile and waiting for its bakes to settle. Those boots
-            fill cache/ (meshes, compiled-worlds, compilations, derived) with the identities a consumer's boot of the same
-            folder derives. A consumer starts the folder with --world worlds/<package> --cache-dir cache.
+            into derived/; needs clang, ld.lld and Rust with wasm32-unknown-unknown); publish the stub and the installer
+            (Puck.Launcher.Setup) self-contained into launcher/; publish each --extension into extensions/<name>/; compile
+            the package's parent directory into worlds/ (documents, compiled worlds and the shader package store); compose
+            the package's worlds and export their specialized shading kernels into derived/; then boot the published engine
+            windowed, paused at its first tick, once per backend and --target, with --cache-dir cache, applying the target's
+            device profile and waiting for its bakes to settle. Those boots fill cache/ (meshes, compiled-worlds,
+            compilations, derived) with the identities a consumer's boot of the same folder derives; a bake's intermediates
+            land in cache/meshes-intermediates/, which a rerun reuses and a release never ships. With --no-bake, one
+            headless boot fills everything but the meshes. A consumer starts the folder with --world worlds/<package>
+            --cache-dir cache; `puck publish` turns it into a release and the installer installs that.
             Writes player.json first as incomplete and last with the commit, runtime, backends, targets and each boot's counts, and prints each part's size. Each boot's
             logs are in player-logs/. Exit 0 wrote a whole player build, 1 a step failed, 2 invalid arguments.
             """);
@@ -82,6 +88,7 @@ public static class WorldPlayerCommand {
             backendNames: parse.GetValue(option: backends) ?? [],
             bake: !parse.GetValue(option: noBake),
             bakeSeconds: parse.GetValue(option: bakeSeconds),
+            channel: ((parse.GetValue(option: channel) is { } url) ? (url, parse.GetValue(option: channelName)!) : null),
             extensions: parse.GetValue(option: extensions) ?? [],
             output: Path.GetFullPath(path: parse.GetRequiredValue(option: output)),
             package: Path.GetFullPath(path: parse.GetRequiredValue(argument: package)),
@@ -90,7 +97,7 @@ public static class WorldPlayerCommand {
         return command;
     }
 
-    private static int Run(string package, string output, IReadOnlyList<string> extensions, IReadOnlyList<string> backendNames, IReadOnlyList<string> targetNames, bool bake, int bakeSeconds) {
+    private static int Run(string package, string output, IReadOnlyList<string> extensions, IReadOnlyList<string> backendNames, IReadOnlyList<string> targetNames, bool bake, int bakeSeconds, (string Url, string Name)? channel) {
         if (!CliPaths.TryGetRepositoryRoot(repositoryRoot: out var repository)) { return 2; }
         if (!Directory.Exists(path: package)) {
             return CliExit.Refuse(verb: Verb, what: CliPaths.ToDisplay(fullPath: package), why: "is not an asset package folder.");
@@ -168,7 +175,6 @@ public static class WorldPlayerCommand {
                         var (baking, loading, bakes) = Bake(backend: backend, bakeSeconds: bakeSeconds, logs: logs, output: output, pass: "bake", target: target, world: world);
 
                         verified[$"bake {WorldBackendTokens.Token(backend: backend)}-{target}"] = new JsonObject { ["baked"] = baking, ["loaded"] = loading, ["bakes"] = bakes };
-                        PruneIntermediates(meshes: Path.Combine(path1: output, path2: CacheName, path3: "meshes"));
                     }
                 }
                 // A second boot of each pair over the finished store is what a consumer's boot does: every group it demands
@@ -178,14 +184,15 @@ public static class WorldPlayerCommand {
                         var (baking, loading, bakes) = Bake(backend: backend, bakeSeconds: bakeSeconds, logs: logs, output: output, pass: "check", target: target, world: world);
 
                         verified[$"check {WorldBackendTokens.Token(backend: backend)}-{target}"] = new JsonObject { ["baked"] = baking, ["loaded"] = loading, ["bakes"] = bakes };
-                        PruneIntermediates(meshes: Path.Combine(path1: output, path2: CacheName, path3: "meshes"));
                     }
                 }
+            } else {
+                verified["warm"] = Warm(logs: logs, output: output, world: world);
             }
 
             var commit = CliProcess.RunCheckedAsync(arguments: ["rev-parse", "HEAD"], capture: true, fileName: "git", workingDirectory: repository).GetAwaiter().GetResult().Trim();
 
-            WriteReadme(commit: commit, extensions: installed, output: output, targets: (bake ? targets : []), world: Puck.Abstractions.PuckPaths.Relative(path: world, relativeTo: output));
+            WriteReadme(channel: channel, commit: commit, extensions: installed, output: output, targets: (bake ? targets : []), world: Puck.Abstractions.PuckPaths.Relative(path: world, relativeTo: output));
             CliFiles.WriteJson(path: Path.Combine(path1: output, path2: MarkerName), value: new JsonObject {
                 ["schema"] = "puck.player-build.v1",
                 ["complete"] = true,
@@ -196,6 +203,7 @@ public static class WorldPlayerCommand {
                 ["backends"] = new JsonArray([.. backends.Select(selector: static backend => JsonValue.Create(value: WorldBackendTokens.Token(backend: backend)))]),
                 ["targets"] = new JsonArray([.. (bake ? targets : []).Select(selector: static target => JsonValue.Create(value: target.ToString()))]),
                 ["extensions"] = new JsonArray([.. installed.Select(selector: static name => JsonValue.Create(value: name))]),
+                ["launcher"] = LauncherName,
                 ["checked"] = verified,
             });
             ReportSizes(output: output);
@@ -231,6 +239,7 @@ public static class WorldPlayerCommand {
             timeout: BuildTimeout,
             workingDirectory: repository
         ).GetAwaiter().GetResult();
+        PublishLauncher(repository: repository, output: output);
     }
     // Every file a machine of the composed worlds can mount (its content folders, WorldMachineContentFolder.TryList) is
     // prepared through its engine's content provider into the cache root's derived store, so a cartridge swapped in at
@@ -266,21 +275,66 @@ public static class WorldPlayerCommand {
         }
         Console.WriteLine(value: $"{Verb}: prepared {prepared.Count} machine content file(s) into {CliPaths.ToDisplay(fullPath: cache)}.");
     }
-    // A bake leaves its intermediates beside its meshes (SdfMeshStore's checkpoint and sample sets, an author's re-bake
-    // aids), and the store's one retention bound counts them with the meshes: one debug-world boot writes several
-    // gibibytes of samples, so the next backend's boot evicted the first backend's finished meshes. A consumer loads meshes
-    // only, so every set that holds no mesh entry is removed after each boot, before the next one writes.
-    private static void PruneIntermediates(string meshes) {
-        if (!Directory.Exists(path: meshes)) { return; }
+    // One headless boot of the published engine with the folder's own cache root, for a folder built without baking boots:
+    // it derives what a boot derives without a device (compiled worlds, compiles, prepared machine content), so a consumer's
+    // first boot reads them; the mesh store stays empty until a cache set fills it (`puck world caches`). Returns the boot's
+    // derived-cache counts.
+    private static JsonObject Warm(string output, string world, string logs) {
+        var directory = Path.Combine(path1: logs, path2: "warm-headless");
+        var request = new WorldLaunchRequest(Artifact: Path.Combine(path1: output, path2: "Puck.World.dll"), Step: Verb) {
+            Arguments = ["--paused", "--cache-dir", Path.Combine(path1: output, path2: CacheName)],
+            Executable = Path.Combine(path1: output, path2: (OperatingSystem.IsWindows() ? "Puck.World.exe" : "Puck.World")),
+            ExitAfterSeconds = WorldLaunch.Backstop(deadline: TimeSpan.FromMinutes(minutes: 10)),
+            Shape = WorldShape.Headless,
+            StateDirectory = Path.Combine(path1: directory, path2: "state"),
+            WorkingDirectory = output,
+            World = world,
+        };
 
-        var removed = 0L;
+        Console.WriteLine(value: $"{Verb}: warm headless.");
 
-        foreach (var set in Directory.EnumerateDirectories(path: meshes)) {
-            if (Directory.EnumerateFiles(path: set, searchPattern: $"*{Puck.SdfVm.SdfMeshStore.Extension}").Any()) { continue; }
-            removed += Directory.EnumerateFiles(path: set, searchOption: SearchOption.AllDirectories, searchPattern: "*").Sum(selector: static file => new FileInfo(fileName: file).Length);
-            Directory.Delete(path: set, recursive: true);
+        WorldProcess started;
+
+        using (var launch = WorldLaunch.Admit(request: request)) {
+            started = launch.Start(logDirectory: directory);
         }
-        Console.WriteLine(value: string.Create(provider: CultureInfo.InvariantCulture, handler: $"{Verb}: removed {(removed / 1048576.0):F1} MiB of bake intermediates from {CliPaths.ToDisplay(fullPath: meshes)}."));
+        using var process = started;
+
+        try {
+            // A headless host composes no renderer, so it is ready once it answers its first console line: the boot has
+            // composed the world and mounted its machines by then.
+            var ready = process.RunScript(lines: ["world.status"], timeout: TimeSpan.FromSeconds(seconds: 320));
+            var lines = process.LinesFrom(from: 0);
+            var hits = lines.Count(predicate: static row => row.Text.StartsWith(comparisonType: StringComparison.Ordinal, value: "[derived] ") && row.Text.Contains(value: ": hit;", comparisonType: StringComparison.Ordinal));
+            var misses = lines.Count(predicate: static row => row.Text.StartsWith(comparisonType: StringComparison.Ordinal, value: "[derived] ") && row.Text.Contains(value: ": miss;", comparisonType: StringComparison.Ordinal));
+            var status = ready.Lines.LastOrDefault(predicate: static line => line.Text.StartsWith(comparisonType: StringComparison.Ordinal, value: "[world.status"))?.Text;
+
+            if (status is null) { throw new InvalidOperationException(message: $"the warm headless boot did not answer world.status; its logs are in {CliPaths.ToDisplay(fullPath: directory)}."); }
+            var answer = (status.Length > 120) ? status[..120] : status;
+
+            Console.WriteLine(value: $"{Verb}: warm headless: {answer}; derived hits {hits}, misses {misses}");
+            return new JsonObject { ["ready"] = answer, ["derivedHits"] = hits, ["derivedMisses"] = misses };
+        } finally {
+            if (!process.Send(line: "quit") || (process.WaitForExit(timeout: TimeSpan.FromSeconds(seconds: 60)) is null)) {
+                process.Kill();
+            }
+        }
+    }
+    // The launcher a release carries in launcher/: the stub that starts an installed version and the installer that
+    // installs and updates one (Puck.Launcher.Setup), each published as one self-contained file, since a consumer machine
+    // has no .NET. The installer lays them beside the install's release record.
+    private static void PublishLauncher(string repository, string output) {
+        // The installer first: it references the stub, so the stub publish that follows writes the stub file last.
+        foreach (var project in new[] { "src/Puck.Launcher.Setup/Puck.Launcher.Setup.csproj", "src/Puck.Launcher.Stub/Puck.Launcher.Stub.csproj" }) {
+            Console.WriteLine(value: $"{Verb}: publishing {Path.GetFileNameWithoutExtension(path: project)} self-contained into {LauncherName}/.");
+            _ = CliProcess.RunCheckedAsync(
+                arguments: ["publish", CliOptions.NoNodeReuse, "-m:2", "--disable-build-servers", Path.Combine(path1: repository, path2: project), "-c", "Release", "--nologo",
+                    "-p:PuckSelfContained=true", "-p:DebugType=none", "-p:PublishDocumentationFile=false", "-p:PublishReferencesDocumentationFiles=false", "-o", Path.Combine(path1: output, path2: LauncherName)],
+                fileName: "dotnet",
+                timeout: BuildTimeout,
+                workingDirectory: repository
+            ).GetAwaiter().GetResult();
+        }
     }
     // An extension installs as the host discovers one (PuckExtensionDiscovery): extensions/<name>/<name>.dll beside its
     // dependency manifest.
@@ -382,10 +436,21 @@ public static class WorldPlayerCommand {
             }
         }
     }
-    // The page a consumer reads first: how to start the folder locally and against a remote authority.
-    private static void WriteReadme(string output, string world, string commit, IReadOnlyList<string> extensions, IReadOnlyList<BakeTarget> targets) {
+    // The page a consumer reads first: how to install the build from its channel, and how to start it locally and against
+    // a remote authority.
+    private static void WriteReadme(string output, string world, string commit, IReadOnlyList<string> extensions, IReadOnlyList<BakeTarget> targets, (string Url, string Name)? channel) {
         var executable = (OperatingSystem.IsWindows() ? "Puck.World.exe" : "./Puck.World");
-        var baked = ((targets.Count == 0) ? "nothing by this verb, so a boot bakes what the store lacks" : string.Join(separator: ", ", values: targets.Select(selector: static target => $"profile `{target.Profile}` at {target.Width} by {target.Height}")));
+        var setup = (OperatingSystem.IsWindows() ? "Puck.Launcher.Setup.exe" : "Puck.Launcher.Setup");
+        var stub = (OperatingSystem.IsWindows() ? "Puck.Launcher.Stub.exe" : "./Puck.Launcher.Stub");
+        var rid = System.Runtime.InteropServices.RuntimeInformation.RuntimeIdentifier;
+        var baked = ((targets.Count == 0)
+            ? "the targets of the cache set its release carries (the release notes name it, or say that none matched this engine, in which case a boot bakes what the store lacks)"
+            : string.Join(separator: ", ", values: targets.Select(selector: static target => $"profile `{target.Profile}` at {target.Width} by {target.Height}")));
+        var install = (channel is { } named)
+            ? (OperatingSystem.IsWindows()
+                ? $"$setup = \"$env:TEMP\\{setup}\"; Invoke-WebRequest {named.Url.TrimEnd('/')}/{named.Name}/{rid}/{setup} -OutFile $setup; & $setup {named.Url.TrimEnd('/')} --channel {named.Name}"
+                : $"curl -fsSLo /tmp/{setup} {named.Url.TrimEnd('/')}/{named.Name}/{rid}/{setup} && chmod +x /tmp/{setup} && /tmp/{setup} {named.Url.TrimEnd('/')} --channel {named.Name}")
+            : $"{setup} <channel address> --channel <name>";
         var signIn = ((extensions.Count == 0)
             ? "No extension is installed, so an authority that requires sign-in refuses this folder; rebuild it with the deployment's provider extension (`--extension <project>`)."
             : $"Installed in `extensions/`: {string.Join(separator: ", ", values: extensions.Select(selector: static name => $"`{name}`"))}. An authority that requires sign-in names its provider and settings in the authentication configuration its deployment publishes; the provider acquires the credential itself, from the sign-in it documents.");
@@ -402,11 +467,30 @@ public static class WorldPlayerCommand {
             | `worlds/` | The compiled package: documents, compiled worlds, the shader package store, cartridge sources. |
             | `derived/` | The shipping cache: the AGB BIOS, the Rust addon guests, specialized shading kernels. |
             | `cache/` | The device caches: baked meshes for each backend, compiles, prepared cartridges and boot ROMs. |
+            | `launcher/` | The stub that starts an installed version and the installer, each one self-contained file. |
             | `extensions/` | Installed extensions, if any. |
+
+            ## Install it from its channel
+
+            The build is published as a signed release; one command downloads the installer and installs the newest
+            release into the per-user Puck `player` directory (`--to <directory>` picks another):
+
+            ```text
+            {{install}}
+            ```
+
+            The installer pins the channel's root key on first install and verifies every later release against it,
+            downloads only the files it does not already hold, and lays the stub beside the install. Run the installed
+            `{{setup}}` again to update; a running World also updates from the same channel (`update.check`,
+            `update.apply`), and the stub starts the new version at its next launch. Start the install with:
+
+            ```text
+            {{stub}} --world {{world}} --cache-dir cache
+            ```
 
             ## Start it locally
 
-            From this folder:
+            From this folder, without installing:
 
             ```text
             {{executable}} --world {{world}} --cache-dir cache
@@ -441,7 +525,7 @@ public static class WorldPlayerCommand {
             : 0L);
 
         var cache = Path.Combine(path1: output, path2: CacheName);
-        string[] parts = ["worlds", "derived", "extensions", LogsName];
+        string[] parts = ["worlds", "derived", LauncherName, "extensions", LogsName];
         var named = parts.Select(selector: part => Path.Combine(path1: output, path2: part)).Append(element: cache).ToHashSet(comparer: Puck.Abstractions.PuckPaths.Comparer);
         var engine = Directory.EnumerateFileSystemEntries(path: output)
             .Where(predicate: path => !named.Contains(item: path) && !string.Equals(a: Path.GetFileName(path: path), b: MarkerName, comparisonType: StringComparison.Ordinal))

@@ -155,6 +155,9 @@ jobs:
     # shards, coverage and the browser harness report on every push and neither hold nor skip it, while the owner's
     # refactoring campaign suspends test requirements (AGENTS.md). The browser payload arrives through `applications`.
     needs: [applications, artifacts, containers, infrastructure]
+    # The player channel publishes only after a deploy of this commit, whose outputs it reads.
+    outputs:
+      deployed: ${{ steps.current.outputs.deploy }}
     permissions:
       contents: read
       id-token: write
@@ -303,6 +306,80 @@ jobs:
             artifacts/functions-scm-*.json
             artifacts/azcopy/*.log
     timeout-minutes: 120
+  # The player channel: the consumer build (what the RTX 2060 test machine installs) as a signed release in the
+  # deployment's own hosting. A hosted runner has no GPU, so the build is assembled without baking boots and takes its
+  # baked mesh store from the cache set a GPU machine pushed for the same mesh bake identity (`puck world caches produce
+  # --push`); the release notes name each backend's set, or the miss. It runs after deploy and nothing waits on it.
+  player:
+    concurrency:
+      cancel-in-progress: false
+      group: azure-player-channel
+    environment: Puck
+    # The deploy job leaves the deployment's outputs only when it deployed this commit (a superseded commit skips it).
+    if: needs.deploy.outputs.deployed == 'true'
+    name: Publish the player channel
+    needs: [artifacts, deploy]
+    permissions:
+      contents: read
+      id-token: write
+    runs-on: windows-2025
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Install the pinned .NET SDK
+        uses: ./.github/actions/setup-dotnet
+      - name: Install pinned DXC
+        uses: ./.github/actions/setup-dxc
+      - name: Restore the shader compiler cache
+        uses: ./.github/actions/shader-cache
+        with:
+          mode: restore
+      - name: Install Puck CLI
+        uses: ./.github/actions/setup-puck
+        with:
+          artifact: nuget-packages
+          azure: "true"
+      - name: Download the deployment's outputs
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: azure-production-release
+          path: artifacts
+      - name: Assemble the player build without baking boots
+        run: puck world player worlds/debug --output artifacts/player --no-bake --channel-url https://puck.byteterrace.com/official/releases --channel-name player
+        shell: bash
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        name: Take the mesh cache sets whose bake identity matches this build
+        run: puck world caches fetch artifacts/player --notes artifacts/player-notes.txt
+        shell: bash
+      - name: Write the player release tree
+        run: >-
+          puck publish --app puck.world --channel player --rid win-x64 --input artifacts/player --output artifacts/player-channel
+          --version "0.1.${{ github.run_number }}" --notes "$(cat artifacts/player-notes.txt)"
+          --exclude player-logs cache/meshes-intermediates player-caches --bootstrap launcher
+        shell: bash
+      - name: Sign in to Azure with OIDC
+        uses: ./.github/actions/azure-login
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+      - id: vault
+        name: Admit the runner to the signing-key vault
+        run: puck azure vault-access
+        shell: bash
+      - env:
+          AZCOPY_AUTO_LOGIN_TYPE: AZCLI
+          AZCOPY_CONCURRENCY_VALUE: AUTO
+          AZCOPY_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+        name: Sign the release and push the player channel
+        run: puck channel push --tree artifacts/player-channel --channel player --sequence ${{ github.run_number }} --host azure
+        shell: bash
+      - if: always() && steps.vault.outcome != 'skipped'
+        name: Restore signing-key vault restrictions
+        run: puck azure vault-access --restore
+        shell: bash
+    timeout-minutes: 90
   applications:
     name: Assemble the application bundle
     needs: [artifacts, browser, docs]
