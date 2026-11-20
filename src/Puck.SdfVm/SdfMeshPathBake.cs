@@ -1088,8 +1088,7 @@ public sealed partial class SdfMeshPathBake {
     // order kept.
     private static float RankOf(Group group) => (group.InView ? group.Priority : (-1f / (1f + group.Priority)));
     // Higher priority first, then the plan's order.
-    private static readonly IComparer<(float Priority, int Index)> ByRank = Comparer<(float Priority, int Index)>.Create(comparison: static (left, right) =>
-        ((right.Priority.CompareTo(value: left.Priority) is var order and not 0) ? order : left.Index.CompareTo(value: right.Index)));
+    private static readonly SdfMeshPriorityOrder ByRank = new();
 
     /// <summary>Returns a taken batch's lattices still unanswered to their groups, as when its dispatch never completed or
     /// its answer stopped part way; each group dispatches its lattice again. Their samples count as discarded when the GPU
