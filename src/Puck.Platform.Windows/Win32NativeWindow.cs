@@ -399,8 +399,6 @@ internal sealed partial class Win32NativeWindow : INativeWindow, INativeWindowCu
             m_windowHandle = 0;
         }
 
-        m_precisionWaiter?.Dispose();
-
         if (m_selfHandle.IsAllocated) {
             m_selfHandle.Free();
         }

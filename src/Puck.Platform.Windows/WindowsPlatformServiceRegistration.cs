@@ -57,7 +57,7 @@ public static class WindowsPlatformServiceRegistration {
 
         return services;
     }
-    /// <summary>Registers a standalone high-resolution <see cref="IPrecisionWaiter"/> for the headless tick host, when
+    /// <summary>Registers a standalone high-resolution <see cref="IPrecisionWaiter"/> for the host loop's pacer, when
     /// the OS version supports a high-resolution waitable timer; a no-op otherwise (the host falls back to a coarse
     /// sleep).</summary>
     /// <param name="services">The service collection.</param>

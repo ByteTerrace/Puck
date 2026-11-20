@@ -9,6 +9,9 @@ The Linux concrete backends behind `Puck.Platform`'s contracts.
   `Interop/WaylandClient.cs`, `Interop/Xcb.cs`. `AddLinuxPlatformWindowing`
   also registers `Puck.Platform.NullClipboardService`—there is no Linux
   clipboard backend.
+- **Precise waiting**—`LinuxPrecisionWaiter`, a `clock_nanosleep` on
+  `CLOCK_MONOTONIC` behind `Puck.Abstractions.Pacing.IPrecisionWaiter`
+  (`AddLinuxPrecisionWaiter`), which the host loop's pacer sleeps on.
 - **Declining recording**—`AddLinuxRecordingPlatform` registers
   `Puck.Platform.Recording`'s `DecliningVideoEncoderFactory`/
   `DecliningAudioCaptureSourceFactory`: no Linux video-encoder or

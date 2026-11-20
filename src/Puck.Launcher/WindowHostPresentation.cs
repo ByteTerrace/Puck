@@ -23,6 +23,7 @@ public sealed class WindowHostPresentation {
     private readonly InputRouter? m_inputRouter;
     private readonly ILogger<WindowHostPresentation> m_logger;
     private readonly LauncherOptions m_options;
+    private readonly IPrecisionWaiter? m_precisionWaiter;
     private readonly PresentPacingControl m_presentPacing;
     private readonly IPresentSurfaceReadback? m_presentReadback;
     private readonly ISurfacePresenter m_presenter;
@@ -48,6 +49,7 @@ public sealed class WindowHostPresentation {
         IEnumerable<InputRouter> inputRouters,
         IEnumerable<IFixedStepSimulation> simulations,
         IEnumerable<FrameCaptureController> captureControllers,
+        IEnumerable<IPrecisionWaiter> precisionWaiters,
         TerminalControl terminal,
         INativeWindowFactory windowFactory,
         IEnumerable<GpuCreationFaults> faults,
@@ -67,6 +69,7 @@ public sealed class WindowHostPresentation {
         ArgumentNullException.ThrowIfNull(inputRouters);
         ArgumentNullException.ThrowIfNull(logger);
         ArgumentNullException.ThrowIfNull(options);
+        ArgumentNullException.ThrowIfNull(precisionWaiters);
         ArgumentNullException.ThrowIfNull(presentPacing);
         ArgumentNullException.ThrowIfNull(presenter);
         ArgumentNullException.ThrowIfNull(root);
@@ -100,6 +103,7 @@ public sealed class WindowHostPresentation {
         );
         m_logger = logger;
         m_options = options;
+        m_precisionWaiter = precisionWaiters.FirstOrDefault();
         m_presentPacing = presentPacing;
         m_presenter = presenter;
         m_presentReadback = (presenter as IPresentSurfaceReadback);
@@ -241,7 +245,6 @@ public sealed class WindowHostPresentation {
                     : 0
                 );
                 var nextDisplayTimingRetryTimestamp = 0L;
-                var precisionWaiter = (window as IPrecisionWaiter);
                 // An optional HELD root capability that sees every raw event. Mouse events can have two projections:
                 // this observer updates presentation state, while WindowInputMapper independently feeds their
                 // relative motion/buttons/wheel into command bindings. Resolved once: contributions never change.
@@ -314,7 +317,7 @@ public sealed class WindowHostPresentation {
                     rootHostContext: m_rootHostContext,
                     sleep: duration => HostWaits.Until(
                         deadlineTimestamp: (m_time.GetTimestamp() + ((long)(duration.TotalSeconds * frequency))),
-                        precisionWaiter: precisionWaiter,
+                        precisionWaiter: m_precisionWaiter,
                         time: m_time
                     ),
                     time: m_time,
@@ -702,7 +705,7 @@ public sealed class WindowHostPresentation {
                                 // Serviced: background work that completes before the slot is taken up in this wait.
                                 HostWaits.Pace(
                                     deadlineTimestamp: nextRenderDeadline,
-                                    precisionWaiter: precisionWaiter,
+                                    precisionWaiter: m_precisionWaiter,
                                     time: m_time
                                 );
 

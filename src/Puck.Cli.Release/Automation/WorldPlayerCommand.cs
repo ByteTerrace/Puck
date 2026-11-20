@@ -70,7 +70,7 @@ public static class WorldPlayerCommand {
 
         command.Detail(detail: """
             Steps, in order: build Puck.World in Release (SPIR-V included) under the build lease and publish it
-            self-contained for this machine's runtime, which runs its player prewarm (the AGB BIOS and every Rust guest
+            self-contained for this machine's runtime as one composite ReadyToRun image, which runs its player prewarm (the AGB BIOS and every Rust guest
             into derived/; needs clang, ld.lld and Rust with wasm32-unknown-unknown); publish the stub and the installer
             (Puck.Launcher.Setup) self-contained into launcher/; publish each --extension into extensions/<name>/; compile
             the package's parent directory into worlds/ (documents, compiled worlds and the shader package store); compose
@@ -215,8 +215,10 @@ public static class WorldPlayerCommand {
     }
 
     // One Release publish with the World's own self-contained switch (PuckSelfContained, see Puck.World.csproj): a global
-    // SelfContained or RuntimeIdentifier would flow into every referenced project's locked restore. Puck.World's own publish
-    // target runs the player prewarm into derived/.
+    // SelfContained or RuntimeIdentifier would flow into every referenced project's locked restore. The ReadyToRun image is
+    // composite: the framework and Puck share one version bubble, so the precompiler reaches the generic instantiations
+    // over framework types that a per-assembly image leaves to the JIT (the World README holds the counts). Puck.World's
+    // own publish target runs the player prewarm into derived/.
     private static void Publish(string repository, string output) {
         var project = Path.Combine(path1: repository, path2: "src/Puck.World/Puck.World.csproj");
 
@@ -231,10 +233,10 @@ public static class WorldPlayerCommand {
             wait: CliLease.DefaultWait
         ).GetAwaiter().GetResult();
 
-        Console.WriteLine(value: $"{Verb}: publishing Puck.World (Release, SPIR-V included) self-contained for {System.Runtime.InteropServices.RuntimeInformation.RuntimeIdentifier}.");
+        Console.WriteLine(value: $"{Verb}: publishing Puck.World (Release, SPIR-V included, composite ReadyToRun) self-contained for {System.Runtime.InteropServices.RuntimeInformation.RuntimeIdentifier}.");
         _ = CliProcess.RunCheckedAsync(
             arguments: ["publish", CliOptions.NoNodeReuse, "-m:2", "--disable-build-servers", project, "-c", "Release", "--nologo",
-                "-p:PuckSelfContained=true", "-p:PuckShaderSpirvEnabled=true", "-o", output],
+                "-p:PuckSelfContained=true", "-p:PublishReadyToRunComposite=true", "-p:PuckShaderSpirvEnabled=true", "-o", output],
             fileName: "dotnet",
             timeout: BuildTimeout,
             workingDirectory: repository

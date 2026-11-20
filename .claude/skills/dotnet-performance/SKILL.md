@@ -122,6 +122,9 @@ Code the post makes worth revisiting is filed in the
   produce IL. Compare the exact published artifact with `puck bench startup
   --world-artifact <path>` and account for its larger assemblies. The World
   README owns the publish recipe; CI retains its compile-once contract.
+  `puck world player` publishes a self-contained composite image, which puts
+  the framework and Puck in one version bubble and so precompiles most of the
+  framework-generic instantiations the paragraph above leaves to the JIT.
 - **A runtime or SDK change moves the baseline.** Startup, gen0 pauses,
   delegate and comparer allocations and several waits shift with the runtime
   alone. Rebuild the base commit on the new SDK before comparing, and read

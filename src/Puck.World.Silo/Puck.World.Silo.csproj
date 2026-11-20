@@ -19,6 +19,7 @@
         <ProjectReference Include="../Puck.Commands/Puck.Commands.csproj" />
         <ProjectReference Include="../Puck.Hosting/Puck.Hosting.csproj" />
         <ProjectReference Include="../Puck.Launcher/Puck.Launcher.csproj" />
+        <ProjectReference Include="../Puck.Platform.Linux/Puck.Platform.Linux.csproj" />
         <ProjectReference Include="../Puck.Storage/Puck.Storage.csproj" />
         <ProjectReference Include="../Puck.World.Addons/Puck.World.Addons.csproj" />
         <ProjectReference Include="../Puck.World.Client/Puck.World.Client.csproj" />
