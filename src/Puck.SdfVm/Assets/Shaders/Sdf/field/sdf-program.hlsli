@@ -222,7 +222,7 @@ uint sdfInstanceCountClamped() {
 // The "nothing nearer yet" sentinel every accumulator and every unknown shape id starts at. It is deliberately far
 // beyond any authored far distance (render.farDistance is capped at 8192 world units by the world validator) so it
 // always loses a min() against real geometry, yet small enough that `a + (b - a)` still resolves; see
-// blendSmoothUnion, which must NOT be handed this value through a saturating lerp.
+// sdfBlendSmoothMinimum, which must NOT be handed this value through a saturating lerp.
 #define SDF_FAR_DISTANCE 1.0e9
 
 // Degenerate-input floors. The Scale / Repeat / RepeatLimited floors are HOST-BAKED (SdfProgramBuilder); the one the
@@ -268,7 +268,7 @@ static const float3 SdfSunDirection = float3(0.51343602, 0.79349202, 0.32673201)
 // core and the extrude join to the plain rectangle/box forms exactly.
 // A generalized ellipsoid (SdfShapeType.Superellipsoid). data0 = (radiusX, radiusY, radiusZ,
 // exponent e in [2, 8]); data1 = (smooth [ISA-wide], 1/radiusX, 1/radiusY, 1/radiusZ [host-baked]). e = 2 is the
-// ellipsoid — the ISA's one ellipsoid spelling — and runs a pow-free fast path (sdfEllipsoidGauge); any other exponent
+// ellipsoid — the ISA's one ellipsoid spelling — and runs a pow-free fast path (the scaled L2 gauge); any other exponent
 // takes the general power path.
 // A validated convex polygon (SdfShapeType.ConvexPolygon) — the 2D-primitive family's lane layout,
 // but its profile is a vertex list too large to pack inline: data0.x = asfloat(packed uint (tableOffset << 5) |

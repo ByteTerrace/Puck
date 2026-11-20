@@ -145,6 +145,8 @@ public static class SdfShadeOps {
 
             text.Append(value: name).Append(value: '\n').Append(value: reader.ReadToEnd()).Append(value: '\n');
         }
+        // The field helpers include the generated shared formulas, which this assembly lowers from its own definitions.
+        text.Append(value: SdfFieldShapes.GenerateFormulasHlsl()).Append(value: SdfFieldBlends.GenerateFormulasHlsl());
         return Convert.ToHexStringLower(inArray: SHA256.HashData(source: Encoding.UTF8.GetBytes(s: text.ToString())));
     }
     private static SdfShadeOpInfo D(SdfShadeOp op, string name, int arity, uint work, string template, bool commutative = false) => new(Arity: arity, Commutative: commutative, Name: name, Op: op, Template: template, Work: checked((work + DispatchWork)));

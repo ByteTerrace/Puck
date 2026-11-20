@@ -3,58 +3,58 @@ case SDF_BLEND_UNION:
 case SDF_BLEND_MORPH:
 case SDF_BLEND_STAIRS_UNION:
 {
-    result = min(current, candidate); break;
+    result = sdfBlendUnion(current, candidate); break;
 }
 case SDF_BLEND_SMOOTH_UNION:
 {
-    result = blendSmoothUnion(current, candidate, smoothK); break;
+    result = sdfBlendSmoothUnion(current, candidate, smoothRadius); break;
 }
 case SDF_BLEND_SUBTRACTION:
 case SDF_BLEND_STAIRS_SUBTRACTION:
 {
-    result = max(current, -candidate); break;
+    result = sdfBlendSubtraction(current, candidate); break;
 }
 case SDF_BLEND_INTERSECTION:
 {
-    result = max(current, candidate); break;
+    result = sdfBlendIntersection(current, candidate); break;
 }
 case SDF_BLEND_XOR:
 {
-    result = max(min(current, candidate), -max(current, candidate)); break;
+    result = sdfBlendXor(current, candidate); break;
 }
 case SDF_BLEND_SMOOTH_INTERSECTION:
 {
-    result = -blendSmoothUnion(-current, -candidate, smoothK); break;
+    result = sdfBlendSmoothIntersection(current, candidate, smoothRadius); break;
 }
 case SDF_BLEND_SMOOTH_SUBTRACTION:
 {
-    result = -blendSmoothUnion(candidate, -current, smoothK); break;
+    result = sdfBlendSmoothSubtraction(current, candidate, smoothRadius); break;
 }
 case SDF_BLEND_CHAMFER_UNION:
 {
-    result = min(min(current, candidate), ((current + candidate - chamfer) * SDF_SQRT_HALF)); break;
+    result = sdfBlendChamferUnion(current, candidate, smoothRadius); break;
 }
 case SDF_BLEND_CHAMFER_INTERSECTION:
 {
-    result = max(max(current, candidate), ((current + candidate + chamfer) * SDF_SQRT_HALF)); break;
+    result = sdfBlendChamferIntersection(current, candidate, smoothRadius); break;
 }
 case SDF_BLEND_CHAMFER_SUBTRACTION:
 {
-    result = max(max(current, -candidate), ((current - candidate + chamfer) * SDF_SQRT_HALF)); break;
+    result = sdfBlendChamferSubtraction(current, candidate, smoothRadius); break;
 }
 case SDF_BLEND_GROOVE_UNION:
 {
-    result = max(min(current, candidate), chamfer - length(float2(current, candidate))); break;
+    result = sdfBlendGrooveUnion(current, candidate, smoothRadius); break;
 }
 case SDF_BLEND_PIPE_UNION:
 {
-    result = min(min(current, candidate), length(float2(current, candidate)) - chamfer); break;
+    result = sdfBlendPipeUnion(current, candidate, smoothRadius); break;
 }
 case SDF_BLEND_GROOVE_SUBTRACTION:
 {
-    result = max(max(current, -candidate), chamfer - length(float2(current, candidate))); break;
+    result = sdfBlendGrooveSubtraction(current, candidate, smoothRadius); break;
 }
 case SDF_BLEND_PIPE_SUBTRACTION:
 {
-    result = min(max(current, -candidate), length(float2(current, candidate)) - chamfer); break;
+    result = sdfBlendPipeSubtraction(current, candidate, smoothRadius); break;
 }

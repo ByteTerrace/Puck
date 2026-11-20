@@ -10,13 +10,14 @@ public static partial class SdfFieldBlends {
     private abstract class Entry {
         public abstract SdfBlendHaloAction Halo { get; }
         public abstract SdfBlendLipschitzAction Lipschitz { get; }
+        // The shared formula both distance readers lower (SdfFieldFormulas); Shader is SdfShaderAction.Of it.
+        public abstract SdfFormula Formula { get; }
         public abstract SdfShaderAction Shader { get; }
         public abstract SdfShaderAction MaterialShader { get; }
         public abstract SdfCullBoundAction CullBound { get; }
         public abstract SdfCullGuardAction CullGuard { get; }
         public abstract SdfPopAdmissionAction PopAdmission { get; }
         public abstract SdfBlendDistanceGainAction BlendDistanceGain { get; }
-        public abstract SdfPointBlendAction PointBlend { get; }
         public abstract SdfMaterialWinnerAction MaterialWinner { get; }
         public abstract SdfIntervalBlendAction IntervalBlend { get; }
         public abstract SdfBlendGrowthAction BlendGrowth { get; }
@@ -33,13 +34,13 @@ public static partial class SdfFieldBlends {
     private sealed class Union : Entry {
         public override SdfBlendHaloAction Halo => SdfBlendHaloAction.None;
         public override SdfBlendLipschitzAction Lipschitz => SdfBlendLipschitzAction.Maximum;
-        public override SdfShaderAction Shader => new(Code: "result = min(current, candidate); break;", Operands: SdfShaderOperands.None);
+        public override SdfFormula Formula => SdfFieldFormulas.Union;
+        public override SdfShaderAction Shader => SdfShaderAction.Of(Formula);
         public override SdfShaderAction MaterialShader => NearerMaterial;
         public override SdfCullBoundAction CullBound => SdfCullBoundAction.Union;
         public override SdfCullGuardAction CullGuard => SdfCullGuardAction.Union;
         public override SdfPopAdmissionAction PopAdmission => SdfPopAdmissionAction.Radius;
         public override SdfBlendDistanceGainAction BlendDistanceGain => SdfBlendDistanceGainAction.Union;
-        public override SdfPointBlendAction PointBlend => SdfPointBlendAction.Union;
         public override SdfMaterialWinnerAction MaterialWinner => SdfMaterialWinnerAction.Nearer;
         public override SdfIntervalBlendAction IntervalBlend => SdfIntervalBlendAction.Union;
         public override SdfBlendGrowthAction BlendGrowth => SdfBlendGrowthAction.None;
@@ -54,13 +55,13 @@ public static partial class SdfFieldBlends {
     private sealed class SmoothUnion : Entry {
         public override SdfBlendHaloAction Halo => SdfBlendHaloAction.Radius;
         public override SdfBlendLipschitzAction Lipschitz => SdfBlendLipschitzAction.Maximum;
-        public override SdfShaderAction Shader => new(Code: "result = blendSmoothUnion(current, candidate, smoothK); break;", Operands: SdfShaderOperands.None);
+        public override SdfFormula Formula => SdfFieldFormulas.SmoothUnion;
+        public override SdfShaderAction Shader => SdfShaderAction.Of(Formula);
         public override SdfShaderAction MaterialShader => NearerMaterial;
         public override SdfCullBoundAction CullBound => SdfCullBoundAction.SmoothUnion;
         public override SdfCullGuardAction CullGuard => SdfCullGuardAction.SmoothUnion;
         public override SdfPopAdmissionAction PopAdmission => SdfPopAdmissionAction.Radius;
         public override SdfBlendDistanceGainAction BlendDistanceGain => SdfBlendDistanceGainAction.SmoothUnion;
-        public override SdfPointBlendAction PointBlend => SdfPointBlendAction.SmoothUnion;
         public override SdfMaterialWinnerAction MaterialWinner => SdfMaterialWinnerAction.Nearer;
         public override SdfIntervalBlendAction IntervalBlend => SdfIntervalBlendAction.SmoothUnion;
         public override SdfBlendGrowthAction BlendGrowth => SdfBlendGrowthAction.QuarterRadiusFloor;
@@ -79,13 +80,13 @@ public static partial class SdfFieldBlends {
     private sealed class Subtraction : Entry {
         public override SdfBlendHaloAction Halo => SdfBlendHaloAction.None;
         public override SdfBlendLipschitzAction Lipschitz => SdfBlendLipschitzAction.Maximum;
-        public override SdfShaderAction Shader => new(Code: "result = max(current, -candidate); break;", Operands: SdfShaderOperands.None);
+        public override SdfFormula Formula => SdfFieldFormulas.Subtraction;
+        public override SdfShaderAction Shader => SdfShaderAction.Of(Formula);
         public override SdfShaderAction MaterialShader => CutMaterial;
         public override SdfCullBoundAction CullBound => SdfCullBoundAction.Local;
         public override SdfCullGuardAction CullGuard => SdfCullGuardAction.Subtraction;
         public override SdfPopAdmissionAction PopAdmission => SdfPopAdmissionAction.Radius;
         public override SdfBlendDistanceGainAction BlendDistanceGain => SdfBlendDistanceGainAction.Subject;
-        public override SdfPointBlendAction PointBlend => SdfPointBlendAction.Subtraction;
         public override SdfMaterialWinnerAction MaterialWinner => SdfMaterialWinnerAction.Cut;
         public override SdfIntervalBlendAction IntervalBlend => SdfIntervalBlendAction.Subtraction;
         public override SdfBlendGrowthAction BlendGrowth => SdfBlendGrowthAction.None;
@@ -101,13 +102,13 @@ public static partial class SdfFieldBlends {
     private sealed class Intersection : Entry {
         public override SdfBlendHaloAction Halo => SdfBlendHaloAction.None;
         public override SdfBlendLipschitzAction Lipschitz => SdfBlendLipschitzAction.Maximum;
-        public override SdfShaderAction Shader => new(Code: "result = max(current, candidate); break;", Operands: SdfShaderOperands.None);
+        public override SdfFormula Formula => SdfFieldFormulas.Intersection;
+        public override SdfShaderAction Shader => SdfShaderAction.Of(Formula);
         public override SdfShaderAction MaterialShader => FartherMaterial;
         public override SdfCullBoundAction CullBound => SdfCullBoundAction.Local;
         public override SdfCullGuardAction CullGuard => SdfCullGuardAction.Disable;
         public override SdfPopAdmissionAction PopAdmission => SdfPopAdmissionAction.Radius;
         public override SdfBlendDistanceGainAction BlendDistanceGain => SdfBlendDistanceGainAction.Smaller;
-        public override SdfPointBlendAction PointBlend => SdfPointBlendAction.Intersection;
         public override SdfMaterialWinnerAction MaterialWinner => SdfMaterialWinnerAction.Farther;
         public override SdfIntervalBlendAction IntervalBlend => SdfIntervalBlendAction.Intersection;
         public override SdfBlendGrowthAction BlendGrowth => SdfBlendGrowthAction.None;
@@ -122,13 +123,13 @@ public static partial class SdfFieldBlends {
     private sealed class Xor : Entry {
         public override SdfBlendHaloAction Halo => SdfBlendHaloAction.None;
         public override SdfBlendLipschitzAction Lipschitz => SdfBlendLipschitzAction.Maximum;
-        public override SdfShaderAction Shader => new(Code: "result = max(min(current, candidate), -max(current, candidate)); break;", Operands: SdfShaderOperands.None);
+        public override SdfFormula Formula => SdfFieldFormulas.Xor;
+        public override SdfShaderAction Shader => SdfShaderAction.Of(Formula);
         public override SdfShaderAction MaterialShader => NearerMaterial;
         public override SdfCullBoundAction CullBound => SdfCullBoundAction.Disable;
         public override SdfCullGuardAction CullGuard => SdfCullGuardAction.Disable;
         public override SdfPopAdmissionAction PopAdmission => SdfPopAdmissionAction.Radius;
         public override SdfBlendDistanceGainAction BlendDistanceGain => SdfBlendDistanceGainAction.Uncertified;
-        public override SdfPointBlendAction PointBlend => SdfPointBlendAction.Xor;
         public override SdfMaterialWinnerAction MaterialWinner => SdfMaterialWinnerAction.Nearer;
         public override SdfIntervalBlendAction IntervalBlend => SdfIntervalBlendAction.Xor;
         public override SdfBlendGrowthAction BlendGrowth => SdfBlendGrowthAction.None;
@@ -144,13 +145,13 @@ public static partial class SdfFieldBlends {
     private sealed class SmoothIntersection : Entry {
         public override SdfBlendHaloAction Halo => SdfBlendHaloAction.None;
         public override SdfBlendLipschitzAction Lipschitz => SdfBlendLipschitzAction.Maximum;
-        public override SdfShaderAction Shader => new(Code: "result = -blendSmoothUnion(-current, -candidate, smoothK); break;", Operands: SdfShaderOperands.None);
+        public override SdfFormula Formula => SdfFieldFormulas.SmoothIntersection;
+        public override SdfShaderAction Shader => SdfShaderAction.Of(Formula);
         public override SdfShaderAction MaterialShader => FartherMaterial;
         public override SdfCullBoundAction CullBound => SdfCullBoundAction.LocalWithRadius;
         public override SdfCullGuardAction CullGuard => SdfCullGuardAction.Disable;
         public override SdfPopAdmissionAction PopAdmission => SdfPopAdmissionAction.Radius;
         public override SdfBlendDistanceGainAction BlendDistanceGain => SdfBlendDistanceGainAction.Smaller;
-        public override SdfPointBlendAction PointBlend => SdfPointBlendAction.SmoothIntersection;
         public override SdfMaterialWinnerAction MaterialWinner => SdfMaterialWinnerAction.Farther;
         public override SdfIntervalBlendAction IntervalBlend => SdfIntervalBlendAction.SmoothIntersection;
         public override SdfBlendGrowthAction BlendGrowth => SdfBlendGrowthAction.None;
@@ -165,13 +166,13 @@ public static partial class SdfFieldBlends {
     private sealed class SmoothSubtraction : Entry {
         public override SdfBlendHaloAction Halo => SdfBlendHaloAction.Radius;
         public override SdfBlendLipschitzAction Lipschitz => SdfBlendLipschitzAction.Maximum;
-        public override SdfShaderAction Shader => new(Code: "result = -blendSmoothUnion(candidate, -current, smoothK); break;", Operands: SdfShaderOperands.None);
+        public override SdfFormula Formula => SdfFieldFormulas.SmoothSubtraction;
+        public override SdfShaderAction Shader => SdfShaderAction.Of(Formula);
         public override SdfShaderAction MaterialShader => CutMaterial;
         public override SdfCullBoundAction CullBound => SdfCullBoundAction.LocalWithRadius;
         public override SdfCullGuardAction CullGuard => SdfCullGuardAction.Disable;
         public override SdfPopAdmissionAction PopAdmission => SdfPopAdmissionAction.Radius;
         public override SdfBlendDistanceGainAction BlendDistanceGain => SdfBlendDistanceGainAction.Subject;
-        public override SdfPointBlendAction PointBlend => SdfPointBlendAction.SmoothSubtraction;
         public override SdfMaterialWinnerAction MaterialWinner => SdfMaterialWinnerAction.Cut;
         public override SdfIntervalBlendAction IntervalBlend => SdfIntervalBlendAction.SmoothSubtraction;
         public override SdfBlendGrowthAction BlendGrowth => SdfBlendGrowthAction.None;
@@ -193,13 +194,13 @@ public static partial class SdfFieldBlends {
     private sealed class ChamferUnion : Entry {
         public override SdfBlendHaloAction Halo => SdfBlendHaloAction.ChamferUnion;
         public override SdfBlendLipschitzAction Lipschitz => SdfBlendLipschitzAction.Chamfer;
-        public override SdfShaderAction Shader => new(Code: "result = min(min(current, candidate), ((current + candidate - chamfer) * SDF_SQRT_HALF)); break;", Operands: SdfShaderOperands.None);
+        public override SdfFormula Formula => SdfFieldFormulas.ChamferUnion;
+        public override SdfShaderAction Shader => SdfShaderAction.Of(Formula);
         public override SdfShaderAction MaterialShader => NearerMaterial;
         public override SdfCullBoundAction CullBound => SdfCullBoundAction.Disable;
         public override SdfCullGuardAction CullGuard => SdfCullGuardAction.Disable;
         public override SdfPopAdmissionAction PopAdmission => SdfPopAdmissionAction.Radius;
         public override SdfBlendDistanceGainAction BlendDistanceGain => SdfBlendDistanceGainAction.Uncertified;
-        public override SdfPointBlendAction PointBlend => SdfPointBlendAction.ChamferUnion;
         public override SdfMaterialWinnerAction MaterialWinner => SdfMaterialWinnerAction.Nearer;
         public override SdfIntervalBlendAction IntervalBlend => SdfIntervalBlendAction.ChamferUnion;
         public override SdfBlendGrowthAction BlendGrowth => SdfBlendGrowthAction.HalfRadius;
@@ -215,13 +216,13 @@ public static partial class SdfFieldBlends {
     private sealed class ChamferIntersection : Entry {
         public override SdfBlendHaloAction Halo => SdfBlendHaloAction.None;
         public override SdfBlendLipschitzAction Lipschitz => SdfBlendLipschitzAction.Chamfer;
-        public override SdfShaderAction Shader => new(Code: "result = max(max(current, candidate), ((current + candidate + chamfer) * SDF_SQRT_HALF)); break;", Operands: SdfShaderOperands.None);
+        public override SdfFormula Formula => SdfFieldFormulas.ChamferIntersection;
+        public override SdfShaderAction Shader => SdfShaderAction.Of(Formula);
         public override SdfShaderAction MaterialShader => FartherMaterial;
         public override SdfCullBoundAction CullBound => SdfCullBoundAction.Disable;
         public override SdfCullGuardAction CullGuard => SdfCullGuardAction.Disable;
         public override SdfPopAdmissionAction PopAdmission => SdfPopAdmissionAction.Radius;
         public override SdfBlendDistanceGainAction BlendDistanceGain => SdfBlendDistanceGainAction.Uncertified;
-        public override SdfPointBlendAction PointBlend => SdfPointBlendAction.ChamferIntersection;
         public override SdfMaterialWinnerAction MaterialWinner => SdfMaterialWinnerAction.Farther;
         public override SdfIntervalBlendAction IntervalBlend => SdfIntervalBlendAction.ChamferIntersection;
         public override SdfBlendGrowthAction BlendGrowth => SdfBlendGrowthAction.None;
@@ -237,13 +238,13 @@ public static partial class SdfFieldBlends {
     private sealed class ChamferSubtraction : Entry {
         public override SdfBlendHaloAction Halo => SdfBlendHaloAction.Radius;
         public override SdfBlendLipschitzAction Lipschitz => SdfBlendLipschitzAction.Chamfer;
-        public override SdfShaderAction Shader => new(Code: "result = max(max(current, -candidate), ((current - candidate + chamfer) * SDF_SQRT_HALF)); break;", Operands: SdfShaderOperands.None);
+        public override SdfFormula Formula => SdfFieldFormulas.ChamferSubtraction;
+        public override SdfShaderAction Shader => SdfShaderAction.Of(Formula);
         public override SdfShaderAction MaterialShader => CutMaterial;
         public override SdfCullBoundAction CullBound => SdfCullBoundAction.Disable;
         public override SdfCullGuardAction CullGuard => SdfCullGuardAction.Disable;
         public override SdfPopAdmissionAction PopAdmission => SdfPopAdmissionAction.Radius;
         public override SdfBlendDistanceGainAction BlendDistanceGain => SdfBlendDistanceGainAction.Uncertified;
-        public override SdfPointBlendAction PointBlend => SdfPointBlendAction.ChamferSubtraction;
         public override SdfMaterialWinnerAction MaterialWinner => SdfMaterialWinnerAction.Cut;
         public override SdfIntervalBlendAction IntervalBlend => SdfIntervalBlendAction.ChamferSubtraction;
         public override SdfBlendGrowthAction BlendGrowth => SdfBlendGrowthAction.None;
@@ -259,13 +260,13 @@ public static partial class SdfFieldBlends {
     private sealed class GrooveUnion : Entry {
         public override SdfBlendHaloAction Halo => SdfBlendHaloAction.Radius;
         public override SdfBlendLipschitzAction Lipschitz => SdfBlendLipschitzAction.RoundSeam;
-        public override SdfShaderAction Shader => new(Code: "result = max(min(current, candidate), chamfer - length(float2(current, candidate))); break;", Operands: SdfShaderOperands.None);
+        public override SdfFormula Formula => SdfFieldFormulas.GrooveUnion;
+        public override SdfShaderAction Shader => SdfShaderAction.Of(Formula);
         public override SdfShaderAction MaterialShader => NearerMaterial;
         public override SdfCullBoundAction CullBound => SdfCullBoundAction.Disable;
         public override SdfCullGuardAction CullGuard => SdfCullGuardAction.Disable;
         public override SdfPopAdmissionAction PopAdmission => SdfPopAdmissionAction.Radius;
         public override SdfBlendDistanceGainAction BlendDistanceGain => SdfBlendDistanceGainAction.Uncertified;
-        public override SdfPointBlendAction PointBlend => SdfPointBlendAction.GrooveUnion;
         public override SdfMaterialWinnerAction MaterialWinner => SdfMaterialWinnerAction.Nearer;
         public override SdfIntervalBlendAction IntervalBlend => SdfIntervalBlendAction.GrooveUnion;
         public override SdfBlendGrowthAction BlendGrowth => SdfBlendGrowthAction.None;
@@ -281,13 +282,13 @@ public static partial class SdfFieldBlends {
     private sealed class PipeUnion : Entry {
         public override SdfBlendHaloAction Halo => SdfBlendHaloAction.Pipe;
         public override SdfBlendLipschitzAction Lipschitz => SdfBlendLipschitzAction.RoundSeam;
-        public override SdfShaderAction Shader => new(Code: "result = min(min(current, candidate), length(float2(current, candidate)) - chamfer); break;", Operands: SdfShaderOperands.None);
+        public override SdfFormula Formula => SdfFieldFormulas.PipeUnion;
+        public override SdfShaderAction Shader => SdfShaderAction.Of(Formula);
         public override SdfShaderAction MaterialShader => NearerMaterial;
         public override SdfCullBoundAction CullBound => SdfCullBoundAction.Disable;
         public override SdfCullGuardAction CullGuard => SdfCullGuardAction.Disable;
         public override SdfPopAdmissionAction PopAdmission => SdfPopAdmissionAction.Radius;
         public override SdfBlendDistanceGainAction BlendDistanceGain => SdfBlendDistanceGainAction.Uncertified;
-        public override SdfPointBlendAction PointBlend => SdfPointBlendAction.PipeUnion;
         public override SdfMaterialWinnerAction MaterialWinner => SdfMaterialWinnerAction.Nearer;
         public override SdfIntervalBlendAction IntervalBlend => SdfIntervalBlendAction.PipeUnion;
         public override SdfBlendGrowthAction BlendGrowth => SdfBlendGrowthAction.Radius;
@@ -304,13 +305,13 @@ public static partial class SdfFieldBlends {
     private sealed class Morph : Entry {
         public override SdfBlendHaloAction Halo => SdfBlendHaloAction.None;
         public override SdfBlendLipschitzAction Lipschitz => SdfBlendLipschitzAction.Maximum;
-        public override SdfShaderAction Shader => new(Code: "result = min(current, candidate); break;", Operands: SdfShaderOperands.None);
+        public override SdfFormula Formula => SdfFieldFormulas.Union;
+        public override SdfShaderAction Shader => SdfShaderAction.Of(Formula);
         public override SdfShaderAction MaterialShader => NearerMaterial;
         public override SdfCullBoundAction CullBound => SdfCullBoundAction.Disable;
         public override SdfCullGuardAction CullGuard => SdfCullGuardAction.Disable;
         public override SdfPopAdmissionAction PopAdmission => SdfPopAdmissionAction.Morph;
         public override SdfBlendDistanceGainAction BlendDistanceGain => SdfBlendDistanceGainAction.Uncertified;
-        public override SdfPointBlendAction PointBlend => SdfPointBlendAction.Union;
         public override SdfMaterialWinnerAction MaterialWinner => SdfMaterialWinnerAction.Nearer;
         public override SdfIntervalBlendAction IntervalBlend => SdfIntervalBlendAction.Union;
         public override SdfBlendGrowthAction BlendGrowth => SdfBlendGrowthAction.None;
@@ -326,13 +327,13 @@ public static partial class SdfFieldBlends {
     private sealed class GrooveSubtraction : Entry {
         public override SdfBlendHaloAction Halo => SdfBlendHaloAction.Radius;
         public override SdfBlendLipschitzAction Lipschitz => SdfBlendLipschitzAction.RoundSeam;
-        public override SdfShaderAction Shader => new(Code: "result = max(max(current, -candidate), chamfer - length(float2(current, candidate))); break;", Operands: SdfShaderOperands.None);
+        public override SdfFormula Formula => SdfFieldFormulas.GrooveSubtraction;
+        public override SdfShaderAction Shader => SdfShaderAction.Of(Formula);
         public override SdfShaderAction MaterialShader => CutMaterial;
         public override SdfCullBoundAction CullBound => SdfCullBoundAction.Disable;
         public override SdfCullGuardAction CullGuard => SdfCullGuardAction.Disable;
         public override SdfPopAdmissionAction PopAdmission => SdfPopAdmissionAction.Radius;
         public override SdfBlendDistanceGainAction BlendDistanceGain => SdfBlendDistanceGainAction.Uncertified;
-        public override SdfPointBlendAction PointBlend => SdfPointBlendAction.GrooveSubtraction;
         public override SdfMaterialWinnerAction MaterialWinner => SdfMaterialWinnerAction.Cut;
         public override SdfIntervalBlendAction IntervalBlend => SdfIntervalBlendAction.GrooveSubtraction;
         public override SdfBlendGrowthAction BlendGrowth => SdfBlendGrowthAction.None;
@@ -348,13 +349,13 @@ public static partial class SdfFieldBlends {
     private sealed class PipeSubtraction : Entry {
         public override SdfBlendHaloAction Halo => SdfBlendHaloAction.Pipe;
         public override SdfBlendLipschitzAction Lipschitz => SdfBlendLipschitzAction.RoundSeam;
-        public override SdfShaderAction Shader => new(Code: "result = min(max(current, -candidate), length(float2(current, candidate)) - chamfer); break;", Operands: SdfShaderOperands.None);
+        public override SdfFormula Formula => SdfFieldFormulas.PipeSubtraction;
+        public override SdfShaderAction Shader => SdfShaderAction.Of(Formula);
         public override SdfShaderAction MaterialShader => CutMaterial;
         public override SdfCullBoundAction CullBound => SdfCullBoundAction.Disable;
         public override SdfCullGuardAction CullGuard => SdfCullGuardAction.Disable;
         public override SdfPopAdmissionAction PopAdmission => SdfPopAdmissionAction.Radius;
         public override SdfBlendDistanceGainAction BlendDistanceGain => SdfBlendDistanceGainAction.Uncertified;
-        public override SdfPointBlendAction PointBlend => SdfPointBlendAction.PipeSubtraction;
         public override SdfMaterialWinnerAction MaterialWinner => SdfMaterialWinnerAction.Cut;
         public override SdfIntervalBlendAction IntervalBlend => SdfIntervalBlendAction.PipeSubtraction;
         public override SdfBlendGrowthAction BlendGrowth => SdfBlendGrowthAction.Radius;
@@ -370,13 +371,13 @@ public static partial class SdfFieldBlends {
     private sealed class StairsUnion : Entry {
         public override SdfBlendHaloAction Halo => SdfBlendHaloAction.Radius;
         public override SdfBlendLipschitzAction Lipschitz => SdfBlendLipschitzAction.Maximum;
-        public override SdfShaderAction Shader => new(Code: "result = min(current, candidate); break;", Operands: SdfShaderOperands.None);
+        public override SdfFormula Formula => SdfFieldFormulas.Union;
+        public override SdfShaderAction Shader => SdfShaderAction.Of(Formula);
         public override SdfShaderAction MaterialShader => NearerMaterial;
         public override SdfCullBoundAction CullBound => SdfCullBoundAction.Disable;
         public override SdfCullGuardAction CullGuard => SdfCullGuardAction.Disable;
         public override SdfPopAdmissionAction PopAdmission => SdfPopAdmissionAction.Stairs;
         public override SdfBlendDistanceGainAction BlendDistanceGain => SdfBlendDistanceGainAction.Uncertified;
-        public override SdfPointBlendAction PointBlend => SdfPointBlendAction.Union;
         public override SdfMaterialWinnerAction MaterialWinner => SdfMaterialWinnerAction.Nearer;
         public override SdfIntervalBlendAction IntervalBlend => SdfIntervalBlendAction.Union;
         public override SdfBlendGrowthAction BlendGrowth => SdfBlendGrowthAction.Radius;
@@ -392,13 +393,13 @@ public static partial class SdfFieldBlends {
     private sealed class StairsSubtraction : Entry {
         public override SdfBlendHaloAction Halo => SdfBlendHaloAction.Radius;
         public override SdfBlendLipschitzAction Lipschitz => SdfBlendLipschitzAction.Maximum;
-        public override SdfShaderAction Shader => new(Code: "result = max(current, -candidate); break;", Operands: SdfShaderOperands.None);
+        public override SdfFormula Formula => SdfFieldFormulas.Subtraction;
+        public override SdfShaderAction Shader => SdfShaderAction.Of(Formula);
         public override SdfShaderAction MaterialShader => NearerMaterial;
         public override SdfCullBoundAction CullBound => SdfCullBoundAction.Disable;
         public override SdfCullGuardAction CullGuard => SdfCullGuardAction.Disable;
         public override SdfPopAdmissionAction PopAdmission => SdfPopAdmissionAction.Stairs;
         public override SdfBlendDistanceGainAction BlendDistanceGain => SdfBlendDistanceGainAction.Uncertified;
-        public override SdfPointBlendAction PointBlend => SdfPointBlendAction.Union;
         public override SdfMaterialWinnerAction MaterialWinner => SdfMaterialWinnerAction.Cut;
         public override SdfIntervalBlendAction IntervalBlend => SdfIntervalBlendAction.Union;
         public override SdfBlendGrowthAction BlendGrowth => SdfBlendGrowthAction.None;

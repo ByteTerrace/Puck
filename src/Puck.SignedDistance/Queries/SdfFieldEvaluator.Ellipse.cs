@@ -15,24 +15,6 @@ public sealed partial class SdfFieldEvaluator {
     // answers.
     private static readonly FixedQ4816 EllipseBoundCentre = FixedQ4816.FromInteger(value: 65536);
 
-    // An ellipse lifted from 2D (KEEP IN SYNC with sdfEllipseSolid in field/sdf-shapes.hlsli): extruded along Z to
-    // ±liftAmount with its cap bevel, or revolved about Y at liftAmount, exactly as the other lifted profiles.
-    private static FixedQ4816 SdfEllipse(FixedVector3 p, FixedQ4816 semiX, FixedQ4816 semiY, FixedQ4816 liftAmount, FixedQ4816 lift, FixedQ4816 capChamfer) =>
-        ApplyLift(
-            capChamfer: capChamfer,
-            distance2D: SdfEllipse2D(
-                p: ProjectLiftPoint(
-                    lift: lift,
-                    liftAmount: liftAmount,
-                    p: p
-                ),
-                semiX: semiX,
-                semiY: semiY
-            ),
-            lift: lift,
-            liftAmount: liftAmount,
-            p: p
-        );
     // The signed Euclidean distance from p to the ellipse of semi-axes (semiX, semiY), negative inside: Eberly's robust
     // projection, whose parameter is the one root of F(s) = (r·z0 / (s + r))² + (z1 / (s + 1))² − 1 on its bracket, bisected
     // to the format's resolution, so the answer is exact to Q48.16 and the same on every machine. The shader bisects the

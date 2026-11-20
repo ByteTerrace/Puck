@@ -829,7 +829,7 @@ public sealed partial class SdfProgram {
     /// Any finite instance sphere would clip authored geometry even though the segment-level bound correctly declines
     /// to bound the shape.</para>
     /// <para>The intersection blends. Every other blend family, evaluated against a candidate far beyond the accumulator,
-    /// returns the accumulator: <c>min(a, b) = a</c>, <c>max(a, -b) = a</c>, <c>blendSmoothUnion</c> is far-exact by
+    /// returns the accumulator: <c>min(a, b) = a</c>, <c>max(a, -b) = a</c>, <c>sdfBlendSmoothMinimum</c> is far-exact by
     /// construction, and the chamfer union/subtraction bevel planes fall away. So dropping a masked-out instance is exactly
     /// evaluating it. The intersection family inverts that — <c>max(a, b) = b</c> — so a masked-out intersection instance
     /// does not vanish, it replaces the field with its own candidate: for example, with a floor at 0.001 and the
@@ -1007,7 +1007,7 @@ public sealed partial class SdfProgram {
     // (Data1.Y = mode, matching SdfLift / the shader's `data1.y > 0.5`; Data0.W = the lift amount). EXTRUDE sweeps the
     // 2D disc ±half-height along Z ⇒ √(r² + h²); REVOLVE offsets the disc by o then lathes it ⇒ the whole solid lies
     // within (o + r) of the axis-centred origin (see the enclose bound derivation). Both are exact conservative bounds
-    // (KEEP IN SYNC with sdfExtrude2D/sdfRevolve2D in Assets/Shaders/Sdf/field/sdf-shapes.hlsli).
+    // (KEEP IN SYNC with the lift in SdfFieldFormulas: SdfExtrudeChamfer2D and SdfRevolve2D).
     // radius2D is read off the packed (already rounding-inset) Data0 lanes, so adding the rounding back — the same
     // offset the kernel applies — reproduces the authored extent exactly and can never exceed it.
     private static float LiftedBoundRadius(float radius2D, in SdfInstruction instruction) {
@@ -1109,7 +1109,7 @@ public sealed partial class SdfProgram {
     /// intersection family is deliberately absent: those instances are unmaskable, so no halo is computed for them
     /// (HasUnmaskableInfluence).
     /// <para>The margin is not simply the blend radius for every family. Neutrality for a far candidate b >= a is:</para>
-    /// <para>SmoothUnion / SmoothSubtraction — <c>b >= a + k</c> saturates <c>blendSmoothUnion</c>'s far endpoint, which
+    /// <para>SmoothUnion / SmoothSubtraction — <c>b >= a + k</c> saturates <c>sdfBlendSmoothMinimum</c>'s far endpoint, which
     /// is bit-exact by construction. A chain of N smooth unions of radius k approaches sag k monotonically from below and
     /// never exceeds it, so <c>max(k)</c> really is the supremum, not a coincidence. Margin = k.</para>
     /// <para>ChamferSubtraction — <c>max(max(a, -b), (a - b + c)/sqrt(2))</c>. Both alternatives fall away for b >= c.

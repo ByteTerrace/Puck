@@ -23,6 +23,10 @@ public enum SdfShaderOperands {
 public readonly record struct SdfShaderAction(string? Code, SdfShaderOperands Operands) {
     /// <summary>The reader does not admit this entry.</summary>
     public static SdfShaderAction Unavailable => new(Code: null, Operands: SdfShaderOperands.None);
+
+    // The arm that calls a shared formula's generated function with the entry's operands.
+    internal static SdfShaderAction Of(SdfFormula formula) =>
+        new(Code: $"result = {formula.Dispatch(shader: true)}; break;", Operands: SdfShaderOperands.None);
 }
 
 /// <summary>Inputs outside the instruction's own data vectors that a field entry reads.</summary>

@@ -48,7 +48,8 @@ preferred outcome.
 |---|---|---|
 | Determinism: same document and input, bit-identical state | `puck test --reproduce`; fixed-point `Puck.Maths` types in simulation state | No |
 | The C# and HLSL shader interface: bindings, block layout, strides | One `ShaderInterface` generates both sides; `ShaderInterfaceLayout.Mismatch` refuses a module that disagrees | No |
-| The SDF ISA's C# encoder and HLSL decoder (`SdfProgram.IsaLayout`, the SdfVm README's contract pairs) | Convention | Yes |
+| The SDF field's C# and HLSL readers: dispatch over every op, shape, blend and relief row, and the arithmetic of every shape and blend with a shared formula (`SdfFieldFormulas`) | One catalogue entry per member generates both dispatches, and one formula lowers to both readers ([sync pairs](../../.claude/skills/rendering/references/sync-pairs.md#instruction-semantics-shared-by-both-interpreters)); `puck shaders generate --check` and `SdfIsaFingerprint.Field` refuse drift | No |
+| The SDF ISA's hand-written halves: the program's packed layout and its HLSL decoders (`SdfProgram.IsaLayout`, the SdfVm README's contract pairs), and the target-escape shapes' C# and HLSL readers (`ConvexPolygon`, `Path`, `Sweep`, the ellipse's projection core) | Convention; `SdfFieldDeviceLawTests` samples agreement | Yes |
 | An exactness-preserving skip in an exact evaluator: a cull, certificate or bound that claims a skipped part could not change the answer (`SdfFieldEvaluator`'s segment hierarchy and relief certificates) | Counterexample tests at the arithmetic edges (overflow, seeds, ties); sampled agreement with a reference evaluator misses them | Yes |
 | [A reference read after its replacement](#a-reference-captured-across-a-replacement) | `STALE001`-`003` | No |
 | GPU fences and resource lifetimes: a buffer retired, reused or resized while a queue still reads it | Review | Yes |

@@ -706,7 +706,7 @@ the former lifted skin sample). Snapped pose keys and form reuse (`SdfMeshGeomet
 and the swing bounds (`ShapeSwingDocument.MaxAmplitude`). Crease and material
 copies (`SdfMeshMaterialCut`), planar merge (`SdfMeshPlanarMerge`), collapse
 (`SdfMeshCollapse.Levels`) and the store codec (`SdfMeshStoreCodec`). The smooth
-blend's factor (`blendSmoothUnion` in `field/sdf-blend.hlsli`) and the CPU
+blend's factor (`sdfBlendSmoothMinimum`, a shared formula in `SdfFieldFormulas`) and the CPU
 evaluator's render reading (`SdfFieldEvaluator`). The surface pass's layer
 frame (`sdfMeshSurfaceNormal`, `sdfLayerFrame`). The decision that the frame
 walks no field ([rendering decisions](../decisions/rendering.md)).

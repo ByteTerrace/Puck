@@ -16,6 +16,7 @@ public static class SdfFieldHlsl {
         new ShaderDeclaration(Path: Directory + "sdf-field-shape-formulas.hlsli", Generate: () => Banner + SdfFieldShapes.GenerateFormulasHlsl()),
         Dispatch("relief-shapes", "SDF_SHAPE", SdfFieldShapes.ReliefShaderActions),
         Dispatch("blends", "SDF_BLEND", SdfFieldBlends.ShaderActions),
+        new ShaderDeclaration(Path: Directory + "sdf-field-blend-formulas.hlsli", Generate: () => Banner + SdfFieldBlends.GenerateFormulasHlsl()),
         Dispatch("material", "SDF_BLEND", SdfFieldBlends.MaterialShaderActions),
         Dispatch("relief-rows", "SDF_RELIEF_ROW_KIND", SdfFieldReliefRows.ShaderActions),
         new ShaderDeclaration(Path: Directory + "sdf-field-operands.hlsli", Generate: EmitOperands),

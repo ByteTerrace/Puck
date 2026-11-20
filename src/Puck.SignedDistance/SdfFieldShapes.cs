@@ -7,6 +7,9 @@ public static partial class SdfFieldShapes {
         public abstract SdfOperandLanes Reinterpreted { get; }
         public abstract SdfPartShapeAction PartShape { get; }
         public abstract SdfShaderAction Shader { get; }
+        // The shared formula both point readers lower (SdfFieldFormulas), with Shader its SdfShaderAction.Of and ShapePoint
+        // Formula; null marks a target escape (a side table, a texture, a loop, or no CPU reader), whose Shader and
+        // ShapePoint name hand-written readers that SdfFieldDeviceLawTests witnesses.
         public abstract SdfFormula? Formula { get; }
         public abstract bool ReliefRegion { get; }
         public abstract SdfShaderAction ReliefShader { get; }
@@ -24,20 +27,17 @@ public static partial class SdfFieldShapes {
     /// <summary>Returns the external field inputs this entry needs.</summary>
     public static SdfFieldResource ResourcesOf(SdfShapeType value) => GetResourcesOf(value: value);
 
-    private static SdfShaderAction FormulaShader(SdfFormula formula) =>
-        new(Code: $"result = {formula.Dispatch(shader: true)}; break;", Operands: SdfShaderOperands.None);
-
     // Data0 = (halfX, halfY, halfZ, roundingRadius)
     [SdfFieldEntry(0)]
     private sealed class Box : Entry {
-        public override SdfFormula? Formula => null;
+        public override SdfFormula? Formula => SdfFieldFormulas.Box;
         public override SdfPartShapeAction PartShape => SdfPartShapeAction.Inline;
         public override SdfOperandLanes Reinterpreted => SdfOperandLanes.None;
-        public override SdfShaderAction Shader => new(Code: "result = sdfBox(p, data0.xyz, data0.w); break;", Operands: SdfShaderOperands.None);
+        public override SdfShaderAction Shader => SdfShaderAction.Of(Formula!);
         public override bool ReliefRegion => true;
         public override SdfShaderAction ReliefShader => Shader;
         public override SdfCertificateAction Certificate => SdfCertificateAction.Box;
-        public override SdfShapePointAction ShapePoint => SdfShapePointAction.Box;
+        public override SdfShapePointAction ShapePoint => SdfShapePointAction.Formula;
         public override SdfShapeIntervalAction ShapeInterval => SdfShapeIntervalAction.Box;
         public override SdfProfileIntervalAction ProfileInterval => SdfProfileIntervalAction.Unsupported;
         public override SdfShapeAdmissionAction ShapeAdmission => SdfShapeAdmissionAction.Box;
@@ -53,11 +53,11 @@ public static partial class SdfFieldShapes {
         public override SdfFormula? Formula => SdfFieldFormulas.Capsule;
         public override SdfPartShapeAction PartShape => SdfPartShapeAction.Inline;
         public override SdfOperandLanes Reinterpreted => SdfOperandLanes.None;
-        public override SdfShaderAction Shader => FormulaShader(Formula!);
+        public override SdfShaderAction Shader => SdfShaderAction.Of(Formula!);
         public override bool ReliefRegion => true;
         public override SdfShaderAction ReliefShader => Shader;
         public override SdfCertificateAction Certificate => SdfCertificateAction.Capsule;
-        public override SdfShapePointAction ShapePoint => SdfShapePointAction.Capsule;
+        public override SdfShapePointAction ShapePoint => SdfShapePointAction.Formula;
         public override SdfShapeIntervalAction ShapeInterval => SdfShapeIntervalAction.Capsule;
         public override SdfProfileIntervalAction ProfileInterval => SdfProfileIntervalAction.Unsupported;
         public override SdfShapeAdmissionAction ShapeAdmission => SdfShapeAdmissionAction.Capsule;
@@ -70,14 +70,14 @@ public static partial class SdfFieldShapes {
     // Data0.x = radius
     [SdfFieldEntry(2)]
     private sealed class Sphere : Entry {
-        public override SdfFormula? Formula => null;
+        public override SdfFormula? Formula => SdfFieldFormulas.Sphere;
         public override SdfPartShapeAction PartShape => SdfPartShapeAction.Inline;
         public override SdfOperandLanes Reinterpreted => SdfOperandLanes.None;
-        public override SdfShaderAction Shader => new(Code: "result = sdfSphere(p, data0.x); break;", Operands: SdfShaderOperands.None);
+        public override SdfShaderAction Shader => SdfShaderAction.Of(Formula!);
         public override bool ReliefRegion => false;
         public override SdfShaderAction ReliefShader => SdfShaderAction.Unavailable;
         public override SdfCertificateAction Certificate => SdfCertificateAction.Sphere;
-        public override SdfShapePointAction ShapePoint => SdfShapePointAction.Sphere;
+        public override SdfShapePointAction ShapePoint => SdfShapePointAction.Formula;
         public override SdfShapeIntervalAction ShapeInterval => SdfShapeIntervalAction.Sphere;
         public override SdfProfileIntervalAction ProfileInterval => SdfProfileIntervalAction.Unsupported;
         public override SdfShapeAdmissionAction ShapeAdmission => SdfShapeAdmissionAction.Sphere;
@@ -90,14 +90,14 @@ public static partial class SdfFieldShapes {
     // Data0 = (majorRadius, minorRadius, _, _)
     [SdfFieldEntry(3)]
     private sealed class Torus : Entry {
-        public override SdfFormula? Formula => null;
+        public override SdfFormula? Formula => SdfFieldFormulas.Torus;
         public override SdfPartShapeAction PartShape => SdfPartShapeAction.Inline;
         public override SdfOperandLanes Reinterpreted => SdfOperandLanes.None;
-        public override SdfShaderAction Shader => new(Code: "result = sdfTorus(p, data0.x, data0.y); break;", Operands: SdfShaderOperands.None);
+        public override SdfShaderAction Shader => SdfShaderAction.Of(Formula!);
         public override bool ReliefRegion => false;
         public override SdfShaderAction ReliefShader => SdfShaderAction.Unavailable;
         public override SdfCertificateAction Certificate => SdfCertificateAction.Torus;
-        public override SdfShapePointAction ShapePoint => SdfShapePointAction.Torus;
+        public override SdfShapePointAction ShapePoint => SdfShapePointAction.Formula;
         public override SdfShapeIntervalAction ShapeInterval => SdfShapeIntervalAction.Torus;
         public override SdfProfileIntervalAction ProfileInterval => SdfProfileIntervalAction.Unsupported;
         public override SdfShapeAdmissionAction ShapeAdmission => SdfShapeAdmissionAction.Torus;
@@ -110,14 +110,14 @@ public static partial class SdfFieldShapes {
     // Data0 = (radius, halfHeight, _, _) inset by Data1.w, Data1.w = edge-rounding radius; upright, centered on the local origin
     [SdfFieldEntry(4)]
     private sealed class Cylinder : Entry {
-        public override SdfFormula? Formula => null;
+        public override SdfFormula? Formula => SdfFieldFormulas.Cylinder;
         public override SdfPartShapeAction PartShape => SdfPartShapeAction.Inline;
         public override SdfOperandLanes Reinterpreted => SdfOperandLanes.None;
-        public override SdfShaderAction Shader => new(Code: "result = (sdfCylinder(p, data0.x, data0.y) - data1.w); break;", Operands: SdfShaderOperands.None);
+        public override SdfShaderAction Shader => SdfShaderAction.Of(Formula!);
         public override bool ReliefRegion => false;
         public override SdfShaderAction ReliefShader => SdfShaderAction.Unavailable;
         public override SdfCertificateAction Certificate => SdfCertificateAction.Cylinder;
-        public override SdfShapePointAction ShapePoint => SdfShapePointAction.Cylinder;
+        public override SdfShapePointAction ShapePoint => SdfShapePointAction.Formula;
         public override SdfShapeIntervalAction ShapeInterval => SdfShapeIntervalAction.Cylinder;
         public override SdfProfileIntervalAction ProfileInterval => SdfProfileIntervalAction.Unsupported;
         public override SdfShapeAdmissionAction ShapeAdmission => SdfShapeAdmissionAction.Cylinder;
@@ -130,14 +130,14 @@ public static partial class SdfFieldShapes {
     // Data0 = (normalX, normalY, normalZ, offset)
     [SdfFieldEntry(5)]
     private sealed class Plane : Entry {
-        public override SdfFormula? Formula => null;
+        public override SdfFormula? Formula => SdfFieldFormulas.Plane;
         public override SdfPartShapeAction PartShape => SdfPartShapeAction.Inline;
         public override SdfOperandLanes Reinterpreted => SdfOperandLanes.None;
-        public override SdfShaderAction Shader => new(Code: "result = sdfPlane(p, data0.xyz, data0.w); break;", Operands: SdfShaderOperands.None);
+        public override SdfShaderAction Shader => SdfShaderAction.Of(Formula!);
         public override bool ReliefRegion => true;
         public override SdfShaderAction ReliefShader => Shader;
         public override SdfCertificateAction Certificate => SdfCertificateAction.Unavailable;
-        public override SdfShapePointAction ShapePoint => SdfShapePointAction.Plane;
+        public override SdfShapePointAction ShapePoint => SdfShapePointAction.Formula;
         public override SdfShapeIntervalAction ShapeInterval => SdfShapeIntervalAction.Plane;
         public override SdfProfileIntervalAction ProfileInterval => SdfProfileIntervalAction.Unsupported;
         public override SdfShapeAdmissionAction ShapeAdmission => SdfShapeAdmissionAction.Plane;
@@ -150,14 +150,14 @@ public static partial class SdfFieldShapes {
     // Data0 = (radius, halfSeparation, halfHeight[baked √(r²−d²)], _); exact 2D vesica revolved to a lens (d < r)
     [SdfFieldEntry(6)]
     private sealed class Vesica : Entry {
-        public override SdfFormula? Formula => null;
+        public override SdfFormula? Formula => SdfFieldFormulas.Vesica;
         public override SdfPartShapeAction PartShape => SdfPartShapeAction.Inline;
         public override SdfOperandLanes Reinterpreted => SdfOperandLanes.None;
-        public override SdfShaderAction Shader => new(Code: "result = sdfVesica(p, data0.x, data0.y, data0.z); break;", Operands: SdfShaderOperands.None);
+        public override SdfShaderAction Shader => SdfShaderAction.Of(Formula!);
         public override bool ReliefRegion => false;
         public override SdfShaderAction ReliefShader => SdfShaderAction.Unavailable;
         public override SdfCertificateAction Certificate => SdfCertificateAction.Unavailable;
-        public override SdfShapePointAction ShapePoint => SdfShapePointAction.Vesica;
+        public override SdfShapePointAction ShapePoint => SdfShapePointAction.Formula;
         public override SdfShapeIntervalAction ShapeInterval => SdfShapeIntervalAction.Vesica;
         public override SdfProfileIntervalAction ProfileInterval => SdfProfileIntervalAction.Unsupported;
         public override SdfShapeAdmissionAction ShapeAdmission => SdfShapeAdmissionAction.Vesica;
@@ -181,14 +181,14 @@ public static partial class SdfFieldShapes {
     // Data0 = (halfX, halfY, cornerRadius, lift), Data1.z = cap chamfer; exact rounded-box 2D SDF
     [SdfFieldEntry(7)]
     private sealed class RoundedRectangle : Entry {
-        public override SdfFormula? Formula => null;
+        public override SdfFormula? Formula => SdfFieldFormulas.RoundedRectangle;
         public override SdfPartShapeAction PartShape => SdfPartShapeAction.Inline;
         public override SdfOperandLanes Reinterpreted => SdfOperandLanes.None;
-        public override SdfShaderAction Shader => new(Code: "result = sdfRoundedRect(p, data0, data1); break;", Operands: SdfShaderOperands.None);
+        public override SdfShaderAction Shader => SdfShaderAction.Of(Formula!);
         public override bool ReliefRegion => false;
         public override SdfShaderAction ReliefShader => SdfShaderAction.Unavailable;
         public override SdfCertificateAction Certificate => SdfCertificateAction.Unavailable;
-        public override SdfShapePointAction ShapePoint => SdfShapePointAction.RoundedRectangle;
+        public override SdfShapePointAction ShapePoint => SdfShapePointAction.Formula;
         public override SdfShapeIntervalAction ShapeInterval => SdfShapeIntervalAction.LiftedWithCap;
         public override SdfProfileIntervalAction ProfileInterval => SdfProfileIntervalAction.RoundedRectangle;
         public override SdfShapeAdmissionAction ShapeAdmission => SdfShapeAdmissionAction.Rectangle;
@@ -241,14 +241,14 @@ public static partial class SdfFieldShapes {
     // Data0 = (lowerRadius, upperRadius, height, _)
     [SdfFieldEntry(10)]
     private sealed class RoundCone : Entry {
-        public override SdfFormula? Formula => null;
+        public override SdfFormula? Formula => SdfFieldFormulas.RoundCone;
         public override SdfPartShapeAction PartShape => SdfPartShapeAction.Inline;
         public override SdfOperandLanes Reinterpreted => SdfOperandLanes.None;
-        public override SdfShaderAction Shader => new(Code: "result = sdfRoundCone(p, data0.x, data0.y, data0.z, data0.w, data1.y); break;", Operands: SdfShaderOperands.None);
+        public override SdfShaderAction Shader => SdfShaderAction.Of(Formula!);
         public override bool ReliefRegion => false;
         public override SdfShaderAction ReliefShader => SdfShaderAction.Unavailable;
         public override SdfCertificateAction Certificate => SdfCertificateAction.Unavailable;
-        public override SdfShapePointAction ShapePoint => SdfShapePointAction.RoundCone;
+        public override SdfShapePointAction ShapePoint => SdfShapePointAction.Formula;
         public override SdfShapeIntervalAction ShapeInterval => SdfShapeIntervalAction.RoundCone;
         public override SdfProfileIntervalAction ProfileInterval => SdfProfileIntervalAction.Unsupported;
         public override SdfShapeAdmissionAction ShapeAdmission => SdfShapeAdmissionAction.RoundCone;
@@ -261,14 +261,14 @@ public static partial class SdfFieldShapes {
     // Data0 = (bottomHalfWidth r1, topHalfWidth r2, halfHeight, lift), Data1.z = cap chamfer; exact isosceles-trapezoid 2D SDF
     [SdfFieldEntry(11)]
     private sealed class Trapezoid : Entry {
-        public override SdfFormula? Formula => null;
+        public override SdfFormula? Formula => SdfFieldFormulas.Trapezoid;
         public override SdfPartShapeAction PartShape => SdfPartShapeAction.Inline;
         public override SdfOperandLanes Reinterpreted => SdfOperandLanes.None;
-        public override SdfShaderAction Shader => new(Code: "result = sdfTrapezoidSolid(p, data0, data1); break;", Operands: SdfShaderOperands.None);
+        public override SdfShaderAction Shader => SdfShaderAction.Of(Formula!);
         public override bool ReliefRegion => false;
         public override SdfShaderAction ReliefShader => SdfShaderAction.Unavailable;
         public override SdfCertificateAction Certificate => SdfCertificateAction.Trapezoid;
-        public override SdfShapePointAction ShapePoint => SdfShapePointAction.Trapezoid;
+        public override SdfShapePointAction ShapePoint => SdfShapePointAction.Formula;
         public override SdfShapeIntervalAction ShapeInterval => SdfShapeIntervalAction.Trapezoid;
         public override SdfProfileIntervalAction ProfileInterval => SdfProfileIntervalAction.Trapezoid;
         public override SdfShapeAdmissionAction ShapeAdmission => SdfShapeAdmissionAction.Trapezoid;
@@ -281,14 +281,14 @@ public static partial class SdfFieldShapes {
     // Data0 = (semiX, semiY, _, lift), Data1.z = cap chamfer; exact ellipse 2D SDF (revolve→spheroid, extrude→elliptic prism)
     [SdfFieldEntry(12)]
     private sealed class Ellipse : Entry {
-        public override SdfFormula? Formula => null;
+        public override SdfFormula? Formula => SdfFieldFormulas.Ellipse;
         public override SdfPartShapeAction PartShape => SdfPartShapeAction.Inline;
         public override SdfOperandLanes Reinterpreted => SdfOperandLanes.None;
-        public override SdfShaderAction Shader => new(Code: "result = sdfEllipseSolid(p, data0, data1); break;", Operands: SdfShaderOperands.None);
+        public override SdfShaderAction Shader => SdfShaderAction.Of(Formula!);
         public override bool ReliefRegion => false;
         public override SdfShaderAction ReliefShader => SdfShaderAction.Unavailable;
         public override SdfCertificateAction Certificate => SdfCertificateAction.Unavailable;
-        public override SdfShapePointAction ShapePoint => SdfShapePointAction.Ellipse;
+        public override SdfShapePointAction ShapePoint => SdfShapePointAction.Formula;
         public override SdfShapeIntervalAction ShapeInterval => SdfShapeIntervalAction.LiftedWithCap;
         public override SdfProfileIntervalAction ProfileInterval => SdfProfileIntervalAction.Ellipse;
         public override SdfShapeAdmissionAction ShapeAdmission => SdfShapeAdmissionAction.Ellipse;
@@ -301,14 +301,14 @@ public static partial class SdfFieldShapes {
     // Data0 = (halfX, halfY, halfZ, roundingRadius)
     [SdfFieldEntry(13)]
     private sealed class ScreenSlab : Entry {
-        public override SdfFormula? Formula => null;
+        public override SdfFormula? Formula => SdfFieldFormulas.Box;
         public override SdfPartShapeAction PartShape => SdfPartShapeAction.Inline;
         public override SdfOperandLanes Reinterpreted => SdfOperandLanes.None;
-        public override SdfShaderAction Shader => new(Code: "result = sdfBox(p, data0.xyz, data0.w); break;", Operands: SdfShaderOperands.None);
+        public override SdfShaderAction Shader => SdfShaderAction.Of(Formula!);
         public override bool ReliefRegion => false;
         public override SdfShaderAction ReliefShader => SdfShaderAction.Unavailable;
         public override SdfCertificateAction Certificate => SdfCertificateAction.Box;
-        public override SdfShapePointAction ShapePoint => SdfShapePointAction.Box;
+        public override SdfShapePointAction ShapePoint => SdfShapePointAction.Formula;
         public override SdfShapeIntervalAction ShapeInterval => SdfShapeIntervalAction.Box;
         public override SdfProfileIntervalAction ProfileInterval => SdfProfileIntervalAction.Unsupported;
         public override SdfShapeAdmissionAction ShapeAdmission => SdfShapeAdmissionAction.Box;
@@ -391,14 +391,14 @@ public static partial class SdfFieldShapes {
     // blend); 1-Lipschitz (no AnalyzeLipschitz step clamp), like the rest of the family.
     [SdfFieldEntry(16)]
     private sealed class ChamferedRectangle : Entry {
-        public override SdfFormula? Formula => null;
+        public override SdfFormula? Formula => SdfFieldFormulas.ChamferedRectangle;
         public override SdfPartShapeAction PartShape => SdfPartShapeAction.Inline;
         public override SdfOperandLanes Reinterpreted => SdfOperandLanes.None;
-        public override SdfShaderAction Shader => new(Code: "result = sdfChamferedRect(p, data0, data1); break;", Operands: SdfShaderOperands.None);
+        public override SdfShaderAction Shader => SdfShaderAction.Of(Formula!);
         public override bool ReliefRegion => false;
         public override SdfShaderAction ReliefShader => SdfShaderAction.Unavailable;
         public override SdfCertificateAction Certificate => SdfCertificateAction.Unavailable;
-        public override SdfShapePointAction ShapePoint => SdfShapePointAction.ChamferedRectangle;
+        public override SdfShapePointAction ShapePoint => SdfShapePointAction.Formula;
         public override SdfShapeIntervalAction ShapeInterval => SdfShapeIntervalAction.ChamferedRectangle;
         public override SdfProfileIntervalAction ProfileInterval => SdfProfileIntervalAction.ChamferedRectangle;
         public override SdfShapeAdmissionAction ShapeAdmission => SdfShapeAdmissionAction.Rectangle;
@@ -419,11 +419,11 @@ public static partial class SdfFieldShapes {
         public override SdfFormula? Formula => SdfFieldFormulas.Superellipsoid;
         public override SdfPartShapeAction PartShape => SdfPartShapeAction.Inline;
         public override SdfOperandLanes Reinterpreted => SdfOperandLanes.None;
-        public override SdfShaderAction Shader => FormulaShader(Formula!);
+        public override SdfShaderAction Shader => SdfShaderAction.Of(Formula!);
         public override bool ReliefRegion => true;
         public override SdfShaderAction ReliefShader => Shader;
         public override SdfCertificateAction Certificate => SdfCertificateAction.Superellipsoid;
-        public override SdfShapePointAction ShapePoint => SdfShapePointAction.Superellipsoid;
+        public override SdfShapePointAction ShapePoint => SdfShapePointAction.Formula;
         public override SdfShapeIntervalAction ShapeInterval => SdfShapeIntervalAction.Superellipsoid;
         public override SdfProfileIntervalAction ProfileInterval => SdfProfileIntervalAction.Unsupported;
         public override SdfShapeAdmissionAction ShapeAdmission => SdfShapeAdmissionAction.Superellipsoid;

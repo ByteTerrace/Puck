@@ -1,33 +1,11 @@
 // The blends and the material winner that compose each shape's candidate into the running field.
 #ifndef FIELD_SDF_BLEND_HLSLI
 #define FIELD_SDF_BLEND_HLSLI
-// The polynomial smooth minimum every smooth blend derives from (smoothIntersection/smoothSubtraction are its
-// negations, so all three share one seam). BOTH saturated endpoints return their input TO THE BIT:
-//
-//  * FAR (b at least k beyond a): h clamps to exactly 1 and the endpoint returns a, including its zero sign. This lets a
-//    masked-out smooth-blended instance (dropped past its cull bound) return the accumulator identically to evaluating
-//    it, so a smooth instance can carry a FINITE, k-inflated bound instead of an unmaskable one (SdfProgram.PackInstances).
-//    The usual lerp(b, a, h) form leaves candidate + (current - candidate) here, ~1 LSB off.
-//  * NEAR (a at least k beyond b): h clamps to exactly 0, and the endpoint returns b. Without that select the
-//    expression is a + (b - a), which is NOT b when |a| >> |b| — and `a` is SDF_FAR_DISTANCE (1e9) for the first shape
-//    evaluated in a mapCore call. blendSmoothUnion(1e9, 5, 0.2) then returns 0 rather than 5, collapsing the whole field
-//    to a surface at the sample. Reachable whenever a segment's first shape carries SmoothUnion and every earlier
-//    segment was bound-skipped. The select costs one cndsel and makes "smooth-union with an empty accumulator" mean
-//    what it must: the shape itself.
-float blendSmoothUnion(float a, float b, float k) {
-    float h = clamp((0.5 + ((0.5 * (b - a)) / k)), 0.0, 1.0);
-    if (h <= 0.0) { return b; }
-    if (h >= 1.0) { return a; }
-    float blended = lerp(a, b, (1.0 - h));
-
-    return (blended - ((k * h) * (1.0 - h)));
-}
+// Each blend's arithmetic, smooth minimum and radius floor included, is a shared formula generated with its fixed-point
+// twin (Puck.SignedDistance's SdfFieldFormulas).
+#include "../isa/sdf-field-blend-formulas.hlsli"
 float blendShape(float current, float candidate, uint blendOp, float smoothRadius) {
     float result;
-    float smoothK = max(smoothRadius, SDF_SMOOTH_RADIUS_MIN);   // the SMOOTH arms' shared radius floor
-    // The CHAMFER arms clamp against 0.0, not SDF_SMOOTH_RADIUS_MIN: a zero bevel must be exactly a hard seam, and
-    // folding the smooth floor in would shift the bevel plane. Do not merge the two clamps.
-    float chamfer = max(smoothRadius, 0.0);
 
     switch (blendOp) {
 #include "../isa/sdf-field-blends.hlsli"
