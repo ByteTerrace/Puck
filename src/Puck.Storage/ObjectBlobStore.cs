@@ -1,6 +1,10 @@
 namespace Puck.Storage;
 
 internal sealed class ObjectBlobStore : IObjectBlobStore {
+    public ValueTask<bool> DeleteAsync(ObjectStorageTarget target, ObjectBlobAddress address, CancellationToken cancellationToken = default) {
+        ArgumentNullException.ThrowIfNull(target);
+        return target.Backend.DeleteAsync(target, address, cancellationToken);
+    }
     public ValueTask<IReadOnlyList<string>> ListAsync(
         ObjectStorageTarget target,
         Guid objectId,

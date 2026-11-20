@@ -17,6 +17,7 @@ public sealed partial class WorldDocument {
         private DocumentStage m_stage;
         private bool m_pending = true;
         private MutationDrawHistory? m_privateWords;
+        private Action? m_commitJournal;
 
         private WorldPreparedMutation(WorldDocument document, WorldMutation mutation, ulong tick, ulong engineTick,
             int? stateMark, CellName? evicted, DocumentStage stage) {
@@ -30,7 +31,7 @@ public sealed partial class WorldDocument {
         }
 
         internal static bool TryPrepare(WorldDocument document, WorldMutation mutation, ulong tick, ulong engineTick,
-            bool preMetered, [NotNullWhen(true)] out WorldPreparedMutation? prepared, out string reason, out bool denied) {
+            bool preMetered, [NotNullWhen(true)] out WorldPreparedMutation? prepared, out string reason, out bool denied, bool derived) {
             prepared = null;
             denied = !document.TryAdmitCompleteMutation(mutation, preMetered, out var admission);
             if (denied) {
@@ -60,7 +61,19 @@ public sealed partial class WorldDocument {
                 }
                 if (!reads.Failed) {
                     if (!accepted) { return false; }
-                    prepared = new WorldPreparedMutation(document, mutation, tick, engineTick, mark, evicted, stage) { m_privateWords = words };
+                    Action? commitJournal = null;
+                    if (!derived && mutation.Principal != Principal.World && host.PrepareMutationJournal is { } prepareJournal) {
+                        (commitJournal, var refusal) = prepareJournal(new WorldJournalEntry(tick, engineTick, mutation) { DrawHistory = words });
+                        if (refusal is not null) {
+                            document.m_lastMutationFailureCode = "world.mutation.journal-unavailable";
+                            reason = refusal;
+                            return false;
+                        }
+                    }
+                    prepared = new WorldPreparedMutation(document, mutation, tick, engineTick, mark, evicted, stage) {
+                        m_privateWords = words,
+                        m_commitJournal = commitJournal,
+                    };
                     return true;
                 }
             } catch (StateUnavailableException) when (reads.Failed) {
@@ -84,9 +97,9 @@ public sealed partial class WorldDocument {
             if (m_stateMark is { } mark) {
                 m_document.Host.CommitStateTransaction(mark);
                 m_document.Host.PublishArena();
-                m_document.RecordCommittedMutation(m_mutation, m_tick, m_engineTick, connectionId, correlationId, m_evicted, derived: derived, privateWords: m_privateWords);
+                m_document.RecordCommittedMutation(m_mutation, m_tick, m_engineTick, connectionId, correlationId, m_evicted, derived: derived, privateWords: m_privateWords, commitJournal: m_commitJournal);
             } else {
-                m_document.InstallPrepared(m_stage, connectionId, correlationId, derived: derived, privateWords: m_privateWords);
+                m_document.InstallPrepared(m_stage, connectionId, correlationId, derived: derived, privateWords: m_privateWords, commitJournal: m_commitJournal);
             }
         }
 

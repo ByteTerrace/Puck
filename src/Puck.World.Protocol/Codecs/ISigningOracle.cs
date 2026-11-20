@@ -22,7 +22,7 @@ public interface ISigningOracle {
 /// Signs directly with a locally held private key — no chain, no remote round trip. The offline shape: a
 /// per-authority keypair pinned into a peer's own <c>admission</c> section as a
 /// <see cref="AttestationTrustMode.SignsDirectly"/> entry (<see cref="WorldAdmissionEntry.Subject"/> names the
-/// authority namespace <see cref="WorldAttestedAuthenticator.TryVerify"/> derives on the far side).
+/// authority namespace <see cref="WorldAttestedAuthenticator.VerifyAsync"/> derives on the far side).
 /// </summary>
 public sealed class LocalKeySigningOracle : ISigningOracle, IDisposable {
     private readonly string m_domain;

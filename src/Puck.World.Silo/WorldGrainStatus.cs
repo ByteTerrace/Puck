@@ -57,4 +57,19 @@ public sealed class WorldGrainStatus {
     /// <summary>Gets the most recently acknowledged durable-journal append's outcome, human-readable.</summary>
     [Id(16)]
     public required string LastJournalOutcome { get; init; }
+    /// <summary>Encoded mutation payload bytes waiting for publication.</summary>
+    [Id(17)]
+    public long PendingJournalBytes { get; init; }
+    /// <summary>Segments intersecting the live recovery tail, including crossings.</summary>
+    [Id(18)]
+    public int JournalSegmentCount { get; init; }
+    /// <summary>External mutations published by this activation.</summary>
+    [Id(19)]
+    public long JournalMutationsWritten { get; init; }
+    /// <summary>Bytes published in external mutation segments by this activation.</summary>
+    [Id(20)]
+    public long JournalBytesWritten { get; init; }
+    /// <summary>Superseded authority payload objects deleted by this activation.</summary>
+    [Id(21)]
+    public long RetiredAuthorityObjects { get; init; }
 }

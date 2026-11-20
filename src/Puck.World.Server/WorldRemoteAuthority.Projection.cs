@@ -4,10 +4,14 @@ using Puck.World.Server;
 namespace Puck.World;
 
 public sealed partial class WorldRemoteAuthority {
-    internal byte[]? FetchPrototype(Puck.Assets.ContentPin pin, WorldTravelerObservation? traveler) {
-        var answer = AwaitAnswer(sourceAuthority: (traveler?.SourceAuthority ?? string.Empty),
+    // The projection codec hydrates synchronously on its network reader. Tick-side forwarding uses the async door.
+    private byte[]? FetchPrototype(Puck.Assets.ContentPin pin, WorldTravelerObservation? traveler) =>
+        FetchPrototypeAsync(pin, traveler).AsTask().GetAwaiter().GetResult();
+
+    internal async ValueTask<byte[]?> FetchPrototypeAsync(Puck.Assets.ContentPin pin, WorldTravelerObservation? traveler) {
+        var answer = await AnswerAsync(sourceAuthority: (traveler?.SourceAuthority ?? string.Empty),
             kind: WorldFederationRequest.Prototype,
-            body: WorldFederationCodec.EncodePrototypeRequest(pin: pin, traveler: traveler));
+            body: WorldFederationCodec.EncodePrototypeRequest(pin: pin, traveler: traveler)).ConfigureAwait(false);
 
         return ((answer.Kind == WorldFederationResponse.Prototype) ? answer.Body.ToArray() : null);
     }

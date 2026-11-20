@@ -130,7 +130,7 @@ public sealed unsafe class DirectXGpuMappedBuffer : IGpuMappedBuffer {
         if (bytes == 0UL) { return; }
 
         var first = ((int)(offset / ChunkBytes));
-        var last = ((int)(((offset + bytes) - 1UL) / ChunkBytes));
+        var last = ((int)offset.LastUnitOf(bytes: bytes, unit: ChunkBytes));
         var arena = m_arena;
         var taken = new List<(int Chunk, DirectXTilePlacement Tiles)>();
 

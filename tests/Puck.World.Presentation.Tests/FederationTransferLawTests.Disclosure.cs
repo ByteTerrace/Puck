@@ -27,6 +27,7 @@ public sealed partial class FederationTransferLawTests {
         using var host = new WorldPeerHost(server: fixture.Server, authenticator: security, timeProvider: new VirtualClock(),
             transportHandshakeTimeout: PeerTestClient.TransportHandshakeTimeout);
         PeerTestClient.StartOrSkip(host: host);
+        await using var mailbox = AdmissionWireFixture.StartMailboxPump(host);
         using var client = new PeerTestClient();
         var ct = TestContext.Current.CancellationToken;
         var lane = await AuthenticatedLaneAsync(client, IPEndPoint.Parse(s: host.ListenEndpoint!), security, ct);
@@ -81,6 +82,7 @@ public sealed partial class FederationTransferLawTests {
             transportHandshakeTimeout: PeerTestClient.TransportHandshakeTimeout);
 
         PeerTestClient.StartOrSkip(host: host);
+        await using var mailbox = AdmissionWireFixture.StartMailboxPump(host);
         using var client = new PeerTestClient();
         var ct = TestContext.Current.CancellationToken;
         var stream = await AuthenticatedLaneAsync(client, IPEndPoint.Parse(s: host.ListenEndpoint!), security, ct);
@@ -102,6 +104,7 @@ public sealed partial class FederationTransferLawTests {
             transportHandshakeTimeout: PeerTestClient.TransportHandshakeTimeout);
 
         PeerTestClient.StartOrSkip(host: host);
+        await using var mailbox = AdmissionWireFixture.StartMailboxPump(host);
         using var client = new PeerTestClient();
         var ct = TestContext.Current.CancellationToken;
         var stream = await AuthenticatedLaneAsync(client, IPEndPoint.Parse(s: host.ListenEndpoint!), security, ct);
@@ -349,6 +352,7 @@ public sealed partial class FederationTransferLawTests {
         );
 
         PeerTestClient.StartOrSkip(host: host);
+        await using var mailbox = AdmissionWireFixture.StartMailboxPump(host);
 
         var endpoint = IPEndPoint.Parse(s: host.ListenEndpoint!);
         var ct = TestContext.Current.CancellationToken;

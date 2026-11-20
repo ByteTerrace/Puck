@@ -1107,7 +1107,44 @@ public static class PuckSyntaxTrivia {
                 case WithExpressionNode derived: {
                         return (derived with {
                             Base = VisitExpression(expression: derived.Base),
-                            Overrides = ((ObjectExpressionNode)VisitExpression(expression: derived.Overrides)),
+                            Overrides = VisitExpression(expression: derived.Overrides),
+                        });
+                    }
+                case ForExpressionNode loop: {
+                        var sequence = VisitExpression(expression: loop.Sequence);
+                        var open = FindNext(
+                            from: ContentEnd(node: loop.Sequence),
+                            limit: ContentEnd(node: loop),
+                            target: '{'
+                        );
+                        var close = ((open < 0) ? -1 : MatchDelimiter(open: open));
+
+                        if (close < 0) {
+                            return (loop with {
+                                Bindings = [.. loop.Bindings.Select(selector: binding => ((LetNode)VisitStatement(statement: binding)))],
+                                Body = [.. loop.Body.Select(selector: VisitExpression)],
+                                Sequence = sequence,
+                                Trivia = (loop.Trivia with { MultiLine = SpansLines(node: loop) }),
+                            });
+                        }
+
+                        var combined = new List<SyntaxNode>(capacity: (loop.Bindings.Count + loop.Body.Count));
+
+                        combined.AddRange(collection: loop.Bindings);
+                        combined.AddRange(collection: loop.Body);
+
+                        var (visited, inner) = List(
+                            bodyEnd: close,
+                            bodyStart: (open + 1),
+                            items: combined,
+                            visit: node => ((node is StatementNode stmt) ? ((SyntaxNode)VisitStatement(statement: stmt)) : VisitExpression(expression: ((ExpressionNode)node)))
+                        );
+
+                        return (loop with {
+                            Bindings = [.. visited.Take(count: loop.Bindings.Count).Cast<LetNode>()],
+                            Body = [.. visited.Skip(count: loop.Bindings.Count).Cast<ExpressionNode>()],
+                            Sequence = sequence,
+                            Trivia = (loop.Trivia with { Inner = inner, MultiLine = SpansLines(node: loop), Opening = m_opening }),
                         });
                     }
                 default: {

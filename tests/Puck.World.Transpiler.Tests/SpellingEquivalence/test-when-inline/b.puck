@@ -1,0 +1,17 @@
+schema: "puck.world.definition.v1"
+documentId: "pair"
+
+state {
+  world {
+    table marker { "0" = 0 }
+  }
+}
+
+test "inline" {
+  when {
+    seat1: world.state.cell.set marker 0 7
+  }
+  expect {
+    marker[0] == 7
+  }
+}

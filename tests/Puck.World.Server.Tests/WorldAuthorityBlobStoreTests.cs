@@ -252,7 +252,7 @@ public sealed class WorldAuthorityBlobStoreTests {
         );
         var checkpointBlobKey = listed.Single(predicate: key => key.Contains(
             comparisonType: StringComparison.Ordinal,
-            value: "/checkpoints/000000000000-"
+            value: "/checkpoints/00000000000000000001-"
         ));
 
         fake.Seed(
@@ -524,10 +524,10 @@ public sealed class WorldAuthorityBlobStoreTests {
         var hex = hash["sha256-64/".Length..];
 
         // Simulates a writer that landed the content-addressed checkpoint candidate but crashed before the root CAS —
-        // the retry recomputes the SAME ordinal+hash and must recognize the identical content rather than refusing.
+        // the retry recomputes the same publication sequence and content hash and must recognize the identical content rather than refusing.
         fake.Seed(
             bytes: encoded,
-            key: $"{WorldOwnedWorldSync.HostedPrivateNamespace}/{identity.World.Value}/authority/checkpoints/000000000000-{hex}.pckp",
+            key: $"{WorldOwnedWorldSync.HostedPrivateNamespace}/{identity.World.Value}/authority/checkpoints/00000000000000000001-{hex}.pckp",
             objectId: identity.Owner
         );
 
@@ -604,7 +604,42 @@ public sealed class WorldAuthorityBlobStoreTests {
         Assert.True(condition: latest.Value.Encoded.Span.SequenceEqual(other: "two"u8));
     }
 
+    [Fact]
+    public async Task CoveringCheckpointsRetireLiveObjectsAndKeepProtectedRecoveryPayloads() {
+        var fake = new FakeObjectBlobStore();
+        var store = new WorldAuthorityBlobStore(fake, Target);
+        var identity = Identity();
+        var token = TestContext.Current.CancellationToken;
+        var fence = (await store.AcquireActivationAsync(identity, token))!.Value;
+
+        Assert.True((await store.WriteCheckpointAsync(identity, "initial"u8.ToArray(), 1, token, fence)).Ok);
+        var batch = await store.AppendJournalBatchAsync(identity, [
+            new(2, 2, "covered"u8.ToArray()),
+            new(2, 2, "suffix"u8.ToArray()),
+        ], token, fence);
+        Assert.True(batch.Ok, batch.Detail);
+        Assert.Equal(1, batch.PublishedRoot!.Value.Root.JournalSegmentCount);
+
+        var operation = Guid.NewGuid();
+        var saved = (await store.CaptureRecoveryRootAsync(identity, operation, token))!.Value;
+        var partial = await store.WriteCheckpointAsync(identity, "partial"u8.ToArray(), 2, token, fence, capturedJournalSequence: 0);
+        Assert.True(partial.Ok, partial.Detail);
+        Assert.Equal("suffix"u8.ToArray(), Assert.Single((await store.LoadRecoveryAsync(identity, token))!.Value.Journal.Entries).Encoded.ToArray());
+
+        var covering = await store.WriteCheckpointAsync(identity, "covering"u8.ToArray(), 3, token, fence, capturedJournalSequence: 1);
+        Assert.True(covering.Ok, covering.Detail);
+        Assert.Equal(2, covering.RetiredObjects);
+
+        Assert.True((await store.RestoreRecoveryRootAsync(identity, saved.Pin, operation, fence, token)).Ok);
+        var recovery = (await store.LoadRecoveryAsync(identity, token))!.Value;
+        Assert.Equal("initial"u8.ToArray(), recovery.Checkpoint!.Value.Encoded.ToArray());
+        Assert.Equal(2, recovery.Journal.Entries.Count);
+    }
+
     private sealed class ThrowAfterRootCommitStore : IObjectBlobStore {
+        public ValueTask<bool> DeleteAsync(ObjectStorageTarget target, ObjectBlobAddress address, CancellationToken cancellationToken = default) =>
+            m_inner.DeleteAsync(target, address, cancellationToken);
+
         private readonly FakeObjectBlobStore m_inner = new();
 
         public bool ThrowOnNextRootOverwrite { get; set; }

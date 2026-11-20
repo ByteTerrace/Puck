@@ -24,6 +24,9 @@ public sealed partial class WorldSiloCrossingRecoveryLawTests {
     // Fails one journal page write before publication, or loses one row's next root compare-and-swap answer: that
     // write lands or not as armed, then throws, and the store's reconciling read of the root fails too.
     private sealed class FailingJournalStore(IObjectBlobStore inner) : IObjectBlobStore {
+        public ValueTask<bool> DeleteAsync(ObjectStorageTarget target, ObjectBlobAddress address, CancellationToken cancellationToken = default) =>
+            inner.DeleteAsync(target, address, cancellationToken);
+
         private int m_fail;
         private string? m_loseRootAnswer;
         private int m_rootWritesPassing;

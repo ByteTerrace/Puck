@@ -1,0 +1,18 @@
+// An enum declared inside a template lowers to the same state.enums row as one declared at the root.
+schema: "puck.world.definition.v1"
+documentId: "pair"
+
+template modeRow(initial = 0) {
+  state {
+    enum Mode {
+      Idle
+      Active
+    }
+
+    world {
+      slot mode: Mode = initial
+    }
+  }
+}
+
+modeRow(initial: 1)

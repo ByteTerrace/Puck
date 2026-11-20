@@ -42,8 +42,8 @@ internal sealed class WorldDeferredForwardedAuthority(WorldForwardingDestination
         }
         (retired as IDisposable)?.Dispose();
     }
-    public byte[]? FetchPrototype(Puck.Assets.ContentPin pin, WorldDisclosureTier ceiling, byte remainingHops) =>
-        Volatile.Read(location: ref m_current)?.FetchPrototype(ceiling: ceiling, pin: pin, remainingHops: remainingHops);
+    public ValueTask<byte[]?> FetchPrototypeAsync(Puck.Assets.ContentPin pin, WorldDisclosureTier ceiling, byte remainingHops) =>
+        Volatile.Read(location: ref m_current)?.FetchPrototypeAsync(ceiling: ceiling, pin: pin, remainingHops: remainingHops) ?? default;
     public Task<string?> StreamProjectionAsync(Stream output, WorldDisclosureTier ceiling, byte remainingHops, CancellationToken ct) =>
         ((Volatile.Read(location: ref m_current) is { } current)
             ? current.StreamProjectionAsync(
@@ -69,15 +69,8 @@ internal sealed class WorldDeferredForwardedAuthority(WorldForwardingDestination
         (current as IDisposable)?.Dispose();
         return false;
     }
-    public bool TryDescribeRoute(out WorldAuthorityRouteDescription route, out string reason) {
-        if (Volatile.Read(location: ref m_current) is { } current) {
-            return current.TryDescribeRoute(
-            reason: out reason,
-            route: out route
-        );
-        }
-        route = default; reason = Unavailable; return false;
-    }
+    public ValueTask<(WorldAuthorityRouteDescription? Route, string Reason)> DescribeRouteAsync() =>
+        Volatile.Read(ref m_current)?.DescribeRouteAsync() ?? new((null, Unavailable));
     public bool TryForwardIntent(in IntentSubmission submission, out string reason) {
         if (Volatile.Read(location: ref m_current) is { } current) {
             return current.TryForwardIntent(

@@ -311,6 +311,9 @@ public sealed class WorldReleaseFixtureArchiveLawTests {
     }
 
     private sealed class InterruptedStore(IObjectBlobStore inner, string suffix = ".json") : IObjectBlobStore {
+        public ValueTask<bool> DeleteAsync(ObjectStorageTarget target, ObjectBlobAddress address, CancellationToken cancellationToken = default) =>
+            inner.DeleteAsync(target, address, cancellationToken);
+
         public ValueTask<IReadOnlyList<string>> ListAsync(ObjectStorageTarget target, Guid objectId, string keyPrefix, CancellationToken cancellationToken = default) => inner.ListAsync(
             cancellationToken: cancellationToken,
             keyPrefix: keyPrefix,

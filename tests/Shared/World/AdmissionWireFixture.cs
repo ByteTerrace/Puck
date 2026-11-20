@@ -177,12 +177,14 @@ internal static class AdmissionWireFixture {
             tape: tape
         );
 
-    private static async Task RunPumpAsync(WorldFixture fixture, WorldPeerHost host, WorldReplayTape? tape, CancellationToken ct) {
+    public static IAsyncDisposable StartMailboxPump(WorldPeerHost host) => new Pump(null, host, null);
+
+    private static async Task RunPumpAsync(WorldFixture? fixture, WorldPeerHost host, WorldReplayTape? tape, CancellationToken ct) {
         try {
             while (true) {
                 await host.WaitForPendingWorkAsync(cancellationToken: ct).ConfigureAwait(continueOnCapturedContext: false);
                 host.DrainPending();
-                fixture.Step();
+                fixture?.Step();
                 tape?.NoteTick();
             }
         } catch (OperationCanceledException) when (ct.IsCancellationRequested) {
@@ -328,7 +330,7 @@ internal static class AdmissionWireFixture {
         private readonly CancellationTokenSource m_stop = new();
         private readonly Task m_loop;
 
-        public Pump(WorldFixture fixture, WorldPeerHost host, WorldReplayTape? tape) {
+        public Pump(WorldFixture? fixture, WorldPeerHost host, WorldReplayTape? tape) {
             m_loop = RunPumpAsync(
                 ct: m_stop.Token,
                 fixture: fixture,

@@ -151,8 +151,7 @@ public static partial class RuleCompiler {
             context.ClearScope();
         }
     }
-    /// <summary>Returns a rule's locals after its gate and effects compiled: the declared ones plus every implicit
-    /// key local an expression key added, in evaluation order.</summary>
+    /// <summary>Returns a rule's compiled locals in evaluation order.</summary>
     /// <param name="declared">The declared locals <see cref="CompileLocals"/> returned.</param>
     /// <param name="context">The compile context.</param>
     /// <returns>The locals in evaluation order.</returns>

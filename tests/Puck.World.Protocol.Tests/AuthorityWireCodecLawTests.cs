@@ -39,7 +39,7 @@ public sealed class AuthorityWireCodecLawTests {
         ));
     }
     [Fact]
-    public void AVerifierWithNoMatchingTrustEntryRefuses() {
+    public async Task AVerifierWithNoMatchingTrustEntryRefuses() {
         var key = ECDsa.Create(curve: ECCurve.NamedCurves.nistP256);
         var oracle = new LocalKeySigningOracle(
             key: key,
@@ -52,15 +52,10 @@ public sealed class AuthorityWireCodecLawTests {
         var challenge = verifier.NewChallenge();
         var proof = prover.Prove(challenge: challenge);
 
-        Assert.False(condition: verifier.TryVerify(
-            challenge: challenge,
-            proof: proof,
-            sourceAuthority: out var sourceAuthority
-        ));
-        Assert.Null(@object: sourceAuthority);
+        Assert.Null(await verifier.VerifyAsync(challenge, proof, TestContext.Current.CancellationToken));
     }
     [Fact]
-    public void AnAttestedAuthenticatorProvesAndVerifiesAgainstItsOwnPinnedTrustEntry() {
+    public async Task AnAttestedAuthenticatorProvesAndVerifiesAgainstItsOwnPinnedTrustEntry() {
         var key = ECDsa.Create(curve: ECCurve.NamedCurves.nistP256);
         var domain = KeyId.ComputeKeyHash(subjectPublicKeyInfo: key.ExportSubjectPublicKeyInfo());
         var oracle = new LocalKeySigningOracle(
@@ -82,15 +77,8 @@ public sealed class AuthorityWireCodecLawTests {
         var challenge = verifier.NewChallenge();
         var proof = prover.Prove(challenge: challenge);
 
-        Assert.True(condition: verifier.TryVerify(
-            challenge: challenge,
-            proof: proof,
-            sourceAuthority: out var sourceAuthority
-        ));
-        Assert.Equal(
-            actual: sourceAuthority,
-            expected: "authority-a"
-        );
+        var verified = await verifier.VerifyAsync(challenge, proof, TestContext.Current.CancellationToken);
+        Assert.Equal("authority-a", verified?.Authority);
     }
     [Fact]
     public void DownstreamAckFrameRoundTripsThroughTheSharedResultGrammar() {
@@ -159,10 +147,12 @@ public sealed class AuthorityWireCodecLawTests {
                 Tick: 2UL
             ),
         ];
-        var encoded = WorldAuthorityStoreWireCodec.EncodeJournalPage(entries: entries);
+        var encoded = WorldAuthorityStoreWireCodec.EncodeJournalSegment(entries: entries);
 
         Assert.True(
-            condition: WorldAuthorityStoreWireCodec.TryDecodeJournalPage(
+            condition: WorldAuthorityStoreWireCodec.TryDecodeJournalSegment(
+                previousSequence: out _,
+                previousHash: out _,
                 bytes: encoded,
                 entries: out var decoded,
                 reason: out var reason
@@ -192,14 +182,16 @@ public sealed class AuthorityWireCodecLawTests {
     }
     [Fact]
     public void JournalPageRefusesAForeignMagic() {
-        var corrupted = WorldAuthorityStoreWireCodec.EncodeJournalPage(entries: [new WorldAuthorityJournalEntry(
+        var corrupted = WorldAuthorityStoreWireCodec.EncodeJournalSegment(entries: [new WorldAuthorityJournalEntry(
             Encoded: new byte[] { 1 },
             EngineTick: 1UL,
             Tick: 1UL
         )]);
 
         corrupted[0] ^= 0xFF;
-        Assert.False(condition: WorldAuthorityStoreWireCodec.TryDecodeJournalPage(
+        Assert.False(condition: WorldAuthorityStoreWireCodec.TryDecodeJournalSegment(
+                previousSequence: out _,
+                previousHash: out _,
             bytes: corrupted,
             entries: out var entries,
             reason: out var refusal
@@ -214,14 +206,16 @@ public sealed class AuthorityWireCodecLawTests {
     // Another version under the journal magic is refused by the version before the entry count is read.
     [Fact]
     public void JournalPageOfAnotherVersionRefusesByItsVersion() {
-        var page = WorldAuthorityStoreWireCodec.EncodeJournalPage(entries: [new WorldAuthorityJournalEntry(
+        var page = WorldAuthorityStoreWireCodec.EncodeJournalSegment(entries: [new WorldAuthorityJournalEntry(
             Encoded: new byte[] { 1 },
             EngineTick: 1UL,
             Tick: 1UL
         )]);
 
         page[4] ^= 0xFF;
-        Assert.False(condition: WorldAuthorityStoreWireCodec.TryDecodeJournalPage(
+        Assert.False(condition: WorldAuthorityStoreWireCodec.TryDecodeJournalSegment(
+                previousSequence: out _,
+                previousHash: out _,
             bytes: page,
             entries: out var entries,
             reason: out var refusal

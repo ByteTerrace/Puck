@@ -1,0 +1,6 @@
+schema: "puck.world.definition.v1"
+documentId: "pair"
+
+let baseSpawn = { id: "start", position [0, 0, 0], yawDegrees: 0 }
+
+spawnPoints [baseSpawn with { yawDegrees: 90 }]

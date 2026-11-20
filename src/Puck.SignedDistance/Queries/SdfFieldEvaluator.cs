@@ -114,6 +114,7 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
     // and a walk may evaluate its nearest instance first (see ComposesByHardUnion).
     private readonly bool m_primeable;
     private readonly SdfFieldReading m_reading;
+    private readonly ReadOnlyMemory<SdfProgram.RootFrame> m_rootFrames;
 
     /// <summary>Compiles <paramref name="program"/>'s instruction stream into this evaluator's fixed-point form.</summary>
     /// <param name="program">The program to wrap. Its <see cref="SdfProgram.Instructions"/> are walked ONCE here —
@@ -137,6 +138,7 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
     /// <exception cref="ArgumentException"><paramref name="program"/> contains an op or shape the reading cannot
     /// interpret, or, read for contact, a <see cref="SdfOp.Scale"/> whose axes differ in magnitude.</exception>
     public SdfFieldEvaluator(SdfProgram program, SdfFieldReading reading) {
+        m_rootFrames = program.RootFrames;
         ArgumentNullException.ThrowIfNull(argument: program);
 
         m_reading = reading;
@@ -340,9 +342,11 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
                 ReliefMasks: ((SdfFieldOps.StreamOf(value: instruction.Op) == SdfReliefStreamRole.ReliefOwner) && (program.ReliefMasksAt(instructionIndex: index) is { Count: > 0 } masks)
                     ? CompileReliefMasks(masks: masks)
                     : null),
-                ScopeScale: (((instruction.Op == SdfOp.PopField) && !deferred[index])
-                    ? CompileScopeScale(scale: instruction.Data1.Y)
-                    : 0L)
+                ScopeScale: (instruction.Op switch {
+                    SdfOp.PopField when !deferred[index] => CompileScopeScale(scale: instruction.Data1.Y),
+                    SdfOp.ShapeBlend when program.ShapeStepScaleAt(instructionIndex: index) is < 1f and var scale => CompileScopeScale(scale: scale),
+                    _ => 0L,
+                })
             );
         }
 
@@ -500,7 +504,7 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
 
         return deferred;
 
-        static bool HardCompose(uint blend) => (blend is ((uint)SdfBlendOp.Union) or ((uint)SdfBlendOp.Subtraction) or ((uint)SdfBlendOp.Intersection));
+        static bool HardCompose(uint blend) => (blend != ((uint)SdfBlendOp.Xor)) && SdfFieldBlends.HardOf(value: (SdfBlendOp)blend);
     }
     // The certified step scale: the program's, divided by how much steeper the compiled field is than the one its
     // analysis bounds, and floored onto the grid. A deferred scope's candidate is its scale's
@@ -519,6 +523,11 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
                 continue;
             }
 
+            if (compiled[index].Op == SdfOp.ShapeBlend && compiled[index].ScopeScale > 0L) {
+                var scale = (double)program.ShapeStepScaleAt(instructionIndex: index);
+
+                content[depth] = Math.Max(val1: content[depth], val2: (compiled[index].ScopeScale / (scale * ScopeScaleOne)));
+            }
             if (compiled[index].Op != SdfOp.PopField) {
                 continue;
             }
@@ -1133,7 +1142,7 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
         // Only for SdfShapeType.Path: the shape's own edge table at its scale, pre-converted once; Data0X is a packed
         // table offset for this shape too.
         PathEdgeFixed[]? PathEdges = null,
-        // Only for SdfOp.PopField: the scope's candidate scale (Data1.y, its 1/L) on a 2⁻³² grid, floored and never
+        // A shape or scope candidate's 1/L on a 2⁻³² grid, floored and never
         // below one tick, so a scale under the Q48.16 grid still scales; zero for an unscaled scope and for one whose
         // scale the certified step scale carries instead (DefersScope).
         long ScopeScale = 0L,

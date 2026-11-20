@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using Puck.Abstractions;
 using Puck.Abstractions.Documents;
 using Puck.Abstractions.Presentation;
 using Puck.Assets.Documents;
@@ -312,6 +313,11 @@ public sealed record WorldRenderExposure(
     /// <summary>The widest an exposure's dead band admits, in stops.</summary>
     public const float MaxBand = 4f;
 
+    // A section's brightest exposure, held per section: a section is immutable and its authored values are its own, so
+    // every resolve of the same section gives the same exposure.
+    private sealed record BrightestExposure(SdfExposure Exposure);
+    private static readonly CodeDerivedTable<WorldRenderExposure, BrightestExposure> BrightestBySection = new();
+
     /// <summary>Returns the brightest exposure the section's authored values reach, which sizes each point and spot
     /// light's range: an absent section's manual default, or this section with each bindable value at its brightest
     /// authored value (the lowest <see cref="Ev100"/> and <see cref="Minimum"/> literal or key, the highest
@@ -323,7 +329,10 @@ public sealed record WorldRenderExposure(
             return SdfExposure.Default;
         }
 
-        return ResolveSection(exposure: exposure, state: false, value: static (_, scalar, _, brightest) => Brightest(brightest: brightest, scalar: scalar));
+        return BrightestBySection.GetValue(
+            key: exposure,
+            derive: static section => new BrightestExposure(Exposure: ResolveSection(exposure: section, state: false, value: static (_, scalar, _, brightest) => Brightest(brightest: brightest, scalar: scalar)))
+        ).Exposure;
     }
     /// <summary>Returns the exposure a frame's views map luminance by: each bindable value as the caller resolves it
     /// (a literal, a state cell or keys on a clock), the pinned manual exposure while <paramref name="hold"/> is above

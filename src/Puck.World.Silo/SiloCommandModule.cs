@@ -102,7 +102,7 @@ public sealed class SiloCommandModule(WorldSiloHost host, IGrainFactory grainFac
                     ? "unbound"
                     : row.DoorEndpoint)} subject={row.FederationSubject} lastCheckpoint={((row.LastCheckpointOrdinal < 0)
                     ? "none"
-                    : $"{row.LastCheckpointOrdinal}@{row.LastCheckpointTick}")} outcome={row.LastCheckpointOutcome} deferred={row.CheckpointDeferredCount} journalPending={row.PendingJournalAppends} journalOutcome={row.LastJournalOutcome}"
+                    : $"{row.LastCheckpointOrdinal}@{row.LastCheckpointTick}")} outcome={row.LastCheckpointOutcome} deferred={row.CheckpointDeferredCount} journalPending={row.PendingJournalAppends} journalPendingBytes={row.PendingJournalBytes} journalSegments={row.JournalSegmentCount} journalMutationsWritten={row.JournalMutationsWritten} journalBytesWritten={row.JournalBytesWritten} retiredAuthorityObjects={row.RetiredAuthorityObjects} journalOutcome={row.LastJournalOutcome}"
                 ));
 
                 return new CommandResult(Output: $"[silo.grains: {rows.Count} row(s)]{Environment.NewLine}{string.Join(

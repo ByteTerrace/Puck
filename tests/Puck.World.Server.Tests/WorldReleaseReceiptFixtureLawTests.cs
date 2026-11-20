@@ -489,6 +489,9 @@ public sealed class WorldReleaseReceiptFixtureLawTests {
         public void Dispose() => m_directory.Dispose();
     }
     private sealed class HookStore(IObjectBlobStore inner) : IObjectBlobStore {
+        public ValueTask<bool> DeleteAsync(ObjectStorageTarget target, ObjectBlobAddress address, CancellationToken cancellationToken = default) =>
+            inner.DeleteAsync(target, address, cancellationToken);
+
         public Func<ObjectBlobAddress, Task> Before { get; set; } = _ => Task.CompletedTask;
         public Func<ObjectBlobAddress, Task> After { get; set; } = _ => Task.CompletedTask;
 

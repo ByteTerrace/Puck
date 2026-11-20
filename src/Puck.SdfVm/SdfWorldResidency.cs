@@ -269,7 +269,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
     public long ProgramBuilds => ((m_frameSource as SdfCompositionFrameSource)?.ProgramBuilds ?? 0);
     /// <summary>Gets the bounded volume count in the latest captured frame, before per-ray rejection.</summary>
     public int LiveVolumes { get; private set; }
-    /// <summary>Gets the last uploaded program's Lipschitz step scale (1 = no clamp), or 0 before the first upload.</summary>
+    /// <summary>Gets the last uploaded program's residual CPU query multiplier, or 0 before the first upload.</summary>
     public float LiveProgramStepScale { get; private set; }
     /// <summary>Gets the last uploaded program's step-scale binder (see <see cref="SdfProgram.StepScaleBinder"/>), or
     /// <see langword="null"/> before the first upload and whenever nothing unscoped binds the step scale.</summary>

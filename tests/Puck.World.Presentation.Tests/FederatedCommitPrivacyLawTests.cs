@@ -129,7 +129,7 @@ public sealed class FederatedCommitPrivacyLawTests {
             sourceInstance: WorldInstanceHost.BootInstanceName,
             sourceSlot: 0
         );
-        hosts.Source.DrainPendingTransfers();
+        hosts.DrainCrossing(0);
 
         var landed = hosts.DestinationRow.Server.ExecuteAuthorityOperation(operation: () => LandedAt(server: hosts.DestinationRow.Server));
 

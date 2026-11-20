@@ -82,8 +82,8 @@ public sealed class GaussianPushLawTests {
             push: new Vector3(value: 0.1f)
         );
 
-        Assert.True(condition: float.IsFinite(f: program.StepScale));
-        Assert.True(condition: (program.StepScale > 0f));
+        Assert.True(condition: float.IsFinite(f: program.ShapeStepScaleAt(instructionIndex: (program.InstructionCount - 1))));
+        Assert.True(condition: (program.ShapeStepScaleAt(instructionIndex: (program.InstructionCount - 1)) > 0f));
     }
     [Fact]
     public void NonFiniteHeaderPayloadIsRefused() {
@@ -180,11 +180,11 @@ public sealed class GaussianPushLawTests {
         ));
 
         Assert.Equal(
-            actual: program.StepScale,
+            actual: program.ShapeStepScaleAt(instructionIndex: (program.InstructionCount - 1)),
             expected: expected,
             precision: 5
         );
-        Assert.True(condition: (program.StepScale < 1.0f));
+        Assert.True(condition: (program.ShapeStepScaleAt(instructionIndex: (program.InstructionCount - 1)) < 1.0f));
     }
     [Fact]
     public void TheWarpFreeEvaluatorRefusesTheOpByName() {
@@ -226,7 +226,7 @@ public sealed class GaussianPushLawTests {
             radii: radii,
             push: push
         );
-        var stepScale = program.StepScale;
+        var stepScale = program.ShapeStepScaleAt(instructionIndex: (program.InstructionCount - 1));
         Vector3[] axes = [Vector3.UnitX, Vector3.UnitY, Vector3.UnitZ];
 
         for (var x = -3.0f; (x <= 3.0f); x += Step) {
@@ -282,7 +282,7 @@ public sealed class GaussianPushLawTests {
         );
 
         Assert.Equal(
-            actual: program.StepScale,
+            actual: program.ShapeStepScaleAt(instructionIndex: (program.InstructionCount - 1)),
             expected: 1.0f
         );
 
@@ -317,7 +317,7 @@ public sealed class GaussianPushLawTests {
                 radii: radii,
                 push: push,
                 radius: 1.0f,
-                stepScale: program.StepScale
+                stepScale: program.ShapeStepScaleAt(instructionIndex: (program.InstructionCount - 1))
             );
 
             Assert.Equal(

@@ -28,8 +28,8 @@ public sealed class ProjectionPrototypeLawTests {
         var document = Fixtures.BuildDocument() with { CreationsRaw = [CreationFixtures.Sphere(id: "one", scale: 1f), CreationFixtures.Sphere(id: "two", scale: 2f)] };
         using var fixture = Fixtures.FreshServer(definition: document);
 
-        byte[]? Fetch(ContentPin pin) => WorldProjectionPrototypeFetch.Fetch(server: fixture.Server, pin: pin,
-            sourceAuthority: "viewer", ceiling: WorldDisclosureTier.Presentation, content: source);
+        byte[]? Fetch(ContentPin pin) => WorldProjectionPrototypeFetch.FetchAsync(server: fixture.Server, pin: pin,
+            sourceAuthority: "viewer", ceiling: WorldDisclosureTier.Presentation, content: source).Result;
         var feed = new WorldProjectionFeed(recipient: null, content: source);
         var hold = new WorldProjectionHold(content: cache, fetch: Fetch);
         var initial = Compose(feed: feed, fixture: fixture);

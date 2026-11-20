@@ -396,6 +396,11 @@ public sealed partial class CompanionCrossingLawTests {
         );
     }
     private sealed record CountingHome(Action Counted, IWorldCustodyPeer Inner) : IWorldCustodyPeer {
+        public ValueTask<IReadOnlyList<ulong?>?> ConfirmHopsAsync(WorldTransferKey key, IReadOnlyList<WorldEntityAddress> incarnations, string destination, WorldHopPhase phase) =>
+            new(ConfirmHops(key, incarnations, destination, phase));
+        public ValueTask<IReadOnlyList<WorldHopAnswer>> RequestHopAsync(WorldTransferKey key, string source, string destination, IReadOnlyList<WorldHopRequestMember> members) =>
+            new(RequestHop(key, source, destination, members));
+
         public IReadOnlyList<ulong?>? ConfirmHops(WorldTransferKey key, IReadOnlyList<WorldEntityAddress> incarnations, string destination, WorldHopPhase phase) {
             Counted();
             return Inner.ConfirmHops(destination: destination, incarnations: incarnations, key: key, phase: phase);

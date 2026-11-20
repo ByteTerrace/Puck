@@ -39,6 +39,8 @@ public sealed partial class WorldServer {
             // A rebuild still preparing was never buffered, so it is answered rather than carried into the checkpoint.
             m_document.RefusePreparations(reason: "authority is retiring and no longer admits submissions");
             m_authorityRetiring = true;
+            m_pending.Writer.TryComplete();
+            DrainMailbox();
         }
     }
     /// <summary>Freezes this activation for retirement only when <paramref name="admits"/> answers
@@ -76,6 +78,8 @@ public sealed partial class WorldServer {
 
             m_stopReason = reason;
             m_authorityRetiring = true;
+            m_pending.Writer.TryComplete();
+            DrainMailbox();
             m_document.RefusePending(reason: reason);
             // A stopped world delivers nothing further, so every session observing it ends now: each stream sends its
             // terminal record, and a screen showing this world through a session shows it no longer.

@@ -444,6 +444,11 @@ public sealed class CompanionCustodyRefinementLawTests(Xunit.ITestOutputHelper o
             }
         }
         private sealed record CustodyCalls(Refinement Owner, Model.Node From, Model.Node To, IWorldCustodyPeer Inner) : IWorldCustodyPeer {
+        public ValueTask<IReadOnlyList<ulong?>?> ConfirmHopsAsync(WorldTransferKey key, IReadOnlyList<WorldEntityAddress> incarnations, string destination, WorldHopPhase phase) =>
+            new(ConfirmHops(key, incarnations, destination, phase));
+        public ValueTask<IReadOnlyList<WorldHopAnswer>> RequestHopAsync(WorldTransferKey key, string source, string destination, IReadOnlyList<WorldHopRequestMember> members) =>
+            new(RequestHop(key, source, destination, members));
+
             public IReadOnlyList<ulong?>? ConfirmHops(WorldTransferKey key, IReadOnlyList<WorldEntityAddress> incarnations, string destination, WorldHopPhase phase) => Owner.Call(from: From, to: To, kind: Model.MsgKind.HopQuery, key: Owner.KeyName(key: key), call: () => Inner.ConfirmHops(destination: destination, incarnations: incarnations, key: key, phase: phase), unreachable: static () => null, replied: static _ => Model.MsgKind.HopQueryReply, replyKinds: [Model.MsgKind.HopQueryReply]);
             public IReadOnlyList<WorldHopAnswer> RequestHop(WorldTransferKey key, string source, string destination, IReadOnlyList<WorldHopRequestMember> members) => Owner.Call(from: From, to: To, kind: Model.MsgKind.HopRequest, key: Owner.KeyName(key: key), call: () => Inner.RequestHop(destination: destination, key: key, members: members, source: source), unreachable: () => [.. members.Select(selector: static member => new WorldHopAnswer(Incarnation: member.Incarnation, Next: 0UL, Verdict: WorldHopVerdict.Unavailable))], replied: static _ => Model.MsgKind.HopAnswer, replyKinds: [Model.MsgKind.HopAnswer]);
             public WorldCustodyAnswer QueryCustody(WorldTransferKey key, WorldEntityAddress incarnation, string asker) => Owner.Call(from: From, to: To, kind: Model.MsgKind.CustodyQuery, key: Owner.KeyName(key: key), call: () => Inner.QueryCustody(asker: asker, incarnation: incarnation, key: key), unreachable: static () => WorldCustodyAnswer.Uncertain, replied: static _ => Model.MsgKind.CustodyReply, replyKinds: [Model.MsgKind.CustodyReply]);

@@ -55,11 +55,12 @@ public sealed class SdfRenderOpsLawTests {
     // many it read.
     private static void AssertAnswers(SdfProgram program, Func<Vector3, float> reference, float tolerance = Tolerance) {
         var field = new SdfFieldEvaluator(program: program, reading: SdfFieldReading.Render);
+        var scale = program.Instructions.Select(selector: (_, index) => program.ShapeStepScaleAt(instructionIndex: index)).Min();
         var read = 0;
 
         Assert.False(condition: field.Capabilities.WarpFree);
         foreach (var point in Points()) {
-            var expected = reference(arg: point);
+            var expected = (reference(arg: point) * scale);
 
             if (float.IsNaN(f: expected)) { continue; }
 

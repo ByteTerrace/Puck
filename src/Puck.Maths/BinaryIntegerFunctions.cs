@@ -695,6 +695,17 @@ public static class BinaryIntegerFunctions {
 
         return (quotient + carry);
     }
+    /// <summary>Gets the index of the last unit (a page, a chunk, a tile) that a byte range touches.</summary>
+    /// <typeparam name="T">The binary integer type.</typeparam>
+    /// <param name="offset">The first byte of the range.</param>
+    /// <param name="bytes">The positive byte count of the range.</param>
+    /// <param name="unit">The unit size, in bytes.</param>
+    /// <returns>The index of the unit that holds the range's last byte, which is <paramref name="offset"/> plus
+    /// <paramref name="bytes"/> minus one, divided by <paramref name="unit"/> and rounded down.</returns>
+    /// <remarks><paramref name="bytes"/> must be above zero: an empty range has no last byte.</remarks>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static T LastUnitOf<T>(this T offset, T bytes, T unit) where T : IBinaryInteger<T> =>
+        (((offset + bytes) - T.One) / unit);
     /// <summary>Returns <paramref name="value"/> with its lowest set bit cleared.</summary>
     /// <typeparam name="T">The binary integer type.</typeparam>
     /// <param name="value">The value to operate on.</param>

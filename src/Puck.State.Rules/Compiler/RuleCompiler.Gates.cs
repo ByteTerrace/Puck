@@ -108,10 +108,22 @@ public static partial class RuleCompiler {
         }
         outer?.UnionWith(other: reads);
 
-        var reference = new CompiledCellRef(
-            Key: default,
-            Program: program,
-            RowOrdinal: -1
+        // An expression key whose program is a single local read lowers to the same LocalKeyFact as `$local:<name>`
+        // so naming a key expression in a rule `local` never prices above writing the expression inline.
+        var reference = ((program is [{ Operation: ExpressionOp.Operand, Operand: LocalOperand local }])
+            ? new CompiledCellRef(
+                Custom: new LocalKeyFact(
+                    ordinal: local.Ordinal,
+                    source: local.Source?.Expression
+                ),
+                Key: default,
+                RowOrdinal: -1
+            )
+            : new CompiledCellRef(
+                Key: default,
+                Program: program,
+                RowOrdinal: -1
+            )
         );
 
         context.KeyExpressions.Add(key: cacheKey, value: (reference, [.. reads]));

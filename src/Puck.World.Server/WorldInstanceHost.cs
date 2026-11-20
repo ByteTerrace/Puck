@@ -708,11 +708,8 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
     }
     /// <summary>Advances every row except a desktop's own boot row on its own authored schedule — the boot row (when
     /// one is admitted) is handled by <see cref="WorldServerStepShell"/> separately by the caller (see
-    /// <see cref="ShouldStepBoot"/>), which also carries the tape/wait-gate/socket bookkeeping only it needs. Every
-    /// other row steps through the identical <see cref="WorldServerStepShell.Step"/> shell over its OWN
-    /// <see cref="WorldInstance.Door"/>/<see cref="WorldInstance.Tape"/>/<see cref="WorldInstance.PublishTick"/> —
-    /// null/idle/no-op on a desktop's non-boot rows today, today's behavior to the byte, and the same seam a hosted
-    /// row's real door/tape/tick-clock plugs into. Each row banks <paramref name="masterDeltaTicks"/> into its own
+    /// <see cref="ShouldStepBoot"/>). Each row drains its mailbox at the step boundary and publishes its own
+    /// completed tick through <see cref="WorldServerStepShell.Step"/>. Each row banks <paramref name="masterDeltaTicks"/> into its own
     /// <see cref="WorldInstance.ScheduleAccumulatorTicks"/> and steps once per whole crossing of its own step width
     /// (<c>50400 / rateHz</c> engine ticks) — a rate faster than the master cadence steps more than once per call, a
     /// rate slower steps less than once. A row whose authored rate is the durable stop (0), or whose live
@@ -817,8 +814,7 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
                         context: in context,
                         publishTick: instance.PublishTick,
                         server: instance.Server,
-                        tape: instance.Tape,
-                        peerHost: instance.Door
+                        tape: instance.Tape
                     );
                 } catch (TimeoutException error) when (instance.Server.Tick.ExecutionInterrupted) {
                     instance.Server.Output.Narrate("world.instance", $"[world.instance: '{name}' execution interrupted; recover from its last checkpoint: {error.Message}]");

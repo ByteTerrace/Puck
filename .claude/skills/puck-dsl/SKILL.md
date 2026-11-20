@@ -65,16 +65,22 @@ A document's `schema:` field selects its vocabulary, never the filename.
   **PUCK040**, the most common mistake; the fix is to drop the colon. A value
   written as a call or a name keeps its colon even when it produces a
   container: `pixels: map(range(0, 8), row => "00000000")`, `origin: bounds`.
-- `let name = expr` is a compile-time constant; `base with { member: value }`
-  derives a record from an object (shallow: members replaced or added, a nested
-  override spelled by nesting, `speed: kit.speed with { value: 5 }`) and lowers
-  to the object written out; `function name(p, q = d) = expr` names a value
-  or a guard, inlined where it is called (a document value, a gate, an
-  effect), never recursive; `template name(p, q = d) { }` a
-  parametric block; `rule template name(p) { }` a block of rule-body
+- `let name = expr` is a compile-time constant (admitted at top level, inside
+  templates, blocks, `prototypes`/`placements`/`state.world` sections, and `for`
+  bodies); `base with overrides` derives a record from an object using either an
+  object literal (`{ member: value }`) or any expression evaluating to an object
+  (shallow: members replaced or added, a nested override spelled by nesting,
+  `speed: kit.speed with { value: 5 }`) and lowers to the object written out;
+  `function name(p, q = d) = expr` names a value or a guard, inlined where it is
+  called (a document value, a gate, an effect), never recursive;
+  `template name(p, q = d) { }` a parametric block (admitting `enum` and
+  `export` inside its body); `rule template name(p) { }` a block of rule-body
   statements (locals, `when`, `if`, effects) a rule body calls and splices
-  (`worlds/standard/seat.puck`'s `seatPress`); `import "name" [as alias]`, `export` and
-  `use m as a(args)` compose modules.
+  (`worlds/standard/seat.puck`'s `seatPress`); `import "name" [as alias]`,
+  `export` (and `exports { … }`, whose repeated blocks merge facet lists), and
+  `use m as a(args)` compose modules. An import's export surface is explicit,
+  never transitive across nested imports. `table` and `pile` admit
+  `capacity(auto)` to lower to their authored entries' count.
 - **A template body's block or rule name is a parameter reference only when
   bare.** `shape Box base { }` takes the value bound to `base`; `shape Box "base" { }`
   is the literal name, whatever the template's parameters are called. Only a
@@ -86,12 +92,13 @@ A document's `schema:` field selects its vocabulary, never the filename.
   own `let`s stay its own. A library importing a document is refused (PUCK017).
   A source of imports alone hands over nothing of its own, so it is a document
   fragment that composes what it imports, not a library (`worlds/standard/standard.puck`).
-- **Compile-time `for` generates rows; builtins generate values.**
+- **Compile-time `for` generates rows and list elements; builtins transform values.**
   `for i in range(0, n) { }` and `for (item, index) in [...] { }` expand at
-  compile time, and the document carries the rows they produce. Inside one
-  value, use the collection builtins: `range`, `length`, `concat`, `map`,
-  `flatMap`, `filter`, `reduce`, `distinct`, `sort`, `groupBy`, each taking a lambda
-  (`i => 0`); a flatten is `flatMap(rows, r => [..])`, never a `reduce` over `concat`. An array of n zeros is `map(range(0, n), i => 0)`; it runs once
+  compile time — both in statement/section position (emitting rows) and directly
+  inside `[ ... ]` (flattening produced elements into the list, with optional
+  local `let`s). Collection builtins (`range`, `length`, `concat`, `map`,
+  `flatMap`, `filter`, `reduce`, `distinct`, `sort`, `groupBy`) take lambdas
+  (`i => 0`); a flatten is `flatMap(rows, r => [..])`, never a `reduce` over `concat`. An array of n zeros is `map(range(0, n), i => 0)` or `[for i in range(0, n) { 0 }]`; it runs once
   at compile time, the compiled JSON still holds every value, and play-time
   behavior is unchanged. A lambda anywhere else is **PUCK042**; an unevaluable
   call **PUCK041**; a `for` over something not known at compile time
@@ -157,6 +164,8 @@ A document's `schema:` field selects its vocabulary, never the filename.
   spelling-equivalence corpus
   (`tests/Puck.World.Transpiler.Tests/SpellingEquivalence/`) holds each pair; a
   new spelling lands with its pair, and a pair that fails is a compiler defect.
+  Known and closed walls live in the
+  [author walls log](../../../docs/authoring/author-walls.md).
   Constants fold before lowering: a name bound to a number, an enum member, an
   exact operator over constants and a ternary on a constant condition become
   their value, in gates and values alike.

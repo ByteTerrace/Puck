@@ -46,16 +46,20 @@ public sealed class AttestationVerifyResult {
     /// <summary>The exact trust entry selected by verification, including its pinned identity and mode.</summary>
     public TrustListEntry? TrustEntry { get; }
 
+    /// <summary>Last inclusive Unix second accepted by every verified claim and binding window.</summary>
+    public long ValidThrough { get; private init; }
+
     /// <summary>Builds a verified result carrying the admitting entry's authored slot reach.</summary>
     /// <param name="trustEntry">The entry that verified the claim.</param>
     /// <param name="replayCommit">The replay-mark commit to transact with the claim's effect, or <see langword="null"/> for an unsequenced claim.</param>
-    internal static AttestationVerifyResult Accept(TrustListEntry trustEntry, ReplayCommitRequirement? replayCommit) => new(
+    /// <param name="validThrough">Last inclusive Unix second authorized by the chain.</param>
+    internal static AttestationVerifyResult Accept(TrustListEntry trustEntry, ReplayCommitRequirement? replayCommit, long validThrough) => new(
         reach: trustEntry.Reach,
         trustEntry: trustEntry,
         refusalReason: null,
         replayCommit: replayCommit,
         verified: true
-    );
+    ) { ValidThrough = validThrough };
 
     /// <summary>Builds a refused result carrying why. A refusal never carries reach — there is no verified claim to scope.</summary>
     /// <param name="reason">A human-readable refusal reason — never used for control flow, only for reporting.</param>

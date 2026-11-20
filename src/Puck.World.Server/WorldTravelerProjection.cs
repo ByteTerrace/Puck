@@ -4,11 +4,12 @@ namespace Puck.World.Server;
 
 /// <summary>Resolves and streams one authenticated traveler view, never holding an authority gate across network I/O.</summary>
 internal static class WorldTravelerProjection {
-    public static async Task<string?> StreamAsync(WorldServer server, WorldTravelerObservation request, string endpoint, Stream output, CancellationToken ct) {
+    public static async Task<string?> StreamAsync(WorldServer server, WorldTravelerObservation request, string endpoint, Stream output, CancellationToken ct, Func<bool>? credentialIsCurrent = null) {
         if (request.RemainingHops is 0 or > 64) { return "traveler projection exceeded its forwarding hop limit"; }
         WorldFederationProjectionSink? sink = null;
         IDisposable? lease = null;
-        var refusal = server.ExecuteAuthorityOperation(operation: () => {
+        var refusal = await server.RunOnTickThreadAsync(work: () => {
+            if (credentialIsCurrent?.Invoke() == false) { return "the session credential expired or was revoked"; }
             if (!server.TryTransferredPrincipal(
                 request.SourceAuthority,
                 request.Mobility,
@@ -50,6 +51,7 @@ internal static class WorldTravelerProjection {
                 return "the traveler holds no Observe grant for its body";
             }
             bool Authorized() => (
+                credentialIsCurrent?.Invoke() != false &&
                 WorldAdmissionDoor.TryAdmitArrival(server.Definition.Admission, request.SourceAuthority, out var liveAdmission) is null &&
                 liveAdmission!.Tier >= request.Ceiling &&
                 server.TryTransferredPrincipal(
@@ -90,7 +92,7 @@ internal static class WorldTravelerProjection {
             ));
             lease = server.AttachSink(sink: sink);
             return ((string?)null);
-        });
+        }, ct).ConfigureAwait(false);
 
         if (refusal is not null) { return refusal; }
         if (
@@ -113,9 +115,10 @@ internal static class WorldTravelerProjection {
             output: output
         ).ConfigureAwait(continueOnCapturedContext: false);
         } finally {
-            server.ExecuteAuthorityOperation(operation: () => {
+            _ = server.RunOnTickThreadAsync(work: () => {
                 lease.Dispose();
                 sink.Release();
+                return true;
             });
         }
         return null;

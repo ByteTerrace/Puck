@@ -55,8 +55,6 @@ public sealed partial class WorldSiloHost {
                     completion.TrySetResult(result: $"{world.World}: checkpoint overdue"); return;
                 }
                 if (
-                    (row.JournalFailed && (row.LastCheckpointTick <= row.JournalFailureTick)) ||
-                    (row.PendingJournalAppends > (policy?.JournalBacklogLimit ?? 1024)) ||
                     ((row.PendingJournalAppends > 0) && (m_clock.GetElapsedTime(startingTimestamp: row.JournalTimestamp) > TimeSpan.FromSeconds(seconds: (policy?.JournalTimeoutSeconds ?? 30))))
                 ) {
                     completion.TrySetResult(result: $"{world.World}: journal persistence unhealthy"); return;

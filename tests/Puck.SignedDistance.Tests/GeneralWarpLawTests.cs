@@ -22,24 +22,27 @@ public sealed class GeneralWarpLawTests {
 
         builder.ResetPoint();
         chain(builder);
-        return builder.Sphere(
+        var program = builder.Sphere(
             1f,
             material
-        ).Build().StepScale;
+        ).Build();
+
+        return program.ShapeStepScaleAt(instructionIndex: (program.InstructionCount - 1));
     }
 
     [Fact]
     public void AScaleDownstreamOfAWarpWidensTheWarpsReachByThatScale() {
         var builder = new SdfProgramBuilder();
         var material = builder.AddMaterial(material: new(Vector3.One));
-        var tenfold = builder.ResetPoint().RotatePlane(
+        var program = builder.ResetPoint().RotatePlane(
             driver: SdfAxis.Y,
             plane: SdfPlane.XZ,
             rate: 1f
         ).Sphere(
             10f,
             material
-        ).Build().StepScale;
+        ).Build();
+        var tenfold = program.ShapeStepScaleAt(instructionIndex: (program.InstructionCount - 1));
 
         Assert.Equal(
             tenfold,
@@ -126,10 +129,10 @@ public sealed class GeneralWarpLawTests {
             if (step is { } expected) {
                 Assert.Equal(
                 expected,
-                p.StepScale
+                p.ShapeStepScaleAt(instructionIndex: (p.InstructionCount - 1))
             );
             }
-            step = p.StepScale;
+            step = p.ShapeStepScaleAt(instructionIndex: (p.InstructionCount - 1));
         }
     }
     [Fact]
@@ -174,7 +177,7 @@ public sealed class GeneralWarpLawTests {
                 );
                 // At |driver| <= 1 the slope is at most .2 + .6 + 1.2 = 2.
                 // The exact 2D shear norm at slope 2 is 1 + sqrt(2).
-                Assert.True(condition: (program.StepScale <= ((1f / (1f + MathF.Sqrt(x: 2f))) + 1e-6f)));
+                Assert.True(condition: (program.ShapeStepScaleAt(instructionIndex: (program.InstructionCount - 1)) <= ((1f / (1f + MathF.Sqrt(x: 2f))) + 1e-6f)));
             }
         }
     }
@@ -211,7 +214,7 @@ public sealed class GeneralWarpLawTests {
                     op.Data0
                 );
                 Assert.InRange(
-                    p.StepScale,
+                    p.ShapeStepScaleAt(instructionIndex: (p.InstructionCount - 1)),
                     float.Epsilon,
                     1f
                 );

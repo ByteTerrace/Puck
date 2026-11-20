@@ -43,7 +43,6 @@ waterViews(views: [
     maximumDepth: 2.35
     heightScale: 1
     cell: 0.5
-    material: waterMaterial
   }
 ])
 spawnPoints [

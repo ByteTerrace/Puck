@@ -149,7 +149,7 @@ public sealed partial class WorldAuthorityBlobStore {
             address: CheckpointCandidateAddress(
                 hash: checkpointHash,
                 identity: identity,
-                ordinal: ordinal
+                sequence: checked(present.Root.Sequence + 1)
             ),
             bytes: checkpoint,
             cancellationToken: cancellationToken
@@ -172,6 +172,10 @@ public sealed partial class WorldAuthorityBlobStore {
             DurableOrdinal = ordinal,
             CheckpointTick = row.Tick,
             DurableTick = row.Tick,
+            CheckpointStorageSequence = checked(present.Root.Sequence + 1),
+            PayloadArchive = Guid.Empty,
+            JournalStorageSequence = 0,
+            JournalSegmentCount = 0,
             JournalHash = null,
             JournalEntryCount = 0,
             CheckpointCoverageSequence = present.Root.JournalSequence,

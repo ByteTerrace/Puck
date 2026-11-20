@@ -24,8 +24,7 @@ namespace Puck.World.Tests;
 /// <item><description>and, as the red leg, programs whose words carry two lanes exchanged, which must miss their
 /// reference somewhere, so the tolerance is tight enough to see a lane read from the wrong place.</description></item>
 /// </list>
-/// A distance matches within <see cref="Tolerance"/> once the program's step scale, which the kernel applies to what
-/// <c>map</c> returns and the evaluator does not, is divided out; a material matches exactly. It runs on the first Vulkan
+/// A distance matches within <see cref="Tolerance"/> and a material matches exactly. The law runs on the first Vulkan
 /// device with a graphics queue and on the first Direct3D 12 hardware adapter. The software (WARP) renderer is left out:
 /// it does not finish one program's lattice through the full interpreter in minutes.
 /// </summary>
@@ -97,12 +96,12 @@ public sealed partial class SdfFieldDeviceLawTests {
 
             for (var point = 0; (point < Points.Length); point++) {
                 var result = results[((index * Points.Length) + point)];
-                var miss = MathF.Abs(x: ((result.X / result.Z) - leg.Distances[point]));
+                var miss = MathF.Abs(x: (result.X - leg.Distances[point]));
 
                 if (!(miss <= worst)) {
                     worst = miss;
                     worstPoint = point;
-                    worstDevice = (result.X / result.Z);
+                    worstDevice = result.X;
                 }
                 if (BitConverter.SingleToInt32Bits(value: result.Y) != leg.Materials[point]) {
                     materialMisses++;

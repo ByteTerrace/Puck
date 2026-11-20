@@ -127,7 +127,6 @@ struct SdfProgramLayout {
     uint segmentCount;       // segment directory's segment count
     uint rigidPlanOffset;    // rigid-leaf execution plan offset (segmentHeader.z)
     uint partProgramOffset;  // whole-scope shared programs (instanceHeader.y); zero when none qualify
-    float stepScale;         // per-program Lipschitz step clamp (1/L; already >0-guarded)
     uint instanceOffset;     // instance directory offset
     uint instanceCount;      // packed (unclamped) instance count
     uint worldSegmentOffset; // world-segment list offset
@@ -140,7 +139,6 @@ static SdfProgramLayout sdfProgramLayout = (SdfProgramLayout)0;
 // The ONE per-invocation layout decode. Same loads, same order as mapCore's former inline sequence.
 SdfProgramLayout sdfLoadProgramLayout() {
     SdfProgramLayout layout = (SdfProgramLayout)0;
-    layout.stepScale = 1.0;
     uint vectors = sdfProgramVectorCount();
     if (vectors == 0u) { return layout; }
     uint4 header = sdfProgramWord(0);
@@ -155,7 +153,6 @@ SdfProgramLayout sdfLoadProgramLayout() {
     uint4 segmentHeader = sdfProgramWord(segmentOffset);
     uint segmentCount = SDF_SEGMENT_COUNT(segmentHeader);
     if (!sdfProgramRange(segmentOffset + SDF_DIRECTORY_HEADER_VECTORS, segmentCount, SDF_BOUND_RECORD_VECTORS)) { return layout; }
-    float stepScale = asfloat(SDF_SEGMENT_STEP_SCALE(segmentHeader));
     uint instanceOffset = sdfInstanceDirectoryOffsetFrom(segmentOffset, segmentCount);
     if (instanceOffset >= vectors) { return layout; }
     uint instanceCount = SDF_INSTANCE_COUNT(sdfProgramWord(instanceOffset));
@@ -175,7 +172,6 @@ SdfProgramLayout sdfLoadProgramLayout() {
     layout.segmentCount = segmentCount;
     layout.rigidPlanOffset = SDF_SEGMENT_RIGID_PLAN_OFFSET(segmentHeader);
     layout.partProgramOffset = SDF_INSTANCE_PART_PROGRAMS(sdfProgramWord(instanceOffset));
-    layout.stepScale = ((stepScale > 0.0) ? stepScale : 1.0);
     layout.instanceOffset = instanceOffset;
     layout.instanceCount = instanceCount;
     layout.worldSegmentOffset = (instanceOffset + SDF_DIRECTORY_HEADER_VECTORS + (SDF_BOUND_RECORD_VECTORS * instanceCount));

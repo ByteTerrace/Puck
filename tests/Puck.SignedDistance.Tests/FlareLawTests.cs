@@ -181,10 +181,10 @@ public sealed class FlareLawTests {
         ));
 
         Assert.Equal(
-            actual: program.StepScale,
+            actual: program.ShapeStepScaleAt(instructionIndex: (program.InstructionCount - 1)),
             expected: expected
         );
-        Assert.True(condition: (program.StepScale < 1.0f));
+        Assert.True(condition: (program.ShapeStepScaleAt(instructionIndex: (program.InstructionCount - 1)) < 1.0f));
     }
     [Fact]
     public void TheWarpFreeEvaluatorRefusesTheOpByName() {
@@ -223,7 +223,7 @@ public sealed class FlareLawTests {
             bulge: Bulge
         );
         var distanceScaleCorrection = (1.0f / maxS);
-        var stepScale = program.StepScale;
+        var stepScale = program.ShapeStepScaleAt(instructionIndex: (program.InstructionCount - 1));
         Vector3[] axes = [Vector3.UnitX, Vector3.UnitY, Vector3.UnitZ];
 
         for (var x = -3.0f; (x <= 3.0f); x += Step) {
@@ -273,7 +273,7 @@ public sealed class FlareLawTests {
         );
 
         Assert.Equal(
-            actual: flared.StepScale,
+            actual: flared.ShapeStepScaleAt(instructionIndex: (flared.InstructionCount - 1)),
             expected: 1.0f
         );
 
@@ -311,7 +311,7 @@ public sealed class FlareLawTests {
                 span: 3f,
                 radius: 1.0f,
                 distanceScaleCorrection: 1.0f,
-                stepScale: flared.StepScale
+                stepScale: flared.ShapeStepScaleAt(instructionIndex: (flared.InstructionCount - 1))
             );
 
             Assert.Equal(

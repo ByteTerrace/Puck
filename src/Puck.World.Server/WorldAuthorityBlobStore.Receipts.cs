@@ -70,6 +70,10 @@ public sealed partial class WorldAuthorityBlobStore {
             CheckpointHash = checkpointHash,
             CheckpointOrdinal = ordinal,
             CheckpointTick = tick,
+            CheckpointStorageSequence = checked(detached.Source.Root.Sequence + 1),
+            PayloadArchive = Guid.Empty,
+            JournalStorageSequence = 0,
+            JournalSegmentCount = 0,
             JournalHash = null,
             JournalEntryCount = 0,
             CheckpointCoverageSequence = detached.Source.Root.JournalSequence,
@@ -90,7 +94,7 @@ public sealed partial class WorldAuthorityBlobStore {
             address: CheckpointCandidateAddress(
                 hash: checkpointHash,
                 identity: identity,
-                ordinal: ordinal
+                sequence: root.CheckpointStorageSequence
             ),
             bytes: checkpointBytes,
             cancellationToken: cancellationToken

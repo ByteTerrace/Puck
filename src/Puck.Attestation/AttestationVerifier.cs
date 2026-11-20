@@ -37,6 +37,7 @@ public static class AttestationVerifier {
         string subject,
         TrustListEntry entry,
         TimeSpan? maximumAge,
+        long bindingValidThrough,
         TimeSpan? replayAcceptanceHorizon,
         DateTimeOffset now,
         string? expectedAudience
@@ -48,6 +49,7 @@ public static class AttestationVerifier {
             : replayAcceptanceHorizon)
         );
         var windowFailure = CheckWindow(
+            validThrough: out var validThrough,
             header: claim.Header,
             now: now,
             maximumAge: effectiveMaximumAge
@@ -97,6 +99,7 @@ public static class AttestationVerifier {
         }
 
         return AttestationVerifyResult.Accept(
+            validThrough: Math.Min(validThrough, bindingValidThrough),
             replayCommit: replayCommit,
             trustEntry: entry
         );
@@ -108,7 +111,8 @@ public static class AttestationVerifier {
     /// unlike a verifier-side grace window, which every verifier would size differently and which would
     /// silently widen every window in the system by twice its size.
     /// </summary>
-    private static string? CheckWindow(AttestationHeader header, DateTimeOffset now, TimeSpan? maximumAge) {
+    private static string? CheckWindow(AttestationHeader header, DateTimeOffset now, TimeSpan? maximumAge, out long validThrough) {
+        validThrough = header.NotAfter;
         var nowSeconds = now.ToUnixTimeSeconds();
 
         if (header.NotAfter < header.NotBefore) {
@@ -130,6 +134,7 @@ public static class AttestationVerifier {
             var ageSeconds = (((Int128)nowSeconds) - header.NotBefore);
             var maximumAgeSeconds = ((Int128)(maximumAge.Value.Ticks / TimeSpan.TicksPerSecond));
 
+            validThrough = (long)Int128.Min(header.NotAfter, (Int128)header.NotBefore + maximumAgeSeconds);
             if (ageSeconds > maximumAgeSeconds) {
                 return $"expired: age {ageSeconds} seconds exceeds the verifier's maximum age of {maximumAgeSeconds} seconds";
             }
@@ -364,6 +369,7 @@ public static class AttestationVerifier {
 
         var windowFailure = CheckWindow(
             header: binding.Header,
+            validThrough: out var validThrough,
             now: now,
             maximumAge: maximumAge
         );
@@ -417,6 +423,7 @@ public static class AttestationVerifier {
         }
 
         return new BindingHopResult(
+            ValidThrough: validThrough,
             Refusal: null,
             TargetId: payload.TargetId,
             TargetSubjectPublicKeyInfo: payload.PublicKeySubjectPublicKeyInfo
@@ -463,6 +470,7 @@ public static class AttestationVerifier {
         var policy = CheckClaimPolicy(
             claim: claim,
             subject: entry.PinnedId.Subject!,
+            bindingValidThrough: long.MaxValue,
             entry: entry,
             maximumAge: trustList.MaximumAgeFor(entry: entry),
             replayAcceptanceHorizon: trustList.ReplayAcceptanceHorizon,
@@ -669,6 +677,7 @@ public static class AttestationVerifier {
         var policy = CheckClaimPolicy(
             claim: claim,
             subject: subjectId.Subject,
+            bindingValidThrough: Math.Min(rootHop.ValidThrough, issuingHop.ValidThrough),
             entry: rootTrust,
             maximumAge: trustList.MaximumAgeFor(entry: rootTrust),
             replayAcceptanceHorizon: trustList.ReplayAcceptanceHorizon,
@@ -838,5 +847,5 @@ public static class AttestationVerifier {
     }
 
     /// <summary>The outcome of verifying one binding hop: either a refusal, or the vouched-for key's id and actual key bytes to carry into the next hop.</summary>
-    private readonly record struct BindingHopResult(string? Refusal, KeyId? TargetId, ReadOnlyMemory<byte> TargetSubjectPublicKeyInfo);
+    private readonly record struct BindingHopResult(string? Refusal, KeyId? TargetId, ReadOnlyMemory<byte> TargetSubjectPublicKeyInfo, long ValidThrough = 0);
 }

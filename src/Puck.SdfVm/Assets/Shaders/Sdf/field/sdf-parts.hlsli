@@ -60,7 +60,7 @@ bool sdfInstanceCannotWin(float gap, float gain, float incumbent) {
 // Each leaf = (canonical shape instruction, optional domain instruction + 1, 0, 0); each placement binding =
 // (packed pose slot (SDF_TRANSFORM_SLOT_UNPACK), material, original shape instruction, 0). Geometry payloads and flags come from the canonical instructions, not the
 // placement that first happened to render. KEEP IN SYNC with SdfProgram.PartPrograms.cs.
-void sdfComposePartProgram(inout SdfHit parent, float3 worldPosition, uint4 part, uint dataOffset, int instanceIndex, bool trackMaterial) {
+void sdfComposePartProgram(inout SdfHit parent, float3 worldPosition, uint4 part, uint dataOffset, int instanceIndex, bool trackMaterial, inout SdfDynamicRoot root) {
     SdfHit child;
     child.distance = SDF_FAR_DISTANCE;
     child.material = 0;
@@ -85,9 +85,7 @@ void sdfComposePartProgram(inout SdfHit parent, float3 worldPosition, uint4 part
         if (binding.x != SDF_TRANSFORM_SLOT_STATIC_WORD) {
             uint pose = (uint)SDF_TRANSFORM_SLOT_UNPACK(binding.x);
             slot = (int)pose;
-            float4 position = sdfDynamicTransformRow(3u * pose);
-            float4 orientation = sdfDynamicTransformRow(3u * pose + 1u);
-            localPosition = rotatePointByInverseQuaternion(worldPosition - position.xyz, orientation);
+            localPosition = sdfWorldPointInSlot(worldPosition, pose, root);
         }
 #endif
 

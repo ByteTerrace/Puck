@@ -21,6 +21,31 @@ SdfHit sdfIsaErrorHit() {
 #include "sdf-quaternion.hlsli"
 #include "sdf-component.hlsli"
 
+#ifdef SDF_DYNAMIC_TRANSFORMS
+float3 sdfPointInSlot(float3 positionToTransform, uint slot) {
+    float4 position = sdfDynamicTransformRow(3u * slot);
+    float4 orientation = sdfDynamicTransformRow(3u * slot + 1u);
+    return rotatePointByInverseQuaternion(positionToTransform - position.xyz, orientation);
+}
+#endif
+
+// A sample's last dynamic root. The generic walk, rigid leaves and compiled parts all ask for the
+// same world point in a slot before applying any shape-local transforms.
+struct SdfDynamicRoot {
+    int slot;
+    float3 localPosition;
+};
+
+#ifdef SDF_DYNAMIC_TRANSFORMS
+float3 sdfWorldPointInSlot(float3 world, uint slot, inout SdfDynamicRoot root) {
+    if ((int)slot != root.slot) {
+        root.slot = (int)slot;
+        root.localPosition = sdfPointInSlot(world, slot);
+    }
+    return root.localPosition;
+}
+#endif
+
 // The point warps the general walk (mapCore) and the compiled part walk (sdfPartEvaluate) both apply, one arithmetic for
 // both; each caller validates the instruction's axes and propagates its own error first.
 

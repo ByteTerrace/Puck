@@ -1,0 +1,13 @@
+schema: "puck.world.definition.v1"
+documentId: "pair"
+
+state {
+  enum Mode {
+    Idle
+    Active
+  }
+
+  world {
+    slot mode: Mode = 1
+  }
+}
