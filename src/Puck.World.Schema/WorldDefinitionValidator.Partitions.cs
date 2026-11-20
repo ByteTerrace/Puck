@@ -70,6 +70,20 @@ public static partial class WorldDefinitionValidator {
             validate: static (run, _) => ValidateHaptics(definition: run.Definition, errors: run.Errors, localSeats: run.Definition.Population.LocalSeats)
         ),
         new(
+            name: "keyLights",
+            granularity: WorldValidationGranularity.Section,
+            owns: WorldDocumentInputs.Of(WorldDocumentInput.KeyLights),
+            reads: (StateInputs | WorldDocumentInputs.Of(WorldDocumentInput.Bodies)),
+            validate: static (run, _) => ValidateKeyLights(definition: run.Definition, errors: run.Errors, localSeats: run.Definition.Population.LocalSeats)
+        ),
+        new(
+            name: "highlights",
+            granularity: WorldValidationGranularity.Section,
+            owns: WorldDocumentInputs.Of(WorldDocumentInput.Highlights),
+            reads: StateInputs,
+            validate: static (run, _) => ValidateHighlights(definition: run.Definition, errors: run.Errors)
+        ),
+        new(
             name: "storage",
             granularity: WorldValidationGranularity.Section,
             owns: WorldDocumentInputs.Of(WorldDocumentInput.Storage),

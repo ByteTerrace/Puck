@@ -98,6 +98,8 @@ public readonly record struct OverlayChannelUsage(
 /// <param name="WheelMaxSectorsPerRing">The most sector pieces one wheel ring presents — <see cref="WheelMaxRings"/>'
 /// per-ring twin.</param>
 /// <param name="HudPlotSamplesPerPanel">The total bars a world or seat HUD panel may request.</param>
+/// <param name="HudStyledRunsPerPanel">The extra text runs one world or seat HUD panel's marked-up text may split into,
+/// beyond the one run each text element already has.</param>
 public readonly record struct OverlayCapacity(
     int Seats,
     int HudPanels,
@@ -110,7 +112,8 @@ public readonly record struct OverlayCapacity(
     int MarkerMaxChipsPerSeat,
     int WheelMaxRings,
     int WheelMaxSectorsPerRing,
-    int HudPlotSamplesPerPanel = 0
+    int HudPlotSamplesPerPanel = 0,
+    int HudStyledRunsPerPanel = 0
 );
 /// <summary>
 /// The lease table: every channel's reservation, each sized at the writer's measured maximum — the largest record
@@ -196,6 +199,7 @@ public sealed class OverlayChannelLeases {
             name: nameof(OverlayCapacity.Seats)
         );
         RequireNonNegative(capacity.HudPlotSamplesPerPanel, nameof(OverlayCapacity.HudPlotSamplesPerPanel));
+        RequireNonNegative(capacity.HudStyledRunsPerPanel, nameof(OverlayCapacity.HudStyledRunsPerPanel));
         RequireNonNegative(
             count: capacity.HudPanels,
             name: nameof(OverlayCapacity.HudPanels)
@@ -262,7 +266,7 @@ public sealed class OverlayChannelLeases {
             (seats, (bindingBarElementsPerSeat * seats), 0, (((UInt128)BindingBarTextWordsPerSeat) * seats)),
             (seats, (markerElementsPerSeat * seats), 0, 0),
             (0, ToastElements, 1, ToastTextWords),
-            (hudPanels, (((hudWorldElements + hudSeatElements) * HudElementCost) + (hudPanels * (uint)capacity.HudPlotSamplesPerPanel * HudWriter.PlotSampleElementCost)), hudPanels, ((hudWorldElements + hudSeatElements) * HudTextWordCost)),
+            (hudPanels, (((hudWorldElements + hudSeatElements) * HudElementCost) + (hudPanels * (uint)capacity.HudPlotSamplesPerPanel * HudWriter.PlotSampleElementCost) + (hudPanels * (uint)capacity.HudStyledRunsPerPanel)), hudPanels, ((hudWorldElements + hudSeatElements) * HudTextWordCost)),
             (seats, ((((UInt128)CursorElementsPerSeat) * seats) + CursorPaneElements), 0, (((UInt128)CursorTextWordsPerSeat) * seats)),
             (seats, (wheelElementsPerSeat * seats), 0, (wheelTextWordsPerSeat * seats)),
             // The editor channel: each seat's inspector and its history scrubber row, each in a clip of its own.

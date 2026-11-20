@@ -25,5 +25,12 @@ public enum TextEffectKind {
     /// <summary>Static: an emphasis weight bias (a fake-bold coverage/edge shift).</summary>
     Weight,
     /// <summary>Reveal: a deterministic per-glyph typewriter materialize, a pure function of the content tick.</summary>
-    Reveal
+    Reveal,
+    /// <summary>Static: a position within the span, for text a reader works through a glyph at a time (a word being
+    /// typed, a line being read aloud). The glyphs before the caret take a settled coverage, the glyph at it is lifted
+    /// and enlarged, and the glyphs after it are untouched. <see cref="TextEffect.Phase"/> is the caret's glyph
+    /// ordinal within the span, <see cref="TextEffect.AmplitudePixels"/> the lift,
+    /// <see cref="TextEffect.FrequencyHz"/> the fraction the caret's glyph grows by, and
+    /// <see cref="TextEffect.DurationSeconds"/> the settled glyphs' coverage in <c>[0, 1]</c>.</summary>
+    Caret
 }

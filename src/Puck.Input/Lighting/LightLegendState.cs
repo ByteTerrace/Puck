@@ -1,10 +1,12 @@
+using Puck.Abstractions.Lighting;
+
 namespace Puck.Input.Lighting;
 
 /// <summary>
 /// One tick's legend: which keyboard sources are bound (and to what category / availability), which held chord
 /// modifiers are active, and which sources fired a command this tick. A host rebuilds this each tick from its
 /// live binding and command state and hands it to <see cref="LightLegendComposer"/>; the reusable instance is
-/// cleared and refilled rather than reallocated. Keyed by the neutral <see cref="InputSources.Keyboard"/> source
+/// cleared and refilled rather than reallocated. Keyed, ignoring case as the source vocabulary does, by the neutral <see cref="InputSources.Keyboard"/> source
 /// string, so it never depends on a device's lamp layout.
 /// </summary>
 /// <remarks>
@@ -13,9 +15,9 @@ namespace Puck.Input.Lighting;
 /// light up). The composer renders whatever legend it is given, so the page swap <em>is</em> the recolor.
 /// </remarks>
 public sealed class LightLegendState {
-    private readonly Dictionary<string, BindLegendEntry> m_bindings = new(comparer: StringComparer.Ordinal);
-    private readonly HashSet<string> m_flashed = new(comparer: StringComparer.Ordinal);
-    private readonly HashSet<string> m_heldModifiers = new(comparer: StringComparer.Ordinal);
+    private readonly Dictionary<string, BindLegendEntry> m_bindings = new(comparer: StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, LampColor?> m_flashed = new(comparer: StringComparer.OrdinalIgnoreCase);
+    private readonly HashSet<string> m_heldModifiers = new(comparer: StringComparer.OrdinalIgnoreCase);
 
     /// <summary>Binds a keyboard source to a category for this tick.</summary>
     /// <param name="source">The neutral keyboard source string (from <see cref="InputSources.Keyboard"/>).</param>
@@ -29,18 +31,60 @@ public sealed class LightLegendState {
             IsAvailable: isAvailable
         );
     }
+    /// <summary>Binds a keyboard source to a color of the host's own for this tick, for a legend whose colors are
+    /// authored by key rather than by category.</summary>
+    /// <param name="source">The neutral keyboard source string (from <see cref="InputSources.Keyboard"/>).</param>
+    /// <param name="color">The color the key takes.</param>
+    /// <param name="isAvailable">Whether the bind is currently available; an unavailable bind is dimmed.</param>
+    public void Bind(string source, LampColor color, bool isAvailable = true) {
+        ArgumentNullException.ThrowIfNull(source);
+
+        m_bindings[source] = new BindLegendEntry(
+            Category: BindCategory.None,
+            Color: color,
+            IsAvailable: isAvailable
+        );
+    }
     /// <summary>Clears every binding, flash, and held-modifier mark, readying the instance for a new tick.</summary>
     public void Clear() {
         m_bindings.Clear();
         m_flashed.Clear();
         m_heldModifiers.Clear();
     }
+    /// <summary>Clears this tick's flashes and keeps every binding and held-modifier mark.</summary>
+    public void ClearFlashes() {
+        m_flashed.Clear();
+    }
+    /// <summary>Copies this legend's bindings and held-modifier marks over another's, and its flashes onto it.</summary>
+    /// <param name="destination">The legend to overwrite.</param>
+    /// <param name="keepFlashes">Whether the flashes <paramref name="destination"/> already holds stay beside the
+    /// copied ones, for a destination whose reader has not painted them yet.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="destination"/> is <see langword="null"/>.</exception>
+    public void CopyTo(LightLegendState destination, bool keepFlashes) {
+        ArgumentNullException.ThrowIfNull(destination);
+
+        destination.m_bindings.Clear();
+        destination.m_heldModifiers.Clear();
+        if (!keepFlashes) {
+            destination.m_flashed.Clear();
+        }
+        foreach (var (source, entry) in m_bindings) {
+            destination.m_bindings[source] = entry;
+        }
+        foreach (var source in m_heldModifiers) {
+            _ = destination.m_heldModifiers.Add(item: source);
+        }
+        foreach (var (source, color) in m_flashed) {
+            destination.m_flashed[source] = color;
+        }
+    }
     /// <summary>Marks that the command bound to a source fired this tick (drives the activation flash layer).</summary>
     /// <param name="source">The neutral keyboard source string.</param>
-    public void Flash(string source) {
+    /// <param name="color">The color the flash starts from, or <see langword="null"/> for the palette's.</param>
+    public void Flash(string source, LampColor? color = null) {
         ArgumentNullException.ThrowIfNull(source);
 
-        _ = m_flashed.Add(item: source);
+        m_flashed[source] = color;
     }
     /// <summary>Marks a keyboard source as a currently-held chord modifier (its key gets the modifier highlight).</summary>
     /// <param name="source">The neutral keyboard source string.</param>
@@ -69,7 +113,18 @@ public sealed class LightLegendState {
     /// <param name="source">The neutral keyboard source string.</param>
     /// <returns><see langword="true"/> when the source flashed.</returns>
     public bool WasFlashed(string source) {
-        return m_flashed.Contains(item: source);
+        return m_flashed.ContainsKey(key: source);
+    }
+    /// <summary>Tries to read the flash a source was given this tick.</summary>
+    /// <param name="source">The neutral keyboard source string.</param>
+    /// <param name="color">When this method returns <see langword="true"/>, the flash's own color, or
+    /// <see langword="null"/> for the palette's.</param>
+    /// <returns><see langword="true"/> when the source flashed.</returns>
+    public bool TryGetFlash(string source, out LampColor? color) {
+        return m_flashed.TryGetValue(
+            key: source,
+            value: out color
+        );
     }
 
     /// <summary>Gets a value indicating whether the state carries any binding (a fully-empty legend paints only idle/ambient).</summary>
@@ -78,4 +133,6 @@ public sealed class LightLegendState {
 /// <summary>One bound key's legend entry: the category that colors it and whether its command is available.</summary>
 /// <param name="Category">The category that selects the key's color.</param>
 /// <param name="IsAvailable">Whether the command is currently available; an unavailable bind is dimmed.</param>
-public readonly record struct BindLegendEntry(BindCategory Category, bool IsAvailable);
+/// <param name="Color">The key's own color, which replaces the category's, or <see langword="null"/> to take the
+/// category's from the palette.</param>
+public readonly record struct BindLegendEntry(BindCategory Category, bool IsAvailable, LampColor? Color = null);

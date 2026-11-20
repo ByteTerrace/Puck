@@ -42,6 +42,7 @@ public static class TextEnrichmentTags {
             "color" or "colour" => TextEffectKind.Color,
             "weight" or "bold" or "emphasis" => TextEffectKind.Weight,
             "reveal" or "typewriter" => TextEffectKind.Reveal,
+            "caret" or "cursor" => TextEffectKind.Caret,
             _ => TextEffectKind.None
         };
 
@@ -130,6 +131,13 @@ public static class TextEnrichmentTags {
             TextEffectDissolveStyle.None,
             Vector4.One
         ),
+            TextEffectKind.Caret => new TextEffect(
+            TextEffectKind.Caret,
+            new(3.0f),
+            new(0.12f),
+            new(0.0f),
+            new(0.45f)
+        ),
             _ => TextEffect.None
         };
 
@@ -168,10 +176,10 @@ public static class TextEnrichmentTags {
             }
 
             effect = name switch {
-                "amplitude" or "amplitudepixels" or "intensity" or "amount" or "weight" => effect with { AmplitudePixels = parsedParameter },
-                "frequency" or "frequencyhz" or "speed" or "rate" => effect with { FrequencyHz = parsedParameter },
-                "phase" or "stagger" => effect with { Phase = parsedParameter },
-                "duration" or "durationseconds" => effect with { DurationSeconds = parsedParameter },
+                "amplitude" or "amplitudepixels" or "intensity" or "amount" or "weight" or "lift" => effect with { AmplitudePixels = parsedParameter },
+                "frequency" or "frequencyhz" or "speed" or "rate" or "grow" => effect with { FrequencyHz = parsedParameter },
+                "phase" or "stagger" or "at" => effect with { Phase = parsedParameter },
+                "duration" or "durationseconds" or "settled" => effect with { DurationSeconds = parsedParameter },
                 _ => effect
             };
         }
@@ -296,6 +304,7 @@ public static class TextEnrichmentTags {
             TextEffectKind.Color => "color",
             TextEffectKind.Weight => "weight",
             TextEffectKind.Reveal => "reveal",
+            TextEffectKind.Caret => "caret",
             _ => throw new ArgumentOutOfRangeException(
             paramName: nameof(kind),
             actualValue: kind,

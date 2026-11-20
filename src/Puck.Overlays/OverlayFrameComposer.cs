@@ -308,7 +308,7 @@ public sealed class OverlayFrameComposer {
         m_builder.BeginFrame();
         m_frameSlots.BeginFrame();
         m_currentFrameRenderTicks = renderTicks;
-        m_hudWriter?.RefreshFrame();
+        m_hudWriter?.RefreshFrame(renderTicks: renderTicks);
 
         if (m_hudWriter is { } hudUnder) {
             m_builder.BeginChannel(channel: OverlayChannel.Hud);

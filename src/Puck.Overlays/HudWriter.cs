@@ -1,4 +1,5 @@
 using Puck.Abstractions.Presentation;
+using Puck.Text;
 
 namespace Puck.Overlays;
 
@@ -18,6 +19,15 @@ public sealed class HudWriter : IOverlaySeatEmitter<OverlayHudSeatPanel> {
     public const int PlotSampleElementCost = 1;
     private PresentationReading[] m_plotSamples = [];
     private int m_plotRemaining;
+    // The engine ticks a presented second holds (Puck.Hosting.FixedTickConversion.TicksPerSecond), which the content
+    // clock of a marked-up text counts in.
+    private const float RenderTicksPerSecond = 50400f;
+    // The marked-up texts a panel may hold parsed at once; past it the cache starts again.
+    private const int StyledTextCacheSize = 64;
+    private readonly Dictionary<string, StyledGlyph[]> m_styledTexts = new(comparer: StringComparer.Ordinal);
+    private readonly char[] m_styledRun = new char[TextRunChars];
+    private int m_styledRemaining;
+    private ulong m_renderTicks;
     // The panel being emitted's presence — multiplied into its chrome and every element's alpha.
     private float m_panelAlpha = 1f;
     // Reused across every ComposeTemplate call (single-threaded on the window-pump thread, like every writer here) so
@@ -368,6 +378,7 @@ public sealed class HudWriter : IOverlaySeatEmitter<OverlayHudSeatPanel> {
 
         m_panelAlpha = panel.Alpha;
         m_plotRemaining = builder.Leases.Capacity.HudPlotSamplesPerPanel;
+        m_styledRemaining = builder.Leases.Capacity.HudStyledRunsPerPanel;
 
         var x = (originX + (rect.X * spanW));
         var y = (originY + (rect.Y * spanH));
@@ -459,6 +470,12 @@ public sealed class HudWriter : IOverlaySeatEmitter<OverlayHudSeatPanel> {
 
         var cellHeight = OverlayFrameBuilder.CellHeight(sizePx: h);
 
+        if (element.Markup) {
+            EmitStyledText(builder: builder, cellHeight: cellHeight, role: element.Role, text: text, x: x, y: y);
+
+            return;
+        }
+
         builder.WriteText(
             x: x,
             y: y,
@@ -469,6 +486,91 @@ public sealed class HudWriter : IOverlaySeatEmitter<OverlayHudSeatPanel> {
             maxChars: TextRunChars
         );
     }
+    // A marked-up text draws as one run for each stretch of glyphs that share a channel this frame: a glyph's offset
+    // moves its run's pen, its scale sizes the run's cell about the glyph's centre, and its coverage is the run's alpha.
+    // The fixed-cell tier has no per-glyph tint or weight, so those two fields are not drawn. The panel's styled-run
+    // budget bounds the split: once it is spent, the rest of the text draws as one unstyled run, so nothing is dropped.
+    private void EmitStyledText(OverlayFrameBuilder builder, ReadOnlySpan<char> text, float x, float y, int cellHeight, OverlayColorRole role) {
+        var glyphs = StyledGlyphs(text: text);
+        var count = Math.Min(val1: glyphs.Length, val2: TextRunChars);
+        var advance = builder.GlyphAdvance(cellHeight: cellHeight);
+        var start = 0;
+
+        while (start < count) {
+            var channel = ChannelOf(glyph: in glyphs[start], index: start, advance: advance);
+            var end = (start + 1);
+
+            if (m_styledRemaining <= 0) {
+                channel = TextGlyphChannel.Identity;
+                end = count;
+            } else {
+                while ((end < count) && (ChannelOf(glyph: in glyphs[end], index: end, advance: advance) == channel)) {
+                    end++;
+                }
+                if (start > 0) {
+                    m_styledRemaining--;
+                }
+            }
+
+            for (var index = start; (index < end); index++) {
+                m_styledRun[(index - start)] = glyphs[index].Character;
+            }
+
+            var runCell = Math.Max(val1: 1, val2: ((int)MathF.Round(x: (cellHeight * channel.Scale))));
+
+            builder.WriteText(
+                x: ((x + (start * advance)) + channel.Offset.X) - ((builder.GlyphAdvance(cellHeight: runCell) - advance) * 0.5f),
+                y: (y - channel.Offset.Y) - ((runCell - cellHeight) * 0.5f),
+                text: m_styledRun.AsSpan(start: 0, length: (end - start)),
+                cellHeight: runCell,
+                role: role,
+                alpha: Math.Clamp(max: 1f, min: 0f, value: channel.Coverage),
+                maxChars: TextRunChars
+            );
+            start = end;
+        }
+    }
+    private TextGlyphChannel ChannelOf(in StyledGlyph glyph, int index, float advance) => TextGlyphChannel.Resolve(
+        contentTick: ((long)m_renderTicks),
+        effect: glyph.Effect,
+        glyphIndex: glyph.SpanIndex,
+        glyphPhase: (index * advance),
+        ticksPerSecond: RenderTicksPerSecond
+    );
+    // The markup is compiled when a text first resolves to it, so a frame that only advances the content clock parses
+    // nothing; a text that changes every frame costs one compile a frame and is bounded by the cache's size.
+    private StyledGlyph[] StyledGlyphs(ReadOnlySpan<char> text) {
+        var lookup = m_styledTexts.GetAlternateLookup<ReadOnlySpan<char>>();
+
+        if (lookup.TryGetValue(key: text, value: out var cached)) {
+            return cached;
+        }
+        if (m_styledTexts.Count >= StyledTextCacheSize) {
+            m_styledTexts.Clear();
+        }
+
+        var markup = text.ToString();
+        var glyphs = new List<StyledGlyph>(capacity: markup.Length);
+        var span = 0;
+        var previous = TextEffect.None;
+
+        foreach (var rune in BbCodeTextMarkup.EnrichRunes(markup: markup)) {
+            span = ((rune.Effect == previous) ? (span + 1) : 0);
+            previous = rune.Effect;
+            glyphs.Add(item: new StyledGlyph(
+                Character: (rune.Rune.IsBmp ? ((char)rune.Rune.Value) : '?'),
+                Effect: rune.Effect,
+                SpanIndex: span
+            ));
+        }
+
+        cached = [.. glyphs];
+        m_styledTexts[markup] = cached;
+
+        return cached;
+    }
+
+    private readonly record struct StyledGlyph(char Character, TextEffect Effect, int SpanIndex);
 
     /// <summary>Emits every over-band panel, in document order.</summary>
     /// <param name="builder">The frame builder.</param>
@@ -512,7 +614,10 @@ public sealed class HudWriter : IOverlaySeatEmitter<OverlayHudSeatPanel> {
     );
     /// <summary>Refreshes the cached structural snapshot for the frame about to produce. Call exactly once per
     /// produced frame, before any <c>Emit*</c> call.</summary>
-    public void RefreshFrame() {
+    /// <param name="renderTicks">The frame's presented time in engine ticks, the content clock a marked-up text's moving
+    /// effects read.</param>
+    public void RefreshFrame(ulong renderTicks = 0UL) {
+        m_renderTicks = renderTicks;
         m_hasFrame = m_source.TrySnapshot(frame: out m_frame);
     }
 

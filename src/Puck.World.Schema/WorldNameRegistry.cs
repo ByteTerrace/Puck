@@ -1712,6 +1712,16 @@ public static partial class WorldNameRegistry {
             "a haptic row id"
         ),
         new(
+            typeof(WorldKeyLightRow),
+            nameof(WorldKeyLightRow.Id),
+            "a key light row id"
+        ),
+        new(
+            typeof(WorldHighlightRow),
+            nameof(WorldHighlightRow.Id),
+            "a highlight row id"
+        ),
+        new(
             typeof(WorldHudElement),
             nameof(WorldHudElement.Id),
             "a HUD element id"

@@ -21,6 +21,7 @@ public static class BbCodeTextMarkup {
             TextEffectKind.Color => "color",
             TextEffectKind.Weight => "amount",
             TextEffectKind.Reveal => "stagger",
+            TextEffectKind.Caret => "at",
             _ => "amplitude"
         };
     private static bool TryCompileTag(string inner, out string compiled) {
