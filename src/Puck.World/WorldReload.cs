@@ -147,6 +147,8 @@ internal sealed class WorldReload(WorldServer server, IServerLink link, WorldDef
         var started = System.Diagnostics.Stopwatch.GetTimestamp();
         var stamps = CompileInputs.StampReads;
         var contents = CompileInputs.ContentReads;
+        // The compile and the load ask about the same files: one pass reads each once.
+        using var pass = CompileInputs.Pass();
         long compiled;
 
         if (reads is null) {

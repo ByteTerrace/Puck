@@ -369,6 +369,10 @@ public sealed partial class WorldCompileSession : IWorldCompositionStore, IWorld
 
         failure = null;
 
+        // Proving a held compile asks about every file it read, and its imports' compiles ask about many of the same
+        // files again: one pass reads each once.
+        using var pass = CompileInputs.Pass();
+
         if (TryServe(compiled: out compiled, hold: hold, key: key)) {
             return true;
         }

@@ -146,29 +146,8 @@ public sealed partial class WorldCompileSession {
         failure = null;
         passed = null;
 
-        var claims = new List<WorldDocumentCarrier>(capacity: 2);
-
-        foreach (var file in WorldSourceIndex.Claims(directory: directory)) {
-            var carrying = file.Names.Where(predicate: name => Puck.Assets.Documents.DocumentName.Comparer.Equals(
-                x: name,
-                y: leaf
-            )).ToArray();
-
-            if (carrying.Length > 0) {
-                claims.AddRange(collection: carrying.Select(selector: name => new WorldDocumentCarrier(
-                    Name: name,
-                    Path: file.Path
-                )));
-            } else if (file.IsSource && Puck.Assets.Documents.DocumentName.Comparer.Equals(
-                x: WorldDocumentName.OfSourceFile(path: Path.GetFileName(path: file.Path)),
-                y: leaf
-            )) {
-                passed = ((file.Names.Count == 0)
-                    ? $"its source {WorldDocumentLabel.Of(path: file.Path)} is a module library, which emits no document"
-                    : $"its source {WorldDocumentLabel.Of(path: file.Path)} is a composition, which declares no world named '{leaf}'"
-                );
-            }
-        }
+        var index = WorldSourceIndex.Index(directory: directory);
+        var claims = index.Carrying(name: leaf);
 
         if (!WorldDocumentName.TryCarriers(
             carriers: out var carriers,
@@ -186,6 +165,13 @@ public sealed partial class WorldCompileSession {
         }
 
         if (carriers.Count == 0) {
+            if (index.PassedSource(name: leaf) is { } file) {
+                passed = ((file.Names.Count == 0)
+                    ? $"its source {WorldDocumentLabel.Of(path: file.Path)} is a module library, which emits no document"
+                    : $"its source {WorldDocumentLabel.Of(path: file.Path)} is a composition, which declares no world named '{leaf}'"
+                );
+            }
+
             return true;
         }
 
@@ -303,6 +289,10 @@ public sealed partial class WorldCompileSession {
         WorldCompiledSource? sourceCompilation = null,
         bool retainRoot = true
     ) {
+        // Every import is resolved, compiled and its held image proved through the same directories' files: one pass
+        // reads each once.
+        using var pass = CompileInputs.Pass();
+
         return WorldDefinitionFileSource.TryComposeChainWithImports(
             origins: origins,
             retainRoot: retainRoot,

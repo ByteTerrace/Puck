@@ -1,4 +1,3 @@
-using System.Text;
 using Puck.Abstractions.Machines;
 using Puck.Assets;
 using Puck.World.Transpiler.Composition;
@@ -100,9 +99,9 @@ public sealed partial class WorldCompileSession {
             sourceCompilation: sourceCompilation
         ) || !WorldDefinitionFileSource.TryParseDocument(
             definition: out var parsed,
-            json: Encoding.UTF8.GetString(bytes: json),
             reason: out reason,
-            sourceName: path
+            sourceName: path,
+            utf8: json
         )) {
             return false;
         }
@@ -141,9 +140,9 @@ public sealed partial class WorldCompileSession {
             sourceCompilation: sourceCompilation
         ) && WorldDefinitionFileSource.TryParseDocument(
             definition: out var parsed,
-            json: Encoding.UTF8.GetString(bytes: json),
             reason: out reason,
-            sourceName: path
+            sourceName: path,
+            utf8: json
         ) && CompiledWorld.TryCompile(
             authored: (parsed! with { DocumentDirectory = WorldDocumentPaths.DirectoryOf(documentPath: path) }),
             bytes: out compiledWorld,
@@ -159,15 +158,18 @@ public sealed partial class WorldCompileSession {
     private bool TryComposeSource(string path, byte[] document, out byte[] json, out string reason, string catalogFingerprint, IMachineValidationCatalog? catalog, WorldCompiledSource? sourceCompilation) {
         json = document;
 
-        if (!TryCompose(
+        // The composed document is taken as its bytes: a held image's own, or the composed tree written once.
+        using var pass = CompileInputs.Pass();
+
+        if (!WorldDefinitionFileSource.TryComposeChainBytes(
             catalog: catalog,
             catalogFingerprint: catalogFingerprint,
             chainBytes: out _,
-            composed: out var composed,
+            composedJson: out var composed,
             reason: out var composeReason,
             rootBytes: document,
-            rootResolvedPath: path,
-            sourceCompilation: sourceCompilation
+            rootResolvedName: Puck.Abstractions.PuckPaths.Slashed(path: path),
+            source: ((sourceCompilation is null) ? this : WithRoot(sourceCompilation: sourceCompilation))
         )) {
             reason = $"{path} composition refused: {composeReason}";
 
@@ -175,7 +177,7 @@ public sealed partial class WorldCompileSession {
         }
 
         if (composed is not null) {
-            json = Encoding.UTF8.GetBytes(s: composed.ToJsonString());
+            json = composed;
         }
 
         reason = string.Empty;

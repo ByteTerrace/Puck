@@ -419,6 +419,10 @@ public static partial class WorldDefinitionFileSource {
         contentHash = string.Empty;
         WorldBootWork.Count(kind: WorldBootWork.Loads);
 
+        // The root's compile, every import's and every held image's proof ask about the same files: one pass reads
+        // each once.
+        using var pass = CompileInputs.Pass();
+
         if (!TryReadDocumentFile(
             content: out var read,
             countsFileRead: true,
@@ -434,11 +438,12 @@ public static partial class WorldDefinitionFileSource {
 
         var bytes = read!;
 
-        string json;
+        ReadOnlyMemory<byte> json;
 
         try {
-            // The hash below is over the raw bytes; the text is decoded as File.ReadAllText decodes the file.
-            json = DecodeJson(bytes: bytes);
+            // The hash below is over the raw bytes; the document is read from the text they decode to, as
+            // File.ReadAllText decodes the file, kept as UTF-8.
+            json = Puck.Confinement.FileContent.Utf8(content: bytes);
         } catch (Exception exception) {
             reason = $"cannot decode {shown}: {exception.Message.ReplaceLineEndings(replacementText: " ")}";
 
@@ -453,16 +458,10 @@ public static partial class WorldDefinitionFileSource {
         var chain = ((IReadOnlyList<byte[]>)[bytes]);
 
         if (
-            json.Contains(
-            comparisonType: StringComparison.Ordinal,
-            value: $"\"{WorldDocumentBasis.BasisMemberName}\""
-        ) ||
-            json.Contains(
-            comparisonType: StringComparison.Ordinal,
-            value: $"\"{WorldDocumentBasis.ImportsMemberName}\""
-        )
+            (json.Span.IndexOf(value: "\"basis\""u8) >= 0) ||
+            (json.Span.IndexOf(value: "\"imports\""u8) >= 0)
         ) {
-            if (!TryComposeChainJson(
+            if (!TryComposeChainBytes(
                 source: (documents ?? LocalDocuments),
                 rootResolvedName: PuckPaths.Normalize(path: path),
                 rootBytes: bytes,
@@ -502,9 +501,9 @@ public static partial class WorldDefinitionFileSource {
         try {
             if (!TryParseDocument(
                 definition: out var parsed,
-                json: json,
                 reason: out reason,
-                sourceName: shown
+                sourceName: shown,
+                utf8: json
             )) {
                 return false;
             }
@@ -672,17 +671,16 @@ public static partial class WorldDefinitionFileSource {
         }
 
         JsonObject? tree = null;
-        var whole = !parse;
+        // A held image holds one JSON object (TryFindComposedImage), so only a parse can find otherwise.
+        var whole = true;
 
         if (parse) {
             try {
-                tree = (JsonNode.Parse(utf8Json: new MemoryStream(buffer: image.ComposedJson)) as JsonObject);
+                tree = (JsonNode.Parse(utf8Json: image.ComposedJson) as JsonObject);
                 whole = (tree is not null);
             } catch (JsonException) {
                 whole = false;
             }
-        } else {
-            whole = (MembersOf(json: image.ComposedJson) is not null);
         }
 
         if (!whole) {
@@ -1287,7 +1285,7 @@ public static partial class WorldDefinitionFileSource {
     }
     /// <summary>Parses an already composed document, binds authored state expressions. A
     /// document holding an authored name that carries <see cref="GeneratedName.FileJoiner"/> is refused by name
-    /// (<see cref="WorldAuthoredNames.TryRefuseFileJoiner"/>).</summary>
+    /// (<see cref="WorldAuthoredNames.TryRefuseFileJoiner(ReadOnlySpan{byte}, out string)"/>).</summary>
     /// <param name="json">The composed JSON text.</param>
     /// <param name="sourceName">The source name echoed in failures.</param>
     /// <param name="definition">The parsed document; its full validity is still the caller's responsibility.</param>
@@ -1321,7 +1319,7 @@ public static partial class WorldDefinitionFileSource {
             sourceName: sourceName
         );
     }
-    /// <summary>Parses a compiled world's drawn definition exactly as <see cref="TryParseDocument"/> parses a composed
+    /// <summary>Parses a compiled world's drawn definition exactly as <see cref="TryParseDocument(string, string, out WorldDefinition?, out string)"/> parses a composed
     /// document, without counting a <see cref="WorldBootWork.Parses"/>. The parse is the work of a compiled-world hit,
     /// which <see cref="WorldBootWork.CompiledHits"/> counts; whether a boot finds a compiled world depends on the
     /// per-user cache, so counting it as a parse would make a deterministic count depend on that cache.</summary>
@@ -1348,13 +1346,49 @@ public static partial class WorldDefinitionFileSource {
     /// <param name="refusal">The schema's refusal of the payload, or <see langword="null"/> on success and on a
     /// failure that is not the payload's shape (the wrong schema name, a refused authored name).</param>
     /// <returns>Whether parsing and schema checks succeeded.</returns>
-    public static bool TryReadCompiledDocument(string json, string sourceName, out WorldDefinition? definition, out string reason, out WorldPayloadRefusal? refusal) {
+    public static bool TryReadCompiledDocument(string json, string sourceName, out WorldDefinition? definition, out string reason, out WorldPayloadRefusal? refusal) =>
+        TryReadCompiledDocument(
+            definition: out definition,
+            reason: out reason,
+            refusal: out refusal,
+            sourceName: sourceName,
+            utf8: Encoding.UTF8.GetBytes(s: json)
+        );
+    /// <summary>Parses a composed document from its UTF-8 JSON exactly as <see cref="TryParseDocument(string, string, out WorldDefinition?, out string)"/>
+    /// parses its text, reading the bytes directly: a world's composed document is held, stored and sent as bytes, and
+    /// is never decoded into text to be read.</summary>
+    /// <param name="utf8">The composed document, as a file holds it.</param>
+    /// <param name="sourceName">The source name echoed in failures.</param>
+    /// <param name="definition">The parsed document; its full validity is still the caller's responsibility.</param>
+    /// <param name="reason">The named parse or schema failure.</param>
+    /// <returns>Whether parsing and schema checks succeeded. No adjacency or local-world validation runs here.</returns>
+    public static bool TryParseDocument(ReadOnlyMemory<byte> utf8, string sourceName, out WorldDefinition? definition, out string reason) {
+        WorldBootWork.Count(kind: WorldBootWork.Parses);
+
+        return TryReadCompiledDocument(definition: out definition, reason: out reason, refusal: out _, sourceName: sourceName, utf8: utf8);
+    }
+    /// <summary>Parses a compiled world's drawn definition from its UTF-8 JSON exactly as
+    /// <see cref="TryParseCompiledDocument(string, string, out WorldDefinition?, out string)"/> parses its text, without
+    /// counting a <see cref="WorldBootWork.Parses"/>.</summary>
+    /// <param name="utf8">The drawn definition's UTF-8 JSON.</param>
+    /// <param name="sourceName">The source name echoed in failures.</param>
+    /// <param name="definition">The parsed document; its full validity is still the caller's responsibility.</param>
+    /// <param name="reason">The named parse or schema failure.</param>
+    /// <returns>Whether parsing and schema checks succeeded.</returns>
+    public static bool TryParseCompiledDocument(ReadOnlyMemory<byte> utf8, string sourceName, out WorldDefinition? definition, out string reason) =>
+        TryReadCompiledDocument(definition: out definition, reason: out reason, refusal: out _, sourceName: sourceName, utf8: utf8);
+    // The one parse of a composed or drawn document: the strict read from its bytes, the schema check, and the refusal
+    // of an authored name carrying the file joiner (WorldAuthoredNames), which reads a tree only when the bytes could
+    // spell one.
+    private static bool TryReadCompiledDocument(ReadOnlyMemory<byte> utf8, string sourceName, out WorldDefinition? definition, out string reason, out WorldPayloadRefusal? refusal) {
         definition = null;
+
+        var text = Puck.Confinement.FileContent.Utf8(content: utf8);
 
         // This is the loader's first parse: a reference into a draw site that has not filled yet stays attached and
         // resolves on the post-draw pass (WorldDefinitionLoader), the one door that runs the draw resolver.
         if (!WorldJsonPayload.TryRead(
-            json: json,
+            utf8: text,
             info: WorldJsonContext.Authored.WorldDefinition,
             value: out var parsed,
             refusal: out refusal,
@@ -1375,13 +1409,10 @@ public static partial class WorldDefinitionFileSource {
             return false;
         }
 
-        if (
-            (JsonNode.Parse(json: json) is JsonObject tree) &&
-            !WorldAuthoredNames.TryRefuseFileJoiner(
-            document: tree,
-            reason: out var nameReason
-        )
-        ) {
+        if (!WorldAuthoredNames.TryRefuseFileJoiner(
+            reason: out var nameReason,
+            utf8: text.Span
+        )) {
             reason = $"{sourceName} is not a valid {WorldDefinition.SchemaVersion} document: {nameReason}";
 
             return false;

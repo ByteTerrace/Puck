@@ -9,7 +9,12 @@ public static partial class WorldDefinitionFileSource {
     private static bool TryFindComposedImage(IWorldDocumentSource source, string key, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out WorldComposedDocument? image) {
         if (ComposedDocuments.TryGetValue(key: key, value: out image)) { return true; }
         image = source.Compositions?.ReadComposition(key: key);
-        if (image is null) { return false; }
+        // An image this process composed holds one JSON object by construction (Compact); one read back from the
+        // store is checked to hold one once, when it is admitted, rather than on every serve.
+        if ((image is null) || (MembersOf(json: image.ComposedJson) is null)) {
+            image = null;
+            return false;
+        }
         ComposedDocuments.TryAdd(key: key, value: image);
         return true;
     }

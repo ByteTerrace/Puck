@@ -1,4 +1,3 @@
-using System.Text.Json;
 using System.Text.Json.Nodes;
 using Puck.Abstractions.Machines;
 
@@ -110,9 +109,23 @@ public static partial class WorldDefinitionFileSource {
         rootResolvedName: rootResolvedName,
         source: source
     );
-    // The composition above as the loader takes it: the composed document's compact JSON text, never parsed into a tree
-    // when a held image or a composition by layer already holds its bytes. Null exactly where the tree would be.
-    private static bool TryComposeChainJson(IWorldDocumentSource source, string rootResolvedName, byte[] rootBytes, out string? composedJson, out IReadOnlyList<byte[]> chainBytes, out string reason, string catalogFingerprint, IMachineValidationCatalog? catalog) {
+    /// <summary>Composes <paramref name="rootBytes"/>' whole basis-and-imports graph exactly as
+    /// <see cref="TryComposeChainWithImports"/> does, and hands back the composed document as its compact UTF-8 JSON:
+    /// the held image's own bytes when one answers, never parsed into a tree, and otherwise the composed tree written
+    /// once. A loader reads the document from these bytes.</summary>
+    /// <param name="source">The document byte source basis/import references resolve against.</param>
+    /// <param name="rootResolvedName">The root's own canonical resolved name — seeds cycle detection.</param>
+    /// <param name="rootBytes">The root document's own already-read raw bytes.</param>
+    /// <param name="composedJson">The composed document's compact UTF-8 JSON when the root named a basis or imports
+    /// and every reference composed; <see langword="null"/> exactly where <see cref="TryComposeChainWithImports"/>'s
+    /// tree is. A held image's array is shared and is never to be written.</param>
+    /// <param name="chainBytes">The bytes of every file touched composing the root, as
+    /// <see cref="TryComposeChainWithImports"/> hands them back.</param>
+    /// <param name="reason">The one-line refusal reason, or empty on success.</param>
+    /// <param name="catalogFingerprint">Stable metadata fingerprint used to partition the composition cache.</param>
+    /// <param name="catalog">The explicit machine catalog used for metadata rewriting, or <see langword="null"/>.</param>
+    /// <returns><see langword="true"/> when the graph composed (or the root names neither basis nor imports).</returns>
+    public static bool TryComposeChainBytes(IWorldDocumentSource source, string rootResolvedName, byte[] rootBytes, out byte[]? composedJson, out IReadOnlyList<byte[]> chainBytes, out string reason, string catalogFingerprint = "", IMachineValidationCatalog? catalog = null) {
         var composedOk = TryComposeGraph(
             catalog: catalog,
             catalogFingerprint: catalogFingerprint,
@@ -128,7 +141,7 @@ public static partial class WorldDefinitionFileSource {
             source: source
         );
 
-        composedJson = ((bytes is not null) ? DecodeJson(bytes: bytes) : composed?.ToJsonString());
+        composedJson = (bytes ?? ((composed is null) ? null : Compact(members: out _, tree: composed)));
 
         return composedOk;
     }
@@ -142,23 +155,14 @@ public static partial class WorldDefinitionFileSource {
         chainBytes = [rootBytes];
         reason = string.Empty;
 
-        JsonObject? root;
-
-        try {
-            root = (JsonNode.Parse(json: DecodeJson(bytes: rootBytes)) as JsonObject);
-        } catch (JsonException) {
-            root = null;
-        }
-
-        if (root is null) {
+        // Whether the root composes anything is read off its root members' names; a tree is parsed only for a flat root
+        // whose provenance is asked for.
+        if (MembersOf(json: Puck.Confinement.FileContent.Utf8(content: rootBytes).Span) is not { } members) {
             return true;
         }
 
-        if (
-            !root.ContainsKey(propertyName: WorldDocumentBasis.BasisMemberName) &&
-            !root.ContainsKey(propertyName: WorldDocumentBasis.ImportsMemberName)
-        ) {
-            if (origins is not null) {
+        if (!members.Any(predicate: static member => member.Name is WorldDocumentBasis.BasisMemberName or WorldDocumentBasis.ImportsMemberName)) {
+            if ((origins is not null) && (JsonNode.Parse(json: DecodeJson(bytes: rootBytes)) is JsonObject root)) {
                 origins.Capture(node: root, documentPath: rootResolvedName);
                 composed = root;
             }
