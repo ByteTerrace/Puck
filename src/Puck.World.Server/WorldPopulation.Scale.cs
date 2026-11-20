@@ -1,5 +1,4 @@
 using Puck.Maths;
-using Puck.Physics.Motion;
 
 namespace Puck.World.Server;
 
@@ -19,17 +18,8 @@ public sealed partial class WorldPopulation {
     public void SyncBodyScale(WorldDefinition definition) {
         ArgumentNullException.ThrowIfNull(argument: definition);
 
-        var slot = -1;
-        var scaling = (
-            (definition.Population.Scale is { } name) &&
-            WorldBodyStateReads.TryResolveSlot(
-            definition: definition,
-            kind: out var kind,
-            name: name,
-            slot: out slot
-        ) &&
-            (kind == ActionStateKind.Counter)
-        );
+        var slot = WorldBodyStateReads.PlanFor(definition: definition).Scale;
+        var scaling = (slot >= 0);
 
         if (!scaling && !m_scaling) {
             return;

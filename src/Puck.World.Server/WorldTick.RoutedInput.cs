@@ -33,15 +33,15 @@ public sealed partial class WorldTick {
                 if (candidate.Target == GrantSubject.Body(index: route.TargetBody)) { application = candidate; break; }
             }
             if (application is not { } selected) { continue; }
-            var hasReach = Host.GrantTable.TryGetInputReach(route.Principal, GrantSubject.Body(index: route.TargetBody), out var reach);
+            var hasReach = Host.GrantTable.TryGetChannelReach(route.Principal, GrantSubject.Body(index: route.TargetBody), source.Channels, out var reach);
+            var routeReach = (selected.Reach?.Project(table: source.Channels) ?? ChannelReachMask.All);
             var image = route.Image with { Channels = default };
+            var remap = source.Channels.RemapTo(target: target.Channels);
 
             for (var ordinal = 0; (ordinal < ChannelLimits.MaxChannels); ordinal++) {
-                if (!source.Channels.IsDeclared(ordinal: ordinal)) { continue; }
-                var name = source.Channels.Name(ordinal: ordinal)!;
+                var destination = remap[ordinal];
 
-                if (((selected.Reach is { } routeReach) && !routeReach.Contains(name: name)) || (hasReach && !reach.Contains(name: name)) ||
-                    !target.Channels.TryGetOrdinal(name: name, ordinal: out var destination) ||
+                if ((destination < 0) || !routeReach.Contains(ordinal: ordinal) || (hasReach && !reach.Contains(ordinal: ordinal)) ||
                     (source.Channels.Shape(ordinal: ordinal) != target.Channels.Shape(ordinal: destination))) { continue; }
                 image = ((source.Channels.Shape(ordinal: ordinal) == ChannelShape.Relative)
                     ? image.WithRelative(ordinal: destination, value: route.Image.Channels.Relative(ordinal: ordinal))
