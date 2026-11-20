@@ -356,7 +356,7 @@ public sealed partial class WorldSiloCrossingRecoveryLawTests {
             sourceSlot: travelerSlot
         );
         await DriveCrossingAsync(
-            done: () => (failPrecedingMutation || original.Instances.CaptureRow(row: rowA).InDoubtTransfers.Count == 0),
+            done: () => (failPrecedingMutation || (!rowA.Server.Population.IsActive(index: travelerSlot) && (original.Instances.CaptureRow(row: rowA).InDoubtTransfers.Count == 0))),
             host: original
         );
         if (failPrecedingMutation) {

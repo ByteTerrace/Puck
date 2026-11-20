@@ -289,7 +289,7 @@ engine's doors **[inference]**. Facts carry no record of which world wrote them
 Home adopts only a colocated seat of its own coming home. `WorldTransferEscrow.AdoptHomeProfiles`
 asks `HomeIdentity` for each traveller (`src/Puck.World.Server/WorldTransferEscrow.cs:1357-1366`),
 and `HomeIdentity` answers only for a non-peer arrival **[opened]**
-(`src/Puck.World.Server/WorldTransferEscrow.cs:1428-1440`):
+(`src/Puck.World.Server/WorldTransferEscrow.cs:1467-1479`):
 
 ```csharp
     // The owned identity a local seat of this authority left with, when traveler `index` is that seat coming home: a
@@ -910,7 +910,7 @@ and `TryAdopt` mints from it (`:577`) **[opened]**. Nothing restores the
 resolver's map. But **[opened]**:
 
 - A continuation's generation id is narration only, never re-verified
-  (`src/Puck.World.Server/WorldInstanceHost.Transfers.cs:2370-2373`):
+  (`src/Puck.World.Server/WorldInstanceHost.Transfers.cs:2462-2465`):
 
   ```csharp
     /// <param name="FrozenGenerationId">The resolver-issued generation id the resolve produced — carried purely for

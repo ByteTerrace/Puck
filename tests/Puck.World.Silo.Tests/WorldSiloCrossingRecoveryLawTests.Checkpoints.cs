@@ -81,7 +81,7 @@ public sealed partial class WorldSiloCrossingRecoveryLawTests {
             held.Dispose();
         }
         await SiloCrossings.DriveAsync(
-            done: () => (CountTraveler(host: original, traveler: traveler) == 1) && (instances.CaptureRow(row: rowA).InDoubtTransfers.Count == 0),
+            done: () => !rowA.Server.Population.IsActive(index: Slot) && (CountTraveler(host: original, traveler: traveler) == 1) && (instances.CaptureRow(row: rowA).InDoubtTransfers.Count == 0),
             host: original,
             rows: ["rowa", "rowb"]
         );

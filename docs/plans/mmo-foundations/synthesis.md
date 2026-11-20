@@ -87,7 +87,7 @@ the memo:
    adoption asks `HomeIdentity`, which answers only for a non-peer arrival, and
    every reservation decoded from the federation wire is a peer admission
    ([puck-today, section 2](puck-today.md#2-write-back-and-the-travelling-projection)).
-   Reopened **[opened]** (`src/Puck.World.Server/WorldTransferEscrow.cs:1431-1432`):
+   Reopened **[opened]** (`src/Puck.World.Server/WorldTransferEscrow.cs:1470-1471`):
 
    ```csharp
    private WorldIdentity? HomeIdentity(WorldCrossingArrival arrival, int index, string id) => ((
@@ -308,7 +308,7 @@ assigned (a search for `DurableImages =` over `src/` finds nothing) **[opened]**
 ```
 
 The destination's consumed-epoch fence is real and per destination
-**[opened]** (`src/Puck.World.Server/WorldTransferEscrow.cs:2109-2111`):
+**[opened]** (`src/Puck.World.Server/WorldTransferEscrow.cs:2181-2183`):
 
 ```csharp
                 (knownEpoch >= mobility.Epoch)
@@ -707,7 +707,7 @@ with a retry ceiling of eight ticks **[opened]**
     public const string GlobalScopeKey = "global";
 ```
 
-and (`src/Puck.World.Server/WorldInstanceHost.Transfers.cs:644-645`):
+and (`src/Puck.World.Server/WorldInstanceHost.Transfers.cs:696-697`):
 
 ```csharp
             if (!standing.Allowed) {

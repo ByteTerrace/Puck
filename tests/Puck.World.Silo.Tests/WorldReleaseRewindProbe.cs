@@ -502,7 +502,7 @@ public sealed partial class WorldReleaseCutoverLawTests {
             actingPrincipal: Principal.Console
         );
         await SiloCrossings.DriveAsync(
-            done: () => beta!.Server.Population.IsActive(index: PeerSlot),
+            done: () => beta!.Server.Population.IsActive(index: PeerSlot) && (source.Instances.CaptureRow(row: alpha!).InDoubtTransfers.Count == 0),
             host: source,
             rows: ["alpha", "beta"]
         );
