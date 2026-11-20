@@ -110,12 +110,12 @@ public static partial class AzureCommand {
         ).ConfigureAwait(continueOnCapturedContext: false)
             ?? throw new InvalidDataException(message: "release deployment configuration is missing from retention"));
 
-        if (retained.Parameters["configuration"]?["name"]?.GetValue<string>() != context.Group) {
+        if (retained.Configuration.Parameters["configuration"]?["name"]?.GetValue<string>() != context.Group) {
             throw new InvalidDataException(message: "retained deployment parameters belong to a different worker group");
         }
         return new(
-            Configuration: retained,
-            Manifest: manifest
+            Manifest: manifest,
+            Retained: retained
         );
     }
 }

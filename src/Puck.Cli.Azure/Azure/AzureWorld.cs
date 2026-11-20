@@ -76,7 +76,13 @@ public static partial class AzureCommand {
             }
             """)!;
     }
-    private static async Task<WorldReleaseDeploymentConfiguration> PrepareWorldReleaseDeploymentAsync(WorldReleaseManifest manifest, string? group, TimeProvider clock) {
+    /// <summary>The mounted file name of a hosted world's federation signing key: the configured primary world's is
+    /// <c>federation.pk8</c>, every other world's is named by its identity's digest.</summary>
+    private static string WorldReleaseKeyFile(string identity, string primaryIdentity) => ((identity == primaryIdentity)
+        ? "federation.pk8"
+        : (("federation-" + ContentDigest.HexOfText(text: identity)) + ".pk8")
+    );
+    private static async Task<WorldReleaseRetainedDeployment> PrepareWorldReleaseDeploymentAsync(WorldReleaseManifest manifest, string? group, TimeProvider clock) {
         var outputs = Outputs();
         var configuration = Value(
             key: "worldSiloConfiguration",
@@ -91,17 +97,11 @@ public static partial class AzureCommand {
             key: "worldSiloOwner",
             outputs: outputs
         ));
-        var endpoint = Text(value: Value(
-            key: "worldSiloStorageEndpoint",
-            outputs: outputs
-        )).TrimEnd(trimChar: '/');
         var vault = Text(value: Value(
             key: "deploymentKeyVaultName",
             outputs: outputs
         ));
-        var secret = Text(value: configuration["federationKeySecretName"]);
-        var host = $"{configuration["dns"]!["recordName"]}.{configuration["dns"]!["zoneName"]}";
-        var port = Text(value: configuration["port"]);
+        var primaryIdentity = ((owner + "/") + Text(value: configuration["worldName"]));
         var scaleSet = Text(value: configuration["name"]);
         JsonNode? secrets = null;
 
@@ -124,13 +124,25 @@ public static partial class AzureCommand {
             prefix: "puck-silo-"
         )) {
             var temporary = scratch.Path;
+            var keys = new Dictionary<string, string>(comparer: StringComparer.Ordinal);
 
-            var encodedKey = await LoadSigningKeyAsync(
-                vault,
-                secret,
-                secrets!.AsArray(),
-                temporary
-            ).ConfigureAwait(continueOnCapturedContext: false);
+            foreach (var identity in manifest.Definitions.Keys.Order(comparer: StringComparer.Ordinal)) {
+                keys[WorldReleaseKeyFile(
+                    identity: identity,
+                    primaryIdentity: primaryIdentity
+                )] = await LoadSigningKeyAsync(
+                    vault,
+                    ((identity == primaryIdentity)
+                    ? Text(value: configuration["federationKeySecretName"])
+                    : ("puck-world-key-" + ContentDigest.HexOfText(text: identity))),
+                    secrets!.AsArray(),
+                    temporary
+                ).ConfigureAwait(continueOnCapturedContext: false);
+            }
+            if (!keys.TryGetValue(
+                key: "federation.pk8",
+                value: out var encodedKey
+            )) { throw new InvalidDataException(message: "release inventory is missing the configured primary world"); }
             using var key = ECDsa.Create();
 
             key.ImportPkcs8PrivateKey(
@@ -141,146 +153,13 @@ public static partial class AzureCommand {
                 bytes: key.ExportSubjectPublicKeyInfo(),
                 path: "artifacts/world-silo.public-key"
             );
-            var siloLifecycle = (configuration["lifecycle"] ?? throw new InvalidDataException(message: "Missing world lifecycle configuration."));
-            var lifecycle = new JsonObject {
-                ["healthPort"] = siloLifecycle["healthPort"]!.DeepClone(),
-                ["healthAddress"] = DeploymentListenAddress,
-                ["shutdownSeconds"] = siloLifecycle["shutdownSeconds"]!.DeepClone(),
-                ["progressTimeoutSeconds"] = siloLifecycle["progressTimeoutSeconds"]!.DeepClone(),
-                ["checkpointTimeoutSeconds"] = siloLifecycle["checkpointTimeoutSeconds"]!.DeepClone(),
-                ["journalTimeoutSeconds"] = siloLifecycle["journalTimeoutSeconds"]!.DeepClone(),
-                ["journalBacklogLimit"] = siloLifecycle["journalBacklogLimit"]!.DeepClone(),
-            };
-
-            if (siloLifecycle["azureScheduledEvents"]!.GetValue<bool>()) {
-                lifecycle["observer"] = new JsonObject {
-                    ["type"] = "azure.scheduled-events",
-                    ["settings"] = new JsonObject { ["pollSeconds"] = siloLifecycle["pollSeconds"]!.DeepClone() },
-                };
-            }
-            var silo = SiloDocument(
-                documentDirectory: WorldSiloImageLayout.WorldsDirectory,
-                keyFile: "/configuration/federation.pk8",
-                lifecycle: lifecycle,
-                owner: owner,
-                store: new JsonObject { ["type"] = "azure.blob", ["settings"] = new JsonObject { ["accountUrl"] = endpoint } },
-                world: Text(value: configuration["worldName"])
-            );
-            var worlds = silo["worlds"]!.AsArray();
-
-            silo["doors"]!["budget"] = manifest.Definitions.Count;
-            var prototype = worlds[0]!.DeepClone();
-            var keyFiles = new JsonObject { ["federation.pk8"] = encodedKey };
-            var primaryWorld = Text(value: configuration["worldName"]);
-
-            if (!manifest.Definitions.ContainsKey(key: ((owner + "/") + primaryWorld))) { throw new InvalidDataException(message: "release inventory is missing the configured primary world"); }
-            worlds.Clear();
-            foreach (var identity in manifest.Definitions.Keys.Order(comparer: StringComparer.Ordinal)) {
-                var parts = identity.Split('/');
-
-                if (
-                    (parts.Length != 2) ||
-                    (parts[0] != owner)
-                ) { throw new InvalidDataException(message: "release inventory does not belong to the configured owner"); }
-                var row = prototype.DeepClone();
-
-                row["world"] = parts[1];
-                if (parts[1] != primaryWorld) {
-                    var identityHash = ContentDigest.HexOfText(text: identity);
-                    var filename = (("federation-" + identityHash) + ".pk8");
-
-                    keyFiles[filename] = await LoadSigningKeyAsync(
-                        vault,
-                        ("puck-world-key-" + identityHash),
-                        secrets.AsArray(),
-                        temporary
-                    ).ConfigureAwait(continueOnCapturedContext: false);
-                    row["federation"]!["keyFile"] = ("/configuration/" + filename);
-                }
-                worlds.Add(item: row);
-            }
-            silo["release"] = new JsonObject {
-                ["group"] = scaleSet,
-                ["owner"] = owner,
-                ["expectedRelease"] = manifest.Identity,
-                ["closedGroupRewind"] = true,
-            };
             var authentication = configuration["authentication"]!.DeepClone();
 
-            foreach (var row in worlds) { row!["federation"]!["authentication"] = authentication.DeepClone(); }
             authentication["settings"]!["remoteKeyHash"] = ContentDigest.HexOf(content: key.ExportSubjectPublicKeyInfo());
             CliFiles.WriteJson(
                 path: "artifacts/world-authentication.json",
                 value: authentication
             );
-            var image = File.ReadAllText(path: "artifacts/world-silo.digest").Trim();
-
-            if (!Regex.IsMatch(
-                input: image,
-                pattern: "\\A[a-z0-9.-]+/[a-z0-9/_-]+@sha256:[a-f0-9]{64}\\z"
-            )) { throw new InvalidDataException(message: "World image must be an immutable registry digest."); }
-            if (!image.EndsWith(
-                ("@" + manifest.EngineImageDigest),
-                StringComparison.Ordinal
-            )) { throw new InvalidDataException(message: "release manifest and published image differ"); }
-            var script = File.ReadAllText(path: "build/Start-WorldSilo.sh");
-            var bootGuard = WorldReleaseGuestGuard(request: new JsonObject {
-                ["endpoint"] = endpoint,
-                ["owner"] = owner,
-                ["group"] = scaleSet,
-                ["clientId"] = Text(value: Value(
-                key: "worldSiloClientId",
-                outputs: outputs
-            )),
-                ["bootRelease"] = manifest.Identity,
-            });
-            var mcpOptions = outputs["worldMcpConfiguration"]?["value"]?["options"];
-            var replacements = new Dictionary<string, string> {
-                ["__RELEASE_GUARD__"] = bootGuard,
-                ["__RELEASE_ID__"] = manifest.Identity,
-                ["__MCP_ENABLED__"] = ((mcpOptions is null)
-                ? "0"
-                : "1"),
-                ["__MCP_DOCUMENT__"] = ((mcpOptions is null)
-                ? ""
-                : Convert.ToBase64String(inArray: Encoding.UTF8.GetBytes(s: mcpOptions.ToJsonString()))),
-                ["__MCP_TLS_DOCUMENT__"] = ((mcpOptions is null)
-                ? ""
-                : Convert.ToBase64String(inArray: Encoding.UTF8.GetBytes(s: McpTlsConfiguration(hostname: host).ToJsonString()))),
-                ["__MCP_HOST__"] = host,
-                ["__MCP_ENTRYPOINT__"] = ((mcpOptions is null)
-                ? ""
-                : "--entrypoint dotnet"),
-                ["__MCP_ARGUMENTS__"] = ((mcpOptions is null)
-                ? "--silo /configuration/silo.json"
-                : $"{WorldSiloImageLayout.CliAssembly} mcp --silo /configuration/silo.json --http /configuration/mcp.json"),
-                ["__SILO_DOCUMENT__"] = Convert.ToBase64String(inArray: Encoding.UTF8.GetBytes(s: silo.ToJsonString())),
-                ["__FEDERATION_KEYS__"] = Convert.ToBase64String(inArray: Encoding.UTF8.GetBytes(s: keyFiles.ToJsonString())),
-                ["__CLIENT_ID__"] = Text(value: Value(
-                key: "worldSiloClientId",
-                outputs: outputs
-            )),
-                ["__REGISTRY__"] = image.Split(separator: '/')[0],
-                ["__IMAGE__"] = image,
-                ["__HEALTH_PORT__"] = Text(value: siloLifecycle["healthPort"]),
-                ["__QUIC_PORT__"] = port,
-                ["__SHUTDOWN_SECONDS__"] = Text(value: siloLifecycle["shutdownSeconds"]),
-                ["__STOP_SECONDS__"] = (((int)siloLifecycle["shutdownSeconds"]!) + 10).ToString(provider: CultureInfo.InvariantCulture),
-                ["__CPU__"] = Text(value: configuration["container"]!["cpu"]),
-                ["__MEMORY__"] = Text(value: configuration["container"]!["memoryInGB"]),
-            };
-
-            foreach (var replacement in replacements) {
-                script = script.Replace(
-                    comparisonType: StringComparison.Ordinal,
-                    newValue: replacement.Value,
-                    oldValue: replacement.Key
-                );
-            }
-            if (Regex.IsMatch(
-                input: script,
-                pattern: "__[A-Z_]+__"
-            )) { throw new InvalidDataException(message: "Unresolved VM bootstrap placeholder."); }
             var workers = await StableWorkersAsync(
                 clock: clock,
                 group: group,
@@ -303,28 +182,6 @@ public static partial class AzureCommand {
                     path2: "ssh.pub"
                 )).Trim();
             }
-            var command = $"printf '%s' '{Convert.ToBase64String(inArray: Encoding.UTF8.GetBytes(s: script))}' | base64 -d | bash";
-
-            CliGitHub.Mask(value: command);
-            var parameters = new JsonObject {
-                ["configuration"] = configuration.DeepClone(),
-                ["location"] = Value(
-                key: "deploymentLocation",
-                outputs: outputs
-            ).DeepClone(),
-                ["tags"] = Value(
-                key: "deploymentTags",
-                outputs: outputs
-            ).DeepClone(),
-                ["identityResourceId"] = Value(
-                key: "worldSiloIdentityResourceId",
-                outputs: outputs
-            ).DeepClone(),
-                ["bootstrapCommand"] = command,
-                ["mcpEnabled"] = (mcpOptions is not null),
-                ["release"] = image,
-                ["sshPublicKey"] = ssh,
-            };
             var templatePath = "artifacts/production-world-compute.json";
 
             if (!File.Exists(path: templatePath)) {
@@ -342,14 +199,253 @@ public static partial class AzureCommand {
                     templatePath
                 );
             }
-            return new WorldReleaseDeploymentConfiguration(
-                manifest.Identity,
-                scaleSet,
-                parameters,
-                Convert.ToBase64String(inArray: key.ExportSubjectPublicKeyInfo()),
-                CliFiles.ReadJson(path: templatePath).AsObject()
-            ) { ClosedGroupRewind = true };
+            return new(
+                Configuration: RenderWorldReleaseDeployment(
+                    outputs: outputs,
+                    manifest: manifest,
+                    image: File.ReadAllText(path: "artifacts/world-silo.digest").Trim(),
+                    publicKey: Convert.ToBase64String(inArray: key.ExportSubjectPublicKeyInfo()),
+                    sshPublicKey: ssh,
+                    computeTemplate: CliFiles.ReadJson(path: templatePath).AsObject(),
+                    bootstrapScript: File.ReadAllText(path: "build/Start-WorldSilo.sh"),
+                    guardScript: File.ReadAllBytes(path: "build/Guard-WorldRelease.py"),
+                    launcherScript: File.ReadAllText(path: "build/Boot-WorldSilo.py")
+                ),
+                Inputs: "",
+                Keys: keys
+            );
         }
+    }
+    /// <summary>Renders a release's deployment inputs from the deployment's outputs and the checkout's bootstrap
+    /// files. The inputs name each hosted world's signing key by its mounted file and hold no key material: the keys
+    /// reach the worker only through the protected bootstrap command (<see cref="WorldReleaseBootstrapCommand"/>).</summary>
+    /// <param name="outputs">The deployment's outputs.</param>
+    /// <param name="manifest">The release the inputs deploy; its inventory belongs to the configured owner and holds the
+    /// configured primary world.</param>
+    /// <param name="image">The immutable registry reference of the world-silo image; it ends with the manifest's
+    /// engine image digest.</param>
+    /// <param name="publicKey">The base64 SubjectPublicKeyInfo of the primary world's federation key.</param>
+    /// <param name="sshPublicKey">The worker's SSH public key.</param>
+    /// <param name="computeTemplate">The compiled compute template.</param>
+    /// <param name="bootstrapScript">The text of <c>build/Start-WorldSilo.sh</c>.</param>
+    /// <param name="guardScript">The bytes of <c>build/Guard-WorldRelease.py</c>.</param>
+    /// <param name="launcherScript">The text of <c>build/Boot-WorldSilo.py</c>.</param>
+    /// <returns>The deployment inputs.</returns>
+    /// <exception cref="InvalidDataException">The inventory does not belong to the configured owner or lacks its
+    /// primary world, the image is not the manifest's immutable digest, or a bootstrap placeholder stays unresolved.</exception>
+    public static WorldReleaseDeploymentConfiguration RenderWorldReleaseDeployment(JsonNode outputs, WorldReleaseManifest manifest, string image,
+        string publicKey, string sshPublicKey, JsonObject computeTemplate, string bootstrapScript, byte[] guardScript, string launcherScript) {
+        var configuration = Value(
+            key: "worldSiloConfiguration",
+            outputs: outputs
+        );
+        var owner = Text(value: Value(
+            key: "worldSiloOwner",
+            outputs: outputs
+        ));
+        var endpoint = Text(value: Value(
+            key: "worldSiloStorageEndpoint",
+            outputs: outputs
+        )).TrimEnd(trimChar: '/');
+        var clientId = Text(value: Value(
+            key: "worldSiloClientId",
+            outputs: outputs
+        ));
+        var host = $"{configuration["dns"]!["recordName"]}.{configuration["dns"]!["zoneName"]}";
+        var port = Text(value: configuration["port"]);
+        var scaleSet = Text(value: configuration["name"]);
+        var primaryWorld = Text(value: configuration["worldName"]);
+        var primaryIdentity = ((owner + "/") + primaryWorld);
+        var siloLifecycle = (configuration["lifecycle"] ?? throw new InvalidDataException(message: "Missing world lifecycle configuration."));
+        var lifecycle = new JsonObject {
+            ["healthPort"] = siloLifecycle["healthPort"]!.DeepClone(),
+            ["healthAddress"] = DeploymentListenAddress,
+            ["shutdownSeconds"] = siloLifecycle["shutdownSeconds"]!.DeepClone(),
+            ["progressTimeoutSeconds"] = siloLifecycle["progressTimeoutSeconds"]!.DeepClone(),
+            ["checkpointTimeoutSeconds"] = siloLifecycle["checkpointTimeoutSeconds"]!.DeepClone(),
+            ["journalTimeoutSeconds"] = siloLifecycle["journalTimeoutSeconds"]!.DeepClone(),
+            ["journalBacklogLimit"] = siloLifecycle["journalBacklogLimit"]!.DeepClone(),
+        };
+
+        if (siloLifecycle["azureScheduledEvents"]!.GetValue<bool>()) {
+            lifecycle["observer"] = new JsonObject {
+                ["type"] = "azure.scheduled-events",
+                ["settings"] = new JsonObject { ["pollSeconds"] = siloLifecycle["pollSeconds"]!.DeepClone() },
+            };
+        }
+        var silo = SiloDocument(
+            documentDirectory: WorldSiloImageLayout.WorldsDirectory,
+            keyFile: "/configuration/federation.pk8",
+            lifecycle: lifecycle,
+            owner: owner,
+            store: new JsonObject { ["type"] = "azure.blob", ["settings"] = new JsonObject { ["accountUrl"] = endpoint } },
+            world: primaryWorld
+        );
+        var worlds = silo["worlds"]!.AsArray();
+
+        silo["doors"]!["budget"] = manifest.Definitions.Count;
+        var prototype = worlds[0]!.DeepClone();
+
+        if (!manifest.Definitions.ContainsKey(key: primaryIdentity)) { throw new InvalidDataException(message: "release inventory is missing the configured primary world"); }
+        worlds.Clear();
+        var authentication = configuration["authentication"]!;
+
+        foreach (var identity in manifest.Definitions.Keys.Order(comparer: StringComparer.Ordinal)) {
+            var parts = identity.Split('/');
+
+            if (
+                (parts.Length != 2) ||
+                (parts[0] != owner)
+            ) { throw new InvalidDataException(message: "release inventory does not belong to the configured owner"); }
+            var row = prototype.DeepClone();
+
+            row["world"] = parts[1];
+            row["federation"]!["keyFile"] = ("/configuration/" + WorldReleaseKeyFile(
+                identity: identity,
+                primaryIdentity: primaryIdentity
+            ));
+            row["federation"]!["authentication"] = authentication.DeepClone();
+            worlds.Add(item: row);
+        }
+        silo["release"] = new JsonObject {
+            ["group"] = scaleSet,
+            ["owner"] = owner,
+            ["expectedRelease"] = manifest.Identity,
+            ["closedGroupRewind"] = true,
+        };
+        if (!Regex.IsMatch(
+            input: image,
+            pattern: "\\A[a-z0-9.-]+/[a-z0-9/_-]+@sha256:[a-f0-9]{64}\\z"
+        )) { throw new InvalidDataException(message: "World image must be an immutable registry digest."); }
+        if (!image.EndsWith(
+            ("@" + manifest.EngineImageDigest),
+            StringComparison.Ordinal
+        )) { throw new InvalidDataException(message: "release manifest and published image differ"); }
+        var bootGuard = WorldReleaseGuestGuard(
+            request: new JsonObject {
+                ["endpoint"] = endpoint,
+                ["owner"] = owner,
+                ["group"] = scaleSet,
+                ["clientId"] = clientId,
+                ["bootRelease"] = manifest.Identity,
+            },
+            script: guardScript
+        );
+        var mcpOptions = outputs["worldMcpConfiguration"]?["value"]?["options"];
+        var bootstrap = Resolve(
+            text: bootstrapScript,
+            replacements: new Dictionary<string, string> {
+                ["__RELEASE_GUARD__"] = bootGuard,
+                ["__RELEASE_ID__"] = manifest.Identity,
+                ["__MCP_ENABLED__"] = ((mcpOptions is null)
+                ? "0"
+                : "1"),
+                ["__MCP_DOCUMENT__"] = ((mcpOptions is null)
+                ? ""
+                : Convert.ToBase64String(inArray: Encoding.UTF8.GetBytes(s: mcpOptions.ToJsonString()))),
+                ["__MCP_TLS_DOCUMENT__"] = ((mcpOptions is null)
+                ? ""
+                : Convert.ToBase64String(inArray: Encoding.UTF8.GetBytes(s: McpTlsConfiguration(hostname: host).ToJsonString()))),
+                ["__MCP_HOST__"] = host,
+                ["__MCP_ENTRYPOINT__"] = ((mcpOptions is null)
+                ? ""
+                : "--entrypoint dotnet"),
+                ["__MCP_ARGUMENTS__"] = ((mcpOptions is null)
+                ? "--silo /configuration/silo.json"
+                : $"{WorldSiloImageLayout.CliAssembly} mcp --silo /configuration/silo.json --http /configuration/mcp.json"),
+                ["__SILO_DOCUMENT__"] = Convert.ToBase64String(inArray: Encoding.UTF8.GetBytes(s: silo.ToJsonString())),
+                ["__CLIENT_ID__"] = clientId,
+                ["__REGISTRY__"] = image.Split(separator: '/')[0],
+                ["__IMAGE__"] = image,
+                ["__HEALTH_PORT__"] = Text(value: siloLifecycle["healthPort"]),
+                ["__QUIC_PORT__"] = port,
+                ["__SHUTDOWN_SECONDS__"] = Text(value: siloLifecycle["shutdownSeconds"]),
+                ["__STOP_SECONDS__"] = (((int)siloLifecycle["shutdownSeconds"]!) + 10).ToString(provider: CultureInfo.InvariantCulture),
+                ["__READY_SECONDS__"] = WorldReleaseReadySeconds(
+                    lifecycle: siloLifecycle,
+                    rows: manifest.Definitions.Count
+                ).ToString(provider: CultureInfo.InvariantCulture),
+                ["__CPU__"] = Text(value: configuration["container"]!["cpu"]),
+                ["__MEMORY__"] = Text(value: configuration["container"]!["memoryInGB"]),
+            }
+        );
+        var launcher = Resolve(
+            text: launcherScript,
+            replacements: new Dictionary<string, string> {
+                ["__CONTENT_URL__"] = $"{endpoint}/{owner}/{WorldReleaseArchive.ContentKeyPrefix}",
+                ["__CLIENT_ID__"] = clientId,
+            }
+        );
+        var parameters = new JsonObject {
+            ["configuration"] = configuration.DeepClone(),
+            ["location"] = Value(
+            key: "deploymentLocation",
+            outputs: outputs
+        ).DeepClone(),
+            ["tags"] = Value(
+            key: "deploymentTags",
+            outputs: outputs
+        ).DeepClone(),
+            ["identityResourceId"] = Value(
+            key: "worldSiloIdentityResourceId",
+            outputs: outputs
+        ).DeepClone(),
+            ["mcpEnabled"] = (mcpOptions is not null),
+            ["release"] = image,
+            ["sshPublicKey"] = sshPublicKey,
+        };
+
+        return new WorldReleaseDeploymentConfiguration(
+            manifest.Identity,
+            scaleSet,
+            parameters,
+            publicKey,
+            computeTemplate,
+            bootstrap,
+            launcher
+        ) { ClosedGroupRewind = true };
+
+        static string Resolve(string text, Dictionary<string, string> replacements) {
+            foreach (var replacement in replacements) {
+                text = text.Replace(
+                    comparisonType: StringComparison.Ordinal,
+                    newValue: replacement.Value,
+                    oldValue: replacement.Key
+                );
+            }
+            if (Regex.IsMatch(
+                input: text,
+                pattern: "__[A-Z_]+__"
+            )) { throw new InvalidDataException(message: "Unresolved VM bootstrap placeholder."); }
+            return text;
+        }
+    }
+    /// <summary>The seconds a booting worker's bootstrap waits for private readiness. The silo activates its rows in
+    /// series, each bounded by a first checkpoint and a progress step, so the deadline is that bound per row plus the
+    /// container's own start.</summary>
+    private static int WorldReleaseReadySeconds(JsonNode lifecycle, int rows) =>
+        (WorldContainerStartSeconds + (rows * (lifecycle["checkpointTimeoutSeconds"]!.GetValue<int>() + lifecycle["progressTimeoutSeconds"]!.GetValue<int>())));
+    // The allowance for the container to start and open its health listener before any row activates.
+    private const int WorldContainerStartSeconds = 120;
+    /// <summary>Builds the protected command the worker's VM extension runs for a retained deployment: it carries the
+    /// launcher, the pin of the retained inputs and the signing keys, and nothing else. The launcher reads the inputs
+    /// from the release content store with the worker's identity and refuses bytes that do not match the pin.</summary>
+    /// <param name="deployment">The retained deployment.</param>
+    /// <returns>The shell command for the extension's protected settings.</returns>
+    public static string WorldReleaseBootstrapCommand(WorldReleaseRetainedDeployment deployment) {
+        ArgumentNullException.ThrowIfNull(argument: deployment);
+        var request = new JsonObject {
+            ["inputs"] = deployment.Inputs,
+            ["keys"] = new JsonObject(deployment.Keys.OrderBy(
+                keySelector: pair => pair.Key,
+                comparer: StringComparer.Ordinal
+            ).Select(selector: pair => KeyValuePair.Create<string, JsonNode?>(
+                key: pair.Key,
+                value: pair.Value
+            ))),
+        };
+
+        return $"PUCK_RELEASE_INPUTS='{Convert.ToBase64String(inArray: Encoding.UTF8.GetBytes(s: request.ToJsonString()))}' python3 -c 'import base64,sys; exec(base64.b64decode(sys.argv[1], validate=True))' '{Convert.ToBase64String(inArray: Encoding.UTF8.GetBytes(s: deployment.Configuration.Launcher))}'";
     }
     /// <summary>Deploys the world compute template, first recreating the scale set when its priority differs from the declared <c>Regular</c> or <c>Spot</c>.</summary>
     /// <remarks>Callers reach this only after the source worker has drained and stopped.</remarks>
