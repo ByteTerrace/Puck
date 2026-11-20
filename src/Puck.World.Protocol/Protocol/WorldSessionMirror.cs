@@ -567,7 +567,7 @@ public sealed class WorldSessionMirror : IClientSink {
         var extent = m_extent;
 
         if (image.Entries.Length < extent) {
-            image.Entries = new ImageEntry[((int)BitOperations.RoundUpToPowerOf2(value: ((uint)extent)))];
+            image.Entries = new ImageEntry[((int)(((uint)extent)).NextPowerOfTwo())];
         }
         for (var index = 0; (index < extent); index++) {
             image.Entries[index] = new ImageEntry(

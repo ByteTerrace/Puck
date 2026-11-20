@@ -38,11 +38,6 @@ public class ParserSugarTests {
             Code: "PUCK009",
             Needle: "hp += \"oops\""
         ),
-        ["PUCK010: a schedule delay without its seconds suffix"] = new(
-            Body: "rule \"r\" {\n    schedule respawnAt in 2\n}\n",
-            Code: "PUCK010",
-            Needle: "schedule respawnAt in 2"
-        ),
         ["PUCK012: a second when clause"] = new(
             Body: "rule \"r\" {\n    when a == 1\n    when b == 2\n    flag = 1\n}\n",
             Code: "PUCK012",

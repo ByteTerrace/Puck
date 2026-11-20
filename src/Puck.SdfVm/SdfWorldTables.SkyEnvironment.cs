@@ -1,3 +1,4 @@
+using Puck.Abstractions.Collections;
 using Puck.Abstractions.Gpu;
 using Puck.Hosting;
 using Puck.Shaders;
@@ -12,7 +13,7 @@ namespace Puck.SdfVm;
 /// <param name="Tainted">Whether an acquired contributing source contains unfilled external content.</param>
 public readonly record struct SdfEnvironmentSubmission(object Owner, long Sequence, bool Tainted) {
     /// <summary>Gets the actual source publication identity.</summary>
-    public GpuImagePublication Publication => new(Owner: Owner, Sequence: Sequence);
+    public ReferenceRevision Publication => new(Owner: Owner, Revision: Sequence);
 }
 // One map and coefficient table per residency. The graph's environment producer writes both after acquiring its
 // panorama inputs; upload owns only the packed source tables and the CPU candidate projection's host counts.
@@ -32,7 +33,7 @@ public sealed partial class SdfWorldTables {
     public SdfEnvironmentSubmission? SubmittedSkyEnvironment => m_skyEnvironment.Publication.Submitted;
     /// <summary>Gets the latest projection whose submission its render node proved complete while it was still the latest
     /// submitted; it is not inferred from a displayed view.</summary>
-    public GpuImagePublication CompletedSkyEnvironment => m_skyEnvironment.Publication.Completed;
+    public ReferenceRevision CompletedSkyEnvironment => m_skyEnvironment.Publication.Completed;
 
     internal bool SkyEnvironmentDemand => m_skyEnvironment.Demand;
     internal bool SkyEnvironmentHasImages => SdfSkyEnvironmentRefresh.HasImages(block: m_skyRecord[0], layers: m_skyLayerRecords);
@@ -162,7 +163,7 @@ public sealed partial class SdfWorldTables {
                     var input = reads[read];
 
                     m_watch.Observe(publication: input.Publication, screen: screen, tainted: input.Tainted);
-                    if ((input.Lease.ImageViewHandle != 0) && !input.Publication.IsKnown) { known = false; }
+                    if ((input.Lease.ImageViewHandle != 0) && !input.Publication.IsPublished()) { known = false; }
                 }
             }
             CanRecord &= (known || Forced);
@@ -192,7 +193,7 @@ public sealed partial class SdfWorldTables {
     // still the latest submitted, since a newer submission owns the source's buffers.
     private sealed class EnvironmentPublication(object owner) {
         public SdfEnvironmentSubmission? Submitted { get; private set; }
-        public GpuImagePublication Completed { get; private set; }
+        public ReferenceRevision Completed { get; private set; }
         public long Renders { get; private set; }
 
         public long Publish(bool tainted) {

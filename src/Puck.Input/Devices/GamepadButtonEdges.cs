@@ -1,3 +1,4 @@
+using Puck.Maths;
 using System.Runtime.CompilerServices;
 
 namespace Puck.Input.Devices;
@@ -41,13 +42,5 @@ public struct GamepadButtonEdges : IEquatable<GamepadButtonEdges> {
         );
     }
     /// <inheritdoc/>
-    public readonly override int GetHashCode() {
-        var hash = new HashCode();
-
-        for (var index = 0; (index < Count); index++) {
-            hash.Add(value: this[index]);
-        }
-
-        return hash.ToHashCode();
-    }
+    public readonly override int GetHashCode() => SequenceHash.Of((ReadOnlySpan<ulong>)this);
 }

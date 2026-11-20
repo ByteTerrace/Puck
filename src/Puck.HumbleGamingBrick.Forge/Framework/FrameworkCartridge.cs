@@ -1,3 +1,4 @@
+using Puck.Maths;
 using System.Text;
 
 namespace Puck.HumbleGamingBrick.Forge.Framework;
@@ -166,11 +167,7 @@ public static class FrameworkCartridge {
         }
 
         // Two fixed banks plus the switchable ones, rounded up to the power of two the header's size field describes.
-        var bankCount = 2;
-
-        while (bankCount < (extra.Count + 2)) {
-            bankCount <<= 1;
-        }
+        var bankCount = ((int)((uint)(extra.Count + 2)).NextPowerOfTwo());
 
         if (bankCount > MaxBankCount) {
             throw new ArgumentException(

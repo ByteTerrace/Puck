@@ -1707,7 +1707,10 @@ public sealed class WorldPeerHost : IDisposable {
                     ).ConfigureAwait(continueOnCapturedContext: false);
                     return;
                 }
-                if (await TransferredPrincipalAsync(credential, mobility, sourceAuthority).ConfigureAwait(false) is not { } principal) {
+                var (resolved, accepted) = await ExecuteAuthenticatedAsync(credential, () =>
+                    WorldLocalForwardedAuthority.TryApplyIntent(m_server, sourceAuthority, in mobility, leaseId, in submission)
+                ).ConfigureAwait(false);
+                if (resolved is not { } stamped) {
                     await WriteFederationRefusal(
                         ct: ct,
                         detail: "the intent names no committed transfer body",
@@ -1717,27 +1720,8 @@ public sealed class WorldPeerHost : IDisposable {
                     return;
                 }
 
-                var stamped = submission with { EntityIndex = principal.Index, Principal = principal };
-                var accepted = false;
                 var reason = string.Empty;
-
-                if (await ExecuteAuthenticatedAsync(credential, () => {
-                    if (!WorldLocalForwardedAuthority.IsLiveTransferredPrincipal(
-                        principal: principal,
-                        server: m_server
-                    )) {
-                        return false;
-                    }
-
-                    m_server.PublishFederatedIntent(
-                        leaseId: leaseId,
-                        submission: in stamped
-                    );
-
-                    return true;
-                })) {
-                    accepted = true;
-                } else if (m_server.TransferForwarder is { } forwarder) {
+                if (!accepted && m_server.TransferForwarder is { } forwarder) {
                     // Socket ingress can land before the committed onward route is published; retain this state update
                     // rather than turning an ordinary handoff into a visible control-lane outage.
                     await AwaitOnwardRouteAsync(
@@ -1767,7 +1751,7 @@ public sealed class WorldPeerHost : IDisposable {
                     return;
                 }
 
-                touched[mobility] = (Principal: principal, Submission: stamped);
+                touched[mobility] = (Principal: stamped.Principal, Submission: stamped);
                 await WorldFederationCodec.WriteResponseAsync(
                     body: default,
                     ct: ct,

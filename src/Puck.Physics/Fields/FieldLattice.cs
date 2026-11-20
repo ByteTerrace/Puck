@@ -1905,7 +1905,7 @@ public sealed class FieldLattice {
     private Delta[] m_taken = [];
     // The take's scratch, grown to hold count deltas.
     private Span<Delta> Taken(int count) {
-        if (m_taken.Length < count) { m_taken = new Delta[(int)System.Numerics.BitOperations.RoundUpToPowerOf2((uint)count)]; }
+        if (m_taken.Length < count) { m_taken = new Delta[(int)((uint)count).NextPowerOfTwo()]; }
         return m_taken.AsSpan(start: 0, length: count);
     }
     /// <summary>Resolves the cell a BODY couples to for the <see cref="FieldReactionInput.Emit"/>/

@@ -1,3 +1,4 @@
+using Puck.Abstractions.Collections;
 using System.Diagnostics;
 using Puck.Abstractions.Counting;
 using Puck.Abstractions.Gpu;
@@ -17,7 +18,7 @@ public readonly record struct ShaderPipelineExternalImage(
     GpuImageLayout Layout = GpuImageLayout.ShaderReadOnly) {
     /// <summary>Gets the actual image publication acquired with its lease and fence, retained when a pass forwards
     /// this image without drawing.</summary>
-    public GpuImagePublication Publication { get; init; }
+    public ReferenceRevision Publication { get; init; }
 }
 /// <summary>
 /// The node that renders one render graph instance: an ordered multi-pass shader graph and its package passes. All passes are recorded before one queue submission;
@@ -1587,7 +1588,7 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
     /// <param name="buffer">The acquired buffer.</param>
     /// <param name="publication">Its actual produced content identity, or unknown when the host cannot supply one.
     /// Only known read-only imports may retain a pass's earlier result.</param>
-    public void BindBuffer(string name, IGpuBuffer buffer, GpuImagePublication publication = default) {
+    public void BindBuffer(string name, IGpuBuffer buffer, ReferenceRevision publication = default) {
         ObjectDisposedException.ThrowIf(
             condition: m_disposed,
             instance: this

@@ -4,6 +4,13 @@ using Puck.Physics.Motion;
 
 namespace Puck.World;
 
+/// <summary>The counter registers one document's kit and look selectors and its <c>bodies.scale</c> name, each resolved
+/// once to its slot in the register file, or -1 when nothing names one or it is not a declared counter (the only kind
+/// any of the three admits).</summary>
+/// <param name="KitSelect">The kit assignment's selector register.</param>
+/// <param name="LookSelect">The look assignment's selector register.</param>
+/// <param name="Scale">The register <c>bodies.scale</c> names.</param>
+public sealed record BodyRegisterPlan(int KitSelect, int LookSelect, int Scale);
 /// <summary>The one definition of what reading a body's named action-state slot answers, shared by a world rule's
 /// <see cref="WorldRuleFacts.BodyStatePrefix"/> read and a look's render lane: which slot a name resolves to, and the
 /// number a stored slot presents.</summary>
@@ -32,6 +39,28 @@ public static class WorldBodyStateReads {
             str1: slot
         );
     }
+    private static readonly Puck.Abstractions.CodeDerivedTable<WorldDefinition, BodyRegisterPlan> Plans = new();
+
+    /// <summary>Gets the registers a document's body population, kit assignment and look assignment name, resolved once
+    /// per document: the one resolution every per-tick consumer reads instead of scanning the register file by name.</summary>
+    /// <param name="definition">The world.</param>
+    /// <returns>The document's plan.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="definition"/> is <see langword="null"/>.</exception>
+    public static BodyRegisterPlan PlanFor(WorldDefinition definition) {
+        ArgumentNullException.ThrowIfNull(argument: definition);
+
+        return Plans.GetValue(
+            derive: static document => new BodyRegisterPlan(
+                KitSelect: CounterSlot(definition: document, name: document.Assignment.Select?.BodyState),
+                LookSelect: CounterSlot(definition: document, name: document.LookAssignment.Select?.BodyState),
+                Scale: CounterSlot(definition: document, name: document.Population.Scale)
+            ),
+            key: definition
+        );
+    }
+    private static int CounterSlot(WorldDefinition definition, string? name) => (((name is not null) &&
+        TryResolveSlot(definition: definition, kind: out var kind, name: name, slot: out var slot) &&
+        (kind == ActionStateKind.Counter)) ? slot : -1);
     /// <summary>Resolves a declared slot by name.</summary>
     /// <param name="definition">The world.</param>
     /// <param name="name">The slot's name.</param>

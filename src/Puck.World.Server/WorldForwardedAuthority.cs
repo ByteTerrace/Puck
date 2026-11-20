@@ -113,50 +113,28 @@ public sealed class WorldLocalForwardedAuthority : IWorldForwardedAuthority, IDi
             new((null, "the traveler is no longer live at this authority"));
     }
     private bool TryForwardIntentCore(in IntentSubmission submission, out string reason) {
-        if (!TryResolvePrincipal(
-            principal: out var principal,
-            reason: out reason
-        )) {
-            return false;
-        }
+        var intent = submission;
+        var (stamped, applied, closed) = m_server.ExecuteAuthorityOperation(() => {
+            if (Volatile.Read(ref m_disposed) != 0) { return ((IntentSubmission?)null, false, true); }
 
-        var stamped = submission with { EntityIndex = principal.Index, Principal = principal };
-        var accepted = m_server.ExecuteAuthorityOperation(operation: () => {
-            if (Volatile.Read(location: ref m_disposed) != 0) { return (Accepted: false, Closed: true); }
-            if (!IsLiveTransferredPrincipal(
-                principal: principal,
-                server: m_server
-            )) {
-                return (Accepted: false, Closed: false);
-            }
-
-            m_server.PublishFederatedIntent(
-                leaseId: m_leaseId,
-                submission: in stamped
-            );
-
-            return (Accepted: true, Closed: false);
+            var (stamped, applied) = TryApplyIntent(m_server, m_sourceAuthority, in m_mobility, m_leaseId, in intent);
+            return (stamped, applied, false);
         });
 
-        // Never hold one authority's operation gate while calling the next authority.
-        if (
-            !accepted.Accepted &&
-            !accepted.Closed &&
-            (m_server.TransferForwarder is { } forwarder)
-        ) {
-            return forwarder.TryForwardIntent(
-                mobility: in m_mobility,
-                reason: out reason,
-                source: m_server,
-                submission: in stamped
-            );
+        if (applied) {
+            reason = string.Empty;
+            return true;
         }
-        reason = (accepted.Accepted
-            ? string.Empty
-            : "the forwarding lease is closed or the traveler is no longer live at this authority"
-        );
 
-        return accepted.Accepted;
+        // Never hold one authority's operation gate while calling the next authority.
+        if (stamped is { } onward && m_server.TransferForwarder is { } forwarder) {
+            return forwarder.TryForwardIntent(source: m_server, mobility: in m_mobility, submission: in onward, reason: out reason);
+        }
+
+        reason = (closed || stamped.HasValue)
+            ? "the forwarding lease is closed or the traveler is no longer live at this authority"
+            : $"traveler {m_mobility.Incarnation} has no committed credential at this authority";
+        return false;
     }
     private bool TryResolvePrincipal(out Principal principal, out string reason) {
         if (!m_server.TryTransferredPrincipal(
@@ -291,6 +269,19 @@ public sealed class WorldLocalForwardedAuthority : IWorldForwardedAuthority, IDi
             output,
             ct
         );
+    // Call under the destination authority gate. Resolve, stamp, and publish there so the resolved principal
+    // cannot be detached or replaced between authentication and publishing. An onward hop gets the stamped intent.
+    internal static (IntentSubmission? Stamped, bool Applied) TryApplyIntent(WorldServer server, string sourceAuthority, in WorldMobilityIdentity mobility, long leaseId, in IntentSubmission intent) {
+        System.Diagnostics.Debug.Assert(server.AuthorityGate.IsHeldByCurrentThread);
+        if (!server.TryTransferredPrincipal(sourceAuthority, in mobility, out var principal)) { return (null, false); }
+
+        var stamped = intent with { EntityIndex = principal.Index, Principal = principal };
+        if (!IsLiveTransferredPrincipal(server, principal)) { return (stamped, false); }
+
+        server.PublishFederatedIntent(leaseId, in stamped);
+        return (stamped, true);
+    }
+
     /// <summary>Applies one already-decoded submission to a live transferred body, resolving the acting principal
     /// from the destination's own transfer table. Runs the liveness test and the act it authorizes as one gated
     /// operation. The typed result reaches <paramref name="completion"/> exactly once when the body was live: inline

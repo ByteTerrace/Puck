@@ -1,3 +1,4 @@
+using Puck.Maths;
 using System.Collections.Immutable;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -82,17 +83,7 @@ public sealed class WorldKeyTrack<T> : IEquatable<WorldKeyTrack<T>>, IWorldKeyTr
     /// <inheritdoc/>
     public override bool Equals(object? obj) => Equals(other: (obj as WorldKeyTrack<T>));
     /// <inheritdoc/>
-    public override int GetHashCode() {
-        var hash = new HashCode();
-
-        hash.Add(value: Clock, comparer: StringComparer.Ordinal);
-
-        foreach (var key in Keys) {
-            hash.Add(value: key);
-        }
-
-        return hash.ToHashCode();
-    }
+    public override int GetHashCode() => HashCode.Combine(Clock, SequenceHash.Of(Keys.AsSpan()));
     /// <inheritdoc/>
     public override string ToString() => $"keys(clock: {Clock}, {Keys.Length} keys)";
 }

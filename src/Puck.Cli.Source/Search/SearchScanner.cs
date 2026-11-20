@@ -1,3 +1,4 @@
+using Puck.Maths;
 using System.Text;
 using Puck.Cli.Source;
 using Resharp;
@@ -53,22 +54,10 @@ internal static class SearchScanner {
         }
         return count;
     }
-    private static int LineOf(int[] starts, int offset) {
-        var lo = 0;
-        var hi = (starts.Length - 1);
-
-        while (lo < hi) {
-            var mid = (((lo + hi) + 1) >> 1);
-
-            if (starts[mid] <= offset) {
-                lo = mid;
-            } else {
-                hi = (mid - 1);
-            }
-        }
-
-        return lo;
-    }
+    private static int LineOf(int[] starts, int offset) => Math.Max(
+        val1: 0,
+        val2: (PartitionPoint.Of(span: starts, state: offset, isBefore: static (at, start) => (start <= at)) - 1)
+    );
     private static int[] LineStartOffsets(string text) {
         var starts = new List<int>();
         var lines = CliText.EnumerateLines(text: text.AsSpan(), emptyIsLine: true);

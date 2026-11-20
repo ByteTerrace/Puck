@@ -1,3 +1,4 @@
+using Puck.Maths;
 namespace Puck.Abstractions.Gpu;
 
 /// <summary>
@@ -179,15 +180,9 @@ public sealed class GpuUploadRuns {
     /// <param name="value">The unit to find.</param>
     /// <returns>Whether a run contains the unit, including its start and excluding its end.</returns>
     public bool Contains(int value) {
-        var low = 0;
-        var high = m_count;
+        var run = PartitionPoint.Of(span: m_ends.AsSpan(start: 0, length: m_count), state: value, isBefore: static (at, end) => (end <= at));
 
-        while (low < high) {
-            var middle = (low + ((high - low) >>> 1));
-
-            if (value < m_starts[middle]) { high = middle; } else if (value >= m_ends[middle]) { low = (middle + 1); } else { return true; }
-        }
-        return false;
+        return ((run < m_count) && (m_starts[run] <= value));
     }
 
     // Halves the run count by closing the smallest gaps: the runs are already ordered, and each gap no wider
@@ -207,7 +202,7 @@ public sealed class GpuUploadRuns {
         m_gaps.AsSpan(length: (m_count - 1), start: 0).CopyTo(destination: m_widths);
 
         // The widest gap closed; gaps of exactly its width close only while fewer than `closing` have.
-        var widest = Select(rank: (closing - 1), values: m_widths.AsSpan(length: (m_count - 1), start: 0));
+        var widest = OrderStatistics.Select(rank: (closing - 1), values: m_widths.AsSpan(length: (m_count - 1), start: 0));
         var narrower = 0;
 
         for (var index = 0; (index < (m_count - 1)); index++) {
@@ -243,37 +238,5 @@ public sealed class GpuUploadRuns {
         }
 
         m_count = kept;
-    }
-    // The value of a rank among values in increasing order (zero the smallest), found by partitioning them in place about
-    // a middle pivot and keeping the side that holds the rank, in linear time on average.
-    private static int Select(Span<int> values, int rank) {
-        var low = 0;
-        var high = (values.Length - 1);
-
-        while (low < high) {
-            var pivot = values[(low + ((high - low) / 2))];
-            var left = low;
-            var right = high;
-
-            while (left <= right) {
-                while (values[left] < pivot) { left++; }
-                while (values[right] > pivot) { right--; }
-                if (left <= right) {
-                    (values[left], values[right]) = (values[right], values[left]);
-                    left++;
-                    right--;
-                }
-            }
-
-            if (rank <= right) {
-                high = right;
-            } else if (rank >= left) {
-                low = left;
-            } else {
-                return values[rank];
-            }
-        }
-
-        return values[rank];
     }
 }

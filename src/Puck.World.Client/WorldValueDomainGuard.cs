@@ -1,3 +1,4 @@
+using Puck.Abstractions.Collections;
 using System.Globalization;
 using System.Runtime.CompilerServices;
 
@@ -196,22 +197,7 @@ public sealed class WorldValueDomainGuard {
         return used;
     }
 
-    private readonly record struct Key(StateBinding Binding, WorldValueField Field, WorldValueSite Site) : IEquatable<Key> {
-        // The field is one of WorldValueFields' rows, so it is compared by reference rather than member by member.
-        public bool Equals(Key other) => (
-            ReferenceEquals(
-                objA: Field,
-                objB: other.Field
-            ) &&
-            Site.Equals(other: other.Site) &&
-            Binding.Equals(other: other.Binding)
-        );
-        public override int GetHashCode() => HashCode.Combine(
-            value1: RuntimeHelpers.GetHashCode(o: Field),
-            value2: Site,
-            value3: Binding
-        );
-    }
+    private readonly record struct Key(StateBinding Binding, ByReference<WorldValueField> Field, WorldValueSite Site);
     private sealed class Entry {
         public bool HasValid { get; set; }
         public bool Invalid { get; set; }
@@ -252,7 +238,7 @@ public sealed class WorldValueDomainGuard {
 
                 if (!manifest.Authors(
                     binding: in binding,
-                    path: key.Site.PathOf(field: key.Field)
+                    path: key.Site.PathOf(field: key.Field.Value!)
                 )) {
                     _ = Entries.Remove(key: key);
                 }

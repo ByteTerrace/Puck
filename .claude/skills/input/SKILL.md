@@ -236,6 +236,9 @@ The pattern contract (`WorldInputPattern.cs`, `WorldInputOwner.Patterns.cs`):
   `WorldStateMirror` (including `$body` keys via `WorldStateLease`) and
   drives the seat's assigned pad via `PlayerRoster.TryGetSeatDevice` and
   `GamepadManager.TryGetOutput`; `haptics.state` echoes per-seat status.
+  The haptic, key light and highlight directors share `WorldSignalEdges`
+  (`Puck.World.Client`): one reading per row id, reporting `Changed` or `Rose`
+  against the last, and a row's first reading only seeds it.
   Protocol work consults several independent sources and cites each
   (AGENTS.md); hardware evidence and owed runs are in
   [device input](../../../docs/reference/input.md#limits-and-hardware-evidence).

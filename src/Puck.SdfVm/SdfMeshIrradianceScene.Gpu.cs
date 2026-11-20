@@ -1,3 +1,4 @@
+using Puck.Maths;
 using System.Numerics;
 using System.Runtime.InteropServices;
 using Puck.Abstractions.Gpu;
@@ -103,13 +104,7 @@ public sealed partial class SdfMeshIrradianceScene {
         return new GpuExport(arena.Words, Read) { Changed = changed, Root = root, Instances = (uint)instances, Prefix = prefix, Geometries = geometries };
 
         void Read(int word, Span<uint> destination) {
-            var low = 0;
-            var high = segments.Count;
-            while (low < high) {
-                var middle = (low + high) / 2;
-                if (segments[middle].Word + segments[middle].Count <= word) { low = middle + 1; }
-                else { high = middle; }
-            }
+            var low = PartitionPoint.Of(span: CollectionsMarshal.AsSpan(segments), state: word, isBefore: static (at, segment) => (segment.Word + segment.Count <= at));
             // One record of any kind the export holds, the widest an instance's.
             Span<uint> record = stackalloc uint[SdfMeshProbeTrace.InstanceWords];
             while (!destination.IsEmpty) {

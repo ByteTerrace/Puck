@@ -1,3 +1,4 @@
+using Puck.Maths;
 using System.Collections;
 
 namespace Puck.Commands;
@@ -116,15 +117,7 @@ public readonly struct CommandBuffer<T> : IReadOnlyList<T>, IEquatable<CommandBu
         );
     }
     /// <inheritdoc/>
-    public override int GetHashCode() {
-        var hash = new HashCode();
-
-        foreach (ref readonly var item in Span) {
-            hash.Add(value: item);
-        }
-
-        return hash.ToHashCode();
-    }
+    public override int GetHashCode() => SequenceHash.Of(Span);
 
     /// <summary>Compares two views structurally.</summary>
     public static bool operator ==(CommandBuffer<T> left, CommandBuffer<T> right) => left.Equals(other: right);

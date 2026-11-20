@@ -12,6 +12,7 @@ public sealed partial record SdfMesh {
     private SdfMesh(SdfMesh source) {
         if (source.m_payload is not null) { throw new InvalidOperationException(message: "A published native mesh cannot be record-cloned."); }
         BakeCell = source.BakeCell;
+        BakedSites = source.BakedSites;
         Chunks = source.Chunks;
         Encloses = source.Encloses;
         Positions = source.Positions;

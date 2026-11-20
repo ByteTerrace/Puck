@@ -1,3 +1,5 @@
+using Puck.Maths;
+
 namespace Puck.HumbleGamingBrick;
 
 /// <summary>
@@ -11,9 +13,6 @@ namespace Puck.HumbleGamingBrick;
 /// pair-stepper's own overshoot credits, and the medium's own traffic counters, none of which the machines' snapshots
 /// carry.</remarks>
 internal sealed class SerialLinkGroupCore : IMachineGroupCore {
-    private const ulong FnvOffsetBasis = 14_695_981_039_346_656_037UL;
-    private const ulong FnvPrime = 1_099_511_628_211UL;
-
     private readonly HumbleGamingBrickCore m_first;
     private readonly SerialComponent m_firstPort;
     private readonly Action<byte>? m_firstPreviousObserver;
@@ -28,7 +27,7 @@ internal sealed class SerialLinkGroupCore : IMachineGroupCore {
     private readonly StateWriter m_writer = new(capacity: 65_536);
     private byte[] m_firstScratch = [];
     private byte[] m_secondScratch = [];
-    private ulong m_trafficFingerprint = FnvOffsetBasis;
+    private ulong m_trafficFingerprint = Fnv1aHash.Create().Value;
 
     /// <summary>Wires two lent cores' serial ports as peers and anchors the pair-stepper at their current
     /// instants.</summary>
@@ -81,14 +80,18 @@ internal sealed class SerialLinkGroupCore : IMachineGroupCore {
     // is the group's own execution thread (transfer completion fires from inside RunCycles), so the increment/fold itself
     // needs no interlock; the write is volatile only so CompletedTransfers/TrafficFingerprint's Volatile.Read from
     // another thread observes it.
-    private void Fold(byte value, ulong port, Action<byte>? previousObserver) {
+    private void Fold(byte value, byte port, Action<byte>? previousObserver) {
         Volatile.Write(
             location: ref m_completedTransfers,
             value: (m_completedTransfers + 1)
         );
+        var fingerprint = Fnv1aHash.Resume(value: m_trafficFingerprint);
+
+        fingerprint.Add(value: value);
+        fingerprint.Add(value: port);
         Volatile.Write(
             location: ref m_trafficFingerprint,
-            value: ((((m_trafficFingerprint ^ value) * FnvPrime) ^ port) * FnvPrime)
+            value: fingerprint.Value
         );
         previousObserver?.Invoke(obj: value);
     }
@@ -101,13 +104,13 @@ internal sealed class SerialLinkGroupCore : IMachineGroupCore {
     // one did.
     private void OnFirstTransferCompleted(byte value) =>
         Fold(
-            port: 0x01UL,
+            port: 0x01,
             previousObserver: m_firstPreviousObserver,
             value: value
         );
     private void OnSecondTransferCompleted(byte value) =>
         Fold(
-            port: 0x02UL,
+            port: 0x02,
             previousObserver: m_secondPreviousObserver,
             value: value
         );

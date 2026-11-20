@@ -1,3 +1,4 @@
+using Puck.Maths;
 using System.Text;
 
 namespace Puck.State;
@@ -57,7 +58,7 @@ public static partial class ExpressionSpelling {
     /// <param name="syntax">The parsed tree, or null on refusal.</param>
     /// <param name="error">The refusal with its source position, or empty on success.</param>
     /// <returns>Whether the source is syntactically valid.</returns>
-    public static bool TryParseSyntax(string? text, IReadOnlyList<SourceAtomSpan> atoms, out SyntaxNode? syntax, out string error) {
+    public static bool TryParseSyntax(string? text, SourceAtomSpan[] atoms, out SyntaxNode? syntax, out string error) {
         ArgumentNullException.ThrowIfNull(atoms);
         syntax = null;
         if (string.IsNullOrWhiteSpace(value: text)) {
@@ -138,22 +139,16 @@ public static partial class ExpressionSpelling {
         private int m_sourceAtomIndex;
 
         private bool TryReadSourceAtom() {
-            var low = 0;
-            var high = ((atoms?.Count ?? 0) - 1);
+            var candidates = (atoms ?? []);
+            var index = PartitionPoint.Of(span: candidates, state: m_position, isBefore: static (at, atom) => (atom.Start < at));
 
-            while (low <= high) {
-                var middle = (low + ((high - low) / 2));
-                var span = atoms![middle];
+            if ((index == candidates.Length) || (candidates[index].Start != m_position)) { return false; }
 
-                if (span.Start < m_position) { low = (middle + 1); } else if (span.Start > m_position) { high = (middle - 1); } else {
-                    m_sourceAtomIndex = middle;
-                    m_position += span.Length;
-                    m_kind = Lexeme.Atom;
-                    m_value = string.Empty;
-                    return true;
-                }
-            }
-            return false;
+            m_sourceAtomIndex = index;
+            m_position += candidates[index].Length;
+            m_kind = Lexeme.Atom;
+            m_value = string.Empty;
+            return true;
         }
         private SyntaxNode ParseSourcePrimary() {
             Prime();

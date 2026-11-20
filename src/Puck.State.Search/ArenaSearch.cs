@@ -650,7 +650,7 @@ public sealed partial class ArenaSearch {
             paramName: nameof(index)
         )
     );
-    private static int WideWordsPerToken(int cellCount) => ((cellCount + 63) >> 6);
+    private static int WideWordsPerToken(int cellCount) => cellCount.CeilingDivide(divisor: 64);
     private static bool WideBit(long[] wide, int token, int cell, int words) {
         var index = ((token * words) + (cell >> 6));
 

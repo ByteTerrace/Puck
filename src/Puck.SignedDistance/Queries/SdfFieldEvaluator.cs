@@ -228,7 +228,7 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
 
             const long RawOneSquared = (1L << (2 * FixedQ4816.FractionBitCount));
 
-            return FixedQ4816.FromRawBits(value: ((RawOneSquared + (m_stepScale.Value - 1L)) / m_stepScale.Value));
+            return FixedQ4816.FromRawBits(value: RawOneSquared.CeilingDivide(divisor: m_stepScale.Value));
         }
     }
 

@@ -9,7 +9,7 @@ public sealed partial class WorldAuthorityBlobStore {
     public async Task<WorldAuthorityStoreOutcome> PrepareIntentionalRestoreAsync(WorldAuthorityIdentity identity,
         WorldReleaseGroupRecord operation, WorldReleaseFixtureManifest point, ReadOnlyMemory<byte> definition,
         ReadOnlyMemory<byte> checkpoint, CancellationToken cancellationToken = default) {
-        var key = $"{identity.Owner:D}/{identity.World}";
+        var key = identity.RootKey;
 
         if (
             (operation.PendingOperationId is not { } operationId) ||

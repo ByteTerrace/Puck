@@ -1,3 +1,4 @@
+using Puck.Maths;
 using System.Globalization;
 
 namespace Puck.State;
@@ -46,17 +47,7 @@ public sealed record ChannelCall(string Channel, IReadOnlyList<ChannelArgument> 
         Arguments.SequenceEqual(second: other.Arguments)
     );
     /// <inheritdoc/>
-    public override int GetHashCode() {
-        var hash = new HashCode();
-
-        hash.Add(value: Channel);
-
-        foreach (var argument in Arguments) {
-            hash.Add(value: argument);
-        }
-
-        return hash.ToHashCode();
-    }
+    public override int GetHashCode() => HashCode.Combine(Channel, SequenceHash.Of(Arguments));
 }
 /// <summary>One argument of a <see cref="ChannelCall"/>.</summary>
 public abstract record ChannelArgument {
