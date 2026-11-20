@@ -4,11 +4,6 @@ namespace Puck.World;
 
 public static partial class WorldDefinitionValidator {
     private static void ValidateIndirect(WorldDefinition definition, List<string> errors) {
-        foreach (var tier in Enum.GetValues<Puck.Abstractions.Presentation.QualityTier>()) {
-            if ((definition.Render.Preset(tier: tier)?.Indirect is { } chosen) && !Enum.IsDefined(value: chosen)) {
-                errors.Add(item: $"render.{tier.ToString().ToLowerInvariant()}.indirect must be off, medium or high.");
-            }
-        }
         if (definition.Render.Indirect is not { } indirect) { return; }
         if (indirect.LightingGrid is { } grid) {
             if (grid.DirectionDegrees is { } direction && (!float.IsFinite(direction) || direction < 0 || direction > 180)) { errors.Add("render.indirect.lightingGrid.directionDegrees must be finite and in [0, 180]."); }

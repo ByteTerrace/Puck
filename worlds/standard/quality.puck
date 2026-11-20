@@ -6,11 +6,12 @@
 // view with no cascade, the sun, so no tier goes without it. Every tier lets the volume's background rays take the ray
 // hardware where the device has it (`world.rays`): the software walk answers the same hits, so the row changes cost, not
 // looks, and a device without ray queries ignores it.
-// A world boots on its own render levers and nothing here changes them until a tier is chosen. Until initial development
-// is done every machine runs `high`, the fullest render, and no machine drops to a lower tier to meet its frame-rate bar;
-// `low` and `medium` are what they are only until the tiers below the highest are worked out on the machines that need
-// them. `standard.puck` imports this table, so every world importing the standard answers each tier, and a world
-// without the standard imports it by name.
+// A world boots on its own render levers until its device opens; a device a profile below matches then runs that
+// profile's table from its first frames, and a lever command after it overrides it. Until initial development is done
+// every device runs the `high` look, the fullest render, along the path its own table chooses, and no machine drops to a
+// lower tier to meet its frame-rate bar; `low` and `medium` are what they are only until the tiers below the highest are
+// worked out on the machines that need them. `standard.puck` imports this table, so every world importing the standard
+// answers each tier, and a world without the standard imports it by name.
 render {
   // The irradiance volume's budget, the same at every tier: each second relights at most `relightPerSecond` probes from
   // their cached hits (a light or sky change) and traces at most `tracePerSecond` probes' hits (a scene change or a
@@ -32,15 +33,47 @@ render {
     }
   }
   // The device profiles: for each graphics device the standard ships for, the quality table it runs and the memory it may
-  // use. The engine selects a profile by the adapter's name (`match`, a case-insensitive part of it) or by name
-  // (`world.device-profile <name>`), applies its table as `world.quality` does and admits memory against its bars: the
-  // device pool's limit is the lower of `deviceMemoryMiB` and the adapter's own budget less a tenth, and
-  // `hostMemoryMiB` bounds the host pool the same way. The RTX 4070 keeps 8 GiB of its 12 for the system and other
-  // programs, the RTX 2060 4.5 GiB of its 6, and the Steam Deck's one pool of 10 GiB holds the process and its GPU
-  // together. Until initial development is done every device runs `high`.
+  // use. The engine selects a profile by the adapter's name (`match`, a case-insensitive part of it) once the device
+  // opens, or by name (`world.device-profile <name>`), applies its table as `world.quality` does and admits memory
+  // against its bars: the device pool's limit is the lower of `deviceMemoryMiB` and the adapter's own budget less a
+  // tenth, and `hostMemoryMiB` bounds the host pool the same way. The RTX 4070 keeps 8 GiB of its 12 for the system and
+  // other programs, the RTX 2060 4.5 GiB of its 6, and the Steam Deck's one pool of 10 GiB holds the process and its GPU
+  // together. A device runs its tier's preset unless it authors a `table` of its own, the highest quality that device
+  // reaches its bar by.
+  //
+  // The RTX 2060's table is the `high` look along the 2060's own path, at 1920 by 1080: its views shade three quarters
+  // of the display's width and height and reconstruct the rest over time (the jittered temporal resolve the high preset
+  // already runs), so the views, surface and probe-gather passes shade a little over half the pixels; its irradiance
+  // volume is the medium tier's, whose finest level is 2 m cells over a 64 m window, two thirds of the high tier's probes,
+  // and the hit cache and the published and feedback tables are sized by it; its distant shadow map draws 1024 texels a
+  // side (a texel about 2.3 m across the 1200 m reach) and holds through a fifth of a degree of the sun's turn, so the
+  // standard's day redraws it a little over once a second, each step about one of its texels.
   devices [
     { name: "rtx4070", match: "RTX 4070", quality: high, deviceMemoryMiB: 8192 }
-    { name: "rtx2060", match: "RTX 2060", quality: high, deviceMemoryMiB: 4608 }
+    {
+      name: "rtx2060"
+      match: "RTX 2060"
+      quality: high
+      deviceMemoryMiB: 4608
+      table {
+        distantShadows { reach: 1200, texels: 1024, turnDegrees: 0.2 }
+        bloom: High
+        indirect: Medium
+        sky: high
+        skyFieldScale: 1
+        shadows: High
+        shadowLights: 2
+        shadowFadeSlots: 0
+        shadowFadeTicks: 0
+        shadowOverflow: instant
+        ambientOcclusion: true
+        temporal: true
+        dynamicResolution: false
+        renderScaleFloor: Quarter
+        renderScale: 0.75
+        rayQueries: true
+      }
+    }
     { name: "steamdeck", match: "VANGOGH", quality: high, hostMemoryMiB: 10240 }
   ]
   // What a nested view (a window, a portal, a filmed camera's screen, a session's screen) gives up at each share of the

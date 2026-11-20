@@ -95,16 +95,28 @@ public sealed record HostLoadThresholds(double? CapacityCpuPercent, double? Pres
     /// <summary>The commit, in gigabytes, an ordinary step (a build, a verb that boots no World) is expected to reach.</summary>
     public const double StepPeakGb = 2;
 
-    /// <summary>Returns the fallback peak before this machine has measured a plateaued or finished start of the kind.</summary>
+    /// <summary>Returns the fallback peak before this machine has measured a plateaued or finished start of the kind: the
+    /// kind's reading on a large machine, held to the host budget a Puck process's account derives on a machine of
+    /// <paramref name="installedRamGb"/> (<see cref="Puck.Hosting.Jobs.MemoryAccount.DefaultBudgetOf"/>). A World sizes its
+    /// caches and pools from that budget, so on a 16 GB machine it plans for 12 GB and ran at 8 to 10 GB private where a
+    /// 64 GB machine reads 12 to 18 GB; judging the small machine by the large one's figure refuses a start that fits.</summary>
     /// <param name="kind">The start's kind.</param>
-    /// <returns>The default expected peak.</returns>
-    public static double DefaultPeakGb(HostStartKind kind) => kind switch {
-        HostStartKind.WindowedWorld => WindowedWorldPeakGb,
-        HostStartKind.HeadlessWorld => HeadlessWorldPeakGb,
-        HostStartKind.HeavySuite => HeavySuitePeakGb,
-        HostStartKind.ReproduceReplica => ReproduceReplicaPeakGb,
-        _ => StepPeakGb,
-    };
+    /// <param name="installedRamGb">The machine's installed memory, in gigabytes, or <see langword="null"/> to judge by the
+    /// kind's figure alone.</param>
+    /// <returns>The default expected peak, in gigabytes.</returns>
+    public static double DefaultPeakGb(HostStartKind kind, double? installedRamGb) {
+        var peak = kind switch {
+            HostStartKind.WindowedWorld => WindowedWorldPeakGb,
+            HostStartKind.HeadlessWorld => HeadlessWorldPeakGb,
+            HostStartKind.HeavySuite => HeavySuitePeakGb,
+            HostStartKind.ReproduceReplica => ReproduceReplicaPeakGb,
+            _ => StepPeakGb,
+        };
+
+        return ((installedRamGb is { } installed && double.IsFinite(d: installed) && (installed > 0))
+            ? Math.Min(val1: peak, val2: (Puck.Hosting.Jobs.MemoryAccount.DefaultBudgetOf(installedPhysicalBytes: (long)(installed * 1073741824.0)) / 1073741824.0))
+            : peak);
+    }
     /// <summary>Gets whether a reading's commit headroom (the limit less the charge) covers <paramref name="needGb"/> and
     /// still holds the commit reserve afterwards. A threshold left out, or a platform that reports no commit limit, never
     /// holds a reading back.</summary>

@@ -454,6 +454,9 @@ public sealed partial class RenderGraphRuntime {
 
         public string? Fault { get; } = fault;
         public RenderGraphRuntimeGraph? Graph { get; } = graph;
+        // Whether the producer declares no image because it is not running; a source that built a graph is no longer
+        // absent once its descriptor drifts, since the rebuild before the next frame replaces it.
+        public bool IsAbsent => ((Graph is null) && Upload.IsAbsent);
 
         // Gives a new source's node its graph, at the extent the descriptor fixed.
         public void Install(ShaderPipelineRenderNode node) {

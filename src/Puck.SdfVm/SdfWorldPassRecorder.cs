@@ -629,6 +629,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         if (m_part == SdfWorldPackage.Parts.ShadowDistant) {
             _ = m_owner.CascadesOf(distantTexels: boundDistantTexels, frame: frame, instance: m_context.Instance, texels: boundTexels, view: view);
             _ = m_owner.RecordDistant(counts: frame.RateCounts, instance: m_context.Instance);
+            tables.CastersRead();
         }
 
         var cascades = m_owner.CascadesOf(distantTexels: boundDistantTexels, frame: frame, instance: m_context.Instance, texels: boundTexels, view: view);
