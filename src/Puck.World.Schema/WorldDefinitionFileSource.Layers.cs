@@ -12,9 +12,8 @@ namespace Puck.World;
 // MergeSiblingObject walk the overlay's members one at a time, and the shades rule and every collision path are rooted at
 // the member). So when a recomposition finds every layer it shaped afresh still writing the same root members in the same
 // order with the same nullness, the composed document keeps its member order and every member no changed layer writes
-// differently, and only the members whose bytes moved in some layer merge again. Anything else (a layer that writes a new
-// root member or stops writing one, a root member spelled with '$', a layer without a held image) merges whole, from the
-// layers' shaped trees, through the same merge as a first composition.
+// differently, and only the members whose bytes moved in some layer merge again. The whole merge handles a changed set
+// of root members, root composition vocabulary and a missing prior layer.
 public static partial class WorldDefinitionFileSource {
     // One root member of a compact JSON object: its name, where its key's spelling starts, and where its value lies in
     // the object's bytes. The key runs from KeyStart to Start, colon included, exactly as the object spelled it.
@@ -29,6 +28,7 @@ public static partial class WorldDefinitionFileSource {
     internal sealed record ComposedLayer(
         string Path,
         WorldComposedDocument? Image,
+        string? Key,
         byte[] Json,
         Member[] Members,
         WorldModuleExports.Layer? Walk,
@@ -132,14 +132,15 @@ public static partial class WorldDefinitionFileSource {
         return output.WrittenSpan.ToArray();
     }
     // A shaped tree held as a layer: its compact JSON and its members.
-    private static ComposedLayer HoldLayer(JsonObject tree, string path, WorldComposedDocument? image, WorldModuleExports.Layer? walk, WorldExports? exports, string description) {
+    private static ComposedLayer HoldLayer(JsonObject tree, string path, WorldComposedDocument? image, string? key, WorldModuleExports.Layer? walk, WorldExports? exports, string description) {
         var json = Compact(members: out var members, tree: tree);
 
         return new ComposedLayer(
             Description: description,
             Exports: exports,
-            Image: image,
+            Image: (key is null ? image : null),
             Json: json,
+            Key: key,
             Members: members,
             Path: path,
             Walk: walk?.Detached()
@@ -231,10 +232,11 @@ public static partial class WorldDefinitionFileSource {
 
     // One slot of a composition being composed: the layer held for it (the held layer itself when it was reused, a new
     // one when it was shaped afresh and is held), the shaped tree when it was shaped afresh, and its live walk.
-    private sealed class Slot(string path, string description, WorldComposedDocument? image) {
+    private sealed class Slot(string path, string description, WorldComposedDocument? image, string? key) {
         public string Path { get; } = path;
         public string Description { get; } = description;
         public WorldComposedDocument? Image { get; } = image;
+        public string? Key { get; } = key;
         public ComposedLayer? Reused { get; init; }
         public JsonObject? Tree { get; set; }
         public WorldExports? Exports { get; init; }
@@ -250,10 +252,49 @@ public static partial class WorldDefinitionFileSource {
         }
     }
 
-    // Whether the layer `held` composed from is the one a slot reads now: the same document, composed to the same image
-    // object, which holds the same bytes it held then, so shaping it again gives the same tree.
-    private static bool Reuses(ComposedLayer? held, WorldComposedDocument? image, string path) =>
-        ((held is not null) && (image is not null) && ReferenceEquals(objA: held.Image, objB: image) && string.Equals(a: held.Path, b: path, comparisonType: StringComparison.Ordinal));
+    private static ComposedLayer? ReuseLayer(ComposedLayer? held, WorldComposedDocument? image, string path, string? key, IWorldCompositionStore? store) {
+        if (key is not null) {
+            return (held?.Key == key) ? held : ReadCachedLayer(store: store!, key: key);
+        }
+        return ((held is not null) && (image is not null) && ReferenceEquals(objA: held.Image, objB: image) && string.Equals(a: held.Path, b: path, comparisonType: StringComparison.Ordinal)) ? held : null;
+    }
+
+    private static void ShapeOwn(JsonObject root) {
+        root.Remove(propertyName: WorldDocumentBasis.BasisMemberName);
+        root.Remove(propertyName: WorldDocumentBasis.ImportsMemberName);
+    }
+
+    private static bool ShapeBasis(JsonObject tree, string path, string target, IMachineValidationCatalog? catalog, WorldDocumentOrigins? origins, out string reason) {
+        WorldDocumentPaths.RelocateDocumentFields(module: tree, origins: origins, sourceDocumentPath: path, targetDocumentPath: target);
+        reason = string.Empty;
+        if ((catalog is null) || WorldModuleNamespace.TryRelocateConfigurationAssets(catalog: catalog, module: tree, reason: out reason, sourceDocumentPath: path, targetDocumentPath: target)) {
+            return true;
+        }
+        reason = $"{WorldDocumentLabel.Of(path: target)} basis {WorldDocumentLabel.Of(path: path)}: {reason}";
+        return false;
+    }
+
+    private static bool ShapeImport(JsonObject tree, string path, string target, string description, string? alias, IMachineValidationCatalog? catalog, WorldDocumentOrigins? origins, out WorldExports? exports, out string reason) {
+        WorldDocumentPaths.RelocateDocumentFields(module: tree, origins: origins, sourceDocumentPath: path, targetDocumentPath: target);
+        exports = null;
+        reason = string.Empty;
+        if ((alias is not null) && !((catalog is null)
+            ? WorldModuleNamespace.TryApply(alias: alias, module: tree, reason: out reason)
+            : WorldModuleNamespace.TryApply(alias: alias, catalog: catalog, module: tree, reason: out reason, sourceDocumentPath: path, targetDocumentPath: target))) {
+            reason = $"{WorldDocumentLabel.Of(path: target)} imports {WorldDocumentLabel.Of(path: path)} as '{alias}': {reason}";
+            return false;
+        }
+        if ((catalog is not null) && (alias is null) && !WorldModuleNamespace.TryRelocateConfigurationAssets(
+            catalog: catalog, module: tree, reason: out reason, sourceDocumentPath: path, targetDocumentPath: target)) {
+            reason = $"{WorldDocumentLabel.Of(path: target)} imports {WorldDocumentLabel.Of(path: path)}: {reason}";
+            return false;
+        }
+        if (!WorldModuleExports.TryTake(exports: out exports, module: tree, moduleName: description, reason: out reason)) {
+            reason = $"{WorldDocumentLabel.Of(path: target)} imports {reason}";
+            return false;
+        }
+        return true;
+    }
 
     // The composition of a document no held image answered (TryComposeLayersCore has already applied the walk rules): a
     // flat file as it stands, or its basis, its imports and its own body, each read and composed through this same
@@ -269,8 +310,12 @@ public static partial class WorldDefinitionFileSource {
         // source whose images are held: the image this composition replaces holds the layers it composed from.
         var byLayer = (retainImage && serveHeldImage && (origins is null) && source.ResolvesFiles);
         var previous = ((byLayer && ComposedDocuments.TryGetValue(key: CacheKey(fingerprint: catalogFingerprint, path: resolvedPath, source: source), value: out var stale)) ? stale : null);
-        var held = previous?.Layers;
         var recordsInputs = (source.ResolvesFiles && source.RecordInputs(content: bytes, resolvedName: resolvedPath));
+        var store = (byLayer && recordsInputs) ? source.Compositions : null;
+        var held = previous?.Layers;
+        if ((store is not null) && (previous?.CachedLayers is { } indexed)) {
+            held = indexed.Load(store: store, ownBytes: previous.Chain[0].Bytes!);
+        }
         var sameRoot = ((held is not null) && held.OwnBytes.AsSpan().SequenceEqual(other: bytes));
         JsonObject? ownBody = null;
         JsonNode? importsNode = null;
@@ -340,9 +385,13 @@ public static partial class WorldDefinitionFileSource {
 
             hasImports = root.TryGetPropertyValue(jsonNode: out importsNode, propertyName: WorldDocumentBasis.ImportsMemberName);
             ownBody = root;
-            ownBody.Remove(propertyName: WorldDocumentBasis.BasisMemberName);
-            ownBody.Remove(propertyName: WorldDocumentBasis.ImportsMemberName);
+            ShapeOwn(root: ownBody);
         }
+
+        var layerCode = (store is null) ? null : LayerCodeIdentity(store: store);
+        string? KeyOf(string kind, string path, string? alias, string description, WorldComposedDocument? input) =>
+            (layerCode is null) ? null : LayerKey(code: layerCode, kind: kind, input: (input?.ComposedDigest ?? ContentPin.Compute(content: bytes).Hex),
+                path: path, target: resolvedPath, catalog: catalogFingerprint, hasCatalog: (catalog is not null), alias: alias, description: description, walk: hasImports);
 
         var nextAncestors = ((IReadOnlyList<string>)[.. ancestors, resolvedPath]);
         Slot? basis = null;
@@ -375,29 +424,16 @@ public static partial class WorldDefinitionFileSource {
                 return false;
             }
 
-            basis = new Slot(description: $"the basis of {resolvedPath}", image: basisImage, path: basisResolvedName) {
-                Reused = (Reuses(held: held?.Basis, image: basisImage, path: basisResolvedName) ? held!.Basis : null),
+            var description = $"the basis of {resolvedPath}";
+            var key = KeyOf(kind: "basis", path: basisResolvedName, alias: null, description: description, input: basisImage);
+
+            basis = new Slot(description: description, image: basisImage, key: key, path: basisResolvedName) {
+                Reused = ReuseLayer(held: held?.Basis, image: basisImage, path: basisResolvedName, key: key, store: store),
             };
             if (basis.Reused is null) {
                 var basisTree = (basisResult ?? ((JsonObject)JsonNode.Parse(utf8Json: basisImage!.ComposedJson)!));
 
-                WorldDocumentPaths.RelocateDocumentFields(
-                    module: basisTree,
-                    origins: origins,
-                    sourceDocumentPath: basisResolvedName,
-                    targetDocumentPath: resolvedPath
-                );
-                if (
-                    (catalog is not null) &&
-                    !WorldModuleNamespace.TryRelocateConfigurationAssets(
-                    catalog: catalog,
-                    module: basisTree,
-                    reason: out var basisMetadataReason,
-                    sourceDocumentPath: basisResolvedName,
-                    targetDocumentPath: resolvedPath
-                )
-                ) {
-                    reason = $"{WorldDocumentLabel.Of(path: resolvedPath)} basis {WorldDocumentLabel.Of(path: basisResolvedName)}: {basisMetadataReason}";
+                if (!ShapeBasis(tree: basisTree, path: basisResolvedName, target: resolvedPath, catalog: catalog, origins: origins, reason: out reason)) {
                     return false;
                 }
                 basis.Tree = basisTree;
@@ -484,81 +520,40 @@ public static partial class WorldDefinitionFileSource {
                     resolvedName: importResolvedName,
                     taken: importDescriptions
                 );
-                var heldImport = (((held is not null) && (index < held.ImportLayers.Length) && (held.Imports[index] == (importName, importAlias)) &&
-                    Reuses(held: held.ImportLayers[index], image: importImage, path: importResolvedName) &&
+                var prior = (((held is not null) && (index < held.ImportLayers.Length) && (held.Imports[index] == (importName, importAlias)) &&
                     string.Equals(a: held.ImportLayers[index].Description, b: importDescription, comparisonType: StringComparison.Ordinal))
                     ? held.ImportLayers[index]
                     : null);
+                var key = KeyOf(kind: "import", path: importResolvedName, alias: importAlias, description: importDescription, input: importImage);
+                var heldImport = ReuseLayer(held: prior, image: importImage, path: importResolvedName, key: key, store: store);
 
                 if (heldImport is not null) {
-                    imports.Add(item: new Slot(description: importDescription, image: importImage, path: importResolvedName) { Exports = heldImport.Exports, Reused = heldImport });
+                    imports.Add(item: new Slot(description: importDescription, image: importImage, key: key, path: importResolvedName) { Exports = heldImport.Exports, Reused = heldImport });
                 } else {
                     var importTree = (importResult ?? ((JsonObject)JsonNode.Parse(utf8Json: importImage!.ComposedJson)!));
 
-                    WorldDocumentPaths.RelocateDocumentFields(
-                        module: importTree,
-                        origins: origins,
-                        sourceDocumentPath: importResolvedName,
-                        targetDocumentPath: resolvedPath
-                    );
-
-                    if (
-                        (importAlias is not null) &&
-                        !((catalog is not null)
-                        ? WorldModuleNamespace.TryApply(
-                            alias: importAlias,
-                            catalog: catalog,
-                            module: importTree,
-                            reason: out var aliasReason,
-                            sourceDocumentPath: importResolvedName,
-                            targetDocumentPath: resolvedPath
-                        )
-                        : WorldModuleNamespace.TryApply(
-                            alias: importAlias,
-                            module: importTree,
-                            reason: out aliasReason
-                        ))
-                    ) {
-                        reason = $"{WorldDocumentLabel.Of(path: resolvedPath)} imports {WorldDocumentLabel.Of(path: importResolvedName)} as '{importAlias}': {aliasReason}";
-
+                    if (!ShapeImport(tree: importTree, path: importResolvedName, target: resolvedPath, description: importDescription,
+                        alias: importAlias, catalog: catalog, origins: origins, exports: out var exports, reason: out reason)) {
                         return false;
                     }
 
-                    if (
-                        (catalog is not null) &&
-                        (importAlias is null) &&
-                        !WorldModuleNamespace.TryRelocateConfigurationAssets(
-                        catalog: catalog,
-                        module: importTree,
-                        reason: out var importMetadataReason,
-                        sourceDocumentPath: importResolvedName,
-                        targetDocumentPath: resolvedPath
-                    )
-                    ) {
-                        reason = $"{WorldDocumentLabel.Of(path: resolvedPath)} imports {WorldDocumentLabel.Of(path: importResolvedName)}: {importMetadataReason}";
-                        return false;
-                    }
-
-                    if (!WorldModuleExports.TryTake(
-                        exports: out var exports,
-                        module: importTree,
-                        moduleName: importDescription,
-                        reason: out var exportsReason
-                    )) {
-                        reason = $"{WorldDocumentLabel.Of(path: resolvedPath)} imports {exportsReason}";
-
-                        return false;
-                    }
-
-                    imports.Add(item: new Slot(description: importDescription, image: importImage, path: importResolvedName) { Exports = exports, Tree = importTree });
+                    imports.Add(item: new Slot(description: importDescription, image: importImage, key: key, path: importResolvedName) { Exports = exports, Tree = importTree });
                 }
                 entries.Add(item: (importName, importAlias));
                 touched.AddRange(links: importTouched.Links);
             }
         }
 
-        var own = new Slot(description: resolvedPath, image: null, path: resolvedPath) {
-            Reused = (sameRoot ? held!.Own : null),
+        var ownKey = KeyOf(kind: "own", path: resolvedPath, alias: null, description: resolvedPath, input: null);
+        var ownLayer = (ownKey is null) ? (sameRoot ? held!.Own : null) : ReuseLayer(
+            held: held?.Own, image: null, path: resolvedPath, key: ownKey, store: store);
+
+        if ((ownLayer is null) && (ownBody is null)) {
+            ownBody = (JsonObject)JsonNode.Parse(json: DecodeJson(bytes: bytes))!;
+            ShapeOwn(root: ownBody);
+        }
+        var own = new Slot(description: resolvedPath, image: null, key: ownKey, path: resolvedPath) {
+            Reused = ownLayer,
             Tree = ownBody,
         };
 
@@ -581,19 +576,23 @@ public static partial class WorldDefinitionFileSource {
         }
 
         // Each layer shaped afresh is held before the merge, which merges into the basis's tree.
-        ComposedLayer HeldOf(Slot slot) => (slot.Held ??= (slot.Reused ?? HoldLayer(
-            description: slot.Description,
-            exports: slot.Exports,
-            image: slot.Image,
-            path: slot.Path,
-            tree: slot.Tree!,
-            walk: slot.Walk
-        )));
+        void Hold(Slot slot) {
+            if (slot.Reused is { } reused) {
+                slot.Held = reused;
+                return;
+            }
+
+            var layer = HoldLayer(description: slot.Description, exports: slot.Exports, image: slot.Image, key: slot.Key,
+                path: slot.Path, tree: slot.Tree!, walk: slot.Walk);
+            slot.Held = layer;
+            WorldBootWork.Count(kind: WorldBootWork.CompositionLayersShaped);
+            if (layer.Key is { } key) { store!.WriteLayer(key: key, write: writer => WriteLayer(writer: writer, layer: layer)); }
+        }
 
         if (byLayer) {
-            if (basis is not null) { _ = HeldOf(slot: basis); }
-            foreach (var slot in imports) { _ = HeldOf(slot: slot); }
-            _ = HeldOf(slot: own);
+            if (basis is not null) { Hold(slot: basis); }
+            foreach (var slot in imports) { Hold(slot: slot); }
+            Hold(slot: own);
         }
 
         byte[]? composedJson = null;

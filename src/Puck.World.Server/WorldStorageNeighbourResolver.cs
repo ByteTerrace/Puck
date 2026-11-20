@@ -184,9 +184,7 @@ public sealed class WorldStorageNeighbourResolver : IWorldNeighbourResolver {
                     store: m_store,
                     target: m_target
                 ),
-                // Seeded from the root's own blob key (matching WorldOwnedWorldSync.PullOne), so a basis link
-                // sharing the root's bare document name can never read as a cycle back to it.
-                rootResolvedName: address.Key,
+                rootResolvedName: WorldDocumentName.For(id: id),
                 rootBytes: found.Content.ToArray(),
                 composed: out composed,
                 chainBytes: out _,

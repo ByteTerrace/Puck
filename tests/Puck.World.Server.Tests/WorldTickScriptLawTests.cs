@@ -120,7 +120,7 @@ public sealed class WorldTickScriptLawTests {
             );
             Source = new TextCommandSource(registry: registry);
             Pump = new FixedStepPump(
-                beforeStep: Source.Collect,
+                beforeStep: _ => Source.Collect(),
                 captureOriginTicks: 0UL,
                 inputRouter: Router,
                 registry: registry,

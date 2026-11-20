@@ -628,7 +628,7 @@ public sealed partial class WorldPersistence {
     private bool TryCaptureCheckpointCore(WorldAuthorityHostRowCheckpoint hostRow, out WorldAuthorityCheckpoint? checkpoint, out string reason) {
         ArgumentNullException.ThrowIfNull(argument: hostRow);
 
-        lock (Host.AuthorityGate) {
+        using (Host.EnterAtTickBoundary()) {
             if (Host.Tick.BlockedDetail is { } pending) {
                 checkpoint = null;
                 reason = $"authority tick is incomplete while waiting for {pending}";
@@ -832,7 +832,7 @@ public sealed partial class WorldPersistence {
     /// boot image keeps its pinned identities detached and leaves the live catalog alone.</param>
     [Replaces(root: typeof(StateArena))]
     public void RestoreCheckpoint(WorldAuthorityCheckpoint checkpoint, bool restoreOwnedIdentities = true) {
-        lock (Host.AuthorityGate) {
+        using (Host.EnterAtTickBoundary()) {
             Host.ThrowIfTickPending();
             ArgumentNullException.ThrowIfNull(argument: checkpoint);
             var keys = Host.DrawKeys;

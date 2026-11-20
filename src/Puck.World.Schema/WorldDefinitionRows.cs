@@ -6,8 +6,7 @@ namespace Puck.World;
 /// <summary>Resolves stable row names in world-definition collections.</summary>
 public static class WorldDefinitionRows {
     /// <summary>Resolves one mounted addon declaration by its stable name without a per-read closure.</summary>
-    public static WorldAddonRow? FindAddon(IReadOnlyList<WorldAddonRow>? rows, string name) =>
-        Find(rows, name, static row => row.Name);
+    public static WorldAddonRow? FindAddon(IReadOnlyList<WorldAddonRow>? rows, string name) => WorldRowKeys.Addons.Find(rows, name);
     /// <summary>Enumerates every declared reference to a <c>curves</c> row across the document: a camera's own rig and
     /// the world's <c>views.seatRig</c>/<c>views.cameraRig</c> <c>path</c> op (<c>Section</c> <c>"cameras"</c>), plus
     /// whatever a body-motion program's <c>curve</c> target source contributes (<c>"follows"</c>) — the one walk both
@@ -182,7 +181,7 @@ public static class WorldDefinitionRows {
             return Find(
                 rows: creations,
                 name: id,
-                selector: static creation => creation.Id
+                selector: WorldRowKeys.Creations.Of
             );
         }
 
@@ -235,11 +234,7 @@ public static class WorldDefinitionRows {
     /// <param name="curves">The section's curve rows.</param>
     /// <param name="name">The curve row name to find.</param>
     /// <returns>The row, or <see langword="null"/> when the section declares none by that name.</returns>
-    public static WorldCurveRow? FindCurve(IReadOnlyList<WorldCurveRow>? curves, string name) => Find(
-        rows: curves,
-        name: name,
-        selector: static row => row.Name
-    );
+    public static WorldCurveRow? FindCurve(IReadOnlyList<WorldCurveRow>? curves, string name) => WorldRowKeys.Curves.Find(curves, name);
     /// <summary>Finds a destinations row by stable name — the primitive a portal facet's <c>destination</c> resolves
     /// against (see <see cref="WorldPlacementPortal.Destination"/>).</summary>
     /// <param name="destinations">The section's destinations, or <see langword="null"/> for a document declaring none.</param>
@@ -254,38 +249,22 @@ public static class WorldDefinitionRows {
     /// <param name="kits">The section's kits.</param>
     /// <param name="name">The kit name to find.</param>
     /// <returns>The kit, or <see langword="null"/> when the section declares none by that name.</returns>
-    public static WorldKit? FindKit(IReadOnlyList<WorldKit>? kits, string name) => Find(
-        rows: kits,
-        name: name,
-        selector: static kit => kit.Name
-    );
+    public static WorldKit? FindKit(IReadOnlyList<WorldKit>? kits, string name) => WorldRowKeys.Kits.Find(kits, name);
     /// <summary>Finds a <c>machines</c> row by stable name.</summary>
     /// <param name="machines">The section's machines.</param>
     /// <param name="name">The machine name to find.</param>
     /// <returns>The machine, or <see langword="null"/> when the section declares none by that name.</returns>
-    public static WorldMachine? FindMachine(IReadOnlyList<WorldMachine>? machines, string name) => Find(
-        rows: machines,
-        name: name,
-        selector: static machine => machine.Name
-    );
+    public static WorldMachine? FindMachine(IReadOnlyList<WorldMachine>? machines, string name) => WorldRowKeys.Machines.Find(machines, name);
     /// <summary>Finds a <c>views.graphs</c> row by stable name.</summary>
     /// <param name="graphs">The section's graph rows.</param>
     /// <param name="name">The graph row name to find.</param>
     /// <returns>The row, or <see langword="null"/> when the section declares none by that name.</returns>
-    public static WorldViewGraph? FindGraph(IReadOnlyList<WorldViewGraph>? graphs, string name) => Find(
-        rows: graphs,
-        name: name,
-        selector: static row => row.Name
-    );
+    public static WorldViewGraph? FindGraph(IReadOnlyList<WorldViewGraph>? graphs, string name) => WorldRowKeys.ViewGraphs.Find(graphs, name);
     /// <summary>Finds a placement by stable id.</summary>
     /// <param name="placements">The section's placements.</param>
     /// <param name="id">The placement id to find.</param>
     /// <returns>The placement, or <see langword="null"/> when the section declares none by that id.</returns>
-    public static WorldPlacement? FindPlacement(IReadOnlyList<WorldPlacement>? placements, string id) => Find(
-        rows: placements,
-        name: id,
-        selector: static placement => placement.Id
-    );
+    public static WorldPlacement? FindPlacement(IReadOnlyList<WorldPlacement>? placements, string id) => WorldRowKeys.Placements.Find(placements, id);
     /// <summary>Finds a placement's declared face by name — the primitive a
     /// <see cref="WorldPlacementPortal.Counterpart"/> resolves its face half against (see
     /// <see cref="WorldPortalCounterpart"/>), and every other placement/face reader (<c>world.portals</c>,

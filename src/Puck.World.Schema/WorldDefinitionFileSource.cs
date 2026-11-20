@@ -932,24 +932,13 @@ public static partial class WorldDefinitionFileSource {
 
         return NormalizeRelativeDocumentName(path: combined);
     }
-    /// <summary>Computes the content-address pin of a basis-and-imports graph — each file's byte length (unsigned
-    /// 64-bit little-endian) followed by its raw bytes, derived file first, then the basis chain, then each import's
-    /// own touched bytes in authored order (see <see cref="TryComposeChainWithImports"/>), folded through one
-    /// SHA-256 in the same <c>sha256-64/{hex}</c> form as <see cref="ComputeContentHash"/>. The length delimiter
-    /// keeps two graphs with different file boundaries from folding to one pin, and folding every file means an edit
-    /// anywhere in the graph — a template or an imported fragment included — moves a derived document's pin. A
-    /// single-file chain is deliberately not equivalent to <see cref="ComputeContentHash"/>; flat documents stay on
-    /// that method's undelimited form.</summary>
-    /// <param name="chain">The graph's raw file bytes, derived document first.</param>
-    /// <returns>The canonical content-address string.</returns>
-    public static string ComputeChainContentHash(IReadOnlyList<byte[]> chain) {
-        ArgumentNullException.ThrowIfNull(argument: chain);
-
+    // Each part contributes its 64-bit little-endian length followed by its bytes, in caller order.
+    internal static string HashLengthPrefixedParts(IEnumerable<byte[]> parts) {
         using var sha = IncrementalHash.CreateHash(hashAlgorithm: HashAlgorithmName.SHA256);
 
         Span<byte> length = stackalloc byte[8];
 
-        foreach (var content in chain) {
+        foreach (var content in parts) {
             BinaryPrimitives.WriteUInt64LittleEndian(
                 destination: length,
                 value: ((ulong)content.LongLength)
@@ -1542,7 +1531,7 @@ public static partial class WorldDefinitionFileSource {
     /// name a flat cloud namespace addresses it by — every deeper link's own authored <c>basis</c> member (if any)
     /// is already a bare sibling spelling and needs no rewrite. The rewrite re-serializes the root through
     /// <c>ToJsonString()</c>, so a pushed root's bytes are not its authored file's own bytes, and its
-    /// content-address pin (<see cref="ComputeChainContentHash"/>) differs from the local chain's.</summary>
+    /// content-address pin differs from the local chain's.</summary>
     /// <param name="path">The file to walk.</param>
     /// <param name="chain">Each chain link's own document name (<see cref="WorldDocumentName"/>, its file name without
     /// the directory or the document suffix) paired with its raw bytes, derived document first.</param>

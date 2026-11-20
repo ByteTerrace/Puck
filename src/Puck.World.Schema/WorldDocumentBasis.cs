@@ -250,7 +250,7 @@ public static class WorldDocumentBasis {
         delta = DiffKeyedRow(key, live, next);
         try {
             var list = live is null ? new JsonArray() : new JsonArray(live.DeepClone());
-            var result = MergeList(list, new JsonArray(delta.DeepClone()), path, origins: null, consume: false);
+            var result = MergeList(list, new JsonArray(delta.DeepClone()), new MergePath(path), origins: null, consume: false);
             return next is null ? result.Count == 0 : result.Count == 1 && Puck.Abstractions.Documents.OrderedJson.Equals(result[0], next);
         } catch (JsonException) {
             return false;
@@ -407,7 +407,34 @@ public static class WorldDocumentBasis {
 
         return true;
     }
-    private static JsonArray MergeList(JsonArray basis, JsonArray overlay, string path, WorldDocumentOrigins? origins, bool consume) {
+    // Ordinary merges carry segments and render the path only for a refusal or a list's compose markers.
+    private sealed class MergePath(string root) {
+        private readonly List<(string Name, JsonNode? Identity)> m_segments = [];
+
+        public bool IsDocumentRoot => (m_segments.Count == 0) && (root == "$");
+
+        public bool EndsWith(string suffix) {
+            if (m_segments.Count == 0) { return root.EndsWith(value: suffix, comparisonType: StringComparison.Ordinal); }
+            var (member, identity) = m_segments[^1];
+
+            return (identity is null) && (member.EndsWith(value: suffix, comparisonType: StringComparison.Ordinal) || ((suffix[0] == '.') && member.AsSpan().SequenceEqual(other: suffix.AsSpan(start: 1))));
+        }
+
+        public void Push(string name, JsonNode? identity = null) => m_segments.Add((name, identity));
+        public void Pop() => m_segments.RemoveAt(m_segments.Count - 1);
+
+        public override string ToString() {
+            var path = new System.Text.StringBuilder(root);
+
+            foreach (var (name, identity) in m_segments) {
+                if (identity is null) { path.Append('.').Append(name); }
+                else { path.Append('[').Append(name).Append('=').Append(DescribeKey(value: identity)).Append(']'); }
+            }
+            return path.ToString();
+        }
+    }
+
+    private static JsonArray MergeList(JsonArray basis, JsonArray overlay, MergePath path, WorldDocumentOrigins? origins, bool consume) {
         if (
             (overlay.Count > 0) &&
             IsReplaceMarker(node: overlay[index: 0])
@@ -438,7 +465,7 @@ public static class WorldDocumentBasis {
 
             // A creation's shapes are refined row by row, and replacing them wholesale is a decision the author
             // states with `$replace`: rows that cannot be told apart would silently discard the basis creation's.
-            if ((basis.Count > 0) && (overlay.Count > 0) && path.EndsWith(comparisonType: StringComparison.Ordinal, value: ".shapes")) {
+            if ((basis.Count > 0) && (overlay.Count > 0) && path.EndsWith(suffix: ".shapes")) {
                 throw new JsonException(message: $"{path} cannot refine the basis creation's shapes: they share no identity key (an id or a name on every row of both lists). Name every shape, or lead the list with {{\"{ReplaceMemberName}\": true}} to replace it wholesale.");
             }
 
@@ -502,11 +529,9 @@ public static class WorldDocumentBasis {
                 continue;
             }
 
-            ValidateSpaceCompositionIdentity(
-                basisRow: basisObject,
-                overlayRow: overlayRow,
-                path: path
-            );
+            if (path.EndsWith(suffix: "spaces")) {
+                ValidateSpaceCompositionIdentity(basisRow: basisObject, overlayRow: overlayRow, path: path.ToString());
+            }
 
             if (TypeDiscriminatorsDiffer(
                 basis: basisObject,
@@ -514,13 +539,15 @@ public static class WorldDocumentBasis {
             )) {
                 merged[basisIndex] = WorldDocumentOrigins.Clone(node: overlayRow, origins: origins);
             } else {
+                path.Push(name: key, identity: basisKey!);
                 MergeObject(
                     consume: consume,
                     origins: origins,
                     target: basisObject,
                     overlay: overlayRow,
-                    path: $"{path}[{key}={DescribeKey(value: basisKey)}]"
+                    path: path
                 );
+                path.Pop();
             }
             survivors?.Add(merged[basisIndex]);
         }
@@ -549,13 +576,12 @@ public static class WorldDocumentBasis {
             merged.Add(value: WorldDocumentOrigins.Clone(node: appended, origins: origins));
         }
 
-        return PositionRows(merged, positions, key, path, origins);
+        return (positions.Count == 0) ? merged : PositionRows(merged, positions, key, path.ToString(), origins);
     }
     // Stable dependency ordering: unpositioned rows retain their order, and predecessors of a target retain
     // authored order. Resolve after all drops/appends, so forward references work and missing targets refuse.
     private static JsonArray PositionRows(JsonArray rows, List<(JsonNode? Row, JsonNode? Before)> positions,
         string key, string path, WorldDocumentOrigins? origins) {
-        if (positions.Count == 0) { return rows; }
         var predecessors = new List<int>[rows.Count];
         var positioned = new bool[rows.Count];
         var indexed = IndexRows(rows, key, out _);
@@ -584,7 +610,7 @@ public static class WorldDocumentBasis {
         foreach (var row in order) { rows.Add(row); }
         return rows;
     }
-    private static void MergeObject(JsonObject target, JsonObject overlay, string path, WorldDocumentOrigins? origins, bool consume) {
+    private static void MergeObject(JsonObject target, JsonObject overlay, MergePath path, WorldDocumentOrigins? origins, bool consume) {
         if (IsTrue(overlay[ReplaceMemberName])) {
             target.Clear();
             foreach (var (name, value) in Members(consume: consume, overlay: overlay)) {
@@ -615,8 +641,6 @@ public static class WorldDocumentBasis {
                 continue;
             }
 
-            var memberPath = $"{path}.{name}";
-
             if (
                 (target[propertyName: name] is JsonObject basisObject) &&
                 (value is JsonObject overlayObject)
@@ -624,7 +648,7 @@ public static class WorldDocumentBasis {
                 // A shades row is a program under its own content identity: a layer's row of the same key is the same
                 // program, so rows are adopted whole and never merged member by member (WorldShadeTable). A delta
                 // removes a row with a null and replaces the table whole with "$replace", as it does any object.
-                if ((path == "$") && (name == ShadesMemberName) && !IsTrue(node: overlayObject[ReplaceMemberName])) {
+                if (path.IsDocumentRoot && (name == ShadesMemberName) && !IsTrue(node: overlayObject[ReplaceMemberName])) {
                     foreach (var (key, row) in overlayObject) {
                         if (row is null) {
                             _ = basisObject.Remove(propertyName: key);
@@ -641,13 +665,15 @@ public static class WorldDocumentBasis {
                 )) {
                     target[propertyName: name] = Take(consume: consume, node: overlayObject, origins: origins);
                 } else {
+                    path.Push(name: name);
                     MergeObject(
                         consume: consume,
                         origins: origins,
                         overlay: overlayObject,
-                        path: memberPath,
+                        path: path,
                         target: basisObject
                     );
+                    path.Pop();
                 }
 
                 continue;
@@ -657,13 +683,15 @@ public static class WorldDocumentBasis {
                 (target[propertyName: name] is JsonArray basisList) &&
                 (value is JsonArray overlayList)
             ) {
+                path.Push(name: name);
                 target[propertyName: name] = MergeList(
                     basis: basisList,
                     consume: consume,
                     origins: origins,
                     overlay: overlayList,
-                    path: memberPath
+                    path: path
                 );
+                path.Pop();
 
                 continue;
             }
@@ -1263,7 +1291,7 @@ public static class WorldDocumentBasis {
                 consume: consume,
                 origins: origins,
                 overlay: overlay,
-                path: "$",
+                path: new MergePath("$"),
                 target: target
             );
 

@@ -6,10 +6,10 @@ namespace Puck.World.Server;
 /// flat cloud <c>puck/worlds/basis/</c> namespace via <see cref="WorldOwnedWorldSync.BasisAddressFor"/>, the storage
 /// twin of the directory walk <see cref="WorldDefinitionFileSource"/> runs for a local file. Every document in the
 /// namespace addresses every other by its bare document name, an owned world id — <c>referrerName</c> plays no role in
-/// resolution, since there is no directory to be relative to. <see cref="TryRead"/> answers the full blob key as
-/// <c>resolvedName</c> (never the bare name alone), so a chain link's identity can never collide with a root seeded
-/// from a DIFFERENT namespace under the same bare spelling — see <see cref="WorldOwnedWorldSync.AddressFor"/>'s own
-/// callers.</summary>
+/// resolution, since there is no directory to be relative to. A basis resolves to its bare document id. The tip is
+/// identified by its file name (<see cref="WorldDocumentName.For"/>), a spelling <see cref="WorldDocumentName.TryParseId"/>
+/// excludes from basis ids. These identities keep a same-named tip and basis distinct and place their assets in the
+/// same directory. The blob key serves only to address the read and report transport failures.</summary>
 /// <remarks>One instance's <see cref="CancellationToken"/> bounds an ENTIRE chain walk, not one hop of it —
 /// <see cref="WorldDefinitionFileSource.TryComposeChain"/> can call <see cref="TryRead"/> up to
 /// <see cref="WorldDocumentBasis.MaxChainDepth"/> times for one root, and a per-hop timeout would let that add up to
@@ -36,8 +36,6 @@ public sealed class WorldStorageDocumentSource(IObjectBlobStore store, ObjectSto
             containerId: containerId,
             id: id
         );
-
-        resolvedName = address.Key;
 
         ObjectBlobContent? found;
 

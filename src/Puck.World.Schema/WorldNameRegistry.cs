@@ -2056,6 +2056,16 @@ public static partial class WorldNameRegistry {
 
     /// <summary>Gets every registered name-bearing member.</summary>
     public static IReadOnlyList<WorldNameField> RegisteredFields => Fields;
+    /// <summary>Gets the registration of every binding a creation document holds: the document rides its own
+    /// serializer, so every value in it a state cell may stand in for (a shape's spatial value, a palette color, an
+    /// identifier) binds a row by its <c>state.&lt;row&gt;</c> token, wherever it sits.</summary>
+    public static WorldNameField CreationBinding { get; } = new(
+        Facet: WorldExportFacet.Binding,
+        Kind: WorldNameKind.State,
+        Member: "state binding",
+        Owner: typeof(Puck.World.Authoring.CreationDocument),
+        Role: WorldNameRole.Binding
+    );
     /// <summary>Gets every name-shaped member excluded with a reason.</summary>
     public static IReadOnlyList<WorldNameExclusion> ExcludedMembers => Exclusions;
 

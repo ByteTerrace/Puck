@@ -107,8 +107,9 @@ public sealed class HostLoop(
     public static bool HoldsTick(bool hasSimulation, FrameCompletion completion) => (hasSimulation && (completion == FrameCompletion.NotYetRenderable));
     // The control phase: the console drain, the control gap's mark, and a fresh wait allowance for the pump thread of
     // one pacer period, so the waits it takes through HostWaits before the next control phase block for at most that.
-    private void ControlPhase() {
-        HostConsoleDrain.Collect(output: output, source: textSource);
+    // The console drains only at a tick boundary; while a step is held across wait slices its lines wait for it.
+    private void ControlPhase(bool atBoundary) {
+        if (atBoundary) { HostConsoleDrain.Collect(output: output, source: textSource); }
         timeline.NoteControlPhase();
         HostWaits.BeginPumpIteration(allowance: TimeSpan.FromSeconds(value: (1.0 / LauncherHostLoop.ResolveRatePerSecond(simulation: m_simulation))));
         m_controlPhases++;
@@ -147,7 +148,7 @@ public sealed class HostLoop(
                 if (pump is not null) {
                     pump.BeginIteration();
                 } else {
-                    ControlPhase();
+                    ControlPhase(atBoundary: true);
                 }
                 if ((exitAt is { } deadline) && (time.GetTimestamp() >= deadline)) {
                     terminal.RequestExit();

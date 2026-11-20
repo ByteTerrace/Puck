@@ -134,7 +134,7 @@ public static partial class WorldDefinitionFileSource {
     /// back.</param>
     /// <param name="contentPin">The pin: over the root's bytes alone when nothing composed
     /// (<see cref="ComputeContentHash"/>), and otherwise over the digest of every document the composition read, each
-    /// once, the root first (<see cref="ComputeChainContentHash"/>); empty on refusal.</param>
+    /// once, the root first. Empty on refusal.</param>
     /// <param name="reason">The one-line refusal reason, or empty on success.</param>
     /// <param name="catalogFingerprint">Stable metadata fingerprint used to partition the composition cache.</param>
     /// <param name="catalog">The explicit machine catalog used for metadata rewriting, or <see langword="null"/>.</param>
@@ -162,7 +162,7 @@ public static partial class WorldDefinitionFileSource {
             ? string.Empty
             : (((composedJson is null) || (chain is null) || (chain.Count == 1))
                 ? ComputeContentHash(content: rootBytes)
-                : ComputeChainContentHash(chain: [.. chain.Select(selector: static link => link.Digest)])));
+                : HashLengthPrefixedParts(parts: chain.Select(selector: static link => link.Digest))));
 
         return composedOk;
     }

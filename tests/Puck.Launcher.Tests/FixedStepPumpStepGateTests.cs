@@ -57,7 +57,7 @@ public sealed class FixedStepPumpStepGateTests {
         var simulation = new CountingSimulation { StepCostTicks = (stepCostTicks ?? 0UL) };
 
         return (new FixedStepPump(
-            beforeStep: beforeStep,
+            beforeStep: ((beforeStep is null) ? null : _ => beforeStep()),
             captureOriginTicks: 0UL,
             holdsClock: holdsClock,
             inputRouter: router,
@@ -145,7 +145,9 @@ public sealed class FixedStepPumpStepGateTests {
                 inputBacklog: Backlog,
                 inputClock: new NowClock(),
                 inputRouter: Router,
-                controlPhase: () => HostConsoleDrain.Collect(output: m_output, source: source),
+                controlPhase: atBoundary => {
+                    if (atBoundary) { HostConsoleDrain.Collect(output: m_output, source: source); }
+                },
                 registry: registry,
                 simulation: Simulation,
                 terminal: new TerminalControl(),

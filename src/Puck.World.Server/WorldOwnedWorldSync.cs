@@ -429,13 +429,7 @@ public sealed class WorldOwnedWorldSync {
                     store: m_store,
                     target: m_target
                 ),
-                // Seeded from the TIP's own blob key, not its bare file name: a basis link's own resolvedName lives
-                // in the SAME flat namespace (see WorldStorageDocumentSource.TryRead), and a basis document that
-                // happens to share the tip's bare name would otherwise read as a cycle back to the root.
-                rootResolvedName: AddressFor(
-                    containerId: m_containerId,
-                    id: safe
-                ).Key,
+                rootResolvedName: WorldDocumentName.For(id: safe),
                 rootBytes: content.Content.ToArray(),
                 composed: out composed,
                 chainBytes: out chainBytes,

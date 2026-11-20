@@ -493,28 +493,28 @@ public sealed partial class WorldServer : IWorldServerHost {
     /// <c>world.save</c> half — a saved world is clean). Reads/writes only journal state, so it runs on the Immediate
     /// console path behind the stdin barrier.</summary>
     public void Compact() {
-        lock (AuthorityGate) { ThrowIfTickPending(); m_document.Compact(); }
+        using (EnterAtTickBoundary()) { ThrowIfTickPending(); m_document.Compact(); }
     }
     /// <summary>Executes a narrow authority operation without racing the fixed-step population fold.</summary>
     /// <exception cref="InvalidOperationException">This activation has frozen for retirement.</exception>
     public T ExecuteAuthorityOperation<T>(Func<T> operation) {
         ArgumentNullException.ThrowIfNull(operation);
-        EnterAuthorityGate();
-        try { return operation(); } finally { m_authorityGate.Exit(); }
+        using var gate = EnterAuthorityGate();
+        return operation();
     }
     /// <summary>Executes a void authority operation under the same gate.</summary>
     /// <exception cref="InvalidOperationException">This activation has frozen for retirement.</exception>
     public void ExecuteAuthorityOperation(Action operation) {
         ArgumentNullException.ThrowIfNull(operation);
-        EnterAuthorityGate();
-        try { operation(); } finally { m_authorityGate.Exit(); }
+        using var gate = EnterAuthorityGate();
+        operation();
     }
 
     /// <summary>Runs a stateful operation under the authority gate without a boundary closure.</summary>
     internal void ExecuteAuthorityAction<T>(T state, Action<T> operation) {
         ArgumentNullException.ThrowIfNull(operation);
-        EnterAuthorityGate();
-        try { operation(state); } finally { m_authorityGate.Exit(); }
+        using var gate = EnterAuthorityGate();
+        operation(state);
     }
 
     /// <summary>Gets or sets a callback invoked on a thread whose <see cref="ExecuteAuthorityOperation{T}"/> finds the
@@ -529,18 +529,61 @@ public sealed partial class WorldServer : IWorldServerHost {
         }
     }
 
-    private void EnterAuthorityGate() {
-        if (!m_authorityGate.TryEnter()) {
-            AuthorityGateContended?.Invoke();
-            m_authorityGate.Enter();
+    // How many authority gates (of any server) the calling thread holds through EnterAtTickBoundary. A thread holding one
+    // never waits at another server's boundary: the held tick it would wait for may need the gate it holds to settle.
+    [ThreadStatic] private static int HeldGates;
+
+    /// <summary>Enters the authority gate at a tick boundary and returns the scope that exits it. While a tick is held
+    /// across wait slices, a thread other than the one that resumes it waits, without the gate, until the tick settles
+    /// or freezes, so it never reads or writes a half-stepped tick. The resuming thread, a thread already holding an
+    /// authority gate, and a wait that outlasts the tick stall enter without waiting; such a caller reads
+    /// <see cref="WorldTick.BlockedDetail"/> and refuses, throws or queues for the boundary itself.</summary>
+    /// <returns>The scope whose disposal exits the gate.</returns>
+    internal AuthorityGateScope EnterAtTickBoundary() {
+        var nested = (HeldGates != 0) || m_authorityGate.IsHeldByCurrentThread;
+        while (true) {
+            if (!m_authorityGate.TryEnter()) {
+                AuthorityGateContended?.Invoke();
+                m_authorityGate.Enter();
+            }
+            if (nested || (m_tick is not { AwaitsBoundary: true } tick) || !WaitedForBoundary(tick)) {
+                HeldGates++;
+                return new AuthorityGateScope(m_authorityGate);
+            }
         }
+
+        // Leaves the gate to wait for the boundary; false when the wait outlasted the stall, with the gate entered again.
+        bool WaitedForBoundary(WorldTick tick) {
+            m_authorityGate.Exit();
+            if (tick.AwaitBoundary()) { return true; }
+            m_authorityGate.Enter();
+            return false;
+        }
+    }
+
+    /// <summary>The held authority gate, exited when disposed. Only <see cref="EnterAtTickBoundary"/> produces one.</summary>
+    internal readonly ref struct AuthorityGateScope {
+        private readonly Lock m_gate;
+
+        internal AuthorityGateScope(Lock gate) => m_gate = gate;
+
+        /// <summary>Exits the authority gate.</summary>
+        public void Dispose() {
+            HeldGates--;
+            m_gate.Exit();
+        }
+    }
+
+    private AuthorityGateScope EnterAuthorityGate() {
+        var gate = EnterAtTickBoundary();
         try {
             ThrowIfTickPending();
             ThrowIfAuthorityRetiring();
         } catch {
-            m_authorityGate.Exit();
+            gate.Dispose();
             throw;
         }
+        return gate;
     }
 
     /// <summary>The installed authority sampler.</summary>

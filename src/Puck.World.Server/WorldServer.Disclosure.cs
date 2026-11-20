@@ -26,7 +26,10 @@ public sealed partial class WorldServer {
 
     internal WorldRecipientView DeliveryView(Principal? recipient, WorldDisclosureTier tier, Func<bool>? observes = null, Func<bool>? readsDocument = null) =>
         new(() => Definition, () => Arena, recipient, tier, observes ?? (() => true), m_disclosureImages,
-            AuthorityIdentity, () => DeliveryTime, () => recipient is { } actor && Grants.IsOperator(actor), readsDocument);
+            AuthorityIdentity, () => DeliveryTime, () => recipient is { } actor && Grants.IsOperator(actor), readsDocument, () => MachineCatalog);
+    // The host's machine vocabulary, whose descriptors say which machine configuration fields name a state row: every
+    // write capability this server mints, live or detached, reads a machine's configuration through it.
+    internal Puck.Abstractions.Machines.IMachineValidationCatalog? MachineCatalog => m_machines?.ValidationCatalog;
 
     /// <summary>Mints the live capability this ingress-stamped console invocation reads through.</summary>
     /// <param name="context">The invocation's context, carrying its stamped principal.</param>
@@ -44,7 +47,7 @@ public sealed partial class WorldServer {
     // a revoked grant refuse here, the same decision the query door makes, so no read answers a session that the
     // query door refuses, and an admitted session reads at its own delivery ceiling.
     internal WorldRecipientView ReadView(Principal? recipient) {
-        lock (AuthorityGate) {
+        using (EnterAtTickBoundary()) {
             ThrowIfTickPending();
             return ReadSettledView(recipient);
         }

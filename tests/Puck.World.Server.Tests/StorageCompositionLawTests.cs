@@ -8,8 +8,7 @@ using Puck.Storage;
 
 namespace Puck.World.Server.Tests;
 
-/// <summary>Proves the one composition path (<see cref="WorldDefinitionFileSource.TryComposeChain"/>) behaves
-/// identically whether the chain is walked over a directory or over <see cref="WorldStorageDocumentSource"/>'s flat
+/// <summary>Proves the same basis chain composes identically over a directory and over <see cref="WorldStorageDocumentSource"/>'s flat
 /// cloud namespace, and that the owned-world sync engine (<see cref="WorldOwnedWorldSync"/>) composes on pull and
 /// pushes a whole chain — never just its flattened tip.</summary>
 public sealed class StorageCompositionLawTests {
@@ -882,7 +881,7 @@ public sealed class StorageCompositionLawTests {
         Assert.Contains(
             actualString: reason,
             comparisonType: StringComparison.Ordinal,
-            expectedSubstring: "first.world.json"
+            expectedSubstring: "first -> second"
         );
     }
     [InlineData(" leading")]
@@ -939,7 +938,7 @@ public sealed class StorageCompositionLawTests {
         );
         Assert.Equal(
             actual: resolvedName,
-            expected: BasisKey(name: "a..b")
+            expected: "a..b"
         );
         Assert.NotNull(@object: content);
         Assert.Equal(
@@ -1012,24 +1011,16 @@ public sealed class StorageCompositionLawTests {
             name: "shared.world.json"
         );
 
-        var deltaText = /*lang=json*/ """{ "basis": "shared", "motion": { "moveSpeed": 6.5 } }""";
-        var deltaPath = files.WriteText(
+        var deltaBytes = """{ "basis": "shared", "motion": { "moveSpeed": 6.5 } }"""u8.ToArray();
+        var deltaPath = files.WriteBytes(
             name: "delta.world.json",
-            text: deltaText
+            bytes: deltaBytes
         );
-        var deltaBytes = Encoding.UTF8.GetBytes(s: deltaText);
-
-        Assert.True(
-            condition: Fixtures.TryLoadDrawn(
-                path: deltaPath,
-                definition: out var fileComposed,
-                contentHash: out var fileHash,
-                reason: out var fileReason
-            ),
-            userMessage: fileReason
-        );
+        var file = Compose(WorldDefinitionFileSource.DirectoryDocuments, deltaPath, File.ReadAllBytes(path: deltaPath));
 
         var store = new FakeObjectBlobStore();
+        var source = Source(cancellationToken: TestContext.Current.CancellationToken, store: store);
+        var tip = WorldDocumentName.For(id: SafeName.Parse(candidate: "delta"));
 
         store.Seed(
             bytes: basisBytes,
@@ -1037,17 +1028,23 @@ public sealed class StorageCompositionLawTests {
             objectId: ContainerId
         );
 
+        var storage = Compose(source, tip, deltaBytes);
+
+        Assert.Equal(expected: file.Pin, actual: storage.Pin);
+        Assert.Equal(expected: file.Json, actual: storage.Json);
+        Assert.True(condition: Fixtures.TryLoadDrawn(path: deltaPath, definition: out var admitted, contentHash: out var fileHash, reason: out var reason), userMessage: reason);
+        Assert.Equal(expected: storage.Pin, actual: fileHash);
+        Assert.Equal(expected: 6.5f, actual: admitted!.Motion.MoveSpeed);
+
+        // A pull also needs each authored link for local adoption. Its flattened probe must carry the same bytes.
         Assert.True(
             condition: WorldDefinitionFileSource.TryComposeChain(
                 chainBytes: out var chainBytes,
                 composed: out var composed,
                 reason: out var composeReason,
                 rootBytes: deltaBytes,
-                rootResolvedName: "delta.world.json",
-                source: Source(
-                    cancellationToken: TestContext.Current.CancellationToken,
-                    store: store
-                )
+                rootResolvedName: tip,
+                source: source
             ),
             userMessage: composeReason
         );
@@ -1066,35 +1063,33 @@ public sealed class StorageCompositionLawTests {
             actual: chainBytes[1]
         );
 
-        var storageHash = WorldDefinitionFileSource.ComputeChainContentHash(chain: chainBytes);
+        Assert.Equal(expected: file.Json, actual: Encoding.UTF8.GetBytes(s: composed.ToJsonString()));
+    }
+    [Fact]
+    public void SwappingImportContentsChangesThePinEvenWhenTheComposedBytesAgree() {
+        var store = new FakeObjectBlobStore();
+        var source = Source(cancellationToken: TestContext.Current.CancellationToken, store: store);
+        var root = """{"imports":[{"document":"first"},{"document":"second"}]}"""u8.ToArray();
 
-        Assert.Equal(
-            actual: storageHash,
-            expected: fileHash
-        );
+        (byte[] Json, string Pin) WithImports(byte[] first, byte[] second) {
+            store.Seed(bytes: first, key: BasisKey(name: "first"), objectId: ContainerId);
+            store.Seed(bytes: second, key: BasisKey(name: "second"), objectId: ContainerId);
+            return Compose(source, WorldDocumentName.For(id: SafeName.Parse(candidate: "delta")), root);
+        }
 
-        Assert.True(
-            condition: WorldJsonPayload.TryParse(
-                json: composed!.ToJsonString(),
-                info: WorldJsonContext.Default.WorldDefinition,
-                value: out var storageDefinition,
-                error: out var parseError
-            ),
-            userMessage: parseError
-        );
-        Assert.Equal(
-            expected: WorldDefinitionSerialization.Serialize(definition: fileComposed!),
-            actual: WorldDefinitionSerialization.Serialize(definition: storageDefinition)
-        );
+        var forward = WithImports("{}"u8.ToArray(), "{ }"u8.ToArray());
+        var reverse = WithImports("{ }"u8.ToArray(), "{}"u8.ToArray());
 
-        // Mutation falsifier: folding the SAME two files in the opposite order must not produce the same pin —
-        // proves the fold is order-sensitive, not merely present.
-        var reversedHash = WorldDefinitionFileSource.ComputeChainContentHash(chain: [.. chainBytes.Reverse()]);
-
-        Assert.NotEqual(
-            actual: reversedHash,
-            expected: storageHash
-        );
+        Assert.Equal(expected: forward.Json, actual: reverse.Json);
+        Assert.NotEqual(expected: forward.Pin, actual: reverse.Pin);
+    }
+    private static (byte[] Json, string Pin) Compose(IWorldDocumentSource source, string root, byte[] bytes) {
+        Assert.True(condition: WorldDefinitionFileSource.TryComposeChainBytes(
+            composedJson: out var json, contentPin: out var pin, reason: out var reason,
+            rootBytes: bytes, rootResolvedName: root, source: source
+        ), userMessage: reason);
+        Assert.NotNull(@object: json);
+        return (json, pin);
     }
 
     /// <summary>Which of the sync engine's bounded store calls <see cref="SyncStoreCall_EndsWhenItsOperationTimeoutExpiresOnTheHostClock"/>

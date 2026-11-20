@@ -60,7 +60,8 @@ public sealed partial class WorldDocument {
         reason = string.Empty;
         evictedKey = null;
         if ((batch.ExpectedCells is { Count: > 0 }) || (batch.ExpectedDefinition is not null) || (batch.ExpectedInputs is not null) || (batch.ExpectedSpatialReads is { Count: > 0 })) {
-            var view = WorldRecipientView.ForComposition(current, batch.Principal, time: time, operates: () => authority.IsOperator(principal: batch.Principal));
+            var view = WorldRecipientView.ForComposition(current, batch.Principal, time: time, operates: () => authority.IsOperator(principal: batch.Principal),
+                machines: authority.MachineCatalog);
 
             if (!view.CheckGuards(batch: batch, reason: out reason)) { candidate = current; return false; }
         }
@@ -71,7 +72,7 @@ public sealed partial class WorldDocument {
                 string? writtenRow = null;
                 // Recheck against preceding members' declarations, never against a future write's membership.
                 if (!authority.IsOperator(principal: batch.Principal)) {
-                    var memberView = WorldRecipientView.ForComposition(working, batch.Principal, arena, time);
+                    var memberView = WorldRecipientView.ForComposition(working, batch.Principal, arena, time, machines: authority.MachineCatalog);
 
                     if (!memberView.Admits(mutation: member, row: out var withheld)) {
                         candidate = current; reason = memberView.Refusal("batch", withheld); refusalCode = WorldRecipientMutations.NotDisclosedCode; return false;
