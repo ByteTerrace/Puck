@@ -8,6 +8,7 @@ public sealed partial class WorldFramePresenter {
     private ulong m_capturedTick;
     private FrameCaptureRequest? m_convergence;
     private SdfFrame? m_convergedFrame;
+    private readonly SdfFrame.Writer m_convergedWriter = new();
 
     private readonly List<(object Source, long Revision, long Cut)> m_viewCuts = [];
     private readonly object?[] m_seatCameraRigs = new object?[PlayerRoster.MaxSlots];
@@ -45,7 +46,7 @@ public sealed partial class WorldFramePresenter {
         if (m_convergence is { Completion.IsCompleted: false }) {
             if (m_convergedFrame is { } frozen) {
                 PlaceComposedFrame();
-                return frozen with { ProgramChanged = false };
+                return m_convergedWriter.CopyFrom(content: (frozen.Content with { ProgramChanged = false }), source: frozen);
             }
             deltaSeconds = 0f;
         } else {
@@ -116,7 +117,8 @@ public sealed partial class WorldFramePresenter {
                 width: width, height: height);
             // A frame that does not yet show what its content calls for is never the one a capture holds.
             if ((m_convergence is { Completion.IsCompleted: false }) && (Waiting is null)) {
-                m_convergedFrame = frame;
+                // The frame the presentation writes again next capture, so the hold keeps a copy of its own.
+                m_convergedFrame = m_convergedWriter.CopyFrom(source: frame);
             }
             return frame;
         } finally {

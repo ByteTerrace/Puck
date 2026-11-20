@@ -233,14 +233,22 @@ public sealed class WorldRoutedScene : ISdfFrameDresser, IDisposable {
         // rates its bodies by the views and shadow cascades this frame renders the world through, as the boot world's pool
         // is rated by its own. The scene also takes the boot presentation's clock and lockstep.
         var host = m_hostFrame();
-        var dressed = m_emitter.TakeLevers(frame: (frame with { Views = m_frameViews }), height: height, host: host, views: m_frameViews, width: width);
+        var content = (frame.Content with { Views = m_frameViews });
 
-        return ((host is null) ? dressed : (dressed with {
-            Time = host.Time,
-            TickLocked = host.TickLocked,
-            ConvergesLighting = host.ConvergesLighting,
-        }));
+        if (host is not null) {
+            content = (content with {
+                Time = host.Time,
+                TickLocked = host.TickLocked,
+                ConvergesLighting = host.ConvergesLighting,
+            });
+        }
+        // The scene's one frame, written again for each capture from the emitter's, which the emitter writes again too.
+        _ = m_frameWriter.Write(content: in content, settings: frame.Settings);
+
+        return m_emitter.TakeLevers(frame: m_frameWriter, height: height, host: host, views: m_frameViews, width: width);
     }
+
+    private readonly SdfFrame.Writer m_frameWriter = new();
     /// <summary>Finds the camera the first seat presented in the world renders with this frame, as the presenter latched
     /// it: the eye every window a screen of this world shows fits to, as the boot world's windows fit to its viewer.</summary>
     /// <param name="camera">The camera, in the scene world's own coordinates, when this returns <see langword="true"/>.</param>

@@ -20,6 +20,7 @@ public sealed partial class WorldFramePresenter {
     private readonly (WorldRoutedScene? Scene, int Index)[] m_seatRoutes = new (WorldRoutedScene?, int)[PlayerRoster.MaxSlots];
 
     private SdfFrame? m_dressedFrame;
+    private readonly SdfFrame.Writer m_frameWriter = new();
 
     /// <summary>Returns the scene of the world a seat was presented in as the last Dress latched it, and its view's index
     /// among that scene's views, so a query through the seat's view (a surface under its pointer) reads the world the

@@ -34,9 +34,11 @@ public sealed class SdfMeshDresser : IDisposable {
     private readonly GpuRowCursor m_slotCursor = new();
     private readonly GpuRowCursor m_hostCursor = new();
     private readonly GpuRowCursor m_copyCursor = new();
-    // The copies as the last dress read them, at the copy journal's endpoint m_copyCursor committed.
+    // The copies as the last dress read them, with the revision and frame slot each had, at the copy journal's endpoint
+    // m_copyCursor committed.
     private SdfMeshInstance[] m_copies = [];
     private int[] m_copyFrames = [];
+    private long[] m_copyRevisions = [];
 
     private SdfProgram? m_program;
 
@@ -61,7 +63,7 @@ public sealed class SdfMeshDresser : IDisposable {
     }
 
     /// <summary>Gets logical retained scratch and index bytes.</summary>
-    public long ScratchBytes => ((((((m_rows.ClipIndexBytes + m_bindingsByOwner.StorageBytes) + m_candidates.StorageBytes) + m_slots.StorageBytes) + m_hostChanges.StorageBytes + m_copyRuns.StorageBytes) + (((long)m_bindings.Length) * IntPtr.Size)) + (((long)m_copies.Length) * (IntPtr.Size + sizeof(int))));
+    public long ScratchBytes => ((((((m_rows.ClipIndexBytes + m_bindingsByOwner.StorageBytes) + m_candidates.StorageBytes) + m_slots.StorageBytes) + m_hostChanges.StorageBytes + m_copyRuns.StorageBytes) + (((long)m_bindings.Length) * IntPtr.Size)) + (((long)m_copies.Length) * (IntPtr.Size + sizeof(int) + sizeof(long))));
 
     /// <summary>Reconciles products, copy membership and poses without moving unrelated owners.</summary>
     public SdfFrame Dress(SdfFrame frame) {
@@ -149,7 +151,7 @@ public sealed class SdfMeshDresser : IDisposable {
         }
         for (var run = 0; (run < m_copyRuns.Count); run++) {
             for (var i = m_copyRuns.Start(index: run); (i < (m_copyRuns.Start(index: run) + m_copyRuns.Length(index: run))); i++) {
-                if (programChanged || (i >= m_copies.Length) || !ReferenceEquals(objA: m_copies[i], objB: frame.MeshInstances[i]) || (m_copyFrames[i] != frame.MeshInstances[i].FrameSlot)) { AddCandidates(key: (true, i)); }
+                if (programChanged || (i >= m_copies.Length) || !ReferenceEquals(objA: m_copies[i], objB: frame.MeshInstances[i]) || (m_copyRevisions[i] != frame.MeshInstances[i].Revision) || (m_copyFrames[i] != frame.MeshInstances[i].FrameSlot)) { AddCandidates(key: (true, i)); }
             }
         }
         for (var r = 0; (r < m_candidates.Count); r++) {
@@ -181,9 +183,9 @@ public sealed class SdfMeshDresser : IDisposable {
 
         // A whole answer resizes to the list (a count change always answers whole), and every answer rewrites the copies
         // its runs name, so m_copies is the list at the endpoint the cursor commits.
-        if (m_copies.Length != frame.MeshInstances.Count) { m_copies = new SdfMeshInstance[frame.MeshInstances.Count]; m_copyFrames = new int[m_copies.Length]; }
+        if (m_copies.Length != frame.MeshInstances.Count) { m_copies = new SdfMeshInstance[frame.MeshInstances.Count]; m_copyFrames = new int[m_copies.Length]; m_copyRevisions = new long[m_copies.Length]; }
         for (var run = 0; (run < m_copyRuns.Count); run++) {
-            for (var i = m_copyRuns.Start(index: run); (i < (m_copyRuns.Start(index: run) + m_copyRuns.Length(index: run))); i++) { m_copies[i] = frame.MeshInstances[i]; m_copyFrames[i] = m_copies[i].FrameSlot; }
+            for (var i = m_copyRuns.Start(index: run); (i < (m_copyRuns.Start(index: run) + m_copyRuns.Length(index: run))); i++) { m_copies[i] = frame.MeshInstances[i]; m_copyFrames[i] = m_copies[i].FrameSlot; m_copyRevisions[i] = m_copies[i].Revision; }
         }
         if (SdfRowChecks.SkipHostRequested) { m_skipHostThrough = ((m_rows.Serial + SdfMovedTransforms.History) + 2); SdfRowChecks.SkipHostRequested = false; }
         if (m_rows.Serial <= m_skipHostThrough) { SdfRowChecks.ProcessWork.Count(kind: SdfRowChecks.HostSkipped); } else { m_hostCursor.Commit(); }
@@ -330,6 +332,7 @@ public sealed class SdfMeshDresser : IDisposable {
         private object? m_motionSource;
         private object? m_motionIdentity;
         private SdfMeshInstance? m_copy;
+        private long m_copyRevision;
         private SdfMeshCopySurface? m_pickIdentity;
         private SdfMeshDraw m_draw;
         private bool m_posed;
@@ -356,8 +359,9 @@ public sealed class SdfMeshDresser : IDisposable {
                 var copy = frame.MeshInstances[copyIndex];
                 var firstInstance = (group?.FirstInstance ?? -1);
 
-                if (ReferenceEquals(objA: copy, objB: m_copy) && (m_draw.FrameSlot == copy.FrameSlot) && (m_pickIdentity?.FirstInstance == firstInstance)) { return m_draw; }
+                if (ReferenceEquals(objA: copy, objB: m_copy) && (m_copyRevision == copy.Revision) && (m_draw.FrameSlot == copy.FrameSlot) && (m_pickIdentity?.FirstInstance == firstInstance)) { return m_draw; }
                 m_copy = copy;
+                m_copyRevision = copy.Revision;
                 if ((m_pickIdentity is null) || !Equals(objA: m_pickIdentity.Identity, objB: copy.Identity) || (m_pickIdentity.FirstInstance != firstInstance)) {
                     m_pickIdentity = new SdfMeshCopySurface(copy.Identity, firstInstance);
                 }
