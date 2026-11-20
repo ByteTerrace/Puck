@@ -97,10 +97,6 @@ public readonly record struct ModularTransform
             c: 0L,
             d: 1L
         );
-    /// <summary>Gets the trace <c>A + D</c> — the conjugacy invariant that <see cref="Classify"/> reads.</summary>
-    /// <exception cref="OverflowException">The sum of the diagonal exceeds <see cref="long"/>.</exception>
-    public long Trace =>
-        checked((A + D));
 
     private static FixedComplex FromInteger(long value) =>
         new(

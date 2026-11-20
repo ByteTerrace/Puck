@@ -37,7 +37,6 @@ namespace Puck.World;
 /// "next free slot"/either-order profile-then-slot convenience does not apply there.</para>
 /// </remarks>
 internal sealed partial class PlayerCommandModule(PlayerRoster roster, WorldScreenBinder screens, IServerLink link, WorldServer server, WorldPerceptionAnchor anchor, WorldClient client, Func<InputRouter> router, WorldInstanceHost instances, WorldSeatBindings seatBindings, WorldSeatAuthorityRouter seatRouter, WorldReplayTape tape, WorldCreationInstances stamps, WorldSeatViewInput? viewInput = null) : ICommandModule {
-    public const string AssignCommand = Puck.World.Client.PlayerCommandNames.AssignCommand;
     /// <summary>The keyboard-claim command (Keyboard F1..F4, press edge). The target slot rides the binding's Axis1D
     /// value as a 1-based player number, the clean scalar constant a binding carries.</summary>
     public const string ClaimCommand = Puck.World.Client.PlayerCommandNames.ClaimCommand;
