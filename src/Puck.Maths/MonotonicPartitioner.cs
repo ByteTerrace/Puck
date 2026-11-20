@@ -71,6 +71,8 @@ public static class MonotonicPartitioner {
 
     private static readonly OwnershipCheckpoint[] Checkpoints;
     private static readonly ushort[] CumulativeTailCountByBlock;
+    // A tail delta is a Leb128 of at most two bytes, so fourteen value bits.
+    private const int DeltaBits = 14;
     // Entry n packs (65536 / n) << 32 | (65536 % n), so the jump chain walks without hardware division.
     private static readonly ulong[] DivModByBucketCount;
     private static readonly ushort[] FirstCheckpointByRankBucket;
@@ -359,19 +361,21 @@ public static class MonotonicPartitioner {
         var streamPosition = ((int)TailStreamOffsetByIndex[tailEntryIndex]);
 
         while (true) {
-            var firstByte = stream[streamPosition++];
-
-            if (0 == firstByte) {
+            if (0 == stream[streamPosition]) {
                 return currentBucket;
             }
 
-            var bucketDelta = firstByte & 0x7F;
+            // The baked stream was written by EncodePositiveVarint, so a read cannot fail: a delta is one or two
+            // bytes and the stream ends in a zero byte no delta can be.
+            _ = Leb128.TryRead(
+                data: stream,
+                maxBits: DeltaBits,
+                offset: ref streamPosition,
+                requireMinimal: false,
+                value: out var bucketDelta
+            );
 
-            if (0 != (firstByte & 0x80)) {
-                bucketDelta |= ((stream[streamPosition++] & 0x7F) << 7);
-            }
-
-            var candidateBucket = (currentBucket + bucketDelta);
+            var candidateBucket = (currentBucket + ((int)bucketDelta));
 
             if (candidateBucket >= bucketCount) {
                 return currentBucket;
@@ -389,12 +393,12 @@ public static class MonotonicPartitioner {
             );
         }
 
-        if (0x80 > value) {
-            destination.Add(item: ((byte)value));
-        } else {
-            destination.Add(item: ((byte)((value & 0x7F) | 0x80)));
-            destination.Add(item: ((byte)(value >> 7)));
-        }
+        Span<byte> spelling = stackalloc byte[Leb128.MaxByteCount];
+
+        destination.AddRange(source: ((ReadOnlySpan<byte>)spelling[..Leb128.Write(
+            destination: spelling,
+            value: ((ulong)value)
+        )]));
     }
     private static void EncodeTailEntry(
         List<byte> destination,

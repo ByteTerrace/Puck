@@ -1,6 +1,7 @@
 using System.Buffers.Binary;
 using System.Numerics;
 using System.Text;
+using Puck.Maths;
 
 namespace Puck.Assets;
 
@@ -170,32 +171,19 @@ public ref struct CanonicalBinaryReader {
     /// <summary>Reads a variable-width unsigned integer <see cref="CanonicalBinaryWriterExtensions.WriteVarUInt"/>
     /// wrote.</summary>
     /// <returns>The integer.</returns>
-    /// <exception cref="InvalidDataException">The integer overflows 32 bits, is longer than five bytes, or is not
-    /// minimally encoded.</exception>
+    /// <exception cref="InvalidDataException">The integer is truncated, overflows 32 bits, is longer than five bytes, or
+    /// is not minimally encoded.</exception>
     public uint ReadVarUInt() {
-        var value = 0U;
-
-        for (var index = 0; (index < 5); ++index) {
-            var current = ReadByte();
-
-            if (
-                (index == 4) &&
-                ((current & 0xf0) != 0)
-            ) {
-                throw new InvalidDataException(message: "a variable-width integer overflows UInt32");
-            }
-
-            value |= (((uint)(current & 0x7f)) << (7 * index));
-            if ((current & 0x80) != 0) { continue; }
-            if (
-                (index > 0) &&
-                ((current & 0x7f) == 0)
-            ) {
-                throw new InvalidDataException(message: "a variable-width integer is not minimally encoded");
-            }
-            return value;
+        if (!Leb128.TryRead(
+            data: m_content,
+            maxBits: 32,
+            offset: ref m_offset,
+            requireMinimal: true,
+            value: out var value
+        )) {
+            throw new InvalidDataException(message: "a variable-width integer is truncated, overflows UInt32 or is not minimally encoded");
         }
 
-        throw new InvalidDataException(message: "a variable-width integer is too long");
+        return ((uint)value);
     }
 }

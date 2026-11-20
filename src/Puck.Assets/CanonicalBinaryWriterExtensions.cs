@@ -2,6 +2,7 @@ using System.Buffers;
 using System.Buffers.Binary;
 using System.Numerics;
 using System.Text;
+using Puck.Maths;
 
 namespace Puck.Assets;
 
@@ -106,13 +107,10 @@ public static class CanonicalBinaryWriterExtensions {
     /// <param name="writer">The destination.</param>
     /// <param name="value">The integer to write.</param>
     public static void WriteVarUInt(this IBufferWriter<byte> writer, uint value) {
-        do {
-            var current = ((byte)(value & 0x7f));
-
-            value >>= 7;
-            if (value != 0) { current |= 0x80; }
-            writer.WriteByte(value: current);
-        } while (value != 0);
+        writer.Advance(count: Leb128.Write(
+            destination: writer.GetSpan(sizeHint: Leb128.MaxByteCount),
+            value: value
+        ));
     }
     /// <summary>Writes <paramref name="count"/> zero bytes.</summary>
     /// <param name="writer">The destination.</param>
