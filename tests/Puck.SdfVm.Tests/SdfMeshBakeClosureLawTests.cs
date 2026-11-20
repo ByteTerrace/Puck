@@ -60,7 +60,7 @@ public sealed class SdfMeshBakeClosureLawTests {
         Requires(typeof(SdfMeshBakeBatch), nameof(SdfMeshBakeBatch.PointRuns));
         Requires(typeof(SdfMeshBakeBatch), "get_" + nameof(SdfMeshBakeBatch.InputRows));
         Requires(typeof(SdfMeshBakeBatch), nameof(SdfMeshBakeBatch.PoseBase));
-        Requires(typeof(SdfMeshBakeBatch), nameof(SdfMeshBakeBatch.WriteSampled));
+        Requires(typeof(SdfMeshBakeBatch), nameof(SdfMeshBakeBatch.WriteSampledDirectory));
         Requires(typeof(SdfMeshBakeBlock), nameof(SdfMeshBakeBlock.Write));
         Assert.True(condition: closure.Reads(type: typeof(SdfMeshBakeBatch)));
 

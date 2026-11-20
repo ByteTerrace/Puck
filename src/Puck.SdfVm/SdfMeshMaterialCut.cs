@@ -179,6 +179,8 @@ internal sealed class SdfMeshMaterialCut {
         if (contour.QuadCount == 0) { return null; }
 
         var positions = new List<Vector3>(capacity: (contour.VertexCount + m_edges.Count));
+        var sites = new List<int>(positions.Capacity);
+        var addedSites = new SdfMeshWeld(m_edges.Count);
         var normals = new List<Vector3>(capacity: (contour.VertexCount + m_edges.Count));
         var indices = new List<uint>(capacity: (6 * contour.QuadCount));
         var triangleMaterials = new List<uint>(capacity: (2 * contour.QuadCount));
@@ -194,6 +196,9 @@ internal sealed class SdfMeshMaterialCut {
         uint Add(Vector3 point, Vector3 normal) {
             var length = normal.Length();
 
+            var vertex = positions.Count;
+            sites.Add(vertex < m_site.Length ? m_site[vertex] :
+                m_siteAt.TryFind(point, out var original) ? original : addedSites.Site(point, vertex));
             positions.Add(item: point);
             normals.Add(item: ((length > 0f) ? (normal / length) : normal));
             Within();
@@ -270,15 +275,13 @@ internal sealed class SdfMeshMaterialCut {
             var key = ((a < b) ? (a, b) : (b, a));
 
             if (!middles.TryGetValue(key: key, value: out var vertex)) {
-                _ = m_siteAt.TryFind(positions[(int)a], out var siteA);
-                _ = m_siteAt.TryFind(positions[(int)b], out var siteB);
-                var sites = Key(siteA, siteB);
-                var (low, high) = (Position(vertex: sites.Low), Position(vertex: sites.High));
+                var endpoints = Key(sites[(int)a], sites[(int)b]);
+                var (low, high) = (Position(vertex: endpoints.Low), Position(vertex: endpoints.High));
                 var point = Vector3.Lerp(value1: low, value2: high, amount: 0.5f);
 
                 vertex = Add(normal: (normals[(int)a] + normals[(int)b]), point: point);
                 middles.Add(key: key, value: vertex);
-                if ((point != low) && (point != high)) { quartered.Add(item: sites); }
+                if ((point != low) && (point != high)) { quartered.Add(item: endpoints); }
             }
 
             return vertex;
@@ -355,7 +358,7 @@ internal sealed class SdfMeshMaterialCut {
                 for (var side = 0; (side < 3); side++) {
                     var (u, v) = (indices[((3 * at) + side)], indices[((3 * at) + ((side + 1) % 3))]);
 
-                    if (!m_siteAt.TryFind(position: positions[(int)u], vertex: out var siteU) || !m_siteAt.TryFind(position: positions[(int)v], vertex: out var siteV) || siteU >= m_site.Length || siteV >= m_site.Length || !quartered.Contains(item: Key(a: siteU, b: siteV))) {
+                    if (!quartered.Contains(Key(sites[(int)u], sites[(int)v]))) {
                         continue;
                     }
 
@@ -376,12 +379,7 @@ internal sealed class SdfMeshMaterialCut {
             }
         }
 
-        var welded = new int[positions.Count];
-        m_site.CopyTo(welded, 0);
-        for (var vertex = m_site.Length; vertex < welded.Length; vertex++) {
-            welded[vertex] = m_siteAt.Site(positions[vertex], vertex);
-        }
-        return new SdfMesh(indices: indices.ToArray(), normals: normals.ToArray(), positions: positions.ToArray(), triangleMaterials: triangleMaterials.ToArray()) { BakedSites = welded };
+        return new SdfMesh(indices: indices.ToArray(), normals: normals.ToArray(), positions: positions.ToArray(), triangleMaterials: triangleMaterials.ToArray()) { BakedSites = sites.ToArray() };
     }
 
     // Where a searched edge's boundary lies, as a fraction of the way from its lower site: an interval still touching an

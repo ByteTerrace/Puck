@@ -1,8 +1,7 @@
-using System.Buffers.Binary;
+using System.Numerics;
 using System.Collections.Concurrent;
 
 using Puck.SdfVm;
-using Puck.Shaders;
 using Puck.SignedDistance;
 using Puck.SignedDistance.Baking;
 using Puck.SignedDistance.Queries;

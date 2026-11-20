@@ -330,7 +330,7 @@ kernel reads in place (`SdfMeshBakeGpuWork`), which the service owns and
 reserves (`SdfGpuWorkRecording.HostBuffer`), grown in 4 MiB granules once the
 slot's last job is released (`SdfGpuWork.Granule`), and bound through the slot's
 own World set at the bake's point member, where the tables' World sets bind the
-unused-member buffer (`SdfWorldTables.WriteBackgroundWorldSet`).
+unused-member buffer (`SdfWorldTables.BackgroundWorldSet`).
 `SdfMeshBakeBatch.InputRows` is the highest input prefix actually read: explicit
 points retain their sample offsets; saved poses still begin after all samples.
 A grid-only batch without poses needs no input rows. Do not allocate or write
@@ -1080,7 +1080,12 @@ laws exercise that boundary.
   `SdfMeshPathBake.BatchTaps` field evaluations, a gradient sample counting
   five). A batch is the mask dispatch, the sampler dispatch and the samples'
   copy back, submitted on its slot's fence; the kernel finds a sample's lattice
-  by binary search over their first samples. `Pump` runs on the frame thread
+  by binary search over their first samples. Each lattice names its output word offset
+  and fields in the last word of its fifth row. Box refinement and root searches read
+  distance, material cuts read material, fine samples and slabs read both, and measured
+  normals and slices read distance followed by gradient triples. Slabs fill the final
+  lattice after their ticket is claimed. The CPU sampler writes the same planes through
+  `SdfMeshBakeRequest.WriteSample`. `Pump` runs on the frame thread
   (the GPU layer records and submits on that thread alone) at the top of each
   frame, before any residency prepares, and after each upload: it hands every
   job whose fence signaled to its client, which copies and decodes the samples
@@ -1248,9 +1253,9 @@ laws exercise that boundary.
   budget. The bake's done line prints hit/miss counts for the three intermediate
   stages beside its actual GPU dispatch count.
 
-  The final codec's quantization (`PositionWidth`, the octahedral normals)
+  The final codec's quantization (the position grid and octahedral normals)
   decides what every later run draws. The
-  encoder's fit check, the decode and `Conform` share one expansion (`SdfMeshStoreCodec.OnGrid`, `Expand`),
+  encoder's fit check, the decode and `Conform` expand quantized positions through `SdfMeshStoreCodec.Expand`,
   so the encoder's budget holds for what the decode writes and what a cold bake publishes. An edit to what a decode
   answers for the two lossy planes changes `Conform` in the same change as the decode. The kernels' source
   closure is `passes/sdf-bake-world.hlsli`: their own interface

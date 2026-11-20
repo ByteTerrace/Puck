@@ -62,7 +62,7 @@ internal sealed class SdfMeshBakeGpuWork : ISdfGpuWorkClient {
             var pass = GpuDescriptorPoolSizes.ForGroups(groups: groups.Where(predicate: static group => (group.Ordinal == ((uint)ShaderInterfaceGroup.Pass))).ToArray());
 
             for (var slot = 0; (slot < SdfGpuWork.SlotCount); slot++) {
-                sizes += world;
+                for (var ring = 0; ring < SdfWorldTables.FrameRingSize; ring++) { sizes += world; }
                 sizes += pass;
                 sizes += pass;
             }
@@ -96,12 +96,18 @@ internal sealed class SdfMeshBakeGpuWork : ISdfGpuWorkClient {
         m_gpu.Bindings.WriteConstantBuffer(arrayElement: 0, binding: 0, bufferHandle: m_frameBlock.BufferHandle, bufferSize: m_frameBlock.SizeBytes, descriptorSetHandle: m_frameSet);
         m_counters = scope.Own(created: m_gpu.BufferFactory.CreateDeviceLocal(name: Name(part: "counters"), sizeBytes: CounterBytes, usage: GpuBufferUsage.Storage));
         for (var slot = 0; (slot < m_slots.Length); slot++) {
+            var worlds = new SdfWorldTables.BackgroundBindings[SdfWorldTables.FrameRingSize];
+            for (var ring = 0; ring < worlds.Length; ring++) {
+                var set = m_gpu.Bindings.AllocateSet(descriptorSetLayoutHandle: layouts[(int)ShaderInterfaceGroup.World],
+                    name: Name(index: slot, part: $"world group {ring}"), poolHandle: m_pool);
+                worlds[ring] = new(set);
+            }
             m_slots[slot] = new SlotResources(
                 Block: scope.Own(created: m_gpu.BufferFactory.CreateHostVisible(name: Name(index: slot, part: "pass block"),
                     sizeBytes: ((ulong)IGpuBindings.ConstantBufferBytes(blockBytes: ((uint)SdfMeshBakeBlock.SizeBytes))), usage: GpuBufferUsage.Uniform)),
                 MaskSet: m_gpu.Bindings.AllocateSet(descriptorSetLayoutHandle: layouts[((int)ShaderInterfaceGroup.Pass)], name: Name(index: slot, part: "mask group"), poolHandle: m_pool),
                 BakeSet: m_gpu.Bindings.AllocateSet(descriptorSetLayoutHandle: layouts[((int)ShaderInterfaceGroup.Pass)], name: Name(index: slot, part: "bake group"), poolHandle: m_pool),
-                WorldSet: m_gpu.Bindings.AllocateSet(descriptorSetLayoutHandle: layouts[((int)ShaderInterfaceGroup.World)], name: Name(index: slot, part: "world group"), poolHandle: m_pool)
+                Worlds: worlds
             );
         }
         scope.Complete();
@@ -197,7 +203,7 @@ internal sealed class SdfMeshBakeGpuWork : ISdfGpuWorkClient {
         Array.Clear(array: m_block);
         SdfMeshBakeBlock.Write(batch: batch, block: m_block, instanceMaskWordCount: ((uint)maskWords), workCounterDetailRow: 0u, workCounterRow: 0u);
         slot.Block.Write<byte>(data: m_block);
-        m_tables.WriteBackgroundWorldSet(slot.WorldSet, points, sampled, slot.WorldBindings);
+        var world = m_tables.BackgroundWorldSet(slot.Worlds, points, sampled);
 
         var recorder = recording.Recorder;
         var commandBuffer = recording.CommandBuffer;
@@ -207,7 +213,7 @@ internal sealed class SdfMeshBakeGpuWork : ISdfGpuWorkClient {
         recorder.TransitionBuffer(commandBufferHandle: commandBuffer, bufferHandle: masks.BufferHandle,
             sourceAccessMask: GpuAccess.ShaderRead, sourceStageMask: GpuStage.ComputeShader,
             destinationAccessMask: GpuAccess.ShaderWrite, destinationStageMask: GpuStage.ComputeShader);
-        Bind(commandBuffer: commandBuffer, pass: slot.MaskSet, pipeline: mask, recorder: recorder, world: slot.WorldSet);
+        Bind(commandBuffer: commandBuffer, pass: slot.MaskSet, pipeline: mask, recorder: recorder, world: world);
         recorder.Dispatch(commandBufferHandle: commandBuffer, groupCountX: SdfWorldPackage.MeshBakeBatch, groupCountY: 1, groupCountZ: 1);
         recorder.TransitionBuffer(commandBufferHandle: commandBuffer, bufferHandle: masks.BufferHandle,
             sourceAccessMask: GpuAccess.ShaderWrite, sourceStageMask: GpuStage.ComputeShader,
@@ -215,7 +221,7 @@ internal sealed class SdfMeshBakeGpuWork : ISdfGpuWorkClient {
         recorder.TransitionBuffer(commandBufferHandle: commandBuffer, bufferHandle: samplesBuffer.BufferHandle,
             sourceAccessMask: GpuAccess.TransferRead, sourceStageMask: GpuStage.Transfer,
             destinationAccessMask: GpuAccess.ShaderWrite, destinationStageMask: GpuStage.ComputeShader);
-        Bind(commandBuffer: commandBuffer, pass: slot.BakeSet, pipeline: sampler, recorder: recorder, world: slot.WorldSet);
+        Bind(commandBuffer: commandBuffer, pass: slot.BakeSet, pipeline: sampler, recorder: recorder, world: world);
         recorder.Dispatch(commandBufferHandle: commandBuffer, groupCountX: ((uint)samples.CeilingDivide(divisor: 64)), groupCountY: 1, groupCountZ: 1);
         recording.CopyToReadback(bytes: sampleBytes, source: samplesBuffer);
     }
@@ -317,13 +323,12 @@ internal sealed class SdfMeshBakeGpuWork : ISdfGpuWorkClient {
     // One slot's own resources: its pass block, its two pass sets and World set, the buffers its pass sets name, and
     // the sampled table it last wrote with what it wrote. The buffers are the service's, kept here only to tell a
     // replaced one by its object.
-    private sealed class SlotResources(IGpuStorageBuffer Block, nint MaskSet, nint BakeSet, nint WorldSet) {
+    private sealed class SlotResources(IGpuStorageBuffer Block, nint MaskSet, nint BakeSet, SdfWorldTables.BackgroundBindings[] Worlds) {
         public IGpuStorageBuffer Block { get; } = Block;
         public nint MaskSet { get; } = MaskSet;
         public nint BakeSet { get; } = BakeSet;
-        public nint WorldSet { get; } = WorldSet;
+        public SdfWorldTables.BackgroundBindings[] Worlds { get; } = Worlds;
 
-        public SdfWorldTables.BackgroundBindings WorldBindings { get; } = new();
         public uint[] Directory { get; set; } = [];
         public IGpuBuffer? PassMasks { get; set; }
         public IGpuBuffer? PassSamples { get; set; }

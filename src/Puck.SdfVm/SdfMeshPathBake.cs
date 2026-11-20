@@ -1,5 +1,4 @@
 using System.Buffers;
-using System.Buffers.Binary;
 using System.Diagnostics;
 using System.Numerics;
 using System.Runtime.InteropServices;
@@ -231,11 +230,13 @@ public sealed record SdfMeshBakeBatch(SdfMeshBakeRequest[] Lattices, object[] Ti
     }
 }
 /// <summary>Where one lattice of a taken batch stands (<see cref="SdfMeshBakeBatch.StateOf"/>): each ticket leaves
-/// <see cref="Taken"/> once, for <see cref="Answered"/> or <see cref="Returned"/>, so answering and abandoning a batch,
+/// <see cref="Taken"/> once and settles as <see cref="Answered"/> or <see cref="Returned"/>, so answering and abandoning a batch,
 /// in either order or in part, settle each lattice exactly once.</summary>
 public enum SdfMeshBakeTicket {
     /// <summary>The lattice is dispatched or awaiting its samples, and its group takes no other lattice.</summary>
     Taken,
+    /// <summary>The answer owns the destination and is copying this lattice's samples.</summary>
+    Decoding,
     /// <summary>The lattice's samples reached its group or slice.</summary>
     Answered,
     /// <summary>The lattice went back to its group or slice unanswered, to be taken again.</summary>
@@ -252,7 +253,7 @@ public enum SdfMeshBakeTicket {
 /// each lattice at most <see cref="LatticeTaps"/> field evaluations: a coarse lattice over the group's bounding sphere, refinements over the box of
 /// the cells the surface can cross until the box stops shrinking, then a final lattice of at most 65 samples a side
 /// whose spacing follows the box's own proportions (a union's cubic, keeping each of its shapes at the resolution its own
-/// lattice would give it), sampled in slabs of whole planes, values alone; then the fine samples
+/// lattice would give it), sampled in slabs of whole planes, values and materials; then the fine samples
 /// of the cells the final lattice cannot resolve (<see cref="SdfSampledLattice.Refine"/>), and then gradients at the
 /// samples a contour reads one at alone (<see cref="SdfSampledLattice.GradientPoints"/>). The final samples contour on
 /// the thread pool (<see cref="SdfSampledLattice"/>) and split at their creases (<see cref="SdfContour.SplitAtCreases"/>).
@@ -983,7 +984,7 @@ public sealed partial class SdfMeshPathBake {
     }
     /// <summary>Answers a dispatched batch with the samples its readback copied, each lattice its own slice: each group's
     /// lattice is decoded on the calling thread and answered on the bake's workers. A lattice answered or returned already
-    /// takes nothing; one whose answer throws stays taken, so <see cref="Abandon"/> returns it and every lattice after
+    /// takes nothing; a decode failure returns its request, and <see cref="Abandon"/> returns every untaken answer after
     /// it.</summary>
     /// <param name="batch">The batch <see cref="TryTake(SdfProgram?, out SdfMeshBakeBatch?, long)"/> took.</param>
     /// <param name="samples">The output planes of each lattice, back to back.</param>
@@ -1005,14 +1006,11 @@ public sealed partial class SdfMeshPathBake {
             if (batch.Tickets[index] is Group group) {
                 using (EnterGate(site: BakeGate.Ticket)) {
                     if (batch.States[index] != SdfMeshBakeTicket.Taken) { continue; }
-                }
-                if (!group.QueueWork()) {
-                    using (EnterGate(site: BakeGate.Ticket)) { _ = MoveTicket(batch: batch, index: index, to: SdfMeshBakeTicket.Returned); }
-                    continue;
-                }
-
-                using (EnterGate(site: BakeGate.Ticket)) {
-                    if (!MoveTicket(batch, index, SdfMeshBakeTicket.Answered)) { group.EndWork(); continue; }
+                    if (!group.QueueWork()) {
+                        _ = MoveTicket(batch, index, SdfMeshBakeTicket.Returned);
+                        continue;
+                    }
+                    _ = MoveTicket(batch, index, SdfMeshBakeTicket.Decoding);
                 }
                 Answer answer;
                 try {
@@ -1020,12 +1018,12 @@ public sealed partial class SdfMeshPathBake {
                 } catch {
                     // No next lattice is published until AnswerGroup. Return the claimed request for retry.
                     using (EnterGate(site: BakeGate.Ticket)) {
-                        batch.States[index] = SdfMeshBakeTicket.Taken;
-                        _ = MoveTicket(batch, index, SdfMeshBakeTicket.Returned);
+                        _ = MoveTicket(batch, index, SdfMeshBakeTicket.Returned, from: SdfMeshBakeTicket.Decoding);
                     }
                     group.EndWork();
                     throw;
                 }
+                using (EnterGate(site: BakeGate.Ticket)) { _ = MoveTicket(batch, index, SdfMeshBakeTicket.Answered, from: SdfMeshBakeTicket.Decoding); }
                 var checkpoint = CaptureSamples(group, slice);
                 Enqueue(group: group, urgent: true, work: () => {
                     using (answer) {
@@ -1048,8 +1046,8 @@ public sealed partial class SdfMeshPathBake {
     // The one transition of a batch's ticket out of Taken, which answering and abandoning both take: Answered once its
     // samples reach its group or slice (the group stays in flight until its answer job runs), Returned when they never will,
     // which hands the lattice back to be taken again. Under the gate; false when the ticket had left Taken already.
-    private bool MoveTicket(SdfMeshBakeBatch batch, int index, SdfMeshBakeTicket to) {
-        if (batch.States[index] != SdfMeshBakeTicket.Taken) { return false; }
+    private bool MoveTicket(SdfMeshBakeBatch batch, int index, SdfMeshBakeTicket to, SdfMeshBakeTicket from = SdfMeshBakeTicket.Taken) {
+        if (batch.States[index] != from) { return false; }
         batch.States[index] = to;
         if (to != SdfMeshBakeTicket.Returned) { return true; }
         if (batch.Tickets[index] is Group group) { group.InFlight = false; }

@@ -50,7 +50,7 @@ public sealed partial class SdfMeshPathBake {
     /// <summary>
     /// Contours one field level of a group: the field sampled on a cubic lattice of the level's cell over a box, at the
     /// iso-value that offsets the surface outward by <paramref name="offset"/> (the lattice's measured slope,
-    /// <see cref="SdfSampledLattice.SurfaceSlope"/>, or each sample's own with <paramref name="localAim"/>, converts it
+    /// <see cref="SdfSampledLattice.SurfaceSlope()"/>, or each sample's own with <paramref name="localAim"/>, converts it
     /// to field units only to aim the contour; the oracle measures where it landed), then the bake's
     /// own stages after the lattice: crossings bracketed on their edges, gradients, the contour, the field check of the
     /// vertices no crossing pins, the crease split, the material cut, and the planar merge after its near-coplanar faces

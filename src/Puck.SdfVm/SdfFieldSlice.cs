@@ -1,8 +1,7 @@
-using System.Buffers.Binary;
+using System.Runtime.InteropServices;
 using System.Globalization;
 using System.Numerics;
 
-using Puck.Shaders;
 using Puck.SignedDistance;
 using Puck.Maths;
 
@@ -191,8 +190,8 @@ public sealed class SdfFieldSlice {
         var first = ((ticket >> 1) * ChunkPoints);
         var count = Math.Min(ChunkPoints, (m_points.Length - first));
 
-        var words = System.Runtime.InteropServices.MemoryMarshal.Cast<byte, float>(samples);
-        var gradients = System.Runtime.InteropServices.MemoryMarshal.Cast<float, Vector3>(words[count..]);
+        var words = MemoryMarshal.Cast<byte, float>(samples);
+        var gradients = MemoryMarshal.Cast<float, Vector3>(words[count..]);
         for (var index = 0; index < count; index++) {
             var value = words[index];
             if (value < m_values[first + index]) {
