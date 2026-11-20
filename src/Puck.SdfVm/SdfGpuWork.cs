@@ -3,7 +3,6 @@ using System.Globalization;
 using System.Runtime.ExceptionServices;
 using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Waiting;
-using Puck.Maths;
 
 namespace Puck.SdfVm;
 
@@ -162,17 +161,6 @@ public sealed class SdfGpuWorkReadback {
     // There is no disposable event for a late release to race. The condition and the buffer share one gate.
     internal void WaitReleased() { lock (m_gate) { while (!m_released) { Monitor.Wait(obj: m_gate); } } }
 }
-/// <summary>How a slot's buffer is sized for a job (<see cref="SdfGpuWorkRecording.HostBuffer"/>,
-/// <see cref="SdfGpuWorkRecording.DeviceBuffer"/>).</summary>
-public enum SdfGpuWorkSizing {
-    /// <summary>The buffer holds at least the bytes and is allocated in whole granules (<see cref="SdfGpuWork.Granule"/>),
-    /// so jobs that grow toward a bound replace it a few times.</summary>
-    Granule,
-    /// <summary>The buffer holds at least the bytes and is allocated at exactly the bytes asked when it is replaced.</summary>
-    Fit,
-    /// <summary>The buffer holds exactly the bytes, replaced whenever a job asks another size.</summary>
-    Exact,
-}
 /// <summary>A slot of the background GPU work a client records one job into (<see cref="ISdfGpuWorkClient.Record"/>),
 /// valid only during that call: its index, which a client's own per-slot resources follow, and its open command
 /// buffer.</summary>
@@ -211,7 +199,7 @@ public readonly ref struct SdfGpuWorkRecording {
     /// keeps what it wrote into a buffer, or the descriptors that name it, compares the object.</returns>
     /// <exception cref="SdfGpuWorkDeferredException">The device has no room for the buffer; the service hands the job
     /// back.</exception>
-    public IGpuStorageBuffer HostBuffer(string part, ulong bytes, GpuBufferUsage usage, SdfGpuWorkSizing sizing = SdfGpuWorkSizing.Granule) =>
+    public IGpuStorageBuffer HostBuffer(string part, ulong bytes, GpuBufferUsage usage, GpuBufferSizing sizing = GpuBufferSizing.Granule) =>
         ((IGpuStorageBuffer)m_owner.Hold(bytes: bytes, client: m_client, hostVisible: true, part: part, readback: false, sizing: sizing, slot: m_slot, usage: usage));
     /// <summary>Returns the slot's device-local buffer for one part of the client's jobs, as
     /// <see cref="HostBuffer"/> returns a host-visible one.</summary>
@@ -222,7 +210,7 @@ public readonly ref struct SdfGpuWorkRecording {
     /// <returns>The buffer, another object than the part's last one whenever it was replaced.</returns>
     /// <exception cref="SdfGpuWorkDeferredException">The device has no room for the buffer; the service hands the job
     /// back.</exception>
-    public IGpuBuffer DeviceBuffer(string part, ulong bytes, GpuBufferUsage usage, SdfGpuWorkSizing sizing = SdfGpuWorkSizing.Granule) =>
+    public IGpuBuffer DeviceBuffer(string part, ulong bytes, GpuBufferUsage usage, GpuBufferSizing sizing = GpuBufferSizing.Granule) =>
         m_owner.Hold(bytes: bytes, client: m_client, hostVisible: false, part: part, readback: false, sizing: sizing, slot: m_slot, usage: usage);
     /// <summary>Records a copy of a buffer's first bytes, which a compute shader wrote, into the slot's readback, which
     /// <see cref="ISdfGpuWorkClient.Complete"/> answers with. A job copies at most once.</summary>
@@ -829,7 +817,7 @@ public sealed class SdfGpuWork : IDisposable {
                 var held = slot.Held[at];
 
                 if ((now - held.WindowStart) < window) { continue; }
-                if ((held.WindowBytes == 0UL) || ((held.Sizing == SdfGpuWorkSizing.Granule) && (held.Buffer.SizeBytes > Granule(bytes: held.WindowBytes)))) {
+                if ((held.WindowBytes == 0UL) || ((held.Sizing == GpuBufferSizing.Granule) && (held.Buffer.SizeBytes > GpuFittedBuffer.AllocationSize(GpuBufferSizing.Granule, 0, held.WindowBytes)))) {
                     Release(held: held);
                     slot.Held.RemoveAt(index: at);
                     continue;
@@ -1112,7 +1100,7 @@ public sealed class SdfGpuWork : IDisposable {
     // The slot's readback, held at a granule's size for a copy of the bytes: what CopyToReadback copies into, reserved
     // ahead by a job that consumes state before its copy.
     internal IGpuReadbackBuffer ReserveReadback(int slot, ulong bytes) =>
-        ((IGpuReadbackBuffer)Hold(bytes: bytes, client: null, hostVisible: true, part: ReadbackPart, readback: true, sizing: SdfGpuWorkSizing.Granule, slot: slot, usage: default));
+        ((IGpuReadbackBuffer)Hold(bytes: bytes, client: null, hostVisible: true, part: ReadbackPart, readback: true, sizing: GpuBufferSizing.Granule, slot: slot, usage: default));
     // Marks that the slot's job recorded something that consumes state (a region's owed words), after which handing the
     // job back would lose it.
     internal void Consume(int slot) => m_slots[slot].Consumed = true;
@@ -1123,7 +1111,7 @@ public sealed class SdfGpuWork : IDisposable {
     // Invariant: a refusal hands back a job that has consumed nothing. A slot whose job consumed state refuses to create
     // any buffer for it (an InvalidOperationException, which faults the service rather than discarding the recording):
     // only a buffer the slot already holds at the size asked comes back.
-    internal IGpuBuffer Hold(int slot, ISdfGpuWorkClient? client, string part, ulong bytes, bool hostVisible, bool readback, GpuBufferUsage usage, SdfGpuWorkSizing sizing) {
+    internal IGpuBuffer Hold(int slot, ISdfGpuWorkClient? client, string part, ulong bytes, bool hostVisible, bool readback, GpuBufferUsage usage, GpuBufferSizing sizing) {
         var held = m_slots[slot].Held;
         var now = m_time.GetTimestamp();
         var at = -1;
@@ -1131,7 +1119,8 @@ public sealed class SdfGpuWork : IDisposable {
         for (var index = 0; (index < held.Count); index++) {
             if (ReferenceEquals(objA: held[index].Client, objB: client) && (held[index].Part == part)) { at = index; break; }
         }
-        if ((at >= 0) && ((sizing == SdfGpuWorkSizing.Exact) ? (held[at].Buffer.SizeBytes == bytes) : (held[at].Buffer.SizeBytes >= bytes))) {
+        var size = GpuFittedBuffer.AllocationSize(sizing, at >= 0 ? held[at].Buffer.SizeBytes : 0, bytes);
+        if (at >= 0 && held[at].Buffer.SizeBytes == size) {
             held[at].WindowBytes = Math.Max(val1: held[at].WindowBytes, val2: Math.Max(val1: bytes, val2: 1UL));
             return held[at].Buffer;
         }
@@ -1142,8 +1131,6 @@ public sealed class SdfGpuWork : IDisposable {
             Release(held: held[at]);
             held.RemoveAt(index: at);
         }
-
-        var size = ((sizing == SdfGpuWorkSizing.Granule) ? Granule(bytes: bytes) : Math.Max(val1: bytes, val2: 1UL));
 
         if ((m_hold is { } hold) && !hold.TryRaise(bytes: ((long)size), forced: false, hostVisible: hostVisible)) {
             // With no room, what the other free slots still hold for jobs to come goes first. Past that a client with
@@ -1217,16 +1204,6 @@ public sealed class SdfGpuWork : IDisposable {
         held.Buffer.Dispose();
         m_hold?.Lower(bytes: bytes, hostVisible: held.HostVisible);
     }
-    /// <summary>Returns the bytes a slot's buffer of at least <paramref name="bytes"/> bytes is allocated at: whole
-    /// granules of 4 MiB, so a client whose jobs grow toward a bound replaces a slot's buffers a few times, never once a
-    /// job, and holds at most a granule more than its largest job.</summary>
-    /// <param name="bytes">The bytes the buffer holds at least.</param>
-    /// <returns>The allocation's bytes.</returns>
-    public static ulong Granule(ulong bytes) {
-        const ulong Bytes = (4UL << 20);
-
-        return Math.Max(val1: bytes, val2: 1UL).AlignUp(alignment: Bytes);
-    }
 
     // What stopped a refill short of a free slot's job that waiting lifts: the budget's credit, the step's share of
     // recording time, or the frame's allowance spent on the jobs in flight.
@@ -1240,7 +1217,7 @@ public sealed class SdfGpuWork : IDisposable {
     }
     // One buffer a slot holds: for a client's part, or the slot's readback (no client), and the window its size is
     // judged over: when it began and the most bytes a job needed of the buffer since.
-    private sealed record HeldBuffer(ISdfGpuWorkClient? Client, string Part, IGpuBuffer Buffer, bool HostVisible, bool Readback, SdfGpuWorkSizing Sizing) {
+    private sealed record HeldBuffer(ISdfGpuWorkClient? Client, string Part, IGpuBuffer Buffer, bool HostVisible, bool Readback, GpuBufferSizing Sizing) {
         public long WindowStart { get; set; }
         public ulong WindowBytes { get; set; }
     }

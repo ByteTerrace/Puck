@@ -1,6 +1,6 @@
 using System.Buffers.Binary;
-using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
+using System.Diagnostics;
 using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Memory;
 using Puck.Maths;
@@ -254,8 +254,8 @@ internal sealed partial class SdfMeshProbeGpuWork {
                 var builds = job.Builds!;
                 var scratchBytes = builds.Max(selector: static build => build.Sizes.ScratchBytes);
                 var sizeBytes = (ulong)builds.Length * sizeof(ulong);
-                var scratch = recording.DeviceBuffer(part: "structure-scratch", bytes: scratchBytes, sizing: SdfGpuWorkSizing.Fit, usage: (GpuBufferUsage.Storage | GpuBufferUsage.AccelerationStructureInput));
-                var sizes = recording.DeviceBuffer(part: "structure-sizes", bytes: sizeBytes, sizing: SdfGpuWorkSizing.Fit, usage: GpuBufferUsage.Storage);
+                var scratch = recording.DeviceBuffer(part: "structure-scratch", bytes: scratchBytes, sizing: GpuBufferSizing.Fit, usage: (GpuBufferUsage.Storage | GpuBufferUsage.AccelerationStructureInput));
+                var sizes = recording.DeviceBuffer(part: "structure-sizes", bytes: sizeBytes, sizing: GpuBufferSizing.Fit, usage: GpuBufferUsage.Storage);
 
                 recording.ReserveReadback(bytes: sizeBytes);
                 for (var index = 0; (index < builds.Length); index++) {
@@ -282,7 +282,7 @@ internal sealed partial class SdfMeshProbeGpuWork {
                 var bottoms = job.Instances!;
                 const int RecordBytes = GpuAccelerationStructureInstance.Bytes;
                 var instanceBytes = (ulong)Math.Max(val1: 1, val2: bottoms.Length) * (ulong)RecordBytes;
-                var instances = recording.HostBuffer(part: "structure-instances", bytes: instanceBytes, sizing: SdfGpuWorkSizing.Fit, usage: (GpuBufferUsage.Storage | GpuBufferUsage.AccelerationStructureInput));
+                var instances = recording.HostBuffer(part: "structure-instances", bytes: instanceBytes, sizing: GpuBufferSizing.Fit, usage: (GpuBufferUsage.Storage | GpuBufferUsage.AccelerationStructureInput));
                 var inputs = GpuAccelerationStructureInputs.Instances(instanceCount: 0U, instanceOffsetBytes: 0UL, source: instances);
                 var records = RentedArrays.Rent<byte>(minimumLength: (int)instanceBytes);
                 var written = 0U;
@@ -302,7 +302,7 @@ internal sealed partial class SdfMeshProbeGpuWork {
 
                 inputs = inputs with { Count = written };
                 var sizes = m_structures!.Size(inputs: in inputs);
-                var scratch = recording.DeviceBuffer(part: "structure-scratch", bytes: Math.Max(val1: 1UL, val2: sizes.ScratchBytes), sizing: SdfGpuWorkSizing.Fit, usage: (GpuBufferUsage.Storage | GpuBufferUsage.AccelerationStructureInput));
+                var scratch = recording.DeviceBuffer(part: "structure-scratch", bytes: Math.Max(val1: 1UL, val2: sizes.ScratchBytes), sizing: GpuBufferSizing.Fit, usage: (GpuBufferUsage.Storage | GpuBufferUsage.AccelerationStructureInput));
                 var structure = CreateStructure(bytes: Math.Max(val1: 1UL, val2: sizes.StructureBytes), level: GpuAccelerationStructureLevel.Top, part: "top");
 
                 job.Created.Add(item: structure);

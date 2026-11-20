@@ -1,4 +1,5 @@
 using System.Numerics;
+using Puck.Abstractions.Memory;
 
 namespace Puck.SdfVm;
 
@@ -31,7 +32,7 @@ public sealed partial class SdfMeshIrradiance {
         var next = new int[count];
         // A probe's saved words are written in Place before the result loop reads them, so the scratch keeps stale words
         // only for probes that read none.
-        GrowScratch(array: ref m_gpuSavedHits, length: (count * SdfMeshProbeDepth.HitWords));
+        ArrayCapacity.EnsureScratch(ref m_gpuSavedHits, count * SdfMeshProbeDepth.HitWords);
         var savedHits = m_gpuSavedHits;
         var indices = new List<int>(count);
         var clearance = SdfMeshIrradianceProbe.Clearance;

@@ -1,6 +1,6 @@
 using System.Runtime.CompilerServices;
 using Puck.Abstractions.Counting;
-using Puck.Maths;
+using Puck.Abstractions.Memory;
 
 namespace Puck.State;
 
@@ -96,13 +96,7 @@ public sealed class ArenaScratch {
         var buffer = pool.Buffers[pool.Depth];
 
         if ((buffer is null) || (buffer.Length < length)) {
-            buffer = new T[Math.Max(
-                val1: 16,
-                val2: ((int)Math.Min(
-                    val1: ((long)Array.MaxLength),
-                    val2: ((long)((uint)length).NextPowerOfTwo())
-                ))
-            )];
+            buffer = new T[ArrayCapacity.Grown(current: (buffer?.Length ?? 0), required: length)];
             pool.Buffers[pool.Depth] = buffer;
         }
 

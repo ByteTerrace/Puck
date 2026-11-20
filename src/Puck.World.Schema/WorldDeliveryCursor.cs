@@ -1,6 +1,7 @@
+using Puck.Abstractions.Memory;
 using Puck.Assets;
-using Puck.Maths;
 using Puck.World.Protocol;
+using Puck.Maths;
 
 namespace Puck.World;
 
@@ -187,7 +188,7 @@ public sealed class WorldDeliveryCursor {
         view.Images.Affected(view, rows, m_affected);
         if (authorityChanged) { for (var row = 0; row < view.Source.AuthoredState.Count; row++) { m_affected.Add(row); } m_operator = view.IsAuthority; }
         foreach (var primer in m_metadataPrimers) { m_affected.Add(index: primer); }
-        if (m_ordered.Length < m_affected.Count) { m_ordered = new int[((uint)m_affected.Count).NextPowerOfTwo()]; }
+        ArrayCapacity.EnsureScratch(ref m_ordered, m_affected.Count);
         var ordered = m_ordered.AsSpan(0, m_affected.Count);
         m_affected.Members.CopyTo(ordered);
         ordered.Sort();

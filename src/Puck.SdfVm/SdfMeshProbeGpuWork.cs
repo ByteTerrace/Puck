@@ -43,12 +43,12 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
     private GpuRegion? m_sceneRegion;
     private IDisposable? m_sceneCarry;
     private GpuRegion? m_feedback;
-    private IGpuBuffer? m_hitCache;
-    private IGpuBuffer? m_cameraSampleCache;
+    private readonly GpuFittedBuffer m_hitCache;
+    private readonly GpuFittedBuffer m_cameraSampleCache;
     // Where a relight batch's jobs copy their results on the device, at each job's first probe: the batch's last job
     // copies every probe's record from it into the feedback volume (RecordCommit), so the batch commits once, after
     // every one of its relights, and no job holds its slot's readback for another to copy from.
-    private IGpuBuffer? m_batchOutput;
+    private readonly GpuFittedBuffer m_batchOutput;
     // Whether a new hit cache's clear, or a new camera-sample cache's fill, is still owed: set as the cache is made and
     // discharged only by the completion of a job that recorded it.
     private bool m_hitCacheOwed;
@@ -86,6 +86,9 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
     internal SdfMeshProbeGpuWork(SdfWorldTables tables, SdfMeshIrradiance volume) {
         m_volume = volume;
         m_gpu = tables.Gpu;
+        m_batchOutput = new(m_gpu.BufferFactory, Name("batch-output"));
+        m_cameraSampleCache = new(m_gpu.BufferFactory, Name("camera-sample-cache"));
+        m_hitCache = new(m_gpu.BufferFactory, Name("hit-cache"), sizing: GpuBufferSizing.Exact);
         m_tables = tables;
         using var scope = new GpuCreationScope();
         var pipeline = tables.Pipeline(SdfKernel.ProbeTrace);
@@ -422,9 +425,9 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
     // fill, the feedback volume's size, the batch output's size), and so runs alone (m_exclusive). Under the gate, as
     // TryTake decides; Record makes the change on the same thread before any other take.
     private bool Exclusive(Job query) {
-        if ((query.HitCapacity != 0) && (m_hitCacheOwed || (m_hitCache?.SizeBytes != HitCacheBytes(capacity: query.HitCapacity)))) { return true; }
-        if (query.CameraSample) { return (m_cameraSampleCacheOwed || (m_cameraSampleCache is null) || (m_cameraSampleCache.SizeBytes < CameraSampleCacheBytes(query: query))); }
-        if (query.Batch is { } batch) { return ((m_feedbackWords != query.VolumeWords) || (m_batchOutput is null) || (m_batchOutput.SizeBytes < BatchOutputBytes(probes: batch.Probes))); }
+        if ((query.HitCapacity != 0) && (m_hitCacheOwed || m_hitCache.NeedsFit(HitCacheBytes(query.HitCapacity)))) { return true; }
+        if (query.CameraSample) { return (m_cameraSampleCacheOwed || m_cameraSampleCache.NeedsFit(CameraSampleCacheBytes(query))); }
+        if (query.Batch is { } batch) { return ((m_feedbackWords != query.VolumeWords) || m_batchOutput.NeedsFit(BatchOutputBytes(batch.Probes))); }
         return false;
     }
     private static ulong HitCacheBytes(uint capacity) => (ulong)capacity * SdfMeshProbeRelight.CacheWords * sizeof(uint);
@@ -456,22 +459,16 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
         // The slot's buffers are the service's, which reserves them: every one the job holds, its readback included, is
         // asked for here, then the client's own caches, before anything consumes state (the feedback region's copy), so a
         // job the device has no room for is handed back whole.
-        var originTable = recording.HostBuffer(part: "origins", bytes: (ulong)query.Origins.Length * 16, usage: GpuBufferUsage.Storage, sizing: SdfGpuWorkSizing.Exact);
-        var hits = recording.DeviceBuffer(part: "hits", bytes: bytes + 4 + partialBytes, usage: GpuBufferUsage.Storage, sizing: SdfGpuWorkSizing.Fit);
-        var identities = recording.DeviceBuffer(part: "identities", bytes: 8, usage: GpuBufferUsage.Storage, sizing: SdfGpuWorkSizing.Fit);
-        var input = compute ? recording.HostBuffer(part: "input", bytes: (ulong)MemoryMarshal.AsBytes(query.Input.Span).Length, usage: GpuBufferUsage.Storage, sizing: SdfGpuWorkSizing.Fit) : null;
-        var lighting = compute ? recording.HostBuffer(part: "lighting", bytes: (ulong)MemoryMarshal.AsBytes(query.Lighting.AsSpan()).Length, usage: GpuBufferUsage.Storage, sizing: SdfGpuWorkSizing.Fit) : null;
-        var work = compute ? recording.DeviceBuffer(part: "work", bytes: (ulong)(query.Origins.Length + 3) * 4, usage: GpuBufferUsage.Storage | GpuBufferUsage.Indirect, sizing: SdfGpuWorkSizing.Fit) : null;
+        var originTable = recording.HostBuffer(part: "origins", bytes: (ulong)query.Origins.Length * 16, usage: GpuBufferUsage.Storage, sizing: GpuBufferSizing.Exact);
+        var hits = recording.DeviceBuffer(part: "hits", bytes: bytes + 4 + partialBytes, usage: GpuBufferUsage.Storage, sizing: GpuBufferSizing.Fit);
+        var identities = recording.DeviceBuffer(part: "identities", bytes: 8, usage: GpuBufferUsage.Storage, sizing: GpuBufferSizing.Fit);
+        var input = compute ? recording.HostBuffer(part: "input", bytes: (ulong)MemoryMarshal.AsBytes(query.Input.Span).Length, usage: GpuBufferUsage.Storage, sizing: GpuBufferSizing.Fit) : null;
+        var lighting = compute ? recording.HostBuffer(part: "lighting", bytes: (ulong)MemoryMarshal.AsBytes(query.Lighting.AsSpan()).Length, usage: GpuBufferUsage.Storage, sizing: GpuBufferSizing.Fit) : null;
+        var work = compute ? recording.DeviceBuffer(part: "work", bytes: (ulong)(query.Origins.Length + 3) * 4, usage: GpuBufferUsage.Storage | GpuBufferUsage.Indirect, sizing: GpuBufferSizing.Fit) : null;
         recording.ReserveReadback(bytes: bytes + 4);
         var command = recording.CommandBuffer;
         if (query.CameraSample) {
-            var cacheBytes = CameraSampleCacheBytes(query: query);
-            if (m_cameraSampleCache is null || m_cameraSampleCache.SizeBytes < cacheBytes) {
-                m_cameraSampleCache?.Dispose();
-                m_cameraSampleCache = null;
-                m_cameraSampleCache = m_gpu.BufferFactory.CreateDeviceLocal(name: Name(part: "camera-sample-cache"), sizeBytes: cacheBytes, usage: GpuBufferUsage.Storage);
-                m_cameraSampleCacheOwed = true;
-            }
+            m_cameraSampleCacheOwed |= m_cameraSampleCache.Fit(CameraSampleCacheBytes(query));
             // A new cache holds nothing until a camera-sample job that fills it completes (Complete), so until then every job
             // fills it: one handed back unsubmitted leaves the fill owed.
             if (m_cameraSampleCacheOwed) {
@@ -481,7 +478,7 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
             }
         }
         if (query.HitCapacity != 0) { FitHitCache(query, query.HitCapacity, command); }
-        if (query.Batch is { } batch) { FitBatchOutput(probes: batch.Probes); }
+        if (query.Batch is { } batch) { m_batchOutput.Fit(BatchOutputBytes(batch.Probes)); }
         originTable.Write<Vector4>(query.Origins.Span);
         // The job stages the feedback volume's owed words through its own slot's staging buffer, which no submission in
         // flight reads once the service hands the slot to this job.
@@ -499,8 +496,8 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
             Bind(SdfWorldPackage.MeshIrradiance, m_feedback?.Buffer(0) ?? m_tables.DummyBuffer, 4);
             Bind(SdfKernelInterfaces.ProbeWorkWritten, work!, 4, written: true);
             Bind(SdfKernelInterfaces.ProbeWork, work!, 4);
-            Bind(SdfKernelInterfaces.ProbeCacheWritten, query.CameraSample ? m_cameraSampleCache! : m_hitCache!, 4, written: true);
-            Bind(SdfKernelInterfaces.ProbeCache, query.CameraSample ? m_cameraSampleCache! : m_hitCache!, 4);
+            Bind(SdfKernelInterfaces.ProbeCacheWritten, query.CameraSample ? m_cameraSampleCache.Buffer! : m_hitCache.Buffer!, 4, written: true);
+            Bind(SdfKernelInterfaces.ProbeCache, query.CameraSample ? m_cameraSampleCache.Buffer! : m_hitCache.Buffer!, 4);
         } else { Bind(SdfKernelInterfaces.ProbeIdentitiesWritten, identities, 8, written: true); }
         if (top is not null) {
             m_structures!.WriteDescriptor(binding: SdfKernelInterfaces.ResourceOf(raysLayout, SdfKernelInterfaces.ProbeStructure).Binding, descriptorSetHandle: raysSet, structure: top.Structure);
@@ -518,12 +515,12 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
             sourceAccessMask: GpuAccess.ShaderWrite, sourceStageMask: GpuStage.ComputeShader,
             destinationAccessMask: GpuAccess.ShaderWrite, destinationStageMask: GpuStage.ComputeShader);
         if (query.CameraSample) {
-            recorder.TransitionBuffer(commandBufferHandle: command, bufferHandle: m_cameraSampleCache!.BufferHandle,
+            recorder.TransitionBuffer(commandBufferHandle: command, bufferHandle: m_cameraSampleCache.Buffer!.BufferHandle,
                 sourceAccessMask: GpuAccess.ShaderWrite, sourceStageMask: GpuStage.ComputeShader,
                 destinationAccessMask: GpuAccess.ShaderRead | GpuAccess.ShaderWrite, destinationStageMask: GpuStage.ComputeShader);
         }
         if (relight) {
-            recorder.TransitionBuffer(commandBufferHandle: command, bufferHandle: m_hitCache!.BufferHandle,
+            recorder.TransitionBuffer(commandBufferHandle: command, bufferHandle: m_hitCache.Buffer!.BufferHandle,
                 sourceAccessMask: GpuAccess.ShaderRead, sourceStageMask: GpuStage.ComputeShader,
                 destinationAccessMask: GpuAccess.ShaderWrite, destinationStageMask: GpuStage.ComputeShader);
             var cache = m_tables.Pipeline(SdfKernel.ProbeCache);
@@ -533,7 +530,7 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
             recorder.TransitionBuffer(commandBufferHandle: command, bufferHandle: hits.BufferHandle,
                 sourceAccessMask: GpuAccess.ShaderWrite, sourceStageMask: GpuStage.ComputeShader,
                 destinationAccessMask: GpuAccess.ShaderRead | GpuAccess.ShaderWrite, destinationStageMask: GpuStage.ComputeShader);
-            recorder.TransitionBuffer(commandBufferHandle: command, bufferHandle: m_hitCache.BufferHandle,
+            recorder.TransitionBuffer(commandBufferHandle: command, bufferHandle: m_hitCache.Buffer!.BufferHandle,
                 sourceAccessMask: GpuAccess.ShaderWrite, sourceStageMask: GpuStage.ComputeShader,
                 destinationAccessMask: GpuAccess.ShaderRead, destinationStageMask: GpuStage.ComputeShader);
             recorder.TransitionBuffer(commandBufferHandle: command, bufferHandle: work!.BufferHandle,
@@ -566,7 +563,7 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
         if (!query.CacheSlots.IsEmpty) {
             // The readback left the hits a transfer source; each origin's hits land behind its cache slot's two token
             // words, which the adopting relight's cache pass stamps.
-            var cache = m_hitCache!;
+            var cache = m_hitCache.Buffer!;
             var cacheSlots = query.CacheSlots.Span;
             recorder.TransitionBuffer(commandBufferHandle: command, bufferHandle: cache.BufferHandle,
                 sourceAccessMask: GpuAccess.ShaderRead, sourceStageMask: GpuStage.ComputeShader,
@@ -583,7 +580,7 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
         if (query.Batch is not null) {
             // The readback left the results a transfer source too. The batch output rests as a transfer source between
             // jobs, so the batch's last job reads every earlier job's rows after the barrier that ended each copy.
-            var output = m_batchOutput!;
+            var output = m_batchOutput.Buffer!;
             recorder.TransitionBuffer(commandBufferHandle: command, bufferHandle: output.BufferHandle,
                 sourceAccessMask: GpuAccess.TransferRead, sourceStageMask: GpuStage.Transfer,
                 destinationAccessMask: GpuAccess.CopyWrite, destinationStageMask: GpuStage.Transfer);
@@ -612,40 +609,25 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
     // recorded it completes (Complete): a job handed back unsubmitted discarded it, and the next job clears again.
     private void FitHitCache(Job query, uint capacity, nint command) {
         var bytes = HitCacheBytes(capacity: capacity);
-        if (m_hitCache?.SizeBytes != bytes) {
-            m_hitCache?.Dispose();
-            m_hitCache = null;
-            m_hitCache = m_gpu.BufferFactory.CreateDeviceLocal(name: Name(part: "hit-cache"), sizeBytes: bytes, usage: GpuBufferUsage.Storage);
-            m_hitCacheOwed = true;
-        }
+        m_hitCacheOwed |= m_hitCache.Fit(bytes);
         if (!m_hitCacheOwed) { return; }
         query.ClearsHitCache = true;
         var recorder = m_gpu.Recorder;
-        recorder.TransitionBuffer(commandBufferHandle: command, bufferHandle: m_hitCache.BufferHandle,
+        recorder.TransitionBuffer(commandBufferHandle: command, bufferHandle: m_hitCache.Buffer!.BufferHandle,
             sourceAccessMask: GpuAccess.None, sourceStageMask: GpuStage.TopOfPipe,
             destinationAccessMask: GpuAccess.TransferWrite, destinationStageMask: GpuStage.Transfer);
-        recorder.ClearStorageBuffer(commandBufferHandle: command, bufferHandle: m_hitCache.BufferHandle, sizeBytes: bytes);
-        recorder.TransitionBuffer(commandBufferHandle: command, bufferHandle: m_hitCache.BufferHandle,
+        recorder.ClearStorageBuffer(commandBufferHandle: command, bufferHandle: m_hitCache.Buffer!.BufferHandle, sizeBytes: bytes);
+        recorder.TransitionBuffer(commandBufferHandle: command, bufferHandle: m_hitCache.Buffer!.BufferHandle,
             sourceAccessMask: GpuAccess.TransferWrite, sourceStageMask: GpuStage.Transfer,
             destinationAccessMask: GpuAccess.ShaderRead, destinationStageMask: GpuStage.ComputeShader);
     }
 
-    // Grows the batch output to hold a batch's results. A job that grows it is exclusive (TryTake), so no recorded work
-    // reads the buffer it replaces.
-    private void FitBatchOutput(int probes) {
-        var bytes = BatchOutputBytes(probes: probes);
-
-        if ((m_batchOutput is not null) && (m_batchOutput.SizeBytes >= bytes)) { return; }
-        m_batchOutput?.Dispose();
-        m_batchOutput = null;
-        m_batchOutput = m_gpu.BufferFactory.CreateDeviceLocal(name: Name(part: "batch-output"), sizeBytes: bytes, usage: GpuBufferUsage.Storage);
-    }
 
     // Copies every probe's published record of the batch from the batch output into the feedback volume at its
     // destination slot: one copy a probe, after every relight of the batch, which wrote its rows in this or an earlier
     // submission.
     private void RecordCommit(Job query, IGpuRecorder recorder, nint command) {
-        var source = m_batchOutput!;
+        var source = m_batchOutput.Buffer!;
         var destination = FeedbackBuffer;
         recorder.TransitionBuffer(commandBufferHandle: command, bufferHandle: destination.BufferHandle,
             sourceAccessMask: GpuAccess.ShaderRead | GpuAccess.TransferRead, sourceStageMask: GpuStage.ComputeShader | GpuStage.Transfer,
@@ -818,7 +800,7 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
             var device = bytes.DeviceLocal;
             var host = bytes.HostVisible + m_directions.SizeBytes + m_zero.SizeBytes;
             device += m_feedback?.OwnedBytes.DeviceLocal ?? 0;
-            device += (m_hitCache?.SizeBytes ?? 0) + (m_cameraSampleCache?.SizeBytes ?? 0) + (m_batchOutput?.SizeBytes ?? 0) + (ulong)Math.Max(val1: 0L, val2: Volatile.Read(location: ref m_structureBytes));
+            device += (m_hitCache.Buffer?.SizeBytes ?? 0) + (m_cameraSampleCache.Buffer?.SizeBytes ?? 0) + (m_batchOutput.Buffer?.SizeBytes ?? 0) + (ulong)Math.Max(val1: 0L, val2: Volatile.Read(location: ref m_structureBytes));
             host += m_feedback?.OwnedBytes.HostVisible ?? 0;
             return new GpuMemoryBytes(DeviceLocal: device, HostVisible: host);
         }
@@ -826,7 +808,7 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
     internal string DescribeMemory() {
         var scene = m_sceneRegion?.OwnedBytes ?? default;
         var feedback = m_feedback?.OwnedBytes ?? default;
-        return FormattableString.Invariant($"trace-scene-device-bytes={scene.DeviceLocal} trace-scene-upload-bytes={scene.HostVisible} trace-scene-shadow-bytes={m_sceneRegion?.ShadowBytes ?? 0} trace-scene-changes={m_sceneUploads} trace-scene-adoptions={m_sceneAdoptions} trace-scene-written-bytes={m_sceneWrittenBytes} trace-scene-last-change-bytes={m_sceneLastBytes} trace-hits-device-bytes={m_hitCache?.SizeBytes ?? 0} trace-batch-output-device-bytes={m_batchOutput?.SizeBytes ?? 0} trace-feedback-device-bytes={feedback.DeviceLocal} trace-feedback-upload-bytes={feedback.HostVisible} trace-feedback-shadow-bytes={m_feedback?.ShadowBytes ?? 0} {DescribeJobs()} {DescribeStructures()}");
+        return FormattableString.Invariant($"trace-scene-device-bytes={scene.DeviceLocal} trace-scene-upload-bytes={scene.HostVisible} trace-scene-shadow-bytes={m_sceneRegion?.ShadowBytes ?? 0} trace-scene-changes={m_sceneUploads} trace-scene-adoptions={m_sceneAdoptions} trace-scene-written-bytes={m_sceneWrittenBytes} trace-scene-last-change-bytes={m_sceneLastBytes} trace-hits-device-bytes={m_hitCache.Buffer?.SizeBytes ?? 0} trace-batch-output-device-bytes={m_batchOutput.Buffer?.SizeBytes ?? 0} trace-feedback-device-bytes={feedback.DeviceLocal} trace-feedback-upload-bytes={feedback.HostVisible} trace-feedback-shadow-bytes={m_feedback?.ShadowBytes ?? 0} {DescribeJobs()} {DescribeStructures()}");
     }
     public void Stop() {
         lock (m_gate) {
@@ -841,9 +823,9 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
         m_disposed = true;
         m_sceneUpload?.Dispose();
         m_feedback?.Dispose();
-        m_hitCache?.Dispose();
-        m_cameraSampleCache?.Dispose();
-        m_batchOutput?.Dispose();
+        m_hitCache.Dispose();
+        m_cameraSampleCache.Dispose();
+        m_batchOutput.Dispose();
         m_sceneRegion?.Dispose();
         m_sceneCarry?.Dispose();
         m_scene?.Dispose();

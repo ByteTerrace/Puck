@@ -1,5 +1,6 @@
 using System.Buffers.Binary;
 using Puck.Abstractions.Gpu;
+using Puck.Abstractions.Memory;
 using Puck.Maths;
 using Puck.Shaders;
 
@@ -37,18 +38,17 @@ internal sealed class SdfMeshOcclusion : IDisposable {
     // The most shares one staged draw list splits into (Stage): eight bits of the controls' fourth word.
     public const int MaxSlices = 256;
 
-    private readonly IGpuBufferFactory m_buffers;
     private readonly string m_owner;
     private readonly string m_part;
-    private readonly IGpuStorageBuffer?[] m_candidates;
+    private readonly GpuFittedBuffer[] m_candidates;
     private readonly List<IGpuBuffer>[] m_retired;
     private readonly byte[] m_pushed = new byte[GpuPipelineLayoutDescription.PushIndexBytes];
 
-    private IGpuBuffer? m_visible;
+    private readonly GpuFittedBuffer m_visible;
     private IGpuBuffer? m_seedVisible;
-    private IGpuBuffer? m_draws;
-    private IGpuBuffer? m_counts;
-    private IGpuBuffer? m_depth;
+    private readonly GpuFittedBuffer m_draws;
+    private readonly GpuFittedBuffer m_counts;
+    private readonly GpuFittedBuffer m_depth;
     private bool m_visibleCleared;
     private SdfWorldTables? m_historyOwner;
     private uint m_capacity;
@@ -76,7 +76,7 @@ internal sealed class SdfMeshOcclusion : IDisposable {
 
     private sealed class ReadbackSlot {
         internal readonly SdfPortalSight.Query?[] Queries = new SdfPortalSight.Query?[SdfPortalSight.Capacity];
-        internal IGpuReadbackBuffer? Buffer;
+        internal required GpuFittedBuffer Buffer;
         internal long Epoch;
         internal bool Sight;
         internal bool Marks;
@@ -89,13 +89,20 @@ internal sealed class SdfMeshOcclusion : IDisposable {
     // Creates a view's occlusion state; every buffer is created on the first frame that needs it.
     public SdfMeshOcclusion(IGpuBufferFactory buffers, int slots, string owner, string part, uint argumentPhases, SdfPortalSight? sight = null) {
         m_argumentPhases = argumentPhases;
-        m_buffers = buffers;
-        m_candidates = new IGpuStorageBuffer?[slots];
         m_retired = Enumerable.Range(count: slots, start: 0).Select(selector: static _ => new List<IGpuBuffer>()).ToArray();
         m_owner = owner;
         m_part = part;
         m_sight = sight;
-        m_readbackSlots = Enumerable.Range(0, slots).Select(static _ => new ReadbackSlot()).ToArray();
+        void Retire(IGpuBuffer buffer) => m_retired[m_slot].Add(buffer);
+        m_candidates = Enumerable.Range(0, slots).Select(slot => new GpuFittedBuffer(
+            bytes => buffers.CreateHostVisible(bytes, GpuBufferUsage.Storage, Name("occlusion candidates", slot)))).ToArray();
+        m_readbackSlots = Enumerable.Range(0, slots).Select(slot => new ReadbackSlot {
+            Buffer = new(bytes => buffers.CreateReadback(bytes, Name("selection readback", slot)), retire: Retire),
+        }).ToArray();
+        m_visible = new(buffers, Name("occlusion visible"), sizing: GpuBufferSizing.Fit, retire: Retire);
+        m_draws = new(buffers, Name("occlusion draws"), GpuBufferUsage.Storage | GpuBufferUsage.Indirect, GpuBufferSizing.Fit, Retire);
+        m_counts = new(buffers, Name("occlusion counts"), GpuBufferUsage.Storage | GpuBufferUsage.Indirect, retire: Retire);
+        m_depth = new(buffers, Name("occlusion depth"), retire: Retire);
         m_readbacks = new RenderGraphSlotResults<ReadbackSlot>(slots: slots, complete: ReadCounts);
         sight?.Attach(this);
     }
@@ -124,11 +131,11 @@ internal sealed class SdfMeshOcclusion : IDisposable {
     private void ReadCounts(ReadbackSlot slot) {
         var words = ((int)(slot.Bytes / sizeof(uint)));
 
-        if (m_readWords.Length < words) { m_readWords = new uint[words]; }
+        ArrayCapacity.EnsureScratch(ref m_readWords, words);
 
         var read = m_readWords.AsSpan(length: words, start: 0);
 
-        slot.Buffer!.Read(System.Runtime.InteropServices.MemoryMarshal.AsBytes(span: read));
+        ((IGpuReadbackBuffer)slot.Buffer.Buffer!).Read(System.Runtime.InteropServices.MemoryMarshal.AsBytes(span: read));
         if (slot.Sight) { m_sight!.Complete(slot.Epoch, slot.Queries, read.Slice(start: SdfKernelInterfaces.MeshSightCountBase, length: SdfPortalSight.Capacity)); }
         if (slot.Marks) { slot.Tables?.ObserveSelectionMarks(draws: slot.Draws, epoch: slot.RowEpoch, marks: read[SdfKernelInterfaces.MeshMarkBase..], source: this); }
     }
@@ -187,16 +194,16 @@ internal sealed class SdfMeshOcclusion : IDisposable {
             m_seedVisible = null;
             m_visibleCleared = false;
         }
-        m_candidates[slot]!.Write(data: words);
+        ((IGpuStorageBuffer)m_candidates[slot].Buffer!).Write(data: words);
     }
     // Writes the occlusion's members of the mesh interface into a mesh set: the frame slot's candidates, the visible set,
     // both phases' draws and counts, the pyramid and the view's mesh target, each only when the set binds another.
     public void Bind(SdfWorldTables tables, nint set, IGpuBuffer?[] bound, int first, ref nint boundTarget, nint target) {
-        tables.WriteMeshBuffer(bound: ref bound[(first + 0)], buffer: m_candidates[m_slot]!, member: SdfKernelInterfaces.MeshOcclusionCandidates, set: set);
-        tables.WriteMeshBuffer(bound: ref bound[(first + 1)], buffer: m_visible!, member: SdfKernelInterfaces.MeshOcclusionVisibleWritten, set: set);
-        tables.WriteMeshBuffer(bound: ref bound[(first + 2)], buffer: m_draws!, member: SdfKernelInterfaces.MeshOcclusionDrawsWritten, set: set);
-        tables.WriteMeshBuffer(bound: ref bound[(first + 3)], buffer: m_counts!, member: SdfKernelInterfaces.MeshOcclusionCountsWritten, set: set);
-        tables.WriteMeshBuffer(bound: ref bound[(first + 4)], buffer: (m_depth ?? tables.DummyBuffer), member: SdfKernelInterfaces.MeshOcclusionDepthWritten, set: set);
+        tables.WriteMeshBuffer(bound: ref bound[(first + 0)], buffer: m_candidates[m_slot].Buffer!, member: SdfKernelInterfaces.MeshOcclusionCandidates, set: set);
+        tables.WriteMeshBuffer(bound: ref bound[(first + 1)], buffer: m_visible.Buffer!, member: SdfKernelInterfaces.MeshOcclusionVisibleWritten, set: set);
+        tables.WriteMeshBuffer(bound: ref bound[(first + 2)], buffer: m_draws.Buffer!, member: SdfKernelInterfaces.MeshOcclusionDrawsWritten, set: set);
+        tables.WriteMeshBuffer(bound: ref bound[(first + 3)], buffer: m_counts.Buffer!, member: SdfKernelInterfaces.MeshOcclusionCountsWritten, set: set);
+        tables.WriteMeshBuffer(bound: ref bound[(first + 4)], buffer: (m_depth.Buffer ?? tables.DummyBuffer), member: SdfKernelInterfaces.MeshOcclusionDepthWritten, set: set);
         tables.WriteMeshBuffer(bound: ref bound[(first + 5)], buffer: tables.DummyBuffer, member: SdfKernelInterfaces.MeshIndirectCommands, set: set);
         tables.WriteMeshTarget(bound: ref boundTarget, set: set, view: target);
     }
@@ -211,7 +218,7 @@ internal sealed class SdfMeshOcclusion : IDisposable {
     }
     // The raster set reads the exact command identity on Vulkan; no optional first-instance feature is needed.
     public void BindDraws(SdfWorldTables tables, nint set, IGpuBuffer?[] bound) =>
-        tables.WriteMeshBuffer(bound: ref bound[5], buffer: m_draws!, member: SdfKernelInterfaces.MeshIndirectCommands, set: set);
+        tables.WriteMeshBuffer(bound: ref bound[5], buffer: m_draws.Buffer!, member: SdfKernelInterfaces.MeshIndirectCommands, set: set);
     // Records selection before rasterization: clear counts, choose kept draws and their levels, then emit the first
     // phase (the previous visible set for opaque occlusion, every kept draw otherwise). The barrier orders prior draws, test and
     // pyramid before this frame's writes, as the buffers are the view's across frames.
@@ -223,39 +230,39 @@ internal sealed class SdfMeshOcclusion : IDisposable {
             sourceAccessMask: GpuAccess.ShaderRead | GpuAccess.ShaderWrite | GpuAccess.IndirectCommandRead,
             sourceStageMask: GpuStage.ComputeShader | GpuStage.VertexShader | GpuStage.DrawIndirect
         );
-        recorder.ClearStorageBuffer(commandBufferHandle: commandBuffer, bufferHandle: m_counts!.BufferHandle, sizeBytes: m_counts.SizeBytes);
-        Ready(buffer: m_counts, commandBuffer: commandBuffer, recorder: recorder, source: GpuAccess.TransferWrite, sourceStage: GpuStage.Transfer);
+        recorder.ClearStorageBuffer(commandBufferHandle: commandBuffer, bufferHandle: m_counts.Buffer!.BufferHandle, sizeBytes: m_counts.Buffer!.SizeBytes);
+        Ready(buffer: m_counts.Buffer!, commandBuffer: commandBuffer, recorder: recorder, source: GpuAccess.TransferWrite, sourceStage: GpuStage.Transfer);
 
         if (!m_visibleCleared) {
             var copied = (m_seedVisible is not null);
 
-            recorder.ClearStorageBuffer(commandBufferHandle: commandBuffer, bufferHandle: m_visible!.BufferHandle, sizeBytes: m_visible.SizeBytes);
+            recorder.ClearStorageBuffer(commandBufferHandle: commandBuffer, bufferHandle: m_visible.Buffer!.BufferHandle, sizeBytes: m_visible.Buffer!.SizeBytes);
             if (m_seedVisible is { } previous) {
                 // The old buffer's only use in this recording is the copy, and the global barrier above makes its
                 // prior compute writes visible to transfer reads on both backends; it needs no transition of its own.
-                recorder.TransitionBuffer(commandBufferHandle: commandBuffer, bufferHandle: m_visible.BufferHandle,
+                recorder.TransitionBuffer(commandBufferHandle: commandBuffer, bufferHandle: m_visible.Buffer!.BufferHandle,
                     sourceAccessMask: GpuAccess.TransferWrite, sourceStageMask: GpuStage.Transfer,
                     destinationAccessMask: GpuAccess.CopyWrite, destinationStageMask: GpuStage.Transfer);
                 recorder.CopyBuffer(commandBufferHandle: commandBuffer, sourceBufferHandle: previous.BufferHandle,
-                    destinationBufferHandle: m_visible.BufferHandle, sizeBytes: previous.SizeBytes);
+                    destinationBufferHandle: m_visible.Buffer!.BufferHandle, sizeBytes: previous.SizeBytes);
                 m_seedVisible = null;
             }
-            Ready(buffer: m_visible, commandBuffer: commandBuffer, recorder: recorder, source: (copied ? GpuAccess.CopyWrite : GpuAccess.TransferWrite), sourceStage: GpuStage.Transfer);
+            Ready(buffer: m_visible.Buffer!, commandBuffer: commandBuffer, recorder: recorder, source: (copied ? GpuAccess.CopyWrite : GpuAccess.TransferWrite), sourceStage: GpuStage.Transfer);
             m_visibleCleared = true;
         }
 
         Bind(commandBuffer: commandBuffer, pipeline: pipeline, recorder: recorder, set: set);
         if (m_receivers) {
             // The receiver set samples current camera depth before any cascade attachment is drawn.
-            recorder.ClearStorageBuffer(commandBufferHandle: commandBuffer, bufferHandle: m_depth!.BufferHandle, sizeBytes: m_depth.SizeBytes);
-            Ready(buffer: m_depth, commandBuffer: commandBuffer, recorder: recorder, source: GpuAccess.TransferWrite, sourceStage: GpuStage.Transfer);
+            recorder.ClearStorageBuffer(commandBufferHandle: commandBuffer, bufferHandle: m_depth.Buffer!.BufferHandle, sizeBytes: m_depth.Buffer!.SizeBytes);
+            Ready(buffer: m_depth.Buffer!, commandBuffer: commandBuffer, recorder: recorder, source: GpuAccess.TransferWrite, sourceStage: GpuStage.Transfer);
             Dispatch(commandBuffer: commandBuffer, invocations: m_receiverWidth * m_receiverHeight, level: 0, pipeline: pipeline, recorder: recorder, step: SdfKernelInterfaces.MeshReceiverStep);
-            Ready(buffer: m_depth, commandBuffer: commandBuffer, recorder: recorder, source: GpuAccess.ShaderWrite, sourceStage: GpuStage.ComputeShader);
+            Ready(buffer: m_depth.Buffer!, commandBuffer: commandBuffer, recorder: recorder, source: GpuAccess.ShaderWrite, sourceStage: GpuStage.ComputeShader);
             var width = Extent(m_width, SdfKernelInterfaces.MeshReceiverShift);
             var height = Extent(m_height, SdfKernelInterfaces.MeshReceiverShift);
             for (var level = 1u; level <= LevelsOf(width, height); level++) {
                 Dispatch(commandBuffer: commandBuffer, invocations: Extent(width, level) * Extent(height, level), level: level, pipeline: pipeline, recorder: recorder, step: SdfKernelInterfaces.MeshReceiverReduceStep);
-                Ready(buffer: m_depth, commandBuffer: commandBuffer, recorder: recorder, source: GpuAccess.ShaderWrite, sourceStage: GpuStage.ComputeShader);
+                Ready(buffer: m_depth.Buffer!, commandBuffer: commandBuffer, recorder: recorder, source: GpuAccess.ShaderWrite, sourceStage: GpuStage.ComputeShader);
             }
         }
         Dispatch(commandBuffer: commandBuffer, invocations: m_count, level: 0u, pipeline: pipeline, recorder: recorder, step: SdfKernelInterfaces.MeshOcclusionEarlyStep);
@@ -270,15 +277,10 @@ internal sealed class SdfMeshOcclusion : IDisposable {
         var slot = m_readbackSlots[m_slot];
         var bytes = (m_marking ? MarkedBytes(draws: m_count) : CountsBytes);
 
-        if ((slot.Buffer is null) || (slot.Buffer.SizeBytes < bytes)) {
-            // A readback the slot's last submission copied into retires with the slot's next completion.
-            if (slot.Buffer is { } previous) { m_retired[m_slot].Add(item: previous); }
-            slot.Buffer = null;
-            slot.Buffer = m_buffers.CreateReadback(sizeBytes: Math.Max(val1: bytes, val2: CountsBytes), name: Name("selection readback", m_slot));
-        }
-        GpuReadbackCopy.Record(commandBuffer: commandBuffer, destination: slot.Buffer, recorder: recorder, sizeBytes: bytes,
-            source: m_counts!, sourceAccess: GpuAccess.ShaderWrite, sourceStage: GpuStage.ComputeShader);
-        Ready(buffer: m_counts!, commandBuffer: commandBuffer, recorder: recorder, source: GpuAccess.TransferRead, sourceStage: GpuStage.Transfer);
+        slot.Buffer.Fit(Math.Max(bytes, CountsBytes));
+        GpuReadbackCopy.Record(commandBuffer: commandBuffer, destination: (IGpuReadbackBuffer)slot.Buffer.Buffer!, recorder: recorder, sizeBytes: bytes,
+            source: m_counts.Buffer!, sourceAccess: GpuAccess.ShaderWrite, sourceStage: GpuStage.ComputeShader);
+        Ready(buffer: m_counts.Buffer!, commandBuffer: commandBuffer, recorder: recorder, source: GpuAccess.TransferRead, sourceStage: GpuStage.Transfer);
         slot.Sight = sight;
         slot.Marks = m_marking;
         slot.Bytes = bytes;
@@ -304,10 +306,10 @@ internal sealed class SdfMeshOcclusion : IDisposable {
             stageFlags: SdfWorldTables.PipelineLayouts.MeshStages
         );
         recorder.DrawIndirectCount(
-            argumentBufferHandle: m_draws!.BufferHandle,
+            argumentBufferHandle: m_draws.Buffer!.BufferHandle,
             argumentBufferOffset: ((((ulong)phase) * m_capacity) * GpuDrawIndirectCommand.StrideBytes),
             commandBufferHandle: commandBuffer,
-            countBufferHandle: m_counts!.BufferHandle,
+            countBufferHandle: m_counts.Buffer!.BufferHandle,
             countBufferOffset: (((ulong)phase) * sizeof(uint)),
             maxDrawCount: m_count,
             pipelineLayoutHandle: pipeline.LayoutHandle
@@ -329,23 +331,23 @@ internal sealed class SdfMeshOcclusion : IDisposable {
         );
         Bind(commandBuffer: commandBuffer, pipeline: pipeline, recorder: recorder, set: set);
 
-        Ready(buffer: m_depth!, commandBuffer: commandBuffer, recorder: recorder, source: GpuAccess.ShaderRead | GpuAccess.ShaderWrite, sourceStage: GpuStage.ComputeShader);
+        Ready(buffer: m_depth.Buffer!, commandBuffer: commandBuffer, recorder: recorder, source: GpuAccess.ShaderRead | GpuAccess.ShaderWrite, sourceStage: GpuStage.ComputeShader);
         for (var level = 1u; (level <= m_levels); level++) {
             var width = Extent(level: level, size: m_width);
             var height = Extent(level: level, size: m_height);
 
             Dispatch(commandBuffer: commandBuffer, invocations: (width * height), level: level, pipeline: pipeline, recorder: recorder, step: SdfKernelInterfaces.MeshOcclusionDepthStep);
-            Ready(buffer: m_depth!, commandBuffer: commandBuffer, recorder: recorder, source: GpuAccess.ShaderWrite, sourceStage: GpuStage.ComputeShader);
+            Ready(buffer: m_depth.Buffer!, commandBuffer: commandBuffer, recorder: recorder, source: GpuAccess.ShaderWrite, sourceStage: GpuStage.ComputeShader);
         }
 
-        Ready(buffer: m_visible!, commandBuffer: commandBuffer, recorder: recorder, source: GpuAccess.ShaderRead | GpuAccess.ShaderWrite, sourceStage: GpuStage.ComputeShader);
+        Ready(buffer: m_visible.Buffer!, commandBuffer: commandBuffer, recorder: recorder, source: GpuAccess.ShaderRead | GpuAccess.ShaderWrite, sourceStage: GpuStage.ComputeShader);
         recorder.BeginBarriers(commandBufferHandle: commandBuffer);
-        Ready(buffer: m_draws!, commandBuffer: commandBuffer, recorder: recorder, source: GpuAccess.IndirectCommandRead | GpuAccess.ShaderRead, sourceStage: GpuStage.DrawIndirect | GpuStage.VertexShader);
-        Ready(buffer: m_counts!, commandBuffer: commandBuffer, recorder: recorder, source: GpuAccess.IndirectCommandRead, sourceStage: GpuStage.DrawIndirect);
+        Ready(buffer: m_draws.Buffer!, commandBuffer: commandBuffer, recorder: recorder, source: GpuAccess.IndirectCommandRead | GpuAccess.ShaderRead, sourceStage: GpuStage.DrawIndirect | GpuStage.VertexShader);
+        Ready(buffer: m_counts.Buffer!, commandBuffer: commandBuffer, recorder: recorder, source: GpuAccess.IndirectCommandRead, sourceStage: GpuStage.DrawIndirect);
         recorder.EndBarriers(commandBufferHandle: commandBuffer);
         Dispatch(commandBuffer: commandBuffer, invocations: m_count, level: 0u, pipeline: pipeline, recorder: recorder, step: SdfKernelInterfaces.MeshOcclusionLateStep);
         if (m_sight is not null) {
-            Ready(buffer: m_counts!, commandBuffer: commandBuffer, recorder: recorder, source: GpuAccess.ShaderWrite, sourceStage: GpuStage.ComputeShader);
+            Ready(buffer: m_counts.Buffer!, commandBuffer: commandBuffer, recorder: recorder, source: GpuAccess.ShaderWrite, sourceStage: GpuStage.ComputeShader);
             Dispatch(commandBuffer: commandBuffer, invocations: SdfPortalSight.Capacity, level: 0u, pipeline: pipeline, recorder: recorder, step: SdfKernelInterfaces.MeshOcclusionSightStep);
         }
         RecordReadback(commandBuffer: commandBuffer, recorder: recorder, sight: (m_sight is not null));
@@ -364,15 +366,15 @@ internal sealed class SdfMeshOcclusion : IDisposable {
     public void Dispose() {
         m_sight?.Detach(this);
         m_historyOwner?.ForgetSelectionMarks(source: this);
-        foreach (var slot in m_readbackSlots) { slot.Buffer?.Dispose(); }
+        foreach (var slot in m_readbackSlots) { slot.Buffer.Dispose(); }
         foreach (var candidates in m_candidates) {
-            candidates?.Dispose();
+            candidates.Dispose();
         }
 
-        m_visible?.Dispose();
-        m_draws?.Dispose();
-        m_counts?.Dispose();
-        m_depth?.Dispose();
+        m_visible.Dispose();
+        m_draws.Dispose();
+        m_counts.Dispose();
+        m_depth.Dispose();
         foreach (var slot in m_retired) { foreach (var buffer in slot) { buffer.Dispose(); } }
     }
 
@@ -404,52 +406,16 @@ internal sealed class SdfMeshOcclusion : IDisposable {
         var capacity = Math.Max(val1: draws, val2: 1u);
         var candidateBytes = ((ulong)((HeaderWords + (16 * SdfPortalSight.Capacity)) * sizeof(uint)));
 
-        if ((m_candidates[m_slot] is not { } candidates) || (candidates.SizeBytes < candidateBytes)) {
-            m_candidates[m_slot]?.Dispose();
-            m_candidates[m_slot] = null;
-            m_candidates[m_slot] = m_buffers.CreateHostVisible(
-                name: Name(detail: "occlusion candidates", index: m_slot),
-                sizeBytes: candidateBytes,
-                usage: GpuBufferUsage.Storage
-            );
-        }
-        const ulong VisibleBytes = (4 * sizeof(uint));
-        var visibleRecords = ((m_visible?.SizeBytes ?? 0UL) / VisibleBytes);
-
-        if ((m_visible is null) || (visibleRecords < capacity)) {
-            m_seedVisible = m_visible;
-            if (m_visible is { } previous) { m_retired[m_slot].Add(item: previous); }
-            m_visible = null;
-            m_visible = m_buffers.CreateDeviceLocal(
-                name: Name(detail: "occlusion visible"),
-                sizeBytes: (((ulong)GpuCapacity.Grown(current: ((long)visibleRecords), required: capacity, ceiling: uint.MaxValue, divisor: 1)) * VisibleBytes),
-                usage: GpuBufferUsage.Storage
-            );
+        m_candidates[m_slot].Fit(candidateBytes);
+        var grown = (uint)GpuCapacity.Grown(m_capacity, capacity, uint.MaxValue, divisor: 1);
+        var previous = m_visible.Buffer;
+        if (m_visible.Fit((ulong)grown * 4 * sizeof(uint))) {
+            m_seedVisible = previous;
             m_visibleCleared = false;
         }
-        if ((m_draws is null) || (m_capacity < capacity)) {
-            if (m_draws is { } previous) { m_retired[m_slot].Add(item: previous); }
-            m_draws = null;
-            m_capacity = (uint)GpuCapacity.Grown(current: m_capacity, required: capacity, ceiling: uint.MaxValue, divisor: 1);
-            m_draws = m_buffers.CreateDeviceLocal(
-                name: Name(detail: "occlusion draws"),
-                sizeBytes: ((((ulong)m_argumentPhases) * m_capacity) * GpuDrawIndirectCommand.StrideBytes),
-                usage: GpuBufferUsage.Storage | GpuBufferUsage.Indirect
-            );
-        }
-
-        // The counts hold the draw phases, the sight verdicts and a mark word for every sixteen draws of the capacity.
-        var countsBytes = MarkedBytes(draws: m_capacity);
-
-        if ((m_counts is null) || (m_counts.SizeBytes < countsBytes)) {
-            if (m_counts is { } previous) { m_retired[m_slot].Add(item: previous); }
-            m_counts = null;
-            m_counts = m_buffers.CreateDeviceLocal(
-                name: Name(detail: "occlusion counts"),
-                sizeBytes: countsBytes,
-                usage: GpuBufferUsage.Storage | GpuBufferUsage.Indirect
-            );
-        }
+        m_draws.Fit((ulong)m_argumentPhases * grown * GpuDrawIndirectCommand.StrideBytes);
+        m_capacity = grown;
+        m_counts.Fit(MarkedBytes(draws: grown));
 
         if (!depth) { return; }
         var depthBytes = (DepthWords(height: m_height, levels: m_levels, width: m_width) * sizeof(uint));
@@ -459,15 +425,7 @@ internal sealed class SdfMeshOcclusion : IDisposable {
             depthBytes += ((ulong)width * height + DepthWords(width, height, LevelsOf(width, height))) * sizeof(uint);
         }
 
-        if ((m_depth is null) || (m_depth.SizeBytes < depthBytes)) {
-            if (m_depth is { } previous) { m_retired[m_slot].Add(item: previous); }
-            m_depth = null;
-            m_depth = m_buffers.CreateDeviceLocal(
-                name: Name(detail: "occlusion depth"),
-                sizeBytes: depthBytes,
-                usage: GpuBufferUsage.Storage
-            );
-        }
+        m_depth.Fit(depthBytes);
     }
     private GpuObjectName Name(string detail, int index = 0) => new(detail: detail, index: index, owner: m_owner, part: m_part);
     private static void Bind(IGpuRecorder recorder, nint commandBuffer, IGpuComputePipeline pipeline, nint set) {
@@ -514,7 +472,7 @@ internal sealed class SdfMeshOcclusion : IDisposable {
     private void ToIndirect(IGpuRecorder recorder, nint commandBuffer) {
         recorder.BeginBarriers(commandBufferHandle: commandBuffer);
 
-        foreach (var buffer in ((ReadOnlySpan<IGpuBuffer>)[m_draws!, m_counts!])) {
+        foreach (var buffer in ((ReadOnlySpan<IGpuBuffer>)[m_draws.Buffer!, m_counts.Buffer!])) {
             recorder.TransitionBuffer(
                 bufferHandle: buffer.BufferHandle,
                 commandBufferHandle: commandBuffer,

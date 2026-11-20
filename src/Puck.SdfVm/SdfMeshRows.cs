@@ -1,4 +1,5 @@
 using Puck.Abstractions.Gpu;
+using Puck.Abstractions.Memory;
 
 namespace Puck.SdfVm;
 
@@ -111,7 +112,7 @@ public sealed class SdfMeshRows {
             var run = new Run(start, count, m_table.m_ranges.TicketOf(start: ((ulong)start)));
 
             m_table.m_runs.Add(key: start, value: run);
-            if (m_table.m_cells.Length < (start + count)) { Array.Resize(array: ref m_table.m_cells, newSize: Math.Max(val1: (start + count), val2: (2 * m_table.m_cells.Length))); }
+            ArrayCapacity.EnsureLength(ref m_table.m_cells, start + count);
             for (var row = start; (row < (start + count)); row++) {
                 m_table.m_ownedChanges.Add(item: row);
                 m_table.m_cells[row].Occupancy = checked(++m_table.m_occupancy);

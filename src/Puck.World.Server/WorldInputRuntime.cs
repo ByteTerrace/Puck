@@ -1,5 +1,6 @@
-using Puck.Maths;
+using Puck.Abstractions.Memory;
 using Puck.Commands;
+using Puck.Maths;
 using Puck.World.Protocol;
 
 namespace Puck.World.Server;
@@ -76,7 +77,7 @@ public sealed partial class WorldInputRuntime {
 
     /// <summary>Publishes epoch decisions with immutable source images; unchanged held ticks allocate nothing.</summary>
     public ReadOnlyMemory<WorldInputPublication> Publish() {
-        if (m_publications.Length < m_ordered.Count) { m_publications = new WorldInputPublication[m_ordered.Count]; }
+        ArrayCapacity.EnsureScratch(ref m_publications, m_ordered.Count);
         var count = 0;
 
         for (var index = 0; (index < m_ordered.Count); index++) {

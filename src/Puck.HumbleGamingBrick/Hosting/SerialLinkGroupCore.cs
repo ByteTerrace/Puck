@@ -1,3 +1,4 @@
+using Puck.Abstractions.Memory;
 using Puck.Maths;
 
 namespace Puck.HumbleGamingBrick;
@@ -95,11 +96,6 @@ internal sealed class SerialLinkGroupCore : IMachineGroupCore {
         );
         previousObserver?.Invoke(obj: value);
     }
-    private static void Grow(ref byte[] buffer, int length) {
-        if (buffer.Length < length) {
-            buffer = new byte[length];
-        }
-    }
     // The two sides fold under distinct tags so a fingerprint distinguishes which port received a byte, not merely that
     // one did.
     private void OnFirstTransferCompleted(byte value) =>
@@ -170,10 +166,7 @@ internal sealed class SerialLinkGroupCore : IMachineGroupCore {
         );
         var firstLength = reader.ReadInt32();
 
-        Grow(
-            buffer: ref m_firstScratch,
-            length: firstLength
-        );
+        ArrayCapacity.EnsureScratch(ref m_firstScratch, firstLength);
         reader.ReadBytes(destination: m_firstScratch.AsSpan(
             length: firstLength,
             start: 0
@@ -181,10 +174,7 @@ internal sealed class SerialLinkGroupCore : IMachineGroupCore {
 
         var secondLength = reader.ReadInt32();
 
-        Grow(
-            buffer: ref m_secondScratch,
-            length: secondLength
-        );
+        ArrayCapacity.EnsureScratch(ref m_secondScratch, secondLength);
         reader.ReadBytes(destination: m_secondScratch.AsSpan(
             length: secondLength,
             start: 0

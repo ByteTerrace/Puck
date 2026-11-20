@@ -181,9 +181,9 @@ public sealed partial class SdfWorldTablesUploadLawTests {
         ]);
         Assert.Equal(expected: new[] { second, third }, actual: PreviousMatrices(rig: rig, draws: 2));
     }
-    // The previous mesh table holds matrices at a compact 16-word stride. Growth reserves twice the needed matrices.
+    // The previous mesh table holds matrices at a compact 16-word stride.
     private static Matrix4x4[] PreviousMatrices(Rig rig, int draws) {
-        var records = rig.Gpu.DeviceLocal(part: "previous-mesh-transforms", sizeBytes: ((ulong)(2 * draws * SdfMeshRecord.MatrixWords * sizeof(uint))));
+        var records = rig.Gpu.DeviceLocal(part: "previous-mesh-transforms", sizeBytes: ((ulong)(draws * SdfMeshRecord.MatrixWords * sizeof(uint))));
 
         return [.. Enumerable.Range(count: draws, start: 0).Select(selector: draw =>
             MemoryMarshal.Read<Matrix4x4>(source: records.AsSpan(length: 64, start: (draw * SdfMeshRecord.MatrixWords * sizeof(uint)))))];

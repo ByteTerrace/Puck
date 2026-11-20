@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Runtime.InteropServices;
 using System.Text;
 using Puck.Abstractions.Counting;
+using Puck.Abstractions.Memory;
 using Puck.Maths;
 using Puck.State;
 
@@ -666,9 +667,9 @@ public sealed class FieldLattice {
 
         for (var index = 0; (index < m_input.Reactions.Count); index++) {
             if (m_input.Reactions[index] is FieldReactionInput.Transform transform) {
-                if (m_transformWhen.Length < transform.When.Count) { m_transformWhen = new FixedQ4816[transform.When.Count]; }
-                if (m_transformThen.Length < transform.Then.Count) { m_transformThen = new FixedQ4816[transform.Then.Count]; }
-                if (m_transformRetain.Length < transform.Then.Count) { m_transformRetain = new FixedQ4816[transform.Then.Count]; }
+                ArrayCapacity.EnsureScratch(ref m_transformWhen, transform.When.Count);
+                ArrayCapacity.EnsureScratch(ref m_transformThen, transform.Then.Count);
+                ArrayCapacity.EnsureScratch(ref m_transformRetain, transform.Then.Count);
             }
             m_cellPassCount += m_input.Reactions[index] switch {
                 FieldReactionInput.Diffuse => 2,
@@ -1905,7 +1906,7 @@ public sealed class FieldLattice {
     private Delta[] m_taken = [];
     // The take's scratch, grown to hold count deltas.
     private Span<Delta> Taken(int count) {
-        if (m_taken.Length < count) { m_taken = new Delta[(int)((uint)count).NextPowerOfTwo()]; }
+        ArrayCapacity.EnsureScratch(ref m_taken, count);
         return m_taken.AsSpan(start: 0, length: count);
     }
     /// <summary>Resolves the cell a BODY couples to for the <see cref="FieldReactionInput.Emit"/>/

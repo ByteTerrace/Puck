@@ -14,8 +14,8 @@ public sealed partial class SdfWorldTables {
     private const int MeshMatrixBytes = (SdfMeshRecord.MatrixWords * sizeof(float));
     private const GpuStage TableReaders = GpuStage.ComputeShader | GpuStage.VertexShader | GpuStage.FragmentShader;
 
-    private IGpuBuffer m_previousDynamicTransforms;
-    private IGpuBuffer m_previousMeshTransforms;
+    private readonly GpuFittedBuffer m_previousDynamicTransforms;
+    private readonly GpuFittedBuffer m_previousMeshTransforms;
 
     // Separate requests for the pre-upload advance and post-upload seeds, per retired upload slot.
     private readonly GpuBufferStridedCopy m_meshHistoryCopies;
@@ -148,7 +148,7 @@ public sealed partial class SdfWorldTables {
 
         if (seedTransforms) {
             m_reseatedTransforms.Clear();
-            m_reseatedTransforms.Add(length: ((int)(m_previousDynamicTransforms.SizeBytes / DynamicTransformByteLength)), start: 0);
+            m_reseatedTransforms.Add(length: ((int)(m_previousDynamicTransforms.Buffer!.SizeBytes / DynamicTransformByteLength)), start: 0);
         }
         if (m_reseatedTransforms.Count > 0) {
             CopyTransformHistory(commandBuffer: commandBuffer, copies: m_reseatedTransforms, slot: m_currentSlot);
@@ -179,9 +179,9 @@ public sealed partial class SdfWorldTables {
     }
     private void CopyTransformHistory(nint commandBuffer, GpuUploadRuns copies, int slot) {
         var source = m_dynamicTransformRegion.Buffer(slot: slot);
-        var rows = ((int)(m_previousDynamicTransforms.SizeBytes / DynamicTransformByteLength));
+        var rows = ((int)(m_previousDynamicTransforms.Buffer!.SizeBytes / DynamicTransformByteLength));
 
-        BeginHistoryCopy(commandBuffer: commandBuffer, destination: m_previousDynamicTransforms, source: source);
+        BeginHistoryCopy(commandBuffer: commandBuffer, destination: m_previousDynamicTransforms.Buffer!, source: source);
         for (var run = 0; (run < copies.Count); run++) {
             var start = copies.Start(index: run);
             var end = Math.Min(val1: (start + copies.Length(index: run)), val2: rows);
@@ -189,11 +189,11 @@ public sealed partial class SdfWorldTables {
             if (end > start) {
                 var offset = (((ulong)start) * DynamicTransformByteLength);
 
-                CopyHistoryRange(bytes: (((ulong)(end - start)) * DynamicTransformByteLength), commandBuffer: commandBuffer, destination: m_previousDynamicTransforms,
+                CopyHistoryRange(bytes: (((ulong)(end - start)) * DynamicTransformByteLength), commandBuffer: commandBuffer, destination: m_previousDynamicTransforms.Buffer!,
                     destinationOffset: offset, source: source, sourceOffset: offset);
             }
         }
-        FinishHistoryCopy(commandBuffer: commandBuffer, destination: m_previousDynamicTransforms, source: source);
+        FinishHistoryCopy(commandBuffer: commandBuffer, destination: m_previousDynamicTransforms.Buffer!, source: source);
     }
     private void CopyMeshHistory(nint commandBuffer, int slot, GpuUploadRuns copies, uint limit, int recording) {
         if ((copies.Count == 0) || (limit == 0)) {
@@ -202,16 +202,16 @@ public sealed partial class SdfWorldTables {
         var source = m_meshRegion.Buffer(slot: slot);
 
         m_gpu.Recorder.BeginDebugGroup(commandBufferHandle: commandBuffer, label: ((recording == 0) ? "mesh history advance" : "mesh history seed"));
-        BeginHistoryCopy(commandBuffer: commandBuffer, compute: true, destination: m_previousMeshTransforms, source: source);
+        BeginHistoryCopy(commandBuffer: commandBuffer, compute: true, destination: m_previousMeshTransforms.Buffer!, source: source);
         var work = m_meshHistoryCopies.Record(commandBuffer: commandBuffer, slot: m_currentSlot, recording: recording,
-            source: source, destination: m_previousMeshTransforms, rows: copies, rowLimit: limit,
+            source: source, destination: m_previousMeshTransforms.Buffer!, rows: copies, rowLimit: limit,
             rowWords: SdfMeshRecord.MatrixWords, sourceStrideWords: SdfMeshRecord.DrawWords, destinationStrideWords: SdfMeshRecord.MatrixWords);
 
         SdfMeshHistory.ProcessWork.Add(kind: SdfMeshHistory.HistoryRowsCopied, amount: work.Rows);
         SdfMeshHistory.ProcessWork.Add(kind: SdfMeshHistory.HistoryBytesCopied, amount: (((long)work.Words) * sizeof(uint)));
         SdfMeshHistory.ProcessWork.Add(kind: SdfMeshHistory.HistoryRequestBytes, amount: work.RequestBytes);
         if (work.Words > 0) { SdfMeshHistory.ProcessWork.Count(kind: SdfMeshHistory.HistoryDispatches); }
-        FinishHistoryCopy(commandBuffer: commandBuffer, compute: true, destination: m_previousMeshTransforms, source: source);
+        FinishHistoryCopy(commandBuffer: commandBuffer, compute: true, destination: m_previousMeshTransforms.Buffer!, source: source);
         m_gpu.Recorder.EndDebugGroup(commandBufferHandle: commandBuffer);
     }
     private void CopyHistoryRange(nint commandBuffer, IGpuBuffer source, IGpuBuffer destination, ulong sourceOffset, ulong destinationOffset, ulong bytes) =>
@@ -342,15 +342,7 @@ public sealed partial class SdfWorldTables {
     private void EnsurePreviousMeshCapacity(int count) {
         var bytes = (((ulong)Math.Max(val1: 1, val2: count)) * MeshMatrixBytes);
 
-        if (bytes <= m_previousMeshTransforms.SizeBytes) {
-            return;
-        }
-        // Twice the need, as the mesh region grows, so draws landing over several frames replace it once; the old buffer is
-        // disposed once the next upload completes, after every view that bound it.
-        var replacement = m_gpu.BufferFactory.CreateDeviceLocal(name: NameOf(part: "previous-mesh-transforms"), sizeBytes: (2UL * bytes), usage: GpuBufferUsage.Storage);
-
-        Retire(replaced: m_previousMeshTransforms);
-        m_previousMeshTransforms = replacement;
+        if (!m_previousMeshTransforms.Fit(bytes)) { return; }
         m_bindingRevision++;
         m_seedMeshHistory = true;
     }

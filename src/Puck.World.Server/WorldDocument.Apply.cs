@@ -1,6 +1,7 @@
+using Puck.Abstractions.Memory;
 using Puck.Abstractions.Waiting;
-using Puck.Hosting.Jobs;
 using Puck.Commands;
+using Puck.Hosting.Jobs;
 using Puck.Maths;
 using Puck.World.Protocol;
 
@@ -1144,7 +1145,7 @@ public sealed partial class WorldDocument {
         var stateCells = Host.PublishedCellCount(full: !consumeContinuity);
         var cellCount = (latticeDeltas.Count + stateCells);
 
-        if (m_snapshotCells.Length < cellCount) { Array.Resize(array: ref m_snapshotCells, newSize: ((int)(((uint)cellCount)).NextPowerOfTwo())); }
+        ArrayCapacity.EnsureLength(ref m_snapshotCells, cellCount);
         var fieldCells = m_snapshotCells.AsMemory(length: cellCount, start: 0);
 
         for (var index = 0; (index < latticeDeltas.Count); index++) {
