@@ -18,8 +18,8 @@ public sealed class MirroredSolidFieldDeterminismLawTests {
 
         return builder;
     }
-    private static Quaternion RotationOf(SdfProgram program, int index) {
-        var data = program.Instructions.Where(predicate: candidate => (candidate.Op == SdfOp.Rotate)).ElementAt(index: index).Data0;
+    private static Quaternion LastRotationOf(SdfProgram program) {
+        var data = program.Instructions.Last(predicate: candidate => (candidate.Op == SdfOp.Rotate)).Data0;
 
         return new Quaternion(
             w: data.W,
@@ -69,7 +69,6 @@ public sealed class MirroredSolidFieldDeterminismLawTests {
         );
 
         var program = builder.Build();
-        var scales = program.Instructions.Where(predicate: candidate => (candidate.Op == SdfOp.Scale)).ToArray();
         var box = Assert.Single(
             collection: program.Instructions,
             predicate: candidate =>
@@ -77,15 +76,11 @@ public sealed class MirroredSolidFieldDeterminismLawTests {
         );
         var fixedThinAxis = ((float)((double)FixedQ4816.FromDouble(value: 0.1)));
 
-        Assert.Single(collection: scales);
-        Assert.Equal(
-            expected: new Vector4(
-                w: 1f,
-                x: 1f,
-                y: 1f,
-                z: 1f
-            ),
-            actual: scales[0].Data0
+        // The stamp's unit scale and the shape's own unit scale are identity point operations, which the builder does
+        // not emit: the authored (24, 0.1, 24) lives only in the box's own dimensions.
+        Assert.DoesNotContain(
+            collection: program.Instructions,
+            filter: candidate => (candidate.Op == SdfOp.Scale)
         );
         // A box is sharp unless its document rounds it, so the fillet lane carries nothing here.
         Assert.Equal(
@@ -199,16 +194,11 @@ public sealed class MirroredSolidFieldDeterminismLawTests {
 
         var floatProgram = floatBuilder.Build();
         var fixedProgram = fixedBuilder.Build();
-        var floatShapeTranslation = floatProgram.Instructions.Where(predicate: candidate => (candidate.Op == SdfOp.Translate)).ElementAt(index: 1).Data0;
-        var fixedShapeTranslation = fixedProgram.Instructions.Where(predicate: candidate => (candidate.Op == SdfOp.Translate)).ElementAt(index: 1).Data0;
-        var floatShapeRotation = RotationOf(
-            index: 1,
-            program: floatProgram
-        );
-        var fixedShapeRotation = RotationOf(
-            index: 1,
-            program: fixedProgram
-        );
+        // The stamp's own zero origin and identity rotation are not emitted, so the shape's pose is the last of each.
+        var floatShapeTranslation = floatProgram.Instructions.Last(predicate: candidate => (candidate.Op == SdfOp.Translate)).Data0;
+        var fixedShapeTranslation = fixedProgram.Instructions.Last(predicate: candidate => (candidate.Op == SdfOp.Translate)).Data0;
+        var floatShapeRotation = LastRotationOf(program: floatProgram);
+        var fixedShapeRotation = LastRotationOf(program: fixedProgram);
 
         Assert.InRange(
             actual: Vector3.Distance(
@@ -318,9 +308,9 @@ public sealed class MirroredSolidFieldDeterminismLawTests {
         );
 
         var program = builder.Build();
-        // The stamp's prefix, then its reflection as the fixed alignment carrying X onto +Y, a mirror of X and the
-        // alignment back, then the shape's own authored pose, unreflected, and the
-        // primitive's own unit scale.
+        // The stamp's reflection as the fixed alignment carrying X onto +Y, a mirror of X and the alignment back, then
+        // the shape's own authored position, unreflected. The stamp's zero origin, identity rotation and unit scale, and
+        // the shape's identity rotation and unit scale, are identity point operations the builder does not emit.
         var alignment = new FixedQuaternion(
             W: FixedQ4816.One,
             X: FixedQ4816.Zero,
@@ -332,14 +322,6 @@ public sealed class MirroredSolidFieldDeterminismLawTests {
         Assert.Equal(
             expected: [
                 (SdfOp.ResetPoint, Vector4.Zero),
-                (SdfOp.Translate, Vector4.Zero),
-                (SdfOp.Rotate, new Vector4(
-                    w: 1f,
-                    x: 0f,
-                    y: 0f,
-                    z: 0f
-                )),
-                (SdfOp.Scale, Vector4.One),
                 (SdfOp.Rotate, new Vector4(
                     w: alignment.W,
                     x: alignment.X,
@@ -364,13 +346,6 @@ public sealed class MirroredSolidFieldDeterminismLawTests {
                     y: 2f,
                     z: 3f
                 )),
-                (SdfOp.Rotate, new Vector4(
-                    w: 1f,
-                    x: 0f,
-                    y: 0f,
-                    z: 0f
-                )),
-                (SdfOp.Scale, Vector4.One),
             ],
             actual: chain
         );
