@@ -304,6 +304,7 @@ puck docs build [--output <directory>] [--site <path>]
 puck bundle create <directory> <commit>
 puck bundle verify <directory> <commit>
 puck world prepare <primary-world> --output <directory>
+puck world player <package> --output <directory> [--extension <project>...] [--backend directx vulkan] [--target [profile@]WIDTHxHEIGHT...] [--no-bake] [--bake-seconds <seconds>]
 puck world release prepare <package-directory> --silo <silo.json> [--output <manifest>] --label <label> --source-revision <sha> --engine-image-digest <sha256:digest> --persistence-contract <name> --peer-protocol-contract <name>
 puck world release status [group-file] [--json] [--host <installed-host>]
 puck world release finalize [--host <installed-host>]
@@ -357,6 +358,29 @@ neither needs no `clang`, `ld.lld` or Rust toolchain; one that does needs them a
 prepare time. `prewarm --output <player>` prepares every BIOS and addon variant the
 engine can derive, for a player executable directory. Publishing `Puck.World` runs
 it automatically.
+
+`world player` assembles the folder a consumer machine runs, one that never builds
+from source, compiles a cartridge or cold-bakes. It builds `Puck.World` in Release
+with SPIR-V under the build lease and publishes it self-contained for this
+machine's runtime (that publish runs `prewarm` into `derived/`, so it needs the
+toolchains above); publishes each `--extension` project into
+`extensions/<name>/`, where the host discovers it (a hosted authority's sign-in
+provider is one); compiles the package's parent directory into `worlds/` as
+`compile --tree` does; and exports the package's specialized shading kernels into
+`derived/` as `world prepare` does. It then boots the published engine itself,
+windowed and paused at its first tick, once per `--backend` and `--target`, with
+`--cache-dir cache`: each boot applies the target's device profile (a name of the
+world's `render.devices`, or `auto`) at the target's window size and waits for its
+bakes to settle, which fills `cache/` with the baked meshes, compiled worlds,
+compiles and prepared cartridges a consumer's boot of the same folder reads. The
+mesh store keys by the bake's code and kernel bytecode, never the adapter, but the
+tiers a view demands follow its window size and its profile's memory bars, so each
+consumer device gets its own target. The driver's pipeline cache is per adapter
+and is not shipped. A consumer starts the folder with
+`--world worlds/<package> --cache-dir cache`. The verb writes `player.json` last
+and replaces only a folder that holds one; it prints each part's size, and keeps
+each boot's logs in `player-logs/`.
+
 `world release prepare` loads the validated silo inventory, requires one canonical
 composed `*.world.json` output for every owner/world row, and writes a
 content-addressed manifest (`release.json` in the package directory unless

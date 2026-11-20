@@ -109,7 +109,9 @@ The next lead rewrites this section when it hands off in turn.
   toolchain, the TraceEvent version, the registry) are on `main`, and each
   push to `main` runs Release Azure. Read the latest run on `main` before the
   owner pushes `lead/rendering`'s work there, and fix what it shows on
-  `lead/rendering`.
+  `lead/rendering`. The RTX 2060 consumer machine runs a folder
+  `puck world player` assembles (a self-contained engine, the compiled package
+  and its prewarmed caches); it is not yet produced by CI.
 - **Before the owner pushes `main`:** the owner deferred the
   [security review](#security-review)'s write-door leaks for this push, as
   AGENTS.md allows for a high finding; they stay high work, ranked first in
@@ -1754,8 +1756,12 @@ migrated to standard programs.
   `shaders.compiler.runs.dxc` rose by 4 per edit on both backends where views
   and glass make 2, likely a requested set overtaken while the active and
   declared sets move on different frames.
-- [low] A Direct3D 12 player without `dxcompiler.dll` refuses a prewarmed
-  kernel at the reflection check (`SdfShadePipelines.BuildAsync`), and a frame
+- [medium] A Direct3D 12 player without `dxcompiler.dll` refuses a prewarmed
+  kernel at the reflection check (`SdfShadePipelines.BuildAsync`), so a
+  `puck world player` folder on a consumer machine (no DXC installed) shades
+  through the interpreter on Direct3D 12 while Vulkan, whose SPIR-V the managed
+  reader reflects, takes the specialized kernels. A managed reader of the DXIL
+  container's own binding data would remove the dependency. A frame
   holding a program its document does not declare requests a set the prewarm
   did not compile.
 - [low] `SdfWorldPipelines.Acquire` leases `ViewsPlain` and `GlassPlain` up

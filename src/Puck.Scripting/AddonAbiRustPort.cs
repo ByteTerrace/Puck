@@ -150,17 +150,29 @@ internal static class AddonAbiRustPort {
         sb.Append(value: "#[derive(Clone, Copy, Debug, Eq, PartialEq)]\n");
         sb.Append(value: "pub enum ").Append(value: rustName).Append(value: " {\n");
 
-        foreach (var value in Enum.GetValues<TEnum>()) {
-            var name = value.ToString();
-            var raw = Convert.ToByte(
-                value: value,
-                provider: CultureInfo.InvariantCulture
-            );
+        var members = Enum.GetValues<TEnum>().Select(selector: static value => (Name: value.ToString(), Raw: Convert.ToByte(
+            value: value,
+            provider: CultureInfo.InvariantCulture
+        ))).ToArray();
 
+        foreach (var (name, raw) in members) {
             sb.Append(value: "    /// `Puck.Scripting.").Append(value: csharpTypeName).Append(value: '.').Append(value: name).Append(value: "` (`").Append(value: raw).Append(value: "`).\n");
             sb.Append(value: "    ").Append(value: name).Append(value: " = ").Append(value: raw).Append(value: ",\n");
         }
 
+        sb.Append(value: "}\n\n");
+        // The decode is generated beside the enum, so a value the host adds is named by the guest's next regeneration
+        // and no hand-written table can lag it.
+        sb.Append(value: "impl ").Append(value: rustName).Append(value: " {\n");
+        sb.Append(value: "    /// Maps a wire byte onto its member, or `None` for a byte this build has no name for.\n");
+        sb.Append(value: "    pub fn from_u8(value: u8) -> Option<Self> {\n");
+        sb.Append(value: "        match value {\n");
+        foreach (var (name, raw) in members) {
+            sb.Append(value: "            ").Append(value: raw).Append(value: " => Some(Self::").Append(value: name).Append(value: "),\n");
+        }
+        sb.Append(value: "            _ => None,\n");
+        sb.Append(value: "        }\n");
+        sb.Append(value: "    }\n");
         sb.Append(value: "}\n\n");
     }
     private static void AppendCapabilityMask(StringBuilder sb) {

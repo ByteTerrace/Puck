@@ -14,6 +14,49 @@ public static class WorldPrepareCommand {
     // directory prepares without a prior build. The primary world's directory is the root no reference may leave; a
     // package's primary is its manifest's entry.
     private static int Run(string output, string primary) {
+        if (!TryResolvePrimary(primary: primary, entry: out var entry, reason: out var refusal)) {
+            return CliExit.Refuse(verb: "world prepare", what: CliPaths.ToDisplay(fullPath: primary), why: refusal);
+        }
+
+        Directory.CreateDirectory(path: output);
+        var composed = Compose(primary: entry);
+
+        foreach (var (name, definition, _) in composed.Worlds) {
+            File.WriteAllBytes(
+                Path.Combine(
+                    path1: output,
+                    path2: name
+                ),
+                WorldDefinitionSerialization.Serialize(definition: definition)
+            );
+        }
+        PlayerDerivedProducts.Prepare(output: output, agbBios: composed.Needs.AgbBios, guests: [.. composed.Needs.Guests]);
+        PrepareShading(output: output, sets: composed.ShadeSets);
+        Console.WriteLine(value: $"Prepared {composed.Worlds.Count} hosted world definitions, with {composed.PrimaryName} as the primary world.");
+        return 0;
+    }
+
+    /// <summary>A primary world composed with every neighbour it references, as hosted storage holds them.</summary>
+    /// <param name="PrimaryName">The primary world's canonical name.</param>
+    /// <param name="Worlds">Each world's hosted document name, its validated definition and its document directory, in
+    /// the order the references reached them.</param>
+    /// <param name="Needs">The derived products the definitions reference.</param>
+    /// <param name="ShadeSets">Each world's declared shading program set.</param>
+    public sealed record Composition(
+        string PrimaryName,
+        IReadOnlyList<(string Name, WorldDefinition Definition, string Directory)> Worlds,
+        PlayerDerivedProducts.Needs Needs,
+        IReadOnlyList<IReadOnlyList<SdfShadeProgram>> ShadeSets
+    );
+
+    /// <summary>Resolves a primary world argument to its entry: a package folder's manifest entry, or the source or
+    /// document itself.</summary>
+    /// <param name="primary">The full path of a package folder, a <c>.puck</c> source or a <c>.world.json</c> document.</param>
+    /// <param name="entry">The entry's full path.</param>
+    /// <param name="reason">Why the argument names no world, or empty.</param>
+    /// <returns><see langword="true"/> when the argument names a world.</returns>
+    public static bool TryResolvePrimary(string primary, out string entry, out string reason) {
+        entry = primary;
         if (WorldPackageManifest.IsPackagePath(path: primary)) {
             if (!WorldPackageManifest.TryResolveEntry(
                 entryPath: out var entryPath,
@@ -21,22 +64,33 @@ public static class WorldPrepareCommand {
                 path: primary,
                 reason: out var packageReason
             )) {
-                return CliExit.Refuse(verb: "world prepare", what: CliPaths.ToDisplay(fullPath: primary), why: packageReason);
+                reason = packageReason;
+                return false;
             }
 
-            primary = entryPath;
+            entry = entryPath;
         }
 
-        if (!WorldDocumentName.IsSourceFile(path: primary) && !WorldDocumentName.IsDocumentFile(path: primary)) {
-            return CliExit.Refuse(verb: "world prepare", what: CliPaths.ToDisplay(fullPath: primary), why: $"names no world: the primary world is a {WorldDocumentName.SourceSuffix} source or a {WorldDocumentName.DocumentSuffix} document.");
+        if (!WorldDocumentName.IsSourceFile(path: entry) && !WorldDocumentName.IsDocumentFile(path: entry)) {
+            reason = $"names no world: the primary world is a {WorldDocumentName.SourceSuffix} source or a {WorldDocumentName.DocumentSuffix} document.";
+            return false;
         }
+        reason = string.Empty;
+        return true;
+    }
 
+    /// <summary>Composes a primary world and its referenced neighbours with the engine's own composer and validates each
+    /// as publishable.</summary>
+    /// <param name="primary">The primary world's entry (<see cref="TryResolvePrimary"/>).</param>
+    /// <returns>The composed worlds.</returns>
+    /// <exception cref="InvalidDataException">A reference escapes the primary world's directory, two worlds share a
+    /// hosted name, or a world cannot be composed, relocated or validated.</exception>
+    public static Composition Compose(string primary) {
         var root = Path.GetDirectoryName(path: primary)!;
         var primaryName = WorldDocumentName.OfCarrierFile(path: Path.GetFileName(path: primary));
         var machines = CliWorldVocabulary.EnsureInstalled();
         var catalogFingerprint = CliWorldVocabulary.Fingerprint(catalog: machines);
-
-        Directory.CreateDirectory(path: output);
+        var worlds = new List<(string Name, WorldDefinition Definition, string Directory)>();
         var pending = new Queue<string>();
         var visited = new HashSet<string>(comparer: StringComparer.Ordinal);
         var names = new Dictionary<string, string>(comparer: StringComparer.OrdinalIgnoreCase);
@@ -130,28 +184,25 @@ public static class WorldPrepareCommand {
             )) {
                 throw new InvalidDataException(message: $"Cannot validate {relative}: {reason}");
             }
-            needs.Note(definition: definition!, documentDirectory: WorldDocumentPaths.DirectoryOf(documentPath: path));
+            var directory = WorldDocumentPaths.DirectoryOf(documentPath: path);
+
+            needs.Note(definition: definition!, documentDirectory: directory);
             shadeSets.Add(item: WorldRenderSettings.DeclaredShades(definition: definition!));
-            File.WriteAllBytes(
-                Path.Combine(
-                    path1: output,
-                    path2: name
-                ),
-                WorldDefinitionSerialization.Serialize(definition: definition)
-            );
+            worlds.Add(item: (name, definition!, directory));
         }
-        PlayerDerivedProducts.Prepare(output: output, agbBios: needs.AgbBios, guests: [.. needs.Guests]);
-        PrepareShading(output: output, sets: shadeSets);
-        Console.WriteLine(value: $"Prepared {visited.Count} hosted world definitions, with {primaryName} as the primary world.");
-        return 0;
+        return new Composition(Needs: needs, PrimaryName: primaryName, ShadeSets: shadeSets, Worlds: worlds);
     }
 
-    // Each hosted world's declared program set specializes the views and glass kernels exactly as its residency requests
-    // them (SdfWorldResidency's PrepareShade), for both targets, from the deployed tree a player compiles against, so a
-    // player's first boot finds them in its shipping cache and interprets only a program its documents did not declare.
-    // The kernels are a cache whose miss the runtime derives again, so a target this machine's toolchain cannot compile
-    // (no dxc, a dxc without SPIR-V, an install without the kernel sources) is skipped and named, never fatal.
-    private static void PrepareShading(IReadOnlyList<IReadOnlyList<SdfShadeProgram>> sets, string output) {
+    /// <summary>Specializes the views and glass kernels for each declared program set exactly as a residency requests
+    /// them (SdfWorldResidency's PrepareShade), for both targets, from the deployed tree a player compiles against, and
+    /// exports them into the shipping cache beside <paramref name="output"/>, so a player's first boot finds them and
+    /// interprets only a program its documents did not declare. The kernels are a cache whose miss the runtime derives
+    /// again, so a target this machine's toolchain cannot compile (no dxc, a dxc without SPIR-V, an install without the
+    /// kernel sources) is skipped and named, never fatal.</summary>
+    /// <param name="sets">The declared program sets (<see cref="Composition.ShadeSets"/>).</param>
+    /// <param name="output">The directory whose <see cref="Puck.Assets.DerivedBytes.ShippingDirectoryName"/> receives the
+    /// kernels: a player's executable directory, or hosted documents' directory.</param>
+    public static void PrepareShading(IReadOnlyList<IReadOnlyList<SdfShadeProgram>> sets, string output) {
         var compiler = new ShaderCompiler(cacheDirectory: ShaderCompiler.DefaultCacheDirectory);
         var store = Path.Combine(path1: output, path2: Puck.Assets.DerivedBytes.ShippingDirectoryName);
         var distinct = sets.Where(predicate: static set => (set.Count != 0))

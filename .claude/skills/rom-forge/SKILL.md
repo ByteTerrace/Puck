@@ -49,6 +49,15 @@ into a C# template. `Puck.GamingBricks.Forge` depends on Abstractions, Assets an
 `puck decompile <name>.cartridge.json --output <name>.cgb.puck` turns a document
 back into source; the source it writes compiles back to the same bytes.
 
+A prepared cartridge (image, source hash and symbols) is a derived product too:
+`CartridgeContentProvider.Prepare` keeps it in `DerivedBytes`, one cache per
+native compiler keyed by the canonical JSON's content pin and the compiler's
+reachable code, so a bind of an unchanged cartridge compiles nothing and stderr
+counts the hit (`[derived] cartridge-<engine> ...`). A player build's baking
+boots fill that cache under its `--cache-dir` (`puck world player`). Lowering a
+`.puck` source to that JSON still runs at each bind; only the native compile is
+cached.
+
 The owner's ruling treats cartridge JSON twins as derived caches: never commit
 them or compare a run against them. Commit the authored source, compile when
 needed, and keep semantic compile/decompile round trips over freshly compiled
