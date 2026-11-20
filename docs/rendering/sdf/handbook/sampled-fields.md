@@ -60,7 +60,7 @@ The bake kernel is the only kernel that samples a distance field (it defines
 `SDF_SAMPLED_REGIONS`; every other kernel answers `SDF_FAR_DISTANCE`). It reads
 the values from `sdfSampledValues`, a table each bake job writes from the
 snapshots its groups sealed (`SdfMeshBakeGroup.SampledSnapshots`,
-`SdfMeshBakeBatch.WriteSampled`): a word per handle naming where its snapshot
+`SdfMeshBakeBatch.WriteSampledDirectory`): a word per handle naming where its snapshot
 starts, then the snapshots. A batch carries one snapshot a handle, so a lattice
 samples exactly the values its mesh is keyed by, never a newer publication. The
 residency's tables bind a filler there, and the program upload carries none of

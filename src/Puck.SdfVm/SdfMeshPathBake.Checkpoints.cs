@@ -127,7 +127,7 @@ public sealed partial class SdfMeshPathBake {
 
     private void LoadSamples(Group group, SdfMeshBakeRequest request, SdfMeshStore store) {
         var input = SampleInput(group, in request);
-        var length = SampleBytes(in request);
+        var length = request.OutputBytes;
         using var samples = new OwnedBuffer<byte>(allocator: Library.Allocator, observer: group.Memory);
 
         if (store.TryReadSamples(group.Checkpoints!.Sampling, input, length, samples)) {
@@ -161,7 +161,4 @@ public sealed partial class SdfMeshPathBake {
             return null;
         }
     }
-
-    private static int SampleBytes(in SdfMeshBakeRequest request) =>
-        checked(request.Samples * Puck.Shaders.SdfWorldPackage.MeshBakeSampleWords * sizeof(uint));
 }

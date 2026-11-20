@@ -711,7 +711,8 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
     private readonly OwnedBuffer<int> m_fineKeys;
     private readonly OwnedBuffer<float> m_fineValues;
     private readonly OwnedBuffer<int> m_fineMaterials;
-    private readonly Dictionary<int, Vector3> m_fineGradients = [];
+    private readonly OwnedBuffer<Vector3> m_fineGradients;
+    private readonly OwnedBuffer<ulong> m_gradientAnswered;
     private readonly OwnedBuffer<int> m_gradientKeys;
     private readonly OwnedBuffer<long> m_crossingKeys;
     // The fine key of the low corner of each crossed fine cell of a refined cell, in the order CrossingEdges reads the
@@ -723,17 +724,24 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
 
     private bool m_crossingsPrepared;
     private bool m_rootsPrepared;
-    // Each searched crossing edge's root, in m_crossingKeys' order, and each such edge's index there by its CrossingKey.
+    // Each searched crossing edge's root, in m_crossingKeys' order (its edge's CrossingData.RootPlusOne names it).
     private readonly OwnedBuffer<CrossingRoot> m_crossingRoots;
 
-    private readonly Dictionary<long, int> m_crossingRootIndex = [];
+    // Each crossing edge's row in m_crossingKeys and m_crossingData, by its CrossingKey.
+    private readonly Dictionary<long, int> m_crossingIndex = [];
     private readonly OwnedBuffer<long> m_pendingCrossings;
 
     // The indices in m_crossingRoots of m_pendingCrossings' edges, in its order.
     private readonly OwnedBuffer<int> m_pendingRoots;
 
-    // Per crossing edge (CrossingKey), the gradient measured at its crossing and the field's value there.
-    private readonly Dictionary<long, Vector4> m_crossingGradients = [];
+    // Per crossing edge, in m_crossingKeys' order: its searched root, whether a closed sample ends it, and the gradient
+    // measured at its crossing with the field's value there.
+    private readonly OwnedBuffer<CrossingData> m_crossingData;
+    private struct CrossingData {
+        public int RootPlusOne;
+        public bool Closed;
+        public Vector4 Gradient;
+    }
     // The measured fine samples a sheet thinner than the fine cell passed beside, and the value each reads (CloseSheets).
     // Per measured fine sample's slot, NaN for one CloseSheets left open; and how many it closed.
     private readonly OwnedBuffer<float> m_closedValues;
@@ -797,6 +805,9 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
         m_fineKeys = new(allocator: allocator, observer: observer);
         m_gradientKeys = new(allocator: allocator, observer: observer);
         m_points = new(allocator: allocator, observer: observer);
+        m_fineGradients = new(allocator, observer);
+        m_gradientAnswered = new(allocator, observer);
+        m_crossingData = new(allocator, observer);
         m_crossingKeys = new(allocator: allocator, observer: observer);
         m_crossedFineCells = new(allocator: allocator, observer: observer);
         m_pendingCrossings = new(allocator: allocator, observer: observer);
@@ -813,6 +824,7 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
     public void Dispose() {
         m_valueHandle.Dispose(); m_materialHandle.Dispose();
         m_measured.Dispose(); m_thin.Dispose(); m_refined.Dispose(); m_strides.Dispose(); m_fineKeys.Dispose();
+        m_crossingData.Dispose(); m_gradientAnswered.Dispose(); m_fineGradients.Dispose();
         m_gradientKeys.Dispose(); m_points.Dispose(); m_crossingKeys.Dispose(); m_crossedFineCells.Dispose(); m_pendingCrossings.Dispose(); m_pendingRoots.Dispose(); m_crossingRoots.Dispose();
         m_gradients.Dispose();
         m_closedValues.Dispose();
@@ -1702,23 +1714,27 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
     /// edges that change sign, of the change along the edge over its length. A field that is no true distance changes by
     /// less, or more, than one.</summary>
     /// <returns>The median slope, in field units per world unit; one where no edge changes sign.</returns>
-    public float SurfaceSlope() {
+    public float SurfaceSlope() => m_surfaceSlope ??= SurfaceSlope(Values, m_samplesX, m_samplesY, m_samplesZ, m_cell);
+    private float? m_surfaceSlope;
+
+    /// <summary>Measures a coarse field before a caller applies its contour offset.</summary>
+    public static float SurfaceSlope(ReadOnlySpan<float> values, int samplesX, int samplesY, int samplesZ, Vector3 cell) {
+        int Index(int x, int y, int z) => x + samplesX * (y + samplesY * z);
         var slopes = new List<float>();
 
-        for (var z = 0; (z < m_samplesZ); z++) {
-            for (var y = 0; (y < m_samplesY); y++) {
-                for (var x = 0; (x < m_samplesX); x++) {
-                    var value = Values[Index(x: x, y: y, z: z)];
+        for (var z = 0; (z < samplesZ); z++) {
+            for (var y = 0; (y < samplesY); y++) {
+                for (var x = 0; (x < samplesX); x++) {
+                    var value = values[Index(x: x, y: y, z: z)];
 
-                    if (((x + 1) < m_samplesX) && ((value < 0f) != (Values[Index(x: (x + 1), y: y, z: z)] < 0f))) { slopes.Add(item: (MathF.Abs(x: (value - Values[Index(x: (x + 1), y: y, z: z)])) / m_cell.X)); }
-                    if (((y + 1) < m_samplesY) && ((value < 0f) != (Values[Index(x: x, y: (y + 1), z: z)] < 0f))) { slopes.Add(item: (MathF.Abs(x: (value - Values[Index(x: x, y: (y + 1), z: z)])) / m_cell.Y)); }
-                    if (((z + 1) < m_samplesZ) && ((value < 0f) != (Values[Index(x: x, y: y, z: (z + 1))] < 0f))) { slopes.Add(item: (MathF.Abs(x: (value - Values[Index(x: x, y: y, z: (z + 1))])) / m_cell.Z)); }
+                    if (((x + 1) < samplesX) && ((value < 0f) != (values[Index(x: (x + 1), y: y, z: z)] < 0f))) { slopes.Add(item: (MathF.Abs(x: (value - values[Index(x: (x + 1), y: y, z: z)])) / cell.X)); }
+                    if (((y + 1) < samplesY) && ((value < 0f) != (values[Index(x: x, y: (y + 1), z: z)] < 0f))) { slopes.Add(item: (MathF.Abs(x: (value - values[Index(x: x, y: (y + 1), z: z)])) / cell.Y)); }
+                    if (((z + 1) < samplesZ) && ((value < 0f) != (values[Index(x: x, y: y, z: (z + 1))] < 0f))) { slopes.Add(item: (MathF.Abs(x: (value - values[Index(x: x, y: y, z: (z + 1))])) / cell.Z)); }
                 }
             }
         }
-        slopes.Sort();
 
-        return ((slopes.Count > 0) ? OrderStatistics.Quantile(ascending: CollectionsMarshal.AsSpan(list: slopes), fraction: 0.5) : 1f);
+        return ((slopes.Count > 0) ? OrderStatistics.SelectMedian(CollectionsMarshal.AsSpan(slopes)) : 1f);
     }
     /// <summary>Answers a run of the fine samples <see cref="Refine"/> named.</summary>
     /// <param name="first">The first sample the run answers, in <see cref="Refine"/>'s order.</param>
@@ -1924,7 +1940,7 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
     public ReadOnlyMemory<Vector4> CrossingPoints() {
         PrepareCrossings();
         if (!m_rootsPrepared) {
-            // The roots and the pending keys are written where they stay, in the order of their edges, then cut to the edges
+            // The roots and the pending keys are written where they stay, in m_crossingKeys' order, then cut to the edges
             // searched: a closed edge's key has neither.
             var roots = m_crossingRoots;
             var keys = m_pendingCrossings;
@@ -1932,8 +1948,8 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
 
             roots.Resize(length: m_crossingKeys.Length, clear: false, preserve: false);
             keys.Resize(length: m_crossingKeys.Length, clear: false, preserve: false);
-            _ = m_crossingRootIndex.EnsureCapacity(capacity: m_crossingKeys.Length);
-            foreach (var key in m_crossingKeys) {
+            for (var edge = 0; edge < m_crossingKeys.Length; edge++) {
+                var key = m_crossingKeys[edge];
                 var (start, axis, length) = CrossingEdge(key: key);
                 var end = EdgeEnd(axis: axis, length: length, start: start);
 
@@ -1941,14 +1957,14 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
                 // contour's topology keeps; its root is searched along the edge as a measured one is. Inside a union the
                 // interpolated value is no distance (a layer thinner than a coarse cell measures to the face it shares
                 // with its neighbour), so its linear estimate lands off the surface, by up to that layer's thickness.
-                if (Closed(key: start) || Closed(key: end)) { continue; }
+                if (m_crossingData[edge].Closed) { continue; }
                 var (x, y, z) = FineCoordinates(key: start);
                 var (ex, ey, ez) = FineCoordinates(key: end);
 
-                m_crossingRootIndex.Add(key: key, value: searched);
                 roots[searched] = new CrossingRoot(first: FineValue(x: x, y: y, z: z), second: FineValue(x: ex, y: ey, z: ez));
                 keys[searched] = key;
                 searched++;
+                m_crossingData[edge].RootPlusOne = searched;
             }
             m_rootsPrepared = true;
             // The first round's roots; each later round keeps those still searching.
@@ -2083,9 +2099,10 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
         }
 
         var listed = m_gradientKeys.Length;
-        // Every answer lands in one of the two: size both once rather than growing them answer by answer.
-        _ = m_fineGradients.EnsureCapacity(capacity: listed);
-        _ = m_crossingGradients.EnsureCapacity(capacity: m_crossingKeys.Length);
+        // A fine answer lands at its sample's slot and a crossing's in its edge's row (CrossingEdges sized those): size the
+        // slots once rather than growing them answer by answer.
+        m_fineGradients.Resize(m_fineValues.Length, clear: false, preserve: false);
+        m_gradientAnswered.Resize((m_fineValues.Length + 63) >> 6);
 
         m_points.Resize(length: (listed + m_crossingKeys.Length), clear: false, preserve: false);
 
@@ -2103,7 +2120,7 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
             var position = new Vector3(x: fx, y: fy, z: fz);
             var step = ((axis == 0) ? Vector3.UnitX : ((axis == 1) ? Vector3.UnitY : Vector3.UnitZ));
 
-            points[(listed + index)] = new Vector4(value: (m_origin + ((position + (step * (Crossing(axis: axis, length: length, x: fx, y: fy, z: fz) * length))) * fine)), w: 1f);
+            points[(listed + index)] = new Vector4(value: (m_origin + ((position + (step * (Crossing(index: out _, axis: axis, length: length, x: fx, y: fy, z: fz) * length))) * fine)), w: 1f);
         }
 
         return m_points.Memory;
@@ -2533,8 +2550,8 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
     // nearer face beyond the edge and tilt the vertex's tangent planes into a chamfer.
     // Fills the crossing keys and crossed fine cells.
     private void CrossingEdges() {
-        // Every edge as each cell meets it, repeats included; the distinct ones are kept in the order first met.
-        // Both are listed where they stay, in the lattice's own buffers.
+        // Every edge as each cell meets it, repeats included, then the distinct ones in key order, each a row of
+        // m_crossingData. Both are listed where they stay, in the lattice's own buffers.
         m_crossingKeys.Resize(length: 0, clear: false, preserve: false);
         m_crossedFineCells.Resize(length: 0, clear: false, preserve: false);
 
@@ -2612,19 +2629,30 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
                 }
             }
         }
-        m_crossingKeys.Resize(length: SpanDistinct.InOrder(items: m_crossingKeys.GetSpan()), clear: false);
+        var sorted = m_crossingKeys.GetSpan();
+        sorted.Sort();
+        m_crossingKeys.Resize(length: SpanDistinct.Sorted(sorted), clear: false);
+        m_crossingData.Resize(m_crossingKeys.Length);
+        m_crossingIndex.EnsureCapacity(m_crossingKeys.Length);
+        for (var index = 0; index < m_crossingKeys.Length; index++) {
+            var key = m_crossingKeys[index];
+            var (start, axis, length) = CrossingEdge(key);
+            m_crossingIndex.Add(key, index);
+            m_crossingData[index] = new CrossingData { Closed = Closed(start) || Closed(EdgeEnd(start: start, axis: axis, length: length)) };
+        }
     }
     // A crossing edge's key: its start sample's fine key, its axis and whether it is a coarse cell long.
     private long CrossingKey(int start, int axis, int length) => ((((((long)start) * 3L) + axis) * 2L) + (((length > 1) && (m_factor > 1)) ? 1L : 0L));
     private (int Start, int Axis, int Length) CrossingEdge(long key) => (((int)((key / 2L) / 3L)), ((int)((key / 2L) % 3L)), (((key & 1L) == 1L) ? m_factor : 1));
     // The refined zero along the edge `length` fine cells long from (x, y, z), in [0, 1]. Synthetic samples retain the
     // linear crossing of the lattice the contour must connect, rather than the underlying field it intentionally replaces.
-    private float Crossing(int x, int y, int z, int axis, int length) {
+    private float Crossing(int x, int y, int z, int axis, int length, out int index) {
         var fineX = (((m_samplesX - 1) * m_factor) + 1);
         var fineY = (((m_samplesY - 1) * m_factor) + 1);
         var start = (x + (fineX * (y + (fineY * z))));
 
-        if (m_crossingRootIndex.TryGetValue(key: CrossingKey(axis: axis, length: length, start: start), value: out var root)) { return m_crossingRoots[root].Position; }
+        index = m_crossingIndex.GetValueOrDefault(CrossingKey(start, axis, length), -1);
+        if (index >= 0 && m_crossingData[index].RootPlusOne is > 0 and var root) { return m_crossingRoots[root - 1].Position; }
         var va = FineValue(x: x, y: y, z: z);
         var vb = FineValue(x: (x + ((axis == 0) ? length : 0)), y: (y + ((axis == 1) ? length : 0)), z: (z + ((axis == 2) ? length : 0)));
         var denominator = (va - vb);
@@ -2655,7 +2683,7 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
             var gradient = new Vector3(x: gradients[(3 * index)], y: gradients[((3 * index) + 1)], z: gradients[((3 * index) + 2)]);
 
             if ((first + index) >= m_gradientKeys.Length) {
-                m_crossingGradients[m_crossingKeys[((first + index) - m_gradientKeys.Length)]] = new Vector4(value: gradient, w: values[index]);
+                m_crossingData[(first + index) - m_gradientKeys.Length].Gradient = new Vector4(value: gradient, w: values[index]);
 
                 continue;
             }
@@ -2668,7 +2696,9 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
             if (((fx % factor) == 0) && ((fy % factor) == 0) && ((fz % factor) == 0)) {
                 m_gradients[Index(x: (fx / factor), y: (fy / factor), z: (fz / factor))] = gradient;
             } else {
-                m_fineGradients[key] = gradient;
+                var slot = FineSlot(fx, fy, fz);
+                m_fineGradients[slot] = gradient;
+                m_gradientAnswered[slot >> 6] |= 1UL << (slot & 63);
             }
         }
     }
@@ -3128,6 +3158,16 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
         m_signInside[word] = ((value < 0f) ? m_signInside[word] | bit : m_signInside[word] & ~bit);
     }
     // A fine sample's gradient: the one measured there, or else the trilinear interpolation of its coarse cell's corners'.
+    private bool TryFineGradient(int x, int y, int z, out Vector3 gradient) {
+        var slot = FineSlot(x, y, z);
+        if (slot >= 0 && (slot >> 6) < m_gradientAnswered.Length && (m_gradientAnswered[slot >> 6] & (1UL << (slot & 63))) != 0) {
+            gradient = m_fineGradients[slot];
+            return true;
+        }
+        gradient = default;
+        return false;
+    }
+
     private Vector3 FineGradient(int x, int y, int z) {
         var factor = m_factor;
 
@@ -3135,10 +3175,7 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
             return m_gradients[Index(x: (x / factor), y: (y / factor), z: (z / factor))];
         }
 
-        var fineX = (((m_samplesX - 1) * factor) + 1);
-        var fineY = (((m_samplesY - 1) * factor) + 1);
-
-        if (m_fineGradients.TryGetValue(key: (x + (fineX * (y + (fineY * z)))), value: out var measured)) {
+        if (TryFineGradient(x, y, z, out var measured)) {
             return measured;
         }
 
@@ -3154,7 +3191,7 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
 
             sum += (corner.Weight * ((((gx % factor) == 0) && ((gy % factor) == 0) && ((gz % factor) == 0))
                 ? m_gradients[Index(x: (gx / factor), y: (gy / factor), z: (gz / factor))]
-                : (m_fineGradients.TryGetValue(key: (gx + (fineX * (gy + (fineY * gz)))), value: out var cornerGradient) ? cornerGradient : CoarseGradient(x: gx, y: gy, z: gz))));
+                : (TryFineGradient(gx, gy, gz, out var cornerGradient) ? cornerGradient : CoarseGradient(x: gx, y: gy, z: gz))));
         }
 
         return sum;
@@ -3209,7 +3246,7 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
     // cell coordinates scaled per axis, and a normal trilinearly interpolated from the gradients of the eight samples
     // around a point.
     private readonly struct Lattice(SdfSampledLattice owner) : ISdfRefinedContourLattice {
-        public double Crossing(int x, int y, int z, int axis, int length) => owner.Crossing(axis: axis, length: length, x: x, y: y, z: z);
+        public double Crossing(int x, int y, int z, int axis, int length, out int index) => owner.Crossing(index: out index, axis: axis, length: length, x: x, y: y, z: z);
 
         public int CellsX => ((owner.m_samplesX - 1) * owner.m_factor);
         public int CellsY => ((owner.m_samplesY - 1) * owner.m_factor);
@@ -3229,6 +3266,7 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
             }
         }
         public int Refinement => owner.m_factor;
+        public ReadOnlySpan<long> CrossingKeys => owner.m_crossingKeys.GetSpan();
         public ReadOnlySpan<SdfCrossedCell> CrossedFineCells => owner.m_crossedFineCells.GetSpan();
 
         public bool Refined(int x, int y, int z) => owner.m_refined[(x + ((owner.m_samplesX - 1) * (y + ((owner.m_samplesY - 1) * z))))];
@@ -3252,14 +3290,10 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
         public bool CrossingNormals => true;
 
         // A crossing's own measured gradient and value, or the gradient its edge's samples interpolate, on the surface.
-        public bool TryCrossingNormal(int x, int y, int z, int axis, int length, double wx, double wy, double wz, out double nx, out double ny, out double nz, out double offset) {
-            var start = (x + ((CellsX + 1) * (y + ((CellsY + 1) * z))));
-            var end = (start + ((axis == 0) ? length : ((axis == 1) ? (length * (CellsX + 1)) : ((length * (CellsX + 1)) * (CellsY + 1)))));
-            // A crossing beside a closed sample lies where the samples put it, a cell's thickness from the sheet's other
-            // face (CloseSheets); moved onto the sheet it would cross it.
-            var closed = (owner.Closed(key: start) || owner.Closed(key: end));
-
-            if (owner.m_crossingGradients.TryGetValue(key: owner.CrossingKey(axis: axis, length: length, start: start), value: out var measured)) {
+        public bool TryCrossingNormal(int index, int length, double wx, double wy, double wz, out double nx, out double ny, out double nz, out double offset) {
+            if (index >= 0) {
+                ref readonly var crossing = ref owner.m_crossingData[index];
+                var measured = crossing.Gradient;
                 var gradient = new Vector3(x: measured.X, y: measured.Y, z: measured.Z);
                 var magnitude = gradient.Length();
 
@@ -3271,7 +3305,7 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
                     (nx, ny, nz) = (gradient.X, gradient.Y, gradient.Z);
                     // A searched root stays on its edge, and a closed sheet retains its deliberately displaced crossing;
                     // any other crossing's plane moves by its measured value.
-                    offset = ((closed || owner.m_crossingRootIndex.ContainsKey(key: owner.CrossingKey(axis: axis, length: length, start: start)))
+                    offset = ((crossing.Closed || crossing.RootPlusOne > 0)
                         ? 0.0
                         : Math.Clamp(max: reach, min: -reach, value: (measured.W / magnitude)));
 

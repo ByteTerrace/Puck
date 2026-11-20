@@ -352,13 +352,20 @@ public sealed class SdfMeshStore {
     /// <returns><see langword="true"/> when the entry was written.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="materials"/> is
     /// <see langword="null"/>.</exception>
-    public bool Write(UInt128 identity, SdfMeshGeometry geometry, SdfMesh? mesh, int[] materials) {
+    public bool Write(UInt128 identity, SdfMeshGeometry geometry, SdfMesh? mesh, int[] materials) =>
+        Write(identity, geometry, mesh, materials, out _);
+
+    // As the public Write, also answering the position planes the entry stored (SdfMeshStoreCodec.Encode), which a
+    // written mesh's native copy conforms to; null when the encode never ran.
+    internal bool Write(UInt128 identity, SdfMeshGeometry geometry, SdfMesh? mesh, int[] materials, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out SdfMeshStoreCodec.Positions? stored) {
         ArgumentNullException.ThrowIfNull(argument: materials);
         if ((mesh is null) && (materials.Length != 0)) { throw new ArgumentException(message: "An empty bake carries no materials.", paramName: nameof(materials)); }
 
         var key = KeyOf(geometry: geometry, identity: identity);
         var path = PathOf(identity: identity, key: key);
-        return WriteEntry(path, (key, mesh, materials), static (output, entry) => SdfMeshStoreCodec.Encode(output, entry.key, entry.mesh, entry.materials));
+
+        stored = null;
+        return WriteEntry(path, new MeshPayload(key, mesh, materials, ref stored), static (output, entry) => entry.Stored = SdfMeshStoreCodec.Encode(output, entry.Key, entry.Mesh, entry.Materials));
     }
 
     // A finished mesh and an intermediate are bounded apart, each in its own directory: PathOf puts every entry under the
@@ -599,8 +606,8 @@ public sealed class SdfMeshStore {
 
         return XxHash128.HashToUInt128(source: key);
     }
-    // A finished mesh lives in its identity's set under Directory, an intermediate in its stage identity's set under
-    // IntermediateDirectory.
+    // A finished mesh lives in its identity's set under Directory (the directory SetDirectoryOf names), an intermediate in
+    // its stage identity's set under IntermediateDirectory.
     private string PathOf(UInt128 identity, UInt128 key, string extension = Extension) {
         Span<char> set = stackalloc char[32];
         Span<char> name = stackalloc char[32 + MaxExtensionLength];
@@ -619,6 +626,20 @@ public sealed class SdfMeshStore {
     private readonly ref struct SamplePayload(UInt128 key, ReadOnlySpan<byte> samples) {
         public UInt128 Key { get; } = key;
         public ReadOnlySpan<byte> Samples { get; } = samples;
+    }
+    // A mesh entry's inputs, and where the encode answers the position planes it stored.
+    private readonly ref struct MeshPayload {
+        public MeshPayload(UInt128 key, SdfMesh? mesh, int[] materials, ref SdfMeshStoreCodec.Positions? stored) {
+            Key = key;
+            Mesh = mesh;
+            Materials = materials;
+            Stored = ref stored;
+        }
+
+        public UInt128 Key { get; }
+        public SdfMesh? Mesh { get; }
+        public int[] Materials { get; }
+        public readonly ref SdfMeshStoreCodec.Positions? Stored;
     }
     // Deletes a file the store owns, leaving one another World holds open for a later trim or refusal to remove.
     private static void Delete(string path) => _ = Quietly(action: () => File.Delete(path: path));

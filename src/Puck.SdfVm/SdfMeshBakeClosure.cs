@@ -30,7 +30,7 @@ public sealed class SdfMeshBakeClosure {
         ("Puck.SdfVm", "Puck.SdfVm.SdfMeshBakeBatch", "PointRuns"),
         ("Puck.SdfVm", "Puck.SdfVm.SdfMeshBakeBatch", "get_InputRows"),
         ("Puck.SdfVm", "Puck.SdfVm.SdfMeshBakeBatch", "PoseBase"),
-        ("Puck.SdfVm", "Puck.SdfVm.SdfMeshBakeBatch", "WriteSampled"),
+        ("Puck.SdfVm", "Puck.SdfVm.SdfMeshBakeBatch", "WriteSampledDirectory"),
         ("Puck.SdfVm", "Puck.SdfVm.SdfMeshBakeBlock", "Write"),
         ("Puck.SdfVm", "Puck.SdfVm.SdfWorldTables", "WriteProgramWords"),
         ("Puck.SdfVm", "Puck.SdfVm.SdfWorldTables", nameof(SdfWorldTables.SetGlyphAtlas)),
@@ -123,6 +123,7 @@ public sealed class SdfMeshBakeClosure {
     /// <param name="directory">The deployed build directory.</param>
     /// <returns>The bake closure.</returns>
     public static SdfMeshBakeClosure Of(string directory) {
+        using var modules = new Puck.Assets.CodeClosure.ModuleSet(directory);
         var codec = typeof(SdfMeshStoreCodec).FullName!;
         var simplification = typeof(SdfMeshPathBake.SimplificationStage).FullName!.Replace('+', '/');
         var contourStops = new HashSet<string>(StopTypes, StringComparer.Ordinal) { simplification };
@@ -134,27 +135,28 @@ public sealed class SdfMeshBakeClosure {
             ("Puck.SdfVm", typeof(SdfMeshStore).FullName!, nameof(SdfMeshStore.TryReadSamples)),
             ("Puck.SdfVm", typeof(SdfMeshStore).FullName!, nameof(SdfMeshStore.WriteSamples)),
         ];
-        var sampling = Puck.Assets.CodeClosure.Of(directory, stopTypes: StopTypes, roots: sampleRoots);
-        var contouring = Puck.Assets.CodeClosure.Of(directory, roots: contourRoots, stopTypes: contourStops);
-        var meshCheckpoints = Puck.Assets.CodeClosure.Of(directory, stopTypes: StopTypes, roots: [
+        var sampling = modules.Of(stopTypes: StopTypes, roots: sampleRoots);
+        var contouring = modules.Of(roots: contourRoots, stopTypes: contourStops);
+        var meshCheckpoints = modules.Of(stopTypes: StopTypes, roots: [
             ("Puck.SdfVm", codec, nameof(SdfMeshStoreCodec.EncodeExact)),
             ("Puck.SdfVm", typeof(SdfMeshStoreDecoder).FullName!, nameof(SdfMeshStoreDecoder.TryDecode)),
         ]);
-        var simplified = Puck.Assets.CodeClosure.Of(directory, stopTypes: StopTypes, roots: [
+        var simplified = modules.Of(stopTypes: StopTypes, roots: [
             ("Puck.SdfVm", simplification, nameof(SdfMeshPathBake.SimplificationStage.Run)),
         ]);
         return new SdfMeshBakeClosure(
-            Puck.Assets.CodeClosure.Of(directory, roots: BakeRoots, stopTypes: StopTypes), ReadEntryVersion(directory),
+            modules.Of(roots: BakeRoots, stopTypes: StopTypes), ReadEntryVersion(modules),
             sampling: sampling, contouring: contouring, simplification: simplified, checkpoints: meshCheckpoints);
     }
     /// <summary>Walks explicit roots with the bake's transport boundaries.</summary>
     /// <param name="directory">The deployed build directory.</param>
     /// <param name="roots">Assembly, type and method roots.</param>
     /// <returns>The closure.</returns>
-    public static SdfMeshBakeClosure Of(string directory, IReadOnlyList<(string Assembly, string Type, string? Method)> roots) => new(
-        code: Puck.Assets.CodeClosure.Of(directory: directory, roots: roots, stopTypes: StopTypes),
-        entryVersion: ReadEntryVersion(directory));
-    private static string ReadEntryVersion(string directory) => SdfMeshStore.VersionText(magic: Puck.Assets.CodeClosure.ReadUInt64Constant(directory: directory, assembly: "Puck.SdfVm", type: "Puck.SdfVm.SdfMeshStore", field: "Magic"));
+    public static SdfMeshBakeClosure Of(string directory, IReadOnlyList<(string Assembly, string Type, string? Method)> roots) {
+        using var modules = new Puck.Assets.CodeClosure.ModuleSet(directory);
+        return new(modules.Of(roots, StopTypes), ReadEntryVersion(modules));
+    }
+    private static string ReadEntryVersion(Puck.Assets.CodeClosure.ModuleSet modules) => SdfMeshStore.VersionText(magic: modules.ReadUInt64Constant(assembly: "Puck.SdfVm", type: "Puck.SdfVm.SdfMeshStore", field: "Magic"));
     /// <summary>Lists added, changed and removed members in ordinal order.</summary>
     /// <param name="members">The current members.</param>
     /// <param name="earlier">The earlier members.</param>

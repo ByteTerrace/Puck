@@ -482,13 +482,13 @@ public static class SdfMeshAudit {
         ArgumentNullException.ThrowIfNull(argument: options);
 
         var reference = mesh;
-        var referenceCell = ((options.Level == 0) ? 0f : MedianEdge(edges: Edges(indices: mesh.Indices.Span, welded: Weld(positions: mesh.Positions.Span)), positions: mesh.Positions.Span));
+        var referenceCell = ((options.Level == 0) ? 0f : MedianEdge(edges: Edges(indices: mesh.Indices.Span, welded: mesh.Sites()), positions: mesh.Positions.Span));
 
         mesh = Surface(mesh: mesh, level: options.Level);
         var positions = mesh.Positions.Span;
         var indices = mesh.Indices.Span;
         var triangles = mesh.TriangleCount;
-        var welded = Weld(positions: positions);
+        var welded = mesh.Sites();
         var edges = Edges(indices: indices, welded: welded);
         var cell = ((options.Level == 0) ? MedianEdge(edges: edges, positions: positions) : referenceCell);
         var threshold = (options.ErrorCells * cell);
@@ -820,7 +820,7 @@ public static class SdfMeshAudit {
     public static (int Open, int NonManifold, bool[] OpenTriangles) EdgeCounts(SdfMesh mesh) {
         ArgumentNullException.ThrowIfNull(argument: mesh);
 
-        var edges = Edges(indices: mesh.Indices.Span, welded: Weld(positions: mesh.Positions.Span));
+        var edges = Edges(indices: mesh.Indices.Span, welded: mesh.Sites());
         var openTriangles = new bool[mesh.TriangleCount];
         var open = 0;
         var nonManifold = 0;
@@ -839,20 +839,6 @@ public static class SdfMeshAudit {
 
     // Each vertex's first vertex at the same position: the contour splits a vertex at creases and material boundaries
     // into copies that share it.
-    private static int[] Weld(ReadOnlySpan<Vector3> positions) {
-        var first = new Dictionary<Vector3, int>(capacity: positions.Length);
-        var welded = new int[positions.Length];
-
-        for (var vertex = 0; (vertex < positions.Length); vertex++) {
-            if (!first.TryGetValue(key: positions[vertex], value: out var at)) {
-                at = vertex;
-                first.Add(key: positions[vertex], value: vertex);
-            }
-            welded[vertex] = at;
-        }
-
-        return welded;
-    }
     // Every welded edge, ordered by its first appearance, with the triangles that hold it.
     private static Dictionary<(int First, int Second), Held> Edges(ReadOnlySpan<uint> indices, int[] welded) {
         var edges = new Dictionary<(int First, int Second), Held>();

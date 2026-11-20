@@ -1,6 +1,4 @@
-using System.Buffers.Binary;
 using System.Numerics;
-using Puck.Shaders;
 using Puck.SignedDistance;
 using Puck.Testing;
 using Xunit;
@@ -638,28 +636,23 @@ public sealed partial class SdfMeshPathBakeLawTests : IClassFixture<SdfMeshPathB
     // The bake kernel's answer to a batch: each lattice's samples, x fastest, grid or points, over the instances its
     // selector names.
     private static byte[] Answer(SdfMeshBakeBatch batch, int[] materials, Shape[] shapes) {
-        var bytes = new byte[((batch.Samples * SdfWorldPackage.MeshBakeSampleWords) * sizeof(uint))];
-        var sample = 0;
+        var bytes = new byte[batch.OutputBytes];
+        var offset = 0;
 
         foreach (var lattice in batch.Lattices) {
             var first = -(lattice.Selector + 1);
             var spacing = lattice.TapSpacing;
             var count = lattice.Instances;
 
-            for (var local = 0; (local < lattice.Samples); local++, sample++) {
+            for (var local = 0; local < lattice.Samples; local++) {
                 var position = lattice.SampleAt(local: local);
 
                 var (value, shape) = Nearest(count: count, first: first, point: position, shapes: shapes);
                 var gradient = (lattice.Gradients ? SdfMeshBakeTaps.Gradient(field: point => Nearest(count: count, first: first, point: point, shapes: shapes).Value, point: position, spacing: spacing) : Vector3.Zero);
 
-                var record = bytes.AsSpan(start: ((sample * SdfWorldPackage.MeshBakeSampleWords) * sizeof(uint)));
-
-                BinaryPrimitives.WriteSingleLittleEndian(destination: record, value: value);
-                BinaryPrimitives.WriteInt32LittleEndian(destination: record[4..], value: materials[shapes[shape].Material]);
-                BinaryPrimitives.WriteSingleLittleEndian(destination: record[8..], value: gradient.X);
-                BinaryPrimitives.WriteSingleLittleEndian(destination: record[12..], value: gradient.Y);
-                BinaryPrimitives.WriteSingleLittleEndian(destination: record[16..], value: gradient.Z);
+                lattice.WriteSample(bytes.AsSpan(offset, lattice.OutputBytes), local, value, materials[shapes[shape].Material], gradient);
             }
+            offset += lattice.OutputBytes;
         }
 
         return bytes;
@@ -668,30 +661,20 @@ public sealed partial class SdfMeshPathBakeLawTests : IClassFixture<SdfMeshPathB
     // first riding slot one and the second slot two; a points lattice without gradients answers the winning shape's slot in
     // the first gradient word.
     private static byte[] AnswerSlots(SdfMeshBakeBatch batch, Shape[] shapes) {
-        var bytes = new byte[((batch.Samples * SdfWorldPackage.MeshBakeSampleWords) * sizeof(uint))];
-        var sample = 0;
+        var bytes = new byte[batch.OutputBytes];
+        var offset = 0;
 
         foreach (var lattice in batch.Lattices) {
             var spacing = lattice.TapSpacing;
 
-            for (var local = 0; (local < lattice.Samples); local++, sample++) {
+            for (var local = 0; local < lattice.Samples; local++) {
                 var position = lattice.SampleAt(local: local);
 
                 var (value, shape) = Nearest(count: shapes.Length, first: 0, point: position, shapes: shapes);
-                var record = bytes.AsSpan(start: ((sample * SdfWorldPackage.MeshBakeSampleWords) * sizeof(uint)));
-
-                BinaryPrimitives.WriteSingleLittleEndian(destination: record, value: value);
-                BinaryPrimitives.WriteInt32LittleEndian(destination: record[4..], value: shapes[shape].Material);
-                if (lattice.Gradients) {
-                    var gradient = SdfMeshBakeTaps.Gradient(field: point => Nearest(count: shapes.Length, first: 0, point: point, shapes: shapes).Value, point: position, spacing: spacing);
-
-                    BinaryPrimitives.WriteSingleLittleEndian(destination: record[8..], value: gradient.X);
-                    BinaryPrimitives.WriteSingleLittleEndian(destination: record[12..], value: gradient.Y);
-                    BinaryPrimitives.WriteSingleLittleEndian(destination: record[16..], value: gradient.Z);
-                } else if (!lattice.Points.IsEmpty) {
-                    BinaryPrimitives.WriteInt32LittleEndian(destination: record[8..], value: (shape + 1));
-                }
+                var gradient = lattice.Gradients ? SdfMeshBakeTaps.Gradient(field: point => Nearest(count: shapes.Length, first: 0, point: point, shapes: shapes).Value, point: position, spacing: spacing) : Vector3.Zero;
+                lattice.WriteSample(bytes.AsSpan(offset, lattice.OutputBytes), local, value, shapes[shape].Material, gradient);
             }
+            offset += lattice.OutputBytes;
         }
 
         return bytes;

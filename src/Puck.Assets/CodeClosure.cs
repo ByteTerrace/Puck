@@ -48,28 +48,50 @@ public sealed partial class CodeClosure {
     /// spelled <c>Outer/Nested</c>; a stop type stops the types nested in it, and explicit roots still run.</param>
     /// <returns>The immutable closure.</returns>
     public static CodeClosure Of(string directory, IReadOnlyList<(string Assembly, string Type, string? Method)> roots, IReadOnlySet<string>? stopTypes = null) {
-        ArgumentException.ThrowIfNullOrWhiteSpace(argument: directory);
-        ArgumentNullException.ThrowIfNull(argument: roots);
-        var walk = new Walk(directory: Path.GetFullPath(path: directory), stopTypes: stopTypes ?? new HashSet<string>());
-        var members = walk.Run(roots: roots);
-        return new CodeClosure(members: members, reasons: walk.Reasons, types: walk.Types);
+        using var modules = new ModuleSet(directory);
+        return modules.Of(roots, stopTypes);
     }
-    /// <summary>Reads an unsigned constant from a deployed assembly's metadata.</summary>
-    /// <param name="directory">The build directory.</param>
-    /// <param name="assembly">The assembly's simple name.</param>
-    /// <param name="type">The full type name.</param>
-    /// <param name="field">The constant field name.</param>
-    /// <returns>The constant's value.</returns>
-    public static ulong ReadUInt64Constant(string directory, string assembly, string type, string field) {
-        var module = new Module(name: assembly, image: File.ReadAllBytes(path: Path.Combine(path1: directory, path2: assembly + ".dll")));
-        using var pe = module.Pe;
-        foreach (var handle in module.Metadata.GetTypeDefinition(handle: module.Types[type]).GetFields()) {
-            var definition = module.Metadata.GetFieldDefinition(handle: handle);
-            if (module.Metadata.StringComparer.Equals(handle: definition.Name, value: field) && definition.GetDefaultValue() is { IsNil: false } constant) {
-                return module.Metadata.GetBlobReader(handle: module.Metadata.GetConstant(handle: constant).Value).ReadUInt64();
-            }
+
+    /// <summary>Assembly images shared by independent closure walks of one deployed build.</summary>
+    public sealed class ModuleSet(string directory) : IDisposable {
+        private readonly string m_directory = Path.GetFullPath(directory);
+        private readonly Dictionary<string, Module?> m_modules = new(StringComparer.Ordinal);
+        private readonly Dictionary<MetadataReader, Module> m_byReader = [];
+
+        /// <summary>Walks these roots with an independent reachability set.</summary>
+        public CodeClosure Of(IReadOnlyList<(string Assembly, string Type, string? Method)> roots, IReadOnlySet<string>? stopTypes = null) {
+            ArgumentNullException.ThrowIfNull(roots);
+            var walk = new Walk(m_directory, stopTypes ?? new HashSet<string>(), Load, m_byReader);
+            return new CodeClosure(walk.Run(roots), walk.Reasons, walk.Types);
         }
-        throw new KeyNotFoundException(message: $"{assembly}!{type}.{field}");
+
+        private Module? Load(string name) {
+            if (m_modules.TryGetValue(name, out var held)) { return held; }
+            var path = Path.Combine(m_directory, name + ".dll");
+            var module = name.StartsWith("Puck.", StringComparison.Ordinal) && File.Exists(path) ? new Module(name, File.ReadAllBytes(path)) : null;
+            m_modules.Add(name, module);
+            if (module is not null) { m_byReader.Add(module.Metadata, module); }
+            return module;
+        }
+
+        /// <summary>Reads an unsigned constant from the same images the walks use.</summary>
+        public ulong ReadUInt64Constant(string assembly, string type, string field) {
+            var module = Load(assembly) ?? throw new FileNotFoundException(assembly);
+            foreach (var handle in module.Metadata.GetTypeDefinition(handle: module.Types[type]).GetFields()) {
+                var definition = module.Metadata.GetFieldDefinition(handle: handle);
+                if (module.Metadata.StringComparer.Equals(handle: definition.Name, value: field) && definition.GetDefaultValue() is { IsNil: false } constant) {
+                    return module.Metadata.GetBlobReader(handle: module.Metadata.GetConstant(handle: constant).Value).ReadUInt64();
+                }
+            }
+            throw new KeyNotFoundException(message: $"{assembly}!{type}.{field}");
+        }
+
+        /// <inheritdoc/>
+        public void Dispose() {
+            foreach (var module in m_modules.Values) { module?.Pe.Dispose(); }
+            m_modules.Clear();
+            m_byReader.Clear();
+        }
     }
     /// <summary>Returns the members whose hash differs between two closures' members, with those only one holds, in
     /// ordinal order.</summary>
@@ -104,7 +126,7 @@ public sealed partial class CodeClosure {
     private sealed class Module {
         public Module(string name, byte[] image) {
             Name = name;
-            Pe = new PEReader(peImage: ImmutableArray.Create(items: image));
+            Pe = new PEReader(peImage: System.Runtime.InteropServices.ImmutableCollectionsMarshal.AsImmutableArray(image));
             Metadata = Pe.GetMetadataReader();
             foreach (var handle in Metadata.TypeDefinitions) {
                 Types[FullName(handle: handle)] = handle;
@@ -127,7 +149,7 @@ public sealed partial class CodeClosure {
     }
 
     // The walk over one build's assemblies, from the roots to every member they reach.
-    private sealed class Walk(string directory, IReadOnlySet<string> stopTypes) : ISignatureTypeProvider<string, object?> {
+    private sealed class Walk(string directory, IReadOnlySet<string> stopTypes, Func<string, Module?> load, Dictionary<MetadataReader, Module> readers) : ISignatureTypeProvider<string, object?> {
         private static readonly Dictionary<ushort, OpCode> OpCodesByValue = typeof(OpCodes)
             .GetFields(bindingAttr: (BindingFlags.Public | BindingFlags.Static))
             .Select(selector: static field => (OpCode)field.GetValue(obj: null)!)
@@ -138,8 +160,6 @@ public sealed partial class CodeClosure {
         // ShortInlineVar 18); a token or a switch's targets are read apart.
         private static readonly int[] OperandBytes = [4, 4, 4, 8, 4, 0, 0, 8, 0, 4, 4, 0, 4, 4, 2, 1, 1, 4, 1];
 
-        private readonly Dictionary<string, Module?> m_modules = new(comparer: StringComparer.Ordinal);
-        private readonly Dictionary<MetadataReader, Module> m_byReader = [];
         private readonly SortedDictionary<string, UInt128> m_members = new(comparer: StringComparer.Ordinal);
         private readonly HashSet<(Module, MethodDefinitionHandle)> m_methodsSeen = [];
         private readonly Queue<(Module, MethodDefinitionHandle)> m_methods = new();
@@ -165,7 +185,7 @@ public sealed partial class CodeClosure {
 
         public SortedDictionary<string, UInt128> Run(IReadOnlyList<(string Assembly, string Type, string? Method)> roots) {
             foreach (var (assembly, type, method) in roots) {
-                var module = (Load(name: assembly) ?? throw new FileNotFoundException(message: $"'{directory}' holds no {assembly}.dll.", fileName: Path.Combine(path1: directory, path2: (assembly + ".dll"))));
+                var module = (load(assembly) ?? throw new FileNotFoundException(message: $"'{directory}' holds no {assembly}.dll.", fileName: Path.Combine(path1: directory, path2: (assembly + ".dll"))));
 
                 Index(root: module);
                 Root(method: method, module: module, type: module.Types[CanonicalTypeName(name: type)]);
@@ -204,17 +224,6 @@ public sealed partial class CodeClosure {
                 Root(method: null, module: module, type: nested);
             }
         }
-        private Module? Load(string name) {
-            if (m_modules.TryGetValue(key: name, value: out var held)) { return held; }
-
-            var path = Path.Combine(path1: directory, path2: (name + ".dll"));
-            var module = ((name.StartsWith(value: "Puck.", comparisonType: StringComparison.Ordinal) && File.Exists(path: path)) ? new Module(image: File.ReadAllBytes(path: path), name: name) : null);
-
-            m_modules[name] = module;
-            if (module is not null) { m_byReader[module.Metadata] = module; }
-
-            return module;
-        }
         // Loads every Puck assembly a root's references, transitively, and indexes each type under the types it derives
         // from and implements, so a call to an abstract member reaches every implementation those assemblies hold.
         private void Index(Module root) {
@@ -224,7 +233,7 @@ public sealed partial class CodeClosure {
             while (pending.TryDequeue(result: out var module)) {
                 if (!indexed.Add(item: module) || m_indexed.Contains(item: module)) { continue; }
                 foreach (var handle in module.Metadata.AssemblyReferences) {
-                    if (Load(name: module.Metadata.GetString(handle: module.Metadata.GetAssemblyReference(handle: handle).Name)) is { } referenced) { pending.Enqueue(item: referenced); }
+                    if (load(module.Metadata.GetString(handle: module.Metadata.GetAssemblyReference(handle: handle).Name)) is { } referenced) { pending.Enqueue(item: referenced); }
                 }
             }
             foreach (var module in indexed.Where(predicate: m_indexed.Add).OrderBy(keySelector: static module => module.Name, comparer: StringComparer.Ordinal)) {
@@ -253,7 +262,7 @@ public sealed partial class CodeClosure {
                 var scope = reference.ResolutionScope;
                 // A nested type's reference is scoped by its declaring type's; any other scope here is an assembly.
                 var outer = ((scope.Kind == HandleKind.TypeReference) ? Resolve(handle: (EntityHandle)scope, module: module) : null);
-                var target = ((outer is { } declaring) ? declaring.Item1 : ((scope.Kind == HandleKind.AssemblyReference) ? Load(name: reader.GetString(handle: reader.GetAssemblyReference(handle: (AssemblyReferenceHandle)scope).Name)) : null));
+                var target = ((outer is { } declaring) ? declaring.Item1 : ((scope.Kind == HandleKind.AssemblyReference) ? load(reader.GetString(handle: reader.GetAssemblyReference(handle: (AssemblyReferenceHandle)scope).Name)) : null));
                 var full = ((outer is { } within) ? (within.Item1.FullName(handle: within.Item2) + "/" + name) : ((space.Length == 0) ? name : (space + "." + name)));
 
                 return (((target is not null) && target.Types.TryGetValue(key: full, value: out var definition)) ? (target, definition) : null);
@@ -560,14 +569,14 @@ public sealed partial class CodeClosure {
         public string GetPrimitiveType(PrimitiveTypeCode typeCode) => typeCode.ToString();
         public string GetSZArrayType(string elementType) => (elementType + "[]");
         public string GetTypeFromDefinition(MetadataReader reader, TypeDefinitionHandle handle, byte rawTypeKind) {
-            var module = m_byReader[reader];
+            var module = readers[reader];
 
             Mention(module: module, type: handle);
 
             return module.FullName(handle: handle);
         }
         public string GetTypeFromReference(MetadataReader reader, TypeReferenceHandle handle, byte rawTypeKind) {
-            var module = m_byReader[reader];
+            var module = readers[reader];
             var reference = reader.GetTypeReference(handle: handle);
             var name = reader.GetString(handle: reference.Name);
             var space = reader.GetString(handle: reference.Namespace);

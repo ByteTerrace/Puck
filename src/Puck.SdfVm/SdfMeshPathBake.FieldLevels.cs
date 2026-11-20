@@ -51,7 +51,7 @@ public sealed partial class SdfMeshPathBake {
     /// <summary>
     /// Contours one field level of a group: the field sampled on a cubic lattice of the level's cell over a box, at the
     /// iso-value that offsets the surface outward by <paramref name="offset"/> (the lattice's measured slope,
-    /// <see cref="SdfSampledLattice.SurfaceSlope"/>, or each sample's own with <paramref name="localAim"/>, converts it
+    /// <see cref="SdfSampledLattice.SurfaceSlope()"/>, or each sample's own with <paramref name="localAim"/>, converts it
     /// to field units only to aim the contour; the oracle measures where it landed), then the bake's
     /// own stages after the lattice: crossings bracketed on their edges, gradients, the contour, the field check of the
     /// vertices no crossing pins, the crease split, the material cut, and the planar merge after its near-coplanar faces
@@ -122,9 +122,7 @@ public sealed partial class SdfMeshPathBake {
         }
         samples = new SdfMeshLevelSamples(Cell: cell, Dims: dims, Materials: materials, Origin: origin, Values: (float[])values.Clone());
 
-        using var lattice = new SdfSampledLattice(cell: new Vector3(value: cell), materials: materials, origin: origin, samplesX: dims.X, samplesY: dims.Y, samplesZ: dims.Z, values: values);
-        // The lattice reads the array it pins, so the offset applies in place once the raw slope is read.
-        var median = lattice.SurfaceSlope();
+        var median = SdfSampledLattice.SurfaceSlope(values, dims.X, dims.Y, dims.Z, new Vector3(cell));
         var slopes = (localAim ? LocalSlopes(cell: cell, dims: dims, median: median, values: samples.Values) : null);
 
         float IsoAt(Vector3 point) => (offset * ((slopes is null) ? median : Trilinear(cell: cell, dims: dims, origin: origin, point: point, values: slopes)));
@@ -133,6 +131,7 @@ public sealed partial class SdfMeshPathBake {
 
         // The cells the level's samples cannot resolve (two patches in a cell, a sheet or gap thinner than it) refine as
         // the bake's do, at two fine cells a coarse one and with no detail region, so the level stays one closed surface.
+        using var lattice = new SdfSampledLattice(cell: new Vector3(value: cell), materials: materials, origin: origin, samplesX: dims.X, samplesY: dims.Y, samplesZ: dims.Z, values: values);
         var fine = Xyz(points: lattice.Refine(factor: 2).Span);
 
         if (fine.Length > 0) {
