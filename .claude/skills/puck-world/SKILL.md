@@ -484,7 +484,7 @@ shipped engine content resolves through `PuckPaths.Shipped`.
 **A reload is a keyed delta between two source revisions.** The authority keeps the
 revision of the source it last took (`WorldServer.SourceRevision`: the document the
 source composed, drew and settled to, and its content pin), set at boot, load and
-reload; a restored checkpoint falls back to its base. `world.reload` (`WorldReload`)
+reload and retained in checkpoints. `world.reload` (`WorldReload`)
 captures that revision on the pump and reads the source on the thread pool as an edit
 (`WorldDefinitionLoader.TryLoadFileForEdit`: composed, drawn and settled, never
 admitted, so only the authority validates). A source that still composes to the
@@ -514,13 +514,16 @@ live value, the rule latches and the lattices' cells. No reload deals placements
 merged against still stand, and merges again on the tick otherwise; a replay drive
 re-reads the file and runs the same cut and merge. The verdict names the members it
 changed. `world.reload.stale-base` names a delta cut from another revision,
-`world.reload.target-mismatch` one that does not reproduce its pin. `world.reload`
-still clears the journal and moves the base to what it installed
+`world.reload.target-mismatch` one that does not reproduce its pin. A file reload
+adds the accepted edit to the journal. `world.undo` restores the prior live
+value and leaves the source file as saved
 ([the live edit path](../../../docs/plans/iteration.md#the-live-edit-path-step-3)).
 
-**A saved file reaches the World as a reload.** `world.watch on`
-(`WorldSourceWatch`, off by default) polls every file fact the last compile read
-and queues an ordinary `world.reload` after a quiet moment. A value you only want to
+**A saved file reaches the World as a reload.** A local operator's `.puck`
+source boot enables `world.watch` from the loader's file facts. The watch
+queues an ordinary `world.reload` after a quiet moment. `world.counters world.boot`
+reports watch pump calls, stamp queries, content reads, and delivered
+presentation rows and bytes. A value you only want to
 try goes through `world.row.set`, which installs by kind (`WorldDocument.InstallKindOf`)
 and survives a later reload that does not change the same row.
 [The authoring loop](../../../docs/plans/iteration/authoring-loop.md) holds the

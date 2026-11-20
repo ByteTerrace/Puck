@@ -3,10 +3,10 @@ using Puck.World.Protocol;
 namespace Puck.World.Server;
 
 public sealed partial class WorldDocument {
-    // What the tick has installed and not yet delivered: a shape change carries the definition, a value change
-    // carries state; the step delivers whichever is pending, once, through DeliverPending.
+    // A shape change primes the document. Smaller edits deliver the creation, shade and value rows they touched.
     private bool m_pendingDefinitionDelivery;
     private bool m_pendingStateDelivery;
+    private WorldDefinition? m_pendingPresentationBasis;
 
     /// <summary>Delivers whatever the step installed and has not yet delivered: the definition after a shape change,
     /// or the state after a value change, stamped with the tick and the rows the export sweep found moved.</summary>
@@ -17,20 +17,22 @@ public sealed partial class WorldDocument {
                 definition: m_definition,
                 version: Host.DocumentVersion
             );
-        } else if (m_pendingStateDelivery) {
-            var stamp = Host.TakeStateStamp() with { ArenaValues = true };
-
-            Host.Output.DeliverState(
-                definition: m_definition,
-                stamp: in stamp,
-                version: Host.DocumentVersion
-            );
-            Host.ForgetMovedRows();
+        } else {
+            if (m_pendingPresentationBasis is { } basis) {
+                Host.Output.DeliverPresentation(basis, m_definition, Host.DocumentVersion);
+            }
+            if (m_pendingStateDelivery) {
+                var stamp = Host.TakeStateStamp() with { ArenaValues = true };
+                Host.Output.DeliverState(m_definition, Host.DocumentVersion, in stamp);
+                Host.ForgetMovedRows();
+            }
         }
 
         m_pendingDefinitionDelivery = false;
         m_pendingStateDelivery = false;
+        m_pendingPresentationBasis = null;
     }
+
     /// <summary>Records that the live definition was replaced since the last delivery, so
     /// <see cref="DeliverPending"/> carries it whole to every attached sink. Every way the authoritative state jumps
     /// rather than steps reaches here: a shape mutation's install and every whole-document rebuild

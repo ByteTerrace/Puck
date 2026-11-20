@@ -1020,6 +1020,15 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
         );
     }
     /// <inheritdoc/>
+    public void DeliverPresentation(WorldDefinition definition, WorldPresentationRows rows, WorldDocumentVersion version, in WorldStreamStamp stream) {
+        if (!rows.TryApply(m_definition, out var changed)) { throw new InvalidOperationException("A presentation delivery must match the client's creation roster."); }
+        if (WorldStateReader.TryBoundArena(m_definition, out var arena)) { WorldStateReader.Bind(changed, arena); }
+        m_stateView.KeepValueShape(m_definition, changed);
+        m_definition = changed;
+        BeginVersion(version);
+        m_definitionRevision++;
+    }
+    /// <inheritdoc/>
     /// <remarks>A client is fed its own authority's fan-out (<see cref="WorldStreamStamp.Unspanned"/>), whose one span
     /// never ends, and never a spanned stream, so it receives no cut.</remarks>
     public void DeliverCut(in WorldStreamStamp stream, bool terminal) {
@@ -1192,6 +1201,7 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
                 break;
         }
 
+        if (stamp.ArenaValues && version.Activation == m_documentVersion.Activation) { m_stateView.KeepValueShape(m_definition, definition); }
         m_definition = definition;
         BeginVersion(version: version);
         m_stateMirror.Refresh(notifyDelivery: false, stamp: in stamp);

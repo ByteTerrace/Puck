@@ -1287,7 +1287,8 @@ receive an authored id before it can be saved as source.
 An explicit new `.puck` target is printed from the snapshot. A refused save
 leaves the file and undo journal intact.
 
-`world.watch on` watches the loaded source's compile and composition inputs,
+Booting a local authority from a `.puck` source enables `world.watch` under
+the console operator. `world.watch on` watches the loaded source's compile and composition inputs,
 including imported documents, missing imports and source-directory listings.
 After 150 ms without another change it submits ordinary `world.reload` under
 the local console or seat principal that enabled it. Each poll reads every
@@ -1296,6 +1297,8 @@ the contents of an input whose stamp moved, or whose last write is within two
 seconds of the poll, so an unchanged tree costs one stat per input. A refusal retains the
 running world and reports its source diagnostic in the editor and terminal.
 `world.watch off` stops future requests; an already submitted reload can finish.
+Each accepted file edit joins the undo journal. `world.undo` restores the
+running value and leaves the source file on disk.
 After `world.load` changes the origin, the watch adopts the new dependencies
 and requests one reload, covering edits made while that load was being accepted.
 Grid and snap overrides and build mode survive reload. The current placement

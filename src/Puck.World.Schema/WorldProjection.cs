@@ -209,11 +209,11 @@ public static class WorldProjection {
     // is therefore flat: every reference is answered from this authority's own state and dropped. The rows above are
     // the live document's own objects; the flattening copies only the paths to its references and leaves them as they
     // are.
-    private static WorldProjectionDocument Flatten(WorldProjectionDocument projection, WorldDefinition definition, StateArena arena, in ArenaTime time) {
+    private static T Flatten<T>(T graph, WorldDefinition definition, StateArena? arena = null, ArenaTime? time = null) where T : class {
         if (!WorldStateDocumentValues.TryFlatten(
             arena: arena,
             flattened: out var flattened,
-            graph: projection,
+            graph: graph,
             reason: out var flattenReason,
             source: definition,
             time: time
@@ -386,8 +386,8 @@ public static class WorldProjection {
         return Flatten(
             arena: arena,
             definition: definition,
-            projection: projection,
-            time: in time
+            graph: projection,
+            time: time
         );
     }
 
@@ -614,14 +614,15 @@ public static class WorldProjection {
         var references = new List<WorldPrototypeReference>();
 
         foreach (var prototype in definition.Creations) {
-            WorldStateDisclosure.ValidateBindings(arena: arena, definition: definition, graph: prototype,
-                recipient: recipient, unrestricted: unrestricted);
-            if (!WorldStateDocumentValues.TryFlatten(flattened: out var flattened, graph: prototype, reason: out var reason, source: definition)) {
-                throw new InvalidOperationException(message: $"the projected prototype could not be flattened: {reason}");
-            }
+            var flattened = FlattenPrototype(definition, arena, recipient, unrestricted, prototype);
             references.Add(item: WorldProjectionContent.Put(prototype: flattened, store: store));
         }
         return references;
+    }
+    internal static WorldPrototype FlattenPrototype(WorldDefinition definition, StateArena arena, Principal? recipient, bool unrestricted, WorldPrototype prototype) {
+        WorldStateDisclosure.ValidateBindings(arena: arena, definition: definition, graph: prototype,
+            recipient: recipient, unrestricted: unrestricted);
+        return Flatten(prototype, definition);
     }
 
     /// <summary>Serializes a projection to its compact canonical UTF-8 bytes, the form it travels to a recipient in:

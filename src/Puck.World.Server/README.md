@@ -814,9 +814,12 @@ complete payload bytes.
 
 Replay records the source pin and rereads that source, not the patch: the drive
 reads the file as an edit and runs the same cut and merge against its own
-revision and live document. A presentation install still delivers the whole
-definition and composes every audience's disclosure on the tick; delivering only
-the changed rows is the next edit-to-running work.
+revision and live document. The undo journal records the accepted file edit
+as an overlay. Undo replays the retained entries over the journal base, and
+the checkpoint retains the source revision separately from that base.
+`WorldPresentationRows` delivers the changed creations and shades to a
+primed client. Values cross in the changed rows of the next snapshot unless
+the change also alters what the recipient's scene discloses.
 
 By default, `WorldHostDefaults.DefaultJournalDepth` bounds the document
 edits available to `world.undo`. Explicit zero retains unbounded history.

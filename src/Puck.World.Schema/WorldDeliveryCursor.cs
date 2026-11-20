@@ -71,16 +71,30 @@ public sealed class WorldDeliveryCursor {
     /// <param name="view">The stream's view.</param>
     /// <returns>The document owed, or <see langword="null"/> when the recipient already holds it.</returns>
     public WorldDefinition? DeliverDefinition(WorldRecipientView view) {
-        if (!view.Observes) { return null; }
-        var replica = (view.Ceiling == Puck.World.Protocol.WorldDisclosureTier.Replica);
-        var presented = replica ? null : view.Definition;
-        var identity = replica ? view.Images.DefinitionIdentity(view) : ContentPin.Compute(WorldDefinitionSerialization.SerializeCompact(presented!));
-        if (replica) { m_frame = view.Images.FrameIdentity(view); }
+        if (!view.Observes || view.Ceiling != WorldDisclosureTier.Replica) { return null; }
+        var identity = view.Images.DefinitionIdentity(view);
+        m_frame = view.Images.FrameIdentity(view);
         if (identity == m_definition) { if (m_operator != view.IsAuthority) { Seed(view); } return null; }
         m_definition = identity;
         Seed(view);
         Delivered();
-        return presented ?? WorldAssetRowLoader.EmbedAudio(definition: view.Images.Definition(view));
+        return WorldAssetRowLoader.EmbedAudio(definition: view.Images.Definition(view));
+    }
+
+    /// <summary>Advances an already primed replica over a presentation edit, provided its disclosed state and
+    /// policy still describe the same stream. A stream that needs a primer uses the ordinary definition door.</summary>
+    public bool TryDeliverPresentation(WorldRecipientView view, WorldPresentationRows rows, out bool moved) {
+        moved = false;
+        if (rows.ChangesProjectionDependencies || !view.Observes || view.Ceiling != WorldDisclosureTier.Replica || m_cutOwed || m_definition is null ||
+            m_operator != view.IsAuthority || !view.Images.TryAdvanceAppearance(view, m_frame, m_definition, out var frame, out var identity)) {
+            return false;
+        }
+        if (m_frame == frame) { return true; }
+        m_frame = frame;
+        m_definition = identity;
+        moved = true;
+        Delivered();
+        return true;
     }
     /// <summary>Records the images a presentation delivery actually carried.</summary>
     public void Delivered(WorldRecipientView view) { Seed(view); Delivered(); }

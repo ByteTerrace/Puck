@@ -111,6 +111,12 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
 
         var projection = delivery.Projection!;
 
+        if (delivery.Appearance is { } rows && m_hydrated is { } previous && rows.TryApply(previous, out var appearance)) {
+            m_hydrated = appearance;
+            inner.DeliverPresentation(appearance, rows, version, m_cursor.Stamp());
+            return;
+        }
+
         if (
             (delivery.Kind == WorldProjectionDeliveryKind.Delta) &&
             delivery.TimelineOnly &&
@@ -180,8 +186,8 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
     }
     // Composes what the observer's projection owes; after a cut, its whole projection under the new generation, which
     // the primer snapshot completes once it is presented (cut).
-    private WorldProjectionDelivery ComposeProjection(out bool cut) {
-        var delivery = m_feed.Compose(cursor: m_cursor, view: m_view);
+    private WorldProjectionDelivery ComposeProjection(out bool cut, WorldPresentationRows? rows = null) {
+        var delivery = rows is null ? m_feed.Compose(m_view, m_cursor) : m_feed.ComposeAppearance(m_view, m_cursor, rows);
 
         cut = AnnounceCut();
         if (!cut) {
@@ -408,6 +414,32 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
         }
     }
     public void DeliverSessionLever(WorldSessionLever lever) {
+    }
+
+    public void DeliverPresentation(WorldDefinition definition, WorldPresentationRows rows, WorldDocumentVersion version, in WorldStreamStamp stream) {
+        if (!Discloses()) { return; }
+        if (m_withheld) {
+            DeliverDefinition(definition, version, in stream);
+            return;
+        }
+        try {
+            if (Tier != WorldDisclosureTier.Replica) {
+                var time = server.DeliveryTime;
+                Present(ComposeProjection(out var cut, rows), Version, time.Tick, time.EngineTick);
+                if (cut) { PrimeSnapshot(); }
+                FollowObserverDetach();
+            } else if (!m_cursor.TryDeliverPresentation(m_view, rows, out var moved)) {
+                DeliverDefinition(definition, version, in stream);
+            } else if (moved) {
+                inner.DeliverPresentation(m_view.Definition, rows, Version, m_cursor.Stamp());
+                WorldOutputHub.CountPresentationRows(rows);
+                observation.SettleSceneProof(server.DeliveryTime.Tick);
+                FollowObserverDetach();
+            }
+        } catch (Exception exception) {
+            EndAfterFault(exception);
+            throw;
+        }
     }
 
     private WorldInputPublication[] m_inputDisclosure = [];

@@ -178,7 +178,8 @@ public sealed class WorldFederationProjectionSink(WorldDisclosureTier tier, stri
         // The hub's fan-out has one span that never ends; this stream decides its own cuts.
     }
     public void CloseSpan(ulong stream) { }
-    public void DeliverDefinition(WorldDefinition definition, WorldDocumentVersion version, in WorldStreamStamp stream) {
+    public void DeliverDefinition(WorldDefinition definition, WorldDocumentVersion version, in WorldStreamStamp stream) => DeliverDocument();
+    private void DeliverDocument(WorldPresentationRows? rows = null) {
         if (!Current()) {
             return;
         }
@@ -197,7 +198,7 @@ public sealed class WorldFederationProjectionSink(WorldDisclosureTier tier, stri
             // Only a disclosure refusal ends the stream by name; any other failure to compose is a fault, which the
             // hub detaches the sink for.
             try {
-                var delivery = m_feed.Compose(cursor: m_cursor, view: m_view);
+                var delivery = rows is null ? m_feed.Compose(m_view, m_cursor) : m_feed.ComposeAppearance(m_view, m_cursor, rows);
 
                 if (AnnounceCut()) {
                     cut = true;
@@ -241,6 +242,16 @@ public sealed class WorldFederationProjectionSink(WorldDisclosureTier tier, stri
         WriteSnapshot(projected: primer with { Cues = default, MusicBoundary = 0, MusicSenses = 0 }, currentDisclosure: disclosure());
     }
     public void DeliverSessionLever(WorldSessionLever lever) { }
+
+    public void DeliverPresentation(WorldDefinition definition, WorldPresentationRows rows, WorldDocumentVersion version, in WorldStreamStamp stream) {
+        if (!Current()) { return; }
+        if (tier != WorldDisclosureTier.Replica || m_view is null || !m_cursor.TryDeliverPresentation(m_view, rows, out var moved)) {
+            DeliverDocument(rows);
+        } else if (moved) {
+            WriteRecord(WorldFederationResponse.PresentationRows, WorldFederationCodec.DocumentLeaf(rows.Payload.Span, tier, Version));
+            WorldOutputHub.CountPresentationRows(rows);
+        }
+    }
 
     private WorldInputPublication[] m_inputDisclosure = [];
     private WorldInputAnswer[] m_answerDisclosure = [];
