@@ -357,6 +357,18 @@ public sealed partial class WorldServer : IWorldServerHost {
     /// a desktop row has no durable store to append to.</summary>
     internal Action<WorldJournalEntry>? MutationJournalTap { get; private set; }
 
+    internal Func<WorldJournalEntry, (Action? Commit, string? Refusal)>? PrepareMutationJournal { get; private set; }
+    internal Action? FlushMutationJournal { get; private set; }
+
+    /// <summary>Installs the hosted journal admission and batch boundary behind the authority credential. The
+    /// admission callback returns a commit action or a refusal while the mutation can still be rolled back.</summary>
+    public void SetMutationJournalPublisher(WorldPrivateDrawKeys authority,
+        Func<WorldJournalEntry, (Action? Commit, string? Refusal)> prepare, Action flush) {
+        RequireAuthorityCredential(authority);
+        PrepareMutationJournal = prepare;
+        FlushMutationJournal = flush;
+    }
+
     private void RequireAuthorityCredential(WorldPrivateDrawKeys authority) {
         if (!ReferenceEquals(authority, DrawKeys)) {
             throw new InvalidOperationException("PrivateDrawAuthorityMismatch: this operation needs the live authority credential.");

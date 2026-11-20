@@ -971,6 +971,7 @@ public sealed partial class WorldTick {
             Host.EndObserverEndedSessions();
             Host.Extensions.Drain();
             var applied = DrainPendingOps(tick: m_lastCompletedTick);
+            Host.FlushMutationJournal?.Invoke();
 
             if (applied) { EmitSnapshot(stepTicks: m_lastStepTicks, tick: m_lastCompletedTick); }
             return applied;

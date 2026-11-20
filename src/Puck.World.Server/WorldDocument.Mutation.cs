@@ -18,7 +18,7 @@ public sealed partial class WorldDocument {
     /// <param name="derived">Whether a guest produced this mutation, so only a checkpoint retains its effects.</param>
     internal bool TryApplyMutation(WorldMutation mutation, ulong tick, ulong engineTick, int connectionId, long correlationId, bool preMetered, bool derived = false) {
         m_lastMutationFailureDetail = null;
-        if (!TryPrepareMutation(mutation, tick, engineTick, preMetered, out var prepared, out var reason, out var denied)) {
+        if (!TryPrepareMutation(mutation, tick, engineTick, preMetered, out var prepared, out var reason, out var denied, derived)) {
             if (denied) { DenyMutation(mutation, reason, connectionId, correlationId); }
             else { Reject(connectionId: connectionId, correlationId: correlationId, mutation: mutation, reason: reason); }
             return false;
@@ -45,8 +45,8 @@ public sealed partial class WorldDocument {
     }
 
     internal bool TryPrepareMutation(WorldMutation mutation, ulong tick, ulong engineTick, bool preMetered,
-        [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out WorldPreparedMutation? prepared, out string reason, out bool denied) =>
-        WorldPreparedMutation.TryPrepare(this, mutation, tick, engineTick, preMetered, out prepared, out reason, out denied);
+        [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out WorldPreparedMutation? prepared, out string reason, out bool denied, bool derived = false) =>
+        WorldPreparedMutation.TryPrepare(this, mutation, tick, engineTick, preMetered, out prepared, out reason, out denied, derived);
 
     private bool TryStageDocument(WorldMutation mutation, ulong tick, ulong engineTick, out DocumentStage stage, out string reason) {
         if (EditsShadingAlone(mutation, m_definition)) {
@@ -324,7 +324,8 @@ public sealed partial class WorldDocument {
     /// <param name="record">Whether to journal and echo here; a coalesced cell run records each original act.</param>
     /// <param name="derived">Whether the mutation is guest output excluded from the external-edit recovery tail.</param>
     /// <param name="privateWords">Private inputs used by the prepared mutation.</param>
-    private void InstallPrepared(DocumentStage prepared, int connectionId, long correlationId, bool record = true, bool derived = false, MutationDrawHistory? privateWords = null) {
+    /// <param name="commitJournal">Publishes the reserved journal entry once the edit has installed.</param>
+    private void InstallPrepared(DocumentStage prepared, int connectionId, long correlationId, bool record = true, bool derived = false, MutationDrawHistory? privateWords = null, Action? commitJournal = null) {
         var mutation = prepared.Mutation;
         var candidate = prepared.Candidate;
         var engineTick = prepared.EngineTick;
@@ -401,20 +402,21 @@ public sealed partial class WorldDocument {
             prepared.Dispose();
         }
 
-        if (record) { RecordPrepared(connectionId: connectionId, correlationId: correlationId, derived: derived, mutation: mutation, prepared: prepared, privateWords: privateWords); }
+        if (record) { RecordPrepared(connectionId: connectionId, correlationId: correlationId, derived: derived, mutation: mutation, prepared: prepared, privateWords: privateWords, commitJournal: commitJournal); }
     }
 
-    private void RecordPrepared(DocumentStage prepared, int connectionId, long correlationId, WorldMutation mutation, bool derived, MutationDrawHistory? privateWords) =>
+    private void RecordPrepared(DocumentStage prepared, int connectionId, long correlationId, WorldMutation mutation, bool derived, MutationDrawHistory? privateWords, Action? commitJournal) =>
         RecordCommittedMutation(mutation: mutation, tick: prepared.Tick, engineTick: prepared.EngineTick, connectionId: connectionId,
-            correlationId: correlationId, evictedKey: prepared.EvictedKey, addonPlan: prepared.AddonPlan, machinePlan: prepared.MachinePlan, derived: derived, privateWords: privateWords);
+            correlationId: correlationId, evictedKey: prepared.EvictedKey, addonPlan: prepared.AddonPlan, machinePlan: prepared.MachinePlan, derived: derived, privateWords: privateWords, commitJournal: commitJournal);
     private void RecordCommittedMutation(WorldMutation mutation, ulong tick, ulong engineTick, int connectionId, long correlationId,
-        CellName? evictedKey = null, IWorldAddonPreparedPlan? addonPlan = null, IWorldMachinePreparedPlan? machinePlan = null, bool derived = false, MutationDrawHistory? privateWords = null) {
+        CellName? evictedKey = null, IWorldAddonPreparedPlan? addonPlan = null, IWorldMachinePreparedPlan? machinePlan = null, bool derived = false, MutationDrawHistory? privateWords = null, Action? commitJournal = null) {
         var entry = new WorldJournalEntry(
             EngineTick: engineTick,
             Mutation: mutation,
             Tick: tick
         ) { DrawHistory = privateWords };
         m_journal.Add(entry);
+        commitJournal?.Invoke();
         // Guest decisions belong to the checkpoint's tick, not the external-edit recovery tail.
         if (!derived) { Host.MutationJournalTap?.Invoke(entry); }
         foreach (var scope in Host.ScopedReplaySpan) { scope.Observe(mutation: mutation); }

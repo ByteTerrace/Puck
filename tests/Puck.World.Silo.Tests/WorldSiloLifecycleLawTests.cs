@@ -1005,6 +1005,9 @@ public sealed class WorldSiloLifecycleLawTests {
     }
 
     private sealed class FailingWrites(IObjectBlobStore inner) : IObjectBlobStore {
+        public ValueTask<bool> DeleteAsync(ObjectStorageTarget target, ObjectBlobAddress address, CancellationToken cancellationToken = default) =>
+            inner.DeleteAsync(target, address, cancellationToken);
+
         internal bool Fail { get; set; }
 
         public ValueTask<IReadOnlyList<string>> ListAsync(ObjectStorageTarget target, Guid objectId, string keyPrefix, CancellationToken cancellationToken = default) => inner.ListAsync(

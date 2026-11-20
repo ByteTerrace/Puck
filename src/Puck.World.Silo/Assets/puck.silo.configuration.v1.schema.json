@@ -207,7 +207,7 @@
           "default": 30
         },
         "journalBacklogLimit": {
-          "description": "Maximum outstanding journal appends admitted as healthy.",
+          "description": "Maximum external mutations waiting for durable journal publication, per row.",
           "type": "integer",
           "default": 1024
         }

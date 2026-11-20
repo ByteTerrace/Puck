@@ -215,6 +215,9 @@ public sealed class WorldReleaseCoordinatorSafetyLawTests {
         public Task<WorldReleaseRuntimeResult> VerifyCandidatePrivatelyAsync(WorldReleaseGroupRecord operation, CancellationToken cancellationToken = default) => Success();
     }
     private sealed class LostCommitResponseStore : IObjectBlobStore {
+        public ValueTask<bool> DeleteAsync(ObjectStorageTarget target, ObjectBlobAddress address, CancellationToken cancellationToken = default) =>
+            m_inner.DeleteAsync(target, address, cancellationToken);
+
         private readonly FakeObjectBlobStore m_inner = new();
 
         public bool Armed { get; set; }

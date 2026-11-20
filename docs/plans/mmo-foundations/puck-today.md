@@ -424,14 +424,7 @@ the destination namespace (`WorldFederationCodec.BindProofChallenge`,
 **World authorities.** A silo row reads a PKCS8 key from `federation.keyFile`
 and signs `SignsDirectly` claims valid for `MaximumClaimAge`, five minutes
 (`src/Puck.World.Protocol/Codecs/WorldAttestedAuthenticator.cs:36-38`)
-**[opened]** (`src/Puck.World.Silo/WorldSiloHost.cs:804-831`):
-
-```csharp
-                : new LocalKeySigningOracle(
-                                key: key,
-                                subject: subject,
-                                validity: WorldAttestedAuthenticator.MaximumClaimAge
-```
+**[opened]** (`WorldSiloHost.TryBuildFederationIdentity`).
 
 The desktop does the same from `--federation-key-file` **[opened]**
 (`src/Puck.World/Program.cs:187-190`):
@@ -862,10 +855,10 @@ public static class WorldAuthorityCheckpointCadence {
     public const ulong EngineTicks = (60UL * Puck.Maths.FixedTickConversion.TicksPerSecond);
 ```
 
-Between checkpoints, mutations are journaled asynchronously with a bounded lag
-(`src/Puck.World.Silo/README.md:313-315`), while crossing records are
-appended synchronously (section 4) **[opened]**. A crash can therefore lose
-recent mutations but no crossing step a peer saw **[inference]**.
+Between checkpoints, the silo journals external edits asynchronously. Its
+[acknowledgement and backlog contract](../../../src/Puck.World.Silo/README.md#live-journaling)
+describes when those edits become durable. Crossing records are published
+synchronously (section 4) **[opened]**.
 
 ### What a desktop host persists
 

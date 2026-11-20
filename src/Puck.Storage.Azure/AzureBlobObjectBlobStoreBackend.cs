@@ -190,6 +190,11 @@ internal sealed class AzureBlobObjectBlobStoreBackend : IObjectBlobStoreBackend 
 
         return keys;
     }
+    public async ValueTask<bool> DeleteAsync(ObjectStorageTarget target, ObjectBlobAddress address, CancellationToken cancellationToken = default) {
+        var blob = GetBlobClient(ObjectStorageTarget.Require<AzureBlobObjectStorageTarget>(target, "an Azure Blob target"), address);
+        return (await blob.DeleteIfExistsAsync(cancellationToken: cancellationToken)).Value;
+    }
+
     public async ValueTask<ObjectBlobContent?> ReadAsync(
         ObjectStorageTarget target,
         ObjectBlobAddress address,

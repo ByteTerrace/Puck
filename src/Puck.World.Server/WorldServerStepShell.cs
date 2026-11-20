@@ -56,6 +56,7 @@ public static class WorldServerStepShell {
                     server.Output.Narrate("replay.drive", $"[replay.drive {name}: {error.Message}]");
                     return current.Tick;
                 }
+                server.FlushMutationJournal?.Invoke();
                 server.EnforceJournalDepth();
                 // Close this tick's captured server-input group for an armed recording or an in-session history, or
                 // compare and advance a drive (a no-op otherwise): the whole tick's intent and command stream has

@@ -50,6 +50,13 @@ public readonly record struct WorldAuthorityStoreOutcome(WorldAuthorityStoreOutc
     /// <summary>The root snapshot observed after a successful publication, including its journal watermark.</summary>
     public WorldAuthorityRootSnapshot? PublishedRoot { get; init; }
 
+    /// <summary>Bytes uploaded for the published journal segment, excluding the root and receipts.</summary>
+    public int JournalBytesWritten { get; init; }
+    /// <summary>Count of superseded payload objects deleted after publication.</summary>
+    public int RetiredObjects { get; init; }
+    /// <summary>A retention failure to retry at the next checkpoint, independent of publication success.</summary>
+    public string? RetentionFailure { get; init; }
+
     /// <summary>Builds an already-exists outcome.</summary>
     /// <param name="detail">The refusal detail.</param>
     public static WorldAuthorityStoreOutcome AlreadyExists(string detail) => new(
@@ -153,6 +160,8 @@ public interface IWorldAuthorityStore {
     /// <see cref="WorldAuthorityStoreOutcomeKind.RecoveryRequired"/> when the root compare-and-swap's outcome could
     /// not be reconciled, so the entry may or may not be durable. A throw means the entry did not land.</returns>
     Task<WorldAuthorityStoreOutcome> AppendJournalAsync(WorldAuthorityIdentity identity, WorldAuthorityJournalEntry entry, CancellationToken cancellationToken, WorldAuthorityFence? fence = null, WorldAuthorityOperationReceipt? receipt = null);
+    /// <summary>Publishes a non-empty group of mutations in one immutable segment and root CAS.</summary>
+    Task<WorldAuthorityStoreOutcome> AppendJournalBatchAsync(WorldAuthorityIdentity identity, IReadOnlyList<WorldAuthorityJournalEntry> entries, CancellationToken cancellationToken, WorldAuthorityFence fence);
     /// <summary>Publishes a hosted world's composed definition as an immutable candidate named by the authority root.</summary>
     /// <param name="identity">The hosted world's identity.</param>
     /// <param name="composed">The composed definition to publish.</param>

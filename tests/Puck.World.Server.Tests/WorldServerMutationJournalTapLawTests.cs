@@ -6,11 +6,8 @@ using Puck.World.Protocol;
 
 namespace Puck.World.Server.Tests;
 
-/// <summary>Proves <see cref="WorldServer.SetMutationJournalTap"/> fires with the exact tick/mutation
-/// <see cref="WorldServer.TryApplyJournalTailMutation"/> reapplies — a hosted row's live-journaling seam
-/// (<c>Puck.World.Silo</c>'s <c>WorldSiloHost.ScheduleJournalAppend</c>), proved at this layer without a store or a
-/// silo: a fresh, uncheckpointed server fed only the tapped-and-reencoded entry reaches the tapped mutation's own
-/// effect — the "mutate, kill before any checkpoint, restart, the mutation survives" claim.</summary>
+/// <summary>The mutation observer receives the tick and entry that journal replay applies. The test
+/// re-encodes that entry and replays it on a fresh server without a silo or store.</summary>
 public sealed class WorldServerMutationJournalTapLawTests {
     private static readonly Principal Seller = Principal.Seat(slot: 0);
 

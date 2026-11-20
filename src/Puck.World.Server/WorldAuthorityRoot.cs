@@ -53,6 +53,19 @@ public readonly record struct WorldAuthorityRoot(
         Sequence: 0,
         Version: WorldAuthorityRootCodec.CurrentVersion
     );
+    /// <summary>The publication sequence in the live checkpoint's immutable storage address.</summary>
+    [JsonPropertyName("checkpointStorageSequence")]
+    public long CheckpointStorageSequence { get; init; }
+    /// <summary>The publication sequence in the head journal segment's immutable storage address.</summary>
+    [JsonPropertyName("journalStorageSequence")]
+    public long JournalStorageSequence { get; init; }
+    /// <summary>The count of segments intersecting the live journal tail.</summary>
+    [JsonPropertyName("journalSegments")]
+    public int JournalSegmentCount { get; init; }
+    /// <summary>A protected recovery archive that supplies restored payloads until the next covering checkpoint.</summary>
+    [JsonPropertyName("payloadArchive"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public Guid PayloadArchive { get; init; }
+
     /// <summary>The immutable closed-group rewind policy and inventory pin. Once established, hosting must
     /// enforce that boundary before admission; older root readers refuse this member.</summary>
     [JsonPropertyName("rewindBoundary"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
@@ -89,7 +102,7 @@ public readonly record struct WorldAuthorityOperationReceipt(
 /// <summary>Encodes the additive mutable authority root and immutable receipt nodes. Existing checkpoint, journal, and
 /// definition payloads are passed through unchanged.</summary>
 internal static class WorldAuthorityRootCodec {
-    internal const int CurrentVersion = 2;
+    internal const int CurrentVersion = 3;
     // The one serializer configuration for authority roots, receipt nodes and recovery roots.
     internal static readonly JsonSerializerOptions Options = new() {
         PropertyNamingPolicy = null,
@@ -133,6 +146,7 @@ internal static class WorldAuthorityRootCodec {
                 "version", "epoch", "fence", "sequence", "definition", "checkpoint", "checkpointOrdinal",
                 "checkpointTick", "journal", "journalCount", "journalSequence", "checkpointCoverageSequence",
                 "receipt", "receiptIndex", "durableOrdinal", "durableTick", "rewindBoundary",
+                "checkpointStorageSequence", "journalStorageSequence", "journalSegments", "payloadArchive",
             };
             var seen = new HashSet<string>(comparer: StringComparer.Ordinal);
 
@@ -148,7 +162,7 @@ internal static class WorldAuthorityRootCodec {
                     return false;
                 }
             }
-            var required = new[] { "version", "epoch", "fence", "sequence", "checkpointOrdinal", "checkpointTick", "journalCount", "journalSequence", "checkpointCoverageSequence", "receiptIndex", "durableOrdinal", "durableTick" };
+            var required = new[] { "version", "epoch", "fence", "sequence", "checkpointOrdinal", "checkpointTick", "journalCount", "journalSequence", "checkpointCoverageSequence", "receiptIndex", "durableOrdinal", "durableTick", "checkpointStorageSequence", "journalStorageSequence", "journalSegments" };
 
             foreach (var name in required) {
                 if (!document.RootElement.TryGetProperty(
@@ -189,6 +203,14 @@ internal static class WorldAuthorityRootCodec {
             ) { reason = "epoch zero carries a fence"; root = default; return false; }
             if ((root.CheckpointHash is null) != (root.CheckpointOrdinal < 0)) { reason = "checkpoint hash and ordinal disagree"; root = default; return false; }
             if ((root.JournalHash is null) != (root.JournalEntryCount == 0)) { reason = "journal hash and count disagree"; root = default; return false; }
+            if (
+                (root.CheckpointStorageSequence < 0) || (root.CheckpointStorageSequence > root.Sequence) ||
+                (root.JournalStorageSequence < 0) || (root.JournalStorageSequence > root.Sequence) ||
+                ((root.CheckpointHash is null) != (root.CheckpointStorageSequence == 0)) ||
+                ((root.JournalHash is null) != (root.JournalStorageSequence == 0)) ||
+                ((root.JournalHash is null) != (root.JournalSegmentCount == 0)) ||
+                (root.JournalSegmentCount < 0) || (root.JournalSegmentCount > root.JournalEntryCount)
+            ) { reason = "root payload references disagree with their publication sequences"; root = default; return false; }
             if ((root.ReceiptHash is null) != (root.ReceiptIndexHash is null)) { reason = "receipt chain and index disagree"; root = default; return false; }
             if (
                 !IsContentPin(value: root.DefinitionHash) ||

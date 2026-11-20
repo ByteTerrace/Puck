@@ -688,6 +688,9 @@ public sealed class WorldReleaseMetadataPublicationLawTests {
         public void Dispose() => m_directory.Dispose();
     }
     private sealed class InterceptStore(IObjectBlobStore inner) : IObjectBlobStore {
+        public ValueTask<bool> DeleteAsync(ObjectStorageTarget target, ObjectBlobAddress address, CancellationToken cancellationToken = default) =>
+            inner.DeleteAsync(target, address, cancellationToken);
+
         public Func<ObjectBlobAddress, Task>? AfterWrite { get; set; }
         public Func<ObjectBlobAddress, Task>? BeforeWrite { get; set; }
         public int Writes { get; private set; }
