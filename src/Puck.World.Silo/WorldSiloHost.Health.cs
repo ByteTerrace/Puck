@@ -46,13 +46,29 @@ public sealed partial class WorldSiloHost {
                 if (
                     row.PersistenceBlocked ||
                     row.Released ||
-                    row.Initializing
+                    row.Initializing ||
+                    !Instances.TryGet(
+                        instance: out var instance,
+                        name: world.World.Value
+                    ) ||
+                    (instance is null)
                 ) { completion.TrySetResult(result: $"{world.World}: authority activation is not ready"); return; }
-                if (
-                    (row.LastCheckpointOrdinal < 0) ||
-                    (m_clock.GetElapsedTime(startingTimestamp: row.CheckpointTimestamp) > TimeSpan.FromSeconds(seconds: (policy?.CheckpointTimeoutSeconds ?? 180)))
-                ) {
-                    completion.TrySetResult(result: $"{world.World}: checkpoint overdue"); return;
+                if (row.LastCheckpointOrdinal < 0) { completion.TrySetResult(result: $"{world.World}: checkpoint overdue"); return; }
+                // Age counts from when the row first held state its landed checkpoint does not cover, so a frozen or
+                // held row stays healthy however old that checkpoint is.
+                if (!NoteCoverage(
+                    bookkeeping: row,
+                    row: instance
+                )) {
+                    if (row.CadenceRefusal is { } refusal) {
+                        completion.TrySetResult(result: $"{world.World}: checkpoint refused ({refusal})"); return;
+                    }
+                    if (m_clock.GetElapsedTime(startingTimestamp: row.UncoveredTimestamp!.Value) > TimeSpan.FromSeconds(seconds: (policy?.CheckpointTimeoutSeconds ?? 180))) {
+                        completion.TrySetResult(result: $"{world.World}: checkpoint overdue"); return;
+                    }
+                }
+                if (row.RetentionFailures >= RetentionFailureLimit) {
+                    completion.TrySetResult(result: $"{world.World}: authority retention failing ({row.RetentionFailure})"); return;
                 }
                 if (
                     ((row.PendingJournalAppends > 0) && (m_clock.GetElapsedTime(startingTimestamp: row.JournalTimestamp) > TimeSpan.FromSeconds(seconds: (policy?.JournalTimeoutSeconds ?? 30))))

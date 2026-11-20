@@ -113,7 +113,10 @@ Requires=docker.service
 After=docker.service network-online.target iptables.service
 [Service]
 Restart=on-failure
+# Each restart takes a fresh authority fence, so a silo that keeps failing backs off from 5 s to 5 min.
 RestartSec=5
+RestartSteps=6
+RestartMaxDelaySec=300
 TimeoutStopSec=__STOP_SECONDS__
 ExecStartPre=/bin/bash /etc/puck/firewall.sh
 ExecStartPre=-/usr/bin/docker rm puck-world

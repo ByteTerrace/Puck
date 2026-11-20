@@ -33,6 +33,20 @@ public interface IObjectBlobStore {
         string? ifMatchVersion = null,
         CancellationToken cancellationToken = default
     );
+    /// <summary>Returns whether a blob exists holding exactly <paramref name="expected"/>: how a create-only writer
+    /// that lost to an existing blob tells its own earlier write from different content. The default reads the blob
+    /// through <see cref="ReadAsync"/>; a store that can stream compares without buffering the whole blob.</summary>
+    /// <param name="target">The storage target the address resolves against.</param>
+    /// <param name="address">The blob address.</param>
+    /// <param name="expected">The bytes the blob must hold.</param>
+    /// <param name="cancellationToken">A token to observe.</param>
+    /// <returns><see langword="true"/> when the blob exists with exactly those bytes; <see langword="false"/> when it
+    /// is absent or differs.</returns>
+    ValueTask<bool> ContentEqualsAsync(ObjectStorageTarget target, ObjectBlobAddress address, ReadOnlyMemory<byte> expected,
+        CancellationToken cancellationToken = default) => ObjectBlobContent.MatchesAsync(
+            expected: expected,
+            read: ReadAsync(target, address, cancellationToken)
+        );
     /// <summary>Lists the keys of every blob under an object beneath <paramref name="keyPrefix"/> — the
     /// cloud-discovery half of the store: a caller that only knows its local and previously-tracked ids uses this to
     /// find objects it has never seen before. Matching is by whole path SEGMENT, not by raw characters: a prefix

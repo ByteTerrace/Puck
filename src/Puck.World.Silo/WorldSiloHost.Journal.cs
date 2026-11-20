@@ -33,6 +33,8 @@ public sealed partial class WorldSiloHost {
             row.PendingJournalBytes += bytes;
             row.JournalBatch.Add(encoded);
             row.JournalBatchBytes += bytes;
+            Interlocked.Increment(ref row.JournalAdmitted);
+            Interlocked.Add(ref row.JournalAdmittedBytes, bytes);
         }, null);
     }
 

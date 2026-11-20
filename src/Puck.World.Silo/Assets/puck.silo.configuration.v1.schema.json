@@ -197,7 +197,7 @@
           "default": 30
         },
         "checkpointTimeoutSeconds": {
-          "description": "Maximum age, on the silo\u0027s clock, of a successful checkpoint before readiness fails.",
+          "description": "Longest time, on the silo\u0027s clock, a row may hold state its landed checkpoint does not cover before readiness fails.",
           "type": "integer",
           "default": 180
         },

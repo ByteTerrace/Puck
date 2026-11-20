@@ -135,10 +135,18 @@ system time. `WorldSiloDeadlineLawTests` drives each on a virtual clock.
 The [Azure extension](../Puck.World.Azure/README.md#silo-hosting) owns its provider keys.
 
 `GET /healthz` returns 200 only after all pinned worlds have activated and
-checkpointed. Unmanaged startup also reconciles published definitions through
+checkpointed. Activation itself lands that checkpoint: a new row's first one, or
+one covering a recovered journal tail, so a successful activation always holds a
+checkpoint that covers everything it restored. Unmanaged startup also reconciles published definitions through
 ordinary reload. Managed startup preserves the recovered state and waits for
 release admission. Health also checks ongoing simulation
-progress, checkpoint age, journal failures and backlog, and pending release saves.
+progress, checkpoint coverage, journal failures and backlog, retention, and pending release saves.
+Checkpoint age counts only from the moment a row holds state its landed
+checkpoint does not cover (it stepped past the checkpoint's tick, or journaled an
+entry since its capture), so a frozen or held row stays healthy however old its
+checkpoint is (`WorldSiloCheckpointHealthLawTests`). A row whose checkpoints the
+store refuses outright reports the refusal at once, and three landed checkpoints in
+a row whose retirement of superseded objects failed report the retention failure.
 `GET /livez` checks simulation progress independently of storage health, so a
 storage outage does not trigger VM replacement. Both refuse during retirement.
 `release.closedGroupRewind` enforces a fixed inventory of pinned worlds under the
@@ -348,15 +356,26 @@ restore. The segmented journal uses a new authority root format. The first
 release using it needs a fresh development authority store.
 
 A cadence request stays pending per row until that row's upload
-succeeds. Other rows can checkpoint on schedule while a row is deferred.
+succeeds. Other rows can checkpoint on schedule while a row is deferred. A failed
+capture or upload retries with exponential backoff on engine time, from one second
+to 64, and a row that has neither stepped nor journaled since the failed capture
+uploads the same bytes again instead of capturing and encoding a new image. A
+refusal no retry can change (the store holds different bytes at the address, the
+capture contradicts the authoritative root, an operation conflict) stops the
+cadence for that row until an explicit `silo.checkpoint` lands; `silo.grains`
+shows it as `cadenceRefusal`. A row whose journal tail above its landed checkpoint
+passes 4096 entries or 32 MiB checkpoints early, which also bounds what a recovery
+replays.
 
 In a hosted run, use `silo.grains` to watch `journalPending` and
 `journalPendingBytes` level off at their limits under a stalled store.
 `journalSegments` should rise once per nonempty tick batch and fall when a
 covering checkpoint lands. Divide changes in `journalBytesWritten` by
 `journalMutationsWritten` to measure segment bytes per mutation as the
-tail grows. `retiredAuthorityObjects` should increase as covering checkpoints
-retire journal and checkpoint objects.
+tail grows. `journalTail` counts the entries a recovery would replay now.
+`retiredAuthorityObjects` should increase as covering checkpoints
+retire journal and checkpoint objects; `retention` and `retentionFailures` name a
+failed retirement, which the runtime identity's storage role must allow (blob delete).
 
 ## Document validation
 

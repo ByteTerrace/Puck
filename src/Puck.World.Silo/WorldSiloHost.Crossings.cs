@@ -35,6 +35,10 @@ public sealed partial class WorldSiloHost {
             }
 
             (var durability, reason) = append.GetAwaiter().GetResult();
+            if (durability == WorldCrossingDurability.Durable) {
+                Interlocked.Increment(location: ref bookkeeping.JournalAdmitted);
+                Interlocked.Add(location1: ref bookkeeping.JournalAdmittedBytes, value: journal.Encoded.Length);
+            }
             return durability;
         }
     }
