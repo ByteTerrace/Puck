@@ -145,6 +145,22 @@ internal static partial class LawRegistry {
             width: 1
         ),
         ClaimCase(
+            claim: Subjects.SplitMix64ReferenceStream,
+            id: "sampling.split-mix64-reference-stream"
+        ),
+        ClaimCase(
+            claim: Subjects.PartitionPointVsScan,
+            id: "integer.partition-point-vs-linear-scan"
+        ),
+        ClaimCase(
+            claim: Subjects.SequenceEqualityKeys,
+            id: "sampling.sequence-equality-comparer"
+        ),
+        ClaimCase(
+            claim: Subjects.Leb128RoundTrip,
+            id: "integer.leb128-round-trip"
+        ),
+        ClaimCase(
             claim: SharedKernelClaims.PiConstantsVsMachin,
             id: "scalar.pi-constants-vs-machin"
         ),
