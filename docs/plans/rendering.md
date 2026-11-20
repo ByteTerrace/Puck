@@ -133,14 +133,14 @@ it (the owner's ruling, [AGENTS.md](../../AGENTS.md#pucks-purpose)).
   switching a level's lights must not rebake its geometry. Vesica and Star
   remain builder-only shape types without creation primitives.
 
-A distributed mesh cache waits until a presenting client downloads packages.
-At that point a GPU runner bakes through a `puck mesh bake` verb, retains only
-used entries, and supplies an optional read-only package cache ahead of the
-user store. Deployment proceeds without it on a miss; the client derives
-missing meshes. WARP and the fixed-point CPU audit are not substitutes for
-that GPU product. The [derived-product decision](../decisions/engine-design.md#a-derived-product-is-a-cache-never-the-truth)
-owns identity and cache semantics; the bake packet owns the derivation closure
-and shared store before this distribution work.
+Player builds ship their mesh store as a cache set a GPU machine produces
+([the player channel](../decisions/runtime-and-delivery.md#the-player-channel)).
+What remains is the read-only package cache: an install should read the shipped
+set as a layer ahead of the user's store, holding only the entries a package
+uses, instead of reading and filling the store inside its version directory,
+which duplicates the set on disk beside the install's object store. The
+[derived-product decision](../decisions/engine-design.md#a-derived-product-is-a-cache-never-the-truth)
+owns identity and cache semantics.
 
 ##### A true distance under a non-uniform scale
 

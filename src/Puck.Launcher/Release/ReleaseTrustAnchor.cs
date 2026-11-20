@@ -19,6 +19,7 @@ public sealed record ReleaseTrustAnchor(string Domain, string Algorithm, string 
 
     /// <summary>Gets a value indicating whether this anchor is the build-time <see cref="Placeholder"/> rather than
     /// an authored real key.</summary>
+    [System.Text.Json.Serialization.JsonIgnore]
     public bool IsPlaceholder => string.Equals(
         a: Domain,
         b: PlaceholderDomain,

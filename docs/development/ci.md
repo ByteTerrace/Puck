@@ -685,7 +685,7 @@ stages, or end-user installation and self-update. Those remain separate release
 qualification work. The published World's GPU side is qualified on a GPU
 machine by [`puck qualify`](qualification.md), which takes the `artifacts/world`
 directory as it is. The current release publishes NuGet libraries, the CLI tool, and the
-documentation artifact; Azure deploys the website. Desktop builds are downloadable CI artifacts.
+documentation artifact; Azure deploys the website and the player channel below.
 
 Local desktop installation is exercised by `puck canary self-update`.
 It bundles the debug world with `puck world prepare`,
@@ -702,6 +702,44 @@ The checkout MCP hook also installs complete signed local builds through that
 chain, under `.claude/mcp-install`. Its stable stdio front follows activated
 versions while retaining World-owning backends. This local development channel
 is independent of publisher signing and Azure releases.
+
+### The player channel
+
+The consumer build is a signed release on the `player` channel, hosted under
+the deployment's official content at `<officialContentBaseUrl>/releases`
+([decision](../decisions/runtime-and-delivery.md#the-player-channel)). The
+Azure workflow's `player` job runs after a deploy of the same commit, on a
+hosted Windows runner, and nothing waits on it:
+
+1. `puck world player worlds/debug --no-bake --channel-url …` assembles the
+   folder: the self-contained engine, the launcher (stub and installer), the
+   compiled package, the shading kernels and prepared cartridges, and one
+   headless boot's device-free caches.
+2. `puck world caches fetch` takes each backend's mesh cache set whose bake
+   identity equals this build's from its GitHub prerelease
+   (`caches/<backend>-<identity>`), verifies every content pin and unpacks it
+   into `cache/meshes`, or writes the miss into the release notes.
+3. `puck publish … --exclude player-logs cache/meshes-intermediates player-caches --bootstrap launcher`
+   writes the unsigned tree, with the installer copied to the stable
+   `<channel>/<rid>/` path a first install downloads.
+4. `puck channel push --host azure` signs the manifest with the channel root
+   key from the deployment vault (created there on first use), writes
+   `trust.json` beside it, and copies the objects the container lacks before
+   the manifest. The version is `0.1.<run number>` and the replay sequence the
+   run number.
+
+The cache sets come from a machine with a GPU. On the lead machine:
+
+```sh
+puck world player worlds/debug --output <folder> --target rtx2060@1920x1080 --target rtx4070@2560x1440
+puck world caches produce <folder> --push
+```
+
+`--push` uses `gh` with the developer's own login to create the prerelease when
+it is missing and replace its `cache-set.zip`. The next release whose build has
+the same mesh bake identity ships the set. Locally, `puck channel push --to
+<directory> --signing-key <file>` mirrors a channel instead, which `puck official
+serve --tree <directory>` serves over HTTP for the installer to test against.
 
 ## Azure production deployment
 

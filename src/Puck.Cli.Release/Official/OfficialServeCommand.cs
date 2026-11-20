@@ -134,7 +134,9 @@ internal static class OfficialServeCommand {
                 continue;
             }
 
-            if (manifest is null) {
+            // A tree can also hold release channels (puck channel push --to): their manifest.json is another document,
+            // whose objects are served as octet streams.
+            if ((manifest is null) || !string.Equals(a: manifest.Schema, b: OfficialManifest.CurrentSchema, comparisonType: StringComparison.Ordinal)) {
                 continue;
             }
 

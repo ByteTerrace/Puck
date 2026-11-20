@@ -122,7 +122,7 @@ public static partial class AzureCommand {
         )) {
             var temporary = scratch.Path;
 
-            var encodedKey = await LoadWorldSigningKeyAsync(
+            var encodedKey = await LoadSigningKeyAsync(
                 vault,
                 secret,
                 secrets!.AsArray(),
@@ -186,7 +186,7 @@ public static partial class AzureCommand {
                     var identityHash = Convert.ToHexStringLower(inArray: SHA256.HashData(source: Encoding.UTF8.GetBytes(s: identity)));
                     var filename = (("federation-" + identityHash) + ".pk8");
 
-                    keyFiles[filename] = await LoadWorldSigningKeyAsync(
+                    keyFiles[filename] = await LoadSigningKeyAsync(
                         vault,
                         ("puck-world-key-" + identityHash),
                         secrets.AsArray(),

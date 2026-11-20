@@ -7,10 +7,23 @@ using Puck.World.Server;
 
 namespace Puck.Cli.Azure;
 
-/// <summary>Installs the Azure release host and its deployment commands without accessing Azure.</summary>
+/// <summary>Installs the Azure release host, its release channel host and its deployment commands without accessing
+/// Azure.</summary>
 public sealed class AzureCliExtension : IPuckExtension {
     public string Name => "Puck.Cli.Azure";
-    public void Register(IPuckExtensionRegistry registry) => registry.Add<WorldReleaseHost>(key: "azure", contribution: new AzureReleaseHost());
+    public void Register(IPuckExtensionRegistry registry) {
+        registry.Add<WorldReleaseHost>(key: "azure", contribution: new AzureReleaseHost());
+        registry.Add<Puck.Cli.Channel.ReleaseChannelHost>(key: "azure", contribution: new AzureChannelHost());
+    }
+
+    // The deployment's official-content container and key vault, named by the deployment outputs a deploy job leaves in
+    // artifacts/production-outputs.json.
+    private sealed class AzureChannelHost : Puck.Cli.Channel.ReleaseChannelHost {
+        public override string Describe => "the Azure deployment's official content (releases/)";
+        public override Task<System.Security.Cryptography.ECDsa> LoadSigningKeyAsync(CancellationToken cancellationToken) => AzureCommand.LoadReleaseChannelKeyAsync();
+        public override Task UploadAsync(string tree, IReadOnlyList<string> objects, IReadOnlyList<string> documents, CancellationToken cancellationToken) =>
+            AzureCommand.UploadReleaseChannelAsync(documents: documents, tree: tree);
+    }
 
     private sealed class AzureReleaseHost : WorldReleaseHost {
         public override string RootDocumentName => AzureCommand.HostedWorldName;

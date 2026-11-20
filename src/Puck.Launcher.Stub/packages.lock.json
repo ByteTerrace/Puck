@@ -5,6 +5,8 @@
       "ByteTerrace.Puck.Confinement": {
         "type": "Project"
       }
-    }
+    },
+    "net11.0/linux-x64": {},
+    "net11.0/win-x64": {}
   }
 }

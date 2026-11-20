@@ -636,9 +636,10 @@ static async Task<int> RunWorldAsync(string[] args, string? script, WorldTestHos
     });
     // Self-update: channel/cacheRoot/checkInterval/keepVersions come from the world document's own update section
     // (WorldUpdateDefaults) — a deployment-facet field carrying no simulation-state weight, matching WorldHostDefaults'
-    // own posture. The trust anchor is a build-pinned composition-root constant, never a document field: a synced
-    // puck.world.definition.v1 a player's own storage container could rewrite is not a trust anchor. It stays the refusing
-    // ReleaseTrustAnchor.Placeholder until a real release-signing chain is minted for this build.
+    // own posture. The trust anchor is never a document field: a synced puck.world.definition.v1 a player's own storage
+    // container could rewrite is not a trust anchor. A World running from an install follows the channel its install root
+    // subscribes to (ChannelSubscription, written by the installer with the anchor it pinned) and installs into that root;
+    // any other World keeps the refusing ReleaseTrustAnchor.Placeholder.
     var updateSection = worldSource.Definition.Update;
     var updateChannel = (updateSection?.Channel ?? "stable");
     var updateCacheRoot = Path.Combine(path1: stateRoot.PathOf(name: "updates"), path2: (updateSection?.CacheRoot ?? string.Empty));
@@ -654,6 +655,16 @@ static async Task<int> RunWorldAsync(string[] args, string? script, WorldTestHos
         path2: "release-source"
     ));
 
+    if (Puck.Launcher.Release.ChannelSubscription.ProcessInstallRoot() is { } installRoot) {
+        if (Puck.Launcher.Release.ChannelSubscription.TryLoad(error: out var subscriptionError, installRoot: installRoot, subscription: out var subscription)) {
+            releaseTrustAnchor = subscription!.TrustAnchor;
+            releaseSource = subscription.ToReleaseSource(httpClient: Puck.Launcher.Release.HttpReleaseSource.SharedClient);
+            updateCacheRoot = installRoot;
+            updateChannel = subscription.Channel;
+        } else if (subscriptionError is not null) {
+            Console.Error.WriteLine(value: $"[update: the install's {Puck.Launcher.Release.ChannelSubscription.FileName} could not be read, so this World does not update: {subscriptionError}]");
+        }
+    }
     if (parseResult.GetValue(option: updateConfigFileOption) is { } updateConfigFile) {
         if (!Puck.Launcher.Release.SelfUpdateConfigFile.TryLoad(
             config: out var updateConfig,

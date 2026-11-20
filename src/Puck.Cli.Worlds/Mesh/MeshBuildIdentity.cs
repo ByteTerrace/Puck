@@ -5,8 +5,19 @@ using System.Runtime.Loader;
 
 namespace Puck.Cli.Mesh;
 
-// Only shared-runtime values cross the boundary. Neither a target object nor a reflected member survives unloading.
-internal sealed record MeshBuildIdentity(
+/// <summary>The bake identity a World build keys its stored meshes by, read from the build's own assemblies and bake
+/// kernels in a collectible context: <c>puck mesh identity</c> prints it, and a player build's mesh cache set is named by
+/// it. Only shared-runtime values cross the boundary; neither a target object nor a reflected member survives
+/// unloading.</summary>
+/// <param name="Value">The identity: the name of the store set the build's meshes land in.</param>
+/// <param name="EntryVersion">The entry format's version tag.</param>
+/// <param name="Code">The hash of the code the bake runs.</param>
+/// <param name="MaskKernel">The hash of the mask kernel's bytecode.</param>
+/// <param name="BakeKernel">The hash of the bake kernel's bytecode.</param>
+/// <param name="Members">Each code member the bake runs, with its hash.</param>
+/// <param name="Reasons">For each member, the member that reached it from a root of the bake.</param>
+/// <param name="Stages">Each persisted stage's identity, by stage name.</param>
+public sealed record MeshBuildIdentity(
     UInt128 Value,
     string EntryVersion,
     UInt128 Code,
@@ -16,7 +27,13 @@ internal sealed record MeshBuildIdentity(
     IReadOnlyDictionary<string, string> Reasons,
     IReadOnlyDictionary<string, UInt128> Stages
 ) {
-    internal static MeshBuildIdentity Read(string buildDirectory, string extension) {
+    /// <summary>Reads a build's bake identity for one backend's bake kernels.</summary>
+    /// <param name="buildDirectory">The build's directory (its <c>Puck.SdfVm.dll</c>'s).</param>
+    /// <param name="extension">The backend's shader bytecode extension (<c>CliWorldDocuments.TryExtension</c>).</param>
+    /// <returns>The identity.</returns>
+    /// <exception cref="InvalidOperationException">The build refused inspection or lacks the inspection API.</exception>
+    /// <exception cref="IOException">A file of the build cannot be read.</exception>
+    public static MeshBuildIdentity Read(string buildDirectory, string extension) {
         var directory = Path.GetFullPath(buildDirectory);
         var context = new TargetBuildContext(directory);
         try {

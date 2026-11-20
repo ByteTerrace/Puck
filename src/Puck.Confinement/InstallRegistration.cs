@@ -17,6 +17,9 @@ public static class InstallLayout {
     public const string SequenceMarkFileName = "sequence-mark";
     /// <summary>The install's durable state directory, directly under the install root.</summary>
     public const string StateDirectoryName = "state";
+    /// <summary>The stub's configuration file (<see cref="StubConfiguration"/>), beside the stub executable, the install
+    /// root itself. Whoever installs a stub writes it; only the stub reads it.</summary>
+    public const string StubConfigFileName = "stub.json";
     /// <summary>Where a version waits for deletion after leaving <see cref="VersionsDirectoryName"/>.</summary>
     public const string TrashDirectoryName = "trash";
     /// <summary>The update lease's file name, directly under the install root. <see cref="InstallTransaction"/> holds it.</summary>

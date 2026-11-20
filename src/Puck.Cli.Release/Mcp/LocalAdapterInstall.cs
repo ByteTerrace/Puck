@@ -3,7 +3,6 @@ using Microsoft.Extensions.DependencyInjection;
 using Puck.Confinement;
 using Puck.Launcher;
 using Puck.Launcher.Release;
-using Puck.Launcher.Stub;
 
 namespace Puck.Cli.Mcp;
 
@@ -95,8 +94,8 @@ internal static class LocalAdapterInstall {
                 Console.Error.WriteLine(value: $"puck-mcp: installed {file} from {build}");
             }
         }
-        _ = AtomicFile.WriteAllBytesIfChanged(path: Path.Combine(path1: install, path2: StubInstall.StubConfigFileName),
-            bytes: JsonSerializer.SerializeToUtf8Bytes(value: new StubConfiguration(AppExecutableFileName: Executable(name: "Puck.Cli"))));
+        _ = AtomicFile.WriteAllBytesIfChanged(path: Path.Combine(path1: install, path2: InstallLayout.StubConfigFileName),
+            bytes: new StubConfiguration(AppExecutableFileName: Executable(name: "Puck.Cli")).Serialize());
     }
     // The front's activation: notices a completed build by its stamp and has that build activate itself, so the release
     // record and the stub are always written by code at least as new as the worker the stub launches next. One activation

@@ -19,9 +19,9 @@ try {
 using var transactionLifetime = transaction;
 StubConfiguration configuration;
 try {
-    configuration = StubConfigurationFile.Load(installRoot: installRoot);
+    configuration = StubConfiguration.Load(installRoot: installRoot);
 } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException or System.Text.Json.JsonException)) {
-    Console.Error.WriteLine(value: $"[stub: could not read {StubInstall.StubConfigFileName} — {exception.Message}]");
+    Console.Error.WriteLine(value: $"[stub: could not read {InstallLayout.StubConfigFileName} — {exception.Message}]");
 
     return 2;
 }

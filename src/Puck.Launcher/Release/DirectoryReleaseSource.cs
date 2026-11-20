@@ -13,16 +13,27 @@ namespace Puck.Launcher.Release;
 public sealed class DirectoryReleaseSource(string root) : IReleaseSource {
     private readonly string m_root = Path.GetFullPath(path: root);
 
-    /// <summary>Publishes a complete built directory into this source's ordinary content-addressed layout.
-    /// Optional signing runs after the complete payload inventory is known.</summary>
-    public ReleaseManifest Publish(string input, string rid, ReleaseManifest manifest, Func<ReleaseManifest, ReleaseManifest>? sign = null) {
+    /// <summary>Publishes a built directory into this source's ordinary content-addressed layout: every file, or every
+    /// file <paramref name="include"/> admits, becomes a payload file named by its slashed path relative to
+    /// <paramref name="input"/>. Optional signing runs after the complete payload inventory is known.</summary>
+    /// <param name="input">The built directory.</param>
+    /// <param name="rid">The runtime identifier the payload targets.</param>
+    /// <param name="manifest">The manifest whose payloads this replaces.</param>
+    /// <param name="sign">Signs the complete manifest, or <see langword="null"/> to write it unsigned.</param>
+    /// <param name="include">Admits a file by its slashed relative path, or <see langword="null"/> to admit every file.</param>
+    /// <returns>The manifest written.</returns>
+    /// <exception cref="IOException">No file was admitted, or a file cannot be read or written.</exception>
+    public ReleaseManifest Publish(string input, string rid, ReleaseManifest manifest, Func<ReleaseManifest, ReleaseManifest>? sign = null, Func<string, bool>? include = null) {
         var store = new ContentAddressedStore(m_root);
         var directory = Path.GetFullPath(path: input);
-        var files = Directory.EnumerateFiles(path: directory, searchOption: SearchOption.AllDirectories, searchPattern: "*").Select(selector: path => {
-            var bytes = File.ReadAllBytes(path: path);
+        var files = Directory.EnumerateFiles(path: directory, searchOption: SearchOption.AllDirectories, searchPattern: "*")
+            .Select(selector: path => (Path: path, Relative: Puck.Abstractions.PuckPaths.Relative(path: path, relativeTo: directory)))
+            .Where(predicate: file => include?.Invoke(arg: file.Relative) ?? true)
+            .Select(selector: file => {
+                var bytes = File.ReadAllBytes(path: file.Path);
 
-            return new ReleasePayloadFile(Puck.Abstractions.PuckPaths.Relative(path: path, relativeTo: directory), store.Put(content: bytes).ToString(), bytes.LongLength);
-        }).ToArray();
+                return new ReleasePayloadFile(file.Relative, store.Put(content: bytes).ToString(), bytes.LongLength);
+            }).ToArray();
 
         if (files.Length == 0) { throw new IOException(message: $"No release files under {directory}"); }
         manifest = manifest with { Payloads = [new ReleasePayload(rid, files)] };

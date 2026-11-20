@@ -235,6 +235,51 @@ requires one is not a defect. Inside it, pruning must hold four things:
 Three pre-landing reviews of earlier designs each found the same class of high,
 all of it adversarial same-user interleavings; this rule settles the class.
 
+## The player channel
+
+**The consumer build is distributed through Puck's own release chain and
+hosting (the owner's ruling), never by copying folders.** What the RTX 2060
+test machine and, later, every player runs is a `puck world player` folder
+published as a signed `puck.release.manifest.v1` release on the `player`
+channel. The installer (`Puck.Launcher.Setup`) installs and updates it through
+the ordinary verifier, stager, applier and release record, and the stub starts
+it. Content addressing means a release uploads, and an install downloads, only
+the files it does not already hold.
+
+**An install pins its channel's root key on first install.** The installer
+writes the channel's address, name and root anchor into the install root
+(`ChannelSubscription`), and every later run, and every World running from
+that install, verifies releases against that pin. The first download is trust
+on first use over HTTPS; `--trust <fingerprint>` makes it an explicit pin.
+The key's custody is the channel host's (`ReleaseChannelHost`): a deployment
+provider keeps it in its own key store, created on first use, and no provider
+type reaches the verb that signs (`puck channel push`). A reset of that store
+mints a new root, and installs pinned to the old one need a fresh install.
+
+**The prewarmed mesh store comes from a GPU machine, and the release pipeline
+releases what it pushes (the owner's ruling).** A hosted runner has no GPU, and
+WARP or the CPU audit bake is not the GPU product a consumer would otherwise
+derive. Until CI has a GPU runner, the lead machine (RTX 4070) is the interim
+producer: it bakes a player folder and runs `puck world caches produce --push`,
+which packs each backend's mesh set into a cache set named by the build's mesh
+bake identity and uploads it as the asset of a GitHub prerelease tagged
+`caches/<backend>-<identity>`. The producer needs no deployment access. The
+release job (`player` in the Azure workflow) assembles the folder without
+baking boots, and `puck world caches fetch` takes the cache set whose identity
+equals its own build's, verifies every file's content pin and unpacks it; the
+deployment's own identity then publishes the release. When no set matches, the
+release notes and the build's record name the miss for that backend instead of
+shipping a cold store silently. A derived product is never committed
+([decision](engine-design.md#a-derived-product-is-a-cache-never-the-truth)),
+so a release asset carries it, never a branch. A GPU runner later runs the same
+`produce --push`, and nothing else changes.
+
+**A cache set fits by identity, never by commit.** The mesh bake identity
+hashes the bake's code and kernel bytecode, so every machine that built the
+same bake from the same sources computes it. A set baked from an older world
+document only misses the groups whose geometry changed, and those are derived
+on the consumer like any other miss.
+
 ## Vendor binaries
 
 A closed component from another company enters a Puck build only where its

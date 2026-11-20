@@ -631,15 +631,19 @@ miss derives with the installed tools, and a missing tool is a named refusal
 with the setup link. Prewarming is a shipping operation, never a repository
 exception or an output-comparison gate.
 
-**A distributed mesh cache waits (the owner's deferral).** Nothing is built to
-ship baked meshes between machines until a presenting client downloads
-packages. When one does, a self-hosted GPU runner bakes them, keeps only the
-entries a package uses and supplies an optional read-only package cache ahead
-of the user's store; a miss there is derived locally like any other, and
-deployment never waits on it. WARP and the fixed-point CPU audit are not
-substitutes for that GPU product. Until then every machine derives its own
-meshes ([the rendering plan](../plans/rendering.md#bake-quality) holds the
-work for that day).
+**Baked meshes ship to players from a GPU producer.** A player build carries
+its mesh store prewarmed, produced by a machine with a GPU (the lead machine
+until CI has a GPU runner) and released by the pipeline as a cache set named
+by the mesh bake identity ([the player channel](runtime-and-delivery.md#the-player-channel)).
+A miss is derived locally like any other, and deployment never waits on a
+producer. WARP and the fixed-point CPU audit are not substitutes for that GPU
+product. The store keeps a bake's intermediates (stage checkpoints and sample
+sets) in their own directory under their own bound, so a producer's bakes never
+evict finished meshes and a shipped store holds meshes alone. A read-only
+package cache ahead of the user's store, holding only the entries a package
+uses, is the later shape ([the rendering plan](../plans/rendering.md#bake-quality));
+today an installed version reads and fills the store inside its own version
+directory.
 Mesh derivation and drawing have separate owners. `SdfMeshPathBake` reconciles
 product inputs and derives meshes; `SdfMeshDresser` retains poses, draws and picks;
 `SdfMeshBakeGpuWork` carries each batch to the device and back. Each persisted

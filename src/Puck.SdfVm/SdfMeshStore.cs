@@ -25,7 +25,11 @@ namespace Puck.SdfVm;
 /// exceeds the bound is trimmed entry by entry, keeping the entry being written. One process's
 /// writes never leave the store over its bound; Worlds writing it at once count one another's writes only at their next
 /// listing, at least once a minute while they write. A file directly in the directory, which no identity's set holds,
-/// is a set of its own and ages out first once nothing reads it. The identity records beside the sets
+/// is a set of its own and ages out first once nothing reads it. A bake's intermediates (its stage checkpoints and
+/// sample sets, which let a later bake resume past a stage whose code did not change) are kept apart, in
+/// <see cref="IntermediateDirectory"/> under their own bound (<see cref="IntermediateCapacityBytes"/>), so a bake that
+/// writes gibibytes of samples never evicts another identity's finished meshes, and a store shipped to a consumer holds
+/// meshes alone. The identity records beside the sets
 /// (<see cref="IdentityExtension"/>) are bounded apart, by count (<see cref="RecordedIdentities"/>), and are not counted
 /// in <see cref="CapacityBytes"/>. Its members are thread-safe.</para>
 /// </summary>
@@ -33,6 +37,11 @@ public sealed class SdfMeshStore {
     /// <summary>The bytes a store holds at most unless its owner names another bound: eight gibibytes. One per-user
     /// store serves every World and worktree; it retains compressed mesh sets whole when they fit the bound.</summary>
     public const long DefaultCapacityBytes = (8L << 30);
+    /// <summary>The bytes a store's intermediates hold at most unless its owner names another bound: eight gibibytes,
+    /// counted apart from the finished meshes (<see cref="DefaultCapacityBytes"/>).</summary>
+    public const long DefaultIntermediateCapacityBytes = (8L << 30);
+    /// <summary>The suffix that names the intermediates' directory beside <see cref="Directory"/>.</summary>
+    public const string IntermediateSuffix = "-intermediates";
     /// <summary>The extension of an entry's file.</summary>
     public const string Extension = ".mesh";
     private const string CheckpointExtension = ".bake";
@@ -51,15 +60,20 @@ public sealed class SdfMeshStore {
     /// <param name="directory">The directory the entries are kept in, made absolute here.</param>
     /// <param name="capacityBytes">The bytes the entries hold at most.</param>
     /// <param name="allocator">The host allocator for decode scratch, or null for managed offline decoding.</param>
+    /// <param name="intermediateCapacityBytes">The bytes the intermediates hold at most.</param>
     /// <exception cref="ArgumentException"><paramref name="directory"/> is <see langword="null"/>, empty or white
     /// space.</exception>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="capacityBytes"/> is not positive.</exception>
-    public SdfMeshStore(string directory, long capacityBytes = DefaultCapacityBytes, IAllocator? allocator = null) {
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="capacityBytes"/> or
+    /// <paramref name="intermediateCapacityBytes"/> is not positive.</exception>
+    public SdfMeshStore(string directory, long capacityBytes = DefaultCapacityBytes, IAllocator? allocator = null, long intermediateCapacityBytes = DefaultIntermediateCapacityBytes) {
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: directory);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(value: capacityBytes);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(value: intermediateCapacityBytes);
 
         CapacityBytes = capacityBytes;
+        IntermediateCapacityBytes = intermediateCapacityBytes;
         Directory = Path.GetFullPath(path: directory);
+        IntermediateDirectory = (Path.TrimEndingDirectorySeparator(path: Directory) + IntermediateSuffix);
         m_allocator = allocator;
     }
 
@@ -71,8 +85,14 @@ public sealed class SdfMeshStore {
 
     /// <summary>Gets the bytes the entries hold at most.</summary>
     public long CapacityBytes { get; }
+    /// <summary>Gets the bytes the intermediates hold at most, counted apart from <see cref="CapacityBytes"/>.</summary>
+    public long IntermediateCapacityBytes { get; }
     /// <summary>Gets the absolute directory the entries are kept in.</summary>
     public string Directory { get; }
+    /// <summary>Gets the absolute directory a bake's intermediates (stage checkpoints and sample sets) are kept in, beside
+    /// <see cref="Directory"/>: its name with <see cref="IntermediateSuffix"/>. A store shipped to a consumer is
+    /// <see cref="Directory"/> alone.</summary>
+    public string IntermediateDirectory { get; }
 
     /// <summary>Gets the entry format's eight-byte version tag (<see cref="SdfMeshStoreCodec.Magic"/>). The identity folds it
     /// (<see cref="BuildIdentityOf"/>), so a bump starts a new set while the decode refuses any entry of another tag;
@@ -341,19 +361,24 @@ public sealed class SdfMeshStore {
         return WriteEntry(path, Encode(key: key, materials: materials, mesh: mesh));
     }
 
+    // A finished mesh and an intermediate are bounded apart, each in its own directory: PathOf puts every entry under the
+    // root its extension names, and this is the one place either bound is enforced.
     private bool WriteEntry(string path, byte[] bytes) {
         if (!Quietly(action: () => Puck.Confinement.AtomicFile.WriteAllBytes(bytes: bytes, path: path))) { return false; }
+        var finished = IsMeshEntry(name: path);
+
         _ = Puck.Abstractions.CacheRetention.EnforceSetsOnWrite(
-            bound: new Puck.Abstractions.CacheBound(MaxBytes: CapacityBytes, MaxEntries: MaxSets),
-            directory: Directory,
+            bound: new Puck.Abstractions.CacheBound(MaxBytes: (finished ? CapacityBytes : IntermediateCapacityBytes), MaxEntries: MaxSets),
+            directory: (finished ? Directory : IntermediateDirectory),
             inUse: path,
-            isEntry: static name => name.EndsWith(Extension, StringComparison.Ordinal)
-                || name.EndsWith(CheckpointExtension, StringComparison.Ordinal)
-                || name.EndsWith(SampleExtension, StringComparison.Ordinal)
+            isEntry: (finished ? IsMeshEntry : IsIntermediateEntry)
         );
 
         return true;
     }
+    private static bool IsMeshEntry(string name) => name.EndsWith(value: Extension, comparisonType: StringComparison.Ordinal);
+    private static bool IsIntermediateEntry(string name) =>
+        name.EndsWith(value: CheckpointExtension, comparisonType: StringComparison.Ordinal) || name.EndsWith(value: SampleExtension, comparisonType: StringComparison.Ordinal);
 
     internal bool ContainsCheckpoint(UInt128 identity, SdfMeshGeometry geometry) =>
         File.Exists(PathOf(identity, KeyOf(identity, geometry), CheckpointExtension));
@@ -569,7 +594,13 @@ public sealed class SdfMeshStore {
 
         return XxHash128.HashToUInt128(source: key);
     }
-    private string PathOf(UInt128 identity, UInt128 key, string extension = Extension) => Path.Combine(path1: SetDirectoryOf(identity: identity), path2: (key.ToString(format: "x32", provider: null) + extension));
+    // A finished mesh lives in its identity's set under Directory, an intermediate in its stage identity's set under
+    // IntermediateDirectory.
+    private string PathOf(UInt128 identity, UInt128 key, string extension = Extension) => Path.Combine(
+        path1: (string.Equals(a: extension, b: Extension, comparisonType: StringComparison.Ordinal)
+            ? SetDirectoryOf(identity: identity)
+            : Path.Combine(path1: IntermediateDirectory, path2: identity.ToString(format: "x32", provider: null))),
+        path2: (key.ToString(format: "x32", provider: null) + extension));
     private static byte[] Encode(UInt128 key, SdfMesh? mesh, int[] materials) => SdfMeshStoreCodec.Encode(key: key, materials: materials, mesh: mesh);
     // Deletes a file the store owns, leaving one another World holds open for a later trim or refusal to remove.
     private static void Delete(string path) => _ = Quietly(action: () => File.Delete(path: path));
