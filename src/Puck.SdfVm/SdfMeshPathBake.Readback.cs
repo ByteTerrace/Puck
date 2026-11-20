@@ -42,7 +42,7 @@ public sealed partial class SdfMeshPathBake {
             m_readbackIdle = false;
             if (m_readbackReserved) { return true; }
             if (m_readbackRetired) { return false; }
-            if (!m_readback.TryReserve(peak: ReadbackBytes)) {
+            if (!m_readback.TryReserveProgress(peak: ReadbackBytes)) {
                 if (!m_readbackReported) { SdfMeshBakeReport.ReadbackDeferred(residency: Residency, bytes: ReadbackBytes); m_readbackReported = true; }
                 m_accounts.ReadbackWaits++;
                 return false;

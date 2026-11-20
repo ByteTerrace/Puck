@@ -379,7 +379,8 @@ internal static class SdfMeshBakeReport {
     /// <param name="owner">The memory owner the account refused.</param>
     /// <param name="bytes">The bytes refused.</param>
     /// <param name="floor">The peak the group's next admission reserves at least.</param>
-    public static void Readmitted(string residency, int selector, string owner, long bytes, long floor) => Say(line: () => $"[sdf.mesh-bake] readmitted residency={residency} group={selector} owner={owner} refused={bytes} floor={floor}");
+    /// <param name="refusal">The refusal, whose stack names the allocation no admission covered.</param>
+    public static void Readmitted(string residency, int selector, string owner, long bytes, long floor, Exception refusal) => Say(line: () => $"[sdf.mesh-bake] readmitted residency={residency} group={selector} owner={owner} refused={bytes} floor={floor}\n{refusal.StackTrace}");
     /// <summary>Writes the line for a group whose bake refused.</summary>
     /// <param name="selector">The group's selector.</param>
     /// <param name="refusal">Why.</param>

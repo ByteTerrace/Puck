@@ -72,6 +72,6 @@ public sealed partial class SdfMeshPathBake {
             group.Memory.ReleaseReservation();
             StartFinal(group: group);
         }
-        SdfMeshBakeReport.Readmitted(bytes: refused.Bytes, floor: floor, owner: refused.Owner, residency: Residency, selector: group.Selector);
+        SdfMeshBakeReport.Readmitted(bytes: refused.Bytes, floor: floor, owner: refused.Owner, refusal: refused, residency: Residency, selector: group.Selector);
     }
 }
