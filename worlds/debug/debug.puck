@@ -60,6 +60,7 @@ import "noclip"
 import "input-modes"
 // The seat's instrument and the score its presses are judged against (bard.puck).
 import "bard"
+import "press"
 import "size"
 import "addon-hud"
 import "watchdog"

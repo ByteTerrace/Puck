@@ -129,6 +129,12 @@
     "haptics": {
       "$ref": "./schema/haptics.schema.json"
     },
+    "keyLights": {
+      "$ref": "./schema/keyLights.schema.json"
+    },
+    "highlights": {
+      "$ref": "./schema/highlights.schema.json"
+    },
     "rules": {
       "$ref": "./schema/rules.schema.json"
     },

@@ -1,0 +1,109 @@
+// The standard's typing play (../standard/typing.puck) on its own, with no place around it: a bench at the spawn, two
+// tiers of two words and the debug world's score for its beat. `puck test worlds/debug/typing-tests.puck`.
+schema: "puck.world.definition.v1"
+basis: "avatars/moth"
+documentId: "typing-tests"
+
+import "../standard/typing"
+import "score"
+
+inputModes {
+  global ["interact", "forward", "strafe"]
+  families [typingFamily()]
+}
+bindingOverlays [
+  {
+    id: "typing-fixture"
+    document {
+      version: "puck.input.bindings.v1"
+      modifiers []
+      chords [
+        {
+          chord []
+          group: "play"
+          page {
+            id: "base"
+            entries [
+              { id: "interact", channel: "interact", sources ["keyboard.e"] }
+            ]
+          }
+        }
+      ]
+    }
+  }
+]
+
+typingPlay(music: score, bench: [0, 0, 0], words: [["ash", "ash"], ["ember", "ember"]], perWave: 2, respawnSeconds: 0.2)
+
+test "sitting starts a run and a typed word scores" {
+  when {
+    ticks 4
+    seat1: player.signal keyboard.e press
+    ticks 2
+    seat1: player.signal keyboard.e release
+    ticks 12
+    seat1: player.signal keyboard.text "as" at:0.001
+    ticks 3
+    seat1: player.signal keyboard.text "H" at:0.001
+    ticks 3
+  }
+  expect {
+    typingSeat == 1
+    typing.phase == 1
+    typing.hits == 3
+    typing.misses == 0
+    typing.cleared == 1
+    typing.score == 30
+    typing.streak == 1
+    typing.target == -1
+  }
+}
+test "a wrong letter is a miss that keeps the lock and ends the streak" {
+  when {
+    ticks 4
+    seat1: player.signal keyboard.e press
+    ticks 2
+    seat1: player.signal keyboard.e release
+    ticks 12
+    seat1: player.signal keyboard.text "ax" at:0.001
+    ticks 3
+  }
+  expect {
+    typing.hits == 1
+    typing.misses == 1
+    typing.target == 0
+    typingTyped["0"] == 1
+    typingKeys.next0 == 115
+    typingStyle["0"] == "shake"
+  }
+}
+test "a word left alone lands and three landings end the run" {
+  when {
+    ticks 4
+    seat1: player.signal keyboard.e press
+    ticks 2
+    seat1: player.signal keyboard.e release
+    ticks 1000
+  }
+  expect {
+    typing.lands == 3
+    typing.lives == 0
+    typing.phase == 2
+  }
+}
+test "standing up abandons the run" {
+  when {
+    ticks 4
+    seat1: player.signal keyboard.e press
+    ticks 2
+    seat1: player.signal keyboard.e release
+    ticks 12
+    seat1: player.signal keyboard.tab press
+    ticks 3
+  }
+  expect {
+    typingSeat == 0
+    typing.phase == 0
+    bodyState(body, 0, typing) == 0
+  }
+}

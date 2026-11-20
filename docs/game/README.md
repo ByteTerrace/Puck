@@ -15,6 +15,8 @@ These pages describe the design those worlds carry.
 
 - [Reference game design](design.md)—gameplay requirements and project decisions.
 
+- [The press](press.md)—the debug world's typing game: its design and what it wires.
+
 - [Play](../plans/play.md)—the programme that sequences the game's remaining engineering, its waves, the federation remainder, the group finder, and MCP.
 
 - [Art and visual design](art/README.md)—character briefs, concept packages, and visual references.

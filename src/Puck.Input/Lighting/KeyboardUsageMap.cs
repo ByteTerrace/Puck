@@ -115,6 +115,48 @@ public static class KeyboardUsageMap {
         }
     }
     /// <summary>
+    /// Resolves a character to the <see cref="InputSources.Keyboard"/> source string of the key that types it on the
+    /// reference layout: a letter of either case, a digit, the space, <c>-</c>, <c>=</c>, the grave accent, a tab or
+    /// a line break.
+    /// </summary>
+    /// <param name="scalar">The Unicode scalar value.</param>
+    /// <param name="source">When this method returns <see langword="true"/>, the neutral source string.</param>
+    /// <returns><see langword="true"/> when a key types the character; otherwise <see langword="false"/>.</returns>
+    public static bool TryGetSource(int scalar, out string source) {
+        source = string.Empty;
+
+        if ((scalar < 0) || (scalar > char.MaxValue)) {
+            return false;
+        }
+
+        var character = ((char)scalar);
+
+        if (char.IsAsciiLetter(c: character)) {
+            return KeyboardSourceMap.TryGetSource(
+                character: char.ToLowerInvariant(c: character),
+                key: KeyCode.Letter,
+                source: out source
+            );
+        }
+
+        var key = character switch {
+            >= '0' and <= '9' => ((KeyCode)(KeyCode.Digit0 + (character - '0'))),
+            ' ' => KeyCode.Space,
+            '-' => KeyCode.Minus,
+            '=' => KeyCode.Equals,
+            '`' => KeyCode.Backtick,
+            '\t' => KeyCode.Tab,
+            '\r' or '\n' => KeyCode.Enter,
+            _ => KeyCode.None,
+        };
+
+        return ((key != KeyCode.None) && KeyboardSourceMap.TryGetSource(
+            character: character,
+            key: key,
+            source: out source
+        ));
+    }
+    /// <summary>
     /// Resolves a lamp's input binding (usage page + usage) to the <see cref="InputSources.Keyboard"/> source
     /// string a binding table targets. Only the keyboard page (<see cref="KeyboardUsagePage"/>) is mapped; any
     /// other page yields <see langword="false"/> (a mouse-button or unbound lamp).

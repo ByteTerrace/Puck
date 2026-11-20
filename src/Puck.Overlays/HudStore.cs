@@ -87,6 +87,7 @@ public readonly record struct OverlayHudTemplateSegment(bool IsPlaceholder, stri
 /// <paramref name="FrameSourceB"/> alone, 1 shows <paramref name="FrameSource"/> alone, so a fade runs 0 to 1 from
 /// the outgoing B to the incoming A. Ignored when <paramref name="FrameSourceB"/> is -1 or cannot be bound: the
 /// winner then draws at full weight.</param>
+/// <param name="Markup">Whether a text element's resolved text is read as markup whose effects style each glyph.</param>
 /// <param name="PlotSamples">The requested recent-series window.</param>
 /// <param name="PlotMin">The lower plot bound, in source units.</param>
 /// <param name="PlotMax">The upper plot bound.</param>
@@ -110,7 +111,8 @@ public readonly record struct OverlayHudElement(
     float PlotMin = 0f,
     float PlotMax = 1f,
     float? PlotReference = null,
-    string? PlotReferenceBinding = null
+    string? PlotReferenceBinding = null,
+    bool Markup = false
 );
 /// <summary>One HUD panel the writer resolves and draws — the presentation-side twin of
 /// <c>Puck.World.WorldHudPanel</c>.</summary>

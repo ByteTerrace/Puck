@@ -1,0 +1,275 @@
+// The press: a typesetter's bench in the gallery lobby where a seat sets type by typing it. Slugs of type, each
+// carrying a word, come down the bench's three channels on the score's beat; typing a slug's word sets it and it drops
+// back into the bed, and a slug that reaches the stick unset is lost. The game is the standard's typing play
+// (../standard/typing.puck): this file authors only what is the press's own, which is its bench, its words, the panel
+// that shows them, the keys that light, its sound and the still it keeps of a record. press.md beside it says how to
+// play and how to read each part over the console.
+
+import "../standard/typing"
+import "shapes"
+import "score"
+
+// Where the bench stands (its creation's floor, against the lobby's west wall whose inner face is x = 10.3, between
+// the hanging map board and the desktop computer), and where the seat stands to work it: out from the wall and a step
+// south of the bench, so the chase camera behind her shows the bed beside her rather than her back.
+let pressAt = [11.15, galleryFloor[0], 20.2]
+let pressStand = [13, galleryFloor[0], 18.8]
+
+// The bed tilts 15 degrees toward the seat, and a slug travels this far down it in `pressSteps` steps.
+let pressTravel = 0.96
+let pressSteps = 10
+let pressLanes = [-0.36, 0, 0.36]
+
+// The quaternion of the tilt about X, and the two directions a slug moves in: down the slope toward the seat, and up
+// out of the bed along its normal.
+let pressTurn = [0.130526, 0, 0, 0.991445]
+let pressDown = [0, -0.258819, 0.965926]
+let pressOut = [0, 0.965926, 0.258819]
+
+// The type: three cases, the shortest first. Every word is one a printer would know.
+let pressWords = [
+  ["ink", "nib", "pen", "tin", "rag", "die", "set", "bed", "cap", "dot", "rule", "pica"]
+  ["press", "quill", "stamp", "paper", "glyph", "serif", "proof", "plate", "wedge", "forme", "spine", "vellum"]
+  [
+    "typeface", "ligature", "colophon", "baseline", "foundry", "kerning", "pressman", "imprint", "margins", "woodcut",
+    "almanac", "broadside"
+  ]
+]
+
+typingPlay(music: score, bench: pressStand, words: pressWords, steps: pressSteps, radius: 1.5)
+
+// A slug settles into each step and a little past it, like a part dropped into a notch.
+dynamics [
+  { name: "press-slug", f: 5, r: 0, zeta: 0.55 }
+]
+
+prototypes {
+  // The creation's origin is on the floor under the bed's middle; +Z is the seat's side. Each slug rests inside the
+  // bed at the head of its channel: its lane's `typingLive` cell lifts it out onto the bed and its `typingStep` cell
+  // carries it down the slope.
+  prototype "press" {
+    document {
+      name: "press"
+      schema: "puck.creation.v1"
+      palette [
+        { color: "#5B3A23", roughness: 0.62, specular: 0.14 }
+        { color: "#2C2C33", roughness: 0.42, specular: 0.35 }
+        { color: "#B9B4A8", roughness: 0.38, specular: 0.5 }
+        { color: "#E8B04A", roughness: 0.4, specular: 0.4 }
+      ]
+      drivers: flatMap(range(0, length(pressLanes)), lane => [
+        { name: $"step-{lane}", signal: $"state.typingStep.{lane}", cadence: (1 / pressSteps), dynamics: "press-slug" }
+        { name: $"live-{lane}", signal: $"state.typingLive.{lane}", cadence: 1, dynamics: "press-slug" }
+      ])
+      shape Box "cabinet" {
+        material: 0
+        position [0, 0.42, -0.05]
+        scale [0.66, 0.42, 0.5]
+      }
+      shape Box "bed" {
+        material: 1
+        position [0, 0.98, 0]
+        rotation: pressTurn
+        scale [0.62, 0.11, 0.6]
+      }
+      // The stick at the foot of the bed, where set type would be gathered and an unset slug is lost.
+      shape Box "stick" {
+        material: 2
+        position [0, 0.905, 0.6]
+        rotation: pressTurn
+        scale [0.62, 0.035, 0.03]
+      }
+      for x in [-0.54, -0.18, 0.18, 0.54] {
+        shape Box $"rail{x}" {
+          material: 2
+          position [x, 1.1, 0.03]
+          rotation: pressTurn
+          scale [0.012, 0.022, 0.58]
+        }
+      }
+      for (x, lane) in pressLanes {
+        shape Box $"slug-{lane}" {
+          material: 3
+          position [x, 1.0995, -0.4443]
+          rotation: pressTurn
+          scale [0.13, 0.045, 0.06]
+          slides [
+            { driver: $"live-{lane}", axis: pressOut, amplitude: 0.16, wave: "linear" }
+            { driver: $"step-{lane}", axis: pressDown, amplitude: pressTravel, wave: "linear" }
+          ]
+        }
+      }
+      textRuns [
+        {
+          text: "PRESS"
+          position [0, 0.56, 0.455]
+          rotation [0, 0, 0, 1]
+          emHeight: 0.11
+          depth: 0.008
+          mode: "emboss"
+          material: 2
+          align: "center"
+        }
+      ]
+    }
+  }
+}
+
+placements {
+  placement "press" {
+    prototype: "press"
+    position: pressAt
+    yawDegrees: 270
+    solid
+  }
+}
+
+spawnPoints [
+  // Where the seat stands to work the bench, facing it, inside its reach: the context button sits her down.
+  { id: "press", position: pressStand, yawDegrees: 90 }
+]
+
+// One word a channel, drawn by the lane's own effect: its typed letters dimmed, the next one lifted, and the whole
+// word shaken for a moment after a wrong letter. The line under them is the run. A lane's text is markup whose tag is
+// the effect the lane's `typingStyle` cell names and whose `at` is the letters typed so far.
+let pressLaneText = [
+  "[{state.typingStyle.0} at={state.typingTyped.0}]{state.typingShown.0}[/{state.typingStyle.0}]"
+  "[{state.typingStyle.1} at={state.typingTyped.1}]{state.typingShown.1}[/{state.typingStyle.1}]"
+  "[{state.typingStyle.2} at={state.typingTyped.2}]{state.typingShown.2}[/{state.typingStyle.2}]"
+]
+
+hud {
+  panels [
+    {
+      id: "press"
+      rect { x: 0.24, y: 0.68, width: 0.52, height: 0.15 }
+      layer: Over
+      style: Panel
+      visible { $type: "state", binding: "state.typingSeat", comparison: Equal, value: 1 }
+      elements: concat(
+        map(range(0, length(pressLanes)), lane => {
+          id: $"lane-{lane}"
+          kind: Text
+          rect { x: (0.04 + (0.32 * lane)), y: 0.14, width: 0.3, height: 0.36 }
+          style: Primary
+          markup: true
+          template: pressLaneText[lane]
+        }),
+        [
+          {
+            id: "run"
+            kind: Text
+            rect { x: 0.04, y: 0.66, width: 0.92, height: 0.17 }
+            style: Dim
+            template: "SCORE {state.typing.score}  RUN {state.typing.streak}  PAGE {state.typing.wave}  SLUGS {state.typing.lives}  BEST {state.typing.best}"
+          }
+        ]
+      )
+    }
+    // The run's last word, spoken once as the panel arrives.
+    {
+      id: "press-over"
+      rect { x: 0.36, y: 0.5, width: 0.28, height: 0.07 }
+      layer: Over
+      style: Panel
+      visible {
+        $type: "all"
+        predicates [
+          { $type: "state", binding: "state.typingSeat", comparison: Equal, value: 1 }
+          { $type: "state", binding: "state.typing.phase", comparison: Equal, value: 2 }
+        ]
+      }
+      elements [
+        {
+          id: "call"
+          kind: Text
+          rect { x: 0.06, y: 0.18, width: 0.88, height: 0.64 }
+          style: Accent
+          text: "OUT OF SORTS"
+          voice { patchId: "gallery-guide", cadenceTicks: 14, pitchThousandths: 900, paceThousandths: 1000 }
+        }
+      ]
+    }
+  ]
+}
+
+// The keyboard is the bench's second panel: dark while the seat types but for the letter to strike, the two after it,
+// each waiting word's first letter and the key that stands her up. Standing in reach, the context button's own key
+// glows instead.
+let pressLetters = map(
+  [
+    "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p", "q", "r", "s", "t", "u", "v", "w",
+    "x", "y", "z"
+  ],
+  letter => $"keyboard.{letter}"
+)
+
+keyLights {
+  idle: "#05050A"
+  flash: "#FFFFFF"
+  modifier: "#FFFFFF"
+  unavailableScale: 0.28
+  flashSeconds: 0.3
+  rows: concat(
+    [
+      { id: "press-reach", bound ["interact"], color: "#E8B04A", lit: "state.typing.near" }
+      { id: "press-stand", bound ["typingLeave"], color: "#6E7C8C", lit: "state.typingSeat" }
+    ],
+    map(range(0, length(pressLanes)), lane => {
+      id: $"press-first-{lane}"
+      character: $"state.typingKeys.first{lane}"
+      color: "#4F8FD0"
+      lit: "state.typingSeat"
+    }),
+    [
+      {
+        id: "press-after-2"
+        character: "state.typingKeys.next2"
+        color: "#E8B04A"
+        lit: "state.typingSeat"
+        available: 0
+      }
+      {
+        id: "press-after-1"
+        character: "state.typingKeys.next1"
+        color: "#E8B04A"
+        lit: "state.typingSeat"
+        available: 0
+      }
+      { id: "press-next", character: "state.typingKeys.next0", color: "#FFC857", lit: "state.typingSeat" }
+      // The three flashes paint nothing of their own: the struck key on a hit, every letter on a miss or a lost slug.
+      {
+        id: "press-hit"
+        character: "state.typingKeys.last"
+        color: "#FFFFFF"
+        lit: 0
+        flashSignal: "state.typing.hits"
+        flashColor: "#FFFFFF"
+      }
+      {
+        id: "press-miss"
+        keys: pressLetters
+        color: "#D0453A"
+        lit: 0
+        flashSignal: "state.typing.misses"
+        flashColor: "#D0453A"
+      }
+      {
+        id: "press-lost"
+        keys: pressLetters
+        color: "#7A1F1A"
+        lit: 0
+        flashSignal: "state.typing.lands"
+        flashColor: "#FF3B30"
+      }
+    ]
+  )
+}
+
+// A new best score keeps the frame half a second on, once the panel shows it.
+highlights [
+  { id: "press-record", signal: "state.typing.records", frames: 1, delaySeconds: 0.5 }
+]
+// The press's sound is the score's (score.puck): the bed joins when a run starts, a second and a third voice while the
+// run of set words holds, and the segment turns over with the second page. The cues the typing play emits drive it,
+// and two more sound on every key (guide.puck's `audio.cues`).

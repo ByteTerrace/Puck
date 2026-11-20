@@ -143,8 +143,8 @@ public sealed partial class WorldAudioDirector : IWorldAudioLever, IWorldAudioFr
     // The seat slot the listener last resolved to, or -1 when it follows a camera or no seat: a delivered cue is heard
     // only when that seat's own view admitted it (WorldGameplayCue.AdmitsSeat).
     private int m_listenerSeat = -1;
-    // The most recently tapped active-layer tune id set (WorldServer.MusicLayerTap) — re-reconciled against whenever
-    // it changes so the derived layer-bed plan tracks it without waiting for the next definition delivery.
+    // The delivered score's active layers as of the last delivered tick (PresentDeliveredCues): the derived layer-bed
+    // plan is re-reconciled against them whenever they change, without waiting for the next definition delivery.
     private IReadOnlyList<MusicLayer> m_activeMusicLayers = [];
 
     /// <summary>The live master gain in Q16 — the value an attached mixer's <c>MasterGainQ16</c> follows: the
@@ -1800,9 +1800,8 @@ public sealed partial class WorldAudioDirector : IWorldAudioLever, IWorldAudioFr
             ApplyMixerBindings();
         }
     }
-    /// <summary>Applies a new active conditional-layer tune id set (<c>WorldServer.MusicLayerTap</c>) — layers are
-    /// level-triggered, so this is called on every tick the server's own active set changes, never once per
-    /// definition delivery. A no-op when the set is unchanged; otherwise re-runs <see cref="ReconcileSpeakers"/>
+    /// <summary>Applies the delivered score's active conditional layers — layers are level-triggered, so this is
+    /// called with every delivered tick's set, never once per definition delivery. A no-op when the set is unchanged; otherwise re-runs <see cref="ReconcileSpeakers"/>
     /// against the cached definition so the derived layer-bed plan tracks it immediately (fading in/out over the
     /// existing Bed presence slew — see <see cref="DeriveMusicLayers"/>), without waiting for the next document
     /// mutation. A no-op before the first <see cref="ReconcileSpeakers"/> call (nothing to re-derive against yet;

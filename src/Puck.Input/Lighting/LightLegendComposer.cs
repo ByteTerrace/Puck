@@ -8,7 +8,7 @@ namespace Puck.Input.Lighting;
 /// <item><description><b>Base</b> — a bound key takes its command's <see cref="BindCategory"/> color; an unbound key takes the palette's faint idle wash.</description></item>
 /// <item><description><b>Availability</b> — a bound-but-unavailable key is dimmed by the palette's unavailable scale.</description></item>
 /// <item><description><b>Chord modifier</b> — a held chord-modifier key is overpainted with the modifier highlight (the board itself recolors because the host feeds the active chord page's legend).</description></item>
-/// <item><description><b>Activation flash</b> — a key whose command fired this tick flashes toward the flash color and decays over subsequent ticks.</description></item>
+/// <item><description><b>Activation flash</b> — a key whose command fired this tick flashes toward its flash color (the palette's unless the host gave the flash its own) and decays over subsequent ticks.</description></item>
 /// </list>
 /// The composer is stateful only in the flash decay it carries between ticks; everything else comes from the
 /// per-tick <see cref="LightLegendState"/>. It maps each lamp to a keyboard source through the lamp's declared
@@ -18,6 +18,7 @@ public sealed class LightLegendComposer {
     private readonly LightLegendPalette m_palette;
 
     private float[] m_flash = [];
+    private LampColor[] m_flashColor = [];
 
     /// <summary>Initializes a new instance over a palette.</summary>
     /// <param name="palette">The palette that colors categories and layers; defaults to <see cref="LightLegendPalette.CreateDefault"/>.</param>
@@ -32,6 +33,10 @@ public sealed class LightLegendComposer {
         if (m_flash.Length < count) {
             Array.Resize(
                 array: ref m_flash,
+                newSize: count
+            );
+            Array.Resize(
+                array: ref m_flashColor,
                 newSize: count
             );
         }
@@ -98,7 +103,7 @@ public sealed class LightLegendComposer {
             return m_palette.Idle;
         }
 
-        var color = m_palette.ColorFor(category: entry.Category);
+        var color = (entry.Color ?? m_palette.ColorFor(category: entry.Category));
 
         return (entry.IsAvailable
             ? color
@@ -153,9 +158,13 @@ public sealed class LightLegendComposer {
 
             if (
                 (source is not null) &&
-                state.WasFlashed(source: source)
+                state.TryGetFlash(
+                    color: out var flashColor,
+                    source: source
+                )
             ) {
                 m_flash[index] = 1f;
+                m_flashColor[index] = (flashColor ?? m_palette.Flash);
             }
 
             var flash = m_flash[index];
@@ -163,7 +172,7 @@ public sealed class LightLegendComposer {
             if (flash > 0f) {
                 color = Lerp(
                     a: color,
-                    b: m_palette.Flash,
+                    b: m_flashColor[index],
                     t: flash
                 );
             }

@@ -96,7 +96,7 @@ A document's `schema:` field selects its vocabulary, never the filename.
   `for i in range(0, n) { }` and `for (item, index) in [...] { }` expand at
   compile time — both in statement/section position (emitting rows) and directly
   inside `[ ... ]` (flattening produced elements into the list, with optional
-  local `let`s). Collection builtins (`range`, `length`, `concat`, `map`,
+  local `let`s). Collection builtins (`range`, `length`, `scalars`, `concat`, `map`,
   `flatMap`, `filter`, `reduce`, `distinct`, `sort`, `groupBy`) take lambdas
   (`i => 0`); a flatten is `flatMap(rows, r => [..])`, never a `reduce` over `concat`. An array of n zeros is `map(range(0, n), i => 0)` or `[for i in range(0, n) { 0 }]`; it runs once
   at compile time, the compiled JSON still holds every value, and play-time

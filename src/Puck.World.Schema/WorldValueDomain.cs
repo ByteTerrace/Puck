@@ -317,6 +317,16 @@ public static class WorldValueFields {
     public static WorldValueField HapticHigh { get; } = new(typeof(WorldHapticRow), nameof(WorldHapticRow.High), WorldValueDomain.Unit);
     /// <summary>A haptic row's state-driven trigger scalar.</summary>
     public static WorldValueField HapticSignal { get; } = new(typeof(WorldHapticRow), nameof(WorldHapticRow.Signal), WorldValueDomain.Finite);
+    /// <summary>A key light row's character.</summary>
+    public static WorldValueField KeyLightCharacter { get; } = new(typeof(WorldKeyLightRow), nameof(WorldKeyLightRow.Character), WorldValueDomain.Finite);
+    /// <summary>A key light row's lit gate.</summary>
+    public static WorldValueField KeyLightLit { get; } = new(typeof(WorldKeyLightRow), nameof(WorldKeyLightRow.Lit), WorldValueDomain.Finite);
+    /// <summary>A key light row's availability.</summary>
+    public static WorldValueField KeyLightAvailable { get; } = new(typeof(WorldKeyLightRow), nameof(WorldKeyLightRow.Available), WorldValueDomain.Finite);
+    /// <summary>A key light row's flash trigger.</summary>
+    public static WorldValueField KeyLightFlashSignal { get; } = new(typeof(WorldKeyLightRow), nameof(WorldKeyLightRow.FlashSignal), WorldValueDomain.Finite);
+    /// <summary>A highlight row's trigger.</summary>
+    public static WorldValueField HighlightSignal { get; } = new(typeof(WorldHighlightRow), nameof(WorldHighlightRow.Signal), WorldValueDomain.Finite);
 
     /// <summary>Returns the field a model member declares.</summary>
     /// <param name="owner">The model type that declares the member.</param>
@@ -433,6 +443,11 @@ public static class WorldValueFields {
         HapticLow,
         HapticHigh,
         HapticSignal,
+        KeyLightCharacter,
+        KeyLightLit,
+        KeyLightAvailable,
+        KeyLightFlashSignal,
+        HighlightSignal,
     ];
 
     // Built on first lookup, once every field and All have initialized.

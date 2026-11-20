@@ -39,6 +39,8 @@ is corrected in the same change.
 | A control no page or overlay can take (the console key, the pause menu) | `IAlwaysActiveInputBindings`, implemented by `TerminalInputBindings` (`Puck.Launcher`) | [below](#the-always-active-plane-and-reserved-gestures) |
 | Read a controller, keyboard or mouse; rumble, lights, adaptive triggers | `Puck.Input` (`GamepadManager`, `InputArbiter`, `GamepadCaptureSource`, `WindowInputMapper`, `InputSources`, `IGamepadOutput`); OS transports in `Puck.Platform.Windows` | [device input](../../../docs/reference/input.md) |
 | A machine's buttons while a seat is engaged | the route's kit `pad` map (`WorldKit`, `WorldPadElement`) | [engagement](../puck-world/references/engagement.md) (`puck-world`) |
+| Light the keyboard's keys from the world: the next key to press, the keys a page binds, a flash on an event | `keyLights` (`WorldKeyLightSection`) → `WorldKeyLightDirector` → `LightLegendComposer` → `LampLegendDriver` → `ILampArrayDeviceSource`; read-back `lights.state` | [dynamic lighting](../../../docs/reference/input.md#dynamic-lighting) |
+| A game played by typing words | the standard's `typingPlay` and `typingFamily` (`worlds/standard/typing.puck`): a `Text` channel judged a character at a time against words authored as strings (`scalars(text)`) | [the press](../../../worlds/debug/press.md) |
 
 ## Semantic channels and typed values
 
@@ -218,6 +220,16 @@ The pattern contract (`WorldInputPattern.cs`, `WorldInputOwner.Patterns.cs`):
   scripted input still drives it
   ([the ruling](../puck-world/SKILL.md#an-agents-world-opens-no-physical-device)).
   Never inject real input to test.
+- **Keyboard lamps are painted from the document.** `WorldKeyLightDirector`
+  (`Puck.World.Client`) builds each local seat's `LightLegendState` every fixed
+  step from its routed world's `keyLights` rows and the seat's active
+  `BindingPageView`, composes it onto a reference board for `lights.state`, and
+  publishes the keyboard-holding seat's legend to `LampLegendDriver`
+  (`Puck.Input.Lighting`). The driver owns the device loop on its own thread:
+  it opens `Win32LampArrayDeviceSource` at the first published legend, never
+  on the pump, and is registered only by a boot that opens physical devices,
+  so an agent's World paints legends and writes no lamp. A lamp check needs
+  `--devices all` and a keyboard that exposes a HID LampArray.
 - Output goes through `IGamepadOutput` (capability-gated; rumble is finite by
   contract). `WorldHapticDirector` evaluates world-authored `haptics` rows
   (`WorldHapticRow`) per local seat against each seat's routed
@@ -258,14 +270,19 @@ The pattern contract (`WorldInputPattern.cs`, `WorldInputOwner.Patterns.cs`):
   (`worlds/standard/instrument.puck` pulses on the beat), while a cartridge's
   `IFeedbackMachine.MotorLevel` still has no consumer. Keep it: an unreached
   capability is wired, not deleted.
-- The typing tutor and chat exhibits, the owed hardware runs and the decision's
-  raw-slot wording are in [the input packet](../../../docs/plans/open-items.md#input-channels).
+- **The lamp loop has not met a lamp array.** `LampLegendDriver` and the
+  `keyLights` path are verified on the reference board only.
+- The chat exhibit, the in-world computer's typing tutor, the owed hardware
+  runs and the decision's raw-slot wording are in
+  [the input packet](../../../docs/plans/open-items.md#input-channels).
 
 ## Verify
 
 - Scenarios: `puck test worlds/debug/input-pattern-tests.puck --jobs 1` and
   the other `worlds/debug/input-*-tests.puck`; add `--reproduce` for a timing,
-  history or continuity change.
+  history or continuity change. Typed text end to end is
+  `worlds/debug/typing-tests.puck` (the standard's play alone) and
+  `worlds/debug/press-tests.puck` (the press in the whole debug world).
 - Genre sweeps: `puck sweep --plan worlds/debug/<plan>.sweep.json --world
   <source>` with the five plans the
   [genre check](../../../docs/decisions/input-channels.md#genre-check) lists.

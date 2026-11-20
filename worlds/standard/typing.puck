@@ -1,0 +1,445 @@
+// The standard's typing play, a library. `typingPlay(...)` authors a typing game a seat plays from a keyboard: words come
+// down lanes toward the seat on the world's beat, the seat types one to clear it, and a word that arrives costs a life.
+// `typingFamily(...)` is the input family a world lists in its `inputModes`. Neither names a place, a look or a sound:
+// where the bench stands, what comes down its lanes, the panel that shows the words, the keys that light and the music
+// are the importing world's, which reads the rows below.
+//
+// A seat standing within `radius` of `bench` presses the context button to sit, and the same press on the typing page
+// (`leaveSources`, since the context button's own key is a letter) stands it up. Seated, its body's `typing` register is
+// 1, the `typing` input family offers the `typed` text channel in place of movement, and every character the keyboard
+// commits arrives as one Text event at the time it was typed. Letters are judged without case; anything else is ignored.
+//
+// A typed letter that begins a live lane's word locks the seat onto that lane (the furthest along, when several begin
+// with it), and each following letter must be the word's next. A wrong letter is a miss: it ends the streak and the lock
+// holds. The word's last letter clears the lane, scores its length times ten plus two for each word of the streak (up to
+// `streakCap`), and lengthens the streak. Lanes step toward the seat every `stride` beats of `music`; one that takes its
+// `steps`th step lands, costing a life and the streak. `perWave` cleared words raise the wave: wave one runs one lane of
+// the first tier's words, wave two a second lane and the second tier, wave three every lane, the last tier and a shorter
+// stride. With no life left the run is over, the best score is kept, and sitting down again starts another.
+//
+// The state, for a world's panel, lamps and looks to read:
+//
+//   typing            phase (0 idle, 1 playing, 2 over), score, best, streak, wave, lives, cleared, target (the locked
+//                     lane, or -1), hits, misses, lands, records (new bests so far), stride, beat, and near (1 while
+//                     the seat stands in reach of the bench, not yet seated)
+//   typingSeat        1 while the seat sits at the bench
+//   typingWord        each lane's word index; typingTyped its letters typed; typingStep its steps taken; typingLive 1
+//                     while a word is on it
+//   typingShown       each lane's word as text ("" while empty), and typingStyle the name of the text effect a panel
+//                     draws it with: `restEffect` normally and `missEffect` for `missSeconds` after a wrong letter
+//                     while locked on it
+//   typingKeys        the characters a keyboard would light: next0 the letter to type now, next1 and next2 the two after
+//                     it, first<lane> each waiting word's first letter while the seat is locked on nothing, and last the
+//                     letter last typed correctly (0 where there is none)
+//
+// The cues a score or an `audio.cues` row may bind: `typing.start`, `typing.hit`, `typing.miss`, `typing.word`,
+// `typing.land`, `typing.wave`, `typing.over`, `typing.record`, `typing.stop` when a run ends either way, and
+// `typing.heat<n>` on every tick the streak is at least the nth of `heats`.
+//
+//   import "../standard/typing"
+//   inputModes { global ["interact"], families [typingFamily()] }
+//   typingPlay(music: score, bench: [12, 0, 17], words: [["ash", "dusk"], ["lantern", "ribbon"]])
+
+// The widest word a list may hold: a word's letters are keyed by `word * typingSpan + index`.
+let typingSpan = 16
+
+// The family that offers the typed text while the seat sits. `suspendedBy` is the families whose selection takes the bench
+// away, which the importing world names; a world lists the families the bench itself suspends (its movement family) with
+// `suspendedBy [{ family: "typing", states ["seated"] }]` on them.
+function typingFamily(suspendedBy = []) = {
+  name: "typing"
+  selector { kind: BodyState, name: "typing" }
+  default: "standing"
+  states [
+    { name: "standing", values ["0"], channels [] }
+    { name: "seated", values ["1"], channels ["typed"] }
+  ]
+  suspendedBy: suspendedBy
+  transitions []
+}
+
+// `words` is the tiers of the word list, easiest first, every tier the same length and every word lower-case letters no
+// longer than `typingSpan`. `seat` is the local seat that plays (its body is its number minus one).
+template typingPlay(music, bench, words, seat = 1, radius = 1.8, lanes = 3, steps = 10, lives = 3, perWave = 6, streakCap = 10, heats = [
+  3, 6
+], respawnSeconds = 1.5, overSeconds = 6, missSeconds = 0.3, keysPerStep = 8, leaveSources = [
+  "keyboard.tab"
+  "gamepad.buttonEast"
+], restEffect = "caret", missEffect = "shake") {
+  let bodyIndex = seat - 1
+  let tiers = length(words)
+  let perTier = length(words[0])
+  let list = flatMap(words, tier => tier)
+  let laneKeys = range(0, lanes)
+
+  channels [
+    { name: "typed", shape: Text, composition: true }
+  ]
+
+  state {
+    body [
+      {
+        name: "typing"
+        kind: "Counter"
+        initial: 0
+        envelope { $type: "set", values [0, 1] }
+      }
+    ]
+    world {
+      slot typingSeat = 0
+      table typing {
+        phase = 0
+        score = 0
+        best = 0
+        streak = 0
+        wave = 1
+        lives = lives
+        cleared = 0
+        target = -1
+        hits = 0
+        misses = 0
+        lands = 0
+        records = 0
+        stride = 2
+        beat = 0
+        overAt = 0
+        missUntil = 0
+        near = 0
+      }
+      row {
+        name: "typingLetters"
+        kind: Int
+        capacity: length(list) * typingSpan
+        cells: flatMap(
+          list,
+          (word, w) => map(scalars(word), (scalar, i) => { key: $"{w * typingSpan + i}", value: scalar })
+        )
+      }
+      row {
+        name: "typingLength"
+        kind: Int
+        capacity: length(list)
+        cells: map(list, (word, w) => { key: $"{w}", value: length(scalars(word)) })
+      }
+      row {
+        name: "typingText"
+        kind: Text
+        capacity: length(list)
+        cells: map(list, (word, w) => { key: $"{w}", value: word })
+      }
+      for name in ["typingWord", "typingTyped", "typingStep", "typingLive", "typingDue"] {
+        row {
+          name: name
+          kind: Int
+          capacity: lanes
+          cells: map(laneKeys, lane => { key: $"{lane}", value: 0 })
+        }
+      }
+      row {
+        name: "typingShown"
+        kind: Text
+        capacity: lanes
+        cells: map(laneKeys, lane => { key: $"{lane}", value: "" })
+      }
+      row {
+        name: "typingStyle"
+        kind: Text
+        capacity: lanes
+        cells: map(laneKeys, lane => { key: $"{lane}", value: restEffect })
+      }
+      row {
+        name: "typingKeys"
+        kind: Int
+        capacity: lanes + 4
+        cells: concat(
+          [
+            { key: "next0", value: 0 }
+            { key: "next1", value: 0 }
+            { key: "next2", value: 0 }
+            { key: "last", value: 0 }
+          ],
+          map(laneKeys, lane => { key: $"first{lane}", value: 0 })
+        )
+      }
+      row {
+        name: "typingDraw"
+        kind: Int
+        draw {
+          timing: Event
+          generator {
+            source: UniformRange
+            rangeMin: 0
+            rangeMax: perTier - 1
+          }
+        }
+      }
+    }
+  }
+
+  // The typing page: nothing but the way to stand up, since every letter key is the game's.
+  allow PUCK_LINT_005 "the context row's state is the value typingSeat holds, not a row's name"
+  bindingOverlays [
+    {
+      id: "typing"
+      document {
+        version: "puck.input.bindings.v1"
+        modifiers []
+        contexts [
+          { family: "state:typingSeat", state: "1", group: "typing" }
+        ]
+        chords [
+          {
+            chord []
+            group: "typing"
+            page {
+              id: "typing"
+              label: "Typing"
+              entries [
+                { channel: "interact", id: "typingLeave", label: "Stand", scale: 1, sources: leaveSources }
+              ]
+            }
+          }
+        ]
+      }
+    }
+  ]
+
+  // One press of the context button sits a seat standing at the bench down, and the next stands it up.
+  rule "typing-sit" {
+    forEach: $"$inputEvents:{seat}"
+    maxFirings: 1
+    local seated = typingSeat
+    local dx = bodyPosition(body, bodyIndex, x) - bench[0]
+    local dy = bodyPosition(body, bodyIndex, y) - bench[1]
+    local dz = bodyPosition(body, bodyIndex, z) - bench[2]
+    local near = (dx * dx + dz * dz <= radius * radius) and (absolute(dy) <= 2)
+    when inputEdge(seat, interact, Press, each) and (seated == 1 or near)
+    mode: Level
+    typingSeat = 1 - seated
+    setBodyState(key: $"{bodyIndex}", state: "typing", expression: (seated == 1) ? 0.0 : 1.0)
+  }
+
+  rule "typing-near" {
+    local dx = bodyPosition(body, bodyIndex, x) - bench[0]
+    local dy = bodyPosition(body, bodyIndex, y) - bench[1]
+    local dz = bodyPosition(body, bodyIndex, z) - bench[2]
+    local reach = ((typingSeat == 0) and (dx * dx + dz * dz <= radius * radius) and (absolute(dy) <= 2)) ? 1 : 0
+    when typing.near != reach
+    mode: Level
+    typing.near = reach
+  }
+
+  // Sitting down starts a run from nothing; standing up mid-run abandons it.
+  rule "typing-start" {
+    when typingSeat == 1 and typing.phase != 1 and $tick >= typing.overAt
+    mode: Edge
+    typing.phase = 1
+    typing.score = 0
+    typing.streak = 0
+    typing.wave = 1
+    typing.lives = lives
+    typing.cleared = 0
+    typing.target = -1
+    typing.stride = 2
+    typing.beat = clock(music, beat)
+    for lane in laneKeys {
+      typingLive[$"{lane}"] = 0
+      typingTyped[$"{lane}"] = 0
+      typingStep[$"{lane}"] = 0
+      typingDue[$"{lane}"] = 0
+      typingShown[$"{lane}"] = ""
+    }
+    emitCue(name: "typing.start")
+  }
+  rule "typing-abandon" {
+    when typingSeat == 0 and typing.phase
+    mode: Level
+    typing.phase = 0
+    typing.target = -1
+    for lane in laneKeys {
+      typingLive[$"{lane}"] = 0
+      typingStep[$"{lane}"] = 0
+      typingShown[$"{lane}"] = ""
+    }
+    emitCue(name: "typing.stop")
+  }
+
+  // A lane that empties rests before its next word. Each rest rule stands before its lane's spawn rule, so the tick a
+  // lane is found empty writes the due tick the spawn then reads.
+  for lane in laneKeys {
+    rule $"typing-rest-{lane}" {
+      when typing.phase == 1 and typingLive[$"{lane}"] == 0
+      mode: Edge
+      scheduleState(state: typingDue, key: $"{lane}", delaySeconds: respawnSeconds)
+    }
+  }
+
+  // A word comes onto an empty lane the wave has opened, drawn from the wave's tier.
+  for lane in laneKeys {
+    rule $"typing-spawn-{lane}" {
+      local tier = minimum(typing.wave - 1, tiers - 1)
+      when typing.phase == 1 and typingLive[$"{lane}"] == 0 and $tick >= typingDue[$"{lane}"] and typing.wave > lane
+      mode: Level
+      generate(row: typingDraw)
+      typingWord[$"{lane}"] = typingDraw + tier * perTier
+      typingTyped[$"{lane}"] = 0
+      typingStep[$"{lane}"] = 0
+      typingLive[$"{lane}"] = 1
+      setState(state: typingShown, key: $"{lane}", fromState: typingText, fromKey: $"$cell:typingWord:{lane}")
+      setState(state: typingStyle, key: $"{lane}", text: restEffect)
+    }
+  }
+
+  // Each typed character, oldest first, so two in one step are each judged against what the one before left.
+  rule "typing-key" {
+    forEach: $"$inputEvents:{seat}"
+    maxFirings: keysPerStep
+    local raw = inputValue(seat, typed, Text, each) ?? 0
+    local key = ((raw >= 65) and (raw <= 90)) ? (raw + 32) : raw
+    local locked = typing.target
+    local pick0 = -1
+    local reach0 = -1
+    for lane in laneKeys {
+      local $"begins{lane}" = (
+        (typingLive[$"{lane}"] == 1) and
+        ((typingLetters[typingWord[$"{lane}"] * typingSpan] ?? 0) == key) and
+        (typingStep[$"{lane}"] > $"reach{lane}")
+      )
+      local $"pick{lane + 1}" = $"begins{lane}" ? lane : $"pick{lane}"
+      local $"reach{lane + 1}" = $"begins{lane}" ? typingStep[$"{lane}"] : $"reach{lane}"
+    }
+    local aim = (locked >= 0) ? locked : $"pick{lanes}"
+    local word = (aim >= 0) ? (typingWord[aim] ?? 0) : 0
+    local at = (aim >= 0) ? (typingTyped[aim] ?? 0) : 0
+    local expected = typingLetters[word * typingSpan + at] ?? 0
+    local hit = (aim >= 0) and (expected == key)
+    local size = typingLength[word] ?? 0
+    local done = hit and (at + 1 >= size)
+    local streak = typing.streak
+    when inputEdge(seat, typed, Text, each) and typing.phase == 1 and key >= 97 and key <= 122
+    mode: Level
+    if hit {
+      typingTyped[aim] = at + 1
+      typing.target = done ? -1 : aim
+      typing.hits += 1
+      typingKeys.last = key
+      emitCue(name: "typing.hit")
+    } else {
+      typing.misses += 1
+      typing.streak = 0
+      scheduleState(state: typing, key: missUntil, delaySeconds: missSeconds)
+      emitCue(name: "typing.miss")
+    }
+    if done {
+      typing.score += size * (10 + 2 * minimum(streak, streakCap))
+      typing.streak = streak + 1
+      typing.cleared += 1
+      typingLive[aim] = 0
+      typingStep[aim] = 0
+      emitCue(name: "typing.word")
+    }
+  }
+
+  // The lanes step on the beat.
+  rule "typing-advance" {
+    local beat = clock(music, beat)
+    when typing.phase == 1 and beat != typing.beat
+    mode: Level
+    typing.beat = beat
+    for lane in laneKeys {
+      if typingLive[$"{lane}"] == 1 and (beat % typing.stride) == 0 {
+        typingStep[$"{lane}"] += 1
+      }
+    }
+  }
+
+  // A word that takes its last step lands.
+  for lane in laneKeys {
+    rule $"typing-land-{lane}" {
+      local aimed = typing.target
+      when typing.phase == 1 and typingLive[$"{lane}"] == 1 and typingStep[$"{lane}"] >= steps
+      mode: Level
+      typingLive[$"{lane}"] = 0
+      typingStep[$"{lane}"] = 0
+      typing.lives -= 1
+      typing.streak = 0
+      typing.lands += 1
+      typing.target = (aimed == lane) ? -1 : aimed
+      emitCue(name: "typing.land")
+    }
+  }
+
+  rule "typing-wave" {
+    local next = typing.wave + 1
+    when typing.phase == 1 and typing.cleared >= (typing.wave * perWave)
+    mode: Level
+    typing.wave = next
+    typing.stride = (next >= 3) ? 1 : 2
+    emitCue(name: "typing.wave")
+  }
+
+  rule "typing-over" {
+    local score = typing.score
+    local best = typing.best
+    when typing.phase == 1 and typing.lives <= 0
+    mode: Level
+    typing.phase = 2
+    typing.target = -1
+    typing.best = maximum(score, best)
+    scheduleState(state: typing, key: overAt, delaySeconds: overSeconds)
+    for lane in laneKeys {
+      typingLive[$"{lane}"] = 0
+      typingStep[$"{lane}"] = 0
+    }
+    emitCue(name: "typing.over")
+    emitCue(name: "typing.stop")
+    if score > best {
+      typing.records += 1
+      emitCue(name: "typing.record")
+    }
+  }
+
+  // What the panel and the keyboard show, settled after every judgement of the tick.
+  rule "typing-show" {
+    local aim = typing.target
+    local word = (aim >= 0) ? (typingWord[aim] ?? 0) : 0
+    local at = (aim >= 0) ? (typingTyped[aim] ?? 0) : 0
+    when typing.phase == 1
+    mode: Level
+    typingKeys.next0 = (aim >= 0) ? (typingLetters[word * typingSpan + at] ?? 0) : 0
+    typingKeys.next1 = (aim >= 0) ? (typingLetters[word * typingSpan + at + 1] ?? 0) : 0
+    typingKeys.next2 = (aim >= 0) ? (typingLetters[word * typingSpan + at + 2] ?? 0) : 0
+    for lane in laneKeys {
+      typingKeys[$"first{lane}"] = (
+        ((aim < 0) and (typingLive[$"{lane}"] == 1)) ? (typingLetters[typingWord[$"{lane}"] * typingSpan] ?? 0) : 0
+      )
+      if typingLive[$"{lane}"] == 0 {
+        typingShown[$"{lane}"] = ""
+      }
+      if aim == lane and $tick < typing.missUntil {
+        setState(state: typingStyle, key: $"{lane}", text: missEffect)
+      } else {
+        setState(state: typingStyle, key: $"{lane}", text: restEffect)
+      }
+    }
+  }
+  rule "typing-hide" {
+    when typing.phase != 1
+    mode: Edge
+    for key in ["next0", "next1", "next2", "last"] {
+      typingKeys[key] = 0
+    }
+    for lane in laneKeys {
+      typingKeys[$"first{lane}"] = 0
+    }
+  }
+
+  // A cue on every tick the streak holds a heat, for a score's layers.
+  for (heat, index) in heats {
+    rule $"typing-heat-{index + 1}" {
+      when typing.phase == 1 and typing.streak >= heat
+      mode: Level
+      emitCue(name: $"typing.heat{index + 1}")
+    }
+  }
+}

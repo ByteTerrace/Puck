@@ -32967,6 +32967,11 @@
                         "null"
                       ],
                       "default": null
+                    },
+                    "markup": {
+                      "description": "Whether a text element\u0027s resolved text is read as markup: [wave], [shake], [caret at=3] and the other effect tags of Puck.Text style each glyph, and a placeholder may supply a tag\u0027s name or a parameter\u0027s value. Absent, brackets are ordinary text.",
+                      "type": "boolean",
+                      "default": false
                     }
                   },
                   "required": [
@@ -52415,6 +52420,643 @@
         ],
         "additionalProperties": false,
         "title": "WorldHapticRow"
+      },
+      "default": null
+    },
+    "keyLights": {
+      "description": "The world\u0027s authored keyboard lamp section, painted per local seat from delivered state.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "idle": {
+          "description": "The color of every key no lit row names.",
+          "title": "BindableColor",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "clock": {
+                  "type": "string"
+                },
+                "keys": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "at": {
+                        "type": "number"
+                      },
+                      "value": {
+                        "type": "string"
+                      },
+                      "ease": {
+                        "type": "string",
+                        "enum": [
+                          "Linear",
+                          "Smooth",
+                          "Step"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "at",
+                      "value"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              },
+              "required": [
+                "clock",
+                "keys"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        },
+        "flash": {
+          "description": "The color a flashing key starts from when its row authors no flash color of its own.",
+          "title": "BindableColor",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "clock": {
+                  "type": "string"
+                },
+                "keys": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "at": {
+                        "type": "number"
+                      },
+                      "value": {
+                        "type": "string"
+                      },
+                      "ease": {
+                        "type": "string",
+                        "enum": [
+                          "Linear",
+                          "Smooth",
+                          "Step"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "at",
+                      "value"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              },
+              "required": [
+                "clock",
+                "keys"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        },
+        "modifier": {
+          "description": "The color of a held chord modifier\u0027s key.",
+          "title": "BindableColor",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "clock": {
+                  "type": "string"
+                },
+                "keys": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "at": {
+                        "type": "number"
+                      },
+                      "value": {
+                        "type": "string"
+                      },
+                      "ease": {
+                        "type": "string",
+                        "enum": [
+                          "Linear",
+                          "Smooth",
+                          "Step"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "at",
+                      "value"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              },
+              "required": [
+                "clock",
+                "keys"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        },
+        "unavailableScale": {
+          "description": "The brightness, in [0, 1], a row\u0027s color keeps while the row is unavailable.",
+          "type": "number",
+          "default": 0.25
+        },
+        "flashSeconds": {
+          "description": "The seconds a flash takes to fade back to the key\u0027s own color. Positive, at most MaxFlashSeconds.",
+          "type": "number",
+          "default": 0.25
+        },
+        "rows": {
+          "description": "The rows, in paint order.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "description": "One row of keyLights: a set of keys and the color they take. The keys are the union of what the row names three ways, each optional: Keys literally, Bound through the seat\u0027s active binding page, and Character through the key that types it.",
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "id": {
+                "description": "The row\u0027s stable id, unique within the section.",
+                "type": "string"
+              },
+              "color": {
+                "description": "The color the row\u0027s keys take.",
+                "title": "BindableColor",
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "clock": {
+                        "type": "string"
+                      },
+                      "keys": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "at": {
+                              "type": "number"
+                            },
+                            "value": {
+                              "type": "string"
+                            },
+                            "ease": {
+                              "type": "string",
+                              "enum": [
+                                "Linear",
+                                "Smooth",
+                                "Step"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "at",
+                            "value"
+                          ],
+                          "additionalProperties": false
+                        }
+                      }
+                    },
+                    "required": [
+                      "clock",
+                      "keys"
+                    ],
+                    "additionalProperties": false
+                  }
+                ]
+              },
+              "keys": {
+                "description": "Keyboard input source ids (keyboard.a, keyboard.space).",
+                "type": [
+                  "array",
+                  "null"
+                ],
+                "items": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "default": null
+              },
+              "bound": {
+                "description": "Binding entry ids: the keyboard sources the seat\u0027s active page binds each entry to, so the lamps follow a page change and a player\u0027s rebinding.",
+                "type": [
+                  "array",
+                  "null"
+                ],
+                "items": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "default": null
+              },
+              "character": {
+                "description": "A Unicode scalar value, usually a state cell: the key that types it lights, and a letter lights its key whatever its case. A value no key types (zero included) lights nothing.",
+                "default": null,
+                "title": "BindableScalar",
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "clock": {
+                        "type": "string"
+                      },
+                      "keys": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "at": {
+                              "type": "number"
+                            },
+                            "value": {
+                              "type": "number"
+                            },
+                            "ease": {
+                              "type": "string",
+                              "enum": [
+                                "Linear",
+                                "Smooth",
+                                "Step"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "at",
+                            "value"
+                          ],
+                          "additionalProperties": false
+                        }
+                      }
+                    },
+                    "required": [
+                      "clock",
+                      "keys"
+                    ],
+                    "additionalProperties": false
+                  }
+                ]
+              },
+              "lit": {
+                "description": "The row paints while this is positive; absent, it always paints.",
+                "default": null,
+                "title": "BindableScalar",
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "clock": {
+                        "type": "string"
+                      },
+                      "keys": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "at": {
+                              "type": "number"
+                            },
+                            "value": {
+                              "type": "number"
+                            },
+                            "ease": {
+                              "type": "string",
+                              "enum": [
+                                "Linear",
+                                "Smooth",
+                                "Step"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "at",
+                            "value"
+                          ],
+                          "additionalProperties": false
+                        }
+                      }
+                    },
+                    "required": [
+                      "clock",
+                      "keys"
+                    ],
+                    "additionalProperties": false
+                  }
+                ]
+              },
+              "available": {
+                "description": "The row is dimmed by UnavailableScale while this is not positive; absent, it is never dimmed.",
+                "default": null,
+                "title": "BindableScalar",
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "clock": {
+                        "type": "string"
+                      },
+                      "keys": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "at": {
+                              "type": "number"
+                            },
+                            "value": {
+                              "type": "number"
+                            },
+                            "ease": {
+                              "type": "string",
+                              "enum": [
+                                "Linear",
+                                "Smooth",
+                                "Step"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "at",
+                            "value"
+                          ],
+                          "additionalProperties": false
+                        }
+                      }
+                    },
+                    "required": [
+                      "clock",
+                      "keys"
+                    ],
+                    "additionalProperties": false
+                  }
+                ]
+              },
+              "flashSignal": {
+                "description": "The row\u0027s keys flash each time this changes to a new value after it is first read.",
+                "default": null,
+                "title": "BindableScalar",
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "clock": {
+                        "type": "string"
+                      },
+                      "keys": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "at": {
+                              "type": "number"
+                            },
+                            "value": {
+                              "type": "number"
+                            },
+                            "ease": {
+                              "type": "string",
+                              "enum": [
+                                "Linear",
+                                "Smooth",
+                                "Step"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "at",
+                            "value"
+                          ],
+                          "additionalProperties": false
+                        }
+                      }
+                    },
+                    "required": [
+                      "clock",
+                      "keys"
+                    ],
+                    "additionalProperties": false
+                  }
+                ]
+              },
+              "flashColor": {
+                "description": "The color the row\u0027s flash starts from; absent, the section\u0027s Flash.",
+                "default": null,
+                "title": "BindableColor",
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "clock": {
+                        "type": "string"
+                      },
+                      "keys": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "at": {
+                              "type": "number"
+                            },
+                            "value": {
+                              "type": "string"
+                            },
+                            "ease": {
+                              "type": "string",
+                              "enum": [
+                                "Linear",
+                                "Smooth",
+                                "Step"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "at",
+                            "value"
+                          ],
+                          "additionalProperties": false
+                        }
+                      }
+                    },
+                    "required": [
+                      "clock",
+                      "keys"
+                    ],
+                    "additionalProperties": false
+                  }
+                ]
+              },
+              "seat": {
+                "description": "The seat whose keyboard the row lights (seat1..seat4), or null for every local seat that holds one.",
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "default": null
+              }
+            },
+            "required": [
+              "id",
+              "color"
+            ],
+            "additionalProperties": false,
+            "title": "WorldKeyLightRow"
+          },
+          "default": null
+        }
+      },
+      "required": [
+        "idle",
+        "flash",
+        "modifier"
+      ],
+      "additionalProperties": false,
+      "default": null,
+      "title": "WorldKeyLightSection"
+    },
+    "highlights": {
+      "description": "The world\u0027s authored highlight rows, triggered by delivered state.",
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "description": "One row of the highlights document section: a run of presented frames a world asks the host to keep. Each time Signal changes to a new value after it is first read, the host writes the next Frames presented frames as images under its own capture directory, named for the row. A document names no path: where a player\u0027s files go is the host\u0027s. Presentation only, and a host that composes no frame capture ignores the section.",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "id": {
+            "description": "The row\u0027s stable id, unique within the section, and the name its files carry.",
+            "type": "string"
+          },
+          "signal": {
+            "description": "The state-driven trigger.",
+            "title": "BindableScalar",
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "clock": {
+                    "type": "string"
+                  },
+                  "keys": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "at": {
+                          "type": "number"
+                        },
+                        "value": {
+                          "type": "number"
+                        },
+                        "ease": {
+                          "type": "string",
+                          "enum": [
+                            "Linear",
+                            "Smooth",
+                            "Step"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "at",
+                        "value"
+                      ],
+                      "additionalProperties": false
+                    }
+                  }
+                },
+                "required": [
+                  "clock",
+                  "keys"
+                ],
+                "additionalProperties": false
+              }
+            ]
+          },
+          "frames": {
+            "description": "How many presented frames one trigger writes, from 1 to MaxFrames.",
+            "type": "integer",
+            "default": 1
+          },
+          "delaySeconds": {
+            "description": "The seconds between the trigger and the first written frame, so a still shows what the trigger led to, from 0 to MaxDelaySeconds.",
+            "type": "number",
+            "default": 0
+          }
+        },
+        "required": [
+          "id",
+          "signal"
+        ],
+        "additionalProperties": false,
+        "title": "WorldHighlightRow"
       },
       "default": null
     },

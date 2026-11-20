@@ -8168,6 +8168,11 @@
             "null"
           ],
           "default": null
+        },
+        "markup": {
+          "description": "Whether a text element\u0027s resolved text is read as markup: [wave], [shake], [caret at=3] and the other effect tags of Puck.Text style each glyph, and a placeholder may supply a tag\u0027s name or a parameter\u0027s value. Absent, brackets are ordinary text.",
+          "type": "boolean",
+          "default": false
         }
       },
       "required": [

@@ -45,6 +45,26 @@ public sealed class LightLegendPalette {
             : Idle
         );
     }
+    /// <summary>Builds a palette from a host's own layer colors, every category unlit until
+    /// <see cref="WithCategory"/> gives it one.</summary>
+    /// <param name="idle">The color of an unbound key.</param>
+    /// <param name="flash">The color an activation flash starts from.</param>
+    /// <param name="modifier">The color of a held chord modifier's key.</param>
+    /// <param name="unavailableScale">The brightness an unavailable bind keeps, clamped to <c>[0, 1]</c>.</param>
+    /// <returns>The palette.</returns>
+    public static LightLegendPalette Create(LampColor idle, LampColor flash, LampColor modifier, float unavailableScale) {
+        return new LightLegendPalette(
+            byCategory: new LampColor[Enum.GetValues<BindCategory>().Length],
+            flash: flash,
+            idle: idle,
+            modifier: modifier,
+            unavailableScale: Math.Clamp(
+                max: 1f,
+                min: 0f,
+                value: unavailableScale
+            )
+        );
+    }
     /// <summary>
     /// Builds the default palette: movement cyan, camera violet, interact green, console and meta amber, bench
     /// and debug in the red family, system a cool blue — chosen to stay legible across the keyboard at once.

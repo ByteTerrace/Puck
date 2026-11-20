@@ -160,6 +160,33 @@ public readonly record struct TextGlyphChannel(
                         : 1.0f),
                     };
                 }
+            case TextEffectKind.Caret: {
+                    var caret = ((int)MathF.Floor(x: effect.Phase.Evaluate(variables: variables)));
+
+                    if (glyphIndex < caret) {
+                        return Identity with {
+                            Coverage = Math.Clamp(
+                            max: 1.0f,
+                            min: 0.0f,
+                            value: effect.DurationSeconds.Evaluate(variables: variables)
+                        ),
+                        };
+                    }
+
+                    return ((glyphIndex == caret)
+                        ? Identity with {
+                            Offset = new Vector2(
+                            x: 0.0f,
+                            y: effect.AmplitudePixels.Evaluate(variables: variables)
+                        ),
+                            Scale = MathF.Max(
+                            x: 0.01f,
+                            y: (1.0f + effect.FrequencyHz.Evaluate(variables: variables))
+                        ),
+                        }
+                        : Identity
+                    );
+                }
             default: {
                     break;
                 }

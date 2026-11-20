@@ -114,6 +114,10 @@ public enum WorldDocumentInput : byte {
     Markers,
     /// <summary>The <c>haptics</c> member.</summary>
     Haptics,
+    /// <summary>The <c>keyLights</c> member.</summary>
+    KeyLights,
+    /// <summary>The <c>highlights</c> member.</summary>
+    Highlights,
     /// <summary>The <c>rules</c> member.</summary>
     Rules,
     /// <summary>The <c>identity</c> member.</summary>
@@ -513,6 +517,8 @@ internal static class WorldDocumentInputTable {
         (WorldDocumentInput.Theme, static d => d.ThemeRaw),
         (WorldDocumentInput.Markers, static d => d.MarkersRaw),
         (WorldDocumentInput.Haptics, static d => d.HapticsRaw),
+        (WorldDocumentInput.KeyLights, static d => d.KeyLightsRaw),
+        (WorldDocumentInput.Highlights, static d => d.HighlightsRaw),
         (WorldDocumentInput.Rules, static d => d.Rules),
         (WorldDocumentInput.Identity, static d => d.Identity),
         (WorldDocumentInput.Groups, static d => d.Groups),

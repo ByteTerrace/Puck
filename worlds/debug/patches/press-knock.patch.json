@@ -1,0 +1,11 @@
+{
+  "schema": "puck.synthesizer-patch.v1",
+  "name": "press-knock",
+  "oscillator": "Triangle",
+  "attackFrames": 24,
+  "decayFrames": 1920,
+  "sustainThousandths": 0,
+  "releaseFrames": 480,
+  "pitchMillihertz": 110000,
+  "durationFrames": 2880
+}

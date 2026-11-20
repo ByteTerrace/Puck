@@ -22,7 +22,7 @@ public static class HexColor {
     public static string Format(Vector3 rgb) =>
         string.Create(
             provider: CultureInfo.InvariantCulture,
-            handler: $"#{Byte(value: rgb.X):X2}{Byte(value: rgb.Y):X2}{Byte(value: rgb.Z):X2}"
+            handler: $"#{VectorFunctions.ToUnorm8(value: rgb.X):X2}{VectorFunctions.ToUnorm8(value: rgb.Y):X2}{VectorFunctions.ToUnorm8(value: rgb.Z):X2}"
         );
     /// <summary>Formats a display colour as an uppercase <c>#RRGGBB</c> string when opaque, else
     /// <c>#RRGGBBAA</c>.</summary>
@@ -33,7 +33,7 @@ public static class HexColor {
 
         return ((color.Alpha >= 1f)
             ? rgb
-            : string.Create(provider: CultureInfo.InvariantCulture, handler: $"{rgb}{Byte(value: color.Alpha):X2}"));
+            : string.Create(provider: CultureInfo.InvariantCulture, handler: $"{rgb}{VectorFunctions.ToUnorm8(value: color.Alpha):X2}"));
     }
     /// <summary>Parses an opaque colour, falling back when it does not parse.</summary>
     /// <param name="value">The candidate string.</param>
@@ -86,7 +86,6 @@ public static class HexColor {
         return true;
     }
 
-    private static int Byte(float value) => ((int)MathF.Round(x: (Math.Clamp(max: 1f, min: 0f, value: value) * 255f)));
     // The R8G8B8A8 word VectorFunctions.UnpackRgba8 reads, red in the low byte; a form without alpha digits is opaque.
     // AllowHexSpecifier alone admits hex digits only: no sign, prefix or whitespace.
     private static bool TryPack(string? value, out uint packed, out bool withAlpha) {

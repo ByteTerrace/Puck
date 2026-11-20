@@ -117,6 +117,9 @@ public sealed record WorldProjectionProvenance(string Authority, string? Documen
 /// value keys on does not cross.</param>
 /// <param name="Haptics">The world's authored haptic pulse rows driven by delivered state, evaluated per local
 /// seat by the haptic director.</param>
+/// <param name="KeyLights">The world's authored keyboard lamp section, painted per local seat from delivered
+/// state.</param>
+/// <param name="Highlights">The world's authored highlight rows, triggered by delivered state.</param>
 /// <param name="Shades">The shade programs the render defaults and the prototype bodies name by key
 /// (<see cref="WorldShadeTable"/>): a body travels naming its programs, never holding them, so each program crosses
 /// once however many bodies use it.</param>
@@ -159,6 +162,8 @@ public sealed record WorldProjectionDocument(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldTimelineSection? Timeline = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldMusicRow>? Music = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldHapticRow>? Haptics = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldKeyLightSection? KeyLights = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldHighlightRow>? Highlights = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyDictionary<string, Puck.SignedDistance.SdfShadeDefinition>? Shades = null
 ) {
     /// <summary>The document schema version. A reader refuses any other value; the canonical writer always emits it.</summary>
@@ -355,6 +360,8 @@ public static class WorldProjection {
                 time: in time
             ),
             Haptics: definition.HapticsRaw,
+            KeyLights: definition.KeyLightsRaw,
+            Highlights: definition.HighlightsRaw,
             Shades: definition.ShadesRaw
         );
 
@@ -733,6 +740,8 @@ public static class WorldProjection {
         // Nullable annotations do not constrain collection elements on the JSON boundary.
         if ((projection.Kits is null) || projection.Kits.Any(predicate: static kit => (kit is null)) ||
             (projection.Haptics?.Any(predicate: static row => (row is null)) == true) ||
+            (projection.KeyLights?.Rows?.Any(predicate: static row => (row is null)) == true) ||
+            (projection.Highlights?.Any(predicate: static row => (row is null)) == true) ||
             (projection.Observations?.Any(predicate: static row => ((row is null) || (row.Cells is null) || row.Cells.Any(predicate: static cell => (cell is null)))) == true)) {
             reason = "projection kits, observations and observed cells must be non-null rows.";
 
@@ -839,7 +848,9 @@ public static class WorldProjection {
                 )
             : null),
             TimelineRaw: projection.Timeline,
-            HapticsRaw: projection.Haptics
+            HapticsRaw: projection.Haptics,
+            KeyLightsRaw: projection.KeyLights,
+            HighlightsRaw: projection.Highlights
         ) {
             DocumentId = projection.Provenance.DocumentId,
             ShadesRaw = projection.Shades,

@@ -1,0 +1,13 @@
+{
+  "schema": "puck.synthesizer-patch.v1",
+  "name": "press-set",
+  "oscillator": "Sine",
+  "attackFrames": 48,
+  "decayFrames": 7200,
+  "sustainThousandths": 150,
+  "releaseFrames": 4800,
+  "pitchMillihertz": 880000,
+  "vibratoDepthMillihertz": 4000,
+  "vibratoRateMillihertz": 6000,
+  "durationFrames": 14400
+}

@@ -70,7 +70,8 @@ internal sealed class WorldHudFeed(WorldClient client, PlayerRoster roster, HudS
                 PlotMin: element.PlotMin,
                 PlotMax: element.PlotMax,
                 PlotReference: element.PlotReference,
-                PlotReferenceBinding: element.PlotReferenceBinding
+                PlotReferenceBinding: element.PlotReferenceBinding,
+                Markup: element.Markup
             );
 
             if (element.Kind != WorldHudElementKind.Frame) {

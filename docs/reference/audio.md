@@ -266,8 +266,12 @@ or backend row. The authoritative server references it directly.
 closure above); `dotnet test tests/Puck.Audio.Tests` for the mixer/synth and
 `MusicClock`/`MusicDirector`/`VoiceBabbler` laws. Behavioral verification runs
 the real windowed `Puck.World` and reads
-`audio.state`/`audio.emitters`/`speaker.state`/`voice.state`/`music.state`
-over stdin—there is no build-only gate for a world-audio feature.
+`audio.state`/`audio.emitters`/`audio.mix`/`speaker.state`/`voice.state`/`music.state`
+over stdin—there is no build-only gate for a world-audio feature. `audio.mix`
+reads what the director last handed the mixer: whether a mixer is attached, the
+live transient cues, and from the latest published snapshot the emitters in the
+mix, the synth triggers and a count per emitter kind, so a music layer joining
+reads as its bed emitter arriving.
 The quarantined script `experimental/tests/Puck.World.Canaries/voice-babble`
 describes a check of the playback wiring end to
 end: triggering an identity's babble fires four DISTINCT syllable triggers
@@ -280,8 +284,8 @@ render endpoint (`audio.state` reports `device=silent` with an endpoint fault, o
 unsupported rather than failed; a device that opens but produces no signal still
 fails.
 A region crossing fires one segment transition, and the transition fires the
-`music.transition` cue token (`WorldServer.MusicTransitionTap`, wired to
-`WorldAudioDirector.SubmitCue` in `WorldPostBuildWiring`)—the crossing a
+`music.transition` cue token (the listener's own director, stepped from each
+delivered tick by `WorldAudioDirector.PresentLocalCues`)—the crossing a
 world's `audio.cues` table binds a stinger patch to. No canary or test proves
 that crossing end to end.
 The quarantined script

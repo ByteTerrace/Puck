@@ -282,6 +282,14 @@ public static class WorldBootComposition {
             );
         });
         services.AddSingleton<ICommandModule, WorldHapticsCommandModule>();
+        // The keyboard lamps: every boot shape paints each seat's legend from its world's keyLights section, and only a
+        // boot that opens physical devices registers the loop that writes it to the platform's lamp arrays.
+        services.AddSingleton(implementationFactory: static sp => new WorldKeyLightDirector(
+            driver: sp.GetService<Puck.Input.Lighting.LampLegendDriver>(),
+            roster: sp.GetRequiredService<PlayerRoster>(),
+            seatBindings: sp.GetRequiredService<WorldSeatBindings>()
+        ));
+        services.AddSingleton<ICommandModule, WorldKeyLightCommandModule>();
 
         // The server's entity table — the four local seats plus up to 124 network stand-ins the world.population verb
         // activates — the one body system the snapshot reports (up to 4096 bodies, rendered through the hybrid avatar/crowd representation).
@@ -1243,6 +1251,8 @@ public static class WorldBootComposition {
         var anchor = sp.GetRequiredService<WorldPerceptionAnchor>();
         var composer = sp.GetRequiredService<WorldViewComposer>();
         var haptics = sp.GetRequiredService<WorldHapticDirector>();
+        var keyLights = sp.GetRequiredService<WorldKeyLightDirector>();
+        var highlights = sp.GetService<WorldHighlightDirector>();
 
         return () => {
             for (var slot = 0; (slot < WorldSeatBindings.SeatCount); slot++) {
@@ -1264,6 +1274,8 @@ public static class WorldBootComposition {
                 screens: server.Definition.Screens
             );
             haptics.Tick(tick: client.Tick);
+            keyLights.Tick();
+            highlights?.Tick();
         };
     }
     /// <summary>Registers the boot shape the resolved host settings select over the authoritative core: the headless
@@ -1631,6 +1643,17 @@ public static class WorldBootComposition {
         } else {
             services.AddLinuxRecordingPlatform();
         }
+        services.AddSingleton(implementationFactory: static sp => new WorldHighlightDirector(
+            capture: sp.GetRequiredService<FrameCaptureController>(),
+            client: sp.GetRequiredService<WorldClient>(),
+            directory: Path.Combine(
+                path1: (sp.GetRequiredService<WorldCaptureRoot>().OverridePath ?? Path.Combine(
+                    path1: sp.GetRequiredService<WorldStateRoot>().FullPath,
+                    path2: "captures"
+                )),
+                path2: "highlights"
+            )
+        ));
         services.AddSingleton<ICommandModule, WorldRecordingCommandModule>();
         // Controllers, first-class beside the keyboard: the hardware manager (HID + the Xbox XInput/GameInput poll
         // thread), the focus-gated snapshot capture binding the sticks to the player's Axis2D channels, and the
@@ -1644,6 +1667,9 @@ public static class WorldBootComposition {
                 build: 10240
             )
         ) {
+            services.AddSingleton(implementationFactory: static _ => new Puck.Input.Lighting.LampLegendDriver(
+                open: static () => new Puck.Platform.Windows.Lighting.Win32LampArrayDeviceSource()
+            ));
             services.AddSingleton(implementationFactory: static sp => WindowsInputTransports.CreateGamepadManager(
                 clock: sp.GetRequiredService<IInputClock>(),
                 diagnostics: static message => Console.Error.WriteLine(value: message)

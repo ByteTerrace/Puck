@@ -143,6 +143,7 @@ public sealed record WorldHudFrameCandidate(WorldFrameSource Source, [property: 
 /// <param name="PlotMax">The plot's upper bound, strictly above PlotMin.</param>
 /// <param name="PlotReference">An optional constant reference line in the reading's units.</param>
 /// <param name="PlotReferenceBinding">An optional reading binding for a live reference line, instead of PlotReference.</param>
+/// <param name="Markup">Whether a text element's resolved text is read as markup: <c>[wave]</c>, <c>[shake]</c>, <c>[caret at=3]</c> and the other effect tags of <c>Puck.Text</c> style each glyph, and a placeholder may supply a tag's name or a parameter's value. Absent, brackets are ordinary text.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record WorldHudElement(
     [property: DocumentText("a HUD element id")] string Id,
@@ -168,7 +169,8 @@ public sealed record WorldHudElement(
     float PlotMax = 1f,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? PlotReference = null,
     [property: DocumentText("a presentation reading's source name, in the readings vocabulary")]
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? PlotReferenceBinding = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? PlotReferenceBinding = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] bool Markup = false
 ) {
     /// <summary>Gets the frame candidates in rank order — <see cref="Sources"/>, else the bare <see cref="Source"/>
     /// as one unconditional entry, else none. The one shape every reader of a frame element's sources takes.</summary>
@@ -262,6 +264,9 @@ public sealed record WorldHudSection(WorldHudDefaults Defaults, IReadOnlyList<Wo
 public static class WorldHudCapacity {
     /// <summary>The sum of requested plot samples within any world or seat panel.</summary>
     public const int MaxPlotSamplesPerPanel = 128;
+    /// <summary>The extra text runs one panel's marked-up text elements may split into, all together, as their
+    /// effects give glyphs different offsets, sizes and coverage. Text past it draws unstyled.</summary>
+    public const int MaxStyledRunsPerPanel = 64;
     /// <summary>The per-panel element-row ceiling (world scope).</summary>
     public const int MaxElementsPerPanel = 24;
     /// <summary>The per-seat player-scope panel's element-row ceiling — capped smaller than the world scope's
@@ -278,7 +283,7 @@ public static class WorldHudCapacity {
     /// <see cref="WorldIdentity.Hud"/> is that one panel.</summary>
     public const int MaxSeatPanels = 1;
     /// <summary>The world-scope panel-row ceiling.</summary>
-    public const int MaxWorldPanels = 5;
+    public const int MaxWorldPanels = 8;
 }
 /// <summary>The approved closed v1 binding vocabulary a <see cref="WorldHudElement.Binding"/> names — validated at
 /// document validation (refuse-unknown by name) and resolved render-side, once per frame, by the writer.</summary>

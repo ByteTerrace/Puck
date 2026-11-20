@@ -69,6 +69,8 @@ public sealed partial record WorldDefinition(
     WorldThemeSection? ThemeRaw = null,
     IReadOnlyList<WorldMarkerRow>? MarkersRaw = null,
     IReadOnlyList<WorldHapticRow>? HapticsRaw = null,
+    WorldKeyLightSection? KeyLightsRaw = null,
+    IReadOnlyList<WorldHighlightRow>? HighlightsRaw = null,
     IReadOnlyList<WorldRule>? Rules = null,
     WorldIdentityDefinition? Identity = null,
     WorldGroupsSection? Groups = null,
@@ -228,6 +230,12 @@ public sealed partial record WorldDefinition(
     /// <summary>Haptic pulses a pad plays when the world names them.</summary>
     [JsonPropertyName("haptics"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public IReadOnlyList<WorldHapticRow>? HapticsRaw { get { WorldDocumentReads.Note(input: WorldDocumentInput.Haptics); return field; } init; } = HapticsRaw;
+    /// <summary>What a seat's keyboard lamps show.</summary>
+    [JsonPropertyName("keyLights"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public WorldKeyLightSection? KeyLightsRaw { get { WorldDocumentReads.Note(input: WorldDocumentInput.KeyLights); return field; } init; } = KeyLightsRaw;
+    /// <summary>Runs of presented frames the host keeps when the world names them.</summary>
+    [JsonPropertyName("highlights"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<WorldHighlightRow>? HighlightsRaw { get { WorldDocumentReads.Note(input: WorldDocumentInput.Highlights); return field; } init; } = HighlightsRaw;
     /// <summary>The rules that react to the world's state and write it.</summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public IReadOnlyList<WorldRule>? Rules { get { WorldDocumentReads.Note(input: WorldDocumentInput.Rules); return field; } init; } = Rules;
@@ -595,6 +603,9 @@ public sealed partial record WorldDefinition(
     /// <summary>Gets the world-authored pad haptic pulse rows — ABSENT resolves to none.</summary>
     [JsonIgnore]
     public IReadOnlyList<WorldHapticRow> Haptics => (HapticsRaw ?? []);
+    /// <summary>Gets the world-authored highlight rows; absent resolves to none.</summary>
+    [JsonIgnore]
+    public IReadOnlyList<WorldHighlightRow> Highlights => (HighlightsRaw ?? []);
     /// <summary>Gets the profileless locomotion speeds a stand-in with no seated profile advances on — ABSENT
     /// resolves to <see cref="WorldMotionDefaults.Default"/> (inert, near-zero).</summary>
     [JsonIgnore]

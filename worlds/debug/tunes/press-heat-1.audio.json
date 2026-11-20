@@ -1,0 +1,93 @@
+{
+  "schema": "puck.tune.v1",
+  "name": "press-heat-1",
+  "tempo": 15,
+  "patterns": [
+    [
+      {
+        "note": "C4",
+        "duty": 1,
+        "envelope": 113
+      },
+      {
+        "note": "E4",
+        "duty": 1,
+        "envelope": 113
+      },
+      {
+        "note": "A4",
+        "duty": 1,
+        "envelope": 113
+      },
+      {
+        "note": "E4",
+        "duty": 1,
+        "envelope": 113
+      },
+      {
+        "note": "C4",
+        "duty": 1,
+        "envelope": 113
+      },
+      {
+        "note": "E4",
+        "duty": 1,
+        "envelope": 113
+      },
+      {
+        "note": "G4",
+        "duty": 1,
+        "envelope": 113
+      },
+      {
+        "note": "E4",
+        "duty": 1,
+        "envelope": 113
+      },
+      {
+        "note": "D4",
+        "duty": 1,
+        "envelope": 113
+      },
+      {
+        "note": "E4",
+        "duty": 1,
+        "envelope": 113
+      },
+      {
+        "note": "A4",
+        "duty": 1,
+        "envelope": 113
+      },
+      {
+        "note": "E4",
+        "duty": 1,
+        "envelope": 113
+      },
+      {
+        "note": "C4",
+        "duty": 1,
+        "envelope": 113
+      },
+      {
+        "note": "E4",
+        "duty": 1,
+        "envelope": 113
+      },
+      {
+        "note": "G4",
+        "duty": 1,
+        "envelope": 113
+      },
+      {
+        "note": "E4",
+        "duty": 1,
+        "envelope": 113
+      }
+    ]
+  ],
+  "order": [
+    0
+  ],
+  "effects": {}
+}

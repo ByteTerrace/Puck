@@ -444,9 +444,33 @@ lamp geometry + palette + live bindings
     -> per-lamp colors
 ```
 
-No host drives a lamp array yet: nothing delivers the composed colors to a
-device on a tick. The transport and composer have been exercised on a Logitech G915 LampArray
+`LampLegendDriver` is the loop that delivers them. A host publishes a
+`LightLegendState` and a palette whenever it has a new legend and withdraws it
+when it has none; the driver's own thread opens the platform's
+`ILampArrayDeviceSource` at the first published legend, takes each keyboard
+array from its firmware, composes the legend once per array at the array's
+minimum update interval (no faster than 33 milliseconds), and writes only a
+frame that differs from the one shown. It enumerates again every three seconds,
+hands every array back when the legend is withdrawn or the driver is disposed,
+and sleeps on a wait handle while nothing is published.
+
+A world authors the legend in its `keyLights` section: an idle colour, a flash
+colour, and rows that each light a set of keys in a colour. A row names its
+keys literally (`keys`), through the seat's active binding page (`bound`, the
+binding entry ids, so the lamps follow a page change and a rebinding), or by
+the character a state cell holds (`character`, through
+`KeyboardUsageMap.TryGetSource`). `lit` and `available` gate and dim a row from
+state, and `flashSignal` flashes its keys each time a cell changes.
+`WorldKeyLightDirector` builds each local seat's legend from the section every
+fixed step and publishes the keyboard-holding seat's to the driver. A World
+that opens no physical device (headless, or `--devices none`) registers no
+driver and still paints every legend onto a reference board of one lamp per
+mapped key, which `lights.state` reads. The debug world's press
+(`worlds/debug/press.puck`) is the live example.
+
+The transport and composer have been exercised on a Logitech G915 LampArray
 (115 lamps, 33-millisecond minimum update), a G502 mouse, and a POWERPLAY pad.
+The driver and the `keyLights` path have not yet been run against a lamp array.
 
 ## Limits and hardware evidence
 

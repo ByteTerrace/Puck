@@ -221,4 +221,36 @@ public abstract record ActionEffect {
         [property: DocumentText("a lexical pair binding")] CellName Binding,
         IReadOnlyList<ActionEffect> Effects
     ) : ActionEffect;
+
+    /// <summary>Enumerates effects with every effect they hold, each before what it holds: a branch's arms, a
+    /// transaction's body and its failure arm, and the bodies a claim, a pair claim and a pool sweep run. A reader that
+    /// asks what a rule can do (which cues it emits, which rows it names) walks this rather than the top-level list,
+    /// so an effect written inside a branch is never missed.</summary>
+    /// <param name="effects">The effects to walk; <see langword="null"/> and null elements yield nothing.</param>
+    /// <returns>Every effect reachable from <paramref name="effects"/>, in authored order.</returns>
+    public static IEnumerable<ActionEffect> WithNested(IEnumerable<ActionEffect?>? effects) {
+        foreach (var effect in (effects ?? [])) {
+            if (effect is null) {
+                continue;
+            }
+
+            yield return effect;
+
+            var (first, second) = effect switch {
+                If branch => (branch.Then, branch.Else),
+                Transaction transaction => (transaction.Effects, transaction.OnFailure),
+                Claim claim => (claim.Effects, null),
+                ClaimPair pair => (pair.Effects, null),
+                ForEachPool sweep => (sweep.Effects, null),
+                _ => (((IReadOnlyList<ActionEffect>?)null), ((IReadOnlyList<ActionEffect>?)null)),
+            };
+
+            foreach (var nested in WithNested(effects: first)) {
+                yield return nested;
+            }
+            foreach (var nested in WithNested(effects: second)) {
+                yield return nested;
+            }
+        }
+    }
 }

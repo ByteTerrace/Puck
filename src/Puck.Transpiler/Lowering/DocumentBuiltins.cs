@@ -29,6 +29,11 @@ public static class DocumentBuiltins {
             evaluate: static (call, scope, fieldKey) => Length(args: call.Arguments, call: call, fieldKey: fieldKey, scope: scope),
             signature: "length(value)"
         ),
+        ["scalars"] = new(
+            description: "Returns a string's Unicode scalar values in order, one whole number per character.",
+            evaluate: static (call, scope, fieldKey) => Scalars(args: call.Arguments, call: call, fieldKey: fieldKey, scope: scope),
+            signature: "scalars(text)"
+        ),
         ["concat"] = new(
             description: "Concatenates arrays and scalar values into one array.",
             evaluate: static (call, scope, fieldKey) => Concat(args: call.Arguments, fieldKey: fieldKey, scope: scope),
@@ -379,6 +384,40 @@ public static class DocumentBuiltins {
             scope: scope
         ),
         };
+    }
+    // Text judged a character at a time (a typed word, a spelled answer) is authored as the string it is: this hands
+    // the rule language the numbers a Text input event carries, so no author writes code points by hand.
+    private static JsonNode? Scalars(CallExpressionNode call, IReadOnlyList<ArgumentNode> args, DocumentScope scope, string? fieldKey) {
+        if (args.Count != 1) {
+            return Refuse(
+                call: call,
+                message: "scalars(text) takes one argument",
+                scope: scope
+            );
+        }
+
+        if (
+            (DocumentLowering.EvaluateValue(
+                expr: args[0].Value,
+                scope: scope,
+                fieldKey: fieldKey
+            ) is not JsonValue value) ||
+            !value.TryGetValue<string>(value: out var text)
+        ) {
+            return Refuse(
+                call: call,
+                message: "scalars(text) reads a string",
+                scope: scope
+            );
+        }
+
+        var scalars = new JsonArray();
+
+        foreach (var rune in text.EnumerateRunes()) {
+            scalars.Add(item: JsonValue.Create(value: ((long)rune.Value)));
+        }
+
+        return scalars;
     }
     private static JsonNode? Map(CallExpressionNode call, IReadOnlyList<ArgumentNode> args, DocumentScope scope, string? fieldKey) {
         if (!TryReadOperand(
