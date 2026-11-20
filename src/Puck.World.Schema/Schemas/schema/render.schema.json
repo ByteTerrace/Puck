@@ -775,7 +775,7 @@
             "type": "string"
           },
           "quality": {
-            "description": "The quality table the profile runs: the tier of the world\u0027s render preset it applies (Names).",
+            "description": "The quality tier the profile runs as (Names): the world\u0027s render preset of that tier is its table unless Table authors the device\u0027s own, and the tier\u0027s indirect default applies where the table names none.",
             "title": "QualityTier",
             "type": "string",
             "enum": [
@@ -798,6 +798,11 @@
               "integer",
               "null"
             ],
+            "default": null
+          },
+          "table": {
+            "$ref": "./common.schema.json#/$defs/WorldQualityPreset",
+            "description": "The device\u0027s own quality table: the levers it runs in place of the world\u0027s render preset of Quality, so each device meets its bar by the path it enables (its render scale, its distant shadow map\u0027s texels, its indirect tier, which sizes the irradiance volume and its caches). Absent runs the tier\u0027s preset.",
             "default": null
           }
         },
