@@ -289,30 +289,17 @@ vertices lie within half a millimetre of the field's surface, which is why
 the two effects are apart: a bound keeps a hard cut's surface and frays only
 its rim, and moves a smooth cut's surface itself.
 
-**What exists.** One closest-point solve is already in both interpreters: the
-ellipse's projection, a bisection of one bracketed root
-(`SdfFieldEvaluator.EllipseRootSteps`, `sdfEllipse2D` in
-`field/sdf-ellipse.hlsli`), held to a double-precision reference by
-`EllipseDistanceLawTests`. It is what makes an elliptic cylinder, a torus
-stretched in Y alone and a revolved ellipse exact. The review and this
-design's emulation of its arithmetic found three limits in it as built, which
-steps 2 and 3 remove:
-
-- Its fixed-point root is searched at the carrier's own resolution. Inside
-  the ellipse beside its major axis the root sits within a few raws of a
-  pole, and the foot cannot be resolved: the emulated answer is 13 mm out for
-  an ellipse of semi-axes 2 and 1 m a millimetre off its axis, and 66 mm
-  out for the lake's meridian, 46 and 17 m, 44 mm off its equator's plane.
-  The engine itself was not run at these points. Its interval rule adds a
-  fixed slack that a comment asserts.
-- Its float bracket squares a ratio of the radii, which overflows binary32 at
-  radii the document's scale floor admits (`2^20` and `2^-13` m), and the
-  solve then answers the distance to the origin.
-- `SdfProgramBuilder.Ellipse` moves a radius by `1e-4` when the two are
-  within `1e-4` of each other, so a near-circle's surface is not the
-  authored one. Both interpreters divide by the difference of the radii's
-  squares only after testing that it is the larger of two quantities, so
-  the move guards nothing.
+**What exists.** One closest-point solve serves both interpreters: the root
+specified below, `FixedEllipsoidProjection` in fixed point (a side, an
+interval and a scalar read from it) and `sdfEllipse2D` in
+`field/sdf-ellipse.hlsli` in float, with the ellipse as its two-term caller.
+`EllipseDistanceLawTests` and `EllipsoidProjectionLawTests` hold it to
+double-precision references for two and three terms. It is what makes an
+elliptic cylinder, a torus stretched in Y alone, a revolved ellipse and a
+spheroid exact, the spheroid's contact lowering included, and
+`SdfProgramBuilder.Ellipse` keeps both radii as authored. The fixed-point
+root solves lengths up to 2^31 raws (32,768 m) directly and a larger shape
+or point scaled down by a power of two, its interval widened by that move.
 
 The sweep searches its curve by samples and golden-section rounds with no
 bound on what it missed. The reach certificates behind the cull tables
@@ -404,9 +391,11 @@ step subtracts two like quantities.
 - *The carrier.* At the root a foot coordinate moves at most `1 / p_i` per
   unit of `u`, and a nonzero coordinate is at least one raw, so `u` needs
   34 fractional bits to hold the foot to a quarter raw. The fixed-point
-  search therefore runs `u` with 48 fractional bits in wide integers, its
-  quotients formed at twice that width; step 3 fixes the widths against the
-  largest `e * p` it admits. In 16 the review's point `(0.5, 2^-16, 0)` of the
+  search therefore runs `u` with 48 fractional bits in 128-bit integers and
+  each ratio `w_i` with 62, from two exact 31-bit quotient steps, for lengths
+  below 2^31 raws; a larger shape or point is solved scaled down by a power of
+  two and its interval widened by the move (claim 9, and radii moved by at
+  most `d` move the surface by at most `d`). In 16 the review's point `(0.5, 2^-16, 0)` of the
   ellipsoid `(2, 1, 3)` stalls at `[0.527, 1.014]`; in 48 it closes on
   `0.957412082`.
 - *A faster step.* A Newton or secant step may replace a halving only in a
@@ -422,8 +411,10 @@ step subtracts two like quantities.
 
 The exact lowering is taken for scales whose axis ratio the root's law covers
 and whose interval the law finds no wider than a raw; a shape past that keeps
-its `Scale` and `puck creation shape` keeps printing `bound`. Step 3 sets the
-ratio from what the carrier certifies, starting from 1024 to 1.
+its `Scale` and `puck creation shape` keeps printing `bound`. The ratio starts
+from 1024 to 1. The spheroid's ellipse takes no ratio limit: its interval
+holds the distance at every stop, so an extreme ratio can widen it but never
+make it wrong (the law reads it at 100 to 1).
 
 **The solves.** Every shape here is symmetric in X and in Z, so a point is
 read by its absolute X and Z, and by its absolute Y where the shape is
@@ -688,44 +679,15 @@ no gain); at scales past the admitted ratios; and at a C# caller that writes
 `SdfProgramBuilder.Scale` itself.
 
 1. The record is corrected, and the exhibits and this design exist.
-2. **The rendered spheroid uses the existing ellipse.**
-   - `SdfProgramBuilder.Ellipse` keeps both radii as authored: its `1e-4`
-     move of a near-circle goes, with the three places that carry it
-     (`SdfSolidGeometry.GetLocalBounds`'s prism box, `LocalBox`'s factor
-     and `MaxChamfer`'s ellipse arm). Equal radii need no branch: both
-     interpreters' roots take a ratio of one, and their on-axis branch
-     compares against a zero difference without dividing by it.
-   - `AppendScaledPrimitive`'s Sphere, Ellipsoid and exponent-2
-     Superellipsoid arms lower exactly two equal radii to the ellipse
-     revolved at offset zero: the equal radius and the odd one as its
-     semi-axes, under the turn that carries Y onto the odd axis when that
-     axis is X or Z (as the elliptic cylinder is turned).
-   - This is the drawn lowering. The contact lowering keeps the exponent-2
-     gauge, the same surface, until step 3: the ellipse's fixed-point root
-     as built is centimetres out deep inside a metre-sized ellipse, and a
-     cutter's inside is where a body moves. `ShapeEmission.Emit` passes
-     which lowering it emits for.
-   - Checks: `puck creation shape` reads `distance=exact` for a spheroid
-     and for the valley's `lake-basin`; `puck creation stats` reports
-     `contact: accepted`; a law reads zero, within the format's rounding,
-     at the six axis points and at sampled surface points of spheroids
-     that include `(1, 1 - 2^-15, 1)` and the lake's radii, in both
-     interpreters; `EllipseDistanceLawTests` passes with its near-circle
-     case at its authored radii; `puck mesh audit --cpu` of a spheroid cut
-     from a slab reads no triangle over the slope deficit's threshold; and
-     the lead's window reads the valley sector's bake work before and
-     after, since the bowl's samples now each run a root.
-3. One root for both interpreters, as specified above, with its interval as
-   the fixed-point result. The ellipse becomes its two-term caller, so
-   there is one implementation, and the spheroid's contact lowering moves
-   to it. Checks: `EllipseDistanceLawTests` passes; a law holds the two-
-   and three-term roots to a higher-precision reference inside, on each
-   axis and plane, at the evolute's cusp, at the centre, with tied axes,
-   one raw off each plane, beside the surface and far from it, with the
-   reference inside the interval at every stop and the interval no wider
-   than a raw when the search ends; the review's fixed-point and float
-   points are cases of it; and the box rule encloses the point answers
-   with their errors.
+2. Built: a spheroid lowers to the ellipse revolved at offset zero, whose
+   radii the builder keeps as authored. Owed: the lead's window reads the
+   valley sector's bake work before and after, since the bowl's samples now
+   each run a root.
+3. Built: one root for both interpreters (`FixedEllipsoidProjection`,
+   `sdfEllipse2D`), the ellipse its two-term caller and the spheroid's
+   contact lowering on it; the box rule reads its interval. Owed: a device
+   law reading the float kernel against the fixed-point interval, at the
+   review's float radii (`2^20` and `2^-13` m) among its points.
 4. The triaxial ellipsoid takes the root, and the gauge is left to exponents
    past 2. Check: `shape-sphere-xyz` and `shape-ellipsoid-xyz` read
    `distance=exact`, and the two interpreters agree over a lattice within

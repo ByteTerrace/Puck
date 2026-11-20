@@ -475,11 +475,10 @@ public static class SdfSolidGeometry {
     /// dimensions — <paramref name="scale"/> must be uniform for a Sweep (refused otherwise, by name) and is baked
     /// as one multiplier onto every one of the curve's lengths, exactly as a uniform scale bakes onto every other
     /// primitive's own unit dimensions via the <see cref="SdfProgramBuilder.Scale"/> transform.</param>
-    /// <param name="contact">Whether the primitive is emitted for authoritative fixed-point contact.</param>
     public static SdfProgramBuilder AppendScaledPrimitive(SdfProgramBuilder chain, SdfSolidPrimitive type, Vector3 scale,
         int material, SdfBlendOp blend = SdfBlendOp.Union, float smooth = 0f, float taper = 0.5f, SdfPrismProfile? profile = null,
         SdfLift lift = SdfLift.Extrude, float rounding = 0f, float chamfer = 0f, bool detail = false, float exponent = SdfProgramBuilder.MinSuperellipsoidExponent,
-        SdfSweepParameters? curve = null, bool contact = false) {
+        SdfSweepParameters? curve = null) {
         ArgumentNullException.ThrowIfNull(chain);
         // A native lowering spells the scale into its shape's dimensions, so a non-finite scale is refused here by name
         // rather than as whichever dimension it reaches first.
@@ -568,7 +567,7 @@ public static class SdfSolidGeometry {
             );
         }
 
-        if (!contact && AppendSpheroid(chain, type, effectiveScale, exponent, material, blend, smooth, detail)) {
+        if (AppendSpheroid(chain, type, effectiveScale, exponent, material, blend, smooth, detail)) {
             return chain;
         }
 
@@ -620,7 +619,8 @@ public static class SdfSolidGeometry {
                 type: type
             );
     }
-    // The revolution axis carries the odd radius. The existing ellipse formula supplies both render readers.
+    // The revolution axis carries the odd radius. The ellipse answers it in every reader through one projection
+    // (FixedEllipsoidProjection and sdfEllipse2D), the contact compile included.
     private static bool AppendSpheroid(SdfProgramBuilder chain, SdfSolidPrimitive type, Vector3 scale, float exponent, int material, SdfBlendOp blend, float smooth, bool detail) {
         if (type != SdfSolidPrimitive.Sphere && type != SdfSolidPrimitive.Ellipsoid &&
             (type != SdfSolidPrimitive.Superellipsoid || exponent != SdfProgramBuilder.MinSuperellipsoidExponent)) {
@@ -703,7 +703,7 @@ public static class SdfSolidGeometry {
             round: boxRound,
             smooth: smooth
         ),
-            // The exponent-2 gauge for a triaxial ellipsoid or a fixed contact read is 1-Lipschitz at any eccentricity.
+            // The exponent-2 gauge for a triaxial ellipsoid is 1-Lipschitz at any eccentricity.
             SdfSolidPrimitive.Sphere => chain.Superellipsoid(
             blend: blend,
             detail: detail,

@@ -126,9 +126,9 @@ The refusal sits at the doors that admit a shape: the builder, the packed
 the builder never authored—and the creation document validator by way of
 `SdfSolidGeometry.TryValidateScaledPrimitive`, because a cone is spelled as a
 revolved trapezoid and an authored per-axis
-scale reaches its dimensions directly. `SdfProgramBuilder.Ellipse` nudges a
-perfect circle apart instead of refusing it; the difference is that a circle
-has a nearby non-degenerate ellipse to nudge toward, while a vanishing
+scale reaches its dimensions directly. `SdfProgramBuilder.Ellipse` takes a
+circle as authored: equal semi-axes are an ellipse like any other to its
+projection (`FixedEllipsoidProjection`, `sdfEllipse2D`), while a vanishing
 trapezoid has extent in neither profile direction.
 
 ## Screen surface frames
