@@ -177,6 +177,7 @@ template typingPlay(music, bench, words, seat = 1, radius = 1.8, lanes = 3, step
   }
 
   // The typing page: nothing but the way to stand up, since every letter key is the game's.
+  allow PUCK_LINT_005 "the context row's state is the value typingSeat holds, not a row's name"
   bindingOverlays [
     {
       id: "typing"

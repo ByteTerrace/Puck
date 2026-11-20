@@ -45,7 +45,8 @@ words are a list of strings in the place's document.
 ## How it teaches without a word of instruction
 
 The bench is in the lobby, the first room a player crosses on the way to the
-exhibits, with `PRESS` raised on its front like any plaque.
+exhibits, between the map board and the desktop computer, with `PRESS` raised
+on its front like any plaque.
 
 1. Standing in reach, the keyboard goes dark but for one key, the context
    button's, in the bench's brass colour. A player with a lit keyboard is shown
@@ -56,8 +57,7 @@ exhibits, with `PRESS` raised on its front like any plaque.
    is the lesson: the letter on the panel lifts, the key flashes white, the next
    key lights, and the keys after it glow dimmer, so the hand is led one letter
    ahead of the eye.
-3. A wrong key flashes every letter red and shakes the word. Nothing is
-   explained and nothing needs to be.
+3. A wrong key flashes every letter red and shakes the word.
 4. Page one cannot be failed quickly: one short word at a time, ten seconds to
    set it. By the time two channels run, the lock on a word has been met a dozen
    times.
@@ -100,6 +100,10 @@ knows the press exists.
   view of the bench shows the same slugs.
 
 ## What it does not do yet
+
+- The bench is a first shape: a cabinet, a tilted bed, four rails and three
+  brass slugs. It reads as a bench with a plaque, and it is below the visual
+  bar the rest of the lobby is held to.
 
 - The camera stays the chase camera. A seated framing of the bed, as the
   board tables have, needs the bench to be a tabletop or a camera state of its

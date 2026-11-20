@@ -114,6 +114,13 @@ this file is corrected in the same change.
 - **Music layer and embellishment `gainThousandths` do not reach presentation
   gain** (`MusicLayerDocument.GainThousandths`).
 - **Nothing proves a region crossing's `music.transition` cue end to end.**
+- **The authority's director does not hear rule cues.** `WorldTick` steps it
+  from the event feed's edges alone, before the tick's rules run, so a score
+  driven by `cue:` conditions moves only the listener's director:
+  `music.state` (the authority's) stays on its first segment while
+  `speaker.state` and `audio.mix` show the layers playing. A rule that reads
+  `clock(...)` is unaffected; a rule or a remote reader that wanted the
+  current segment would be.
 - **A layer starts when its cue arrives, not on a boundary**, so a voice can
   enter off the beat; and each layer's tune runs its own clock, not the
   score's.
@@ -138,8 +145,8 @@ this file is corrected in the same change.
 - Live sound needs a windowed World with an audio device, which is a GPU leg
   (`verification`): read `audio.state` (device, frames, faults, `peak`),
   `audio.emitters`, `audio.mix`, `speaker.state` (including `lastCue:<token>`),
-  `voice.state`, `music.state` and `instrument.state` over stdin. `music.state`
-  answers headless too, which is how a scenario reads the press's segment.
+  `voice.state`, `music.state` and `instrument.state` over stdin. A headless
+  World composes none of them.
 - A clip: `capture.start`, `capture.status`, `capture.stop` on a windowed
   World, then inspect the file; a lane that declined reports its reason
   rather than failing the session.

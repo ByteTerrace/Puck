@@ -9,3 +9,50 @@ music [
     hash: "sha256/285c743719854fc64eeb068ff18aa4d5b54b3105658145b4d60a7ec79c0e89c0"
   }
 ]
+
+// The notes the score's layers and stingers name. They stand with the score so that every world importing it holds
+// what it plays.
+tunes [
+  {
+    name: "press-bed"
+    source: "tunes/press-bed.audio.json"
+    hash: "sha256/1eb5c84445a5fb0f14449ac7c47030e726da9476ae8a7eff4593a8a271e0de85"
+  }
+  {
+    name: "press-heat-1"
+    source: "tunes/press-heat-1.audio.json"
+    hash: "sha256/490ad5f291607cb06a613d2ebf017b57fbac9d822aff869cb412b253d285ef5c"
+  }
+  {
+    name: "press-heat-2"
+    source: "tunes/press-heat-2.audio.json"
+    hash: "sha256/66c7c6f9b654faae2fcbce9368d55cf844f79bc114f64c38a1907c7e992bd66f"
+  }
+]
+patches [
+  {
+    name: "press-tick"
+    source: "patches/press-tick.patch.json"
+    hash: "sha256/beb0d9d809c0cce6c8ccddc14dedb5bdfbbba8a223a5eace3d92f592d9eb5c59"
+  }
+  {
+    name: "press-knock"
+    source: "patches/press-knock.patch.json"
+    hash: "sha256/85b00a87054f0ce9809b3014e0a6560fd7293602d42da897e47be7661c505aaf"
+  }
+  {
+    name: "press-set"
+    source: "patches/press-set.patch.json"
+    hash: "sha256/347a57016993d21f5a92c06dc61e3687f2b9bdd81d1aacbae2a6372fd669432e"
+  }
+  {
+    name: "press-thud"
+    source: "patches/press-thud.patch.json"
+    hash: "sha256/15685cbbf0067b811d0693a4c04b6bf5c526c19bf007401c78d583d70782000d"
+  }
+  {
+    name: "press-page"
+    source: "patches/press-page.patch.json"
+    hash: "sha256/3ca93b4f3752862687c11191b2f1e48430631f76b0f6d6ff8aa62b9b30869393"
+  }
+]
