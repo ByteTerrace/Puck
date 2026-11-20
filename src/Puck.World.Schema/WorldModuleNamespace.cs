@@ -115,28 +115,14 @@ public static class WorldModuleNamespace {
         }
 
         foreach (var node in machines) {
-            if (
-                (node is not JsonObject machine) ||
-                (machine["engine"] is not JsonValue engineValue) ||
-                !engineValue.TryGetValue<string>(value: out var engineId) ||
-                (machine["configuration"] is not JsonObject configuration) ||
-                !catalog.TryDescriptor(
-                descriptor: out var descriptor,
-                engineId: engineId
-            )
-            ) {
+            if (!TryReadMachine(node: node, catalog: catalog, machine: out var visited)) {
                 continue;
             }
 
-            var visited = new ModuleMachine(
-                Machine: machine,
-                Configuration: configuration,
-                Descriptor: descriptor.Configuration
-            );
             var descriptorErrors = new List<string>();
 
             if (!MachineConfigurationFields.TryValidateDescriptor(
-                descriptor: descriptor.Configuration,
+                descriptor: visited.Descriptor,
                 errors: descriptorErrors
             )) {
                 if (refuseInvalidDescriptor) {
@@ -160,6 +146,66 @@ public static class WorldModuleNamespace {
         }
 
         return true;
+    }
+    // Reads one machine row the catalog describes: its configuration object and its engine's provider descriptor. A
+    // row without an engine, a configuration object or a catalog entry has neither.
+    private static bool TryReadMachine(JsonNode? node, IMachineValidationCatalog catalog, out ModuleMachine machine) {
+        if (
+            (node is not JsonObject row) ||
+            (row["engine"] is not JsonValue engineValue) ||
+            !engineValue.TryGetValue<string>(value: out var engineId) ||
+            (row["configuration"] is not JsonObject configuration) ||
+            !catalog.TryDescriptor(descriptor: out var descriptor, engineId: engineId)
+        ) {
+            machine = default;
+
+            return false;
+        }
+
+        machine = new ModuleMachine(Machine: row, Configuration: configuration, Descriptor: descriptor.Configuration);
+
+        return true;
+    }
+    /// <summary>Reads, and respells, every name a machine row's configuration holds at a provider field whose role
+    /// references a world declaration (<see cref="MachineFieldRole.StateReference"/>,
+    /// <see cref="MachineFieldRole.MachineReference"/>, <see cref="MachineFieldRole.ScreenReference"/>), through the
+    /// descriptor the host's catalog holds for the row's engine: the positions <see cref="Respell(JsonNode?, Type, WorldNameRespelling)"/>
+    /// cannot reach, since a configuration's shape is its provider's. A row whose engine the catalog does not describe,
+    /// or whose descriptor is unusable, has no such position.</summary>
+    /// <param name="machine">The machine row; respelled in place.</param>
+    /// <param name="catalog">The host's machine vocabulary.</param>
+    /// <param name="respell">Called once per name position, with a site whose member is the configuration.</param>
+    public static void RespellMachineReferences(JsonObject machine, IMachineValidationCatalog catalog, WorldNameRespelling respell) {
+        ArgumentNullException.ThrowIfNull(argument: machine);
+        ArgumentNullException.ThrowIfNull(argument: catalog);
+        ArgumentNullException.ThrowIfNull(argument: respell);
+
+        if (!TryReadMachine(node: machine, catalog: catalog, machine: out var read) ||
+            !MachineConfigurationFields.TryValidateDescriptor(descriptor: read.Descriptor, errors: [])) {
+            return;
+        }
+
+        MachineConfigurationFields.Visit(
+            configuration: read.Configuration,
+            descriptor: read.Descriptor,
+            visitor: site => {
+                if (
+                    (site.Field.Role is not (MachineFieldRole.StateReference or MachineFieldRole.MachineReference or MachineFieldRole.ScreenReference)) ||
+                    (site.Value is not JsonValue value) ||
+                    !value.TryGetValue<string>(value: out var name) ||
+                    (name.Length == 0)
+                ) {
+                    return;
+                }
+
+                var kind = ProviderReferenceKind(role: site.Field.Role);
+
+                if ((respell(new WorldNameField(Owner: typeof(WorldMachine), Member: nameof(WorldMachine.Configuration), Kind: kind, Role: WorldNameRole.Names), kind, name, read.Configuration) is { } respelled) &&
+                    (respelled != name)) {
+                    site.Value = JsonValue.Create(respelled);
+                }
+            }
+        );
     }
     private static void RelocateMachinePaths(ModuleMachine machine, string sourceDocumentPath, string targetDocumentPath) =>
         MachineConfigurationFields.Visit(

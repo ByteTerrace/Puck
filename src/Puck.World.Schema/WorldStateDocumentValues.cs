@@ -207,7 +207,8 @@ public static class WorldStateDocumentValues {
         }
     }
     // Resolves every referenced value (or every one naming a sought row) against a document's state cells, or the live
-    // arena when one is given, into a copy that keeps its reference or, flattening, drops it.
+    // arena when one is given, into a copy that keeps its reference or, flattening, drops it. A search for one row
+    // passes over every holder that does not name it, a malformed reference included, which cannot name it.
     private sealed class Resolver(WorldDefinition definition, string root, string? soughtRow, bool deferDrawSites, bool detach, StateArena? arena, ArenaTime? time) : IWorldDocumentRewriter {
         public string Reason { get; private set; } = string.Empty;
         public bool Stopped { get; private set; }
@@ -219,7 +220,7 @@ public static class WorldStateDocumentValues {
                 return value;
             }
             if (StateBinding.Parse(token: reference) is not (var row, var key, _)) {
-                return Refuse(message: "must be state.<row>[.<key>]", reference: reference, site: site, value: value);
+                return (soughtRow is null) ? Refuse(message: "must be state.<row>[.<key>]", reference: reference, site: site, value: value) : value;
             }
             if (
                 (soughtRow is not null) &&
@@ -227,56 +228,12 @@ public static class WorldStateDocumentValues {
             ) {
                 return value;
             }
-            if (!WorldStateReader.TryRead(
-                arena: arena,
-                definition: definition,
-                engineTick: (time?.EngineTick ?? 0UL),
-                key: key,
-                rawValue: out var rawValue,
-                row: out var stateRow,
-                rowName: row,
-                text: out var text,
-                tick: (time?.Tick ?? 0UL)
-            )) {
-                return Refuse(message: "must name a declared state cell", reference: reference, site: site, value: value);
+            if (ResolveHolder(arena: arena, definition: definition, deferDrawSites: deferDrawSites, detach: detach, holder: holder, key: key, resolved: out var resolved, row: row, time: time) is { } message) {
+                return Refuse(message: message, reference: reference, site: site, value: value);
             }
-
-            // A numeric cell is offered as its decimal spelling — the same text the document would carry literally
-            // — so a scalar binds an int or fixed cell (a drawn or advancing one included) and a vector still
-            // refuses it by expectation.
-            // A draw site fills at boot, after this walk runs at parse: a reference to it stays unresolved and
-            // resolves on the post-draw pass (WorldDefinitionLoader), so an empty drawn cell is deferred, not refused.
-            if (
-                deferDrawSites &&
-                (stateRow.Draw is not null) &&
-                (rawValue is null) &&
-                (text is null)
-            ) {
-                return value;
+            if (!ReferenceEquals(objA: resolved, objB: holder)) {
+                WorldBootWork.Count(kind: WorldBootWork.DocumentValueCopies);
             }
-            if (stateRow.Kind == CellKind.Vector) {
-                return Refuse(message: $"names vector row '{stateRow.Name}'; vector rows cannot be resolved as document values", reference: reference, site: site, value: value);
-            }
-            if (stateRow.Kind != CellKind.Text) {
-                if (rawValue is not { } raw) {
-                    return Refuse(message: "names a cell that holds no value", reference: reference, site: site, value: value);
-                }
-
-                text = NumberText(kind: stateRow.Kind, raw: raw);
-            }
-            if (text is null) {
-                return Refuse(message: "names a cell that holds no value", reference: reference, site: site, value: value);
-            }
-            if (!holder.TryResolved(
-                detach: detach,
-                reason: out var parseReason,
-                resolved: out var resolved,
-                text: text
-            )) {
-                return Refuse(message: $"must hold {holder.ExpectedValue}: {parseReason}", reference: reference, site: site, value: value);
-            }
-
-            WorldBootWork.Count(kind: WorldBootWork.DocumentValueCopies);
 
             return resolved;
         }
@@ -287,6 +244,83 @@ public static class WorldStateDocumentValues {
 
             return value;
         }
+    }
+    // Checks every value bound to one row reads that row's cell, rewriting nothing: the bound-write check, which reads
+    // the written row alone. A holder naming another row, or no row, is not its business; the state section binds no
+    // value, and a dealt child carries its template's values, which the template's own holders answer for.
+    private sealed class BoundChecker(WorldDefinition definition, string soughtRow, StateArena arena, ArenaTime time) : IWorldDocumentVisitor {
+        public string Reason { get; private set; } = string.Empty;
+        public bool Stopped { get; private set; }
+
+        public bool Enter(object value, WorldDocumentSite site) {
+            if ((value is WorldStateSection) || ((value is WorldPlacement placement) && WorldPlacementDeal.TrySplitChildId(id: placement.Id, template: out _, key: out _))) {
+                return false;
+            }
+            if (value is not IDocumentStateValue holder) {
+                return true;
+            }
+            if (
+                (holder.Reference is { } reference) &&
+                (StateBinding.Parse(token: reference) is (var row, var key, _)) &&
+                string.Equals(a: row, b: soughtRow, comparisonType: StringComparison.Ordinal) &&
+                (ResolveHolder(arena: arena, definition: definition, deferDrawSites: false, detach: true, holder: holder, key: key, resolved: out _, row: row, time: time) is { } message)
+            ) {
+                Reason = Refusal(message: message, reference: reference, root: "definition", site: site);
+                Stopped = true;
+            }
+
+            return false;
+        }
+    }
+    // Reads the cell a reference names, against a document's state cells or the live arena when one is given, and
+    // resolves the holder against it: the one reading behind every resolution and the bound-write check. Returns the
+    // refusal's message, or null with the resolved copy, or the holder itself for a draw site the loader's first parse
+    // defers.
+    private static string? ResolveHolder(IDocumentStateValue holder, string row, string? key, WorldDefinition definition, StateArena? arena, ArenaTime? time, bool deferDrawSites, bool detach, out IDocumentStateValue resolved) {
+        resolved = holder;
+        if (!WorldStateReader.TryRead(
+            arena: arena,
+            definition: definition,
+            engineTick: (time?.EngineTick ?? 0UL),
+            key: key,
+            rawValue: out var rawValue,
+            row: out var stateRow,
+            rowName: row,
+            text: out var text,
+            tick: (time?.Tick ?? 0UL)
+        )) {
+            return "must name a declared state cell";
+        }
+
+        // A numeric cell is offered as its decimal spelling — the same text the document would carry literally — so a
+        // scalar binds an int or fixed cell (a drawn or advancing one included) and a vector still refuses it by
+        // expectation. A draw site fills at boot, after this walk runs at parse: a reference to it stays unresolved and
+        // resolves on the post-draw pass (WorldDefinitionLoader), so an empty drawn cell is deferred, not refused.
+        if (
+            deferDrawSites &&
+            (stateRow.Draw is not null) &&
+            (rawValue is null) &&
+            (text is null)
+        ) {
+            return null;
+        }
+        if (stateRow.Kind == CellKind.Vector) {
+            return $"names vector row '{stateRow.Name}'; vector rows cannot be resolved as document values";
+        }
+        if (stateRow.Kind != CellKind.Text) {
+            if (rawValue is not { } raw) {
+                return "names a cell that holds no value";
+            }
+
+            text = NumberText(kind: stateRow.Kind, raw: raw);
+        }
+        if (text is null) {
+            return "names a cell that holds no value";
+        }
+
+        return holder.TryResolved(detach: detach, reason: out var parseReason, resolved: out resolved, text: text)
+            ? null
+            : $"must hold {holder.ExpectedValue}: {parseReason}";
     }
     // Reports whether a reference is present (any reference, or one naming a sought row), or collects every
     // referenced row's name, touching nothing; a search stops at its first hit, a collection never stops early.
@@ -475,8 +509,10 @@ public static class WorldStateDocumentValues {
     /// <summary>Checks that every document value bound to <paramref name="rowName"/> reads the row's current cell in
     /// the live store as a value of its own shape, reading no other row: the one check a cell write into a bound row
     /// owes its bindings, scoped to the row it wrote.</summary>
-    /// <remarks>Nothing is rewritten for the caller: the resolved copies are discarded. A refusal's text carries the
-    /// document path of the first holder that refused, so a caller answering a recipient words its own refusal.</remarks>
+    /// <remarks>Nothing is rewritten: the walk visits holders in place. It reads no holder that names another row (a
+    /// malformed reference included), never enters the state section, and judges a dealt child by its template's
+    /// holders, so a unit the write does not reach cannot refuse it. A refusal's text carries the document path of
+    /// the first holder that refused, so a caller answering a recipient words its own refusal.</remarks>
     /// <param name="definition">The live document whose values are checked.</param>
     /// <param name="rowName">The written row.</param>
     /// <param name="arena">The live store holding the written cell.</param>
@@ -488,12 +524,12 @@ public static class WorldStateDocumentValues {
         ArgumentException.ThrowIfNullOrEmpty(argument: rowName);
         ArgumentNullException.ThrowIfNull(argument: arena);
 
-        return TryRewrite<WorldDefinition>(
-            graph: definition,
-            reason: out reason,
-            resolver: new Resolver(arena: arena, definition: definition, deferDrawSites: false, detach: false, root: "definition", soughtRow: rowName, time: time),
-            rewritten: out _
-        );
+        var checker = new BoundChecker(arena: arena, definition: definition, soughtRow: rowName, time: time);
+
+        Walker.Walk(root: definition, visitor: checker);
+        reason = checker.Reason;
+
+        return !checker.Stopped;
     }
     /// <summary>Reports whether a value bound to <paramref name="rowName"/> is an identity other units refer to (a
     /// prototype's or a look's name, any bound value that is not a spatial one), so that writing the row renames an

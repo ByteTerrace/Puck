@@ -52,8 +52,24 @@ public sealed partial class WorldServer {
     /// <returns><see langword="true"/> when the transaction may commit.</returns>
     /// <exception cref="StateUnavailableException"><paramref name="reads"/> is given and an input the recipient's
     /// validation reads is unavailable to it; <paramref name="reads"/> keeps the fault.</exception>
-    public bool ValidateStateTransaction(Principal principal, out string reason, StateReadAccess? reads = null) {
+    public bool ValidateStateTransaction(Principal principal, out string reason, StateReadAccess? reads = null) =>
+        ValidateStateTransaction(principal: principal, reason: out reason, undisclosed: out _, reads: reads);
+    /// <summary>Checks live grants and bound presentation values against the complete open transaction, reporting
+    /// whether a refusal is the neutral disclosure refusal (see
+    /// <see cref="ValidateStateTransaction(Principal, out string, StateReadAccess?)"/>).</summary>
+    /// <param name="principal">The principal whose transaction is open.</param>
+    /// <param name="reason">The refusal, or empty when the transaction may commit.</param>
+    /// <param name="undisclosed">Whether the transaction was refused because an input its validation reads is
+    /// unavailable to the recipient, which every door answers as <c>world.mutation.undisclosed</c>, never as an
+    /// ordinary refusal.</param>
+    /// <param name="reads">The open preparation's read access, or <see langword="null"/> to acquire through a fresh
+    /// access.</param>
+    /// <returns><see langword="true"/> when the transaction may commit.</returns>
+    /// <exception cref="StateUnavailableException"><paramref name="reads"/> is given and an input the recipient's
+    /// validation reads is unavailable to it; <paramref name="reads"/> keeps the fault.</exception>
+    public bool ValidateStateTransaction(Principal principal, out string reason, out bool undisclosed, StateReadAccess? reads = null) {
         reason = string.Empty;
+        undisclosed = false;
         if (m_arena.Journal.OverCeiling) { reason = "state transaction exceeds its journal allowance"; return false; }
         FlagTransactionRows();
         try {
@@ -80,6 +96,7 @@ public sealed partial class WorldServer {
                         return TryValidateWrittenBindings(view, access, out reason);
                     } catch (StateUnavailableException) when ((reads is null) && access.Failed) {
                         reason = view.Refusal("mutation", nameof(WorldSection.State).ToLowerInvariant());
+                        undisclosed = true;
                         return false;
                     }
                 }
@@ -105,8 +122,8 @@ public sealed partial class WorldServer {
     // is acquired through the transaction, so a row the recipient cannot read whole faults the access; every value
     // bound to it must read the cell the write left (TryCheckBound reads that row alone); and every placement whose
     // geometry reads it is a unit validated whole, so every row the placement's values bind (the geometry's whole
-    // read universe: its other fields are literals) is admitted first, from the declarations alone, and then its
-    // geometry is checked. A dealt child is judged by its template, whose values the child copies: the children
+    // read universe: its other fields are literals) is acquired through the access first, which admits it from the
+    // declarations alone, and then its geometry is checked. A dealt child is judged by its template, whose values the child copies: the children
     // exist only for members, so asking of them would read membership. No other
     // unit is validated: a hidden unit left invalid by an authority write (a rule firing, a clock) answers nothing to
     // the recipient's write. The refusal names only the written row, never a path into the document, whose indices
@@ -130,9 +147,7 @@ public sealed partial class WorldServer {
                     !WorldStateDocumentValues.ReferencesRow(definition, placement, name)) { continue; }
                 universe.Clear();
                 WorldStateDocumentValues.CollectReferencedRows(placement, universe);
-                foreach (var read in universe) {
-                    if (!view.Admits(read)) { access.Refuse(); }
-                }
+                foreach (var read in universe) { _ = access.ResolveRow(read); }
                 if (!WorldDefinitionValidator.TryValidatePlacementGeometry(placement, out var geometry)) {
                     reason = $"state '{name}' places a placement it binds where it cannot stand: {geometry}";
                     return false;
@@ -142,8 +157,17 @@ public sealed partial class WorldServer {
         return true;
     }
     /// <summary>Validates and closes a batch, restoring every member when any requirement refuses it.</summary>
-    public bool TryCommitStateTransaction(int mark, Principal principal, out string reason) {
-        if (!ValidateStateTransaction(principal: principal, reason: out reason)) { RewindStateTransaction(mark: mark); return false; }
+    public bool TryCommitStateTransaction(int mark, Principal principal, out string reason) =>
+        TryCommitStateTransaction(mark: mark, principal: principal, reason: out reason, undisclosed: out _);
+    /// <summary>Validates and closes a batch, restoring every member when any requirement refuses it, and reporting
+    /// whether a refusal is the neutral disclosure refusal, which the caller answers as its own not-disclosed verdict.</summary>
+    /// <param name="mark">The transaction's journal mark.</param>
+    /// <param name="principal">The principal whose transaction is open.</param>
+    /// <param name="reason">The refusal, or empty when the transaction committed.</param>
+    /// <param name="undisclosed">Whether the refusal is the disclosure refusal.</param>
+    /// <returns><see langword="true"/> when the transaction committed.</returns>
+    public bool TryCommitStateTransaction(int mark, Principal principal, out string reason, out bool undisclosed) {
+        if (!ValidateStateTransaction(principal: principal, reason: out reason, undisclosed: out undisclosed)) { RewindStateTransaction(mark: mark); return false; }
         CommitStateTransaction(mark: mark); return true;
     }
 

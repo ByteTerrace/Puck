@@ -141,6 +141,8 @@ public sealed partial class WorldGrants : IWorldGrantsView {
     // halves of this facade run against. Null only for a table built standalone, which reaches the capability doors
     // below and nothing else.
     internal WorldPrivateDrawKeys DrawKeys => m_host?.DrawKeys ?? WorldPrivateDrawKeys.Missing;
+    // The host's machine vocabulary, which a detached composition's write door reads a machine's configuration through.
+    internal Puck.Abstractions.Machines.IMachineValidationCatalog? MachineCatalog => m_host?.MachineCatalog;
     private readonly WorldServer? m_host;
 
     /// <summary>Gets the server this table serves.</summary>

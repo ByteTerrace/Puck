@@ -108,14 +108,16 @@ public sealed partial class WorldServer {
             ? m_arena.TryWriteText(row.Ordinal, key, text, out _)
             : m_arena.TryWriteLive(row.Ordinal, key, operand, ((StateWriteKind)write), DeliveryTime, out _));
 
-        if (applied && TryCommitStateTransaction(mark: mark, principal: principal, reason: out _)) {
+        var undisclosed = false;
+        if (applied && TryCommitStateTransaction(mark: mark, principal: principal, reason: out _, undisclosed: out undisclosed)) {
             foreach (var scope in ScopedReplaySpan) {
                 scope.Observe(mutation: new WorldMutation.UpsertStateCell(principal, descriptor.Name, m_arena.Keys[key].Value, operand, write, text));
             }
             return WorldCellWriteVerdict.Applied;
         }
         if (!applied) { RewindStateTransaction(mark: mark); }
-        return WorldCellWriteVerdict.Rejected;
+        // A write whose validation reads a row the writer cannot read whole answers as the door does for a withheld row.
+        return undisclosed ? WorldCellWriteVerdict.NotDisclosed : WorldCellWriteVerdict.Rejected;
     }
 
     internal void BeginCellWriteTick() => m_cellWriteCounts.Clear();
