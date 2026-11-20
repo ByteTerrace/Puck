@@ -24,8 +24,8 @@ public sealed class WorldRemoteForwardedAuthority(WorldRemoteAuthority authority
         authority.Definition
     );
     /// <inheritdoc/>
-    public byte[]? FetchPrototype(ContentPin pin, WorldDisclosureTier ceiling, byte remainingHops) =>
-        authority.FetchPrototype(pin: pin, traveler: new WorldTravelerObservation(credential.SourceAuthority, credential.Mobility, ceiling, remainingHops));
+    public ValueTask<byte[]?> FetchPrototypeAsync(ContentPin pin, WorldDisclosureTier ceiling, byte remainingHops) =>
+        authority.FetchPrototypeAsync(pin: pin, traveler: new WorldTravelerObservation(credential.SourceAuthority, credential.Mobility, ceiling, remainingHops));
     /// <inheritdoc/>
     public Task<string?> StreamProjectionAsync(Stream output, WorldDisclosureTier ceiling, byte remainingHops, CancellationToken ct) =>
         authority.RelayProjectionAsync(
@@ -39,15 +39,7 @@ public sealed class WorldRemoteForwardedAuthority(WorldRemoteAuthority authority
             ct
         );
     /// <inheritdoc/>
-    public bool TryDescribeRoute(out WorldAuthorityRouteDescription route, out string reason) {
-        var held = credential;
-
-        return authority.TryDescribeRoute(
-            credential: in held,
-            reason: out reason,
-            route: out route
-        );
-    }
+    public ValueTask<(WorldAuthorityRouteDescription? Route, string Reason)> DescribeRouteAsync() => authority.DescribeRouteAsync(credential);
     /// <inheritdoc/>
     public bool TryForwardIntent(in IntentSubmission submission, out string reason) {
         var held = credential;
@@ -135,8 +127,7 @@ public readonly record struct WorldFederationAnswer(WorldFederationResponse Kind
 /// per operation.</para>
 /// <para>Every request answers. It is issued once, keyed so a repeat ask claims the same answer, and bounded by
 /// <see cref="RoutedRequestDeadline"/>; a lane inside its unreachable backoff answers without waiting at all, which
-/// is what keeps a dead neighbour from stalling the tick. A caller that could be told "not yet" would have to hold
-/// state across ticks the adjacency scan is concurrently re-deriving, so no path here returns one.</para>
+/// keeps unavailable peers off the tick thread. A crossing holds its seats and consumes the reply at a tick boundary.</para>
 /// </remarks>
 public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldCustodyPeer, IDisposable {
     /// <summary>The detail every federation request answers with when this run holds no signing identity.</summary>
@@ -286,29 +277,6 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
     public IServerLink Link => m_link;
     public ulong NextInputTick => (unchecked((ulong)Interlocked.Read(location: ref m_lastObservedTickBits)) + 1UL);
 
-    /// <summary>Issues one routed request on the source namespace's lane and waits, bounded on the host clock, for its
-    /// answer.</summary>
-    /// <remarks>This wait, and its twin in the transfer-step resolver, is reached from the tick thread: the transfer
-    /// steps from <c>WorldInstanceHost.DrainPendingTransfers</c> (the host's per-tick fixed point) and the forwarded
-    /// submissions and route lookups from the server's own drain, plus the routed observer's <see cref="IServerLink"/>
-    /// (<see cref="WorldFederatedServerLink"/>), which the console and client drive on the thread that pumps the tick.
-    /// A bounded synchronous wait is acceptable there because the contract demands an ANSWER inside the tick — a
-    /// caller told "not yet" would hold state across ticks the adjacency scan is concurrently re-deriving and mint a
-    /// second crossing for the same seat — and the wait is bounded twice over: the lane's own
-    /// <see cref="LaneRequestTimeout"/> per attempt, then <see cref="RoutedRequestDeadline"/> here, both on the host
-    /// clock (<see cref="WorldPeerNetwork.Clock"/>), so a test clock decides when either elapses. A lane already
-    /// known unreachable, or a run holding no signing identity, answers without waiting at all, so the stall is
-    /// confined to the one tick that carries a request to a peer that stops answering mid-exchange — the cost the
-    /// authored unavailable policy exists to absorb.</remarks>
-    /// <param name="sourceAuthority">The authenticated source namespace whose lane carries the request.</param>
-    /// <param name="kind">The request kind.</param>
-    /// <param name="body">The encoded request leaf.</param>
-    /// <returns>The peer's answer, or a named refusal when the lane could not deliver one in time.</returns>
-    public WorldFederationAnswer AwaitAnswer(string sourceAuthority, WorldFederationRequest kind, byte[] body) => AnswerAsync(
-        body: body,
-        kind: kind,
-        sourceAuthority: sourceAuthority
-    ).GetAwaiter().GetResult();
     /// <summary>Issues one routed request on the source namespace's lane and returns its answer without waiting for it:
     /// the peer's answer, or a named refusal when the lane cannot carry it or the peer does not answer within
     /// <see cref="RoutedRequestDeadline"/> on the host clock.</summary>
@@ -394,52 +362,19 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
 
         return false;
     }
-    public bool TryDescribeRoute(int bodyIndex, out WorldAuthorityRouteDescription route, out string reason) {
-        if (!TryRouteCredential(
-            bodyIndex: bodyIndex,
-            credential: out var credential
-        )) {
-            route = default;
-            reason = $"forwarded body:{bodyIndex} has no committed destination credential";
-            return false;
-        }
+    public ValueTask<(WorldAuthorityRouteDescription? Route, string Reason)> DescribeRouteAsync(int bodyIndex) =>
+        TryRouteCredential(bodyIndex, out var credential) ? DescribeRouteAsync(credential) :
+            new((null, $"forwarded body:{bodyIndex} has no committed destination credential"));
 
-        return TryDescribeRoute(
-            credential: in credential,
-            reason: out reason,
-            route: out route
-        );
-    }
-
-    internal bool TryDescribeRoute(in WorldRemoteRouteCredential credential, out WorldAuthorityRouteDescription route, out string reason) {
-        route = default;
-        var target = (m_submissionAuthority ?? this);
+    internal async ValueTask<(WorldAuthorityRouteDescription? Route, string Reason)> DescribeRouteAsync(WorldRemoteRouteCredential credential) {
+        var target = m_submissionAuthority ?? this;
         var mobility = credential.Mobility;
-        var credentialSource = credential.SourceAuthority;
-        var answer = target.AwaitAnswer(
-            sourceAuthority: credential.SourceAuthority,
-            kind: WorldFederationRequest.Route,
-            body: WorldFederationCodec.EncodeRouteCredential(
-                sourceAuthority: credential.SourceAuthority,
-                mobility: in mobility
-            )
-        );
-
-        if (
-            (answer.Kind != WorldFederationResponse.Route) ||
-            !WorldFederationCodec.TryDecodeRoute(
-            fetch: pin => target.FetchPrototype(pin: pin, traveler: new WorldTravelerObservation(credentialSource, mobility)),
-            body: answer.Body.Span,
-            route: out route,
-            failure: out _
-        )
-        ) {
-            reason = answer.Describe();
-            return false;
-        }
-
-        reason = string.Empty;
-        return true;
+        var answer = await target.AnswerAsync(credential.SourceAuthority, WorldFederationRequest.Route,
+            WorldFederationCodec.EncodeRouteCredential(credential.SourceAuthority, in mobility)).ConfigureAwait(ConfigureAwaitOptions.ForceYielding);
+        if (answer.Kind != WorldFederationResponse.Route) { return (null, answer.Describe()); }
+        var traveler = new WorldTravelerObservation(credential.SourceAuthority, mobility);
+        return WorldFederationCodec.TryDecodeRoute(answer.Body.Span, out var route, out var failure,
+            pin => target.FetchPrototype(pin, traveler)) ? (route, string.Empty) : (null, failure.ToString());
     }
 
     public bool TryForwardIntent(int bodyIndex, in IntentSubmission submission, out string reason) {
@@ -494,7 +429,7 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
 
         var mobility = credential.Mobility;
         var target = (m_submissionAuthority ?? this);
-        var answer = target.AwaitAnswer(
+        var pending = target.AnswerAsync(
             sourceAuthority: credential.SourceAuthority,
             kind: WorldFederationRequest.Submission,
             body: WorldFederationCodec.EncodeSubmission(
@@ -504,22 +439,20 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
             )
         );
 
-        if (answer.Kind != WorldFederationResponse.Completion) {
-            reason = answer.Describe();
-            return false;
-        }
-
-        if (!TryReadCompletion(
-            body: answer.Body,
-            result: out var result,
-            reason: out reason
-        ) || (result is null)) {
-            return false;
-        }
-
-        completion(obj: result);
-
+        _ = CompleteAsync();
+        reason = string.Empty;
         return true;
+
+        async Task CompleteAsync() {
+            var answer = await pending.ConfigureAwait(false);
+            var detail = answer.Describe();
+            if (answer.Kind == WorldFederationResponse.Completion &&
+                TryReadCompletion(answer.Body, out var result, out detail) && result is not null) {
+                completion(result);
+            } else {
+                completion(new WorldSubmissionResult.Refusal(WorldFederatedServerLink.CompletionUnavailableCode, detail));
+            }
+        }
     }
 
     public bool TryRouteCredential(int bodyIndex, out WorldRemoteRouteCredential credential) {
@@ -560,8 +493,10 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
         return false;
     }
 
-    private void AdoptReservationCredentials(WorldTransferReservationRequest request, WorldTransferReservationReply reply) {
-        for (var ordinal = 0; ((ordinal < reply.BodyIndices.Count) && (ordinal < request.Members.Count)); ordinal++) {
+    internal void AdoptReservationCredentials(WorldTransferReservationRequest request, WorldTransferReservationReply reply) {
+        var accepted = reply.LeasedIds(request);
+        var members = request.Members.Where((member, ordinal) => accepted.Contains(member.IdAt(ordinal))).ToArray();
+        for (var ordinal = 0; ordinal < reply.BodyIndices.Count && ordinal < members.Length; ordinal++) {
             var bodyIndex = reply.BodyIndices[ordinal];
 
             if (
@@ -577,7 +512,7 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
                 previousPump.Retire(mobility: previous.Mobility);
             }
 
-            if (request.Members[ordinal].Mobility is { } mobility) {
+            if (members[ordinal].Mobility is { } mobility) {
                 m_credentials[bodyIndex] = new WorldRemoteRouteCredential(
                     BodyIndex: bodyIndex,
                     SourceAuthority: request.SourceAuthority,
@@ -586,9 +521,6 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
             }
         }
     }
-    // The one wait on a lane's answer. The tick thread needs an answer inside the tick (see AwaitAnswer), so the caller
-    // blocks on the awaited deadline rather than on a wall-clock Task.Wait: the deadline is a WaitAsync on the host
-    // clock, and the lane's task itself never faults, so the only non-answer is that deadline elapsing.
     private LaneRoute CurrentRoute() => m_route.Lane;
     private static string DescribeHandshake(WireFrameRead read, string stage) =>
         (read.Ok
@@ -1076,75 +1008,17 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
     // Correlation names what a step is about beyond its source-scoped id, so two steps of one kind about different
     // questions (a hop query about another authority's key, other companions or the other phase) never share an answer.
     private bool TryResolveTransferStep(string sourceAuthority, ulong transferId, WorldFederationRequest kind, Func<byte[]> body, out WorldFederationAnswer answer, string correlation = "") {
-        answer = default;
-
-        if (m_submissionAuthority is { } upstream) {
-            return upstream.TryResolveTransferStep(
-                answer: out answer,
-                body: body,
-                correlation: correlation,
-                kind: kind,
-                sourceAuthority: sourceAuthority,
-                transferId: transferId
-            );
+        var key = new TransferStepKey(sourceAuthority, transferId, kind, correlation);
+        if (!m_transferSteps.TryGetValue(key, out var task)) {
+            task = AnswerAsync(sourceAuthority, kind, body());
+            m_transferSteps[key] = task;
         }
-
-        if (LacksSigningIdentity()) {
-            answer = WorldFederationAnswer.Refused(
-                detail: UnconfiguredDetail,
-                refusal: WireRefusal.LaneUnavailable
-            );
-
-            return true;
+        if (!task.IsCompleted) {
+            answer = default;
+            return false;
         }
-
-        var lane = LaneFor(
-            kind: kind,
-            sourceAuthority: sourceAuthority
-        );
-
-        if (!lane.IsAvailable) {
-            // Already known unreachable. Answering here — without a socket attempt and without waiting — is what
-            // keeps a closed edge costing the tick nothing while the neighbour is away.
-            answer = WorldFederationAnswer.Refused(
-                refusal: WireRefusal.LaneUnavailable,
-                detail: $"the federation lane to '{Endpoint}' is reconnecting"
-            );
-
-            return true;
-        }
-
-        var key = new TransferStepKey(
-            Correlation: correlation,
-            Kind: kind,
-            SourceAuthority: sourceAuthority,
-            TransferId: transferId
-        );
-        var task = m_transferSteps.GetOrAdd(
-            key: key,
-            valueFactory: _ => EnqueueAnswerAsync(
-                kind: kind,
-                body: body(),
-                lane: lane
-            )
-        );
-
-        // A transfer step MUST always answer. The adjacency scan that produced this crossing re-fires on every tick
-        // the traveler is still at the seam, so a caller told "not yet" leaves its transfer queued while the scan
-        // mints a second crossing for the same seat — the traveler then arrives at the destination twice. A step
-        // that ran out of time is an answered refusal, which the caller resolves once: terminal for a reservation,
-        // in doubt for a commit.
-        answer = WithinDeadlineAsync(
-            answer: task,
-            clock: m_clock,
-            endpoint: Endpoint,
-            kind: kind
-        ).GetAwaiter().GetResult();
-        _ = m_transferSteps.TryRemove(
-            key: key,
-            value: out _
-        );
-
+        m_transferSteps.TryRemove(key, out _);
+        answer = task.Result;
         return true;
     }
 
@@ -1281,7 +1155,7 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
             throw new IOException(message: $"federation authentication — invalid destination identity ({identityFailure})");
         }
         if (!pinnedTransport && (
-            !m_security.TryVerify(
+            (await m_security.VerifyAsync(
                 challenge: WorldFederationCodec.BindProofChallenge(
                     challenge: clientChallenge,
                     counterChallenge: challenge.Body.Span,
@@ -1289,9 +1163,7 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
                     serverKeyHash: peer.Link.RemoteId.KeyHash,
                     serverProof: true,
                     authority: peerAuthority),
-                proof: serverProof,
-                sourceAuthority: out var verifiedAuthority) ||
-            !string.Equals(a: verifiedAuthority, b: peerAuthority, comparisonType: StringComparison.Ordinal)
+                proof: serverProof, ct: ct).ConfigureAwait(false))?.Authority != peerAuthority
         )) {
             throw new IOException(message: "federation authentication — destination did not prove its authority on this transport");
         }
@@ -1302,27 +1174,11 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
         }
     }
     /// <summary>Resolves this transfer's commit step.</summary>
-    public WorldTransferStep Commit(string sourceAuthority, ulong transferId, IReadOnlyList<WorldTransferCommitMember> members, out WorldTransferStatus status, out string reason) {
-        status = WorldTransferStatus.Missing;
-        reason = string.Empty;
-
-        _ = TryResolveTransferStep(
-            sourceAuthority: sourceAuthority,
-            transferId: transferId,
-            kind: WorldFederationRequest.Commit,
-            body: () => WorldFederationCodec.EncodeCommit(
-                members: members,
-                sourceAuthority: sourceAuthority,
-                transferId: transferId
-            ),
-            answer: out var answer
-        );
-
-        return DecodeCommitAnswer(
-            answer: answer,
-            reason: out reason,
-            status: out status
-        );
+    public async Task<(WorldTransferStep Step, WorldTransferStatus Status, string Reason)> CommitAsync(string sourceAuthority, ulong transferId, IReadOnlyList<WorldTransferCommitMember> members) {
+        var answer = await AnswerAsync(sourceAuthority, WorldFederationRequest.Commit,
+            WorldFederationCodec.EncodeCommit(sourceAuthority, transferId, members)).ConfigureAwait(false);
+        var step = DecodeCommitAnswer(answer, out var status, out var reason);
+        return (step, status, reason);
     }
     public void Dispose() {
         m_lifetime.Cancel();
@@ -1339,14 +1195,9 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
     /// <summary>Resolves this transfer's reservation step.</summary>
     /// <param name="request">The reservation request.</param>
     /// <returns>The destination's verdict, or a named refusal when the lane could not deliver the step.</returns>
-    public WorldTransferReservationReply Reserve(WorldTransferReservationRequest request) {
-        _ = TryResolveTransferStep(
-            sourceAuthority: request.SourceAuthority,
-            transferId: request.TransferId,
-            kind: WorldFederationRequest.Reserve,
-            body: () => WorldFederationCodec.EncodeReservation(request: request),
-            answer: out var answer
-        );
+    public async Task<WorldTransferReservationReply> ReserveAsync(WorldTransferReservationRequest request) {
+        var answer = await AnswerAsync(request.SourceAuthority, WorldFederationRequest.Reserve,
+            WorldFederationCodec.EncodeReservation(request)).ConfigureAwait(ConfigureAwaitOptions.ForceYielding);
 
         if (answer.Kind != WorldFederationResponse.Reservation) {
             // A request or answer the lane lost decided nothing; an unconfigured federation identity never will.
@@ -1367,13 +1218,6 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
             return WorldTransferReservationReply.Refused(reason: $"remote authority returned an undecodable reservation verdict — {failure}");
         }
 
-        if (decoded.Accepted) {
-            AdoptReservationCredentials(
-                reply: decoded,
-                request: request
-            );
-        }
-
         return decoded;
     }
     /// <summary>Resolves this transfer's idempotent status.</summary>
@@ -1384,7 +1228,7 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
     public bool TryStatus(string sourceAuthority, ulong transferId, out WorldTransferStatus status) {
         status = WorldTransferStatus.Missing;
 
-        _ = TryResolveTransferStep(
+        if (!TryResolveTransferStep(
             sourceAuthority: sourceAuthority,
             transferId: transferId,
             kind: WorldFederationRequest.Status,
@@ -1393,7 +1237,7 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
                 transferId: transferId
             ),
             answer: out var answer
-        );
+        )) { return false; }
 
         return ((answer.Kind == WorldFederationResponse.Status) && WorldFederationCodec.TryDecodeStatus(
             body: answer.Body.Span,
@@ -1409,7 +1253,7 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
     public bool TryLanded(string sourceAuthority, ulong transferId, out IReadOnlyList<int>? landed) {
         landed = null;
 
-        _ = TryResolveTransferStep(
+        if (!TryResolveTransferStep(
             sourceAuthority: sourceAuthority,
             transferId: transferId,
             kind: WorldFederationRequest.Status,
@@ -1417,8 +1261,9 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
                 sourceAuthority: sourceAuthority,
                 transferId: transferId
             ),
-            answer: out var answer
-        );
+            answer: out var answer,
+            correlation: "landed"
+        )) { return false; }
 
         if ((answer.Kind != WorldFederationResponse.Status) || !WorldFederationCodec.TryDecodeStatus(
             body: answer.Body.Span,
@@ -1437,17 +1282,10 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
     /// <param name="incarnations">The companions.</param>
     /// <param name="destination">The asking destination: this lane's authenticated namespace.</param>
     /// <param name="phase">The decision the question belongs to; it correlates the answer to this question alone.</param>
-    public IReadOnlyList<ulong?>? ConfirmHops(WorldTransferKey key, IReadOnlyList<WorldEntityAddress> incarnations, string destination, WorldHopPhase phase) {
+    public async ValueTask<IReadOnlyList<ulong?>?> ConfirmHopsAsync(WorldTransferKey key, IReadOnlyList<WorldEntityAddress> incarnations, string destination, WorldHopPhase phase) {
         var question = WorldFederationCodec.EncodeHopQuery(incarnations: incarnations, key: key, phase: phase);
 
-        _ = TryResolveTransferStep(
-            sourceAuthority: destination,
-            transferId: key.TransferId,
-            kind: WorldFederationRequest.HopQuery,
-            body: () => question,
-            answer: out var answer,
-            correlation: Convert.ToHexString(inArray: question)
-        );
+        var answer = await AnswerAsync(destination, WorldFederationRequest.HopQuery, question).ConfigureAwait(false);
 
         return (((answer.Kind == WorldFederationResponse.HopQueryReply) && WorldFederationCodec.TryDecodeHopQueryReply(
             answers: out var answers,
@@ -1466,14 +1304,14 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
     public WorldCustodyAnswer QueryCustody(WorldTransferKey key, WorldEntityAddress incarnation, string asker) {
         var question = WorldFederationCodec.EncodeCompanionHop(incarnation: incarnation, key: key);
 
-        _ = TryResolveTransferStep(
+        if (!TryResolveTransferStep(
             sourceAuthority: asker,
             transferId: key.TransferId,
             kind: WorldFederationRequest.CustodyQuery,
             body: () => question,
             answer: out var answer,
             correlation: Convert.ToHexString(inArray: question)
-        );
+        )) { return WorldCustodyAnswer.Uncertain; }
 
         return (((answer.Kind == WorldFederationResponse.CustodyReply) && (answer.Body.Length == 1) && Enum.IsDefined(value: ((WorldCustodyAnswer)answer.Body.Span[0])))
             ? (WorldCustodyAnswer)answer.Body.Span[0]
@@ -1488,14 +1326,14 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
     public bool SettleHop(WorldTransferKey key, WorldEntityAddress incarnation, string source) {
         var question = WorldFederationCodec.EncodeCompanionHop(incarnation: incarnation, key: key);
 
-        _ = TryResolveTransferStep(
+        if (!TryResolveTransferStep(
             sourceAuthority: source,
             transferId: key.TransferId,
             kind: WorldFederationRequest.HopSettled,
             body: () => question,
             answer: out var answer,
             correlation: Convert.ToHexString(inArray: question)
-        );
+        )) { return false; }
 
         return ((answer.Kind == WorldFederationResponse.HopSettledAck) && (answer.Body.Length == 1) && (answer.Body.Span[0] == 1));
     }
@@ -1507,17 +1345,10 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
     /// <param name="members">The companions.</param>
     /// <returns>One answer per companion; each <see cref="WorldHopVerdict.Unavailable"/> when the peer gave no usable
     /// answer.</returns>
-    public IReadOnlyList<WorldHopAnswer> RequestHop(WorldTransferKey key, string source, string destination, IReadOnlyList<WorldHopRequestMember> members) {
+    public async ValueTask<IReadOnlyList<WorldHopAnswer>> RequestHopAsync(WorldTransferKey key, string source, string destination, IReadOnlyList<WorldHopRequestMember> members) {
         var question = WorldFederationCodec.EncodeHopRequest(destination: destination, key: key, members: members);
 
-        _ = TryResolveTransferStep(
-            sourceAuthority: source,
-            transferId: key.TransferId,
-            kind: WorldFederationRequest.HopRequest,
-            body: () => question,
-            answer: out var answer,
-            correlation: Convert.ToHexString(inArray: question)
-        );
+        var answer = await AnswerAsync(source, WorldFederationRequest.HopRequest, question).ConfigureAwait(false);
 
         return (((answer.Kind == WorldFederationResponse.HopAnswer) && WorldFederationCodec.TryDecodeHopAnswer(
             answers: out var answers,

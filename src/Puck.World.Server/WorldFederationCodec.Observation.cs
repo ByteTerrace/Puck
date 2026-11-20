@@ -71,7 +71,7 @@ public static class WorldProjectionPrototypeFetch {
     /// <param name="traveler">The traveler credential, or null for public observation.</param>
     /// <param name="content">The authority's content store, or the shared store.</param>
     /// <returns>The disclosed bytes, or null on refusal.</returns>
-    public static byte[]? Fetch(WorldServer server, ContentPin pin, string sourceAuthority, WorldDisclosureTier ceiling,
+    public static ValueTask<byte[]?> FetchAsync(WorldServer server, ContentPin pin, string sourceAuthority, WorldDisclosureTier ceiling,
         WorldTravelerObservation? traveler = null, ContentAddressedStore? content = null) {
         var forward = false;
         var bytes = server.ExecuteAuthorityOperation(operation: () => {
@@ -112,13 +112,13 @@ public static class WorldProjectionPrototypeFetch {
         });
 
         if (forward && (traveler is { RemainingHops: > 1 } onward) && (server.TransferForwarder is { } forwarder)) {
-            return forwarder.FetchForwardedPrototype(pin: pin, request: onward, source: server);
+            return forwarder.FetchForwardedPrototypeAsync(pin: pin, request: onward, source: server);
         }
         if (bytes is not null) {
             WorldProjectionWork.Count(kind: WorldProjectionWork.PrototypeFetches);
             WorldProjectionWork.Count(kind: WorldProjectionWork.PrototypeBytes, amount: bytes.Length);
         }
-        return bytes;
+        return new(bytes);
     }
 }
 public static partial class WorldFederationCodec {

@@ -83,7 +83,7 @@ public sealed class EntraWorldAuthenticatorTests {
     [InlineData("signature", false)]
     [InlineData("overage", false)]
     [Theory]
-    public void OnlyDelegatedApiUsersAreAdmitted(string fault, bool accepted) {
+    public async Task OnlyDelegatedApiUsersAreAdmitted(string fault, bool accepted) {
         using var signing = RSA.Create(keySizeInBits: 2048);
         using var untrusted = RSA.Create(keySizeInBits: 2048);
         var key = new RsaSecurityKey(rsa: signing) { KeyId = "known" };
@@ -139,19 +139,13 @@ public sealed class EntraWorldAuthenticatorTests {
         var proof = client.Prove(challenge: challenge);
 
         if (fault == "nonce") { challenge = server.NewChallenge(); }
-        Assert.Equal(
-            accepted,
-            server.TryVerify(
-                challenge: challenge,
-                proof: proof,
-                sourceAuthority: out var subject
-            )
-        );
+        var verified = await server.VerifyAsync(challenge, proof, TestContext.Current.CancellationToken);
+        Assert.Equal(accepted, verified is not null);
         Assert.Equal(
             (accepted
             ? client.UserIdentity()
             : null),
-            subject
+            verified?.Authority
         );
     }
 

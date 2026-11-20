@@ -12,8 +12,7 @@ public sealed partial class WorldInstanceHost {
     // detaches) -> detach every member with its pose captured -> commit every join into its reserved slot ->
     // if any join still fails (a refusal class reservation cannot pre-check, or the test-only injection
     // point below), abort: every already-landed member returns to its exact source pose, nothing partially
-    // lands. No Server.Step of any instance runs between the first detach and the last decision, so a party
-    // lands together, aborts together, or never leaves at all.
+    // lands. A detached cohort remains in doubt across ticks until the destination answers.
     private void ApplyTransfer(in PendingTransfer transfer) {
         // Idempotence: checked first, before this transfer touches anything — a retry-shaped duplicate (the
         // same transfer id submitted again) refuses by name rather than double-landing. A diegetic crossing
@@ -130,12 +129,31 @@ public sealed partial class WorldInstanceHost {
         // one requested seat.
         int[] members;
 
-        if (transfer.FrozenCohortSlots is { } frozenSlots) {
+        if (transfer.Sent is { } submitted) {
+            members = submitted.Members;
+        } else if (transfer.FrozenCohortSlots is { } frozenSlots) {
             members = [.. frozenSlots];
         } else if (transfer.Scope == TransferScope.Party) {
             members = ActiveLocalSeats(server: source.Server);
         } else {
             members = [transfer.SourceSlot];
+        }
+
+        // The companions following this crossing's travelers join its cohort, each named by its member id and bound to
+        // the member it follows; each crosses only under a hop its title authority grants.
+        // A companion's return is its own operation: it follows no one, and home's records alone decide it.
+        var companions = ((transfer.CompanionReturn || (transfer.Sent is not null))
+            ? []
+            : CompanionsFollowing(
+                members: members,
+                source: source
+            ));
+
+        if (transfer.Sent is null && m_pendingTransfers.Any(other => other.Source == source && other.Sent is { } held &&
+            (held.Members.Intersect(members).Any() || companions.Any(companion => Array.IndexOf(held.Members, companion.Slot) >= 0)))) {
+            source.DrainedTransfers.Undrain(transferId);
+            m_pendingTransfers.Enqueue(transfer);
+            return;
         }
 
         if (members.Length == 0) {
@@ -198,12 +216,23 @@ public sealed partial class WorldInstanceHost {
             return;
         }
 
-        if (!TryResolveWorldPeerCall(
-            authority: out var targetAuthority,
+        WorldPeerCall targetAuthority;
+        string targetName;
+        bool spawned;
+        if (transfer.Sent is { Target: { } sentTarget } sent) {
+            if (sentTarget.Local is { } local && (local.Server.IsRetiring || m_instances.GetValueOrDefault(local.Name) != local)) {
+                NoteTransferOutcome(in transfer, source.Name, outcome: "refused-destination:reserved authority retired");
+                return;
+            }
+            targetAuthority = sentTarget;
+            targetName = sent.TargetName!;
+            spawned = sent.Spawned;
+        } else if (!TryResolveWorldPeerCall(
+            authority: out targetAuthority,
             reason: out var destinationReason,
-            resolvedName: out var targetName,
+            resolvedName: out targetName,
             source: source,
-            spawned: out var spawned,
+            spawned: out spawned,
             transfer: in transfer
         )) {
             if (m_narration.HasNarrationSink) {
@@ -276,20 +305,6 @@ public sealed partial class WorldInstanceHost {
             }
             if (spawned) { ReapIfEmpty(name: targetName); }
             return;
-        }
-
-        // The companions following this crossing's travelers join its cohort, each named by its member id and bound to
-        // the member it follows; each crosses only under a hop its title authority grants.
-        // A companion's return is its own operation: it follows no one, and home's records alone decide it.
-        var companions = ((transfer.CompanionReturn || (transfer.Sent is not null))
-            ? []
-            : CompanionsFollowing(
-                members: members,
-                source: source
-            ));
-
-        if (transfer.Sent is { } resent) {
-            members = [.. resent.Members];
         }
 
         if (companions.Count > 0) {
@@ -450,25 +465,26 @@ public sealed partial class WorldInstanceHost {
             source.AllocatedTransferIds = allocated;
         }
 
-        if (companions.Count > 0) {
-            var keep = Enumerable.Repeat(element: true, count: members.Length).ToArray();
-            var transient = AuthorizeCompanions(
-                destination: (targetAuthority.Local?.Server.AuthorityIdentity ?? targetAuthority.Remote!.PeerAuthority),
-                keep: keep,
-                key: new WorldTransferKey(
-                    SourceAuthority: sourceAuthority,
-                    TransferId: transfer.TransferId
-                ),
-                reservationMembers: reservationMembers,
-                source: source
-            );
+        if (companions.Count > 0 || transfer.Hops is not null) {
+            var key = new WorldTransferKey(sourceAuthority, transfer.TransferId);
+            var questions = transfer.Hops ?? AskCompanionHomes(source, key, destinationAuthority, reservationMembers);
+            if (questions.Any(question => !question.Answer.IsCompleted)) {
+                source.DrainedTransfers.Undrain(transferId);
+                m_pendingTransfers.Enqueue(transfer with {
+                    Hops = questions,
+                    Sent = new SentReservation(reservationRequest, members, null, targetAuthority, targetName, spawned)
+                });
+                return;
+            }
+            var keep = Enumerable.Repeat(true, members.Length).ToArray();
+            var transient = AuthorizeCompanions(key, reservationMembers, keep, questions);
 
             // A title authority that could not decide yet is asked again at the next drain; the companion is left behind
             // only once the attempts run out.
-            if (transient && (transfer.Attempt < TransferRetryCeiling)) {
+            if (transient && transfer.Attempt < TransferRetryCeiling) {
                 if (spawned) { ReapIfEmpty(name: targetName); }
                 source.DrainedTransfers.Undrain(transferId: transfer.TransferId);
-                m_pendingTransfers.Enqueue(item: (transfer with { Attempt = (transfer.Attempt + 1) }));
+                m_pendingTransfers.Enqueue(transfer with { Attempt = transfer.Attempt + 1, Hops = null, Sent = null });
                 return;
             }
             members = [.. members.Where(predicate: (_, ordinal) => keep[ordinal])];
@@ -476,9 +492,20 @@ public sealed partial class WorldInstanceHost {
             reservationRequest = reservationRequest with { Members = reservationMembers };
         }
 
-        var reservation = targetAuthority.Reserve(request: reservationRequest);
+        var answer = transfer.Sent?.Answer ?? targetAuthority.ReserveAsync(reservationRequest);
+        if (!answer.IsCompleted) {
+            source.DrainedTransfers.Undrain(transferId);
+            m_pendingTransfers.Enqueue(transfer with {
+                Hops = null,
+                Sent = new SentReservation(reservationRequest, members, answer, targetAuthority, targetName, spawned)
+            });
+            return;
+        }
+        var reservation = answer.IsCompletedSuccessfully ? answer.Result :
+            WorldTransferReservationReply.Refused("reservation transport failed") with { Transient = true };
 
         if (reservation.Accepted) {
+            targetAuthority.Remote?.AdoptReservationCredentials(reservationRequest, reservation);
             // The destination decides each companion on its own: a refused one stays here, and the cohort that departs
             // is exactly the members it leased, by id.
             var leasedIds = reservation.LeasedIds(request: reservationRequest);
@@ -537,6 +564,7 @@ public sealed partial class WorldInstanceHost {
                 source.DrainedTransfers.Undrain(transferId: transfer.TransferId);
                 m_pendingTransfers.Enqueue(item: (transfer with {
                     Attempt = (transfer.Attempt + 1),
+                    Hops = null,
                     Sent = (resend ? new SentReservation(Members: members, Request: reservationRequest) : null),
                 }));
             } else {
@@ -856,7 +884,7 @@ public sealed partial class WorldInstanceHost {
 
         if (abortReason is null) {
             if (TryRecordDeparture(
-                departure: new InDoubtTransfer(transfer with { FrozenCohortSlots = [.. members] }, targetAuthority, sourceAuthority, targetName, spawned, reservationRequest.DeadlineSourceTick, landed, commitMembers, members.Length),
+                departure: new InDoubtTransfer(transfer with { FrozenCohortSlots = [.. members], Sent = null, Hops = null }, targetAuthority, sourceAuthority, targetName, spawned, reservationRequest.DeadlineSourceTick, landed, commitMembers, members.Length),
                 reason: out var departureReason
             )) {
                 departed = true;
@@ -866,13 +894,10 @@ public sealed partial class WorldInstanceHost {
         }
 
         if (abortReason is null) {
-            var step = targetAuthority.Commit(
-                sourceAuthority: sourceAuthority,
-                transferId: transfer.TransferId,
-                members: commitMembers,
-                status: out var verdict,
-                reason: out var commitReason
-            );
+            var commit = targetAuthority.CommitAsync(sourceAuthority, transfer.TransferId, commitMembers);
+            var (step, verdict, commitReason) = commit.IsCompletedSuccessfully ? commit.Result :
+                (commit.IsFaulted || commit.IsCanceled ? WorldTransferStep.Unreachable : WorldTransferStep.Pending,
+                    WorldTransferStatus.Uncertain, string.Empty);
 
             if ((step != WorldTransferStep.Answered) || (verdict == WorldTransferStatus.Uncertain)) {
                 // Preserve every source recovery record and the exact commit payload. Subsequent fixed-point drains
@@ -880,7 +905,7 @@ public sealed partial class WorldInstanceHost {
                 // lease, or restore the source after a confirmed missing/expired reservation. Never infer from a
                 // failed transport or an uncertain arrival record whether the destination applied the commit.
                 m_inDoubtTransfers.Add(item: new InDoubtTransfer(
-                    Transfer: transfer with { FrozenCohortSlots = [.. members] },
+                    Transfer: transfer with { FrozenCohortSlots = [.. members], Sent = null, Hops = null },
                     TargetAuthority: targetAuthority,
                     SourceAuthority: sourceAuthority,
                     TargetName: targetName,
@@ -888,9 +913,10 @@ public sealed partial class WorldInstanceHost {
                     SourceDeadlineTick: reservationRequest.DeadlineSourceTick,
                     Landed: landed,
                     CommitMembers: commitMembers,
-                    MemberCount: members.Length
+                    MemberCount: members.Length,
+                    CommitAnswer: step == WorldTransferStep.Pending ? commit : null
                 ));
-                if (m_narration.HasNarrationSink) {
+                if (step != WorldTransferStep.Pending && m_narration.HasNarrationSink) {
                     m_narration.Narrate(
                         channel: "world.transfer",
                         text: $"[world.transfer: transfer={transferId} IN-DOUBT ('{targetName}' {((step == WorldTransferStep.Answered) ? "answered uncertain" : "commit acknowledgement was lost")}: {commitReason}) — recovery state retained for status reconciliation]"
@@ -913,7 +939,7 @@ public sealed partial class WorldInstanceHost {
             } catch (Exception exception) when ((exception is IOException or System.Net.Sockets.SocketException or OperationCanceledException)) {
                 // No ambiguous commit reaches this arm. A failed abort leaves only the expiring destination lease.
             }
-            var rollback = new InDoubtTransfer(transfer with { FrozenCohortSlots = [.. members] }, targetAuthority, sourceAuthority, targetName, spawned, reservationRequest.DeadlineSourceTick, landed, commitMembers, members.Length, RollbackOnly: true);
+            var rollback = new InDoubtTransfer(transfer with { FrozenCohortSlots = [.. members], Sent = null, Hops = null }, targetAuthority, sourceAuthority, targetName, spawned, reservationRequest.DeadlineSourceTick, landed, commitMembers, members.Length, RollbackOnly: true);
             // A companion whose title an install released while its departure was in doubt is retired, never restored.
             var retired = (departed
                 ? InstallRetired(commits: commitMembers, landed: [], source: source)
@@ -971,7 +997,7 @@ public sealed partial class WorldInstanceHost {
         }
 
         var confirmed = new InDoubtTransfer(
-            transfer with { FrozenCohortSlots = [.. members] },
+            transfer with { FrozenCohortSlots = [.. members], Sent = null, Hops = null },
             targetAuthority,
             sourceAuthority,
             targetName,
@@ -1162,6 +1188,7 @@ public sealed partial class WorldInstanceHost {
     // EnqueueTransfer call the whole merged cohort shares, whether the cohort came from one hit or several.
     private void EnqueueCoalescedGroup(WorldInstance instance, CoalescedPortalGroup group) {
         var cohortSlots = group.Slots.ToArray();
+        if (cohortSlots.Any(HeldCrossingSeats(instance).ContainsKey)) { return; }
         var cohort = BuildCohort(
             server: instance.Server,
             slots: cohortSlots
@@ -1391,7 +1418,9 @@ public sealed partial class WorldInstanceHost {
                 return;
             }
 
-            if (transfer.FrozenCohortSlots is { } frozen) {
+            if (transfer.Sent is { } sent) {
+                foreach (var slot in sent.Members) { held[slot] = transfer.TransferId; }
+            } else if (transfer.FrozenCohortSlots is { } frozen) {
                 foreach (var slot in frozen) {
                     held[slot] = transfer.TransferId;
                 }
@@ -1532,6 +1561,8 @@ public sealed partial class WorldInstanceHost {
             SourceSlot = foundSlot,
             TransferId = followedId,
             Travellers = [traveller],
+            Sent = null,
+            Hops = null,
         });
 
         return false;
@@ -1980,6 +2011,10 @@ public sealed partial class WorldInstanceHost {
         var batchCount = m_pendingTransfers.Count;
 
         for (var index = 0; ((index < batchCount) && m_pendingTransfers.TryDequeue(result: out var transfer)); index++) {
+            if (transfer.Sent?.Answer is { IsCompleted: false } || transfer.Hops?.Any(question => !question.Answer.IsCompleted) == true) {
+                m_pendingTransfers.Enqueue(transfer);
+                continue;
+            }
             WorldNarrationScope.Current = transfer.SourceInstance;
 
             try {
@@ -2381,6 +2416,7 @@ public sealed partial class WorldInstanceHost {
     /// <see langword="null"/> for a slot that held no body then; <see langword="null"/> for a live-read party.</param>
     /// <param name="CompanionReturn">Whether the transfer is a visiting companion's return to its title authority: it
     /// follows no one and carries the ticket it landed with.</param>
+    /// <param name="Hops">Companion title replies outstanding for the frozen reservation members.</param>
     /// <param name="Sent">The reservation an earlier attempt sent and got no decided answer to, which this attempt sends
     /// again unchanged; <see langword="null"/> for an attempt that builds its own.</param>
     private readonly record struct PendingTransfer(
@@ -2413,12 +2449,14 @@ public sealed partial class WorldInstanceHost {
         WorldInstance? Source = null,
         IReadOnlyList<WorldEntityAddress?>? Travellers = null,
         bool CompanionReturn = false,
+        HopQuestion[]? Hops = null,
         SentReservation? Sent = null
     );
     // A reservation already sent whose answer never came back (a lost request or reply, or a destination that could not
     // decide yet): the retry sends this same request for these same source slots, never a recomputed one, so a lease the
     // destination already holds answers it and no hop is asked for again.
-    private sealed record SentReservation(WorldTransferReservationRequest Request, int[] Members);
+    private sealed record SentReservation(WorldTransferReservationRequest Request, int[] Members,
+        Task<WorldTransferReservationReply>? Answer = null, WorldPeerCall? Target = null, string? TargetName = null, bool Spawned = false);
     // The traveller a pose carries home, by the mobility incarnation it keeps through every handoff, and the pose it
     // lands at standing still.
     private readonly record struct PosedTraveller(FixedSpawnPoint Pose, WorldEntityAddress Incarnation);
@@ -2460,9 +2498,11 @@ public sealed partial class WorldInstanceHost {
         string? RecoveryAuthority = null,
         string? RecoveryEndpoint = null,
         WorldDefinition? RecoveryDefinition = null,
+        Task<(WorldTransferStep Step, WorldTransferStatus Status, string Reason)>? CommitAnswer = null,
         bool CommitConfirmed = false,
         bool RestoreOnly = false
     ) {
+        public Dictionary<int, Task<(WorldAuthorityRouteDescription? Route, string Reason)>>? RouteSeeds { get; set; }
         public bool PublicationFailureReported { get; set; }
         // The settlement this source wrote ahead of acknowledging or restoring the cohort.
         public bool SettlementRecorded { get; set; }

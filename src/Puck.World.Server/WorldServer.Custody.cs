@@ -10,7 +10,15 @@ public sealed partial class WorldServer : IWorldCustodyPeer {
     public Func<string, IWorldCustodyPeer?>? CustodyPeers { get; set; }
 
     /// <inheritdoc/>
-    public IReadOnlyList<ulong?>? ConfirmHops(WorldTransferKey key, IReadOnlyList<WorldEntityAddress> incarnations, string destination, WorldHopPhase phase) {
+    public ValueTask<IReadOnlyList<ulong?>?> ConfirmHopsAsync(WorldTransferKey key, IReadOnlyList<WorldEntityAddress> incarnations, string destination, WorldHopPhase phase) =>
+        new(ConfirmHops(key, incarnations, destination, phase));
+
+    /// <inheritdoc/>
+    public ValueTask<IReadOnlyList<WorldHopAnswer>> RequestHopAsync(WorldTransferKey key, string source, string destination, IReadOnlyList<WorldHopRequestMember> members) =>
+        new(RequestHop(key, source, destination, members));
+
+    /// <inheritdoc/>
+    public IReadOnlyList<ulong?> ConfirmHops(WorldTransferKey key, IReadOnlyList<WorldEntityAddress> incarnations, string destination, WorldHopPhase phase) {
         ArgumentNullException.ThrowIfNull(argument: incarnations);
         ArgumentNullException.ThrowIfNull(argument: destination);
 
@@ -210,32 +218,39 @@ public sealed partial class WorldServer : IWorldCustodyPeer {
     // Asks each companion's title authority, off this authority's gate, whether its hop under `key` to this destination
     // is currently granted: one question per home, for this call alone, so an answer never outlives the decision it was
     // asked for.
-    private IReadOnlyDictionary<(WorldTransferKey Key, WorldEntityAddress Incarnation), ulong>? ConfirmCompanionHops(WorldTransferKey key, IEnumerable<WorldCustodyTicket> tickets, WorldHopPhase phase) {
-        Dictionary<(WorldTransferKey, WorldEntityAddress), ulong>? confirmed = null;
+    private Task<T> WithConfirmedHopsAsync<T>(WorldTransferKey key, IReadOnlyList<WorldCustodyTicket> tickets,
+        WorldHopPhase phase, Func<IReadOnlyDictionary<(WorldTransferKey, WorldEntityAddress), ulong>?, T> decide,
+        Action? authorize, CancellationToken ct) {
+        if (tickets.Count == 0) { return Task.FromResult(Decide(null)); }
 
-        foreach (var home in tickets.Where(predicate: ticket => ((ticket.Hop == key) && ticket.Incarnation.Titled && string.Equals(a: ticket.Home, b: ticket.Incarnation.Authority, comparisonType: StringComparison.Ordinal))).GroupBy(keySelector: static ticket => ticket.Home, comparer: StringComparer.Ordinal)) {
-            if (CustodyPeers?.Invoke(arg: home.Key) is not { } door) {
-                continue;
-            }
+        var questions = tickets.Where(ticket => ticket.Hop == key && ticket.Incarnation.Titled && ticket.Home == ticket.Incarnation.Authority)
+            .GroupBy(ticket => ticket.Home, StringComparer.Ordinal)
+            .Select(home => {
+                var members = home.Select(ticket => ticket.Incarnation).ToArray();
+                var answer = CustodyPeers?.Invoke(home.Key)?.ConfirmHopsAsync(key, members, AuthorityIdentity, phase) ?? default;
+                return (Members: members, Answer: answer.AsTask());
+            }).ToArray();
+        var ready = Task.WhenAll(questions.Select(question => question.Answer));
+        return ready.IsCompletedSuccessfully ? Task.FromResult(Apply()) : ResumeAsync();
 
-            var incarnations = home.Select(selector: static ticket => ticket.Incarnation).ToArray();
-            var answers = door.ConfirmHops(
-                destination: AuthorityIdentity,
-                incarnations: incarnations,
-                key: key,
-                phase: phase
-            );
-
-            if ((answers is null) || (answers.Count != incarnations.Length)) {
-                continue;
-            }
-            for (var index = 0; (index < incarnations.Length); index++) {
-                if (answers[index] is { } next) {
-                    (confirmed ??= new())[(key, incarnations[index])] = next;
+        T Decide(IReadOnlyDictionary<(WorldTransferKey, WorldEntityAddress), ulong>? confirmed) {
+            authorize?.Invoke();
+            return decide(confirmed);
+        }
+        T Apply() {
+            Dictionary<(WorldTransferKey, WorldEntityAddress), ulong>? confirmed = null;
+            foreach (var (members, answer) in questions) {
+                if (answer.Result is not { } epochs || epochs.Count != members.Length) { continue; }
+                for (var i = 0; i < members.Length; ++i) {
+                    if (epochs[i] is { } next) { (confirmed ??= new())[(key, members[i])] = next; }
                 }
             }
+            return Decide(confirmed);
         }
-        return confirmed;
+        async Task<T> ResumeAsync() {
+            await ready.WaitAsync(ct).ConfigureAwait(false);
+            return await RunOnTickThreadAsync(Apply, ct).ConfigureAwait(false);
+        }
     }
     // Whether this authority is latched on a crossing record it cannot yet call durable: home then verifies no return
     // and confirms no grant, since the record it is uncertain about may end a title. Callers hold the authority gate.

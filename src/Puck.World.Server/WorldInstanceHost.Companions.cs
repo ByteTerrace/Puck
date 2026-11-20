@@ -84,51 +84,48 @@ public sealed partial class WorldInstanceHost {
     // granted by one record here; another authority's is asked through the host's custody door. A granted companion
     // carries the ticket home recorded; any other is left out of the cohort and stays where it is. Returns whether an
     // answer was transient (Pending or Unavailable), which keeps the attempt for the next drain to ask again.
-    private bool AuthorizeCompanions(WorldInstance source, WorldTransferKey key, string destination, WorldTransferReservationMember[] reservationMembers, bool[] keep) {
+    private sealed record HopQuestion(string Home, int[] Ordinals, Task<IReadOnlyList<WorldHopAnswer>> Answer);
+
+    private static HopQuestion[] AskCompanionHomes(WorldInstance source, WorldTransferKey key, string destination,
+        WorldTransferReservationMember[] members) {
         var server = source.Server;
-        var authority = server.AuthorityIdentity;
-        var ordinals = Enumerable.Range(start: 0, count: reservationMembers.Length).Where(predicate: ordinal => reservationMembers[ordinal].Companion is not null);
+        return [.. Enumerable.Range(0, members.Length).Where(i => members[i].Companion is not null)
+            .GroupBy(i => members[i].Companion!.Home, StringComparer.Ordinal).Select(home => {
+                var ordinals = home.ToArray();
+                var requests = ordinals.Select(i => new WorldHopRequestMember(members[i].Mobility!.Value.Incarnation,
+                    members[i].Mobility!.Value.Epoch)).ToArray();
+                Task<IReadOnlyList<WorldHopAnswer>> answer;
+                if (home.Key == server.AuthorityIdentity) {
+                    answer = Task.FromResult(server.AuthorizeOwnHop(key, destination, requests.Select(member => member.Incarnation).ToArray()));
+                } else if (server.CustodyPeers?.Invoke(home.Key) is { } door) {
+                    answer = door.RequestHopAsync(key, server.AuthorityIdentity, destination, requests).AsTask();
+                } else {
+                    answer = Task.FromResult<IReadOnlyList<WorldHopAnswer>>([]);
+                }
+                return new HopQuestion(home.Key, ordinals, answer);
+            })];
+    }
+
+    private bool AuthorizeCompanions(WorldTransferKey key, WorldTransferReservationMember[] reservationMembers, bool[] keep,
+        HopQuestion[] questions) {
         var transient = false;
-
-        foreach (var home in ordinals.GroupBy(keySelector: ordinal => reservationMembers[ordinal].Companion!.Home, comparer: StringComparer.Ordinal)) {
-            var group = home.ToArray();
-            var incarnations = group.Select(selector: ordinal => reservationMembers[ordinal].Mobility!.Value.Incarnation).ToArray();
-            IReadOnlyList<WorldHopAnswer> answers;
-
-            if (string.Equals(a: home.Key, b: authority, comparisonType: StringComparison.Ordinal)) {
-                answers = server.AuthorizeOwnHop(
-                    destination: destination,
-                    incarnations: incarnations,
-                    key: key
-                );
-            } else {
-                answers = ((server.CustodyPeers?.Invoke(arg: home.Key) is { } door)
-                    ? door.RequestHop(
-                        destination: destination,
-                        key: key,
-                        members: [.. group.Select(selector: ordinal => new WorldHopRequestMember(
-                            Epoch: reservationMembers[ordinal].Mobility!.Value.Epoch,
-                            Incarnation: reservationMembers[ordinal].Mobility!.Value.Incarnation
-                        ))],
-                        source: authority
-                    )
-                    : [.. incarnations.Select(selector: static incarnation => new WorldHopAnswer(Incarnation: incarnation, Next: 0UL, Verdict: WorldHopVerdict.Unavailable))]);
-            }
+        foreach (var (home, group, task) in questions) {
+            var answers = task.IsCompletedSuccessfully ? task.Result : [];
             for (var index = 0; (index < group.Length); index++) {
                 var ordinal = group[index];
                 var member = reservationMembers[ordinal];
-                var answer = ((index < answers.Count) ? answers[index] : default);
+                var answer = ((index < answers.Count) ? answers[index] : new WorldHopAnswer(member.Mobility!.Value.Incarnation, WorldHopVerdict.Unavailable, 0));
                 var expected = checked((member.Mobility!.Value.Epoch + 1UL));
 
                 transient |= (answer.Verdict is WorldHopVerdict.Pending or WorldHopVerdict.Unavailable);
-                if ((answer.Verdict == WorldHopVerdict.Granted) && (answer.Incarnation == incarnations[index]) && (answer.Next == expected)) {
+                if ((answer.Verdict == WorldHopVerdict.Granted) && (answer.Incarnation == member.Mobility!.Value.Incarnation) && (answer.Next == expected)) {
                     reservationMembers[ordinal] = member with {
                         Companion = member.Companion! with {
                             Ticket = new WorldCustodyTicket(
                                 Epoch: answer.Next,
-                                Home: home.Key,
+                                Home: home,
                                 Hop: key,
-                                Incarnation: incarnations[index]
+                                Incarnation: member.Mobility!.Value.Incarnation
                             ),
                         },
                     };
@@ -138,7 +135,7 @@ public sealed partial class WorldInstanceHost {
                 if (m_narration.HasNarrationSink) {
                     m_narration.Narrate(
                         channel: "world.transfer",
-                        text: $"[world.transfer: transfer={key.TransferId} companion {incarnations[index]} stays — its title authority answered {((answer.Incarnation == incarnations[index]) ? answer.Verdict.ToString() : "nothing")}]"
+                        text: $"[world.transfer: transfer={key.TransferId} companion {member.Mobility!.Value.Incarnation} stays — its title authority answered {((answer.Incarnation == member.Mobility!.Value.Incarnation) ? answer.Verdict.ToString() : "nothing")}]"
                     );
                 }
             }

@@ -468,23 +468,9 @@ public sealed partial class WorldInstanceHost {
         return false;
     }
     /// <inheritdoc/>
-    public bool TryDescribeForwarding(WorldServer source, in WorldMobilityIdentity mobility, out WorldAuthorityRouteDescription routeDescription, out string reason) {
-        if (!TryFindOnwardRoute(
-            mobility: in mobility,
-            reason: out reason,
-            route: out var route,
-            source: source
-        )) {
-            routeDescription = default;
-
-            return false;
-        }
-
-        return route.Authority.TryDescribeRoute(
-            reason: out reason,
-            route: out routeDescription
-        );
-    }
+    public ValueTask<(WorldAuthorityRouteDescription? Route, string Reason)> DescribeForwardingAsync(WorldServer source, WorldMobilityIdentity mobility) =>
+        TryFindOnwardRoute(source: source, mobility: in mobility, reason: out var reason, route: out var route)
+            ? route.Authority.DescribeRouteAsync() : new((null, reason));
     /// <summary>Read-back for <c>world.rate</c>: one instance's declared rate, live schedule state, step width and
     /// completed ticks — the boot instance included, under its reserved name.</summary>
     /// <param name="name">The instance name.</param>

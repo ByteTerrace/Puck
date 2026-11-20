@@ -39,7 +39,7 @@ public sealed class AuthorityWireCodecLawTests {
         ));
     }
     [Fact]
-    public void AVerifierWithNoMatchingTrustEntryRefuses() {
+    public async Task AVerifierWithNoMatchingTrustEntryRefuses() {
         var key = ECDsa.Create(curve: ECCurve.NamedCurves.nistP256);
         var oracle = new LocalKeySigningOracle(
             key: key,
@@ -52,15 +52,10 @@ public sealed class AuthorityWireCodecLawTests {
         var challenge = verifier.NewChallenge();
         var proof = prover.Prove(challenge: challenge);
 
-        Assert.False(condition: verifier.TryVerify(
-            challenge: challenge,
-            proof: proof,
-            sourceAuthority: out var sourceAuthority
-        ));
-        Assert.Null(@object: sourceAuthority);
+        Assert.Null(await verifier.VerifyAsync(challenge, proof, TestContext.Current.CancellationToken));
     }
     [Fact]
-    public void AnAttestedAuthenticatorProvesAndVerifiesAgainstItsOwnPinnedTrustEntry() {
+    public async Task AnAttestedAuthenticatorProvesAndVerifiesAgainstItsOwnPinnedTrustEntry() {
         var key = ECDsa.Create(curve: ECCurve.NamedCurves.nistP256);
         var domain = KeyId.ComputeKeyHash(subjectPublicKeyInfo: key.ExportSubjectPublicKeyInfo());
         var oracle = new LocalKeySigningOracle(
@@ -82,15 +77,8 @@ public sealed class AuthorityWireCodecLawTests {
         var challenge = verifier.NewChallenge();
         var proof = prover.Prove(challenge: challenge);
 
-        Assert.True(condition: verifier.TryVerify(
-            challenge: challenge,
-            proof: proof,
-            sourceAuthority: out var sourceAuthority
-        ));
-        Assert.Equal(
-            actual: sourceAuthority,
-            expected: "authority-a"
-        );
+        var verified = await verifier.VerifyAsync(challenge, proof, TestContext.Current.CancellationToken);
+        Assert.Equal("authority-a", verified?.Authority);
     }
     [Fact]
     public void DownstreamAckFrameRoundTripsThroughTheSharedResultGrammar() {

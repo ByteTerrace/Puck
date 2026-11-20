@@ -30,22 +30,17 @@ public static class WorldServerStepShell {
     /// <param name="context">Host pacing coordinates and step width. Only the width advances simulation state:
     /// <see cref="WorldServer.Advance"/> uses the authority's checkpointed tick and engine-time coordinates.
     /// <see cref="FixedStepContext.Tick"/> supplies the independent count returned and published to the host.</param>
-    /// <param name="peerHost">The socket door, or <see langword="null"/> in a shape that never constructs one.
-    /// Drained BEFORE <see cref="WorldServer.Advance"/> — the deterministic fair-merge window: every
-    /// admission/submission/disconnect a connection's background reader marshaled since the last tick applies here,
-    /// on the tick thread, before this tick's bodies advance.</param>
     /// <returns>The completed tick count — <c>context.Tick + 1</c>, or further along by the number of extra ticks a
     /// fast-forwarding drive stepped; a caller derives its own elapsed engine time from the difference times
     /// <see cref="FixedStepContext.StepTicks"/>.</returns>
-    public static ulong Step(WorldServer server, WorldReplayTape? tape, Action<ulong> publishTick, in FixedStepContext context, HostPacing pacing, WorldPeerHost? peerHost = null) {
+    public static ulong Step(WorldServer server, WorldReplayTape? tape, Action<ulong> publishTick, in FixedStepContext context, HostPacing pacing) {
         var current = context;
         var burst = 0;
 
         while (true) {
             using var work = HostFrameWork.MeasureWorld(server.InstanceIdentity);
-            peerHost?.DrainPending();
-            // Federation may commit from another thread. Its authority operation must precede this whole step or
-            // follow its tape close: a post-step arrival cannot enter the bucket replay will apply before that step.
+            server.DrainMailbox();
+            // Keep the simulation step and tape close atomic with other authority readers and writers.
             lock (server.AuthorityGate) {
                 try {
                     using var recordedDraws = tape?.InjectDriveTick();

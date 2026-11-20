@@ -9,16 +9,16 @@ namespace Puck.World.Presentation.Tests;
 /// real federation to a destination behind its door, and the destination hands it on to a third authority.</summary>
 public sealed class FederationOnwardRouteLawTests {
     [Fact]
-    public void MissingDestinationNamespaceLeavesTheCachedRemoteAndItsCommittedTravelerUsable() {
+    public async Task MissingDestinationNamespaceLeavesTheCachedRemoteAndItsCommittedTravelerUsable() {
         WorldRemoteAuthority? traveler = null;
         using var hosts = FederatedHosts.Build(travelerRouteStarted: wrapper => traveler = wrapper);
         hosts.JoinSeat(slot: 0, travelTurn: default);
         hosts.Source.EnqueueTransfer(actingPrincipal: Principal.Console, destination: hosts.RemoteDestination,
             scope: WorldInstanceHost.TransferScope.Body, sourceInstance: WorldInstanceHost.BootInstanceName, sourceSlot: 0);
-        hosts.Source.DrainPendingTransfers();
+        hosts.DrainCrossing(0);
         Assert.NotNull(@object: traveler);
         Assert.True(condition: traveler.TryRouteCredential(bodyIndex: -1, credential: out var credential));
-        Assert.True(condition: traveler.TryDescribeRoute(bodyIndex: credential.BodyIndex, route: out var before, reason: out _));
+        var before = (await traveler.DescribeRouteAsync(credential.BodyIndex)).Route!.Value;
         var valid = File.ReadAllBytes(path: hosts.DestinationPath);
         var definition = WorldDefinitionSerialization.Deserialize(utf8Json: valid);
         File.WriteAllBytes(path: hosts.DestinationPath, bytes: WorldDefinitionSerialization.Serialize(definition: definition with {
@@ -29,12 +29,12 @@ public sealed class FederationOnwardRouteLawTests {
             scope: WorldInstanceHost.TransferScope.Body, sourceInstance: WorldInstanceHost.BootInstanceName, sourceSlot: 1);
         hosts.Source.DrainPendingTransfers();
         Assert.True(condition: hosts.SourceRow.Server.Population.IsActive(index: 1));
-        Assert.True(condition: traveler.TryDescribeRoute(bodyIndex: credential.BodyIndex, route: out var after, reason: out var reason), userMessage: reason);
+        var after = (await traveler.DescribeRouteAsync(credential.BodyIndex)).Route!.Value;
         Assert.Equal(expected: before.Entity, actual: after.Entity);
         File.WriteAllBytes(path: hosts.DestinationPath, bytes: valid);
         hosts.Source.EnqueueTransfer(actingPrincipal: Principal.Console, destination: hosts.RemoteDestination,
             scope: WorldInstanceHost.TransferScope.Body, sourceInstance: WorldInstanceHost.BootInstanceName, sourceSlot: 1);
-        hosts.Source.DrainPendingTransfers();
+        hosts.DrainCrossing(1);
         Assert.False(condition: hosts.SourceRow.Server.Population.IsActive(index: 1));
     }
 
@@ -110,7 +110,7 @@ public sealed class FederationOnwardRouteLawTests {
             sourceInstance: WorldInstanceHost.BootInstanceName,
             sourceSlot: 0
         );
-        hosts.Source.DrainPendingTransfers();
+        hosts.DrainCrossing(0);
         concurrent?.Join();
 
         Assert.Equal(

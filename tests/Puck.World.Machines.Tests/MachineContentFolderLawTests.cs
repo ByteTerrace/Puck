@@ -38,11 +38,7 @@ public sealed class MachineContentFolderLawTests {
 
         public byte[] NewChallenge() => [];
         public byte[] Prove(ReadOnlySpan<byte> challenge) => throw new NotSupportedException();
-        public bool TryVerify(ReadOnlySpan<byte> challenge, ReadOnlySpan<byte> proof, out string? sourceAuthority) {
-            sourceAuthority = null;
-
-            return false;
-        }
+        public ValueTask<VerifiedPeerIdentity?> VerifyAsync(ReadOnlyMemory<byte> challenge, ReadOnlyMemory<byte> proof, CancellationToken ct) => new((VerifiedPeerIdentity?)null);
     }
 
     private const string Mirror = "../carts/mirror.cgb.cartridge.json";

@@ -25,6 +25,7 @@ public enum WorldHopVerdict : byte {
 
     /// <summary>Home already holds this hop's settlement: the key is spent for the companion.</summary>
     Dead = 6,
+
 }
 /// <summary>What a hop's destination holds for one companion under the hop's key, answered to the companion's title
 /// authority from durable records alone.</summary>
@@ -79,7 +80,7 @@ public interface IWorldCustodyPeer {
     /// <param name="phase">The decision the question belongs to.</param>
     /// <returns>One entry per companion: the landing epoch of a current grant, or <see langword="null"/>; or
     /// <see langword="null"/> when home could not be reached.</returns>
-    IReadOnlyList<ulong?>? ConfirmHops(WorldTransferKey key, IReadOnlyList<WorldEntityAddress> incarnations, string destination, WorldHopPhase phase);
+    ValueTask<IReadOnlyList<ulong?>?> ConfirmHopsAsync(WorldTransferKey key, IReadOnlyList<WorldEntityAddress> incarnations, string destination, WorldHopPhase phase);
     /// <summary>Asks home to authorize the onward hop of each companion the authenticated custodian
     /// <paramref name="source"/> holds, toward <paramref name="destination"/>, under <paramref name="key"/>. Home decides
     /// each on its own title and records one hop naming the ones it grants.</summary>
@@ -89,7 +90,7 @@ public interface IWorldCustodyPeer {
     /// <param name="members">The companions and the epochs the custodian holds them at.</param>
     /// <returns>One answer per companion, in order; every answer <see cref="WorldHopVerdict.Unavailable"/> when home
     /// could not be reached.</returns>
-    IReadOnlyList<WorldHopAnswer> RequestHop(WorldTransferKey key, string source, string destination, IReadOnlyList<WorldHopRequestMember> members);
+    ValueTask<IReadOnlyList<WorldHopAnswer>> RequestHopAsync(WorldTransferKey key, string source, string destination, IReadOnlyList<WorldHopRequestMember> members);
     /// <summary>Answers, as a hop's destination, what this authority holds for <paramref name="incarnation"/> under
     /// <paramref name="key"/>, to the authenticated <paramref name="asker"/>: only the authority that minted the
     /// incarnation may ask. A key it neither leased nor landed is tombstoned before the answer, so the answer is final.</summary>

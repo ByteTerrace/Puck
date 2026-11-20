@@ -1125,7 +1125,7 @@ public static partial class WorldFederationCodec {
         );
     }
 
-    /// <summary>Decodes an authentication leaf. The proof's own shape is <see cref="Puck.Networking.IAuthenticator.TryVerify"/>'s
+    /// <summary>Decodes an authentication leaf. The proof's own shape is <see cref="Puck.Networking.IAuthenticator.VerifyAsync"/>'s
     /// call to make, never this decode's — a fixed length here would bind the wire to one authenticator scheme.
     /// Carries no source-authority field: the identity the proof establishes comes back only
     /// from a successful verify, never from a claimed label alongside it.</summary>
