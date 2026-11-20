@@ -31,7 +31,7 @@ public static class HostCommand {
                         Console.Out.WriteLine(FormattableString.Invariant($"admission {demand.Kind}: headroom={demand.HeadroomGb:0.0}GB peak={demand.OwnGb:0.0}GB growth={demand.GrowthGb:0.0}GB need={demand.NeedGb:0.0}GB commit-covered={demand.CommitCovered} freeRAM={demand.FreeRamGb:0.0}GB privateResident={demand.ResidentOwnGb:0.0}GB privateResidentGrowth={demand.ResidentGrowthGb:0.0}GB privateResidentNeed={demand.ResidentNeedGb:0.0}GB workingSet={Measured(demand.WorkingSetOwnGb)} ram-covered={demand.PhysicalCovered} admitted={demand.Covered}"));
                     }
                     foreach (var start in sample.Starts ?? []) {
-                        Console.Out.WriteLine(FormattableString.Invariant($"start {start.Kind} {start.Id}: private={start.PrivateGb:0.0}GB privateResident={Measured(start.PrivateResidentGb)} workingSet={Measured(start.WorkingSetGb)} judged={start.ResidentGb:0.0}GB ready={start.Ready}"));
+                        Console.Out.WriteLine(FormattableString.Invariant($"start {start.Kind} {start.Id}: private={start.PrivateGb:0.0}GB privateResident={Measured(start.PrivateResidentGb)} workingSet={Measured(start.WorkingSetGb)} judged={start.ResidentGb:0.0}GB ready={start.Ready}{start.IdleNote}"));
                     }
                 }
             } else if (lines.Count > 0) {
@@ -51,6 +51,7 @@ public static class HostCommand {
                         ["workingSetGb"] = Finite(start.WorkingSetGb),
                         ["judgedResidentGb"] = Finite(start.ResidentGb),
                         ["ready"] = start.Ready,
+                        ["idleSince"] = start.IdleSince,
                     })]),
                     ["demands"] = new System.Text.Json.Nodes.JsonArray([.. demands.Select(static demand => new System.Text.Json.Nodes.JsonObject {
                         ["kind"] = demand.Kind.ToString(),
@@ -123,10 +124,14 @@ public static class HostCommand {
               working set overstates it too (clean mapped-file and image pages are shared and reclaimed), so it is
               printed (workingSet=, unmeasured before the kind's first observation) and never judged. admitted= is
               both, the decision gate, lease and the MCP World start make for that kind. Each live start's kind, PID,
-              private bytes, private working set, working set, the figure judged and readiness follow.
+              private bytes, private working set, working set, the figure judged and readiness follow, and
+              "idle since <time>" when the start has used under HostStartTracker.BusyCpuSeconds of CPU for a plateau
+              (a hung test run): admission then counts only what it holds now, expects no growth from it, and a
+              heavy suite no longer waits for it to exit. The mark is shared (puck lease list names it too); the
+              verb never stops the process, which its owner decides.
               A kind's expected peak is the high percentile of its last ten observed starts, kept per machine in the
               lease root, so one unusual session moves it only briefly; unused growth tapers away over
-              HostStartTracker.Plateau and returns on renewed allocation. An expectation the machine could not
+              HostStartTracker.Plateau and returns on renewed allocation, and goes at once for an idle start. An expectation the machine could not
               hold even with every admitted start gone is judged as the lesser of itself and the figure an
               unmeasured kind gets (peak= shows the figure judged), so an inflated expectation cannot refuse every
               start and lock out the observations that would lower it.

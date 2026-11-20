@@ -1,5 +1,4 @@
 using System.Diagnostics;
-using System.Globalization;
 
 namespace Puck.Cli;
 
@@ -40,7 +39,7 @@ public sealed class WorldReadiness {
         string? mark = null;
 
         try {
-            mark = Path.Combine(path1: Directory(root: CliLease.RootAsync(checkout: checkout).GetAwaiter().GetResult()), path2: Name(processId: process.Id, startTicks: process.StartTime.ToUniversalTime().Ticks));
+            mark = Path.Combine(path1: Directory(root: CliLease.RootAsync(checkout: checkout).GetAwaiter().GetResult()), path2: ProcessMarks.Name(processId: process.Id, startTicks: process.StartTime.ToUniversalTime().Ticks));
         } catch (Exception exception) when ((exception is InvalidOperationException or System.ComponentModel.Win32Exception or IOException or UnauthorizedAccessException)) { }
 
         return new WorldReadiness(device: opensDevice, mark: mark);
@@ -77,41 +76,8 @@ public sealed class WorldReadiness {
     /// <param name="root">The shared lease directory.</param>
     /// <param name="running">The running processes' UTC start ticks, by process id.</param>
     /// <returns>The ready Worlds among <paramref name="running"/>.</returns>
-    public static IReadOnlySet<(int ProcessId, long StartTicks)> ReadyAmong(string root, IReadOnlyDictionary<int, long> running) {
-        var ready = new HashSet<(int, long)>();
-        var directory = Directory(root: root);
+    public static IReadOnlySet<(int ProcessId, long StartTicks)> ReadyAmong(string root, IReadOnlyDictionary<int, long> running) =>
+        ProcessMarks.Among(directory: Directory(root: root), prune: true, running: running).Keys.ToHashSet();
 
-        if (!System.IO.Directory.Exists(path: directory)) { return ready; }
-
-        foreach (var file in System.IO.Directory.EnumerateFiles(path: directory)) {
-            var name = Path.GetFileName(path: file).Split(separator: '-');
-
-            if ((name.Length == 2) && int.TryParse(s: name[0], provider: CultureInfo.InvariantCulture, result: out var id) && long.TryParse(s: name[1], provider: CultureInfo.InvariantCulture, result: out var ticks) &&
-                running.TryGetValue(key: id, value: out var started) && (started == ticks)) {
-                _ = ready.Add(item: (id, ticks));
-
-                continue;
-            }
-            // A World that started after the caller listed the processes is not in the list yet but still runs.
-            if ((name.Length == 2) && int.TryParse(s: name[0], provider: CultureInfo.InvariantCulture, result: out id) && long.TryParse(s: name[1], provider: CultureInfo.InvariantCulture, result: out ticks) && Running(processId: id, startTicks: ticks)) {
-                continue;
-            }
-
-            try { File.Delete(path: file); } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) { }
-        }
-
-        return ready;
-    }
-
-    private static bool Running(int processId, long startTicks) {
-        try {
-            using var process = Process.GetProcessById(processId: processId);
-
-            return (!process.HasExited && (process.StartTime.ToUniversalTime().Ticks == startTicks));
-        } catch (Exception exception) when ((exception is ArgumentException or InvalidOperationException or System.ComponentModel.Win32Exception)) {
-            return false;
-        }
-    }
     private static string Directory(string root) => Path.Combine(path1: root, path2: Folder);
-    private static string Name(int processId, long startTicks) => string.Create(provider: CultureInfo.InvariantCulture, handler: $"{processId}-{startTicks}");
 }

@@ -68,7 +68,8 @@ public static class LeaseCommand {
     /// <summary>Renders every lease's holder and queue, as <c>puck lease list</c> prints them.</summary>
     /// <param name="clock">The clock hold and wait times are measured against.</param>
     /// <param name="root">The shared lease directory.</param>
-    /// <returns>One line per lease (build, gpu, heavy), each followed by a line per waiter in admission order.</returns>
+    /// <returns>One line per lease (build, gpu, heavy), each followed by a line per waiter in admission order, then a line
+    /// per idle start (<see cref="StartIdleness"/>).</returns>
     public static string Render(TimeProvider clock, string root) {
         var now = clock.GetUtcNow();
         var text = new System.Text.StringBuilder();
@@ -91,8 +92,14 @@ public static class LeaseCommand {
                 _ = text.Append(value: $"  {(index + 1)}. {ticket.Holder} (lane {ticket.Lane}){((ticket.Checkout is null) ? string.Empty : $" from {ticket.Checkout}")} waiting {Age(since: ticket.Since, now: now)}; lane {ticket.Position} of {ticket.Lanes} in the round, {ticket.Ahead} ahead{(ticket.AdmissionBlocked ? "; waiting for host capacity" : string.Empty)}\n");
             }
         }
+        foreach (var start in IdleStarts(root: root)) {
+            _ = text.Append(value: $"idle start: {start.Kind} PID {start.ProcessId} has used no CPU for {Age(since: start.Since, now: now)}; admission no longer waits for it to grow or exit\n");
+        }
         return text.ToString();
     }
+    // The tracked starts running that have gone idle, oldest first; reading them removes nothing, so listing stays a read.
+    private static IEnumerable<IdleStart> IdleStarts(string root) =>
+        StartIdleness.Among(root: root, running: new Dictionary<int, long>(), prune: false).Values.OrderBy(keySelector: static start => start.Since).ThenBy(keySelector: static start => start.ProcessId);
 
     /// <summary>Writes every lease's holder and queue as <c>puck lease list --json</c> does: one record per lease, in the
     /// order <see cref="Render"/> prints them.</summary>
@@ -129,6 +136,13 @@ public static class LeaseCommand {
                 ["queue"] = queue,
                 ["recordedProtocol"] = CliLease.RecordedProtocol(root: root),
                 ["protocol"] = CliLease.Protocol,
+            });
+        }
+        foreach (var start in IdleStarts(root: root)) {
+            output.Write(record: new System.Text.Json.Nodes.JsonObject {
+                ["idleStart"] = start.Kind.ToString(),
+                ["processId"] = start.ProcessId,
+                ["since"] = start.Since,
             });
         }
     }
