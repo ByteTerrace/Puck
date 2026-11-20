@@ -1,4 +1,5 @@
 {
+  "description": "Marker rows: icon chips, and optional rings, the world shows over the rows they follow.",
   "type": [
     "array",
     "null"

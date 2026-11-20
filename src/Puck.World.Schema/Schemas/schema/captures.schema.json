@@ -1,4 +1,5 @@
 {
+  "description": "Captures the world schedules of itself, and the directory they are written to.",
   "type": [
     "object",
     "null"

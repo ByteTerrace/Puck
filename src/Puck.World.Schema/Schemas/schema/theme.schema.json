@@ -1,4 +1,5 @@
 {
+  "description": "The colors, type and spacing the world\u0027s interface uses; absent, the engine\u0027s neutral theme.",
   "type": [
     "object",
     "null"

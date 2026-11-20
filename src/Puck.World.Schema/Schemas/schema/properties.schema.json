@@ -1,4 +1,5 @@
 {
+  "description": "The vocabulary of property names the world\u0027s carriers and interactions may use.",
   "type": [
     "object",
     "null"

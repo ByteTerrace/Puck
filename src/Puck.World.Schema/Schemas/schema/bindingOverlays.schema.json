@@ -1,4 +1,5 @@
 {
+  "description": "Per-world overlays on the standard input bindings.",
   "type": [
     "array",
     "null"
@@ -566,7 +567,7 @@
             "type": "string"
           },
           "comparison": {
-            "$ref": "./common.schema.json#/$defs/ExpressionComparison",
+            "$ref": "./common.schema.json#/$defs/ExpressionComparisonNonNullable",
             "description": "The comparison."
           },
           "value": {

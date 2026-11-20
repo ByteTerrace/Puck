@@ -1,4 +1,5 @@
 {
+  "description": "The placeable cameras a view screen renders the world from.",
   "type": [
     "array",
     "null"

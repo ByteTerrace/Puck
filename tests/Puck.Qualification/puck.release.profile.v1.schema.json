@@ -26,7 +26,10 @@
           "enum": [
             "ReadyToRun"
           ],
-          "title": "ReleasePublishMode"
+          "title": "ReleasePublishMode",
+          "x-enumDescriptions": {
+            "ReadyToRun": "Framework-dependent, with every managed assembly precompiled to native code beside its IL: the entry assembly carries a ReadyToRun header, and the machine supplies the .NET runtime."
+          }
         },
         "entryAssembly": {
           "description": "The entry assembly\u0027s file name inside the package, which a leg launches with dotnet.",
@@ -38,7 +41,11 @@
             "None",
             "Path"
           ],
-          "title": "ReleaseCompilerDiscovery"
+          "title": "ReleaseCompilerDiscovery",
+          "x-enumDescriptions": {
+            "None": "Nowhere: every matrix leg runs with each directory holding dxc removed from its search path, so a world that asks for a compile fails its cell.",
+            "Path": "On the search path the qualification run inherits, as a developer machine finds it."
+          }
         }
       },
       "required": [
@@ -267,7 +274,12 @@
               "FrameTime",
               "ReloadStall"
             ],
-            "title": "QualificationDeferredCheck"
+            "title": "QualificationDeferredCheck",
+            "x-enumDescriptions": {
+              "DeviceLocalPeak": "A threshold on the peak of device-local bytes the whole World process holds.",
+              "FrameTime": "Frame-time median and tail.",
+              "ReloadStall": "How long a reload stalls presentation."
+            }
           },
           "reason": {
             "description": "Why it is deferred and what it waits on.",

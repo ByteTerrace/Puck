@@ -1,4 +1,5 @@
 {
+  "description": "Named second-order follower rows (spring, damping, response) that looks, camera booms, kits and state cells name to ease toward a target.",
   "type": [
     "array",
     "null"

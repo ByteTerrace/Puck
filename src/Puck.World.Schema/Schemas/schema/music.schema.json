@@ -1,4 +1,5 @@
 {
+  "description": "The music scores the world can play, each pinned by its content hash.",
   "type": [
     "array",
     "null"

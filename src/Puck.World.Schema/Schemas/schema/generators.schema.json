@@ -1,4 +1,5 @@
 {
+  "description": "Named random sources draw sites reference, so several sites can share one table while drawing independent sequences.",
   "type": [
     "array",
     "null"

@@ -1,4 +1,5 @@
 {
+  "description": "Named input patterns (taps, holds, chords, sequences) that match over each owner\u0027s recent input.",
   "type": [
     "array",
     "null"
@@ -35,7 +36,15 @@
                 "Cancel"
               ],
               "default": "Press",
-              "title": "WorldInputEventKind"
+              "title": "WorldInputEventKind",
+              "x-enumDescriptions": {
+                "Press": "A normalized button\u0027s real press.",
+                "Release": "A normalized button\u0027s real release.",
+                "AxisSample": "An ordered normalized axis sample.",
+                "Text": "One Unicode scalar from typing, paste or committed IME text.",
+                "AxisCrossing": "An authority-derived named threshold crossing.",
+                "Cancel": "A reset ends a hold without a gameplay release."
+              }
             },
             "rawValue": {
               "type": [

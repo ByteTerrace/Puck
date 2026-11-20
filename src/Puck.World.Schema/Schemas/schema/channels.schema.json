@@ -1,4 +1,5 @@
 {
+  "description": "The world\u0027s input channels, the movement and action set every binding and kit names; the engine declares none of its own.",
   "type": [
     "array",
     "null"
@@ -23,7 +24,14 @@
           "Relative",
           "Text"
         ],
-        "title": "ChannelShape"
+        "title": "ChannelShape",
+        "x-enumDescriptions": {
+          "Bipolar": "Ranges [-1, 1] \u2014 a stick axis.",
+          "Unipolar": "Ranges [0, 1] \u2014 an analog trigger.",
+          "Binary": "A bit: exactly {0, 1} once quantized. Edges derive from the value crossing the channel\u0027s threshold against the previous sub-step (see Puck.World.Server.WorldBody\u0027s per-channel edge tracking) \u2014 never carried.",
+          "Relative": "A Q32.32 displacement accumulated since the preceding input submission, consumed once.",
+          "Text": "Ordered Unicode scalar events with no held value or numeric/button storage."
+        }
       },
       "role": {
         "description": "The engine motion role this channel claims, or null for a composition channel.",
@@ -43,7 +51,21 @@
           null
         ],
         "default": null,
-        "title": "ChannelRole"
+        "title": "ChannelRole",
+        "x-enumDescriptions": {
+          "MoveAdvance": "Motion along facing, \u002B1 ahead / -1 back.",
+          "MoveStrafe": "Motion along the body\u0027s right, \u002B1 right / -1 left.",
+          "Turn": "The heading turn rate, \u002B1 left (counter-clockwise about the body\u0027s up) / -1 right. The grounded program integrates it into the heading scalar the attitude derives from; the free program reads it as the yaw rate beside Pitch/Roll.",
+          "MoveUp": "Motion along the body\u0027s up, \u002B1 up / -1 down.",
+          "Pitch": "Pitch rate about the body\u0027s right, \u002B1 nose-up / -1 nose-down.",
+          "Roll": "Roll rate about the body\u0027s forward axis, \u002B1 banks left (the body\u0027s right rises) / -1 right.",
+          "FaceX": "The world \u002BX component of a commanded facing direction \u2014 with FaceY and FaceZ a world-frame vector; nonzero, it is the direction the body faces this tick, ahead of movement-facing. All zero commands nothing.",
+          "FaceY": "The world \u002BY (up) component of a commanded facing direction. Carried so the commanded facing rides as a whole vector; no motion op reads it yet \u2014 the yaw snap takes its angle from the planar pair alone.",
+          "FaceZ": "The world \u002BZ component of a commanded facing direction (see FaceX).",
+          "MoveX": "The world \u002BX component of a commanded movement direction \u2014 with MoveY and MoveZ a full world-frame vector. Claimed, it supersedes the MoveAdvance/MoveStrafe pair whenever it is nonzero.",
+          "MoveY": "The world \u002BY component of a commanded movement direction (see MoveX).",
+          "MoveZ": "The world \u002BZ component of a commanded movement direction (see MoveX)."
+        }
       },
       "composition": {
         "description": "Whether this channel is a kit-composition trigger. Exactly one of Role or this must be set.",
@@ -66,7 +88,12 @@
           "Heading"
         ],
         "default": "World",
-        "title": "ChannelFrame"
+        "title": "ChannelFrame",
+        "x-enumDescriptions": {
+          "World": "Raw world axes \u2014 what the sim reads; the kit\u0027s own MoveFrame/FacingSnap decide the rest.",
+          "Camera": "Relative to the seat\u0027s camera yaw \u2014 latched the tick movement begins, so the camera may orbit mid-run without steering \u2014 and the body\u0027s HEADING turns to the way it moves (the seat composes the direction into the FaceX/FaceZ roles) \u2014 the third-person scheme.",
+          "Heading": "Relative to the body\u0027s own heading, which the Turn role steers and movement never turns \u2014 the keyboard scheme: strafe sidesteps (the drawn attitude angling toward the travel under the kit\u0027s facing snap, the heading intact), turn turns, the camera is its own control."
+        }
       },
       "relative": {
         "description": "Required units, sensitivity and limit for Relative channels; absent on levels.",

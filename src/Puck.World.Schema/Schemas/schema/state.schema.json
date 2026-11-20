@@ -1,4 +1,5 @@
 {
+  "description": "The world\u0027s state: its rows and cells, body and identity state, lattices, spaces, enums, families, records and pools.",
   "type": [
     "object",
     "null"
@@ -27,10 +28,17 @@
               "Bool",
               "Text",
               "Vector"
-            ]
+            ],
+            "x-enumDescriptions": {
+              "Int": "A whole 64-bit signed integer cell (a score, a round counter, an inventory count, or \u2014 declaring min zero \u2014 a tick-count timer).",
+              "Fixed": "A fixed-point cell holding raw FixedQ4816 bits \u2014 the deterministic replacement for a float in simulation state. Human-authored surfaces (document JSON, console verb arguments, validator refusal text, read-back echoes) use the decimal representation via FixedQ4816.TryParse/ToString; only the addon ABI channel wire and the per-cell mutation payload carry the raw bit pattern.",
+              "Bool": "A boolean cell (a win flag, a toggle). Carries no range \u2014 a gauge cannot bind to it.",
+              "Text": "A short-text cell (a status label, a player name slot), bounded to MaxTextValueLength UTF-16 code units. Carries no range \u2014 a gauge cannot bind to it. The only kind whose value is carried in Text rather than Value.",
+              "Vector": "A vector cell holding an admitted, normalized signed 8-bit embedding vector, carried in Vector rather than Value or Text."
+            }
           },
           "value": {
-            "$ref": "./common.schema.json#/$defs/ShapeNonNullable59"
+            "$ref": "./common.schema.json#/$defs/ShapeNonNullable50"
           },
           "cells": {
             "description": "The row\u0027s current cells (default empty). Refused past its effective capacity, and on a duplicate key, by name \u2014 unless Evicts is set, in which case a write that would grow past capacity evicts the oldest cell instead of refusing (see Evicts). A slot-shaped row (see IsSlot) holds exactly one cell keyed SlotKey; a keyed row may hold any author-chosen keys except SlotKey itself, which is reserved for the value sugar and refused as an authored cell key.",
@@ -42,7 +50,7 @@
                   "type": "string"
                 },
                 "value": {
-                  "$ref": "./common.schema.json#/$defs/ShapeNonNullable59"
+                  "$ref": "./common.schema.json#/$defs/ShapeNonNullable50"
                 },
                 "advance": {
                   "$ref": "./common.schema.json#/$defs/StateAdvance"
@@ -58,10 +66,14 @@
                   "enum": [
                     "Inherit",
                     "None"
-                  ]
+                  ],
+                  "x-enumDescriptions": {
+                    "Inherit": "The cell carries no override of its own: its effective behavior is whichever of Advance/Dynamics/Cycle the row declares, or none at all. The default, and the only legitimate value for a row\u0027s own slot cell.",
+                    "None": "The cell explicitly opts out of its row\u0027s default behavior \u2014 its effective behavior is none, regardless of what the row declares. Refused together with the cell\u0027s own Advance/ Dynamics/Cycle (a cell that opts out declares no trait of its own either) and on the reserved slot key (see SlotKey) \u2014 nothing for a slot\u0027s one cell to opt out of beyond simply not declaring a row trait."
+                  }
                 },
                 "clock": {
-                  "$ref": "./common.schema.json#/$defs/ShapeNonNullable60"
+                  "$ref": "./common.schema.json#/$defs/ShapeNonNullable51"
                 },
                 "visibility": {
                   "$ref": "./common.schema.json#/$defs/StateVisibility"
@@ -172,7 +184,11 @@
             "enum": [
               "Refuse",
               "Saturate"
-            ]
+            ],
+            "x-enumDescriptions": {
+              "Refuse": "Refuse the write by name.",
+              "Saturate": "Clamp the write to the crossed bound, or to MinValue/MaxValue on a side with no declared bound."
+            }
           },
           "evicts": {
             "description": "Whether growth at capacity evicts the oldest member.",
@@ -207,7 +223,12 @@
                   "Event"
                 ],
                 "default": "Boot",
-                "title": "DrawTiming"
+                "title": "DrawTiming",
+                "x-enumDescriptions": {
+                  "Boot": "Drawn once at first fill; a later generate against this site refuses by name.",
+                  "TickPeriod": "Drawn at first fill and redrawable via generate; the author gates cadence with an ordinary $tick-scheduled rule.",
+                  "Event": "Drawn at first fill and redrawable via generate; the author gates redraw with an ordinary event-flag rule."
+                }
               },
               "skip": {
                 "description": "An authored seek, non-negative, default 0: a rebuild advances the generator by skip \u002B cursor rather than cursor. Authored data, the same class as the seed ladder\u0027s own rungs \u2014 it never writes the persisted DrawCursor, which keeps counting raw words from zero exactly as an unskipped site\u0027s does.",
@@ -416,7 +437,7 @@
             "$ref": "./common.schema.json#/$defs/StateCycle"
           },
           "clock": {
-            "$ref": "./common.schema.json#/$defs/ShapeNonNullable60"
+            "$ref": "./common.schema.json#/$defs/ShapeNonNullable51"
           },
           "space": {
             "description": "The vector space name.",
@@ -604,25 +625,7 @@
                               "type": "number"
                             },
                             "surface": {
-                              "type": "object",
-                              "properties": {
-                                "color": {
-                                  "type": "string"
-                                },
-                                "roughness": {
-                                  "type": "number"
-                                },
-                                "metal": {
-                                  "type": "number"
-                                }
-                              },
-                              "required": [
-                                "color",
-                                "roughness",
-                                "metal"
-                              ],
-                              "additionalProperties": false,
-                              "title": "PaletteSurfaceDocument"
+                              "$ref": "./common.schema.json#/$defs/PaletteSurfaceDocumentNonNullable"
                             }
                           },
                           "required": [
@@ -767,80 +770,9 @@
                     "default": null
                   },
                   "glass": {
+                    "$ref": "./common.schema.json#/$defs/PaletteGlassDocument",
                     "description": "The slot\u0027s glass (PaletteGlassDocument), whose tint is Color and whose frost is Roughness; null keeps the slot opaque.",
-                    "type": [
-                      "object",
-                      "null"
-                    ],
-                    "properties": {
-                      "depth": {
-                        "description": "The thickness, in creation units, over which light takes on the tint; finite and positive. A part twice this thick reads twice as deep.",
-                        "type": "number"
-                      },
-                      "ior": {
-                        "description": "The index of refraction, in [1, 4]: 1 bends and reflects nothing, 1.5 is window glass, 1.49 acrylic (null = 1.5).",
-                        "type": [
-                          "number",
-                          "null"
-                        ],
-                        "default": null
-                      },
-                      "scatter": {
-                        "description": "The colour the glass scatters as a medium, the colour a deep body of it reads as under the light arriving at its surface (null = none).",
-                        "type": [
-                          "string",
-                          "null"
-                        ],
-                        "default": null
-                      },
-                      "scattering": {
-                        "description": "How much the medium scatters, per creation unit, finite and non-negative; it also dims what lies behind (null = 0, no scattering).",
-                        "type": [
-                          "number",
-                          "null"
-                        ],
-                        "default": null
-                      },
-                      "contact": {
-                        "description": "Foam or a wet margin where an opaque surface behind the glass comes within reach of its surface, revealed through the slot\u0027s flow coverage (null = none).",
-                        "type": [
-                          "object",
-                          "null"
-                        ],
-                        "properties": {
-                          "reach": {
-                            "description": "The distance, in creation units along the view from the glass surface to the opaque surface behind it, over which the added coverage falls to zero; positive.",
-                            "type": "number"
-                          },
-                          "coverage": {
-                            "description": "The coverage added where the opaque surface touches the glass\u0027s, in [0, 1].",
-                            "type": "number"
-                          }
-                        },
-                        "required": [
-                          "reach",
-                          "coverage"
-                        ],
-                        "additionalProperties": false,
-                        "default": null,
-                        "title": "PaletteGlassContactDocument"
-                      },
-                      "shadowDensity": {
-                        "description": "Shadow extinction per creation unit, finite and non-negative (null = zero).",
-                        "type": [
-                          "number",
-                          "null"
-                        ],
-                        "default": null,
-                        "minimum": 0
-                      }
-                    },
-                    "required": [
-                      "depth"
-                    ],
-                    "additionalProperties": false,
-                    "default": null,
-                    "title": "PaletteGlassDocument"
+                    "default": null
                   },
                   "toon": {
                     "$ref": "./common.schema.json#/$defs/ToonStyleDocument",
@@ -890,139 +822,9 @@
                     "title": "PaletteToonSelectDocument"
                   },
                   "flow": {
+                    "$ref": "./common.schema.json#/$defs/PaletteFlowDocument",
                     "description": "The slot\u0027s flow layer (PaletteFlowDocument): shading that moves along an authored flow over still geometry; null moves nothing.",
-                    "type": [
-                      "object",
-                      "null"
-                    ],
-                    "properties": {
-                      "velocity": {
-                        "$ref": "./common.schema.json#/$defs/DocumentVector3",
-                        "description": "The flow, in units per second."
-                      },
-                      "scale": {
-                        "description": "The pattern\u0027s frequency, in cells per unit; positive (null = 1).",
-                        "type": [
-                          "number",
-                          "null"
-                        ],
-                        "default": null
-                      },
-                      "stretch": {
-                        "description": "How many times longer a pattern feature is along the flow than across; at least 1 (null = 1).",
-                        "type": [
-                          "number",
-                          "null"
-                        ],
-                        "default": null
-                      },
-                      "cycle": {
-                        "description": "The seconds a layer advects before it restarts, in [0.25, 4096] (null = 1).",
-                        "type": [
-                          "number",
-                          "null"
-                        ],
-                        "default": null
-                      },
-                      "tilt": {
-                        "description": "The normal tilt per unit slope of the pattern; non-negative (null = 0).",
-                        "type": [
-                          "number",
-                          "null"
-                        ],
-                        "default": null
-                      },
-                      "coverage": {
-                        "description": "The share of the slot the pattern reveals Surface over, in [0, 1] (null = 0).",
-                        "type": [
-                          "number",
-                          "null"
-                        ],
-                        "default": null
-                      },
-                      "softness": {
-                        "description": "The coverage edge\u0027s width, in [0, 1] (null = 0.1).",
-                        "type": [
-                          "number",
-                          "null"
-                        ],
-                        "default": null
-                      },
-                      "surface": {
-                        "$ref": "./common.schema.json#/$defs/PaletteSurfaceDocument",
-                        "description": "The surface the coverage reveals; required when Coverage is positive.",
-                        "default": null
-                      },
-                      "seed": {
-                        "description": "The pattern\u0027s seed (null = 0).",
-                        "type": [
-                          "integer",
-                          "null"
-                        ],
-                        "default": null
-                      },
-                      "lane": {
-                        "description": "The render lane whose value scales the velocity: 0 to 3 an inhabited body\u0027s look lanes (a placement without them reads zero and stands still), 4 to 7 the world\u0027s render.lanes (SdfLanes). Null keeps the velocity constant.",
-                        "type": [
-                          "integer",
-                          "null"
-                        ],
-                        "default": null
-                      },
-                      "frame": {
-                        "description": "The frame the velocity is authored in (null = Object).",
-                        "enum": [
-                          "Object",
-                          "World",
-                          null
-                        ],
-                        "default": null,
-                        "title": "SdfFlowFrame"
-                      },
-                      "coverageLane": {
-                        "description": "The render lane, as Lane, whose value saturated to [0, 1] scales Coverage. Null keeps the coverage constant.",
-                        "type": [
-                          "integer",
-                          "null"
-                        ],
-                        "default": null
-                      },
-                      "region": {
-                        "description": "A sphere in world coordinates within which the velocity varies.",
-                        "type": [
-                          "object",
-                          "null"
-                        ],
-                        "properties": {
-                          "center": {
-                            "$ref": "./common.schema.json#/$defs/DocumentVector3",
-                            "description": "Centre in world coordinates."
-                          },
-                          "radius": {
-                            "description": "Radius in world units over which the velocity blends back to the base, finite and positive.",
-                            "type": "number"
-                          },
-                          "velocity": {
-                            "$ref": "./common.schema.json#/$defs/DocumentVector3",
-                            "description": "Velocity at the centre in the flow\u0027s velocity frame, before placement scaling."
-                          }
-                        },
-                        "required": [
-                          "center",
-                          "radius",
-                          "velocity"
-                        ],
-                        "additionalProperties": false,
-                        "default": null,
-                        "title": "PaletteFlowRegionDocument"
-                      }
-                    },
-                    "required": [
-                      "velocity"
-                    ],
-                    "additionalProperties": false,
-                    "default": null,
-                    "title": "PaletteFlowDocument"
+                    "default": null
                   },
                   "shade": {
                     "$ref": "./common.schema.json#/$defs/ShadeReference",
@@ -1092,14 +894,9 @@
                           "default": null
                         },
                         "lift": {
+                          "$ref": "./common.schema.json#/$defs/SdfLiftNullable",
                           "description": "Prism only: extrude or revolve.",
-                          "enum": [
-                            "Revolve",
-                            "Extrude",
-                            null
-                          ],
-                          "default": null,
-                          "title": "SdfLift"
+                          "default": null
                         },
                         "rounding": {
                           "description": "The edge-rounding radius, as a shape\u0027s.",
@@ -1126,75 +923,9 @@
                           "default": null
                         },
                         "curve": {
+                          "$ref": "./common.schema.json#/$defs/ShapeCurveDocument",
                           "description": "Sweep only: the curve, in the frame\u0027s units.",
-                          "type": [
-                            "object",
-                            "null"
-                          ],
-                          "properties": {
-                            "a": {
-                              "$ref": "./common.schema.json#/$defs/DocumentVector3",
-                              "description": "The curve\u0027s first control point, in the shape\u0027s local (workbench) frame \u2014 creation units, or a state.\u003Crow\u003E[.\u003Ckey\u003E] reference."
-                            },
-                            "b": {
-                              "$ref": "./common.schema.json#/$defs/DocumentVector3",
-                              "description": "The curve\u0027s middle control point."
-                            },
-                            "c": {
-                              "$ref": "./common.schema.json#/$defs/DocumentVector3",
-                              "description": "The curve\u0027s last control point."
-                            },
-                            "radiusStart": {
-                              "description": "The sweep radius at t = 0; finite and strictly positive.",
-                              "type": "number"
-                            },
-                            "radiusEnd": {
-                              "description": "The sweep radius at t = 1; finite and strictly positive.",
-                              "type": "number"
-                            },
-                            "bulge": {
-                              "description": "The mid-span radius bulge amplitude (null = 0), added by bulge\u00B7sin(\u03C0\u00B7t)^0.65; refused past MaxSweepBulgeRatio times max(RadiusStart, RadiusEnd).",
-                              "type": [
-                                "number",
-                                "null"
-                              ],
-                              "default": null
-                            },
-                            "strands": {
-                              "description": "The helical strand count (null = 1), in [MinSweepStrands, MaxSweepStrands]. A count above 1 is render-only \u2014 refused for deterministic field contact by name, matching Sweep\u0027s own status.",
-                              "type": [
-                                "integer",
-                                "null"
-                              ],
-                              "default": null
-                            },
-                            "twist": {
-                              "description": "The strand orbit rate, in turns along the curve (null = 0); finite.",
-                              "type": [
-                                "number",
-                                "null"
-                              ],
-                              "default": null
-                            },
-                            "strandOffset": {
-                              "description": "The strand orbit radius, in creation units (null = 0); non-negative, finite, refused past MaxSweepStrandOffsetRatio times max(RadiusStart, RadiusEnd).",
-                              "type": [
-                                "number",
-                                "null"
-                              ],
-                              "default": null
-                            }
-                          },
-                          "required": [
-                            "a",
-                            "b",
-                            "c",
-                            "radiusStart",
-                            "radiusEnd"
-                          ],
-                          "additionalProperties": false,
-                          "default": null,
-                          "title": "ShapeCurveDocument"
+                          "default": null
                         }
                       },
                       "required": [
@@ -1885,7 +1616,13 @@
                   "Both"
                 ],
                 "default": "None",
-                "title": "TopologyWrap"
+                "title": "TopologyWrap",
+                "x-enumDescriptions": {
+                  "None": "Neither axis wraps.",
+                  "X": "The x axis wraps.",
+                  "Y": "The y axis wraps.",
+                  "Both": "Both axes wrap."
+                }
               },
               "band": {
                 "description": "The vertical half-extent about the origin\u0027s Y a position must lie within to resolve to a cell (cellOf); 0 resolves any height, so a piece on the floor beneath a table still reads as on its square.",
@@ -2254,7 +1991,17 @@
                   "TruncatedTrihexagonal",
                   "Penrose"
                 ],
-                "title": "TilingFamily"
+                "title": "TilingFamily",
+                "x-enumDescriptions": {
+                  "Triangular": "3.3.3.3.3.3 \u2014 equilateral triangles, three neighbours each.",
+                  "Kagome": "3.6.3.6 \u2014 hexagons and triangles, the trihexagonal (kagome) tiling.",
+                  "TruncatedSquare": "4.8.8 \u2014 octagons with squares in the gaps.",
+                  "Rhombitrihexagonal": "3.4.6.4 \u2014 hexagons ringed by squares and triangles.",
+                  "TruncatedHexagonal": "3.12.12 \u2014 dodecagons with triangles in the gaps.",
+                  "ElongatedTriangular": "3.3.3.4.4 \u2014 rows of squares alternating with rows of triangles.",
+                  "TruncatedTrihexagonal": "4.6.12 \u2014 dodecagons, hexagons, and squares.",
+                  "Penrose": "The Penrose P3 rhomb tiling (thick and thin rhombs), grown by inflation from a sun vertex."
+                }
               },
               "radius": {
                 "description": "The patch radius in edge lengths, at least 1.",
@@ -2388,7 +2135,7 @@
                                 "type": "string"
                               },
                               "comparison": {
-                                "$ref": "./common.schema.json#/$defs/ExpressionComparison",
+                                "$ref": "./common.schema.json#/$defs/ExpressionComparisonNonNullable",
                                 "description": "The comparison."
                               },
                               "value": {
@@ -2420,12 +2167,8 @@
                                 "type": "string"
                               },
                               "op": {
-                                "description": "Set or add.",
-                                "enum": [
-                                  "Set",
-                                  "Add"
-                                ],
-                                "title": "WorldFieldWriteOp"
+                                "$ref": "./common.schema.json#/$defs/WorldFieldWriteOp",
+                                "description": "Set or add."
                               },
                               "value": {
                                 "description": "The constant written or added; the result clamps to the field\u0027s range.",
@@ -2500,7 +2243,7 @@
                           "type": "string"
                         },
                         "comparison": {
-                          "$ref": "./common.schema.json#/$defs/ExpressionComparison",
+                          "$ref": "./common.schema.json#/$defs/ExpressionComparisonNonNullable",
                           "description": "The comparison."
                         },
                         "value": {
@@ -2794,7 +2537,11 @@
                     "Saturate"
                   ],
                   "default": "Refuse",
-                  "title": "StateOverflow"
+                  "title": "StateOverflow",
+                  "x-enumDescriptions": {
+                    "Refuse": "Refuse the write by name.",
+                    "Saturate": "Clamp the write to the crossed bound, or to MinValue/MaxValue on a side with no declared bound."
+                  }
                 },
                 "enum": {
                   "default": null,

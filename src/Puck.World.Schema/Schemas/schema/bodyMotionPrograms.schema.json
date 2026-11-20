@@ -1,4 +1,5 @@
 {
+  "description": "The fixed-phase body motion programs kits select by name.",
   "type": [
     "array",
     "null"

@@ -1,4 +1,5 @@
 {
+  "description": "The rules that react to the world\u0027s state and write it.",
   "type": [
     "array",
     "null"
@@ -28,13 +29,9 @@
         "default": null
       },
       "mode": {
+        "$ref": "./common.schema.json#/$defs/ActionTriggerMode",
         "description": "Whether the rule fires every tick the gate holds (Level, the default) or once per crossing (Edge). A rule that writes a row almost always wants Edge: level-firing an addState writes one journal entry per tick.",
-        "enum": [
-          "Level",
-          "Edge"
-        ],
-        "default": "Level",
-        "title": "ActionTriggerMode"
+        "default": "Level"
       },
       "forEach": {
         "$ref": "./common.schema.json#/$defs/StateChannelRefNonNullable",
@@ -144,7 +141,11 @@
               "Weighted"
             ],
             "default": "HighestScore",
-            "title": "WorldDecisionMode"
+            "title": "WorldDecisionMode",
+            "x-enumDescriptions": {
+              "HighestScore": "The greatest score wins; equal scores retain option order, then stable body index within a neighbor option.",
+              "Weighted": "Positive scores are relative weights; non-positive scores cannot win."
+            }
           },
           "scoreKind": {
             "$ref": "./common.schema.json#/$defs/CellKindNonNullable",

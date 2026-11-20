@@ -1,4 +1,5 @@
 {
+  "description": "How much input each owner retains and how late an input may arrive and still count.",
   "type": [
     "object",
     "null"
@@ -36,7 +37,11 @@
         "Admission"
       ],
       "default": "Capture",
-      "title": "WorldInputJudgement"
+      "title": "WorldInputJudgement",
+      "x-enumDescriptions": {
+        "Capture": "Captured time, including the owner\u0027s admitted calibration.",
+        "Admission": "Processing interval start."
+      }
     },
     "crossings": {
       "description": "Named threshold/hysteresis predicates over ordered samples.",

@@ -1,4 +1,5 @@
 {
+  "description": "The census: how many local seats, network players and simulated bodies the world holds, and how they are placed and varied.",
   "type": [
     "object",
     "null"
@@ -21,7 +22,11 @@
           "Eager",
           "OnDemand"
         ],
-        "title": "SeatActivationPolicy"
+        "title": "SeatActivationPolicy",
+        "x-enumDescriptions": {
+          "Eager": "The seat\u0027s body is minted at boot, mirroring a session join for it immediately \u2014 the only policy seat 0 (player 1) may declare, since a session always needs a first player.",
+          "OnDemand": "The seat stays empty at boot; its body is minted the first time something claims it."
+        }
       }
     },
     "networkPlayers": {
@@ -83,7 +88,12 @@
             "SelfOnly"
           ],
           "default": "All",
-          "title": "WorldObserverDisclosureMode"
+          "title": "WorldObserverDisclosureMode",
+          "x-enumDescriptions": {
+            "All": "Every active body. The default, and what every world authoring no policy delivers.",
+            "Radius": "Only bodies within Radius metres of the observer\u0027s own body, plus that body itself. An observer with no body of its own is delivered nothing.",
+            "SelfOnly": "Only the observer\u0027s own body. An observer with no body of its own is delivered nothing."
+          }
         },
         "radius": {
           "description": "The disclosure radius in metres for Radius; authored only for that mode.",

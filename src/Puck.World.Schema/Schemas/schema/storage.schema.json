@@ -1,4 +1,5 @@
 {
+  "description": "Where the world keeps durable identity and saves; absent, identity is declined.",
   "type": [
     "object",
     "null"

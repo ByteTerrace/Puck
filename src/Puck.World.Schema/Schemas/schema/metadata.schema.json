@@ -1,4 +1,5 @@
 {
+  "description": "Facts about the world for its readers, such as its credited authors.",
   "type": [
     "object",
     "null"

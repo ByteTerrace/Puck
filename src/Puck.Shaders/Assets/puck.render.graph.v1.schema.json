@@ -66,7 +66,12 @@
                   "Absolute",
                   "Render"
                 ],
-                "title": "ShaderPipelineDimensionMode"
+                "title": "ShaderPipelineDimensionMode",
+                "x-enumDescriptions": {
+                  "Relative": "Dimensions are a scale of the frame extent.",
+                  "Absolute": "Dimensions are absolute pixels.",
+                  "Render": "Dimensions scale the package\u0027s render extent inside its output."
+                }
               },
               "width": {
                 "type": "number"
@@ -98,7 +103,13 @@
               "Host"
             ],
             "default": "Undefined",
-            "title": "ShaderPipelineInitialization"
+            "title": "ShaderPipelineInitialization",
+            "x-enumDescriptions": {
+              "Undefined": "No initial contents. A first-frame read is refused.",
+              "Zero": "Clear the resource to zero before the first pass.",
+              "External": "The resource is supplied by the host.",
+              "Host": "The resource is a fixed-size buffer the host writes, a host buffer port: the node running the graph owns its region (ShaderPipelineRenderNode.BindRegion), and its copy sets are reserved when the graph is admitted."
+            }
           },
           "sizeBytes": {
             "description": "A fixed buffer\u0027s capacity in bytes, a multiple of four and of StrideBytes, or null for an image or a counted buffer. A buffer without a stride is a raw buffer of 32-bit words, read and written by byte address.",
@@ -158,7 +169,18 @@
                       "ExtentTiles",
                       "RenderExtentTiles"
                     ],
-                    "title": "ShaderPipelineCountBasis"
+                    "title": "ShaderPipelineCountBasis",
+                    "x-enumDescriptions": {
+                      "Extent": "Per pixel of the frame extent.",
+                      "Instances": "Per instance of the program the host renders.",
+                      "ProgramWords": "Per word of the program the host renders.",
+                      "Viewports": "Per viewport the host renders into one frame.",
+                      "DynamicTransforms": "Per dynamic transform the host provisions.",
+                      "InstanceMaskWords": "Per word of one instance mask, which the host derives from its instances.",
+                      "RenderExtent": "Per pixel of the package\u0027s allocated render extent.",
+                      "ExtentTiles": "Per tile of the frame extent: TileEdge pixels a side, each axis rounded up.",
+                      "RenderExtentTiles": "Per tile of the package\u0027s allocated render extent, as ExtentTiles counts them."
+                    }
                   }
                 },
                 "elements": {
@@ -248,7 +270,12 @@
               "Fullscreen",
               "Geometry"
             ],
-            "title": "ShaderPipelineDocumentPassKind"
+            "title": "ShaderPipelineDocumentPassKind",
+            "x-enumDescriptions": {
+              "Compute": "A compute dispatch.",
+              "Fullscreen": "A fullscreen graphics pass: one triangle covering its color attachment.",
+              "Geometry": "A graphics pass that draws its declared vertices as an indexed triangle list into its color attachment, optionally tested against and writing a depth attachment."
+            }
           },
           "inputs": {
             "description": "The versions the pass reads, each a port of its interface. Set PreviousFrame explicitly for feedback.",
@@ -400,7 +427,11 @@
               null
             ],
             "default": null,
-            "title": "ShaderPipelineVertexInput"
+            "title": "ShaderPipelineVertexInput",
+            "x-enumDescriptions": {
+              "VertexId": "The vertex stage derives each corner from SV_VertexID; no vertex buffer is bound.",
+              "Position": "The vertex stage reads each corner\u0027s clip-space float2 from a POSITION attribute, fed by the shared fullscreen-triangle vertex buffer."
+            }
           },
           "geometry": {
             "description": "A geometry pass\u0027s vertices, indices and vertex layout. Only a geometry pass declares it, and it must.",
@@ -470,7 +501,11 @@
                   "UInt32"
                 ],
                 "default": "UInt16",
-                "title": "ShaderPipelineIndexFormat"
+                "title": "ShaderPipelineIndexFormat",
+                "x-enumDescriptions": {
+                  "UInt16": "16-bit unsigned indices.",
+                  "UInt32": "32-bit unsigned indices."
+                }
               }
             },
             "required": [
@@ -496,7 +531,15 @@
               null
             ],
             "default": null,
-            "title": "ShaderPipelineDepthCompare"
+            "title": "ShaderPipelineDepthCompare",
+            "x-enumDescriptions": {
+              "Less": "The fragment\u0027s depth is less.",
+              "LessOrEqual": "The fragment\u0027s depth is less or equal.",
+              "Greater": "The fragment\u0027s depth is greater.",
+              "GreaterOrEqual": "The fragment\u0027s depth is greater or equal.",
+              "Equal": "The fragment\u0027s depth is equal.",
+              "Always": "Every fragment passes, so the last one drawn at a pixel wins."
+            }
           },
           "blend": {
             "description": "A graphics pass\u0027s blend policy; null means Opaque, the only policy the planner admits.",
@@ -507,7 +550,12 @@
               null
             ],
             "default": null,
-            "title": "ShaderPipelineBlend"
+            "title": "ShaderPipelineBlend",
+            "x-enumDescriptions": {
+              "Opaque": "A fragment replaces the attachment\u0027s contents.",
+              "AlphaOver": "A fragment blends over the attachment by its alpha. Refused.",
+              "Additive": "A fragment adds to the attachment. Refused."
+            }
           },
           "alphaTest": {
             "description": "An alpha-test cutoff. The planner refuses every value by name.",
@@ -531,7 +579,12 @@
                   "Groups",
                   "Indirect"
                 ],
-                "title": "ShaderPipelineDispatchKind"
+                "title": "ShaderPipelineDispatchKind",
+                "x-enumDescriptions": {
+                  "Extent": "Enough workgroups to cover the frame extent, one invocation per pixel.",
+                  "Groups": "The declared group counts.",
+                  "Indirect": "Group counts a buffer version holds: three 32-bit words at a byte offset, which an earlier pass writes and the dispatch reads as indirect arguments."
+                }
               },
               "groupCountX": {
                 "description": "A Groups dispatch\u0027s group count in x, otherwise one.",

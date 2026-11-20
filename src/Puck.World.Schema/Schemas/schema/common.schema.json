@@ -18,6 +18,22 @@
         }
       ]
     },
+    "ShadowTier": {
+      "description": "The engine-wide shadow tier: whether the shadow cascades render, and at what resolution. Each step down halves every cascade\u0027s texels along each side, a quarter of its memory and fill, so its shadows soften and lose their finest contacts over the same reach.",
+      "enum": [
+        "Off",
+        "Low",
+        "Medium",
+        "High"
+      ],
+      "title": "ShadowTier",
+      "x-enumDescriptions": {
+        "Off": "No shadows: no cascade renders or is held, and every light goes unshadowed.",
+        "Low": "Cascades at a quarter of the full resolution, 512 texels a side.",
+        "Medium": "Cascades at half the full resolution, 1024 texels a side.",
+        "High": "Cascades at the full resolution, 2048 texels a side."
+      }
+    },
     "WorldRenderScaleTier": {
       "description": "The enumerated world render-scale tiers a player picks at the console and a view\u0027s floor names, over the continuous render-scale ceiling a view carries (SdfViewSnapshot.RenderScale). A view\u0027s output keeps its rect\u0027s extent; below native it traces and shades a grid of that extent times its render scale, rounded up on each axis to a step of the render graph\u0027s extent quantization (RenderGraphExtent.Quantize, sixteen steps per power-of-two octave), and its own resolve pass reconstructs the grid into the output at world.upscale-sharpness. A layout transition\u0027s dip moves that grid inside the ceiling (SdfViewSnapshot.ResolvedRenderScale); the enumerated set lives only at the user surface. WorldRenderScaleTiers is the one definition of the names and scales, which the quality presets\u0027 floors, the console world.render-scale verb and the per-view floors read; a ceiling is a scalar. Each extent below is a lone whole-display view at 1280x800.",
       "enum": [
@@ -27,7 +43,14 @@
         "Quarter",
         "Eighth"
       ],
-      "title": "WorldRenderScaleTier"
+      "title": "WorldRenderScaleTier",
+      "x-enumDescriptions": {
+        "Native": "Native resolution (scale 1): the view renders at its rect\u0027s own extent, 1280x800, and a lone whole-display view is not placed at all, so the root shows the world\u0027s output itself.",
+        "ThreeQuarter": "Scale 221/255 (about 0.867), which the extent quantization rounds up to 0.875: 1120x700, about three quarters of the native pixel work.",
+        "Half": "Scale 181/255 (about 0.710), which the extent quantization rounds up to 0.75: 960x600, about 0.56 of the native pixel work.",
+        "Quarter": "Scale 128/255 (about 0.502), which the extent quantization rounds up to 0.5625: 720x450, about 0.32 of the native pixel work.",
+        "Eighth": "Scale 90/255 (about 0.353), which the extent quantization rounds up to 0.375: 480x300, about 0.14 of the native pixel work; the most aggressive tier."
+      }
     },
     "SdfIndirectTier": {
       "enum": [
@@ -36,7 +59,12 @@
         "High",
         null
       ],
-      "title": "SdfIndirectTier"
+      "title": "SdfIndirectTier",
+      "x-enumDescriptions": {
+        "Off": "No indirect light: the coarse volume occludes, and none of its light is applied.",
+        "Medium": "The coarse volume.",
+        "High": "The fine volume."
+      }
     },
     "WorldDistantShadows": {
       "description": "The key light\u0027s distant shadow map: one more shadow map past the far cascade, with texels of its own, so ridges shadow walls hundreds of metres off without costing the near cascades precision. It draws only what stands still and holds what it drew while the light turns within TurnDegrees and the eye stays within an eighth of the reach of where it was centred, so it costs a frame nothing between those changes. A device\u0027s quality row chooses it (DistantShadows); a view\u0027s shadow quality halves its texels as it does the cascades\u0027.",
@@ -73,14 +101,8 @@
       ],
       "properties": {
         "shadows": {
-          "description": "The soft-shadow tier the preset selects.",
-          "enum": [
-            "Off",
-            "Low",
-            "Medium",
-            "High"
-          ],
-          "title": "ShadowTier"
+          "$ref": "#/$defs/ShadowTier",
+          "description": "The soft-shadow tier the preset selects."
         },
         "ambientOcclusion": {
           "description": "Whether the preset enables ambient occlusion.",
@@ -915,7 +937,12 @@
         "Step",
         null
       ],
-      "title": "WorldEase"
+      "title": "WorldEase",
+      "x-enumDescriptions": {
+        "Linear": "Time runs evenly from this key to the next.",
+        "Smooth": "Time starts and ends slowly: t\u00B2 (3 \u2212 2t), so the value leaves and arrives at rest.",
+        "Step": "The value holds this key\u0027s until the next key, where it changes at once."
+      }
     },
     "WorldRenderSkyStop": {
       "description": "One gradient stop.",
@@ -2530,7 +2557,21 @@
         "Superellipsoid",
         "Sweep"
       ],
-      "title": "SdfSolidPrimitive"
+      "title": "SdfSolidPrimitive",
+      "x-enumDescriptions": {
+        "Sphere": "A sphere.",
+        "Box": "A box.",
+        "Torus": "A torus.",
+        "Cylinder": "A cylinder.",
+        "Capsule": "A capsule.",
+        "Ellipsoid": "An ellipsoid.",
+        "RoundCone": "A tapered capsule \u2014 a fat base narrowing to a rounded tip along \u002BY (teeth, horns, spikes).",
+        "Plane": "An infinite plane bounding a solid half-space; local \u002BY is the outward normal.",
+        "Cone": "A sharp circular cone with a flat base, centered along local Y.",
+        "Prism": "A bounded profile in local XY extruded along Z. The default trapezoid has unit bottom half-width, half-height and depth, with an authored top-to-bottom width ratio (default one half). SdfPrismProfile selects rounded rectangles, polygons, ellipses, or a convex vertex list instead.",
+        "Superellipsoid": "A generalized ellipsoid: q = pow(abs(p)/r, e); d = (pow(q.x\u002Bq.y\u002Bq.z, 1/e) - 1) * min(r), unit radii (1,1,1) and an authored exponent e in [MinSuperellipsoidExponent, MaxSuperellipsoidExponent] (the document\u0027s exponent field carries it; unauthored is the minimum, the ellipsoid itself \u2014 an Ellipsoid emits the identical instruction, since every ellipsoid is this shape at that exponent). A squircle/rounded-cube family: the minimum exponent is a plain ellipsoid, larger values round toward a box.",
+        "Sweep": "A quadratic Bezier curve swept with a tapering, optionally bulging radius, optionally as 1-4 helical strands \u2014 see Sweep. NOT a closed solid a body can stand on in the sense the rest of this enum\u0027s members are: its field is \u0022exact enough\u0022, not exact, and carries no Reach unit-scale law \u2014 its control points and radii already carry creation-unit dimensions directly (see SweepReach). The authoring layer admits it only with a curve facet naming its control points and radii."
+      }
     },
     "SdfPrismProfileKind": {
       "description": "The cross-section of a prism, in its local XY plane.",
@@ -2543,7 +2584,16 @@
         "Convex",
         "Path"
       ],
-      "title": "SdfPrismProfileKind"
+      "title": "SdfPrismProfileKind",
+      "x-enumDescriptions": {
+        "Trapezoid": "A trapezoid controlled by the shape\u0027s taper.",
+        "RoundedRectangle": "A rectangle with independently controlled corner rounding.",
+        "Polygon": "A regular polygon, stretched by the authored X/Y scale.",
+        "Ellipse": "An exact elliptical profile, extruded with flat front and rear caps.",
+        "ChamferedRectangle": "A rectangle with independently controlled 45-degree corner chamfers.",
+        "Convex": "An arbitrary convex polygon authored by Vertices, with CornerRadius reused as a uniform corner-rounding radius. The exact convex-polygon SDF, not the study\u0027s smoothed half-plane intersection.",
+        "Path": "Filled contours or variable-width strokes, flattened with an explicit tolerance and edge budget."
+      }
     },
     "SdfPathStroke": {
       "description": "Round-ended stroke radii. Smooth interpolates with smoothstep over [From, To]; otherwise interpolation is linear over that interval. Parameterization gives every authored segment an equal part of [0, 1].",
@@ -2782,6 +2832,18 @@
       "additionalProperties": false,
       "title": "SdfPrismProfile"
     },
+    "SdfLift": {
+      "description": "How a 2D-primitive family shape (RoundedRectangle, RegularPolygon, Star, Trapezoid, Ellipse, ChamferedRectangle) is lifted from its 2D signed-distance field into a 3D solid. The kernels read each member as SDF_LIFT_* from the generated sdf-isa.hlsli; the mode is packed into the shape instruction\u0027s Data1.y and decoded as \u003E 0.5.",
+      "enum": [
+        "Revolve",
+        "Extrude"
+      ],
+      "title": "SdfLift",
+      "x-enumDescriptions": {
+        "Revolve": "Revolve the 2D profile around the local Y axis (the revolve lift operator): the profile sits in the (radial, Y) half-plane at a radial offset (the shape\u0027s liftAmount). Exact when the offset clears the profile\u0027s radial extent (a torus-like solid); a harmless conservative underestimate near the axis when the profile crosses it (offset 0 = a solid of revolution centred on the axis, e.g. a spheroid from an ellipse). Always 1-Lipschitz.",
+        "Extrude": "Extrude the 2D profile along the local Z axis (the extrude lift operator) to the given half-height (the shape\u0027s liftAmount): a prism/slab whose cross-section is the exact 2D shape. Exact for any exact 2D field, and 1-Lipschitz."
+      }
+    },
     "SdfSweepParameters": {
       "type": [
         "object",
@@ -2874,12 +2936,8 @@
           "default": null
         },
         "lift": {
-          "enum": [
-            "Revolve",
-            "Extrude"
-          ],
-          "default": "Extrude",
-          "title": "SdfLift"
+          "$ref": "#/$defs/SdfLift",
+          "default": "Extrude"
         },
         "rounding": {
           "type": "number",
@@ -3178,7 +3236,11 @@
         "Camera",
         "Window"
       ],
-      "title": "WorldScreenProjection"
+      "title": "WorldScreenProjection",
+      "x-enumDescriptions": {
+        "Camera": "The destination renders through its own declared (or default) camera, unaffected by the viewer\u0027s position \u2014 today\u0027s behavior, unchanged for every session facet authored before this member existed.",
+        "Window": "The destination renders through an off-axis frustum fitted to THIS face\u0027s aperture, apexed at the viewer\u0027s eye mapped through the border pair\u0027s isometry (see Puck.World.Client.WorldWindowProjectionMath, downstream of this project \u2014 see docs/project-map.md\u0027s layering) \u2014 requires this same face\u0027s Portal to author Mapped with a Counterpart (refused by name otherwise \u2014 see WorldDefinitionValidator), since the aperture and the mapping both come from the SAME border pair. CameraName is ignored under this mode \u2014 the camera is derived every produced frame, never an authored row."
+      }
     },
     "WorldScreenSourceSession": {
       "description": "A live rendered view of another world, resolved through a destinations row (docs/architecture/worlds.md, \u0022Observation and display\u0022). The face/screen resolves the same resolver-owned identity a portal crossing at the same door would land in (WorldSessionResolver), attaches an observation lease to the resolved instance\u0027s server, and mirrors just enough of its delivered definition/snapshots to render its static authored geometry through CameraName (or the destination\u0027s default projection). It never re-derives durability/scope/generation itself \u2014 those are the destination row\u0027s own facts.",
@@ -4005,7 +4067,15 @@
         "SeatCameraApplication",
         "ScreenFramed"
       ],
-      "title": "OverlayFact"
+      "title": "OverlayFact",
+      "x-enumDescriptions": {
+        "SeatInput": "The seat sent any input (a routed signal) this tick.",
+        "PointerMotion": "The seat\u0027s pointer moved this tick.",
+        "WheelOpen": "The seat\u0027s binding wheel is open.",
+        "ConsoleOpen": "The seat\u0027s console is open.",
+        "SeatCameraApplication": "The seat\u0027s camera control application is active (see Target).",
+        "ScreenFramed": "The seat is captured on a screen it engaged, and its view shows that screen\u0027s picture alone (not the held view of a carried screen, nor the room after player.frame)."
+      }
     },
     "OverlayPredicateNow": {
       "description": "The fact holds this frame.",
@@ -5385,6 +5455,27 @@
         }
       ]
     },
+    "ExpressionComparisonNonNullable": {
+      "description": "A comparison as a document spells it: one of the six comparison operations of ExpressionOp (Equal, NotEqual, Less, LessOrEqual, Greater, GreaterOrEqual), named by its member name exactly. Another operation\u0027s name, another casing, and a number are refused on read.",
+      "title": "ExpressionComparison",
+      "type": "string",
+      "enum": [
+        "Equal",
+        "NotEqual",
+        "Less",
+        "LessOrEqual",
+        "Greater",
+        "GreaterOrEqual"
+      ],
+      "x-enumDescriptions": {
+        "Equal": "Equality, pushing Int 1 or 0.",
+        "NotEqual": "Inequality, pushing Int 1 or 0.",
+        "Less": "Less-than, pushing Int 1 or 0.",
+        "LessOrEqual": "Less-or-equal, pushing Int 1 or 0.",
+        "Greater": "Greater-than, pushing Int 1 or 0.",
+        "GreaterOrEqual": "Greater-or-equal, pushing Int 1 or 0."
+      }
+    },
     "ActionPredicateCompareState": {
       "description": "Compares a named state cell against either a fixed authored value, or another named state cell/reserved channel read live at the same evaluation. Exactly one of Value, Text and ComparandState must be present. The comparand-row spelling is what lets a gate track a moving threshold \u2014 $tick compared against a schedule row the rule\u0027s own effects advance is \u0022every N ticks\u0022; a round row compared against a declared length row is a round boundary \u2014 composition over the same two-sided comparison, never a new mechanism.",
       "properties": {
@@ -5396,7 +5487,7 @@
           "description": "A declared state-section row name, or one of the reserved channels the compiler\u0027s vocabulary answers (RuleFacts and whatever a document project registers). Inside a host\u0027s per-participant action program, a named counter slot the program declares."
         },
         "comparison": {
-          "$ref": "#/$defs/ExpressionComparison",
+          "$ref": "#/$defs/ExpressionComparisonNonNullable",
           "description": "The comparison to apply."
         },
         "value": {
@@ -5840,7 +5931,14 @@
         "Vector",
         null
       ],
-      "title": "CellKind"
+      "title": "CellKind",
+      "x-enumDescriptions": {
+        "Int": "A whole 64-bit signed integer cell (a score, a round counter, an inventory count, or \u2014 declaring min zero \u2014 a tick-count timer).",
+        "Fixed": "A fixed-point cell holding raw FixedQ4816 bits \u2014 the deterministic replacement for a float in simulation state. Human-authored surfaces (document JSON, console verb arguments, validator refusal text, read-back echoes) use the decimal representation via FixedQ4816.TryParse/ToString; only the addon ABI channel wire and the per-cell mutation payload carry the raw bit pattern.",
+        "Bool": "A boolean cell (a win flag, a toggle). Carries no range \u2014 a gauge cannot bind to it.",
+        "Text": "A short-text cell (a status label, a player name slot), bounded to MaxTextValueLength UTF-16 code units. Carries no range \u2014 a gauge cannot bind to it. The only kind whose value is carried in Text rather than Value.",
+        "Vector": "A vector cell holding an admitted, normalized signed 8-bit embedding vector, carried in Vector rather than Value or Text."
+      }
     },
     "ActionPredicateCompareValue": {
       "description": "Comparison of two bounded numeric expressions. Arithmetic failure makes this comparison false.",
@@ -5853,7 +5951,7 @@
           "description": "Left numeric expression."
         },
         "comparison": {
-          "$ref": "#/$defs/ExpressionComparison",
+          "$ref": "#/$defs/ExpressionComparisonNonNullable",
           "description": "The comparison operation."
         },
         "right": {
@@ -6180,7 +6278,12 @@
         "ProducerTarget",
         "AffectingSubject"
       ],
-      "title": "ActionTarget"
+      "title": "ActionTarget",
+      "x-enumDescriptions": {
+        "Self": "The participant whose trigger fired.",
+        "ProducerTarget": "The target selected by the participant\u0027s active producer.",
+        "AffectingSubject": "The participant that applied the recipient\u0027s most recent targeted effect."
+      }
     },
     "ActionEffectSetState": {
       "description": "Writes a named state cell \u2014 a state-section row\u0027s cell at rule scope, a counter slot inside a host\u0027s per-participant action program.",
@@ -6363,7 +6466,14 @@
         "Random",
         "Slice"
       ],
-      "title": "ZoneSelector"
+      "title": "ZoneSelector",
+      "x-enumDescriptions": {
+        "Key": "Select by stable token identity.",
+        "First": "Select the first cell of an ordered zone.",
+        "Last": "Select the last cell of an ordered zone.",
+        "Random": "Select by one draw from an explicitly named stream-draw state row.",
+        "Slice": "Select the keyed token and every token after it in the zone \u2014 a cascade\u0027s tail, moved in order as one run (a solitaire column\u0027s run from a card to its top)."
+      }
     },
     "StateTransformTransfer": {
       "description": "Moves selected tokens, preserving identity. A random draw advances only when the whole transfer commits.",
@@ -6633,7 +6743,19 @@
         "Shift",
         "Image"
       ],
-      "title": "BoardCombineOp"
+      "title": "BoardCombineOp",
+      "x-enumDescriptions": {
+        "Copy": "Every cell of left, value for value, including its empty value even when the target\u0027s differs.",
+        "Fill": "Every cell a member.",
+        "Clear": "No cell a member.",
+        "And": "Members of both left and right.",
+        "Or": "Members of either.",
+        "Xor": "Members of exactly one.",
+        "AndNot": "Members of left that are not members of right.",
+        "Not": "Every cell that is not a member of left.",
+        "Shift": "Each member of left moved one step along direction; a member with no neighbour that way drops \u2014 the same move boardShift makes on a 64-bit mask.",
+        "Image": "Each member of left carried through the point-group element \u2014 the same move boardImage makes."
+      }
     },
     "StateTransformBoardCombine": {
       "description": "Rewrites a board from one or two boards over the same topology, cell by cell, in one journaled mutation: the set algebra $board:mask and the bit operators give a board of at most 64 cells, for a board of any size. A cell is a member when its value is not its board\u0027s empty; every member of the result is written as Value and every other cell as the board\u0027s empty.",
@@ -7498,7 +7620,11 @@
         "Body",
         "Clear"
       ],
-      "title": "WorldBodyDesignationKind"
+      "title": "WorldBodyDesignationKind",
+      "x-enumDescriptions": {
+        "Body": "Designate another active body.",
+        "Clear": "Clear the register."
+      }
     },
     "WorldEffectDesignate": {
       "description": "Designates a subject into a body\u0027s named target register, or clears the register. A kit\u0027s action designates into its own body the participant that last affected it; a world rule names the body with Key and the subject with TargetKey.",
@@ -7599,6 +7725,18 @@
       "additionalProperties": false,
       "title": "WorldEffectApplyRigidImpulse"
     },
+    "WorldFieldWriteOp": {
+      "description": "How a transform writes a field cell.",
+      "enum": [
+        "Set",
+        "Add"
+      ],
+      "title": "WorldFieldWriteOp",
+      "x-enumDescriptions": {
+        "Set": "Replace the cell.",
+        "Add": "Add to the cell."
+      }
+    },
     "WorldEffectPaintField": {
       "description": "Paints one lattice field cell, or the cube of Radius around it.",
       "properties": {
@@ -7621,12 +7759,8 @@
           "type": "number"
         },
         "operation": {
-          "enum": [
-            "Set",
-            "Add"
-          ],
-          "default": "Set",
-          "title": "WorldFieldWriteOp"
+          "$ref": "#/$defs/WorldFieldWriteOp",
+          "default": "Set"
         },
         "radius": {
           "type": "integer",
@@ -7667,6 +7801,20 @@
       "additionalProperties": false,
       "title": "WorldHudRect"
     },
+    "WorldHudLayer": {
+      "description": "Where a WorldHudPanel draws relative to the five first-party overlay writers (the console panel, binding bars, gizmos, editor HUD, and toast) \u2014 the banded pipeline\u0027s ordering key.",
+      "enum": [
+        "Under",
+        "Over",
+        "Replace"
+      ],
+      "title": "WorldHudLayer",
+      "x-enumDescriptions": {
+        "Under": "Draws before the first-party writers (document order among Under panels).",
+        "Over": "Draws after the first-party writers, or after the replace panels when any are live (document order among Over panels) \u2014 always the topmost band.",
+        "Replace": "Takes the base slot the five first-party writers would otherwise occupy: while at least one live panel declares Replace, every replace panel renders itself there (document order) and the five first-party writers do not run. Removing the last replace panel restores them."
+      }
+    },
     "WorldHudPanelStyle": {
       "description": "A WorldHudPanel\u0027s chrome recipe \u2014 the authored twin of Puck.Overlays.OverlayPanelStyle (Puck.World.Schema must not reference Puck.Overlays; the renderer maps this token to the concrete style).",
       "enum": [
@@ -7674,7 +7822,12 @@
         "Strip",
         "Chip"
       ],
-      "title": "WorldHudPanelStyle"
+      "title": "WorldHudPanelStyle",
+      "x-enumDescriptions": {
+        "Panel": "The full panel scrim.",
+        "Strip": "The strip scrim (a thinner readout band).",
+        "Chip": "The chip scrim (a small badge-sized panel)."
+      }
     },
     "WorldHudElementKind": {
       "description": "A WorldHudElement\u0027s rendered kind \u2014 the schema\u2192render expansion cost differs per kind (see WorldHudCapacity).",
@@ -7685,7 +7838,14 @@
         "Plot",
         "Frame"
       ],
-      "title": "WorldHudElementKind"
+      "title": "WorldHudElementKind",
+      "x-enumDescriptions": {
+        "Rect": "A filled rect \u2014 1 render element, no binding.",
+        "Text": "A fixed-cell text run \u2014 the authored Text string, or (when Binding names one) the live-resolved binding\u0027s text form.",
+        "Gauge": "A fill-bar readout of a bound binding\u0027s normalized 0..1 value (0 when unbound).",
+        "Plot": "A scrolling recent series in an authored range, with an optional reference line.",
+        "Frame": "A sampled frame: the element rect shows the frame a WorldFrameSource produces (camera/view/probe/capture) \u2014 the picture-in-picture element kind (e.g. a face-cam overlay)."
+      }
     },
     "WorldHudStyleToken": {
       "description": "A WorldHudElement\u0027s color role \u2014 a curated authored subset of Puck.Overlays.OverlayColorRole (Puck.World.Schema must not reference Puck.Overlays; the renderer maps this token to the concrete role).",
@@ -7697,7 +7857,15 @@
         "Warning",
         "Danger"
       ],
-      "title": "WorldHudStyleToken"
+      "title": "WorldHudStyleToken",
+      "x-enumDescriptions": {
+        "Primary": "The primary text/fill tone.",
+        "Dim": "The muted/dim tone.",
+        "Accent": "The accent tone.",
+        "Positive": "The positive/healthy tone.",
+        "Warning": "The warning tone.",
+        "Danger": "The danger tone."
+      }
     },
     "WorldFrameSource": {
       "description": "The WorldScreenSource arms that produce a sampled frame \u2014 Producer, View and Probe \u2014 carrying its own JsonPolymorphicAttribute over the same three discriminators (producer/view/probe) their parent union uses, so a member declared as this narrower type round-trips the identical JSON a full WorldScreenSource screen row does. A WorldProbe socket is the driving consumer: it plugs one of these into each named input rather than the wider union, which would legally admit a decal, machine, text or none source no probe kernel can sample.",
@@ -7971,13 +8139,8 @@
           "description": "The panel\u0027s viewport rect, normalized to screen space."
         },
         "layer": {
-          "description": "Which band the panel draws in.",
-          "enum": [
-            "Under",
-            "Over",
-            "Replace"
-          ],
-          "title": "WorldHudLayer"
+          "$ref": "#/$defs/WorldHudLayer",
+          "description": "Which band the panel draws in."
         },
         "style": {
           "$ref": "#/$defs/WorldHudPanelStyle",
@@ -8370,7 +8533,11 @@
         "Presence",
         "Endowed"
       ],
-      "title": "WorldContributionTenure"
+      "title": "WorldContributionTenure",
+      "x-enumDescriptions": {
+        "Presence": "The piece stands while Link is reachable. The per-tick sweep stamps RetractDeadlineTick at GraceSeconds out when the link first reads unreachable, clears the stamp when it comes back, and retracts once the deadline passes.",
+        "Endowed": "The piece persists; the sweep never touches the row. Link and a positive GraceSeconds are refused beside this tenure \u2014 the disjoint-field-set rule StateGenerator\u0027s source arms follow."
+      }
     },
     "WorldPlacementContribution": {
       "description": "A placement\u0027s contribution facet: the row is a slot whose frame (id, pose, scale, and these lifecycle terms) is host-authored and whose creation a federation partner supplies through ordinary mutations. Null is an ordinary placement.",
@@ -8437,7 +8604,7 @@
           "type": "string"
         },
         "comparison": {
-          "$ref": "#/$defs/ExpressionComparison",
+          "$ref": "#/$defs/ExpressionComparisonNonNullable",
           "description": "The comparison."
         },
         "value": {
@@ -8464,7 +8631,7 @@
           "type": "string"
         },
         "comparison": {
-          "$ref": "#/$defs/ExpressionComparison",
+          "$ref": "#/$defs/ExpressionComparisonNonNullable",
           "description": "The comparison."
         },
         "value": {
@@ -8579,7 +8746,11 @@
         "Record",
         "Return"
       ],
-      "title": "WorldBoardEnforcement"
+      "title": "WorldBoardEnforcement",
+      "x-enumDescriptions": {
+        "Record": "An illegal move is recorded; the body that moved stays where it settled.",
+        "Return": "An illegal move is recorded and the body that moved is posed back onto the move\u0027s origin cell."
+      }
     },
     "WorldTabletopSeat": {
       "description": "One chair at a tabletop: the edge of the board a seat sits at, given as the way it faces.",
@@ -8850,19 +9021,32 @@
         "Clearance",
         "Influence"
       ],
-      "title": "WorldPlacementSpatialRole"
+      "title": "WorldPlacementSpatialRole",
+      "x-enumDescriptions": {
+        "Occupation": "Blocks occupation by another occupation volume.",
+        "Clearance": "Reserves passage around an occupation volume.",
+        "Influence": "Reports presence to a named, author-defined channel without blocking."
+      }
+    },
+    "WorldSpatialShapeKind": {
+      "description": "The shared shape vocabulary used by occupation, clearance, and influence volumes.",
+      "enum": [
+        "Box",
+        "Sphere"
+      ],
+      "title": "WorldSpatialShapeKind",
+      "x-enumDescriptions": {
+        "Box": "A finite oriented box.",
+        "Sphere": "A finite sphere."
+      }
     },
     "WorldSpatialShape": {
       "description": "A placement-local bounded shape. Box yaw is measured about \u002BY; Y extents are part of the contract.",
       "type": "object",
       "properties": {
         "kind": {
-          "description": "The shape kind.",
-          "enum": [
-            "Box",
-            "Sphere"
-          ],
-          "title": "WorldSpatialShapeKind"
+          "$ref": "#/$defs/WorldSpatialShapeKind",
+          "description": "The shape kind."
         },
         "center": {
           "$ref": "#/$defs/DocumentVector3",
@@ -9471,6 +9655,18 @@
       "additionalProperties": false,
       "title": "ActionTrigger"
     },
+    "ActionTriggerMode": {
+      "description": "One edge/latch vocabulary, shared by every gated trigger the engine evaluates \u2014 a per-body fact trigger and a state rule alike. It is deliberately not two concepts with two spellings: \u0022fires while the condition holds\u0022 and \u0022fires once when the condition becomes true\u0022 is the same distinction at both scopes, so it is the same enum.",
+      "enum": [
+        "Level",
+        "Edge"
+      ],
+      "title": "ActionTriggerMode",
+      "x-enumDescriptions": {
+        "Level": "Fires every evaluation the condition holds \u2014 the default, and the right shape for a continuous effect (a per-tick drain, a standing impulse).",
+        "Edge": "Fires once on the condition crossing from not-holding to holding, and re-arms only when it crosses back \u2014 the right shape for anything that writes a document row, since a level-triggered write fires once per tick the condition holds rather than once per crossing."
+      }
+    },
     "DocumentQuaternion": {
       "title": "DocumentQuaternion",
       "anyOf": [
@@ -9583,7 +9779,15 @@
         "Edit",
         "Operate"
       ],
-      "title": "WorldCapability"
+      "title": "WorldCapability",
+      "x-enumDescriptions": {
+        "Drive": "The right to drive a body \u2014 submit its per-tick intents and authority commands. Checked at the intent drain and ApplyCommand.",
+        "Observe": "The right to observe a subject \u2014 read it rather than change it. Enforced on the addon read path: a guest\u0027s pose query resolves an Observe handle and is checked against this capability over the concrete body it designates (Server.WorldAddonRuntime\u0027s read point), so an observe body:\u003Cn\u003E row is real, checkable authority. Submitted WorldQuery envelopes are likewise checked over the addressed body/screen (or all for world-wide read-backs) before WorldServer.Answer composes them; its direct public call remains the trusted in-process read-back surface.",
+        "Control": "The right to control a screen/machine surface \u2014 the engagement route (a player\u0027s intent diverts to the screen\u0027s machine). Checked on the engage path.",
+        "Mutate": "The right to mutate a world-document section \u2014 apply a WorldMutation targeting it. Checked at mutation apply (and, over every section, at a whole-document swap or journal undo). A Section subject admits every row the section carries; the row-scoped Creation/Placement subjects admit one row apiece and are checked as an alternative to the section hold, never beneath it.",
+        "Edit": "The right to edit a concrete state row \u2014 slot-shaped or table-shaped alike (a slot is a table with one key). Checked against the State subject of the row being touched, narrowing which named row a principal may touch beneath the coarse Mutate/section:state hold the mutation\u0027s own section-authority check already requires \u2014 the same subject whether the write is whole-row (WorldMutation.UpsertStateRow/WorldMutation.RemoveStateRow) or per-cell (WorldMutation.UpsertStateCell/WorldMutation.RemoveStateCell) \u2014 there is no separate table:\u003Cname\u003E subject narrowing per-cell writes independently of the whole row\u0027s own hold. The All wildcard covers every row, so the domain-seeded Edit/all every seat and Console already holds reaches every state row until someone narrows it. A concrete state:\u003Cname\u003E row may additionally carry a KindMask \u2014 the verb-scoped narrowing that separates bumping a row (the per-cell pair) from redefining it (the whole-row pair). An unmasked row keeps full reach over its subject, so a mask is opt-in narrowing beneath an already deny-by-default capability, never a new gate a seeded grant has to pass.",
+        "Operate": "Full world authority, without host access. Valid only over all, without payloads."
+      }
     },
     "StringListNullable": {
       "type": [
@@ -10100,7 +10304,8 @@
         "$ref": "#/$defs/WorldBindingBarLayout"
       }
     },
-    "ShapeNullable": {
+    "PaletteSurfaceDocument": {
+      "description": "An authored surface tint and reflectance.",
       "type": [
         "object",
         "null"
@@ -10121,174 +10326,257 @@
         "roughness",
         "metal"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "PaletteSurfaceDocument"
     },
-    "ShapeNullable2": {
-      "type": [
-        "object",
-        "null"
-      ],
+    "PaletteSurfaceDocumentNonNullable": {
+      "description": "An authored surface tint and reflectance.",
+      "type": "object",
       "properties": {
-        "enabled": {
-          "type": [
-            "boolean",
-            "null"
-          ],
-          "default": null,
-          "description": "Whether the style is on; absent is on. False on a palette row keeps that material unstyled whatever the world\u0027s default is; false on render.toon leaves the world\u0027s default off."
+        "color": {
+          "type": "string"
         },
-        "outlineWidth": {
-          "type": [
-            "number",
-            "null"
-          ],
-          "default": null,
-          "description": "The close outline radius in output pixels, in [0, 4]; zero disables outlines."
-        },
-        "outlineDistance": {
-          "type": [
-            "number",
-            "null"
-          ],
-          "default": null,
-          "description": "The distance in metres at which the outline radius halves, in [0.1, 1000]."
-        },
-        "outlineNormal": {
-          "type": [
-            "number",
-            "null"
-          ],
-          "default": null,
-          "description": "The crease normal cosine, in [0, 0.95]."
-        },
-        "outlineTint": {
-          "default": null,
-          "description": "The outline multiplier, three linear RGB values in [0, 1]."
-        }
-      },
-      "additionalProperties": false
-    },
-    "ShapeNonNullable50": {
-      "enum": [
-        "Sphere",
-        "Box",
-        "Torus",
-        "Cylinder",
-        "Capsule",
-        "Ellipsoid",
-        "RoundCone",
-        "Plane",
-        "Cone",
-        "Prism",
-        "Superellipsoid",
-        "Sweep"
-      ],
-      "x-enumDescriptions": {
-        "Sphere": "A sphere.",
-        "Box": "A box.",
-        "Torus": "A torus.",
-        "Cylinder": "A cylinder.",
-        "Capsule": "A capsule.",
-        "Ellipsoid": "An ellipsoid.",
-        "RoundCone": "A tapered capsule \u2014 a fat base narrowing to a rounded tip along \u002BY (teeth, horns, spikes).",
-        "Plane": "An infinite plane bounding a solid half-space; local \u002BY is the outward normal.",
-        "Cone": "A sharp circular cone with a flat base, centered along local Y.",
-        "Prism": "A bounded profile in local XY extruded along Z. The default trapezoid has unit bottom half-width, half-height and depth, with an authored top-to-bottom width ratio (default one half). SdfPrismProfile selects rounded rectangles, polygons, ellipses, or a convex vertex list instead.",
-        "Superellipsoid": "A generalized ellipsoid: q = pow(abs(p)/r, e); d = (pow(q.x\u002Bq.y\u002Bq.z, 1/e) - 1) * min(r), unit radii (1,1,1) and an authored exponent e in [MinSuperellipsoidExponent, MaxSuperellipsoidExponent] (the document\u0027s exponent field carries it; unauthored is the minimum, the ellipsoid itself \u2014 an Ellipsoid emits the identical instruction, since every ellipsoid is this shape at that exponent). A squircle/rounded-cube family: the minimum exponent is a plain ellipsoid, larger values round toward a box.",
-        "Sweep": "A quadratic Bezier curve swept with a tapering, optionally bulging radius, optionally as 1-4 helical strands \u2014 see Sweep. NOT a closed solid a body can stand on in the sense the rest of this enum\u0027s members are: its field is \u0022exact enough\u0022, not exact, and carries no Reach unit-scale law \u2014 its control points and radii already carry creation-unit dimensions directly (see SweepReach). The authoring layer admits it only with a curve facet naming its control points and radii."
-      }
-    },
-    "ShapeNonNullable51": {
-      "enum": [
-        "Trapezoid",
-        "RoundedRectangle",
-        "Polygon",
-        "Ellipse",
-        "ChamferedRectangle",
-        "Convex",
-        "Path"
-      ],
-      "x-enumDescriptions": {
-        "Trapezoid": "A trapezoid controlled by the shape\u0027s taper.",
-        "RoundedRectangle": "A rectangle with independently controlled corner rounding.",
-        "Polygon": "A regular polygon, stretched by the authored X/Y scale.",
-        "Ellipse": "An exact elliptical profile, extruded with flat front and rear caps.",
-        "ChamferedRectangle": "A rectangle with independently controlled 45-degree corner chamfers.",
-        "Convex": "An arbitrary convex polygon authored by Vertices, with CornerRadius reused as a uniform corner-rounding radius. The exact convex-polygon SDF, not the study\u0027s smoothed half-plane intersection.",
-        "Path": "Filled contours or variable-width strokes, flattened with an explicit tolerance and edge budget."
-      }
-    },
-    "ShapeNullable3": {
-      "type": [
-        "object",
-        "null"
-      ],
-      "properties": {
-        "radiusStart": {
+        "roughness": {
           "type": "number"
         },
-        "radiusEnd": {
+        "metal": {
           "type": "number"
-        },
-        "smooth": {
-          "type": "boolean",
-          "default": false
-        },
-        "from": {
-          "type": "number",
-          "default": 0
-        },
-        "to": {
-          "type": "number",
-          "default": 1
         }
       },
       "required": [
-        "radiusStart",
-        "radiusEnd"
+        "color",
+        "roughness",
+        "metal"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "PaletteSurfaceDocument"
     },
-    "ShapeNullable4": {
+    "PaletteGlassContactDocument": {
+      "description": "A glass slot\u0027s contact: the slot\u0027s flow coverage rises toward Coverage where the opaque surface behind the glass lies within Reach of the glass\u0027s surface along the view, so foam gathers at a step, a pier or a bank in the flow\u0027s own pattern. The slot\u0027s flow must name the surface its coverage reveals.",
       "type": [
         "object",
         "null"
       ],
       "properties": {
-        "linear": {
+        "reach": {
+          "description": "The distance, in creation units along the view from the glass surface to the opaque surface behind it, over which the added coverage falls to zero; positive.",
           "type": "number"
         },
-        "quadratic": {
-          "type": "number",
-          "default": 0
-        },
-        "cubic": {
-          "type": "number",
-          "default": 0
-        },
-        "offset": {
-          "type": "number",
-          "default": 0
-        },
-        "from": {
-          "type": "number",
-          "default": -1
-        },
-        "to": {
-          "type": "number",
-          "default": 1
-        },
-        "target": {
-          "type": "integer",
-          "default": 0
+        "coverage": {
+          "description": "The coverage added where the opaque surface touches the glass\u0027s, in [0, 1].",
+          "type": "number"
         }
       },
       "required": [
-        "linear"
+        "reach",
+        "coverage"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "PaletteGlassContactDocument"
     },
-    "ShapeNullable5": {
+    "PaletteGlassDocument": {
+      "description": "A palette slot\u0027s glass: the slot\u0027s shapes transmit what lies behind them, refracted and absorbed over the distance the view ray travels through the shape, and reflect their surroundings by Fresnel. The slot\u0027s color is the tint, the colour light takes on through Depth of the glass, and its roughness the frost. A glass slot\u0027s shapes bake and draw apart from the creation\u0027s opaque shapes: they never blend with them, a cut or engraving never carves them, and a pooled creation keeps them out of any group.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "depth": {
+          "description": "The thickness, in creation units, over which light takes on the tint; finite and positive. A part twice this thick reads twice as deep.",
+          "type": "number"
+        },
+        "ior": {
+          "description": "The index of refraction, in [1, 4]: 1 bends and reflects nothing, 1.5 is window glass, 1.49 acrylic (null = 1.5).",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        },
+        "scatter": {
+          "description": "The colour the glass scatters as a medium, the colour a deep body of it reads as under the light arriving at its surface (null = none).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "scattering": {
+          "description": "How much the medium scatters, per creation unit, finite and non-negative; it also dims what lies behind (null = 0, no scattering).",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        },
+        "contact": {
+          "$ref": "#/$defs/PaletteGlassContactDocument",
+          "description": "Foam or a wet margin where an opaque surface behind the glass comes within reach of its surface, revealed through the slot\u0027s flow coverage (null = none).",
+          "default": null
+        },
+        "shadowDensity": {
+          "description": "Shadow extinction per creation unit, finite and non-negative (null = zero).",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null,
+          "minimum": 0
+        }
+      },
+      "required": [
+        "depth"
+      ],
+      "additionalProperties": false,
+      "title": "PaletteGlassDocument"
+    },
+    "SdfFlowFrame": {
+      "enum": [
+        "Object",
+        "World",
+        null
+      ],
+      "title": "SdfFlowFrame",
+      "x-enumDescriptions": {
+        "Object": "The frame of the surface\u0027s own object: the creation\u0027s frame for a placed creation (its copies turn the vector with them), the slot\u0027s frame for a surface riding a slot, and world space for a surface emitted in world space (a field row).",
+        "World": "World space whatever the surface rides, the pattern included, so it runs continuously across every surface wearing the material: a wind across a meadow of separately swaying blades."
+      }
+    },
+    "PaletteFlowRegionDocument": {
+      "description": "A localized flow velocity blended into the base velocity.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "center": {
+          "$ref": "#/$defs/DocumentVector3",
+          "description": "Centre in world coordinates."
+        },
+        "radius": {
+          "description": "Radius in world units over which the velocity blends back to the base, finite and positive.",
+          "type": "number"
+        },
+        "velocity": {
+          "$ref": "#/$defs/DocumentVector3",
+          "description": "Velocity at the centre in the flow\u0027s velocity frame, before placement scaling."
+        }
+      },
+      "required": [
+        "center",
+        "radius",
+        "velocity"
+      ],
+      "additionalProperties": false,
+      "title": "PaletteFlowRegionDocument"
+    },
+    "PaletteFlowDocument": {
+      "description": "A palette slot\u0027s flow layer: the slot\u0027s shading moves along Velocity while its geometry stays still. A seeded noise pattern advects with the flow in two layers half a cycle apart, so neither restart shows, tilting the shading normal by Tilt times its slope and revealing Surface over Coverage of the slot (streaks, foam). The velocity is authored in the shader\u0027s frame, as the other palette layers are: for a creation, its engine frame (the author frame\u0027s x and z negated), turned with each placement; for a field row, world space; FrameWorld keeps it and the pattern in world space on any surface.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "velocity": {
+          "$ref": "#/$defs/DocumentVector3",
+          "description": "The flow, in units per second."
+        },
+        "scale": {
+          "description": "The pattern\u0027s frequency, in cells per unit; positive (null = 1).",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        },
+        "stretch": {
+          "description": "How many times longer a pattern feature is along the flow than across; at least 1 (null = 1).",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        },
+        "cycle": {
+          "description": "The seconds a layer advects before it restarts, in [0.25, 4096] (null = 1).",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        },
+        "tilt": {
+          "description": "The normal tilt per unit slope of the pattern; non-negative (null = 0).",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        },
+        "coverage": {
+          "description": "The share of the slot the pattern reveals Surface over, in [0, 1] (null = 0).",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        },
+        "softness": {
+          "description": "The coverage edge\u0027s width, in [0, 1] (null = 0.1).",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        },
+        "surface": {
+          "$ref": "#/$defs/PaletteSurfaceDocument",
+          "description": "The surface the coverage reveals; required when Coverage is positive.",
+          "default": null
+        },
+        "seed": {
+          "description": "The pattern\u0027s seed (null = 0).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "default": null
+        },
+        "lane": {
+          "description": "The render lane whose value scales the velocity: 0 to 3 an inhabited body\u0027s look lanes (a placement without them reads zero and stands still), 4 to 7 the world\u0027s render.lanes (SdfLanes). Null keeps the velocity constant.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "default": null
+        },
+        "frame": {
+          "$ref": "#/$defs/SdfFlowFrame",
+          "description": "The frame the velocity is authored in (null = Object).",
+          "default": null
+        },
+        "coverageLane": {
+          "description": "The render lane, as Lane, whose value saturated to [0, 1] scales Coverage. Null keeps the coverage constant.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "default": null
+        },
+        "region": {
+          "$ref": "#/$defs/PaletteFlowRegionDocument",
+          "description": "A sphere in world coordinates within which the velocity varies.",
+          "default": null
+        }
+      },
+      "required": [
+        "velocity"
+      ],
+      "additionalProperties": false,
+      "title": "PaletteFlowDocument"
+    },
+    "SdfPathSegmentNullable": {
+      "description": "A line, quadratic/cubic Bezier, or circular arc ending at End. An arc uses ArcCenter and Clockwise; Beziers use Control and optionally Control2. Controls are in the profile\u0027s local XY frame.",
       "type": [
         "object",
         "null"
@@ -10303,13 +10591,31 @@
           "maxItems": 2
         },
         "control": {
-          "default": null
+          "default": null,
+          "type": "array",
+          "items": {
+            "type": "number"
+          },
+          "minItems": 2,
+          "maxItems": 2
         },
         "control2": {
-          "default": null
+          "default": null,
+          "type": "array",
+          "items": {
+            "type": "number"
+          },
+          "minItems": 2,
+          "maxItems": 2
         },
         "arcCenter": {
-          "default": null
+          "default": null,
+          "type": "array",
+          "items": {
+            "type": "number"
+          },
+          "minItems": 2,
+          "maxItems": 2
         },
         "clockwise": {
           "type": "boolean",
@@ -10319,9 +10625,11 @@
       "required": [
         "end"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "SdfPathSegment"
     },
-    "ShapeNullable6": {
+    "SdfPathContourNullable": {
+      "description": "A continuous contour. Filled contours close implicitly; stroked contours remain open unless Closed.",
       "type": [
         "object",
         "null"
@@ -10340,21 +10648,22 @@
           "default": false
         },
         "segments": {
+          "description": "Gets the contour\u0027s segments in order, each ending where the next begins. The list is owned.",
           "type": "array",
           "items": {
-            "$ref": "#/$defs/ShapeNullable5",
-            "description": "A line, quadratic/cubic Bezier, or circular arc ending at End. An arc uses ArcCenter and Clockwise; Beziers use Control and optionally Control2. Controls are in the profile\u0027s local XY frame."
-          },
-          "description": "Gets the contour\u0027s segments in order, each ending where the next begins. The list is owned."
+            "$ref": "#/$defs/SdfPathSegmentNullable"
+          }
         }
       },
       "required": [
         "start",
         "segments"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "SdfPathContour"
     },
-    "ShapeNullable7": {
+    "SdfPathProfileNullable": {
+      "description": "A bounded presentation profile. Filled contours use even/odd fill, including holes. Curves are flattened once at composition, with a local-space geometric error at most Tolerance (apart from floating-point rounding). Strokes approximate the union of disks along the curve, including their varying radius, to the same tolerance. The emitted polygon/rounded-segment field is 1-Lipschitz; no margin moves its zero surface. At most 128 edges are emitted; exceeding that budget refuses instead of silently relaxing the requested tolerance.",
       "type": [
         "object",
         "null"
@@ -10365,134 +10674,146 @@
           "default": 0.001
         },
         "stroke": {
-          "$ref": "#/$defs/ShapeNullable3",
+          "$ref": "#/$defs/SdfPathStroke",
           "default": null
         },
         "shear": {
-          "$ref": "#/$defs/ShapeNullable4",
+          "$ref": "#/$defs/SdfPathShear",
           "default": null
         },
         "contours": {
+          "description": "Gets the profile\u0027s contours, filled with even/odd fill. The list is owned, since Compile caches its edges by the profile.",
           "type": "array",
           "items": {
-            "$ref": "#/$defs/ShapeNullable6",
-            "description": "A continuous contour. Filled contours close implicitly; stroked contours remain open unless Closed."
-          },
-          "description": "Gets the profile\u0027s contours, filled with even/odd fill. The list is owned, since Compile caches its edges by the profile."
+            "$ref": "#/$defs/SdfPathContourNullable"
+          }
         }
       },
       "required": [
         "contours"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "SdfPathProfile"
     },
-    "ShapeNullable8": {
+    "SdfPrismProfileNullable": {
+      "description": "Authored profile controls for a solid prism. The profile is extruded along local Z.",
       "type": [
         "object",
         "null"
       ],
       "properties": {
         "kind": {
-          "$ref": "#/$defs/ShapeNonNullable51",
+          "$ref": "#/$defs/SdfPrismProfileKind",
           "description": "The profile family."
         },
         "cornerRadius": {
+          "description": "A fraction in [0, 1]: the profile\u0027s smaller half-extent for RoundedRectangle\u0027s corner radius or ChamferedRectangle\u0027s chamfer radius; the scaled polygon\u0027s conservative inradius (ConvexPolygonInradius) for Convex\u0027s uniform corner rounding, also clamped to the extrusion half-depth when extruded.",
           "type": "number",
-          "default": 0,
-          "description": "A fraction in [0, 1]: the profile\u0027s smaller half-extent for RoundedRectangle\u0027s corner radius or ChamferedRectangle\u0027s chamfer radius; the scaled polygon\u0027s conservative inradius (ConvexPolygonInradius) for Convex\u0027s uniform corner rounding, also clamped to the extrusion half-depth when extruded."
+          "default": 0
         },
         "sides": {
+          "description": "Polygon side count, from 3 through 32.",
           "type": "integer",
-          "default": 6,
-          "description": "Polygon side count, from 3 through 32."
+          "default": 6
         },
         "path": {
-          "$ref": "#/$defs/ShapeNullable7",
+          "$ref": "#/$defs/SdfPathProfileNullable",
           "description": "Required only for Path; its points are normalized profile coordinates.",
           "default": null
         },
         "vertices": {
+          "description": "Gets, for Convex only, 3 to MaxConvexVertices local XY points, clockwise (X right, Y up \u2014 each turn\u0027s 2D cross product of consecutive edges strictly negative), no coincident or collinear vertices, and convex. Ignored by every other kind. The list is owned.",
           "type": [
             "array",
             "null"
           ],
           "default": null,
-          "description": "Gets, for Convex only, 3 to MaxConvexVertices local XY points, clockwise (X right, Y up \u2014 each turn\u0027s 2D cross product of consecutive edges strictly negative), no coincident or collinear vertices, and convex. Ignored by every other kind. The list is owned."
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            },
+            "minItems": 2,
+            "maxItems": 2
+          }
         }
       },
       "required": [
         "kind"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "SdfPrismProfile"
     },
-    "ShapeNullable9": {
+    "SdfLiftNullable": {
       "enum": [
         "Revolve",
         "Extrude",
         null
       ],
+      "title": "SdfLift",
       "x-enumDescriptions": {
         "Revolve": "Revolve the 2D profile around the local Y axis (the revolve lift operator): the profile sits in the (radial, Y) half-plane at a radial offset (the shape\u0027s liftAmount). Exact when the offset clears the profile\u0027s radial extent (a torus-like solid); a harmless conservative underestimate near the axis when the profile crosses it (offset 0 = a solid of revolution centred on the axis, e.g. a spheroid from an ellipse). Always 1-Lipschitz.",
         "Extrude": "Extrude the 2D profile along the local Z axis (the extrude lift operator) to the given half-height (the shape\u0027s liftAmount): a prism/slab whose cross-section is the exact 2D shape. Exact for any exact 2D field, and 1-Lipschitz."
       }
     },
-    "ShapeNullable10": {
+    "ShapeCurveDocument": {
+      "description": "The authored form of a Sweep \u2014 a quadratic Bezier curve swept with a tapering, optionally bulging radius, optionally as helical strands orbiting the curve (the pipeline\u0027s hair locks and braid). Admitted only on TypeSweep (refused elsewhere, by name), and required there (a Sweep with no curve is refused, by name). Not a closed solid: refused alongside Panel, Trims, Flare, Shear, Bumps, and Domain on the same shape, and contributes no contact/collider geometry \u2014 Scale must be uniform (refused otherwise, by name) and multiplies every one of the curve\u0027s own lengths, exactly as it does for every other primitive\u0027s canonical unit dimensions.",
       "type": [
         "object",
         "null"
       ],
       "properties": {
         "a": {
-          "$comment": "Converter-defined value. This schema supplies documentation but leaves value validation to the creation document loader.",
+          "$ref": "#/$defs/DocumentVector3",
           "description": "The curve\u0027s first control point, in the shape\u0027s local (workbench) frame \u2014 creation units, or a state.\u003Crow\u003E[.\u003Ckey\u003E] reference."
         },
         "b": {
-          "$comment": "Converter-defined value. This schema supplies documentation but leaves value validation to the creation document loader.",
+          "$ref": "#/$defs/DocumentVector3",
           "description": "The curve\u0027s middle control point."
         },
         "c": {
-          "$comment": "Converter-defined value. This schema supplies documentation but leaves value validation to the creation document loader.",
+          "$ref": "#/$defs/DocumentVector3",
           "description": "The curve\u0027s last control point."
         },
         "radiusStart": {
-          "type": "number",
-          "description": "The sweep radius at t = 0; finite and strictly positive."
+          "description": "The sweep radius at t = 0; finite and strictly positive.",
+          "type": "number"
         },
         "radiusEnd": {
-          "type": "number",
-          "description": "The sweep radius at t = 1; finite and strictly positive."
+          "description": "The sweep radius at t = 1; finite and strictly positive.",
+          "type": "number"
         },
         "bulge": {
+          "description": "The mid-span radius bulge amplitude (null = 0), added by bulge\u00B7sin(\u03C0\u00B7t)^0.65; refused past MaxSweepBulgeRatio times max(RadiusStart, RadiusEnd).",
           "type": [
             "number",
             "null"
           ],
-          "default": null,
-          "description": "The mid-span radius bulge amplitude (null = 0), added by bulge\u00B7sin(\u03C0\u00B7t)^0.65; refused past MaxSweepBulgeRatio times max(RadiusStart, RadiusEnd)."
+          "default": null
         },
         "strands": {
+          "description": "The helical strand count (null = 1), in [MinSweepStrands, MaxSweepStrands]. A count above 1 is render-only \u2014 refused for deterministic field contact by name, matching Sweep\u0027s own status.",
           "type": [
             "integer",
             "null"
           ],
-          "default": null,
-          "description": "The helical strand count (null = 1), in [MinSweepStrands, MaxSweepStrands]. A count above 1 is render-only \u2014 refused for deterministic field contact by name, matching Sweep\u0027s own status."
+          "default": null
         },
         "twist": {
+          "description": "The strand orbit rate, in turns along the curve (null = 0); finite.",
           "type": [
             "number",
             "null"
           ],
-          "default": null,
-          "description": "The strand orbit rate, in turns along the curve (null = 0); finite."
+          "default": null
         },
         "strandOffset": {
+          "description": "The strand orbit radius, in creation units (null = 0); non-negative, finite, refused past MaxSweepStrandOffsetRatio times max(RadiusStart, RadiusEnd).",
           "type": [
             "number",
             "null"
           ],
-          "default": null,
-          "description": "The strand orbit radius, in creation units (null = 0); non-negative, finite, refused past MaxSweepStrandOffsetRatio times max(RadiusStart, RadiusEnd)."
+          "default": null
         }
       },
       "required": [
@@ -10502,9 +10823,10 @@
         "radiusStart",
         "radiusEnd"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ShapeCurveDocument"
     },
-    "ShapeNullable11": {
+    "SdfBlendOp": {
       "enum": [
         "Union",
         "SmoothUnion",
@@ -10525,6 +10847,7 @@
         "StairsSubtraction",
         null
       ],
+      "title": "SdfBlendOp",
       "x-enumDescriptions": {
         "Subtraction": "Carves the shape out of everything accumulated so far: max(a, \u2212b). The result is an exact distance only where the subject is the nearest surface. Inside the carved void max(a, \u2212b) returns the subject\u0027s carved-away face or the carve\u0027s own boundary rather than the true clearance, so contact queries see phantom surfaces there: world.collision.probe reads a positive distance with an upward gradient in open air. Extend a carve past every point a body can reach, or build the void from union geometry.",
         "Intersection": "Intersection with everything accumulated so far \u2014 not with the preceding shape alone. See the accumulator rule on SdfBlendOp.",
@@ -10543,110 +10866,121 @@
         "StairsSubtraction": "Carves continuous steps of radius r (Data1.x) and step count n (Data1.z) from the subtraction. Strictly 1-Lipschitz. PopField compose only."
       }
     },
-    "ShapeNonNullable52": {
+    "ShapeDomainOpSymmetry": {
+      "description": "Reflection fold across a plane \u2014 Symmetry. One authored half repeats mirror-imaged across the plane.",
       "properties": {
         "$type": {
           "const": "symmetry"
         },
         "normal": {
-          "$comment": "Converter-defined value. This schema supplies documentation but leaves value validation to the creation document loader.",
+          "$ref": "#/$defs/DocumentVector3",
           "description": "The plane normal, in the shape\u0027s creation-space frame (normalized at canonicalization; a zero/non-finite normal falls back to UnitX \u2014 the retired Mirror: true flag\u0027s exact fold)."
         },
         "offset": {
+          "description": "The plane\u0027s signed offset along Normal (null = 0, through the creation origin).",
           "type": [
             "number",
             "null"
           ],
-          "default": null,
-          "description": "The plane\u0027s signed offset along Normal (null = 0, through the creation origin)."
+          "default": null
         }
       },
       "required": [
         "normal"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ShapeDomainOpSymmetry"
     },
-    "ShapeNonNullable53": {
+    "ShapeDomainOpRepeat": {
+      "description": "Bounded linear domain repeat \u2014 Repeat. Expands for contact only when the limit is a whole number within the copy budget; an absent limit is unbounded (UnboundedRepeatLimit per axis) and does not expand.",
       "properties": {
         "$type": {
           "const": "repeat"
         },
         "spacing": {
-          "$comment": "Converter-defined value. This schema supplies documentation but leaves value validation to the creation document loader.",
+          "$ref": "#/$defs/DocumentVector3",
           "description": "The per-axis cell spacing, creation units (clamped to \u003E= 0.001 per axis, matching the builder\u0027s own floor)."
         },
         "limit": {
-          "default": null,
-          "description": "The per-axis repeat-cell limit \u2014 the lattice spans cell indices -limit..\u002Blimit (null = UnboundedRepeatLimit per axis, a lattice with no edge)."
+          "$ref": "#/$defs/DocumentVector3",
+          "description": "The per-axis repeat-cell limit \u2014 the lattice spans cell indices -limit..\u002Blimit (null = UnboundedRepeatLimit per axis, a lattice with no edge).",
+          "default": null
         },
         "origin": {
-          "default": null,
-          "description": "The point the lattice folds around, creation units (null = the creation origin, the fold this op has always used). Cell selection centres on this point instead of the creation root \u2014 the lattice of physical copies is unchanged, so a null origin is byte-identical to today\u0027s fold."
+          "$ref": "#/$defs/DocumentVector3",
+          "description": "The point the lattice folds around, creation units (null = the creation origin, the fold this op has always used). Cell selection centres on this point instead of the creation root \u2014 the lattice of physical copies is unchanged, so a null origin is byte-identical to today\u0027s fold.",
+          "default": null
         },
         "isUnbounded": {
-          "type": "boolean",
-          "description": "Whether the lattice has no edge: its limit, or an absent one, reaches UnboundedRepeatLimit on any axis. The program\u0027s own answer (IsUnboundedRepeat) decides it."
+          "description": "Whether the lattice has no edge: its limit, or an absent one, reaches UnboundedRepeatLimit on any axis. The program\u0027s own answer (IsUnboundedRepeat) decides it.",
+          "type": "boolean"
         }
       },
       "required": [
         "spacing"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ShapeDomainOpRepeat"
     },
-    "ShapeNullable12": {
+    "SdfAxis": {
       "enum": [
         "X",
         "Y",
         "Z",
         null
       ],
+      "title": "SdfAxis",
       "x-enumDescriptions": {
         "X": "The local X axis; a polar repeat about it folds the YZ plane.",
         "Y": "The local Y axis; a polar repeat about it folds the XZ (ground) plane, the common \u0022arranged on the ground around a centre\u0022 case (columns of a rotunda, spokes of a wheel lying flat).",
         "Z": "The local Z axis; a polar repeat about it folds the XY plane (a clock face or a gear facing \u002BZ)."
       }
     },
-    "ShapeNonNullable54": {
+    "ShapeDomainOpPolar": {
+      "description": "Angular domain repeat \u2014 Polar. Its sectors expand to one rigid copy each, so contact carries the full ring.",
       "properties": {
         "$type": {
           "const": "polar"
         },
         "count": {
-          "type": "integer",
-          "description": "The sector count around the axis (clamped \u003E= 1)."
+          "description": "The sector count around the axis (clamped \u003E= 1).",
+          "type": "integer"
         },
         "axis": {
-          "$ref": "#/$defs/ShapeNullable12",
+          "$ref": "#/$defs/SdfAxis",
           "description": "The rotation axis (null = Y, the XZ ground plane).",
           "default": null
         },
         "mirror": {
+          "description": "Whether adjacent sectors mirror across their shared bisector (null = false).",
           "type": [
             "boolean",
             "null"
           ],
-          "default": null,
-          "description": "Whether adjacent sectors mirror across their shared bisector (null = false)."
+          "default": null
         },
         "materialStride": {
+          "description": "The per-sector palette stride (null = 0, geometric only).",
           "type": [
             "integer",
             "null"
           ],
-          "default": null,
-          "description": "The per-sector palette stride (null = 0, geometric only)."
+          "default": null
         },
         "origin": {
-          "default": null,
-          "description": "The point the sector fold pivots around, creation units (null = the creation origin, the pivot this op has always used). A null origin is byte-identical to today\u0027s fold."
+          "$ref": "#/$defs/DocumentVector3",
+          "description": "The point the sector fold pivots around, creation units (null = the creation origin, the pivot this op has always used). A null origin is byte-identical to today\u0027s fold.",
+          "default": null
         }
       },
       "required": [
         "count"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ShapeDomainOpPolar"
     },
-    "ShapeNonNullable55": {
+    "SdfWallpaperGroup": {
+      "description": "The 17 wallpaper symmetry groups, in IUC order. P1\u2013P4G tile a square/rectangular lattice; P3 and up tile the equilateral hexagonal lattice (the cell must be square \u2014 the pitch is the cell\u0027s x extent). The kernels read each member as SDF_WPG_* from the generated sdf-isa.hlsli.",
       "enum": [
         "P1",
         "P2",
@@ -10666,6 +11000,7 @@
         "P6",
         "P6M"
       ],
+      "title": "SdfWallpaperGroup",
       "x-enumDescriptions": {
         "P1": "Pure lattice translation (bit-identical to a two-axis RepeatLimited).",
         "P2": "Half-turns keyed on the cell parity.",
@@ -10686,150 +11021,162 @@
         "P6M": "The full hex kaleidoscope (6-fold rotations plus both mirror families)."
       }
     },
-    "ShapeNullable13": {
+    "SdfPlane": {
       "enum": [
         "XZ",
         "XY",
         "YZ",
         null
       ],
+      "title": "SdfPlane",
       "x-enumDescriptions": {
         "XZ": "X and Z: the ground, facing Y.",
         "XY": "X and Y: a wall facing Z.",
         "YZ": "Y and Z: a wall facing X."
       }
     },
-    "ShapeNonNullable56": {
+    "ShapeDomainOpWallpaper": {
+      "description": "Wallpaper-group lattice fold \u2014 Wallpaper. Render only: it has no rigid-copy expansion, so a solid placement carrying one is refused by name at validation.",
       "properties": {
         "$type": {
           "const": "wallpaper"
         },
         "group": {
-          "$ref": "#/$defs/ShapeNonNullable55",
+          "$ref": "#/$defs/SdfWallpaperGroup",
           "description": "The wallpaper group: one whose fold is continuous (PMM, P4M, P3M1, P6M; see IsContinuous). A program refuses any other group by name when it builds."
         },
         "cell": {
-          "$comment": "Converter-defined value. This schema supplies documentation but leaves value validation to the creation document loader.",
+          "$ref": "#/$defs/DocumentVector2",
           "description": "The lattice cell extents in the fold plane, creation units."
         },
         "limit": {
-          "default": null,
-          "description": "The repeat-cell limit per plane axis (null = UnboundedLimit per axis): a non-negative whole number of cells for a square group, and unbounded for a hex group, which is bounded by intersecting it with a bounding shape instead (LimitRefusal)."
+          "$ref": "#/$defs/DocumentVector2",
+          "description": "The repeat-cell limit per plane axis (null = UnboundedLimit per axis): a non-negative whole number of cells for a square group, and unbounded for a hex group, which is bounded by intersecting it with a bounding shape instead (LimitRefusal).",
+          "default": null
         },
         "plane": {
-          "$ref": "#/$defs/ShapeNullable13",
+          "$ref": "#/$defs/SdfPlane",
           "description": "The fold plane (null = XZ).",
           "default": null
         },
         "materialStride": {
+          "description": "The parity-material stride (null = 0, geometric only).",
           "type": [
             "integer",
             "null"
           ],
-          "default": null,
-          "description": "The parity-material stride (null = 0, geometric only)."
+          "default": null
         }
       },
       "required": [
         "group",
         "cell"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ShapeDomainOpWallpaper"
     },
-    "ShapeNullable14": {
+    "SdfNoiseFlavor": {
       "enum": [
         "White",
         "Blue",
         "Gaussian",
         null
       ],
+      "title": "SdfNoiseFlavor",
       "x-enumDescriptions": {
         "White": "The independent PCG3D uniform: three decorrelated hashed uniforms, one per axis. The default, and This is the zero-valued default and preserves the base jitter distribution.",
         "Blue": "The R3 generalized-golden low-discrepancy offset (the rank-1 lattice on the integer cell index), evaluated in FIXED-POINT integer so it is de-clumped yet bit-identical cross-backend. \u0022Blue-ish\u0022 low-discrepancy scatter \u2014 NOT true isotropic blue noise.",
         "Gaussian": "The central-limit average of several decorrelated hashed uniforms per axis: a bell-shaped offset whose mass clusters toward the cell centre, with occasional outliers."
       }
     },
-    "ShapeNonNullable57": {
+    "ShapeDomainOpJitter": {
+      "description": "Stochastic lattice fold \u2014 Jitter: a repeat whose every cell displaces, tumbles and recolours its copy by a hash of the cell. Render only: a hashed copy per cell has no rigid-copy expansion, so a solid placement carrying one is refused by name at validation.",
       "properties": {
         "$type": {
           "const": "jitter"
         },
         "spacing": {
-          "$comment": "Converter-defined value. This schema supplies documentation but leaves value validation to the creation document loader.",
+          "$ref": "#/$defs/DocumentVector3",
           "description": "The per-axis cell spacing, creation units (clamped to at least 0.001 per axis)."
         },
         "amount": {
-          "type": "number",
-          "description": "The peak-to-peak hashed displacement per axis, creation units; it must stay under the least spacing, and the shape\u0027s reach plus half of it under half the least spacing, or the copies cross their cell walls and the program refuses them."
+          "description": "The peak-to-peak hashed displacement per axis, creation units; it must stay under the least spacing, and the shape\u0027s reach plus half of it under half the least spacing, or the copies cross their cell walls and the program refuses them.",
+          "type": "number"
         },
         "seed": {
+          "description": "The hash seed (null = 0).",
           "type": [
             "integer",
             "null"
           ],
-          "default": null,
-          "description": "The hash seed (null = 0)."
+          "default": null
         },
         "tumble": {
+          "description": "The hashed rotation\u0027s share of a half turn, in [0, 1] (null = 0, every copy upright).",
           "type": [
             "number",
             "null"
           ],
-          "default": null,
-          "description": "The hashed rotation\u0027s share of a half turn, in [0, 1] (null = 0, every copy upright)."
+          "default": null
         },
         "materialVariants": {
+          "description": "The hashed palette rows a copy\u0027s material strides over (null = 0, geometric only); the palette must hold the rows the stride reaches.",
           "type": [
             "integer",
             "null"
           ],
-          "default": null,
-          "description": "The hashed palette rows a copy\u0027s material strides over (null = 0, geometric only); the palette must hold the rows the stride reaches."
+          "default": null
         },
         "flavor": {
-          "$ref": "#/$defs/ShapeNullable14",
+          "$ref": "#/$defs/SdfNoiseFlavor",
           "description": "How the displacement is distributed over the cell (null = White).",
           "default": null
         },
         "origin": {
-          "default": null,
-          "description": "The point the lattice folds around, creation units (null = the creation origin)."
+          "$ref": "#/$defs/DocumentVector3",
+          "description": "The point the lattice folds around, creation units (null = the creation origin).",
+          "default": null
         }
       },
       "required": [
         "spacing",
         "amount"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ShapeDomainOpJitter"
     },
-    "ShapeNonNullable58": {
+    "ShapeDomainOpLogSphere": {
+      "description": "Log-spherical shell fold \u2014 LogSphere: space tiled into self-similar shells about the origin, each a scaled copy of the prototype shell, so one shape repeats outward and inward at every scale. Render only: a scaled copy per shell has no rigid-copy expansion, so a solid placement carrying one is refused by name at validation.",
       "properties": {
         "$type": {
           "const": "logSphere"
         },
         "shellRatio": {
-          "type": "number",
-          "description": "The ratio between neighbouring shells\u0027 radii, above 1 (clamped to at least MinShellRatio)."
+          "description": "The ratio between neighbouring shells\u0027 radii, above 1 (clamped to at least MinShellRatio).",
+          "type": "number"
         },
         "twist": {
+          "description": "The spin each shell turns about the fold\u0027s Z axis, in radians per shell (null = 0, concentric shells).",
           "type": [
             "number",
             "null"
           ],
-          "default": null,
-          "description": "The spin each shell turns about the fold\u0027s Z axis, in radians per shell (null = 0, concentric shells)."
+          "default": null
         },
         "origin": {
-          "default": null,
-          "description": "The point the shells centre on, creation units (null = the creation origin)."
+          "$ref": "#/$defs/DocumentVector3",
+          "description": "The point the shells centre on, creation units (null = the creation origin).",
+          "default": null
         }
       },
       "required": [
         "shellRatio"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ShapeDomainOpLogSphere"
     },
-    "ShapeNullable15": {
+    "ShapeDomainOp": {
+      "description": "One domain operator authored on a ShapeDocument, applied in creation space \u2014 after the creation/placement frame chain (origin/rotation/scale) and before the shape\u0027s own translate/rotate/scale, so every entry in Domain shares one space regardless of kind. The wire form of SdfDomainOp: a $type-discriminated ordered list whose optional members ToDomainOps resolves.",
       "type": [
         "object",
         "null"
@@ -10839,64 +11186,74 @@
       ],
       "anyOf": [
         {
-          "$ref": "#/$defs/ShapeNonNullable52",
-          "description": "Reflection fold across a plane \u2014 Symmetry. One authored half repeats mirror-imaged across the plane."
+          "$ref": "#/$defs/ShapeDomainOpSymmetry"
         },
         {
-          "$ref": "#/$defs/ShapeNonNullable53",
-          "description": "Bounded linear domain repeat \u2014 Repeat. Expands for contact only when the limit is a whole number within the copy budget; an absent limit is unbounded (UnboundedRepeatLimit per axis) and does not expand."
+          "$ref": "#/$defs/ShapeDomainOpRepeat"
         },
         {
-          "$ref": "#/$defs/ShapeNonNullable54",
-          "description": "Angular domain repeat \u2014 Polar. Its sectors expand to one rigid copy each, so contact carries the full ring."
+          "$ref": "#/$defs/ShapeDomainOpPolar"
         },
         {
-          "$ref": "#/$defs/ShapeNonNullable56",
-          "description": "Wallpaper-group lattice fold \u2014 Wallpaper. Render only: it has no rigid-copy expansion, so a solid placement carrying one is refused by name at validation."
+          "$ref": "#/$defs/ShapeDomainOpWallpaper"
         },
         {
-          "$ref": "#/$defs/ShapeNonNullable57",
-          "description": "Stochastic lattice fold \u2014 Jitter: a repeat whose every cell displaces, tumbles and recolours its copy by a hash of the cell. Render only: a hashed copy per cell has no rigid-copy expansion, so a solid placement carrying one is refused by name at validation."
+          "$ref": "#/$defs/ShapeDomainOpJitter"
         },
         {
-          "$ref": "#/$defs/ShapeNonNullable58",
-          "description": "Log-spherical shell fold \u2014 LogSphere: space tiled into self-similar shells about the origin, each a scaled copy of the prototype shell, so one shape repeats outward and inward at every scale. Render only: a scaled copy per shell has no rigid-copy expansion, so a solid placement carrying one is refused by name at validation."
+          "$ref": "#/$defs/ShapeDomainOpLogSphere"
+        }
+      ],
+      "title": "ShapeDomainOp"
+    },
+    "DocumentScalar": {
+      "title": "DocumentScalar",
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "string",
+          "minLength": 1,
+          "description": "A state.\u003Crow\u003E[.\u003Ckey\u003E] reference the containing document resolves from a cell."
         }
       ]
     },
-    "ShapeNullable16": {
+    "ShapeSwingDocument": {
+      "description": "One driver-fed rotation authored on a ShapeDocument: the shape turns about Axis at Pivot by amplitude \u00B7 wave(\u03C6 \u002B phase) \u00B7 w. Presentation-only \u2014 nothing downstream of the dynamic transform buffer reads it, so the SDF program, the analytic colliders, the compiled solid field, and every simulation value are untouched by an authored swing.",
       "type": [
         "object",
         "null"
       ],
       "properties": {
         "driver": {
-          "type": "string",
-          "description": "The Name supplying (\u03C6, w). An unresolvable name is refused at canonicalization."
+          "description": "The Name supplying (\u03C6, w). An unresolvable name is refused at canonicalization.",
+          "type": "string"
         },
         "pivot": {
-          "$comment": "Converter-defined value. This schema supplies documentation but leaves value validation to the creation document loader.",
+          "$ref": "#/$defs/DocumentVector3",
           "description": "The joint the shape turns about, in the creation\u0027s author frame (see CreationFrame) \u2014 a shoulder or a hip, not the shape\u0027s own centre."
         },
         "axis": {
-          "$comment": "Converter-defined value. This schema supplies documentation but leaves value validation to the creation document loader.",
+          "$ref": "#/$defs/DocumentVector3",
           "description": "The rotation axis, in the creation\u0027s author frame; normalized at canonicalization. A positive angle turns right-handed about it."
         },
         "amplitude": {
-          "$comment": "Converter-defined value. This schema supplies documentation but leaves value validation to the creation document loader.",
+          "$ref": "#/$defs/DocumentScalar",
           "description": "The peak angle in radians, magnitude at most MaxAmplitude. A negative amplitude mirrors the swing, which is how a limb on the body\u0027s other side reads."
         },
         "phase": {
-          "default": null,
-          "description": "The phase offset added to the driver\u0027s phase, radians (null = 0) \u2014 how two limbs on one driver are put out of step (contralateral arms differ by \u03C0)."
+          "$ref": "#/$defs/DocumentScalar",
+          "description": "The phase offset added to the driver\u0027s phase, radians (null = 0) \u2014 how two limbs on one driver are put out of step (contralateral arms differ by \u03C0).",
+          "default": null
         },
         "wave": {
+          "description": "The waveform name (null = Sine); see CreationWave.",
           "type": [
             "string",
             "null"
           ],
-          "default": null,
-          "description": "The waveform name (null = Sine); see CreationWave."
+          "default": null
         }
       },
       "required": [
@@ -10905,37 +11262,40 @@
         "axis",
         "amplitude"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ShapeSwingDocument"
     },
-    "ShapeNullable17": {
+    "ShapeSlideDocument": {
+      "description": "One driver-fed translation authored on a ShapeDocument: the shape slides along Axis by amplitude \u00B7 wave(\u03C6 \u002B phase) \u00B7 w \u2014 a piston, a hull\u0027s bob, a breathing chest. Presentation-only on the same terms as ShapeSwingDocument.",
       "type": [
         "object",
         "null"
       ],
       "properties": {
         "driver": {
-          "type": "string",
-          "description": "The Name supplying (\u03C6, w). An unresolvable name is refused at canonicalization."
+          "description": "The Name supplying (\u03C6, w). An unresolvable name is refused at canonicalization.",
+          "type": "string"
         },
         "axis": {
-          "$comment": "Converter-defined value. This schema supplies documentation but leaves value validation to the creation document loader.",
+          "$ref": "#/$defs/DocumentVector3",
           "description": "The slide direction, in the creation\u0027s author frame; normalized at canonicalization."
         },
         "amplitude": {
-          "$comment": "Converter-defined value. This schema supplies documentation but leaves value validation to the creation document loader.",
+          "$ref": "#/$defs/DocumentScalar",
           "description": "The peak offset in creation units, magnitude at most MaxAmplitude."
         },
         "phase": {
-          "default": null,
-          "description": "The phase offset added to the driver\u0027s phase, radians (null = 0)."
+          "$ref": "#/$defs/DocumentScalar",
+          "description": "The phase offset added to the driver\u0027s phase, radians (null = 0).",
+          "default": null
         },
         "wave": {
+          "description": "The waveform name (null = Sine); see CreationWave.",
           "type": [
             "string",
             "null"
           ],
-          "default": null,
-          "description": "The waveform name (null = Sine); see CreationWave."
+          "default": null
         }
       },
       "required": [
@@ -10943,29 +11303,32 @@
         "axis",
         "amplitude"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ShapeSlideDocument"
     },
-    "ShapeNullable18": {
+    "ShapePanelDocument": {
+      "description": "A second-material inset face region carried by a ShapeDocument \u2014 one authored shape that reads as two: an eroded copy of the same primitive, offset along its own local face and composed with its own material, recessed into or raised proud of the plate. Authored as one shape that bakes two field operands; no budget admits or refuses them, StampShapeCount only reports that bake work (a panelled shape counts as 2).",
       "type": [
         "object",
         "null"
       ],
       "properties": {
         "inset": {
-          "type": "number",
-          "description": "How far the panel copy shrinks on every local axis before it is placed \u2014 the copy\u0027s own scale is shape scale \u2212 Inset per axis (floored at MinimumScale), a sharp-cornered shrink rather than a rounded Minkowski erosion. The panel recipe changes the copy\u0027s primitive dimensions rather than applying Dilate to its field. Creation units. Finite and non-negative; refused by name past the shape\u0027s smallest local half-extent (the smallest of HalfExtent over the X, Y, and Z local axes) \u2014 past that the eroded copy is empty everywhere."
+          "description": "How far the panel copy shrinks on every local axis before it is placed \u2014 the copy\u0027s own scale is shape scale \u2212 Inset per axis (floored at MinimumScale), a sharp-cornered shrink rather than a rounded Minkowski erosion. The panel recipe changes the copy\u0027s primitive dimensions rather than applying Dilate to its field. Creation units. Finite and non-negative; refused by name past the shape\u0027s smallest local half-extent (the smallest of HalfExtent over the X, Y, and Z local axes) \u2014 past that the eroded copy is empty everywhere.",
+          "type": "number"
         },
         "depth": {
-          "type": "number",
-          "description": "How far the panel\u0027s own face sits from the plate\u0027s face along Face, in creation units, exact whatever the Inset. Positive recesses it: the eroded copy is composed with Subtraction so its near face becomes the recess floor exactly Depth below the plate\u0027s face \u2014 the floor and walls shade with Material, the subtraction-shades-with-the-subtrahend convention the Moth\u0027s hood opening rides. Negative raises the panel proud by |Depth| instead: the copy is composed with Union, its far face standing |Depth| past the plate\u0027s own and its back end buried inside the plate. Finite; refused by name past \u00B12\u00B7h\u2032, the eroded copy\u0027s own full extent along Face \u2014 deeper, a recess carves an enclosed void and a raise floats detached, both silent no-ops on the surface. See Resolve for the offset each case translates the copy by."
+          "description": "How far the panel\u0027s own face sits from the plate\u0027s face along Face, in creation units, exact whatever the Inset. Positive recesses it: the eroded copy is composed with Subtraction so its near face becomes the recess floor exactly Depth below the plate\u0027s face \u2014 the floor and walls shade with Material, the subtraction-shades-with-the-subtrahend convention the Moth\u0027s hood opening rides. Negative raises the panel proud by |Depth| instead: the copy is composed with Union, its far face standing |Depth| past the plate\u0027s own and its back end buried inside the plate. Finite; refused by name past \u00B12\u00B7h\u2032, the eroded copy\u0027s own full extent along Face \u2014 deeper, a recess carves an enclosed void and a raise floats detached, both silent no-ops on the surface. See Resolve for the offset each case translates the copy by.",
+          "type": "number"
         },
         "material": {
-          "type": "integer",
-          "description": "The panel\u0027s own palette slot \u2014 see Material. Clamped into [0, CreationDocument.PaletteSize) at normalization."
+          "description": "The panel\u0027s own palette slot \u2014 see Material. Clamped into [0, CreationDocument.PaletteSize) at normalization.",
+          "type": "integer"
         },
         "face": {
-          "default": null,
-          "description": "The local direction the panel erodes and offsets against, read in the primitive\u0027s own local frame \u2014 before its placement transform, the same frame Domain ops read. Null defaults to \u002BZ (the Prism extrude axis / a Box\u0027s front); a non-finite or zero-length authored value is refused by name, and a finite non-unit one is normalized at canonicalization, mirroring a domain op\u0027s own normal. Any primitive may author a curved face (a Cylinder\u0027s \u002BX rim, say) \u2014 the erode/translate/blend recipe reads only Support along the axis, never the primitive\u0027s curvature."
+          "$ref": "#/$defs/DocumentVector3",
+          "description": "The local direction the panel erodes and offsets against, read in the primitive\u0027s own local frame \u2014 before its placement transform, the same frame Domain ops read. Null defaults to \u002BZ (the Prism extrude axis / a Box\u0027s front); a non-finite or zero-length authored value is refused by name, and a finite non-unit one is normalized at canonicalization, mirroring a domain op\u0027s own normal. Any primitive may author a curved face (a Cylinder\u0027s \u002BX rim, say) \u2014 the erode/translate/blend recipe reads only Support along the axis, never the primitive\u0027s curvature.",
+          "default": null
         }
       },
       "required": [
@@ -10973,30 +11336,32 @@
         "depth",
         "material"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ShapePanelDocument"
     },
-    "ShapeNullable19": {
+    "ShapeTrimDocument": {
+      "description": "A second-material band painted onto a ShapeDocument\u0027s own surface wherever it sits near another, earlier-declared shape in the same creation \u2014 the pipeline\u0027s ivory boot band (max(shin - .003, -ankleCut - .095)) generalized: the host\u0027s surface where it is within Width of the reference shape\u0027s own surface, painted with Material. Where ShapePanelDocument recesses or raises a copy of a shape\u0027s OWN geometry, a trim colors the host\u0027s surface against a REFERENCE shape\u0027s geometry instead \u2014 a Subtraction cutter riding the host\u0027s own Group is the common case (the carve\u0027s own edge becomes the trim\u0027s guide), or a plain plane-like Box authored purely to mark a seam. Authored as one shape that bakes two field operands (the host\u0027s own eroded copy plus the reference\u0027s own dilated copy); no budget admits or refuses them, StampShapeCount only reports that bake work.",
       "type": [
         "object",
         "null"
       ],
       "properties": {
         "shape": {
-          "type": "string",
-          "description": "The Name of another shape in the same creation, declared EARLIER in shapes (so a chain resolves in one pass and can never cycle \u2014 mirrors Parent\u0027s own rule). A Subtraction cutter riding the host\u0027s own Group is the common case; a plain plane-like Box with blend Union works too. Only the reference\u0027s own primitive geometry (type, scale, taper, profile, lift, rounding, chamfer) and pose are re-read; its own blend, domain, panel, and trims play no part in the band."
+          "description": "The Name of another shape in the same creation, declared EARLIER in shapes (so a chain resolves in one pass and can never cycle \u2014 mirrors Parent\u0027s own rule). A Subtraction cutter riding the host\u0027s own Group is the common case; a plain plane-like Box with blend Union works too. Only the reference\u0027s own primitive geometry (type, scale, taper, profile, lift, rounding, chamfer) and pose are re-read; its own blend, domain, panel, and trims play no part in the band.",
+          "type": "string"
         },
         "width": {
-          "type": "number",
-          "description": "How far outward from the reference shape\u0027s own surface the band reaches, in creation units. Finite and positive; refused by name otherwise. Baked into the reference copy\u0027s own scale (a sharp-cornered growth \u2014 the mirror image of, and the same imprecision, Inset\u0027s own erosion already accepts) rather than a field-op dilation: it is the only way the reference\u0027s own offset survives composing through the macro\u0027s Intersection blend inside the one field scope both copies share \u2014 a field op applied after that blend would dilate the ALREADY-INTERSECTED result (eroding the host\u0027s own copy a second time by Width too), not the reference alone."
+          "description": "How far outward from the reference shape\u0027s own surface the band reaches, in creation units. Finite and positive; refused by name otherwise. Baked into the reference copy\u0027s own scale (a sharp-cornered growth \u2014 the mirror image of, and the same imprecision, Inset\u0027s own erosion already accepts) rather than a field-op dilation: it is the only way the reference\u0027s own offset survives composing through the macro\u0027s Intersection blend inside the one field scope both copies share \u2014 a field op applied after that blend would dilate the ALREADY-INTERSECTED result (eroding the host\u0027s own copy a second time by Width too), not the reference alone.",
+          "type": "number"
         },
         "material": {
-          "type": "integer",
-          "description": "The trim\u0027s own palette slot \u2014 see Material. Clamped into [0, CreationDocument.PaletteSize) at normalization. Used for both copies the macro composes, so whichever term the blend resolves to at a given point still paints the same color."
+          "description": "The trim\u0027s own palette slot \u2014 see Material. Clamped into [0, CreationDocument.PaletteSize) at normalization. Used for both copies the macro composes, so whichever term the blend resolves to at a given point still paints the same color.",
+          "type": "integer"
         },
         "inset": {
+          "description": "The margin the trim\u0027s own scope must beat the host\u0027s already-present, unmodified surface by to render at all \u2014 a real Dilate field op at a POSITIVE radius on the host\u0027s own copy (exact and isolated: the copy is alone in the trim\u0027s scope at that point, so nothing else is affected). The scope pops via Union into the accumulator the host\u0027s own plain shape already folded into, and max(a, b) \u003E= a makes a genuine erosion (a negative radius) provably always lose to that plain surface \u2014 the trim would never render \u2014 so the copy is instead nudged narrowly CLOSER than the plain surface by Inset, imperceptibly proud rather than inward: it loses everywhere by default (small) and wins only where the reference\u0027s own dilated copy does not additionally push the Intersection candidate past it, i.e. near the reference. Creation units, finite, in [0, MaxInset]; refused by name otherwise. Default 0.003 \u2014 just enough to clear the plain surface without z-fighting, the pipeline\u0027s own shin margin.",
           "type": "number",
-          "default": 0.003,
-          "description": "The margin the trim\u0027s own scope must beat the host\u0027s already-present, unmodified surface by to render at all \u2014 a real Dilate field op at a POSITIVE radius on the host\u0027s own copy (exact and isolated: the copy is alone in the trim\u0027s scope at that point, so nothing else is affected). The scope pops via Union into the accumulator the host\u0027s own plain shape already folded into, and max(a, b) \u003E= a makes a genuine erosion (a negative radius) provably always lose to that plain surface \u2014 the trim would never render \u2014 so the copy is instead nudged narrowly CLOSER than the plain surface by Inset, imperceptibly proud rather than inward: it loses everywhere by default (small) and wins only where the reference\u0027s own dilated copy does not additionally push the Intersection candidate past it, i.e. near the reference. Creation units, finite, in [0, MaxInset]; refused by name otherwise. Default 0.003 \u2014 just enough to clear the plain surface without z-fighting, the pipeline\u0027s own shin margin."
+          "default": 0.003
         }
       },
       "required": [
@@ -11004,43 +11369,45 @@
         "width",
         "material"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ShapeTrimDocument"
     },
-    "ShapeNullable20": {
+    "ShapeFlareDocument": {
+      "description": "An axial cross-section profile with a linear endpoint change and sinusoidal bulge. The profile\u0027s axis, start scale, origin and span are authored explicitly. Render-only.",
       "type": [
         "object",
         "null"
       ],
       "properties": {
         "amount": {
-          "type": "number",
-          "description": "The linear flare rate at the far end of the span (dimensionless; s(1) = StartScale \u002B Amount). Clamped to [MinAmount, MaxAmount]."
+          "description": "The linear flare rate at the far end of the span (dimensionless; s(1) = StartScale \u002B Amount). Clamped to [MinAmount, MaxAmount].",
+          "type": "number"
         },
         "bulge": {
-          "type": "number",
-          "description": "The mid-span sinusoidal bulge amplitude (dimensionless, peaks at the span\u0027s midpoint). Clamped to [-MaxBulge, MaxBulge]."
+          "description": "The mid-span sinusoidal bulge amplitude (dimensionless, peaks at the span\u0027s midpoint). Clamped to [-MaxBulge, MaxBulge].",
+          "type": "number"
         },
         "span": {
-          "type": "number",
-          "description": "The axial distance the profile runs over, in creation units; finite and strictly greater than zero, or the shape is refused at validation."
+          "description": "The axial distance the profile runs over, in creation units; finite and strictly greater than zero, or the shape is refused at validation.",
+          "type": "number"
         },
         "top": {
+          "description": "The axial coordinate where the profile begins, in creation units (null = 0).",
           "type": [
             "number",
             "null"
           ],
-          "default": null,
-          "description": "The axial coordinate where the profile begins, in creation units (null = 0)."
+          "default": null
         },
         "axis": {
+          "description": "Profile axis in [0, 2].",
           "type": "integer",
-          "default": 1,
-          "description": "Profile axis in [0, 2]."
+          "default": 1
         },
         "startScale": {
+          "description": "Positive radial scale at the span origin.",
           "type": "number",
-          "default": 1,
-          "description": "Positive radial scale at the span origin."
+          "default": 1
         }
       },
       "required": [
@@ -11048,24 +11415,26 @@
         "bulge",
         "span"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ShapeFlareDocument"
     },
-    "ShapeNullable21": {
+    "ShapeBumpDocument": {
+      "description": "The authored form of one GaussianPush bump: a gaussian displacement of the shape\u0027s local point applied before the primitive evaluates \u2014 p -= Push \u00B7 exp(-|(p - Center) / Radii|\u00B2) (see Bumps). The pipeline\u0027s faceOffset cheek/muzzle bumps (pushed along local \u002BZ) are two of these. Render-only, like Twist/Bend: Puck.SignedDistance.Queries.SdfFieldEvaluator does not interpret GaussianPush, so a shape carrying one is unreachable for deterministic field contact.",
       "type": [
         "object",
         "null"
       ],
       "properties": {
         "center": {
-          "$comment": "Converter-defined value. This schema supplies documentation but leaves value validation to the creation document loader.",
+          "$ref": "#/$defs/DocumentVector3",
           "description": "The bump\u0027s local center, in creation units."
         },
         "radii": {
-          "$comment": "Converter-defined value. This schema supplies documentation but leaves value validation to the creation document loader.",
+          "$ref": "#/$defs/DocumentVector3",
           "description": "The per-axis Gaussian falloff radii, in creation units \u2014 clamped away from zero at normalization (GaussianPushMinRadius) so the exponent\u0027s divisor is never zero. Refused by name if any authored component is negative or non-finite (a magnitude is what the field reads; a negative radius states nothing a positive one does not)."
         },
         "push": {
-          "$comment": "Converter-defined value. This schema supplies documentation but leaves value validation to the creation document loader.",
+          "$ref": "#/$defs/DocumentVector3",
           "description": "The peak displacement at the center, in creation units (zero = an exact identity, still admitted \u2014 it still charges the per-copy instance count)."
         }
       },
@@ -11074,9 +11443,11 @@
         "radii",
         "push"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ShapeBumpDocument"
     },
-    "ShapeNullable22": {
+    "ShapeShearDocument": {
+      "description": "Polynomial point shear: target \u002B= linear*driver \u002B quadratic*driver\u00B2 \u002B cubic*driver\u00B3. Target and Driver are distinct axes in [0, 2]. Coefficients carry inverse powers of creation length.",
       "type": [
         "object",
         "null"
@@ -11105,33 +11476,35 @@
       "required": [
         "linear"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ShapeShearDocument"
     },
-    "ShapeNullable23": {
+    "ShapeErodeDocument": {
+      "description": "The authored form of LaneErode \u2014 per-shape lane-driven erosion, the diegetic \u0022the body IS the health bar\u0022 carrier: reads the riding dynamic slot\u0027s Lane component and, as it rises from From to To, dilates the shape inward \u2014 ragged-fronted by noise \u2014 until it is skipped entirely. Admitted on every primitive (Erode); applies to the shape\u0027s own local point, immediately before its own primitive emission (whatever Twist/ Bend/Flare/Shear/ Bumps the shape\u0027s own chain still applies land on the point as usual). A shape under no dynamic slot (a static placement, or a dynamic one with no bound lanes expression) reads lane 0. Render-only: LaneErode\u0027s remarks list the field-contact exclusion.",
       "type": [
         "object",
         "null"
       ],
       "properties": {
         "lane": {
-          "type": "integer",
-          "description": "Which dynamic-slot lane drives the erosion."
+          "description": "Which dynamic-slot lane drives the erosion.",
+          "type": "integer"
         },
         "from": {
-          "type": "number",
-          "description": "The lane value where erosion begins (t = 0)."
+          "description": "The lane value where erosion begins (t = 0).",
+          "type": "number"
         },
         "to": {
-          "type": "number",
-          "description": "The lane value where the shape is fully eroded (t = 1); may be less than From to run the fold in reverse (the shape grows IN as the lane rises \u2014 the torn-fabric use). Must differ from From."
+          "description": "The lane value where the shape is fully eroded (t = 1); may be less than From to run the fold in reverse (the shape grows IN as the lane rises \u2014 the torn-fabric use). Must differ from From.",
+          "type": "number"
         },
         "noise": {
+          "description": "The erosion front\u0027s noise lattice frequency, cells per world unit (null = 1).",
           "type": [
             "number",
             "null"
           ],
-          "default": null,
-          "description": "The erosion front\u0027s noise lattice frequency, cells per world unit (null = 1)."
+          "default": null
         }
       },
       "required": [
@@ -11139,9 +11512,11 @@
         "from",
         "to"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ShapeErodeDocument"
     },
-    "ShapeNullable24": {
+    "ShapeCellsDocument": {
+      "description": "Shape-local cellular relief. Frequency and amplitude use creation units. Contact geometry retains the base shape; the fixed-point VM can evaluate the emitted field independently.",
       "type": [
         "object",
         "null"
@@ -11160,7 +11535,8 @@
           "enum": [
             "F1",
             "F2MinusF1"
-          ]
+          ],
+          "title": "SdfCellMode"
         },
         "randomness": {
           "type": "number"
@@ -11173,75 +11549,81 @@
         "mode",
         "randomness"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ShapeCellsDocument"
     },
-    "ShapeNullable25": {
+    "ShapeWarpDocument": {
+      "description": "The authored form of DomainWarp: a bounded, cross-coupled sinusoidal warp of the shape\u0027s own local point (each axis moved by the sine of the next axis\u0027s coordinate) before its primitive evaluates, an organic wobble. Admitted on every primitive (Warp); applied after Bumps, before Elongate and the primitive\u0027s own scale. Render-only, like Flare: contact rides the unwarped primitive.",
       "type": [
         "object",
         "null"
       ],
       "properties": {
         "frequency": {
-          "$comment": "Converter-defined value. This schema supplies documentation but leaves value validation to the creation document loader.",
+          "$ref": "#/$defs/DocumentVector3",
           "description": "The per-axis angular frequency, radians per creation unit (each clamped to [-MaxFrequency, MaxFrequency])."
         },
         "amplitude": {
-          "type": "number",
-          "description": "The farthest the point moves per axis, creation units (clamped to [-MaxAmplitude, MaxAmplitude])."
+          "description": "The farthest the point moves per axis, creation units (clamped to [-MaxAmplitude, MaxAmplitude]).",
+          "type": "number"
         },
         "reach": {
-          "type": "number",
-          "description": "The farthest the warp carries any point: the amplitude on every axis at once."
+          "description": "The farthest the warp carries any point: the amplitude on every axis at once.",
+          "type": "number"
         }
       },
       "required": [
         "frequency",
         "amplitude"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ShapeWarpDocument"
     },
-    "ShapeNullable26": {
+    "ShapeDisplaceDocument": {
+      "description": "The authored form of Displace: a bounded separable sine relief added to the shape\u0027s own field inside its own scope, the SDF-native height map (the relief is real geometry, so it shadows and self-occludes). Admitted on every closed primitive (Displace), evaluated at the shape\u0027s rigid frame like Cells. Render-only: contact rides the undisplaced primitive.",
       "type": [
         "object",
         "null"
       ],
       "properties": {
         "frequency": {
-          "$comment": "Converter-defined value. This schema supplies documentation but leaves value validation to the creation document loader.",
+          "$ref": "#/$defs/DocumentVector3",
           "description": "The per-axis angular frequency, radians per creation unit (each clamped to [-MaxFrequency, MaxFrequency])."
         },
         "amplitude": {
-          "type": "number",
-          "description": "The relief\u0027s height either way, creation units (clamped to [-MaxAmplitude, MaxAmplitude])."
+          "description": "The relief\u0027s height either way, creation units (clamped to [-MaxAmplitude, MaxAmplitude]).",
+          "type": "number"
         },
         "reach": {
-          "type": "number",
-          "description": "The farthest the relief carries the surface outward."
+          "description": "The farthest the relief carries the surface outward.",
+          "type": "number"
         }
       },
       "required": [
         "frequency",
         "amplitude"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ShapeDisplaceDocument"
     },
-    "ShapeNullable27": {
+    "ShapeMorphDocument": {
+      "description": "The authored form of PushFieldMorph\u0027s parameters, carried by a shape whose Blend is Morph: the shape\u0027s own scope composes into the field before it by linear interpolation, the riding dynamic slot\u0027s Lane running the blend from the field (lane at From) to the shape (lane at To). A shape under no dynamic slot (a static placement) reads lane 0.",
       "type": [
         "object",
         "null"
       ],
       "properties": {
         "lane": {
-          "type": "integer",
-          "description": "Which dynamic-slot lane drives the morph, in [0, 3]."
+          "description": "Which dynamic-slot lane drives the morph, in [0, 3].",
+          "type": "integer"
         },
         "from": {
-          "type": "number",
-          "description": "The lane value where the field before the shape shows alone (t = 0)."
+          "description": "The lane value where the field before the shape shows alone (t = 0).",
+          "type": "number"
         },
         "to": {
-          "type": "number",
-          "description": "The lane value where the shape shows alone (t = 1); must differ from From."
+          "description": "The lane value where the shape shows alone (t = 1); must differ from From.",
+          "type": "number"
         }
       },
       "required": [
@@ -11249,271 +11631,271 @@
         "from",
         "to"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ShapeMorphDocument"
     },
-    "ShapeNullable28": {
+    "ShapeDocument": {
+      "description": "The persisted form of a placed shape. Position and Rotation are authored in the creation\u0027s author frame \u2014 see CreationFrame \u2014 and Scale is the primitive\u0027s size directly: see CreationGeometry\u0027s unit table.",
       "type": [
         "object",
         "null"
       ],
       "properties": {
         "id": {
-          "type": "integer",
-          "description": "The shape\u0027s stable id."
+          "description": "The shape\u0027s stable id.",
+          "type": "integer"
         },
         "name": {
-          "$comment": "Converter-defined value. This schema supplies documentation but leaves value validation to the creation document loader.",
-          "description": "The optional player-given name, authored literally or through a containing world\u0027s Text state cell."
+          "description": "The optional player-given name, authored literally or through a containing world\u0027s Text state cell.",
+          "title": "DocumentIdentifier",
+          "type": "string"
         },
         "type": {
-          "$ref": "#/$defs/ShapeNonNullable50",
+          "$ref": "#/$defs/SdfSolidPrimitive",
           "description": "The primitive."
         },
         "position": {
-          "$comment": "Converter-defined value. This schema supplies documentation but leaves value validation to the creation document loader.",
+          "$ref": "#/$defs/DocumentVector3",
           "description": "The shape\u0027s position (the author frame\u0027s workbench space)."
         },
         "rotation": {
-          "$comment": "Converter-defined value. This schema supplies documentation but leaves value validation to the creation document loader.",
+          "$ref": "#/$defs/DocumentQuaternion",
           "description": "The orientation."
         },
         "scale": {
-          "$comment": "Converter-defined value. This schema supplies documentation but leaves value validation to the creation document loader.",
+          "$ref": "#/$defs/DocumentVector3",
           "description": "The per-axis scale \u2014 the primitive\u0027s size (see CreationGeometry)."
         },
         "material": {
+          "description": "The palette slot (null = 0).",
           "type": [
             "integer",
             "null"
-          ],
-          "description": "The palette slot (null = 0)."
+          ]
         },
         "blend": {
-          "$ref": "#/$defs/ShapeNullable11",
+          "$ref": "#/$defs/SdfBlendOp",
           "description": "The blend op name (null = Union)."
         },
         "smooth": {
+          "description": "The smooth-blend radius (null = 0).",
           "type": [
             "number",
             "null"
-          ],
-          "description": "The smooth-blend radius (null = 0)."
+          ]
         },
         "group": {
+          "description": "The composition group (null = ungrouped).",
           "type": [
             "integer",
             "null"
-          ],
-          "description": "The composition group (null = ungrouped)."
+          ]
         },
         "twist": {
+          "description": "The shape\u0027s local twist rate (null = 0).",
           "type": [
             "number",
             "null"
           ],
-          "default": null,
-          "description": "The shape\u0027s local twist rate (null = 0)."
+          "default": null
         },
         "onion": {
+          "description": "The shape\u0027s shell thickness (null = 0, solid).",
           "type": [
             "number",
             "null"
           ],
-          "default": null,
-          "description": "The shape\u0027s shell thickness (null = 0, solid)."
+          "default": null
         },
         "bend": {
+          "description": "The shape\u0027s local bend rate about Y (null = 0).",
           "type": [
             "number",
             "null"
           ],
-          "default": null,
-          "description": "The shape\u0027s local bend rate about Y (null = 0)."
+          "default": null
         },
         "dilate": {
+          "description": "The shape\u0027s inflation radius (null = 0).",
           "type": [
             "number",
             "null"
           ],
-          "default": null,
-          "description": "The shape\u0027s inflation radius (null = 0)."
+          "default": null
         },
         "domain": {
+          "description": "The ordered SDF VM domain operators (ShapeDomainOp) applied to the shape\u0027s point in creation space, before its own translate/rotate/scale (null = none). Every op the copy expansion covers reaches contact as well as render; wallpaper does not expand, and a solid placement carrying one is refused at validation.",
           "type": [
             "array",
             "null"
           ],
           "items": {
-            "$ref": "#/$defs/ShapeNullable15",
-            "description": "One domain operator authored on a ShapeDocument, applied in creation space \u2014 after the creation/placement frame chain (origin/rotation/scale) and before the shape\u0027s own translate/rotate/scale, so every entry in Domain shares one space regardless of kind. The wire form of SdfDomainOp: a $type-discriminated ordered list whose optional members ToDomainOps resolves."
+            "$ref": "#/$defs/ShapeDomainOp"
           },
-          "default": null,
-          "description": "The ordered SDF VM domain operators (ShapeDomainOp) applied to the shape\u0027s point in creation space, before its own translate/rotate/scale (null = none). Every op the copy expansion covers reaches contact as well as render; wallpaper does not expand, and a solid placement carrying one is refused at validation."
+          "default": null
         },
         "swings": {
+          "description": "The driver-fed rotations this shape rides (ShapeSwingDocument), any number (null = none), composed in the order written.",
           "type": [
             "array",
             "null"
           ],
           "items": {
-            "$ref": "#/$defs/ShapeNullable16",
-            "description": "One driver-fed rotation authored on a ShapeDocument: the shape turns about Axis at Pivot by amplitude \u00B7 wave(\u03C6 \u002B phase) \u00B7 w. Presentation-only \u2014 nothing downstream of the dynamic transform buffer reads it, so the SDF program, the analytic colliders, the compiled solid field, and every simulation value are untouched by an authored swing."
+            "$ref": "#/$defs/ShapeSwingDocument"
           },
-          "default": null,
-          "description": "The driver-fed rotations this shape rides (ShapeSwingDocument), any number (null = none), composed in the order written."
+          "default": null
         },
         "slides": {
+          "description": "The driver-fed translations this shape rides (ShapeSlideDocument), any number (null = none). Applied after every swing, along the authored axis. Both facets are presentation-only \u2014 composed onto the shape\u0027s per-frame dynamic transform and read nowhere else, so the SDF program, the colliders, the solid field, and simulation state are all blind to them. A shape carrying Domain rides its own slot packed with its Parent chain\u0027s rigid delta (the identity with no parent), leaving nowhere for its OWN swing/slide to compose, so they are refused alongside a domain list at validation.",
           "type": [
             "array",
             "null"
           ],
           "items": {
-            "$ref": "#/$defs/ShapeNullable17",
-            "description": "One driver-fed translation authored on a ShapeDocument: the shape slides along Axis by amplitude \u00B7 wave(\u03C6 \u002B phase) \u00B7 w \u2014 a piston, a hull\u0027s bob, a breathing chest. Presentation-only on the same terms as ShapeSwingDocument."
+            "$ref": "#/$defs/ShapeSlideDocument"
           },
-          "default": null,
-          "description": "The driver-fed translations this shape rides (ShapeSlideDocument), any number (null = none). Applied after every swing, along the authored axis. Both facets are presentation-only \u2014 composed onto the shape\u0027s per-frame dynamic transform and read nowhere else, so the SDF program, the colliders, the solid field, and simulation state are all blind to them. A shape carrying Domain rides its own slot packed with its Parent chain\u0027s rigid delta (the identity with no parent), leaving nowhere for its OWN swing/slide to compose, so they are refused alongside a domain list at validation."
+          "default": null
         },
         "parent": {
+          "description": "The Name of the shape this one hangs from (null = the creation root): the parent\u0027s animated motion carries this shape and its own pivots with it, so a forearm swung at the elbow also rides the upper arm\u0027s swing at the shoulder. The parent must be declared earlier in shapes (so a chain resolves in one pass and can never cycle); presentation-only on the same terms as the swings it composes with.",
           "type": [
             "string",
             "null"
           ],
-          "default": null,
-          "description": "The Name of the shape this one hangs from (null = the creation root): the parent\u0027s animated motion carries this shape and its own pivots with it, so a forearm swung at the elbow also rides the upper arm\u0027s swing at the shoulder. The parent must be declared earlier in shapes (so a chain resolves in one pass and can never cycle); presentation-only on the same terms as the swings it composes with."
+          "default": null
         },
         "joint": {
-          "default": null,
-          "description": "The point this shape turns about (null = the pivot of its first swing, or its own position when it has neither): an effector\u0027s solve turns a bone about it (Joint). Author-frame, like every other point here. It changes no pose on its own."
+          "$ref": "#/$defs/DocumentVector3",
+          "description": "The point this shape turns about (null = the pivot of its first swing, or its own position when it has neither): an effector\u0027s solve turns a bone about it (Joint). Author-frame, like every other point here. It changes no pose on its own.",
+          "default": null
         },
         "taper": {
+          "description": "Only for Prism: top width divided by bottom width, finite in [0, 1]. Null uses 0.5; zero makes a triangular profile and one a rectangular profile. Scale holds bottom half-width, half-height and extrusion half-depth. Rotate the prism to reverse its taper.",
           "type": [
             "number",
             "null"
           ],
-          "default": null,
-          "description": "Only for Prism: top width divided by bottom width, finite in [0, 1]. Null uses 0.5; zero makes a triangular profile and one a rectangular profile. Scale holds bottom half-width, half-height and extrusion half-depth. Rotate the prism to reverse its taper."
+          "default": null
         },
         "profile": {
-          "$ref": "#/$defs/ShapeNullable8",
+          "$ref": "#/$defs/SdfPrismProfileNullable",
           "description": "Optional Prism cross-section controls. Null uses a trapezoid; other profiles expose rounded rectangles, polygons, and ellipses with flat extruded caps.",
           "default": null
         },
         "lift": {
-          "$ref": "#/$defs/ShapeNullable9",
+          "$ref": "#/$defs/SdfLiftNullable",
           "description": "Only for Prism: how the XY profile becomes a solid. Null or extrude sweeps it along local Z to scale.z. revolve sweeps it about the local Y axis with scale.z as the radial offset \u2014 zero gives a solid of revolution (a cowl, a boot cuff, a pauldron dome), a positive offset a ring. Renderable for every profile; a solid placement refuses it, because both contact compilers read a per-axis-scaled local box and a revolve reads scale.z as an offset rather than an extent.",
           "default": null
         },
         "rounding": {
+          "description": "Only for Box, Prism, Cylinder and Cone: the edge-rounding radius in the creation\u0027s own units, finite and non-negative. The profile (and, for an extruded prism, its half-depth) insets by it and the field offsets back out, so the shape keeps its authored extent and its edges fillet; a Box without it is sharp, so boxes that touch meet as one solid, and a solid placement collides as the same rounded or sharp box. Refused by name past MaxRounding.",
           "type": [
             "number",
             "null"
           ],
-          "default": null,
-          "description": "Only for Box, Prism, Cylinder and Cone: the edge-rounding radius in the creation\u0027s own units, finite and non-negative. The profile (and, for an extruded prism, its half-depth) insets by it and the field offsets back out, so the shape keeps its authored extent and its edges fillet; a Box without it is sharp, so boxes that touch meet as one solid, and a solid placement collides as the same rounded or sharp box. Refused by name past MaxRounding."
+          "default": null
         },
         "panel": {
-          "$ref": "#/$defs/ShapeNullable18",
+          "$ref": "#/$defs/ShapePanelDocument",
           "description": "The shape\u0027s second-material inset face region (null = none) \u2014 see ShapePanelDocument. Render-only; refused by name on a Plane, on a shape carrying Domain ops or a non-zero Group, and on a creation that otherwise needs its own field scope.",
           "default": null
         },
         "chamfer": {
+          "description": "Only for Box, Cylinder and Prism (an extruded prism only \u2014 a revolve has no cap seam to bevel): the 45-degree edge-chamfer radius in the creation\u0027s own units, finite and non-negative. Refused by name past MaxChamfer, and refused by name alongside a nonzero Rounding on the same shape.",
           "type": [
             "number",
             "null"
           ],
-          "default": null,
-          "description": "Only for Box, Cylinder and Prism (an extruded prism only \u2014 a revolve has no cap seam to bevel): the 45-degree edge-chamfer radius in the creation\u0027s own units, finite and non-negative. Refused by name past MaxChamfer, and refused by name alongside a nonzero Rounding on the same shape."
+          "default": null
         },
         "trims": {
+          "description": "The shape\u0027s second-material surface bands against other, earlier-declared shapes (null = none), at most MaxTrims \u2014 see ShapeTrimDocument. Render-only, like Panel; refused by name on a shape carrying Domain ops, a non-zero Group, or on a creation that otherwise needs its own field scope.",
           "type": [
             "array",
             "null"
           ],
           "items": {
-            "$ref": "#/$defs/ShapeNullable19",
-            "description": "A second-material band painted onto a ShapeDocument\u0027s own surface wherever it sits near another, earlier-declared shape in the same creation \u2014 the pipeline\u0027s ivory boot band (max(shin - .003, -ankleCut - .095)) generalized: the host\u0027s surface where it is within Width of the reference shape\u0027s own surface, painted with Material. Where ShapePanelDocument recesses or raises a copy of a shape\u0027s OWN geometry, a trim colors the host\u0027s surface against a REFERENCE shape\u0027s geometry instead \u2014 a Subtraction cutter riding the host\u0027s own Group is the common case (the carve\u0027s own edge becomes the trim\u0027s guide), or a plain plane-like Box authored purely to mark a seam. Authored as one shape that bakes two field operands (the host\u0027s own eroded copy plus the reference\u0027s own dilated copy); no budget admits or refuses them, StampShapeCount only reports that bake work."
+            "$ref": "#/$defs/ShapeTrimDocument"
           },
-          "default": null,
-          "description": "The shape\u0027s second-material surface bands against other, earlier-declared shapes (null = none), at most MaxTrims \u2014 see ShapeTrimDocument. Render-only, like Panel; refused by name on a shape carrying Domain ops, a non-zero Group, or on a creation that otherwise needs its own field scope."
+          "default": null
         },
         "detail": {
+          "description": "Whether this shape is a detail shape (null = false): excluded from contact (it never carves the contact field or the collider) while the baked frame samples it like any other shape, so a seam (a thin subtraction) or a rivet (a small union, its own material) bakes into the mesh and paints its footprint through the bake\u0027s point-sampled materials. Refused by name alongside Panel or Trims on the same shape.",
           "type": [
             "boolean",
             "null"
           ],
-          "default": null,
-          "description": "Whether this shape is a detail shape (null = false): excluded from contact (it never carves the contact field or the collider) while the baked frame samples it like any other shape, so a seam (a thin subtraction) or a rivet (a small union, its own material) bakes into the mesh and paints its footprint through the bake\u0027s point-sampled materials. Refused by name alongside Panel or Trims on the same shape."
+          "default": null
         },
         "flare": {
-          "$ref": "#/$defs/ShapeNullable20",
+          "$ref": "#/$defs/ShapeFlareDocument",
           "description": "The shape\u0027s radial flare warp (null = none) \u2014 see ShapeFlareDocument. Admitted on every primitive; applies to the shape\u0027s own local point after Twist/Bend, in that order (twist, then bend, then flare), before the primitive\u0027s own scale. Render-only, like Twist/Bend.",
           "default": null
         },
         "exponent": {
+          "description": "Only for Superellipsoid: the generalizing exponent, finite in [MinSuperellipsoidExponent, MaxSuperellipsoidExponent] (null = MinSuperellipsoidExponent, the ellipsoid limit \u2014 an unauthored Superellipsoid is a plain ellipsoid).",
           "type": [
             "number",
             "null"
           ],
-          "default": null,
-          "description": "Only for Superellipsoid: the generalizing exponent, finite in [MinSuperellipsoidExponent, MaxSuperellipsoidExponent] (null = MinSuperellipsoidExponent, the ellipsoid limit \u2014 an unauthored Superellipsoid is a plain ellipsoid)."
+          "default": null
         },
         "bumps": {
+          "description": "The shape\u0027s Gaussian domain-push bumps (null = none), at most MaxBumps \u2014 see ShapeBumpDocument. Applied to the shape\u0027s own local point after Shear, before the primitive\u0027s own scale. Render-only, like Twist/Bend/Flare.",
           "type": [
             "array",
             "null"
           ],
           "items": {
-            "$ref": "#/$defs/ShapeNullable21",
-            "description": "The authored form of one GaussianPush bump: a gaussian displacement of the shape\u0027s local point applied before the primitive evaluates \u2014 p -= Push \u00B7 exp(-|(p - Center) / Radii|\u00B2) (see Bumps). The pipeline\u0027s faceOffset cheek/muzzle bumps (pushed along local \u002BZ) are two of these. Render-only, like Twist/Bend: Puck.SignedDistance.Queries.SdfFieldEvaluator does not interpret GaussianPush, so a shape carrying one is unreachable for deterministic field contact."
+            "$ref": "#/$defs/ShapeBumpDocument"
           },
-          "default": null,
-          "description": "The shape\u0027s Gaussian domain-push bumps (null = none), at most MaxBumps \u2014 see ShapeBumpDocument. Applied to the shape\u0027s own local point after Shear, before the primitive\u0027s own scale. Render-only, like Twist/Bend/Flare."
+          "default": null
         },
         "shear": {
-          "$ref": "#/$defs/ShapeNullable22",
+          "$ref": "#/$defs/ShapeShearDocument",
           "description": "A polynomial point shear with explicit target and driver axes.",
           "default": null
         },
         "curve": {
-          "$ref": "#/$defs/ShapeNullable10",
+          "$ref": "#/$defs/ShapeCurveDocument",
           "description": "The shape\u0027s swept-curve geometry (null = none) \u2014 see ShapeCurveDocument. Admitted only, and required, on Sweep (refused elsewhere, by name; a Sweep with no curve is refused, by name); refused alongside Panel, Trims, Flare, Shear, Bumps, or Domain on the same shape.",
           "default": null
         },
         "erode": {
-          "$ref": "#/$defs/ShapeNullable23",
+          "$ref": "#/$defs/ShapeErodeDocument",
           "description": "The shape\u0027s per-instance lane-driven erosion (null = none) \u2014 see ShapeErodeDocument. Admitted on every primitive; its reach is this shape\u0027s own Reach, so it needs no separate authored magnitude.",
           "default": null
         },
         "cells": {
-          "$ref": "#/$defs/ShapeNullable24",
+          "$ref": "#/$defs/ShapeCellsDocument",
           "description": "Shape-local cellular relief, evaluated after geometry within its own field scope.",
           "default": null
         },
         "warp": {
-          "$ref": "#/$defs/ShapeNullable25",
+          "$ref": "#/$defs/ShapeWarpDocument",
           "description": "The shape\u0027s cross-coupled sinusoidal domain warp (null = none) \u2014 see ShapeWarpDocument. Applied to the shape\u0027s own local point after Bumps, before Elongate. Render-only.",
           "default": null
         },
         "displace": {
-          "$ref": "#/$defs/ShapeNullable26",
+          "$ref": "#/$defs/ShapeDisplaceDocument",
           "description": "The shape\u0027s sine relief (null = none) \u2014 see ShapeDisplaceDocument. Added to the shape\u0027s own field inside its own scope. Render-only.",
           "default": null
         },
         "elongate": {
-          "default": null,
-          "description": "The half-extents the primitive\u0027s cross-section is swept over, creation units (null = none): Elongate, the capsule-from-sphere operator, applied last to the shape\u0027s own local point. Each component is clamped to [0, MaxElongate]. Render-only."
+          "$ref": "#/$defs/DocumentVector3",
+          "description": "The half-extents the primitive\u0027s cross-section is swept over, creation units (null = none): Elongate, the capsule-from-sphere operator, applied last to the shape\u0027s own local point. Each component is clamped to [0, MaxElongate]. Render-only.",
+          "default": null
         },
         "steps": {
+          "description": "Only with a stairs Blend (StairsUnion, StairsSubtraction): the steps the seam takes over the blend radius Smooth, in [1, MaxSteps] (null = DefaultSteps).",
           "type": [
             "integer",
             "null"
           ],
-          "default": null,
-          "description": "Only with a stairs Blend (StairsUnion, StairsSubtraction): the steps the seam takes over the blend radius Smooth, in [1, MaxSteps] (null = DefaultSteps)."
+          "default": null
         },
         "morph": {
-          "$ref": "#/$defs/ShapeNullable27",
+          "$ref": "#/$defs/ShapeMorphDocument",
           "description": "Only with a MorphBlend, and required by it: the lane and range the morph runs over \u2014 see ShapeMorphDocument.",
           "default": null
         }
@@ -11525,28 +11907,31 @@
         "rotation",
         "scale"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ShapeDocument"
     },
-    "ShapeNullable29": {
+    "CreationDriverCurveDocument": {
+      "description": "A curve of an earlier driver\u0027s phase, the way a driver\u0027s CadenceBy and WeightBy read one signal through another: the value is the height (Z) of the containing world\u0027s curves row where its X equals Driver\u0027s phase, held at the end knots outside the row\u0027s span. The named driver\u0027s cadence scales its signal onto the curve\u0027s X, and its dynamics smooths it.",
       "type": [
         "object",
         "null"
       ],
       "properties": {
         "driver": {
-          "type": "string",
-          "description": "A driver declared before the one this curve modulates."
+          "description": "A driver declared before the one this curve modulates.",
+          "type": "string"
         },
         "curve": {
-          "type": "string",
-          "description": "The world\u0027s curves row: open and drawn left to right, each knot further along X than the last with its tangent pointing toward \u002BX. The world validator refuses a row that is not."
+          "description": "The world\u0027s curves row: open and drawn left to right, each knot further along X than the last with its tangent pointing toward \u002BX. The world validator refuses a row that is not.",
+          "type": "string"
         }
       },
       "required": [
         "driver",
         "curve"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "CreationDriverCurveDocument"
     },
     "WorldSpeakerSourceNone": {
       "description": "No signal is bound \u2014 honest silence (the emitter holds its place; audio.emitters reads the state).",
@@ -11776,7 +12161,7 @@
       "additionalProperties": false,
       "title": "WorldChannelSelection"
     },
-    "ShapeNonNullable59": {
+    "ShapeNonNullable50": {
       "anyOf": [
         {
           "type": "integer"
@@ -11834,7 +12219,17 @@
         "ProjectionY",
         "Ring"
       ],
-      "title": "CycleOutput"
+      "title": "CycleOutput",
+      "x-enumDescriptions": {
+        "Step": "The rotation\u0027s step count in [0, order), one full turn per Order steps \u2014 an int cell.",
+        "Turns": "The rotation as a fraction of one turn, \u230Astep \u00B7 2^16 / order\u230B in raw FixedQ4816 bits, so the value wraps once per loop the way a state clock reads its row \u2014 a fixed cell.",
+        "Cos": "The unit rotation\u0027s cosine, the real part of the order\u0027s root of unity at the step \u2014 a fixed cell.",
+        "Sin": "The unit rotation\u0027s sine, the imaginary part of that root of unity \u2014 a fixed cell.",
+        "Node": "The symmetry-lattice node the phase node has been carried to along its orbit under the generator, in [0, 240) \u2014 an int cell whose stored value is the node the walk starts from.",
+        "ProjectionX": "The current node\u0027s projected X coordinate on the plane of eight concentric rings \u2014 a fixed cell.",
+        "ProjectionY": "The current node\u0027s projected Y coordinate on that plane \u2014 a fixed cell.",
+        "Ring": "The ring, 0..7, the current node lies on \u2014 an int cell; constant along the lattice\u0027s own cycle, and a value that moves under a word whose orbits cross rings."
+      }
     },
     "StateCycle": {
       "description": "A row\u0027s or cell\u0027s tick-indexed rotation trait: the value is a pure function of the server tick through a generator of the symmetry lattice\u0027s reflection group \u2014 Puck.Maths.SymmetryWord, the lattice\u0027s own thirty-step cycle when no Word is authored \u2014 raised to Power once per step. The generator\u0027s order is the loop\u0027s period, derived from the word rather than authored: a word of order twelve is a twelve-position dial, one of order twenty-four a day. Nothing accumulates and nothing is rebased: the mapping is tick-absolute for a fixed epoch/substep pair, so a replay, a reconnect, or a fresh read at any tick lands on the same bits.",
@@ -11869,7 +12264,7 @@
       },
       "additionalProperties": false
     },
-    "ShapeNonNullable60": {
+    "ShapeNonNullable51": {
       "type": "object",
       "properties": {
         "epochTick": {
@@ -11897,7 +12292,12 @@
         "Count",
         "Placeholder"
       ],
-      "title": "HiddenCells"
+      "title": "HiddenCells",
+      "x-enumDescriptions": {
+        "Omit": "Hidden cells leave no trace: neither their count nor their positions.",
+        "Count": "The observed row reports how many cells were hidden and nothing else about them.",
+        "Placeholder": "Every hidden cell appears in pile order as an anonymous placeholder (a card back): no key, no value, no text, no observation stamp."
+      }
     },
     "StateVisibility": {
       "description": "Opt-in observation policy. Null readers means public; an empty list means authority only. Row and cell policies intersect. Replica-tier authorities remain fully trusted.",
@@ -11943,7 +12343,14 @@
         "StreamDraw",
         "SymmetryOrbit"
       ],
-      "title": "GeneratorSource"
+      "title": "GeneratorSource",
+      "x-enumDescriptions": {
+        "Markov": "The weighted-transition walk over Contexts \u2014 reads Start/Bound/Contexts/ Mode, writes text. The only source that deals (see GeneratorMode) and the only one whose emission costs more than one sample.",
+        "UniformRange": "One draw over the closed integer range [RangeMin, RangeMax] \u2014 reads only those two fields, writes an int or fixed value. The shared Maths rejection sampler makes every accepted value equally likely. The cursor counts all raw words, including rejected words. A result attempts at most MaxBoundedAttempts words, then refuses without a biased fallback.",
+        "WeightedNumeric": "One alias-table draw over Weighted\u0027s numeric outcomes \u2014 reads that field and Mode, writes an int or fixed value. Each outcome\u0027s probability is exactly its weight over the total. A draw takes two advances, plus the raw words of one exact wide draw on the one word in 2\u00B3\u00B2 that lands on a column\u0027s threshold; the result reports the advances consumed, and the Markov walk pays the same per token. Under an exhausting mode the outcomes are drawn through the site\u0027s one DrawnMasks mask, which is the numeric shuffle bag.",
+        "StreamDraw": "One raw, unshaped 32-bit draw off the site\u0027s own stream \u2014 no range, no weights \u2014 widened into the target\u0027s raw value as-is. One fixed-cost advance per draw. The unshaped-entropy primitive: no distribution is applied.",
+        "SymmetryOrbit": "One uniform draw over an orbit of the symmetry lattice: the thirty nodes of Ring, or the nodes Node visits under Word (the lattice\u0027s own cycle when none is authored, so the node\u0027s ring) \u2014 reads those fields and Mode, writes the node index in the site\u0027s displayed unit (a fixed site stores node.0, the phase a cycle trait reads). The units are the orbit\u0027s nodes in walk order, equally weighted, drawn under an exhausting mode through the site\u0027s one DrawnMasks mask exactly as a weighted numeric source is; two advances per draw, plus the rare exact wide draw a weighted numeric source takes."
+      }
     },
     "GeneratorAlternative": {
       "description": "One weighted alternative of a GeneratorContext: the token it emits, its relative weight, and the context the walk moves into after it is picked. The authored Next is what makes this a real Markov process rather than a bag of independent draws \u2014 the context key is the process state, so an author folds exactly as much history into it as the chain needs.",
@@ -12013,7 +12420,12 @@
         "WithoutReplacement",
         "RestartOnExhaustion"
       ],
-      "title": "GeneratorMode"
+      "title": "GeneratorMode",
+      "x-enumDescriptions": {
+        "WithReplacement": "Every sample leaves the entry set unchanged \u2014 the ordinary weighted draw.",
+        "WithoutReplacement": "Each entry may be drawn at most once per pass; a set whose entries are all drawn refuses the whole emission by name (never a silent stall, never a re-draw).",
+        "RestartOnExhaustion": "Each entry may be drawn at most once per pass; a set whose entries are all drawn clears its mask and draws again from the full set, deterministically, in the same emission \u2014 the shuffle bag."
+      }
     },
     "GeneratorWeightedNumeric": {
       "description": "One numeric outcome of a WeightedNumeric source: the raw value it writes and its relative weight \u2014 the numeric twin of GeneratorAlternative, minus Token (nothing to join into text) and Next (a numeric draw is one terminal pick, never a walk).",
@@ -12187,31 +12599,6 @@
       },
       "additionalProperties": false,
       "title": "StateGenerator"
-    },
-    "PaletteSurfaceDocument": {
-      "description": "An authored surface tint and reflectance.",
-      "type": [
-        "object",
-        "null"
-      ],
-      "properties": {
-        "color": {
-          "type": "string"
-        },
-        "roughness": {
-          "type": "number"
-        },
-        "metal": {
-          "type": "number"
-        }
-      },
-      "required": [
-        "color",
-        "roughness",
-        "metal"
-      ],
-      "additionalProperties": false,
-      "title": "PaletteSurfaceDocument"
     },
     "ActionFactNullable": {
       "enum": [
@@ -12402,7 +12789,14 @@
         "Text",
         "Vector"
       ],
-      "title": "CellKind"
+      "title": "CellKind",
+      "x-enumDescriptions": {
+        "Int": "A whole 64-bit signed integer cell (a score, a round counter, an inventory count, or \u2014 declaring min zero \u2014 a tick-count timer).",
+        "Fixed": "A fixed-point cell holding raw FixedQ4816 bits \u2014 the deterministic replacement for a float in simulation state. Human-authored surfaces (document JSON, console verb arguments, validator refusal text, read-back echoes) use the decimal representation via FixedQ4816.TryParse/ToString; only the addon ABI channel wire and the per-cell mutation payload carry the raw bit pattern.",
+        "Bool": "A boolean cell (a win flag, a toggle). Carries no range \u2014 a gauge cannot bind to it.",
+        "Text": "A short-text cell (a status label, a player name slot), bounded to MaxTextValueLength UTF-16 code units. Carries no range \u2014 a gauge cannot bind to it. The only kind whose value is carried in Text rather than Value.",
+        "Vector": "A vector cell holding an admitted, normalized signed 8-bit embedding vector, carried in Vector rather than Value or Text."
+      }
     },
     "CellValueJsonConverterIntShape": {
       "description": "The schema-only Int wire arm.",
@@ -12714,7 +13108,26 @@
         "Danger",
         null
       ],
-      "title": "WorldThemeRole"
+      "title": "WorldThemeRole",
+      "x-enumDescriptions": {
+        "SurfaceBase": "The deepest surface (a held control\u0027s seated plate).",
+        "SurfaceRaised": "A raised surface (a control\u0027s resting plate).",
+        "SurfaceInset": "A recessed surface (a well inside a panel).",
+        "ScrimPanel": "The panel scrim.",
+        "ScrimStrip": "The strip scrim.",
+        "ScrimChip": "The chip scrim.",
+        "LineHair": "The hairline rule.",
+        "LineSoft": "The soft rule (a band divider).",
+        "TextPrimary": "The primary text.",
+        "TextDim": "The dimmed text.",
+        "TextMute": "The muted text.",
+        "Accent": "The accent (also the hover and selected tier).",
+        "AccentQuiet": "The quiet accent fill.",
+        "AccentInk": "The ink drawn on the accent.",
+        "Positive": "The positive status.",
+        "Warning": "The warning status.",
+        "Danger": "The danger status."
+      }
     },
     "WorldThemeStyleColor": {
       "description": "A component style\u0027s color: a core role by name (Role, so the component follows the world\u0027s palette), or its own literal, binding or keys (Color). Exactly one is authored.",
@@ -13365,175 +13778,6 @@
       ],
       "title": "CellSetExpression"
     },
-    "SdfPathSegmentNullable": {
-      "description": "A line, quadratic/cubic Bezier, or circular arc ending at End. An arc uses ArcCenter and Clockwise; Beziers use Control and optionally Control2. Controls are in the profile\u0027s local XY frame.",
-      "type": [
-        "object",
-        "null"
-      ],
-      "properties": {
-        "end": {
-          "type": "array",
-          "items": {
-            "type": "number"
-          },
-          "minItems": 2,
-          "maxItems": 2
-        },
-        "control": {
-          "default": null,
-          "type": "array",
-          "items": {
-            "type": "number"
-          },
-          "minItems": 2,
-          "maxItems": 2
-        },
-        "control2": {
-          "default": null,
-          "type": "array",
-          "items": {
-            "type": "number"
-          },
-          "minItems": 2,
-          "maxItems": 2
-        },
-        "arcCenter": {
-          "default": null,
-          "type": "array",
-          "items": {
-            "type": "number"
-          },
-          "minItems": 2,
-          "maxItems": 2
-        },
-        "clockwise": {
-          "type": "boolean",
-          "default": false
-        }
-      },
-      "required": [
-        "end"
-      ],
-      "additionalProperties": false,
-      "title": "SdfPathSegment"
-    },
-    "SdfPathContourNullable": {
-      "description": "A continuous contour. Filled contours close implicitly; stroked contours remain open unless Closed.",
-      "type": [
-        "object",
-        "null"
-      ],
-      "properties": {
-        "start": {
-          "type": "array",
-          "items": {
-            "type": "number"
-          },
-          "minItems": 2,
-          "maxItems": 2
-        },
-        "closed": {
-          "type": "boolean",
-          "default": false
-        },
-        "segments": {
-          "description": "Gets the contour\u0027s segments in order, each ending where the next begins. The list is owned.",
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/SdfPathSegmentNullable"
-          }
-        }
-      },
-      "required": [
-        "start",
-        "segments"
-      ],
-      "additionalProperties": false,
-      "title": "SdfPathContour"
-    },
-    "SdfPathProfileNullable": {
-      "description": "A bounded presentation profile. Filled contours use even/odd fill, including holes. Curves are flattened once at composition, with a local-space geometric error at most Tolerance (apart from floating-point rounding). Strokes approximate the union of disks along the curve, including their varying radius, to the same tolerance. The emitted polygon/rounded-segment field is 1-Lipschitz; no margin moves its zero surface. At most 128 edges are emitted; exceeding that budget refuses instead of silently relaxing the requested tolerance.",
-      "type": [
-        "object",
-        "null"
-      ],
-      "properties": {
-        "tolerance": {
-          "type": "number",
-          "default": 0.001
-        },
-        "stroke": {
-          "$ref": "#/$defs/SdfPathStroke",
-          "default": null
-        },
-        "shear": {
-          "$ref": "#/$defs/SdfPathShear",
-          "default": null
-        },
-        "contours": {
-          "description": "Gets the profile\u0027s contours, filled with even/odd fill. The list is owned, since Compile caches its edges by the profile.",
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/SdfPathContourNullable"
-          }
-        }
-      },
-      "required": [
-        "contours"
-      ],
-      "additionalProperties": false,
-      "title": "SdfPathProfile"
-    },
-    "SdfPrismProfileNullable": {
-      "description": "Authored profile controls for a solid prism. The profile is extruded along local Z.",
-      "type": [
-        "object",
-        "null"
-      ],
-      "properties": {
-        "kind": {
-          "$ref": "#/$defs/SdfPrismProfileKind",
-          "description": "The profile family."
-        },
-        "cornerRadius": {
-          "description": "A fraction in [0, 1]: the profile\u0027s smaller half-extent for RoundedRectangle\u0027s corner radius or ChamferedRectangle\u0027s chamfer radius; the scaled polygon\u0027s conservative inradius (ConvexPolygonInradius) for Convex\u0027s uniform corner rounding, also clamped to the extrusion half-depth when extruded.",
-          "type": "number",
-          "default": 0
-        },
-        "sides": {
-          "description": "Polygon side count, from 3 through 32.",
-          "type": "integer",
-          "default": 6
-        },
-        "path": {
-          "$ref": "#/$defs/SdfPathProfileNullable",
-          "description": "Required only for Path; its points are normalized profile coordinates.",
-          "default": null
-        },
-        "vertices": {
-          "description": "Gets, for Convex only, 3 to MaxConvexVertices local XY points, clockwise (X right, Y up \u2014 each turn\u0027s 2D cross product of consecutive edges strictly negative), no coincident or collinear vertices, and convex. Ignored by every other kind. The list is owned.",
-          "type": [
-            "array",
-            "null"
-          ],
-          "default": null,
-          "items": {
-            "type": "array",
-            "items": {
-              "type": "number"
-            },
-            "minItems": 2,
-            "maxItems": 2
-          }
-        }
-      },
-      "required": [
-        "kind"
-      ],
-      "additionalProperties": false,
-      "title": "SdfPrismProfile"
-    },
     "SdfShadeShapeNullable": {
       "description": "A structural shape descriptor. Compilation uses the existing solid/paint emission and admission.",
       "type": [
@@ -13565,12 +13809,8 @@
           "default": null
         },
         "lift": {
-          "enum": [
-            "Revolve",
-            "Extrude"
-          ],
-          "default": "Extrude",
-          "title": "SdfLift"
+          "$ref": "#/$defs/SdfLift",
+          "default": "Extrude"
         },
         "rounding": {
           "type": "number",

@@ -1,4 +1,5 @@
 {
+  "description": "The surfaces, free volumes and live media bodies find routes through.",
   "type": [
     "object",
     "null"
@@ -28,7 +29,12 @@
               "Volume",
               "Medium"
             ],
-            "title": "WorldNavigationKind"
+            "title": "WorldNavigationKind",
+            "x-enumDescriptions": {
+              "Surface": "A 2D grid whose Y values are sampled from solid ground.",
+              "Volume": "A 3D grid of collision-free space.",
+              "Medium": "A 3D grid constrained to one live fluid-medium field."
+            }
           },
           "origin": {
             "description": "The center of cell (0,0,0), relative to Parent when present and world-space otherwise; for a surface domain, resolved world Y is the ground-probe baseline.",
@@ -80,7 +86,12 @@
               "Full"
             ],
             "default": "Full",
-            "title": "WorldNavigationConnectivity"
+            "title": "WorldNavigationConnectivity",
+            "x-enumDescriptions": {
+              "Axis": "The six axis-aligned neighbours.",
+              "FacesAndEdges": "Axis and two-axis diagonal neighbours.",
+              "Full": "All 26 neighbours, including three-axis diagonals."
+            }
           },
           "probeUp": {
             "description": "For a surface domain, the ground-search distance above origin Y.",

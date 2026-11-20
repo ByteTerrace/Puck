@@ -1,4 +1,5 @@
 {
+  "description": "Named cell sets a rule addresses as one.",
   "type": [
     "array",
     "null"

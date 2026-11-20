@@ -1,4 +1,5 @@
 {
+  "description": "Grant rows that add to the permissions the world starts with.",
   "type": [
     "array",
     "null"

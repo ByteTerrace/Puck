@@ -1,4 +1,5 @@
 {
+  "description": "The property interactions: what happens when one thing with a property meets another.",
   "type": [
     "object",
     "null"
@@ -33,7 +34,11 @@
               "Distance",
               "Region"
             ],
-            "title": "WorldInteractionCoOccurrence"
+            "title": "WorldInteractionCoOccurrence",
+            "x-enumDescriptions": {
+              "Distance": "Every pair of a body tagged Left and a different body tagged Right within Range of one another \u2014 property x property; the pair is bound as $left/$right.",
+              "Region": "Every body tagged Left inside the region of the placement Right names \u2014 property x region; the occupant is bound as $left."
+            }
           },
           "range": {
             "description": "The distance threshold, for Distance alone \u2014 an exact JSON decimal lowered directly to deterministic fixed point, with no binary32 intermediate. Ignored (and unchecked) under Region.",
@@ -47,13 +52,9 @@
             }
           },
           "mode": {
+            "$ref": "./common.schema.json#/$defs/ActionTriggerMode",
             "description": "Whether the interaction fires every tick the co-occurrence holds For a distance interaction, at most this many right carriers per left carrier \u2014 the nearest first, ties broken by the lower body index \u2014 or null for every carrier in range. The work sheet prices the pair count at this budget. (Level) or once per crossing (Edge, the default \u2014 an interaction that transforms/spawns/despawns almost always wants Edge, for the same reason a rule that writes a row does: level-firing a spawn is a journal entry every tick the co-occurrence holds).",
-            "enum": [
-              "Level",
-              "Edge"
-            ],
-            "default": "Edge",
-            "title": "ActionTriggerMode"
+            "default": "Edge"
           },
           "neighbours": {
             "type": [

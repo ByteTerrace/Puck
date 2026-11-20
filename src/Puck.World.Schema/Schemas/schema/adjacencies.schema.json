@@ -1,4 +1,5 @@
 {
+  "description": "The neighbouring worlds this one borders, edge by edge, and the overlap the seam between them keeps.",
   "type": [
     "array",
     "null"
@@ -64,7 +65,10 @@
           "Closed"
         ],
         "default": "Closed",
-        "title": "WorldAdjacencyUnavailable"
+        "title": "WorldAdjacencyUnavailable",
+        "x-enumDescriptions": {
+          "Closed": "The handoff is refused and the local authority stays authoritative. At a boundary a body walks through, one whose frame is yaw-only, the body is clamped one raw unit inside it, as against closed terrain. At a pitched boundary, a floor or a ceiling, the body keeps its pose and its velocity and goes on moving under the local authority: a clamp there would pin a falling body in mid-air at the plane."
+        }
       },
       "onUnavailable": {
         "description": "Optional declared channel pressed once on the body after the engine applies the failure treatment. Use a kit action on this channel for authored sound, animation, state, or other feedback; ownership safety never depends on the binding.",

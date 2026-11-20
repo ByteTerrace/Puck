@@ -1,4 +1,5 @@
 {
+  "description": "The diegetic screens standing in the world, each showing a machine, a view or a picture.",
   "type": [
     "array",
     "null"

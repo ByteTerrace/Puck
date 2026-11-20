@@ -1,4 +1,5 @@
 {
+  "description": "The addon modules the world mounts, each pinned by its content hash.",
   "type": [
     "array",
     "null"

@@ -1,19 +1,14 @@
 {
+  "description": "The render levers the world boots with and its quality presets; absent, every lever is inert and no preset is offered.",
   "type": [
     "object",
     "null"
   ],
   "properties": {
     "shadows": {
+      "$ref": "./common.schema.json#/$defs/ShadowTier",
       "description": "The boot soft-shadow tier.",
-      "enum": [
-        "Off",
-        "Low",
-        "Medium",
-        "High"
-      ],
-      "default": "Off",
-      "title": "ShadowTier"
+      "default": "Off"
     },
     "ambientOcclusion": {
       "description": "Whether ambient occlusion boots on.",
@@ -521,7 +516,12 @@
             "High"
           ],
           "default": "Medium",
-          "title": "SdfIndirectTier"
+          "title": "SdfIndirectTier",
+          "x-enumDescriptions": {
+            "Off": "No indirect light: the coarse volume occludes, and none of its light is applied.",
+            "Medium": "The coarse volume.",
+            "High": "The fine volume."
+          }
         },
         "budget": {
           "description": "The irradiance work each second grants the volume and the lighting age it reports past; absent bounds nothing.",
@@ -611,7 +611,11 @@
             "Auto"
           ],
           "default": "Manual",
-          "title": "SdfExposureMode"
+          "title": "SdfExposureMode",
+          "x-enumDescriptions": {
+            "Manual": "A fixed EV100, Ev100.",
+            "Auto": "The EV100 the view\u0027s own image meters (Meter), less the compensation, held within the bounds, and eased toward over the adaptation time once its target leaves the dead band."
+          }
         },
         "ev100": {
           "$ref": "./common.schema.json#/$defs/BindableScalar",
@@ -843,7 +847,13 @@
               null
             ],
             "default": null,
-            "title": "ShadowTier"
+            "title": "ShadowTier",
+            "x-enumDescriptions": {
+              "Off": "No shadows: no cascade renders or is held, and every light goes unshadowed.",
+              "Low": "Cascades at a quarter of the full resolution, 512 texels a side.",
+              "Medium": "Cascades at half the full resolution, 1024 texels a side.",
+              "High": "Cascades at the full resolution, 2048 texels a side."
+            }
           },
           "ambientOcclusion": {
             "description": "Whether the view keeps ambient occlusion: false drops it. Absent keeps the world\u0027s.",

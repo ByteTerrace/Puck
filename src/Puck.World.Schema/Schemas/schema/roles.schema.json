@@ -1,4 +1,5 @@
 {
+  "description": "The companion roles the world offers; absent, every companion is refused.",
   "type": [
     "array",
     "null"

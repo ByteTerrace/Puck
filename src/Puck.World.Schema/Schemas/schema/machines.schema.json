@@ -1,4 +1,5 @@
 {
+  "description": "The emulated machines the world runs, each named so a screen can show it; absent, no machine runs.",
   "type": [
     "array",
     "null"
@@ -50,7 +51,11 @@
                 "Read",
                 "Write"
               ],
-              "title": "WorldMachineMemoryDirection"
+              "title": "WorldMachineMemoryDirection",
+              "x-enumDescriptions": {
+                "Read": "Observe machine hardware and mirror accepted values into world state.",
+                "Write": "Send world state into machine hardware."
+              }
             },
             "space": {
               "description": "The provider\u0027s hardware address space.",

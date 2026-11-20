@@ -1,4 +1,5 @@
 {
+  "description": "The world seed, one value that rerolls every random draw in the document at once.",
   "type": [
     "object",
     "null"

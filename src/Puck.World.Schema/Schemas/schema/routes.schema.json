@@ -1,4 +1,5 @@
 {
+  "description": "Routes a seat plays through the world, step by step.",
   "type": [
     "array",
     "null"

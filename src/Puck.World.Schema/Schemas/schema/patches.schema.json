@@ -1,4 +1,5 @@
 {
+  "description": "The synthesizer patches tunes and cues play through.",
   "type": [
     "array",
     "null"

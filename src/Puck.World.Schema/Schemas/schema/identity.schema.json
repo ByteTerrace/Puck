@@ -1,4 +1,5 @@
 {
+  "description": "The authored identity that seeds an owned world\u0027s player.",
   "type": [
     "object",
     "null"

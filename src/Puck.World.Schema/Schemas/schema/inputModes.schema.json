@@ -1,4 +1,5 @@
 {
+  "description": "The input families a seat switches between and which of them may hold at once.",
   "type": [
     "object",
     "null"
@@ -40,7 +41,13 @@
                   "BodyState",
                   "SeatState"
                 ],
-                "title": "WorldInputModeSelectorKind"
+                "title": "WorldInputModeSelectorKind",
+                "x-enumDescriptions": {
+                  "ActiveKit": "The controlled body\u0027s selected kit.",
+                  "Engagement": "The owner\u0027s authoritative engagement kind.",
+                  "BodyState": "A finite or exhaustively partitioned body register.",
+                  "SeatState": "A finite authoritative seat/session state family."
+                }
               },
               "name": {
                 "description": "Body register or seat state family, when required by the kind.",
