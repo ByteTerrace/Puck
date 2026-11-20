@@ -102,14 +102,6 @@ public sealed class SessionWriteDoorLawTests {
         Assert.Contains(pub, cell => (cell.Key.Value == "k") && (cell.Value == CellValue.Int(value: 7)));
     }
 
-    private static WorldMutationOutcome Submit(WorldFixture fixture, WorldMutation mutation) {
-        var results = new List<WorldSubmissionResult>();
-        fixture.Server.Submit(new SubmissionEnvelope(ConnectionId: SubmissionEnvelope.LocalConnectionId,
-            SessionGeneration: 0, Sequence: 1, CorrelationId: 1, Principal: mutation.Principal,
-            Payload: new WorldSubmissionPayload.Mutation(Value: mutation), OperationId: Guid.NewGuid()), results.Add);
-        fixture.Step();
-        return Assert.IsType<WorldSubmissionResult.Mutation>(Assert.Single(results)).Outcome;
-    }
     // A guard over the whole document is admitted or refused by whether any declaration withholds from its proposer, so
     // a recipient's is refused by its shape and named as the section, whatever the document declares and in what order.
     [Fact]
@@ -122,7 +114,7 @@ public sealed class SessionWriteDoorLawTests {
             ];
             using var fixture = Fixtures.FreshServer(Fixtures.BuildDocument().WithWorldState(rows));
             var seat = Principal.Seat(slot: 1);
-            var outcome = Submit(fixture, new WorldMutation.Batch(seat,
+            var outcome = fixture.SubmitMutation(new WorldMutation.Batch(seat,
                 [new WorldMutation.UpsertStateCell(seat, "pub", StateRow.SlotKey.Value, 1, WorldDocumentWriteKind.Set)],
                 ExpectedDefinition: new string('0', 64)));
             outcomes.Add($"{outcome.Code}:{outcome.Detail}");

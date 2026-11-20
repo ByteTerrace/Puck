@@ -7,8 +7,11 @@ namespace Puck.World;
 /// to every read. Delivery history belongs exclusively to a <see cref="WorldDeliveryCursor"/>.</summary>
 public sealed partial class WorldRecipientView(Func<WorldDefinition> definition, Func<StateArena> arena, Principal? recipient,
     WorldDisclosureTier ceiling, Func<bool> observes, WorldDisclosureImages images, string authority,
-    Func<ArenaTime> time, Func<bool>? operates = null) {
+    Func<ArenaTime> time, Func<bool>? operates = null, Func<bool>? readsDocument = null) {
     internal WorldDefinition Source => definition();
+    // Whether the recipient's read door hands it a replica document now: a guard over the document is a read of it,
+    // so a write capability answers one only for a recipient that is delivered what the guard hashes.
+    internal bool ReadsDocument => readsDocument?.Invoke() != false;
     internal StateArena Arena => arena();
     internal Principal? Recipient => recipient;
     internal WorldDisclosureImages Images => images;

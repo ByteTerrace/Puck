@@ -10,6 +10,15 @@ namespace Puck.World;
 /// <param name="memberType">The type the document model gives the member.</param>
 public delegate void WorldNameVisitor(JsonObject holder, string jsonName, JsonNode value, WorldNameField field, Type memberType);
 
+/// <summary>Answers one name position a registered site spells (<see cref="WorldModuleNamespace.Respell(JsonNode?, Type, WorldNameRespelling)"/>).</summary>
+/// <param name="site">The registration the position was read under.</param>
+/// <param name="kind">The namespace the position names, which a reserved channel's grammar can narrow from the site's;
+/// <see langword="null"/> for a position no declaration names (an input channel, an adjacency).</param>
+/// <param name="name">The name as written.</param>
+/// <param name="holder">The object holding the site, or <see langword="null"/> for a value read outside a tree.</param>
+/// <returns>The name to write in its place, or <see langword="null"/> to leave it as written.</returns>
+public delegate string? WorldNameRespelling(WorldNameField site, WorldNameKind? kind, string name, JsonObject? holder);
+
 /// <summary>The one crossing between a document's <see cref="StateChannelRef"/> members and the colon spelling a
 /// lowering or a decompile works in: a document holds a reserved channel as a call node, and text that builds or
 /// prints a document holds it as <see cref="StateChannelRef.Spelling"/>.</summary>

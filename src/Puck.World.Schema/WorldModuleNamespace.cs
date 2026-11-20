@@ -306,6 +306,58 @@ public static class WorldModuleNamespace {
 
         return Channels.ContainsKey(key: channel);
     }
+    /// <summary>Reads every name a raw tree spells at a registered site, by the same grammar the import rewrite reads
+    /// (a bare name, a reserved channel's name positions, a cell key's <c>$cell:</c>/<c>$zone:</c>/<c>$expr:</c>
+    /// spelling, an expression's state reads, a binding token, a HUD template's placeholders), and writes back the
+    /// name <paramref name="respell"/> returns, or leaves the name as written when it returns
+    /// <see langword="null"/>. The import rewrite and the write door's footprint are its two readers, so a name
+    /// position the registry learns reaches both.</summary>
+    /// <remarks>The tree is the caller's own: a site whose names are all left as written may still be written back
+    /// in its canonical spelling.</remarks>
+    /// <param name="node">The tree, or the subtree to walk.</param>
+    /// <param name="type">The model type <paramref name="node"/> holds.</param>
+    /// <param name="respell">Called once per name position, in document order.</param>
+    public static void Respell(JsonNode? node, Type type, WorldNameRespelling respell) {
+        ArgumentNullException.ThrowIfNull(argument: respell);
+
+        var names = new RespellingNames(respell: respell);
+        var rewriter = new Rewriter(names: names);
+
+        Visit(
+            node: node,
+            type: type,
+            visitor: (parent, name, value, field, memberType) => {
+                names.Site = field;
+                names.Holder = parent;
+                rewriter.Scope = parent;
+                rewriter.RewriteSite(
+                    field: field,
+                    memberType: memberType,
+                    name: name,
+                    parent: parent,
+                    value: value
+                );
+            }
+        );
+    }
+    /// <summary>Reads every name one value of a registered site spells and returns it respelled, as
+    /// <see cref="Respell(JsonNode?, Type, WorldNameRespelling)"/> does for a whole tree: the entry for a name-bearing
+    /// value that is not held in a document tree (a mutation's own row or id argument).</summary>
+    /// <param name="text">The value.</param>
+    /// <param name="site">The registration describing how the value carries names.</param>
+    /// <param name="respell">Called once per name position.</param>
+    /// <returns>The respelled value.</returns>
+    public static string Respell(string text, WorldNameField site, WorldNameRespelling respell) {
+        ArgumentNullException.ThrowIfNull(argument: text);
+        ArgumentNullException.ThrowIfNull(argument: site);
+        ArgumentNullException.ThrowIfNull(argument: respell);
+
+        return new Rewriter(names: new RespellingNames(respell: respell) { Site = site }).Rewrite(
+            kind: site.Kind,
+            role: site.Role,
+            text: text
+        );
+    }
     /// <summary>Qualifies every name <paramref name="module"/> declares by <paramref name="alias"/> and rewrites the
     /// module's references to match, in place.</summary>
     /// <param name="module">The fragment's composed tree; mutated.</param>
@@ -873,7 +925,7 @@ public static class WorldModuleNamespace {
     // Where a declared name lives: a placement, a prototype, a clock and a screen material each keep their own
     // namespace, and every other kind shares the document's, so a module's placement 'gate' never renames a host row
     // 'gate' the module reads.
-    private enum NameSpace : byte {
+    internal enum NameSpace : byte {
         Document,
         Placement,
         Prototype,
@@ -881,7 +933,7 @@ public static class WorldModuleNamespace {
         ScreenMaterial,
     }
 
-    private static NameSpace SpaceOf(WorldNameKind kind) => kind switch {
+    internal static NameSpace SpaceOf(WorldNameKind kind) => kind switch {
         WorldNameKind.Placement => NameSpace.Placement,
         WorldNameKind.Prototype => NameSpace.Prototype,
         WorldNameKind.Clock => NameSpace.Clock,
@@ -897,6 +949,16 @@ public static class WorldModuleNamespace {
     }
     // A map that answers by spelling alone, whatever the position: a module argument's placeholders, and a caller's
     // own dictionary.
+    // A map that asks its caller at every position, with the registration the position was read under.
+    private sealed class RespellingNames(WorldNameRespelling respell) : INameMap {
+        public WorldNameField? Site { get; set; }
+        public JsonObject? Holder { get; set; }
+
+        public bool TryMap(WorldNameKind? kind, string name, [NotNullWhen(returnValue: true)] out string? mapped) {
+            mapped = ((name.Length == 0) ? null : respell(Site!, kind, name, Holder));
+            return (mapped is not null);
+        }
+    }
     private sealed class KindlessNames(IReadOnlyDictionary<string, string> names) : INameMap {
         public bool TryMap(WorldNameKind? kind, string name, [NotNullWhen(returnValue: true)] out string? mapped) => names.TryGetValue(
             key: name,

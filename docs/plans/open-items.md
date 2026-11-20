@@ -124,10 +124,12 @@ correctness rests on an invariant is designed and reviewed before code
    design (J1), which folds in the bake's private worker pool; then rows as
    jobs (T4) for the silo. The frame thread still steps the authority and
    emits the whole program; the 2060 trace in item 3 sizes both.
-8. [high, before `main`] [Security review](#security-review): the write door
-   still tells a withheld row from an absent one at fields and paths a
-   per-field enumeration missed; the structural write door
-   ([the disclosure plan](disclosure.md)) is in design.
+8. [high] [Security review](#security-review): the write door's footprint is
+   derived from the name registry
+   ([checkpoint](disclosure.md#write-door-footprint-checkpoint)), so a
+   submission naming a withheld row at any position answers as one naming an
+   absent row; checks that read past the declared relation wait on the
+   restricted transaction (D0b1 to D0c).
 9. [high] [Transfers, federation and server](#transfers-federation-and-server):
    local games reveal the MMO, so the hosted authority is ordinary work.
    Interest management first (every body goes to every session every tick),
@@ -2545,25 +2547,24 @@ findings are answered in decision 3a. Then the researcher brief's priorities
   chooses declaration entitlement for general writes and closed scopes for
   lower-tier writes; D6 migrates authored input and addon bindings to protected
   scopes before D0c closes their old general-write routes. Nothing enforces it yet.
-- [high, before any push to `main`] The write door's footprint is
-  enumerated per field, and an Antigravity adversarial review of the read-door
-  fix found five high and three medium leaks it missed: state-row references
-  in mutation and placement values outside `CollectReferencedRows`; transform
-  indirections (`$cell:`, `$zone:`, `$expr:`, `[key]`) with
-  `WorldRecipientView.AdmitsTransform` admitting when it cannot resolve the
-  rows; `AdmitsDeclaration` skipping knowledge, witness and per-cell readers;
-  `Admits`' reverse footprint skipping dependents other than keyed rows; an
-  empty `ExpectedStateRows` passing `AdmitsDefinition` while the fingerprint
-  hashes state-dependent placements and fields; console write verbs reading
-  the read view first; `WorldDocument.IsStateCommand` reading the unfiltered
-  definition; `world.parked` and `world.hud.template`.
-  [Decision 3a's structural write footprint](disclosure.md#the-structural-write-footprint)
-  records the reopened evidence, options, restricted transaction, static
-  security closure, supplemental derived dependencies, cost counters and a finding-by-finding harness
-  witness. The review's one-versus-two `Placeholder` example is permitted
-  disclosure to its named seat; D0a recasts the actual guard-ceiling attack at
-  a lower tier and verifies every claimed reproduction. The design is complete,
-  not implemented; its one build table incorporates the Claude design review.
+- [high] The write door's footprint is derived from the name registry
+  ([checkpoint](disclosure.md#write-door-footprint-checkpoint)): every name a
+  submission spells, the declared relations of each row it names, the installed
+  value it replaces, and a guard's read entitlement. That closes the
+  adversarial review's per-field leaks at the declared level (values outside
+  `CollectReferencedRows`, transform indirections and unresolvable transforms,
+  knowledge, witness and readers declarations, reverse relations beyond keyed
+  rows, the empty-selection guard below `Replica`, the console row verbs'
+  pre-read). What remains is every check that reads past the declared relation,
+  which only [decision 3a's restricted transaction](disclosure.md#the-structural-write-footprint)
+  closes: whole-document validation of a unit the write does not name (a joint
+  check inside one placement or HUD element over a written row and a withheld
+  one), shared ceilings and the key table, rule firings that leave a hidden row
+  invalid (H2), and `world.parked` and `world.hud.template` on the read side
+  (D0d). D0a still owes the executed witnesses for H1 and H2. The coupling
+  refuses a recipient's write into a row a withheld declaration names (a live
+  audience, a knowledge source), which the token-domain relation alone admitted;
+  scoped input (D6) is where such a writer gets its route back.
 - [high] Hidden state is distinguishable from absent state at doors the
   door-by-door fixes did not reach. [The disclosure plan](disclosure.md#the-build-order)
   is the structural fix and owns the queue: D0b1–D0b4 and step 6, step 0's fuzzer,

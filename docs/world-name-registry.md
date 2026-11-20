@@ -1549,6 +1549,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `state.world[].visibility.readersFrom` | State | Names | Read | `StateVisibility.ReadersFrom` |
 | `state.world[].knowledge.source` | State | Names | Read | `StateKnowledge.Source` |
 | `state.world[].knowledge.mask` | State | Names | Read | `StateKnowledge.Mask` |
+| `state.world[].knowledge.positions` | State | Names | Read | `StateKnowledge.Positions` |
 | `state.world[].phaseOf` | State | Names | Read | `StateRowShape.PhaseOf` |
 | `state.lattices[].name` | Topology | Declares |  | `LatticeTopology.Name` |
 | `state.lattices[][grid].name` | Topology | Declares |  | `LatticeTopology.Name` |
