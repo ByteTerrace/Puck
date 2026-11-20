@@ -2,6 +2,7 @@ using System.Numerics;
 using System.Runtime.InteropServices;
 using Puck.Abstractions.Collections;
 using Puck.Abstractions.Gpu;
+using Puck.Abstractions.Memory;
 using Puck.Maths;
 
 namespace Puck.SdfVm;
@@ -138,8 +139,8 @@ public sealed partial class SdfMeshIrradiance {
         }
         // The loop below writes every origin and every word of every row, so the reused arrays need no clearing.
         var inputWords = (layout.TotalCount * SdfMeshProbeRelight.SelectionInputWords);
-        GrowScratch(array: ref m_gpuOrigins, length: layout.TotalCount);
-        GrowScratch(array: ref m_gpuInput, length: inputWords);
+        ArrayCapacity.EnsureScratch(ref m_gpuOrigins, layout.TotalCount);
+        ArrayCapacity.EnsureScratch(ref m_gpuInput, inputWords);
         var origins = m_gpuOrigins;
         var input = m_gpuInput;
         FitGpuHits(layout: layout);
@@ -202,11 +203,6 @@ public sealed partial class SdfMeshIrradiance {
         return deferred;
     }
 
-    // Grows an array to hold at least `length` entries, never shrinking it. The entries a caller does not write keep an
-    // earlier use's values.
-    private static void GrowScratch<T>(ref T[] array, int length) {
-        if (array.Length < length) { array = new T[length]; }
-    }
 
     // The relight's lighting rows, exactly sized: the array `rows` holds is rewritten and returned when it already has
     // the length, so batches under one lighting share one array. A null `rows` always allocates; a caller that keeps the
@@ -276,10 +272,10 @@ public sealed partial class SdfMeshIrradiance {
         Lighting lighting, in Snapshot snapshot, bool feedback) {
         var rows = (m_gpuLightingRows = LightingRows(lighting, in snapshot, feedback, rows: m_gpuLightingRows));
         var inputWords = (count * SdfMeshProbeRelight.InputWords);
-        GrowScratch(array: ref m_gpuOrigins, length: count);
-        GrowScratch(array: ref m_gpuInput, length: inputWords);
-        GrowScratch(array: ref m_gpuRelightRays, length: count);
-        GrowScratch(array: ref m_gpuDestinations, length: count);
+        ArrayCapacity.EnsureScratch(ref m_gpuOrigins, count);
+        ArrayCapacity.EnsureScratch(ref m_gpuInput, inputWords);
+        ArrayCapacity.EnsureScratch(ref m_gpuRelightRays, count);
+        ArrayCapacity.EnsureScratch(ref m_gpuDestinations, count);
         // A probe without hits leaves its row and origin untouched, and Compose and the row writes below skip words, so
         // the batch starts from zeros as a new array would.
         Array.Clear(array: m_gpuOrigins, index: 0, length: count);
@@ -329,8 +325,8 @@ public sealed partial class SdfMeshIrradiance {
             }
             volumeWords = m_volume.Length;
             if (!ReferenceEquals(m_gpuVolume, m_volume)) {
-                GrowScratch(array: ref m_gpuUpdateAt, length: 1);
-                GrowScratch(array: ref m_gpuVolumeSnapshot, length: m_volume.Length);
+                ArrayCapacity.EnsureScratch(ref m_gpuUpdateAt, 1);
+                ArrayCapacity.EnsureScratch(ref m_gpuVolumeSnapshot, m_volume.Length);
                 m_gpuUpdateAt[0] = 0;
                 m_volume.CopyTo(array: m_gpuVolumeSnapshot, index: 0);
                 updates = new(Words: m_gpuUpdateAt, Data: m_gpuVolumeSnapshot.AsMemory(start: 0, length: m_volume.Length), Count: 1, Length: m_volume.Length);
@@ -338,8 +334,8 @@ public sealed partial class SdfMeshIrradiance {
                 snapshotOf = m_volume;
             } else {
                 var dirty = m_gpuDirty.Count;
-                GrowScratch(array: ref m_gpuUpdateAt, length: dirty);
-                GrowScratch(array: ref m_gpuUpdateData, length: (dirty * SdfMeshIrradianceProbe.ProbeWords));
+                ArrayCapacity.EnsureScratch(ref m_gpuUpdateAt, dirty);
+                ArrayCapacity.EnsureScratch(ref m_gpuUpdateData, (dirty * SdfMeshIrradianceProbe.ProbeWords));
                 var i = 0;
                 foreach (var slot in m_gpuDirty.Members) {
                     var word = slot * SdfMeshIrradianceProbe.ProbeWords;

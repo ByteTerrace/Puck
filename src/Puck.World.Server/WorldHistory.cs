@@ -1,6 +1,7 @@
 using Puck.Maths;
 using System.Runtime.CompilerServices;
 using Puck.Abstractions.Machines;
+using Puck.Abstractions.Memory;
 using Puck.Networking;
 using Puck.World.Protocol;
 using Puck.World.Server;
@@ -180,16 +181,16 @@ public sealed partial class WorldHistory {
         public string? DocumentDirectory { get; set; }
         public WorldHistoryFingerprint Fingerprint { get; set; }
 
-        public ulong[] Hashes { get; set; } = new ulong[16];
-        public int[] IntentEnds { get; set; } = new int[16];
-        public IntentSubmission[] Intents { get; set; } = new IntentSubmission[16];
+        public ulong[] Hashes = new ulong[16];
+        public int[] IntentEnds = new int[16];
+        public IntentSubmission[] Intents = new IntentSubmission[16];
         public WorldHistoryChunkStore.Chunk[] Keyframe { get; set; } = [];
 
         public ulong KeyframeHash { get; set; }
         public int KeyframeLength { get; set; }
         public ulong KeyframeTick { get; set; }
 
-        public ulong[] StepTicks { get; set; } = new ulong[16];
+        public ulong[] StepTicks = new ulong[16];
 
         public ulong HeadTick => (KeyframeTick + ((ulong)Count));
         public long InputBytes => (((((long)Hashes.Length) * TickBookkeepingBytes) + (((long)Intents.Length) * Unsafe.SizeOf<IntentSubmission>())) + AuthorityBytes);
@@ -296,29 +297,18 @@ public sealed partial class WorldHistory {
         var offset = segment.Count;
 
         if (offset == segment.Hashes.Length) {
-            var grown = Math.Max(
-                val1: (offset * 2),
-                val2: 16
-            );
+            var grown = ArrayCapacity.Grown(offset, offset + 1);
 
-            segment.Hashes = Grow(array: segment.Hashes, length: grown);
-            segment.StepTicks = Grow(array: segment.StepTicks, length: grown);
-            segment.IntentEnds = Grow(array: segment.IntentEnds, length: grown);
+            Array.Resize(ref segment.Hashes, grown);
+            Array.Resize(ref segment.StepTicks, grown);
+            Array.Resize(ref segment.IntentEnds, grown);
         }
 
         var start = segment.IntentCount;
         var intents = input.Intents;
         var end = (start + intents.Count);
 
-        if (end > segment.Intents.Length) {
-            segment.Intents = Grow(
-                array: segment.Intents,
-                length: Math.Max(
-                    val1: end,
-                    val2: (segment.Intents.Length * 2)
-                )
-            );
-        }
+        ArrayCapacity.EnsureLength(ref segment.Intents, end);
 
         for (var index = 0; (index < intents.Count); index++) {
             segment.Intents[(start + index)] = intents[index];
@@ -445,17 +435,6 @@ public sealed partial class WorldHistory {
         Recycle(segment: m_segments[0]);
         m_segments.RemoveAt(index: 0);
         m_counters = (m_counters with { SegmentsEvicted = (m_counters.SegmentsEvicted + 1L) });
-    }
-    private static T[] Grow<T>(T[] array, int length) {
-        var grown = new T[length];
-
-        Array.Copy(
-            destinationArray: grown,
-            length: array.Length,
-            sourceArray: array
-        );
-
-        return grown;
     }
     private static ArraySegment<IntentSubmission> IntentRange(Segment segment, int offset) {
         var start = ((offset == 0)

@@ -1,3 +1,4 @@
+using Puck.Abstractions.Memory;
 namespace Puck.Abstractions.Gpu;
 
 /// <summary>
@@ -340,10 +341,7 @@ public sealed class GpuRangeAllocator {
     private void Reserve() {
         if (m_liveCount < m_liveStarts.Length) { return; }
 
-        var length = (int)Math.Min(
-            val1: (2L * m_liveStarts.Length),
-            val2: MaxRanges
-        );
+        var length = ArrayCapacity.Grown(m_liveStarts.Length, m_liveCount + 1, ceiling: MaxRanges);
 
         Array.Resize(array: ref m_liveStarts, newSize: length);
         Array.Resize(array: ref m_liveLengths, newSize: length);

@@ -1,5 +1,6 @@
 using System.Numerics;
 using Puck.Abstractions.Cameras;
+using Puck.Abstractions.Memory;
 using Puck.SignedDistance;
 
 namespace Puck.SdfVm;
@@ -54,13 +55,7 @@ public sealed class SdfMeshDemand {
         var views = frame.Views;
         var count = 0;
 
-        if (m_points.Length < views.Count) {
-            m_points = new Vector3[views.Count];
-            m_focal = new float[views.Count];
-            m_cameras = new CameraSnapshot[views.Count];
-            m_within = new bool[views.Count];
-            m_framed = new bool[views.Count];
-        }
+        EnsureCapacity(views.Count);
         for (var index = 0; (index < views.Count); index++) {
             var view = views[index];
             var camera = view.Camera;
@@ -76,6 +71,15 @@ public sealed class SdfMeshDemand {
         }
         Count = count;
     }
+    private void EnsureCapacity(int required) {
+        if (required <= m_points.Length) { return; }
+        var capacity = ArrayCapacity.Grown(m_points.Length, required);
+        Array.Resize(ref m_points, capacity);
+        Array.Resize(ref m_focal, capacity);
+        Array.Resize(ref m_cameras, capacity);
+        Array.Resize(ref m_within, capacity);
+        Array.Resize(ref m_framed, capacity);
+    }
     /// <summary>Adds a demand point after those the latest frame named: an eye with its
     /// pixels a metre one metre in front of it, for a plan made with no frame (an offline audit at a chosen eye).</summary>
     /// <param name="eye">The eye's position, in world space.</param>
@@ -85,13 +89,7 @@ public sealed class SdfMeshDemand {
     public void Place(Vector3 eye, uint height, float tanHalfFieldOfView) {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(value: tanHalfFieldOfView);
 
-        if (Count == m_points.Length) {
-            Array.Resize(array: ref m_points, newSize: (2 * m_points.Length));
-            Array.Resize(array: ref m_focal, newSize: (2 * m_focal.Length));
-            Array.Resize(array: ref m_cameras, newSize: (2 * m_cameras.Length));
-            Array.Resize(array: ref m_within, newSize: (2 * m_within.Length));
-            Array.Resize(array: ref m_framed, newSize: (2 * m_framed.Length));
-        }
+        EnsureCapacity(Count + 1);
         m_points[Count] = eye;
         m_within[Count] = false;
         m_framed[Count] = false;

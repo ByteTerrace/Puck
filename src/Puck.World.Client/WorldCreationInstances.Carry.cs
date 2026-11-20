@@ -28,7 +28,7 @@ public sealed partial class WorldCreationInstances {
             return false;
         }
 
-        foreach (var live in m_pool) {
+        foreach (var live in m_pool.AsSpan(0, m_poolCount)) {
             if (
                 (live?.BodyIndex is not { } body) ||
                 !client.IsActive(index: body) ||

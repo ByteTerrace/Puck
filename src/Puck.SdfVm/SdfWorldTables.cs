@@ -368,10 +368,12 @@ public sealed partial class SdfWorldTables : IDisposable {
             name: RegionName(region: ShadowHandoffRegionIndex), copySets: m_regionCopyPool.Region(index: ShadowHandoffRegionIndex), hostCopies: m_regionHostCopies));
         m_meshRegionBytes = SdfMeshRegion.DrawBytes;
         ShadowMeshRecords();
-        m_previousDynamicTransforms = scope.Own(created: gpu.BufferFactory.CreateDeviceLocal(
-            name: NameOf(part: "previous-dynamic-transforms"), sizeBytes: ((ulong)m_dynamicTransformRegion.ByteCount), usage: GpuBufferUsage.Storage));
-        m_previousMeshTransforms = scope.Own(created: gpu.BufferFactory.CreateDeviceLocal(
-            name: NameOf(part: "previous-mesh-transforms"), sizeBytes: MeshMatrixBytes, usage: GpuBufferUsage.Storage));
+        void RetireBuffer(IGpuBuffer buffer) => Retire(buffer);
+        m_previousDynamicTransforms = scope.Own(new GpuFittedBuffer(gpu.BufferFactory, NameOf("previous-dynamic-transforms"), sizing: GpuBufferSizing.Exact));
+        m_previousDynamicTransforms.Fit((ulong)m_dynamicTransformRegion.ByteCount);
+        m_previousMeshTransforms = scope.Own(new GpuFittedBuffer(gpu.BufferFactory, NameOf("previous-mesh-transforms"), retire: RetireBuffer));
+        m_previousMeshTransforms.Fit(MeshMatrixBytes);
+        m_meshIrradiance = scope.Own(new GpuFittedBuffer(gpu.BufferFactory, NameOf("mesh-irradiance"), sizing: GpuBufferSizing.Exact, retire: RetireBuffer));
         m_meshHistoryCopies = scope.Own(created: new GpuBufferStridedCopy(buffers: gpu.BufferFactory, bindings: gpu.Bindings,
             recorder: gpu.Recorder, pipeline: m_regionCopyPipeline, frameSlotCount: FrameRingSize, recordingCount: 2,
             name: NameOf(part: "mesh-history-copy")));

@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.Runtime.CompilerServices;
+using Puck.Abstractions.Memory;
 using Puck.Maths;
 
 namespace Puck.State;
@@ -98,7 +99,7 @@ public sealed class CellKeyTable {
             return;
         }
         if (index >= m_indexKeys.Length) {
-            Array.Resize(array: ref m_indexKeys, newSize: Math.Min(val1: StateCapacity.MaxCellsPerRow, val2: Math.Max(val1: (index + 1), val2: (m_indexKeys.Length * 2))));
+            Array.Resize(ref m_indexKeys, ArrayCapacity.Grown(m_indexKeys.Length, index + 1, ceiling: StateCapacity.MaxCellsPerRow));
         }
         m_indexKeys[index] = key;
     }

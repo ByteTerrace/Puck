@@ -773,7 +773,7 @@ public sealed partial class WorldCreationInstances {
     /// <returns>Whether a live registration answered.</returns>
     public bool TryRegistrationRig(int registration, out WorldRigState? state, string? shapeName = null) {
         state = null;
-        if ((((uint)registration) >= ((uint)m_pool.Length)) || (m_pool[registration] is not { } live)) {
+        if ((((uint)registration) >= ((uint)m_poolCount)) || (m_pool[registration] is not { } live)) {
             return false;
         }
 

@@ -1,3 +1,4 @@
+using Puck.Abstractions.Memory;
 using Puck.Maths;
 
 namespace Puck.Physics;
@@ -245,10 +246,7 @@ public sealed class AdaptiveFmmGravitySolver : IGravitySolver {
             count: bodies.Length
         );
 
-        GravityOctree.EnsureNodeCapacity(
-            nodes: ref m_nodes,
-            required: 1
-        );
+        ArrayCapacity.EnsureLength(ref m_nodes, 1);
         m_nodeSlotCount = 1;
         var builder = new OctreeBuilder(owner: this);
 

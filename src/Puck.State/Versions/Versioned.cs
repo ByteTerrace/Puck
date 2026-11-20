@@ -1,5 +1,6 @@
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using Puck.Abstractions.Memory;
 
 namespace Puck.State;
 
@@ -215,9 +216,7 @@ public sealed class VersionedArray<T> : VersionedHolder where T : unmanaged {
         ArgumentOutOfRangeException.ThrowIfNegative(value: count);
 
         Touch();
-        if (count > m_items.Length) {
-            Array.Resize(array: ref m_items, newSize: Math.Max(val1: count, val2: (m_items.Length * 2)));
-        }
+        ArrayCapacity.EnsureLength(ref m_items, count);
         if (count > m_count) {
             m_items.AsSpan(length: (count - m_count), start: m_count).Clear();
         }

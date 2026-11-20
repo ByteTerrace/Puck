@@ -1,5 +1,6 @@
 using System.Runtime.InteropServices;
 using Puck.Abstractions.Gpu;
+using Puck.Abstractions.Memory;
 
 namespace Puck.SdfVm;
 
@@ -210,7 +211,7 @@ public sealed class SdfMeshRegionArena : IDisposable {
         m_placed.Clear(); m_moved.Clear(); m_forgotten.Clear(); m_toPlace.Clear();
         Relocated = false; Unchanged = true;
         m_firstRows = ((m_drawCapacity == 0) && (extent > 0));
-        if (m_latestMeshes.Length < extent) { Array.Resize(array: ref m_latestMeshes, newSize: Math.Max(val1: extent, val2: (2 * m_latestMeshes.Length))); }
+        ArrayCapacity.EnsureLength(ref m_latestMeshes, extent);
         for (var row = extent; (row < m_latestMeshCount); row++) { NameRow(index: row, mesh: null); }
         m_latestMeshCount = extent;
     }

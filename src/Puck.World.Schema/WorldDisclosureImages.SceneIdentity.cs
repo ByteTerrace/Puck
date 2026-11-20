@@ -1,7 +1,7 @@
 using System.Security.Cryptography;
+using Puck.Abstractions.Memory;
 using Puck.Assets;
 using Puck.World.Authoring;
-using Puck.Maths;
 
 namespace Puck.World;
 
@@ -48,7 +48,7 @@ public sealed partial class WorldDisclosureImages {
         if (!ReferenceEquals(entry.RowsOf, definition) || !ReferenceEquals(entry.Source, source)) { entry.Rows = SceneRows(view, definition); entry.RowsOf = definition; }
         // Each row takes a marker byte and a digest slot, left zero for a row read whole.
         var length = (SHA256.HashSizeInBytes * (1 + entry.Rows.Length)) + entry.Rows.Length;
-        if (m_sceneParts.Length < length) { m_sceneParts = new byte[((uint)length).NextPowerOfTwo()]; }
+        ArrayCapacity.EnsureScratch(ref m_sceneParts, length);
         var parts = m_sceneParts.AsSpan(0, length);
         parts.Clear();
         var at = 0;

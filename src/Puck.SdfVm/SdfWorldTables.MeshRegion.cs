@@ -1,5 +1,6 @@
 using System.Runtime.InteropServices;
 using Puck.Abstractions.Gpu;
+using Puck.Abstractions.Memory;
 using Puck.Maths;
 
 namespace Puck.SdfVm;
@@ -421,7 +422,7 @@ public sealed partial class SdfWorldTables {
         m_meshArena.BeginRows(extent: draws.Count);
         m_meshClaims ??= new SdfMeshClaims();
         if (m_stagedDraws.Length < draws.Count) {
-            var capacity = Math.Max(val1: draws.Count, val2: (2 * m_stagedDraws.Length));
+            var capacity = ArrayCapacity.Grown(m_stagedDraws.Length, draws.Count);
 
             Array.Resize(array: ref m_stagedDraws, newSize: capacity); Array.Resize(array: ref m_stagedOccupancies, newSize: capacity);
             Array.Resize(array: ref m_stagedCasterState, newSize: capacity);
@@ -455,7 +456,7 @@ public sealed partial class SdfWorldTables {
         }
         var words = (draws.Count * SdfMeshRecord.DrawWords);
 
-        if (m_meshDrawWords.Length < words) { Array.Resize(array: ref m_meshDrawWords, newSize: Math.Max(val1: words, val2: (2 * m_meshDrawWords.Length))); }
+        ArrayCapacity.EnsureLength(ref m_meshDrawWords, words);
         m_stagingCause = (((draws.Serial != m_meshSourceSerial) || !ReferenceEquals(objA: m_meshCauseSource, objB: draws.Roster))
             ? draws.Cause : null);
         _ = StageChangedDraws(candidates: m_owedDraws, draws: draws);
@@ -801,9 +802,7 @@ public sealed partial class SdfWorldTables {
         using var held = mesh.Hold();
 
         if (!held.Readable) { return ((words <= ZeroWords.Length) ? ZeroWords.AsSpan(length: words, start: 0) : new uint[words]); }
-        if (words > m_meshWords.Length) {
-            m_meshWords = new uint[Math.Max(val1: words, val2: (2 * m_meshWords.Length))];
-        }
+        ArrayCapacity.EnsureScratch(ref m_meshWords, words);
 
         var destination = m_meshWords.AsSpan(length: words, start: 0);
 
