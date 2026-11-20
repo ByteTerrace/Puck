@@ -7,6 +7,7 @@ public static partial class SdfFieldShapes {
         public abstract SdfOperandLanes Reinterpreted { get; }
         public abstract SdfPartShapeAction PartShape { get; }
         public abstract SdfShaderAction Shader { get; }
+        public abstract SdfFormula? Formula { get; }
         public abstract bool ReliefRegion { get; }
         public abstract SdfShaderAction ReliefShader { get; }
         public abstract SdfCertificateAction Certificate { get; }
@@ -23,9 +24,13 @@ public static partial class SdfFieldShapes {
     /// <summary>Returns the external field inputs this entry needs.</summary>
     public static SdfFieldResource ResourcesOf(SdfShapeType value) => GetResourcesOf(value: value);
 
+    private static SdfShaderAction FormulaShader(SdfFormula formula) =>
+        new(Code: $"result = {formula.Dispatch(shader: true)}; break;", Operands: SdfShaderOperands.None);
+
     // Data0 = (halfX, halfY, halfZ, roundingRadius)
     [SdfFieldEntry(0)]
     private sealed class Box : Entry {
+        public override SdfFormula? Formula => null;
         public override SdfPartShapeAction PartShape => SdfPartShapeAction.Inline;
         public override SdfOperandLanes Reinterpreted => SdfOperandLanes.None;
         public override SdfShaderAction Shader => new(Code: "result = sdfBox(p, data0.xyz, data0.w); break;", Operands: SdfShaderOperands.None);
@@ -45,9 +50,10 @@ public static partial class SdfFieldShapes {
     // Data0 = (endX, endY, endZ, radius); the segment runs from the local origin to the endpoint
     [SdfFieldEntry(1)]
     private sealed class Capsule : Entry {
+        public override SdfFormula? Formula => SdfFieldFormulas.Capsule;
         public override SdfPartShapeAction PartShape => SdfPartShapeAction.Inline;
         public override SdfOperandLanes Reinterpreted => SdfOperandLanes.None;
-        public override SdfShaderAction Shader => new(Code: "result = sdfCapsule(p, data0.xyz, data0.w); break;", Operands: SdfShaderOperands.None);
+        public override SdfShaderAction Shader => FormulaShader(Formula!);
         public override bool ReliefRegion => true;
         public override SdfShaderAction ReliefShader => Shader;
         public override SdfCertificateAction Certificate => SdfCertificateAction.Capsule;
@@ -64,6 +70,7 @@ public static partial class SdfFieldShapes {
     // Data0.x = radius
     [SdfFieldEntry(2)]
     private sealed class Sphere : Entry {
+        public override SdfFormula? Formula => null;
         public override SdfPartShapeAction PartShape => SdfPartShapeAction.Inline;
         public override SdfOperandLanes Reinterpreted => SdfOperandLanes.None;
         public override SdfShaderAction Shader => new(Code: "result = sdfSphere(p, data0.x); break;", Operands: SdfShaderOperands.None);
@@ -83,6 +90,7 @@ public static partial class SdfFieldShapes {
     // Data0 = (majorRadius, minorRadius, _, _)
     [SdfFieldEntry(3)]
     private sealed class Torus : Entry {
+        public override SdfFormula? Formula => null;
         public override SdfPartShapeAction PartShape => SdfPartShapeAction.Inline;
         public override SdfOperandLanes Reinterpreted => SdfOperandLanes.None;
         public override SdfShaderAction Shader => new(Code: "result = sdfTorus(p, data0.x, data0.y); break;", Operands: SdfShaderOperands.None);
@@ -102,6 +110,7 @@ public static partial class SdfFieldShapes {
     // Data0 = (radius, halfHeight, _, _) inset by Data1.w, Data1.w = edge-rounding radius; upright, centered on the local origin
     [SdfFieldEntry(4)]
     private sealed class Cylinder : Entry {
+        public override SdfFormula? Formula => null;
         public override SdfPartShapeAction PartShape => SdfPartShapeAction.Inline;
         public override SdfOperandLanes Reinterpreted => SdfOperandLanes.None;
         public override SdfShaderAction Shader => new(Code: "result = (sdfCylinder(p, data0.x, data0.y) - data1.w); break;", Operands: SdfShaderOperands.None);
@@ -121,6 +130,7 @@ public static partial class SdfFieldShapes {
     // Data0 = (normalX, normalY, normalZ, offset)
     [SdfFieldEntry(5)]
     private sealed class Plane : Entry {
+        public override SdfFormula? Formula => null;
         public override SdfPartShapeAction PartShape => SdfPartShapeAction.Inline;
         public override SdfOperandLanes Reinterpreted => SdfOperandLanes.None;
         public override SdfShaderAction Shader => new(Code: "result = sdfPlane(p, data0.xyz, data0.w); break;", Operands: SdfShaderOperands.None);
@@ -140,6 +150,7 @@ public static partial class SdfFieldShapes {
     // Data0 = (radius, halfSeparation, halfHeight[baked √(r²−d²)], _); exact 2D vesica revolved to a lens (d < r)
     [SdfFieldEntry(6)]
     private sealed class Vesica : Entry {
+        public override SdfFormula? Formula => null;
         public override SdfPartShapeAction PartShape => SdfPartShapeAction.Inline;
         public override SdfOperandLanes Reinterpreted => SdfOperandLanes.None;
         public override SdfShaderAction Shader => new(Code: "result = sdfVesica(p, data0.x, data0.y, data0.z); break;", Operands: SdfShaderOperands.None);
@@ -170,6 +181,7 @@ public static partial class SdfFieldShapes {
     // Data0 = (halfX, halfY, cornerRadius, lift), Data1.z = cap chamfer; exact rounded-box 2D SDF
     [SdfFieldEntry(7)]
     private sealed class RoundedRectangle : Entry {
+        public override SdfFormula? Formula => null;
         public override SdfPartShapeAction PartShape => SdfPartShapeAction.Inline;
         public override SdfOperandLanes Reinterpreted => SdfOperandLanes.None;
         public override SdfShaderAction Shader => new(Code: "result = sdfRoundedRect(p, data0, data1); break;", Operands: SdfShaderOperands.None);
@@ -189,6 +201,7 @@ public static partial class SdfFieldShapes {
     // Data0 = (circumRadius, π/n[baked], 0[ecs.x], lift), Data1.z = 1[ecs.y]; exact star-polygon SDF with m=2
     [SdfFieldEntry(8)]
     private sealed class RegularPolygon : Entry {
+        public override SdfFormula? Formula => null;
         public override SdfPartShapeAction PartShape => SdfPartShapeAction.Inline;
         public override SdfOperandLanes Reinterpreted => SdfOperandLanes.None;
         public override SdfShaderAction Shader => new(Code: "result = sdfPolyStar(p, data0, data1); break;", Operands: SdfShaderOperands.None);
@@ -208,6 +221,7 @@ public static partial class SdfFieldShapes {
     // Data0 = (outerRadius, π/n[baked], cos(π/m)[baked ecs.x], lift), Data1.z = sin(π/m)[baked ecs.y]; exact star-polygon SDF
     [SdfFieldEntry(9)]
     private sealed class Star : Entry {
+        public override SdfFormula? Formula => null;
         public override SdfPartShapeAction PartShape => SdfPartShapeAction.Inline;
         public override SdfOperandLanes Reinterpreted => SdfOperandLanes.None;
         public override SdfShaderAction Shader => new(Code: "result = sdfPolyStar(p, data0, data1); break;", Operands: SdfShaderOperands.None);
@@ -227,6 +241,7 @@ public static partial class SdfFieldShapes {
     // Data0 = (lowerRadius, upperRadius, height, _)
     [SdfFieldEntry(10)]
     private sealed class RoundCone : Entry {
+        public override SdfFormula? Formula => null;
         public override SdfPartShapeAction PartShape => SdfPartShapeAction.Inline;
         public override SdfOperandLanes Reinterpreted => SdfOperandLanes.None;
         public override SdfShaderAction Shader => new(Code: "result = sdfRoundCone(p, data0.x, data0.y, data0.z, data0.w, data1.y); break;", Operands: SdfShaderOperands.None);
@@ -246,6 +261,7 @@ public static partial class SdfFieldShapes {
     // Data0 = (bottomHalfWidth r1, topHalfWidth r2, halfHeight, lift), Data1.z = cap chamfer; exact isosceles-trapezoid 2D SDF
     [SdfFieldEntry(11)]
     private sealed class Trapezoid : Entry {
+        public override SdfFormula? Formula => null;
         public override SdfPartShapeAction PartShape => SdfPartShapeAction.Inline;
         public override SdfOperandLanes Reinterpreted => SdfOperandLanes.None;
         public override SdfShaderAction Shader => new(Code: "result = sdfTrapezoidSolid(p, data0, data1); break;", Operands: SdfShaderOperands.None);
@@ -265,6 +281,7 @@ public static partial class SdfFieldShapes {
     // Data0 = (semiX, semiY, _, lift), Data1.z = cap chamfer; exact ellipse 2D SDF (revolve→spheroid, extrude→elliptic prism)
     [SdfFieldEntry(12)]
     private sealed class Ellipse : Entry {
+        public override SdfFormula? Formula => null;
         public override SdfPartShapeAction PartShape => SdfPartShapeAction.Inline;
         public override SdfOperandLanes Reinterpreted => SdfOperandLanes.None;
         public override SdfShaderAction Shader => new(Code: "result = sdfEllipseSolid(p, data0, data1); break;", Operands: SdfShaderOperands.None);
@@ -284,6 +301,7 @@ public static partial class SdfFieldShapes {
     // Data0 = (halfX, halfY, halfZ, roundingRadius)
     [SdfFieldEntry(13)]
     private sealed class ScreenSlab : Entry {
+        public override SdfFormula? Formula => null;
         public override SdfPartShapeAction PartShape => SdfPartShapeAction.Inline;
         public override SdfOperandLanes Reinterpreted => SdfOperandLanes.None;
         public override SdfShaderAction Shader => new(Code: "result = sdfBox(p, data0.xyz, data0.w); break;", Operands: SdfShaderOperands.None);
@@ -308,6 +326,7 @@ public static partial class SdfFieldShapes {
     // conservative underestimate, since the glyph is strictly inside its cell.
     [SdfFieldEntry(14)]
     private sealed class Glyph : Entry {
+        public override SdfFormula? Formula => null;
         public override SdfPartShapeAction PartShape => SdfPartShapeAction.Inline;
         public override SdfOperandLanes Reinterpreted => SdfOperandLanes.Data0X | SdfOperandLanes.Data0Y;
         public override SdfShaderAction Shader => new(
@@ -344,6 +363,7 @@ public static partial class SdfFieldShapes {
     // distance (the Glyph quad-fallback precedent).
     [SdfFieldEntry(15)]
     private sealed class SampledRegion : Entry {
+        public override SdfFormula? Formula => null;
         public override SdfPartShapeAction PartShape => SdfPartShapeAction.Unshared;
         public override SdfOperandLanes Reinterpreted => SdfOperandLanes.Data1Y | SdfOperandLanes.Data1Z;
         public override SdfShaderAction Shader => new(Code: "result = sdfSampledRegion(p, data0, data1); break;", Operands: SdfShaderOperands.None);
@@ -371,6 +391,7 @@ public static partial class SdfFieldShapes {
     // blend); 1-Lipschitz (no AnalyzeLipschitz step clamp), like the rest of the family.
     [SdfFieldEntry(16)]
     private sealed class ChamferedRectangle : Entry {
+        public override SdfFormula? Formula => null;
         public override SdfPartShapeAction PartShape => SdfPartShapeAction.Inline;
         public override SdfOperandLanes Reinterpreted => SdfOperandLanes.None;
         public override SdfShaderAction Shader => new(Code: "result = sdfChamferedRect(p, data0, data1); break;", Operands: SdfShaderOperands.None);
@@ -395,9 +416,10 @@ public static partial class SdfFieldShapes {
     // pow-free fast path.
     [SdfFieldEntry(17)]
     private sealed class Superellipsoid : Entry {
+        public override SdfFormula? Formula => SdfFieldFormulas.Superellipsoid;
         public override SdfPartShapeAction PartShape => SdfPartShapeAction.Inline;
         public override SdfOperandLanes Reinterpreted => SdfOperandLanes.None;
-        public override SdfShaderAction Shader => new(Code: "result = sdfSuperellipsoid(p, data0.xyz, data1.yzw, data0.w); break;", Operands: SdfShaderOperands.None);
+        public override SdfShaderAction Shader => FormulaShader(Formula!);
         public override bool ReliefRegion => true;
         public override SdfShaderAction ReliefShader => Shader;
         public override SdfCertificateAction Certificate => SdfCertificateAction.Superellipsoid;
@@ -422,6 +444,7 @@ public static partial class SdfFieldShapes {
     // SDF_SHAPE_CONVEX_POLYGON / sdfConvexPolygon2D / sdfPolygonVertex.
     [SdfFieldEntry(18)]
     private sealed class ConvexPolygon : Entry {
+        public override SdfFormula? Formula => null;
         public override SdfPartShapeAction PartShape => SdfPartShapeAction.Polygon;
         public override SdfOperandLanes Reinterpreted => SdfOperandLanes.Data0X;
         public override SdfShaderAction Shader => new(Code: "result = sdfConvexPolygonSolid(p, data0, data1); break;", Operands: SdfShaderOperands.None);
@@ -465,6 +488,7 @@ public static partial class SdfFieldShapes {
     // exactly like Glyph/SampledRegion are refused for reasons of their own.
     [SdfFieldEntry(19)]
     private sealed class Sweep : Entry {
+        public override SdfFormula? Formula => null;
         public override SdfPartShapeAction PartShape => SdfPartShapeAction.Unshared;
         public override SdfOperandLanes Reinterpreted => SdfOperandLanes.Data0X;
         public override SdfShaderAction Shader => new(Code: "result = sdfSweep(p, data0, data1); break;", Operands: SdfShaderOperands.None);
@@ -488,6 +512,7 @@ public static partial class SdfFieldShapes {
     // Extrusion only. The fixed-point evaluator reads the same edges from the program's own table (SdfProgram.Paths).
     [SdfFieldEntry(20)]
     private sealed class Path : Entry {
+        public override SdfFormula? Formula => null;
         public override SdfPartShapeAction PartShape => SdfPartShapeAction.Unshared;
         public override SdfOperandLanes Reinterpreted => SdfOperandLanes.Data0X;
         public override SdfShaderAction Shader => new(Code: "result = sdfPathSolid(p, data0, data1); break;", Operands: SdfShaderOperands.None);

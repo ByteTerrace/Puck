@@ -3,6 +3,7 @@
 #define FIELD_SDF_SHAPES_HLSLI
 // The 2D box distance (puckBoxDistance2) and the glyph median decode (puckMsdfReconstruct) are the overlays' too.
 #include "Shared/msdf.hlsli"
+#include "../isa/sdf-field-shape-formulas.hlsli"
 // The exact distance to a box centred on the origin, from q = abs(p) - halfExtents: the outside part's length plus the
 // inside part's largest (never positive) component. Every box below reads it; the 2D cylinder, slab and extrude
 // profiles read puckBoxDistance2.
@@ -24,79 +25,13 @@ precise float sdfTorus(float3 p, float major, float minor) {
 precise float sdfPlane(float3 p, float3 normal, float offset) {
     return (dot(p, normal) + offset);
 }
-// The segment parameter is dot(p, e) / dot(e, e), clamped to [0, 1], from the endpoint alone (a zero endpoint is a
-// sphere): the formula the fixed-point evaluator rounds once (FixedVector3.SegmentParameter). KEEP IN SYNC with
-// Puck.SignedDistance.Queries.SdfFieldEvaluator.SdfCapsule.
-precise float sdfCapsule(float3 p, float3 endpoint, float radius) {
-    float lengthSquared = dot(endpoint, endpoint);
-    float h = ((lengthSquared > 0.0) ? clamp((dot(p, endpoint) / lengthSquared), 0.0, 1.0) : 0.0);
-    return (length(p - (h * endpoint)) - radius);
-}
 precise float sdfCylinder(float3 p, float radius, float halfHeight) {
     return puckBoxDistance2(float2(length(p.xz), abs(p.y)) - float2(radius, halfHeight));
 }
-// The superellipsoid's gauge ratios carried in metres, q = |p| * min(r) / r, the form the fixed-point evaluator rounds
-// once (SdfFieldEvaluator.SuperellipsoidScaledRatio): the radii lie on the grid both carriers hold, so both scale by
-// the same smallest radius.
-precise float3 sdfSuperellipsoidRatios(float3 p, float minRadius, float3 inverseRadii) {
-    return (abs(p) * (minRadius * inverseRadii));
-}
-// The ellipsoid: the superellipsoid's scaled gauge at e = 2, |p * min(r) / r| - min(r). EXACTLY 1-Lipschitz at every
-// eccentricity (SdfProgramBuilder.Superellipsoid's proof covers e = 2), so it needs no step clamp and no field scope;
-// it shares its zero set with the true ellipsoid and underestimates Euclidean distance away from it. The center
-// returns -min(r) like the general path's m <= 0 branch (length(0) = 0). KEEP IN SYNC with the e == 2 fast path of
-// Puck.SignedDistance.Queries.SdfFieldEvaluator.SdfSuperellipsoid.
-precise float sdfEllipsoidGauge(float3 p, float3 radii, float3 inverseRadii) {
-    float minRadius = min(radii.x, min(radii.y, radii.z));
-
-    return (length(sdfSuperellipsoidRatios(p, minRadius, inverseRadii)) - minRadius);
-}
-precise float sdfSuperellipsoidNormFactor(float exponent) {
-    return 1.0 - (7.0 / 25.0) * (exponent - 2.0);
-}
+// The gauge-envelope device probe distinguishes the clamped endpoints.
 bool sdfSuperellipsoidNormIsClamped(float approximate, float norm, float exponent) {
     return ((asuint(approximate) & 0x7F800000u) == 0x7F800000u)
-        || approximate < sdfSuperellipsoidNormFactor(exponent) * norm || approximate > norm;
-}
-// For 2 < e <= 3 the exact Lp norm lies between (1-(7/25)*(e-2))*L2 and L2. The rational lower
-// factor follows from convexity of 3^(1/e-1/2) and ln(3)/4 < 7/25. Clamping to that band keeps the field a
-// conservative distance without assuming an error bound for pow.
-precise float sdfClampSuperellipsoidNorm(float approximate, float norm, float exponent) {
-    if ((asuint(approximate) & 0x7F800000u) == 0x7F800000u) { return norm; }
-    return clamp(approximate, sdfSuperellipsoidNormFactor(exponent) * norm, norm);
-}
-precise float sdfSuperellipsoidPowerNorm(float3 q, float m, float exponent) {
-    float3 u = pow(q / m, exponent);
-    return m * pow((u.x + u.y) + u.z, 1.0 / exponent);
-}
-// The superellipsoid: with q = |p| * min(r) / r, d = pow(sum(q_i^e), 1/e) - min(r). EXACTLY
-// 1-Lipschitz for every radius and every e >= 1 (see SdfProgramBuilder.Superellipsoid's remarks for the proof) — no
-// AnalyzeLipschitz step clamp is needed. e == 2 (every ellipsoid) takes sdfEllipsoidGauge's pow-free form, the same
-// field. inverseRadii = 1/radii, HOST-BAKED (data1.yzw); minRadius = min(radii) is cheap enough to read straight off
-// data0.xyz per eval. For 2 < e <= 3 the power norm is clamped to its certified band around length(q), in both readers.
-// The l_e gauge is computed in its FACTORED form, m * (sum((q_i/m)^e))^(1/e) with m = max(q): every pow() argument
-// stays in [0, 1] (the sum in [1, 3]), so a far query never overflows — the plain sum(q_i^e) reaches float infinity at
-// |p|/r ~ 1e5 for e = 8 (and saturates the fixed-point mirror's Q48.16 carrier at |p|/r ~ 60), which would collapse
-// the far field. Mathematically identical to sum(q_i^e)^(1/e). KEEP IN SYNC with
-// Puck.SignedDistance.Queries.SdfFieldEvaluator.SdfSuperellipsoid.
-precise float sdfSuperellipsoid(float3 p, float3 radii, float3 inverseRadii, float exponent) {
-    if (exponent == 2.0) {
-        return sdfEllipsoidGauge(p, radii, inverseRadii);
-    }
-
-    float minRadius = min(radii.x, min(radii.y, radii.z));
-    float3 q = sdfSuperellipsoidRatios(p, minRadius, inverseRadii);
-    float m = max(q.x, max(q.y, q.z));
-
-    if (m <= 0.0) {
-        return -minRadius;
-    }
-
-    float norm = sdfSuperellipsoidPowerNorm(q, m, exponent);
-    if (exponent > 2.0 && exponent <= 3.0) {
-        norm = sdfClampSuperellipsoidNorm(norm, length(q), exponent);
-    }
-    return (norm - minRadius);
+        || approximate != sdfClampSuperellipsoidNorm(approximate, norm, exponent);
 }
 // slope b = (lowerRadius - upperRadius)/height and its complement a = sqrt(1 - b*b) are HOST-BAKED (data0.w / data1.y).
 precise float sdfRoundCone(float3 p, float lowerRadius, float upperRadius, float height, float b, float a) {

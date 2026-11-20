@@ -741,7 +741,7 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
     // === The shape distance functions (KEEP IN SYNC with the matching sdf* functions in Assets/Shaders/Sdf/field/sdf-shapes.hlsli)
     // ======================================================================================================================
 
-    private static FixedQ4816 EvaluateShape(in CompiledInstruction instruction, FixedVector3 p, ref PowerWork powerWork) {
+    private static FixedQ4816 EvaluateShapeEscape(in CompiledInstruction instruction, FixedVector3 p) {
         return instruction.ShapePointAction switch {
             SdfShapePointAction.Sphere => SdfSphere(
             p: p,
@@ -769,11 +769,6 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
             height: instruction.Data0Z,
             b: instruction.Data0W,
             a: instruction.Data1Y
-        ),
-            SdfShapePointAction.Capsule => SdfCapsule(
-            p: p,
-            endpoint: Vector(instruction: instruction),
-            radius: instruction.Data0W
         ),
             SdfShapePointAction.Cylinder => (SdfCylinder(
             p: p,
@@ -822,12 +817,6 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
             liftAmount: instruction.Data0W,
             lift: instruction.Data1Y
         ) - instruction.Data1W),
-            SdfShapePointAction.Superellipsoid => SdfSuperellipsoid(
-            p: p,
-            radii: Vector(instruction: instruction),
-            work: ref powerWork,
-            exponent: instruction.Data0W
-        ),
             SdfShapePointAction.ConvexPolygon => (SdfConvexPolygonSolid(
             p: p,
             vertices: (instruction.ConvexPolygonVertices ?? []),
@@ -918,16 +907,6 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
 
         return ((outside + inside) - cornerRadius);
     }
-    // dot(p, e) / dot(e, e), clamped to [0, 1]: the kernel's formula, which the carrier divides from the exact dot products
-    // once (SegmentParameter), since a rounded dot of two centimetre vectors keeps a few bits. KEEP IN SYNC with sdfCapsule.
-    private static FixedQ4816 SdfCapsule(FixedVector3 p, FixedVector3 endpoint, FixedQ4816 radius) {
-        var h = FixedVector3.SegmentParameter(
-            point: p,
-            segment: endpoint
-        );
-
-        return ((p - (endpoint * h)).Length - radius);
-    }
     private static FixedQ4816 SdfCylinder(FixedVector3 p, FixedQ4816 radius, FixedQ4816 halfHeight) {
         var dx = (RadialLength(
             x: p.X,
@@ -953,86 +932,6 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
         ).Length;
 
         return (inside + outside);
-    }
-    // The real-valued scaled gauge is 1-Lipschitz (see SdfProgramBuilder.Superellipsoid's remarks). This is
-    // sdfSuperellipsoid's formula in field/sdf-shapes.hlsli step for step: the radii and the exponent lie on the grid both
-    // carriers hold (SdfDerivedLanes.FixedGrid), so both scale the gauge by one smallest radius, and the two differ only by
-    // each carrier's rounding of the same expression.
-    // The l_e gauge in its FACTORED form, m * (sum((q_i/m)^e))^(1/e) with m = max(q): every Pow argument stays in
-    // [0, 1] (the sum in [1, 3]), so a far query never saturates the Q48.16 carrier — the plain sum(q_i^e) saturates at
-    // |p|/r ~ 60 for e = 8 (FixedQ4816.Pow clamps to MaxValue), collapsing a far field to a few radii and starving
-    // every march that crosses it. Mathematically identical to sum(q_i^e)^(1/e).
-    // e == 2 is the ellipsoid, every ellipsoid the ISA carries: it takes the pow-free fast path (|q| - 1) * min(r), the
-    // same scaled L2 gauge without four Pow evaluations, and the same m <= 0 center value -min(r) (|q| = 0 there).
-    // KEEP the fast path IN SYNC with sdfSuperellipsoid's own e == 2 branch.
-    // The kernel's q = |p| · (1 / r) is carried here as q · min(r) = (|p| · min(r)) / r, in metres, rounded once
-    // (SuperellipsoidScaledRatio): the packed inverse radius has a Q16 raw of 65536 / r, so 1 / 514 carries seven bits
-    // and moves a 514 m surface by metres, and a carrier-rounded product |p| · min(r) of two centimetres keeps a few
-    // bits, which the division by a centimetre radius turns into a millimetre of noise.
-    private static FixedQ4816 SdfSuperellipsoid(FixedVector3 p, FixedVector3 radii, FixedQ4816 exponent, ref PowerWork work) {
-        var absP = FixedVector3.Abs(value: p);
-        var minRadius = FixedQ4816.Min(
-            x: radii.X,
-            y: FixedQ4816.Min(
-                x: radii.Y,
-                y: radii.Z
-            )
-        );
-        var q = new FixedVector3(
-            X: SuperellipsoidScaledRatio(magnitude: absP.X, minRadius: minRadius, radius: radii.X),
-            Y: SuperellipsoidScaledRatio(magnitude: absP.Y, minRadius: minRadius, radius: radii.Y),
-            Z: SuperellipsoidScaledRatio(magnitude: absP.Z, minRadius: minRadius, radius: radii.Z)
-        );
-        var m = FixedQ4816.Max(
-            x: q.X,
-            y: FixedQ4816.Max(
-                x: q.Y,
-                y: q.Z
-            )
-        );
-
-        if (exponent == Two) {
-            return (q.Length - minRadius);
-        }
-
-        if (m <= FixedQ4816.Zero) {
-            return -minRadius;
-        }
-
-        var memo = CurrentPowerMemo();
-        var ux = memo.Pow(
-            x: (q.X / m),
-            work: ref work,
-            y: exponent
-        );
-        var uy = memo.Pow(
-            x: (q.Y / m),
-            work: ref work,
-            y: exponent
-        );
-        var uz = memo.Pow(
-            x: (q.Z / m),
-            work: ref work,
-            y: exponent
-        );
-        var sum = ((ux + uy) + uz);
-        var inverseExponent = (FixedQ4816.One / exponent);
-
-        var norm = (m * memo.Pow(
-            work: ref work,
-            x: sum,
-            y: inverseExponent
-        ));
-
-        // For 2 < e <= 3 the exact norm lies between (1 - (7/25)(e - 2))·|q| and |q|; the kernel clamps its pow to that
-        // band, and so does this carrier (sdfClampSuperellipsoidNorm).
-        if ((exponent > Two) && (exponent <= SuperellipsoidClampedExponent)) {
-            var length = q.Length;
-
-            norm = FixedQ4816.Clamp(maximum: length, minimum: ((FixedQ4816.One - (SuperellipsoidNormSlope * (exponent - Two))) * length), value: norm);
-        }
-
-        return (norm - minRadius);
     }
     // |p_i| / r_i scaled by min(r): one superellipsoid axis's gauge ratio in metres. min(r) <= r_i, so it never exceeds
     // |p_i| and never wraps; it is non-decreasing in |p_i|, which SuperellipsoidScaledRatioBounds relies on.

@@ -13,6 +13,7 @@ public static class SdfFieldHlsl {
         Dispatch("rigid", "SDF_OP", SdfFieldOps.RigidShaderActions),
         Dispatch("parts", "SDF_OP", SdfFieldOps.PartShaderActions),
         Dispatch("shapes", "SDF_SHAPE", SdfFieldShapes.ShaderActions),
+        new ShaderDeclaration(Path: Directory + "sdf-field-shape-formulas.hlsli", Generate: () => Banner + SdfFieldShapes.GenerateFormulasHlsl()),
         Dispatch("relief-shapes", "SDF_SHAPE", SdfFieldShapes.ReliefShaderActions),
         Dispatch("blends", "SDF_BLEND", SdfFieldBlends.ShaderActions),
         Dispatch("material", "SDF_BLEND", SdfFieldBlends.MaterialShaderActions),
