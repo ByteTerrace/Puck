@@ -185,11 +185,12 @@ public static class WorldPlacementFrameCompilation {
         // A bound translation or lattice step changes without replacing its section. Such frames are live views,
         // never immutable-section cache entries.
         if (HasLiveInputs(section: section)) { return Compile(placements: section.Rows, worldSeed: worldSeed); }
-        if (Cache.TryGetValue(key: section, value: out var held) && (held.WorldSeed == worldSeed)) { return held.Frames; }
-        var table = new FrameTable(worldSeed, Compile(placements: section.Rows, worldSeed: worldSeed));
-
-        Cache.AddOrUpdate(key: section, value: table);
-        return table.Frames;
+        return Cache.GetValue(
+            derive: static (held, seed) => new FrameTable(seed, Compile(placements: held.Rows, worldSeed: seed)),
+            holds: static (table, _, seed) => (table.WorldSeed == seed),
+            key: section,
+            state: worldSeed
+        ).Frames;
     }
     // A holding-only replacement has the same authored transforms.
     internal static void CarryAcrossHolding(WorldPlacementsSection source, WorldPlacementsSection target) {

@@ -89,15 +89,12 @@ public sealed class WorldPlacementIndex {
     public static WorldPlacementIndex Of(IReadOnlyList<WorldPlacement> placements) {
         ArgumentNullException.ThrowIfNull(argument: placements);
 
-        if (Indices.TryGetValue(key: placements, value: out var held) && (held.RowCount == placements.Count)) {
-            return held;
-        }
-
-        var built = new WorldPlacementIndex(placements: placements);
-
-        Indices.AddOrUpdate(key: placements, value: built);
-
-        return built;
+        return Indices.GetValue(
+            derive: static (list, _) => new WorldPlacementIndex(placements: list),
+            holds: static (held, list, _) => (held.RowCount == list.Count),
+            key: placements,
+            state: 0
+        );
     }
     /// <summary>Gets a placement list's rows by id, the first row of an id winning.</summary>
     /// <param name="placements">The placement list.</param>

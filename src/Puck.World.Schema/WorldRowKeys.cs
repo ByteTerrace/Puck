@@ -73,15 +73,12 @@ public sealed class WorldRowKey<T, TKey>(Func<T, TKey> keyOf, Func<T, string?>? 
     public WorldRowIndex<T, TKey> IndexOf(IReadOnlyList<T> rows) {
         ArgumentNullException.ThrowIfNull(argument: rows);
 
-        if (m_indices.TryGetValue(key: rows, value: out var held) && (held.RowCount == rows.Count)) {
-            return held;
-        }
-
-        var built = new WorldRowIndex<T, TKey>(keyOf: keyOf, referenceOf: referenceOf, rows: rows);
-
-        m_indices.AddOrUpdate(key: rows, value: built);
-
-        return built;
+        return m_indices.GetValue(
+            derive: static (list, key) => new WorldRowIndex<T, TKey>(keyOf: key.keyOf, referenceOf: key.referenceOf, rows: list),
+            holds: static (held, list, _) => (held.RowCount == list.Count),
+            key: rows,
+            state: (keyOf, referenceOf)
+        );
     }
 }
 
