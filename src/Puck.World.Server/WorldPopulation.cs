@@ -378,6 +378,29 @@ public sealed partial class WorldPopulation {
         m_dynamicContactGrid = new FixedSweepGrid(capacity: m_entries.Length);
         m_activeCarries = new CarryRelationship[m_entries.Length];
 
+        // The field lattices are their own product, installed again by every full install; the population's build
+        // reads the installed lattices, not the state section they compile from.
+        InstallFields(definition: definition);
+
+        // Recorded as Rebuild records its own build, so the population answers what it was built from whichever door
+        // built it.
+        var recording = WorldDocumentReads.Begin();
+
+        try {
+            Build(definition: definition);
+        } finally {
+            BuiltFrom = recording.End();
+        }
+    }
+
+    /// <summary>Gets the parts of the document the population was last built from (<see cref="WorldDocumentReads"/>):
+    /// its construction or its last <see cref="Rebuild"/>, and the reconcile of the inhabited placements after it.
+    /// An install that changes none of them keeps the population.</summary>
+    public WorldDocumentInputs BuiltFrom { get; private set; } = WorldDocumentInputs.All;
+
+    // The construction's build from the document, after the boot-sized tables are allocated.
+    [System.Diagnostics.CodeAnalysis.MemberNotNull(nameof(m_seatSpawns))]
+    private void Build(WorldDefinition definition) {
         m_seatSpawns = CompileSeatSpawns(
             spawnPoints: definition.SpawnPoints,
             seatSpawns: definition.Population.SeatSpawns

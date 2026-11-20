@@ -80,6 +80,10 @@ public sealed class WorldSolidField : IContactField {
     // gradient a side to face. Small enough that no authored surface curves meaningfully across it.
     private static readonly FixedQ4816 GradientBackoff = FixedQ4816.FromDouble(value: 0.02);
 
+    /// <summary>Gets the parts of the document this field's program was compiled from
+    /// (<see cref="WorldDocumentReads"/>); a field re-wrapped with new regions or tuning keeps its program's.</summary>
+    public WorldDocumentInputs BuiltFrom { get; private set; }
+
     private WorldSolidField(SdfProgram program, SdfFieldEvaluator evaluator, SdfDistanceGrid? grid, FixedQ4816 kitReach, IReadOnlyList<WorldFieldRegion> regions, long placementShapeCount, WorldContactCensus census, FixedWorldCollision tuning, bool[] holdableMaterials, bool[] holdableGrantedByOverride, bool defaultGrip, WorldColliderSet movingSolids) {
         MovingSolids = movingSolids;
         m_program = program;
@@ -369,6 +373,21 @@ public sealed class WorldSolidField : IContactField {
     /// <paramref name="definition"/> is placed by its inert authored transform like any other), or <see langword="null"/>.</param>
     /// <returns><see langword="true"/> when the field compiled, <see langword="false"/> with a named reason otherwise.</returns>
     public static bool TryBuild(WorldDefinition definition, out WorldSolidField? built, out string reason, IReadOnlyList<WorldFieldRegion>? regions = null, IReadOnlyList<WorldPosedSolid>? posed = null) {
+        var recording = WorldDocumentReads.Begin();
+        WorldSolidField? product = null;
+
+        try {
+            var compiled = TryBuildCore(built: out product, definition: definition, posed: posed, reason: out reason, regions: regions);
+
+            built = product;
+            return compiled;
+        } finally {
+            var inputs = recording.End();
+
+            product?.BuiltFrom = inputs;
+        }
+    }
+    private static bool TryBuildCore(WorldDefinition definition, out WorldSolidField? built, out string reason, IReadOnlyList<WorldFieldRegion>? regions, IReadOnlyList<WorldPosedSolid>? posed) {
         built = null;
         reason = string.Empty;
 
@@ -573,7 +592,7 @@ public sealed class WorldSolidField : IContactField {
     public WorldSolidField WithRegions(IReadOnlyList<WorldFieldRegion> regions, FixedWorldCollision tuning, WorldColliderSet? movingSolids = null) => new(
         program: m_program, evaluator: m_evaluator, grid: m_banded?.Grid, kitReach: m_kitReach, regions: regions,
         placementShapeCount: PlacementShapeCount, census: Census, tuning: tuning, holdableMaterials: m_holdableMaterials,
-        holdableGrantedByOverride: m_holdableGrantedByOverride, defaultGrip: m_defaultGrip, movingSolids: (movingSolids ?? MovingSolids));
+        holdableGrantedByOverride: m_holdableGrantedByOverride, defaultGrip: m_defaultGrip, movingSolids: (movingSolids ?? MovingSolids)) { BuiltFrom = BuiltFrom };
     /// <summary>Re-wraps this field's already-compiled program with fresh solver scalars, reusing the wrapped
     /// <see cref="SdfFieldEvaluator"/> (safe to share by reference — it holds only an immutable instruction array) and
     /// the distance grid when the cell size is unchanged. A <c>SetCollision</c> edit touches only the collision tuning
@@ -603,5 +622,5 @@ public sealed class WorldSolidField : IContactField {
             defaultGrip: m_defaultGrip,
             movingSolids: MovingSolids,
             tuning: tuning
-        );
+        ) { BuiltFrom = BuiltFrom };
 }

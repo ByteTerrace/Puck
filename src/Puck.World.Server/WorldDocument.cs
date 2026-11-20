@@ -122,7 +122,7 @@ public sealed partial class WorldDocument {
     /// <param name="solids">The new field, or <see langword="null"/> under the analytic provider.</param>
     private void AdoptSolidField(WorldSolidField? solids) {
         m_solidRevision++;
-        m_solids = solids;
+        SetSolids(solids: solids);
     }
 
     /// <summary>Compacts the journal: the live definition becomes the new base and the edit history is cleared.</summary>
@@ -136,6 +136,6 @@ public sealed partial class WorldDocument {
     /// <param name="revision">The captured revision.</param>
     internal void RestoreSolidField(WorldSolidField? solids, int revision) {
         m_solidRevision = revision;
-        m_solids = solids;
+        SetSolids(solids: solids);
     }
 }

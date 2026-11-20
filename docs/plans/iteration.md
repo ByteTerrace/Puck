@@ -242,7 +242,7 @@ while this step was built, so [the checks](#checks) below are owed.
   three ways, the source winning each row both changed. The verdict names those
   rows and the members the reload changed.
 - **As the edit it is.** `WorldDocument.ReloadInstallKindOf` classifies the
-  candidate by which root members are other objects than the live document's:
+  candidate by which parts of the document (`WorldDocumentInputs.Changed`) are other objects than the live document's:
   nothing installs when none is; state values alone take the value install;
   creations changed only in shading, and shade programs, take the presentation
   install; anything else takes the full install. Only the full install compiles
@@ -287,7 +287,7 @@ each count across one `world.reload`):
 
 > What a reload installs is the source's change between the revision the
 > authority took and the next one, merged over the live document; what the
-> install keeps is decided by which root members of that candidate are other
+> install keeps is decided by which parts of that candidate are other
 > objects than the live document's, and by nothing else.
 
 - **Enforced by** one door. Every reload candidate reaches
@@ -312,22 +312,21 @@ each count across one `world.reload`):
 [The authoring loop](iteration/authoring-loop.md#an-edit-is-one-keyed-delta)
 needs a door that takes a keyed delta with the revision it was made against.
 That door is `WorldRebuildRequest` carrying a `WorldReloadDelta`: the patch and
-the pins of both source revisions. Two differences from that memo's target
-remain:
+the pins of both source revisions. One difference from that memo's target
+remains:
 
 | The door | The target | Owned by |
 |---|---|---|
 | The install clears the journal and moves the base, and only the operator may send it | One journal entry, admitted by the sender's grants for the sections the patch names | Authoring loop step 4 |
-| A mutation's install still decides what it rebuilds from lists of mutation kinds (`AffectsPopulation`, `AffectsSolidField` and their siblings) | Each compiled product names the document members it is built from, and a mutation and a patch are judged alike | The next step on this door, below |
 
-The second row needs each product's real inputs. A root member is too coarse
-to stand for them: `SetAuthoringDefaults` writes the placements section's
-policy, so a test by the placements member would rebuild the population and the
-solid field for it, and a reload can change members (`bodyMotionPrograms`, the
-simulation rate) no mutation kind writes, so a list built from the mutation
-kinds would leave the population stale for them. The reload's narrower installs
-are therefore named by the members they may change rather than by what each
-product reads.
+A mutation's full install and a reload's full install already decide alike what
+they rebuild: each compiled product records the parts of the document its build
+read, and `WorldDocument.PlanProducts` rebuilds the products whose parts the
+candidate changed ([which compiled products rebuild](../../src/Puck.World.Server/README.md#which-compiled-products-rebuild)).
+The placements section's policy is a part of its own, so an authoring-defaults
+edit rebuilds nothing that read only the rows, and a reload that changes
+`bodyMotionPrograms` or the simulation rate rebuilds the population, which reads
+both.
 
 ### Checks
 
@@ -340,7 +339,7 @@ product reads.
 | A form edit bakes that creation's groups, floor first | The same log names only those groups, and `world.residency`'s floor line counts them before their detail lands | Owed, windowed |
 | A recorded reload reproduces | `puck test --reproduce` over a scenario that reloads mid-run | Owed |
 | An unchanged source is not sent | The verb answers `the source is unchanged since the revision the authority holds` | Headless |
-| A one-colour reload is a presentation install | The verdict names `presentation install` and `changed prototypes shades`; `world.boot.rule-compilations` does not move | Headless |
+| A one-colour reload is a presentation install | The verdict names `presentation install` and `changed prototypes`; `world.boot.rule-compilations` does not move | Headless |
 | A live edit and a file edit to another row both stand | `world.row.set` one creation, edit another in the file, `world.reload`, read both with `world.row` | Headless |
 | A row both changed takes the source's and is named | The verdict names `the source won over the session's edits at $.prototypes[id="…"]` | Headless |
 

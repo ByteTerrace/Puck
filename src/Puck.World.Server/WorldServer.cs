@@ -602,13 +602,25 @@ public sealed partial class WorldServer : IWorldServerHost {
         BootDerivedFaceScreens = definition.DerivedFaceScreens;
         ResetClockSeeds(definition: definition);
         m_machines = machines;
-        if (!machines.TryPrepare(
-            admission: admission,
-            candidate: definition,
-            current: null,
-            plan: out var machinePlan,
-            reason: out var machineReason
-        )) {
+        // What the boot preparation reads is what the first install judges the machines by.
+        var machineRecording = WorldDocumentReads.Begin();
+        bool machinesPrepared;
+        IWorldMachinePreparedPlan? machinePlan;
+        string? machineReason;
+        WorldDocumentInputs bootMachineInputs;
+
+        try {
+            machinesPrepared = machines.TryPrepare(
+                admission: admission,
+                candidate: definition,
+                current: null,
+                plan: out machinePlan,
+                reason: out machineReason
+            );
+        } finally {
+            bootMachineInputs = machineRecording.End();
+        }
+        if (!machinesPrepared) {
             throw new ArgumentException(
                 message: $"World machine preparation refused: {machineReason}",
                 paramName: nameof(definition)
@@ -632,6 +644,7 @@ public sealed partial class WorldServer : IWorldServerHost {
             definition: definition,
             host: this
         );
+        m_document.AdoptBootMachineInputs(inputs: bootMachineInputs);
         m_persistence = new WorldPersistence(host: this);
         m_ruleHost = new WorldRuleHost(host: this);
         m_ruleHost.InstallTables(compilation: compilation!);

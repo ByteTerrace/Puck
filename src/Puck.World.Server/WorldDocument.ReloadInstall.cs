@@ -1,14 +1,14 @@
 namespace Puck.World.Server;
 
 public sealed partial class WorldDocument {
-    // The document's root members, by JSON name, in the serializer's order.
-    private static readonly IReadOnlyList<string> RootMembers = WorldDocumentWalker.MemberNames(owner: typeof(WorldDefinition));
+    // What a presentation install may change: creations, in what shading reads, and the shade programs.
+    private static readonly WorldDocumentInputs PresentationParts = WorldDocumentInputs.Of(WorldDocumentInput.Prototypes, WorldDocumentInput.Shades);
 
-    /// <summary>Returns what installing a reload's candidate over the live document rebuilds, decided by which of the
-    /// document's root members the candidate holds as another instance than the live document: nothing, when it holds
-    /// every member as the live document's own; a value install, when only state rows' values moved; a presentation
-    /// install, when only creations changed, each in what shading reads, and shade programs; a full install
-    /// otherwise.</summary>
+    /// <summary>Returns what installing a reload's candidate over the live document rebuilds, decided by which parts of
+    /// the document the candidate holds as another instance than the live document
+    /// (<see cref="WorldDocumentInputs.Changed"/>): nothing, when it holds every part as the live document's own; a
+    /// value install, when only state rows' values moved; a presentation install, when only creations changed, each in
+    /// what shading reads, and shade programs; a full install otherwise.</summary>
     /// <remarks>A reload's candidate holds the live document's own instance of every member and keyed row its change
     /// leaves equal (<see cref="Protocol.WorldReloadDelta.TryMergeOver"/>), so an instance that differs is a change. The
     /// value and presentation installs are named by the members they may change, and every other member's change takes
@@ -21,36 +21,17 @@ public sealed partial class WorldDocument {
     internal static WorldInstallKind ReloadInstallKindOf(WorldDefinition candidate, WorldDefinition live, out IReadOnlyList<string> rows) {
         rows = [];
 
-        var changed = ChangedMembers(candidate: candidate, live: live);
+        var changed = WorldDocumentInputs.Changed(after: candidate, before: live);
 
-        if (changed.Count == 0) { return WorldInstallKind.Nothing; }
-        if (changed is [WorldDefinitionMembers.StateMemberName] && TryNameValueRows(candidate: candidate, live: live, rows: out var valueRows)) {
+        if (changed.IsEmpty) { return WorldInstallKind.Nothing; }
+        if (changed.Except(other: WorldDocumentInputs.State).IsEmpty && TryNameValueRows(candidate: candidate, live: live, rows: out var valueRows)) {
             rows = valueRows;
             return WorldInstallKind.Value;
         }
-        return (changed.TrueForAll(match: static name => name is PrototypesMemberName or WorldDocumentBasis.ShadesMemberName) && ChangesShadingAlone(candidate: candidate, live: live))
+        return (changed.Except(other: PresentationParts).IsEmpty && ChangesShadingAlone(candidate: candidate, live: live))
             ? WorldInstallKind.Presentation
             : WorldInstallKind.Full;
     }
-
-    /// <summary>Returns the root members, by JSON name, that a candidate holds as another instance than the live
-    /// document it was merged over.</summary>
-    /// <param name="candidate">The candidate.</param>
-    /// <param name="live">The live document.</param>
-    /// <returns>The changed members' names, in the serializer's order.</returns>
-    internal static List<string> ChangedMembers(WorldDefinition candidate, WorldDefinition live) {
-        var changed = new List<string>();
-
-        foreach (var name in RootMembers) {
-            var before = WorldDocumentWalker.ReadMember(name: name, root: live);
-            var after = WorldDocumentWalker.ReadMember(name: name, root: candidate);
-
-            if (!ReferenceEquals(objA: before, objB: after) && !((before is string or ValueType) && before.Equals(obj: after))) { changed.Add(item: name); }
-        }
-        return changed;
-    }
-
-    private const string PrototypesMemberName = "prototypes";
 
     // Whether every creation row the candidate holds as another instance is the same creation differing only in what
     // shading reads, in the same order.
