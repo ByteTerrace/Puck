@@ -357,25 +357,29 @@ public sealed partial class WorldPersistence {
             creations = (rows ?? creations);
         }
 
-        var shades = live.ShadesRaw;
+        // ShadesRaw reads the table the definition's uses derive, so it is set only when a program moved: setting it
+        // back would replace the stored table the live document carries with another instance.
+        restored = (ReferenceEquals(objA: creations, objB: live.CreationsRaw) ? live : (live with { CreationsRaw = creations }));
 
-        if (!ReferenceEquals(objA: candidate.ShadesRaw, objB: undone.ShadesRaw)) {
+        var restoring = candidate.ShadesRaw;
+        var dropping = undone.ShadesRaw;
+
+        if (!ReferenceEquals(objA: restoring, objB: dropping)) {
+            var held = live.ShadesRaw;
             Dictionary<string, SdfShadeDefinition>? table = null;
 
-            Dictionary<string, SdfShadeDefinition> Table() => (table ??= ((live.ShadesRaw is { } held)
-                ? new Dictionary<string, SdfShadeDefinition>(held, StringComparer.Ordinal)
-                : new Dictionary<string, SdfShadeDefinition>(StringComparer.Ordinal)));
+            Dictionary<string, SdfShadeDefinition> Table() => (table ??= ((held is null)
+                ? new Dictionary<string, SdfShadeDefinition>(StringComparer.Ordinal)
+                : new Dictionary<string, SdfShadeDefinition>(held, StringComparer.Ordinal)));
 
-            foreach (var (name, program) in (candidate.ShadesRaw ?? new Dictionary<string, SdfShadeDefinition>())) {
-                if ((undone.ShadesRaw?.TryGetValue(key: name, value: out var dropped) != true) || !ReferenceEquals(objA: dropped, objB: program)) { Table()[name] = program; }
+            foreach (var (name, program) in (restoring ?? new Dictionary<string, SdfShadeDefinition>())) {
+                if ((dropping?.TryGetValue(key: name, value: out var dropped) != true) || !ReferenceEquals(objA: dropped, objB: program)) { Table()[name] = program; }
             }
-            foreach (var name in (undone.ShadesRaw?.Keys ?? [])) {
-                if (candidate.ShadesRaw?.ContainsKey(key: name) != true) { _ = Table().Remove(key: name); }
+            foreach (var name in (dropping?.Keys ?? [])) {
+                if ((restoring?.ContainsKey(key: name) != true) && (held?.ContainsKey(key: name) == true)) { _ = Table().Remove(key: name); }
             }
-            if (table is not null) { shades = (((candidate.ShadesRaw is null) && (table.Count == 0)) ? null : table); }
+            if (table is not null) { restored = (restored with { ShadesRaw = (((restoring is null) && (table.Count == 0)) ? null : table) }); }
         }
-
-        restored = live with { CreationsRaw = creations, ShadesRaw = shades };
         return changed;
     }
 
