@@ -19,14 +19,14 @@
 #define SDF_PROBE_MAX_WALK_STEPS                     65536u
 #define SDF_PROBE_GROUP_SIZE                         32u
 #define SDF_PROBE_RELIGHT_OUTPUT_WORDS               58u
-#define SDF_PROBE_RELIGHT_INPUT_WORDS                306u
+#define SDF_PROBE_RELIGHT_INPUT_WORDS                309u
 #define SDF_PROBE_RELIGHT_HEADER_ROWS                155u
 #define SDF_PROBE_RELIGHT_MATERIAL_ROWS              2u
 #define SDF_PROBE_RELIGHT_LIGHT_ROWS                 4u
-#define SDF_PROBE_SELECT_INPUT_WORDS                 12u
-#define SDF_PROBE_SELECT_HEADER_ROWS                 8u
+#define SDF_PROBE_SELECT_INPUT_WORDS                 8u
+#define SDF_PROBE_SELECT_HEADER_ROWS                 5u
 #define SDF_PROBE_CACHE_WORDS                        290u
-#define SDF_PROBE_RELIGHT_RESULT_WORDS               302u
+#define SDF_PROBE_RELIGHT_RESULT_WORDS               305u
 #define SDF_PROBE_CAMERA_SAMPLE_OUTPUT_WORDS         20u
 #define SDF_PROBE_CAMERA_SAMPLE_CLOSURE_PASSES       16u
 #define SDF_PROBE_RECORD_INPUT_WORD                  62u
@@ -177,7 +177,8 @@
 #define SDF_MESH_MARK_BASE                64u
 
 // The irradiance volume's probe record and read (SdfMeshIrradianceProbe).
-#define SDF_MESH_IRRADIANCE_PROBE_WORDS                 244u
+#define SDF_MESH_IRRADIANCE_PROBE_WORDS                 247u
+#define SDF_MESH_IRRADIANCE_CELL_WORD                   244u
 #define SDF_MESH_IRRADIANCE_LEVELS                      3u
 #define SDF_MESH_IRRADIANCE_SKY_WORD                    1u
 #define SDF_MESH_IRRADIANCE_RADIANCE_WORD               4u

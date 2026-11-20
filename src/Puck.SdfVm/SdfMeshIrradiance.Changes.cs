@@ -78,12 +78,11 @@ public sealed partial class SdfMeshIrradiance {
         var placement = ((1.5f * spacing) + new Vector3(value: SdfMeshIrradianceProbe.Clearance));
         var origin = (centre + probe.Offset);
         var hits = probe.HitWords;
-        var reach = -1f;
+        var reach = Extended(probe.Reach);
 
         foreach (var (geometry, tree) in changes) {
             if (geometry <= probe.Geometry) { continue; }
             if (tree is null) { return true; }
-            if (reach < 0f) { reach = RayReach(hits: hits, limit: layout.Reach); }
 
             var nodes = tree.Nodes;
 
@@ -105,15 +104,18 @@ public sealed partial class SdfMeshIrradiance {
         }
         return false;
     }
-    // The distance every ray of a probe ends within, the margins a box test grants included: a box farther from the
-    // origin meets none of its rays.
-    private static float RayReach(ReadOnlySpan<uint> hits, float limit) => Extended(reach: FarthestHit(hits: hits, limit: limit));
     // The farthest any of a probe's rays travelled, a miss to its reach, held to the layout's reach: every hit lies
     // within it of the probe's origin (ProbeData.Reach).
-    private static float FarthestHit(ReadOnlySpan<uint> hits, float limit) {
+    private static float FarthestHit(ReadOnlySpan<uint> hits, float limit, out bool frontHit, out ulong openSkyGroups) {
         var far = 0f;
-
-        for (var texel = 0; (texel < SdfMeshProbeDepth.HitCount); texel++) { far = MathF.Max(x: far, y: MathF.Min(x: MathF.Abs(x: BitConverter.UInt32BitsToSingle(value: hits[(2 * texel)])), y: limit)); }
+        frontHit = false;
+        openSkyGroups = 0;
+        for (var texel = 0; texel < SdfMeshProbeDepth.HitCount; texel++) {
+            var distance = BitConverter.UInt32BitsToSingle(hits[2 * texel]);
+            if (float.IsPositiveInfinity(distance)) { openSkyGroups |= SkyGroup(texel); }
+            frontHit |= float.IsFinite(distance) && distance >= 0f;
+            far = MathF.Max(far, MathF.Min(MathF.Abs(distance), limit));
+        }
         return far;
     }
     // A recorded hit's reach with its margins: one on the box's face lies at its entry, and rounding must not pass it

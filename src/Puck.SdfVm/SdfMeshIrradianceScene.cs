@@ -526,6 +526,17 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
         bakeHalfDiagonal = hit.BakeHalfDiagonal;
         return true;
     }
+    // A ray already outside a face of the scene and pointing away from that face cannot hit a caster.
+    internal bool PointsOutside(Vector3 origin, Vector3 direction) {
+        if (m_content.NodeCount == 0) { return true; }
+        ref readonly var root = ref m_content.Nodes[0];
+        for (var axis = 0; axis < 3; axis++) {
+            if ((origin[axis] < root.Low[axis] && direction[axis] <= 0f) ||
+                (origin[axis] > root.High[axis] && direction[axis] >= 0f)) { return true; }
+        }
+        return false;
+    }
+
     /// <summary>Returns whether a ray reaches a distance without meeting a triangle.</summary>
     /// <param name="origin">The ray's origin, in world space.</param>
     /// <param name="direction">The ray's unit direction.</param>

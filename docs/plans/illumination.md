@@ -948,8 +948,13 @@ rule effect that writes a row's advance.
 What the GPU trace opened, in the order the evidence favours. Each is a step of
 this plan; none is scheduled by another page.
 
-**The trace's own acceptance.** A moving-sun lockstep drain still takes many
-frames. GPU execution time alone is not the drain's cost: measure job and fence
+**The trace's own acceptance.** Live selection now compares a probe's last
+light inputs with the current sun and the parts of the sky its rays saw.
+`SdfMeshIrradiance.OwesRelight` spreads small changes across cell phases before
+their age deadlines. An exact drain still starts bounce receivers from zero,
+and later passes visit only those receivers. Read the moving-day backlog and
+relight counts at the gallery and overlook, then compare dawn and dusk in the
+valley. The moving-sun drain still needs a reading. GPU execution time alone is not the drain's cost: measure job and fence
 round trips and the host's placement and selection beside kernel time before
 choosing the next cut. The outdoor relight's difference from the CPU reference
 near foliage needs attribution beyond the device law's transformed-box corpus.
@@ -1064,13 +1069,11 @@ method. In the debug world, lowering the skylight blinds moves the shadow's
 edge correctly. Keep a field method only where it beats triangles inside the
 one tracer; otherwise the field stays the bake-time judge.
 
-**A moved window published slot by slot.** An unmeasured slot is invalid, so
-the share rule hands its receivers to the coarser level, instead of the whole
-old table being held until every new slot is measured. Puck's gather already
-falls through to the coarser level, so no parent copy is needed. It moves
-lighting latency after a camera move and the `unsettled` reads at the window's
-edge. Check: after a camera cut across half the window, the frames until the
-first relit probe publishes, against holding the table.
+**A moved window published slot by slot.** `SdfMeshIrradiance.Publish` makes
+completed cells available during a refill. The gather checks the slot's world
+coordinates and tries a measured parent for the missing share. A view whose
+camera sample is still pending after a cut reads its authored sky. Measure the
+first published light and `world.iteration`'s `lit=` stage after a teleport.
 
 **Hardware ray query, one kernel with two traversals (built; its reading is
 owed).** The probe trace, the relight and the camera sample each have one body

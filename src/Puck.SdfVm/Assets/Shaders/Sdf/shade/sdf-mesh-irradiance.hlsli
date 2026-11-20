@@ -2,22 +2,22 @@
 // a shaded point (by the views and glass passes) and at a probe's hit (by the relight's bounce and the exposure meter)
 // through the probes about it. It performs no field query. The probe record and the normal bias are
 // SdfMeshIrradianceProbe's (Puck.SdfVm.Model), generated into sdf-render.hlsli (SDF_MESH_IRRADIANCE_*); the key, the
-// toroidal slot and the probe weights are mirrored by SdfMeshIrradiance's KeyOf, SlotOf and Incoming, the CPU read of the
+// toroidal slot and the probe weights are mirrored by SdfMeshIrradiance's Holds, SlotOf and Incoming, the CPU read of the
 // same volume.
 #ifndef SHADE_SDF_MESH_IRRADIANCE_HLSLI
 #define SHADE_SDF_MESH_IRRADIANCE_HLSLI
 #include "../isa/sdf-render.hlsli"
 #include "../field/sdf-octahedral.hlsli"
 
-uint sdfMeshIrradianceKey(int3 cell) {
-    uint3 low = (asuint(cell) & 1023u);
-    return (low.x | (low.y << 10) | (low.z << 20));
+bool sdfMeshIrradianceHolds(uint address, uint flags, int3 cell) {
+    uint at = address + SDF_MESH_IRRADIANCE_CELL_WORD;
+    return (flags & SDF_MESH_IRRADIANCE_WRITTEN) != 0u &&
+        all(uint3(sdfMeshIrradiance[at], sdfMeshIrradiance[at + 1], sdfMeshIrradiance[at + 2]) == asuint(cell));
 }
-// The cell's coordinates modulo the volume's size, from 0, wrapped unsigned after a lift by 2^16 sizes, which covers every
-// cell within 2^16 volumes of the origin: NVIDIA's Vulkan driver answers a signed remainder (OpSRem) of a negative operand
-// wrongly, where Direct3D 12 answers it right.
+// Floor modulo with unsigned remainder, including at INT_MIN.
 uint3 sdfMeshIrradianceWrapped(int3 cell, int3 dims) {
-    return ((uint3)(cell + (dims * 65536)) % (uint3)dims);
+    uint3 remainder = select(cell < 0, asuint(~cell), asuint(cell)) % (uint3)dims;
+    return select(cell < 0, (uint3)dims - 1u - remainder, remainder);
 }
 uint sdfMeshIrradianceSlot(int3 cell, int3 dims) {
     uint3 size = (uint3)dims;
@@ -332,7 +332,7 @@ bool sdfMeshProbeAt(SdfMeshProbes probes, SdfMeshProbeStages stages, uint corner
 // Returns the total weight, and in `front` the cage's weight before visibility with the facing fade alone (no behind
 // floor) over every present probe, invalid ones included: the support a share is measured against. KEEP IN SYNC with
 // SdfMeshIrradiance.Gather.
-float sdfMeshProbesGather(uint level, float3 spacing, int3 low, int3 dims, float3 position, float3 normal, float3 pushed, bool bounded, float behind, out float front, out SdfMeshProbeCage probes) {
+float sdfMeshProbesGather(uint level, float3 spacing, int3 low, int3 dims, float3 position, float3 normal, float3 pushed, bool bounded, float behind, out float front, out float missing, out SdfMeshProbeCage probes) {
     uint count, stride;
     sdfMeshIrradiance.GetDimensions(count, stride);
 
@@ -351,6 +351,7 @@ float sdfMeshProbesGather(uint level, float3 spacing, int3 low, int3 dims, float
     float total = 0.0;
 
     front = 0.0;
+    missing = 0.0;
     probes.cage = sdfMeshProbeCageWord(level, first, dims);
 
     SdfMeshProbeStage stage = sdfMeshProbeStageOf(probes.cage);
@@ -365,18 +366,19 @@ float sdfMeshProbesGather(uint level, float3 spacing, int3 low, int3 dims, float
             continue;
         }
 
+        float3 axes = lerp((1.0 - fraction), fraction, float3(offset));
+        float trilinear = (axes.x * axes.y * axes.z);
         uint address = sdfMeshProbeStageAddress(stage, corner);
 
         if ((address + SDF_MESH_IRRADIANCE_PROBE_WORDS) > count) {
             continue;
         }
         uint key = sdfMeshIrradiance[address];
-        if ((key & ~SDF_MESH_IRRADIANCE_INVALID) != (sdfMeshIrradianceKey(cell) | SDF_MESH_IRRADIANCE_WRITTEN)) {
+        if (!sdfMeshIrradianceHolds(address, key, cell)) {
+            missing += trilinear;
             continue;
         }
 
-        float3 axes = lerp((1.0 - fraction), fraction, float3(offset));
-        float trilinear = (axes.x * axes.y * axes.z);
         // The trilinear share is the cell's; the direction, the distance and the depth test are the probe's own position.
         float3 probePoint = ((((float3)cell + 0.5) * spacing) + sdfMeshProbeOffset(address));
         float3 toward = (probePoint - position);
@@ -474,14 +476,16 @@ SdfMeshProbes sdfMeshProbesAt(float3 position, float3 normal) {
     float share = 1.0;
     bool remainder = false;
 
-    [loop] for (uint attempt = 0u; (attempt <= (chosen + 2u)); attempt++) {
-        uint level = ((attempt > (chosen + 1u)) ? 0u : min(attempt, chosen));
-        bool bounded = (attempt <= chosen);
+    bool cold = false;
+    [loop] for (uint attempt = 0u; attempt <= SDF_MESH_IRRADIANCE_LEVELS + 1u; attempt++) {
+        bool bounded = attempt < SDF_MESH_IRRADIANCE_LEVELS;
+        if (bounded && attempt > chosen && !cold) { continue; }
+        uint level = bounded ? attempt : (attempt == SDF_MESH_IRRADIANCE_LEVELS ? chosen : 0u);
         float3 spacing = sdfMeshIrradianceSpacing(level);
         int3 low = passGroup.meshIrradianceLevels[level].xyz;
         int3 dims = sdfMeshIrradianceDims(level);
 
-        if (((attempt < chosen) || (attempt > (chosen + 1u))) && (!all(spacing > 0.0) || any(dims <= 0) || (chosen == 0u))) {
+        if (!all(spacing > 0.0) || any(dims <= 0) || (attempt > SDF_MESH_IRRADIANCE_LEVELS && chosen == 0u)) {
             continue;
         }
         float reachShare = 1.0;
@@ -498,8 +502,10 @@ SdfMeshProbes sdfMeshProbesAt(float3 position, float3 normal) {
         }
 
         SdfMeshProbeCage cage;
-        float front;
-        float total = sdfMeshProbesGather(level, spacing, low, dims, position, normal, pushed, bounded, ((level == 0u) ? SDF_MESH_IRRADIANCE_BEHIND_SHARE : 0.0), front, cage);
+        float front, missing;
+        float total = sdfMeshProbesGather(level, spacing, low, dims, position, normal, pushed, bounded, ((level == 0u) ? SDF_MESH_IRRADIANCE_BEHIND_SHARE : 0.0), front, missing, cage);
+        if (bounded && level >= chosen) { cold = missing > 0; }
+        front += missing;
 
         if (!(total > 0.0)) {
             continue;

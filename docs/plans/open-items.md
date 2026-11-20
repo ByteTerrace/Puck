@@ -1441,8 +1441,10 @@ in [sweep](#sweep-and-visual-checks).
 Owner: next lighting batch (rendering, principal-grade review) · high · Next:
 [what the GPU trace still owes](illumination.md#after-the-gpu-trace), the
 plan's step 3: the moving-sun lockstep drain and the outdoor difference from
-the CPU reference; then a cold area lit from the coarser levels or the sky
-term the moment a view arrives.
+the CPU reference. Measure the live relight backlog under an accelerated day,
+the valley at dawn and dusk, and the first frame and settled light after a
+teleport. The gather now hands missing cells to the coarser levels and the
+view can read its authored sky while its new camera sample is pending.
 [The plan](illumination.md#the-build-order) owns the steps, and the
 [mesh-GI reference](../../.claude/skills/rendering/references/mesh-gi.md)
 holds the fixed poses and the approaches already rejected.
