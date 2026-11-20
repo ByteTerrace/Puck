@@ -57,6 +57,8 @@ let regionPlaces = concat(
     { id: "endless-fall", at [fallX, 1.6, fallZ], half [1.5, 2.6, 1.5] }
     // The lobby's west wall: the desktop computer before it, and the big painting into Wonderland (wonderland.puck).
     storeyPlace("desktop", 0, 10.3, 13.3, 22.4, 25)
+    // The typesetter's bench against the same wall, south of the desktop (press.puck).
+    storeyPlace("press", 0, 10.3, 13.6, 15.6, 18.4)
     storeyPlace("wonderland-threshold", 0, 10.3, 12.3, 29, 32)
     // Wonderland: the room beyond the lobby's west wall, the device row along its west side, and the mouse hole in
     // its east wall back to the lobby.

@@ -1,0 +1,93 @@
+{
+  "schema": "puck.tune.v1",
+  "name": "press-bed",
+  "tempo": 15,
+  "patterns": [
+    [
+      {
+        "note": "A3",
+        "duty": 2,
+        "envelope": 163
+      },
+      {
+        "note": "---",
+        "duty": 2,
+        "envelope": null
+      },
+      {
+        "note": "E3",
+        "duty": 2,
+        "envelope": 163
+      },
+      {
+        "note": "---",
+        "duty": 2,
+        "envelope": null
+      },
+      {
+        "note": "A3",
+        "duty": 2,
+        "envelope": 163
+      },
+      {
+        "note": "---",
+        "duty": 2,
+        "envelope": null
+      },
+      {
+        "note": "G3",
+        "duty": 2,
+        "envelope": 163
+      },
+      {
+        "note": "---",
+        "duty": 2,
+        "envelope": null
+      },
+      {
+        "note": "A3",
+        "duty": 2,
+        "envelope": 163
+      },
+      {
+        "note": "---",
+        "duty": 2,
+        "envelope": null
+      },
+      {
+        "note": "E3",
+        "duty": 2,
+        "envelope": 163
+      },
+      {
+        "note": "---",
+        "duty": 2,
+        "envelope": null
+      },
+      {
+        "note": "D3",
+        "duty": 2,
+        "envelope": 163
+      },
+      {
+        "note": "---",
+        "duty": 2,
+        "envelope": null
+      },
+      {
+        "note": "E3",
+        "duty": 2,
+        "envelope": 163
+      },
+      {
+        "note": "---",
+        "duty": 2,
+        "envelope": null
+      }
+    ]
+  ],
+  "order": [
+    0
+  ],
+  "effects": {}
+}

@@ -74,7 +74,7 @@ test "a wrong letter is a miss that keeps the lock and ends the streak" {
     typing.target == 0
     typingTyped["0"] == 1
     typingKeys.next0 == 115
-    typingStyle["0"] == "miss"
+    typingStyle["0"] == "shake"
   }
 }
 test "a word left alone lands and three landings end the run" {

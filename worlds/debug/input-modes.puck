@@ -1,5 +1,6 @@
 // Gameplay eligibility follows body registers and engagement, independently of camera pages.
 import "../standard/instrument"
+import "../standard/typing"
 
 let movement = ["forward", "strafe", "turn", "faceX", "faceY", "faceZ", "run"]
 let controls = ["jump", "suit", "noclip"]
@@ -18,7 +19,10 @@ inputModes {
         { name: "pilot-noclip", values ["2"], channels: concat(movement, controls, ["rise"]) }
         { name: "suited-noclip", values ["3"], channels: concat(movement, controls, ["rise", "flight", "dash"]) }
       ]
-      suspendedBy [{ family: "engagement", states ["tabletop", "machine", "screen", "body"] }]
+      suspendedBy [
+        { family: "engagement", states ["tabletop", "machine", "screen", "body"] }
+        { family: "typing", states ["seated"] }
+      ]
       transitions [
         { from: "pilot", to: "suited", keep: movement }
         { from: "suited", to: "pilot", keep: movement }
@@ -62,6 +66,11 @@ inputModes {
       transitions []
     }
     // The instrument's vents are offered while the breath holds it up (bard.puck), and a seat engaged anywhere has none.
-    instrumentFamily(suspendedBy: [{ family: "engagement", states ["tabletop", "machine", "screen", "body"] }])
+    instrumentFamily(suspendedBy: [
+      { family: "engagement", states ["tabletop", "machine", "screen", "body"] }
+      { family: "typing", states ["seated"] }
+    ])
+    // The press's typed text is offered while the seat sits at its bench (press.puck), in place of her movement.
+    typingFamily(suspendedBy: [{ family: "engagement", states ["tabletop", "machine", "screen", "body"] }])
   ]
 }

@@ -201,7 +201,11 @@ audio {
   defaultCurve: "linear"
   defaultBedFadeSeconds: 0.1
   listener: "focus"
-  cues []
+  // The press's keys (press.puck): a dry tick for a struck letter and a dull knock for a wrong one.
+  cues [
+    { event: "typing.hit", patchId: "press-tick", placement: "listener", gainThousandths: 350 }
+    { event: "typing.miss", patchId: "press-knock", placement: "listener", gainThousandths: 600 }
+  ]
 }
 
 // `guide` holds the shown exhibit's title and note, both empty while she stands at none; `guideAt` its position in

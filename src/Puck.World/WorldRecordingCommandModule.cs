@@ -26,7 +26,8 @@ internal sealed class WorldRecordingCommandModule(
     IAudioCaptureSourceFactory audioSources,
     RecordingSessionClock clock,
     RecordingDocumentSource source,
-    IOptions<NativeWindowOptions> window
+    IOptions<NativeWindowOptions> window,
+    WorldHighlightDirector highlights
 ) : ICommandModule {
     private readonly FrameCaptureController m_capture = capture;
     private readonly IVideoEncoderFactory m_videoEncoders = videoEncoders;
@@ -34,9 +35,36 @@ internal sealed class WorldRecordingCommandModule(
     private readonly RecordingSessionClock m_clock = clock;
     private readonly RecordingDocumentSource m_source = source;
     private readonly IOptions<NativeWindowOptions> m_window = window;
-    private static readonly CommandForms CaptureStartForms = CommandForms.Of(verb: "capture.start", "[<path>]");
+    private readonly WorldHighlightDirector m_highlights = highlights;
+    private static readonly CommandForms CaptureStartForms = CommandForms.Of(verb: "capture.start", "[<path>]", "frames <name> [<count>]");
 
+    // The frames form writes a run of presented frames as images, the way a world's highlights rows do.
+    private CommandResult StartFrames(WireArgs args) {
+        var count = 1;
+
+        if (
+            (args.Count is < 2 or > 3) ||
+            args[1].IsWhiteSpace() ||
+            ((args.Count == 3) && (!args.TryInt(index: 2, value: out count) || (count < 1) || (count > WorldHighlightCapacity.MaxFrames)))
+        ) {
+            return CaptureStartForms.Refuse(got: ((args.Count > 1) ? args[1].ToString() : null));
+        }
+
+        var name = args[1].ToString();
+
+        if (name.Any(predicate: static letter => (!char.IsAsciiLetterOrDigit(c: letter) && (letter is not ('-' or '_'))))) {
+            return CommandResult.Error(output: $"[capture.start: '{name}' may hold only ASCII letters, digits, '-' and '_']");
+        }
+
+        return (m_highlights.TryArm(frames: count, name: name, reason: out var reason)
+            ? new CommandResult(Output: $"[capture.start: writing {count} frame(s) -> {Path.Combine(path1: m_highlights.Directory, path2: reason)}-*.png]")
+            : CommandResult.Error(output: $"[capture.start: declined — {reason}]")
+        );
+    }
     private CommandResult Start(WireArgs args) {
+        if ((args.Count > 0) && args[0].Equals(other: "frames", comparisonType: StringComparison.Ordinal)) {
+            return StartFrames(args: args);
+        }
         if (args.Count > 1) {
             return CaptureStartForms.Refuse(got: args[1].ToString());
         }
@@ -105,7 +133,7 @@ internal sealed class WorldRecordingCommandModule(
         var origin = m_source.SourcePath;
 
         if (m_capture.CurrentSink is not RecordingSession session) {
-            return new CommandResult(Output: $"[capture.status: idle | document {origin} | readback synchronous presenter readback per captured GPU frame while recording]");
+            return new CommandResult(Output: $"[capture.status: idle | document {origin} | readback synchronous presenter readback per captured GPU frame while recording | {m_highlights.Describe()}]");
         }
 
         var status = session.Snapshot();
@@ -124,11 +152,11 @@ internal sealed class WorldRecordingCommandModule(
             return refusal;
         }
 
-        var session = (m_capture.Disarm() as RecordingSession);
-
-        if (session is null) {
+        if (m_capture.CurrentSink is not RecordingSession session) {
             return CommandResult.Error(output: "[capture.stop: not recording]");
         }
+
+        _ = m_capture.Disarm();
 
         // Snapshot the counters before finalizing (Stop disposes the muxer's stream, which the byte count reads); the
         // final byte size is then taken from the closed file on disk.
@@ -154,7 +182,7 @@ internal sealed class WorldRecordingCommandModule(
             audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "capture.start",
-            description: $"Starts a native recording (Immediate): {CaptureStartForms.Spelling}. It loads the boot recording document (or the given output path), resolves the AV1->H.264 encoder ladder and mic+loopback audio against this machine, arms frame capture, and echoes the negotiated codec and any declines.",
+            description: $"Starts a native recording (Immediate): {CaptureStartForms.Spelling}. It loads the boot recording document (or the given output path), resolves the AV1->H.264 encoder ladder and mic+loopback audio against this machine, arms frame capture, and echoes the negotiated codec and any declines. The frames form writes the next <count> presented frames (1 when omitted) as PNG images named <name> under the host's highlight directory, as a world's highlights rows do, and stops by itself.",
             forms: CaptureStartForms,
             handler: (_, args) => Start(args: args)
         );
@@ -169,7 +197,7 @@ internal sealed class WorldRecordingCommandModule(
             audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "capture.status",
-            description: "Reports the recording state (Immediate): running/idle, the negotiated codec, frames captured/dropped, audio tracks and drops, bytes written, the output path, and the source document.",
+            description: "Reports the recording state (Immediate): running/idle, the negotiated codec, frames captured/dropped, audio tracks and drops, bytes written, the output path, and the source document; while idle, the world's highlights rows, the frame runs written and passed over, and where they go.",
             handler: (_, args) => Status(args: args)
         );
     }

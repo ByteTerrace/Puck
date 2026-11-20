@@ -164,6 +164,14 @@ export type WorldDefinition = {
    */
   haptics?: (WorldHapticRow | null)[] | null;
   /**
+   * What a seat's keyboard lamps show.
+   */
+  keyLights?: WorldKeyLightSection | null;
+  /**
+   * Runs of presented frames the host keeps when the world names them.
+   */
+  highlights?: (WorldHighlightRow | null)[] | null;
+  /**
    * The rules that react to the world's state and write it.
    */
   rules?: (WorldRule | null)[] | null;
@@ -8437,6 +8445,25 @@ export type WorldHapticRow = {
   seat?: string | null;
 };
 
+export type WorldHighlightRow = {
+  /**
+   * The row's stable id, unique within the section, and the name its files carry.
+   */
+  id: string;
+  /**
+   * The state-driven trigger.
+   */
+  signal: BindableScalar;
+  /**
+   * How many presented frames one trigger writes, from 1 to MaxFrames.
+   */
+  frames?: number;
+  /**
+   * The seconds between the trigger and the first written frame, so a still shows what the trigger led to, from 0 to MaxDelaySeconds.
+   */
+  delaySeconds?: number;
+};
+
 export type WorldHold = {
   /**
    * The row's name, unique within the list — the body.hold read-back token.
@@ -8759,6 +8786,10 @@ export type WorldHudElement = {
    * An optional reading binding for a live reference line, instead of PlotReference.
    */
   plotReferenceBinding?: string | null;
+  /**
+   * Whether a text element's resolved text is read as markup: [wave], [shake], [caret at=3] and the other effect tags of Puck.Text style each glyph, and a placeholder may supply a tag's name or a parameter's value. Absent, brackets are ordinary text.
+   */
+  markup?: boolean;
 };
 
 /**
@@ -9271,6 +9302,76 @@ export type WorldInteractionsSection = {
    * The declared interaction rows, in authoring/evaluation order.
    */
   interactions: (WorldInteraction | null)[];
+};
+
+export type WorldKeyLightRow = {
+  /**
+   * The row's stable id, unique within the section.
+   */
+  id: string;
+  /**
+   * The color the row's keys take.
+   */
+  color: BindableColor;
+  /**
+   * Keyboard input source ids (keyboard.a, keyboard.space).
+   */
+  keys?: (string | null)[] | null;
+  /**
+   * Binding entry ids: the keyboard sources the seat's active page binds each entry to, so the lamps follow a page change and a player's rebinding.
+   */
+  bound?: (string | null)[] | null;
+  /**
+   * A Unicode scalar value, usually a state cell: the key that types it lights, and a letter lights its key whatever its case. A value no key types (zero included) lights nothing.
+   */
+  character?: BindableScalar;
+  /**
+   * The row paints while this is positive; absent, it always paints.
+   */
+  lit?: BindableScalar;
+  /**
+   * The row is dimmed by UnavailableScale while this is not positive; absent, it is never dimmed.
+   */
+  available?: BindableScalar;
+  /**
+   * The row's keys flash each time this changes to a new value after it is first read.
+   */
+  flashSignal?: BindableScalar;
+  /**
+   * The color the row's flash starts from; absent, the section's Flash.
+   */
+  flashColor?: BindableColor;
+  /**
+   * The seat whose keyboard the row lights (seat1..seat4), or null for every local seat that holds one.
+   */
+  seat?: string | null;
+};
+
+export type WorldKeyLightSection = {
+  /**
+   * The color of every key no lit row names.
+   */
+  idle: BindableColor;
+  /**
+   * The color a flashing key starts from when its row authors no flash color of its own.
+   */
+  flash: BindableColor;
+  /**
+   * The color of a held chord modifier's key.
+   */
+  modifier: BindableColor;
+  /**
+   * The brightness, in [0, 1], a row's color keeps while the row is unavailable.
+   */
+  unavailableScale?: number;
+  /**
+   * The seconds a flash takes to fade back to the key's own color. Positive, at most MaxFlashSeconds.
+   */
+  flashSeconds?: number;
+  /**
+   * The rows, in paint order.
+   */
+  rows?: (WorldKeyLightRow | null)[] | null;
 };
 
 export type WorldKit = {

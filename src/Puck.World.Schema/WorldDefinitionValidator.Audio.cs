@@ -88,7 +88,7 @@ public static partial class WorldDefinitionValidator {
         var tokens = new HashSet<string>(comparer: StringComparer.Ordinal);
 
         foreach (var rule in (rules ?? [])) {
-            foreach (var effect in (rule?.Effects ?? [])) {
+            foreach (var effect in ActionEffect.WithNested(effects: rule?.Effects)) {
                 if (
                     (effect is WorldEffect.EmitCue cue) &&
                     WorldGameplayCue.IsValidName(candidate: cue.Name)

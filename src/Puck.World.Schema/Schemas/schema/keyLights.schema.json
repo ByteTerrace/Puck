@@ -1,0 +1,131 @@
+{
+  "description": "What a seat\u0027s keyboard lamps show.",
+  "type": [
+    "object",
+    "null"
+  ],
+  "properties": {
+    "idle": {
+      "$ref": "./common.schema.json#/$defs/BindableColor",
+      "description": "The color of every key no lit row names."
+    },
+    "flash": {
+      "$ref": "./common.schema.json#/$defs/BindableColor",
+      "description": "The color a flashing key starts from when its row authors no flash color of its own."
+    },
+    "modifier": {
+      "$ref": "./common.schema.json#/$defs/BindableColor",
+      "description": "The color of a held chord modifier\u0027s key."
+    },
+    "unavailableScale": {
+      "description": "The brightness, in [0, 1], a row\u0027s color keeps while the row is unavailable.",
+      "type": "number",
+      "default": 0.25
+    },
+    "flashSeconds": {
+      "description": "The seconds a flash takes to fade back to the key\u0027s own color. Positive, at most MaxFlashSeconds.",
+      "type": "number",
+      "default": 0.25
+    },
+    "rows": {
+      "description": "The rows, in paint order.",
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "description": "One row of keyLights: a set of keys and the color they take. The keys are the union of what the row names three ways, each optional: Keys literally, Bound through the seat\u0027s active binding page, and Character through the key that types it.",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "id": {
+            "description": "The row\u0027s stable id, unique within the section.",
+            "type": "string"
+          },
+          "color": {
+            "$ref": "./common.schema.json#/$defs/BindableColor",
+            "description": "The color the row\u0027s keys take."
+          },
+          "keys": {
+            "description": "Keyboard input source ids (keyboard.a, keyboard.space).",
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "default": null
+          },
+          "bound": {
+            "description": "Binding entry ids: the keyboard sources the seat\u0027s active page binds each entry to, so the lamps follow a page change and a player\u0027s rebinding.",
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "default": null
+          },
+          "character": {
+            "$ref": "./common.schema.json#/$defs/BindableScalar",
+            "description": "A Unicode scalar value, usually a state cell: the key that types it lights, and a letter lights its key whatever its case. A value no key types (zero included) lights nothing.",
+            "default": null
+          },
+          "lit": {
+            "$ref": "./common.schema.json#/$defs/BindableScalar",
+            "description": "The row paints while this is positive; absent, it always paints.",
+            "default": null
+          },
+          "available": {
+            "$ref": "./common.schema.json#/$defs/BindableScalar",
+            "description": "The row is dimmed by UnavailableScale while this is not positive; absent, it is never dimmed.",
+            "default": null
+          },
+          "flashSignal": {
+            "$ref": "./common.schema.json#/$defs/BindableScalar",
+            "description": "The row\u0027s keys flash each time this changes to a new value after it is first read.",
+            "default": null
+          },
+          "flashColor": {
+            "$ref": "./common.schema.json#/$defs/BindableColor",
+            "description": "The color the row\u0027s flash starts from; absent, the section\u0027s Flash.",
+            "default": null
+          },
+          "seat": {
+            "description": "The seat whose keyboard the row lights (seat1..seat4), or null for every local seat that holds one.",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          }
+        },
+        "required": [
+          "id",
+          "color"
+        ],
+        "additionalProperties": false,
+        "title": "WorldKeyLightRow"
+      },
+      "default": null
+    }
+  },
+  "required": [
+    "idle",
+    "flash",
+    "modifier"
+  ],
+  "additionalProperties": false,
+  "default": null,
+  "title": "WorldKeyLightSection"
+}

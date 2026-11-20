@@ -280,8 +280,8 @@ render endpoint (`audio.state` reports `device=silent` with an endpoint fault, o
 unsupported rather than failed; a device that opens but produces no signal still
 fails.
 A region crossing fires one segment transition, and the transition fires the
-`music.transition` cue token (`WorldServer.MusicTransitionTap`, wired to
-`WorldAudioDirector.SubmitCue` in `WorldPostBuildWiring`)—the crossing a
+`music.transition` cue token (the listener's own director, stepped from each
+delivered tick by `WorldAudioDirector.PresentLocalCues`)—the crossing a
 world's `audio.cues` table binds a stinger patch to. No canary or test proves
 that crossing end to end.
 The quarantined script

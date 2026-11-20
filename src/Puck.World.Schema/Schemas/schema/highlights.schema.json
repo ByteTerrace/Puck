@@ -1,0 +1,41 @@
+{
+  "description": "Runs of presented frames the host keeps when the world names them.",
+  "type": [
+    "array",
+    "null"
+  ],
+  "items": {
+    "description": "One row of the highlights document section: a run of presented frames a world asks the host to keep. Each time Signal changes to a new value after it is first read, the host writes the next Frames presented frames as images under its own capture directory, named for the row. A document names no path: where a player\u0027s files go is the host\u0027s. Presentation only, and a host that composes no frame capture ignores the section.",
+    "type": [
+      "object",
+      "null"
+    ],
+    "properties": {
+      "id": {
+        "description": "The row\u0027s stable id, unique within the section, and the name its files carry.",
+        "type": "string"
+      },
+      "signal": {
+        "$ref": "./common.schema.json#/$defs/BindableScalar",
+        "description": "The state-driven trigger."
+      },
+      "frames": {
+        "description": "How many presented frames one trigger writes, from 1 to MaxFrames.",
+        "type": "integer",
+        "default": 1
+      },
+      "delaySeconds": {
+        "description": "The seconds between the trigger and the first written frame, so a still shows what the trigger led to, from 0 to MaxDelaySeconds.",
+        "type": "number",
+        "default": 0
+      }
+    },
+    "required": [
+      "id",
+      "signal"
+    ],
+    "additionalProperties": false,
+    "title": "WorldHighlightRow"
+  },
+  "default": null
+}

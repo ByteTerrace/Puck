@@ -117,22 +117,6 @@ public sealed partial class WorldServer {
             submission: in submission
         );
 
-    /// <inheritdoc cref="WorldTick.MusicEmbellishmentTap"/>
-    public Action<string>? MusicEmbellishmentTap {
-        get => m_tick.MusicEmbellishmentTap;
-        set => m_tick.MusicEmbellishmentTap = value;
-    }
-    /// <inheritdoc cref="WorldTick.MusicLayerTap"/>
-    public Action<IReadOnlyList<string>>? MusicLayerTap {
-        get => m_tick.MusicLayerTap;
-        set => m_tick.MusicLayerTap = value;
-    }
-    /// <inheritdoc cref="WorldTick.MusicTransitionTap"/>
-    public Action<ulong>? MusicTransitionTap {
-        get => m_tick.MusicTransitionTap;
-        set => m_tick.MusicTransitionTap = value;
-    }
-
     /// <inheritdoc cref="WorldTick.ReadClock"/>
     public long ReadClock(ClockFacet facet) => m_tick.ReadClock(facet: facet);
     /// <inheritdoc cref="WorldTick.ReleaseFederatedIntents"/>

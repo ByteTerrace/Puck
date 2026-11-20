@@ -1,0 +1,11 @@
+{
+  "schema": "puck.synthesizer-patch.v1",
+  "name": "press-thud",
+  "oscillator": "Noise",
+  "attackFrames": 24,
+  "decayFrames": 4800,
+  "sustainThousandths": 0,
+  "releaseFrames": 2400,
+  "pitchMillihertz": 80000,
+  "durationFrames": 7200
+}

@@ -8,9 +8,98 @@
   "segments": [
     {
       "id": "verse",
-      "transitions": [],
+      "transitions": [
+        {
+          "to": "press",
+          "when": "cue:typing.start",
+          "at": "BeatEnd"
+        }
+      ],
       "layers": null,
       "embellishments": null
+    },
+    {
+      "id": "press",
+      "transitions": [
+        {
+          "to": "press-run",
+          "when": "cue:typing.wave",
+          "at": "BarEnd"
+        },
+        {
+          "to": "verse",
+          "when": "cue:typing.stop",
+          "at": "BarEnd"
+        }
+      ],
+      "layers": [
+        {
+          "tuneId": "press-bed",
+          "gainThousandths": 450,
+          "when": null
+        },
+        {
+          "tuneId": "press-heat-1",
+          "gainThousandths": 350,
+          "when": "cue:typing.heat1"
+        }
+      ],
+      "embellishments": [
+        {
+          "patchId": "press-set",
+          "when": "cue:typing.word",
+          "gainThousandths": null
+        },
+        {
+          "patchId": "press-thud",
+          "when": "cue:typing.land",
+          "gainThousandths": null
+        }
+      ]
+    },
+    {
+      "id": "press-run",
+      "transitions": [
+        {
+          "to": "verse",
+          "when": "cue:typing.stop",
+          "at": "BarEnd"
+        }
+      ],
+      "layers": [
+        {
+          "tuneId": "press-bed",
+          "gainThousandths": 450,
+          "when": null
+        },
+        {
+          "tuneId": "press-heat-1",
+          "gainThousandths": 350,
+          "when": "cue:typing.heat1"
+        },
+        {
+          "tuneId": "press-heat-2",
+          "gainThousandths": 300,
+          "when": "cue:typing.heat2"
+        }
+      ],
+      "embellishments": [
+        {
+          "patchId": "press-set",
+          "when": "cue:typing.word",
+          "gainThousandths": null
+        },
+        {
+          "patchId": "press-thud",
+          "when": "cue:typing.land",
+          "gainThousandths": null
+        },
+        {
+          "patchId": "press-page",
+          "when": "cue:typing.wave",
+          "gainThousandths": null
+        }
+      ]
     }
   ]
 }

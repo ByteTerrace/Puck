@@ -1,0 +1,90 @@
+// The press's scenarios (press.puck), each booted in the whole debug world: `puck test worlds/debug/press-tests.puck`.
+// A scenario stands the seat at the bench, sits her down with the context button and types as a keyboard would: each
+// `keyboard.text` step commits its characters as Text events at the step's tick. Which word a slug carries is a draw, so
+// a scenario that types one first writes the lane's word index (0 is "ink", press.puck's first word).
+
+schema: "puck.world.definition.v1"
+basis: "debug"
+// Keep same-world portals in this fixture's boot instance instead of opening another live debug world.
+documentId: "debug"
+import "stopped-machines"
+
+grants [
+  { capability: Edit, grantee: "seat1", subject: "state:typingWord" }
+]
+
+test "a seat sits at the press, sets a word and the keys follow" {
+  when {
+    ticks 10
+    seat1: body.pose spawn:press 0
+    ticks 20
+    seat1: player.signal keyboard.e press
+    ticks 2
+    seat1: player.signal keyboard.e release
+    // A lane rests a second and a half before its first slug.
+    ticks 60
+    seat1: world.state.cell.set typingWord 0 0
+    ticks 4
+    seat1: player.signal keyboard.text "in" at:0.001
+    ticks 4
+  }
+  expect {
+    typingSeat == 1
+    bodyState(body, 0, typing) == 1
+    typing.phase == 1
+    typing.hits == 2
+    typing.target == 0
+    typingTyped["0"] == 2
+    // The key to strike next is k, and nothing waits unlocked while she is on a word.
+    typingKeys.next0 == 107
+    typingKeys.first0 == 0
+    typingKeys.last == 110
+  }
+}
+test "a set word scores, a wrong letter costs the run, and standing up ends it" {
+  when {
+    ticks 10
+    seat1: body.pose spawn:press 0
+    ticks 20
+    seat1: player.signal keyboard.e press
+    ticks 2
+    seat1: player.signal keyboard.e release
+    ticks 60
+    seat1: world.state.cell.set typingWord 0 0
+    ticks 4
+    seat1: player.signal keyboard.text "INK" at:0.001
+    ticks 60
+    seat1: world.state.cell.set typingWord 0 0
+    ticks 4
+    seat1: player.signal keyboard.text "ix" at:0.001
+    ticks 4
+    seat1: player.signal keyboard.tab press
+    ticks 4
+  }
+  expect {
+    typing.cleared == 1
+    typing.score == 30
+    typing.misses == 1
+    typing.streak == 0
+    typingSeat == 0
+    typing.phase == 0
+    bodyState(body, 0, typing) == 0
+  }
+}
+test "slugs left alone are lost and the run ends out of sorts" {
+  when {
+    ticks 10
+    seat1: body.pose spawn:press 0
+    ticks 20
+    seat1: player.signal keyboard.e press
+    ticks 2
+    seat1: player.signal keyboard.e release
+    ticks 1100
+  }
+  expect {
+    typing.lands == 3
+    typing.lives == 0
+    typing.phase == 2
+    typing.best == 0
+  }
+}

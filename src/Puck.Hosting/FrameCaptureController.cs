@@ -53,6 +53,15 @@ public sealed class FrameCaptureController : IDisposable {
         }
     }
     /// <summary>Gets whether an armed session is able to accept another frame.</summary>
+    /// <summary>Gets whether the armed session has captured every frame its options asked for; a session with no
+    /// frame limit, and no session, never has.</summary>
+    public bool IsExhausted {
+        get {
+            lock (m_sync) {
+                return ((m_session is { } session) && BudgetExhausted(session: session));
+            }
+        }
+    }
     public bool WantsFrames {
         get {
             lock (m_sync) {

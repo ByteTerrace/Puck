@@ -1,0 +1,13 @@
+{
+  "schema": "puck.synthesizer-patch.v1",
+  "name": "press-page",
+  "oscillator": "Saw",
+  "attackFrames": 960,
+  "decayFrames": 9600,
+  "sustainThousandths": 300,
+  "releaseFrames": 9600,
+  "pitchMillihertz": 440000,
+  "vibratoDepthMillihertz": 8000,
+  "vibratoRateMillihertz": 5000,
+  "durationFrames": 24000
+}

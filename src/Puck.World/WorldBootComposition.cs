@@ -1252,6 +1252,7 @@ public static class WorldBootComposition {
         var composer = sp.GetRequiredService<WorldViewComposer>();
         var haptics = sp.GetRequiredService<WorldHapticDirector>();
         var keyLights = sp.GetRequiredService<WorldKeyLightDirector>();
+        var highlights = sp.GetService<WorldHighlightDirector>();
 
         return () => {
             for (var slot = 0; (slot < WorldSeatBindings.SeatCount); slot++) {
@@ -1274,6 +1275,7 @@ public static class WorldBootComposition {
             );
             haptics.Tick(tick: client.Tick);
             keyLights.Tick();
+            highlights?.Tick();
         };
     }
     /// <summary>Registers the boot shape the resolved host settings select over the authoritative core: the headless
@@ -1641,6 +1643,17 @@ public static class WorldBootComposition {
         } else {
             services.AddLinuxRecordingPlatform();
         }
+        services.AddSingleton(implementationFactory: static sp => new WorldHighlightDirector(
+            capture: sp.GetRequiredService<FrameCaptureController>(),
+            client: sp.GetRequiredService<WorldClient>(),
+            directory: Path.Combine(
+                path1: (sp.GetRequiredService<WorldCaptureRoot>().OverridePath ?? Path.Combine(
+                    path1: sp.GetRequiredService<WorldStateRoot>().FullPath,
+                    path2: "captures"
+                )),
+                path2: "highlights"
+            )
+        ));
         services.AddSingleton<ICommandModule, WorldRecordingCommandModule>();
         // Controllers, first-class beside the keyboard: the hardware manager (HID + the Xbox XInput/GameInput poll
         // thread), the focus-gated snapshot capture binding the sticks to the player's Axis2D channels, and the

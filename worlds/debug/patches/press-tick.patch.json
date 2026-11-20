@@ -1,0 +1,11 @@
+{
+  "schema": "puck.synthesizer-patch.v1",
+  "name": "press-tick",
+  "oscillator": "Pulse",
+  "attackFrames": 24,
+  "decayFrames": 480,
+  "sustainThousandths": 0,
+  "releaseFrames": 240,
+  "pitchMillihertz": 1760000,
+  "durationFrames": 960
+}

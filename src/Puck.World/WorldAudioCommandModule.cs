@@ -10,6 +10,7 @@ namespace Puck.World;
 /// <summary>
 /// The audio sections' READ-BACK + LEVER surface: <c>world.speakers</c> (the document rows), <c>audio.state</c> +
 /// <c>speaker.state</c> (live device/per-row status), <c>audio.emitters</c> (the derived emitter table),
+/// <c>audio.mix</c> (what the director last handed the mixer),
 /// <c>voice.state</c> + <c>voice.babble</c> (the live voice-babble status and its debug/test trigger — see
 /// <see cref="WorldAudioDirector.TriggerBabble"/>), <c>world.volume</c> (the master-volume session lever), and
 /// <c>music.state</c> (the live music clock/director state, routed through seat 1's currently claimed
@@ -144,6 +145,53 @@ internal sealed class WorldAudioCommandModule(WorldServer server, IServerLink li
             handler: $"[audio.state: device={device.StateToken} frames={device.FramesDelivered} rebinds={device.RebindAttempts} fillFaults={device.FillFaults} sources={mixer.BoundSourceCount} voices={mixer.Synth.ActiveVoiceCount} peak={mixer.OutputPeak} droppedTriggers={mixer.DroppedTriggerCount} emitters={director.EmitterCount} fault={(device.Fault ?? "none")}]"
         ));
     }
+    // The audio.mix echo: what the director last handed the mixer, which audio.state's device facts and
+    // audio.emitters' document-derived table do not show. It runs on the pump thread, as Publish does, so the snapshot
+    // it reads is not being refilled under it.
+    private CommandResult MixHandler(CommandContext context, WireArgs args) {
+        if (CommandResult.RequireNoArguments(
+            args: args,
+            verb: "audio.mix"
+        ) is { } refusal) {
+            return refusal;
+        }
+
+        var builder = new StringBuilder();
+
+        _ = builder.Append(
+            provider: CultureInfo.InvariantCulture,
+            handler: $"[audio.mix: mixer={(director.MixerAttached ? "attached" : "detached")} cues={director.LiveCueCount}"
+        );
+        if (!director.TrySnapshot(snapshot: out var snapshot)) {
+            return new CommandResult(Output: builder.Append(value: " snapshot=none]").ToString());
+        }
+
+        var loudest = 0;
+
+        foreach (ref readonly var emitter in snapshot.Emitters) {
+            loudest = Math.Max(val1: loudest, val2: emitter.GainQ16);
+        }
+
+        _ = builder.Append(
+            provider: CultureInfo.InvariantCulture,
+            handler: $" emitters={snapshot.Emitters.Length} triggers={snapshot.Triggers.Length} loudest={(loudest / 65536f):0.###}"
+        );
+        foreach (var kind in Enum.GetValues<Puck.Audio.Mixing.AudioEmitterKind>()) {
+            var count = 0;
+
+            foreach (ref readonly var emitter in snapshot.Emitters) {
+                count += ((emitter.Kind == kind) ? 1 : 0);
+            }
+            if (count != 0) {
+                _ = builder.Append(
+                    provider: CultureInfo.InvariantCulture,
+                    handler: $" {kind}={count}"
+                );
+            }
+        }
+
+        return new CommandResult(Output: builder.Append(value: ']').ToString());
+    }
     // The world.volume lever: one float argument engages the session lever (bounded by the shared audio gain
     // ceiling); no argument reads the effective volume and which side owns it.
     private CommandResult VolumeHandler(CommandContext context, WireArgs args) {
@@ -205,6 +253,13 @@ internal sealed class WorldAudioCommandModule(WorldServer server, IServerLink li
             name: "audio.state",
             description: "Echoes the live speaker-device state (the device-state half; speaker.state joins it with per-row facts): device token (playing|silent|rebinding|unsupported|stopped), last fault, frames delivered across device generations, rebind attempts, fill faults, bound mixer sources, live synth voices, the running output peak (monotone — nonzero proves the mix has produced signal), dropped triggers, and derived emitters. A query — always echoes.",
             handler: StateHandler
+        );
+        yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
+            bindability: CommandBindability.Unbindable,
+            name: "audio.mix",
+            description: "Echoes what the audio director last handed the mixer (beside audio.state's device facts and audio.emitters' derived table): whether a mixer is attached, the live transient cues (a rule's cue, a music transition, an embellishment), and from the latest published snapshot the emitters in the mix, the synth triggers riding it, the loudest emitter's gain and a count per emitter kind, so a music layer joining or leaving the mix reads as its bed emitter arriving or going. snapshot=none before the first publish. A query — always echoes.",
+            handler: MixHandler
         );
         yield return CommandDefinition.WithWireArgs(
             audience: CommandAudience.Anyone,
