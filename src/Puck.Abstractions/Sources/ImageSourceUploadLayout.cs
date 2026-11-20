@@ -131,7 +131,7 @@ public static class ImageSourceUploadLayout {
             _ => (((ulong)header.Plane0Offset) + (((ulong)header.Plane0Stride) * header.Height)),
         };
 
-        return checked((int)((end + 3UL) & ~3UL));
+        return checked((int)end.AlignUp(alignment: 4UL));
     }
     /// <summary>Returns one plane of a region: its rows at their stride, from the plane's offset.</summary>
     /// <param name="region">The region, at least <see cref="ByteCount"/> bytes of <paramref name="header"/>.</param>

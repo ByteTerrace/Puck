@@ -59,5 +59,68 @@
         "Shared": "", "Citation": "", "Absolute": ""
       }
     ]
+  },
+  {
+    "Id": "integer.leb128-round-trip",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.Leb128", "Name": "TryRead" },
+      { "Type": "Puck.Maths.Leb128", "Name": "Write" }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural", "Flavor": "None",
+        "Subject": "Leb128: Write is the minimal spelling and TryRead reads it back at every group boundary of a 64-bit value; a value over the accepted bits, a truncated spelling, an over-long spelling and (when required) a padded spelling are refused",
+        "Against": "", "Shared": "", "Citation": "", "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "sampling.sequence-equality-comparer",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.SequenceEqualityComparer`1", "Name": "Instance" },
+      { "Type": "Puck.Maths.SequenceEqualityComparer`1", "Name": "Create" }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural", "Flavor": "None",
+        "Subject": "SequenceEqualityComparer: arrays, read-only lists and spans with equal elements in order are equal and hash alike; a differing element, length or order is unequal; null equals only null",
+        "Against": "", "Shared": "", "Citation": "", "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "sampling.split-mix64-reference-stream",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.SplitMix64", "Name": ".ctor" },
+      { "Type": "Puck.Maths.SplitMix64", "Name": "State" },
+      { "Type": "Puck.Maths.SplitMix64", "Name": "NextUInt64" },
+      { "Type": "Puck.Maths.SplitMix64", "Name": "GoldenGamma" }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical", "Flavor": "None",
+        "Subject": "SplitMix64.NextUInt64: the golden-gamma counter through the 64-bit finalizer, the published stream",
+        "Against": "The first five words of seed 1234567 as the SplitMix64 reference implementation and its published test vectors give them; State restores the stream",
+        "Shared": "", "Citation": "", "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "integer.partition-point-vs-linear-scan",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.PartitionPoint", "Name": "Of" }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical", "Flavor": "None",
+        "Subject": "PartitionPoint.Of: the first index a monotone test rejects, found by binary search",
+        "Against": "A linear count of the accepted prefix, over every prefix length of runs with duplicate keys, lower-bound and upper-bound tests, and the empty run",
+        "Shared": "", "Citation": "", "Absolute": ""
+      }
+    ]
   }
 ]

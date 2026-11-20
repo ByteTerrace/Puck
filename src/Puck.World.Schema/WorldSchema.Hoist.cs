@@ -1,7 +1,7 @@
 using System.Buffers;
-using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Puck.Maths;
 
 namespace Puck.World;
 
@@ -68,26 +68,6 @@ public static partial class WorldSchema {
     private sealed record ExpansionMemo(ulong[]? Probes, ulong[]? Answers, object Node);
     // A group's def: its name, the member whose reduced content it holds, and its type-level description.
     private sealed record DefGroup(string Name, ExpandedNode First, string? Summary);
-    // Interns int sequences (a composite group key's signature) without allocating on a hit.
-    private sealed class SignatureComparer : IEqualityComparer<int[]>, IAlternateEqualityComparer<ReadOnlySpan<int>, int[]> {
-        public static SignatureComparer Instance { get; } = new();
-
-        public int[] Create(ReadOnlySpan<int> alternate) =>
-            alternate.ToArray();
-        public bool Equals(int[]? x, int[]? y) =>
-            ((x is not null) && (y is not null) && x.AsSpan().SequenceEqual(other: y));
-        public bool Equals(ReadOnlySpan<int> alternate, int[] other) =>
-            alternate.SequenceEqual(other: other);
-        public int GetHashCode(int[] obj) =>
-            GetHashCode(alternate: obj.AsSpan());
-        public int GetHashCode(ReadOnlySpan<int> alternate) {
-            var hash = new HashCode();
-
-            hash.AddBytes(value: MemoryMarshal.AsBytes(span: alternate));
-
-            return hash.ToHashCode();
-        }
-    }
     private sealed class HoistPass {
         private const int ArrayTag = -2;
         private const int ObjectTag = -1;
@@ -109,7 +89,7 @@ public static partial class WorldSchema {
         private readonly ulong[] m_presence;
 
         private readonly Dictionary<int, int> m_rawKeyCounts = [];
-        private readonly Dictionary<int[], int> m_signatures = new(comparer: SignatureComparer.Instance);
+        private readonly Dictionary<int[], int> m_signatures = new(comparer: SequenceEqualityComparer<int>.Instance);
         private readonly Dictionary<string, int> m_targetByPath = new(comparer: StringComparer.Ordinal);
 
         private JsonObject? m_documentRoot;

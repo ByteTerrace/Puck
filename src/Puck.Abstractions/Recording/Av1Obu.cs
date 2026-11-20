@@ -1,9 +1,14 @@
+using Puck.Maths;
+
 namespace Puck.Abstractions.Recording;
 
 /// <summary>Frames one AV1 open bitstream unit (OBU): the header byte, the optional extension byte and the optional
 /// <c>leb128</c> size, the walk both the recording engine's temporal-delimiter filter and a platform's bitstream
 /// inspection take over an encoder's temporal unit.</summary>
 public static class Av1Obu {
+    // AV1's leb128 is at most eight bytes, so 56 value bits; a padded spelling is legal.
+    private const int Av1Leb128MaxBits = 56;
+
     /// <summary>Reads the OBU at <paramref name="index"/> and advances <paramref name="index"/> past it. A header the
     /// walk cannot trust stops it instead of being guessed at: a set forbidden bit, a truncated size, or a payload that
     /// runs past the buffer.</summary>
@@ -37,9 +42,11 @@ public static class Av1Obu {
         ulong length;
 
         if (hasSizeField == 1) {
-            if (!Av1Leb128.TryRead(
+            if (!Leb128.TryRead(
                 data: temporalUnit,
+                maxBits: Av1Leb128MaxBits,
                 offset: ref cursor,
+                requireMinimal: false,
                 value: out length
             )) {
                 return false;

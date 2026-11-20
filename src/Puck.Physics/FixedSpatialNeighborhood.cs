@@ -76,17 +76,9 @@ public sealed class FixedSpatialNeighborhood {
         );
     }
     private int FindCell(Key key) {
-        var low = 0;
-        var high = (m_cellCount - 1);
+        var found = m_cells.AsSpan(length: m_cellCount, start: 0).BinarySearch(comparable: new CellKey(Key: key));
 
-        while (low <= high) {
-            var middle = (low + ((high - low) / 2));
-            var order = m_cells[middle].Key.CompareTo(other: key);
-
-            if (order == 0) { return middle; }
-            if (order < 0) { low = (middle + 1); } else { high = (middle - 1); }
-        }
-        return -1;
+        return ((found >= 0) ? found : -1);
     }
     private long Floor(long raw) => raw.FloorDivide(divisor: CellWidth.Value);
     // The nearest neighbours kept so far, as a heap whose first item is the farthest of them, so a nearer candidate
@@ -324,6 +316,9 @@ public sealed class FixedSpatialNeighborhood {
         }
     }
     private readonly record struct Cell(Key Key, int Start, int Count);
+    private readonly record struct CellKey(Key Key) : IComparable<Cell> {
+        public int CompareTo(Cell other) => Key.CompareTo(other: other.Key);
+    }
     private readonly struct FarthestFirst : IComparer<FixedSpatialNeighbor> {
         public int Compare(FixedSpatialNeighbor x, FixedSpatialNeighbor y) => FixedSpatialNeighborhood.Compare(left: y, right: x);
     }

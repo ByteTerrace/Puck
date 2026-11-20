@@ -1,10 +1,10 @@
 using System.Globalization;
 using System.Text;
 using System.Text.Json.Nodes;
+using Puck.Assets.Documents;
 using Puck.Maths;
 using Puck.State;
 using Puck.Transpiler.Formatting;
-using Puck.Transpiler.Lowering;
 using Puck.Transpiler.Parsing;
 using Puck.World.Transpiler.Embeddings;
 using Puck.World.Transpiler.Vocabulary;

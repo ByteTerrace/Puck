@@ -3,6 +3,7 @@ using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Puck.Abstractions;
+using Puck.Assets.Documents;
 using Puck.Cli.Bench;
 using Puck.Confinement;
 using Puck.Maths;
@@ -347,7 +348,7 @@ public static class MeasureCommand {
         var resolved = pointer.StartsWith(value: '/');
 
         foreach (var part in pointer.Split('/').Skip(count: 1)) {
-            var key = part.Replace(comparisonType: StringComparison.Ordinal, newValue: "/", oldValue: "~1").Replace(comparisonType: StringComparison.Ordinal, newValue: "~", oldValue: "~0");
+            var key = DocumentJsonPointer.Unescape(value: part);
 
             if ((value.ValueKind == JsonValueKind.Object) && value.TryGetProperty(propertyName: key, value: out var child)) { value = child; } else if ((value.ValueKind == JsonValueKind.Array) && int.TryParse(key, NumberStyles.None, CultureInfo.InvariantCulture, out var index) && (index < value.GetArrayLength())) { value = value[index]; } else { resolved = false; break; }
         }
@@ -365,7 +366,7 @@ public static class MeasureCommand {
     private static IEnumerable<string> NumericPointers(JsonElement value, string path = "") {
         if (TryNumber(number: out _, value: value)) { yield return path; } else if (value.ValueKind == JsonValueKind.Object) {
             foreach (var field in value.EnumerateObject()) {
-                foreach (var pointer in NumericPointers(field.Value, ((path + "/") + Escape(key: field.Name)))) { yield return pointer; }
+                foreach (var pointer in NumericPointers(field.Value, ((path + "/") + DocumentJsonPointer.Escape(value: field.Name)))) { yield return pointer; }
             }
         } else if (value.ValueKind == JsonValueKind.Array) {
             var index = 0;
@@ -376,7 +377,6 @@ public static class MeasureCommand {
             }
         }
     }
-    private static string Escape(string key) => key.Replace(comparisonType: StringComparison.Ordinal, newValue: "~0", oldValue: "~").Replace(comparisonType: StringComparison.Ordinal, newValue: "~1", oldValue: "/");
 
     public static void ValidateMetric(string[] command, string pointer) {
         ValidateCommand(arguments: command);

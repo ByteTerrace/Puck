@@ -53,6 +53,32 @@ public static class Retry {
             report: report,
             retryable: retryable
         );
+    /// <summary>Asks <paramref name="attempt"/> until it reports success or <paramref name="attempts"/> attempts have
+    /// said no, waiting <paramref name="delay"/> between attempts and never after the last. It serves an operation whose
+    /// refusal is a return value rather than an exception (a device that rejects a feature report for a moment).</summary>
+    /// <param name="attempt">The operation; <see langword="true"/> ends the loop.</param>
+    /// <param name="attempts">The total attempts, the first included.</param>
+    /// <param name="delay">The wait between attempts.</param>
+    /// <param name="cancellationToken">Ends the wait between attempts.</param>
+    /// <returns>Whether an attempt succeeded.</returns>
+    /// <exception cref="OperationCanceledException">Cancellation fired during a wait.</exception>
+    public static async ValueTask<bool> UntilAsync(Func<bool> attempt, int attempts, TimeSpan delay, CancellationToken cancellationToken = default) {
+        ArgumentNullException.ThrowIfNull(argument: attempt);
+
+        for (var number = 1; (number <= attempts); number++) {
+            if (attempt()) {
+                return true;
+            }
+            if (number < attempts) {
+                await Task.Delay(
+                    cancellationToken: cancellationToken,
+                    delay: delay
+                );
+            }
+        }
+
+        return false;
+    }
     /// <summary>Runs <paramref name="action"/>, blocking the thread between attempts, until it returns or
     /// <paramref name="attempts"/> attempts have failed.</summary>
     /// <param name="action">The operation.</param>

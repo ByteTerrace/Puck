@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.Json.Nodes;
+using Puck.Assets.Documents;
 using Puck.Maths;
 using Puck.State;
 using Puck.Transpiler.Ast;
@@ -984,14 +985,14 @@ public static partial class DocumentLowering {
                 node: rightNode,
                 number: out var exactRight
             ) &&
-            DocumentNumbers.TryExactArithmetic(
+            DocumentNumberSpelling.TryExactArithmetic(
                 left: exactLeft,
                 operation: row.Operation,
                 result: out var exactResult,
                 right: exactRight
             )
         ) {
-            return DocumentNumbers.ExactNode(number: exactResult);
+            return DocumentNumberSpelling.ExactNode(number: exactResult);
         }
 
         return NumberNode(
@@ -1135,7 +1136,7 @@ public static partial class DocumentLowering {
             node: operand,
             number: out var exact
         )) {
-            return DocumentNumbers.ExactNode(number: ((un.Operator == "-")
+            return DocumentNumberSpelling.ExactNode(number: ((un.Operator == "-")
                 ? -exact
                 : exact));
         }
@@ -1181,7 +1182,7 @@ public static partial class DocumentLowering {
             return whole.ToString(provider: CultureInfo.InvariantCulture);
         }
 
-        return DocumentNumbers.Canonical(node: value)!.ToJsonString();
+        return DocumentNumberSpelling.Canonical(node: value)!.ToJsonString();
     }
     private static JsonNode? LowerLiteral(LiteralExpressionNode lit, string? fieldKey, DocumentScope scope) {
         if (lit.Value is null) {
@@ -1233,7 +1234,7 @@ public static partial class DocumentLowering {
         }
 
         if (authored is { } exact) {
-            return DocumentNumbers.ExactNode(number: exact);
+            return DocumentNumberSpelling.ExactNode(number: exact);
         }
 
         if (!double.IsFinite(d: numVal)) {
@@ -1263,7 +1264,7 @@ public static partial class DocumentLowering {
                 value: exact
             )
         ) {
-            return DocumentNumbers.ExactNode(number: scaled);
+            return DocumentNumberSpelling.ExactNode(number: scaled);
         }
         if (UnitConversion.TryConvert(
             converted: out var converted,
@@ -1356,7 +1357,7 @@ public static partial class DocumentLowering {
         target[key] = value;
     }
     /// <summary>Canonicalizes a JSON node in place by sorting every object's properties ordinally and writing every
-    /// number in its one spelling (<see cref="DocumentNumbers.Canonical"/>).</summary>
+    /// number in its one spelling (<see cref="DocumentNumberSpelling.Canonical"/>).</summary>
     /// <param name="node">The node to canonicalize; the caller owns it, and it is reordered where it stands.</param>
     /// <returns><paramref name="node"/> itself, its canonical number when it is a bare number, or
     /// <see langword="null"/> when the input was null.</returns>
@@ -1403,7 +1404,7 @@ public static partial class DocumentLowering {
                 return arr;
 
             default:
-                return DocumentNumbers.Canonical(node: node);
+                return DocumentNumberSpelling.Canonical(node: node);
         }
 
         static bool IsOrdinallySorted(JsonObject obj) {
@@ -1806,7 +1807,7 @@ public static partial class DocumentLowering {
         );
     }
     /// <summary>Reads a lowered value as an object key: a string as itself, a number by the spelling a document writes
-    /// it in (<see cref="DocumentNumbers.Canonical"/>), and anything else as nothing.</summary>
+    /// it in (<see cref="DocumentNumberSpelling.Canonical"/>), and anything else as nothing.</summary>
     /// <param name="node">The lowered node.</param>
     /// <returns>The key text, or <see langword="null"/> when the value cannot key an object.</returns>
     public static string? KeyText(JsonNode? node) {
@@ -1828,7 +1829,7 @@ public static partial class DocumentLowering {
             node: node,
             number: out _
         )
-            ? DocumentNumbers.Canonical(node: node)!.ToJsonString()
+            ? DocumentNumberSpelling.Canonical(node: node)!.ToJsonString()
             : null
         );
     }

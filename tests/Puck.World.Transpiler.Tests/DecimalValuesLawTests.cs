@@ -1,4 +1,5 @@
 using System.Text.Json.Nodes;
+using Puck.Assets.Documents;
 using Puck.Transpiler.Ast;
 using Puck.Transpiler.Lowering;
 using Xunit;
@@ -195,19 +196,19 @@ public sealed class DecimalValuesLawTests {
     // arithmetic gives it, in a product and in a unit conversion alike.
     [Fact]
     public void AResultADecimalWouldRoundIsComputedInDouble() {
-        Assert.False(condition: DocumentNumbers.TryExactArithmetic(
+        Assert.False(condition: DocumentNumberSpelling.TryExactArithmetic(
             left: 1e-28m,
             operation: ExpressionOp.Multiply,
             result: out _,
             right: 0.1m
         ));
-        Assert.False(condition: DocumentNumbers.TryExactArithmetic(
+        Assert.False(condition: DocumentNumberSpelling.TryExactArithmetic(
             left: decimal.MaxValue,
             operation: ExpressionOp.Add,
             result: out _,
             right: 0.5m
         ));
-        Assert.True(condition: DocumentNumbers.TryExactArithmetic(
+        Assert.True(condition: DocumentNumberSpelling.TryExactArithmetic(
             left: 0.1m,
             operation: ExpressionOp.Add,
             result: out var sum,
@@ -218,7 +219,7 @@ public sealed class DecimalValuesLawTests {
             expected: 0.3m
         );
         // A quotient stays decimal only when its exact value is a finite decimal a decimal holds every digit of.
-        Assert.True(condition: DocumentNumbers.TryExactArithmetic(
+        Assert.True(condition: DocumentNumberSpelling.TryExactArithmetic(
             left: 1m,
             operation: ExpressionOp.Divide,
             result: out var quotient,
@@ -228,13 +229,13 @@ public sealed class DecimalValuesLawTests {
             actual: quotient,
             expected: 0.0000152587890625m
         );
-        Assert.False(condition: DocumentNumbers.TryExactArithmetic(
+        Assert.False(condition: DocumentNumberSpelling.TryExactArithmetic(
             left: 1m,
             operation: ExpressionOp.Divide,
             result: out _,
             right: 3m
         ));
-        Assert.False(condition: DocumentNumbers.TryExactArithmetic(
+        Assert.False(condition: DocumentNumberSpelling.TryExactArithmetic(
             left: 1m,
             operation: ExpressionOp.Divide,
             result: out _,

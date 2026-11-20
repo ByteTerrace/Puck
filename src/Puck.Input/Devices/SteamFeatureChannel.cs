@@ -1,3 +1,4 @@
+using Puck.Abstractions;
 using Puck.Input.Hid;
 
 namespace Puck.Input.Devices;
@@ -7,6 +8,9 @@ namespace Puck.Input.Devices;
 /// and the Triton under report id 1. One channel owns one reusable buffer, so it belongs to the one thread that
 /// drives its controller.</summary>
 internal sealed class SteamFeatureChannel {
+    private const int WriteAttempts = 50;
+    private const int WriteRetryDelayMilliseconds = 2;
+
     private readonly byte[] m_buffer;
     private readonly IHidDevice m_device;
     private readonly byte m_reportId;
@@ -51,10 +55,11 @@ internal sealed class SteamFeatureChannel {
             payload: payload
         );
 
-        return await HidFeatureWriteRetry.TryWriteAsync(
-            buffer: m_buffer,
+        return await Retry.UntilAsync(
+            attempt: () => m_device.TrySetFeatureReport(buffer: m_buffer),
+            attempts: WriteAttempts,
             cancellationToken: cancellationToken,
-            device: m_device
+            delay: TimeSpan.FromMilliseconds(WriteRetryDelayMilliseconds)
         );
     }
 

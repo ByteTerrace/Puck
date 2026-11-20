@@ -1,4 +1,5 @@
 using System.Text.Json.Nodes;
+using Puck.Assets.Documents;
 using Puck.Transpiler.Ast;
 using Puck.Transpiler.Diagnostics;
 using Puck.State;

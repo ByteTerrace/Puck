@@ -42,11 +42,10 @@ internal sealed class WorldHistoryChunkStore {
 
     private static ulong[] BuildGear() {
         var gear = new ulong[256];
-        var state = 0x9E37_79B9_7F4A_7C15UL;
+        var stream = new SplitMix64(seed: SplitMix64.GoldenGamma);
 
         for (var index = 0; (index < gear.Length); index++) {
-            state = unchecked((state + 0x9E37_79B9_7F4A_7C15UL));
-            gear[index] = InvertibleBitMix.Mix64(value: state);
+            gear[index] = stream.NextUInt64();
         }
 
         return gear;

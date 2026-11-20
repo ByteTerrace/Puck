@@ -1,3 +1,5 @@
+using Puck.Maths;
+
 namespace Puck.Abstractions.Gpu;
 
 /// <summary>The sizes a growing GPU table takes: the one rule every table, region and scratch buffer grows by, with the
@@ -47,6 +49,6 @@ public static class GpuCapacity {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(granule);
         var wanted = checked((required + (required / divisor)));
 
-        return Math.Min(val1: checked((((wanted + (granule - 1L)) / granule) * granule)), val2: ceiling);
+        return Math.Min(val1: checked(wanted.CeilingDivide(divisor: granule) * granule), val2: ceiling);
     }
 }

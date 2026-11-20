@@ -28,15 +28,17 @@ namespace Puck.Maths;
 /// against what is committed left the build, so drift is caught only by regenerating and reading the diff.
 /// </remarks>
 public static class FixedQ4816RustPort {
-    private const ulong LcgIncrement = 1442695040888963407UL;
     // A fixed-constant LCG (PCG's own multiplier/increment), seeded by a literal — never re-seeded from
     // Random or the wall clock, so the sweep below is exactly reproducible.
-    private const ulong LcgMultiplier = 6364136223846793005UL;
     private const ulong LcgSeed = 0x9E3779B97F4A7C15UL;
     private const int SmoothstepSweepCount = 1000;
     private const int VectorTargetCount = 2000;
 
-    private static ulong AdvanceState(ulong state) => unchecked(((state * LcgMultiplier) + LcgIncrement));
+    private static ulong AdvanceState(ulong state) => Pcg32XshRr.Step(
+        increment: Pcg32XshRr.DefaultIncrement,
+        multiplier: Pcg32XshRr.DefaultMultiplier,
+        state: state
+    );
     // Every named branch in FixedQ4816.Pow/PowMagnitude, explicitly: zero base at every exponent sign, the
     // exact identity exponents (0, 1, -1) at both signs of base, the exact whole-exponent range boundary
     // (+-32/+-33), MinValue's own carve-out, and a fractional exponent on a negative base (must be

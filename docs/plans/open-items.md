@@ -3609,6 +3609,14 @@ proves itself with `puck compile` lowering to the same document.
   (`SdfSampledLattice.m_fineGradients`, `m_crossingGradients`,
   `m_crossingRootIndex`). Each moves to `RentedList`/`RentedArrays` as the
   contour's did.
+- Small duplicates whose shared home sits a layer above them.
+  `DirectoryObjectBlobStoreBackend.Token` and `MachineConfigurationFields.CatalogFingerprint` and `DescriptorFingerprint` still
+  spell SHA-256 hex by hand, because `ContentPin` is in `Puck.Assets`, which neither `Puck.Storage` nor
+  `Puck.Abstractions` reaches. Many more `Convert.ToHexStringLower(SHA256.HashData(...))`
+  sites hash text rather than content (`SdfShadeKernels`, `SdfKernelSource`, `ImageSourceSettings.Digest`
+  and others) and may want a text-hash helper beside `ContentPin`. Ceiling division is still spelled
+  `(x + n - 1) / n` outside the GPU files (`PlacePackage`, `ShaderPipelineRenderNode`,
+  `StateArena`, `PngDecoder`, `QrBitWriter`, `SdfMeshIrradianceScene` and others) where `CeilingDivide` serves.
 - [low] File-system primitives `AtomicFile` cannot serve yet:
   `ShaderCompiler.Entries.cs` wants a write that refuses to replace;
   `DirectoryObjectBlobStoreBackend` stages through a confined handle; a lock

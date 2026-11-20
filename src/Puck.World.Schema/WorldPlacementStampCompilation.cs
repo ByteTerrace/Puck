@@ -67,20 +67,6 @@ public static partial class WorldPlacementStamp {
         public GroundInput[] Inputs = [];
         public SdfFieldEvaluator? Field;
     }
-    private sealed class TargetComparer : IEqualityComparer<IReadOnlyList<string>> {
-        public static readonly TargetComparer Instance = new();
-        public bool Equals(IReadOnlyList<string>? a, IReadOnlyList<string>? b) {
-            if (ReferenceEquals(a, b)) { return true; }
-            if (a is null || b is null || a.Count != b.Count) { return false; }
-            for (var i = 0; i < a.Count; i++) { if (!StringComparer.Ordinal.Equals(a[i], b[i])) { return false; } }
-            return true;
-        }
-        public int GetHashCode(IReadOnlyList<string> values) {
-            var hash = new HashCode();
-            foreach (var value in values) { hash.Add(value, StringComparer.Ordinal); }
-            return hash.ToHashCode();
-        }
-    }
 
     private static readonly WorldPlacementsSection EmptySection = new();
     private static readonly CodeDerivedTable<WorldPlacement, StampEntry> Stamps = new();

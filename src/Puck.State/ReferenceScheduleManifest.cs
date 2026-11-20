@@ -1,6 +1,6 @@
-using System.Security.Cryptography;
 using System.Text.Json;
 
+using Puck.Assets;
 using Puck.Maths;
 
 namespace Puck.State;
@@ -209,7 +209,7 @@ public static class ReferenceScheduleManifest {
 
         var bytes = buffer.ToArray();
 
-        Digest = Convert.ToHexStringLower(inArray: SHA256.HashData(source: bytes));
+        Digest = ContentPin.Compute(content: bytes).Hex;
         try {
             using var document = JsonDocument.Parse(utf8Json: bytes);
 

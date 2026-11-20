@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Puck.Assets.Documents;
 
 namespace Puck.World;
 
@@ -96,32 +97,8 @@ public static class WorldDocumentBasis {
     private static readonly string[] RowKeyPrecedence = ["id", "name", "key", "index", "grantee+capability+subject"];
     private const char CompositeKeySeparator = '+';
 
-    // Equality stays exact JSON equality. Equal numbers necessarily round to the same double, which supplies
-    // only the hash: collisions (large integers included) are still distinguished by DeepEquals. CLR-backed
-    // restatement/position keys use their JSON spelling too, just as DeepEquals does across numeric backings.
-    private sealed class RowIdentityEquality : IEqualityComparer<JsonNode> {
-        internal static readonly RowIdentityEquality Instance = new();
-        public bool Equals(JsonNode? x, JsonNode? y) => JsonNode.DeepEquals(x, y);
-        public int GetHashCode(JsonNode obj) {
-            if (obj is JsonValue scalar && scalar.TryGetValue<string>(out var text)) {
-                return StringComparer.Ordinal.GetHashCode(text);
-            }
-            if (obj is JsonValue number) {
-                if (number.TryGetValue<double>(out var value)) { return value.GetHashCode(); }
-                if (number.GetValueKind() == JsonValueKind.Number) {
-                    return JsonSerializer.SerializeToElement(number).GetDouble().GetHashCode();
-                }
-            }
-            if (obj is JsonArray array) {
-                var hash = new HashCode();
-                foreach (var item in array) { hash.Add(item is null ? 0 : GetHashCode(item)); }
-                return hash.ToHashCode();
-            }
-            return 0;
-        }
-    }
     internal static Dictionary<JsonNode, int> IndexRows(JsonArray list, string key, out string duplicate) {
-        var rows = new Dictionary<JsonNode, int>(list.Count, RowIdentityEquality.Instance);
+        var rows = new Dictionary<JsonNode, int>(list.Count, DocumentValueEqualityComparer.Instance);
         var firstDuplicate = int.MaxValue;
         duplicate = string.Empty;
         for (var index = 0; index < list.Count; index++) {
@@ -148,7 +125,7 @@ public static class WorldDocumentBasis {
     /// key, or a fresh array of the members' values, in key order, for a composite one.</summary>
     /// <param name="row">The row, a JSON object; anything else has no identity.</param>
     /// <param name="key">The identity key <see cref="TryFindRowKey"/> returned.</param>
-    /// <returns>The identity node to compare with <see cref="JsonNode.DeepEquals"/>, or <see langword="null"/> when the
+    /// <returns>The identity node to compare with <see cref="DocumentValueEqualityComparer"/>, or <see langword="null"/> when the
     /// row is not an object or carries no such member.</returns>
     public static JsonNode? RowIdentity(JsonNode? row, string key) {
         ArgumentNullException.ThrowIfNull(argument: key);
@@ -205,9 +182,9 @@ public static class WorldDocumentBasis {
         var orderHolds = (reconstructed.Count == target.Count);
 
         for (var index = 0; (orderHolds && (index < target.Count)); index++) {
-            orderHolds = JsonNode.DeepEquals(
-                node1: reconstructed[index: index],
-                node2: RowIdentity(key: key, row: target[index: index]!)
+            orderHolds = DocumentValueEqualityComparer.Instance.Equals(
+                x: reconstructed[index: index],
+                y: RowIdentity(key: key, row: target[index: index]!)
             );
         }
 
@@ -372,9 +349,9 @@ public static class WorldDocumentBasis {
         for (var index = 0; (index < list.Count); index++) {
             if (
                 (list[index: index] is JsonObject row) &&
-                JsonNode.DeepEquals(
-                node1: RowIdentity(key: key, row: row),
-                node2: value
+                DocumentValueEqualityComparer.Instance.Equals(
+                x: RowIdentity(key: key, row: row),
+                y: value
             )
             ) {
                 return index;

@@ -50,13 +50,14 @@ public static class BoardQueries {
     // A flood along the topology's directions from the key cell over in-range cells; every settled member is one
     // visit against the budget. Boundary are counted once each through a second mark, so a cell touching the group
     // twice is one boundary cell.
-    private static long Component(BoardComponentQuery query, ReadOnlySpan<long> values, int source) {
+    private static long Component(BoardComponentQuery query, ReadOnlySpan<long> values, int source, ArenaScratch scratch) {
         var topology = query.Topology;
         var count = topology.CellCount;
 
         if (query.Kind is BoardQueryKind.BoundaryAt or BoardQueryKind.EnclosedAt) {
             return Placement(
                 query: query,
+                scratch: scratch,
                 source: source,
                 values: values
             );
@@ -67,33 +68,246 @@ public static class BoardQueries {
         ) {
             return 0;
         }
-        var markPool = System.Buffers.ArrayPool<byte>.Shared.Rent(minimumLength: count);
-        var stackPool = System.Buffers.ArrayPool<int>.Shared.Rent(minimumLength: count);
+        using var markLease = scratch.Rent<byte>(length: count);
+        using var stackLease = scratch.Rent<int>(length: count);
 
-        try {
-            var mark = markPool.AsSpan(
-                length: count,
-                start: 0
-            );
-            var stack = stackPool.AsSpan(
-                length: count,
-                start: 0
-            );
+        var mark = markLease.Span;
+        var stack = stackLease.Span;
 
-            mark.Clear();
-            var boundary = (query.Kind == BoardQueryKind.Boundary);
+        var boundary = (query.Kind == BoardQueryKind.Boundary);
+        var size = 0;
+        var members = 0L;
+        var free = 0L;
+
+        mark[source] = 1;
+        stack[size++] = source;
+        while (size > 0) {
+            var cell = stack[--size];
+
+            if (members == query.MaxVisits) {
+                return -2;
+            }
+            members++;
+            for (var direction = 0; (direction < topology.DirectionCount); direction++) {
+                var next = topology.Neighbour(
+                    cell: cell,
+                    direction: direction
+                );
+
+                if (
+                    (next < 0) ||
+                    (mark[next] != 0)
+                ) {
+                    continue;
+                }
+                if (
+                    (values[next] >= query.Lower) &&
+                    (values[next] <= query.Upper)
+                ) {
+                    mark[next] = 1;
+                    stack[size++] = next;
+                } else if (
+                    boundary &&
+                    (values[next] >= query.BoundaryLower) &&
+                    (values[next] <= query.BoundaryUpper)
+                ) {
+                    mark[next] = 2;
+                    free++;
+                }
+            }
+        }
+        return (boundary
+            ? free
+            : members
+        );
+    }
+    // Dijkstra over a binary heap keyed (distance, cell ordinal): the same settle order as a linear scan (least
+    // distance, lowest ordinal on ties), at O((V + E) log V) instead of O(V²) per query. Stale heap entries are
+    // skipped on pop; the visit budget counts settled cells.
+    private static long PathCost(BoardPathCostQuery query, ReadOnlySpan<long> costs, int source, int target, ArenaScratch scratch) {
+        var topology = query.Topology;
+        var count = topology.CellCount;
+        var capacity = (count * (topology.DirectionCount + 1));
+        using var distanceLease = scratch.Rent<long>(length: count);
+        using var heapLease = scratch.Rent<PathEntry>(length: capacity);
+        using var settledLease = scratch.Rent<byte>(length: count);
+
+        var distances = distanceLease.Span;
+        var heap = heapLease.Span;
+        var settled = settledLease.Span;
+        var order = default(PathEntryOrder);
+
+        distances.Fill(value: long.MaxValue);
+        distances[source] = 0;
+        var size = 0;
+
+        BinaryHeap.Push(
+            count: ref size,
+            heap: heap,
+            item: new PathEntry(Cell: source, Distance: 0),
+            order: order
+        );
+        for (var visited = 0; (visited <= query.MaxVisits); visited++) {
+            var best = -1;
+            var distance = long.MaxValue;
+
+            while (size > 0) {
+                var candidate = BinaryHeap.Pop(
+                    count: ref size,
+                    heap: heap,
+                    order: order
+                );
+
+                if (
+                    (settled[candidate.Cell] != 0) ||
+                    (candidate.Distance != distances[candidate.Cell])
+                ) {
+                    continue;
+                }
+                best = candidate.Cell;
+                distance = candidate.Distance;
+                break;
+            }
+            if (
+                (best < 0) ||
+                (distance > query.MaxCost)
+            ) {
+                return -1;
+            }
+            if (visited == query.MaxVisits) {
+                return -2;
+            }
+            if (best == target) {
+                return distance;
+            }
+            settled[best] = 1;
+            for (var direction = 0; (direction < topology.DirectionCount); direction++) {
+                var neighbour = topology.Neighbour(
+                    cell: best,
+                    direction: direction
+                );
+
+                if (
+                    (neighbour < 0) ||
+                    (settled[neighbour] != 0) ||
+                    (costs[neighbour] < 0) ||
+                    (costs[neighbour] > (query.MaxCost - distance))
+                ) {
+                    continue;
+                }
+                var relaxed = (distance + costs[neighbour]);
+
+                if (relaxed < distances[neighbour]) {
+                    distances[neighbour] = relaxed;
+                    BinaryHeap.Push(
+                        count: ref size,
+                        heap: heap,
+                        item: new PathEntry(Cell: neighbour, Distance: relaxed),
+                        order: order
+                    );
+                }
+            }
+        }
+        return -2;
+    }
+    // A value on the empty key cell: BoundaryAt floods the in-range component it would join (the key cell a member)
+    // and counts the distinct boundary cells beside it other than the key cell; EnclosedAt floods each in-range
+    // component beside the key cell and counts the cells of those left with no boundary cell once the key cell is
+    // filled. -1 when the key cell is not empty, -2 when the settled-cell budget runs out across the floods.
+    private static long Placement(BoardComponentQuery query, ReadOnlySpan<long> values, int source, ArenaScratch scratch) {
+        var topology = query.Topology;
+        var count = topology.CellCount;
+
+        if (
+            (values[source] < query.BoundaryLower) ||
+            (values[source] > query.BoundaryUpper)
+        ) {
+            return -1;
+        }
+        using var markLease = scratch.Rent<byte>(length: count);
+        using var stackLease = scratch.Rent<int>(length: count);
+
+        var mark = markLease.Span;
+        var stack = stackLease.Span;
+
+        mark[source] = 1;
+        var settled = 0L;
+
+        if (query.Kind == BoardQueryKind.BoundaryAt) {
             var size = 0;
-            var members = 0L;
             var free = 0L;
 
-            mark[source] = 1;
             stack[size++] = source;
             while (size > 0) {
                 var cell = stack[--size];
 
-                if (members == query.MaxVisits) {
+                if (settled == query.MaxVisits) {
                     return -2;
                 }
+                settled++;
+                for (var direction = 0; (direction < topology.DirectionCount); direction++) {
+                    var next = topology.Neighbour(
+                        cell: cell,
+                        direction: direction
+                    );
+
+                    if (
+                        (next < 0) ||
+                        (mark[next] != 0)
+                    ) {
+                        continue;
+                    }
+                    if (
+                        (values[next] >= query.Lower) &&
+                        (values[next] <= query.Upper)
+                    ) {
+                        mark[next] = 1;
+                        stack[size++] = next;
+                    } else if (
+                        (values[next] >= query.BoundaryLower) &&
+                        (values[next] <= query.BoundaryUpper)
+                    ) {
+                        mark[next] = 2;
+                        free++;
+                    }
+                }
+            }
+            return free;
+        }
+        var enclosed = 0L;
+
+        for (var seed = 0; (seed < topology.DirectionCount); seed++) {
+            var start = topology.Neighbour(
+                cell: source,
+                direction: seed
+            );
+
+            if (
+                (start < 0) ||
+                (mark[start] != 0) ||
+                (values[start] < query.Lower) ||
+                (values[start] > query.Upper)
+            ) {
+                continue;
+            }
+            // Boundary cells seen for earlier components are cleared back to unmarked so each counts its own.
+            mark.Replace(
+                newValue: ((byte)0),
+                oldValue: ((byte)2)
+            );
+            var size = 0;
+            var free = 0L;
+            var members = 0L;
+
+            mark[start] = 1;
+            stack[size++] = start;
+            while (size > 0) {
+                var cell = stack[--size];
+
+                if (settled == query.MaxVisits) {
+                    return -2;
+                }
+                settled++;
                 members++;
                 for (var direction = 0; (direction < topology.DirectionCount); direction++) {
                     var next = topology.Neighbour(
@@ -114,7 +328,6 @@ public static class BoardQueries {
                         mark[next] = 1;
                         stack[size++] = next;
                     } else if (
-                        boundary &&
                         (values[next] >= query.BoundaryLower) &&
                         (values[next] <= query.BoundaryUpper)
                     ) {
@@ -123,263 +336,11 @@ public static class BoardQueries {
                     }
                 }
             }
-            return (boundary
-                ? free
-                : members
-            );
-        } finally {
-            System.Buffers.ArrayPool<byte>.Shared.Return(markPool);
-            System.Buffers.ArrayPool<int>.Shared.Return(stackPool);
-        }
-    }
-    // Dijkstra over a binary heap keyed (distance, cell ordinal): the same settle order as a linear scan (least
-    // distance, lowest ordinal on ties), at O((V + E) log V) instead of O(V²) per query. Stale heap entries are
-    // skipped on pop; the visit budget counts settled cells.
-    private static long PathCost(BoardPathCostQuery query, ReadOnlySpan<long> costs, int source, int target) {
-        var topology = query.Topology;
-        var count = topology.CellCount;
-        var capacity = (count * (topology.DirectionCount + 1));
-        var distancePool = System.Buffers.ArrayPool<long>.Shared.Rent(minimumLength: count);
-        var heapPool = System.Buffers.ArrayPool<PathEntry>.Shared.Rent(minimumLength: capacity);
-        var settledPool = System.Buffers.ArrayPool<byte>.Shared.Rent(minimumLength: count);
-
-        try {
-            var distances = distancePool.AsSpan(
-                length: count,
-                start: 0
-            );
-            var heap = heapPool.AsSpan(
-                length: capacity,
-                start: 0
-            );
-            var settled = settledPool.AsSpan(
-                length: count,
-                start: 0
-            );
-            var order = default(PathEntryOrder);
-
-            distances.Fill(value: long.MaxValue);
-            settled.Clear();
-            distances[source] = 0;
-            var size = 0;
-
-            BinaryHeap.Push(
-                count: ref size,
-                heap: heap,
-                item: new PathEntry(Cell: source, Distance: 0),
-                order: order
-            );
-            for (var visited = 0; (visited <= query.MaxVisits); visited++) {
-                var best = -1;
-                var distance = long.MaxValue;
-
-                while (size > 0) {
-                    var candidate = BinaryHeap.Pop(
-                        count: ref size,
-                        heap: heap,
-                        order: order
-                    );
-
-                    if (
-                        (settled[candidate.Cell] != 0) ||
-                        (candidate.Distance != distances[candidate.Cell])
-                    ) {
-                        continue;
-                    }
-                    best = candidate.Cell;
-                    distance = candidate.Distance;
-                    break;
-                }
-                if (
-                    (best < 0) ||
-                    (distance > query.MaxCost)
-                ) {
-                    return -1;
-                }
-                if (visited == query.MaxVisits) {
-                    return -2;
-                }
-                if (best == target) {
-                    return distance;
-                }
-                settled[best] = 1;
-                for (var direction = 0; (direction < topology.DirectionCount); direction++) {
-                    var neighbour = topology.Neighbour(
-                        cell: best,
-                        direction: direction
-                    );
-
-                    if (
-                        (neighbour < 0) ||
-                        (settled[neighbour] != 0) ||
-                        (costs[neighbour] < 0) ||
-                        (costs[neighbour] > (query.MaxCost - distance))
-                    ) {
-                        continue;
-                    }
-                    var relaxed = (distance + costs[neighbour]);
-
-                    if (relaxed < distances[neighbour]) {
-                        distances[neighbour] = relaxed;
-                        BinaryHeap.Push(
-                            count: ref size,
-                            heap: heap,
-                            item: new PathEntry(Cell: neighbour, Distance: relaxed),
-                            order: order
-                        );
-                    }
-                }
+            if (free == 0) {
+                enclosed += members;
             }
-            return -2;
-        } finally {
-            System.Buffers.ArrayPool<long>.Shared.Return(distancePool);
-            System.Buffers.ArrayPool<PathEntry>.Shared.Return(heapPool);
-            System.Buffers.ArrayPool<byte>.Shared.Return(settledPool);
         }
-    }
-    // A value on the empty key cell: BoundaryAt floods the in-range component it would join (the key cell a member)
-    // and counts the distinct boundary cells beside it other than the key cell; EnclosedAt floods each in-range
-    // component beside the key cell and counts the cells of those left with no boundary cell once the key cell is
-    // filled. -1 when the key cell is not empty, -2 when the settled-cell budget runs out across the floods.
-    private static long Placement(BoardComponentQuery query, ReadOnlySpan<long> values, int source) {
-        var topology = query.Topology;
-        var count = topology.CellCount;
-
-        if (
-            (values[source] < query.BoundaryLower) ||
-            (values[source] > query.BoundaryUpper)
-        ) {
-            return -1;
-        }
-        var markPool = System.Buffers.ArrayPool<byte>.Shared.Rent(minimumLength: count);
-        var stackPool = System.Buffers.ArrayPool<int>.Shared.Rent(minimumLength: count);
-
-        try {
-            var mark = markPool.AsSpan(
-                length: count,
-                start: 0
-            );
-            var stack = stackPool.AsSpan(
-                length: count,
-                start: 0
-            );
-
-            mark.Clear();
-            mark[source] = 1;
-            var settled = 0L;
-
-            if (query.Kind == BoardQueryKind.BoundaryAt) {
-                var size = 0;
-                var free = 0L;
-
-                stack[size++] = source;
-                while (size > 0) {
-                    var cell = stack[--size];
-
-                    if (settled == query.MaxVisits) {
-                        return -2;
-                    }
-                    settled++;
-                    for (var direction = 0; (direction < topology.DirectionCount); direction++) {
-                        var next = topology.Neighbour(
-                            cell: cell,
-                            direction: direction
-                        );
-
-                        if (
-                            (next < 0) ||
-                            (mark[next] != 0)
-                        ) {
-                            continue;
-                        }
-                        if (
-                            (values[next] >= query.Lower) &&
-                            (values[next] <= query.Upper)
-                        ) {
-                            mark[next] = 1;
-                            stack[size++] = next;
-                        } else if (
-                            (values[next] >= query.BoundaryLower) &&
-                            (values[next] <= query.BoundaryUpper)
-                        ) {
-                            mark[next] = 2;
-                            free++;
-                        }
-                    }
-                }
-                return free;
-            }
-            var enclosed = 0L;
-
-            for (var seed = 0; (seed < topology.DirectionCount); seed++) {
-                var start = topology.Neighbour(
-                    cell: source,
-                    direction: seed
-                );
-
-                if (
-                    (start < 0) ||
-                    (mark[start] != 0) ||
-                    (values[start] < query.Lower) ||
-                    (values[start] > query.Upper)
-                ) {
-                    continue;
-                }
-                // Boundary cells seen for earlier components are cleared back to unmarked so each counts its own.
-                mark.Replace(
-                    newValue: ((byte)0),
-                    oldValue: ((byte)2)
-                );
-                var size = 0;
-                var free = 0L;
-                var members = 0L;
-
-                mark[start] = 1;
-                stack[size++] = start;
-                while (size > 0) {
-                    var cell = stack[--size];
-
-                    if (settled == query.MaxVisits) {
-                        return -2;
-                    }
-                    settled++;
-                    members++;
-                    for (var direction = 0; (direction < topology.DirectionCount); direction++) {
-                        var next = topology.Neighbour(
-                            cell: cell,
-                            direction: direction
-                        );
-
-                        if (
-                            (next < 0) ||
-                            (mark[next] != 0)
-                        ) {
-                            continue;
-                        }
-                        if (
-                            (values[next] >= query.Lower) &&
-                            (values[next] <= query.Upper)
-                        ) {
-                            mark[next] = 1;
-                            stack[size++] = next;
-                        } else if (
-                            (values[next] >= query.BoundaryLower) &&
-                            (values[next] <= query.BoundaryUpper)
-                        ) {
-                            mark[next] = 2;
-                            free++;
-                        }
-                    }
-                }
-                if (free == 0) {
-                    enclosed += members;
-                }
-            }
-            return enclosed;
-        } finally {
-            System.Buffers.ArrayPool<byte>.Shared.Return(markPool);
-            System.Buffers.ArrayPool<int>.Shared.Return(stackPool);
-        }
+        return enclosed;
     }
     // One path-cost frontier entry: a cell reached at a distance, possibly stale once a cheaper entry for it exists.
     private readonly record struct PathEntry(long Distance, int Cell);
@@ -403,9 +364,12 @@ public static class BoardQueries {
     /// <param name="lower">The enclosed range's inclusive low end.</param>
     /// <param name="upper">The enclosed range's inclusive high end.</param>
     /// <param name="empty">The board's empty value.</param>
+    /// <param name="scratch">The working storage the flood borrows its marks and stacks from, normally the owning
+    /// arena's; a throwaway one is made when it is <see langword="null"/>.</param>
     /// <returns>How many cells were cleared.</returns>
-    public static long ClearEnclosed(CompiledTopology topology, Span<long> values, int source, long lower, long upper, long empty) {
+    public static long ClearEnclosed(CompiledTopology topology, Span<long> values, int source, long lower, long upper, long empty, ArenaScratch? scratch = null) {
         ArgumentNullException.ThrowIfNull(topology);
+        scratch ??= new ArenaScratch();
         var count = topology.CellCount;
 
         if (
@@ -414,85 +378,70 @@ public static class BoardQueries {
         ) {
             return 0L;
         }
-        var markPool = System.Buffers.ArrayPool<byte>.Shared.Rent(minimumLength: count);
-        var stackPool = System.Buffers.ArrayPool<int>.Shared.Rent(minimumLength: (2 * count));
+        using var markLease = scratch.Rent<byte>(length: count);
+        using var stackLease = scratch.Rent<int>(length: (2 * count));
 
-        try {
-            var mark = markPool.AsSpan(
-                length: count,
-                start: 0
+        var mark = markLease.Span;
+        var stack = stackLease.Span[..count];
+        var members = stackLease.Span[count..];
+
+        mark[source] = 1;
+        var cleared = 0L;
+
+        for (var seed = 0; (seed < topology.DirectionCount); seed++) {
+            var start = topology.Neighbour(
+                cell: source,
+                direction: seed
             );
-            var stack = stackPool.AsSpan(
-                length: count,
-                start: 0
-            );
-            var members = stackPool.AsSpan(
-                length: count,
-                start: count
-            );
 
-            mark.Clear();
-            mark[source] = 1;
-            var cleared = 0L;
+            if (
+                (start < 0) ||
+                (mark[start] != 0) ||
+                (values[start] < lower) ||
+                (values[start] > upper)
+            ) {
+                continue;
+            }
+            var size = 0;
+            var memberCount = 0;
+            var alive = false;
 
-            for (var seed = 0; (seed < topology.DirectionCount); seed++) {
-                var start = topology.Neighbour(
-                    cell: source,
-                    direction: seed
-                );
+            mark[start] = 1;
+            stack[size++] = start;
+            while (size > 0) {
+                var cell = stack[--size];
 
-                if (
-                    (start < 0) ||
-                    (mark[start] != 0) ||
-                    (values[start] < lower) ||
-                    (values[start] > upper)
-                ) {
-                    continue;
-                }
-                var size = 0;
-                var memberCount = 0;
-                var alive = false;
+                members[memberCount++] = cell;
+                for (var direction = 0; (direction < topology.DirectionCount); direction++) {
+                    var next = topology.Neighbour(
+                        cell: cell,
+                        direction: direction
+                    );
 
-                mark[start] = 1;
-                stack[size++] = start;
-                while (size > 0) {
-                    var cell = stack[--size];
-
-                    members[memberCount++] = cell;
-                    for (var direction = 0; (direction < topology.DirectionCount); direction++) {
-                        var next = topology.Neighbour(
-                            cell: cell,
-                            direction: direction
-                        );
-
-                        if (next < 0) {
-                            continue;
-                        }
-                        if (values[next] == empty) {
-                            alive = true;
-                        } else if (
-                            (mark[next] == 0) &&
-                            (values[next] >= lower) &&
-                            (values[next] <= upper)
-                        ) {
-                            mark[next] = 1;
-                            stack[size++] = next;
-                        }
+                    if (next < 0) {
+                        continue;
+                    }
+                    if (values[next] == empty) {
+                        alive = true;
+                    } else if (
+                        (mark[next] == 0) &&
+                        (values[next] >= lower) &&
+                        (values[next] <= upper)
+                    ) {
+                        mark[next] = 1;
+                        stack[size++] = next;
                     }
                 }
-                if (alive) {
-                    continue;
-                }
-                for (var index = 0; (index < memberCount); index++) {
-                    values[members[index]] = empty;
-                }
-                cleared += memberCount;
             }
-            return cleared;
-        } finally {
-            System.Buffers.ArrayPool<byte>.Shared.Return(markPool);
-            System.Buffers.ArrayPool<int>.Shared.Return(stackPool);
+            if (alive) {
+                continue;
+            }
+            for (var index = 0; (index < memberCount); index++) {
+                values[members[index]] = empty;
+            }
+            cleared += memberCount;
         }
+        return cleared;
     }
     /// <summary>Evaluates one preflighted query. A ray search never revisits its own wrapped origin.</summary>
     /// <param name="query">The compiled query.</param>
@@ -503,8 +452,10 @@ public static class BoardQueries {
     /// or <see cref="BoardJumpDistanceQuery"/> whose TargetIsLive is set; ignored otherwise. The caller
     /// resolves it (a tick-dependent state read) before this otherwise tick-agnostic
     /// evaluation runs.</param>
+    /// <param name="scratch">The working storage a flood or search borrows its marks, stacks and queues from, normally
+    /// the owning arena's; a throwaway one is made when it is <see langword="null"/>.</param>
     /// <returns>The result in the query's documented integer domain.</returns>
-    public static long Evaluate(BoardQuery query, ReadOnlySpan<long> values, long empty, int source, int dynamicTarget = 0) {
+    public static long Evaluate(BoardQuery query, ReadOnlySpan<long> values, long empty, int source, int dynamicTarget = 0, ArenaScratch? scratch = null) {
         var topology = query.Topology;
 
         if (query is BoardCanonicalQuery) {
@@ -541,9 +492,11 @@ public static class BoardQueries {
                 direction: neighbour.Direction
             );
         }
+        scratch ??= new ArenaScratch();
         if (query is BoardComponentQuery component) {
             return Component(
                 query: component,
+                scratch: scratch,
                 source: source,
                 values: values
             );
@@ -555,11 +508,12 @@ public static class BoardQueries {
                 source,
                 (pathCost.TargetIsLive
                 ? dynamicTarget
-                : pathCost.Target)
+                : pathCost.Target),
+                scratch
             );
         }
         if (query is BoardJumpDistanceQuery jump) {
-            return jump.Evaluate(values, empty, source, (jump.TargetIsLive ? dynamicTarget : jump.Target));
+            return jump.Evaluate(values, empty, source, (jump.TargetIsLive ? dynamicTarget : jump.Target), scratch);
         }
         if (query is BoardAttacksQuery attacks) {
             var directions = attacks.Directions;

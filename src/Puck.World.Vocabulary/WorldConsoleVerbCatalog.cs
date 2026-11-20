@@ -40,7 +40,7 @@ public static class WorldConsoleVerbCatalog {
 
         var rows = verbs
             .OrderBy(keySelector: static verb => verb.Name, comparer: StringComparer.Ordinal)
-            .Select(selector: static verb => $"    {{ \"name\": \"{verb.Name}\", \"bindable\": {((verb.Bindability == CommandBindability.Bindable) ? "true" : "false")}, \"audience\": \"{verb.Audience.ToString().ToLowerInvariant()}\", \"valueKind\": \"{verb.ValueKind.ToString().ToLowerInvariant()}\", \"wireArgs\": {(verb.AcceptsWireArgs ? "true" : "false")} }}");
+            .Select(selector: static verb => $"    {{ \"name\": \"{JsonEncodedText.Encode(value: verb.Name)}\",\"bindable\": {((verb.Bindability == CommandBindability.Bindable) ? "true" : "false")}, \"audience\": \"{verb.Audience.ToString().ToLowerInvariant()}\", \"valueKind\": \"{verb.ValueKind.ToString().ToLowerInvariant()}\", \"wireArgs\": {(verb.AcceptsWireArgs ? "true" : "false")} }}");
 
         return $"{{\n  \"schema\": \"{SchemaId}\",\n  \"verbs\": [\n{string.Join(separator: ",\n", values: rows)}\n  ]\n}}\n";
     }

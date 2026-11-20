@@ -285,11 +285,11 @@ public sealed class FixedSweepGrid {
         // ends before it: its X interval is at most two of the largest radii wide.
         var lowest = box.Minimum.X.Value.SubtractSaturating(right: m_width);
 
-        while (low < high) {
-            var middle = (low + ((high - low) / 2));
-
-            if (m_rows[m_entries[middle]].Bounds.Minimum.X.Value < lowest) { low = (middle + 1); } else { high = middle; }
-        }
+        low += PartitionPoint.Of(
+            isBefore: static (state, entry) => (state.Rows[entry].Bounds.Minimum.X.Value < state.Lowest),
+            span: m_entries.AsSpan(length: (high - low), start: low),
+            state: (Rows: m_rows, Lowest: lowest)
+        );
         for (var position = low; (position < end); position++) {
             ref readonly var row = ref m_rows[m_entries[position]];
 

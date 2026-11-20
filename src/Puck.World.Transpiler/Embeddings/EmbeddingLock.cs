@@ -1,4 +1,5 @@
 using Puck.Confinement;
+using Puck.Abstractions.Documents;
 using Puck.Assets;
 using System.Diagnostics.CodeAnalysis;
 using System.Text;
@@ -233,74 +234,38 @@ public sealed class EmbeddingLock {
         }
     }
     /// <summary>Serializes the lock file deterministically with LF line endings, 2-space indentation, and ordinal order.</summary>
-    public string Serialize() {
-        var sb = new StringBuilder();
-
-        sb.Append(value: "{\n  \"format\": 1,\n  \"spaces\": {");
-
-        var orderedSpaces = Spaces.OrderBy(keySelector: s => s.Key, comparer: StringComparer.Ordinal).ToList();
-
-        if (orderedSpaces.Count == 0) {
-            sb.Append(value: "}\n}\n");
-
-            return sb.ToString();
-        }
-
-        sb.Append(value: "\n");
-
-        for (var s = 0; (s < orderedSpaces.Count); s++) {
-            var (spaceName, space) = orderedSpaces[s];
-
-            sb.Append(value: $"    \"{EscapeJson(text: spaceName)}\": {{\n");
-            sb.Append(value: $"      \"dimensions\": {space.Identity.Dimensions},\n");
-            sb.Append(value: "      \"entries\": {");
-
-            var orderedEntries = space.Entries.OrderBy(keySelector: e => e.Key, comparer: StringComparer.Ordinal).ToList();
-
-            if (orderedEntries.Count == 0) {
-                sb.Append(value: "},\n");
-            } else {
-                sb.Append(value: "\n");
-
-                for (var e = 0; (e < orderedEntries.Count); e++) {
-                    var (hashKey, entry) = orderedEntries[e];
-
-                    sb.Append(value: $"        \"{hashKey}\": {{\n");
-                    sb.Append(value: $"          \"text\": \"{EscapeJson(text: entry.Text)}\",\n");
-                    sb.Append(value: $"          \"vector\": \"{EscapeJson(text: entry.Vector)}\"\n");
-                    sb.Append(value: "        }");
-
-                    if (e < (orderedEntries.Count - 1)) {
-                        sb.Append(value: ",");
-                    }
-
-                    sb.Append(value: "\n");
-                }
-
-                sb.Append(value: "      },\n");
-            }
-
-            sb.Append(value: $"      \"model\": \"{EscapeJson(text: space.Identity.Model)}\",\n");
-            sb.Append(value: $"      \"revision\": \"{EscapeJson(text: space.Identity.Revision)}\"\n");
-            sb.Append(value: "    }");
-
-            if (s < (orderedSpaces.Count - 1)) {
-                sb.Append(value: ",");
-            }
-
-            sb.Append(value: "\n");
-        }
-
-        sb.Append(value: "  }\n}\n");
-
-        return sb.ToString();
-    }
+    public string Serialize() => Encoding.UTF8.GetString(bytes: ToBytes());
     /// <summary>Writes the lock file only when its bytes change.</summary>
     /// <param name="lockPath">Destination lock path.</param>
     /// <returns><see langword="true"/> if the file was written; <see langword="false"/> if contents were unchanged.</returns>
-    public bool Write(string lockPath) => AtomicFile.WriteAllBytesIfChanged(path: lockPath, bytes: Encoding.UTF8.GetBytes(s: Serialize()));
+    public bool Write(string lockPath) => AtomicFile.WriteAllBytesIfChanged(path: lockPath, bytes: ToBytes());
 
-    private static string EscapeJson(string text) {
-        return JsonValue.Create(value: text)!.ToJsonString()[1..^1];
+    // A space's members are written in ordinal name order (dimensions, entries, model, revision), as are the spaces and
+    // each space's entries.
+    private byte[] ToBytes() {
+        var spaces = new JsonObject();
+
+        foreach (var (spaceName, space) in Spaces.OrderBy(keySelector: pair => pair.Key, comparer: StringComparer.Ordinal)) {
+            var entries = new JsonObject();
+
+            foreach (var (hashKey, entry) in space.Entries.OrderBy(keySelector: pair => pair.Key, comparer: StringComparer.Ordinal)) {
+                entries.Add(propertyName: hashKey, value: new JsonObject {
+                    ["text"] = entry.Text,
+                    ["vector"] = entry.Vector,
+                });
+            }
+
+            spaces.Add(propertyName: spaceName, value: new JsonObject {
+                ["dimensions"] = space.Identity.Dimensions,
+                ["entries"] = entries,
+                ["model"] = space.Identity.Model,
+                ["revision"] = space.Identity.Revision,
+            });
+        }
+
+        return CanonicalJsonDocument.Serialize(node: new JsonObject {
+            ["format"] = SupportedFormat,
+            ["spaces"] = spaces,
+        });
     }
 }

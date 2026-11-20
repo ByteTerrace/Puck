@@ -1,6 +1,6 @@
+using Puck.Assets;
 using Puck.Commands;
 using System.Collections.Frozen;
-using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using Puck.Storage;
@@ -282,6 +282,6 @@ public sealed partial class WorldExtensionHost : IAsyncDisposable {
             ),
             leaveOpen: true
         )) { foreach (var field in fields) { writer.Write(value: field); } }
-        return Convert.ToHexStringLower(inArray: SHA256.HashData(source: bytes.ToArray()));
+        return ContentPin.Compute(content: bytes.ToArray()).Hex;
     }
 }

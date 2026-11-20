@@ -20,7 +20,7 @@ public static partial class WorldPlacementStamp {
         private readonly Dictionary<WorldPlacement, CompiledPlacementStamp> m_stamps = new(comparer: ReferenceEqualityComparer.Instance);
         private readonly HashSet<WorldPlacement> m_resolvingFrames = new(comparer: ReferenceEqualityComparer.Instance);
         private readonly HashSet<WorldPlacement> m_resolvingStamps = new(comparer: ReferenceEqualityComparer.Instance);
-        private readonly Dictionary<IReadOnlyList<string>, FieldEntry> m_fields = new(comparer: TargetComparer.Instance);
+        private readonly Dictionary<IReadOnlyList<string>, FieldEntry> m_fields = new(comparer: SequenceEqualityComparer<string>.Instance);
 
         private readonly ulong m_seed;
         private readonly int m_revision;

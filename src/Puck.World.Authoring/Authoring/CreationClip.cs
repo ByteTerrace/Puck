@@ -185,14 +185,14 @@ public sealed class CreationRigTrack {
             return;
         }
 
-        var low = 0;
-        var high = last;
+        // The position lies in [m_at[0], m_at[last]), so the first key above it is in (0, last].
+        var high = PartitionPoint.Of(
+            isBefore: static (limit, key) => (key <= limit),
+            span: m_at.AsSpan(),
+            state: position
+        );
+        var low = (high - 1);
 
-        while ((high - low) > 1) {
-            var middle = ((low + high) >> 1);
-
-            if (m_at[middle] <= position) { low = middle; } else { high = middle; }
-        }
         from = low;
         to = high;
         amount = Ease(ease: m_eases[high], fraction: ((position - m_at[low]) / (m_at[high] - m_at[low])));

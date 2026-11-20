@@ -148,7 +148,7 @@ public sealed partial class StateArena {
     private void PrepareDigestCache() {
         if (ReferenceEquals(objA: m_digestLayout, objB: m_layout) && ReferenceEquals(objA: m_digestKeys, objB: m_keys)) { return; }
         var rows = m_layout.RowCount;
-        var segments = ((rows + (HashSegmentRows - 1)) / HashSegmentRows);
+        var segments = rows.CeilingDivide(divisor: HashSegmentRows);
 
         m_rowDigests = new ulong[rows];
         m_rowDigestVersions = new ulong[rows];

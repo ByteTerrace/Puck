@@ -86,6 +86,7 @@ public static class ArenaBoards {
             dynamicTarget: dynamicTarget,
             empty: layout.Empty,
             query: query,
+            scratch: arena.Scratch,
             source: source,
             values: values[..topology.CellCount]
         );

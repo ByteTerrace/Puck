@@ -1,6 +1,7 @@
 using System.Buffers.Binary;
 using System.Diagnostics.CodeAnalysis;
 using System.Text;
+using Puck.Maths;
 
 namespace Puck.Assets;
 
@@ -85,19 +86,12 @@ public sealed partial record WasmModuleDeclarations(IReadOnlyList<string> Export
 
             return true;
         }
-        // A signed LEB128 of at most 33 bits (a heap type): five bytes, the last carrying the sign.
-        public bool TrySkipVarInt33() {
-            for (var count = 0; (count < 5); count++) {
-                if (!TryReadByte(value: out var next)) {
-                    return false;
-                }
-                if ((next & 0x80) == 0) {
-                    return true;
-                }
-            }
-
-            return false;
-        }
+        // A signed LEB128 of at most 33 bits (a heap type) has the continuation structure of an unsigned one of up to
+        // 35 bits (five bytes, the last carrying the sign), and only its length matters here.
+        public bool TrySkipVarInt33() => TryReadVarUInt(
+            bits: 35,
+            value: out _
+        );
         // An unsigned LEB128 of at most 32 bits: five bytes, the fifth carrying four.
         public bool TryReadVarUInt32(out uint value) {
             var read = TryReadVarUInt(
@@ -110,32 +104,13 @@ public sealed partial record WasmModuleDeclarations(IReadOnlyList<string> Export
             return read;
         }
         // An unsigned LEB128 of at most the given bits.
-        public bool TryReadVarUInt(int bits, out ulong value) {
-            value = 0UL;
-
-            for (var shift = 0; (shift < bits); shift += 7) {
-                if (!TryReadByte(value: out var next)) {
-                    return false;
-                }
-
-                var payload = ((ulong)(next & 0x7F));
-
-                if (
-                    ((bits - shift) < 7) &&
-                    ((payload >> (bits - shift)) != 0UL)
-                ) {
-                    return false;
-                }
-
-                value |= (payload << shift);
-
-                if ((next & 0x80) == 0) {
-                    return true;
-                }
-            }
-
-            return false;
-        }
+        public bool TryReadVarUInt(int bits, out ulong value) => Leb128.TryRead(
+            data: m_bytes,
+            maxBits: bits,
+            offset: ref m_offset,
+            requireMinimal: false,
+            value: out value
+        );
         // A value type or reference type: one byte, or a nullable reference prefix followed by its heap type.
         public bool TrySkipValueType() => (
             TryReadByte(value: out var type) &&

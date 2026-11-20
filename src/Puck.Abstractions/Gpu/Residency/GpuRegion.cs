@@ -1,5 +1,6 @@
 using System.Runtime.InteropServices;
 using Puck.Abstractions.Memory;
+using Puck.Maths;
 
 namespace Puck.Abstractions.Gpu;
 
@@ -1690,7 +1691,7 @@ public sealed unsafe class GpuRegion : IDisposable {
         }
 
         var end = (offset + bytes.Length);
-        var endWord = ((int)(((end - 1) / sizeof(uint)) + 1));
+        var endWord = ((int)end.CeilingDivide(divisor: sizeof(uint)));
 
         if (
             m_external &&
@@ -1908,7 +1909,7 @@ public sealed unsafe class GpuRegion : IDisposable {
             }
 
             Owe(
-                endWord: ((int)((((offset + index) - 1) / sizeof(uint)) + 1)),
+                endWord: ((int)(offset + index).CeilingDivide(divisor: sizeof(uint))),
                 startWord: ((int)((offset + start) / sizeof(uint)))
             );
             owed = true;

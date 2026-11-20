@@ -27,6 +27,8 @@ public struct Pcg32XshRr : IDrawGenerator {
 
     /// <summary>The default state multiplier — the PCG reference implementation's 64-bit LCG constant.</summary>
     public const ulong DefaultMultiplier = 6364136223846793005UL;
+    // The reference implementation's default stream increment, which the Rust port's sweep generator also steps by.
+    internal const ulong DefaultIncrement = 1442695040888963407UL;
     /// <summary>The largest valid stream id (<c>2⁶³ − 1</c>); each id selects a distinct odd increment (see remarks for the correlation caveat).</summary>
     public const ulong MaxStream = ((1UL << 63) - 1UL);
 
@@ -41,6 +43,9 @@ public struct Pcg32XshRr : IDrawGenerator {
         m_state = state;
     }
 
+    // One step of the affine congruential state: state -> state * multiplier + increment, wrapping.
+    internal static ulong Step(ulong state, ulong multiplier, ulong increment) =>
+        unchecked(((state * multiplier) + increment));
     // O'Neill's logarithmic discrete-log over an affine LCG (state -> state*multiplier + increment), restricted to
     // `mask`'s bits. Shared with Pcg32Extended, whose own table-tick bookkeeping runs this same search masked to
     // its tick window rather than the full word.
@@ -52,7 +57,11 @@ public struct Pcg32XshRr : IDrawGenerator {
 
         while ((currentState & mask) != (newState & mask)) {
             if ((currentState & theBit) != (newState & theBit)) {
-                currentState = unchecked(((currentState * currentMultiplier) + currentIncrement));
+                currentState = Step(
+                    increment: currentIncrement,
+                    multiplier: currentMultiplier,
+                    state: currentState
+                );
                 distance |= theBit;
             }
 
@@ -295,7 +304,11 @@ public struct Pcg32XshRr : IDrawGenerator {
         // the top five bits.
         var oldState = m_state;
 
-        m_state = unchecked(((oldState * m_multiplier) + m_increment));
+        m_state = Step(
+            increment: m_increment,
+            multiplier: m_multiplier,
+            state: oldState
+        );
 
         return uint.RotateRight(
             rotateAmount: ((int)(oldState >> 59)),
