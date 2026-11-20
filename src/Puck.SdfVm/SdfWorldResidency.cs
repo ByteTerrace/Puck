@@ -483,11 +483,8 @@ public sealed partial class SdfWorldResidency : IDisposable {
         var waited = m_pipelines.WaitFinished(cancellationToken: cancellationToken);
 
         if (!m_reloadBuild.IsPending && (m_reloadLoad is { IsCompleted: false } load)) {
-            try {
-                load.Completion.Wait(cancellationToken: cancellationToken);
-            } catch (AggregateException) {
-                // A failed load is reported by the next frame, which finishes the request.
-            }
+            // A failed load is reported by the next frame, which finishes the request.
+            load.WaitFinished(cancellationToken: cancellationToken);
 
             return true;
         }
