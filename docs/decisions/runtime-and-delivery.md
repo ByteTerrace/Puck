@@ -263,7 +263,9 @@ derive. Until CI has a GPU runner, the lead machine (RTX 4070) is the interim
 producer: it bakes a player folder and runs `puck world caches produce --push`,
 which packs each backend's mesh set into a cache set named by the build's mesh
 bake identity and uploads it as the asset of a GitHub prerelease tagged
-`caches/<backend>-<identity>`. The producer needs no deployment access. The
+`caches/<backend>-<identity>`. The lead creates those tags and prereleases
+(the owner's ruling); a lane never does, since a lane never pushes. The
+producer needs no deployment access. The
 release job (`player` in the Azure workflow) assembles the folder without
 baking boots, and `puck world caches fetch` takes the cache set whose identity
 equals its own build's, verifies every file's content pin and unpacks it; the
