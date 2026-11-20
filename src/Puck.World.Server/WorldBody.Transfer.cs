@@ -570,6 +570,7 @@ public sealed partial class WorldBody {
         UpNeedsReseat: m_upNeedsReseat,
         FieldUpTurnRemainder: m_upTurnAccumulator.Remainder,
         ContactUpTurnRemainder: m_contactUpTurnAccumulator.Remainder,
+        IdleSleepGravity: IdleSleepGravity,
         AsleepSinceTick: m_asleepSinceTick,
         SleepIdleTicks: m_sleepIdleTicks,
         LastContactFieldVersion: m_lastContactFieldVersion,
@@ -654,6 +655,7 @@ public sealed partial class WorldBody {
             ticksPerSecond: EngineTicksPerSecond
         );
         m_asleepSinceTick = residue.AsleepSinceTick;
+        IdleSleepGravity = residue.IdleSleepGravity;
         m_sleepIdleTicks = residue.SleepIdleTicks;
         m_lastContactFieldVersion = residue.LastContactFieldVersion;
         m_planarFollowerSeeded = residue.PlanarFollowerSeeded;

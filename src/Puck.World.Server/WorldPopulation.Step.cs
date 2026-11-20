@@ -798,10 +798,15 @@ public sealed partial class WorldPopulation {
         // The field's contact revision says nothing about solved acceleration. Reuse its already-required,
         // entity-ordered target pass; a static/default-gravity world pays no sleeping-body scan.
         foreach (var target in m_gravityTargets) {
-            if (!m_sleepGravity.TryGetValue(key: target.EntityIndex, value: out var previous)) { continue; }
-            FixedVector3? current = (gravity.TryAcceleration(entityIndex: target.EntityIndex, acceleration: out var acceleration) ? acceleration : null);
+            var body = m_entries[target.EntityIndex].Body!;
+            FixedVector3? previous;
+            if (body.Asleep) { previous = body.IdleSleepGravity; }
+            else if (!m_sleepGravity.TryGetValue(key: target.EntityIndex, value: out previous)) { continue; }
 
-            if (current != previous) { WakeBodyIsland(index: target.EntityIndex); woke = true; }
+            if (body.SolvedGravity != previous) {
+                body.WakeUp();
+                woke = true;
+            }
         }
         return woke;
     }

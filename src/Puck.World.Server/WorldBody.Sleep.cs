@@ -54,6 +54,8 @@ public sealed partial class WorldBody {
     // Consecutive engine ticks (stepTicks accumulated) this body has produced no motion and received no intent —
     // reset to 0 the instant either happens. Meaningless once m_asleepSinceTick is set.
     private ulong m_sleepIdleTicks;
+    internal FixedVector3? IdleSleepGravity { get; private set; }
+    internal FixedVector3? SolvedGravity => TrySolvedGravity(out var acceleration) ? acceleration : null;
     // The population's ContactFieldVersion as of this body's last Advance (ordinary or deferred) — compared on the
     // next tick to decide whether the surface it sleeps against could now answer differently.
     private ulong m_lastContactFieldVersion;
@@ -80,6 +82,7 @@ public sealed partial class WorldBody {
     internal void WakeUp() {
         NotifyPopulationWake();
         m_asleepSinceTick = 0UL;
+        IdleSleepGravity = null;
         m_sleepIdleTicks = 0UL;
     }
     /// <summary>Gets how far past its broadphase radius, in metres, a contact-field change can still decide this idle
@@ -153,6 +156,7 @@ public sealed partial class WorldBody {
 
         if (m_sleepIdleTicks >= sleepAfterTicks) {
             m_asleepSinceTick = tick;
+            IdleSleepGravity = SolvedGravity;
         }
     }
 }
