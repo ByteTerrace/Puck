@@ -124,7 +124,7 @@ correctness rests on an invariant is designed and reviewed before code
    design (J1), which folds in the bake's private worker pool; then rows as
    jobs (T4) for the silo. The frame thread still steps the authority and
    emits the whole program; the 2060 trace in item 3 sizes both.
-8. [high] [Security review](#security-review): the write door's footprint is
+8. [high, before the hosted world admits players] [Security review](#security-review): the write door's footprint is
    derived from the name registry
    ([checkpoint](disclosure.md#write-door-footprint-checkpoint)), so a
    submission naming a withheld row at any position answers as one naming an
