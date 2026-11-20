@@ -1,4 +1,3 @@
-using System.Runtime.CompilerServices;
 using System.Text.Json.Serialization;
 using Puck.Abstractions.Documents;
 using Puck.Commands;
@@ -53,7 +52,7 @@ public enum WorldConsoleCommandParameterKind {
 }
 /// <summary>Compiles a document's <c>commands</c> rows into the set a <see cref="CommandRegistry"/> answers.</summary>
 public static class WorldConsoleCommands {
-    private static readonly ConditionalWeakTable<IReadOnlyList<WorldConsoleCommand>, ConditionalWeakTable<IReadOnlyList<WorldSpawnPoint>, AuthoredCommandSet>> Compiled = new();
+    private static readonly Puck.Abstractions.CodeDerivedTable<IReadOnlyList<WorldConsoleCommand>, Puck.Abstractions.CodeDerivedTable<IReadOnlyList<WorldSpawnPoint>, AuthoredCommandSet>> Compiled = new();
     private static readonly IReadOnlyList<WorldSpawnPoint> ImplicitSpawns = [WorldSpawnPointDefaults.ImplicitOrigin];
 
     /// <summary>Returns the authored command set of <paramref name="definition"/>, compiled once for its command
@@ -74,7 +73,7 @@ public static class WorldConsoleCommands {
     }
 
     private static AuthoredCommandSet CompileMissing(WorldDefinition definition, IReadOnlyList<WorldSpawnPoint> spawns,
-        ConditionalWeakTable<IReadOnlyList<WorldSpawnPoint>, AuthoredCommandSet> cache) =>
+        Puck.Abstractions.CodeDerivedTable<IReadOnlyList<WorldSpawnPoint>, AuthoredCommandSet> cache) =>
         cache.GetValue(spawns, _ => Compile(definition: definition, errors: []));
 
     /// <summary>Compiles <paramref name="definition"/>'s <c>commands</c> rows, appending every refusal.</summary>

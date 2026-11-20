@@ -22,6 +22,7 @@ public sealed class WorldDocumentOrigins {
         private string? m_json;
         internal WorldDocumentValueOrigin Value => new(DocumentPath, Pointer, m_json ??= JsonSerializer.Serialize(Scalar));
     }
+    [SideTable(reason: "records the source origin the reader noted for each node")]
     private readonly ConditionalWeakTable<JsonNode, Origin> m_values = new();
 
     /// <summary>Finds the original authored value of an effective scalar.</summary>

@@ -358,7 +358,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
     // The rig each authored camera program compiles to against one state mirror, recompiled only when the cache's
     // inputs move. A rig ResolveCamera resolves holds no history (its look and spread stay at rest), so the cached
     // rig answers what a fresh compile would.
-    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<WorldStateMirror, System.Runtime.CompilerServices.ConditionalWeakTable<WorldCameraProgram, WorldCameraRigCompiler.Cache>> ResolvedRigs = new();
+    private static readonly Puck.Abstractions.CodeDerivedTable<WorldStateMirror, Puck.Abstractions.CodeDerivedTable<WorldCameraProgram, WorldCameraRigCompiler.Cache>> ResolvedRigs = new();
 
     /// <summary>Resolves the camera a session's ordinary projection renders a destination through this frame: the named
     /// camera if the destination still declares it, else the destination's first declared camera, else a fixed overview
@@ -389,7 +389,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
                 mirror: mirror
             );
             var state = mirror.FollowState();
-            var cache = ResolvedRigs.GetOrCreateValue(key: state).GetOrCreateValue(key: cameraRow.Rig);
+            var cache = ResolvedRigs.GetValue(key: state, derive: static _ => new()).GetValue(key: cameraRow.Rig, derive: static _ => new());
             IWorldCameraProgramRig rig;
 
             lock (cache) {

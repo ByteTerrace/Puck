@@ -87,6 +87,7 @@ public readonly record struct StateDescriptor(
 public sealed class StateCatalog {
     private static long ShapeWalkCountValue;
 
+    [SideTable(reason: "a section's generated rows are one population, by reference, that the catalogs and arenas built from it hold")]
     private static readonly ConditionalWeakTable<IStateSection, Lazy<IReadOnlyList<StateRow>>> ExpandedRows = new();
 
     private readonly StateDescriptor[] m_descriptors;

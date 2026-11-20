@@ -25,7 +25,7 @@ public static partial class CreationMotion {
         public HashSet<int>? CreasedGroups;
     }
 
-    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<CreationRig, Derived> Memo = new();
+    private static readonly Puck.Abstractions.CodeDerivedTable<CreationRig, Derived> Memo = new();
 
     /// <summary>Resolves each shape's <see cref="ShapeDocument.Parent"/> to the index of the earlier shape it names, or
     /// -1 for a shape on the creation root. The canonicalizer refuses a parent that is missing or declared later.</summary>
@@ -59,7 +59,7 @@ public static partial class CreationMotion {
     public static IReadOnlyList<CreationMovingBlend> MovingBlends(CreationRig rig) {
         ArgumentNullException.ThrowIfNull(argument: rig);
 
-        var derived = Memo.GetOrCreateValue(key: rig);
+        var derived = Memo.GetValue(key: rig, derive: static _ => new());
 
         return (derived.MovingBlends ??= FindMovingBlends(rig: rig));
     }
@@ -208,7 +208,7 @@ public static partial class CreationMotion {
     public static bool Creases(CreationRig rig, CreationMovingBlend blend) {
         ArgumentNullException.ThrowIfNull(argument: rig);
 
-        var derived = Memo.GetOrCreateValue(key: rig);
+        var derived = Memo.GetValue(key: rig, derive: static _ => new());
 
         return (derived.CreasedGroups ??= FindCreasedGroups(rig: rig)).Contains(item: blend.Group);
     }
@@ -221,7 +221,7 @@ public static partial class CreationMotion {
     public static HashSet<int> CreasedGroups(CreationRig rig) {
         ArgumentNullException.ThrowIfNull(argument: rig);
 
-        var derived = Memo.GetOrCreateValue(key: rig);
+        var derived = Memo.GetValue(key: rig, derive: static _ => new());
 
         return [.. (derived.CreasedGroups ??= FindCreasedGroups(rig: rig))];
     }

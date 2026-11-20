@@ -349,7 +349,7 @@ public static partial class WorldPlacementStamper {
 
     // A closed mesh drawn under a mirror: the same triangles with each one's winding reversed, which the mirror reverses
     // back, so its faces stay outward where it is drawn.
-    private static SdfMesh Mirrored(SdfMesh mesh) => MirroredMeshes.GetValue(key: mesh, createValueCallback: static closed => {
+    private static SdfMesh Mirrored(SdfMesh mesh) => MirroredMeshes.GetValue(key: mesh, derive: static closed => {
         var indices = closed.Indices.ToArray();
 
         for (var index = 0; (index < indices.Length); index += 3) {
@@ -359,7 +359,7 @@ public static partial class WorldPlacementStamper {
         return new SdfMesh(indices: indices, positions: closed.Positions);
     });
 
-    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<SdfMesh, SdfMesh> MirroredMeshes = new();
+    private static readonly Puck.Abstractions.CodeDerivedTable<SdfMesh, SdfMesh> MirroredMeshes = new();
 
     // The triangles wound outward when they close a volume: every edge, its vertices matched by position, is shared by
     // exactly two triangles that run it in opposite directions, and the volume they enclose is not zero. Triangles

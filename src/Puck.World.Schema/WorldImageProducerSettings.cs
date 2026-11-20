@@ -1,6 +1,5 @@
 using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
-using System.Runtime.CompilerServices;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -91,7 +90,7 @@ public static class WorldImageProducerSettings {
     /// <summary>The test-pattern producer's id.</summary>
     public const string TestPatternId = "testPattern";
 
-    private static readonly ConditionalWeakTable<WorldScreenSource.Producer, Binding> Bindings = new();
+    private static readonly Puck.Abstractions.CodeDerivedTable<WorldScreenSource.Producer, Binding> Bindings = new();
 
     private static bool TryReadShipped<T>(WorldScreenSource? source, string id, [NotNullWhen(returnValue: true)] out T? settings) where T : class {
         if (
@@ -122,7 +121,7 @@ public static class WorldImageProducerSettings {
         ArgumentNullException.ThrowIfNull(argument: producer);
 
         var binding = Bindings.GetValue(
-            createValueCallback: static source => {
+            derive: static source => {
                 var buffer = new ArrayBufferWriter<byte>();
 
                 using (var writer = new Utf8JsonWriter(bufferWriter: buffer)) {

@@ -1146,6 +1146,7 @@ public sealed partial record WorldDefinition(
     }
 
     private sealed record HoldingMove(WeakReference<WorldDefinition> Previous, (int Row, int Holding)[] Rows);
+    [SideTable(reason: "records which definition a holdings move produced each one from")]
     private static readonly ConditionalWeakTable<WorldDefinition, HoldingMove> HoldingMoves = new();
 
     /// <summary>Gets the exact placement changes when this definition came directly from a holding-only edit of
@@ -1166,6 +1167,7 @@ public sealed partial record WorldDefinition(
     }
 
     private static readonly RuntimeCompilationCache AbsentStateCompilation = new();
+    [SideTable(reason: "holds the state catalog the running arena was created against; a recompiled catalog would mint keys that arena cannot resolve")]
     private static readonly ConditionalWeakTable<WorldStateSection, RuntimeCompilationCache> RuntimeCompilationCaches = new();
 
     private sealed class RuntimeCompilationCache {

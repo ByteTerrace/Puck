@@ -1,5 +1,4 @@
 using System.Numerics;
-using System.Runtime.CompilerServices;
 using Puck.Assets.Documents;
 using Puck.SignedDistance;
 
@@ -288,7 +287,7 @@ public readonly record struct CreationRigContest(int Earlier, int Later, int Sha
 /// </para>
 /// </summary>
 public sealed class CreationRig {
-    private static readonly ConditionalWeakTable<CreationDocument, CreationRig> Compiled = new();
+    private static readonly Puck.Abstractions.CodeDerivedTable<CreationDocument, CreationRig> Compiled = new();
 
     private readonly CreationRigWriters[] m_writers;
     private readonly int[] m_parents;
@@ -301,7 +300,7 @@ public sealed class CreationRig {
     private int[]? m_owners;
     private float? m_reach;
     private string? m_reachRefusal;
-    private readonly ConditionalWeakTable<IReadOnlyDictionary<string, string>, CreationRig> m_follows = new();
+    private readonly Puck.Abstractions.CodeDerivedTable<IReadOnlyDictionary<string, string>, CreationRig> m_follows = new();
 
     private CreationRig(CreationDocument document, CreationRigWriters[] writers, int[] parents, CreationRigTerm[] terms, int[] termStarts, DocumentVector3[] joints, IReadOnlyList<CreationRigDriver> drivers, IReadOnlyList<CreationRigEffector> effectors, IReadOnlyList<CreationRigClip> clips, IReadOnlyList<CreationRigRead> reads, CreationRigRead? sizeBy, bool animates, IReadOnlyDictionary<string, string>? followed, int[] replacers, int[] replacerStarts, IReadOnlyList<CreationRigUnplayed> unplayed, IReadOnlyList<CreationRigContest> contests) {
         Document = document;
@@ -465,7 +464,7 @@ public sealed class CreationRig {
         if ((partDynamics is not { Count: > 0 }) || ReferenceEquals(objA: partDynamics, objB: m_followed)) { return this; }
         if (m_followed is not null) { throw new InvalidOperationException(message: "A followed rig is followed from the creation's own rig."); }
 
-        return m_follows.GetValue(key: partDynamics, createValueCallback: map => {
+        return m_follows.GetValue(key: partDynamics, derive: map => {
             var parts = CreationPartCompiler.Compile(document: Document);
             var writers = (CreationRigWriters[])m_writers.Clone();
             var any = false;
@@ -489,7 +488,7 @@ public sealed class CreationRig {
     public static CreationRig Of(CreationDocument document) {
         ArgumentNullException.ThrowIfNull(argument: document);
 
-        return Compiled.GetValue(key: document, createValueCallback: Compile);
+        return Compiled.GetValue(key: document, derive: Compile);
     }
     /// <summary>Compiles a creation's rig.</summary>
     /// <param name="document">The creation, in either frame, normalized or not; a reference that names nothing compiles to

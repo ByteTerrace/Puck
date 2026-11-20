@@ -93,7 +93,7 @@ public sealed record WorldPlacementPortal(
 public static class WorldPortalCounterpart {
     // Each authored counterpart string's halves, split once: a window's frustum fit parses its portal's counterpart
     // every frame, and the string is the document's own instance.
-    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<string, Halves> Parsed = new();
+    private static readonly Puck.Abstractions.CodeDerivedTable<string, Halves> Parsed = new();
 
     private sealed record Halves(string PlacementId, string Face);
 

@@ -684,7 +684,8 @@ check the flag: the owner may be holding the pad.
   (`Puck.Abstractions`) or keeps its entries in a `CodeDerivedTable`, and
   derives again when it moved; a persisted product folds
   `CodeRevision.AppliedTo` (over the types it reads) into its identity. A new
-  such cache does the same. Laws that apply an update call `AppliedCodeUpdate`
+  such cache does the same; a raw `ConditionalWeakTable` field fails the build
+  (CACHE001) unless it carries `[SideTable(reason)]` for values no code derives. Laws that apply an update call `AppliedCodeUpdate`
   (`tests/Shared`) inside `AppliedCodeUpdateCollection`, which runs alone. An
   agent's verification still boots a fresh World.
 - **Build first.** A failed build leaves the previous binaries in place, so a

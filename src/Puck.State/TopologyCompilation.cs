@@ -1,5 +1,4 @@
 using System.Numerics;
-using System.Runtime.CompilerServices;
 using Puck.Assets.Documents;
 using Puck.Maths;
 
@@ -24,7 +23,7 @@ public static class TopologyCompilation {
 
     // Unanchored compiles are a pure function of the topology instance, so one weak entry per instance serves every
     // reader; a host that anchors a topology's frame elsewhere keeps its own cache keyed on the anchor too.
-    private static readonly ConditionalWeakTable<LatticeTopology, CompiledTopology> Cache = new();
+    private static readonly Puck.Abstractions.CodeDerivedTable<LatticeTopology, CompiledTopology> Cache = new();
 
     /// <summary>The six hex directions in the order <c>hexNeighbor</c> counts them: counterclockwise from +q in
     /// the Eisenstein basis, which on the board (r toward +Z) reads E, SE, SW, W, NW, NE.</summary>
@@ -781,12 +780,12 @@ public static class TopologyCompilation {
     /// <returns><see langword="true"/> when the topology validates.</returns>
     public static bool Validates(LatticeTopology topology) => Validity.GetValue(
         key: topology,
-        createValueCallback: static built => new System.Runtime.CompilerServices.StrongBox<bool>(value: TryValidate(
+        derive: static built => new System.Runtime.CompilerServices.StrongBox<bool>(value: TryValidate(
             reason: out _,
             topology: built
         ))
     ).Value;
-    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<LatticeTopology, System.Runtime.CompilerServices.StrongBox<bool>> Validity = new();
+    private static readonly Puck.Abstractions.CodeDerivedTable<LatticeTopology, System.Runtime.CompilerServices.StrongBox<bool>> Validity = new();
     /// <summary>Finds and compiles a discrete topology by name, unanchored: a Grid's <c>origin</c> resolves exactly
     /// as authored. A host that composes a topology's frame over another row's transform compiles through
     /// <see cref="Compile"/> with that offset instead.</summary>
@@ -804,7 +803,7 @@ public static class TopologyCompilation {
             ) {
                 return Cache.GetValue(
                     key: topology,
-                    createValueCallback: static topology => Compile(
+                    derive: static topology => Compile(
                         topology: topology,
                         anchorOffset: Vector3.Zero
                     )

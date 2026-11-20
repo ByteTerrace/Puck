@@ -1928,10 +1928,10 @@ public static partial class PuckParser {
         )
     );
 
-    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<string, int[]> LineStartsCache = new();
+    private static readonly Puck.Abstractions.CodeDerivedTable<string, int[]> LineStartsCache = new();
 
     private static int[] GetLineStarts(string buffer) =>
-        LineStartsCache.GetValue(key: buffer, createValueCallback: static b => {
+        LineStartsCache.GetValue(key: buffer, derive: static b => {
             var starts = new List<int> { 0 };
 
             for (var i = 0; (i < b.Length); i++) {

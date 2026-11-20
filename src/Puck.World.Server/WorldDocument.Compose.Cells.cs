@@ -23,7 +23,9 @@ public sealed partial class WorldDocument {
     }
     private sealed record ComposeArenaEntry(StateArena Arena, WorldStateSection Source, ComposeArenaPool Pool);
 
+    [SideTable(reason: "a pool of compose arenas per catalog")]
     private static readonly ConditionalWeakTable<StateCatalog, ComposeArenaPool> ComposeArenas = new();
+    [SideTable(reason: "the pool entry each pooled arena returns to")]
     private static readonly ConditionalWeakTable<StateArena, ComposeArenaEntry> ComposeEntries = new();
     private static readonly HashSet<string> NoSeedRows = new(comparer: StringComparer.Ordinal);
 

@@ -6,11 +6,12 @@ namespace Puck.World;
 
 /// <summary>The World boundary of the arena reader. Live callers supply their arena; declaration validation reads seeds.</summary>
 public static class WorldStateReader {
-    private static readonly ConditionalWeakTable<WorldStateSection, StateArena> Seeds = new();
+    private static readonly Puck.Abstractions.CodeDerivedTable<WorldStateSection, StateArena> Seeds = new();
     // The key every definition that authors no state section shares: they all compile the one empty catalog.
     private static readonly WorldStateSection AbsentSection = new();
+    [SideTable(reason: "binds a runtime projection to the arena its host owns; the arena is state, not derived from the definition")]
     private static readonly ConditionalWeakTable<WorldDefinition, StateArena> Live = new();
-    private static readonly ConditionalWeakTable<StateRow, WorldStateRow> RowMetadata = new();
+    private static readonly Puck.Abstractions.CodeDerivedTable<StateRow, WorldStateRow> RowMetadata = new();
 
     private static WorldStateRow WorldRow(StateRow row) => row as WorldStateRow ??
         RowMetadata.GetValue(row, static declaration => new WorldStateRow(declaration, false, null));
@@ -51,7 +52,7 @@ public static class WorldStateReader {
         WorldBootWork.Count(kind: WorldBootWork.ArenaBuilds);
         seed = new StateArena(catalog: definition.StateCatalog, section: definition.StateRaw, time: ArenaTime.Origin);
 
-        return Seeds.GetValue(key: section, createValueCallback: _ => seed);
+        return Seeds.GetValue(key: section, derive: _ => seed);
     }
 
     private static ArenaTime Time(WorldDefinition definition, ulong tick, ulong engineTick) =>

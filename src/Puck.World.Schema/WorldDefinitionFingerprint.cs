@@ -1,4 +1,3 @@
-using System.Runtime.CompilerServices;
 using System.Text.Json;
 using Puck.Assets;
 using Puck.Maths;
@@ -17,7 +16,7 @@ public static class WorldDefinitionFingerprint {
         );
     }
 
-    private static readonly ConditionalWeakTable<WorldPlacementsSection, PlacementLookup> Placements = new();
+    private static readonly Puck.Abstractions.CodeDerivedTable<WorldPlacementsSection, PlacementLookup> Placements = new();
 
     private static void WriteStateInputs(Utf8JsonWriter writer, WorldDefinition definition, IEnumerable<string> stateRows) {
         writer.WriteStartArray();

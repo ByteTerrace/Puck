@@ -17,6 +17,7 @@ public static partial class WorldDocumentEmitter {
     // The bare-member constants an enum declaration bound, each to its declaration, so a later declaration can tell a
     // member it replaces from a let or module parameter it would shadow. Keyed by the constant's own node, so it is
     // right in every scope that shares the binding.
+    [SideTable(reason: "records the enum declaration each bound member constant came from")]
     private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<ExpressionNode, EnumDeclarationNode> EnumMemberConstants = new();
 
     internal static Dictionary<string, EnumDefinition> GetOrCreateEnums(DocumentScope scope) =>

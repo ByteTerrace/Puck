@@ -55,6 +55,7 @@ public sealed class SdfResidencySelector {
     /// apart from the one job a service cannot progress without.</summary>
     public const string WorkOwner = "sdf.gpu-work";
 
+    [SideTable(reason: "one selector per device, holding that device's residency state")]
     private static readonly ConditionalWeakTable<IGpuDeviceContext, SdfResidencySelector> Selectors = [];
     // How long a residency's report counts toward the bias after it was made, in seconds; a residency no frame prepares
     // stops steering it.

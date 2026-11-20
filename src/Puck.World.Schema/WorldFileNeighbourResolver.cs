@@ -1,6 +1,5 @@
 using Puck.Abstractions;
 using System.Collections.Concurrent;
-using System.Runtime.CompilerServices;
 using System.Text.Json.Nodes;
 
 using Puck.Abstractions.Machines;
@@ -40,7 +39,7 @@ public sealed class WorldFileNeighbourResolver : IWorldNeighbourResolver {
     // locators were re-expressed against, so it is held against the image itself: while the image stands, every
     // resolver reading that neighbour from that directory — a boot's admission and its completion, a reload — is
     // answered without parsing it again, and a recomposed image is a different key. Nothing holds an image alive.
-    private static readonly ConditionalWeakTable<byte[], ConcurrentDictionary<string, WorldDefinition>> ResolvedByImage = new();
+    private static readonly Puck.Abstractions.CodeDerivedTable<byte[], ConcurrentDictionary<string, WorldDefinition>> ResolvedByImage = new();
 
     private readonly Func<string> m_baseDirectory;
     private readonly IMachineValidationCatalog? m_catalog;
@@ -196,7 +195,7 @@ public sealed class WorldFileNeighbourResolver : IWorldNeighbourResolver {
             catalogFingerprint: m_catalogFingerprint,
             resolvedPath: path
         ) is { } image) {
-            ResolvedByImage.GetOrCreateValue(key: image)[directory] = referenced;
+            ResolvedByImage.GetValue(key: image, derive: static _ => new())[directory] = referenced;
         }
 
         return WorldNeighbourResolution.Resolved(

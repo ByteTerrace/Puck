@@ -1,5 +1,4 @@
 using System.Buffers;
-using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text.Json;
@@ -426,9 +425,9 @@ public sealed partial class WorldDisclosureImages {
         return entry.Frame;
     }
     private static readonly byte[] AbsentSection = SHA256.HashData(ReadOnlySpan<byte>.Empty);
-    private readonly ConditionalWeakTable<WorldPlacement, byte[]> m_placementDigests = new();
-    private readonly ConditionalWeakTable<WorldPlacementsSection, byte[]> m_placementSections = new();
-    private readonly ConditionalWeakTable<WorldStateSection, byte[]> m_stateSections = new();
+    private readonly Puck.Abstractions.CodeDerivedTable<WorldPlacement, byte[]> m_placementDigests = new();
+    private readonly Puck.Abstractions.CodeDerivedTable<WorldPlacementsSection, byte[]> m_placementSections = new();
+    private readonly Puck.Abstractions.CodeDerivedTable<WorldStateSection, byte[]> m_stateSections = new();
     private readonly System.Buffers.ArrayBufferWriter<byte> m_placementLeaves = new();
 
     private byte[] PlacementDigest(WorldPlacementsSection? section) {
@@ -444,13 +443,13 @@ public sealed partial class WorldDisclosureImages {
                 var row = rows[index];
                 if (!m_placementDigests.TryGetValue(row, out var digest)) {
                     digest = DigestSection(row);
-                    m_placementDigests.Add(row, digest);
+                    m_placementDigests.AddOrUpdate(row, digest);
                 }
                 m_placementLeaves.Write(digest);
             }
         }
         stored = SHA256.HashData(m_placementLeaves.WrittenSpan);
-        m_placementSections.Add(section, stored);
+        m_placementSections.AddOrUpdate(section, stored);
         return stored;
     }
 
@@ -458,7 +457,7 @@ public sealed partial class WorldDisclosureImages {
         if (section is null) { return AbsentSection; }
         if (!m_stateSections.TryGetValue(section, out var digest)) {
             digest = DigestSection(section);
-            m_stateSections.Add(section, digest);
+            m_stateSections.AddOrUpdate(section, digest);
         }
         return digest;
     }

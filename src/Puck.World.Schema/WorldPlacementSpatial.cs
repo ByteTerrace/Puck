@@ -1,6 +1,5 @@
 using System.Collections.Immutable;
 using System.Text.Json.Serialization;
-using System.Runtime.CompilerServices;
 using Puck.Assets.Documents;
 using Puck.Abstractions.Documents;
 using Puck.Maths;
@@ -552,7 +551,7 @@ public static class WorldSpatialQueryCompilation {
     // This is a numeric representability envelope, not a gameplay or world-size ceiling.
     private const long NarrowphaseRawLimit = (1L << 38);
 
-    private static readonly ConditionalWeakTable<WorldPlacementsSection, CompiledIndex> Cache = new();
+    private static readonly Puck.Abstractions.CodeDerivedTable<WorldPlacementsSection, CompiledIndex> Cache = new();
     private static readonly WorldSpatialQueryIndex Empty = new([]);
 
     private static FixedSpatialShape CompileShape(WorldSpatialShape authored, CompiledPlacementFrame frame) {

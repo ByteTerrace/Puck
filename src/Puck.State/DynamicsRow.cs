@@ -48,7 +48,7 @@ public sealed record DynamicsRow(
     // invalidation of its own. Kept off the record's own equality-compared surface (a lazily-populated field would
     // make two otherwise-identical rows compare unequal purely because one had been read from and the other had
     // not), which is also why this is a table rather than a plain private field.
-    private static readonly ConditionalWeakTable<DynamicsRow, StrongBox<SecondOrderDynamics>> CompiledCache = new();
+    private static readonly Puck.Abstractions.CodeDerivedTable<DynamicsRow, StrongBox<SecondOrderDynamics>> CompiledCache = new();
 
     /// <summary>Gets this row's triple as the plain <see cref="DynamicsLimits"/> shape every consumer's own compile
     /// step reads (fixed-point simulation paths through <c>Puck.Maths.SecondOrderDynamics.Create</c>, the
@@ -64,7 +64,7 @@ public sealed record DynamicsRow(
     [JsonIgnore]
     public SecondOrderDynamics Compiled => CompiledCache.GetValue(
         key: this,
-        createValueCallback: static row => new StrongBox<SecondOrderDynamics>(value: SecondOrderDynamics.Create(
+        derive: static row => new StrongBox<SecondOrderDynamics>(value: SecondOrderDynamics.Create(
             frequencyHz: FixedQ4816.FromDouble(value: row.Frequency),
             dampingRatio: FixedQ4816.FromDouble(value: row.Damping),
             initialResponse: FixedQ4816.FromDouble(value: row.Response)

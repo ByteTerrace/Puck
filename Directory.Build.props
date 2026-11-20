@@ -121,6 +121,8 @@
         <Compile Include="$(MSBuildThisFileDirectory)build/OpensGpuDeviceAttribute.cs" Link="Properties/OpensGpuDeviceAttribute.cs" />
         <!-- What a host can swap under a held reference, matched by name by StaleCaptureAnalyzer (STALE001-003). -->
         <Compile Include="$(MSBuildThisFileDirectory)build/ReplacementAttributes.cs" Link="Properties/ReplacementAttributes.cs" />
+        <!-- A raw weak table that is not a product of code, matched by name by CodeDerivedCacheAnalyzer (CACHE001). -->
+        <Compile Include="$(MSBuildThisFileDirectory)build/SideTableAttribute.cs" Link="Properties/SideTableAttribute.cs" />
     </ItemGroup>
 
     <!-- Every project except the analyzer itself (which would otherwise be a build-order cycle: the analyzer

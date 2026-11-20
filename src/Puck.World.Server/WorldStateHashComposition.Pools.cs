@@ -1,10 +1,9 @@
 using Puck.Maths;
-using System.Runtime.CompilerServices;
 
 namespace Puck.World.Server;
 
 public static partial class WorldStateHashComposition {
-    private static readonly ConditionalWeakTable<WorldStateSection, IdentityRecordHash> IdentityRecordHashes = new();
+    private static readonly Puck.Abstractions.CodeDerivedTable<WorldStateSection, IdentityRecordHash> IdentityRecordHashes = new();
 
     /// <summary>Folds explicit identity ownership and logical-to-physical attachment declarations.</summary>
     public static void AppendPoolBindings(ref Fnv1aHash hash, WorldDefinition definition) {

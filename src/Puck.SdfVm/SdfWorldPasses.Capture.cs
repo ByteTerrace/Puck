@@ -65,13 +65,13 @@ public sealed partial class SdfWorldPasses {
         for (var index = 0; (index < (reads?.Count ?? 0)); index++) {
             if (reads![index].Tainted) {
                 // Spelled once for each producer, since a view reading a live external image is tainted every frame.
-                return ReadTaints.GetValue(key: reads[index].Producer, createValueCallback: static producer => $"the unfilled external image of '{producer}'");
+                return ReadTaints.GetValue(key: reads[index].Producer, derive: static producer => $"the unfilled external image of '{producer}'");
             }
         }
 
         return null;
     }
-    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<string, string> ReadTaints = new();
+    private static readonly Puck.Abstractions.CodeDerivedTable<string, string> ReadTaints = new();
     // Records a views render's taint: what it read, or null when it read nothing external, and whether it read history.
     internal void SubmittedTaint(string instance, string? cause, bool readsHistory) {
         var entry = Refresh(instance: instance);

@@ -1,4 +1,3 @@
-using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -15,7 +14,7 @@ namespace Puck.World;
 /// (<see cref="Replace"/>) is held with the slices it was built from, so its own are never cut again. A member the
 /// serializer omits (a null value) has no slice; its absence is part of the pin.</remarks>
 public sealed class WorldDefinitionMembers {
-    private static readonly ConditionalWeakTable<WorldDefinition, WorldDefinitionMembers> Held = new();
+    private static readonly Puck.Abstractions.CodeDerivedTable<WorldDefinition, WorldDefinitionMembers> Held = new();
 
     /// <summary>The JSON name of the root member holding the state section.</summary>
     public const string StateMemberName = "state";
@@ -57,7 +56,7 @@ public sealed class WorldDefinitionMembers {
     public static WorldDefinitionMembers Of(WorldDefinition definition) {
         ArgumentNullException.ThrowIfNull(argument: definition);
 
-        return Held.GetValue(key: definition, createValueCallback: static definition => Slice(json: WorldDefinitionSerialization.SerializeCompact(definition: definition)));
+        return Held.GetValue(key: definition, derive: static definition => Slice(json: WorldDefinitionSerialization.SerializeCompact(definition: definition)));
     }
     /// <summary>Returns whether a root member name is one of the document model's members; any other name is an
     /// extension member (<see cref="WorldDefinition.Extensions"/>: a <c>_</c> comment or a <c>$</c> key), whose value is

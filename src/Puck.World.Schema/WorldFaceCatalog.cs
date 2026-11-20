@@ -65,7 +65,7 @@ public sealed class WorldFaceCatalog {
 
     private readonly Dictionary<(string PlacementId, string FaceName), int> m_index;
 
-    private static readonly ConditionalWeakTable<WorldDefinition, WorldFaceCatalog> PerDefinition = new();
+    private static readonly Puck.Abstractions.CodeDerivedTable<WorldDefinition, WorldFaceCatalog> PerDefinition = new();
     // Puck.World.Authoring.CreationFrame's 180°-about-+Y conversion quaternion, built the same way (an exact axis
     // swap/negate, never Quaternion.CreateFromAxisAngle) — the value every author-frame shape's own rotation carries
     // when the author declared none.
@@ -500,7 +500,7 @@ public sealed class WorldFaceCatalog {
 
         return PerDefinition.GetValue(
             key: definition,
-            createValueCallback: static built => Derive(definition: built)
+            derive: static built => Derive(definition: built)
         );
     }
     /// <summary>Finds one derived face row.</summary>

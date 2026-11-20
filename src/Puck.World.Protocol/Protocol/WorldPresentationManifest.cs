@@ -1,4 +1,3 @@
-using System.Runtime.CompilerServices;
 using Puck.Commands;
 using Puck.Assets.Documents;
 using Puck.World.Authoring;
@@ -46,7 +45,7 @@ public sealed class WorldPresentationManifest {
         templates: []
     );
 
-    private static readonly ConditionalWeakTable<WorldDefinition, WorldPresentationManifest> Compiled = new();
+    private static readonly Puck.Abstractions.CodeDerivedTable<WorldDefinition, WorldPresentationManifest> Compiled = new();
     private static readonly WorldDocumentWalker Walker = new(surfaces: [
         typeof(BindableAngle),
         typeof(BindableColor),
@@ -169,7 +168,7 @@ public sealed class WorldPresentationManifest {
         ArgumentNullException.ThrowIfNull(argument: definition);
 
         return Compiled.GetValue(
-            createValueCallback: static document => Compile(definition: document),
+            derive: static document => Compile(definition: document),
             key: definition
         );
     }

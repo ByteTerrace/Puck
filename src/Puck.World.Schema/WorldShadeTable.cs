@@ -1,4 +1,3 @@
-using System.Runtime.CompilerServices;
 using Puck.SignedDistance;
 using Puck.World.Authoring;
 
@@ -21,7 +20,7 @@ namespace Puck.World;
 public static class WorldShadeTable {
     private static readonly WorldDocumentWalker Walker = new(surfaces: [typeof(ShadeReference)]);
     // The table a definition writes, once per definition: a definition never changes once built.
-    private static readonly ConditionalWeakTable<WorldDefinition, Box> Tables = new();
+    private static readonly Puck.Abstractions.CodeDerivedTable<WorldDefinition, Box> Tables = new();
 
     private sealed record Box(IReadOnlyDictionary<string, SdfShadeDefinition>? Table);
 
@@ -33,7 +32,7 @@ public static class WorldShadeTable {
     public static IReadOnlyDictionary<string, SdfShadeDefinition>? Of(WorldDefinition definition) {
         ArgumentNullException.ThrowIfNull(argument: definition);
 
-        return Tables.GetValue(key: definition, createValueCallback: static definition => new Box(Table: Derive(graph: definition, stored: definition.StoredShades))).Table;
+        return Tables.GetValue(key: definition, derive: static definition => new Box(Table: Derive(graph: definition, stored: definition.StoredShades))).Table;
     }
     /// <summary>Returns every use in <paramref name="graph"/> holding its program from <paramref name="source"/>'s table.</summary>
     /// <typeparam name="T">The graph's type: a whole definition, or a row a mutation submits before it joins one.</typeparam>

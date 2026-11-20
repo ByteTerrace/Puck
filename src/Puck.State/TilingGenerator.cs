@@ -63,8 +63,8 @@ public static class TilingGenerator {
     /// <summary>The most inflation steps a Penrose patch takes: φ⁹ ≈ 76 edge lengths of radius.</summary>
     public const int MaxPenroseInflations = 9;
 
-    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<LatticeTopology.Tiling, LatticeTopology.Graph> Graphs = new();
-    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<LatticeTopology.Tiling, PenroseTiles> PenroseTilesValue = new();
+    private static readonly Puck.Abstractions.CodeDerivedTable<LatticeTopology.Tiling, LatticeTopology.Graph> Graphs = new();
+    private static readonly Puck.Abstractions.CodeDerivedTable<LatticeTopology.Tiling, PenroseTiles> PenroseTilesValue = new();
 
     private static LatticeTopology.Graph Build(LatticeTopology.Tiling tiling) {
         var tiles = Sorted(tiling: tiling);
@@ -861,7 +861,7 @@ public static class TilingGenerator {
 
         return Graphs.GetValue(
             key: tiling,
-            createValueCallback: static t => Build(tiling: t)
+            derive: static t => Build(tiling: t)
         );
     }
     /// <summary>Returns a Penrose patch's per-tile facts, computed once per record instance.</summary>
@@ -882,7 +882,7 @@ public static class TilingGenerator {
         reason = string.Empty;
         tiles = PenroseTilesValue.GetValue(
             key: tiling,
-            createValueCallback: static t => DescribePenrose(tiling: t)
+            derive: static t => DescribePenrose(tiling: t)
         );
 
         return true;

@@ -242,6 +242,7 @@ public sealed partial class DocumentScope {
 
     // The constants a vocabulary bound only to refuse every read of their value, each to its refusal. Keyed by the
     // bound node, so a refusal follows the binding into every scope that shares the constants.
+    [SideTable(reason: "records the refusal a vocabulary bound to each constant")]
     private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<ExpressionNode, DocumentBindingRefusal> RefusedBindings = new();
 
     private readonly Dictionary<(string Name, string? Field), (ExpressionNode Expression, JsonNode? Value)> m_values;
@@ -316,6 +317,7 @@ public sealed partial class DocumentScope {
         );
     }
 
+    [SideTable(reason: "records the definition path each let constant was bound from")]
     private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<ExpressionNode, string> ConstantSources = new();
 
     /// <summary>Returns the source an imported <c>let</c>'s value was written in.</summary>

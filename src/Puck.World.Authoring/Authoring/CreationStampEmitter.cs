@@ -545,7 +545,7 @@ public static partial class CreationStampEmitter {
             return [];
         }
 
-        return CompiledMasks.GetValue(key: noise, createValueCallback: document => {
+        return CompiledMasks.GetValue(key: noise, derive: document => {
             var compiled = new SdfReliefMask[masks.Count];
 
             for (var index = 0; (index < masks.Count); index++) {
@@ -598,7 +598,7 @@ public static partial class CreationStampEmitter {
     }
 
     // Each noise document's compiled masks, keyed by the immutable document's identity.
-    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<CreationNoiseDocument, SdfReliefMask[]> CompiledMasks = new();
+    private static readonly Puck.Abstractions.CodeDerivedTable<CreationNoiseDocument, SdfReliefMask[]> CompiledMasks = new();
 
     /// <summary>Emits ONE shape of a creation under the stamp transform — the per-shape-instance form of
     /// <see cref="Emit"/>, for a stamper that gives each shape its own tight cull bound

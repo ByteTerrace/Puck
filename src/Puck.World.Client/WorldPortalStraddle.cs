@@ -1,5 +1,4 @@
 using System.Numerics;
-using System.Runtime.CompilerServices;
 using Puck.SdfVm;
 using Puck.World.Protocol;
 using Puck.World.Server;
@@ -16,7 +15,7 @@ namespace Puck.World.Client;
 /// the reference's file name without extension is the document's <see cref="WorldDefinition.DocumentId"/>, and its
 /// counterpart names a face of this document.</remarks>
 public static class WorldPortalStraddle {
-    private static readonly ConditionalWeakTable<WorldDefinition, Door[]> PerDefinition = new();
+    private static readonly Puck.Abstractions.CodeDerivedTable<WorldDefinition, Door[]> PerDefinition = new();
 
     /// <summary>One door of a same-world pair.</summary>
     /// <param name="Glass">The door's glass.</param>
@@ -43,7 +42,7 @@ public static class WorldPortalStraddle {
         }
 
         var doors = PerDefinition.GetValue(
-            createValueCallback: Derive,
+            derive: Derive,
             key: definition
         );
         var slot = ((Interlocked.Increment(location: ref NextDerived) & int.MaxValue) % derived.Length);

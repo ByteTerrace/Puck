@@ -1,4 +1,3 @@
-using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using Puck.Maths;
 
@@ -96,7 +95,7 @@ public sealed partial class InputRouter : IDisposable {
     // profile/host plane, then keep the per-signal fold entirely in the registry's numeric namespace.
     // The resolver owns each immutable list identity. Cache lowered command ids only while that list remains live;
     // a mutable/custom resolver returning replacement identities cannot make the router retain every historical list.
-    private readonly ConditionalWeakTable<IReadOnlyList<CommandBinding>, ResolvedBinding[]> m_resolvedBindingLists = new();
+    private readonly Puck.Abstractions.CodeDerivedTable<IReadOnlyList<CommandBinding>, ResolvedBinding[]> m_resolvedBindingLists = new();
     private readonly Dictionary<string, ushort> m_resolvedCommandIds = new(comparer: StringComparer.OrdinalIgnoreCase);
     // Snapshot output is borrowed until the next SnapshotForTick call. Retain one entry array per observed slot and
     // one lane array for the router, growing only when a new high-water mark is reached.
@@ -1691,7 +1690,7 @@ public sealed partial class InputRouter : IDisposable {
             );
         }
 
-        m_resolvedBindingLists.Add(
+        m_resolvedBindingLists.AddOrUpdate(
             key: bindings,
             value: candidates
         );

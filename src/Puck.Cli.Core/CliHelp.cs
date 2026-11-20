@@ -14,6 +14,7 @@ public static class CliHelp {
     /// <summary>The name usage and help print for the tool, whatever file the process was started from.</summary>
     public const string ToolName = "puck";
 
+    [SideTable(reason: "attaches the detail text its author wrote to each command")]
     private static readonly ConditionalWeakTable<Command, Func<string>> Details = [];
 
     /// <summary>Attaches the detail <paramref name="command"/>'s own help prints after its options, under

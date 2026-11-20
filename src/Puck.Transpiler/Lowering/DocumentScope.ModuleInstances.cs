@@ -1,5 +1,4 @@
 using System.Diagnostics.CodeAnalysis;
-using System.Runtime.CompilerServices;
 using Puck.State;
 using Puck.Transpiler.Ast;
 
@@ -9,7 +8,7 @@ public sealed partial class DocumentScope {
     private const string ModuleInstancesAnnotation = "ModuleInstances";
 
     // The aliases a module's own body uses its modules under, read once from its statements.
-    private static readonly ConditionalWeakTable<TemplateNode, Dictionary<string, string>> ModuleBodyInstances = new();
+    private static readonly Puck.Abstractions.CodeDerivedTable<TemplateNode, Dictionary<string, string>> ModuleBodyInstances = new();
 
     // Every `use module as alias(…)` among the statements, alias to the module name as written, through blocks and
     // compile-time loops the way the structural names are found.
@@ -66,7 +65,7 @@ public sealed partial class DocumentScope {
         }
 
         return ModuleBodyInstances.GetValue(
-            createValueCallback: static template => {
+            derive: static template => {
                 var instances = new Dictionary<string, string>(comparer: StringComparer.Ordinal);
 
                 CollectModuleInstances(
