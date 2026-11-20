@@ -631,8 +631,20 @@ public sealed class ChargedPresentation<TValue, TOps>
 
         return true;
     }
+    /// <summary>Rewrites a charged word to a charged combination of irreducible words, bounded.</summary>
+    /// <returns><see langword="false"/> when the step limit was exhausted or a term outgrew the word cap.</returns>
+    internal bool TryRewrite(ReadOnlySpan<int> word, TValue charge, long stepLimit, Combination combination, out long stepsTaken) =>
+        TryRewriteDetailed(
+            amountReached: out _,
+            charge: charge,
+            combination: combination,
+            failure: out _,
+            stepLimit: stepLimit,
+            stepsTaken: out stepsTaken,
+            word: word
+        );
     /// <summary>Rewrites a charged word to a charged combination of normal-form keys through a reusable scratch, which
-    /// it clears at entry, so one may be held for the life of a loop.</summary>
+    /// <see cref="TryRewrite"/> clears at entry, so one may be held for the life of a loop.</summary>
     /// <returns><see langword="false"/> when the step limit was exhausted or a normal form fell outside the key scheme.</returns>
     internal bool TryRewriteToKeys(ReadOnlySpan<int> word, TValue charge, long stepLimit, KeyedCombination result, Combination combination, out long stepsTaken) {
         return TryRewriteToKeysDetailed(

@@ -527,3 +527,46 @@ public readonly record struct FixedScalarRing(FixedQ4816 Value)
     public static FixedScalarRing Subtract(FixedScalarRing left, FixedScalarRing right) =>
         new(Value: (left.Value - right.Value));
 }
+/// <summary>
+/// The complex plane presented as an <see cref="IConjugationRing{TSelf}"/>: the house <see cref="FixedComplex"/> with
+/// its native fused multiply and its complex conjugation. Doubling this yields the quaternions built directly on
+/// <see cref="FixedComplex"/> — the same floor-two algebra reached by doubling <see cref="FixedScalarRing"/> twice,
+/// differing only in where the fixed-point rounding falls, and identical to it wherever the inputs avoid rounding.
+/// </summary>
+/// <param name="Value">The wrapped complex number.</param>
+public readonly record struct FixedComplexRing(FixedComplex Value)
+    : IConjugationRing<FixedComplexRing> {
+    /// <summary>Gets the additive identity, zero.</summary>
+    public static FixedComplexRing AdditiveIdentity => new(Value: FixedComplex.AdditiveIdentity);
+    /// <summary>Gets the multiplicative identity, one.</summary>
+    public static FixedComplexRing MultiplicativeIdentity => new(Value: FixedComplex.MultiplicativeIdentity);
+
+    /// <summary>Adds two complex numbers.</summary>
+    /// <param name="left">The first addend.</param>
+    /// <param name="right">The second addend.</param>
+    /// <returns>The sum.</returns>
+    public static FixedComplexRing Add(FixedComplexRing left, FixedComplexRing right) =>
+        new(Value: (left.Value + right.Value));
+    /// <summary>Returns the complex conjugate (the imaginary part negated).</summary>
+    /// <param name="value">The complex number.</param>
+    /// <returns>The conjugate.</returns>
+    public static FixedComplexRing Conjugate(FixedComplexRing value) =>
+        new(Value: value.Value.Conjugate());
+    /// <summary>Multiplies two complex numbers by the native fused complex product.</summary>
+    /// <param name="left">The multiplicand.</param>
+    /// <param name="right">The multiplier.</param>
+    /// <returns>The product.</returns>
+    public static FixedComplexRing Multiply(FixedComplexRing left, FixedComplexRing right) =>
+        new(Value: (left.Value * right.Value));
+    /// <summary>Negates a complex number.</summary>
+    /// <param name="value">The complex number to negate.</param>
+    /// <returns>The negation.</returns>
+    public static FixedComplexRing Negate(FixedComplexRing value) =>
+        new(Value: -value.Value);
+    /// <summary>Subtracts one complex number from another.</summary>
+    /// <param name="left">The minuend.</param>
+    /// <param name="right">The subtrahend.</param>
+    /// <returns>The difference.</returns>
+    public static FixedComplexRing Subtract(FixedComplexRing left, FixedComplexRing right) =>
+        new(Value: (left.Value - right.Value));
+}

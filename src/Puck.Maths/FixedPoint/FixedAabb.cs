@@ -73,6 +73,13 @@ public readonly record struct FixedAabb(FixedVector3 Minimum, FixedVector3 Maxim
     /// <returns><see cref="FromCenter"/> of the centre and the radius on all three axes.</returns>
     public static FixedAabb Around(FixedVector3 center, FixedQ4816 radius) =>
         FromCenter(center: center, extent: new FixedVector3(X: radius, Y: radius, Z: radius));
+    /// <summary>Creates the world-axis box about an oriented box.</summary>
+    /// <param name="center">The oriented box's centre.</param>
+    /// <param name="rotation">The unit box-to-world rotation.</param>
+    /// <param name="halfExtent">The half-extent along the box's own axes, at least zero.</param>
+    /// <returns><see cref="FromCenter"/> of the centre and <see cref="OrientedHalfExtent(in FixedQuaternion, FixedVector3)"/>.</returns>
+    public static FixedAabb AboutOriented(FixedVector3 center, in FixedQuaternion rotation, FixedVector3 halfExtent) =>
+        FromCenter(center: center, extent: OrientedHalfExtent(halfExtent: halfExtent, rotation: in rotation));
     /// <summary>Returns the world-axis half-extent of a box whose own axes point along three world directions: on each
     /// world axis, <c>|axisX|·h.X + |axisY|·h.Y + |axisZ|·h.Z</c> of that axis's components.</summary>
     /// <param name="axisX">The world image of the box's local +X axis; its length scales the extent.</param>
