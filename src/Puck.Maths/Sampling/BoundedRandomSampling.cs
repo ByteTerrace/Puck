@@ -100,7 +100,7 @@ public static class BoundedRandomSampling {
         }
 
         var bits = (128 - ((int)UInt128.LeadingZeroCount(exclusiveHigh - 1U)));
-        var wordsPerCandidate = ((bits + 31) / 32);
+        var wordsPerCandidate = bits.CeilingDivide(divisor: 32);
         var mask = (UInt128.MaxValue >>> (128 - bits));
 
         words = 0;

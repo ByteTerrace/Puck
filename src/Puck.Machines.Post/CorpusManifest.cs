@@ -1,5 +1,5 @@
+using Puck.Abstractions;
 using System.IO.Compression;
-using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Puck.Confinement;
@@ -230,7 +230,7 @@ public sealed partial class CorpusManifest {
             Console.Out.WriteLine(value: $"{corpus.Name} {corpus.Version}: fetching {corpus.Archive}");
 
             var bytes = client.GetByteArrayAsync(requestUri: corpus.Archive).GetAwaiter().GetResult();
-            var actual = Convert.ToHexStringLower(inArray: SHA256.HashData(source: bytes));
+            var actual = ContentDigest.HexOf(content: bytes);
 
             if (!string.Equals(
                 a: actual,

@@ -86,7 +86,7 @@ public sealed class SdfFieldSlice {
         m_values = new float[m_points.Length];
         m_gradients = new Vector3[m_points.Length];
         m_world = new bool[m_points.Length];
-        Chunks = ((m_points.Length + (ChunkPoints - 1)) / ChunkPoints);
+        Chunks = m_points.Length.CeilingDivide(divisor: ChunkPoints);
         m_answered = new bool[(2 * Chunks)];
         m_inFlight = new bool[(2 * Chunks)];
         Array.Fill(array: m_values, value: float.PositiveInfinity);

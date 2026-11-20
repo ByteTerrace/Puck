@@ -1,5 +1,6 @@
 using System.Buffers.Binary;
 using Puck.Abstractions.Gpu;
+using Puck.Maths;
 using Puck.Shaders;
 using Puck.SignedDistance;
 
@@ -190,7 +191,7 @@ public sealed class SdfShadeDispatch {
         var tileWork = checked(pixelWork * TilePixels);
         if (tileWork > SdfShadeProgram.MaxWork) { throw new InvalidOperationException("An admitted shade tile exceeds MaxWork."); }
         var width = (uint)Math.Min(MaxGroups, (authored ? (SdfShadeProgram.MaxWork / tileWork) : MaxGroups));
-        return new(Jobs: ((tiles + width) - 1U) / width, TileWork: tileWork, Width: width);
+        return new(Jobs: tiles.CeilingDivide(divisor: width), TileWork: tileWork, Width: width);
     }
     private static uint Tiles(uint width, uint height) =>
         checked(((width + (SdfVisibility.GroupEdgePixels - 1U)) / SdfVisibility.GroupEdgePixels) * ((height + (SdfVisibility.GroupEdgePixels - 1U)) / SdfVisibility.GroupEdgePixels));

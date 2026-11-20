@@ -312,7 +312,7 @@ public sealed partial class SdfWorldTables {
         var holes = (m_meshRegion.Mapped ? Math.Max(val1: 0L, val2: (RoundUp(value: m_meshRegion.ByteCount, unit: m_meshRegion.MappedChunkBytes) - held)) : 0L);
         m_meshArena.SetLimit(limitBytes: ((ulong)m_meshGrant.ReserveGrowth(capacityBytes: held, mostBytes: ((long)MostMeshRegionBytes), unbackedBytes: holes)));
 
-        static long RoundUp(long value, long unit) => ((((value + unit) - 1L) / unit) * unit);
+        static long RoundUp(long value, long unit) => (value.CeilingDivide(divisor: unit) * unit);
     }
     // A plan forgot these meshes: their words are free for the next mesh they hold, so they owe none and their landing
     // starts again should a list place them later.
@@ -943,7 +943,7 @@ public sealed partial class SdfWorldTables {
 
         var chunk = m_meshRegion.MappedChunkBytes;
         var size = m_meshRegion.ByteCount;
-        var chunks = ((int)(((size + chunk) - 1L) / chunk));
+        var chunks = ((int)size.CeilingDivide(divisor: chunk));
 
         if (m_meshCovered.Length < chunks) { m_meshCovered = new bool[chunks]; }
         Array.Clear(array: m_meshCovered, index: 0, length: chunks);

@@ -136,7 +136,7 @@ public sealed partial class NavigationRuntime {
             var dz = (to.Z - from.Z);
             var length = FixedQ4816.Sqrt(value: ((dx * dx) + (dz * dz)));
             var spacing = (Tuning.CellSize / FixedQ4816.FromInteger(value: 2));
-            var samples = Math.Max(val1: 1, val2: checked((int)(((length.Value + spacing.Value) - 1L) / spacing.Value)));
+            var samples = Math.Max(val1: 1, val2: checked((int)length.Value.CeilingDivide(divisor: spacing.Value)));
             var step = Tuning.MaxStepHeight;
             var previous = -1;
             var previousGround = FixedQ4816.Zero;

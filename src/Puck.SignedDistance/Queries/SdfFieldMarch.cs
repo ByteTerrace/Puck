@@ -58,7 +58,7 @@ internal static class SdfFieldMarch {
         var reach = (HitEpsilon * FixedQ4816.FromInteger(value: BaseMarchIterations));
         var floor = FixedQ4816.Max(x: ScaleDistanceDown(distance: HitEpsilon, scale: stepScale), y: FixedQ4816.Epsilon);
 
-        return ((int)(((reach.Value + floor.Value) - 1L) / floor.Value));
+        return ((int)reach.Value.CeilingDivide(divisor: floor.Value));
     }
     // Occupancy compares the same lower-bound clearance as a radius cast. A missing reading is occupied
     // when geometry exists; a genuinely empty field is clear even outside its representable frame.

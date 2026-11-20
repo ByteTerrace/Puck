@@ -282,6 +282,6 @@ public sealed partial class WorldExtensionHost : IAsyncDisposable {
             ),
             leaveOpen: true
         )) { foreach (var field in fields) { writer.Write(value: field); } }
-        return ContentPin.Compute(content: bytes.ToArray()).Hex;
+        return ContentPin.Compute(content: bytes.GetBuffer().AsSpan(length: (int)bytes.Length, start: 0)).Hex;
     }
 }

@@ -2,6 +2,7 @@ using System.Numerics;
 using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Memory;
 using Puck.Hosting.Jobs;
+using Puck.Maths;
 using Puck.Shaders;
 
 namespace Puck.SdfVm;
@@ -203,7 +204,7 @@ internal sealed class SdfMeshBakeGpuWork : ISdfGpuWorkClient {
             sourceAccessMask: GpuAccess.TransferRead, sourceStageMask: GpuStage.Transfer,
             destinationAccessMask: GpuAccess.ShaderWrite, destinationStageMask: GpuStage.ComputeShader);
         Bind(commandBuffer: commandBuffer, pass: slot.BakeSet, pipeline: sampler, recorder: recorder, world: slot.WorldSet);
-        recorder.Dispatch(commandBufferHandle: commandBuffer, groupCountX: ((uint)((samples + 63) / 64)), groupCountY: 1, groupCountZ: 1);
+        recorder.Dispatch(commandBufferHandle: commandBuffer, groupCountX: ((uint)samples.CeilingDivide(divisor: 64)), groupCountY: 1, groupCountZ: 1);
         recording.CopyToReadback(bytes: sampleBytes, source: samplesBuffer);
     }
     /// <inheritdoc/>

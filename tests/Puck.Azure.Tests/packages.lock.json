@@ -1016,6 +1016,13 @@
           "xunit.v3.runner.common": "[4.0.3]"
         }
       },
+      "ByteTerrace.Puck.Abstractions": {
+        "type": "Project",
+        "dependencies": {
+          "ByteTerrace.Puck.Confinement": "[0.1.0-alpha, )",
+          "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )"
+        }
+      },
       "ByteTerrace.Puck.Attestation": {
         "type": "Project",
         "dependencies": {
@@ -1068,6 +1075,7 @@
       "puck.storage": {
         "type": "Project",
         "dependencies": {
+          "ByteTerrace.Puck.Abstractions": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Confinement": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )"
         }

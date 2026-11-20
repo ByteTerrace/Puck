@@ -165,7 +165,7 @@ public sealed class SdfAppearance {
         return checked((((MaterialVectorsPerEntry * materials.Count) + paints) + shades));
     }
 
-    private static int PaintSideVectors(SdfPaint paint) => (((paint.Shape.Table.Count + WordsPerVector) - 1) / WordsPerVector);
+    private static int PaintSideVectors(SdfPaint paint) => paint.Shape.Table.Count.CeilingDivide(divisor: WordsPerVector);
     private static bool IsWorldLane(int? lane) => (lane >= SdfLanes.FirstWorld);
     private static SdfMaterial[] Snapshot(IReadOnlyList<SdfMaterial> materials) {
         var snapshot = new SdfMaterial[materials.Count];

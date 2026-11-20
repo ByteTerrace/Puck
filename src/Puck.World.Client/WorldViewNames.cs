@@ -1,6 +1,5 @@
+using Puck.Abstractions;
 using System.Globalization;
-using System.Security.Cryptography;
-using System.Text;
 using System.Text.Json;
 using Puck.Abstractions.Sources;
 
@@ -118,11 +117,7 @@ public static class WorldViewNames {
 
         return GeneratedName.Join(
             RoutedHead,
-            Convert.ToHexStringLower(
-                inArray: SHA256.HashData(source: Encoding.UTF8.GetBytes(s: authority)),
-                length: 8,
-                offset: 0
-            )
+            ContentDigest.HexOfText(text: authority)[..16]
         );
     }
     /// <summary>Returns the name of the source instance a producer, machine or probe source is read through, named by its

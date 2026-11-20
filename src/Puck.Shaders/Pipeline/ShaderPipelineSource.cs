@@ -72,7 +72,7 @@ public sealed class ShaderPipelineSource {
             }
         }
 
-        return ContentPin.Compute(content: Encoding.UTF8.GetBytes(s: builder.ToString())).ToString();
+        return ContentPin.OfText(text: builder.ToString()).ToString();
     }
     /// <summary>Reads a pipeline instance's source the way <see cref="ShaderPackager.LoadSource"/> loads it: a directory
     /// as a <c>puck.shader.package.v1</c> package, a <c>.json</c> path as a graph document, and an <c>.hlsl</c> path as a

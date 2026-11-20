@@ -525,7 +525,7 @@ public sealed partial class WorldBenchmarkCommandModule(WorldTickScript script, 
         }
         _ = text.Append(provider: CultureInfo.InvariantCulture, handler: $"timeout {chapter.TimeoutSeconds}\n");
 
-        return AssetContentHash.Compute(content: Encoding.UTF8.GetBytes(s: text.ToString())).Hex;
+        return AssetContentHash.OfText(text: text).Hex;
     }
 
     // Establishes a run's span and starts recording it: what a test-block run and a route run share once their first
@@ -686,10 +686,10 @@ public sealed partial class WorldBenchmarkCommandModule(WorldTickScript script, 
             _ = text.Append(provider: CultureInfo.InvariantCulture, handler: $"gate {gate}\n");
         }
 
-        return AssetContentHash.Compute(content: Encoding.UTF8.GetBytes(s: text.ToString())).Hex;
+        return AssetContentHash.OfText(text: text).Hex;
     }
 
-    private static string IdentityOf(IEnumerable<string> identities) => AssetContentHash.Compute(content: Encoding.UTF8.GetBytes(s: string.Join(separator: '\n', values: identities))).Hex;
+    private static string IdentityOf(IEnumerable<string> identities) => AssetContentHash.OfText(text: string.Join(separator: '\n', values: identities)).Hex;
 
     private CommandResult Mark(int index, bool begin) {
         if (!m_running || (index < 0) || (index >= m_chapters.Count)) {

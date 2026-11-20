@@ -250,7 +250,7 @@ internal static class MeshPreviewImage {
     /// <returns>The sheet's width and height, in pixels, and its RGBA8 bytes.</returns>
     public static (int Width, int Height, byte[] Rgba) Sheet(IReadOnlyList<byte[]> tiles, int tileWidth, int tileHeight, int columns) {
         const int Gap = 4;
-        var rows = ((tiles.Count + columns - 1) / columns);
+        var rows = tiles.Count.CeilingDivide(divisor: columns);
         var (width, height) = (((columns * tileWidth) + ((columns - 1) * Gap)), ((rows * tileHeight) + ((rows - 1) * Gap)));
         var rgba = new byte[(width * height) * 4];
 

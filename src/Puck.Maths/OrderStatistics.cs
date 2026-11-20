@@ -46,7 +46,7 @@ public static class OrderStatistics {
         ArgumentOutOfRangeException.ThrowIfNegative(value: numerator);
         ArgumentOutOfRangeException.ThrowIfGreaterThan(value: numerator, other: denominator);
 
-        var rank = ((((long)numerator * ascending.Length) + denominator - 1) / denominator);
+        var rank = ((long)numerator * ascending.Length).CeilingDivide(divisor: denominator);
 
         return ascending[((int)Math.Max(val1: 1L, val2: rank) - 1)];
     }

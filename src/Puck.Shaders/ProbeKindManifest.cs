@@ -353,7 +353,7 @@ public sealed partial record ProbeKindManifest(
             var offset = end;
 
             if (((offset % RowBytes) + size) > RowBytes) {
-                offset = ((((offset + RowBytes) - 1) / RowBytes) * RowBytes);
+                offset = offset.AlignUp(alignment: RowBytes);
             }
 
             offsets[index] = offset;

@@ -3,6 +3,7 @@ using System.Globalization;
 using Puck.Abstractions.Gpu;
 using Puck.Shaders;
 using Puck.Hosting;
+using Puck.Maths;
 
 namespace Puck.SdfVm;
 
@@ -98,7 +99,7 @@ internal sealed class SdfOpticsRecorder : IRenderGraphPackageRecorder {
 
         recording.Recorder.BindPipeline(bindPoint: GpuBindPoint.Compute, commandBufferHandle: recording.CommandBuffer, pipelineHandle: pipeline.Handle);
         m_sets.Bind(bindPoint: GpuBindPoint.Compute, commandBuffer: recording.CommandBuffer, pipelineLayout: pipeline.LayoutHandle, recorder: recording.Recorder, slot: recording.Slot);
-        recording.Recorder.Dispatch(commandBufferHandle: recording.CommandBuffer, groupCountX: ((output.Width + 7) / 8), groupCountY: ((output.Height + 7) / 8), groupCountZ: 1);
+        recording.Recorder.Dispatch(commandBufferHandle: recording.CommandBuffer, groupCountX: output.Width.CeilingDivide(divisor: 8U), groupCountY: output.Height.CeilingDivide(divisor: 8U), groupCountZ: 1);
         return RenderGraphPackageOutcome.Drew;
     }
 

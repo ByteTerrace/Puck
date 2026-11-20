@@ -27,10 +27,9 @@ public static partial class CanaryCommand {
     public static FederationIdentity GenerateFederationIdentity() {
         using var ecdsa = System.Security.Cryptography.ECDsa.Create(curve: System.Security.Cryptography.ECCurve.NamedCurves.nistP256);
         var spki = ecdsa.ExportSubjectPublicKeyInfo();
-        var fingerprint = System.Security.Cryptography.SHA256.HashData(source: spki);
 
         return new FederationIdentity(
-            Domain: Convert.ToHexStringLower(bytes: fingerprint),
+            Domain: Puck.Abstractions.ContentDigest.HexOf(content: spki),
             PublicKeyBase64: Convert.ToBase64String(inArray: spki),
             Pkcs8: ecdsa.ExportPkcs8PrivateKey()
         );

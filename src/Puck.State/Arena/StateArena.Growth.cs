@@ -1,3 +1,5 @@
+using Puck.Maths;
+
 namespace Puck.State;
 
 public sealed partial class StateArena {
@@ -102,7 +104,7 @@ public sealed partial class StateArena {
         var numbers = new long[next.CellSlotCount];
         var keys = new int[next.CellSlotCount];
         Array.Fill(array: keys, value: -1);
-        var presence = new ulong[(next.CellSlotCount + 63) / 64];
+        var presence = new ulong[next.CellSlotCount.CeilingDivide(divisor: 64)];
         var vectors = new sbyte[next.VectorByteCount];
         foreach (var row in previous.ColumnRows) {
             ref readonly var source = ref previous[row];

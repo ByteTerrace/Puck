@@ -321,7 +321,7 @@ public sealed class FontAtlasSourceResolver(
                 first: AssetContentHash.Compute(content: atlasBytes.Span),
                 second: AssetContentHash.Compute(content: imageBytes.Span)
             ),
-            second: AssetContentHash.Compute(content: Encoding.UTF8.GetBytes(s: resolvedImagePath))
+            second: AssetContentHash.OfText(text: resolvedImagePath)
         );
 
         return m_fontAtlasCache.GetOrAdd(

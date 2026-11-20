@@ -478,10 +478,7 @@ public static partial class WorldDefinitionValidator {
                     errors.Add(item: $"{path}.placementId is required.");
                 } else if (
                     (definition is not null) &&
-                    (WorldDefinitionRows.FindPlacement(
-                    placements: definition.Placements,
-                    id: placement.PlacementId
-                ) is null)
+                    !WorldPlacementIndex.ById(placements: definition.Placements).ContainsKey(key: placement.PlacementId)
                 ) {
                     errors.Add(item: $"{path}.placementId '{placement.PlacementId}' names no placement row.");
                 }

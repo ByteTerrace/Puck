@@ -143,7 +143,7 @@ public sealed class FixedFieldContactSolver(
             return true;
         }
 
-        var count = ((((((Int128)coreLength.Value) + radius.Value) - 1L) / radius.Value) + 1L);
+        var count = (((Int128)coreLength.Value).CeilingDivide(divisor: radius.Value) + 1L);
 
         if (count > MaximumCapsuleSweepPieces) {
             return false;

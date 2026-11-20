@@ -1,3 +1,4 @@
+using Puck.Maths;
 using System.Collections.ObjectModel;
 using System.Numerics;
 
@@ -246,7 +247,7 @@ public sealed partial class SdfProgram {
         var pathEdges = 0;
 
         foreach (var (_, vertices) in m_convexPolygonProfiles) {
-            convexPolygonVectors += ((vertices.Length + 1) / 2);
+            convexPolygonVectors += vertices.Length.CeilingDivide(divisor: 2);
         }
 
         foreach (var path in m_paths) {
@@ -275,7 +276,7 @@ public sealed partial class SdfProgram {
 
         for (var profileIndex = 0; (profileIndex < m_convexPolygonProfiles.Length); profileIndex++) {
             convexPolygonProfileOffsets[profileIndex] = (convexPolygonOffsetVectors + convexPolygonCursor);
-            convexPolygonCursor += ((m_convexPolygonProfiles[profileIndex].Vertices.Length + 1) / 2);
+            convexPolygonCursor += m_convexPolygonProfiles[profileIndex].Vertices.Length.CeilingDivide(divisor: 2);
         }
 
         // The Sweep curve table sits immediately after the convex-polygon table — a FIXED 3-uvec4 stride per curve
@@ -1594,7 +1595,7 @@ public sealed partial class SdfProgram {
     public static int InstanceMaskStorageWordCountFor(int instanceCount) {
         var words = InstanceMaskWordCountFor(instanceCount: instanceCount);
 
-        return (words + ((words + 31) / 32));
+        return (words + words.CeilingDivide(divisor: 32));
     }
     /// <summary>Returns the per-(viewport, tile) instance-mask width in uints an <paramref name="instanceCount"/>-instance
     /// program derives (see <see cref="InstanceMaskWordCount"/>) — the one statement of the formula, also used by a
@@ -1602,7 +1603,7 @@ public sealed partial class SdfProgram {
     /// <param name="instanceCount">The instance count to derive the mask width for.</param>
     public static int InstanceMaskWordCountFor(int instanceCount) => Math.Max(
         val1: 1,
-        val2: ((instanceCount + 31) / 32)
+        val2: instanceCount.CeilingDivide(divisor: 32)
     );
 
     /// <summary>One bounding-sphere record from the bounds analysis: a per-shape entry (<see cref="Instruction"/> is

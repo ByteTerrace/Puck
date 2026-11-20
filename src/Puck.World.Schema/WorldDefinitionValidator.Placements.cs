@@ -96,10 +96,7 @@ public static partial class WorldDefinitionValidator {
                 }
 
                 if (placement.ShapeId is { } shapeId) {
-                    var row = WorldDefinitionRows.FindPlacement(
-                        placements: placements,
-                        id: placement.PlacementId
-                    );
+                    var row = WorldPlacementIndex.ById(placements: placements).GetValueOrDefault(key: placement.PlacementId);
                     var creation = ((row is null)
                         ? null
                         : WorldDefinitionRows.FindCreation(
@@ -1504,19 +1501,8 @@ public static partial class WorldDefinitionValidator {
         // The one face derivation, read for both the per-face portal refusals below and the screen budget after the
         // loop — never a second walk of (placements x declared faces) to answer the same questions.
         var faces = WorldFaceCatalog.For(definition: definition);
-        // The id lookup a dealt child's parent resolves through; the first row wins a duplicate id exactly as
-        // WorldDefinitionRows.FindPlacement's scan would.
-        var placementsById = new Dictionary<string, WorldPlacement>(comparer: StringComparer.Ordinal);
-
-        for (var placementIndex = 0; (placementIndex < placements.Count); placementIndex++) {
-            if (placements[placementIndex] is { Id: not null } placementRow) {
-                _ = placementsById.TryAdd(
-                    key: placementRow.Id,
-                    value: placementRow
-                );
-            }
-        }
-
+        // The id lookup a dealt child's parent resolves through.
+        var placementsById = WorldPlacementIndex.ById(placements: placements);
         var childCounts = new Dictionary<string, int>(comparer: StringComparer.Ordinal);
         var slotCounts = new Dictionary<string, int>(comparer: StringComparer.Ordinal);
         var occupiedSlots = new HashSet<(string Parent, int Slot)>();

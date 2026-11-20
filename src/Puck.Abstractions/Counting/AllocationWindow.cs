@@ -1,3 +1,4 @@
+using Puck.Maths;
 using System.Diagnostics.Tracing;
 using System.Runtime;
 using System.Runtime.CompilerServices;
@@ -127,7 +128,7 @@ public static class AllocationWindow {
         var runs = ((int)Math.Clamp(
             max: MaximumDiagnosisRuns,
             min: 1L,
-            value: ((((SamplingDistanceBytes * DiagnosisIntervals) + least) - 1L) / least)
+            value: (SamplingDistanceBytes * DiagnosisIntervals).CeilingDivide(divisor: least)
         ));
 
         for (var run = 0; (run < runs); run++) {

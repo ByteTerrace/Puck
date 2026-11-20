@@ -1,3 +1,4 @@
+using Puck.Maths;
 using System.Globalization;
 
 namespace Puck.SignedDistance;
@@ -171,7 +172,7 @@ public sealed partial class SdfShadeProgram {
                 var start = checked((((((int)constantsOffset) + relative) + 1) * 4));
 
                 words[start] = BitConverter.SingleToUInt32Bits(value: data0.X);
-                RequireRange(((uint)(words.Count / 4)), checked(((constantsOffset + ((uint)relative)) + 7)), ((uint)((shape.Table.Count + 3) / 4)));
+                RequireRange(((uint)(words.Count / 4)), checked(((constantsOffset + ((uint)relative)) + 7)), ((uint)shape.Table.Count.CeilingDivide(divisor: 4)));
             }
             foreach (var (_, word) in m_relocations) { words[word] = checked((words[word] + constantsOffset)); }
             words[14] = ((uint)(words.Count / 4)); words[15] = ((uint)m_parameters.Count);
@@ -307,15 +308,7 @@ public sealed partial class SdfShadeProgram {
                 content.Append(arg); first = false;
             }
             content.Append(')');
-            var length = System.Text.Encoding.UTF8.GetMaxByteCount(content.Length);
-            var rented = System.Buffers.ArrayPool<byte>.Shared.Rent(length);
-            try {
-                var written = 0;
-                foreach (var chunk in content.GetChunks()) { written += System.Text.Encoding.UTF8.GetBytes(chunk.Span, rented.AsSpan(written)); }
-                Span<byte> hash = stackalloc byte[32];
-                System.Security.Cryptography.SHA256.HashData(rented.AsSpan(0, written), hash);
-                return Convert.ToHexStringLower(hash);
-            } finally { System.Buffers.ArrayPool<byte>.Shared.Return(rented); }
+            return Puck.Abstractions.ContentDigest.HexOfText(content);
         }
         [ThreadStatic] private static System.Text.StringBuilder? KeyText;
 

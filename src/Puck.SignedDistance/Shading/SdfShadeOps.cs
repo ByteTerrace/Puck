@@ -1,4 +1,4 @@
-using System.Security.Cryptography;
+using Puck.Abstractions;
 using System.Text;
 
 namespace Puck.SignedDistance;
@@ -147,7 +147,7 @@ public static class SdfShadeOps {
         }
         // The field helpers include the generated shared formulas, which this assembly lowers from its own definitions.
         text.Append(value: SdfFieldShapes.GenerateFormulasHlsl()).Append(value: SdfFieldBlends.GenerateFormulasHlsl());
-        return Convert.ToHexStringLower(inArray: SHA256.HashData(source: Encoding.UTF8.GetBytes(s: text.ToString())));
+        return ContentDigest.HexOfText(text: text);
     }
     private static SdfShadeOpInfo D(SdfShadeOp op, string name, int arity, uint work, string template, bool commutative = false) => new(Arity: arity, Commutative: commutative, Name: name, Op: op, Template: template, Work: checked((work + DispatchWork)));
     private static SdfShadeInput I(string name, SdfShadeType type = SdfShadeType.Float, SdfShadePhase? phase = null, SdfShadeReads reads = SdfShadeReads.None) => new(name, type, phase, reads);

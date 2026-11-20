@@ -4,6 +4,7 @@ using System.Text.Json.Serialization;
 using Puck.Abstractions.Documents;
 using Puck.Abstractions.Gpu;
 using Puck.Hosting;
+using Puck.Maths;
 
 namespace Puck.Shaders;
 
@@ -332,7 +333,7 @@ public readonly record struct ShaderPipelineStorageCounts(uint Width, uint Heigh
     };
 
     private static ulong Tiles(uint width, uint height) =>
-        (((((ulong)width) + TileEdge) - 1UL) / TileEdge) * (((((ulong)height) + TileEdge) - 1UL) / TileEdge);
+        (((ulong)width).CeilingDivide(divisor: TileEdge) * ((ulong)height).CeilingDivide(divisor: TileEdge));
 }
 /// <summary>How a compute or package pass chooses its workgroup counts.</summary>
 /// <param name="Kind">The dispatch shape.</param>

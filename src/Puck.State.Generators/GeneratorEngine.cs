@@ -1125,7 +1125,7 @@ public static partial class GeneratorEngine {
                     var threshold = ((1UL << 32) % n);
                     var numerator = ((offset << 32) + threshold);
 
-                    wantedRaw = unchecked((uint)(((numerator + n) - 1UL) / n));
+                    wantedRaw = unchecked((uint)numerator.CeilingDivide(divisor: n));
                     reason = string.Empty;
 
                     return true;

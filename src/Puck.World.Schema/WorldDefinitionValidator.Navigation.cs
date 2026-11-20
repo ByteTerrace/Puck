@@ -19,10 +19,8 @@ public static partial class WorldDefinitionValidator {
             var path = $"navigation.domains[{index}]";
 
             if (domain.Parent is { } parentId) {
-                var parent = WorldDefinitionRows.FindPlacement(
-                    id: parentId,
-                    placements: definition.Placements
-                );
+                var placementsById = WorldPlacementIndex.ById(placements: definition.Placements);
+                var parent = placementsById.GetValueOrDefault(key: parentId);
                 var remaining = (definition.Placements.Count + 1);
 
                 while (
@@ -35,10 +33,7 @@ public static partial class WorldDefinitionValidator {
                     ((parent.Distribution is null) || (parent.Deal is not null)) &&
                     (parent.Parent is { } ancestor)
                 ) {
-                    parent = WorldDefinitionRows.FindPlacement(
-                        id: ancestor,
-                        placements: definition.Placements
-                    );
+                    parent = placementsById.GetValueOrDefault(key: ancestor);
                 }
                 if (
                     (parent is null) ||

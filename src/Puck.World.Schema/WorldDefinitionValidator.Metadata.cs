@@ -137,10 +137,7 @@ public static partial class WorldDefinitionValidator {
                     errors.Add(item: $"{path}.placementId duplicates '{attractor.PlacementId}'.");
                 }
 
-                if (WorldDefinitionRows.FindPlacement(
-                    id: attractor.PlacementId,
-                    placements: placements
-                ) is null) {
+                if (!WorldPlacementIndex.ById(placements: placements).ContainsKey(key: attractor.PlacementId)) {
                     errors.Add(item: $"{path}.placementId '{attractor.PlacementId}' resolves to no placement.");
                 }
             }
@@ -174,10 +171,7 @@ public static partial class WorldDefinitionValidator {
                         errors.Add(item: $"{path}.placementId duplicates gravity source '{point.PlacementId}'.");
                     }
 
-                    if (WorldDefinitionRows.FindPlacement(
-                        id: point.PlacementId,
-                        placements: placements
-                    ) is null) {
+                    if (!WorldPlacementIndex.ById(placements: placements).ContainsKey(key: point.PlacementId)) {
                         errors.Add(item: $"{path}.placementId '{point.PlacementId}' resolves to no placement.");
                     }
                 }
@@ -238,10 +232,7 @@ public static partial class WorldDefinitionValidator {
 
             if (string.IsNullOrWhiteSpace(value: area.PlacementId)) {
                 errors.Add(item: $"{path}.placementId is required.");
-            } else if ((placement = WorldDefinitionRows.FindPlacement(
-                id: area.PlacementId,
-                placements: placements
-            )) is null) {
+            } else if ((placement = WorldPlacementIndex.ById(placements: placements).GetValueOrDefault(key: area.PlacementId)) is null) {
                 errors.Add(item: $"{path}.placementId '{area.PlacementId}' resolves to no placement.");
             }
 

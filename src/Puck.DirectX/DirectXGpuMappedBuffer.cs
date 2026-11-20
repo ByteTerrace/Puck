@@ -1,6 +1,7 @@
 using System.Runtime.Versioning;
 using Puck.DirectX.Apis;
 using Puck.DirectX.Interop;
+using Puck.Maths;
 using Windows.Win32.Graphics.Direct3D12;
 using Windows.Win32.Graphics.Dxgi.Common;
 using Windows.Win32.System.Com;
@@ -64,8 +65,8 @@ public sealed unsafe class DirectXGpuMappedBuffer : IGpuMappedBuffer {
         m_resource = resource;
         m_family = family;
         SizeBytes = sizeBytes;
-        m_tiles = checked((uint)(((sizeBytes + TileBytes) - 1UL) / TileBytes));
-        m_chunks = new DirectXTilePlacement?[((m_tiles + (ChunkTiles - 1U)) / ChunkTiles)];
+        m_tiles = checked((uint)sizeBytes.CeilingDivide(divisor: TileBytes));
+        m_chunks = new DirectXTilePlacement?[m_tiles.CeilingDivide(divisor: ChunkTiles)];
         Pages = new GpuBufferPages(bytes: ((long)sizeBytes), pageBytes: ((int)ChunkBytes), writable: false);
     }
 

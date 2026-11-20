@@ -1,5 +1,3 @@
-using System.Security.Cryptography;
-using System.Text;
 using Puck.Abstractions;
 using Puck.Confinement;
 
@@ -44,7 +42,7 @@ public sealed class LawProofTree(string tree, string source, FileStream lease) :
     public static string DirectoryFor(string root, string source) {
         var path = PuckPaths.Key(path: Path.TrimEndingDirectorySeparator(path: Path.GetFullPath(path: source)));
 
-        return Path.Combine(path1: root, path2: Convert.ToHexStringLower(inArray: SHA256.HashData(source: Encoding.UTF8.GetBytes(s: path)))[..KeyLength]);
+        return Path.Combine(path1: root, path2: ContentDigest.HexOfText(text: path)[..KeyLength]);
     }
     /// <summary>Attempts an exclusive lease without waiting. An unavailable cache takes the cold scratch path.</summary>
     public static LawProofTree? TryAcquire(string root, string repository, out string reason) {

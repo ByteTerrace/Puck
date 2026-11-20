@@ -1,6 +1,6 @@
 using Puck.Commands;
+using Puck.Abstractions;
 using System.Text.Json;
-using System.Security.Cryptography;
 
 namespace Puck.World.Server;
 
@@ -13,8 +13,7 @@ public sealed partial class WorldPersistence {
     // A computed identity for a serialized definition: every member except the command schedule.
     private static string ConfigurationShape(byte[] json) {
         using var document = JsonDocument.Parse(json);
-        using var hash = SHA256.Create();
-        using var stream = new CryptoStream(mode: CryptoStreamMode.Write, stream: Stream.Null, transform: hash);
+        using var stream = new Sha256Stream();
 
         using (var writer = new Utf8JsonWriter(stream)) {
             writer.WriteStartObject();
@@ -23,8 +22,7 @@ public sealed partial class WorldPersistence {
             }
             writer.WriteEndObject();
         }
-        stream.FlushFinalBlock();
-        return Convert.ToHexStringLower(inArray: hash.Hash!);
+        return Convert.ToHexStringLower(inArray: stream.TakeHash());
     }
 
     /// <summary>Restores a replay's starting checkpoint into this authority, reinstalling the

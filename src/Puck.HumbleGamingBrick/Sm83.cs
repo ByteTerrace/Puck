@@ -1,5 +1,6 @@
 using Puck.HumbleGamingBrick.Interfaces;
 using Puck.HumbleGamingBrick.Timing;
+using Puck.Maths;
 
 namespace Puck.HumbleGamingBrick;
 
@@ -235,7 +236,7 @@ public sealed partial class Sm83 : ICpu, ISnapshotable, IModeSwitchable {
         m_bus.NoteInstructionStart(pc: m_programCounter);
 
         do {
-            var untilDot = ((((dot - clock.CycleCount) + dotsPerMachineCycle) - 1UL) / dotsPerMachineCycle);
+            var untilDot = (dot - clock.CycleCount).CeilingDivide(divisor: dotsPerMachineCycle);
             var quietMachineCycles = ((ulong)(m_componentClock.AgreedQuietCycles / CpuTCyclesPerMachineCycle));
 
             if (quietMachineCycles > 1UL) {

@@ -131,7 +131,7 @@ public sealed partial class WorldAuthorityBlobStore {
         var receipt = new WorldAuthorityOperationReceipt(
             operationId,
             "world.release.metadata",
-            ContentPin.Compute(content: Encoding.UTF8.GetBytes(s: $"{source.Identity}\n{target.Identity}\n{recoveryPin}")).ToString(),
+            ContentPin.OfText(text: $"{source.Identity}\n{target.Identity}\n{recoveryPin}").ToString(),
             "release.metadata.applied",
             true,
             checked((protectedRoot.Root.Sequence + 1)),

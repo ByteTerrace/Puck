@@ -1,5 +1,4 @@
 using System.Globalization;
-using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json.Nodes;
 
@@ -389,7 +388,7 @@ public static class MachineConfigurationFields {
                 );
             }
         }
-        return Convert.ToHexString(inArray: SHA256.HashData(source: Encoding.UTF8.GetBytes(s: text.ToString()))).ToLowerInvariant();
+        return ContentDigest.HexOfText(text: text);
     }
     /// <summary>Computes a stable fingerprint of the metadata that affects configuration composition.</summary>
     /// <param name="descriptor">The descriptor whose field names, roles, shapes, and constraints are included.</param>
@@ -402,7 +401,7 @@ public static class MachineConfigurationFields {
             descriptor: descriptor,
             text: text
         );
-        return Convert.ToHexString(inArray: SHA256.HashData(source: Encoding.UTF8.GetBytes(s: text.ToString()))).ToLowerInvariant();
+        return ContentDigest.HexOfText(text: text);
     }
     /// <summary>Checks a provider object descriptor before it is used by validation, schema tooling, or composition.</summary>
     /// <param name="descriptor">The provider-owned object descriptor.</param>

@@ -2,6 +2,7 @@ using System.Buffers.Binary;
 using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Presentation;
 using Puck.Hosting;
+using Puck.Maths;
 
 namespace Puck.Shaders;
 
@@ -250,8 +251,8 @@ public sealed class SourceConversionPackage : IRenderGraphPackageFactory {
             );
             recorder.Dispatch(
                 commandBufferHandle: command,
-                groupCountX: (((recording.Width + GroupSize) - 1) / GroupSize),
-                groupCountY: (((recording.Height + GroupSize) - 1) / GroupSize),
+                groupCountX: recording.Width.CeilingDivide(divisor: GroupSize),
+                groupCountY: recording.Height.CeilingDivide(divisor: GroupSize),
                 groupCountZ: 1
             );
 

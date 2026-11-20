@@ -108,7 +108,7 @@ public static partial class PrimeKernels {
 
                 words[(FoldLowWeights + i)] = ((uint)((ushort)weights[0])) | (((uint)((ushort)weights[1])) << 16);
                 words[(FoldHighWeights + i)] = ((uint)((ushort)weights[2])) | (((uint)((ushort)weights[3])) << 16);
-                words[(FoldOffsets + i)] = ((uint)(offset + (prime * (((TrialDivisionFoldLift + prime) - 1L) / prime))));
+                words[(FoldOffsets + i)] = ((uint)(offset + (prime * TrialDivisionFoldLift.CeilingDivide(divisor: prime))));
             }
 
             return storage;

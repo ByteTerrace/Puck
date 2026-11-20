@@ -1,4 +1,4 @@
-using System.Security.Cryptography;
+using Puck.Abstractions;
 using System.Text;
 using System.Text.Json;
 using Azure.Core;
@@ -61,7 +61,7 @@ public sealed partial class AzureResourceOperationProvider : IWorldExternalOpera
             foreach (var field in new[] { "puck.azure.resource.v1", binding.Name, m_requestUri.AbsoluteUri,
                 cloud.DefaultScope, binding.Incarnation, binding.Method.ToString(), (binding.IfMatch ?? "") }) { writer.Write(value: field); }
         }
-        Identity = Convert.ToHexString(inArray: SHA256.HashData(source: bytes.ToArray()));
+        Identity = ContentDigest.HexOf(content: bytes.GetBuffer().AsSpan(length: (int)bytes.Length, start: 0), upperCase: true);
     }
 
     /// <inheritdoc/>
@@ -93,7 +93,7 @@ public sealed partial class AzureResourceOperationProvider : IWorldExternalOpera
         // This is a correlation header, not Azure's promise of deduplicated execution.
         message.Request.Headers.SetValue(
             name: "x-ms-client-request-id",
-            value: Convert.ToHexString(inArray: SHA256.HashData(source: Encoding.UTF8.GetBytes(s: operation.Id)))
+            value: ContentDigest.HexOfText(text: operation.Id, upperCase: true)
         );
         if (m_binding.IfMatch is { } etag) {
             message.Request.Headers.SetValue(

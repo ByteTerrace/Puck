@@ -179,8 +179,8 @@ public static class CreationStampSampling {
         );
 
         return (
-            (((Math.Max(val1: width, val2: 0)) + (effectiveSpacing - 1)) / effectiveSpacing),
-            (((Math.Max(val1: depth, val2: 0)) + (effectiveSpacing - 1)) / effectiveSpacing)
+            Math.Max(val1: width, val2: 0).CeilingDivide(divisor: effectiveSpacing),
+            Math.Max(val1: depth, val2: 0).CeilingDivide(divisor: effectiveSpacing)
         );
     }
 }

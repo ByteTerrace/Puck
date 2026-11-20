@@ -1,3 +1,5 @@
+using Puck.Maths;
+
 namespace Puck.Assets.Qr;
 
 /// <summary>
@@ -42,7 +44,7 @@ internal sealed class QrBitWriter {
         }
 
         // Byte-align: the buffer is already zero there, so advancing the cursor is the whole operation.
-        m_bitPosition = (((m_bitPosition + 7) / 8) * 8);
+        m_bitPosition = m_bitPosition.AlignUp(alignment: 8);
 
         var padToggle = true;
 
