@@ -3744,6 +3744,13 @@ proves itself with `puck compile` lowering to the same document.
 [Code size](code-size.md) holds the measured map, the generator families and
 their lane order; this packet keeps the single duplicates and leads.
 
+- Three presentation directors each track "this row's state signal changed
+  since I last read it" on their own: `WorldHapticDirector` (its `RowState`,
+  with rise and change modes), `WorldKeyLightDirector` (a flash signal) and
+  `WorldHighlightDirector` (a capture signal). Each also walks rows against a
+  routed `WorldStateMirror` and forgets its trackers when the mirror's lifetime
+  moves. One signal tracker over a mirror, keyed by row id, with the modes as
+  data, serves all three and the next authored output row.
 - Two mirrors of the boot world's snapshot, both hub subscribers copying every
   entry per tick: `WorldClient` and the boot endpoint's `WorldSessionMirror`
   (`WorldAuthorityEndpoint`); and three per-sink redaction scratch buffers
