@@ -37,19 +37,15 @@ public sealed partial class WorldCompileSession {
         if (EntryPath(key: key) is not { } path) { return; }
         try {
             AtomicFile.Write(path: path, write: stream => {
-                using var hash = SHA256.Create();
+                using var hashing = new Puck.Abstractions.Sha256Stream(inner: stream);
 
-                using (var hashing = new CryptoStream(stream, hash, CryptoStreamMode.Write, leaveOpen: true)) {
-                    using var writer = new BinaryWriter(hashing, Encoding.UTF8, leaveOpen: true);
-
+                using (var writer = new BinaryWriter(hashing, Encoding.UTF8, leaveOpen: true)) {
                     writer.Write(buffer: Magic);
                     writer.Write(value: CompilerIdentity);
                     writer.Write(value: key);
                     write(writer);
-                    writer.Flush();
-                    hashing.FlushFinalBlock();
                 }
-                stream.Write(buffer: hash.Hash!);
+                stream.Write(buffer: hashing.TakeHash());
             });
             // The bound holds the most recently used entries, the one just written among them, and listing the
             // directory also removes the temporaries a killed write abandoned.
