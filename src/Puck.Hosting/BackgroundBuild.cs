@@ -82,6 +82,19 @@ public sealed class BackgroundBuild<T> where T : class {
     /// <param name="discard">Releases a result that completed, or <see langword="null"/> when the result owns nothing.</param>
     public void CancelAndWait(Action<T>? discard = null) =>
         Detach().Wait(discard: discard);
+    /// <summary>Cancels the pending build and retires it into <paramref name="retired"/>, which discards it on a pool
+    /// thread as it finishes, or, with no table, blocks until it returns as <see cref="CancelAndWait"/> does. An owner whose
+    /// dependency's release drains a table never waits for its build. Does nothing when no build is pending.</summary>
+    /// <param name="retired">The table whose drain precedes the release of what the build depends on, or
+    /// <see langword="null"/> when the owner has none.</param>
+    /// <param name="discard">Releases a result that completed, or <see langword="null"/> when the result owns nothing.</param>
+    public void Retire(RetiredBuilds? retired, Action<T>? discard = null) {
+        if (retired is null) {
+            CancelAndWait(discard: discard);
+        } else {
+            retired.Retire(build: Detach(), discard: discard);
+        }
+    }
     /// <summary>Cancels the pending build and hands it to the caller to wait out with
     /// <see cref="CanceledBuild{T}.Wait"/>. The cancel takes effect before this returns, and the build is no longer
     /// pending; only the wait is deferred. Use it where the cancel must be visible inside a lock that guards the build

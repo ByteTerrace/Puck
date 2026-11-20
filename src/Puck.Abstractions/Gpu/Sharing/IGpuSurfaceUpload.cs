@@ -24,4 +24,9 @@ public interface IGpuSurfaceUpload : IDisposable {
     /// <exception cref="NotSupportedException">The device cannot sample <paramref name="format"/>; the message names
     /// the format and the device.</exception>
     nint Upload(ReadOnlyMemory<byte> pixels, GpuPixelFormat format, uint width, uint height);
+    /// <summary>Releases the upload as <see cref="IDisposable.Dispose"/> does, without first waiting for the device to go
+    /// idle: the owner calls it only once no submission can still sample its images, after a checkpoint ordered behind
+    /// every reader has completed or after a device loss. An upload whose release waits for nothing releases the same
+    /// way either call.</summary>
+    void DisposeCompleted() => Dispose();
 }

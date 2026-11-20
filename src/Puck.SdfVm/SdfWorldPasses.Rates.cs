@@ -26,6 +26,17 @@ namespace Puck.SdfVm;
 // it draws, which stages the cameras those layers are drawn from for this frame's readers, and SubmittedFar commits them
 // once the frame's submission succeeds. A pass that stands, skips or whose recording is abandoned commits nothing, and a
 // layer the recorder has not drawn in its current graph is always drawn (RecordFar answers both).
+//
+// A cascade at a reduced rate holds a static layer (SdfFarShadows.HoldsStaticLayer, the fragment's two static depths):
+// the static scene's casters drawn alone, which every refresh copies into the cascade before it draws the moving casters
+// and every glass draw over it, both layers in one frame. The invariant is that the static layer is copied only into a
+// cascade drawn from the camera it was drawn from, holding the static draws it drew. RecordFar enforces both: it reuses
+// the layer only while it stands (committed by a submitted recording that drew it, in a target the recorder has written
+// in its current graph), the fit still covers the view (DecideFar's covers, measured against that same camera, whose
+// anchors a refresh over the static layer leaves where the layer's own refresh set them) and the static scene's revision
+// is the one it drew (SdfWorldTables.StaticDrawRevision, which the distant map's hold trusts too); otherwise the
+// recording draws the layer again. So the static layer is drawn again only on a static change, a light turn past the
+// authored tolerance or anything else that ends the fit, and the moving casters at the authored rate.
 public sealed partial class SdfWorldPasses {
     // A layer's receiver coverage names the sample grid it classified the casters against: the cull level, the detail
     // choice, the render extent and scale, and the view's cut and bindings. The light is absent (readers use that layer's
@@ -110,17 +121,34 @@ public sealed partial class SdfWorldPasses {
     /// <param name="written">Whether the recorder has drawn both layers of the target it binds in its current graph: an
     /// unwritten layer has no contents, so a recording draws both.</param>
     /// <param name="counts">The frame's rate counters, or <see langword="null"/>.</param>
-    /// <returns>The layers to draw: both unless a split refresh draws one of them.</returns>
-    internal SdfFarLayers RecordFar(string instance, in SdfMeshShadowCamera fresh, bool written, WorkCounterSet? counts) {
+    /// <param name="layer">The static layer the recorder holds: whether its graph keeps one, whether it has drawn the one of
+    /// the target it binds, and the static scene's revision the recording draws.</param>
+    /// <param name="drawsStatic">Whether the recording draws the static layer again before it copies it into the cascade;
+    /// always <see langword="false"/> without one.</param>
+    /// <returns>The layers to draw: both unless a split refresh draws one of them, and always both with a static
+    /// layer.</returns>
+    internal SdfFarLayers RecordFar(string instance, in SdfMeshShadowCamera fresh, bool written, WorkCounterSet? counts, SdfFarStaticLayer layer, out bool drawsStatic) {
         var entry = Refresh(instance: instance);
         var layers = (((entry.FarLayers == SdfFarLayers.None) || !written) ? SdfFarLayers.Both : entry.FarLayers);
+        // An exit layer alone is drawn from the camera its depth was drawn from.
+        var camera = ((layers == SdfFarLayers.Exit) ? entry.FarCamera : fresh);
+
+        drawsStatic = false;
+        if (layer.Held) {
+            var stands = (entry.FarStaticStands && entry.FarCovers && layer.Written && entry.FarCamera.Equals(other: entry.FarStaticCamera));
+
+            layers = SdfFarLayers.Both;
+            camera = (stands ? entry.FarStaticCamera : camera);
+            drawsStatic = (!stands || (entry.FarStaticRevision != layer.Revision));
+        }
 
         entry.FarPendingFrame = m_frame;
         entry.FarPendingLayers = layers;
         entry.FarPendingReceivers = ReceiverSignatureOf(entry);
         entry.FarPendingCounts = counts;
-        // An exit layer alone is drawn from the camera its depth was drawn from.
-        entry.FarPendingCamera = ((layers == SdfFarLayers.Exit) ? entry.FarCamera : fresh);
+        entry.FarPendingCamera = camera;
+        entry.FarPendingStatic = (layer.Held ? drawsStatic : null);
+        entry.FarPendingRevision = layer.Revision;
 
         return layers;
     }
@@ -137,6 +165,18 @@ public sealed partial class SdfWorldPasses {
         var camera = entry.FarPendingCamera;
         entry.FarPendingCounts?.Count(kind: entry.FarPendingLayers == SdfFarLayers.Both
             ? SdfUpdateRateCounts.ShadowFarRendered : SdfUpdateRateCounts.ShadowFarSplit);
+
+        switch (entry.FarPendingStatic) {
+            case true:
+                entry.FarStaticStands = true;
+                entry.FarStaticCamera = camera;
+                entry.FarStaticRevision = entry.FarPendingRevision;
+                entry.FarPendingCounts?.Count(kind: SdfUpdateRateCounts.ShadowFarStatic);
+                break;
+            case null:
+                entry.FarStaticStands = false;
+                break;
+        }
 
         switch (entry.FarPendingLayers) {
             case SdfFarLayers.Depth:
@@ -197,6 +237,7 @@ public sealed partial class SdfWorldPasses {
 
         entry.FarDecided = m_frame;
         entry.FarHeld = held;
+        entry.FarCovers = covers;
         if (held) {
             entry.FarElapsedSeconds = elapsed;
             entry.FarLayers = (entry.FarExitOwed ? SdfFarLayers.Exit : SdfFarLayers.None);
@@ -207,11 +248,20 @@ public sealed partial class SdfWorldPasses {
             frame.RateIntervals?.Record(hertz: authored.Hertz, lever: SdfUpdateRates.ShadowFar, seconds: elapsed);
         }
 
+        entry.FarElapsedSeconds = 0d;
+        // The rate alone calls for this refresh over a standing static layer: the moving casters are drawn over a copy of
+        // it from its camera, both layers at once, and the fit's anchors stay with the static layer's own refresh, so the
+        // tolerances bound how far the view strays from the camera that layer was drawn from (RecordFar).
+        if (covers && entry.FarStaticStands) {
+            entry.FarLayers = SdfFarLayers.Both;
+            entry.FarRefreshFrame = m_frame;
+
+            return;
+        }
         // The rate alone calls for this refresh and the exit layer has a camera to be read through until the next frame
         // redraws it: draw the depth now and the exit layer then, whatever the frames' pace, so no frame draws both layers
         // for the rate's sake. Anything else redraws both.
         entry.FarLayers = ((covers && (entry.FarExitCamera.HalfHeight > 0f)) ? SdfFarLayers.Depth : SdfFarLayers.Both);
-        entry.FarElapsedSeconds = 0d;
         entry.FarTexels = cascades.Texels;
         entry.FarEye = camera.Position;
         entry.FarForward = camera.Forward;
@@ -295,8 +345,23 @@ public sealed partial class SdfWorldPasses {
         public ulong? FarExitReceivers { get; set; }
         public ulong? FarPendingReceivers { get; set; }
         public WorkCounterSet? FarPendingCounts { get; set; }
+        // Whether the decided frame's fit still covers what the view shows, so only the rate called for a refresh.
+        public bool FarCovers { get; set; }
+        // The static layer a submitted recording last drew, while it stands: the camera and the static scene's revision it
+        // was drawn from. What this frame's recording does to it: null with no static layer, true when it draws it again.
+        public bool FarStaticStands { get; set; }
+        public SdfMeshShadowCamera FarStaticCamera { get; set; }
+        public long FarStaticRevision { get; set; } = -1;
+        public bool? FarPendingStatic { get; set; }
+        public long FarPendingRevision { get; set; }
     }
 }
+/// <summary>The far cascade's static layer as a recorder holds it (<see cref="SdfWorldPasses"/>).</summary>
+/// <param name="Held">Whether the recorder's graph keeps the layer's depths.</param>
+/// <param name="Written">Whether a submitted recording of the current graph drew the layer of the target the recording
+/// binds.</param>
+/// <param name="Revision">The static scene's revision the recording draws (<see cref="SdfWorldTables.StaticDrawRevision"/>).</param>
+internal readonly record struct SdfFarStaticLayer(bool Held, bool Written, long Revision);
 /// <summary>Which of the far shadow cascade's two layers its pass draws on a frame (<see cref="SdfWorldPasses"/>).</summary>
 [Flags]
 internal enum SdfFarLayers : byte {

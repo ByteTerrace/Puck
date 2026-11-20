@@ -137,12 +137,14 @@ internal sealed class SdfMeshOcclusion : IDisposable {
 
     // Each pass uploads constant-sized controls. The residency already uploaded each changed draw once.
     // A cascade that draws one layer of a split refresh (skipsDepth, skipsExit) emits and counts commands for that layer
-    // alone, so its counted draws and vertices are the work it draws. A pass staged staticOnly (the distant shadow map)
-    // keeps only draws of the static scene (SdfMeshRecord.DynamicFlag clear). A pass staged with a share of `slices` (a
+    // alone, so its counted draws and vertices are the work it draws. A pass staged with a motion filter keeps the static
+    // scene's draws alone (SdfMeshRecord.DynamicFlag clear: the distant map, a far cascade's static layer) or the moving
+    // draws and every glass draw alone (the far cascade over a copy of its static layer); a draw the filter leaves out keeps
+    // its visibility history, so a static and a dynamic staging of one list do not erase each other's. A pass staged with a share of `slices` (a
     // distant map redraw spread over several frames) keeps only the draws whose index leaves that share's remainder, so the
     // shares of one draw list draw each of its draws exactly once. The kernel reads the count and the share from eight bits
     // each of the controls' fourth word (MaxSlices).
-    public void Stage(SdfWorldTables tables, int slot, uint count, uint width, uint height, in SdfMeshCull cull, in SdfMeshDetail detail, bool held, bool glass, bool occlude, bool splitExit = false, bool skipsDepth = false, bool skipsExit = false, Puck.Abstractions.Cameras.CameraSnapshot camera = default, uint receiverWidth = 0, uint receiverHeight = 0, System.Numerics.Vector2 jitter = default, bool staticOnly = false, int slice = 0, int slices = 1) {
+    public void Stage(SdfWorldTables tables, int slot, uint count, uint width, uint height, in SdfMeshCull cull, in SdfMeshDetail detail, bool held, bool glass, bool occlude, bool splitExit = false, bool skipsDepth = false, bool skipsExit = false, Puck.Abstractions.Cameras.CameraSnapshot camera = default, uint receiverWidth = 0, uint receiverHeight = 0, System.Numerics.Vector2 jitter = default, SdfMeshMotion motion = SdfMeshMotion.Any, int slice = 0, int slices = 1) {
         ArgumentOutOfRangeException.ThrowIfLessThan(value: slices, other: 1);
         ArgumentOutOfRangeException.ThrowIfGreaterThan(value: slices, other: MaxSlices);
         ArgumentOutOfRangeException.ThrowIfNegative(value: slice);
@@ -171,7 +173,7 @@ internal sealed class SdfMeshOcclusion : IDisposable {
         words[0] = count;
         words[1] = m_levels;
         words[2] = (occlude ? 1u : 0u) | (splitExit ? 2u : 0u) | (m_argumentPhases << 2);
-        words[3] = (glass ? 1u : 0u) | (skipsDepth ? 2u : 0u) | (skipsExit ? 4u : 0u) | (m_marking ? 8u : 0u) | (staticOnly ? 16u : 0u) |
+        words[3] = (glass ? 1u : 0u) | (skipsDepth ? 2u : 0u) | (skipsExit ? 4u : 0u) | (m_marking ? 8u : 0u) | ((motion == SdfMeshMotion.Static) ? 16u : 0u) | ((motion == SdfMeshMotion.Dynamic) ? 32u : 0u) |
             (((uint)(slices - 1)) << 8) | (((uint)slice) << 16);
         detail.WriteGpu(rows: rows[1..4], held: held);
         cull.WriteGpu(rows: rows[4..]);
@@ -525,4 +527,13 @@ internal sealed class SdfMeshOcclusion : IDisposable {
 
         recorder.EndBarriers(commandBufferHandle: commandBuffer);
     }
+}
+/// <summary>Which draws a staging of the selection keeps by whether they can move (<see cref="SdfMeshRecord.DynamicFlag"/>).</summary>
+internal enum SdfMeshMotion : byte {
+    /// <summary>Every draw.</summary>
+    Any,
+    /// <summary>The static scene's draws alone.</summary>
+    Static,
+    /// <summary>The draws that can move, and every glass draw.</summary>
+    Dynamic,
 }

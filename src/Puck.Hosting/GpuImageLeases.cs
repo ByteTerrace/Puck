@@ -68,9 +68,24 @@ public sealed class GpuImageLeases {
             }
         }
     }
-    /// <summary>Waits until every object the table freed or was handed has been disposed, then rethrows the first failure
-    /// a background disposal met, if any. A table that disposes on the calling thread has nothing to wait for.</summary>
+    /// <summary>Gets the canceled builds of the owners that create through this table, each waited out and discarded on
+    /// a pool thread, so a node released or retired with a build in flight never waits for it on the frame thread.
+    /// <see cref="DrainDisposals"/> waits them out first, since a build creates objects on the device.</summary>
+    public RetiredBuilds RetiredBuilds { get; } = new();
+
+    /// <summary>Waits out every retired build (<see cref="RetiredBuilds"/>), then until every object the table freed or
+    /// was handed has been disposed, and rethrows the first failure a background disposal met, if any. The owner calls it
+    /// before the device is recreated or destroyed.</summary>
+    /// <exception cref="InvalidOperationException">A retired build's discard or a background disposal threw.</exception>
     public void DrainDisposals() {
+        try {
+            RetiredBuilds.Drain();
+        } finally {
+            WaitDisposals();
+        }
+    }
+    // Waits for the background disposer; a table that disposes on the calling thread has nothing to wait for.
+    private void WaitDisposals() {
         while (true) {
             Task disposer;
 
@@ -221,6 +236,7 @@ public sealed class GpuImageLeases {
             ImageFactory = Wrap(factory: services.ImageFactory),
             Naming = services.Naming,
             PipelineFactory = services.PipelineFactory,
+            Retirement = services.Retirement,
             QueueSubmitter = services.QueueSubmitter,
             Recorder = services.Recorder,
             RenderPassFactory = services.RenderPassFactory,

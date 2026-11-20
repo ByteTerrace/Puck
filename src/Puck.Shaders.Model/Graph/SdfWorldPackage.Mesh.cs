@@ -136,6 +136,7 @@ public static partial class SdfWorldPackage {
     private static readonly string[] ShadowParts = [Parts.ShadowNear, Parts.ShadowFar, Parts.ShadowSecond];
     private static readonly string[] DistantStorages = [Parts.ShadowDistantDepth, Parts.ShadowDistantExit];
     private static readonly string[] DistantBackStorages = [Parts.ShadowDistantBackDepth, Parts.ShadowDistantBackExit];
+    private static readonly string[] FarStaticStorages = [Parts.ShadowFarStaticDepth, Parts.ShadowFarStaticExit];
     private static readonly string[] ShadowStorages = [
         Parts.ShadowNearDepth, Parts.ShadowFarDepth, Parts.ShadowSecondDepth,
         Parts.ShadowNearExit, Parts.ShadowFarExit, Parts.ShadowSecondExit,
@@ -155,10 +156,13 @@ public static partial class SdfWorldPackage {
     }
     /// <summary>Returns a fragment whose cascades are <paramref name="texels"/> a side, with the second shadow slot's
     /// cascade only when <paramref name="second"/> and the distant map only when <paramref name="distantTexels"/> is
-    /// positive, at that size, with its back map only when <paramref name="distantSliced"/>: a view allocates the cascades
-    /// its shadow quality, its world's shadow slots and its world's distant map draw, and no more. The back map's two
-    /// depths are further outputs of the distant pass, which draws a redraw spread over several frames into them and
-    /// copies them into the map the surface pass reads once its last share is drawn.</summary>
+    /// positive, at that size, with its back map only when <paramref name="distantSliced"/>, and the far cascade's static
+    /// layer only when <paramref name="farStatic"/>: a view allocates the cascades its shadow quality, its world's shadow
+    /// slots, its world's distant map and its far cascade's rate draw, and no more. The back map's two depths are further
+    /// outputs of the distant pass, which draws a redraw spread over several frames into them and copies them into the map
+    /// the surface pass reads once its last share is drawn. The static layer's two depths are further outputs of the far
+    /// pass, which draws the static scene's casters into them and copies them into its depth and exit layer before it
+    /// draws the moving casters.</summary>
     /// <param name="fragment">The fragment, any of the package's that holds the cascades.</param>
     /// <param name="texels">The texels along each side of every cascade, from 1 through <see cref="MeshShadowResolution"/>.</param>
     /// <param name="second">Whether the fragment keeps the second shadow slot's cascade.</param>
@@ -166,12 +170,14 @@ public static partial class SdfWorldPackage {
     /// <see cref="MeshDistantShadowMaxResolution"/>, or zero for a fragment without it.</param>
     /// <param name="distantSliced">Whether the distant map keeps a back map for redraws spread over several frames;
     /// ignored without the distant map.</param>
+    /// <param name="farStatic">Whether the far cascade keeps a static layer, which a cascade refreshed at a reduced rate
+    /// holds between static changes.</param>
     /// <returns>The fragment with the cascades sized and chosen.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="fragment"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="texels"/> lies outside 1 through
     /// <see cref="MeshShadowResolution"/>, or <paramref name="distantTexels"/> is negative or past
     /// <see cref="MeshDistantShadowMaxResolution"/>.</exception>
-    public static RenderGraphPackageFragment WithShadows(RenderGraphPackageFragment fragment, int texels, bool second, int distantTexels, bool distantSliced = false) {
+    public static RenderGraphPackageFragment WithShadows(RenderGraphPackageFragment fragment, int texels, bool second, int distantTexels, bool distantSliced = false, bool farStatic = false) {
         ArgumentNullException.ThrowIfNull(argument: fragment);
         ArgumentOutOfRangeException.ThrowIfLessThan(value: texels, other: 1);
         ArgumentOutOfRangeException.ThrowIfGreaterThan(value: texels, other: MeshShadowResolution);
@@ -188,6 +194,15 @@ public static partial class SdfWorldPackage {
                     Outputs = [.. pass.Outputs, .. DistantBackStorages.Select(selector: static name => new ResourceReference(Name: name))],
                 })))],
                 Resources = [.. shaped.Resources, .. DistantBackStorages.Select(selector: name => ShadowDepth(name: name, texels: distantTexels))],
+            };
+        }
+        if (farStatic) {
+            shaped = shaped with {
+                Passes = [.. shaped.Passes.Select(selector: static pass => ((pass.Name != Parts.ShadowFar) ? pass : (pass with {
+                    OutputAccesses = [.. pass.OutputAccesses, RenderGraphPortAccess.ColorAttachmentWrite, RenderGraphPortAccess.ColorAttachmentWrite],
+                    Outputs = [.. pass.Outputs, .. FarStaticStorages.Select(selector: static name => new ResourceReference(Name: name))],
+                })))],
+                Resources = [.. shaped.Resources, .. FarStaticStorages.Select(selector: name => ShadowDepth(name: name, texels: texels))],
             };
         }
 

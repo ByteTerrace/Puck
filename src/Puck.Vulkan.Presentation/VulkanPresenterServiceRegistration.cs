@@ -112,6 +112,7 @@ public static class VulkanPresenterServiceRegistration {
                 graphicsPipelineApi: graphicsPipelineApi,
                 naming: naming
             ),
+                Retirement = new GpuDeviceRetirement(),
                 QueueSubmitter = new VulkanGpuQueueSubmitter(
                 deviceContext: deviceContext,
                 frameSynchronizationApi: frameSynchronizationApi,

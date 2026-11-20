@@ -330,7 +330,16 @@ nonzero and within `IGpuBindings.MaxConstantBufferBytes`, the current backend's 
 A growing table picks its next size with `GpuCapacity`: `Grown` (a fraction of the current size, for amortized growth)
 or `Headroom` (a fraction over the need, for a table fitted to its need). An object replaced while a queue may still
 read it waits in a `GpuRetirementQueue` keyed by a completion point counted on one queue (an upload's sequence, a native
-fence value). A package recorder never sees a fence: a result its recording captured (a readback, a publication, a
+fence value). An owner that lets go of objects other nodes' submissions read, and that no longer records itself (a
+released residency, a dropped portal's or routed view's tables), hands them to the device's one retirement
+(`GpuDeviceServices.Retirement`, a `GpuDeviceRetirement`) instead of waiting for idle: `RenderGraphRuntime` polls it
+after each frame's batch, which queues a timeline checkpoint behind it, and the hosts drain it at a loss
+(`DeviceLossRecovery`) and at teardown (`LauncherHostRun.DrainRetirement`). A released residency's release retires the
+builds it still leases into `SdfWorldPipelineCatalog.RetiredBuilds`, so `WorldRenderRoot` drains the device's retirement
+itself before that table, in its holdings and in its loss. Never add a `TryWaitIdle` to a release
+path; `SdfWorldTables.Dispose` and `IGpuSurfaceUpload.DisposeCompleted` wait for nothing. A render node's build in
+flight retires into its runtime's `GpuImageLeases.RetiredBuilds`, which `DrainDisposals` waits out before the device
+goes. A package recorder never sees a fence: a result its recording captured (a readback, a publication, a
 submission's shading identities) lives in a `RenderGraphSlotResults` and is read only when the node reports the slot
 complete (`IRenderGraphPackageReadback.Completed`), which the node does from `WaitSlot` as it reuses the slot or as
 soon as an owed slot's fence reads signaled (`ShaderPipelineRenderNode.PollReadbacks`), and before it disposes a
@@ -382,6 +391,16 @@ Compare counts beside time and shadow diagnostic captures on both backends;
 include a moving camera and reduced/temporal render grids. The receiver scratch
 shares the depth allocation and its existing slot-fence retirement; early
 compute samples camera depth, late compute samples light depth, in separate sets.
+
+A far cascade at a reduced rate holds a static layer (`SdfFarShadows.HoldsStaticLayer`; the far pass's
+`ShadowFarStaticDepth` and `ShadowFarStaticExit` outputs, `SdfWorldPackage.WithShadows`' `farStatic`). Its invariant is
+that the layer is copied only into a cascade drawn from the camera it was drawn from, holding the static revision it
+drew; `SdfWorldPasses.RecordFar` is the one door (`SdfFarStaticLayer`, its `drawsStatic`), and `SubmittedFar` commits the
+layer. The recorder stages the static draws through a second `SdfMeshOcclusion` (`SdfMeshMotion.Static`, its own mesh
+set group after the cascade's, `OcclusionGroups`) and the moving draws plus every glass draw through the cascade's own
+(`SdfMeshMotion.Dynamic`) over a `CopyDepth` of the layer; the kernel leaves a draw a motion filter excludes untouched.
+A path that draws the layer must call `SdfWorldTables.CastersRead`, or a caster absent then never redraws it on landing.
+`sdf.rates`' `shadow-far.static` counts the layer's redraws.
 
 ## The distant shadow map
 

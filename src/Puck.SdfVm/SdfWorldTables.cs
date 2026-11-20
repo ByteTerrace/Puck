@@ -19,8 +19,10 @@ namespace Puck.SdfVm;
 /// the next of <see cref="FrameRingSize"/> upload slots, whose
 /// buffers every pass of the frame binds. Before an upload rewrites a slot it waits the previous upload's fence, which
 /// signals once every submission queued before it has finished, the views that read the slot two uploads earlier among
-/// them. A rewrite of what every slot shares — a grown program, a grown mesh region, the glyph atlas, a
-/// reloaded kernel — waits the device idle first, since other nodes' submissions read it.
+/// them. What every slot shares and a rewrite replaces (a grown program, a grown mesh region, a reloaded kernel) waits
+/// in a <see cref="GpuRetirementQueue{T}"/> behind a timeline checkpoint, since other nodes' submissions read it. The
+/// owner disposes the tables only once no submission reads them or after a device loss: <see cref="Dispose"/> waits for
+/// nothing.
 /// </para>
 /// </summary>
 public sealed partial class SdfWorldTables : IDisposable {
@@ -441,7 +443,8 @@ public sealed partial class SdfWorldTables : IDisposable {
         );
     }
 
-    /// <inheritdoc/>
+    /// <summary>Releases every device object the tables own, without waiting for the device: call it only once no
+    /// submission reads them or after a device loss.</summary>
     public void Dispose() {
         if (m_disposed) {
             return;
@@ -451,9 +454,8 @@ public sealed partial class SdfWorldTables : IDisposable {
         if (m_meshTrimListening) { Puck.Hosting.Jobs.MemoryAccount.Shared.TrimRequested -= RequestMeshTrim; m_meshTrimListening = false; }
         if (Interlocked.Exchange(location1: ref m_meshTrimRequested, value: 0) != 0) { Puck.Hosting.Jobs.MemoryAccount.Shared.CompleteDeferredTrim(); }
 
-        // Drain the device BEFORE destroying anything (tolerating an already-lost device, where there is nothing left to
-        // drain): the views' submissions, which the tables' own fences cannot see, read every table.
-        m_deviceContext.TryWaitIdle();
+        // No idle wait: the views' submissions, which the tables' own fences cannot see, read every table, so the owner
+        // disposes the tables only once they have completed (the residency through GpuDeviceRetirement) or after a loss.
         m_gpuWork.Dispose();
         m_meshClaims?.Dispose(); m_meshClaims = null;
         m_meshesOwed.Clear();
@@ -483,6 +485,6 @@ public sealed partial class SdfWorldTables : IDisposable {
         m_dummyBuffer.Dispose();
         m_storageFiller.Dispose();
         m_sampledFiller.Dispose();
-        m_glyphAtlasUpload?.Dispose();
+        m_glyphAtlasUpload?.DisposeCompleted();
     }
 }

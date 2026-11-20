@@ -47,6 +47,7 @@ public static class GpuWorkCounting {
                 factory: services.PipelineFactory,
                 ledger: ledger
             ),
+            Retirement = services.Retirement,
             QueueSubmitter = Wrap(
                 ledger: ledger,
                 submitter: services.QueueSubmitter

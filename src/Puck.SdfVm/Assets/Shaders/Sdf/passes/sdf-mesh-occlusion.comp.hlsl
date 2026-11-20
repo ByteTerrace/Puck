@@ -236,9 +236,13 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
     uint receiverRejected = 0u;
     uint entryRejected = 0u;
     bool marking = (header.w & 8u) != 0u;
-    // A pass that draws static casters alone (the distant shadow map, SdfMeshOcclusion.Stage) keeps no dynamic or glass
-    // draw, boxed or not: what it holds stands until a static draw changes.
+    // A pass that draws static casters alone (the distant shadow map, a far cascade's static layer, SdfMeshOcclusion.Stage)
+    // keeps no dynamic draw, boxed or not: what it holds stands until a static draw changes. One that draws dynamic casters
+    // alone (the far cascade over a copy of its static layer) keeps no static opaque draw, but keeps every glass draw,
+    // whose extinction it draws whole. A draw a filter leaves out keeps the visibility history it had: it writes no state
+    // and emits only empty commands, so the other filter's staging of the same draws keeps its two-phase history.
     bool staticOnly = (header.w & 16u) != 0u;
+    bool dynamicOnly = (header.w & 32u) != 0u;
     // A share of a draw list split over several frames (the distant map's back map, SdfMeshOcclusion.Stage) keeps the
     // draws whose index leaves its remainder, so the shares draw each draw exactly once.
     uint slices = ((header.w >> 8u) & 0xFFu) + 1u;
@@ -257,8 +261,11 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
         uint draw = id.x;
         uint record = sdfMeshRecord(draw);
         uint4 a = sdfSelectionRow(record, 0u);
-        if ((a.w & SDF_MESH_ABSENT_FLAG) != 0u) {
-            sdfMeshOcclusionVisibleRW[draw] = uint4(0u, 0u, 0u, 0u);
+        bool absent = (a.w & SDF_MESH_ABSENT_FLAG) != 0u;
+        bool dynamicDraw = (a.w & SDF_MESH_DYNAMIC_FLAG) != 0u;
+        bool filtered = (staticOnly && dynamicDraw) || (dynamicOnly && !dynamicDraw && ((a.w & 2u) == 0u));
+        if (absent || filtered) {
+            if (absent) { sdfMeshOcclusionVisibleRW[draw] = uint4(0u, 0u, 0u, 0u); }
             sdfOcclusionEmit(step == SDF_OCCLUSION_LATE_STEP ? 1u : 0u, draw, draw, 0u, false);
             if (splitExit && step == SDF_OCCLUSION_EARLY_STEP) {
                 sdfOcclusionEmit(2u, draw, draw, 0u, false);
@@ -278,7 +285,7 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
         // A culled draw can retain another mesh's level in history; its current table may have fewer levels.
         uint level = min(state.y, d.w);
         if (step == SDF_OCCLUSION_EARLY_STEP) {
-            kept = (!staticOnly || ((a.w & SDF_MESH_DYNAMIC_FLAG) == 0u)) && ((draw % slices) == slice) &&
+            kept = ((draw % slices) == slice) &&
                 (splitExit || (((a.w >> 1u) & 1u) == (header.w & 1u))) && (unboxed || sdfSelectionKeeps(asfloat(a.xyz), asfloat(b.xyz), asfloat(c.xyz), asfloat(d.xyz)));
             if (kept && splitExit && occlude && !unboxed) {
                 kept = sdfReceiverMayShadow(asfloat(a.xyz), asfloat(b.xyz), asfloat(c.xyz), asfloat(d.xyz));

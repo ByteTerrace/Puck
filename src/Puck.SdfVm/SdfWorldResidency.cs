@@ -393,15 +393,26 @@ public sealed partial class SdfWorldResidency : IDisposable {
             holds = observed;
         }
     }
-    /// <summary>Gives back a hold; the last one releases the residency's tables and its pipeline set, after the device has
-    /// finished every submission that reads them.</summary>
+    /// <summary>Gives back a hold; the last one hands the residency's tables, irradiance, meshes and pipeline set to the
+    /// device's retirement (<see cref="GpuDeviceRetirement"/>), which releases them once the device has finished every
+    /// submission that reads them, so releasing a residency with views still in flight never waits for the queue. A
+    /// residency with no device, before its first frame or after a loss, releases them at once.</summary>
     public void Release() {
         if (Interlocked.Decrement(location: ref m_holds) != 0) {
             return;
         }
 
         m_disposed = true;
-        m_deviceContext.TryWaitIdle();
+        if (m_deviceContext is { } device) {
+            device.Services.Retirement.Retire(item: new Puck.Abstractions.DisposeOnce(action: ReleaseDeviceObjects));
+        } else {
+            ReleaseDeviceObjects();
+        }
+    }
+
+    // Runs once, after the last hold: at once without a device, otherwise from the device's retirement once no
+    // submission reads the objects, or at its drain after a loss or at teardown.
+    private void ReleaseDeviceObjects() {
         MeshIrradiance.Dispose();
         m_tables?.Dispose();
         m_tables = null;

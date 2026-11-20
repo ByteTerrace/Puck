@@ -136,6 +136,7 @@ public sealed class GpuCreationFaults {
                 faults: faults,
                 inner: Guard(instance: services.PipelineFactory)
             ),
+            Retirement = services.Retirement,
             QueueSubmitter = services.QueueSubmitter,
             Recorder = services.Recorder,
             RenderPassFactory = new FaultingRenderPassFactory(

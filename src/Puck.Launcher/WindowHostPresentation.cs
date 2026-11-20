@@ -749,6 +749,7 @@ public sealed class WindowHostPresentation {
                     }
                 ),
                     ("dispose render root", m_root.Dispose),
+                    ("drain device retirement", () => LauncherHostRun.DrainRetirement(rootHostContext: m_rootHostContext)),
                     ("dispose presenter", m_presenter.Dispose)
                 );
             }

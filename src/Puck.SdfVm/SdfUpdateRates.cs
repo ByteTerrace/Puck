@@ -365,6 +365,9 @@ public static class SdfUpdateRateCounts {
     public static readonly WorkKind ShadowFarSplit = new(name: "sdf.rates.shadow-far.split", unit: "frames", workClass: WorkClass.Pacing);
     /// <summary>Counts each frame a view held its far cascade.</summary>
     public static readonly WorkKind ShadowFarHeld = new(name: "sdf.rates.shadow-far.held", unit: "frames", workClass: WorkClass.Pacing);
+    /// <summary>Counts each frame a view drew its far cascade's static layer again (<see cref="SdfFarShadows.HoldsStaticLayer"/>):
+    /// a refresh that counts as <see cref="ShadowFarRendered"/> without it drew only the moving casters over the held layer.</summary>
+    public static readonly WorkKind ShadowFarStatic = new(name: "sdf.rates.shadow-far.static", unit: "frames", workClass: WorkClass.Pacing);
     /// <summary>Counts each frame a view drew its distant shadow map.</summary>
     public static readonly WorkKind ShadowDistantRendered = new(name: "sdf.rates.shadow-distant.rendered", unit: "frames", workClass: WorkClass.Pacing);
     /// <summary>Counts each frame a view drew one share of a distant shadow map redraw spread over several frames
@@ -381,7 +384,7 @@ public static class SdfUpdateRateCounts {
     /// <summary>Counts each frame a screen's source was shown at a reduced rate.</summary>
     public static readonly WorkKind ScreensRated = new(name: "sdf.rates.screens.rated", unit: "footprints", workClass: WorkClass.Pacing);
 
-    private static readonly WorkKind[] DeclaredKinds = [BodiesPosed, BodiesHeld, PlacementsPosed, PlacementsHeld, ShadowFarRendered, ShadowFarSplit, ShadowFarHeld, ShadowDistantRendered, ShadowDistantShared, ShadowDistantHeld, ViewsRated, ViewsHeld, ScreensRated];
+    private static readonly WorkKind[] DeclaredKinds = [BodiesPosed, BodiesHeld, PlacementsPosed, PlacementsHeld, ShadowFarRendered, ShadowFarSplit, ShadowFarHeld, ShadowFarStatic, ShadowDistantRendered, ShadowDistantShared, ShadowDistantHeld, ViewsRated, ViewsHeld, ScreensRated];
 
     /// <summary>Creates the counters a host's frames count into.</summary>
     /// <returns>A set over every kind this class declares, in report order, every count zero.</returns>

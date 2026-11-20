@@ -72,7 +72,8 @@ public sealed class GpuRetirementQueue<T> {
     /// <summary>Releases, in retirement order, every object whose completion point is at or before
     /// <paramref name="completed"/>.</summary>
     /// <param name="completed">The latest completion point known to have passed; <see cref="ulong.MaxValue"/> releases
-    /// everything.</param>
+    /// everything, held objects included, and ends the queue's timeline, so a device recreated after a loss polls it with
+    /// its new one.</param>
     /// <param name="release">The release of one object.</param>
     public void Release(ulong completed, Action<T> release) {
         while (m_items.TryPeek(result: out var next) && (next.After <= completed)) {
@@ -82,6 +83,8 @@ public sealed class GpuRetirementQueue<T> {
         if (completed == ulong.MaxValue) {
             foreach (var held in m_held) { release(held.Item); }
             m_held.Clear();
+            m_timeline = null;
+            m_last = 0;
         }
     }
 }

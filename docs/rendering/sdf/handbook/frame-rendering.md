@@ -1598,7 +1598,27 @@ asks `SdfWorldPasses.RecordFar` which layers to draw, which answers both while
 a layer of its current graph has never been drawn; the cameras it draws from
 are committed when the frame's submission succeeds (`SubmittedFar`), so each
 layer is always read through the camera it was drawn from. `world.rates`
-counts `shadow-far.rendered` (both layers), `.split` (one) and `.held`.
+counts `shadow-far.rendered` (both layers), `.split` (one), `.held` and
+`.static` (a refresh that drew the static layer again).
+
+A far cascade at a reduced rate (`farShadows.hertz` below every frame, with
+`world.rates shadow-far` on: `SdfFarShadows.HoldsStaticLayer`) also holds a
+static layer, two more depths of the far pass (`SdfWorldPackage.WithShadows`'
+`farStatic`): the static scene's casters drawn alone through their own
+selection (`SdfMeshMotion.Static`). Every refresh copies the layer into the
+cascade's depth and exit layer and draws the moving casters over the copy
+(`SdfMeshMotion.Dynamic`, whose two phases test against the static depth),
+then every glass draw's extinction, both layers in one frame, so a refresh
+costs the moving casters rather than the scene. The selection kernel leaves a
+draw its filter excludes untouched, so the two stagings keep each other's
+visibility history. The static layer is drawn again only when the static scene
+changes (`SdfWorldTables.StaticDrawRevision`, the revision the distant map
+holds by, read through `CastersRead`) or the fit no longer covers the view:
+`RecordFar` reuses it only while a submitted recording of the current graph
+drew it, the fit's tolerances still hold against the camera it was drawn from,
+and the revision is the one it drew. A refresh over a standing static layer
+draws from that layer's camera and leaves the fit's anchors where the layer's
+own refresh set them, so the tolerances bound how far the view strays from it.
 
 ### The distant shadow map
 
