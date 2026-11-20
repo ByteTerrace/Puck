@@ -22,19 +22,24 @@ public sealed class CodeDerivedCache<TKey, TValue>(int capacity) where TKey : no
     // One entry: a value held, or a derivation every caller that finds it shares. A derivation that throws leaves its
     // slot unheld, and the caller that saw it fail removes it so the next request derives again.
     private sealed class Slot {
-        private readonly Lazy<TValue>? m_derivation;
-        private readonly TValue m_value;
+        private readonly Func<TValue>? m_derive;
+        private bool m_held;
+        private object? m_gate;
+        private TValue m_value;
 
         public Slot(TValue value) {
+            m_held = true;
             m_value = value;
         }
         public Slot(TKey key, Func<TKey, TValue> derive) {
+            m_derive = () => derive(arg: key);
             m_value = default!;
-            m_derivation = new(valueFactory: () => derive(arg: key), mode: LazyThreadSafetyMode.ExecutionAndPublication);
         }
 
-        public bool IsHeld => (m_derivation?.IsValueCreated ?? true);
-        public TValue Value => ((m_derivation is null) ? m_value : m_derivation.Value);
+        public bool IsHeld => Volatile.Read(location: ref m_held);
+        // LazyInitializer's factory overload carries no trimming demand on TValue, where Lazy<TValue> asks for a
+        // public parameterless constructor the browser engine's trimmer cannot prove.
+        public TValue Value => (IsHeld ? m_value : LazyInitializer.EnsureInitialized(target: ref m_value, initialized: ref m_held, syncLock: ref m_gate, valueFactory: m_derive!));
     }
 
     /// <summary>Gets the most entries the table holds.</summary>

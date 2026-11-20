@@ -6,6 +6,11 @@
                 "excludedTypes": "Request",
                 "isEnabled": true
             }
+        },
+        "logLevel": {
+            "Function": "Warning",
+            "Host.Results": "Warning",
+            "default": "Warning"
         }
     },
     "telemetryMode": "OpenTelemetry",
