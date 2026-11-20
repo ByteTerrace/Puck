@@ -862,12 +862,8 @@ public static partial class WorldDefinitionValidator {
         return ids;
     }
 
-    // The declared-name sets ValidateCore's worst-threaded consumers (ValidatePlacements/ValidateFaceSources,
-    // ValidateScreenSource/ValidateMagazine) resolve dangling references against, carried as ONE parameter instead
-    // of one positional HashSet per set. Filled progressively as ValidateCore computes each set — a field is safe to
-    // read once ValidateCore's own call to its owning Validate* method has run, the same dependency order the
-    // un-scoped locals already followed.
-    private sealed class ValidationScope {
+    // The declarations placement facets and screen sources resolve against. Each validator builds the scope it reads.
+    private sealed record ValidationScope {
         public HashSet<string> Cameras { get; set; } = [];
         public HashSet<string> DestinationNames { get; set; } = [];
         public HashSet<string> FontNames { get; set; } = [];
@@ -964,47 +960,8 @@ public static partial class WorldDefinitionValidator {
             deferred: deferredSink
         );
 
-        ValidateRenderFarDistance(
-            farDistance: definition.Render.FarDistance,
-            errors: errors
-        );
-        ValidateExposure(definition: definition, exposure: definition.Render.Exposure, errors: errors);
-        ValidateRenderResolution(definition: definition, errors: errors);
-
-        ValidateTimeline(
-            definition: definition,
-            errors: errors
-        );
-        ValidateKeyedValues(
-            definition: definition,
-            errors: errors
-        );
-        var (expandedLighting, expandedSky) = ValidateAndExpandRenderKeys(
-            definition: definition,
-            errors: errors
-        );
-
-        ValidateRenderLighting(
-            definition: definition,
-            lighting: expandedLighting,
-            errors: errors
-        );
-        ValidateRenderSky(
-            definition: definition,
-            sky: expandedSky,
-            errors: errors,
-            lighting: ResolvedLightingShape(lighting: expandedLighting)
-        );
-        ValidateRenderEnvironment(
-            definition: definition,
-            environment: definition.Render.Environment,
-            errors: errors
-        );
-        ValidateRenderAtmosphere(
-            atmosphere: definition.Render.Atmosphere,
-            definition: definition,
-            errors: errors
-        );
+        ValidateTimeline(definition: definition, errors: errors);
+        ValidateKeyedValues(definition: definition, errors: errors);
 
         ValidateUpdate(
             errors: errors,
@@ -1033,12 +990,7 @@ public static partial class WorldDefinitionValidator {
             errors: errors
         );
 
-        // Curves validates before every consumer that names a row by curves/curve — today the camera path op — the
-        // same ordering dynamicsNames already gives dynamics consumers.
-        var curveNames = ValidateCurves(
-            curves: definition.Curves,
-            errors: errors
-        );
+        var curveNames = ValidateCurveDeclarations(definition.Curves, errors);
 
         ValidatePlayerDefaults(
             defaults: definition.PlayerDefaults,
@@ -1138,7 +1090,6 @@ public static partial class WorldDefinitionValidator {
             errors: errors
         );
 
-        scope.PatchIds = patchIds;
         // Music validates right beside tunes/patches — the same asset-row shape, optional (null = none) rather
         // than required, since a required section would refuse every world checked in before this arc.
         _ = ValidateOptionalAssets(
@@ -1299,7 +1250,6 @@ public static partial class WorldDefinitionValidator {
             targetRegisterNames: targetRegisterNames
         );
 
-        scope.KitNames = kitNames;
 
         ValidateAssignment(
             assignment: definition.Assignment,
@@ -1527,7 +1477,6 @@ public static partial class WorldDefinitionValidator {
             errors: errors
         );
 
-        scope.DestinationNames = destinationNames;
 
         ValidateAdjacencies(
             definition: definition,
@@ -1578,49 +1527,18 @@ public static partial class WorldDefinitionValidator {
             placements: definition.Placements,
             worldSeed: (definition.Generation?.WorldSeed ?? 0UL)
         );
-        var fontNames = ValidateTextCatalog(
+        _ = ValidateTextCatalog(
             text: definition.Text,
             errors: errors
         );
 
-        scope.FontNames = fontNames;
-        scope.HasTextCatalog = (definition.Text is not null);
-
-        var prototypeIds = DeclaredNames(rows: definition.Creations, name: static creation => creation.Id.Value);
-
-        scope.PrototypeIds = prototypeIds;
-
-        // The LOOK rows go AFTER ValidateCreations (a creation look resolves its PrototypeId against the id-set that
-        // returns) and BEFORE ValidatePlacements (a future Inhabit facet will resolve its Look against the look-name set
-        // this returns) — the same forward-threading prototypeIds already rides.
-        var lookNames = ValidateLooks(
-            definition: definition,
-            creations: definition.Creations,
-            looks: definition.Looks,
-            prototypeIds: prototypeIds,
-            dynamicsNames: dynamicsNames,
-            errors: errors
-        );
-
-        scope.LookNames = lookNames;
-
-        ValidateLookAssignment(
-            assignment: definition.LookAssignment,
-            definition: definition,
-            lookNames: lookNames,
-            errors: errors
-        );
-
-        var placementIds = ValidatePlacements(
-            placements: definition.Placements,
-            definition: definition,
-            authoring: authoring,
-            requiresField: WorldContactSelection.RequiresField(collision: definition.Collision),
-            scope: scope,
-            errors: errors
-        );
 
 
+
+        ValidateUniqueRowNames(definition.Looks, static look => look.Name?.Value, "looks", "", errors);
+        ValidateProbeReservations(definition, errors);
+
+        var placementIds = ValidatePlacementReservations(definition, errors);
         var cameras = new HashSet<string>(comparer: StringComparer.Ordinal);
 
         {
@@ -1727,16 +1645,6 @@ public static partial class WorldDefinitionValidator {
             }
         }
 
-        scope.Cameras = cameras;
-
-        // A probe socket's 'view' arm resolves against the SAME declared camera set a screen row's own 'view' arm
-        // does, so this runs only once that set is fully built above — never earlier, and never twice.
-        ValidateProbes(
-            cameras: cameras,
-            deferred: deferredSink,
-            definition: definition,
-            errors: errors
-        );
 
         ValidateCommands(
             definition: definition,
@@ -1796,150 +1704,18 @@ public static partial class WorldDefinitionValidator {
         if ((WorldPlacementPolicy.DerivedFaceBase(definition: definition) + definition.DerivedFaceScreens) > SdfProgramBuilder.MaxScreenSurfaces) {
             errors.Add(item: $"Authored screens and {definition.DerivedFaceScreens} derived-face bindings exceed the {SdfProgramBuilder.MaxScreenSurfaces} screen bindings.");
         }
-        // The kits a screen route may name: only a kit carrying a pad map assigns channels a meaning at a machine,
-        // so a route naming any other kit would compile to an empty pad and silently press nothing.
-        var padKits = new Dictionary<string, IReadOnlyDictionary<string, WorldPadElement>>(comparer: StringComparer.Ordinal);
-
-        foreach (var padKit in definition.Kits) {
-            if (padKit is { Name: { Length: > 0 } padKitName, PadRaw: { Count: > 0 } pad }) {
-                _ = padKits.TryAdd(
-                    key: padKitName,
-                    value: pad
-                );
+        foreach (var screen in definition.Screens) {
+            if (screen is { Index: >= 0 and < SdfProgramBuilder.MaxScreenSurfaces } && !screenIndices.Add(screen.Index)) {
+                errors.Add(item: $"screens index {screen.Index} is duplicated.");
             }
         }
+        var availableHeadroom = ((SdfProgramBuilder.MaxScreenSurfaces - definition.DerivedFaceScreens) - screenIndices.Count);
 
-        {
-            var screens = definition.Screens;
-
-            for (var index = 0; (index < screens.Count); index++) {
-                var screen = screens[index];
-                var path = $"screens[{index}]";
-
-                if (screen is null) {
-                    errors.Add(item: $"{path} is required.");
-                    continue;
-                }
-
-                if (
-                    (screen.Index < 0) ||
-                    (screen.Index >= SdfProgramBuilder.MaxScreenSurfaces)
-                ) {
-                    errors.Add(item: $"{path}.index {screen.Index} is outside 0..{(SdfProgramBuilder.MaxScreenSurfaces - 1)}.");
-                } else if (!screenIndices.Add(item: screen.Index)) {
-                    errors.Add(item: $"{path}.index {screen.Index} is duplicated.");
-                }
-
-                if (
-                    (screen.Origin is null) || (screen.Right is null) || (screen.Up is null) ||
-                    !VectorFunctions.IsFinite(vector: screen.Origin) ||
-                    !VectorFunctions.IsFinite(vector: screen.Right) ||
-                    !VectorFunctions.IsFinite(vector: screen.Up)
-                ) {
-                    errors.Add(item: $"{path} frame vectors must contain finite coordinates.");
-                } else if (
-                    (screen.Right.LengthSquared() <= MinimumBasisLengthSquared) ||
-                    (screen.Up.LengthSquared() <= MinimumBasisLengthSquared) ||
-                    (Vector3.Cross(
-                    vector1: screen.Right,
-                    vector2: screen.Up
-                ).LengthSquared() <= MinimumBasisLengthSquared)
-                ) {
-                    errors.Add(item: $"{path} right/up vectors must be non-zero and linearly independent.");
-                } else if (ScreenBasisSkew(screen: screen) > MaximumScreenBasisSkew) {
-                    errors.Add(item: $"{path} right/up vectors must be orthogonal (the unit axes' dot product is {ScreenBasisSkew(screen: screen)}, and at most {MaximumScreenBasisSkew} is accepted). They are the slab's local +X/+Y: the render path derives the slab's orientation and sampled UV from them while the collider projects its half-extents onto them, so a skewed pair renders and collides as different solids.");
-                }
-
-                if (
-                    !float.IsFinite(f: screen.HalfWidth) ||
-                    !float.IsFinite(f: screen.HalfHeight) ||
-                    !float.IsFinite(f: screen.HalfDepth) ||
-                    (screen.HalfWidth <= 0f) ||
-                    (screen.HalfHeight <= 0f) ||
-                    (screen.HalfDepth <= 0f)
-                ) {
-                    errors.Add(item: $"{path} half extents must be finite and positive.");
-                }
-                if (!Enum.IsDefined(value: screen.Filter)) {
-                    errors.Add(item: $"{path}.filter {((uint)screen.Filter)} is not a sampler filter; a screen samples its source Nearest or Linear.");
-                }
-                ValidateScreenMaterialName(
-                    definition: definition,
-                    errors: errors,
-                    material: screen.Material,
-                    path: $"{path}.material",
-                    source: screen.Source
-                );
-                if ((screen.Luminance is { } luminance) && (!float.IsFinite(f: luminance) || (luminance <= 0f) || (luminance > SdfScreenEmission.MaxLuminance))) {
-                    errors.Add(item: $"{path}.luminance {luminance} is not a display's peak luminance; a screen shows a white picture at a luminance in (0, {SdfScreenEmission.MaxLuminance}] nits.");
-                }
-
-                // The declared source and each magazine entry cross the same source gate (a magazine entry could
-                // otherwise name an undeclared camera).
-                ValidateScreenSource(
-                    definition: definition,
-                    source: screen.Source,
-                    path: $"{path}.source",
-                    scope: scope,
-                    cablePermitted: true,
-                    errors: errors,
-                    deferred: deferredSink
-                );
-
-                ValidateRoute(
-                    route: screen.Route,
-                    source: screen.Source,
-                    path: $"{path}.route",
-                    channelNames: allChannelNames,
-                    padKits: padKits,
-                    errors: errors
-                );
-                ValidateMagazine(
-                    definition: definition,
-                    magazine: screen.Magazine,
-                    path: $"{path}.magazine",
-                    scope: scope,
-                    errors: errors,
-                    deferred: deferredSink
-                );
-                if (screen.Carry is { } carry) {
-                    ValidateCarry(
-                        carry: carry,
-                        definition: definition,
-                        errors: errors,
-                        path: $"{path}.carry"
-                    );
-                }
-
-                // The screen's solidity facet — a box collider from the slab's frame + margin. The effective
-                // per-axis extent must stay positive (a margin that inverts the box is rejected by name).
-                if (screen.Solid is { } screenSolid) {
-                    RequireFinite(
-                        value: screenSolid.Margin,
-                        name: new Subject(Member: ".solid.margin", Path: path),
-                        errors: errors
-                    );
-                    RequirePositiveEffectiveExtent(
-                        halfExtents: new Vector3(
-                            x: screen.HalfWidth,
-                            y: screen.HalfHeight,
-                            z: screen.HalfDepth
-                        ),
-                        margin: screenSolid.Margin,
-                        path: $"{path}.solid.margin",
-                        errors: errors
-                    );
-                }
-            }
-
-            var availableHeadroom = ((SdfProgramBuilder.MaxScreenSurfaces - definition.DerivedFaceScreens) - screenIndices.Count);
-
-            if (authoring.AuthoringHeadroomScreens > availableHeadroom) {
-                errors.Add(item: $"placements.policy.authoringHeadroomScreens asks for {authoring.AuthoringHeadroomScreens} slot(s), but only {Math.Max(
-                    val1: 0,
-                    val2: availableHeadroom
-                )} remain after {screenIndices.Count} authored screen(s) and {definition.DerivedFaceScreens} derived-face reservation(s).");
-            }
+        if (authoring.AuthoringHeadroomScreens > availableHeadroom) {
+            errors.Add(item: $"placements.policy.authoringHeadroomScreens asks for {authoring.AuthoringHeadroomScreens} slot(s), but only {Math.Max(
+                val1: 0,
+                val2: availableHeadroom
+            )} remain after {screenIndices.Count} authored screen(s) and {definition.DerivedFaceScreens} derived-face reservation(s).");
         }
 
         ValidateMachines(

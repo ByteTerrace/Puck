@@ -15,14 +15,17 @@ public static partial class WorldDefinitionValidator {
 
     private static readonly float CurveMaxTangentYaw = (MathF.PI + TangentYawSlack);
 
-    internal static HashSet<string> ValidateCurves(IReadOnlyList<WorldCurveRow> curves, List<string> errors) {
-        var names = new HashSet<string>(comparer: StringComparer.Ordinal);
-
+    private static HashSet<string> ValidateCurveDeclarations(IReadOnlyList<WorldCurveRow> curves, List<string> errors) {
         if (curves.Count > WorldCurves.MaxRows) {
             errors.Add(item: $"curves declares {curves.Count} row(s), more than {WorldCurves.MaxRows}.");
         }
+        return ValidateUniqueRowNames(curves, static row => row.Name, "curves", "", errors);
+    }
 
-        for (var index = 0; (index < curves.Count); index++) {
+    internal static HashSet<string> ValidateCurves(IReadOnlyList<WorldCurveRow> curves, List<string> errors, IReadOnlyList<int>? rows = null, bool checkDeclarations = true) {
+        var names = checkDeclarations ? ValidateCurveDeclarations(curves, errors) : [];
+
+        foreach (var index in RowOrdinals(curves.Count, rows)) {
             var row = curves[index];
             var path = $"curves[{index}]";
 
@@ -31,14 +34,6 @@ public static partial class WorldDefinitionValidator {
 
                 continue;
             }
-
-            RequireUniqueName(
-                value: row.Name,
-                seen: names,
-                path: path,
-                field: "",
-                errors: errors
-            );
 
             var knots = row.Knots;
             var knotCount = (knots?.Count ?? 0);

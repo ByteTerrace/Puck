@@ -7,6 +7,8 @@ public static partial class WorldDefinitionValidator {
     // and, for a value, the rate and dynamics a cell's clock is read through (WorldStateReader).
     private static readonly WorldDocumentInputs StateInputs = (WorldDocumentInputs.State |
         WorldDocumentInputs.Of(WorldDocumentInput.Identity, WorldDocumentInput.Properties, WorldDocumentInput.Bodies, WorldDocumentInput.Simulation, WorldDocumentInput.Dynamics));
+    private static readonly WorldDocumentInputs PlacementRowInputs = WorldDocumentInputs.Of(
+        WorldDocumentInput.PlacementRows, WorldDocumentInput.Prototypes);
 
     // The one table of validation partitions, in the order a whole-document validation runs them. The state expansion
     // runs first, since every reader of the state rows reads them expanded; the document partition runs last, so the
@@ -32,7 +34,96 @@ public static partial class WorldDefinitionValidator {
             reads: (StateInputs | WorldDocumentInputs.Of(WorldDocumentInput.Text, WorldDocumentInput.Dynamics, WorldDocumentInput.Channels, WorldDocumentInput.Curves)),
             validate: static (run, rows) => ValidateCreationRows(definition: run.Definition, rows: rows, errors: run.Errors),
             rowCount: static definition => definition.Creations.Count,
-            rowChange: CreationRowChange
+            rowChange: CreationRowChange,
+            bound: BoundRows(static d => d.Creations, static (d, rows) => d with { CreationsRaw = rows })
+        ),
+        RowPartition(
+            name: "placements",
+            owns: WorldDocumentInput.PlacementRows,
+            reads: StateInputs | WorldDocumentInputs.Of(WorldDocumentInput.Adjacencies, WorldDocumentInput.Channels,
+                WorldDocumentInput.Collision, WorldDocumentInput.Destinations,
+                WorldDocumentInput.Generation, WorldDocumentInput.KitRows, WorldDocumentInput.LookRows,
+                WorldDocumentInput.Patches, WorldDocumentInput.PlacementPolicy, WorldDocumentInput.Prototypes,
+                WorldDocumentInput.ScreenMaterials, WorldDocumentInput.Text, WorldDocumentInput.DocumentDirectory),
+            get: static d => d.Placements,
+            set: static (d, rows) => d with { PlacementRowsRaw = rows },
+            validate: static (run, rows) => {
+                ValidatePlacements(run.Definition, rows, run.Errors);
+                if (run.BoundUnit && !WorldPlacementFrameCompilation.TryValidate(run.Definition.Placements, out var reason)) {
+                    run.Errors.Add(item: $"placements: {reason}");
+                }
+            },
+            bound: PlacementBinding(),
+            rowChange: static (before, after) => new(PlacementRowsReached(before, after, prototypesChanged: false), false),
+            selectDependentRows: static (before, after, changed) => changed.Except(PlacementRowInputs).IsEmpty
+                ? PlacementRowsReached(before, after, prototypesChanged: true)
+                : null
+        ),
+        RowPartition(
+            name: "screens",
+            owns: WorldDocumentInput.Screens,
+            reads: StateInputs | WorldDocumentInputs.Of(WorldDocumentInput.Cameras, WorldDocumentInput.Channels,
+                WorldDocumentInput.Destinations, WorldDocumentInput.DocumentDirectory, WorldDocumentInput.KitRows,
+                WorldDocumentInput.LookRows, WorldDocumentInput.Machines, WorldDocumentInput.Probes, WorldDocumentInput.Prototypes,
+                WorldDocumentInput.ScreenMaterials, WorldDocumentInput.Text, WorldDocumentInput.Views),
+            get: static d => d.Screens,
+            set: static (d, rows) => d with { ScreensRaw = rows },
+            validate: ValidateScreens,
+            selectDependentRows: static (before, after, changed) =>
+                changed.Except(WorldDocumentInputs.Of(WorldDocumentInput.Screens, WorldDocumentInput.Prototypes)).IsEmpty
+                    ? ScreenRowsReachingCreations(before, after)
+                    : null
+        ),
+        RowPartition(
+            name: "curves",
+            owns: WorldDocumentInput.Curves,
+            reads: WorldDocumentInputs.None,
+            get: static d => d.Curves,
+            set: static (d, rows) => d with { CurvesRaw = rows },
+            validate: static (run, rows) => _ = ValidateCurves(run.Definition.Curves, run.Errors, rows, checkDeclarations: false)
+        ),
+        RowPartition(
+            name: "probes",
+            owns: WorldDocumentInput.Probes,
+            reads: StateInputs | WorldDocumentInputs.Of(WorldDocumentInput.Cameras, WorldDocumentInput.Channels,
+                WorldDocumentInput.DocumentDirectory, WorldDocumentInput.Views),
+            get: static d => d.ProbesRaw ?? [],
+            set: static (d, rows) => d with { ProbesRaw = rows },
+            validate: static (run, rows) => ValidateProbes(run.Definition,
+                DeclaredNames(run.Definition.Cameras, static camera => camera.Name), run.Errors, run.Deferred, rows)
+        ),
+        RowPartition(
+            name: "looks",
+            owns: WorldDocumentInput.LookRows,
+            reads: StateInputs | WorldDocumentInputs.Of(WorldDocumentInput.Prototypes),
+            get: static d => d.Looks,
+            set: static (d, rows) => d with { LookRowsRaw = rows },
+            validate: static (run, rows) => ValidateLookRows(run.Definition, rows, run.Errors)
+        ),
+        new(
+            name: "looks.assignment",
+            granularity: WorldValidationGranularity.Section,
+            owns: WorldDocumentInputs.Of(WorldDocumentInput.LookAssignment),
+            reads: StateInputs | WorldDocumentInputs.Of(WorldDocumentInput.LookRows),
+            validate: static (run, _) => ValidateLookAssignment(run.Definition, run.Definition.LookAssignment,
+                DeclaredNames(run.Definition.Looks, static row => row.Name?.Value), run.Errors),
+            bound: new WorldBoundValidation(
+                Enumerate: static d => d.LookAssignmentRaw is { } assignment ? [assignment] : [],
+                Resolve: static (d, unit, resolve) => resolve(unit) is WorldRowAssignment literal ? new(d with { LookAssignmentRaw = literal }) : null,
+                Remove: static d => d with { LookAssignmentRaw = null })
+        ),
+        new(
+            name: "render",
+            granularity: WorldValidationGranularity.Section,
+            owns: WorldDocumentInputs.Of(WorldDocumentInput.Render),
+            reads: StateInputs | WorldDocumentInputs.Of(WorldDocumentInput.Timeline, WorldDocumentInput.Curves,
+                WorldDocumentInput.Cameras, WorldDocumentInput.PlacementRows, WorldDocumentInput.Prototypes,
+                WorldDocumentInput.Screens, WorldDocumentInput.ScreenMaterials, WorldDocumentInput.Shades, WorldDocumentInput.Views),
+            validate: static (run, _) => ValidateRenderUnit(run),
+            bound: new WorldBoundValidation(
+                Enumerate: static d => d.Render.Sky is { } sky ? [sky] : [],
+                Resolve: static (d, sky, resolve) => resolve(sky) is WorldRenderSky literal ? new(WithSky(d, literal)) : null,
+                Remove: static d => d.Render.Sky is not null ? WithSky(d, null) : d)
         ),
         new(
             name: "hud",
@@ -212,7 +303,8 @@ public static partial class WorldDefinitionValidator {
                 var partition = table[index];
 
                 if (partition.Reads.Except(other: partition.Owns).Overlaps(other: visible)) {
-                    plan[index] = WholePartition;
+                    var selected = partition.SelectDependentRows?.Invoke(before, after, visible.Intersect(partition.Reads));
+                    plan[index] = selected is null ? WholePartition : selected.Count > 0 ? selected : null;
                 } else if (rowChanges[index] is { } change) {
                     plan[index] = ((change.Rows.Count > 0) ? change.Rows : null);
                 } else if (partition.Owns.Overlaps(other: changed)) {
@@ -241,22 +333,22 @@ public static partial class WorldDefinitionValidator {
                 rows = ((planned.Count == 0) ? null : planned);
             }
 
-            WorldBootWork.Count(kind: WorldBootWork.Validations, amount: ((rows is null) ? partition.UnitsIn(definition: run.Definition) : rows.Count));
+            RunPartition(partition, run, rows, rows?.Count ?? partition.UnitsIn(definition: run.Definition));
+        }
+    }
 
-            var recording = WorldDocumentReads.Begin();
-            WorldDocumentInputs read;
+    private static void RunPartition(WorldValidationPartition partition, WorldValidationRun run, IReadOnlyList<int>? rows, int units) {
+        WorldBootWork.Count(kind: WorldBootWork.Validations, amount: units);
+        var recording = WorldDocumentReads.Begin();
+        WorldDocumentInputs read;
 
-            try {
-                partition.Validate(arg1: run, arg2: rows);
-            } finally {
-                read = recording.End();
-            }
+        try { partition.Validate(arg1: run, arg2: rows); }
+        finally { read = recording.End(); }
 
-            var undeclared = read.Except(other: partition.Reads);
+        var undeclared = read.Except(other: partition.Reads);
 
-            if (!undeclared.IsEmpty) {
-                run.Errors.Add(item: $"validation partition '{partition.Name}' read {undeclared}, which its declared inputs do not name.");
-            }
+        if (!undeclared.IsEmpty) {
+            run.Errors.Add(item: $"validation partition '{partition.Name}' read {undeclared}, which its declared inputs do not name.");
         }
     }
 

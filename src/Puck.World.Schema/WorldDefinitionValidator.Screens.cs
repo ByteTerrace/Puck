@@ -6,6 +6,145 @@ using Puck.SignedDistance;
 namespace Puck.World;
 
 public static partial class WorldDefinitionValidator {
+    private static void ValidateScreens(WorldValidationRun run, IReadOnlyList<int>? rows) {
+        var definition = run.Definition;
+        var errors = run.Errors;
+        var deferredSink = run.Deferred;
+        var scope = DeclaredScreenScope(definition, run.Machines);
+        var allChannelNames = DeclaredNames(rows: definition.Channels, name: static channel => channel.Name);
+        // The kits a screen route may name: only a kit carrying a pad map assigns channels a meaning at a machine,
+        // so a route naming any other kit would compile to an empty pad and silently press nothing.
+        var padKits = new Dictionary<string, IReadOnlyDictionary<string, WorldPadElement>>(comparer: StringComparer.Ordinal);
+
+        foreach (var padKit in definition.Kits) {
+            if (padKit is { Name: { Length: > 0 } padKitName, PadRaw: { Count: > 0 } pad }) {
+                _ = padKits.TryAdd(
+                    key: padKitName,
+                    value: pad
+                );
+            }
+        }
+
+        var screens = definition.Screens;
+        foreach (var index in RowOrdinals(screens.Count, rows)) {
+            var screen = screens[index];
+            var path = $"screens[{index}]";
+
+            if (screen is null) {
+                errors.Add(item: $"{path} is required.");
+                continue;
+            }
+
+            if (
+                (screen.Index < 0) ||
+                (screen.Index >= SdfProgramBuilder.MaxScreenSurfaces)
+            ) {
+                errors.Add(item: $"{path}.index {screen.Index} is outside 0..{(SdfProgramBuilder.MaxScreenSurfaces - 1)}.");
+            }
+
+            if (
+                (screen.Origin is null) || (screen.Right is null) || (screen.Up is null) ||
+                !VectorFunctions.IsFinite(vector: screen.Origin) ||
+                !VectorFunctions.IsFinite(vector: screen.Right) ||
+                !VectorFunctions.IsFinite(vector: screen.Up)
+            ) {
+                errors.Add(item: $"{path} frame vectors must contain finite coordinates.");
+            } else if (
+                (screen.Right.LengthSquared() <= MinimumBasisLengthSquared) ||
+                (screen.Up.LengthSquared() <= MinimumBasisLengthSquared) ||
+                (Vector3.Cross(
+                vector1: screen.Right,
+                vector2: screen.Up
+            ).LengthSquared() <= MinimumBasisLengthSquared)
+            ) {
+                errors.Add(item: $"{path} right/up vectors must be non-zero and linearly independent.");
+            } else if (ScreenBasisSkew(screen: screen) > MaximumScreenBasisSkew) {
+                errors.Add(item: $"{path} right/up vectors must be orthogonal (the unit axes' dot product is {ScreenBasisSkew(screen: screen)}, and at most {MaximumScreenBasisSkew} is accepted). They are the slab's local +X/+Y: the render path derives the slab's orientation and sampled UV from them while the collider projects its half-extents onto them, so a skewed pair renders and collides as different solids.");
+            }
+
+            if (
+                !float.IsFinite(f: screen.HalfWidth) ||
+                !float.IsFinite(f: screen.HalfHeight) ||
+                !float.IsFinite(f: screen.HalfDepth) ||
+                (screen.HalfWidth <= 0f) ||
+                (screen.HalfHeight <= 0f) ||
+                (screen.HalfDepth <= 0f)
+            ) {
+                errors.Add(item: $"{path} half extents must be finite and positive.");
+            }
+            if (!Enum.IsDefined(value: screen.Filter)) {
+                errors.Add(item: $"{path}.filter {((uint)screen.Filter)} is not a sampler filter; a screen samples its source Nearest or Linear.");
+            }
+            ValidateScreenMaterialName(
+                definition: definition,
+                errors: errors,
+                material: screen.Material,
+                path: $"{path}.material",
+                source: screen.Source
+            );
+            if ((screen.Luminance is { } luminance) && (!float.IsFinite(f: luminance) || (luminance <= 0f) || (luminance > SdfScreenEmission.MaxLuminance))) {
+                errors.Add(item: $"{path}.luminance {luminance} is not a display's peak luminance; a screen shows a white picture at a luminance in (0, {SdfScreenEmission.MaxLuminance}] nits.");
+            }
+
+            // The declared source and each magazine entry cross the same source gate (a magazine entry could
+            // otherwise name an undeclared camera).
+            ValidateScreenSource(
+                definition: definition,
+                source: screen.Source,
+                path: $"{path}.source",
+                scope: scope,
+                cablePermitted: true,
+                errors: errors,
+                deferred: deferredSink
+            );
+
+            ValidateRoute(
+                route: screen.Route,
+                source: screen.Source,
+                path: $"{path}.route",
+                channelNames: allChannelNames,
+                padKits: padKits,
+                errors: errors
+            );
+            ValidateMagazine(
+                definition: definition,
+                magazine: screen.Magazine,
+                path: $"{path}.magazine",
+                scope: scope,
+                errors: errors,
+                deferred: deferredSink
+            );
+            if (screen.Carry is { } carry) {
+                ValidateCarry(
+                    carry: carry,
+                    definition: definition,
+                    errors: errors,
+                    path: $"{path}.carry"
+                );
+            }
+
+            // The screen's solidity facet — a box collider from the slab's frame + margin. The effective
+            // per-axis extent must stay positive (a margin that inverts the box is rejected by name).
+            if (screen.Solid is { } screenSolid) {
+                RequireFinite(
+                    value: screenSolid.Margin,
+                    name: new Subject(Member: ".solid.margin", Path: path),
+                    errors: errors
+                );
+                RequirePositiveEffectiveExtent(
+                    halfExtents: new Vector3(
+                        x: screen.HalfWidth,
+                        y: screen.HalfHeight,
+                        z: screen.HalfDepth
+                    ),
+                    margin: screenSolid.Margin,
+                    path: $"{path}.solid.margin",
+                    errors: errors
+                );
+            }
+        }
+    }
+
     // The per-axis effective-extent check for a box solidity facet: a margin that inverts any axis (halfExtent + margin
     // <= 0) is rejected by name, not turned into a negative-extent collider.
     private static void RequirePositiveEffectiveExtent(Vector3 halfExtents, float margin, string path, List<string> errors) {
