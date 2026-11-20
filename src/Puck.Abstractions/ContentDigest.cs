@@ -89,6 +89,16 @@ public static class ContentDigest {
         AppendChunk(buffer: buffer, chars: default, encoder: encoder, flush: true, hash: hash);
         _ = hash.GetHashAndReset(destination: digest);
     }
+    /// <summary>Gets the SHA-256 digest of text's UTF-8 bytes as a new array.</summary>
+    /// <param name="text">The text to hash.</param>
+    /// <returns>The 32 bytes of the digest.</returns>
+    public static byte[] OfText(ReadOnlySpan<char> text) {
+        var digest = new byte[SizeInBytes];
+
+        HashText(text: text, digest: digest);
+
+        return digest;
+    }
     /// <summary>Gets the SHA-256 digest of bytes as hexadecimal text.</summary>
     /// <param name="content">The bytes to hash.</param>
     /// <param name="upperCase"><see langword="true"/> for uppercase digits, <see langword="false"/> for lowercase.</param>

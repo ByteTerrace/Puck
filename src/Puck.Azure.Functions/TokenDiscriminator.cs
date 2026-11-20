@@ -1,6 +1,5 @@
 using System.IdentityModel.Tokens.Jwt;
-using System.Security.Cryptography;
-using System.Text;
+using Puck.Abstractions;
 
 namespace Puck.Azure.Functions;
 
@@ -67,7 +66,7 @@ public readonly struct TokenDiscriminator {
                 : new() {
                     ObjectId = objectIdGuid.ToString(format: "D").ToLowerInvariant(),
                     TimeToLive = timeToLive,
-                    Value = SHA256.HashData(source: Encoding.UTF8.GetBytes(s: string.Join(
+                    Value = ContentDigest.OfText(text: string.Join(
                     separator: UnitSeparator,
                     values: [
                         audiences,
@@ -75,7 +74,7 @@ public readonly struct TokenDiscriminator {
                         objectId,
                         scopes
                     ]
-                ))),
+                )),
                 }
         ));
     }
