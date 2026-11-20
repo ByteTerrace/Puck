@@ -889,6 +889,11 @@
       "$ref": "./common.schema.json#/$defs/WorldDistantShadows",
       "description": "The distant shadow map the world boots drawing past the far cascade (WorldDistantShadows); a quality preset\u0027s row replaces it. Absent draws none.",
       "default": null
+    },
+    "farShadows": {
+      "$ref": "./common.schema.json#/$defs/WorldFarShadows",
+      "description": "How often the world boots refreshing the far shadow cascade (WorldFarShadows); a quality preset\u0027s row replaces it. Absent refreshes it every frame.",
+      "default": null
     }
   },
   "additionalProperties": false,

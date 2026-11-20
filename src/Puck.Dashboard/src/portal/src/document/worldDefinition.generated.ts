@@ -7288,6 +7288,10 @@ export type WorldDistantShadows = {
    * The light turn, in degrees, a held map tolerates before it is drawn again: the most its shadows lag a moving sun by, in (0, 10].
    */
   turnDegrees: number;
+  /**
+   * The frames one redraw is spread over, from 1 through MaxFrames: each draws a share of the casters into a back map, and the map the receivers read changes only once the last share lands, so a redraw costs any one frame about this share of a whole one and lands this many frames later. One draws a redraw whole.
+   */
+  frames?: number;
 };
 
 /**
@@ -7905,6 +7909,20 @@ export type WorldExports = {
    * The names a host's presentation may bind: HUD elements and templates, overlay predicates, camera program scalars, binding wheels and bars.
    */
   bindings?: (string | null)[] | null;
+};
+
+/**
+ * How the key light's far shadow cascade keeps up with what moves: it is drawn again at least Hertz times a second of presentation time and held between, and a held cascade is drawn again at once when the light turns past TurnDegrees, the camera moves or turns past the cascade's receiver margin, or its fit changes. A dynamic caster's shadow lags it by up to one period, and every shadow lags a turning light by up to the turn. A device's quality row chooses it (FarShadows).
+ */
+export type WorldFarShadows = {
+  /**
+   * The refreshes a second, a whole number from 1 through MaxHertz, where MaxHertz draws it every frame. A refresh draws the cascade's two layers on consecutive frames.
+   */
+  hertz: number;
+  /**
+   * The light turn, in degrees, a held cascade tolerates, in (0, MaxTurnDegrees]: past it the cascade is drawn again at once, so a light that turns faster than this a period refreshes the cascade on its turn rather than its rate.
+   */
+  turnDegrees: number;
 };
 
 export type WorldFieldCondition = {
@@ -10958,6 +10976,10 @@ export type WorldQualityPreset = {
    * The distant shadow map the device draws past the far cascade (its reach, texels and the light turn a held map tolerates): far shadows by rasterization, which need no ray hardware. Absent draws none.
    */
   distantShadows?: WorldDistantShadows | null;
+  /**
+   * How often the device refreshes the far shadow cascade and the light turn a held cascade tolerates (WorldFarShadows). Absent refreshes it every frame.
+   */
+  farShadows?: WorldFarShadows | null;
 };
 
 export type WorldReaction = WorldReactionDiffuse | WorldReactionDecay | WorldReactionTransform | WorldReactionEmit | WorldReactionExpose | WorldReactionFlow | null;
@@ -11276,6 +11298,10 @@ export type WorldRenderDefaults = {
    * The distant shadow map the world boots drawing past the far cascade (WorldDistantShadows); a quality preset's row replaces it. Absent draws none.
    */
   distantShadows?: WorldDistantShadows | null;
+  /**
+   * How often the world boots refreshing the far shadow cascade (WorldFarShadows); a quality preset's row replaces it. Absent refreshes it every frame.
+   */
+  farShadows?: WorldFarShadows | null;
 };
 
 export type WorldRenderEnvironment = {
