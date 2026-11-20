@@ -37,14 +37,81 @@ public abstract partial class StateRowJsonConverter<TRow> : JsonConverter<TRow>,
         public JsonElement? Draw { get; internal set; }
     }
 
+    /// <summary>One top-level member a derived row adds to the shared shape: its wire name, how a refusal spells it,
+    /// and the shared member it follows.</summary>
+    /// <param name="After">The shared member the added one follows in <see cref="Shape"/>.</param>
+    /// <param name="Name">The wire member name.</param>
+    /// <param name="Spelling">The member as <see cref="Shape"/> spells it, name included.</param>
+    protected readonly record struct ClaimedShapeMember(string After, string Name, string Spelling);
+
+    // The shared shape's top-level members in wire order, each with its spelling; Shape adds a derived row's own
+    // members after the shared member each follows.
+    private static readonly (string Name, string Spelling)[] SharedShape = [
+        ("name", """ "name":… """),
+        ("kind", """ "kind":"Int"|"Fixed"|"Bool"|"Text"|"Vector" """),
+        ("space", """ "space":… """),
+        ("enum", """ "enum":… """),
+        ("value", """ "value":… or "cells":[{"key":…,"value":…,"advance":{"perSecondNumerator":…,"perSecondDenominator":…},"dynamics":{"row":…},"cycle":{"word":[…],"power":…,"output":"Step"|"Turns"|"Cos"|"Sin"|"Node"|"ProjectionX"|"ProjectionY"|"Ring","ticksPerStep":…},"behavior":"None","clock":{"epochTick":…,"epochEngineTick":…,"y0":…,"v0":…,"substepTicks":…}}] """),
+        ("clock", """ "clock":{…} """),
+        ("min", """ "min":… """),
+        ("max", """ "max":… """),
+        ("capacity", """ "capacity":… """),
+        ("reservedCapacity", """ "reservedCapacity":… """),
+        ("cellSlots", """ "cellSlots":[…] """),
+        ("overflow", """ "overflow":"Refuse"|"Saturate" """),
+        ("evicts", """ "evicts":… """),
+        ("advance", """ "advance":{"perSecondNumerator":…,"perSecondDenominator":…} """),
+        ("dynamics", """ "dynamics":{"row":…} """),
+        ("cycle", """ "cycle":{"word":[…],"power":…,"output":"Step"|"Turns"|"Cos"|"Sin"|"Node"|"ProjectionX"|"ProjectionY"|"Ring","ticksPerStep":…} """),
+        ("draw", """ "draw":{"source":… or "generator":{"source":"Markov"|"UniformRange"|"WeightedNumeric"|"StreamDraw"|"SymmetryOrbit",…},"timing":"Boot"|"TickPeriod"|"Event"} """),
+        ("drawCursor", """ "drawCursor":… """),
+        ("drawnMasks", """ "drawnMasks":[…] """),
+        ("historyCursor", """ "historyCursor":… """),
+        ("visibility", """ "visibility":{…} """),
+        ("cellVisibility", """ "cellVisibility":true """),
+        ("knowledge", """ "knowledge":{…} """),
+        ("phase", """ "phase":{…} """),
+        ("phaseOf", """ "phaseOf":… """),
+        ("valuesFrom", """ "valuesFrom":… """),
+        ("domain", """ "domain":{"$type":"slot"|"keys"|"keysOf"|"cellsOf"|"ring",…} """),
+        ("inverse", """ "inverse":{"tokens":…,"codes":…} """),
+    ];
+    private string? m_shape;
+
     /// <summary>Gets the shape a refusal quotes for an unmapped or missing member — also the completeness law's own
-    /// oracle for which top-level members the schema must describe.</summary>
-    public abstract string Shape { get; }
+    /// oracle for which top-level members the schema must describe: the shared members, with a derived row's own
+    /// (<see cref="ClaimedShapeMembers"/>) after the shared member each follows.</summary>
+    public string Shape => (m_shape ??= ComposeShape());
+    /// <summary>Gets the top-level members a derived row adds to the shared shape, which it claims on read
+    /// (<see cref="ClaimsMember"/>) and <see cref="Shape"/> quotes.</summary>
+    protected virtual IReadOnlyList<ClaimedShapeMember> ClaimedShapeMembers => [];
+
+    private string ComposeShape() {
+        var claimed = ClaimedShapeMembers;
+        var members = new List<string>(capacity: (SharedShape.Length + claimed.Count));
+
+        foreach (var (name, spelling) in SharedShape) {
+            members.Add(item: spelling.Trim());
+            foreach (var member in claimed) {
+                if (string.Equals(a: member.After, b: name, comparisonType: StringComparison.Ordinal)) { members.Add(item: member.Spelling.Trim()); }
+            }
+        }
+        if ((members.Count - SharedShape.Length) != claimed.Count) {
+            throw new InvalidOperationException(message: "A claimed state-row member follows no shared member.");
+        }
+        return $"{{{string.Join(separator: ',', values: members)}}}";
+    }
 
     /// <summary>Determines whether a wire member outside the shared shape belongs to the derived row; a claimed
-    /// member lands in <see cref="RowMembers.Claimed"/> instead of refusing.</summary>
+    /// member lands in <see cref="RowMembers.Claimed"/> instead of refusing. The members
+    /// <see cref="ClaimedShapeMembers"/> names are claimed.</summary>
     /// <param name="name">The wire member name.</param>
-    protected virtual bool ClaimsMember(string name) => false;
+    protected virtual bool ClaimsMember(string name) {
+        foreach (var member in ClaimedShapeMembers) {
+            if (string.Equals(a: member.Name, b: name, comparisonType: StringComparison.Ordinal)) { return true; }
+        }
+        return false;
+    }
     /// <summary>Determines whether the derived row's own members declare a draw site, so <c>drawCursor</c> and
     /// <c>drawnMasks</c> are admitted without a <c>draw</c> facet.</summary>
     /// <param name="members">The parsed members.</param>
@@ -1153,9 +1220,6 @@ public abstract partial class StateRowJsonConverter<TRow> : JsonConverter<TRow>,
 }
 /// <summary>The row converter of the standalone state document — the shared shape and nothing more.</summary>
 public sealed class StateRowJsonConverter : StateRowJsonConverter<StateRow> {
-    /// <inheritdoc/>
-    public override string Shape => "{\"name\":…,\"kind\":\"Int\"|\"Fixed\"|\"Bool\"|\"Text\"|\"Vector\",\"space\":…,\"enum\":…,\"value\":… or \"cells\":[{\"key\":…,\"value\":…,\"advance\":{…},\"dynamics\":{…},\"cycle\":{…},\"behavior\":\"None\",\"clock\":{…}}],\"clock\":{…},\"min\":…,\"max\":…,\"capacity\":…,\"reservedCapacity\":…,\"cellSlots\":[…],\"overflow\":\"Refuse\"|\"Saturate\",\"evicts\":…,\"advance\":{…},\"dynamics\":{…},\"cycle\":{…},\"draw\":{…},\"drawCursor\":…,\"drawnMasks\":[…],\"historyCursor\":…,\"visibility\":{…},\"cellVisibility\":true,\"knowledge\":{…},\"phase\":{…},\"phaseOf\":…,\"valuesFrom\":…,\"domain\":{\"$type\":\"slot\"|\"keys\"|\"keysOf\"|\"cellsOf\"|\"ring\",…},\"inverse\":{\"tokens\":…,\"codes\":…}}";
-
     /// <inheritdoc/>
     protected override StateRow Create(StateRow row, RowMembers members, JsonSerializerOptions options) => row;
 }

@@ -346,12 +346,7 @@ public static partial class WorldSchema {
     // record where each one first appears.
     private static JsonObject BuildConverterShape(IJsonSchemaNodeConverter converter, Type propertyType, ExportRun run) {
         if (run.Nested is not null) {
-            var own = converter.BuildSchema(exportType: type => ExportNested(
-                run: run,
-                type: type
-            ));
-
-            return own;
+            return BuildOwnShape(converter: converter, run: run);
         }
 
         var memos = (CollectionsMarshal.GetValueRefOrAddDefault(
@@ -370,10 +365,7 @@ public static partial class WorldSchema {
         }
 
         if (shape is null) {
-            shape = converter.BuildSchema(exportType: type => ExportNested(
-                run: run,
-                type: type
-            ));
+            shape = BuildOwnShape(converter: converter, run: run);
             if (shape.Remove(propertyName: "$id")) {
                 ScopeInlineReferences(node: shape, root: run.InlineRoots.Count);
                 run.InlineRoots.Add(item: shape);
@@ -385,6 +377,76 @@ public static partial class WorldSchema {
             node: shape,
             typesByNode: run.TypesByNode
         ));
+    }
+    // A converter's own description of its node. A graph converter's whole type graph is exported through this run's
+    // transform instead, so every shape in it is titled, typed and described as the world's own shapes are.
+    private static JsonObject BuildOwnShape(IJsonSchemaNodeConverter converter, ExportRun run) => ((converter is IJsonSchemaGraphConverter graph)
+        ? ExportGraph(graph: graph, run: run)
+        : converter.BuildSchema(exportType: type => ExportNested(
+            run: run,
+            type: type
+        )));
+    /// <summary>Exports a graph converter's type graph on its own, as its <see cref="IJsonSchemaNodeConverter.BuildSchema"/>
+    /// answers outside a world export.</summary>
+    /// <param name="graph">The graph converter.</param>
+    /// <returns>The graph's schema, rooted at its own <c>$id</c>.</returns>
+    internal static JsonObject ExportGraph(IJsonSchemaGraphConverter graph) => ExportGraph(graph: graph, run: new ExportRun(index: XmlDocIndex.Value, nested: null));
+    // The graph is read through its own serializer options, so it is exported with them, through the world's own
+    // transform after the converter's own fixups. A repeated shape's later occurrence takes a typed copy of its first
+    // (ExpandOwnReferences), so the copy is titled and hoisted by the same type as the first.
+    private static JsonObject ExportGraph(IJsonSchemaGraphConverter graph, ExportRun run) {
+        var exporterOptions = new JsonSchemaExporterOptions {
+            TransformSchemaNode = (context, node) => {
+                var permissive = ((node is JsonValue value) && value.TryGetValue<bool>(value: out var unconstrained) && unconstrained);
+                var transformed = Transform(
+                    context: context,
+                    node: graph.PrepareSchemaNode(context: context, node: node),
+                    run: run
+                );
+
+                if (transformed is JsonObject obj) {
+                    // Transform leaves the world document's root untitled; a graph's root is a shape inside it.
+                    if (context.Path.Length == 0) {
+                        StampTitle(obj: obj, type: context.TypeInfo.Type);
+                    }
+                    if (permissive && !IsConstrained(node: obj)) {
+                        obj["$comment"] = "Converter-defined value. This schema supplies documentation but leaves value validation to the document's own loader.";
+                    }
+                }
+                return transformed;
+            },
+        };
+        var schema = graph.SchemaOptions.GetJsonSchemaAsNode(
+            exporterOptions: exporterOptions,
+            type: graph.SchemaType
+        ).AsObject();
+
+        ExpandOwnReferences(node: schema, root: schema, typesByNode: run.TypesByNode);
+        schema["$id"] = graph.SchemaId;
+        return schema;
+    }
+    // Whether a node constrains its value at all: a type, a vocabulary, a combinator or a reference.
+    private static bool IsConstrained(JsonObject node) =>
+        (node.ContainsKey(propertyName: "type") || node.ContainsKey(propertyName: "enum") || node.ContainsKey(propertyName: "const") ||
+         node.ContainsKey(propertyName: "anyOf") || node.ContainsKey(propertyName: "oneOf") || node.ContainsKey(propertyName: "$ref") ||
+         node.ContainsKey(propertyName: "properties") || node.ContainsKey(propertyName: "items"));
+    // Describes each token of an enum node that spells a member's name from that member's own summary.
+    private static void ApplyEnumDescriptions(JsonObject node, Type type, XmlDocumentation? index) {
+        var enumType = (Nullable.GetUnderlyingType(nullableType: type) ?? type);
+
+        if (!enumType.IsEnum || (index is null) || (node["enum"] is not JsonArray tokens)) { return; }
+
+        var spelled = tokens.Select(selector: static token => ((token is JsonValue value) && value.TryGetValue<string>(value: out var text)) ? text : null).ToHashSet(comparer: StringComparer.Ordinal);
+        var descriptions = new JsonObject();
+
+        foreach (var name in Enum.GetNames(enumType: enumType)) {
+            if (spelled.Contains(item: name) && TryGetSummary(index: index, memberDocId: $"F:{FormatDeclaringType(type: enumType)}.{name}", text: out var summary)) {
+                descriptions[name] = summary;
+            }
+        }
+        if (descriptions.Count > 0) {
+            node["x-enumDescriptions"] = descriptions;
+        }
     }
     // Normalizes a schema node to an annotatable object, promoting a permissive `true` leaf (an unconstrained
     // schema — e.g. a custom-converted member the exporter cannot introspect, like Vector3) to `{}` in place so a
@@ -1332,6 +1394,7 @@ public static partial class WorldSchema {
                 value: description
             );
         }
+        ApplyEnumDescriptions(node: obj, type: context.TypeInfo.Type, index: run.Index);
 
         if (
             (context.Path.Length == 0) &&
@@ -1622,11 +1685,11 @@ public static partial class WorldSchema {
         return clone;
     }
 
-    // The exporter refers a repeated type's later occurrence to its first by a pointer from the exported root. A creation
-    // fragment embeds under the world schema, where the hoist resolves every pointer from the world's own root, so each
-    // such reference in the fragment takes a copy of its target, the reference's own sibling keywords replacing the
-    // target's in place; a reference to its own ancestor (a shape holding itself) is left as it is.
-    internal static void ExpandOwnReferences(JsonNode node, JsonObject root, HashSet<string>? expanding = null) {
+    // The exporter refers a repeated type's later occurrence to its first by a pointer from the exported root. A graph
+    // converter's fragment embeds under the world schema, where the hoist resolves every pointer from the world's own
+    // root, so each such reference in the fragment takes a typed copy of its target, the reference's own sibling
+    // keywords replacing the target's in place; a reference to its own ancestor (a shape holding itself) is left as it is.
+    private static void ExpandOwnReferences(JsonNode node, JsonObject root, Dictionary<JsonNode, Type> typesByNode, HashSet<string>? expanding = null) {
         expanding ??= new HashSet<string>(comparer: StringComparer.Ordinal);
         string? opened = null;
 
@@ -1642,9 +1705,9 @@ public static partial class WorldSchema {
             opened = pointer;
             var occurrence = reference
                 .Where(predicate: static member => !string.Equals(a: member.Key, b: "$ref", comparisonType: StringComparison.Ordinal))
-                .ToDictionary(keySelector: static member => member.Key, elementSelector: static member => member.Value?.DeepClone(), comparer: StringComparer.Ordinal);
+                .ToDictionary(keySelector: static member => member.Key, elementSelector: member => Copy(value: member.Value), comparer: StringComparer.Ordinal);
             var members = target
-                .Select(selector: member => (member.Key, Value: (occurrence.Remove(key: member.Key, value: out var own) ? own : member.Value?.DeepClone())))
+                .Select(selector: member => (member.Key, Value: (occurrence.Remove(key: member.Key, value: out var own) ? own : Copy(value: member.Value))))
                 .ToArray()
                 .Concat(second: occurrence.Select(selector: static member => (member.Key, member.Value)))
                 .ToArray();
@@ -1653,13 +1716,18 @@ public static partial class WorldSchema {
             foreach (var (key, value) in members) {
                 reference[key] = value;
             }
+            if (typesByNode.TryGetValue(key: target, value: out var targetType)) {
+                typesByNode[reference] = targetType;
+            }
         }
         foreach (var child in node switch { JsonObject members => members.Select(selector: static member => member.Value).ToArray(), JsonArray items => items.ToArray(), _ => [] }) {
             if (child is not null) {
-                ExpandOwnReferences(expanding: expanding, node: child, root: root);
+                ExpandOwnReferences(expanding: expanding, node: child, root: root, typesByNode: typesByNode);
             }
         }
         if (opened is not null) { expanding.Remove(item: opened); }
+
+        JsonNode? Copy(JsonNode? value) => ((value is null) ? null : CloneTyped(node: value, typesByNode: typesByNode));
     }
 
     private static void ResolveNestedRefs(JsonObject root, NestedExports nested) {
