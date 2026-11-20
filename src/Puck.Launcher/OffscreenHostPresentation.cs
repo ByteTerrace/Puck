@@ -1,7 +1,6 @@
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Puck.Abstractions.Gpu;
-using Puck.Abstractions.Pacing;
 using Puck.Abstractions.Waiting;
 using Puck.Hosting;
 
@@ -15,7 +14,6 @@ public sealed class OffscreenHostPresentation {
     private readonly GpuCreationFaults? m_faults;
     private readonly GpuFrameCapture? m_gpuCapture;
     private readonly ILogger<OffscreenHostPresentation> m_logger;
-    private readonly IPrecisionWaiter? m_precisionWaiter;
     private readonly OffscreenRenderOptions m_renderOptions;
     private readonly IRenderRoot m_root;
     private readonly IHostContext m_rootHostContext;
@@ -31,7 +29,6 @@ public sealed class OffscreenHostPresentation {
         IRenderRoot root,
         IHostContext rootHostContext,
         IEnumerable<IFixedStepSimulation> simulations,
-        IEnumerable<IPrecisionWaiter> precisionWaiters,
         IEnumerable<IDeviceRebuild> deviceRebuilds,
         IEnumerable<GpuCreationFaults> faults,
         IEnumerable<GpuFrameCapture> gpuCaptures,
@@ -48,7 +45,6 @@ public sealed class OffscreenHostPresentation {
         ArgumentNullException.ThrowIfNull(renderOptions);
         ArgumentNullException.ThrowIfNull(root);
         ArgumentNullException.ThrowIfNull(rootHostContext);
-        ArgumentNullException.ThrowIfNull(precisionWaiters);
 
         m_applicationLifetime = applicationLifetime;
         m_bufferedOutput = bufferedOutput;
@@ -68,7 +64,6 @@ public sealed class OffscreenHostPresentation {
             hostDescription: "offscreen host"
         );
         m_logger = logger;
-        m_precisionWaiter = precisionWaiters.FirstOrDefault();
         m_renderOptions = renderOptions;
         m_root = root;
         m_rootHostContext = rootHostContext;
@@ -99,7 +94,7 @@ public sealed class OffscreenHostPresentation {
                 rootHostContext: m_rootHostContext,
                 sleep: duration => HostWaits.Until(
                     deadlineTimestamp: (time.GetTimestamp() + ((long)(duration.TotalSeconds * frequency))),
-                    precisionWaiter: m_precisionWaiter,
+                    precisionWaiter: loop.PrecisionWaiter,
                     time: time
                 ),
                 time: time,
