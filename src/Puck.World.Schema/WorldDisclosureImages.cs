@@ -104,6 +104,8 @@ public sealed partial class WorldDisclosureImages {
         }
         // The frame slot is written once, by FillFrame: rows refresh only their own slots.
         public ContentPin Frame { get; private set; }
+        public ContentPin? BeforeAppearance { get; private set; }
+        public ContentPin? BeforeAppearanceIdentity { get; private set; }
         public WorldDefinition? Disclosed { get; set; }
         public bool Dirty { get; set; }
         private Dictionary<string, int>? m_placementOrdinals;
@@ -121,6 +123,7 @@ public sealed partial class WorldDisclosureImages {
         }
 
         public void AdoptHoldings(WorldDefinition next, IReadOnlyList<(int Row, int Holding)> projected) {
+            BeforeAppearance = null;
             Composed = ReferenceEquals(Composed.PlacementsRaw, Source.PlacementsRaw)
                 ? Composed with { PlacementsRaw = next.PlacementsRaw }
                 : Composed.WithPlacementHoldings(projected);
@@ -129,11 +132,24 @@ public sealed partial class WorldDisclosureImages {
             Disclosed = null;
         }
 
+        public void AdoptAppearance(WorldDefinition next, ContentPin before) {
+            BeforeAppearance = before;
+            BeforeAppearanceIdentity = Identity;
+            Source = next;
+            Composed = Composed with { CreationsRaw = next.CreationsRaw, ShadesRaw = next.ShadesRaw };
+            FrameDocument = Composed with { StateRaw = FrameState };
+            if (Disclosed is { } held) {
+                Disclosed = held with { CreationsRaw = next.CreationsRaw, ShadesRaw = next.ShadesRaw };
+            }
+        }
+        public void AdoptValues(WorldDefinition next) => Source = next;
+
         public static int ImageSlot(int row) => (1 + (2 * row)) * SHA256.HashSizeInBytes;
         public static int SkeletonSlot(int row) => (2 + (2 * row)) * SHA256.HashSizeInBytes;
         public void Store(int slot, ReadOnlySpan<byte> digest) {
             var target = Digests.AsSpan(slot, SHA256.HashSizeInBytes);
             if (target.SequenceEqual(digest)) { return; }
+            BeforeAppearanceIdentity = null;
             digest.CopyTo(target);
             Dirty = true;
         }
@@ -171,6 +187,12 @@ public sealed partial class WorldDisclosureImages {
     private readonly Dictionary<(int Row, string Audience), Entry> m_rows = [];
     private readonly Puck.Abstractions.Collections.WeakValueTable<ImageDigest, WorldRecipientImage> m_content = new();
     private readonly Dictionary<string, AudienceDefinition> m_definitions = [];
+    [SideTable(reason: "records consecutive accepted value installs on the live authority")]
+    private readonly System.Runtime.CompilerServices.ConditionalWeakTable<WorldDefinition, object> m_valueSources = new();
+
+    /// <summary>Registers two installed definitions whose state values alone differ.</summary>
+    public void ContinueValues(WorldDefinition before, WorldDefinition after) =>
+        m_valueSources.AddOrUpdate(after, m_valueSources.GetValue(before, static _ => new object()));
     private ArenaChangedKeys? m_changes;
     private StateArena? m_windowArena;
     private ulong[] m_windowVersions = [];
@@ -411,15 +433,17 @@ public sealed partial class WorldDisclosureImages {
     // sections have their own digests, and the placement section reuses the canonical digest of each retained row.
     private ContentPin FrameOf(AudienceDefinition entry) {
         if (entry.FrameDocument is { } frame) {
-            var basis = frame with { PlacementsRaw = null, StateRaw = null };
+            var basis = frame with { PlacementsRaw = null, StateRaw = null, CreationsRaw = null, ShadesRaw = null };
             if (!basis.Equals(m_frameBaseOf)) {
                 m_frameBase = Digest(WorldDefinitionSerialization.SerializeCompact(basis));
                 m_frameBaseOf = basis;
             }
-            Span<byte> parts = stackalloc byte[3 * SHA256.HashSizeInBytes];
+            Span<byte> parts = stackalloc byte[5 * SHA256.HashSizeInBytes];
             m_frameBase.CopyTo(parts);
             PlacementDigest(frame.PlacementsRaw).CopyTo(parts[SHA256.HashSizeInBytes..]);
             StateDigest(frame.StateRaw).CopyTo(parts[(2 * SHA256.HashSizeInBytes)..]);
+            RowsDigest(frame.CreationsRaw, m_creationDigests, m_creationLists).CopyTo(parts[(3 * SHA256.HashSizeInBytes)..]);
+            ShadeDigest(frame.ShadesRaw).CopyTo(parts[(4 * SHA256.HashSizeInBytes)..]);
             entry.FillFrame(SHA256.HashData(parts));
         }
         return entry.Frame;
@@ -428,7 +452,11 @@ public sealed partial class WorldDisclosureImages {
     private readonly Puck.Abstractions.CodeDerivedTable<WorldPlacement, byte[]> m_placementDigests = new();
     private readonly Puck.Abstractions.CodeDerivedTable<WorldPlacementsSection, byte[]> m_placementSections = new();
     private readonly Puck.Abstractions.CodeDerivedTable<WorldStateSection, byte[]> m_stateSections = new();
-    private readonly System.Buffers.ArrayBufferWriter<byte> m_placementLeaves = new();
+    private readonly Puck.Abstractions.CodeDerivedTable<WorldPrototype, byte[]> m_creationDigests = new();
+    private readonly Puck.Abstractions.CodeDerivedTable<IReadOnlyList<WorldPrototype>, byte[]> m_creationLists = new();
+    private readonly Puck.Abstractions.CodeDerivedTable<Puck.SignedDistance.SdfShadeDefinition, byte[]> m_shadeDigests = new();
+    private readonly Puck.Abstractions.CodeDerivedTable<IReadOnlyDictionary<string, Puck.SignedDistance.SdfShadeDefinition>, byte[]> m_shadeTables = new();
+    private readonly System.Buffers.ArrayBufferWriter<byte> m_frameLeaves = new();
 
     private byte[] PlacementDigest(WorldPlacementsSection? section) {
         if (section is null) { return AbsentSection; }
@@ -436,21 +464,53 @@ public sealed partial class WorldDisclosureImages {
         // The header and ordered, fixed-width leaves distinguish absent and empty row lists and preserve row order.
         // An immutable row reused across a holding patch or a disclosure never serializes its bytes again.
         var header = section with { Rows = (section.Rows is null ? null : []) };
-        m_placementLeaves.ResetWrittenCount();
-        m_placementLeaves.Write(DigestSection(header));
-        if (section.Rows is { } rows) {
-            for (var index = 0; index < rows.Count; index++) {
-                var row = rows[index];
-                if (!m_placementDigests.TryGetValue(row, out var digest)) {
-                    digest = DigestSection(row);
-                    m_placementDigests.AddOrUpdate(row, digest);
-                }
-                m_placementLeaves.Write(digest);
-            }
-        }
-        stored = SHA256.HashData(m_placementLeaves.WrittenSpan);
+        m_frameLeaves.ResetWrittenCount();
+        m_frameLeaves.Write(DigestSection(header));
+        WriteRowDigests(section.Rows, m_placementDigests);
+        stored = SHA256.HashData(m_frameLeaves.WrittenSpan);
         m_placementSections.AddOrUpdate(section, stored);
         return stored;
+    }
+
+    private byte[] RowsDigest<T>(IReadOnlyList<T>? rows, Puck.Abstractions.CodeDerivedTable<T, byte[]> digests,
+        Puck.Abstractions.CodeDerivedTable<IReadOnlyList<T>, byte[]> lists) where T : class {
+        if (rows is null) { return AbsentSection; }
+        if (lists.TryGetValue(rows, out var digest)) { return digest; }
+        m_frameLeaves.ResetWrittenCount();
+        WriteRowDigests(rows, digests);
+        digest = SHA256.HashData(m_frameLeaves.WrittenSpan.Length == 0 ? [0] : m_frameLeaves.WrittenSpan);
+        lists.AddOrUpdate(rows, digest);
+        return digest;
+    }
+
+    private void WriteRowDigests<T>(IReadOnlyList<T>? rows, Puck.Abstractions.CodeDerivedTable<T, byte[]> digests) where T : class {
+        if (rows is null) { return; }
+        for (var index = 0; index < rows.Count; index++) {
+            var row = rows[index];
+            if (!digests.TryGetValue(row, out var digest)) {
+                digest = DigestSection(row);
+                digests.AddOrUpdate(row, digest);
+            }
+            m_frameLeaves.Write(digest);
+        }
+    }
+
+    private byte[] ShadeDigest(IReadOnlyDictionary<string, Puck.SignedDistance.SdfShadeDefinition>? shades) {
+        if (shades is null) { return AbsentSection; }
+        if (m_shadeTables.TryGetValue(shades, out var digest)) { return digest; }
+        m_frameLeaves.ResetWrittenCount();
+        m_frameLeaves.Write<byte>([0]);
+        foreach (var (name, shade) in shades.OrderBy(static pair => pair.Key, StringComparer.Ordinal)) {
+            m_frameLeaves.Write(SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(name)));
+            if (!m_shadeDigests.TryGetValue(shade, out var leaf)) {
+                leaf = DigestSection(shade);
+                m_shadeDigests.AddOrUpdate(shade, leaf);
+            }
+            m_frameLeaves.Write(leaf);
+        }
+        digest = SHA256.HashData(m_frameLeaves.WrittenSpan);
+        m_shadeTables.AddOrUpdate(shades, digest);
+        return digest;
     }
 
     private byte[] StateDigest(WorldStateSection? section) {
@@ -481,6 +541,13 @@ public sealed partial class WorldDisclosureImages {
         var audience = Audience(view);
         var entry = DefinitionFor(view, audience);
         return FrameOf(FrameRowsMoved(view, audience, entry) ? Compose(view, audience) : entry);
+    }
+    internal bool TryAdvanceAppearance(WorldRecipientView view, ContentPin? held, ContentPin? heldIdentity, out ContentPin next, out ContentPin identity) {
+        var entry = Current(view);
+        next = FrameOf(entry);
+        identity = entry.Identity;
+        return (held == next && heldIdentity == identity) ||
+            (held is not null && held == entry.BeforeAppearance && heldIdentity == entry.BeforeAppearanceIdentity);
     }
     private bool FrameRowsMoved(WorldRecipientView view, string audience, AudienceDefinition entry) {
         var arena = view.Arena;
@@ -544,6 +611,20 @@ public sealed partial class WorldDisclosureImages {
         if (!m_definitions.TryGetValue(audience, out var entry)) { return Compose(view, audience); }
         var source = view.Source;
         if (ReferenceEquals(entry.Source, source)) { return entry; }
+
+        if (ReferenceEquals(entry.Arena, view.Arena) && entry.Revision == view.Arena.DisclosureRevision &&
+            m_valueSources.TryGetValue(source, out var values) && m_valueSources.TryGetValue(entry.Source, out var heldValues) &&
+            ReferenceEquals(values, heldValues)) {
+            entry.AdoptValues(source);
+            return entry;
+        }
+
+        if (ReferenceEquals(entry.Arena, view.Arena) && entry.Revision == view.Arena.DisclosureRevision &&
+            WorldDocumentInputs.Changed(entry.Source, source).Except(WorldPresentationRows.Parts).IsEmpty &&
+            !FrameRowsMoved(view, audience, entry)) {
+            entry.AdoptAppearance(source, FrameOf(entry));
+            return entry;
+        }
 
         var changes = source.HoldingsFrom(entry.Source);
         if (changes.IsEmpty ||

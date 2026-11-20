@@ -71,13 +71,13 @@ public sealed class StreamGenerationLawTests {
     public void BodyMembershipUnderAnUnchangedPolicyNeverCutsAndARedactingPolicyChangeDoes() {
         var cursor = new WorldDeliveryCursor();
 
-        cursor.ObserveBodies(mode: WorldObserverDisclosureMode.Radius, radius: 8f);
-        cursor.ObserveBodies(mode: WorldObserverDisclosureMode.Radius, radius: 8f);
+        cursor.ObserveBodies(new(Mode: WorldObserverDisclosureMode.Radius, Radius: 8f));
+        cursor.ObserveBodies(new(Mode: WorldObserverDisclosureMode.Radius, Radius: 8f, UpdateSeconds: 0f));
         Assert.Equal(0L, cursor.Generation);
         Assert.False(cursor.TakeCut());
-        cursor.ObserveBodies(mode: WorldObserverDisclosureMode.All, radius: null);
+        cursor.ObserveBodies(WorldObserverDisclosure.Default);
         Assert.Equal(0L, cursor.Generation);
-        cursor.ObserveBodies(mode: WorldObserverDisclosureMode.Radius, radius: 4f);
+        cursor.ObserveBodies(new(Mode: WorldObserverDisclosureMode.Radius, Radius: 4f));
         Assert.Equal(1L, cursor.Generation);
         Assert.True(cursor.TakeCut());
         Assert.False(cursor.TakeCut());

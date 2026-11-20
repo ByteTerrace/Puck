@@ -705,6 +705,20 @@ public sealed class WorldSessionMirror : IClientSink {
         }
         ApplyDefinition(definition: definition, version: version);
     }
+    /// <inheritdoc/>
+    public void DeliverPresentation(WorldDefinition definition, WorldPresentationRows rows, WorldDocumentVersion version, in WorldStreamStamp stream) {
+        if (!m_ingress.Admit(stream: in stream)) { return; }
+        var started = Stopwatch.GetTimestamp();
+        lock (m_snapshotWriteGate) {
+            lock (m_followGate) {
+                if (!rows.TryApply(Document.Definition, out var changed)) { throw new InvalidOperationException("A presentation delivery must match the mirror's creation roster."); }
+                Publish(changed, version);
+                _ = Interlocked.Increment(ref m_definitionRevision);
+            }
+        }
+        DocumentDelivered?.Invoke(Document);
+        Charge(count: ref m_definitionsApplied, started: started, ticks: ref m_definitionApplyTicks);
+    }
     private void ApplyDefinition(WorldDefinition definition, WorldDocumentVersion version) {
         var started = Stopwatch.GetTimestamp();
 

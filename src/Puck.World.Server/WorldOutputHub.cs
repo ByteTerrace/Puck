@@ -213,6 +213,23 @@ public sealed partial class WorldOutputHub {
             payload: (Definition: definition, Version: version)
         );
     }
+    /// <summary>Delivers the final creation and shade rows changed during this tick.</summary>
+    public void DeliverPresentation(WorldDefinition before, WorldDefinition after, WorldDocumentVersion version) {
+        if (WithholdsTimeline) { return; }
+        var rows = WorldPresentationRows.Between(before, after);
+        Deliver(
+            callSite: nameof(DeliverPresentation),
+            deliver: static (sink, payload) => {
+                sink.DeliverPresentation(payload.Definition, payload.Rows, payload.Version, WorldStreamStamp.Unspanned);
+                if (sink is not IWorldDetachableSink) { CountPresentationRows(payload.Rows); }
+            },
+            payload: (Definition: after, Rows: rows, Version: version)
+        );
+    }
+    internal static void CountPresentationRows(WorldPresentationRows rows) {
+        WorldBootWork.Count(WorldBootWork.PresentationRowsDelivered, rows.Creations.Length + rows.Shades.Length);
+        WorldBootWork.Count(WorldBootWork.PresentationBytesDelivered, rows.Payload.Length);
+    }
     /// <summary>Fans the live world definition out to every typed subscriber after a value-only mutation (see
     /// <see cref="IClientSink.DeliverState"/>). A faulting sink is isolated and detached — see the class
     /// remarks.</summary>

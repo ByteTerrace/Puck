@@ -295,6 +295,23 @@ rows, [the checks](#checks) below are owed.
   member the session has not changed takes the source's, and any other merges
   three ways, the source winning each row both changed. The verdict names those
   rows and the members the reload changed.
+- **Undo follows the accepted edit.** A local file reload appends the overlay
+  that actually installed to the same journal as console mutations
+  (`WorldJournalEntry.TryCompose`). An unchanged reload advances the source
+  revision without adding an entry. Undo and reset leave the file on disk
+  alone. The checkpoint keeps the source revision independently of the undo
+  base so the next save merges against the source the authority last accepted.
+- **Prepared clients receive changed rows.** `WorldOutputHub.DeliverPresentation`
+  sends changed creations and shades. `WorldDeliveryCursor` advances the
+  replica identity from shared row digests, and `WorldProjectionFeed` can
+  send changed content references to presentation observers. Value installs
+  leave the replica's document in place while `WorldDeliveryRows` delivers
+  its changed values with a snapshot. An observer that loses disclosure
+  receives a new primer.
+- **Local source boots start the watch.** `WorldSourceWatch` starts from the
+  file facts read at boot and submits an ordinary reload on a save.
+  `world.counters world.boot` reports pump calls, stamp queries, content
+  reads, and delivered presentation rows and bytes.
 - **As the edit it is.** `WorldDocument.ReloadInstallKindOf` classifies the
   candidate by which parts of the document (`WorldDocumentInputs.Changed`) are other objects than the live document's:
   nothing installs when none is; state values alone take the value install;
@@ -357,25 +374,18 @@ each count across one `world.reload`):
   change (`WorldDocument.ReloadInstallKindOf`), so a change to any other member
   takes the full install. A recorded reload is a path and a content pin; the
   replay reads the file again and installs the same candidate.
-- **Where it stops.** The authority's revision is not part of a checkpoint: a
-  restore takes its base as the revision, so a replay begun from a checkpoint
-  taken after a reload that met a live edit can merge a row both changed
-  differently from the live run. Sharing is an economy, never a proof:
-  `WorldDocumentWalker.Share` keeps a list whole when its typed rows and its
-  tree's rows do not line up, and what was not shared is derived again.
+- **Where it stops.** The tape still re-reads a file reload by its content
+  pin. `WorldDocumentWalker.Share` keeps a list whole when its typed rows
+  and its tree's rows do not line up, and derives the unshared values again.
 
 ### The door the authoring loop asks for
 
 [The authoring loop](iteration/authoring-loop.md#an-edit-is-one-keyed-delta)
 needs a door that takes a keyed delta with the revision it was made against.
 That door is `WorldRebuildRequest` carrying a `WorldReloadDelta`: the patch and
-the pins of both source revisions. Two differences from that memo's target
-remain:
-
-| The door | The target | Owned by |
-|---|---|---|
-| The install clears the journal and moves the base, and only the operator may send it | One journal entry, admitted by the sender's grants for the sections the patch names | Authoring loop step 4 |
-| A row both the source and the session changed takes the source's value, and the verdict names it | The delta is refused by the row's name with both values, and the author chooses | Authoring loop step 4, which settles which of the two is right |
+the pins of both source revisions. File reload is an operator operation. A
+published world's granted author needs section-scoped admission through the
+[shared write door](iteration/authoring-loop.md#an-edit-is-one-keyed-delta).
 
 A mutation's full install and a reload's full install already decide alike what
 they rebuild: each compiled product records the parts of the document its build
@@ -421,14 +431,6 @@ both.
   whose hits carry the material would change nothing while later sweeps relight
   the window for the bounce; it needs a relight driven by which probes' inputs
   moved, which is step 4.
-- **Every edit holds the frame while the server applies it.** A live row set
-  and a reload's install deliver the definition through the recipient's
-  disclosure walk on the step the host pump waits for, and the client receives
-  the whole definition again; a presentation install still delivers it whole
-  (`WorldDocument.InstallPresentation` marks the delivery,
-  `WorldDeliveryCursor.DeliverDefinition` hashes the whole serialized document
-  for a view that is not a replica). Delivering only the changed rows is the
-  authoring loop's step 4. `world.iteration`'s `worst-frame` reads the hold.
 - **A delivery emits the whole program on the frame thread.**
   `SdfCompositionFrameSource.CaptureFrame` runs every emitter's `Emit` on the
   frame that finds the content moved, and only the build after it runs on the
@@ -436,9 +438,4 @@ both.
   and mirror, the stamp pools, the adjacency band's scratch), so moving the
   emission needs an emitter contract that snapshots what it reads on the frame
   thread and emits from the snapshot. The presentation query field already
-  works that way (`WorldFramePresenter.RebuildStaticField`). Delivering only
-  the changed rows (step 4) shrinks the same emission.
-- **The watch is off until asked.** `world.watch on` starts it. Turning it on
-  at boot for a local operator's source tree is the authoring loop's step 4;
-  its poll runs on the host pump and wants a reading of its cost in a frame
-  first.
+  works that way (`WorldFramePresenter.RebuildStaticField`).

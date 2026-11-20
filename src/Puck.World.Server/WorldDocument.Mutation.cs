@@ -554,11 +554,10 @@ public sealed partial class WorldDocument {
             before.DiffersInShadingAlone(other: after)
         );
     }
-    // A presentation install changes only what a client draws: the definition is adopted as this server's projection
-    // and delivered whole; the arena, every compiled product, the solid field and the population stay as they are.
+    // A presentation install retains the arena and simulation products. The tick delivers its final changed rows.
     private void InstallPresentation(WorldDefinition definition) {
         WorldBootWork.Count(kind: WorldBootWork.PresentationInstalls);
-        MarkDefinitionDeliveryPending();
+        m_pendingPresentationBasis ??= m_definition;
         Host.AdoptBound(definition: definition);
     }
 }

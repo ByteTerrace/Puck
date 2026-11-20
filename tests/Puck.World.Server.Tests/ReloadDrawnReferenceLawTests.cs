@@ -70,7 +70,7 @@ public sealed class ReloadDrawnReferenceLawTests {
     private static float Cadence(WorldDefinition definition) => definition.Creations[^1].Document.Drivers![0].Cadence.Value;
 
     [Fact]
-    public void AReloadOfABootDrawnDriverCadenceCrossesTheCodecAndRebuilds() {
+    public void AReloadOfAnUnchangedBootDrawnDriverKeepsItsCadence() {
         using var directory = new TemporaryDirectory(prefix: "puck-reload-draw-");
         var path = directory.PathOf(name: "drawn.world.json");
 
@@ -113,7 +113,7 @@ public sealed class ReloadDrawnReferenceLawTests {
 
         Assert.False(condition: submitted.IsError, userMessage: submitted.Output);
         fixture.Step();
-        Assert.StartsWith(actualString: verdict, expectedStartString: $"[{Verb}: {Verb} applied — base is '{path}'");
+        Assert.StartsWith(actualString: verdict, expectedStartString: $"[{Verb}: {Verb} applied — journal entries=0, nothing the session holds changed");
         Assert.Equal(actual: Cadence(definition: fixture.Server.Definition), expected: Cadence(definition: admission.Definition));
     }
     [Fact]

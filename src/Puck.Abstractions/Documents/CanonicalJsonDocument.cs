@@ -20,6 +20,12 @@ public static class CanonicalJsonDocument {
         Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
     };
 
+    /// <summary>Parses the root object of a UTF-8 document with unique member names.</summary>
+    /// <exception cref="JsonException">The bytes do not contain a JSON object with unique member names.</exception>
+    public static JsonObject ParseObject(ReadOnlySpan<byte> bytes) =>
+        JsonNode.Parse(bytes, documentOptions: new JsonDocumentOptions { AllowDuplicateProperties = false }) as JsonObject ??
+        throw new JsonException("Expected a JSON object.");
+
     /// <summary>Serializes a document to its compact canonical UTF-8 bytes: the members, order, and escaping of
     /// <see cref="Serialize{T}(T, JsonTypeInfo{T})"/>, with no indentation, newlines, or trailing newline.</summary>
     /// <param name="value">The document to serialize.</param>
