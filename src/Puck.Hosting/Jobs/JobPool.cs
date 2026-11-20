@@ -1,4 +1,5 @@
 using System.Runtime.ExceptionServices;
+using Puck.Abstractions.Waiting;
 using Puck.Maths;
 
 namespace Puck.Hosting.Jobs;
@@ -16,6 +17,9 @@ namespace Puck.Hosting.Jobs;
 /// it runs, runs every partition and then rethrows the lowest-numbered failing partition's exception, so what a fork
 /// completes never depends on the worker count or on which path it took.</remarks>
 public sealed class JobPool : IDisposable {
+    /// <summary>The dependency of a pending fork.</summary>
+    public static readonly WaitReason JoinWait = new("jobs", "fork partitions");
+    private static readonly WaitReason IdleWait = new("jobs", "ready partitions");
     // The open fork: the high 32 bits its generation, the low 32 bits the next unclaimed partition. Closed while a
     // fork is being set up, so a worker that read an earlier generation can never claim a partition of the next.
     private const uint Closed = uint.MaxValue;
@@ -71,11 +75,27 @@ public sealed class JobPool : IDisposable {
     /// <remarks>A partition that throws does not stop the others: every partition runs, and then the exception of the
     /// lowest-numbered partition that threw is rethrown here, on the calling thread.</remarks>
     public void Fork(int partitions, IJobPartitions body) {
+        var fork = default(ForkOperation);
+        if (Fork(partitions, body, ref fork, WaitDeadline.In(TimeSpan.FromSeconds(30))) == WaitOutcome.DeadlinePassed) {
+            throw new TimeoutException(JoinWait.ToString());
+        }
+    }
+
+    /// <summary>Starts a fork or resumes its join. Keep the operation and all partition inputs until it settles.</summary>
+    public WaitOutcome Fork(int partitions, IJobPartitions body, ref ForkOperation fork, WaitDeadline deadline) {
         ArgumentNullException.ThrowIfNull(argument: body);
         ObjectDisposedException.ThrowIf(condition: m_stopping, instance: this);
 
+        if (fork.Pool is not null) {
+            if (!ReferenceEquals(fork.Pool, this) || (fork.ThreadId != Environment.CurrentManagedThreadId) ||
+                (fork.Generation != PackedIntPair.High(Volatile.Read(ref m_state))) ||
+                (Volatile.Read(ref m_busy) == 0) || !ReferenceEquals(body, m_body) || (partitions != m_count)) {
+                throw new InvalidOperationException("The fork operation no longer owns these partitions.");
+            }
+            return Join(ref fork, deadline);
+        }
         if (partitions <= 0) {
-            return;
+            return WaitOutcome.Completed;
         }
         if (
             Serial ||
@@ -90,28 +110,50 @@ public sealed class JobPool : IDisposable {
                 fault.Run(body: body, partition: partition);
             }
             fault.Rethrow();
-            return;
+            return WaitOutcome.Completed;
         }
 
+        var generation = unchecked(PackedIntPair.High(value: m_state) + 1);
+
+        _ = Interlocked.Exchange(location1: ref m_state, value: PackedIntPair.Pack(high: generation, low: unchecked(((int)Closed))));
+        m_body = body;
+        m_count = partitions;
+        m_fault = default;
+        Volatile.Write(location: ref m_remaining, value: partitions);
+        _ = Interlocked.Exchange(location1: ref m_state, value: PackedIntPair.Pack(high: generation, low: 0));
+        fork = new ForkOperation(this, generation, Environment.CurrentManagedThreadId);
+        Wake(wanted: (partitions - 1));
+
+        Drain();
+        return Join(ref fork, deadline);
+    }
+
+    private WaitOutcome Join(ref ForkOperation fork, WaitDeadline deadline) {
+        var outcome = HostWaits.Wait(m_done, JoinWait, deadline);
+        if (outcome == WaitOutcome.DeadlinePassed) {
+            return outcome;
+        }
         try {
-            var generation = unchecked(PackedIntPair.High(value: m_state) + 1);
-
-            _ = Interlocked.Exchange(location1: ref m_state, value: PackedIntPair.Pack(high: generation, low: unchecked(((int)Closed))));
-            m_body = body;
-            m_count = partitions;
-            m_fault = default;
-            Volatile.Write(location: ref m_remaining, value: partitions);
-            _ = Interlocked.Exchange(location1: ref m_state, value: PackedIntPair.Pack(high: generation, low: 0));
-            Wake(wanted: (partitions - 1));
-
-            if (!Drain()) {
-                _ = m_done.WaitOne();
-            }
             m_body = null;
+            fork = default;
             m_fault.Rethrow();
         } finally {
             Volatile.Write(location: ref m_busy, value: 0);
         }
+        return WaitOutcome.Completed;
+    }
+
+    /// <summary>The owning caller's handle for a fork whose partitions may still be running.</summary>
+    public readonly struct ForkOperation {
+        internal ForkOperation(JobPool pool, int generation, int threadId) {
+            Pool = pool;
+            Generation = generation;
+            ThreadId = threadId;
+        }
+
+        internal JobPool? Pool { get; }
+        internal int Generation { get; }
+        internal int ThreadId { get; }
     }
     /// <summary>Stops and joins every worker thread. A fork in flight on another thread must have returned first.</summary>
     public void Dispose() {
@@ -122,6 +164,10 @@ public sealed class JobPool : IDisposable {
         m_stopping = true;
         if (m_threads.Length > 0) {
             _ = m_wake.Release(releaseCount: m_threads.Length);
+        }
+        if (Volatile.Read(ref m_busy) != 0) {
+            Console.Error.WriteLine("[jobs: leaving the active fork and its handles with the retiring workers]");
+            return;
         }
         foreach (var thread in m_threads) {
             thread.Join();
@@ -147,14 +193,10 @@ public sealed class JobPool : IDisposable {
             }
         }
     }
-    // Runs partitions until none is unclaimed; true when this thread finished the fork's last partition.
-    private bool Drain() {
-        var last = false;
-
+    private void Drain() {
         while (TryTake(body: out var body, partition: out var partition)) {
-            last = Complete(body: body, partition: partition);
+            Complete(body: body, partition: partition);
         }
-        return last;
     }
     private bool TryTake(out IJobPartitions body, out int partition) {
         while (true) {
@@ -175,26 +217,25 @@ public sealed class JobPool : IDisposable {
             }
         }
     }
-    private bool Complete(IJobPartitions body, int partition) {
+    private void Complete(IJobPartitions body, int partition) {
         if (!PartitionFault.TryRun(body: body, error: out var error, partition: partition)) {
             lock (m_faultGate) {
                 m_fault.Record(error: error!, partition: partition);
             }
         }
-        return (Interlocked.Decrement(location: ref m_remaining) == 0);
+        if (Interlocked.Decrement(location: ref m_remaining) == 0) {
+            _ = m_done.Set();
+        }
     }
     private void Work() {
+        var consumer = HostWaits.ClaimConsumer(IdleWait);
         while (true) {
-            _ = m_wake.WaitOne();
+            HostWaits.Idle(m_wake, consumer);
             _ = Interlocked.Decrement(location: ref m_pendingWakes);
             if (m_stopping) {
                 return;
             }
-            while (TryTake(body: out var body, partition: out var partition)) {
-                if (Complete(body: body, partition: partition)) {
-                    _ = m_done.Set();
-                }
-            }
+            Drain();
         }
     }
 

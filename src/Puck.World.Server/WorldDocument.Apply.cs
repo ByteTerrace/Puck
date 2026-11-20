@@ -1,3 +1,5 @@
+using Puck.Abstractions.Waiting;
+using Puck.Hosting.Jobs;
 using Puck.Commands;
 using Puck.Maths;
 using Puck.World.Protocol;
@@ -1068,27 +1070,46 @@ public sealed partial class WorldDocument {
 
     private WorldSnapshot BuildSnapshotCore(ulong tick, ulong stepTicks, bool consumeContinuity) {
         var capacity = Host.Population.Capacity;
+        EnsureSnapshotStateCapacity(capacity);
+        return FinishSnapshot(tick, stepTicks, consumeContinuity, WriteSnapshotRows(Host.Population, consumeContinuity, end: capacity, first: 0, offset: 0));
+    }
+
+    internal struct SnapshotOperation {
+        internal JobPool.ForkOperation Fork;
+        internal int Partitions;
+        internal int Count;
+    }
+
+    internal WaitOutcome TryBuildTickSnapshot(ulong tick, ulong stepTicks, ref SnapshotOperation operation, WaitDeadline deadline, out WorldSnapshot snapshot) {
+        var capacity = Host.Population.Capacity;
+        if (operation.Partitions == 0) {
+            EnsureSnapshotStateCapacity(capacity);
+            var partitions = capacity.CeilingDivide(divisor: SnapshotPartitionRows);
+            if ((partitions > 1) && (Host.Jobs is { Serial: false }) &&
+                ((operation.Count = CountSnapshotPartitions(capacity, partitions)) >= SnapshotForkRows)) {
+                m_snapshotRows ??= new SnapshotRows(document: this);
+                m_snapshotRows.Population = Host.Population;
+                operation.Partitions = partitions;
+            } else {
+                operation.Count = WriteSnapshotRows(Host.Population, consumeContinuity: true, end: capacity, first: 0, offset: 0);
+            }
+        }
+        if ((operation.Partitions > 0) &&
+            (Host.Jobs!.Fork(operation.Partitions, m_snapshotRows!, ref operation.Fork, deadline) == WaitOutcome.DeadlinePassed)) {
+            snapshot = default;
+            return WaitOutcome.DeadlinePassed;
+        }
+        if (operation.Partitions > 0) { m_snapshotRows!.Population = null!; }
+        snapshot = FinishSnapshot(tick, stepTicks, consumeContinuity: true, operation.Count);
+        return WaitOutcome.Completed;
+    }
+
+    private void EnsureSnapshotStateCapacity(int capacity) {
         var stateWidth = (capacity * Host.Population.ActionStateLane.Definitions.Count);
+        if (m_snapshotState.Length < stateWidth) { m_snapshotState = new long[stateWidth]; }
+    }
 
-        if (m_snapshotState.Length < stateWidth) {
-            m_snapshotState = new long[stateWidth];
-        }
-
-        var partitions = capacity.CeilingDivide(divisor: SnapshotPartitionRows);
-        int count;
-
-        if (
-            (partitions > 1) &&
-            (Host.Jobs is { Serial: false } jobs) &&
-            ((count = CountSnapshotPartitions(capacity: capacity, partitions: partitions)) >= SnapshotForkRows)
-        ) {
-            m_snapshotRows ??= new SnapshotRows(document: this);
-            m_snapshotRows.ConsumeContinuity = consumeContinuity;
-            jobs.Fork(body: m_snapshotRows, partitions: partitions);
-        } else {
-            count = WriteSnapshotRows(consumeContinuity: consumeContinuity, end: capacity, first: 0, offset: 0);
-        }
-
+    private WorldSnapshot FinishSnapshot(ulong tick, ulong stepTicks, bool consumeContinuity, int count) {
         var fieldsFull = !consumeContinuity;
         var latticeDeltas = m_latticeSnapshotDeltas;
 
@@ -1167,13 +1188,14 @@ public sealed partial class WorldDocument {
         }
 
         var count = 0;
+        var population = Host.Population;
 
         for (var partition = 0; (partition < partitions); partition++) {
             m_snapshotOffsets[partition] = count;
             var end = Math.Min(val1: capacity, val2: ((partition + 1) * SnapshotPartitionRows));
 
             for (var index = (partition * SnapshotPartitionRows); (index < end); index++) {
-                if (SnapshotBody(index: index) is not null) {
+                if (SnapshotBody(population, index) is not null) {
                     count++;
                 }
             }
@@ -1181,21 +1203,21 @@ public sealed partial class WorldDocument {
         return count;
     }
     // The body a snapshot delivers a row for at an entity index, or null for an inactive or bodiless slot.
-    private WorldBody? SnapshotBody(int index) => (Host.Population.IsActive(index: index)
-        ? Host.Population.EntryBody(index: index)
+    private static WorldBody? SnapshotBody(WorldPopulation population, int index) => (population.IsActive(index: index)
+        ? population.EntryBody(index: index)
         : null);
     // Writes the delivered rows of entity indices [first, end) into Host.SnapshotEntries from position offset, in
     // index order, and returns the position after the last. Partitions call it concurrently over disjoint ranges: it
     // writes only those rows' entries, their bodies' continuity and their register-file ranges of m_snapshotState,
     // and reads the arena only through participant lane slots (StateArena.TryReadSlot), which build no lazy read
     // cache. A read added here that can build one (a linked row's positions) needs the arena prepared before the fork.
-    private int WriteSnapshotRows(int first, int end, int offset, bool consumeContinuity) {
+    private int WriteSnapshotRows(WorldPopulation population, bool consumeContinuity, int first, int end, int offset) {
         var count = offset;
-        var stateLane = Host.Population.ActionStateLane;
+        var stateLane = population.ActionStateLane;
         var stateSlots = stateLane.Definitions;
 
         for (var index = first; (index < end); index++) {
-            if (SnapshotBody(index: index) is not { } body) {
+            if (SnapshotBody(population, index) is not { } body) {
                 continue;
             }
 
@@ -1215,16 +1237,16 @@ public sealed partial class WorldDocument {
                 Index: index,
                 Position: body.Position,
                 Orientation: body.Orientation,
-                BodyColor: Host.Population.BodyColor(index: index),
+                BodyColor: population.BodyColor(index: index),
                 Active: true,
-                Kit: Host.Population.KitIndex(index: index),
-                Look: Host.Population.LookIndex(index: index),
-                CatalogRig: Host.Population.CatalogRig(index: index),
+                Kit: population.KitIndex(index: index),
+                Look: population.LookIndex(index: index),
+                CatalogRig: population.CatalogRig(index: index),
                 Continuity: (consumeContinuity
                 ? body.TakeContinuity()
                 : body.PeekContinuity()),
-                Generation: Host.Population.Generation(index: index),
-                PlacementId: Host.Population.InhabitantPlacementId(index: index),
+                Generation: population.Generation(index: index),
+                PlacementId: population.InhabitantPlacementId(index: index),
                 Heading: body.Yaw,
                 Facts: body.Facts,
                 State: m_snapshotState.AsMemory(
@@ -1246,11 +1268,12 @@ public sealed partial class WorldDocument {
     // The snapshot's partitioned phase: partition p writes entity indices [256p, 256(p+1)) at the offset the serial
     // count assigned it. Retained across ticks, so a fork allocates nothing.
     private sealed class SnapshotRows(WorldDocument document) : Puck.Hosting.Jobs.IJobPartitions {
-        public bool ConsumeContinuity { get; set; }
+        public WorldPopulation Population { get; set; } = null!;
 
         public void Run(int partition) => _ = document.WriteSnapshotRows(
-            consumeContinuity: ConsumeContinuity,
-            end: Math.Min(val1: document.Host.Population.Capacity, val2: ((partition + 1) * SnapshotPartitionRows)),
+            population: Population,
+            consumeContinuity: true,
+            end: Math.Min(val1: Population.Capacity, val2: ((partition + 1) * SnapshotPartitionRows)),
             first: (partition * SnapshotPartitionRows),
             offset: document.m_snapshotOffsets[partition]
         );

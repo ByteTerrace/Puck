@@ -47,7 +47,7 @@ internal static class WorldSaveSnapshot {
     /// <param name="editor">The live per-seat editor state, whose primary seat folds into <c>editor</c>.</param>
     /// <returns>The snapshot definition to serialize.</returns>
     public static WorldDefinition Compose(WorldServer server, ulong tick, WorldRenderSettings render, PresentPacingControl pacing, IWorldAudioLever audio, WorldBindingBarVisibility bindingBar, WorldEditorSeats editor) =>
-        WorldSessionLevers.Fold(
+        server.ExecuteAuthorityOperation(() => WorldSessionLevers.Fold(
             audio: audio,
             bindingBar: bindingBar,
             editor: editor,
@@ -60,5 +60,5 @@ internal static class WorldSaveSnapshot {
             ),
             pacing: pacing,
             settings: render
-        );
+        ));
 }

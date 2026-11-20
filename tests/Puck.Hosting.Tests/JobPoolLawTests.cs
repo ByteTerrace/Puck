@@ -1,4 +1,5 @@
 using Puck.Hosting.Jobs;
+using Puck.Abstractions.Waiting;
 
 namespace Puck.Hosting.Tests;
 
@@ -21,6 +22,35 @@ public sealed class JobPoolLawTests {
     }
     private sealed class Partitions(Action<int> run) : IJobPartitions {
         public void Run(int partition) => run(obj: partition);
+    }
+
+    [Fact]
+    public void SlicedJoinRetainsItsPartitionsUntilTheWorkerCompletes() {
+        using var pool = new JobPool(new JobWorkers(requested: 2));
+        using var workerEntered = new ManualResetEventSlim();
+        using var releaseWorker = new ManualResetEventSlim();
+        var owner = Environment.CurrentManagedThreadId;
+        var runs = new int[2];
+        var partitions = new Partitions(partition => {
+            Interlocked.Increment(ref runs[partition]);
+            if (Environment.CurrentManagedThreadId == owner) {
+                Assert.True(workerEntered.Wait(TimeSpan.FromSeconds(10)));
+            } else {
+                workerEntered.Set();
+                Assert.True(releaseWorker.Wait(TimeSpan.FromSeconds(10)));
+            }
+        });
+        var fork = default(JobPool.ForkOperation);
+
+        try {
+            Assert.Equal(WaitOutcome.DeadlinePassed, pool.Fork(2, partitions, ref fork, default));
+            Assert.Equal(WaitOutcome.DeadlinePassed, pool.Fork(2, partitions, ref fork, default));
+            Assert.Equal([1, 1], runs);
+        } finally {
+            releaseWorker.Set();
+        }
+        Assert.Equal(WaitOutcome.Completed, pool.Fork(2, partitions, ref fork, WaitDeadline.In(TimeSpan.FromSeconds(10))));
+        Assert.Equal([1, 1], runs);
     }
 
     [Theory]

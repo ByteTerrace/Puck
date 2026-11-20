@@ -1,3 +1,4 @@
+using Puck.Abstractions.Waiting;
 using Puck.Commands;
 using Puck.Hosting;
 using Puck.Maths;
@@ -60,7 +61,7 @@ public sealed partial class WorldTick {
             if (Host.AuthorityRetiring) {
                 return;
             }
-            if (ordered) {
+            if (ordered || (BlockedReason is not null)) {
                 EnqueueOrdered(entry: new WorldOrderedEntry.ServerEvent(
                     Input: input,
                     Value: serverEvent
@@ -111,7 +112,7 @@ public sealed partial class WorldTick {
     }
     // Drain every buffered live edit in FIFO order, applying it at this tick boundary. Delivers the new definition to
     // the client sink ONCE if at least one edit applied (once per step with >=1 applied edit, not once per edit).
-    internal bool DrainPendingOps(ulong tick) {
+    internal bool DrainPendingOps(ulong tick, bool deliver = true) {
         var applied = false;
 
         Host.Document.TakePreparedRebuilds();
@@ -134,7 +135,7 @@ public sealed partial class WorldTick {
 
         }
 
-        if (applied) {
+        if (applied && deliver) {
             Host.Document.DeliverPending();
         }
 
@@ -233,6 +234,7 @@ public sealed partial class WorldTick {
     /// (<see cref="WorldOutputHub.WithholdsTimeline"/>), so this is the one delivery a viewer observes per seek.</summary>
     internal void PresentRestoredTimeline() {
         lock (Host.AuthorityGate) {
+            Host.ThrowIfTickPending();
             Host.Document.MarkDefinitionDeliveryPending();
             Host.Document.DeliverPending();
             EmitSnapshot(
@@ -272,8 +274,12 @@ public sealed partial class WorldTick {
                 retiringSubmission.Completion?.Invoke(Host.RetiredRefusal());
                 return;
             }
+            if ((BlockedReason is { } pending) && (entry is WorldOrderedEntry.Submission submission)) {
+                submission.Completion?.Invoke(new WorldSubmissionResult.Refusal("world.authority.pending", $"authority tick is incomplete while waiting for {pending}"));
+                return;
+            }
             m_ordered.Enqueue(item: entry);
-            DrainOrdered();
+            if (BlockedReason is null) { DrainOrdered(); }
         }
     }
     // The live half of link liveness: each DIRECT projection in the tick's frozen graph whose delivered snapshot tick
@@ -335,7 +341,7 @@ public sealed partial class WorldTick {
             Host.FreezeForRetirement();
             throw;
         }
-        _ = DrainPendingOps(tick: context.Tick);
+        _ = DrainPendingOps(tick: context.Tick, deliver: false);
         WorldAdjacencyOwnership.ResolveContinuations(server: Host);
         Host.InputHold.PrepareParticipants(population: Host.Population);
 
@@ -628,7 +634,6 @@ public sealed partial class WorldTick {
         // A response or deal install is delivered on the tick that made it. Left pending, it would ride the next
         // delivery some later change happens to trigger, a hidden-only one included, so its delivery tick would tell
         // a recipient that something it cannot read moved.
-        using (HostFrameWork.Measure(HostFrameWorkPart.TickDelivery)) { Host.Document.DeliverPending(); }
         Host.Addons?.ResolveReads(tick: (context.Tick + 1UL));
         // Fold this tick's routed intents into their targets BEFORE the snapshot is built.
         Host.Engagement.FoldTick(replaysInput: Host.ReplaysInput);
@@ -640,15 +645,9 @@ public sealed partial class WorldTick {
         work.Next(HostFrameWorkPart.TickMachines);
         Host.SyncNamedMachineMemory(tick: tick);
 
-        // Step every booted machine off THIS tick's freshly-folded pads: reads WorldEngagement.BuildPadSnapshot()
-        // directly, in-process, no client/wire round-trip. Runs in EVERY boot shape via WorldServerStepShell.Step
-        // (headless and windowed alike both call WorldServer.Step) — ROM state IS sim state, not presentation-fed.
-        // context.StepTicks is forwarded exactly, preserving the exact-rational T-cycle bridge.
-        Host.Machines.Advance(
-            stepTicks: context.StepTicks,
-            pads: Host.Engagement.BuildPadSnapshot()
-        );
+    }
 
+    private void FinishMachineRouting() {
         // A body-target route's contribution lands on the TARGET's NEXT tick — FoldTick runs after this tick's
         // population has already advanced, so there is no earlier point this tick where the target could still fold
         // it in. This is derived output, not a second admission of the owner's events. Replay re-derives it;
@@ -658,17 +657,27 @@ public sealed partial class WorldTick {
         }
         Host.Engagement.CompleteBodyRouting();
 
-        work.Next(HostFrameWorkPart.TickDelivery);
-        m_deliveringCues = true;
-        try {
-            EmitSnapshot(tick: (context.Tick + 1UL), stepTicks: context.StepTicks);
-        } finally {
-            m_deliveringCues = false;
-            m_cues.Clear();
+    }
+
+    private WaitReason? FinishTick(in FixedStepContext context, ref WorldDocument.SnapshotOperation snapshot, WaitDeadline deadline) {
+        using var work = HostFrameWork.Measure(HostFrameWorkPart.TickDelivery);
+        var tick = context.Tick + 1UL;
+        var deliver = Host.Output.HasTypedSubscribers && !Host.Output.WithholdsTimeline;
+        WorldSnapshot frame = default;
+        if (((snapshot.Partitions > 0) || deliver) &&
+            (Host.Document.TryBuildTickSnapshot(tick, context.StepTicks, ref snapshot, deadline, out frame) == WaitOutcome.DeadlinePassed)) {
+            return Puck.Hosting.Jobs.JobPool.JoinWait;
         }
-        m_lastCompletedTick = (context.Tick + 1UL);
+        Host.Document.DeliverPending();
+        if (deliver) {
+            m_deliveringCues = true;
+            try { Host.Output.DeliverSnapshot(in frame); } finally { m_deliveringCues = false; }
+        }
+        m_cues.Clear();
+        m_lastCompletedTick = tick;
         m_lastStepTicks = context.StepTicks;
         m_lastCompletedEngineTicks = context.ElapsedTicks;
+        return null;
     }
 
     /// <summary>Applies one submission to a live body under the per-tick Drive check, and returns the verdict that
@@ -965,7 +974,7 @@ public sealed partial class WorldTick {
     /// immediately, before a future simulation tick can clear their publication flags.</returns>
     internal bool DrainAdministrative() {
         lock (Host.AuthorityGate) {
-            if (Host.AuthorityRetiring) { return false; }
+            if (Host.AuthorityRetiring || (BlockedReason is not null)) { return false; }
             Host.MutationBudget.BeginTick();
             // A paused or stopped world still ends a session whose observer faulted or detached itself.
             Host.EndObserverEndedSessions();
@@ -984,6 +993,25 @@ public sealed partial class WorldTick {
             if (!Host.AuthorityRetiring) { m_intents.Enqueue(item: submission); }
         }
     }
+    private static readonly TimeSpan TickStall = TimeSpan.FromSeconds(30);
+    private PendingTick m_pendingTick;
+    private bool m_resumingTick;
+    private volatile TickBlock? m_tickBlock;
+    private sealed record TickBlock(WaitReason Reason, ulong PreviousEngineTicks);
+
+    private struct PendingTick {
+        public FixedStepContext Context;
+        public WaitDeadline Stall;
+        public ulong PreviousEngineTicks;
+        public ReadOnlyMemory<ScreenPadSnapshot> Pads;
+        public bool RoutedMachines;
+        public WorldDocument.SnapshotOperation Snapshot;
+    }
+
+    internal WaitReason? PendingReason => m_tickBlock?.Reason;
+    private bool ResumingOnOwner => Host.AuthorityGate.IsHeldByCurrentThread && m_resumingTick;
+    internal WaitReason? BlockedReason => ResumingOnOwner ? null : PendingReason;
+
     /// <summary>Advances the authoritative world by one exact host tick: run every mounted addon's guest code first (see
     /// <see cref="IWorldAddonHost.TickAddons"/>, which applies nothing) → drain the buffered live edits (mutations,
     /// swaps, undo), applying each at the tick boundary and delivering the new definition once if any applied → drain
@@ -1009,38 +1037,89 @@ public sealed partial class WorldTick {
     /// use <see cref="Advance"/> to derive these from the authority's own checkpointed clock.</param>
     internal void Step(in FixedStepContext context) {
         lock (Host.AuthorityGate) {
-            Host.Persistence.RequireAddonsRestored();
-            if (Host.AuthorityRetiring) { return; }
-            RunTick(in context);
+            if (RunTick(in context, WaitDeadline.In(TickStall)) is { } pending) {
+                throw new TimeoutException(pending.ToString());
+            }
         }
     }
-    private void RunTick(in FixedStepContext context) {
+
+    private WaitReason? RunTick(in FixedStepContext context, WaitDeadline slice) {
+        Host.Persistence.RequireAddonsRestored();
+        if (ExecutionInterrupted) { return PendingReason; }
+        if (PendingReason is { } waiting && m_pendingTick.Stall.HasPassed) {
+            FreezeStalledTick(waiting);
+            return waiting;
+        }
+        if (Host.AuthorityRetiring) { return null; }
+        if (PendingReason is null) {
+            m_pendingTick.Context = context;
+            m_pendingTick.PreviousEngineTicks = m_lastCompletedEngineTicks;
+            Host.EnterArenaTick();
+        } else if (context != m_pendingTick.Context) {
+            throw new InvalidOperationException("A pending tick must resume with its original coordinates.");
+        }
+
+        m_resumingTick = true;
+        var held = false;
         var scopes = Host.ScopedReplaySpan;
-        Host.EnterArenaTick();
         try {
-            StepCore(context: in context);
+            if (PendingReason is null) {
+                DrainOrdered();
+                StepCore(in context);
+                m_pendingTick.Pads = Host.Engagement.BuildPadSnapshot();
+                m_pendingTick.Stall = WaitDeadline.In(TickStall);
+            }
+            var deadline = WaitDeadline.At(Math.Min(slice.Timestamp, m_pendingTick.Stall.Timestamp));
+            var pending = ResumeTick(deadline);
+            if (pending is { } reason) {
+                held = true;
+                if (PendingReason != reason) { m_tickBlock = new TickBlock(reason, m_pendingTick.PreviousEngineTicks); }
+                if (m_pendingTick.Stall.HasPassed) { FreezeStalledTick(reason); }
+                return pending;
+            }
             foreach (var scope in Host.ScopedReplaySpan) { scope.AfterTick(); }
+            return null;
         } finally {
-            foreach (var scope in scopes) { scope.CloseDrawInput(); }
-            Host.LeaveArenaTick();
+            m_resumingTick = false;
+            if (!held) {
+                m_pendingTick = default;
+                m_tickBlock = null;
+                foreach (var scope in scopes) { scope.CloseDrawInput(); }
+                Host.LeaveArenaTick();
+            }
         }
     }
-    /// <summary>Advances one step from this authority's own checkpointed clock. Hosts and replay drivers use this
-    /// entry point so restoring a timeline cannot inherit the host pacing counter's old tick or elapsed time.</summary>
-    /// <param name="stepTicks">The exact duration of this step in engine ticks.</param>
-    /// <exception cref="OverflowException">The completed tick or engine-time coordinate would overflow.</exception>
-    internal void Advance(ulong stepTicks) {
+
+    private void FreezeStalledTick(WaitReason reason) {
+        ExecutionInterrupted = true;
+        Host.Output.Narrate("world.tick", $"[world.tick {m_pendingTick.Context.Tick + 1}: authority stalled waiting for {reason}]");
+    }
+
+    private WaitReason? ResumeTick(WaitDeadline deadline) {
+        if (!m_pendingTick.RoutedMachines) {
+            using var work = HostFrameWork.Measure(HostFrameWorkPart.TickMachines);
+            if (Host.Machines.TryAdvance(m_pendingTick.Context.StepTicks, m_pendingTick.Pads, deadline) is { } pending) { return pending; }
+            FinishMachineRouting();
+            m_pendingTick.RoutedMachines = true;
+        }
+        return FinishTick(in m_pendingTick.Context, ref m_pendingTick.Snapshot, deadline);
+    }
+
+    internal WaitReason? TryAdvance(ulong stepTicks, WaitDeadline deadline) {
         lock (Host.AuthorityGate) {
-            Host.Persistence.RequireAddonsRestored();
-            if (Host.AuthorityRetiring) { return; }
-            _ = checked((m_lastCompletedTick + 1UL));
-            var context = new FixedStepContext(
-                ElapsedTicks: checked((m_lastCompletedEngineTicks + stepTicks)),
+            var context = (PendingReason is not null) ? m_pendingTick.Context : new FixedStepContext(
+                ElapsedTicks: checked(m_lastCompletedEngineTicks + stepTicks),
                 StepTicks: stepTicks,
                 Tick: m_lastCompletedTick
             );
+            _ = checked(context.Tick + 1UL);
+            return RunTick(in context, deadline);
+        }
+    }
 
-            RunTick(in context);
+    internal void Advance(ulong stepTicks) {
+        if (TryAdvance(stepTicks, WaitDeadline.In(TickStall)) is { } pending) {
+            throw new TimeoutException(pending.ToString());
         }
     }
     /// <summary>Submits one envelope into the ordered domain — the single front door every non-intent submission kind

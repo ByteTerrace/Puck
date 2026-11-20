@@ -1,4 +1,5 @@
 using Puck.Commands;
+using Puck.Abstractions.Waiting;
 using Xunit;
 using Puck.Hosting;
 using Puck.Testing;
@@ -7,6 +8,43 @@ using Puck.World.Protocol;
 namespace Puck.World.Server.Tests;
 
 public sealed class WorldAuthorityCheckpointLawTests {
+    [Fact]
+    public void PendingMachineTickRefusesAuthorityOperationsAndResumesWithoutRepeatingTheTick() {
+        using var fixture = Fixtures.FreshServer();
+        var baseline = fixture.Server;
+        var machines = System.Reflection.DispatchProxy.Create<IWorldMachineHost, NonDurableMachines>();
+        var proxy = (NonDurableMachines)machines;
+        proxy.Inner = baseline.Machines;
+        proxy.Hold = true;
+        var server = new WorldServer(baseline.Definition, new WorldPopulation(baseline.Definition),
+            baseline.Profiles, new WorldRenderEnvelope(), machines);
+        var context = new FixedStepContext(0, Fixtures.StepTicks, Fixtures.StepTicks);
+        var published = 0UL;
+        Action<ulong> publish = tick => published = tick;
+
+        var first = WorldServerStepShell.TryStep(server, null, publish, in context, HostPacing.OneTickPerFrame,
+            default, out var pending);
+        Assert.Equal(0UL, first);
+        Assert.Equal(0UL, published);
+        Assert.Equal(proxy.Wait, pending);
+        Assert.Equal(0UL, server.CompletedTick);
+        Assert.Contains(proxy.Wait.ToString(), Assert.Throws<InvalidOperationException>(() => server.ReadView(default(CommandContext))).Message);
+        Assert.Contains(proxy.Wait.ToString(), Assert.Throws<InvalidOperationException>(() => server.AttachSink(null!)).Message);
+        Assert.Contains(proxy.Wait.ToString(), Assert.Throws<InvalidOperationException>(() => server.RestoreCheckpoint(null!)).Message);
+        Assert.False(server.TryCaptureCheckpoint(WorldAuthorityHostRowCheckpoint.Empty, out _, out var refusal));
+        Assert.Contains(proxy.Wait.ToString(), refusal);
+
+        proxy.Hold = false;
+        var final = WorldServerStepShell.TryStep(server, null, publish, in context, HostPacing.OneTickPerFrame,
+            WaitDeadline.In(TimeSpan.FromSeconds(10)), out pending);
+        Assert.Null(pending);
+        Assert.Equal(1UL, final);
+        Assert.Equal(1UL, published);
+        Assert.Equal(2, proxy.Attempts);
+        baseline.Advance(Fixtures.StepTicks);
+        Assert.Equal(WorldStateHashComposition.HashAuthoritative(baseline, 1UL), WorldStateHashComposition.HashAuthoritative(server, 1UL));
+    }
+
     [Fact]
     public void AHostWithoutDurableCheckpointsNamesOnlyItsSteppedMachine() {
         using var fixture = Fixtures.FreshServer();
@@ -24,10 +62,17 @@ public sealed class WorldAuthorityCheckpointLawTests {
     // Exposes the real fixture host through its non-durable interface; Advance latches the unsupported step.
     public class NonDurableMachines : System.Reflection.DispatchProxy {
         public IWorldMachineHost Inner { get; set; } = null!;
+        public WaitReason Wait { get; } = new("machines", "held fixture segment");
+        public bool Hold { get; set; }
+        public int Attempts { get; private set; }
         private bool m_stepped;
         protected override object? Invoke(System.Reflection.MethodInfo? method, object?[]? arguments) {
             if (method!.Name == "get_AnyEverPumped") { return m_stepped; }
             if (method.Name == nameof(IWorldMachineHost.Advance)) { m_stepped = true; }
+            if (method.Name == nameof(IWorldMachineHost.TryAdvance)) {
+                Attempts++;
+                if (Hold) { return Wait; }
+            }
             return method.Invoke(Inner, arguments);
         }
     }
