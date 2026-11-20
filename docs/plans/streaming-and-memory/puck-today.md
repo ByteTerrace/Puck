@@ -164,7 +164,7 @@ All paths are under `src/` unless stated.
   arrays rented from `ArrayPool<T>.Shared` (`RentedArrays.Rent`, Puck.Abstractions/Memory/RentedArrays.cs:17-21;
   `Content.Release`, src/Puck.SdfVm/SdfMeshIrradianceScene.cs:82-95) **[opened]**; not charged to `MemoryAccount` (no account call in the scene files,
   grep **[opened]**). GPU side: `GpuArena` over a `GpuRangeAllocator` that throws "The probe scene exceeds its packed
-  node address space." (src/Puck.SdfVm/SdfMeshIrradianceScene.Gpu.cs:187-201) **[opened]**, in a region from `CreateProbeSceneRegion`
+  node address space." (src/Puck.SdfVm/SdfMeshIrradianceScene.Gpu.cs:187-201) **[opened]**, in a region from `CreateProbeRegion`
   (MeshRegion.cs:35-38) **[opened]**.
 - The scene holds mesh claims (`m_meshClaims`, src/Puck.SdfVm/SdfMeshIrradianceScene.cs:22), which keep the static meshes' CPU payloads alive
   **[opened]**.

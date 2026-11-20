@@ -394,7 +394,12 @@ owns the behaviour. Its invariant is that a held map draws only what cannot move
 displaced draw, which moves without its record changing, is never static), and its
 signature (`SdfWorldPasses.DistantSignatureOf`) folds `SdfWorldTables.StaticDrawRevision`, which only
 `StageChangedDraws` and `Unname` advance. A new path that changes a static draw's record outside those two leaves a
-stale map standing. Readers take the camera through `CascadesOf`, which reads the committed one
+stale map standing. The revision follows casters, not records (`SdfMeshDraw.SameCaster`): a tier swap within one
+bake group (the same `Trace`) and an eviction leave it standing, and a landing advances it only when the caster never
+stood or the distant pass recorded while it was absent (`SdfWorldTables.CastersRead`, called beside `RecordDistant`).
+Under the standard's day (0.25° a second) the authored `turnDegrees` sets the redraw rate: 0.1° redraws 2.5 times a
+second, and `world.gpu-timing` keeps a standing pass's last samples (as it does glass's), so its `shadow-distant`
+figure is a refresh's cost, not a frame's; `world.counters sdf.rates` counts the refreshes. Readers take the camera through `CascadesOf`, which reads the committed one
 (`SubmittedDistant`, which like every package commit runs only once the frame's submission reached the queue:
 `ShaderPipelineRenderNode.CommitPackages`) or none; an entry without a committed camera writes no role (`SdfFrameBlock.WriteMeshShadows`
 through `SdfMeshShadowCascades.Holds`), and the surface pass reads no optical term for it. Because its count makes
@@ -1400,10 +1405,14 @@ quality table enables. A path that needs a capability is a second
 implementation: it reads the same data as the path it replaces, gives the same
 result within the still tolerance, is measured to pay on that hardware, and
 falls back automatically where the capability is missing, so every device keeps
-a working path. No code reads a per-device quality table yet, so the benchmark
-boots with the debug world's own render settings;
-[the rendering plan](../../../docs/plans/rendering-research.md#the-bars-and-the-budget)
-owns building it.
+a working path. A device's table is its `render.devices` row's own `table`, or
+its tier's preset (`WorldDeviceProfile.TableIn`); a windowed boot applies it once
+the device names its adapter, and the benchmark applies it again before its first
+chapter (`--profile`). A table sizes storage through the levers it sets: its
+indirect tier sizes the irradiance volume, its hit cache and its published and
+feedback tables (`SdfMeshIrradiance.LevelsOf`), and its distant map's texels size
+that map. The output-sized temporal history (`SdfWorldPackage.HistoryWindowWords`)
+follows the display, not the table.
 
 For a frame-time bar,
 `host.frames` on the windowed host gives produce, simulate and their sum per

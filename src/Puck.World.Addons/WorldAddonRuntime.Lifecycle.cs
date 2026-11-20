@@ -467,9 +467,8 @@ public sealed partial class WorldAddonRuntime {
         // A candidate whose channel declarations differ from what the currently-mounted set was compiled against
         // invalidates every row's reuse eligibility at once, even a row that compares structurally equal to its own
         // prior self — an unchanged manifest still resolves its declared names against a table that just moved.
-        // Only a whole-document rebuild or undo can move this (no live mutation kind touches the channels section
-        // for a running server's whole life — see AffectsAddons' own remarks), so the live-mutation path pays this
-        // SequenceEqual's cost only on those rare calls, never on an ordinary UpsertAddon/RemoveAddon.
+        // Reading the channels here makes them an input of this preparation, so an install that changes them
+        // prepares the host again (WorldDocument.PlanProducts).
         var channelsChanged = !m_channelsSource.SequenceEqual(second: candidate.Channels);
         var stagedChannels = (channelsChanged
             ? WorldInputCatalog.For(definition: candidate)

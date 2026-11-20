@@ -393,7 +393,7 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
                     if (m_feedback is not null) { tables.RetireBackgroundResource(m_feedback); }
                     // A slot of the service is the region's slot its job flushes through (Record), so a staging buffer
                     // is rewritten only once the job that last staged through it completed.
-                    m_feedback = tables.CreateProbeSceneRegion(pending.VolumeWords * 4, SdfGpuWork.SlotCount);
+                    m_feedback = tables.CreateProbeRegion("probe-feedback", pending.VolumeWords * 4, SdfGpuWork.SlotCount);
                     m_feedbackWords = pending.VolumeWords;
                 }
                 var updates = pending.Updates;

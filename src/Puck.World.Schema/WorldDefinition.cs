@@ -14,10 +14,13 @@ namespace Puck.World;
 /// </summary>
 /// <remarks>These serialization-friendly records are populated from world documents. A document declares only what it
 /// wants to state — every section below is optional. Each section's primary-constructor parameter carries the "Raw"
-/// suffix and the section's true JSON key (<c>[property: JsonPropertyName]</c>); the resolved, non-nullable property of
-/// the section's plain name (declared in the body below) is what every consumer reads, and states the section's ABSENT
-/// semantics on its own summary. <c>with</c>-expressions that replace a live section (the mutation-compose pipeline)
-/// target the "Raw" parameter name.
+/// suffix, and its property carries the section's true JSON key; the resolved, non-nullable property of the section's
+/// plain name is what every consumer reads, and states the section's ABSENT semantics on its own summary.
+/// <c>with</c>-expressions that replace a live section (the mutation-compose pipeline) target the "Raw" parameter name.
+/// <para>Every stored member's property notes the part it reads (<see cref="WorldDocumentReads"/>), so a compiled
+/// product built inside a recording learns exactly which parts it was built from, and
+/// <see cref="WorldDocumentInputs.Changed"/> compares two documents part by part. A member added without such a
+/// property fails the read table's check at the first build.</para>
 /// <para>The named static instance a resolved section/table type carries states which shape it is: <c>Absent</c> is a
 /// section's own "the author declared nothing" resolution, semantically inert (off, zeroed, no presentation).
 /// <c>Empty</c> is the identity element on a compiled table, mask, or collection type (zero rows, zero bits) — the
@@ -26,82 +29,387 @@ namespace Puck.World;
 /// section whose own closed vocabulary already reserves a named "none" member (<see cref="WorldStorageDefaults.None"/>)
 /// uses that member directly rather than one of the three generic names.</para></remarks>
 public sealed partial record WorldDefinition(
-    [property: JsonPropertyName("motion"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldMotionDefaults? MotionRaw = null,
-    [property: JsonPropertyName("spawnPoints"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldSpawnPoint>? SpawnPointsRaw = null,
-    [property: JsonPropertyName("render"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldRenderDefaults? RenderRaw = null,
-    [property: JsonPropertyName("screens"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldScreen>? ScreensRaw = null,
-    [property: JsonPropertyName("screenMaterials"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldScreenMaterial>? ScreenMaterialsRaw = null,
-    [property: JsonPropertyName("cameras"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldCamera>? CamerasRaw = null,
-    [property: JsonPropertyName("bodies"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldBodiesDefaults? PopulationRaw = null,
-    [property: JsonPropertyName("seatDefaults"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldPlayerDefaults? PlayerDefaultsRaw = null,
-    [property: JsonPropertyName("channels"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldChannel>? ChannelsRaw = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldInputModes? InputModes = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldInputHistory? InputHistory = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldInputPattern>? InputPatterns = null,
-    [property: JsonPropertyName("targetRegisters"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldTargetRegister>? TargetRegistersRaw = null,
-    [property: JsonPropertyName("bodyMotionPrograms"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<BodyMotionProgram>? BodyMotionProgramsRaw = null,
-    [property: JsonPropertyName("kits"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldKitsSection? KitsRaw = null,
-    [property: JsonPropertyName("defaultSeatKit"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? DefaultSeatKitRaw = null,
-    [property: JsonPropertyName("addons"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldAddonRow>? AddonsRaw = null,
-    [property: JsonPropertyName("bindingOverlays"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldBindingOverlay>? BindingOverlaysRaw = null,
-    [property: JsonPropertyName("storage"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldStorageDefaults? StorageRaw = null,
-    [property: JsonPropertyName("prototypes"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldPrototype>? CreationsRaw = null,
-    [property: JsonPropertyName("placements"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldPlacementsSection? PlacementsRaw = null,
-    [property: JsonPropertyName("speakers"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldSpeaker>? SpeakersRaw = null,
-    [property: JsonPropertyName("tunes"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldTune>? TunesRaw = null,
-    [property: JsonPropertyName("patches"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldPatch>? PatchesRaw = null,
-    [property: JsonPropertyName("audio"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldAudioDefaults? AudioRaw = null,
-    [property: JsonPropertyName("collision"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldCollision? CollisionRaw = null,
-    [property: JsonPropertyName("gravity"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldGravity? GravityRaw = null,
-    [property: JsonPropertyName("host"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldHostDefaults? HostRaw = null,
-    [property: JsonPropertyName("views"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldViewDefaults? ViewsRaw = null,
-    [property: JsonPropertyName("looks"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldLooksSection? LooksRaw = null,
-    [property: JsonPropertyName("dynamics"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<DynamicsRow>? DynamicsRaw = null,
-    [property: JsonPropertyName("grants"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldGrant>? GrantsRaw = null,
-    [property: JsonPropertyName("hud"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldHudSection? HudRaw = null,
-    [property: JsonPropertyName("icons"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldIconographySection? IconsRaw = null,
-    [property: JsonPropertyName("state"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldStateSection? StateRaw = null,
-    [property: JsonPropertyName("inputHold"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldInputHoldAuthoring? InputHoldRaw = null,
-    [property: JsonPropertyName("theme"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldThemeSection? ThemeRaw = null,
-    [property: JsonPropertyName("markers"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldMarkerRow>? MarkersRaw = null,
-    [property: JsonPropertyName("haptics"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldHapticRow>? HapticsRaw = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldRule>? Rules = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldIdentityDefinition? Identity = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldGroupsSection? Groups = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldPropertyRegistrySection? Properties = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldInteractionsSection? Interactions = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldGenerationDefaults? Generation = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<GeneratorRow>? Generators = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldReference>? References = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldPortalsSection? Portals = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldSimulationDefaults? Simulation = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldDestination>? Destinations = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldAdmissionEntry>? Admission = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldAdjacency>? Adjacencies = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] TextFontCatalogDefinition? Text = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldMetadataSection? Metadata = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldUpdateDefaults? Update = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldMusicRow>? Music = null,
-    [property: JsonPropertyName("seatModes"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldSeatModeFamily>? SeatModesRaw = null,
-    [property: JsonPropertyName("probes"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldProbe>? ProbesRaw = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldCapturesSection? Captures = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldScheduleSection? Schedule = null,
-    [property: JsonPropertyName("curves"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldCurveRow>? CurvesRaw = null,
-    [property: JsonPropertyName("navigation"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldNavigationSection? NavigationRaw = null,
-    [property: JsonPropertyName("patterns"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<PatternRow>? PatternsRaw = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<TableRow>? Tables = null,
-    [property: JsonPropertyName("search"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldSearchSection? SearchRaw = null,
-    [property: JsonPropertyName("machines"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldMachine>? MachinesRaw = null,
-    [property: JsonPropertyName("ruleGroups"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<RuleGroupDeclaration>? RuleGroupsRaw = null,
-    [property: JsonPropertyName("sets"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<CellSetRow>? SetsRaw = null,
-    [property: JsonPropertyName("editor"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldEditorDefaults? EditorRaw = null,
-    [property: JsonPropertyName("timeline"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldTimelineSection? TimelineRaw = null,
-    [property: JsonPropertyName("commands"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldConsoleCommand>? CommandsRaw = null,
-    [property: JsonPropertyName("replays"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldScopedReplay>? ReplaysRaw = null,
-    [property: JsonPropertyName("roles"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldRole>? RolesRaw = null,
-    [property: JsonPropertyName("seatPrograms"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldSeatProgram>? SeatProgramsRaw = null,
-    [property: JsonPropertyName("routes"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldRoute>? RoutesRaw = null
+    WorldMotionDefaults? MotionRaw = null,
+    IReadOnlyList<WorldSpawnPoint>? SpawnPointsRaw = null,
+    WorldRenderDefaults? RenderRaw = null,
+    IReadOnlyList<WorldScreen>? ScreensRaw = null,
+    IReadOnlyList<WorldScreenMaterial>? ScreenMaterialsRaw = null,
+    IReadOnlyList<WorldCamera>? CamerasRaw = null,
+    WorldBodiesDefaults? PopulationRaw = null,
+    WorldPlayerDefaults? PlayerDefaultsRaw = null,
+    IReadOnlyList<WorldChannel>? ChannelsRaw = null,
+    WorldInputModes? InputModes = null,
+    WorldInputHistory? InputHistory = null,
+    IReadOnlyList<WorldInputPattern>? InputPatterns = null,
+    IReadOnlyList<WorldTargetRegister>? TargetRegistersRaw = null,
+    IReadOnlyList<BodyMotionProgram>? BodyMotionProgramsRaw = null,
+    WorldKitsSection? KitsRaw = null,
+    string? DefaultSeatKitRaw = null,
+    IReadOnlyList<WorldAddonRow>? AddonsRaw = null,
+    IReadOnlyList<WorldBindingOverlay>? BindingOverlaysRaw = null,
+    WorldStorageDefaults? StorageRaw = null,
+    IReadOnlyList<WorldPrototype>? CreationsRaw = null,
+    WorldPlacementsSection? PlacementsRaw = null,
+    IReadOnlyList<WorldSpeaker>? SpeakersRaw = null,
+    IReadOnlyList<WorldTune>? TunesRaw = null,
+    IReadOnlyList<WorldPatch>? PatchesRaw = null,
+    WorldAudioDefaults? AudioRaw = null,
+    WorldCollision? CollisionRaw = null,
+    WorldGravity? GravityRaw = null,
+    WorldHostDefaults? HostRaw = null,
+    WorldViewDefaults? ViewsRaw = null,
+    WorldLooksSection? LooksRaw = null,
+    IReadOnlyList<DynamicsRow>? DynamicsRaw = null,
+    IReadOnlyList<WorldGrant>? GrantsRaw = null,
+    WorldHudSection? HudRaw = null,
+    WorldIconographySection? IconsRaw = null,
+    WorldStateSection? StateRaw = null,
+    WorldInputHoldAuthoring? InputHoldRaw = null,
+    WorldThemeSection? ThemeRaw = null,
+    IReadOnlyList<WorldMarkerRow>? MarkersRaw = null,
+    IReadOnlyList<WorldHapticRow>? HapticsRaw = null,
+    IReadOnlyList<WorldRule>? Rules = null,
+    WorldIdentityDefinition? Identity = null,
+    WorldGroupsSection? Groups = null,
+    WorldPropertyRegistrySection? Properties = null,
+    WorldInteractionsSection? Interactions = null,
+    WorldGenerationDefaults? Generation = null,
+    IReadOnlyList<GeneratorRow>? Generators = null,
+    IReadOnlyList<WorldReference>? References = null,
+    WorldPortalsSection? Portals = null,
+    WorldSimulationDefaults? Simulation = null,
+    IReadOnlyList<WorldDestination>? Destinations = null,
+    IReadOnlyList<WorldAdmissionEntry>? Admission = null,
+    IReadOnlyList<WorldAdjacency>? Adjacencies = null,
+    TextFontCatalogDefinition? Text = null,
+    WorldMetadataSection? Metadata = null,
+    WorldUpdateDefaults? Update = null,
+    IReadOnlyList<WorldMusicRow>? Music = null,
+    IReadOnlyList<WorldSeatModeFamily>? SeatModesRaw = null,
+    IReadOnlyList<WorldProbe>? ProbesRaw = null,
+    WorldCapturesSection? Captures = null,
+    WorldScheduleSection? Schedule = null,
+    IReadOnlyList<WorldCurveRow>? CurvesRaw = null,
+    WorldNavigationSection? NavigationRaw = null,
+    IReadOnlyList<PatternRow>? PatternsRaw = null,
+    IReadOnlyList<TableRow>? Tables = null,
+    WorldSearchSection? SearchRaw = null,
+    IReadOnlyList<WorldMachine>? MachinesRaw = null,
+    IReadOnlyList<RuleGroupDeclaration>? RuleGroupsRaw = null,
+    IReadOnlyList<CellSetRow>? SetsRaw = null,
+    WorldEditorDefaults? EditorRaw = null,
+    WorldTimelineSection? TimelineRaw = null,
+    IReadOnlyList<WorldConsoleCommand>? CommandsRaw = null,
+    IReadOnlyList<WorldScopedReplay>? ReplaysRaw = null,
+    IReadOnlyList<WorldRole>? RolesRaw = null,
+    IReadOnlyList<WorldSeatProgram>? SeatProgramsRaw = null,
+    IReadOnlyList<WorldRoute>? RoutesRaw = null
 ) {
+    /// <summary>Gets the authored <c>motion</c> member as written; reading it notes
+    /// <see cref="WorldDocumentInput.Motion"/>.</summary>
+    [JsonPropertyName("motion"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public WorldMotionDefaults? MotionRaw { get { WorldDocumentReads.Note(input: WorldDocumentInput.Motion); return field; } init; } = MotionRaw;
+    /// <summary>Gets the authored <c>spawnPoints</c> member as written; reading it notes
+    /// <see cref="WorldDocumentInput.SpawnPoints"/>.</summary>
+    [JsonPropertyName("spawnPoints"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<WorldSpawnPoint>? SpawnPointsRaw { get { WorldDocumentReads.Note(input: WorldDocumentInput.SpawnPoints); return field; } init; } = SpawnPointsRaw;
+    /// <summary>Gets the authored <c>render</c> member as written; reading it notes
+    /// <see cref="WorldDocumentInput.Render"/>.</summary>
+    [JsonPropertyName("render"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public WorldRenderDefaults? RenderRaw { get { WorldDocumentReads.Note(input: WorldDocumentInput.Render); return field; } init; } = RenderRaw;
+    /// <summary>Gets the authored <c>screens</c> member as written; reading it notes
+    /// <see cref="WorldDocumentInput.Screens"/>.</summary>
+    [JsonPropertyName("screens"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<WorldScreen>? ScreensRaw { get { WorldDocumentReads.Note(input: WorldDocumentInput.Screens); return field; } init; } = ScreensRaw;
+    /// <summary>Gets the authored <c>screenMaterials</c> member as written; reading it notes
+    /// <see cref="WorldDocumentInput.ScreenMaterials"/>.</summary>
+    [JsonPropertyName("screenMaterials"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<WorldScreenMaterial>? ScreenMaterialsRaw { get { WorldDocumentReads.Note(input: WorldDocumentInput.ScreenMaterials); return field; } init; } = ScreenMaterialsRaw;
+    /// <summary>Gets the authored <c>cameras</c> member as written; reading it notes
+    /// <see cref="WorldDocumentInput.Cameras"/>.</summary>
+    [JsonPropertyName("cameras"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<WorldCamera>? CamerasRaw { get { WorldDocumentReads.Note(input: WorldDocumentInput.Cameras); return field; } init; } = CamerasRaw;
+    /// <summary>Gets the authored <c>bodies</c> member as written; reading it notes
+    /// <see cref="WorldDocumentInput.Bodies"/>.</summary>
+    [JsonPropertyName("bodies"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public WorldBodiesDefaults? PopulationRaw { get { WorldDocumentReads.Note(input: WorldDocumentInput.Bodies); return field; } init; } = PopulationRaw;
+    /// <summary>Gets the authored <c>seatDefaults</c> member as written; reading it notes
+    /// <see cref="WorldDocumentInput.SeatDefaults"/>.</summary>
+    [JsonPropertyName("seatDefaults"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public WorldPlayerDefaults? PlayerDefaultsRaw { get { WorldDocumentReads.Note(input: WorldDocumentInput.SeatDefaults); return field; } init; } = PlayerDefaultsRaw;
+    /// <summary>Gets the authored <c>channels</c> member as written; reading it notes
+    /// <see cref="WorldDocumentInput.Channels"/>.</summary>
+    [JsonPropertyName("channels"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<WorldChannel>? ChannelsRaw { get { WorldDocumentReads.Note(input: WorldDocumentInput.Channels); return field; } init; } = ChannelsRaw;
+    /// <summary>Gets the authored <c>inputModes</c> member as written; reading it notes
+    /// <see cref="WorldDocumentInput.InputModes"/>.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public WorldInputModes? InputModes { get { WorldDocumentReads.Note(input: WorldDocumentInput.InputModes); return field; } init; } = InputModes;
+    /// <summary>Gets the authored <c>inputHistory</c> member as written; reading it notes
+    /// <see cref="WorldDocumentInput.InputHistory"/>.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public WorldInputHistory? InputHistory { get { WorldDocumentReads.Note(input: WorldDocumentInput.InputHistory); return field; } init; } = InputHistory;
+    /// <summary>Gets the authored <c>inputPatterns</c> member as written; reading it notes
+    /// <see cref="WorldDocumentInput.InputPatterns"/>.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<WorldInputPattern>? InputPatterns { get { WorldDocumentReads.Note(input: WorldDocumentInput.InputPatterns); return field; } init; } = InputPatterns;
+    /// <summary>Gets the authored <c>targetRegisters</c> member as written; reading it notes
+    /// <see cref="WorldDocumentInput.TargetRegisters"/>.</summary>
+    [JsonPropertyName("targetRegisters"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<WorldTargetRegister>? TargetRegistersRaw { get { WorldDocumentReads.Note(input: WorldDocumentInput.TargetRegisters); return field; } init; } = TargetRegistersRaw;
+    /// <summary>Gets the authored <c>bodyMotionPrograms</c> member as written; reading it notes
+    /// <see cref="WorldDocumentInput.BodyMotionPrograms"/>.</summary>
+    [JsonPropertyName("bodyMotionPrograms"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<BodyMotionProgram>? BodyMotionProgramsRaw { get { WorldDocumentReads.Note(input: WorldDocumentInput.BodyMotionPrograms); return field; } init; } = BodyMotionProgramsRaw;
+    private readonly WorldKitsSection? m_kits = KitsRaw;
+    /// <summary>Gets the authored <c>kits</c> member as written; reading it notes every part of it
+    /// (<see cref="WorldDocumentInputs.Kits"/>).</summary>
+    [JsonPropertyName("kits"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public WorldKitsSection? KitsRaw { get { WorldDocumentReads.Note(inputs: WorldDocumentInputs.Kits); return m_kits; } init => m_kits = value; }
+    /// <summary>Gets the authored <c>defaultSeatKit</c> member as written; reading it notes
+    /// <see cref="WorldDocumentInput.DefaultSeatKit"/>.</summary>
+    [JsonPropertyName("defaultSeatKit"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? DefaultSeatKitRaw { get { WorldDocumentReads.Note(input: WorldDocumentInput.DefaultSeatKit); return field; } init; } = DefaultSeatKitRaw;
+    /// <summary>Gets the authored <c>addons</c> member as written; reading it notes
+    /// <see cref="WorldDocumentInput.Addons"/>.</summary>
+    [JsonPropertyName("addons"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<WorldAddonRow>? AddonsRaw { get { WorldDocumentReads.Note(input: WorldDocumentInput.Addons); return field; } init; } = AddonsRaw;
+    /// <summary>Gets the authored <c>bindingOverlays</c> member as written; reading it notes
+    /// <see cref="WorldDocumentInput.BindingOverlays"/>.</summary>
+    [JsonPropertyName("bindingOverlays"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<WorldBindingOverlay>? BindingOverlaysRaw { get { WorldDocumentReads.Note(input: WorldDocumentInput.BindingOverlays); return field; } init; } = BindingOverlaysRaw;
+    /// <summary>Gets the authored <c>storage</c> member as written; reading it notes
+    /// <see cref="WorldDocumentInput.Storage"/>.</summary>
+    [JsonPropertyName("storage"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public WorldStorageDefaults? StorageRaw { get { WorldDocumentReads.Note(input: WorldDocumentInput.Storage); return field; } init; } = StorageRaw;
+    /// <summary>Gets the authored <c>prototypes</c> member as written; reading it notes
+    /// <see cref="WorldDocumentInput.Prototypes"/>.</summary>
+    [JsonPropertyName("prototypes"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<WorldPrototype>? CreationsRaw { get { WorldDocumentReads.Note(input: WorldDocumentInput.Prototypes); return field; } init; } = CreationsRaw;
+    private readonly WorldPlacementsSection? m_placements = PlacementsRaw;
+    /// <summary>Gets the authored <c>placements</c> member as written; reading it notes every part of it
+    /// (<see cref="WorldDocumentInputs.Placements"/>).</summary>
+    [JsonPropertyName("placements"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public WorldPlacementsSection? PlacementsRaw { get { WorldDocumentReads.Note(inputs: WorldDocumentInputs.Placements); return m_placements; } init => m_placements = value; }
+    /// <summary>Gets the authored <c>speakers</c> member as written; reading it notes
+    /// <see cref="WorldDocumentInput.Speakers"/>.</summary>
+    [JsonPropertyName("speakers"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<WorldSpeaker>? SpeakersRaw { get { WorldDocumentReads.Note(input: WorldDocumentInput.Speakers); return field; } init; } = SpeakersRaw;
+    /// <summary>Gets the authored <c>tunes</c> member as written; reading it notes
+    /// <see cref="WorldDocumentInput.Tunes"/>.</summary>
+    [JsonPropertyName("tunes"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<WorldTune>? TunesRaw { get { WorldDocumentReads.Note(input: WorldDocumentInput.Tunes); return field; } init; } = TunesRaw;
+    /// <summary>Gets the authored <c>patches</c> member as written; reading it notes
+    /// <see cref="WorldDocumentInput.Patches"/>.</summary>
+    [JsonPropertyName("patches"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<WorldPatch>? PatchesRaw { get { WorldDocumentReads.Note(input: WorldDocumentInput.Patches); return field; } init; } = PatchesRaw;
+    /// <summary>Gets the authored <c>audio</c> member as written; reading it notes
+    /// <see cref="WorldDocumentInput.Audio"/>.</summary>
+    [JsonPropertyName("audio"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public WorldAudioDefaults? AudioRaw { get { WorldDocumentReads.Note(input: WorldDocumentInput.Audio); return field; } init; } = AudioRaw;
+    /// <summary>Gets the authored <c>collision</c> member as written; reading it notes
+    /// <see cref="WorldDocumentInput.Collision"/>.</summary>
+    [JsonPropertyName("collision"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public WorldCollision? CollisionRaw { get { WorldDocumentReads.Note(input: WorldDocumentInput.Collision); return field; } init; } = CollisionRaw;
+    /// <summary>Gets the authored <c>gravity</c> member as written; reading it notes
+    /// <see cref="WorldDocumentInput.Gravity"/>.</summary>
+    [JsonPropertyName("gravity"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public WorldGravity? GravityRaw { get { WorldDocumentReads.Note(input: WorldDocumentInput.Gravity); return field; } init; } = GravityRaw;
+    /// <summary>Gets the authored <c>host</c> member as written; reading it notes
+    /// <see cref="WorldDocumentInput.Host"/>.</summary>
+    [JsonPropertyName("host"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public WorldHostDefaults? HostRaw { get { WorldDocumentReads.Note(input: WorldDocumentInput.Host); return field; } init; } = HostRaw;
+    /// <summary>Gets the authored <c>views</c> member as written; reading it notes
+    /// <see cref="WorldDocumentInput.Views"/>.</summary>
+    [JsonPropertyName("views"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public WorldViewDefaults? ViewsRaw { get { WorldDocumentReads.Note(input: WorldDocumentInput.Views); return field; } init; } = ViewsRaw;
+    private readonly WorldLooksSection? m_looks = LooksRaw;
+    /// <summary>Gets the authored <c>looks</c> member as written; reading it notes every part of it
+    /// (<see cref="WorldDocumentInputs.Looks"/>).</summary>
+    [JsonPropertyName("looks"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public WorldLooksSection? LooksRaw { get { WorldDocumentReads.Note(inputs: WorldDocumentInputs.Looks); return m_looks; } init => m_looks = value; }
+    /// <summary>Gets the authored <c>dynamics</c> member as written; reading it notes
+    /// <see cref="WorldDocumentInput.Dynamics"/>.</summary>
+    [JsonPropertyName("dynamics"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<DynamicsRow>? DynamicsRaw { get { WorldDocumentReads.Note(input: WorldDocumentInput.Dynamics); return field; } init; } = DynamicsRaw;
+    /// <summary>Gets the authored <c>grants</c> member as written; reading it notes
+    /// <see cref="WorldDocumentInput.Grants"/>.</summary>
+    [JsonPropertyName("grants"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<WorldGrant>? GrantsRaw { get { WorldDocumentReads.Note(input: WorldDocumentInput.Grants); return field; } init; } = GrantsRaw;
+    /// <summary>Gets the authored <c>hud</c> member as written; reading it notes
+    /// <see cref="WorldDocumentInput.Hud"/>.</summary>
+    [JsonPropertyName("hud"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public WorldHudSection? HudRaw { get { WorldDocumentReads.Note(input: WorldDocumentInput.Hud); return field; } init; } = HudRaw;
+    /// <summary>Gets the authored <c>icons</c> member as written; reading it notes
+    /// <see cref="WorldDocumentInput.Icons"/>.</summary>
+    [JsonPropertyName("icons"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public WorldIconographySection? IconsRaw { get { WorldDocumentReads.Note(input: WorldDocumentInput.Icons); return field; } init; } = IconsRaw;
+    private readonly WorldStateSection? m_state = StateRaw;
+    /// <summary>Gets the authored <c>state</c> member as written; reading it notes every part of it
+    /// (<see cref="WorldDocumentInputs.State"/>).</summary>
+    [JsonPropertyName("state"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public WorldStateSection? StateRaw { get { WorldDocumentReads.Note(inputs: WorldDocumentInputs.State); return m_state; } init => m_state = value; }
+    /// <summary>Gets the authored <c>inputHold</c> member as written; reading it notes
+    /// <see cref="WorldDocumentInput.InputHold"/>.</summary>
+    [JsonPropertyName("inputHold"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public WorldInputHoldAuthoring? InputHoldRaw { get { WorldDocumentReads.Note(input: WorldDocumentInput.InputHold); return field; } init; } = InputHoldRaw;
+    /// <summary>Gets the authored <c>theme</c> member as written; reading it notes
+    /// <see cref="WorldDocumentInput.Theme"/>.</summary>
+    [JsonPropertyName("theme"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public WorldThemeSection? ThemeRaw { get { WorldDocumentReads.Note(input: WorldDocumentInput.Theme); return field; } init; } = ThemeRaw;
+    /// <summary>Gets the authored <c>markers</c> member as written; reading it notes
+    /// <see cref="WorldDocumentInput.Markers"/>.</summary>
+    [JsonPropertyName("markers"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<WorldMarkerRow>? MarkersRaw { get { WorldDocumentReads.Note(input: WorldDocumentInput.Markers); return field; } init; } = MarkersRaw;
+    /// <summary>Gets the authored <c>haptics</c> member as written; reading it notes
+    /// <see cref="WorldDocumentInput.Haptics"/>.</summary>
+    [JsonPropertyName("haptics"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<WorldHapticRow>? HapticsRaw { get { WorldDocumentReads.Note(input: WorldDocumentInput.Haptics); return field; } init; } = HapticsRaw;
+    /// <summary>Gets the authored <c>rules</c> member as written; reading it notes
+    /// <see cref="WorldDocumentInput.Rules"/>.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<WorldRule>? Rules { get { WorldDocumentReads.Note(input: WorldDocumentInput.Rules); return field; } init; } = Rules;
+    /// <summary>Gets the authored <c>identity</c> member as written; reading it notes
+    /// <see cref="WorldDocumentInput.Identity"/>.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public WorldIdentityDefinition? Identity { get { WorldDocumentReads.Note(input: WorldDocumentInput.Identity); return field; } init; } = Identity;
+    /// <summary>Gets the authored <c>groups</c> member as written; reading it notes
+    /// <see cref="WorldDocumentInput.Groups"/>.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public WorldGroupsSection? Groups { get { WorldDocumentReads.Note(input: WorldDocumentInput.Groups); return field; } init; } = Groups;
+    /// <summary>Gets the authored <c>properties</c> member as written; reading it notes
+    /// <see cref="WorldDocumentInput.Properties"/>.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public WorldPropertyRegistrySection? Properties { get { WorldDocumentReads.Note(input: WorldDocumentInput.Properties); return field; } init; } = Properties;
+    /// <summary>Gets the authored <c>interactions</c> member as written; reading it notes
+    /// <see cref="WorldDocumentInput.Interactions"/>.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public WorldInteractionsSection? Interactions { get { WorldDocumentReads.Note(input: WorldDocumentInput.Interactions); return field; } init; } = Interactions;
+    /// <summary>Gets the authored <c>generation</c> member as written; reading it notes
+    /// <see cref="WorldDocumentInput.Generation"/>.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public WorldGenerationDefaults? Generation { get { WorldDocumentReads.Note(input: WorldDocumentInput.Generation); return field; } init; } = Generation;
+    /// <summary>Gets the authored <c>generators</c> member as written; reading it notes
+    /// <see cref="WorldDocumentInput.Generators"/>.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<GeneratorRow>? Generators { get { WorldDocumentReads.Note(input: WorldDocumentInput.Generators); return field; } init; } = Generators;
+    /// <summary>Gets the authored <c>references</c> member as written; reading it notes
+    /// <see cref="WorldDocumentInput.References"/>.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<WorldReference>? References { get { WorldDocumentReads.Note(input: WorldDocumentInput.References); return field; } init; } = References;
+    /// <summary>Gets the authored <c>portals</c> member as written; reading it notes
+    /// <see cref="WorldDocumentInput.Portals"/>.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public WorldPortalsSection? Portals { get { WorldDocumentReads.Note(input: WorldDocumentInput.Portals); return field; } init; } = Portals;
+    /// <summary>Gets the authored <c>simulation</c> member as written; reading it notes
+    /// <see cref="WorldDocumentInput.Simulation"/>.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public WorldSimulationDefaults? Simulation { get { WorldDocumentReads.Note(input: WorldDocumentInput.Simulation); return field; } init; } = Simulation;
+    /// <summary>Gets the authored <c>destinations</c> member as written; reading it notes
+    /// <see cref="WorldDocumentInput.Destinations"/>.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<WorldDestination>? Destinations { get { WorldDocumentReads.Note(input: WorldDocumentInput.Destinations); return field; } init; } = Destinations;
+    /// <summary>Gets the authored <c>admission</c> member as written; reading it notes
+    /// <see cref="WorldDocumentInput.Admission"/>.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<WorldAdmissionEntry>? Admission { get { WorldDocumentReads.Note(input: WorldDocumentInput.Admission); return field; } init; } = Admission;
+    /// <summary>Gets the authored <c>adjacencies</c> member as written; reading it notes
+    /// <see cref="WorldDocumentInput.Adjacencies"/>.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<WorldAdjacency>? Adjacencies { get { WorldDocumentReads.Note(input: WorldDocumentInput.Adjacencies); return field; } init; } = Adjacencies;
+    /// <summary>Gets the authored <c>text</c> member as written; reading it notes
+    /// <see cref="WorldDocumentInput.Text"/>.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public TextFontCatalogDefinition? Text { get { WorldDocumentReads.Note(input: WorldDocumentInput.Text); return field; } init; } = Text;
+    /// <summary>Gets the authored <c>metadata</c> member as written; reading it notes
+    /// <see cref="WorldDocumentInput.Metadata"/>.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public WorldMetadataSection? Metadata { get { WorldDocumentReads.Note(input: WorldDocumentInput.Metadata); return field; } init; } = Metadata;
+    /// <summary>Gets the authored <c>update</c> member as written; reading it notes
+    /// <see cref="WorldDocumentInput.Update"/>.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public WorldUpdateDefaults? Update { get { WorldDocumentReads.Note(input: WorldDocumentInput.Update); return field; } init; } = Update;
+    /// <summary>Gets the authored <c>music</c> member as written; reading it notes
+    /// <see cref="WorldDocumentInput.Music"/>.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<WorldMusicRow>? Music { get { WorldDocumentReads.Note(input: WorldDocumentInput.Music); return field; } init; } = Music;
+    /// <summary>Gets the authored <c>seatModes</c> member as written; reading it notes
+    /// <see cref="WorldDocumentInput.SeatModes"/>.</summary>
+    [JsonPropertyName("seatModes"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<WorldSeatModeFamily>? SeatModesRaw { get { WorldDocumentReads.Note(input: WorldDocumentInput.SeatModes); return field; } init; } = SeatModesRaw;
+    /// <summary>Gets the authored <c>probes</c> member as written; reading it notes
+    /// <see cref="WorldDocumentInput.Probes"/>.</summary>
+    [JsonPropertyName("probes"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<WorldProbe>? ProbesRaw { get { WorldDocumentReads.Note(input: WorldDocumentInput.Probes); return field; } init; } = ProbesRaw;
+    /// <summary>Gets the authored <c>captures</c> member as written; reading it notes
+    /// <see cref="WorldDocumentInput.Captures"/>.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public WorldCapturesSection? Captures { get { WorldDocumentReads.Note(input: WorldDocumentInput.Captures); return field; } init; } = Captures;
+    /// <summary>Gets the authored <c>schedule</c> member as written; reading it notes
+    /// <see cref="WorldDocumentInput.Schedule"/>.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public WorldScheduleSection? Schedule { get { WorldDocumentReads.Note(input: WorldDocumentInput.Schedule); return field; } init; } = Schedule;
+    /// <summary>Gets the authored <c>curves</c> member as written; reading it notes
+    /// <see cref="WorldDocumentInput.Curves"/>.</summary>
+    [JsonPropertyName("curves"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<WorldCurveRow>? CurvesRaw { get { WorldDocumentReads.Note(input: WorldDocumentInput.Curves); return field; } init; } = CurvesRaw;
+    /// <summary>Gets the authored <c>navigation</c> member as written; reading it notes
+    /// <see cref="WorldDocumentInput.Navigation"/>.</summary>
+    [JsonPropertyName("navigation"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public WorldNavigationSection? NavigationRaw { get { WorldDocumentReads.Note(input: WorldDocumentInput.Navigation); return field; } init; } = NavigationRaw;
+    /// <summary>Gets the authored <c>patterns</c> member as written; reading it notes
+    /// <see cref="WorldDocumentInput.Patterns"/>.</summary>
+    [JsonPropertyName("patterns"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<PatternRow>? PatternsRaw { get { WorldDocumentReads.Note(input: WorldDocumentInput.Patterns); return field; } init; } = PatternsRaw;
+    /// <summary>Gets the authored <c>tables</c> member as written; reading it notes
+    /// <see cref="WorldDocumentInput.Tables"/>.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<TableRow>? Tables { get { WorldDocumentReads.Note(input: WorldDocumentInput.Tables); return field; } init; } = Tables;
+    /// <summary>Gets the authored <c>search</c> member as written; reading it notes
+    /// <see cref="WorldDocumentInput.Search"/>.</summary>
+    [JsonPropertyName("search"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public WorldSearchSection? SearchRaw { get { WorldDocumentReads.Note(input: WorldDocumentInput.Search); return field; } init; } = SearchRaw;
+    /// <summary>Gets the authored <c>machines</c> member as written; reading it notes
+    /// <see cref="WorldDocumentInput.Machines"/>.</summary>
+    [JsonPropertyName("machines"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<WorldMachine>? MachinesRaw { get { WorldDocumentReads.Note(input: WorldDocumentInput.Machines); return field; } init; } = MachinesRaw;
+    /// <summary>Gets the authored <c>ruleGroups</c> member as written; reading it notes
+    /// <see cref="WorldDocumentInput.RuleGroups"/>.</summary>
+    [JsonPropertyName("ruleGroups"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<RuleGroupDeclaration>? RuleGroupsRaw { get { WorldDocumentReads.Note(input: WorldDocumentInput.RuleGroups); return field; } init; } = RuleGroupsRaw;
+    /// <summary>Gets the authored <c>sets</c> member as written; reading it notes
+    /// <see cref="WorldDocumentInput.Sets"/>.</summary>
+    [JsonPropertyName("sets"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<CellSetRow>? SetsRaw { get { WorldDocumentReads.Note(input: WorldDocumentInput.Sets); return field; } init; } = SetsRaw;
+    /// <summary>Gets the authored <c>editor</c> member as written; reading it notes
+    /// <see cref="WorldDocumentInput.Editor"/>.</summary>
+    [JsonPropertyName("editor"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public WorldEditorDefaults? EditorRaw { get { WorldDocumentReads.Note(input: WorldDocumentInput.Editor); return field; } init; } = EditorRaw;
+    /// <summary>Gets the authored <c>timeline</c> member as written; reading it notes
+    /// <see cref="WorldDocumentInput.Timeline"/>.</summary>
+    [JsonPropertyName("timeline"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public WorldTimelineSection? TimelineRaw { get { WorldDocumentReads.Note(input: WorldDocumentInput.Timeline); return field; } init; } = TimelineRaw;
+    /// <summary>Gets the authored <c>commands</c> member as written; reading it notes
+    /// <see cref="WorldDocumentInput.Commands"/>.</summary>
+    [JsonPropertyName("commands"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<WorldConsoleCommand>? CommandsRaw { get { WorldDocumentReads.Note(input: WorldDocumentInput.Commands); return field; } init; } = CommandsRaw;
+    /// <summary>Gets the authored <c>replays</c> member as written; reading it notes
+    /// <see cref="WorldDocumentInput.Replays"/>.</summary>
+    [JsonPropertyName("replays"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<WorldScopedReplay>? ReplaysRaw { get { WorldDocumentReads.Note(input: WorldDocumentInput.Replays); return field; } init; } = ReplaysRaw;
+    /// <summary>Gets the authored <c>roles</c> member as written; reading it notes
+    /// <see cref="WorldDocumentInput.Roles"/>.</summary>
+    [JsonPropertyName("roles"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<WorldRole>? RolesRaw { get { WorldDocumentReads.Note(input: WorldDocumentInput.Roles); return field; } init; } = RolesRaw;
+    /// <summary>Gets the authored <c>seatPrograms</c> member as written; reading it notes
+    /// <see cref="WorldDocumentInput.SeatPrograms"/>.</summary>
+    [JsonPropertyName("seatPrograms"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<WorldSeatProgram>? SeatProgramsRaw { get { WorldDocumentReads.Note(input: WorldDocumentInput.SeatPrograms); return field; } init; } = SeatProgramsRaw;
+    /// <summary>Gets the authored <c>routes</c> member as written; reading it notes
+    /// <see cref="WorldDocumentInput.Routes"/>.</summary>
+    [JsonPropertyName("routes"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<WorldRoute>? RoutesRaw { get { WorldDocumentReads.Note(input: WorldDocumentInput.Routes); return field; } init; } = RoutesRaw;
+
     private readonly IReadOnlyDictionary<string, Puck.SignedDistance.SdfShadeDefinition>? m_storedShades;
 
     /// <summary>Gets or initializes the world's shade programs, each under its computed identity: read, the table a
@@ -110,11 +418,32 @@ public sealed partial record WorldDefinition(
     /// program carries it. ABSENT when nothing uses a program.</summary>
     [JsonPropertyName("shades"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public IReadOnlyDictionary<string, Puck.SignedDistance.SdfShadeDefinition>? ShadesRaw {
-        get => WorldShadeTable.Of(definition: this);
+        get { WorldDocumentReads.Note(input: WorldDocumentInput.Shades); return WorldShadeTable.Of(definition: this); }
         init => m_storedShades = value;
     }
+    // The placements section as the container of its rows, for the caches keyed by it that read its rows alone: a
+    // read notes the rows, so a policy edit leaves what those caches feed alone.
+    internal WorldPlacementsSection? PlacementRowsSection { get { WorldDocumentReads.Note(input: WorldDocumentInput.PlacementRows); return m_placements; } }
+    // One part of the state section, noting that part alone: what a comparison of two documents' state reads.
+    internal object? StatePart(WorldDocumentInput input) {
+        WorldDocumentReads.Note(input: input);
+        return input switch {
+            WorldDocumentInput.StateWorld => m_state?.World,
+            WorldDocumentInput.StateBody => m_state?.Body,
+            WorldDocumentInput.StateIdentity => m_state?.Identity,
+            WorldDocumentInput.StateLattices => m_state?.Lattices,
+            WorldDocumentInput.StateSpaces => m_state?.Spaces,
+            WorldDocumentInput.StateEnums => m_state?.Enums,
+            WorldDocumentInput.StateFamilies => m_state?.Families,
+            WorldDocumentInput.StateRecords => m_state?.Records,
+            WorldDocumentInput.StatePools => m_state?.Pools,
+            WorldDocumentInput.StatePairPools => m_state?.PairPools,
+            WorldDocumentInput.StateDrawInstallCount => (m_state?.DrawInstallCount ?? 0L),
+            _ => throw new ArgumentOutOfRangeException(paramName: nameof(input), actualValue: input, message: "Not a part of the state section."),
+        };
+    }
     // The table the document carried, which only resolution reads; consumers read the uses themselves.
-    internal IReadOnlyDictionary<string, Puck.SignedDistance.SdfShadeDefinition>? StoredShades => m_storedShades;
+    internal IReadOnlyDictionary<string, Puck.SignedDistance.SdfShadeDefinition>? StoredShades { get { WorldDocumentReads.Note(input: WorldDocumentInput.Shades); return m_storedShades; } }
 
     /// <summary>Gets the companion roles this world declares; absent declares none, so every companion is refused at
     /// reservation.</summary>
@@ -147,10 +476,10 @@ public sealed partial record WorldDefinition(
     public IReadOnlyList<WorldAddonRow> Addons => (AddonsRaw ?? []);
     /// <summary>Gets the kit→entity assignment policy — ABSENT resolves to <see cref="WorldRowAssignment.Default"/>.</summary>
     [JsonIgnore]
-    public WorldRowAssignment Assignment => (KitsRaw?.Assignment ?? WorldRowAssignment.Default);
+    public WorldRowAssignment Assignment => (AssignmentRaw ?? WorldRowAssignment.Default);
     /// <summary>Gets or initializes the kit assignment through the kits section (see <see cref="KitRowsRaw"/>).</summary>
     [JsonIgnore]
-    public WorldRowAssignment? AssignmentRaw { get => KitsRaw?.Assignment; init => KitsRaw = ((KitsRaw ?? new WorldKitsSection()) with { Assignment = value }); }
+    public WorldRowAssignment? AssignmentRaw { get { WorldDocumentReads.Note(input: WorldDocumentInput.KitAssignment); return m_kits?.Assignment; } init => m_kits = ((m_kits ?? new WorldKitsSection()) with { Assignment = value }); }
     /// <summary>Gets the audio host-section defaults — ABSENT resolves to <see cref="WorldAudioDefaults.Absent"/>
     /// (silent); a world authors its own or inherits its basis's.</summary>
     [JsonIgnore]
@@ -159,7 +488,7 @@ public sealed partial record WorldDefinition(
     /// (<see cref="WorldPlacementPolicyDefaults.DeriveFrom"/>: no live placement authoring, the scale envelope the
     /// authored rows span); a world wanting live placement authoring declares the block deliberately.</summary>
     [JsonIgnore]
-    public WorldPlacementPolicyDefaults Authoring => (PlacementsRaw?.Policy ?? WorldPlacementPolicyDefaults.DeriveFrom(placements: Placements));
+    public WorldPlacementPolicyDefaults Authoring => (AuthoringRaw ?? WorldPlacementPolicyDefaults.DeriveFrom(placements: Placements));
     /// <summary>Gets the screen slots the world's creation faces claim, one for each face of a placed creation whose
     /// source renders something (<see cref="WorldFaceCatalog.ClaimingFaceCount"/>), counted from the composed world.
     /// The binder reserves them at boot at <c>[DerivedFaceBase, DerivedFaceBase + this)</c>, so a later definition that
@@ -168,7 +497,7 @@ public sealed partial record WorldDefinition(
     public int DerivedFaceScreens => WorldFaceCatalog.For(definition: this).ClaimingFaceCount;
     /// <summary>Gets or initializes the placement policy through the placements section (see <see cref="KitRowsRaw"/>).</summary>
     [JsonIgnore]
-    public WorldPlacementPolicyDefaults? AuthoringRaw { get => PlacementsRaw?.Policy; init => PlacementsRaw = ((PlacementsRaw ?? new WorldPlacementsSection()) with { Policy = value }); }
+    public WorldPlacementPolicyDefaults? AuthoringRaw { get { WorldDocumentReads.Note(input: WorldDocumentInput.PlacementPolicy); return m_placements?.Policy; } init => m_placements = ((m_placements ?? new WorldPlacementsSection()) with { Policy = value }); }
     /// <summary>Gets the basis document this file layers over, as a file path resolved against this document's own
     /// directory — the document-composition member (see <c>WorldDocumentBasis</c>). A file naming a basis is a
     /// delta: it authors only what differs, inheriting every omitted member from the (recursively composed) basis
@@ -179,7 +508,7 @@ public sealed partial record WorldDefinition(
     /// replica egress, a replay embed) is self-contained. A wire-arriving document has no directory to resolve
     /// against, so a non-null basis on that path refuses rather than resolving.</remarks>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public string? Basis { get; init; }
+    public string? Basis { get { WorldDocumentReads.Note(input: WorldDocumentInput.Basis); return field; } init; }
     /// <summary>Gets the directory every relative path this document authors resolves beside
     /// (<see cref="WorldDocumentPaths"/>): the full, forward-slashed directory of the file it was loaded from, the
     /// source directory of a compiled <c>.puck</c> world, or <see langword="null"/> for a document with no directory
@@ -187,8 +516,8 @@ public sealed partial record WorldDefinition(
     /// <remarks>Not document content: never serialized, and never part of a hash or a pin. A <c>with</c> copy
     /// carries it; a door that rebuilds a definition from its JSON restores it from the definition it rebuilt.</remarks>
     [JsonIgnore]
-    public string? DocumentDirectory { get; init; }
-    internal bool ReadFromFile { get; init; }
+    public string? DocumentDirectory { get { WorldDocumentReads.Note(input: WorldDocumentInput.DocumentDirectory); return field; } init; }
+    internal bool ReadFromFile { get { WorldDocumentReads.Note(input: WorldDocumentInput.ReadFromFile); return field; } init; }
     /// <summary>Gets the per-world binding overlays — ABSENT resolves to none.</summary>
     [JsonIgnore]
     public IReadOnlyList<WorldBindingOverlay> BindingOverlays => (BindingOverlaysRaw ?? []);
@@ -198,7 +527,7 @@ public sealed partial record WorldDefinition(
     public IReadOnlyList<BodyMotionProgram> BodyMotionPrograms => (BodyMotionProgramsRaw ?? []);
     /// <summary>Gets the body-owned ephemeral state declarations compiled into every body's ordinal register file.</summary>
     [JsonIgnore]
-    public IReadOnlyList<ActionStateSlot> BodyState => (StateRaw?.Body ?? []);
+    public IReadOnlyList<ActionStateSlot> BodyState { get { WorldDocumentReads.Note(input: WorldDocumentInput.StateBody); return (m_state?.Body ?? []); } }
     /// <summary>Gets the placeable cameras a <see cref="WorldScreenSource.View"/> screen renders the world from —
     /// ABSENT resolves to none.</summary>
     [JsonIgnore]
@@ -237,7 +566,7 @@ public sealed partial record WorldDefinition(
     /// <summary>Gets the stable document id used when this world submits to another document, or
     /// <see langword="null"/> when the document authors none.</summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public string? DocumentId { get; init; }
+    public string? DocumentId { get { WorldDocumentReads.Note(input: WorldDocumentInput.DocumentId); return field; } init; }
     /// <summary>Gets the named second-order "personality" rows every follower consumer (looks, camera booms, kit
     /// planar shaping, state cells) names by <see cref="DynamicsRow.Name"/> — ABSENT resolves to none, so an
     /// unauthored world is unchanged.</summary>
@@ -248,7 +577,7 @@ public sealed partial record WorldDefinition(
     /// where the document is imported (<see cref="WorldModuleExports"/>), so a live document always carries
     /// <see langword="null"/> here and the validator refuses anything else.</summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public WorldExports? Exports { get; init; }
+    public WorldExports? Exports { get { WorldDocumentReads.Note(input: WorldDocumentInput.Exports); return field; } init; }
     /// <summary>Gets the unknown top-level members captured during deserialization, declared identically on every versioned
     /// document root here and validated
     /// through the shared <see cref="DocumentExtensionsPolicy"/> regime (see <see cref="WorldDefinitionValidator"/>): a
@@ -257,7 +586,7 @@ public sealed partial record WorldDefinition(
     /// surviving silently is how authoring drift starts. Null when the document carries no unknown members. A
     /// settable (not <c>init</c>) accessor is required: System.Text.Json appends to it during deserialization.</summary>
     [JsonExtensionData]
-    public IDictionary<string, JsonElement>? Extensions { get; set; }
+    public IDictionary<string, JsonElement>? Extensions { get { WorldDocumentReads.Note(input: WorldDocumentInput.Extensions); return field; } set; }
     /// <summary>Gets the typed deterministic program compiled from the lattice-shaped state rows and their ordered
     /// reactions, in physical region declaration order. Empty when no physical regions are declared.</summary>
     [JsonIgnore]
@@ -289,7 +618,7 @@ public sealed partial record WorldDefinition(
     /// <summary>Gets the identity-owned state declarations compiled into every body's ordinal register file and
     /// synchronized through the durable document seam.</summary>
     [JsonIgnore]
-    public IReadOnlyList<ActionStateSlot> IdentityState => (StateRaw?.Identity ?? []);
+    public IReadOnlyList<ActionStateSlot> IdentityState { get { WorldDocumentReads.Note(input: WorldDocumentInput.StateIdentity); return (m_state?.Identity ?? []); } }
     /// <summary>Gets the ordered fragment documents this file imports — each a <see cref="WorldImport"/> naming a
     /// file path resolved against this document's own directory and an optional alias its names compose under —
     /// the fan-in half of composition beside <see cref="Basis"/>'s single-parent chain (see
@@ -299,7 +628,7 @@ public sealed partial record WorldDefinition(
     /// always carries <see langword="null"/> here, the validator refuses anything else, and a wire-arriving document
     /// (no directory to resolve imports against) refuses a non-null value the same way <see cref="Basis"/> does.</remarks>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public IReadOnlyList<WorldImport>? Imports { get; init; }
+    public IReadOnlyList<WorldImport>? Imports { get { WorldDocumentReads.Note(input: WorldDocumentInput.Imports); return field; } init; }
     /// <summary>Gets the participant input-hold policy, authored shape — ABSENT resolves to
     /// <see cref="WorldInputHoldAuthoring.Absent"/> (inert).</summary>
     [JsonIgnore]
@@ -307,27 +636,27 @@ public sealed partial record WorldDefinition(
     /// <summary>Bridge spellings for compose sites: each writes ONE member of its dealt section, preserving the
     /// other. The document spelling is the section object; these never serialize.</summary>
     [JsonIgnore]
-    public IReadOnlyList<WorldKit>? KitRowsRaw { get => KitsRaw?.Rows; init => KitsRaw = ((KitsRaw ?? new WorldKitsSection()) with { Rows = value }); }
+    public IReadOnlyList<WorldKit>? KitRowsRaw { get { WorldDocumentReads.Note(input: WorldDocumentInput.KitRows); return m_kits?.Rows; } init => m_kits = ((m_kits ?? new WorldKitsSection()) with { Rows = value }); }
     /// <summary>Gets the world's locomotion kits — ABSENT resolves to none. A kit row is required only when the
     /// document's population implies a body to move: a zero-capacity census (see <see cref="Population"/>) needs no
     /// kit at all — the derived refusal <see cref="WorldDefinitionValidator"/> applies rather than a flat floor.</summary>
     [JsonIgnore]
-    public IReadOnlyList<WorldKit> Kits => (KitsRaw?.Rows ?? []);
+    public IReadOnlyList<WorldKit> Kits => (KitRowsRaw ?? []);
     /// <summary>Gets the look→entity assignment policy — ABSENT resolves to <see cref="WorldRowAssignment.Default"/>.</summary>
     [JsonIgnore]
-    public WorldRowAssignment LookAssignment => (LooksRaw?.Assignment ?? WorldRowAssignment.Default);
+    public WorldRowAssignment LookAssignment => (LookAssignmentRaw ?? WorldRowAssignment.Default);
     /// <summary>Gets or initializes the look assignment through the looks section (see <see cref="KitRowsRaw"/>).</summary>
     [JsonIgnore]
-    public WorldRowAssignment? LookAssignmentRaw { get => LooksRaw?.Assignment; init => LooksRaw = ((LooksRaw ?? new WorldLooksSection()) with { Assignment = value }); }
+    public WorldRowAssignment? LookAssignmentRaw { get { WorldDocumentReads.Note(input: WorldDocumentInput.LookAssignment); return m_looks?.Assignment; } init => m_looks = ((m_looks ?? new WorldLooksSection()) with { Assignment = value }); }
     /// <summary>Gets or initializes the look rows through the looks section (see <see cref="KitRowsRaw"/>).</summary>
     [JsonIgnore]
-    public IReadOnlyList<WorldLook>? LookRowsRaw { get => LooksRaw?.Rows; init => LooksRaw = ((LooksRaw ?? new WorldLooksSection()) with { Rows = value }); }
+    public IReadOnlyList<WorldLook>? LookRowsRaw { get { WorldDocumentReads.Note(input: WorldDocumentInput.LookRows); return m_looks?.Rows; } init => m_looks = ((m_looks ?? new WorldLooksSection()) with { Rows = value }); }
     /// <summary>Gets the look rows — ABSENT resolves to none. A consumer resolving an entity's look row (or the
     /// whole table) reads the empty case through <see cref="WorldDefinitionRows.ResolveLook"/>/
     /// <see cref="WorldDefinitionRows.ResolveLookRows"/>, the one place that falls back to the implicit single
     /// catalog look (<see cref="WorldLook.Implicit"/>).</summary>
     [JsonIgnore]
-    public IReadOnlyList<WorldLook> Looks => (LooksRaw?.Rows ?? []);
+    public IReadOnlyList<WorldLook> Looks => (LookRowsRaw ?? []);
     /// <summary>Gets the named machine instances. An absent section runs no declared devices.</summary>
     [JsonIgnore]
     public IReadOnlyList<WorldMachine> Machines => (MachinesRaw ?? []);
@@ -367,10 +696,10 @@ public sealed partial record WorldDefinition(
     public IReadOnlyDictionary<string, CompiledPlacementFrame> PlacementFrames => WorldPlacementStamp.ResolveFrames(this);
     /// <summary>Gets or initializes the placement rows through the placements section (see <see cref="KitRowsRaw"/>).</summary>
     [JsonIgnore]
-    public IReadOnlyList<WorldPlacement>? PlacementRowsRaw { get => PlacementsRaw?.Rows; init => PlacementsRaw = ((PlacementsRaw ?? new WorldPlacementsSection()) with { Rows = value }); }
+    public IReadOnlyList<WorldPlacement>? PlacementRowsRaw { get { WorldDocumentReads.Note(input: WorldDocumentInput.PlacementRows); return m_placements?.Rows; } init => m_placements = ((m_placements ?? new WorldPlacementsSection()) with { Rows = value }); }
     /// <summary>Gets the placement instance rows — ABSENT resolves to none.</summary>
     [JsonIgnore]
-    public IReadOnlyList<WorldPlacement> Placements => (PlacementsRaw?.Rows ?? []);
+    public IReadOnlyList<WorldPlacement> Placements => (PlacementRowsRaw ?? []);
     /// <summary>Gets the authored player-profile seed palette and picker tuning — ABSENT resolves to
     /// <see cref="WorldPlayerDefaults.Default"/>.</summary>
     [JsonIgnore]
@@ -415,7 +744,7 @@ public sealed partial record WorldDefinition(
     [JsonIgnore]
     public WorldRenderDefaults Render => (RenderRaw ?? WorldRenderDefaults.Absent);
     /// <summary>Gets the document schema tag — <see cref="SchemaVersion"/> for a well-formed document.</summary>
-    public string Schema { get; init; } = SchemaVersion;
+    public string Schema { get { WorldDocumentReads.Note(input: WorldDocumentInput.Schema); return field; } init; } = SchemaVersion;
     /// <summary>Gets the diegetic screens standing in the plaza — ABSENT resolves to none.</summary>
     [JsonIgnore]
     public IReadOnlyList<WorldScreen> Screens => (ScreensRaw ?? []);
@@ -454,7 +783,7 @@ public sealed partial record WorldDefinition(
     /// index is rebuilt when the placement section instance changes, and reports unsupported dynamic/distributed rows
     /// explicitly instead of silently dropping their possible blockers.</summary>
     [JsonIgnore]
-    public WorldSpatialQueryIndex SpatialQueryIndex => WorldSpatialQueryCompilation.Resolve(section: PlacementsRaw, worldSeed: (Generation?.WorldSeed ?? 0UL));
+    public WorldSpatialQueryIndex SpatialQueryIndex => WorldSpatialQueryCompilation.Resolve(section: PlacementRowsSection, worldSeed: (Generation?.WorldSeed ?? 0UL));
     /// <summary>Gets the named spawn poses seats and population policies reference — ABSENT resolves to empty,
     /// EXCEPT that a spawn-point id of <see cref="WorldSpawnPointDefaults.ImplicitOriginId"/> is always resolvable:
     /// when this document authors no <c>spawnPoints</c> section at all, one implicit point at world-space zero is
@@ -472,10 +801,10 @@ public sealed partial record WorldDefinition(
     public IReadOnlyList<WorldStateRow> State => GetStateRows();
     /// <summary>Gets the explicitly authored state rows, excluding generated pool storage.</summary>
     [JsonIgnore]
-    public IReadOnlyList<WorldStateRow> AuthoredState => (StateRaw?.World ?? []);
+    public IReadOnlyList<WorldStateRow> AuthoredState { get { WorldDocumentReads.Note(input: WorldDocumentInput.StateWorld); return (m_state?.World ?? []); } }
     /// <summary>Gets the declared symbolic value domains a row may name — ABSENT resolves to none.</summary>
     [JsonIgnore]
-    public IReadOnlyList<StateEnum> Enums => (StateRaw?.Enums ?? []);
+    public IReadOnlyList<StateEnum> Enums { get { WorldDocumentReads.Note(input: WorldDocumentInput.StateEnums); return (m_state?.Enums ?? []); } }
 
     /// <summary>Returns the declared enum a state row draws its cells from.</summary>
     /// <param name="row">The row.</param>
@@ -504,7 +833,7 @@ public sealed partial record WorldDefinition(
 
     /// <summary>Gets the declared vector embedding spaces — ABSENT resolves to none.</summary>
     [JsonIgnore]
-    public IReadOnlyList<StateSpace> Spaces => (StateRaw?.Spaces ?? []);
+    public IReadOnlyList<StateSpace> Spaces { get { WorldDocumentReads.Note(input: WorldDocumentInput.StateSpaces); return (m_state?.Spaces ?? []); } }
     /// <summary>Gets the typed descriptor catalog compiled from the authored <c>state</c> section. Runtime processors
     /// resolve names against this catalog once, retain <see cref="StateHandle"/> values, and then use ordinal
     /// descriptor access without repeated string lookup.</summary>

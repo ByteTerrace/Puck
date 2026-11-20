@@ -820,6 +820,64 @@ public sealed partial class RenderGraphRuntimeLawTests {
         Assert.Equal(expected: FrameCompletion.Refused, actual: runtime.Render.Completion);
         Assert.Contains(expectedSubstring: upload.Refusal!, actualString: runtime.Render.Reason);
     }
+    // The law: a source whose producer is not running is a defined outcome its readers draw as their stand-in, so it
+    // holds no reader's frame incomplete, where a refused upload (the test above) refuses every reader.
+    [Fact]
+    public void AnAbsentUploadHoldsNoReaderIncomplete() {
+        var gpu = new FakePipelineGpu();
+        var recorders = new Recorders();
+        var upload = new FakeUpload(format: ImagePixelFormat.B8G8R8A8Unorm) {
+            Absent = true,
+            Refusal = "the test producer is not running",
+        };
+
+        SourceConversionPackage.RegisterAll(packages: recorders.Registry);
+        recorders.Registry.RegisterSource(
+            factory: _ => upload,
+            package: Upload
+        );
+
+        var set = Set(
+            RenderGraphInstance.Source(
+                name: "pattern",
+                producer: "test"
+            ),
+            Instance(
+                name: "left",
+                reads: new RenderGraphRead(Producer: "pattern")
+            ),
+            Instance(
+                name: "right",
+                reads: new RenderGraphRead(Producer: "pattern")
+            )
+        );
+
+        using var runtime = Runtime(
+            gpu,
+            recorders,
+            set,
+            "left",
+            null!,
+            Graph(ScreensGraph(false, "screen"), ("screen", "pattern")),
+            Graph(ScreensGraph(false, "screen"), ("screen", "pattern"))
+        );
+
+        for (var index = 0; (index < 4); index++) {
+            Produce(
+                index: index,
+                runtime: runtime,
+                tick: index
+            );
+        }
+
+        TestLiveness.Until(step: () => {
+            Produce(index: (runtime.Latest!.Frame + 1), runtime: runtime, tick: 1);
+
+            return (runtime.Node(instance: 1).FrameCounter > 0UL);
+        });
+        Assert.Equal(expected: 0L, actual: upload.Writes);
+        Assert.Equal(expected: FrameCompletion.Rendered, actual: runtime.Render.Completion);
+    }
 
     // An upload of a SourceExtent-square image that counts what it writes.
     private sealed class FakeUpload(ImagePixelFormat format) : IRenderGraphSourceUpload {
@@ -836,6 +894,8 @@ public sealed partial class RenderGraphRuntimeLawTests {
             )
             : null);
         public string? Fault => Refusal;
+        public bool Absent { get; init; }
+        public bool IsAbsent => (Absent && (Refusal is not null));
         public string? Refusal { get; init; }
         public long Writes { get; private set; }
 

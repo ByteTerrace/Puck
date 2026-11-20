@@ -467,6 +467,11 @@ install rebuilds only what the candidate changed: `WorldDocument.InstallKindOf`
 answers value, presentation (a creation edit that changes shading alone keeps the
 arena, the rules and the population) or full, once per prepared mutation
 ([what an install rebuilds](../../../src/Puck.World.Server/README.md#what-an-install-rebuilds)).
+Within a full install each compiled product (population, solid field, envelope
+fit, addon and machine hosts) rebuilds only when a part of the document its build
+read changed (`WorldDocument.PlanProducts` over the reads `WorldDocumentReads`
+records); no list of mutation kinds decides it, and a new document member needs
+a property that notes its part (`WorldDocumentInputs.cs`).
 Document values never change once built; binding, resolving and flattening copy
 only the paths to the references they replace (`WorldStateDocumentValues`). Rule
 effects write the tick's `StateArena` and publish once at the end of the tick.
@@ -809,11 +814,13 @@ check the flag: the owner may be holding the pad.
   the tick and the place, on a stick held while the body goes nowhere or a step out of its path's places; `puck benchmark --headless --route
   debug --loops 2` is the headless proof ([the plan](../../../docs/plans/benchmark.md#the-route-is-places-played-by-an-authored-seat-program-stage-4)).
 - **A device profile is data, selected by adapter.** A world's `render.devices` rows (the standard's, in
-  `worlds/standard/quality.puck`) each name a device's quality table and memory bars. A windowed boot selects the row
-  whose `match` the adapter's name contains and caps the device and host pools at its bars
-  (`WorldDeviceProfileState.Apply`, over `MemoryAccount.SetBudget`, which only lowers a limit); `world.device-profile
-  [auto|none|<name>]` selects by name and also writes the table through the `world.quality` levers
-  (`IWorldQualityPresets`). `puck benchmark --profile` sends it before the first chapter, and the run report's
+  `worlds/standard/quality.puck`) each name a device's quality tier, an optional `table` of its own in place of that
+  tier's preset (`WorldDeviceProfile.TableIn`), and memory bars. A windowed or offscreen boot selects the row whose
+  `match` the adapter's name contains once the device names its adapter, caps the device and host pools at its bars
+  before the first frame stages anything (`WorldDeviceProfileState.ApplyAtBoot`, over `MemoryAccount.SetBudget`, which
+  only lowers a limit), then submits `world.device-profile auto`, which writes the table through the `world.quality`
+  levers (`IWorldQualityPresets`); a lever command after it overrides it, and `world.device-profile` echoes
+  `table=<tier or profile name>`. `puck benchmark --profile` sends it before the first chapter, and the run report's
   `profile` and `topology` objects name what applied. No device name or figure is engine code.
 - `puck test <source>` boots each `.puck` `test` block headless and prints one
   verdict per line ([references/schedules-and-tests.md](references/schedules-and-tests.md)).

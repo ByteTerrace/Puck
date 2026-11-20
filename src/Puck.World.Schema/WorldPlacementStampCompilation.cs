@@ -93,7 +93,7 @@ public static partial class WorldPlacementStamp {
         return true;
     }
     private static CompilationContext ContextFor(WorldDefinition definition, ulong seed, int revision) {
-        var section = (definition.PlacementsRaw ?? EmptySection);
+        var section = (definition.PlacementRowsSection ?? EmptySection);
 
         if (WorldPlacementFrameCompilation.HasLiveInputs(section: section)) { return new CompilationContext(section, definition.Creations, seed, revision); }
         var entry = Contexts.GetValue(section, static _ => new ContextEntry());

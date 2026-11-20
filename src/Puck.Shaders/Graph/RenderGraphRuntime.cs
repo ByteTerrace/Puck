@@ -959,7 +959,7 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
                             schedule: schedule
                         ),
                         index: index,
-                        producer: binding.ProducerName
+                        producer: binding.Producer
                     );
                 }
 
@@ -1021,7 +1021,7 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
                 NoteStandIn(
                     frame: frame,
                     index: index,
-                    producer: binding.ProducerName
+                    producer: binding.Producer
                 );
             }
         }
@@ -1029,10 +1029,11 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
         return true;
     }
     // Records a stand-in bound for a read the schedule shows this frame, which a capture of the consumer waits out. A
-    // read the frame does not show (no footprint, or the producer off view) samples nothing a capture would see.
-    private void NoteStandIn(int index, string producer, long frame) {
-        if (frame >= 0) {
-            m_standInReads[index] = producer;
+    // read the frame does not show (no footprint, or the producer off view) samples nothing a capture would see. A source
+    // that is absent (IsAbsent) has no image to wait for: its stand-in is what its readers draw, so nothing is noted.
+    private void NoteStandIn(int index, int producer, long frame) {
+        if ((frame >= 0) && !IsAbsent(index: producer)) {
+            m_standInReads[index] = m_set.Instances[producer].Name;
         }
     }
     // The frame of a producer's output the schedule has a consumer read, or -1 when it names none.
@@ -1294,7 +1295,9 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
         // A source with no conversion graph is never scheduled. Its opening or descriptor fault still refuses any
         // same-frame consumer that shows it, rather than certifying a stand-in as a completed frame.
         for (var index = 0; (index < m_sources.Length); index++) {
-            if (m_sources[index] is { Graph: null }) {
+            if (IsAbsent(index: index)) {
+                MarkCurrent(index: index);
+            } else if (m_sources[index] is { Graph: null }) {
                 MarkUnproduced(index: index, node: m_nodes[index]!);
             } else if (m_set.Instances[index].IsSource &&
                 (m_producers[index] is IRenderGraphSourceProducer producer) &&

@@ -5080,7 +5080,9 @@ beside the live starts' remaining growth, and the demand reports the figure judg
 A start whose own expected peak (judged as just described) plus the commit reserve exceeds the commit limit, or whose expected private working set plus the
 pressure floor exceeds the installed memory, is refused by name at once (`gate: refused <step>: a windowed World can
 never be admitted on this machine, ...`) instead of waiting out the bound. Before the first observation, `HostLoadThresholds.DefaultPeakGb`
-provides the private-byte fallback, and `HostLoadThresholds.ResidentFraction` (0.7) of the kind's expected
+provides the private-byte fallback: the kind's figure from a large machine, held to the host budget a Puck process's
+account derives on this machine's installed memory (`MemoryAccount.DefaultBudgetOf`, three quarters of it), since a
+World sizes its pools from that budget; and `HostLoadThresholds.ResidentFraction` (0.7) of the kind's expected
 private-byte peak is the private working-set fallback until the kind's private working set is measured. The ordinary host samplers feed this same tracker,
 including during a benchmark; no separate admission or sampling service runs.
 Pre-process reservations remain local and expire when a matching process appears

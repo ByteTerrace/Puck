@@ -198,14 +198,20 @@ public sealed partial class WorldDocument {
             return false;
         }
 
-        if (
-            AffectsRenderEnvelope(mutation: mutation) &&
-            !Host.Envelope.TryFit(
-            candidate: candidate,
-            reason: out reason
-        )
-        ) {
-            return false;
+        // The compiled products a full install keeps unless a part they were built from changed; a presentation
+        // install keeps every product but the envelope's fit, and a value install keeps them all.
+        var products = kind switch {
+            WorldInstallKind.Full => PlanProducts(previous: current, candidate: candidate),
+            WorldInstallKind.Presentation => PlanProducts(previous: current, candidate: candidate).ForPresentation(),
+            _ => default(WorldProductPlan),
+        };
+        WorldDocumentInputs? envelopeInputs = null;
+
+        if (!products.Envelope.IsEmpty) {
+            if (!TryFitEnvelope(candidate: candidate, inputs: out var fitted, reason: out reason)) {
+                return false;
+            }
+            envelopeInputs = fitted;
         }
 
         if (!Host.Population.CanInstallFields(
@@ -217,85 +223,70 @@ public sealed partial class WorldDocument {
             return false;
         }
 
-        // The SDF contact field is built here, before install, so the warp-free evaluator's excluded-op ceiling is
-        // a refusal rather than a constructor throw at install. Only a solid-affecting mutation rebuilds it;
-        // otherwise the live field carries forward untouched.
-        var solids = m_solids;
-        // Shading never reaches the contact field.
-        var solidAffecting = ((kind != WorldInstallKind.Presentation) && AffectsSolidField(mutation: mutation));
-
-        if (solidAffecting) {
-            // A SetCollision edit touches only the collision tuning row, so the compiled SDF program is
-            // byte-identical: when the live field exists and the candidate still needs it, the existing evaluator
-            // is re-wrapped with the new scalars instead of recompiled. Every other solid-affecting edit, and a
-            // requirement-selection flip, rebuilds from scratch.
-            if (
-                (mutation is WorldMutation.SetCollision) &&
-                (m_solids is { } live) &&
-                WorldContactSelection.RequiresField(collision: candidate.Collision)
-            ) {
-                solids = live.WithTuning(tuning: FixedWorldCollision.Compile(collision: candidate.Collision));
-            } else if (!TryBuildSolids(
-                definition: candidate,
-                reason: out reason,
-                solids: out solids
-            )) {
-                return false;
-            }
+        if (!TryStageSolids(candidate: candidate, products: products, reason: out reason, solids: out var solids)) {
+            return false;
         }
 
         // The addon and machine hosts stage their resources against the same candidate, last. A plan is set only on
         // success, and a refusal or a throw after one was obtained disposes it, so nothing staged outlives a
-        // mutation that does not install. A server with no addon host attached refuses an addon-affecting mutation
-        // by name rather than accepting a no-op.
+        // mutation that does not install. A server with no addon host attached refuses a candidate holding an
+        // enabled addon row by name rather than accepting a no-op.
         IWorldAddonPreparedPlan? addonPlan = null;
         IWorldMachinePreparedPlan? machinePlan = null;
+        WorldDocumentInputs? addonInputs = null;
+        WorldDocumentInputs? machineInputs = null;
         int[]? tickWrittenEntity = null;
         Principal[]? tickWrittenPrincipal = null;
         bool[]? tickCollided = null;
         var staged = false;
 
         try {
-            if (AffectsAddons(mutation: mutation)) {
+            if (!products.Addons.IsEmpty) {
                 if (Host.Addons is not { } addons) {
-                    reason = "no addon host is attached to this server — addon-affecting mutations are refused";
+                    if (TryFindEnabledAddonRow(candidate: candidate, name: out var enabledRowName)) {
+                        reason = $"addon '{enabledRowName}' cannot mount — no addon host is attached to this server";
 
-                    return false;
-                }
+                        return false;
+                    }
+                } else {
+                    if (!TryPrepareAddons(
+                        addons: addons,
+                        candidate: candidate,
+                        current: current,
+                        inputs: out var preparedAddons,
+                        plan: out addonPlan,
+                        reason: out var addonReason
+                    )) {
+                        reason = (addonReason ?? "addon preparation refused");
 
-                if (!addons.TryPrepare(
-                    candidate: candidate,
-                    current: current,
-                    plan: out addonPlan,
-                    reason: out var addonReason
-                )) {
-                    reason = (addonReason ?? "addon preparation refused");
+                        return false;
+                    }
+                    addonInputs = preparedAddons;
 
-                    return false;
-                }
-
-                if (addonPlan is not null) {
-                    StageAddonContentionArrays(
-                        mountedCount: addonPlan.MountedCount,
-                        entity: out tickWrittenEntity,
-                        principal: out tickWrittenPrincipal,
-                        collided: out tickCollided
-                    );
+                    if (addonPlan is not null) {
+                        StageAddonContentionArrays(
+                            mountedCount: addonPlan.MountedCount,
+                            entity: out tickWrittenEntity,
+                            principal: out tickWrittenPrincipal,
+                            collided: out tickCollided
+                        );
+                    }
                 }
             }
 
-            if (
-                (AffectsScreens(mutation: mutation) || AffectsMachines(mutation: mutation)) &&
-                !Host.Machines.TryPrepare(
+            if (!products.Machines.IsEmpty) {
+                if (!TryPrepareMachines(
                     candidate: candidate,
                     current: current,
+                    inputs: out var preparedMachines,
                     plan: out machinePlan,
                     reason: out var machineReason
-                )
-            ) {
-                reason = (machineReason ?? "screen machine preparation refused");
+                )) {
+                    reason = (machineReason ?? "screen machine preparation refused");
 
-                return false;
+                    return false;
+                }
+                machineInputs = preparedMachines;
             }
 
             if (!Host.GrantTable.TryPrepareDocument(mutation.Principal, current, candidate,
@@ -311,7 +302,8 @@ public sealed partial class WorldDocument {
                 kind: kind,
                 machinePlan: machinePlan,
                 mutation: mutation,
-                solidAffecting: solidAffecting,
+                products: products,
+                productInputs: (envelopeInputs, addonInputs, machineInputs),
                 solids: solids,
                 tick: tick,
                 tickCollided: tickCollided,
@@ -351,13 +343,13 @@ public sealed partial class WorldDocument {
         try {
             // The candidate field is published immediately before the install rebuilds bodies against it.
             if (
-                prepared.SolidAffecting &&
+                !prepared.Products.Solids.IsEmpty &&
                 !ReferenceEquals(
                 objA: prepared.Solids,
                 objB: m_solids
             )
             ) {
-                m_solids = prepared.Solids;
+                SetSolids(solids: prepared.Solids);
                 m_solidRevision++;
             }
 
@@ -371,6 +363,7 @@ public sealed partial class WorldDocument {
                 case WorldInstallKind.Presentation:
                     prepared.Authority.Install();
                     InstallPresentation(definition: candidate);
+                    NarrateProducts(plan: prepared.Products, population: false);
                     break;
                 default:
                     Install(
@@ -378,13 +371,12 @@ public sealed partial class WorldDocument {
                         arena: prepared.Arena,
                         definition: candidate,
                         compilation: prepared.Compilation,
-                        rebuildPopulation: RecompilesPopulation(
-                        candidate: candidate,
-                        mutation: mutation
-                    )
+                        rebuildPopulation: prepared.Products.RebuildsPopulation
                     );
+                    NarrateProducts(plan: prepared.Products, population: prepared.Products.RebuildsPopulation);
                     break;
             }
+            AdoptProductInputs(addons: prepared.ProductInputs.Addons, envelope: prepared.ProductInputs.Envelope, machines: prepared.ProductInputs.Machines);
 
             // Whatever moved a lattice row's draw pass — a Generate, or a whole-row upsert that re-authored its
             // cursor, drawn masks or fill — repaints that row; every other row keeps its evolved cells.
@@ -510,20 +502,7 @@ public sealed partial class WorldDocument {
             mutation: mutation,
             previous: previous
         ) == WorldInstallKind.Full) &&
-        RecompilesPopulation(
-            candidate: candidate,
-            mutation: mutation
-        )
-    );
-
-    // Whether a full install of the mutation recompiles the population (Rebuild, then the reconciles).
-    private bool RecompilesPopulation(WorldMutation mutation, WorldDefinition candidate) => (
-        AffectsPopulation(mutation: mutation) ||
-        RefreshesLookAssignment(
-            candidate: candidate,
-            mutation: mutation
-        ) ||
-        (AffectsSolidField(mutation: mutation) && WorldContactSelection.RequiresField(collision: candidate.Collision))
+        PlanProducts(candidate: candidate, previous: previous).RebuildsPopulation
     );
 
     /// <summary>Returns what installing <paramref name="mutation"/>, composed into <paramref name="candidate"/> over
