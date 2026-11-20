@@ -21,8 +21,17 @@ import "shading"
 // surface under the band.
 function celMaterial(base, style) = base with {
   toon: style.ink
-  shade [base.shade, cel(style.threshold, style.softness, style.shadowTint, style.specularSize, combined: style.combined,
-    restore: style.restore, bleed: style.bleed, form: style.form)]
+  shade [base.shade, cel(
+      style.threshold,
+      style.softness,
+      style.shadowTint,
+      style.specularSize,
+      combined: style.combined,
+      restore: style.restore,
+      bleed: style.bleed,
+      form: style.form
+    )
+  ]
 }
 function celLook(style) = celMaterial({}, style)
 

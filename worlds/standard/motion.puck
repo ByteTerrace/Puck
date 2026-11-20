@@ -30,5 +30,10 @@ template walkMotion() {
 }
 
 // A kit action can use this in an effects list to ease the travel and turn in and out.
-function easedTimedMove(duration, right = 0, forward = 0, yawDegrees = 0) =
-  timedMove(right: right, forward: forward, yawDegrees: yawDegrees, durationSeconds: duration, curve: Smoothstep)
+function easedTimedMove(duration, right = 0, forward = 0, yawDegrees = 0) = timedMove(
+  right: right,
+  forward: forward,
+  yawDegrees: yawDegrees,
+  durationSeconds: duration,
+  curve: Smoothstep
+)

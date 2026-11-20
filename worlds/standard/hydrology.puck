@@ -87,7 +87,13 @@ template hydrology(stages = hydrologyStages, origin = [0, -90, 0], cell = 1, mel
               { field: hydroIce, comparison: Greater, value: 0 }
             ],
             then: [
-              { field: hydroWater, op: Add, takeFrom: hydroIce, value: waterPerCell * unit, retain { row: "hydroTarget" } }
+              {
+                field: hydroWater
+                op: Add
+                takeFrom: hydroIce
+                value: waterPerCell * unit
+                retain { row: "hydroTarget" }
+              }
             ]
           )
           flow(field: hydroWater, rate: { row: "hydroRate" }, over: [hydroBed])

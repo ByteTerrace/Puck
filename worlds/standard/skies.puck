@@ -167,7 +167,14 @@ template dayCycle(clock = "day", daySeconds = 1440, start = 10, noonElevation = 
   render {
     lighting {
       lights [
-        directional(name: "moon", direction: [0, 1, 0], color: moonColor, illuminance: 0lx, shadow: auto, angularRadius: moonAngularRadius)
+        directional(
+          name: "moon",
+          direction: [0, 1, 0],
+          color: moonColor,
+          illuminance: 0lx,
+          shadow: auto,
+          angularRadius: moonAngularRadius
+        )
       ]
       clock: clock
       keys: map(range(0, 24), h => {

@@ -56,4 +56,3 @@ test "the water arc: glacier, lake at its sill, falls, aquifer, river" {
     (totalAt[11] - totalAt[0]) < 0.01 and (totalAt[0] - totalAt[11]) < 0.01
   }
 }
-

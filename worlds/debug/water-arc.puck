@@ -15,7 +15,10 @@ exports {
 // 45 minutes.
 let arcMeltTicks = 324000
 let arcTail = 27000
-let arcMilestones = concat(map(range(0, 9), i => i * arcMeltTicks / 8), map(range(1, 4), j => arcMeltTicks + j * arcTail))
+let arcMilestones = concat(
+  map(range(0, 9), i => i * arcMeltTicks / 8),
+  map(range(1, 4), j => arcMeltTicks + j * arcTail)
+)
 
 let arcProbes = ["glacierAt", "lakeAt", "fallsAt", "riverAt", "aquiferAt", "poolAt"]
 state {
