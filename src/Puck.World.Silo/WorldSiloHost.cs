@@ -513,16 +513,15 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
         );
         // Finish background captures before retirement; the final frozen image supersedes failed attempts.
         _ = await WaitForCheckpointUploadsAsync(ct: ct);
-        await RetireExtensionsAsync(worldIds: [.. m_definition.Worlds.Select(selector: static declared => declared.World.Value)]);
+        var worldIds = m_definition.Worlds.Select(selector: static declared => declared.World.Value).ToArray();
+
+        await RetireExtensionsAsync(worldIds: worldIds);
+        await FreezeRowsAsync(ct: ct, worldIds: worldIds, draining: true);
         var capture = new TaskCompletionSource<List<(WorldAuthorityIdentity Identity, RowBookkeeping Bookkeeping, Task<WorldAuthorityStoreOutcome> Save)>>(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously);
 
         Post(action: () => {
             try {
                 ct.ThrowIfCancellationRequested();
-                Volatile.Write(
-                    location: ref m_draining,
-                    value: 1
-                );
                 var rows = new List<(WorldAuthorityIdentity, RowBookkeeping, Task<WorldAuthorityStoreOutcome>)>();
 
                 foreach (var declared in m_definition.Worlds) {
@@ -536,8 +535,6 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
                     var bookkeeping = m_rows[declared.World.Value];
 
                     if (bookkeeping.Released) { continue; }
-                    row.Door?.SuspendIngress();
-                    row.Server.FreezeForRetirement();
                     var identity = new WorldAuthorityIdentity(
                         Owner: declared.Owner,
                         World: declared.World
@@ -1672,6 +1669,7 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
             var worldId = identity.World.Value;
 
             await RetireExtensionsAsync(worldIds: [worldId]);
+            await FreezeRowsAsync(ct: ct, worldIds: [worldId]);
             var captureTcs = new TaskCompletionSource<(RowBookkeeping Bookkeeping, Task<WorldAuthorityStoreOutcome> Save)?>(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously);
 
             Post(action: () => {
@@ -1687,8 +1685,6 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
                         captureTcs.TrySetResult(result: null);
                         return;
                     }
-                    row.Door?.SuspendIngress();
-                    row.Server.FreezeForRetirement();
                     if (TryQueueCheckpoint(
                         cancellationToken: ct,
                         identity: identity,

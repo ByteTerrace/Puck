@@ -14,8 +14,19 @@ public sealed partial class WorldServer : IWorldCustodyPeer {
         new(ConfirmHops(key, incarnations, destination, phase));
 
     /// <inheritdoc/>
-    public ValueTask<IReadOnlyList<WorldHopAnswer>> RequestHopAsync(WorldTransferKey key, string source, string destination, IReadOnlyList<WorldHopRequestMember> members) =>
-        new(RequestHop(key, source, destination, members));
+    public ValueTask<IReadOnlyList<WorldHopAnswer>> RequestHopAsync(WorldTransferKey key, string source, string destination, IReadOnlyList<WorldHopRequestMember> members) {
+        ArgumentNullException.ThrowIfNull(argument: source);
+        ArgumentNullException.ThrowIfNull(argument: destination);
+        ArgumentNullException.ThrowIfNull(argument: members);
+
+        // A grant answers once its hop record is durable.
+        return new(task: DecideCrossingAsync(decide: () => DecideHop(
+            destination: destination,
+            key: key,
+            members: members,
+            source: source
+        )));
+    }
 
     /// <inheritdoc/>
     public IReadOnlyList<ulong?> ConfirmHops(WorldTransferKey key, IReadOnlyList<WorldEntityAddress> incarnations, string destination, WorldHopPhase phase) {
@@ -115,16 +126,19 @@ public sealed partial class WorldServer : IWorldCustodyPeer {
     }
     /// <summary>Authorizes this authority's own hop: one record naming every listed companion whose title is home,
     /// leaving at its current epoch toward <paramref name="destination"/> under <paramref name="key"/>. A companion whose
-    /// title is not home is answered as the onward door would answer it.</summary>
+    /// title is not home is answered as the onward door would answer it. The answer completes once the hop record is
+    /// durable, at a later tick boundary when the log answers asynchronously.</summary>
     /// <param name="key">The crossing's key, minted here.</param>
     /// <param name="destination">Where the crossing goes.</param>
     /// <param name="incarnations">The companions.</param>
     /// <returns>One answer per companion, in order.</returns>
-    public IReadOnlyList<WorldHopAnswer> AuthorizeOwnHop(WorldTransferKey key, string destination, IReadOnlyList<WorldEntityAddress> incarnations) {
+    /// <exception cref="ArgumentNullException"><paramref name="destination"/> or <paramref name="incarnations"/> is
+    /// <see langword="null"/>.</exception>
+    public Task<IReadOnlyList<WorldHopAnswer>> AuthorizeOwnHopAsync(WorldTransferKey key, string destination, IReadOnlyList<WorldEntityAddress> incarnations) {
         ArgumentNullException.ThrowIfNull(argument: destination);
         ArgumentNullException.ThrowIfNull(argument: incarnations);
 
-        return ExecuteAuthorityOperation(operation: () => {
+        return DecideCrossingAsync(decide: () => {
             var members = new List<WorldHopRequestMember>(capacity: incarnations.Count);
 
             foreach (var incarnation in incarnations) {

@@ -2330,20 +2330,21 @@ grow:
   step thread from a copy-on-write image, and make checkpoints incremental;
   the document a checkpoint carries twice is
   [delivery's item](#delivery-launcher-and-ci).
-- [high] A crossing record blocks the silo's one step thread on blob round
-  trips. `WorldSiloHost.RowCrossingLog.Append` waits on the row's publication
-  queue (`GetAwaiter().GetResult()`), which checkpoint uploads also join, and
-  it is reached from the step through `WorldInstanceHost.DrainPendingTransfers`
-  and every other synchronous `WorldServer.RecordCrossingHeld` caller
-  (`WorldTransferEscrow`, `WorldServer.Custody`, the companion, departure and
-  settlement paths in `WorldInstanceHost`). Make the record asynchronous the
-  way federated transfers resume at tick boundaries: `IWorldCrossingLog`
-  answers pending, the authority holds one in-flight record per crossing
-  sequence (the sequence must stay dense) together with the step that waits
-  on it, and the step resumes at the next drain once the record is durable;
-  an arrival lands only then. Retried steps rebuild their records (a
-  settlement's lists), so the in-flight record is kept by the transfer, never
-  matched by value.
+- [medium] A colocated source learns its commit's answer a pool hop late when
+  the destination's log answers asynchronously: `WorldPeerCall.CommitAsync`
+  awaits the destination's task, so its completion runs on the thread pool and
+  the source's in-doubt drain sees it at whichever drain follows. The
+  destination itself settles at a fixed tick boundary
+  (`WorldServer.SettleCrossingIfAnswered`); return the destination's task
+  mapped synchronously so the source's view is fixed too. Check:
+  `CrossingInFlightLawTests` drives without its per-step pool yield.
+- [low] A destination whose arrival record goes out asynchronously lands the
+  cohort twice: once to build the record, undone at once, and again once it is
+  durable (`WorldTransferEscrow.UndoSpeculativeLanding`), so every admission
+  and grant a landing makes runs and rolls back once more than it stands.
+  Derive the record's landed members and generations without landing, or keep
+  the first landing out of the simulation until the record settles. Check: an
+  asynchronous crossing in `CrossingInFlightLawTests` admits each traveler once.
 - [medium] Hard caps with no admission story: 4096 bodies a world
   (`WorldBodiesLimits.CapacityCeiling`), 256 authenticated federation
   connections a host (`WorldPeerHost.MaximumFederationConnections`), and one

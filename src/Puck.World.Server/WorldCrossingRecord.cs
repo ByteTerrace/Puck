@@ -155,7 +155,8 @@ public abstract record WorldCrossingRecord {
 /// <param name="Tick">The authority tick the record was made at.</param>
 /// <param name="Record">The record.</param>
 public readonly record struct WorldCrossingEntry(ulong Sequence, ulong Tick, WorldCrossingRecord Record);
-/// <summary>What a crossing log can say about one append.</summary>
+/// <summary>What became of one crossing record: what a crossing log answers about an append, and what an authority's
+/// crossing door answers a step.</summary>
 public enum WorldCrossingDurability : byte {
     /// <summary>The record is durable; recovery redoes it.</summary>
     Durable = 0,
@@ -166,17 +167,33 @@ public enum WorldCrossingDurability : byte {
     /// <summary>The record may or may not be durable, and only a later activation's recovery from the log can tell.
     /// The authority records nothing more until it recovers: a later record would take the same sequence.</summary>
     Uncertain = 2,
+
+    /// <summary>The authority's door only, never a log: the step's record is in flight to the log, or another step's
+    /// record is, and the step waits. Nothing the step would do once its record is durable has happened yet; the
+    /// authority learns the record's fate at a later tick boundary and the step resumes from there.</summary>
+    Pending = 3,
+}
+/// <summary>A crossing log's answer about one append.</summary>
+/// <param name="Durability">What became of the record: <see cref="WorldCrossingDurability.Durable"/>,
+/// <see cref="WorldCrossingDurability.Refused"/> or <see cref="WorldCrossingDurability.Uncertain"/>, never
+/// <see cref="WorldCrossingDurability.Pending"/>.</param>
+/// <param name="Reason">Why the record is not known to be durable, when it is not; empty otherwise.</param>
+public readonly record struct WorldCrossingAppend(WorldCrossingDurability Durability, string Reason) {
+    /// <summary>Gets the answer for a record that is durable.</summary>
+    public static WorldCrossingAppend Durable => new(Durability: WorldCrossingDurability.Durable, Reason: string.Empty);
 }
 /// <summary>The durable log an authority writes its crossing records ahead through. An implementation answers only
 /// once it knows what became of the record, and refuses an append from an activation its store has fenced off, so a
 /// superseded authority can never claim a step its successor will not recover. An authority with no log installed
-/// records nothing and keeps no crossing beyond its own process.</summary>
+/// records nothing and keeps no crossing beyond its own process. The authority never blocks on an answer: an append
+/// that completes synchronously is acted on at once, and one that does not parks its step until the answer arrives
+/// (<see cref="WorldServer.RecordCrossing"/>). The authority sends at most one record at a time, so the sequence stays
+/// dense whatever the log answers.</summary>
 public interface IWorldCrossingLog {
-    /// <summary>Appends one record and reports what became of it.</summary>
+    /// <summary>Appends one record and reports what became of it, now or later.</summary>
     /// <param name="entry">The record and its sequence.</param>
-    /// <param name="reason">Why the record is not known to be durable, when it is not; empty otherwise.</param>
     /// <returns><see cref="WorldCrossingDurability.Durable"/> once the record is durable,
     /// <see cref="WorldCrossingDurability.Refused"/> when it certainly did not land, or
     /// <see cref="WorldCrossingDurability.Uncertain"/> when the store's answer was lost.</returns>
-    WorldCrossingDurability Append(in WorldCrossingEntry entry, out string reason);
+    ValueTask<WorldCrossingAppend> Append(in WorldCrossingEntry entry);
 }

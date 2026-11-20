@@ -96,7 +96,7 @@ public sealed partial class WorldInstanceHost {
                     members[i].Mobility!.Value.Epoch)).ToArray();
                 Task<IReadOnlyList<WorldHopAnswer>> answer;
                 if (home.Key == server.AuthorityIdentity) {
-                    answer = Task.FromResult(server.AuthorizeOwnHop(key, destination, requests.Select(member => member.Incarnation).ToArray()));
+                    answer = server.AuthorizeOwnHopAsync(key, destination, requests.Select(member => member.Incarnation).ToArray());
                 } else if (server.CustodyPeers?.Invoke(home.Key) is { } door) {
                     answer = door.RequestHopAsync(key, server.AuthorityIdentity, destination, requests).AsTask();
                 } else {

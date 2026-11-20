@@ -327,8 +327,13 @@ activation's fence and requires recovery.
 
 An ordinary mutation acknowledgement means the authority applied the edit to
 the live world. A crash before the journal root is published can lose an
-acknowledged edit. Crossing acknowledgements require a durable write. A
-successful checkpoint publishes a durable image through the same root.
+acknowledged edit. Crossing acknowledgements require a durable write, but the
+step thread never waits for it: a crossing record joins the row queue, the row's
+authority parks the step that wrote it, and the step resumes at the tick
+boundary after the store answers (`WorldServer.RecordCrossingHeld`). A
+successful checkpoint publishes a durable image through the same root; none is
+captured while a crossing record is in flight, and retirement freezes its rows
+and waits for their records' answers before the final capture.
 
 `WorldPreparedMutation` asks the hosted journal to admit each external edit
 before installing it. `WorldSiloHost.PrepareJournalMutation` bounds outstanding

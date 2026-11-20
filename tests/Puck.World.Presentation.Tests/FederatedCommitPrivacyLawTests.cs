@@ -102,10 +102,9 @@ public sealed class FederatedCommitPrivacyLawTests {
     private sealed class CapturingCrossingLog : IWorldCrossingLog {
         public List<byte[]> Entries { get; } = [];
 
-        public WorldCrossingDurability Append(in WorldCrossingEntry entry, out string reason) {
+        public ValueTask<WorldCrossingAppend> Append(in WorldCrossingEntry entry) {
             Entries.Add(item: WorldAuthorityCheckpointCodec.EncodeCrossingEntry(entry: in entry));
-            reason = string.Empty;
-            return WorldCrossingDurability.Durable;
+            return new(result: WorldCrossingAppend.Durable);
         }
     }
 

@@ -243,6 +243,11 @@ public sealed partial class WorldSiloCrossingRecoveryLawTests {
         );
         Assert.True(condition: await activation);
     }
+    private static Task DriveCrossingAsync(WorldSiloHost host, Func<bool> done) => SiloCrossings.DriveAsync(
+        done: done,
+        host: host,
+        rows: ["rowa", "rowb"]
+    );
     private static int CountTraveler(WorldSiloHost host, WorldEntityAddress traveler) {
         var count = 0;
 
@@ -350,7 +355,10 @@ public sealed partial class WorldSiloCrossingRecoveryLawTests {
             sourceInstance: "rowa",
             sourceSlot: travelerSlot
         );
-        original.Instances.DrainPendingTransfers();
+        await DriveCrossingAsync(
+            done: () => (failPrecedingMutation || (!rowA.Server.Population.IsActive(index: travelerSlot) && (original.Instances.CaptureRow(row: rowA).InDoubtTransfers.Count == 0))),
+            host: original
+        );
         if (failPrecedingMutation) {
             Assert.True(condition: rowA.Server.Population.IsActive(index: travelerSlot));
             Assert.Equal(expected: 0UL, actual: rowA.Server.CrossingSequence);
@@ -506,8 +514,10 @@ public sealed partial class WorldSiloCrossingRecoveryLawTests {
             sourceSlot: Slot
         );
 
-        original.Instances.DrainPendingTransfers();
-        original.Instances.DrainPendingTransfers();
+        await DriveCrossingAsync(
+            done: () => (rowB!.Server.UncertainCrossing is not null),
+            host: original
+        );
         Assert.Equal(
             expected: 0,
             actual: CountTraveler(
@@ -549,7 +559,14 @@ public sealed partial class WorldSiloCrossingRecoveryLawTests {
             host: replacement,
             identity: pair.Destination
         );
-        replacement.Instances.DrainPendingTransfers();
+        Assert.True(condition: replacement.Instances.TryGet(
+            instance: out var settlingA,
+            name: "rowa"
+        ));
+        await DriveCrossingAsync(
+            done: () => (replacement.Instances.CaptureRow(row: settlingA!).InDoubtTransfers.Count == 0),
+            host: replacement
+        );
         Assert.Equal(
             expected: 1,
             actual: CountTraveler(

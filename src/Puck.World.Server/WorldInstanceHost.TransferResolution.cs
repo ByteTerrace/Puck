@@ -57,6 +57,31 @@ public sealed partial class WorldInstanceHost {
             var targetAuthority = pending.TargetAuthority!.Value;
             var transfer = pending.Transfer;
 
+            // A departure in flight: the destination is neither asked nor committed to until the record settles. A durable
+            // one carries on below, where the live lease takes the commit; any other returns the cohort, as a departure
+            // the log refused at once does.
+            if (pending.Departure is { } departing) {
+                if (!departing.IsSettled) {
+                    index++;
+                    continue;
+                }
+                pending.Departure = null;
+                if (
+                    (departing.Outcome != WorldCrossingDurability.Durable) &&
+                    m_instances.TryGetValue(key: transfer.SourceInstance, value: out var returning)
+                ) {
+                    m_inDoubtTransfers.RemoveAt(index: index);
+                    AbortDeparture(
+                        abortReason: $"'{transfer.SourceInstance}' could not make its departure durable ({departing.Reason})",
+                        departed: false,
+                        departure: pending,
+                        source: returning,
+                        transfer: in transfer
+                    );
+                    continue;
+                }
+            }
+
             try {
                 // Every step below may answer "not yet". Leaving the entry exactly where it is and re-asking at the
                 // next drain is the whole reconciliation loop already does for an unresolved status. The destination is

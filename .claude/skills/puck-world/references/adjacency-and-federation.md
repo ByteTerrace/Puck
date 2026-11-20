@@ -283,12 +283,18 @@ ahead of the step: the source's `Departure` (its complete in-doubt record)
 before the commit, the destination's `Arrival` (reservation, body indices,
 commit) before the commit's answer, and the source's `Settlement` (arrived with
 its forwarding routes, or stayed) before the acknowledgement or the cohort's
-restore. `IWorldCrossingLog.Append` answers `WorldCrossingDurability`
-(`Durable`, `Refused`, `Uncertain`); after an `Uncertain` record the server
+restore. `IWorldCrossingLog.Append` answers a `WorldCrossingAppend` now or
+later (`Durable`, `Refused`, `Uncertain`); after an `Uncertain` record the server
 latches `WorldServer.UncertainCrossing` and refuses every later record until a
 recovered activation replaces it. A source record that is not `Durable` refuses
 its step; a pending settlement narrates `SETTLEMENT-PENDING` once and retries
-each drain. Records share one
+each drain. An answer that comes later leaves one record in flight
+(`WorldCrossingStep`): the door (`WorldServer.RecordCrossingHeld`) answers
+`Pending`, sends nothing else, refuses checkpoints until the record settles at a
+tick boundary (`SettleCrossingIfAnswered`), and the waiting step resumes there;
+reservations, commits and hop grants go through `DecideCrossingAsync`. A
+destination's speculative landing is undone with
+`WorldPopulation.RestoreGeneration` before its arrival record goes out. Records share one
 dense per-authority sequence (`WorldTransferEscrow.CrossingSequence`), captured
 by every checkpoint as its watermark. Recovery is
 `WorldInstanceHost.RecoverCrossings(row, entries)` after `Admit` and
@@ -373,7 +379,7 @@ to the crossing member's slot and generation. Every member carries a
 request-local `MemberId`; a companion carries `WorldTransferCompanion` (role,
 followed member id, home, driver, ticket). Before the reservation the source
 asks the title authority for each hop: home records one `Hop` for its own
-companions (`WorldServer.AuthorizeOwnHop`), a custodian asks home through
+companions (`WorldServer.AuthorizeOwnHopAsync`), a custodian asks home through
 `IWorldCustodyPeer.RequestHopAsync`; only a granted companion carries a ticket.
 `WorldServer.ReserveTransferAsync` and `CommitTransferAsync` ask home asynchronously,
 once per call, whether each companion's grant is current
