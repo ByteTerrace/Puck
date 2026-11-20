@@ -57,7 +57,7 @@ public sealed class PaletteAdmissionLawTests {
     [Fact]
     public void AnEmissiveLaneOutsideTheRenderLanesIsRefusedByName() {
         AssertRefusesNaming(
-            entry: new PaletteEntryDocument(Color: "#CCCCCC", Emissive: 2f, Specular: null, Roughness: null, EmissiveLane: 7),
+            entry: new PaletteEntryDocument(Color: "#CCCCCC", Emissive: 2f, Specular: null, Roughness: null, EmissiveLane: SdfLanes.Count),
             needle: "emissiveLane"
         );
         AssertRefusesNaming(
@@ -66,7 +66,7 @@ public sealed class PaletteAdmissionLawTests {
         );
         AssertAccepts(entry: new PaletteEntryDocument(Color: "#CCCCCC", Emissive: 2f, Specular: null, Roughness: null, EmissiveLane: 3));
 
-        var refused = Assert.Throws<ArgumentOutOfRangeException>(testCode: static () => new SdfProgramBuilder().AddMaterial(material: new SdfMaterial(Albedo: System.Numerics.Vector3.One, EmissiveLane: 4)));
+        var refused = Assert.Throws<ArgumentOutOfRangeException>(testCode: static () => new SdfProgramBuilder().AddMaterial(material: new SdfMaterial(Albedo: System.Numerics.Vector3.One, EmissiveLane: SdfLanes.Count)));
 
         Assert.Contains(expectedSubstring: "emissive lane", actualString: refused.Message, comparisonType: StringComparison.Ordinal);
     }
@@ -273,7 +273,7 @@ public sealed class PaletteAdmissionLawTests {
 
         AssertAccepts(entry: entry);
         AssertAccepts(entry: entry with { Paints = [band, ring, line] });
-        AssertRefusesNaming(entry: entry with { Paints = [band with { Rotation = new System.Numerics.Quaternion(x: 0f, y: 0f, z: 0f, w: 0f) }] }, needle: "Invalid inset, weathering or paint");
+        AssertRefusesNaming(entry: entry with { Paints = [band with { Rotation = new System.Numerics.Quaternion(x: 0f, y: 0f, z: 0f, w: 0f) }] }, needle: "Invalid inset, weathering, paint or flow");
         AssertRefusesNaming(entry: entry with { Paints = [band, band with { Stroke = -1f }] }, needle: "stroke must be finite and non-negative");
         AssertRefusesNaming(entry: entry with { Paints = [band with { Color = "cream" }] }, needle: "Layer colors");
         AssertRefusesNaming(entry: entry with { Paints = [ring with { Parent = "nowhere" }] }, needle: "parent 'nowhere' names no shape");
@@ -297,7 +297,7 @@ public sealed class PaletteAdmissionLawTests {
 
         AssertRefusesNaming(
             entry: entry,
-            needle: "Invalid inset, weathering or paint"
+            needle: "Invalid inset, weathering, paint or flow"
         );
         AssertAccepts(entry: entry with {
             Weathering = new(
@@ -314,7 +314,7 @@ public sealed class PaletteAdmissionLawTests {
         });
         AssertRefusesNaming(
             entry: entry with { Weathering = new(Settle: 1f) },
-            needle: "Invalid inset, weathering or paint"
+            needle: "Invalid inset, weathering, paint or flow"
         );
     }
     [InlineData("wrap")]

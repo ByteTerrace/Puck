@@ -59,6 +59,38 @@ public sealed class WorldDefinitionMembers {
 
         return Held.GetValue(key: definition, createValueCallback: static definition => Slice(json: WorldDefinitionSerialization.SerializeCompact(definition: definition)));
     }
+    /// <summary>Returns whether a root member name is one of the document model's members; any other name is an
+    /// extension member (<see cref="WorldDefinition.Extensions"/>: a <c>_</c> comment or a <c>$</c> key), whose value is
+    /// its <see cref="JsonElement"/>.</summary>
+    /// <param name="name">The member's JSON name.</param>
+    /// <returns><see langword="true"/> for a model member.</returns>
+    public static bool IsModelMember(string name) => (WorldDocumentWalker.MemberType(name: name, owner: typeof(WorldDefinition)) is not null);
+    /// <summary>Reads one root member's typed value as the member's bytes hold it: a model member through
+    /// <see cref="WorldDocumentWalker.ReadMember"/>, an extension member as its <see cref="JsonElement"/>. The one read
+    /// every member-wise change takes, so a document carrying extension members slices, deltas and reassembles like any
+    /// other, and a value carried from one definition into another is what reading its slice gives.</summary>
+    /// <remarks>A state row a preview sampler drew from a private stream serializes as the input it was installed from
+    /// (the serializer writes <see cref="WorldStateRow.InstallationInput"/>), so the state member reads with each such row
+    /// as that input: a change never carries a preview's words into another document.</remarks>
+    /// <param name="definition">The definition.</param>
+    /// <param name="name">The member's JSON name.</param>
+    /// <returns>The value, or <see langword="null"/> when the definition does not hold it.</returns>
+    /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
+    public static object? Value(WorldDefinition definition, string name) {
+        ArgumentNullException.ThrowIfNull(argument: definition);
+        ArgumentNullException.ThrowIfNull(argument: name);
+
+        if (!IsModelMember(name: name)) {
+            return (((definition.Extensions is { } extensions) && extensions.TryGetValue(key: name, value: out var element)) ? element : null);
+        }
+
+        var value = WorldDocumentWalker.ReadMember(name: name, root: definition);
+
+        if ((value is WorldStateSection { World: { } rows } state) && rows.Any(predicate: static row => !ReferenceEquals(objA: row.InstallationInput, objB: row))) {
+            return (state with { World = [.. rows.Select(selector: static row => row.InstallationInput)] });
+        }
+        return value;
+    }
     /// <summary>Returns whether the definition holds a member, and its slice.</summary>
     /// <param name="name">The member's JSON name.</param>
     /// <param name="member">The member's slice.</param>
@@ -101,7 +133,7 @@ public sealed class WorldDefinitionMembers {
 
         foreach (var member in (held?.Members ?? [])) { slices[member.Name] = member; }
         foreach (var (name, value) in replacements) {
-            var current = WorldDocumentWalker.ReadMember(name: name, root: basis);
+            var current = Value(definition: basis, name: name);
 
             if (value is not { } bytes) {
                 values[name] = null;
@@ -123,7 +155,7 @@ public sealed class WorldDefinitionMembers {
 
             var read = Read(name: name, value: bytes.Span);
 
-            values[name] = (((before is not null) && (current is not null) && (read is not null))
+            values[name] = (((before is not null) && (current is not null) && (read is not null) && IsModelMember(name: name))
                 ? WorldDocumentWalker.Share(basis: current, basisTree: before, patch: WorldDocumentBasis.DiffValue(basis: before, target: tree)!, value: read, valueTree: tree)
                 : read);
         }
@@ -134,7 +166,8 @@ public sealed class WorldDefinitionMembers {
         var rebound = new Dictionary<string, object?>(comparer: StringComparer.Ordinal);
 
         foreach (var (name, value) in values) {
-            if ((value is null) || ReferenceEquals(objA: value, objB: WorldDocumentWalker.ReadMember(name: name, root: basis))) { continue; }
+            // An extension member is JSON the author keeps, with no state reference to resolve.
+            if ((value is null) || !IsModelMember(name: name) || ReferenceEquals(objA: value, objB: WorldDocumentWalker.ReadMember(name: name, root: basis))) { continue; }
             if (!WorldStateDocumentValues.TryResolveGraph(graph: value, reason: out var reason, resolved: out var resolved, source: replaced)) {
                 throw new InvalidDataException(message: reason);
             }
@@ -167,8 +200,18 @@ public sealed class WorldDefinitionMembers {
     // carries over, and the directory set.
     private static WorldDefinition Assemble(WorldDefinition basis, Dictionary<string, object?> values, string? documentDirectory) {
         var replacesState = values.Remove(key: StateMemberName, value: out var state);
+        Dictionary<string, JsonElement>? extensions = null;
+
+        foreach (var name in values.Keys.Where(predicate: static name => !IsModelMember(name: name)).ToArray()) {
+            // A fresh table: the basis's own is shared with every definition built from it.
+            extensions ??= ((basis.Extensions is { } held) ? new Dictionary<string, JsonElement>(collection: held, comparer: StringComparer.Ordinal) : new Dictionary<string, JsonElement>(comparer: StringComparer.Ordinal));
+            _ = values.Remove(key: name, value: out var value);
+            if (value is JsonElement element) { extensions[name] = element; } else { _ = extensions.Remove(key: name); }
+        }
+
         var replaced = WorldDocumentWalker.WithMembers(members: values, root: basis);
 
+        if (extensions is not null) { replaced = (replaced with { Extensions = ((extensions.Count == 0) ? null : extensions) }); }
         if (replacesState) { replaced = replaced.WithStateSection(state: (WorldStateSection?)state); }
         return (string.Equals(a: replaced.DocumentDirectory, b: documentDirectory, comparisonType: StringComparison.Ordinal)
             ? replaced
@@ -180,10 +223,14 @@ public sealed class WorldDefinitionMembers {
     /// <returns>The typed value.</returns>
     /// <exception cref="InvalidDataException">No root member has the name, or the value does not read as its type.</exception>
     public static object? Read(string name, ReadOnlySpan<byte> value) {
-        var type = (WorldDocumentWalker.MemberType(name: name, owner: typeof(WorldDefinition))
-            ?? throw new InvalidDataException(message: $"a {WorldDefinition.SchemaVersion} document has no root member '{name}'"));
+        var type = WorldDocumentWalker.MemberType(name: name, owner: typeof(WorldDefinition));
 
         try {
+            if (type is null) {
+                return ((DocumentExtensionsPolicy.IsReservedKey(key: name))
+                    ? JsonSerializer.Deserialize<JsonElement>(utf8Json: value)
+                    : throw new InvalidDataException(message: $"a {WorldDefinition.SchemaVersion} document has no root member '{name}'"));
+            }
             return JsonSerializer.Deserialize(utf8Json: value, jsonTypeInfo: WorldJsonContext.Authored.Options.GetTypeInfo(type: type));
         } catch (Exception exception) when (WorldJsonPayload.IsParseFailure(exception: exception)) {
             throw new InvalidDataException(message: $"the document member '{name}' is not valid: {WorldJsonPayload.Reason(exception: exception)}", innerException: exception);
@@ -196,6 +243,7 @@ public sealed class WorldDefinitionMembers {
     /// <exception cref="InvalidDataException">No root member has the name.</exception>
     public static JsonNode? Write(string name, object? value) {
         if (value is null) { return null; }
+        if (value is JsonElement element) { return JsonNode.Parse(json: element.GetRawText()); }
 
         var type = (WorldDocumentWalker.MemberType(name: name, owner: typeof(WorldDefinition))
             ?? throw new InvalidDataException(message: $"a {WorldDefinition.SchemaVersion} document has no root member '{name}'"));

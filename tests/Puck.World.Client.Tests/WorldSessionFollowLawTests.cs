@@ -148,7 +148,8 @@ public sealed class WorldSessionFollowLawTests {
     }
     [Fact]
     public void AStateWriteMovingABakedColorMovesTheSessionEmittersRevision() {
-        var session = Session(definition: Document(bump: "#3FAF6F"));
+        var delivered = Document(bump: "#3FAF6F");
+        var session = Session(definition: delivered);
         // Held as the presenter holds it, so the material-scope default below is the one the composition reads.
         ISdfSceneEmitter emitter = new WorldSessionSceneEmitter(domains: new WorldValueDomainGuard(),
             effectiveCameraName: null,
@@ -183,9 +184,10 @@ public sealed class WorldSessionFollowLawTests {
         // Nothing delivered, nothing moved.
         Assert.Equal(actual: steady, expected: before);
 
-        // A value write of the bound cell, delivered as state (not a new definition shape).
+        // A value write of the bound cell, delivered as state (not a new definition shape): the delivered document with
+        // that one row replaced and every other row the same, as a values-only delta hydrates it.
         session.DeliverState(
-            definition: Document(bump: "#112233"),
+            definition: delivered.WithWorldState(rows: [.. delivered.AuthoredState.Select(selector: static row => ((row.Name.Value == "colors") ? Colors(bump: "#112233") : row))]),
             stamp: new WorldStateStamp(EngineTick: 2UL, Everything: true, MovedRows: ReadOnlyMemory<int>.Empty, Tick: 2UL),
             version: default, stream: default
         );
