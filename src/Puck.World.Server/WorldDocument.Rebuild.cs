@@ -91,41 +91,38 @@ public sealed partial class WorldDocument {
         verb: RebuildVerb(kind: preparation.Request.Kind)
     ));
 
-    // A replay drive's Load carries no document, so the pinned path is re-read through the door the live verb read it
-    // through: drawn for this instance and admitted on its own facts, since the tick path reaches no transport.
-    private WorldDefinition RereadForReplay(string verb, string path, out string contentHash) {
-        if (!WorldDefinitionLoader.TryLoadFileForAdmission(
-            keys: WorldPrivateDrawKeys.Preview,
-            admission: out var reread,
-            catalog: Host.Machines.ValidationCatalog,
-            contentHash: out contentHash,
-            documents: Host.RebuildDocuments,
-            instanceIdentity: Host.InstanceIdentity,
-            path: path,
-            proveNeighbours: false,
-            reason: out var reason
-        )) {
-            throw ReplayRefusal.RebuildSourceUnavailable.Raise(message: $"{verb}: cannot re-read '{path}' for replay — {reason}");
-        }
+    // A replay drive's Load or Reload carries no document, so the pinned path is re-read through the door the live verb
+    // read it through: drawn for this instance and, for a load, admitted on its own facts, since the tick path reaches no
+    // transport; a reload's re-read is an edit, which the apply validates once as the live run's preparation did.
+    private WorldDefinition RereadForReplay(string verb, string path, bool edit, out string contentHash) {
+        WorldDefinition? reread = null;
+        WorldDefinitionAdmission? admission = null;
+        var read = (edit
+            ? WorldDefinitionLoader.TryLoadFileForEdit(
+                keys: WorldPrivateDrawKeys.Preview,
+                catalog: Host.Machines.ValidationCatalog,
+                contentHash: out contentHash,
+                definition: out reread,
+                documents: Host.RebuildDocuments,
+                instanceIdentity: Host.InstanceIdentity,
+                path: path,
+                reason: out var reason
+            )
+            : WorldDefinitionLoader.TryLoadFileForAdmission(
+                keys: WorldPrivateDrawKeys.Preview,
+                admission: out admission,
+                catalog: Host.Machines.ValidationCatalog,
+                contentHash: out contentHash,
+                documents: Host.RebuildDocuments,
+                instanceIdentity: Host.InstanceIdentity,
+                path: path,
+                proveNeighbours: false,
+                reason: out reason
+            ));
 
-        return reread!.Definition;
-    }
-    // A replay drive's Reload re-reads the pinned path as the live verb read it, an edit the authority validates once.
-    private WorldDefinition RereadEditForReplay(string verb, string path, out string contentHash) {
-        if (!WorldDefinitionLoader.TryLoadFileForEdit(
-            keys: WorldPrivateDrawKeys.Preview,
-            catalog: Host.Machines.ValidationCatalog,
-            contentHash: out contentHash,
-            definition: out var reread,
-            documents: Host.RebuildDocuments,
-            instanceIdentity: Host.InstanceIdentity,
-            path: path,
-            reason: out var reason
-        )) {
-            throw ReplayRefusal.RebuildSourceUnavailable.Raise(message: $"{verb}: cannot re-read '{path}' for replay — {reason}");
-        }
-
-        return reread!;
+        return ((read && ((reread ?? admission?.Definition) is { } definition))
+            ? definition
+            : throw ReplayRefusal.RebuildSourceUnavailable.Raise(message: $"{verb}: cannot re-read '{path}' for replay — {reason}"));
     }
 
     /// <summary>Resolves the proof transport appropriate to one replacement document path.</summary>

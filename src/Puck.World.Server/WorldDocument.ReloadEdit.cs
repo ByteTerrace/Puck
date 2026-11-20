@@ -82,9 +82,8 @@ public sealed partial class WorldDocument {
     }
 
     // The root members a reload changed, for its verdict.
-    private static string DescribeChanged(IReadOnlyList<string> changed) =>
-        ((changed.Count == 0) ? string.Empty : $", changed {string.Join(separator: " ", values: changed)}");
+    private static string DescribeChanged(IReadOnlyList<string> changed) => DescribeList(items: changed, lead: ", changed ");
     // The rows and values a reload's source won from the session's own edits, for its verdict.
-    private static string DescribeConflicts(IReadOnlyList<string> conflicts) =>
-        ((conflicts.Count == 0) ? string.Empty : $", the source won over the session's edits at {string.Join(separator: ", ", values: conflicts)}");
+    private static string DescribeConflicts(IReadOnlyList<string> conflicts) => DescribeList(items: conflicts, lead: ", the source won over the session's edits at ");
+    private static string DescribeList(IReadOnlyList<string> items, string lead) => ((items.Count == 0) ? string.Empty : (lead + string.Join(separator: ", ", values: items)));
 }

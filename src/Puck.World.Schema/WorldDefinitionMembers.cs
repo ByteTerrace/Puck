@@ -1,5 +1,4 @@
 using System.Runtime.CompilerServices;
-using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -17,7 +16,6 @@ namespace Puck.World;
 /// serializer omits (a null value) has no slice; its absence is part of the pin.</remarks>
 public sealed class WorldDefinitionMembers {
     private static readonly ConditionalWeakTable<WorldDefinition, WorldDefinitionMembers> Held = new();
-    private static readonly byte[] Separator = [0];
 
     /// <summary>The JSON name of the root member holding the state section.</summary>
     public const string StateMemberName = "state";
@@ -45,7 +43,7 @@ public sealed class WorldDefinitionMembers {
         Pin = PinOf(members: m_members.Values);
     }
 
-    /// <summary>Gets the revision pin: a digest over every present member's name and digest, in ordinal name order, so
+    /// <summary>Gets the revision pin: a chain content pin (<see cref="WorldDefinitionFileSource.ComputeChainContentHash"/>) over every present member's name and digest, in ordinal name order, so
     /// it depends on what the document holds and never on the order its members were sliced in.</summary>
     public string Pin { get; }
     /// <summary>Gets the present members, in no particular order.</summary>
@@ -213,17 +211,9 @@ public sealed class WorldDefinitionMembers {
 
         return new WorldDefinitionMembers(members: members.Select(selector: member => Member.Of(name: member.Name, value: memory.Slice(start: member.Start, length: member.Length))));
     }
-    // The digest over every member's name and digest, in ordinal name order.
-    private static string PinOf(IEnumerable<Member> members) {
-        using var hash = IncrementalHash.CreateHash(hashAlgorithm: HashAlgorithmName.SHA256);
-
-        foreach (var member in members.OrderBy(keySelector: static member => member.Name, comparer: StringComparer.Ordinal)) {
-            hash.AppendData(data: Encoding.UTF8.GetBytes(s: member.Name));
-            hash.AppendData(data: Separator);
-            hash.AppendData(data: Encoding.UTF8.GetBytes(s: member.Digest));
-            hash.AppendData(data: Separator);
-        }
-
-        return ContentPin.FromDigest(digest: hash.GetHashAndReset()).Hex;
-    }
+    // The digest over every member's name and digest, in ordinal name order, through the length-delimited chain pin a
+    // composed source's content pin folds its files with.
+    private static string PinOf(IEnumerable<Member> members) => WorldDefinitionFileSource.ComputeChainContentHash(chain: [.. members
+        .OrderBy(keySelector: static member => member.Name, comparer: StringComparer.Ordinal)
+        .SelectMany(selector: static member => new[] { Encoding.UTF8.GetBytes(s: member.Name), Encoding.UTF8.GetBytes(s: member.Digest) })]);
 }

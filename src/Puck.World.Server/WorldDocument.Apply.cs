@@ -474,15 +474,10 @@ public sealed partial class WorldDocument {
             throw ReplayRefusal.RebuildSourceUnavailable.Raise(message: ((request.Origin is WorldRebuildOrigin.Store store)
                 ? $"{verb}: a hosted world's rebuild is replayed from its store ('{store}'), which this drive cannot read."
                 : $"{verb}: a Load/Reload request with no embedded document must carry a file origin to re-read for replay."));
-        } else if (request.Kind == WorldRebuildKind.Reload) {
-            candidate = RereadEditForReplay(
-                contentHash: out contentHash,
-                path: path,
-                verb: verb
-            );
         } else {
             candidate = RereadForReplay(
                 contentHash: out contentHash,
+                edit: (request.Kind == WorldRebuildKind.Reload),
                 path: path,
                 verb: verb
             );
