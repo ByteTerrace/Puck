@@ -2191,6 +2191,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
         m_volumes.Clear();
         AppendVolumes(volumes: m_emitter.StaticVolumes);
         AppendVolumes(volumes: m_animator.Volumes);
+        AppendVolumes(volumes: m_animator.RigidVolumes);
 
         // The document version a diagnostic compares frames by, boxed once for each version rather than every frame.
         if ((m_diagnosticSource is null) || (m_diagnosticVersion != m_client.DocumentVersion)) {

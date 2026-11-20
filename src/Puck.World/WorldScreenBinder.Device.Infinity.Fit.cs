@@ -26,7 +26,8 @@ public sealed partial class WorldScreenBinder {
             if ((((uint)index) >= ((uint)views.Count)) || !m_cameraViews.TryGetValue(key: name, value: out var camera)) { continue; }
             FitInfinity(root, null, name, presenter, views, index, sky, camera.Row.RenderWidth, camera.Row.RenderHeight);
         }
-        EndInfinityConsumers(target: presenter);
+        // The home films' end below rebuilds the outputs and reconciles the views once for both ends.
+        EndInfinityConsumers(target: presenter, publish: false);
         // The boot world's sessions filmed into its own frame, and the cameras of the levels they show.
         BeginInfinityConsumers(target: m_homeFilms);
         foreach (var feed in m_feeds) {
@@ -175,7 +176,9 @@ public sealed partial class WorldScreenBinder {
             }
         }
     }
-    private void EndInfinityConsumers(object target) {
+    // Retires the target's consumers this frame did not fit and, unless a later end in the same frame will, republishes the
+    // views their outputs feed.
+    private void EndInfinityConsumers(object target, bool publish = true) {
         foreach (var root in m_infinityRoots.Values) {
             m_retiredConsumers.Clear();
             foreach (var (name, consumer) in root.Consumers) {
@@ -184,6 +187,11 @@ public sealed partial class WorldScreenBinder {
             foreach (var name in m_retiredConsumers) { _ = root.Consumers.Remove(key: name); }
             PruneInfinityIndices(root: root);
         }
+
+        if (!publish) {
+            return;
+        }
+
         RebuildInfinityOutputs();
         ReconcileViews();
     }

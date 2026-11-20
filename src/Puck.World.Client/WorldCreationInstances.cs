@@ -845,16 +845,11 @@ public sealed partial class WorldCreationInstances : IWorldBodyPoses {
     public bool HasBodyRegistration(int bodyIndex) => (Rigid.ContainsBody(body: bodyIndex) || (FindBody(bodyIndex: bodyIndex) is not null));
 
     /// <summary>Gets the bounded volumes the pool's live registrations author, as packed by the latest
-    /// <see cref="PackTransforms"/> — each riding its registration's root slot or its parent shape's slot.</summary>
-    private readonly List<SdfVolume> m_allVolumes = [];
-
-    public IReadOnlyList<SdfVolume> Volumes {
-        get {
-            m_allVolumes.Clear(); m_allVolumes.AddRange(collection: m_volumes); m_allVolumes.AddRange(collection: Rigid.Volumes);
-            if (m_allVolumes.Count > SdfProgramBuilder.MaxVolumes) { throw new InvalidOperationException(message: $"The world's creations need {m_allVolumes.Count} bounded volumes; the renderer holds {SdfProgramBuilder.MaxVolumes}."); }
-            return m_allVolumes;
-        }
-    }
+    /// <see cref="PackTransforms"/> — each riding its registration's root slot or its parent shape's slot. The rigid
+    /// assets' volumes are <see cref="RigidVolumes"/>; the frame's volume list takes both without a joined copy of them.</summary>
+    public IReadOnlyList<SdfVolume> Volumes => m_volumes;
+    /// <summary>Gets the bounded volumes the rigid assets author.</summary>
+    public IReadOnlyList<SdfVolume> RigidVolumes => Rigid.Volumes;
 
     // Volumes follow the root or motion owner with the authored parent frame composed in. Overflow refuses by name.
     private void AppendVolumes(Registration live, CreationDocument document, float placementScale, int rootSlot, bool[]? hidden) {

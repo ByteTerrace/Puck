@@ -178,6 +178,7 @@ public sealed class CreationRigTerm {
         Amplitude = amplitude;
         Phase = phase;
         Wave = wave;
+        WaveCurve = (CreationWave.TryCurveName(name: out var curve, wave: wave) ? curve : null);
         Track = track;
     }
 
@@ -204,6 +205,9 @@ public sealed class CreationRigTerm {
     /// <summary>Gets the waveform's name (<see cref="CreationWave"/>), or <see langword="null"/> for a sine and for a
     /// clip's term.</summary>
     public string? Wave { get; }
+    /// <summary>Gets the name of the <c>curves</c> row a <c>curve:&lt;row&gt;</c> waveform names, split from
+    /// <see cref="Wave"/> once so a frame never builds it, or <see langword="null"/> for any other waveform.</summary>
+    public string? WaveCurve { get; }
     /// <summary>Gets the clip track a clip's term plays, or <see langword="null"/> for a swing or a slide.</summary>
     public CreationRigTrack? Track { get; }
     /// <summary>Gets whether the term's largest motion at full share follows from the document alone: literal values

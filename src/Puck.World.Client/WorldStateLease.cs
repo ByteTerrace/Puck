@@ -33,6 +33,15 @@ public sealed class WorldStateLease {
     private int m_installs;
     private WorldStateMirror? m_mirror;
 
+    // What Changed last answered, and what it answered for: the mirror, its revision, and the version of the set of held
+    // slots. Every read that adds, drops or replaces a held slot moves m_heldVersion, and a held slot's change stamp moves
+    // only with the mirror's revision, so a repeat at the same revision and version has the same answer.
+    private WorldStateMirror? m_changedMirror;
+    private int m_changedRevision = -1;
+    private int m_changedVersion = -1;
+    private int m_changedValue;
+    private int m_heldVersion;
+
     private sealed class SourceComparer : IEqualityComparer<(object Source, bool Target)> {
         public static readonly SourceComparer Instance = new();
 
@@ -66,6 +75,14 @@ public sealed class WorldStateLease {
                 return 0;
             }
 
+            if (
+                ReferenceEquals(objA: mirror, objB: m_changedMirror) &&
+                (mirror.Revision == m_changedRevision) &&
+                (m_heldVersion == m_changedVersion)
+            ) {
+                return m_changedValue;
+            }
+
             var changed = 0;
 
             foreach (var slot in m_slots.Values) {
@@ -80,6 +97,11 @@ public sealed class WorldStateLease {
             foreach (var slot in m_templates) {
                 changed = Math.Max(val1: changed, val2: mirror.Changed(slot: slot));
             }
+
+            m_changedMirror = mirror;
+            m_changedRevision = mirror.Revision;
+            m_changedVersion = m_heldVersion;
+            m_changedValue = changed;
 
             return changed;
         }
@@ -171,6 +193,7 @@ public sealed class WorldStateLease {
         }
 
         m_slots.Clear();
+        m_heldVersion++;
     }
     /// <summary>Finds the slot the lease already resolved for an authored object, without acquiring one.</summary>
     /// <param name="source">The authored object naming the read: a string compared by its text, any other object by
@@ -221,6 +244,7 @@ public sealed class WorldStateLease {
             target: target
         );
         m_slots[(source, target)] = slot;
+        m_heldVersion++;
 
         return slot;
     }
@@ -255,6 +279,7 @@ public sealed class WorldStateLease {
             : -1
         );
         m_slots[(reference, truth)] = slot;
+        m_heldVersion++;
 
         return slot;
     }
@@ -363,6 +388,7 @@ public sealed class WorldStateLease {
 
             if (slot >= 0) {
                 m_templates.Add(item: slot);
+                m_heldVersion++;
             }
         }
     }
@@ -372,6 +398,7 @@ public sealed class WorldStateLease {
         }
 
         m_templates.Clear();
+        m_heldVersion++;
         m_arrived = false;
         m_arrivedFirst = null;
         m_arrivedSecond = null;
