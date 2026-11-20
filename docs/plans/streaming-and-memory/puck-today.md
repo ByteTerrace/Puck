@@ -283,8 +283,8 @@ the same physical RAM `MemoryAccount.DefaultBudget` takes 3/4 of **[inference]**
    (SdfMeshStore.cs:34). The selector's "eviction by priority" needs one currency.
 5. **Several schedulers for residency work:** the bake's static pool (`Task.Run`, src/Puck.SdfVm/SdfMeshPathBake.Residency.cs:223), `JobPool`
    (Puck.Hosting/Jobs/JobPool.cs:18, used by Puck.World/Puck.World.Server per grep), the irradiance's `Task.Run`
-   worker, build and refill (SdfMeshIrradiance.cs:737, 1387, 1556), restore work on `ThreadPool`
-   (SdfMesh.Restore.cs:350), and a per-residency `SdfGpuWork` budget (SdfWorldTables.cs:400). The decision's "engine
+   worker, build and refill (SdfMeshIrradiance.cs:737, 1387, 1556), restore work, bake readbacks and mesh-store writes
+   on `ThreadPool` (`BoundedWorkQueue`, Puck.Hosting/Jobs/BoundedWorkQueue.cs), and a per-residency `SdfGpuWork` budget (SdfWorldTables.cs:400). The decision's "engine
    job scheduler" the selector feeds does not exist as one type (§6, assumption 7).
 ### Stand-ins (where the decision's design should be)
 

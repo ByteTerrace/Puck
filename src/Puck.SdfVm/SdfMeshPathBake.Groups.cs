@@ -15,6 +15,10 @@ public sealed partial class SdfMeshPathBake {
 
         public Group this[int index] => m_items[index];
 
+        // Moves with every change of which group stands at which index, so an order of the indices (Order) knows it
+        // still names the groups it was taken over.
+        public int Version { get; private set; }
+
         // Whether the group stands at an index of the list.
         public static bool Holds(Group group) => group.Listed;
 
@@ -25,11 +29,13 @@ public sealed partial class SdfMeshPathBake {
             if (!ReferenceEquals(objA: displaced, objB: group)) { displaced.Listed = false; }
             group.Listed = true;
             m_items[index] = group;
+            Version++;
         }
         // Takes every group out of the list.
         public void Clear() {
             foreach (var group in m_items) { group.Listed = false; }
             m_items.Clear();
+            Version++;
         }
         // Appends planned groups, unlisted until Set puts each into its place.
         public void Plan(IEnumerable<Group> groups) {
@@ -37,6 +43,7 @@ public sealed partial class SdfMeshPathBake {
 
             m_items.AddRange(collection: groups);
             for (var index = first; (index < m_items.Count); index++) { m_items[index].Listed = false; }
+            Version++;
         }
 
         public List<Group>.Enumerator GetEnumerator() => m_items.GetEnumerator();

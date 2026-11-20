@@ -1,5 +1,4 @@
 using System.Buffers;
-using System.Buffers.Binary;
 using System.Diagnostics;
 using System.Numerics;
 using System.Runtime.InteropServices;
@@ -34,6 +33,23 @@ public readonly record struct SdfMeshBakeRequest(Vector3 Origin, Vector3 Cell, (
     public float TapSpacing => SdfMeshBakeTaps.Spacing(cell: Cell);
     /// <summary>Gets the samples the dispatch writes.</summary>
     public int Samples => ((Dims.X * Dims.Y) * Dims.Z);
+    // Final grid slabs carry materials even though their description requests gradients for planning.
+    internal bool MaterialOnly { get; init; }
+    internal bool WithMaterial { get; init; }
+    internal bool WithGradient => Gradients && !Points.IsEmpty;
+    internal uint OutputMode => WithGradient ? 3u : MaterialOnly ? 2u : WithMaterial || Slab >= 0 ? 1u : 0u;
+    /// <summary>Number of bytes occupied by this lattice's output planes.</summary>
+    public int OutputBytes => checked(Samples * sizeof(uint) * (OutputMode switch { 1 => 2, 3 => 4, _ => 1 }));
+
+    /// <summary>Writes the selected fields of one CPU sample into this lattice's output planes.</summary>
+    public void WriteSample(Span<byte> output, int local, float value, int material, Vector3 gradient) {
+        var words = MemoryMarshal.Cast<byte, int>(output);
+        var mode = OutputMode;
+        words[local] = mode == 2 ? material : BitConverter.SingleToInt32Bits(value);
+        if (mode == 1) { words[Samples + local] = material; }
+        if (mode == 3) { MemoryMarshal.Cast<int, Vector3>(words[Samples..])[local] = gradient; }
+    }
+
     /// <summary>Gets the field evaluations the dispatch makes: five a sample that measures the gradient, one
     /// otherwise.</summary>
     public int Taps => (Gradients ? (5 * Samples) : Samples);
@@ -92,6 +108,8 @@ public sealed record SdfMeshBakeBatch(SdfMeshBakeRequest[] Lattices, object[] Ti
     /// <summary>Gets the handles of the program the batch samples (<see cref="SdfProgram.SampledFields"/>), which its sampled
     /// table's directory holds a word for.</summary>
     public int SampledHandles { get; init; }
+    /// <summary>Gets the byte length of the packed output of every lattice.</summary>
+    public int OutputBytes => Lattices.Sum(static lattice => lattice.OutputBytes);
     /// <summary>Gets the field evaluations the batch's lattices make (<see cref="SdfMeshBakeRequest.Taps"/>), the unit the
     /// bake's GPU time is measured in.</summary>
     public long Taps {
@@ -102,7 +120,7 @@ public sealed record SdfMeshBakeBatch(SdfMeshBakeRequest[] Lattices, object[] Ti
             return taps;
         }
     }
-    /// <summary>Gets the words of the batch's sampled table (<see cref="WriteSampled"/>), at least one.</summary>
+    /// <summary>Gets the words of the batch's sampled table (<see cref="WriteSampledDirectory"/>), at least one.</summary>
     public int SampledWords {
         get {
             var words = SampledHandles;
@@ -112,18 +130,13 @@ public sealed record SdfMeshBakeBatch(SdfMeshBakeRequest[] Lattices, object[] Ti
         }
     }
 
-    /// <summary>Writes the table the bake kernel reads sampled values from (<c>SdfWorldPackage.SampledValues</c>): a word a
-    /// handle, the word its snapshot starts at or <c>0xFFFFFFFF</c> for a handle the batch samples none of, then each
-    /// snapshot's voxels as float bits.</summary>
-    /// <param name="table">The table, at least <see cref="SampledWords"/> words.</param>
-    public void WriteSampled(Span<uint> table) {
-        table[..SampledHandles].Fill(value: uint.MaxValue);
-        var cursor = SampledHandles;
-
+    /// <summary>Writes each handle's snapshot offset, or the absent sentinel, into the sampled table directory.</summary>
+    public void WriteSampledDirectory(Span<uint> directory) {
+        directory.Fill(uint.MaxValue);
+        var offset = SampledHandles;
         foreach (var (handle, snapshot) in Sampled) {
-            table[handle] = ((uint)cursor);
-            System.Runtime.InteropServices.MemoryMarshal.Cast<float, uint>(span: snapshot.Values).CopyTo(destination: table[cursor..]);
-            cursor += snapshot.Count;
+            directory[handle] = (uint)offset;
+            offset += snapshot.Count;
         }
     }
 
@@ -217,11 +230,13 @@ public sealed record SdfMeshBakeBatch(SdfMeshBakeRequest[] Lattices, object[] Ti
     }
 }
 /// <summary>Where one lattice of a taken batch stands (<see cref="SdfMeshBakeBatch.StateOf"/>): each ticket leaves
-/// <see cref="Taken"/> once, for <see cref="Answered"/> or <see cref="Returned"/>, so answering and abandoning a batch,
+/// <see cref="Taken"/> once and settles as <see cref="Answered"/> or <see cref="Returned"/>, so answering and abandoning a batch,
 /// in either order or in part, settle each lattice exactly once.</summary>
 public enum SdfMeshBakeTicket {
     /// <summary>The lattice is dispatched or awaiting its samples, and its group takes no other lattice.</summary>
     Taken,
+    /// <summary>The answer owns the destination and is copying this lattice's samples.</summary>
+    Decoding,
     /// <summary>The lattice's samples reached its group or slice.</summary>
     Answered,
     /// <summary>The lattice went back to its group or slice unanswered, to be taken again.</summary>
@@ -238,7 +253,7 @@ public enum SdfMeshBakeTicket {
 /// each lattice at most <see cref="LatticeTaps"/> field evaluations: a coarse lattice over the group's bounding sphere, refinements over the box of
 /// the cells the surface can cross until the box stops shrinking, then a final lattice of at most 65 samples a side
 /// whose spacing follows the box's own proportions (a union's cubic, keeping each of its shapes at the resolution its own
-/// lattice would give it), sampled in slabs of whole planes, values alone; then the fine samples
+/// lattice would give it), sampled in slabs of whole planes, values and materials; then the fine samples
 /// of the cells the final lattice cannot resolve (<see cref="SdfSampledLattice.Refine"/>), and then gradients at the
 /// samples a contour reads one at alone (<see cref="SdfSampledLattice.GradientPoints"/>). The final samples contour on
 /// the thread pool (<see cref="SdfSampledLattice"/>) and split at their creases (<see cref="SdfContour.SplitAtCreases"/>).
@@ -806,17 +821,17 @@ public sealed partial class SdfMeshPathBake {
                 // A slice samples any instance, so it reads every field at the bake's set.
                 for (var handle = 0; (handle < m_sampled.Count); handle++) { m_takenSampled[handle] = m_sampled[handle]; }
             }
-            var candidates = m_candidates;
             var pending = false;
+            var waiting = 0;
             var flying = 0;
             var working = 0;
             var admitted = 0;
             // The groups admitted whose first stage has not reached the pool's queue: stages on their way.
             var awaiting = 0;
+            var from = DoneThrough();
 
-            candidates.Clear();
             // Every group before the done cursor is done and offers nothing, so a settled bake takes without a walk.
-            for (var index = DoneThrough(); (index < m_groups.Count); index++) {
+            for (var index = from; (index < m_groups.Count); index++) {
                 var group = m_groups[index];
 
                 pending |= !group.Done;
@@ -824,26 +839,31 @@ public sealed partial class SdfMeshPathBake {
                 working += ((!group.Done && group.Contouring) ? 1 : 0);
                 admitted += ((!group.Done && group.Admitted) ? 1 : 0);
                 awaiting += ((!group.Done && group.AwaitsStage) ? 1 : 0);
-                if (group.Done || group.InFlight || group.Contouring || (group.Next is null) || (owedOnly && !OwesFrame(group: group))) { continue; }
-                candidates.Add(item: (RankOf(group: group), index));
+                waiting += (Offers(group: group, owedOnly: owedOnly) ? 1 : 0);
             }
             if (pending) {
                 m_accounts.Takes++;
-                m_accounts.WaitingGroups += candidates.Count;
+                m_accounts.WaitingGroups += waiting;
                 m_accounts.FlyingGroups += flying;
                 m_accounts.WorkingGroups += working;
+                // A tier's replacement set into the list since the latest measure is ordered here, once until the next.
+                if (m_orderVersion != m_groups.Version) {
+                    Order(order: m_order, from: from);
+                    m_orderVersion = m_groups.Version;
+                }
             }
-            CollectionsMarshal.AsSpan(list: candidates).Sort(comparison: ByPriority);
             var stop = 0;
             // The first group the account defers holds its place: no group behind it starts its final lattice
             // before it does, so a large group never starves behind a stream of smaller ones.
             var admissionWaits = false;
             var queued = -1;
 
-            foreach (var (_, index) in candidates) {
+            foreach (var (_, index) in (pending ? CollectionsMarshal.AsSpan(list: m_order) : [])) {
+                var group = m_groups[index];
+
+                if (!Offers(group: group, owedOnly: owedOnly)) { continue; }
                 if (lattices.Count >= SdfWorldPackage.MeshBakeBatch) { stop = 3; break; }
 
-                var group = m_groups[index];
                 var next = group.Next!.Value;
 
                 // A batch reads one snapshot a handle: a group whose geometry hashed another waits for a later batch.
@@ -951,8 +971,29 @@ public sealed partial class SdfMeshPathBake {
         return true;
     }
 
-    // The groups a take may take a lattice of, by priority, reused take to take.
-    private readonly List<(float Priority, int Index)> m_candidates = [];
+    // The order a take offers groups in: every group not done from the done cursor, as the list stood at m_orderVersion,
+    // by ByPriority over RankOf. Invariant: a take walks the order a sort of its candidates would give. A rank changes
+    // only in Prioritize, which takes the order again after measuring (into the spare, outside the gate, swapped in
+    // under it), and the list changes only through GroupList, whose Version the take compares, ordering again under the
+    // gate when a group was set in since. A group done since is passed over (Offers), and Done only turns on.
+    private List<(float Priority, int Index)> m_order = [];
+    private List<(float Priority, int Index)> m_spareOrder = [];
+    private int m_orderVersion = -1;
+
+    // Orders the groups not done from `from` by take priority into `order`.
+    private void Order(List<(float Priority, int Index)> order, int from) {
+        order.Clear();
+        for (var index = from; (index < m_groups.Count); index++) {
+            var group = m_groups[index];
+
+            if (!group.Done) { order.Add(item: (RankOf(group: group), index)); }
+        }
+        CollectionsMarshal.AsSpan(list: order).Sort(comparison: ByPriority);
+    }
+    // Whether a take may take a lattice of a group: one it owes, with none in flight or being worked, and, for an owed
+    // take, owed to the frame.
+    private static bool Offers(Group group, bool owedOnly) =>
+        !(group.Done || group.InFlight || group.Contouring || (group.Next is null) || (owedOnly && !OwesFrame(group: group)));
 
     // A group's rank among a take's candidates: every group in view (Group.InView) ahead of every group out of it, each
     // side by its priority. A priority is never negative, so an out-of-view group's rank is taken into [-1, 0) with its
@@ -974,11 +1015,10 @@ public sealed partial class SdfMeshPathBake {
     }
     /// <summary>Answers a dispatched batch with the samples its readback copied, each lattice its own slice: each group's
     /// lattice is decoded on the calling thread and answered on the bake's workers. A lattice answered or returned already
-    /// takes nothing; one whose answer throws stays taken, so <see cref="Abandon"/> returns it and every lattice after
+    /// takes nothing; a decode failure returns its request, and <see cref="Abandon"/> returns every untaken answer after
     /// it.</summary>
     /// <param name="batch">The batch <see cref="TryTake(SdfProgram?, out SdfMeshBakeBatch?, long)"/> took.</param>
-    /// <param name="samples">The batch's samples, <see cref="SdfWorldPackage.MeshBakeSampleWords"/> words each, the
-    /// lattices back to back.</param>
+    /// <param name="samples">The output planes of each lattice, back to back.</param>
     public void Complete(SdfMeshBakeBatch batch, ReadOnlySpan<byte> samples) {
         ArgumentNullException.ThrowIfNull(argument: batch);
 
@@ -986,7 +1026,7 @@ public sealed partial class SdfMeshPathBake {
 
         for (var index = 0; (index < batch.Lattices.Length); index++) {
             var lattice = batch.Lattices[index];
-            var bytes = SampleBytes(in lattice);
+            var bytes = lattice.OutputBytes;
             var slice = samples.Slice(length: bytes, start: offset);
 
             offset += bytes;
@@ -997,40 +1037,28 @@ public sealed partial class SdfMeshPathBake {
             if (batch.Tickets[index] is Group group) {
                 using (EnterGate(site: BakeGate.Ticket)) {
                     if (batch.States[index] != SdfMeshBakeTicket.Taken) { continue; }
+                    if (!group.QueueWork()) {
+                        _ = MoveTicket(batch, index, SdfMeshBakeTicket.Returned);
+                        continue;
+                    }
+                    _ = MoveTicket(batch, index, SdfMeshBakeTicket.Decoding);
                 }
-                if (!group.QueueWork()) {
-                    using (EnterGate(site: BakeGate.Ticket)) { _ = MoveTicket(batch: batch, index: index, to: SdfMeshBakeTicket.Returned); }
-                    continue;
-                }
-
                 Answer answer;
-
                 try {
-                    answer = Decode(group: group, request: in lattice, samples: slice);
+                    answer = Decode(group, in lattice, slice);
                 } catch {
+                    // No next lattice is published until AnswerGroup. Return the claimed request for retry.
+                    using (EnterGate(site: BakeGate.Ticket)) {
+                        _ = MoveTicket(batch, index, SdfMeshBakeTicket.Returned, from: SdfMeshBakeTicket.Decoding);
+                    }
                     group.EndWork();
                     throw;
                 }
-
-                bool answered;
-
-                using (EnterGate(site: BakeGate.Ticket)) { answered = MoveTicket(batch: batch, index: index, to: SdfMeshBakeTicket.Answered); }
-                if (!answered) {
-                    answer.Dispose();
-                    group.EndWork();
-                    continue;
-                }
-                var checkpoint = CaptureSamples(group, slice);
+                using (EnterGate(site: BakeGate.Ticket)) { _ = MoveTicket(batch, index, SdfMeshBakeTicket.Answered, from: SdfMeshBakeTicket.Decoding); }
                 Enqueue(group: group, urgent: true, work: () => {
-                    using (answer) {
-                        using var captured = checkpoint;
-                        if (captured is not null && CheckpointStore(group) is { } store) {
-                            store.WriteSamples(group.Checkpoints!.Sampling, group.SampleProbe!.Value, captured.GetSpan());
-                        }
-                        group.SampleProbe = null;
-                        AnswerGroup(answer: answer, group: group, request: in lattice);
-                    }
+                    using (answer) { AnswerGroup(answer: answer, group: group, request: in lattice); }
                 });
+                KeepSamples(group: group, request: in lattice, samples: slice);
                 continue;
             }
             Complete(batch: batch, index: index, request: in lattice, samples: slice);
@@ -1042,8 +1070,8 @@ public sealed partial class SdfMeshPathBake {
     // The one transition of a batch's ticket out of Taken, which answering and abandoning both take: Answered once its
     // samples reach its group or slice (the group stays in flight until its answer job runs), Returned when they never will,
     // which hands the lattice back to be taken again. Under the gate; false when the ticket had left Taken already.
-    private bool MoveTicket(SdfMeshBakeBatch batch, int index, SdfMeshBakeTicket to) {
-        if (batch.States[index] != SdfMeshBakeTicket.Taken) { return false; }
+    private bool MoveTicket(SdfMeshBakeBatch batch, int index, SdfMeshBakeTicket to, SdfMeshBakeTicket from = SdfMeshBakeTicket.Taken) {
+        if (batch.States[index] != from) { return false; }
         batch.States[index] = to;
         if (to != SdfMeshBakeTicket.Returned) { return true; }
         if (batch.Tickets[index] is Group group) { group.InFlight = false; }
@@ -1078,44 +1106,28 @@ public sealed partial class SdfMeshPathBake {
         public readonly OwnedBuffer<float> Values = new(allocator: allocator, observer: owner);
         public readonly OwnedBuffer<int> Materials = new(allocator: allocator, observer: owner);
         public readonly OwnedBuffer<float> Gradients = new(allocator: allocator, observer: owner);
-        public readonly OwnedBuffer<int> Slots = new(allocator: allocator, observer: owner);
 
-        public void Dispose() { Values.Dispose(); Materials.Dispose(); Gradients.Dispose(); Slots.Dispose(); }
+        public void Dispose() { Values.Dispose(); Materials.Dispose(); Gradients.Dispose(); }
     }
 
-    // Decodes one lattice's readback records, MeshBakeSampleWords little-endian words each: value, material, then the
-    // gradient's three components or the winning slot.
+    // The ticket (or checkpoint worker) owns this group's slab until AnswerGroup publishes its successor.
     private Answer Decode(Group group, in SdfMeshBakeRequest request, ReadOnlySpan<byte> samples) {
-        var answer = new Answer(allocator: Library.Allocator, owner: group.Memory);
-
+        var answer = new Answer(Library.Allocator, group.Memory);
         try {
             var count = request.Samples;
-            var hasSlots = (!request.Gradients && !request.Points.IsEmpty);
-
-            answer.Values.Resize(count, clear: false, preserve: false);
-            answer.Materials.Resize(count, clear: false, preserve: false);
-            if (request.Gradients) { answer.Gradients.Resize((3 * count), clear: false, preserve: false); }
-            if (hasSlots) { answer.Slots.Resize(count, clear: false, preserve: false); }
-
-            var values = answer.Values.GetSpan();
-            var materials = answer.Materials.GetSpan();
-            var gradients = answer.Gradients.GetSpan();
-            var slots = answer.Slots.GetSpan();
-
-            for (var index = 0; (index < count); index++) {
-                var record = samples.Slice(start: ((index * SdfWorldPackage.MeshBakeSampleWords) * sizeof(uint)));
-
-                values[index] = BinaryPrimitives.ReadSingleLittleEndian(source: record);
-                materials[index] = BinaryPrimitives.ReadInt32LittleEndian(source: record[4..]);
-                if (hasSlots) {
-                    slots[index] = BinaryPrimitives.ReadInt32LittleEndian(source: record[8..]);
-                } else if (request.Gradients) {
-                    gradients[(3 * index)] = BinaryPrimitives.ReadSingleLittleEndian(source: record[8..]);
-                    gradients[((3 * index) + 1)] = BinaryPrimitives.ReadSingleLittleEndian(source: record[12..]);
-                    gradients[((3 * index) + 2)] = BinaryPrimitives.ReadSingleLittleEndian(source: record[16..]);
-                }
+            var words = MemoryMarshal.Cast<byte, int>(samples);
+            var values = MemoryMarshal.Cast<int, float>(words[..count]);
+            if (request.Slab >= 0) {
+                var first = request.Slab * request.Dims.X * request.Dims.Y;
+                values.CopyTo(group.Final!.Values[first..]);
+                words[count..].CopyTo(group.Final.Materials[first..]);
+            } else if (request.MaterialOnly) {
+                answer.Materials.CopyFrom(words);
+            } else {
+                answer.Values.CopyFrom(values);
+                if (request.WithMaterial) { answer.Materials.CopyFrom(words[count..]); }
+                if (request.WithGradient) { answer.Gradients.CopyFrom(MemoryMarshal.Cast<int, float>(words[count..])); }
             }
-
             return answer;
         } catch {
             answer.Dispose();
@@ -1139,7 +1151,7 @@ public sealed partial class SdfMeshPathBake {
                 AnswerPoints(group: group, kind: 6, materials: materials, request: in request);
             }
         } else if (request.Slab >= 0) {
-            AnswerSlab(group: group, materials: materials, request: in request, values: values);
+            AnswerSlab(group, in request);
         } else {
             Refine(group: group, request: in request, values: values);
         }
@@ -1569,6 +1581,7 @@ public sealed partial class SdfMeshPathBake {
             group.Checkpoints = Identity;
             group.CheckpointProgram = m_program;
             group.CheckpointGeometry = CheckpointInput(group, m_program!);
+            group.SampleGeometry = SampleFieldInput(group, m_program!);
         }
         if (!Library.Holds(geometry: group.Sealed, identity: group.Identity) && !HoldsCheckpoint(group)) { return false; }
         group.Deferred = group.Next;
@@ -1850,12 +1863,8 @@ public sealed partial class SdfMeshPathBake {
     }
     // Answers a slab of a group's final lattice. Once every plane is answered, the lattice chooses the cells it
     // refines on the thread pool (Prepare).
-    private void AnswerSlab(Group group, in SdfMeshBakeRequest request, ReadOnlySpan<float> values, ReadOnlySpan<int> materials) {
+    private void AnswerSlab(Group group, in SdfMeshBakeRequest request) {
         var final = group.Final!;
-        var start = (request.Slab * (request.Dims.X * request.Dims.Y));
-
-        values.CopyTo(destination: final.Values[start..]);
-        materials.CopyTo(destination: final.Materials[start..]);
         final.Planes += request.Dims.Z;
 
         var complete = (final.Planes >= final.Lattice.Dims.Z);
@@ -2003,6 +2012,7 @@ public sealed partial class SdfMeshPathBake {
         var count = Math.Clamp(value: (LatticeTaps / (gradients ? 5 : 1)), min: 1, max: (final.Points.Length - final.Answered));
 
         return RequestOf(cell: final.Sampled!.ContourCell, dims: (count, 1, 1), gradients: gradients, group: group, origin: Vector3.Zero) with {
+            WithMaterial = final.Stage == FinalStage.Refinement,
             Points = final.Points.Slice(start: final.Answered, length: count),
         };
     }
@@ -2139,6 +2149,7 @@ public sealed partial class SdfMeshPathBake {
         var count = Math.Min(val1: (group.Points!.Length - group.PointsAnswered), val2: (LatticeTaps / (gradients ? 5 : 1)));
 
         return RequestOf(cell: (gradients ? group.CreaseSpacing : Vector3.One), dims: (count, 1, 1), gradients: gradients, group: group, origin: Vector3.Zero) with {
+            MaterialOnly = !gradients,
             Points = group.Points.Memory.Slice(group.PointsAnswered, count),
         };
     }
@@ -2749,7 +2760,10 @@ public sealed partial class SdfMeshPathBake {
         public SdfProgram? CheckpointProgram { get; set; }
         public SdfMeshGeometry CheckpointGeometry { get; set; }
         public bool CheckedCheckpoints { get; set; }
-        public UInt128? SampleProbe { get; set; }
+        // The key every sample set of the group is kept and probed under, beside each lattice's row (SampleFieldInput).
+        public SdfMeshGeometry SampleGeometry { get; set; }
+        // Whether the group's next lattice missed its probe, so the next take dispatches it unprobed (ProbeSamples).
+        public bool ProbeMissed { get; set; }
         public SdfMeshBakeRequest? Deferred { get; set; }
         // Whether the mesh came from the library or its store rather than a bake of this group.
         public bool Stored { get; set; }

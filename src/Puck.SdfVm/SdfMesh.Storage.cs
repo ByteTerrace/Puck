@@ -66,6 +66,9 @@ public sealed partial record SdfMesh {
     /// <summary>Releases one mesh claim; the last claimant releases the payload, never a finalizer.</summary>
     /// <param name="cached">Whether the released claim was acquired as cache retention.</param>
     public void Release(bool cached = false) => m_payload?.Release(cached: cached);
+    // Whether the mesh's planes are native storage its claims own, which its last release frees; a managed mesh's planes
+    // are arrays nothing writes once it is built, kept alive by any reference to it.
+    internal bool OwnsNativeStorage => (m_payload is not null);
 
     /// <summary>Gets the bytes the mesh's own storage holds: for a native mesh, what its storage owners are charged,
     /// excluding storage it shares with the mesh it was renumbered from; for a managed one, its arrays' bytes, counting
@@ -113,13 +116,13 @@ public sealed partial record SdfMesh {
     /// <param name="restore">The library and store key the mesh was read from, whose store can restore its normals and
     /// coarser levels' indices once no region needs them (<see cref="Need"/>), or <see langword="null"/> for a mesh that
     /// keeps them for its lifetime.</param>
-    /// <param name="asStored">Whether the copy carries what a decode of the mesh's store entry answers
+    /// <param name="stored">Whether the copy carries what a decode of the mesh's store entry answers
     /// (<see cref="SdfMeshStoreCodec.Conform"/>) instead of the mesh's own positions and normals, which the entry stores
     /// quantized: the form of a mesh published with <paramref name="restore"/>, whose restored normals must be the ones
     /// its region first wrote.</param>
     /// <returns>The native mesh, or this mesh when <paramref name="allocator"/> is <see langword="null"/>.</returns>
     /// <exception cref="InvalidOperationException">The mesh is chunked, and its chunks are not views of its attributes.</exception>
-    internal SdfMesh NativeCopy(IAllocator? allocator, MemoryAccount account, (SdfMeshLibrary Library, UInt128 Identity, SdfMeshGeometry Geometry)? restore = null, bool asStored = false) {
+    internal SdfMesh NativeCopy(IAllocator? allocator, MemoryAccount account, (SdfMeshLibrary Library, UInt128 Identity, SdfMeshGeometry Geometry)? restore = null, SdfMeshStoreCodec.Positions? stored = null) {
         if (allocator is null) { return this; }
         if (m_payload is not null) { return Acquire(); }
         if ((Chunks.Count != 0) && !JoinsChunks()) { throw new InvalidOperationException(message: "A chunked mesh's chunks view its attributes."); }
@@ -128,15 +131,14 @@ public sealed partial record SdfMesh {
 
         try {
             var shape = SdfMeshShape.Of(mesh: this);
-            var grid = (asStored ? SdfMeshStoreCodec.GridOf(mesh: this) : default);
 
             _ = storage.Begin(shape: shape);
             for (var piece = 0; (piece < shape.Pieces.Length); piece++) {
                 var source = Piece(index: piece);
 
-                if (storage.Positions(destination: out var positions, piece: piece)) { source.Positions.Span.CopyTo(destination: positions); }
+                if (storage.Positions(destination: out var positions, piece: piece) && (stored is null || stored.Grid.Width == 4)) { source.Positions.Span.CopyTo(destination: positions); }
                 if (storage.Normals(destination: out var normals, piece: piece)) { source.Normals.Span.CopyTo(destination: normals); }
-                if (asStored) { SdfMeshStoreCodec.Conform(grid: in grid, normals: normals, positions: positions); }
+                if (stored is not null) { SdfMeshStoreCodec.Conform(stored, piece, positions, normals); }
                 if (storage.Indices(destination: out var indices, piece: piece)) { source.Indices.Span.CopyTo(destination: indices); }
                 if (storage.Materials(destination: out var materials, piece: piece)) { source.TriangleMaterials.Span.CopyTo(destination: materials); }
                 if (!shape.Chunked) {
@@ -381,7 +383,7 @@ public sealed partial record SdfMesh {
     // material arrays are new physical allocations; renumbering must not duplicate positions, normals or indices, and a
     // chunked mesh's chunks view one renumbered copy of its triangle materials. A native chunked mesh's chunks always
     // view its attributes (NativeCopy refuses any other, and NativeStorage builds no other).
-    internal SdfMesh RenumberNative(int[] from, int[] to, IAllocator allocator, MemoryAccount account) {
+    internal SdfMesh RenumberNative(SdfMeshMaterials.Remap map, IAllocator allocator, MemoryAccount account) {
         var payload = new Payload(owner: account.CreateOwner(memoryClass: Puck.Abstractions.Memory.MemoryClass.Elastic, name: "mesh-materials"));
 
         ReadOnlyMemory<uint> Remap(Payload owner, ReadOnlyMemory<uint> source) {
@@ -390,7 +392,7 @@ public sealed partial record SdfMesh {
             var input = source.Span;
 
             for (var index = 0; (index < input.Length); index++) {
-                values[index] = SdfMeshMaterials.Renumber(material: input[index], from: from, to: to);
+                values[index] = map.Renumber(input[index]);
             }
             return values.Memory;
         }

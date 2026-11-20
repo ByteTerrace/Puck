@@ -56,9 +56,9 @@ public sealed partial class SdfMeshPathBake {
     // shared thread-pool items they kept the process's other pool work waiting while the runtime injected threads. An
     // idle worker blocks on an operating-system semaphore, so nothing spins.
     private static readonly Lock WorkGate = new();
-    // Every change a bake's groups see happens inside a pool work item (a stage, a contour or an answer), so the pool's
-    // completions are the producer signal an offline caller waits on (WaitForProgress). A System.Threading.Lock has no
-    // Monitor.Wait, so the count has its own monitor.
+    // Every change a bake's groups see happens inside a pool work item (a stage, a contour or an answer) or a batch's
+    // reader (Progressed), so their completions are the producer signal an offline caller waits on (WaitForProgress). A
+    // System.Threading.Lock has no Monitor.Wait, so the count has its own monitor.
     private static readonly object ProgressGate = new();
 
     private static long ProgressCount;
@@ -181,11 +181,20 @@ public sealed partial class SdfMeshPathBake {
             if (OwesFrame(group: group)) { holes++; }
         }
         Volatile.Write(location: ref m_owedGroups, value: holes);
-        if (!measured) { return; }
-        foreach (var group in m_groups) {
-            if (group.Done) { continue; }
-            if (group.Waiter is { } waiter) { waiter.Priority = group.Priority; }
-            if ((group.Share is { HasWaiters: true } share)) { group.Priority = MathF.Max(x: group.Priority, y: Library.MostWanted(share: share)); }
+        if (measured) {
+            foreach (var group in m_groups) {
+                if (group.Done) { continue; }
+                if (group.Waiter is { } waiter) { waiter.Priority = group.Priority; }
+                if ((group.Share is { HasWaiters: true } share)) { group.Priority = MathF.Max(x: group.Priority, y: Library.MostWanted(share: share)); }
+            }
+        }
+        // The ranks stand until the next measure: the takes until then walk this order rather than sorting.
+        var version = m_groups.Version;
+
+        Order(order: m_spareOrder, from: Volatile.Read(location: ref m_doneThrough));
+        using (EnterGate(site: BakeGate.Frame)) {
+            (m_order, m_spareOrder) = (m_spareOrder, m_order);
+            m_orderVersion = version;
         }
     }
     // The leaders done since Follow last ran that groups follow (Group.Done enqueues them), under the gate.
@@ -352,12 +361,12 @@ public sealed partial class SdfMeshPathBake {
         return true;
     }
 
-    // Runs work on the bake's pool ahead of every queued stage, in the order it came, as a lattice's answer runs: a
-    // completed dispatch's samples are read and decoded there, off the frame's thread.
-    internal static void RunFirst(Action work) {
-        lock (WorkGate) {
-            AnswerQueue.Enqueue(item: work);
-            StartWorkers();
+    // Advances Progress and wakes its waiters: a pool worker finishing a work item does, and so does a batch's reader
+    // (SdfMeshBakeGpuWork) once it has answered the batch, since a field slice's answer queues no work item.
+    internal static void Progressed() {
+        lock (ProgressGate) {
+            ProgressCount++;
+            Monitor.PulseAll(obj: ProgressGate);
         }
     }
 
@@ -502,10 +511,7 @@ public sealed partial class SdfMeshPathBake {
                 SdfMeshBakeReport.WorkFailed(exception: exception);
             } finally {
                 if (stage) { PoolBacklog.ObserveStage(seconds: Stopwatch.GetElapsedTime(startingTimestamp: began).TotalSeconds); }
-                lock (ProgressGate) {
-                    ProgressCount++;
-                    Monitor.PulseAll(obj: ProgressGate);
-                }
+                Progressed();
             }
         }
     }

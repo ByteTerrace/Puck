@@ -23,17 +23,47 @@ internal static class SdfMeshStoreCodec {
     internal readonly record struct PositionGrid(Vector3 Low, Vector3 High, int Width);
 
     private static IReadOnlyList<SdfMesh> PiecesOf(SdfMesh? mesh) => ((mesh is null) ? Array.Empty<SdfMesh>() : ((mesh.Chunks.Count == 0) ? new[] { mesh } : mesh.Chunks));
-    // Every shared seam vertex uses exactly the same grid, including its width. A per-piece grid opens cracks.
-    private static PositionGrid GridOf(IReadOnlyList<SdfMesh> pieces) {
-        var low = ((pieces.Count == 0) ? Vector3.Zero : pieces[0].PositionLow);
-        var high = ((pieces.Count == 0) ? Vector3.Zero : pieces[0].PositionHigh);
-
-        foreach (var piece in pieces) {
-            low = Vector3.Min(value1: low, value2: piece.PositionLow);
-            high = Vector3.Max(value1: high, value2: piece.PositionHigh);
+    // The same words prove the error bound, feed the encoder and place the native copy on its storage grid.
+    internal sealed record Positions(PositionGrid Grid, uint[][] Planes) {
+        public static Positions Prepare(IReadOnlyList<SdfMesh> pieces) {
+            var low = pieces.Count == 0 ? Vector3.Zero : pieces[0].PositionLow;
+            var high = pieces.Count == 0 ? Vector3.Zero : pieces[0].PositionHigh;
+            foreach (var piece in pieces) {
+                low = Vector3.Min(low, piece.PositionLow);
+                high = Vector3.Max(high, piece.PositionHigh);
+            }
+            if (pieces.Count != 0 && pieces.All(static piece => piece.BakeCell.Length() / 1024f is > 0f and < float.PositiveInfinity)) {
+                var planes = new uint[pieces.Count][];
+                for (var width = 2; width <= 3; width++) {
+                    var grid = new PositionGrid(low, high, width);
+                    var index = 0;
+                    for (; index < pieces.Count; index++) {
+                        var mesh = pieces[index];
+                        var words = planes[index] ??= new uint[3 * mesh.Positions.Length];
+                        if (!Fits(mesh, grid, words)) { break; }
+                    }
+                    if (index == pieces.Count) { return new(grid, planes); }
+                }
+            }
+            return new(new PositionGrid(low, high, 4), []);
         }
 
-        return new PositionGrid(Low: low, High: high, Width: ((pieces.Count == 0) ? 4 : PositionWidth(high: high, low: low, pieces: pieces)));
+        private static bool Fits(SdfMesh mesh, PositionGrid grid, uint[] words) {
+            var budget = mesh.BakeCell.Length() / 1024f;
+            var positions = mesh.Positions.Span;
+            var steps = Steps(grid.Width);
+            for (var vertex = 0; vertex < positions.Length; vertex++) {
+                var point = positions[vertex];
+                var expanded = Vector3.Zero;
+                for (var axis = 0; axis < 3; axis++) {
+                    var word = Quantize(point[axis], grid.Low[axis], grid.High[axis], grid.Width);
+                    words[axis * positions.Length + vertex] = word;
+                    expanded[axis] = Expand(word, grid.Low[axis], (double)grid.High[axis] - grid.Low[axis], steps);
+                }
+                if (Vector3.Distance(point, expanded) > budget) { return false; }
+            }
+            return true;
+        }
     }
     // Whether a piece's normals are stored as octahedral words: every one is a unit vector.
     private static bool IsOctahedral(ReadOnlySpan<Vector3> normals) {
@@ -43,20 +73,18 @@ internal static class SdfMeshStoreCodec {
 
         return oct;
     }
-    /// <summary>Returns the grid an entry of a mesh stores its positions on, which <see cref="Conform"/> reads again.</summary>
-    /// <param name="mesh">The mesh, whole or chunked.</param>
-    /// <returns>The grid.</returns>
-    internal static PositionGrid GridOf(SdfMesh mesh) => GridOf(pieces: PiecesOf(mesh: mesh));
-    /// <summary>Writes a piece's planes as a decode of the mesh's entry would: positions on the entry's grid and unit
-    /// normals through their octahedral words, the two planes the format stores lossily. The planes are the copy's own,
-    /// written from the mesh and not yet read by anything, so the published mesh is what the store answers without the
-    /// store being read back (<see cref="SdfMeshLibrary.Store"/>).</summary>
-    /// <param name="grid">The mesh's grid (<see cref="GridOf(SdfMesh)"/>).</param>
-    /// <param name="normals">The piece's normals, as copied.</param>
-    /// <param name="positions">The piece's positions, as copied.</param>
-    internal static void Conform(in PositionGrid grid, Span<Vector3> positions, Span<Vector3> normals) {
+    internal static void Conform(Positions stored, int piece, Span<Vector3> positions, Span<Vector3> normals) {
+        var grid = stored.Grid;
         if (grid.Width != 4) {
-            for (var index = 0; (index < positions.Length); index++) { positions[index] = OnGrid(grid: in grid, position: positions[index]); }
+            var words = stored.Planes[piece];
+            for (var axis = 0; axis < 3; axis++) {
+                var low = grid.Low[axis];
+                var extent = (double)grid.High[axis] - low;
+                var steps = Steps(grid.Width);
+                for (var index = 0; index < positions.Length; index++) {
+                    positions[index][axis] = Expand(words[axis * positions.Length + index], low, extent, steps);
+                }
+            }
         }
         if (IsOctahedral(normals: normals)) {
             for (var index = 0; (index < normals.Length); index++) {
@@ -68,19 +96,24 @@ internal static class SdfMeshStoreCodec {
         }
     }
 
-    internal static void Encode(Stream output, UInt128 key, SdfMesh? mesh, int[] materials) {
+    // Streams a mesh's entry to the output and returns the position planes it stored, which the caller's native copy
+    // conforms to (Conform): the one place both are computed, so a published mesh holds exactly what its entry answers.
+    internal static Positions Encode(Stream output, UInt128 key, SdfMesh? mesh, int[] materials) {
         var pieces = PiecesOf(mesh: mesh);
         var canonical = SdfMeshMaterials.Canonical(materials: materials, pieces: pieces);
-        EncodePlanes(output, key, pieces, mesh is { Chunks.Count: > 0 }, GridOf(pieces), materials, canonical, exact: false);
+        var stored = Positions.Prepare(pieces);
+
+        EncodePlanes(output, key, pieces, mesh is { Chunks.Count: > 0 }, stored, materials, canonical, exact: false);
+        return stored;
     }
 
     // A checkpoint feeds later geometry operations. Quantizing it here would make a warm derivation differ from a cold one.
     internal static void EncodeExact(Stream output, UInt128 key, SdfMesh? mesh) => EncodePlanes(
-        output, key, PiecesOf(mesh), mesh is { Chunks.Count: > 0 }, new PositionGrid(default, default, 4), [], [], exact: true);
+        output, key, PiecesOf(mesh), mesh is { Chunks.Count: > 0 }, new Positions(new PositionGrid(default, default, 4), []), [], [], exact: true);
 
-    private static void EncodePlanes(Stream output, UInt128 key, IReadOnlyList<SdfMesh> pieces, bool chunked, PositionGrid grid,
+    private static void EncodePlanes(Stream output, UInt128 key, IReadOnlyList<SdfMesh> pieces, bool chunked, Positions stored,
         int[] materials, int[] canonical, bool exact) {
-        var (low, high, width) = grid;
+        var (low, high, width) = stored.Grid;
         using var payload = new MemoryStream();
 
         using (var writer = new BinaryWriter(payload, System.Text.Encoding.UTF8, leaveOpen: true)) {
@@ -88,7 +121,10 @@ internal static class SdfMeshStoreCodec {
             foreach (var material in canonical) { writer.Write(value: material); }
             writer.Write(value: chunked);
             writer.Write(value: pieces.Count);
-            foreach (var piece in pieces) { WriteMesh(from: materials, high: high, low: low, mesh: piece, to: canonical, width: width, writer: writer, exact: exact); }
+            var map = materials.Length == 0 ? null : new SdfMeshMaterials.Remap(materials, canonical);
+            for (var piece = 0; piece < pieces.Count; piece++) {
+                WriteMesh(writer, pieces[piece], low, high, width, map, exact, width == 4 ? default : stored.Planes[piece]);
+            }
         }
         EncodePayload(output, key, payload.GetBuffer().AsSpan(0, checked((int)payload.Length)));
     }
@@ -122,7 +158,7 @@ internal static class SdfMeshStoreCodec {
 
         protected override void Append(ReadOnlySpan<byte> bytes) => m_hash.Append(source: bytes);
     }
-    private static void WriteMesh(BinaryWriter writer, SdfMesh mesh, Vector3 low, Vector3 high, int width, int[] from, int[] to, bool exact) {
+    private static void WriteMesh(BinaryWriter writer, SdfMesh mesh, Vector3 low, Vector3 high, int width, SdfMeshMaterials.Remap? map, bool exact, ReadOnlySpan<uint> quantized) {
         WriteVector(writer, mesh.BakeCell);
         var positions = mesh.Positions.Span;
 
@@ -130,10 +166,13 @@ internal static class SdfMeshStoreCodec {
         WriteVector(value: low, writer: writer);
         WriteVector(value: high, writer: writer);
         for (var axis = 0; (axis < 3); axis++) {
+            if (width != 4) {
+                WritePlane(writer, quantized.Slice(axis * positions.Length, positions.Length), width);
+                continue;
+            }
             var words = new uint[positions.Length];
-
-            for (var index = 0; (index < words.Length); index++) {
-                words[index] = ((width == 4) ? BitConverter.SingleToUInt32Bits(value: positions[index][axis]) : Quantize(positions[index][axis], low[axis], high[axis], width));
+            for (var index = 0; index < words.Length; index++) {
+                words[index] = BitConverter.SingleToUInt32Bits(positions[index][axis]);
             }
             WritePlane(width: width, words: words, writer: writer);
         }
@@ -158,7 +197,7 @@ internal static class SdfMeshStoreCodec {
             }
         }
         WritePlane(writer, mesh.Indices.Span, ((positions.Length <= 65536) ? 2 : 4));
-        WriteMaterials(writer, mesh.TriangleMaterials.Span, from, to);
+        WriteMaterials(writer, mesh.TriangleMaterials.Span, map);
         writer.Write(value: mesh.Members.Length);
         foreach (var member in mesh.Members.Span) {
             writer.Write(value: member.SlotOffset);
@@ -174,41 +213,8 @@ internal static class SdfMeshStoreCodec {
         foreach (var level in mesh.Levels) {
             writer.Write(value: level.Error);
             WritePlane(writer, level.Indices.Span, ((positions.Length <= 65536) ? 2 : 4));
-            WriteMaterials(writer, level.TriangleMaterials.Span, from, to);
+            WriteMaterials(writer, level.TriangleMaterials.Span, map);
         }
-    }
-    private static int PositionWidth(IReadOnlyList<SdfMesh> pieces, Vector3 low, Vector3 high) {
-        for (var width = 2; (width <= 3); width++) {
-            var fits = true;
-
-            foreach (var piece in pieces) {
-                if (!PositionsFit(high: high, low: low, mesh: piece, width: width)) { fits = false; break; }
-            }
-            if (fits) { return width; }
-        }
-        return 4;
-    }
-    private static bool PositionsFit(SdfMesh mesh, Vector3 low, Vector3 high, int width) {
-        var budget = (mesh.BakeCell.Length() / 1024f);
-
-        if (!(budget > 0) || !float.IsFinite(f: budget)) { return false; }
-        var grid = new PositionGrid(Low: low, High: high, Width: width);
-
-        foreach (var position in mesh.Positions.Span) {
-            if (Vector3.Distance(value1: position, value2: OnGrid(grid: in grid, position: position)) > budget) { return false; }
-        }
-        return true;
-    }
-    // The position a decode of the grid's entry answers for one the encoder was given: the one quantize and expansion the
-    // encoder's fit check and Conform both run, so the budget the encoder holds is the error a published mesh carries.
-    private static Vector3 OnGrid(in PositionGrid grid, Vector3 position) {
-        var (low, high, width) = (grid.Low, grid.High, grid.Width);
-        var divisor = Steps(width: width);
-
-        return new Vector3(
-            x: Expand(divisor: divisor, extent: (((double)high.X) - low.X), low: low.X, value: Quantize(high: high.X, low: low.X, value: position.X, width: width)),
-            y: Expand(divisor: divisor, extent: (((double)high.Y) - low.Y), low: low.Y, value: Quantize(high: high.Y, low: low.Y, value: position.Y, width: width)),
-            z: Expand(divisor: divisor, extent: (((double)high.Z) - low.Z), low: low.Z, value: Quantize(high: high.Z, low: low.Z, value: position.Z, width: width)));
     }
     // The largest quantized value of a position width, which spans its axis's low to high.
     internal static double Steps(int width) => ((1u << (width * 8)) - 1);
@@ -216,20 +222,20 @@ internal static class SdfMeshStoreCodec {
     // The position a quantized value decodes to: the one expansion both the decode and the encoder's fit check run, so the
     // encoder's budget holds for what the decode writes.
     internal static float Expand(uint value, double low, double extent, double divisor) => ((float)(low + ((extent * value) / divisor)));
-    private static void WriteMaterials(BinaryWriter writer, ReadOnlySpan<uint> materials, int[] from, int[] to) {
+    private static void WriteMaterials(BinaryWriter writer, ReadOnlySpan<uint> materials, SdfMeshMaterials.Remap? map) {
         var width = 1;
 
-        foreach (var material in materials) { if (SdfMeshMaterials.Renumber(from: from, material: material, to: to) > byte.MaxValue) { width = 4; break; } }
-        WritePlane(from: from, to: to, width: width, words: materials, writer: writer);
+        foreach (var material in materials) { if ((map?.Renumber(material) ?? material) > byte.MaxValue) { width = 4; break; } }
+        WritePlane(map: map, width: width, words: materials, writer: writer);
     }
-    private static void WritePlane(BinaryWriter writer, ReadOnlySpan<uint> words, int width, int[]? from = null, int[]? to = null) {
+    private static void WritePlane(BinaryWriter writer, ReadOnlySpan<uint> words, int width, SdfMeshMaterials.Remap? map = null) {
         writer.Write(value: ((byte)width));
         writer.Write(value: words.Length);
         var bytes = new byte[checked((words.Length * width))];
         var previous = 0U;
 
         for (var index = 0; (index < words.Length); index++) {
-            var word = ((from is null) ? words[index] : SdfMeshMaterials.Renumber(words[index], from, to!));
+            var word = (map?.Renumber(words[index]) ?? words[index]);
             var delta = unchecked((word - previous));
 
             previous = word;

@@ -47,7 +47,7 @@ internal sealed class SdfMeshMaterialCut {
     private readonly int[] m_site;
     // The site at each contour vertex's position, which a vertex the cut adds at that position (a boundary point that
     // lands on an end) answers to as well.
-    private readonly Dictionary<Vector3, int> m_siteAt;
+    private readonly SdfMeshWeld m_siteAt;
 
     private int[] m_quarters = [];
     private int[] m_vertices = [];
@@ -65,10 +65,10 @@ internal sealed class SdfMeshMaterialCut {
     /// <param name="contour">The contour, split at its creases, in the frame its group bakes in.</param>
     public SdfMeshMaterialCut(SdfContour contour) {
         m_contour = contour;
-        m_siteAt = new Dictionary<Vector3, int>(capacity: contour.VertexCount);
+        m_siteAt = new SdfMeshWeld(contour.VertexCount);
         m_site = new int[contour.VertexCount];
         for (var vertex = 0; (vertex < m_site.Length); vertex++) {
-            m_site[vertex] = (m_siteAt.TryAdd(key: Position(vertex: vertex), value: vertex) ? vertex : m_siteAt[Position(vertex: vertex)]);
+            m_site[vertex] = m_siteAt.Site(Position(vertex), vertex);
         }
     }
 
@@ -189,6 +189,8 @@ internal sealed class SdfMeshMaterialCut {
         if (contour.QuadCount == 0) { return null; }
 
         var positions = new List<Vector3>(capacity: (contour.VertexCount + m_edges.Count));
+        var sites = new List<int>(positions.Capacity);
+        var addedSites = new SdfMeshWeld(m_edges.Count);
         var normals = new List<Vector3>(capacity: (contour.VertexCount + m_edges.Count));
         var indices = new List<uint>(capacity: (6 * contour.QuadCount));
         var triangleMaterials = new List<uint>(capacity: (2 * contour.QuadCount));
@@ -204,6 +206,9 @@ internal sealed class SdfMeshMaterialCut {
         uint Add(Vector3 point, Vector3 normal) {
             var length = normal.Length();
 
+            var vertex = positions.Count;
+            sites.Add(vertex < m_site.Length ? m_site[vertex] :
+                m_siteAt.TryFind(point, out var original) ? original : addedSites.Site(point, vertex));
             positions.Add(item: point);
             normals.Add(item: ((length > 0f) ? (normal / length) : normal));
             Within();
@@ -280,13 +285,13 @@ internal sealed class SdfMeshMaterialCut {
             var key = ((a < b) ? (a, b) : (b, a));
 
             if (!middles.TryGetValue(key: key, value: out var vertex)) {
-                var sites = Key(a: m_siteAt[positions[(int)a]], b: m_siteAt[positions[(int)b]]);
-                var (low, high) = (Position(vertex: sites.Low), Position(vertex: sites.High));
+                var endpoints = Key(sites[(int)a], sites[(int)b]);
+                var (low, high) = (Position(vertex: endpoints.Low), Position(vertex: endpoints.High));
                 var point = Vector3.Lerp(value1: low, value2: high, amount: 0.5f);
 
                 vertex = Add(normal: (normals[(int)a] + normals[(int)b]), point: point);
                 middles.Add(key: key, value: vertex);
-                if ((point != low) && (point != high)) { quartered.Add(item: sites); }
+                if ((point != low) && (point != high)) { quartered.Add(item: endpoints); }
             }
 
             return vertex;
@@ -363,7 +368,7 @@ internal sealed class SdfMeshMaterialCut {
                 for (var side = 0; (side < 3); side++) {
                     var (u, v) = (indices[((3 * at) + side)], indices[((3 * at) + ((side + 1) % 3))]);
 
-                    if (!m_siteAt.TryGetValue(key: positions[(int)u], value: out var siteU) || !m_siteAt.TryGetValue(key: positions[(int)v], value: out var siteV) || !quartered.Contains(item: Key(a: siteU, b: siteV))) {
+                    if (!quartered.Contains(Key(sites[(int)u], sites[(int)v]))) {
                         continue;
                     }
 
@@ -384,7 +389,7 @@ internal sealed class SdfMeshMaterialCut {
             }
         }
 
-        return new SdfMesh(indices: indices.ToArray(), normals: normals.ToArray(), positions: positions.ToArray(), triangleMaterials: triangleMaterials.ToArray());
+        return new SdfMesh(indices: indices.ToArray(), normals: normals.ToArray(), positions: positions.ToArray(), triangleMaterials: triangleMaterials.ToArray()) { BakedSites = sites.ToArray() };
     }
 
     // Where a searched edge's boundary lies, as a fraction of the way from its lower site: an interval still touching an

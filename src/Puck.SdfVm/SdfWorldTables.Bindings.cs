@@ -79,14 +79,35 @@ public sealed partial class SdfWorldTables {
     // Writes a World set of background work as the latest upload's ring slot's World set, with the work's own point
     // table at the bake's points: the set is the work's own, rewritten only while no job of it is in flight, and the
     // buffers it binds are retired only after the upload that follows the work's submission (Retire).
-    internal void WriteBackgroundWorldSet(nint set, ReadOnlySpan<(string Member, IGpuBuffer Buffer)> overrides) {
-        if (!BindsBackgroundWork) { throw new InvalidOperationException(message: "Background work binds the World set only after an upload, before the next pack moves what it binds."); }
-        WriteWorldSet(set: set, slot: m_currentSlot);
-        foreach (var (member, buffer) in overrides) { WriteWorldBuffer(buffer: buffer, member: member, set: set); }
+    internal sealed class BackgroundBindings(nint set) {
+        public nint Set { get; } = set;
+        public long Revision = -1;
+        public IGpuBuffer? Points;
+        public IGpuBuffer? Sampled;
+    }
+
+    internal nint BackgroundWorldSet(BackgroundBindings[] sets, IGpuBuffer points, IGpuBuffer sampled) {
+        if (!BindsBackgroundWork) { throw new InvalidOperationException("Background work needs an uploaded World set."); }
+        var bound = sets[m_currentSlot];
+        var set = bound.Set;
+        if (bound.Revision != m_bindingRevision) {
+            WriteWorldSet(set, m_currentSlot);
+            bound.Points = bound.Sampled = null;
+            bound.Revision = m_bindingRevision;
+        }
+        if (!ReferenceEquals(points, bound.Points)) {
+            WriteWorldBuffer(set, SdfWorldPackage.MeshBakePoints, points);
+            bound.Points = points;
+        }
+        if (!ReferenceEquals(sampled, bound.Sampled)) {
+            WriteWorldBuffer(set, SdfWorldPackage.SampledValues, sampled);
+            bound.Sampled = sampled;
+        }
+        return set;
     }
     // Writes a ring slot's World set: each table's buffer in the slot, the samplers and the glyph atlas, with the sampled
     // filler at an image not set, and the unused-member buffer at the bake's point table and sampled values, which only
-    // background work binds (WriteBackgroundWorldSet).
+    // background work binds (BackgroundWorldSet).
     private void WriteWorldSet(nint set, int slot) {
         WriteWorldBuffer(buffer: m_programRegion.Buffer(slot: slot), member: SdfWorldPackage.ProgramWords, set: set);
         WriteWorldBuffer(buffer: m_dynamicTransformRegion.Buffer(slot: slot), member: SdfWorldPackage.DynamicTransforms, set: set);

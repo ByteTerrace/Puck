@@ -1,7 +1,7 @@
-using System.Collections.Concurrent;
 using System.Globalization;
 using System.Numerics;
 using Puck.Abstractions.Memory;
+using Puck.Hosting.Jobs;
 
 namespace Puck.SdfVm;
 
@@ -335,33 +335,12 @@ public sealed partial record SdfMesh {
             }
         }
 
-        // The storage waiting for a restore, worked off by at most MaxWorkers pool items at once, so a rebuilt region's
-        // thousand restores never fill the pool with blocking reads and decodes.
-        private static readonly ConcurrentQueue<Restorable> Waiting = new();
-        private static readonly int MaxWorkers = Math.Max(val1: 1, val2: (Environment.ProcessorCount / 4));
+        // The storage waiting for a restore, worked off by at most a quarter of the processors' pool items at once, so a
+        // rebuilt region's thousand restores never fill the pool with blocking reads and decodes. Run reports its own
+        // failures (the storage ends Lost).
+        private static readonly BoundedWorkQueue<Restorable> Waiting = new(concurrency: Math.Max(val1: 1, val2: (Environment.ProcessorCount / 4)), run: static restorable => restorable.Run());
 
-        private static int Workers;
-
-        private static void Enqueue(Restorable restorable) {
-            Waiting.Enqueue(item: restorable);
-            TryStartWorker();
-        }
-        private static void TryStartWorker() {
-            while (!Waiting.IsEmpty) {
-                var workers = Volatile.Read(location: ref Workers);
-
-                if (workers >= MaxWorkers) { return; }
-                if (Interlocked.CompareExchange(comparand: workers, location1: ref Workers, value: (workers + 1)) != workers) { continue; }
-                _ = ThreadPool.UnsafeQueueUserWorkItem(callBack: static _ => Work(), state: ((object?)null), preferLocal: false);
-                return;
-            }
-        }
-        private static void Work() {
-            while (Waiting.TryDequeue(result: out var restorable)) { restorable.Run(); }
-            _ = Interlocked.Decrement(location: ref Workers);
-            // An item queued after the last dequeue and before the decrement found every worker busy.
-            TryStartWorker();
-        }
+        private static void Enqueue(Restorable restorable) => Waiting.Enqueue(item: restorable);
 
         private enum State { Resident, Released, Restoring, Lost }
     }

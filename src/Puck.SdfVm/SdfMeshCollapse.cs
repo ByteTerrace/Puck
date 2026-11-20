@@ -169,7 +169,10 @@ public static class SdfMeshCollapse {
         private readonly List<int> m_targetPlaces = [];
         private readonly List<int> m_features = [];
         private readonly List<int> m_seams = [];
-        private readonly List<(double Cost, int Place)> m_targets = [];
+        // Sorted targets in independent runs. A commit invalidates the old source fan and
+        // the old target fan: every edge whose topology or endpoint quadric changed touches one of them.
+        private readonly List<(double Cost, int Place)> m_prices;
+        private readonly (int Start, int Capacity, int Count, bool Ready)[] m_priceRuns;
         private readonly List<int> m_samples = [];
         private readonly List<(int Triangle, double Distance)> m_choices = [];
         private readonly List<int> m_lineNeighbours = [];
@@ -211,18 +214,11 @@ public static class SdfMeshCollapse {
             var indices = mesh.Indices.Span;
             var materials = mesh.TriangleMaterials.Span;
             var vertices = positions.Length;
-            var first = new Dictionary<Vector3, int>(capacity: vertices);
-
+            var sites = mesh.Sites();
             m_placeOf = new int[vertices];
-            for (var vertex = 0; (vertex < vertices); vertex++) {
-                if (!first.TryGetValue(key: positions[vertex], value: out var place)) {
-                    place = first.Count;
-                    first.Add(key: positions[vertex], value: place);
-                }
-                m_placeOf[vertex] = place;
+            for (var vertex = 0; vertex < vertices; vertex++) {
+                m_placeOf[vertex] = sites[vertex] == vertex ? m_places++ : m_placeOf[sites[vertex]];
             }
-
-            m_places = first.Count;
             m_point = new Point[m_places];
             for (var vertex = 0; (vertex < vertices); vertex++) {
                 m_point[m_placeOf[vertex]] = new Point { X = positions[vertex].X, Y = positions[vertex].Y, Z = positions[vertex].Z };
@@ -258,6 +254,8 @@ public static class SdfMeshCollapse {
             m_kind = new byte[m_places];
             m_slideTargets = new int[(SlideTargets * m_places)];
             m_slideCounts = new int[m_places];
+            m_prices = new(3 * m_triangles);
+            m_priceRuns = new (int, int, int, bool)[m_places];
             m_candidateCosts = new double[m_places];
             m_candidatePlaces = new int[m_places];
             m_quadrics = new double[(10 * m_places)];
@@ -379,13 +377,8 @@ public static class SdfMeshCollapse {
             for (var place = 0; (place < m_places); place++) {
                 if (m_kind[place] == Locked) { continue; }
 
-                var best = double.PositiveInfinity;
-
-                Targets(place: place);
-                foreach (var target in m_targetPlaces) {
-                    best = Math.Min(val1: best, val2: Cost(from: place, to: target));
-                }
-                m_candidateCosts[count] = best;
+                var prices = Prices(place);
+                m_candidateCosts[count] = prices.IsEmpty ? double.PositiveInfinity : prices[0].Cost;
                 m_candidatePlaces[count] = place;
                 count++;
             }
@@ -401,17 +394,10 @@ public static class SdfMeshCollapse {
                 if (m_touched[place] == m_pass) { continue; }
                 if ((m_changed[place] == m_pass) && ((m_kind[place] = Kind(penalize: false, place: place)) == Locked)) { continue; }
 
-                // No revision changes before this place's first commit, so an edge refused at its current revisions is
-                // left out before pricing and laying out the fan: the others keep their order.
-                m_targets.Clear();
-                Targets(place: place);
-                foreach (var target in m_targetPlaces) {
-                    if ((m_touched[target] != m_pass) && !Refused(from: place, to: target)) { m_targets.Add(item: (Cost(from: place, to: target), target)); }
-                }
-                if (m_targets.Count == 0) { continue; }
-                m_targets.Sort();
-                PrepareFrom(place: place);
-                foreach (var (_, target) in m_targets) {
+                var prepared = false;
+                foreach (var (_, target) in Prices(place)) {
+                    if (m_touched[target] == m_pass || Refused(place, target)) { continue; }
+                    if (!prepared) { PrepareFrom(place); prepared = true; }
                     var outcome = TryCollapse(cosine: cosine, error: error, from: place, to: target);
 
                     if (outcome == Outcome.Taken) {
@@ -430,6 +416,28 @@ public static class SdfMeshCollapse {
 
             return taken;
         }
+        private ReadOnlySpan<(double Cost, int Place)> Prices(int place) {
+            ref var run = ref m_priceRuns[place];
+            if (!run.Ready) {
+                Targets(place);
+                var count = m_targetPlaces.Count;
+                if (count > run.Capacity) {
+                    run.Start = m_prices.Count;
+                    run.Capacity = Math.Max(count, 2 * run.Capacity);
+                    CollectionsMarshal.SetCount(m_prices, checked(run.Start + run.Capacity));
+                }
+                var prices = CollectionsMarshal.AsSpan(m_prices).Slice(run.Start, count);
+                for (var index = 0; index < count; index++) {
+                    var target = m_targetPlaces[index];
+                    prices[index] = (Cost(place, target), target);
+                }
+                prices.Sort();
+                run.Count = count;
+                run.Ready = true;
+            }
+            return CollectionsMarshal.AsSpan(m_prices).Slice(run.Start, run.Count);
+        }
+
         private bool Refused(int from, int to) {
             if (!m_rejected.TryGetValue(key: PackedIntPair.Pack(high: from, low: to), value: out var rejected) || (PackedIntPair.High(value: rejected) != m_revisions[from])) { return false; }
 
@@ -1188,8 +1196,17 @@ public static class SdfMeshCollapse {
         // measured sample is tracked to its chosen triangle, and the neighbour takes the place's planes.
         private void Commit(List<int> fan, int from, int to, int first, int second, int fromFirst, int toFirst, int toSecond) {
             m_revision++;
+            // The target gains the source quadric even for neighbours outside the source fan.
+            for (var at = m_fanStart[to]; at < m_fanStart[to + 1]; at++) {
+                var triangle = m_fan[at];
+                if (!m_alive[triangle]) { continue; }
+                for (var corner = 3 * triangle; corner < 3 * triangle + 3; corner++) {
+                    m_priceRuns[m_cornerPlace[corner]].Ready = false;
+                }
+            }
             foreach (var triangle in fan) {
                 for (var corner = (3 * triangle); (corner < ((3 * triangle) + 3)); corner++) {
+                    m_priceRuns[m_cornerPlace[corner]].Ready = false;
                     m_revisions[m_cornerPlace[corner]] = m_revision;
                 }
                 m_tracked[triangle] = -1;

@@ -58,41 +58,70 @@ public static class SdfMeshChunks {
         }
         if (bins.Count == 1) { return SdfMeshCollapse.Levels(mesh: mesh, preserveFeatures: preserveFeatures); }
 
-        var parts = new List<SdfMesh>(capacity: bins.Count);
-
-        foreach (var bin in bins.Values) {
-            var vertices = new Dictionary<uint, uint>();
-            var points = new List<Vector3>();
-            var normals = new List<Vector3>();
-            var triangles = new uint[(3 * bin.Count)];
-            var materials = new uint[(mesh.TriangleMaterials.IsEmpty ? 0 : bin.Count)];
-
-            for (var at = 0; (at < bin.Count); at++) {
-                var triangle = bin[at];
-
-                if (materials.Length != 0) { materials[at] = mesh.TriangleMaterials.Span[triangle]; }
-                for (var corner = 0; (corner < 3); corner++) {
-                    var index = indices[((3 * triangle) + corner)];
-
-                    if (!vertices.TryGetValue(key: index, value: out var local)) {
-                        local = ((uint)points.Count);
-                        vertices.Add(key: index, value: local);
-                        points.Add(item: positions[((int)index)]);
-                        if (!mesh.Normals.IsEmpty) { normals.Add(item: mesh.Normals.Span[((int)index)]); }
-                    }
-                    triangles[((3 * at) + corner)] = local;
+        var partitions = bins.Values.ToArray();
+        var vertexCounts = new int[partitions.Length];
+        var seen = new int[positions.Length];
+        var vertexCount = 0;
+        for (var part = 0; part < partitions.Length; part++) {
+            foreach (var triangle in partitions[part]) {
+                foreach (var source in indices.Slice(3 * triangle, 3)) {
+                    if (seen[source] == part + 1) { continue; }
+                    seen[source] = part + 1;
+                    vertexCounts[part]++;
                 }
             }
-            parts.Add(item: new SdfMesh(positions: points.ToArray(), indices: triangles, normals: normals.ToArray(), triangleMaterials: materials) { BakeCell = mesh.BakeCell });
+            vertexCount += vertexCounts[part];
         }
 
-        // Each piece's open edges stay fixed, so the pieces level independently, at once, each into its own
-        // place in the bins' order.
-        var chunks = new SdfMesh[parts.Count];
-
-        _ = Parallel.For(fromInclusive: 0, toExclusive: parts.Count, body: index => chunks[index] = SdfMeshCollapse.Levels(mesh: parts[index], preserveFeatures: preserveFeatures));
-
-        return Join(chunks: chunks);
+        var joinedPositions = new Vector3[vertexCount];
+        var joinedNormals = new Vector3[mesh.Normals.IsEmpty ? 0 : vertexCount];
+        var joinedIndices = new uint[indices.Length];
+        var joinedMaterials = new uint[mesh.TriangleMaterials.Length];
+        var chunks = new SdfMesh[partitions.Length];
+        var localOf = new int[positions.Length];
+        var sourceSites = mesh.Sites();
+        var siteOf = new int[positions.Length];
+        Array.Fill(siteOf, -1);
+        Array.Clear(seen);
+        var vertexBase = 0;
+        var triangleBase = 0;
+        for (var part = 0; part < partitions.Length; part++) {
+            var bin = partitions[part];
+            var localIndices = new uint[3 * bin.Count];
+            var localSites = new int[vertexCounts[part]];
+            var count = 0;
+            for (var at = 0; at < bin.Count; at++) {
+                var triangle = bin[at];
+                if (joinedMaterials.Length > 0) { joinedMaterials[triangleBase + at] = mesh.TriangleMaterials.Span[triangle]; }
+                for (var corner = 0; corner < 3; corner++) {
+                    var source = indices[3 * triangle + corner];
+                    if (seen[source] != part + 1) {
+                        seen[source] = part + 1;
+                        localOf[source] = count;
+                        var vertex = vertexBase + count;
+                        ref var site = ref siteOf[sourceSites[source]];
+                        if (site < vertexBase) { site = vertex; }
+                        localSites[count++] = site - vertexBase;
+                        joinedPositions[vertex] = positions[(int)source];
+                        if (joinedNormals.Length > 0) { joinedNormals[vertex] = mesh.Normals.Span[(int)source]; }
+                    }
+                    localIndices[3 * at + corner] = (uint)localOf[source];
+                    joinedIndices[3 * (triangleBase + at) + corner] = (uint)(vertexBase + localOf[source]);
+                }
+            }
+            chunks[part] = new SdfMesh(
+                joinedPositions.AsMemory(vertexBase, count), localIndices,
+                joinedNormals.Length == 0 ? default : joinedNormals.AsMemory(vertexBase, count),
+                joinedMaterials.Length == 0 ? default : joinedMaterials.AsMemory(triangleBase, bin.Count)) {
+                BakeCell = mesh.BakeCell, BakedSites = localSites,
+            };
+            vertexBase += count;
+            triangleBase += bin.Count;
+        }
+        Parallel.For(0, chunks.Length, part => {
+            chunks[part] = SdfMeshCollapse.Levels(chunks[part], preserveFeatures) with { BakedSites = null };
+        });
+        return new SdfMesh(joinedPositions, joinedIndices, joinedNormals, joinedMaterials) { BakeCell = mesh.BakeCell, Chunks = chunks };
     }
 
     /// <summary>Joins chunks' merged surfaces for whole-group queries. Only chunks are stored and drawn; the joined

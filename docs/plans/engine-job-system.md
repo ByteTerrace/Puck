@@ -877,41 +877,14 @@ limit, waits for a measured need; none of the consumers above has one.
 ### The bake as jobs
 
 Each group stage the bake schedules today (`SdfMeshPathBake.Schedule`)
-becomes a `Bake` job under the bake's rank (section 1); urgent answers
-(`SdfMeshPathBake.RunFirst`) keep their place ahead by a reserved rank.
-Admission of a group's final lattice reads the pool's backlog as wall time
-(`SdfMeshBakeBacklog`: the stages queued and on their way against what the
-workers drain in an admission's lead), which under J1 reads the `Bake` class's
-ready queue and the pool's worker count. The GPU dispatch share is the
-background GPU work's (`SdfGpuWork.GpuShare` of measured GPU time), recorded
-and submitted by the frame thread as GPU work. The CPU stages are bounded
-units under the memory account.
-
-Three handoffs between the GPU and the pool hold the bake's critical path
-today, and each is fixed before or with J1 (in a lane, under the
-[Bake proportional to change](open-items.md#bake-proportional-to-change)
-packet):
-
-- **A lattice answer frees its readback slot only on a pool worker.** The
-  background service has four slots (`SdfGpuWork.SlotCount`), shared with
-  landing and probes. A completed batch's samples are copied out and the slot
-  released inside an answer job (`SdfMeshBakeGpuWork.Complete` queues it with
-  `RunFirst`), so while every worker is in a long contour stage the slot stays
-  busy and the GPU idles behind contouring. Under J1 the copy runs where the
-  owner polls its fence, or on a reader that is not a contour worker, so a
-  slot frees as soon as its fence signals.
-- **Admission pacing measures the wrong lead.** The backlog's lead is meant to
-  be how long the GPU takes to round a lattice (`SdfMeshBakeBacklog`), and a
-  group's lead ends at the first stage queued after admission
-  (`SdfMeshPathBake.Schedule`, `ObserveLead`). That first stage is the
-  sample-checkpoint probe, queued in the same take, so the lead reads
-  microseconds and admission clamps to its floor. The lead is observed at the
-  group's first real stage instead.
-- **Every lattice probes the sample store on the normal queue** before it may
-  dispatch, and on a cold store each probe misses by throwing, so each lattice
-  waits for a free worker and a take. The probe stops after a group's first
-  miss, runs inline or ahead of the stages, and tests existence without an
-  exception.
+becomes a `Bake` job under the descending
+demand comparer (section 1); urgent answers and sample probes (`SdfMeshPathBake.Enqueue` with `urgent`) keep their
+place ahead by a reserved rank. Admission of a group's final lattice reads the
+pool's backlog as wall time (`SdfMeshBakeBacklog`: the stages queued and on
+their way against what the workers drain in an admission's lead), which under
+J1 reads the `Bake` class's ready queue and the pool's worker count. The GPU dispatch share is the background GPU
+work's (`SdfGpuWork.GpuShare` of measured GPU time), recorded and submitted by the frame
+thread as GPU work. The CPU stages are bounded units under the memory account.
 What a bake rebakes is the [Bake proportional to change](open-items.md#bake-proportional-to-change)
 packet's: per-group content keys, the narrowed closure, one store for both
 backends; the scheduler runs whatever that packet leaves to bake.

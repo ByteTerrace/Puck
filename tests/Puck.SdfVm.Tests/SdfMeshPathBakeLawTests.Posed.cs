@@ -1,4 +1,3 @@
-using System.Buffers.Binary;
 using System.Numerics;
 using Puck.Shaders;
 using Puck.SignedDistance;
@@ -138,8 +137,8 @@ public sealed partial class SdfMeshPathBakeLawTests {
     }
     // The bake kernel's answer over a group's two boxes, the member's at the pose the batch carries for its slot.
     private static byte[] AnswerPosed(SdfMeshBakeBatch batch, bool empty, float scale = 1f, int memberGap = 1) {
-        var bytes = new byte[((batch.Samples * SdfWorldPackage.MeshBakeSampleWords) * sizeof(uint))];
-        var sample = 0;
+        var bytes = new byte[batch.OutputBytes];
+        var offset = 0;
 
         for (var lattice = 0; (lattice < batch.Lattices.Length); lattice++) {
             var request = batch.Lattices[lattice];
@@ -152,23 +151,14 @@ public sealed partial class SdfMeshPathBakeLawTests {
             };
             var spacing = request.TapSpacing;
 
-            for (var local = 0; (local < request.Samples); local++, sample++) {
+            for (var local = 0; local < request.Samples; local++) {
                 var position = request.SampleAt(local: local);
 
                 var (value, shape) = (empty ? (1f, 0) : Nearest(count: 2, first: 0, point: position, shapes: shapes));
-                var record = bytes.AsSpan(start: ((sample * SdfWorldPackage.MeshBakeSampleWords) * sizeof(uint)));
-
-                BinaryPrimitives.WriteSingleLittleEndian(destination: record, value: value);
-                if (request.Gradients) {
-                    var gradient = SdfMeshBakeTaps.Gradient(field: point => (empty ? 1f : Nearest(count: 2, first: 0, point: point, shapes: shapes).Value), point: position, spacing: spacing);
-
-                    BinaryPrimitives.WriteSingleLittleEndian(destination: record[8..], value: gradient.X);
-                    BinaryPrimitives.WriteSingleLittleEndian(destination: record[12..], value: gradient.Y);
-                    BinaryPrimitives.WriteSingleLittleEndian(destination: record[16..], value: gradient.Z);
-                } else if (!request.Points.IsEmpty) {
-                    BinaryPrimitives.WriteInt32LittleEndian(destination: record[8..], value: (request.Selector + shape));
-                }
+                var gradient = request.Gradients ? SdfMeshBakeTaps.Gradient(field: point => (empty ? 1f : Nearest(count: 2, first: 0, point: point, shapes: shapes).Value), point: position, spacing: spacing) : Vector3.Zero;
+                request.WriteSample(bytes.AsSpan(offset, request.OutputBytes), local, value, 0, gradient);
             }
+            offset += request.OutputBytes;
         }
 
         return bytes;

@@ -51,6 +51,41 @@ public static class OrderStatistics {
         return ascending[((int)Math.Max(val1: 1L, val2: rank) - 1)];
     }
 
+    /// <summary>Selects the median in place. Equal values occupy a single partition.</summary>
+    public static float SelectMedian(Span<float> samples) {
+        if (samples.IsEmpty) { throw new ArgumentException("A median needs at least one sample.", nameof(samples)); }
+        var middle = samples.Length / 2;
+        var low = 0;
+        var high = samples.Length;
+        var depth = 2 * BitOperations.Log2((uint)samples.Length);
+        while (high - low > 1) {
+            if (depth-- == 0) { samples[low..high].Sort(); break; }
+            var pivot = samples[low + ((high - low) / 2)];
+            var left = low;
+            var right = high;
+            var cursor = low;
+            while (cursor < right) {
+                var order = samples[cursor].CompareTo(pivot);
+                if (order < 0) {
+                    (samples[left], samples[cursor]) = (samples[cursor], samples[left]);
+                    left++;
+                    cursor++;
+                } else if (order > 0) {
+                    right--;
+                    (samples[right], samples[cursor]) = (samples[cursor], samples[right]);
+                } else { cursor++; }
+            }
+            if (middle < left) { high = left; }
+            else if (middle >= right) { low = right; }
+            else { break; }
+        }
+        var upper = samples[middle];
+        if ((samples.Length & 1) != 0) { return upper; }
+        var lower = samples[0];
+        foreach (var value in samples[1..middle]) { if (value.CompareTo(lower) > 0) { lower = value; } }
+        return lower + ((upper - lower) * 0.5f);
+    }
+
     private static T Interpolate<T>(ReadOnlySpan<T> ascending, double fraction) where T : IFloatingPointIeee754<T> {
         if (ascending.IsEmpty) {
             throw new ArgumentException(message: "A quantile needs at least one sample.", paramName: nameof(ascending));

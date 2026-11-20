@@ -49,6 +49,7 @@ public static class SdfMeshBakeBlock {
         }
 
         var first = 0u;
+        var outputWord = 0u;
 
         WriteUInt32(block: block, offset: BakeInstanceMaskWordCountOffset, value: instanceMaskWordCount);
         WriteUInt32(block: block, offset: BakeWorkCounterRowOffset, value: workCounterRow);
@@ -58,12 +59,13 @@ public static class SdfMeshBakeBlock {
             var lattice = batch.Lattices[index];
             var (poseFirst, poseRows) = ((index < batch.Poses.Length) ? batch.Poses[index] : (0, ReadOnlyMemory<Vector4>.Empty));
             WriteLattice(block.Slice(MeshBakeLatticesOffset + (index * LatticeBytes), LatticeBytes), in lattice,
-                first, batch.PoseBase(lattice: index), poseFirst, poseRows.Length);
+                first, batch.PoseBase(lattice: index), poseFirst, poseRows.Length, outputWord);
+            outputWord += (uint)(lattice.OutputBytes / sizeof(uint));
             first += ((uint)lattice.Samples);
         }
     }
 
-    internal static void WriteLattice(Span<byte> block, in SdfMeshBakeRequest lattice, uint first, int poseBase, int poseFirst, int poseRowCount) {
+    internal static void WriteLattice(Span<byte> block, in SdfMeshBakeRequest lattice, uint first, int poseBase, int poseFirst, int poseRowCount, uint outputWord = 0) {
         WriteVector3(block: block, offset: 0, value: lattice.Origin);
         WriteUInt32(block: block, offset: 12, value: first);
         // A grid's spacing places its samples; a points lattice's samples come from the point table, so its second row
@@ -87,5 +89,6 @@ public static class SdfMeshBakeBlock {
         WriteUInt32(block: block, offset: 60, value: unchecked((uint)lattice.FrameSlot));
         // The lettering stroke rule's cell and stroke (sdfGlyph), the group's for every lattice of it.
         WriteVector4(block: block, offset: 64, value: new Vector4(x: lattice.Glyphs.Cell, y: lattice.Glyphs.Stroke, z: (lattice.LivePoses ? 1f : 0f), w: 0f));
+        WriteUInt32(block, offset: 76, value: (outputWord << 2) | lattice.OutputMode);
     }
 }
