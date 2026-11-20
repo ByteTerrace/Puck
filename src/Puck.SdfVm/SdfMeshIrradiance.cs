@@ -3409,7 +3409,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
             // arena from only kept cells would copy the whole hash table at each tiny arena growth while it refills.
             var entries = Math.Max(val1: (kept + 1), val2: ((int)cells));
 
-            while ((((long)entries) * 2) > capacity) { capacity *= 2; }
+            capacity = Math.Max(val1: capacity, val2: checked((int)(((ulong)entries) * 2UL).NextPowerOfTwo()));
 
             var compact = new Table(capacity: capacity, entries: entries);
 

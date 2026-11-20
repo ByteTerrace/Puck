@@ -40,7 +40,7 @@ public static class WorldReleaseReceiptProof {
                 }
             } else if (!allowMissingRoots) { throw new InvalidDataException(message: $"receipt qualification has no authority for '{row.World}'"); }
             inventory.Add(
-                key: $"{row.Owner:D}/{row.World}",
+                key: row.RootKey,
                 value: receipts
             );
         }
@@ -55,7 +55,7 @@ public static class WorldReleaseReceiptProof {
                 Owner: row.Owner,
                 World: row.World
             );
-            var key = $"{row.Owner:D}/{row.World}";
+            var key = row.RootKey;
             var receipts = new SortedDictionary<Guid, WorldAuthorityOperationReceipt>();
             var root = (await store.LoadRootAsync(
                 cancellationToken: token,

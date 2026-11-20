@@ -6,5 +6,9 @@ internal static partial class LawRegistry {
             claim: OrderStatisticsClaims.Quantile,
             id: "order-statistics.quantile-hand-computed"
         ),
+        ClaimCase(
+            claim: OrderStatisticsClaims.Select,
+            id: "order-statistics.select-vs-sort"
+        ),
     ];
 }

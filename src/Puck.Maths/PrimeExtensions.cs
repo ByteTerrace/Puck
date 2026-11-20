@@ -376,7 +376,7 @@ public static partial class PrimeExtensions {
                     : 3UL
                 );
                 var bits = (((cursor - low) >> 1) + 1UL);
-                var words = ((int)((bits + 63UL) >> 6));
+                var words = ((int)bits.CeilingDivide(divisor: 64UL));
                 var tail = ((((ulong)words) << 6) - bits);
 
                 PrimeKernels.MarkWindow(
@@ -432,7 +432,7 @@ public static partial class PrimeExtensions {
                     val2: 4_294_967_295UL
                 );
                 var bits = (((high - cursor) >> 1) + 1UL);
-                var words = ((int)((bits + 63UL) >> 6));
+                var words = ((int)bits.CeilingDivide(divisor: 64UL));
                 var tail = ((((ulong)words) << 6) - bits);
 
                 PrimeKernels.MarkWindow(

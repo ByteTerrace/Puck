@@ -163,16 +163,12 @@ public sealed class WorldKeyLightDirector {
             (definition.KeyLightsRaw is not { } section)
         ) {
             seat.Authored = false;
-            seat.Trackers.Clear();
+            seat.Edges.Clear();
 
             return;
         }
 
-        if (!ReferenceEquals(objA: seat.SeenMirror, objB: mirror) || (seat.SeenLifetime != mirror.Lifetime)) {
-            seat.SeenMirror = mirror;
-            seat.SeenLifetime = mirror.Lifetime;
-            seat.Trackers.Clear();
-        }
+        seat.Edges.Bind(mirror: mirror);
 
         var idle = ToLamp(color: mirror.Color(color: section.Idle, delivered: true, fallback: Vector4.Zero));
         var flash = ToLamp(color: mirror.Color(color: section.Flash, delivered: true, fallback: Vector4.One));
@@ -234,16 +230,10 @@ public sealed class WorldKeyLightDirector {
 
             matching++;
 
-            var flashes = false;
-
-            if (row.FlashSignal is { } signalScalar) {
-                var signal = mirror.Scalar(delivered: true, fallback: 0f, scalar: in signalScalar);
-
-                if (seat.Trackers.TryGetValue(key: row.Id, value: out var last)) {
-                    flashes = (signal != last);
-                }
-                seat.Trackers[row.Id] = signal;
-            }
+            var flashes = (
+                (row.FlashSignal is { } signalScalar) &&
+                seat.Edges.Observe(mirror: mirror, id: row.Id, signal: in signalScalar).HasFlag(flag: SignalEdge.Changed)
+            );
 
             var paints = ((row.Lit is not { } litScalar) || (mirror.Scalar(delivered: true, fallback: 0f, scalar: in litScalar) > 0f));
 
@@ -322,7 +312,7 @@ public sealed class WorldKeyLightDirector {
 
     private sealed class SeatSlot {
         public readonly LightLegendState Legend = new();
-        public readonly Dictionary<string, float> Trackers = new(comparer: StringComparer.Ordinal);
+        public readonly WorldSignalEdges Edges = new();
         public readonly LampColor[] BoardColors = new LampColor[ReferenceBoard.Usages.Length];
         public bool Authored;
         public LightLegendComposer? Composer;
@@ -333,8 +323,6 @@ public sealed class WorldKeyLightDirector {
         public int LitCount;
         public LightLegendPalette? Palette;
         public int RowCount;
-        public int SeenLifetime = -1;
-        public WorldStateMirror? SeenMirror;
     }
     // One lamp per keyboard usage the usage map resolves, so the composer paints a seat's legend with no array present.
     private sealed class ReferenceBoard : ILampArrayDevice {

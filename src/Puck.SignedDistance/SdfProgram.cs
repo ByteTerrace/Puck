@@ -415,6 +415,9 @@ public sealed partial class SdfProgram {
     /// iteration independently derives the same formula (KEEP IN SYNC with sdfInstanceMaskWordCount in
     /// Assets/Shaders/Sdf/field/sdf-program.hlsli).</summary>
     public int InstanceMaskWordCount => InstanceMaskWordCountFor(instanceCount: m_instances.Length);
+    /// <summary>Gets the physical uint stride of one tile's mask entry for this program: <see cref="InstanceMaskWordCount"/>
+    /// plus the per-word summary bits (<see cref="InstanceMaskStorageWordCountFor"/>).</summary>
+    public int InstanceMaskStorageWordCount => InstanceMaskStorageWordCountFor(instanceCount: m_instances.Length);
     /// <summary>Gets the per-object instances this program declared, in declaration order (matches the packed instance
     /// directory's index order — see the type-level remarks). Empty for a zero-instance (flat) program.</summary>
     public IReadOnlyList<SdfInstanceRange> Instances => m_instancesView;

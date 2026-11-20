@@ -1,3 +1,4 @@
+using Puck.Maths;
 namespace Puck.Overlays;
 
 /// <summary>
@@ -314,7 +315,7 @@ public sealed class OverlayChannelLeases {
         TotalElements = ((int)totalElements);
         TotalPanels = ((int)totalPanels);
         TotalTextWords = checked((int)totalTextWords);
-        TextWordCapacity = checked((int)System.Numerics.BitOperations.RoundUpToPowerOf2(value: checked((uint)TotalTextWords)));
+        TextWordCapacity = checked((int)(checked((uint)TotalTextWords)).NextPowerOfTwo());
         m_reservations = new OverlayChannelReservation[Count];
 
         for (var index = 0; (index < wideReservations.Length); index++) {

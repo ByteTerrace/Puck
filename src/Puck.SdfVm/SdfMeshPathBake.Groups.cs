@@ -1,3 +1,4 @@
+using Puck.Maths;
 using System.Collections;
 
 namespace Puck.SdfVm;
@@ -146,7 +147,7 @@ public sealed partial class SdfMeshPathBake {
         private long m_sweep;
 
         // The boxes the next frame's share reads at most.
-        public readonly long Share => Math.Max(val1: SdfMeshTier.MeasureBoxes, val2: ((m_boxes + (SdfMeshTier.MeasureFrames - 1)) / SdfMeshTier.MeasureFrames));
+        public readonly long Share => Math.Max(val1: SdfMeshTier.MeasureBoxes, val2: m_boxes.CeilingDivide(divisor: ((long)SdfMeshTier.MeasureFrames)));
 
         // The group the share starts at, among `count`.
         public readonly int Start(int count) => ((m_at < count) ? m_at : 0);
