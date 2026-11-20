@@ -935,7 +935,7 @@ public static partial class PrimeKernels {
     internal static void MarkWindow(ReadOnlySpan<uint> basePrimes, Span<ulong> bitmap, ulong bits, ulong low) {
         var high = (low + ((bits - 1UL) << 1));
 
-        bitmap[..((int)((bits + 63UL) >> 6))].Clear();
+        bitmap[..((int)bits.CeilingDivide(divisor: 64UL))].Clear();
 
         for (var i = 0; (i < basePrimes.Length); ++i) {
             var prime = ((ulong)basePrimes[i]);
@@ -943,7 +943,7 @@ public static partial class PrimeKernels {
 
             if (start > high) { break; }
             if (start < low) {
-                var quotient = ((low + (prime - 1UL)) / prime);
+                var quotient = low.CeilingDivide(divisor: prime);
 
                 if (0UL == (quotient & 1UL)) { ++quotient; }
 

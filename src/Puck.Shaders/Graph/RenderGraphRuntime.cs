@@ -1,3 +1,4 @@
+using Puck.Abstractions.Collections;
 using System.Diagnostics.CodeAnalysis;
 using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Presentation;
@@ -1751,7 +1752,7 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
     // One completed output of an instance: the frame it belongs to, its published image and the layout it is in, its
     // buffer when it is one, whether it was rendered from a tainted input, and what the image stands for when it is not
     // the instance's own (RenderGraphRuntime.Standing.cs).
-    private readonly record struct Output(long Frame, Surface Image, GpuImageLayout Layout, IGpuBuffer? Buffer, bool Tainted, Standing StandsFor, ulong? StateTick = null, GpuImagePublication Publication = default, ShaderPipelineRenderNode.BufferOutput[]? Buffers = null, GpuImagePublication BufferPublication = default) {
+    private readonly record struct Output(long Frame, Surface Image, GpuImageLayout Layout, IGpuBuffer? Buffer, bool Tainted, Standing StandsFor, ulong? StateTick = null, ReferenceRevision Publication = default, ShaderPipelineRenderNode.BufferOutput[]? Buffers = null, ReferenceRevision BufferPublication = default) {
         public Output ImageOf(string name) {
             foreach (var output in (Buffers ?? [])) {
                 if ((output.Name == name) && (output.Image.ImageHandle != 0)) {
@@ -1767,7 +1768,7 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
             }
             return this with { Image = default };
         }
-        public IGpuBuffer? BufferOf(string? name, out GpuImagePublication publication) {
+        public IGpuBuffer? BufferOf(string? name, out ReferenceRevision publication) {
             publication = BufferPublication;
             if (name is null) { return Buffer; }
             if (Buffers is not null) {

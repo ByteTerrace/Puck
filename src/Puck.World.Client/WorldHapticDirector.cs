@@ -179,9 +179,7 @@ public sealed class WorldHapticDirector {
                 now: now,
                 seat: seat
             );
-            seat.ResetTrackers();
-            seat.SeenMirror = null;
-            seat.SeenLifetime = -1;
+            seat.Edges.Clear();
             seat.RowCount = 0;
             seat.HasGamepad = false;
             seat.HasOutput = false;
@@ -239,15 +237,7 @@ public sealed class WorldHapticDirector {
                 }
             }
 
-            if (mirror is null) {
-                seat.SeenMirror = null;
-                seat.SeenLifetime = -1;
-            } else {
-                seat.SeenMirror = mirror;
-                seat.SeenLifetime = mirror.Lifetime;
-            }
-
-            seat.ResetTrackers();
+            seat.Edges.Clear();
             seat.RowCount = 0;
 
             return;
@@ -260,14 +250,7 @@ public sealed class WorldHapticDirector {
             mirror: mirror
         );
 
-        if (
-            !ReferenceEquals(objA: seat.SeenMirror, objB: mirror) ||
-            (seat.SeenLifetime != mirror.Lifetime)
-        ) {
-            seat.SeenMirror = mirror;
-            seat.SeenLifetime = mirror.Lifetime;
-            seat.ResetTrackers();
-        }
+        seat.Edges.Bind(mirror: mirror);
 
         var seatNumber = PlayerRoster.DisplayNumber(slot: slot);
         var rows = definition.Haptics;
@@ -293,10 +276,6 @@ public sealed class WorldHapticDirector {
             }
 
             matchingRows++;
-
-            var state = seat.GetOrAddRowState(id: row.Id);
-
-            state.SeenSerial = seat.Serial;
 
             if (row.Mode == WorldHapticMode.Level) {
                 var low = ReadScalar(
@@ -345,25 +324,15 @@ public sealed class WorldHapticDirector {
                 seat: seat
             );
 
-            var triggered = false;
+            var edge = seat.Edges.Observe(
+                id: row.Id,
+                value: signal
+            );
 
-            if (!state.Seeded) {
-                state.Seeded = true;
-                state.LastSignal = signal;
-            } else if (row.Mode == WorldHapticMode.Rise) {
-                if ((state.LastSignal <= 0f) && (signal > 0f)) {
-                    triggered = true;
-                }
-
-                state.LastSignal = signal;
-            } else if (row.Mode == WorldHapticMode.Change) {
-                if (signal != state.LastSignal) {
-                    triggered = true;
-                    state.LastSignal = signal;
-                }
-            }
-
-            if (!triggered) {
+            if (!edge.HasFlag(flag: ((row.Mode == WorldHapticMode.Rise)
+                ? SignalEdge.Rose
+                : SignalEdge.Changed
+            ))) {
                 continue;
             }
 
@@ -400,8 +369,6 @@ public sealed class WorldHapticDirector {
         }
 
         seat.RowCount = matchingRows;
-        seat.PruneUnseenRows();
-        seat.Serial++;
 
         if (pulseFired) {
             var low = MathF.Max(x: pulseLow, y: levelLow);
@@ -599,16 +566,9 @@ public sealed class WorldHapticDirector {
         seat.PulseExpiryTimestamp = 0L;
     }
 
-    private sealed class RowState {
-        public float LastSignal;
-        public int SeenSerial;
-        public bool Seeded;
-    }
-
     private sealed class SeatSlot {
+        public readonly WorldSignalEdges Edges = new();
         public readonly WorldStateLease Lease = new();
-        public readonly Dictionary<string, RowState> Rows = new(comparer: StringComparer.Ordinal);
-        public readonly List<string> PruneScratch = [];
 
         public InputDeviceId ActiveDevice;
         public bool HasActiveDevice;
@@ -627,42 +587,11 @@ public sealed class WorldHapticDirector {
         public long PulseExpiryTimestamp;
         public ulong PulsesSent;
         public int RowCount;
-        public int SeenLifetime = -1;
-        public WorldStateMirror? SeenMirror;
-        public int Serial = 1;
 
         public void ClearLevelState() {
             LevelActive = false;
             LevelLow = 0f;
             LevelHigh = 0f;
-        }
-        public RowState GetOrAddRowState(string id) {
-            if (!Rows.TryGetValue(key: id, value: out var state)) {
-                state = new RowState();
-                Rows[id] = state;
-            }
-
-            return state;
-        }
-        public void PruneUnseenRows() {
-            if (Rows.Count == 0) {
-                return;
-            }
-
-            PruneScratch.Clear();
-
-            foreach (var (id, state) in Rows) {
-                if (state.SeenSerial != Serial) {
-                    PruneScratch.Add(item: id);
-                }
-            }
-
-            foreach (var id in PruneScratch) {
-                _ = Rows.Remove(key: id);
-            }
-        }
-        public void ResetTrackers() {
-            Rows.Clear();
         }
     }
 }

@@ -119,19 +119,23 @@ public sealed class DeferredVerbAnswerLawTests {
             ? consoleLink
             : new LoopbackTransport(server: fixture.Server));
         var answers = new List<WorldDeferredVerbAnswer>();
+        var completions = new List<WorldSubmissionResult>();
 
         echoes.Answered += answers.Add;
-        link.SubmitGrant(
-            actor: Principal.Seat(slot: 1),
-            grant: new WorldGrant(
+        _ = link.SubmitEnvelope(
+            principal: Principal.Seat(slot: 1),
+            payload: new WorldSubmissionPayload.Grant(new WorldGrant(
                 Budget: 4,
                 Capability: WorldCapability.Drive,
                 Exclusive: false,
                 Grantee: Principal.Seat(slot: 2),
                 Subject: GrantSubject.Body(index: body)
-            )
+            )),
+            operationId: Guid.Empty,
+            completion: completions.Add
         );
 
+        Assert.Same(WorldSubmissionResult.Ack.Instance, Assert.Single(completions));
         Assert.Equal(actual: answers.Count(predicate: static answer => answer.Counts), expected: counted);
         Assert.Equal(actual: echoes.PendingCount, expected: 0);
     }

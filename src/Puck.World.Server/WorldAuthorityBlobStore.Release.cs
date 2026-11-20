@@ -39,7 +39,7 @@ public sealed partial class WorldAuthorityBlobStore {
         ) {
             return WorldAuthorityStoreOutcome.Failed(detail: reason);
         }
-        var key = $"{identity.Owner:D}/{identity.World}";
+        var key = identity.RootKey;
 
         if (
             (operation.PendingOperationId is not { } operationId) ||

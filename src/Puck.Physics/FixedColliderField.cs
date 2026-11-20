@@ -388,7 +388,7 @@ public static class FixedFieldColliderContact {
 
         if (length > FixedQ4816.Zero) {
             count = ((int)((radius > FixedQ4816.Zero)
-                ? Math.Clamp(value: ((length.Value + (radius.Value - 1L)) / radius.Value), min: 1L, max: MaximumCorePieces)
+                ? Math.Clamp(value: length.Value.CeilingDivide(divisor: radius.Value), min: 1L, max: MaximumCorePieces)
                 : MaximumCorePieces));
         }
 

@@ -720,11 +720,11 @@ public sealed partial class WorldTick {
         var sourceTable = (Host.Input.TryGet(input: out var admittedOwner, principal: inputOwner)
             ? admittedOwner!.Mapping.Channels : body.Channels);
 
-        if (Host.GrantTable.TryGetInputReach(submission.Principal, GrantSubject.Body(index: submission.EntityIndex), out var reach)) {
+        if (Host.GrantTable.TryGetChannelReach(submission.Principal, GrantSubject.Body(index: submission.EntityIndex), sourceTable, out var reach)) {
             for (var ordinal = 0; (ordinal < ChannelLimits.MaxChannels); ordinal++) {
                 if (sourceTable.IsDeclared(ordinal: ordinal) &&
                     ((submission.Intent[ordinal] != FixedQ4816.Zero) || (submission.Input.Image[ordinal] != FixedQ4816.Zero)) &&
-                    !reach.Contains(name: sourceTable.Name(ordinal: ordinal)!)) {
+                    !reach.Contains(ordinal: ordinal)) {
                     return new(verdict, $"input.permission: Drive reach excludes '{sourceTable.Name(ordinal: ordinal)}'");
                 }
             }
@@ -740,9 +740,12 @@ public sealed partial class WorldTick {
         var target = body.Channels;
         var movement = input.Image with { Channels = default };
         var held = default(PlayerIntent);
+        var remap = table.RemapTo(target: target);
 
         for (var ordinal = 0; (ordinal < ChannelLimits.MaxChannels); ordinal++) {
-            if (!table.IsDeclared(ordinal: ordinal) || !target.TryGetOrdinal(name: table.Name(ordinal: ordinal)!, ordinal: out var destination)) { continue; }
+            var destination = remap[ordinal];
+
+            if (destination < 0) { continue; }
             if (table.Shape(ordinal: ordinal) == ChannelShape.Relative) { movement = movement.WithRelative(ordinal: destination, value: input.Image.Channels.Relative(ordinal: ordinal)); } else if (table.IsRole(ordinal: ordinal)) { movement = movement.WithChannel(ordinal: destination, value: target.Quantize(ordinal: destination, value: submission.Intent[ordinal])); } else { held = held.WithChannel(ordinal: destination, value: input.Image[ordinal]); }
         }
         var applied = new WorldAcceptedInput(submission.Tick, submission.EntityIndex, movement, submission.Principal,

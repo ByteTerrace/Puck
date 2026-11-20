@@ -1,4 +1,4 @@
-using Puck.Hosting;
+using Puck.Abstractions.Collections;
 
 namespace Puck.SdfVm;
 
@@ -8,10 +8,10 @@ public sealed partial class SdfWorldTables {
     // screen's mapping bytes. A screen read now or then is compared; one read neither time cannot change the pass.
     // Each pass decides which screens it reads and what a source with no known publication means.
     private sealed class ScreenSourceWatch(SdfWorldTables tables) {
-        private readonly GpuImagePublication[] m_sources = new GpuImagePublication[MaxScreenSurfaces];
+        private readonly ReferenceRevision[] m_sources = new ReferenceRevision[MaxScreenSurfaces];
         private readonly bool[] m_tainted = new bool[MaxScreenSurfaces];
         private readonly bool[] m_renderedScreens = new bool[MaxScreenSurfaces];
-        private readonly GpuImagePublication[] m_renderedSources = new GpuImagePublication[MaxScreenSurfaces];
+        private readonly ReferenceRevision[] m_renderedSources = new ReferenceRevision[MaxScreenSurfaces];
         private readonly bool[] m_renderedTainted = new bool[MaxScreenSurfaces];
         private readonly byte[] m_renderedMappings = new byte[(MaxScreenSurfaces * ScreenMappingStride)];
 
@@ -26,7 +26,7 @@ public sealed partial class SdfWorldTables {
             Array.Clear(array: m_tainted);
         }
         public void Read(int screen) => Screens[screen] = true;
-        public void Observe(int screen, GpuImagePublication publication, bool tainted) {
+        public void Observe(int screen, ReferenceRevision publication, bool tainted) {
             m_sources[screen] = publication;
             m_tainted[screen] |= tainted;
         }

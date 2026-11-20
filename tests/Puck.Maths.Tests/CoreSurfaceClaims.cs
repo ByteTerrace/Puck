@@ -650,6 +650,13 @@ internal static class CoreSurfaceClaims {
         Assert.Equal(expected: 0x85944171F73967E8UL, actual: Fnv1aHash.Compute(values: "foobar"u8));
         Assert.Equal(expected: 0xA430D84680AABD0BUL, actual: Fnv1aHash.Compute(values: "hello"u8));
 
+        // Resume continues a digest an earlier accumulator produced, so folding the tail after it equals one fold of
+        // the whole sequence.
+        var resumed = Fnv1aHash.Resume(value: Fnv1aHash.Compute(values: "foo"u8));
+
+        resumed.Add(values: "bar"u8);
+        Assert.Equal(expected: 0x85944171F73967E8UL, actual: resumed.Value);
+
         // The order sensitivity a published vector set of single characters cannot show on its own: two folds of the
         // same multiset in different orders must differ, so a Compute that summed rather than folded is visible.
         Assert.NotEqual(expected: Fnv1aHash.Compute(values: "ab"u8), actual: Fnv1aHash.Compute(values: "ba"u8));

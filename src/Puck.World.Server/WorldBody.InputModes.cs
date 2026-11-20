@@ -39,11 +39,14 @@ public sealed partial class WorldBody {
         continuing.Clear();
         recencySources.Fill(value: -1);
         Array.Clear(array: m_inputScriptActorScratch);
+        var carried = next.Channels.RemapTo(target: previous.Channels);
+
         foreach (var logical in next.Live) {
             var destination = next.Address(logicalId: logical);
 
             if ((destination < 0) || reset || (!recompiled && !catalog.Keeps(from: previous, logicalId: logical, to: next)) ||
-                !previous.Channels.TryGetOrdinal(name: next.Channels.Name(ordinal: destination)!, ordinal: out var source)) { continue; }
+                (carried[destination] < 0)) { continue; }
+            var source = carried[destination];
             var released = false;
 
             foreach (var decision in decisions) {
@@ -90,8 +93,7 @@ public sealed partial class WorldBody {
                     var destination = next.Address(logicalId: logical);
 
                     if ((destination >= 0) && continuing[destination]) {
-                        _ = previous.Channels.TryGetOrdinal(name: next.Channels.Name(ordinal: destination)!, ordinal: out var source);
-                        image = image.WithChannel(ordinal: destination, value: segment.Intent[source]);
+                        image = image.WithChannel(ordinal: destination, value: segment.Intent[carried[destination]]);
                     }
                 }
             }

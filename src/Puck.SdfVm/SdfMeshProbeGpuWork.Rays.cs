@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Memory;
+using Puck.Maths;
 
 namespace Puck.SdfVm;
 
@@ -376,7 +377,7 @@ internal sealed partial class SdfMeshProbeGpuWork {
     // backs off for the scene so the software walk's queries are taken first. Under the gate.
     private void AbandonStructures(StructureJob job) {
         m_structureInFlight = false;
-        m_structureBackoff = ((m_structureBackoff == TimeSpan.Zero) ? LeastStructureBackoff : TimeSpan.FromTicks(Math.Min(MostStructureBackoff.Ticks, 2 * m_structureBackoff.Ticks)));
+        m_structureBackoff = TimeSpan.FromTicks(ExponentialBackoff.Next(ceiling: MostStructureBackoff.Ticks, current: m_structureBackoff.Ticks, first: LeastStructureBackoff.Ticks));
         m_structureRetryAt = Stopwatch.GetTimestamp() + (long)(m_structureBackoff.TotalSeconds * Stopwatch.Frequency);
         m_structureBackoffScene?.Dispose();
         m_structureBackoffScene = m_scene?.Acquire();

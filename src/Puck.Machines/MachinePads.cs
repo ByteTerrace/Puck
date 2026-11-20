@@ -1,3 +1,4 @@
+using Puck.Maths;
 using System.Runtime.CompilerServices;
 using Puck.Abstractions.Machines;
 
@@ -83,13 +84,5 @@ public struct MachinePads : IEquatable<MachinePads> {
     public override readonly bool Equals(object? obj) =>
         ((obj is MachinePads other) && Equals(other: other));
     /// <inheritdoc/>
-    public override readonly int GetHashCode() {
-        var hash = new HashCode();
-
-        for (var seat = 0; (seat < MaxSeats); ++seat) {
-            hash.Add(value: this[seat]);
-        }
-
-        return hash.ToHashCode();
-    }
+    public override readonly int GetHashCode() => SequenceHash.Of((ReadOnlySpan<MachinePadState>)this);
 }

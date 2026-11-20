@@ -64,7 +64,7 @@ public static class CellSetLowering {
 
     private static CellSet Combine(CellSet left, CellSet right, bool union) {
         var length = left.Length;
-        var wordCount = CellSet.WordCount(length: length);
+        var wordCount = length.CeilingDivide(divisor: 64);
         ulong[]? tail = null;
 
         if (wordCount > 4) {
@@ -86,7 +86,7 @@ public static class CellSetLowering {
         );
     }
     private static CellSet Complement(CellSet set, int elements) {
-        var wordCount = CellSet.WordCount(length: elements);
+        var wordCount = elements.CeilingDivide(divisor: 64);
         ulong[]? tail = null;
 
         if (wordCount > 4) {
@@ -114,7 +114,7 @@ public static class CellSetLowering {
         return admitted.LowMask<ulong>();
     }
     private static CellSet Full(int elements) {
-        var wordCount = CellSet.WordCount(length: elements);
+        var wordCount = elements.CeilingDivide(divisor: 64);
         ulong[]? tail = null;
 
         if (wordCount > 4) {
@@ -311,7 +311,7 @@ public static class CellSetLowering {
     }
     private static bool TryLowerSource(StateArena arena, CellSetExpression expression, int elements, in ArenaTime time, out CellSet set, out string reason) {
         set = default;
-        var wordCount = CellSet.WordCount(length: elements);
+        var wordCount = elements.CeilingDivide(divisor: 64);
         var word0 = 0UL;
         var word1 = 0UL;
         var word2 = 0UL;

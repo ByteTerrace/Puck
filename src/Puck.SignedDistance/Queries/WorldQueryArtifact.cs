@@ -239,11 +239,7 @@ public sealed class WorldQueryArtifact {
             value: cellCount
         );
 
-        // Shift-then-carry rather than (cellCount + 63) / 64: the rounding addend overflows int for the last 63 cell
-        // counts and turns the largest grids into negative word counts.
-        return ((cellCount >> 6) + (((cellCount & 63) == 0)
-            ? 0
-            : 1));
+        return cellCount.CeilingDivide(divisor: 64);
     }
     /// <summary>Returns a value indicating whether the cell at <paramref name="cellIndex"/> is blocked. An index
     /// outside the grid reads as not blocked — the "out of bounds reads as clear" contract this artifact inherits

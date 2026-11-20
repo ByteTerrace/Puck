@@ -139,12 +139,10 @@ appears in an expression, so it is never mistaken for a machine or state name.
 arithmetic) lives in the core; *which* field of a given vocabulary is
 dimensioned is that vocabulary's own table. A unit suffix on a field the table
 doesn't cover is **PUCK024**; a unit the field's own dimension doesn't admit is
-**PUCK025**. The one place the core itself asserts a dimension regardless of
-vocabulary is `schedule <row> in <N><unit>`, where the grammar — not a field
-name — says the operand is a time, and the unit must be one the seconds
-dimension admits. `schedule ... in` needs a literal number-with-unit at that
-position; a bare identifier there (even one bound by `let` to a seconds value)
-is a parse error, not a unit-conversion one.
+**PUCK025**. `schedule <row> in <delay>` takes any value expression the call
+form's `delaySeconds` argument takes (a number with or without a unit, a name, a
+template parameter, arithmetic), converts it against that same field, and lowers
+to the same effect as `scheduleState(state: <row>, delaySeconds: <delay>)`.
 
 ## Strings
 

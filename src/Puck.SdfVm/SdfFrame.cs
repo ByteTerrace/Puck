@@ -1,3 +1,4 @@
+using Puck.Abstractions.Collections;
 using Puck.Abstractions.Cameras;
 using Puck.Abstractions.Counting;
 using Puck.Abstractions.Gpu;
@@ -6,12 +7,6 @@ using Puck.Hosting;
 using Puck.SignedDistance;
 
 namespace Puck.SdfVm;
-
-// Readings belong to the same view only while its source object and cut revision both stand.
-internal readonly record struct SdfViewCut(long Revision, object? Source) {
-    public bool Equals(SdfViewCut other) => Revision == other.Revision && ReferenceEquals(Source, other.Source);
-    public override int GetHashCode() => HashCode.Combine(Revision, System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(Source!));
-}
 
 /// <summary>Describes one viewport slot of an SDF frame: an SDF camera render into the view's own output image, and the
 /// normalized display region a host places that output in.</summary>
@@ -42,7 +37,8 @@ public readonly record struct SdfViewSnapshot(CameraSnapshot Camera, NormalizedR
     /// readings in flight for it) starts a new generation when another source or cut takes the slot, so state one view
     /// left never lands on another (<see cref="SdfViewExposures.GenerationOf"/>).</summary>
     public object? Source { get; init; }
-    internal SdfViewCut Cut => new(CutRevision, Source);
+    // Readings belong to the same view only while its source object and cut revision both stand.
+    internal ReferenceRevision Cut => new(Source, CutRevision);
 
     /// <summary>The pixels high the mesh demand measures the view's projected sizes in (<see cref="SdfMeshDemand"/>)
     /// when the view renders into an image apart from the residency's output: a camera filmed for a screen its own

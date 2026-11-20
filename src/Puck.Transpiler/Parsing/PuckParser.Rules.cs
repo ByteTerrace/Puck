@@ -3,7 +3,6 @@ using Puck.State;
 using Puck.Transpiler.Ast;
 using Puck.Transpiler.Diagnostics;
 using Puck.Transpiler.Lowering;
-using Puck.Transpiler.Units;
 
 namespace Puck.Transpiler.Parsing;
 
@@ -1157,50 +1156,14 @@ public static partial class PuckParser {
                     message: "Expected 'in' after 'schedule <row>'"
                 );
             }
-            SkipWhiteSpace(context: context);
-            var literal = ParseNumberWithOptionalUnit(context: context);
-            var delay = DecimalValues.FromLiteral(literal: literal);
-
-            if (literal.Unit is null) {
-                diagnostics?.ReportError(
-                    code: PuckDiagnosticCodes.ScheduleDelayUnit,
-                    message: "'schedule ... in' requires a number carrying a time unit",
-                    span: new SourceSpan(
-                        literal.Offset,
-                        literal.Length,
-                        literal.Line,
-                        literal.Column
-                    )
-                );
-            } else if (UnitConversion.TryConvert(
-                UnitDimension.Seconds,
-                ((double)delay),
-                literal.Unit,
-                out var seconds
-            )) {
-                delay = DecimalValues.FromDouble(value: seconds);
-            } else {
-                var accepted = string.Join(
-                    "/",
-                    UnitConversion.AcceptedUnits(dimension: UnitDimension.Seconds)
-                );
-
-                diagnostics?.ReportError(
-                    code: PuckDiagnosticCodes.ScheduleDelayUnit,
-                    message: $"'schedule ... in' accepts {accepted}, not '{literal.Unit}'",
-                    span: new SourceSpan(
-                        literal.Offset,
-                        literal.Length,
-                        literal.Line,
-                        literal.Column
-                    )
-                );
-            }
+            // The delay is the value `scheduleState(delaySeconds: ...)` takes, read by the same member grammar, so a
+            // parameter, a name or arithmetic works here as it does in the call form.
+            var delay = ParseMemberValue(context: context);
             var len = (cursor.Offset - startOffset);
 
             return new ScheduleStatementNode(
                 Column: col,
-                DelaySeconds: delay,
+                Delay: delay,
                 Length: len,
                 Line: line,
                 Offset: startOffset,

@@ -346,22 +346,6 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
             );
         }
     }
-    public bool TryCredential(int bodyIndex, out string sourceAuthority, out WorldMobilityIdentity mobility) {
-        if (TryRouteCredential(
-            bodyIndex: bodyIndex,
-            credential: out var credential
-        )) {
-            sourceAuthority = credential.SourceAuthority;
-            mobility = credential.Mobility;
-
-            return true;
-        }
-
-        sourceAuthority = string.Empty;
-        mobility = default;
-
-        return false;
-    }
     public ValueTask<(WorldAuthorityRouteDescription? Route, string Reason)> DescribeRouteAsync(int bodyIndex) =>
         TryRouteCredential(bodyIndex, out var credential) ? DescribeRouteAsync(credential) :
             new((null, $"forwarded body:{bodyIndex} has no committed destination credential"));
@@ -414,7 +398,10 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
     }
     // Forwards one submission over the routed lane and answers its completion with the destination's typed result,
     // which a destination sends once its own verdict exists (a buffered mutation's at its tick boundary).
-    internal bool TryForwardSubmission(in WorldRemoteRouteCredential credential, WorldSubmissionPayload payload, Guid operationId, Action<WorldSubmissionResult> completion, out string reason) {
+    internal bool TryForwardSubmission(in WorldRemoteRouteCredential credential, WorldSubmissionPayload payload, Guid operationId, Action<WorldSubmissionResult> completion, out string reason) =>
+        TrySendSubmission(this, in credential, payload, operationId, completion, out reason);
+
+    internal static bool TrySendSubmission(IWorldRoutedRequests authority, in WorldRemoteRouteCredential credential, WorldSubmissionPayload payload, Guid operationId, Action<WorldSubmissionResult> completion, out string reason) {
         ArgumentNullException.ThrowIfNull(argument: completion);
 
         if (!Puck.World.Protocol.WorldFrameCodec.TryEncode(
@@ -428,8 +415,7 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
         }
 
         var mobility = credential.Mobility;
-        var target = (m_submissionAuthority ?? this);
-        var pending = target.AnswerAsync(
+        var pending = authority.AnswerAsync(
             sourceAuthority: credential.SourceAuthority,
             kind: WorldFederationRequest.Submission,
             body: WorldFederationCodec.EncodeSubmission(
@@ -444,14 +430,21 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
         return true;
 
         async Task CompleteAsync() {
-            var answer = await pending.ConfigureAwait(false);
-            var detail = answer.Describe();
-            if (answer.Kind == WorldFederationResponse.Completion &&
-                TryReadCompletion(answer.Body, out var result, out detail) && result is not null) {
-                completion(result);
-            } else {
-                completion(new WorldSubmissionResult.Refusal(WorldFederatedServerLink.CompletionUnavailableCode, detail));
+            WorldSubmissionResult? result = null;
+            string detail;
+
+            try {
+                var answer = await pending.ConfigureAwait(false);
+                if (answer.Kind == WorldFederationResponse.Completion) {
+                    _ = TryReadCompletion(answer.Body, out result, out detail);
+                } else {
+                    detail = answer.Describe();
+                }
+            } catch (Exception exception) {
+                detail = exception.Message;
             }
+
+            completion(result ?? new WorldSubmissionResult.Refusal(WorldFederatedServerLink.CompletionUnavailableCode, detail));
         }
     }
 

@@ -41,5 +41,26 @@
         "Absolute": ""
       }
     ]
+  },
+  {
+    "Id": "order-statistics.select-vs-sort",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.OrderStatistics",
+        "Name": "Select"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "OrderStatistics.Select at every rank of 257 values shaped sorted, reversed, all equal, organ pipe, sawtooth, three distinct values and a seeded shuffle",
+        "Against": "the same rank of a sorted copy; every value before the rank is no greater than the result and every value after it is no smaller; a rank at the length and a negative rank are refused",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
   }
 ]

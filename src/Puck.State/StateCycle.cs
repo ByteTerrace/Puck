@@ -320,42 +320,13 @@ public sealed record StateCycle(
         (Power == other.Power) &&
         (Output == other.Output) &&
         (TicksPerStep == other.TicksPerStep) &&
-        SameWord(
-            left: Word,
-            right: other.Word
+        SequenceEqualityComparer<int>.Instance.Equals(
+            x: Word,
+            y: other.Word
         ));
     /// <inheritdoc/>
-    public override int GetHashCode() {
-        var hash = new HashCode();
+    public override int GetHashCode() => HashCode.Combine(Power, Output, TicksPerStep, SequenceHash.Of(Word));
 
-        hash.Add(value: Power);
-        hash.Add(value: Output);
-        hash.Add(value: TicksPerStep);
-
-        if (Word is { } letters) {
-            foreach (var letter in letters) { hash.Add(value: letter); }
-        }
-
-        return hash.ToHashCode();
-    }
-
-    private static bool SameWord(IReadOnlyList<int>? left, IReadOnlyList<int>? right) {
-        if (ReferenceEquals(
-            objA: left,
-            objB: right
-        )) { return true; }
-        if (
-            (left is null) ||
-            (right is null) ||
-            (left.Count != right.Count)
-        ) { return false; }
-
-        for (var index = 0; (index < left.Count); index++) {
-            if (left[index] != right[index]) { return false; }
-        }
-
-        return true;
-    }
     // The generator applications reached at a tick: whole steps since the epoch (with the carried substep), reduced
     // modulo the order before the power multiplies them, so no tick count can overflow the arithmetic.
     private long Rotation(ulong currentTick, long epochTick, long substepTicks) {

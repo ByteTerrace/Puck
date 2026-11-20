@@ -7,6 +7,58 @@ internal static class OrderStatisticsClaims {
 
     public static string? Quantile() => (QuantileHandComputed() ?? QuantileRefusals());
 
+    public static string? Select() {
+        // Shapes a naive quickselect degrades on (sorted, reversed, all equal, organ pipe, sawtooth, few distinct
+        // values) beside a seeded shuffle, each selected at every rank and read against the sorted copy.
+        const int Length = 257;
+        var random = new Random(Seed: 20240611);
+        Func<int, int>[] shapes = [
+            static index => index,
+            static index => (Length - index),
+            static index => 7,
+            static index => ((index < (Length / 2)) ? index : (Length - index)),
+            static index => (index % 16),
+            static index => (index % 3),
+            index => random.Next(maxValue: 1000),
+        ];
+
+        foreach (var shape in shapes) {
+            var original = Enumerable.Range(start: 0, count: Length).Select(selector: shape).ToArray();
+            var sorted = original.Order().ToArray();
+
+            for (var rank = 0; (rank < Length); rank++) {
+                var values = ((int[])original.Clone());
+                var selected = OrderStatistics.Select(values: values.AsSpan(), rank: rank);
+
+                if (selected != sorted[rank]) {
+                    return $"Select of rank {rank} returned {selected}, but the sorted copy holds {sorted[rank]}";
+                }
+                for (var index = 0; (index < Length); index++) {
+                    if ((index < rank) && (values[index] > selected)) { return $"rank {rank}: a value after the pivot sits before the rank at {index}"; }
+                    if ((index > rank) && (values[index] < selected)) { return $"rank {rank}: a value before the pivot sits after the rank at {index}"; }
+                }
+            }
+        }
+
+        var single = new[] { 5 };
+
+        if (OrderStatistics.Select(values: single.AsSpan(), rank: 0) != 5) { return "a single value is its own rank 0"; }
+        if (!Throws<ArgumentOutOfRangeException>(action: static () => OrderStatistics.Select(values: new[] { 1, 2 }.AsSpan(), rank: 2))) { return "a rank at the length is not refused"; }
+        if (!Throws<ArgumentOutOfRangeException>(action: static () => OrderStatistics.Select(values: new[] { 1, 2 }.AsSpan(), rank: -1))) { return "a negative rank is not refused"; }
+
+        return null;
+    }
+
+    private static bool Throws<TException>(Action action) where TException : Exception {
+        try {
+            action();
+        } catch (TException) {
+            return true;
+        }
+
+        return false;
+    }
+
     private static string? QuantileHandComputed() {
         var tens = Enumerable.Range(start: 1, count: 10).Select(selector: static value => ((double)value)).ToArray();
         var thousand = Enumerable.Range(start: 1, count: 1000).Select(selector: static value => ((double)value)).ToArray();
