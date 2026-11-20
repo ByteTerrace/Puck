@@ -5139,7 +5139,16 @@ Every `Puck.World` process the CLI starts goes through one launch, `WorldLaunch`
 
 `WorldWorkHold` shares an execution hold among live Worlds of the same resource, holder and lane, including parallel test workers. Each joining start waits for headroom on its own readings without giving up a sibling's hold. A start beneath an already executing lease (this process holding it for another lane, or an ancestor, including an outer `puck lease`) waits like any other: only the reservation made under a lease's own guard is a single reading, and a start is refused early only when it can never fit the machine, named in the refusal. A start's own bound (`puck_world_start`'s `timeoutSeconds`) spans the lease queue and the headroom wait. Device admission also needs an idle GPU apart from the waiting process's own Worlds. The admission reserves growth only while a process is still growing: it tapers
 the unused reserve over one minute without a material allocation (64 MB),
-releasing it entirely at the plateau and restoring it if growth resumes. A World
+releasing it entirely at the plateau and restoring it if growth resumes. A start that has gone idle
+releases its reserve too: one that used under `HostStartTracker.BusyCpuSeconds` of CPU over a
+`HostStartTracker.Plateau` (a hung test run, whose private bytes may still wobble past the material step and so never
+plateau by memory alone) holds what it holds now and nothing more is expected of it. The tracker that sees the window
+pass marks the start idle for the whole machine (`StartIdleness`, a file named by process id and start ticks under
+`start-idle` in the lease root, holding the idle-since time and the kind), any observer that sees the start use CPU
+again removes the mark, and a heavy suite no longer waits for the idle run to exit: an idle run does not hold the
+machine's one heavy slot, since the memory it holds is already in the headroom a start is admitted by. Admission
+never stops or times out the process; its owner decides that. `puck lease list` and `puck host load` name it
+(`idle since`). A World
 that reports ready also releases its reserve: the launch reads the World's output and marks it ready (`WorldReadiness`, a mark beside the leases) once a headless World answers on its console or publishes its attachment, or a device World's renderer is ready or its bakes settle, and from then on its actual usage is what counts. Each start names its kind (a windowed World, a headless World, or a `--test-batch` replica).
 `HostStartTracker` keeps, per kind, the private-byte, private working-set and working-set peaks of its last ten observed
 processes (plateaued, or finished after a full plateau window; a shorter run counts only to raise a kind that has
@@ -5182,12 +5191,17 @@ gpu: held by <lane-a> timing run (lane <lane-a>) for <time>; 2 queued
   1. <lane-b> gpu (lane <lane-b>) waiting <time>; lane 1 of 2 in the round, 0 ahead
   2. <lane-a> retime (lane <lane-a>) waiting <time>; lane 2 of 2 in the round, 1 ahead
 heavy: idle
+idle start: HeavySuite PID <pid> has used no CPU for <time>; admission no longer waits for it to grow or exit
 ```
+
+The last line appears for each tracked start (a heavy test run or a World) that has used no CPU for a plateau
+(`StartIdleness`); it is how a hung test run shows, and the verb reads the marks without removing any.
 
 `puck lease list --json` writes one JSON object per lease instead: `lease`,
 `holder`, `lane`, `checkout`, `since`, `alive`, its `queue` in admission order
 (each waiter's `holder`, `lane`, `checkout`, `since`, `ahead`, `position` and
 `lanes`, plus `admissionBlocked` for a parked ticket), and the `recordedProtocol` and `protocol`.
+An idle start follows as its own object: `idleStart` (its kind), `processId` and `since`.
 
 ### `puck lease quiet`—a settle window
 

@@ -19,8 +19,9 @@ namespace Puck.Cli.Host;
 /// advisory: a step admitted over the CPU threshold runs, and the admission prints the load it ran under. A step that
 /// opens a device also waits for an idle GPU; any other step never waits on a GPU holder. A heavy suite
 /// (<see cref="HostProcesses.IsHeavyTestAssembly"/>) also waits while another process runs one, machine-wide, since two
-/// at once exhaust memory; the waiting process's own runs never hold it back. A wait is the host's timed wait on the
-/// caller's token, never a spin.</summary>
+/// at once exhaust memory; the waiting process's own runs never hold it back, and neither does a run that has gone idle
+/// (<see cref="HostStartTracker"/>: no CPU use for a window), whose growth admission no longer expects either. A wait is
+/// the host's timed wait on the caller's token, never a spin.</summary>
 public static class HostAdmission {
     /// <summary>How long a step waits before it is refused.</summary>
     public static readonly TimeSpan Timeout = TimeSpan.FromMinutes(minutes: 30);
@@ -79,7 +80,7 @@ public static class HostAdmission {
         var shortfalls = Shortfalls(reading: reading, thresholds: thresholds, demand: demand);
 
         return (
-            $"no memory headroom: {string.Join(separator: "; ", values: shortfalls.Select(selector: static shortfall => $"{shortfall.Reading} (admission needs {shortfall.Need})"))}{(demand.GrowthGb > 0 ? "; running starts: " + string.Join(", ", (reading.Starts ?? []).Select(start => $"{start.Kind} PID {start.Id} private={start.PrivateGb:0.0}GB ready={start.Ready}")) : string.Empty)}",
+            $"no memory headroom: {string.Join(separator: "; ", values: shortfalls.Select(selector: static shortfall => $"{shortfall.Reading} (admission needs {shortfall.Need})"))}{(demand.GrowthGb > 0 ? "; running starts: " + string.Join(", ", (reading.Starts ?? []).Select(start => $"{start.Kind} PID {start.Id} private={start.PrivateGb:0.0}GB ready={start.Ready}{start.IdleNote}")) : string.Empty)}",
             $"memory headroom: {string.Join(separator: ", ", values: shortfalls.Select(selector: static shortfall => shortfall.Reading))}"
         );
     }
