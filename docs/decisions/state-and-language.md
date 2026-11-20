@@ -806,6 +806,14 @@ dropped at any time without moving a hash.
   the hazard analysis (`RuleHazards`) as its conflict graph.
 - *Wall-clock budgets per rule*: a timing is not deterministic and not
   comparable across machines; the sheet prices in work units.
+- *DBSP's delta idea, kept as open work and not set aside.* The state-of-the-art
+  audit ([the record](../plans/state-of-the-art/audit.md#14-rule-scheduling-re-judges-every-key))
+  placed version-pushed rule scheduling ahead of the engines it compared, and
+  proposed one extension: per-key versions in the moved feed, so a keyed sweep's
+  due set is the keys that changed. It applies the delta to the due list and
+  leaves the evaluator alone, so it does not meet the objection to a
+  differential program above ([the plan](../plans/state-and-language.md#open-items)
+  holds the step).
 - *Speculating the due list's gates on the pool*, committing in order, costs a
   fork's dispatch and join, a partition-owned evaluation context and
   version-validated reuse. On the debug world most evaluations that still run
