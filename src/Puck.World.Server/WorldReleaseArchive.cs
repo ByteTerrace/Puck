@@ -27,9 +27,14 @@ public sealed class WorldReleaseArchive {
         m_maximumFileBytes = maximumFileBytes;
     }
 
+    /// <summary>The key prefix, inside the owner's container, under which every retained object sits at its full
+    /// lowercase SHA-256 hex digest. A reader outside .NET (a worker's bootstrap reading with its own identity)
+    /// appends the digest to this prefix and verifies the bytes against it.</summary>
+    public const string ContentKeyPrefix = (WorldOwnedWorldSync.HostedPrivateNamespace + "/releases/content/");
+
     private ObjectBlobAddress ContentAddress(string pin) => new(
         m_owner,
-        $"{WorldOwnedWorldSync.HostedPrivateNamespace}/releases/content/{Digest(pin: pin)}"
+        (ContentKeyPrefix + Digest(pin: pin))
     );
     private static WorldReleaseManifest Decode(ReadOnlySpan<byte> bytes, string expectedIdentity) {
         VerifyPin(
@@ -171,19 +176,50 @@ public sealed class WorldReleaseArchive {
             key: relativePath,
             value: out var pin
         )) { throw new InvalidDataException(message: $"release does not declare '{relativePath}'"); }
-        var found = (await m_store.ReadAsync(
+        return (await ReadContentAsync(
+            cancellationToken: cancellationToken,
+            pin: pin
+        ).ConfigureAwait(continueOnCapturedContext: false)
+            ?? throw new InvalidDataException(message: $"retained release file '{relativePath}' is missing"));
+    }
+    /// <summary>Reads one immutable object by its full pin and rechecks the bytes against it.</summary>
+    /// <param name="pin">The full content pin (<c>sha256/</c> and 64 lowercase hexadecimal digits) of the object.</param>
+    /// <param name="cancellationToken">The token that cancels the read.</param>
+    /// <returns>The verified bytes, or <see langword="null"/> when no object is retained under the pin.</returns>
+    /// <exception cref="InvalidDataException">The pin is malformed, or the object exceeds the byte budget or does not
+    /// match its pin.</exception>
+    public async Task<ReadOnlyMemory<byte>?> ReadContentAsync(string pin, CancellationToken cancellationToken = default) {
+        var found = await m_store.ReadAsync(
             m_target,
             ContentAddress(pin: pin),
             cancellationToken
-        ).ConfigureAwait(continueOnCapturedContext: false)
-            ?? throw new InvalidDataException(message: $"retained release file '{relativePath}' is missing"));
+        ).ConfigureAwait(continueOnCapturedContext: false);
 
-        if (found.Content.Length > m_maximumFileBytes) { throw new InvalidDataException(message: "retained release file exceeds its byte budget"); }
+        if (found is not { } content) { return null; }
+        if (content.Content.Length > m_maximumFileBytes) { throw new InvalidDataException(message: "retained release file exceeds its byte budget"); }
         VerifyPin(
-            bytes: found.Content.Span,
+            bytes: content.Content.Span,
             expected: pin
         );
-        return found.Content;
+        return content.Content;
+    }
+    /// <summary>Retains bytes as an immutable object under their full pin. Retaining the same bytes again is a no-op;
+    /// different bytes can never replace an object.</summary>
+    /// <param name="bytes">The bytes to retain; at most the archive's per-file byte budget.</param>
+    /// <param name="cancellationToken">The token that cancels the write.</param>
+    /// <exception cref="InvalidDataException"><paramref name="bytes"/> exceeds the byte budget, or a different object
+    /// already sits under its pin.</exception>
+    /// <returns>The full pin the bytes are retained under.</returns>
+    public async Task<string> SaveContentAsync(ReadOnlyMemory<byte> bytes, CancellationToken cancellationToken = default) {
+        if (bytes.Length > m_maximumFileBytes) { throw new InvalidDataException(message: "release content exceeds its byte budget"); }
+        var pin = ContentPin.Compute(content: bytes.Span).ToString();
+
+        await WriteImmutableAsync(
+            address: ContentAddress(pin: pin),
+            bytes: bytes,
+            cancellationToken: cancellationToken
+        ).ConfigureAwait(continueOnCapturedContext: false);
+        return pin;
     }
     /// <summary>Verifies and retains a complete package. An interrupted upload can be retried with the same package;
     /// the manifest never makes a partial upload discoverable as a retained release.</summary>

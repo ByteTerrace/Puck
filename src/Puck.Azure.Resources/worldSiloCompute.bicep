@@ -12,7 +12,7 @@ param identityResourceId string
 param bootstrapCommand string
 param release string
 param sshPublicKey string
-@description('Expose the silo OAuth-protected MCP TLS listener. Its configuration and certificate arrive through the existing protected bootstrap settings.')
+@description('Expose the silo OAuth-protected MCP TLS listener. Its configuration arrives in the retained deployment inputs the protected bootstrap command pins.')
 param mcpEnabled bool = false
 param location string = resourceGroup().location
 param tags { *: string } = {}

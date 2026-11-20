@@ -33,6 +33,8 @@ public readonly record struct SdfFrameSettings {
     /// table's row) while <see cref="SdfUpdateRates.ShadowFar"/> is on: its refreshes a second and the light turn a held
     /// cascade tolerates; the default refreshes it every frame (<see cref="SdfFarShadows.EveryFrame"/>).</summary>
     public SdfFarShadows FarShadows { get; init; } = SdfFarShadows.EveryFrame;
+    /// <summary>The device table’s maximum shading footprint and classification tile. Absent shades every pixel.</summary>
+    public SdfViewsRate? ViewsRate { get; init; }
     /// <summary>The display transform every view of the frame that converts for the display puts its exposed light
     /// through before the encode (<c>render.tone</c>, the display pass); the default applies no curve.</summary>
     public SdfToneCurve Tone { get; init; }

@@ -76,6 +76,7 @@ public sealed partial class WorldServer {
     /// <returns>The live admission or storage verdict. A refusal changes no cell.</returns>
     public WorldCellWriteVerdict WriteStateCell(Principal principal, StateHandle row, CellKey key, long operand,
         WorldDocumentWriteKind write = WorldDocumentWriteKind.Set, string? text = null) {
+        ThrowIfTickPending();
         if (!m_arena.Catalog.TryGetDescriptor(descriptor: out var descriptor, handle: row) || (descriptor.Lane != StateLane.Document)) {
             return WorldCellWriteVerdict.StaleAddress;
         }
@@ -149,7 +150,7 @@ public sealed partial class WorldServer {
     private int m_documentRowCount;
 
     /// <summary>Gets the columnar store every state read and write of the tick in flight addresses.</summary>
-    public StateArena Arena => m_arena;
+    public StateArena Arena { get { ThrowIfTickPending(); return m_arena; } }
     /// <summary>Gets the <c>state.arena</c> counters over every arena this server has held: the current arena's counts
     /// on top of the totals of each one a definition install retired, so a reading never goes down.</summary>
     public IWorkCounterSource ArenaWorkSource => m_arenaWork;

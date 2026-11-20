@@ -1,3 +1,5 @@
+using Puck.Abstractions.Waiting;
+
 namespace Puck.Abstractions.Machines;
 
 /// <summary>The observable outcome of submitting one exact tick/input segment to an
@@ -13,6 +15,12 @@ public enum QueuedMachineSubmission {
     /// <summary>The segment entered the FIFO after producer backpressure waited for capacity. No prior segment was
     /// dropped or coalesced.</summary>
     AcceptedAfterBackpressure,
+
+    /// <summary>The capacity wait expired before accepting the segment. Retry with the same input.</summary>
+    PendingCapacity,
+
+    /// <summary>The segment was accepted and its ordered drain is still outstanding.</summary>
+    PendingDrain,
 }
 /// <summary>
 /// Optional asynchronous submission capability for a computationally heavy <see cref="IMachineRuntime"/>. Below its
@@ -51,4 +59,7 @@ public interface IQueuedMachineRuntime {
     /// <param name="deltaTicks">The segment's fixed-step tick budget.</param>
     /// <returns>The observable submission outcome.</returns>
     QueuedMachineSubmission Submit(ulong deltaTicks);
+
+    /// <summary>Submits or resumes one segment. A synchronous step retains its drain generation across slices.</summary>
+    QueuedMachineSubmission StepSegment(ulong deltaTicks, bool drain, ref ulong generation, WaitDeadline deadline);
 }

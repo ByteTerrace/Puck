@@ -476,10 +476,11 @@ artifacts. Repeating it after finalization succeeds without another mutation;
 an uncommitted or closed deployment refuses. It uses the same configured Azure
 group as `status`, and acquires the deployment controller lease before its write.
 `world release resume` reads the configured group's pending operation and resumes
-that exact source and target. It loads verified retained packages, a pinned Key
-Vault secret version containing deployment inputs, and the retained compute
-template. It never substitutes the latest secret value or the current checkout's
-template. Missing or conflicting retained inputs refuse before a worker effect.
+that exact source and target. It loads verified retained packages, the retained
+deployment inputs (compute parameters and template, bootstrap script) from the
+release content store, and a pinned Key Vault secret version holding only the
+signing keys and the inputs' pin. It never substitutes the latest secret value or
+the current checkout's template. Missing or conflicting retained inputs refuse before a worker effect.
 A recovered source is reported as a failed deployment, not a successful upgrade.
 
 `world release deploy` verifies the package, retains its files and versioned

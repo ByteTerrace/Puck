@@ -987,7 +987,7 @@ Three statements, each checked by the step that builds it.
    not.
 
 Two bounds, kept apart. The **wait budget**, a host pacing value (by default
-one pacer period, set by measurement in C0.5 and C0.6), is a slice: it governs
+one pacer period, reviewed against the wait readings in C0.6), is a slice: it governs
 returning to the control plane, and a slice that expires returns deadline
 passed. An operation's **stall deadline** is counted from the operation's first
 slice and never restarted by a later one: it governs giving up, as the tick's
@@ -1030,8 +1030,8 @@ Only the stall deadline declares a device lost or an authority stalled.
   idle forms take that consumer and refuse it on any other thread. A producer
   waiting for a queue's capacity (`QueuedWorkerLifecycle.Submit`) is not its
   consumer and cannot hold one: it waits with a deadline as a tick dependency
-  (C0.5). The parks that keep the idle form are workers waiting for their own
-  next work: `JobPool.Work`, `QueuedWorkerLifecycle.TakeWork`, and the audio
+  through the wait door. Workers use the idle form for their own next work in
+  `JobPool.Work`, `QueuedWorkerLifecycle.TakeWork`, and the audio
   and socket loops.
 - **Lifetime parks and startup rendezvous have their own forms.** A thread
   started to own a resource for the process's life (the allocator's owner
@@ -1149,10 +1149,9 @@ and its operation, never of the file the wait sits in.
   follows teardown's rule. The check has one home, the authority's own entry:
   the authority operation door (`WorldServer.ExecuteAuthorityOperation`, which
   federation and sessions already enter) and the console's read view
-  (`IWorldConsoleAuthority.ReadView`, which the server mints). C0.5's first task
-  is to list the paths that reach the arena without either (checkpoints
-  snapshot arena columns directly, for one) and route them through the entry,
-  so no path gets around the check once the record can stand.
+  (`IWorldConsoleAuthority.ReadView`, which the server mints).
+  Direct checkpoint and replay restore, document export and attach primers
+  also check the authority's pending tick before they touch live state.
 - **The stall deadline faults the authority.** An incomplete tick past its
   stall deadline (finite on an unpaced host too) freezes the authority with the
   reason, as an addon host's epoch timeout already does
@@ -1286,14 +1285,6 @@ Reached from the pump thread inside an iteration:
 | `VulkanQueueSubmitter` (`vkQueueWaitIdle`), `VulkanLogicalDevice.WaitIdle` (`vkDeviceWaitIdle`) | Queue and device idle waits outside the fence wrappers | Replaced by fence-based progress where a deadline applies, or named as native teardown and loss-path waits in C0.6 |
 | `SdfMeshProbeGpuWork`'s answers, `ShaderCompiler`'s synchronous compile, `ShaderPackager`, `ShaderPackager.Store`, `ShaderPipelineLoader` | Synchronous waits on asynchronous work; which thread calls each was not read for this design | C0.8 reads each caller: on the pump they become waiting answers, on a worker a run-after edge (J1) |
 
-The tick's waits (C0.5):
-
-| Wait | Today | Under C0 |
-|---|---|---|
-| `QueuedWorkerLifecycle.Drain`, once a synchronous machine step | Unbounded, and allocates an event a step | A tick wait with one retained barrier and its generation; past its slice the tick is incomplete |
-| `QueuedWorkerLifecycle.Submit` with a full pending window | The producer waits on the condition for another thread's completions | A tick wait with a deadline, never the idle form; past its slice the tick is incomplete |
-| `JobPool.Fork`'s join | Unbounded | A tick or frame wait; the fork keeps its storage while pending, and expiry names the partition still held |
-
 Live requests (C0.8):
 
 | Wait | Today | Under C0 |
@@ -1351,12 +1342,13 @@ and migrate with their projects.
 Each lands on its own, in this order. A project turns `WAIT001` on in the step
 that clears its last site; the compiler's list says which step that is.
 
-C0.1 to C0.4 are built: the door and its forms in `Puck.Abstractions` with
+C0.1 to C0.5 are built: the door and its forms in `Puck.Abstractions` with
 `WAIT001` behind `PuckWaitRule`; the control phase minting `HostIteration` and
 the control gap in `host.frames`; a converging frame's drain on worker tasks
 under one stall deadline (`ConvergenceStall`, `SdfMeshConvergence`); the query
-field, composition program and display encode published or polled; and
-`WAIT001` on for `Puck.World.Client`, `Puck.DirectX.Presentation` and
+field, composition program and display encode published or polled. The
+authority can resume its machine queue and fork joins on a later iteration.
+`WAIT001` is on for `Puck.World.Client`, `Puck.DirectX.Presentation` and
 `Puck.Vulkan.Presentation`. Two windowed readings they owe are verification
 requests for the lead's batch: at a lockstep walkthrough stop that converges
 lighting, a console verb during the drain answers within one iteration (the
@@ -1367,7 +1359,6 @@ same bound on both backends.
 
 | Step | Lands | Check |
 |---|---|---|
-| **C0.5** | The tick's waits: the drain, the producer's capacity wait and the fork join bounded; the incomplete-tick record, the read view's refusal and the stall deadline; first, the list of read paths that bypass the read view | A law over `QueuedWorkerLifecycle` and the authority with a worker held past its slice: the step answers pending within its budget; a console read, a checkpoint, an attach and a reset issued while the record stands are refused or wait with the stall's reason; the late worker completion finishes the same tick, whose hash equals an unheld run's; a completed drain allocates 0 B. A held fork the same way. `puck test --reproduce` and `--workers 1,2,0` on the machine and snapshot fixtures. |
 | **C0.6** | Fences, device, present and recovery waits through the door: the native entry points in `WAIT001`; `GpuFenceBlocking`'s per-thread blocked time folded into the door's own accounting, so produce-fence reads one mechanism; `TryWaitForFrame` and `BeginFrame` on the pacing deadline; recovery as an operation; the teardown outcomes and the retirement list; the wait budget and stall deadlines set from readings | An armed device loss (`gpu.faults`) during a fence wait recovers across iterations on both backends with the console answering between attempts. A minimized or occluded window keeps the control gap under the wait budget plus a pacer period on both backends. A fence, a readback lease and a build that complete after their teardown deadline leave no device-after-dispose message in stderr and the narration lists what was kept. `host.frames` standing at the lobby: produce-fence against the build before. |
 | **C0.7** | The attach primer under the authority's operation, with its callbacks' lock order audited | First a law that shows the defect or clears the item: an attach from a second thread while a tick writes. Then the route, with `puck test --reproduce` on the session fixtures. |
 | **C0.8** | The live requests' outcomes; the startup rendezvous and lifetime park forms; the compile, probe and storage callers read and classified; `WAIT001` on in every project C0 cleared | A machine checkpoint and a memory poke issued while the machine's worker is held answer pending and complete once it is released, with no wait on a disposed completion; a module load whose admission is full is refused and leaves the semaphore's count unchanged; those projects build with the rule on. |
@@ -1377,11 +1368,10 @@ The remaining projects turn `WAIT001` on as J1 migrates each.
 ### What this design did not settle
 
 - The wait budget's default (one pacer period) and the stall deadlines are
-  guesses until the tick's waits and the fences run through the door. C0.5 and
-  C0.6 set them from readings that include preempted workers, cold work and
-  host load, give an unpaced host a finite stall deadline, and fix what a
-  pending operation does when the pacer's rate changes: each slice reads the
-  current budget, and the stall deadline stays the one fixed at the operation's
+  provisional until the fences run through the door. C0.6 sets them from
+  readings that include preempted workers, cold work and host load. A pending
+  operation's next slice reads the current budget when the pacer's rate changes.
+  The finite stall deadline stays the one fixed at the operation's
   first slice.
 - Whether the sliced convergence changes a converged still beyond the capture
   noise. The drain runs the same batches and passes it ran on the frame thread,
@@ -1401,7 +1391,7 @@ reopened before its ruling.
 | Finding | Ruling |
 |---|---|
 | **R1** [high] Producer backpressure (`QueuedWorkerLifecycle.Submit`) was given the idle form. | Accepted. `Submit` waits for another thread's completions: it is a tick wait with a deadline and the incomplete-tick protocol. Idle is a role held by a `WaitConsumer` the pump cannot claim and another thread cannot use. |
-| **R2** [high] A timed-out tick join had no ownership or incomplete-tick protocol. | Accepted. The authority keeps an incomplete-tick record that retains the fork or barrier, scratch, read epoch and workers; the same tick resumes; the read view and the authority operation door refuse or defer every read and write until it completes; the stall deadline freezes the authority and refuses a checkpoint of the incomplete tick. C0.5's check holds a worker, issues a checkpoint, an attach and a reset, and lets the worker complete late. |
+| **R2** [high] A timed-out tick join had no ownership or incomplete-tick protocol. | Accepted. The authority keeps an incomplete-tick record that retains the fork or barrier, scratch, read epoch and workers; the same tick resumes; the read view and the authority operation door refuse or defer every read and write until it completes; the stall deadline freezes the authority and refuses a checkpoint of the incomplete tick. |
 | **R3** [high] Teardown expiry could free resources still in use. | Accepted. Teardown has three outcomes: drained, device proven lost, and an unretired owner whose dependency closure is kept until process exit and never disposed. J1's settlement takes the same outcome. The audio join is corrected to match. C0.6's check completes a fence, a lease and a build after their deadline. |
 | **R4** [high] The analyzer and survey missed a pump wait reached through a delegate (`DeviceLossRecovery`), and several wait families. | Accepted. `WAIT001` reads member references, method groups and delegate conversions, and every managed family; native entry points join in C0.6. Device recovery becomes an operation polled across iterations. The compiler's list is the inventory and the text survey a cross-check, and the claim of exact coverage is narrowed to what the set names. |
 | **R5** [medium] Live waits were classified as teardown, and expiry had no answer for a live operation. | Accepted. Classes are by caller and operation. Live requests have refused, accepted, pending and completed outcomes, with late completions owned; admission refuses without taking a permit. The encoder window is a live request, the startup waits are rendezvous, the allocator's park is a lifetime park, completed-task reads left the list, and the unread callers are C0.8's. |
@@ -1422,7 +1412,7 @@ Small steps, each landing on its own and checked on the debug world. Test
 requirements are lifted for the campaign (AGENTS.md); each step is verified by
 building what it touched and running the check named, and each check is chosen
 to fail when the step's main risk is real. Built: the scheduling stage (S1),
-C0.1 to C0.4, the memory account, native movers 1 and 2, the worker-count
+C0.1 to C0.5, the memory account, native movers 1 and 2, the worker-count
 harness (T0: `--workers` and `puck test --workers`), snapshot partitions (T1)
 and GPU culling in the indirect path (R2).
 
@@ -1453,7 +1443,7 @@ as `puck mesh audit` for bake defects.
 | **Lift slow steps and frame-thread breakdowns** | Fix the lift chapter's 0.6 to 0.8 s steps at their cause: make installed rigid-body contact probes and per-session state delivery on a door swap (`WorldSessionSink.DeliverState`, `WorldDeliveryCursor.FrameMoved`) follow only the rows that changed. In the same pass, add the remaining [frame-thread measurements owed](#frame-thread-measurements-owed) (capture counts by cause, per-iteration allocations by source, and the +1 world / +1 nested view readings) and take the standing produce and tick splits. | `puck benchmark --headless --route debug --chapter "the lift"` shows no step in the hundreds of milliseconds, and the windowed route agrees; produce parts sum within 5% of `produce-work` with GPU waits separate; +1 world and +1 nested view each report a distinct delta. The lift's cause is open items' thread trace of the headless chapter, not reopened for this plan. |
 | **Per-frame allocation cuts** | Eliminate per-iteration managed allocations on the frame thread and background threads at the sources the trace names (no dependency on the pool; runs immediately). The frame thread's per-frame presentation garbage is a few kilobytes a frame; the per-frame cartridge hash, the environment's rebuild, the pack's quadratic offsets and the per-frame delegates are already gone, and the rest is the packet's churn item. A `gc-verbose` trace with allocation stacks, on a windowed World in motion and through a cold bake (on the RTX 2060 machine too, whose 16 GB is the tighter case), names the threads that allocate and whether the pauses are gen0, gen1 or compactions of the large-object heap. Do not switch the GC mode to mask allocations: it hides the problem without fixing its cause. `ConserveMemory` is the exception the trace may name: it is a setting that adds compactions of its own, and if they dominate the pauses the setting is lowered. | Allocations per iteration drop at the traced sources and 20 to 28 ms GC pauses disappear on the benchmark route; no garbage collection pauses the steady loop. |
 | **S1's reading** | Nothing more to build: the scheduling stage is in. Its standing reading on a windowed World is owed. | At `debug.go desktop` and `debug.go overlook`, `world.rates`' `burst` reads about half of each lever's items rated at one tier, where one shared phase reads all of them, and `host.frames` standing there shows no iteration over 16.7 ms of work from a tick meeting the burst. |
-| **C0 The control plane's phase, and bounded waits** ([designed and reviewed above](#the-control-planes-phase-and-bounded-waits); C0.5 to C0.8 remain) | The tick's waits and the incomplete-tick record (C0.5), the device, present and recovery waits (C0.6), the attach primer under the authority's operation (C0.7), and the live requests and remaining projects (C0.8). Headless; no new thread. It comes before J1 because J1 moves the waits it names, and a wait with no deadline moved onto a pool is still a stall. | Each step's check in [the steps](#the-steps); for the whole: a console verb issued while a tick's join is held past its slice answers within one iteration, and an armed device loss recovers across iterations with the console answering between attempts. |
+| **C0 The control plane's phase, and bounded waits** ([designed and reviewed above](#the-control-planes-phase-and-bounded-waits); C0.6 to C0.8 remain) | The device, present and recovery waits (C0.6), the attach primer under the authority's operation (C0.7), and the live requests and remaining projects (C0.8). Headless; no new thread. It comes before J1 because J1 moves the waits it names, and a wait with no deadline moved onto a pool is still a stall. | Each step's check in [the steps](#the-steps); for the whole: a console verb issued while a tick's join is held past its slice answers within one iteration, and an armed device loss recovers across iterations with the console answering between attempts. |
 | **J1 The pool and the channels** | The design comes first, as a document reviewed by another family before any build: the hand-rolled concurrency sites moved onto the job system project by project, with the scheduler analyzer and `puck scan`'s `LockAnalyzer` switched on for each project as it migrates. Then `Puck.Hosting.Jobs`: classes with their comparers, bounded units, the dependency rules, a fork that returns an operation its forking thread owns (C0's contract for a join past the wait budget), the cap with hysteresis, per-owner channels drained at each owner's install point, parking, shutdown settlement; every site in section 1's lists moved; the bake's own pool and its dedicated threads folded into `JobPool`, the irradiance worker counts, mesh restore's count, the compile turnstile and the engine's `Parallel.For` (the bake's sign priming included) deleted; `JobWorkers`' `0` reconciled with the pool's `max(2, ProcessorCount - 2)` workers plus the frame thread. The bake's three GPU handoffs (section 5) are fixed first, so the pool inherits a bake whose readback slots free at their fence. A worker preempted while it holds a partition holds the join, so the cap against oversubscription is measured with other programs running before smaller partitions are tried. | A cold bake with `host.frames` sampled through it, and the process's thread count at `workers + 2` plus the dedicated threads. A lockstep `world.at` still after a `world.reload` traces its own scene (`[sdf.mesh-gi]` reports the frame's draw count). A channel forced full by a scratch world with more groups than its capacity lands every group (`[sdf.mesh-bake]` done counts match). A headless boot with a reflow verb answers it. `quit` during a cold bake exits cleanly with no device-after-dispose message in stderr on both backends. The first visible group bakes before any unseen one (`[sdf.mesh-bake]` order against `world.view.pick`). |
 | **T3 Crossing scan partitions** | E3 by seat partition with occupancy deltas (note: 32 seats per partition saves nothing in today's debug world with a handful of seats, so the tick breakdown ranks this against serial tick fixes below). | T0 on a fixture of 40 seats where two seats enter one party-travel door on one tick and seats straddle the 32-seat boundary; the crossing log (transfer tick, cohort) identical across counts and against the recording. |
 | **T2 Rigid advance partitions** | E1 for rigid bodies with partition scratch; the rigid share is read from the tick breakdown first; the one pose-read change re-recorded. | T0 on a fixture of 200 rigid bodies (a rack and a domino line) beside kit bodies whose producers target a rigid body; hashes identical across counts; `puck bench world` at 0 B median a tick; a standing `host.frames` simulate read. |

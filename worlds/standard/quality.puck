@@ -58,6 +58,7 @@ render {
       deviceMemoryMiB: 4608
       hostMemoryMiB: 6144
       table {
+        viewsRate { maxRate: 2, tileSize: 4 }
         distantShadows { reach: 1200, texels: 1024, turnDegrees: 0.2, frames: 4 }
         farShadows { hertz: 15, turnDegrees: 0.02 }
         bloom: High
@@ -146,6 +147,7 @@ render {
     rayQueries: true
   }
   high {
+    viewsRate { maxRate: 1, tileSize: 4 }
     distantShadows {
       reach: 1200
       texels: 2048

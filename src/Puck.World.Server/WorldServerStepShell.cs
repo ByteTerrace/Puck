@@ -1,3 +1,4 @@
+using Puck.Abstractions.Waiting;
 using Puck.Hosting;
 
 namespace Puck.World.Server;
@@ -34,22 +35,38 @@ public static class WorldServerStepShell {
     /// fast-forwarding drive stepped; a caller derives its own elapsed engine time from the difference times
     /// <see cref="FixedStepContext.StepTicks"/>.</returns>
     public static ulong Step(WorldServer server, WorldReplayTape? tape, Action<ulong> publishTick, in FixedStepContext context, HostPacing pacing) {
+        var tick = TryStep(server, tape, publishTick, in context, pacing, WaitDeadline.In(TimeSpan.FromSeconds(30)), out var pending);
+        if (pending is { } reason) { throw new TimeoutException(reason.ToString()); }
+        return tick;
+    }
+
+    /// <summary>Steps complete ticks, retaining the current tick when a dependency exceeds the slice.</summary>
+    public static ulong TryStep(WorldServer server, WorldReplayTape? tape, Action<ulong> publishTick, in FixedStepContext context, HostPacing pacing,
+        WaitDeadline deadline, out WaitReason? pending) {
+        pending = null;
         var current = context;
         var burst = 0;
 
         while (true) {
             using var work = HostFrameWork.MeasureWorld(server.InstanceIdentity);
-            server.DrainMailbox();
+            var resuming = server.Tick.PendingReason is not null;
+            if (!resuming) { server.DrainMailbox(); }
             // Keep the simulation step and tape close atomic with other authority readers and writers.
             lock (server.AuthorityGate) {
                 try {
-                    using var recordedDraws = tape?.InjectDriveTick();
-                    server.Advance(stepTicks: current.StepTicks);
+                    if (!resuming) { server.PendingReplayInputs = tape?.InjectDriveTick(); }
+                    pending = server.Tick.TryAdvance(current.StepTicks, deadline);
+                    if (pending is not null) { return current.Tick; }
                 } catch (InvalidDataException error) when (tape?.Mode == WorldReplayMode.Replaying &&
                     ReplayRefusalExtensions.ReasonOf(error) == ReplayRefusal.MissingPrivateDraw) {
                     var name = tape.CancelDrive();
                     server.Output.Narrate("replay.drive", $"[replay.drive {name}: {error.Message}]");
                     return current.Tick;
+                } finally {
+                    if (pending is null) {
+                        server.PendingReplayInputs?.Dispose();
+                        server.PendingReplayInputs = null;
+                    }
                 }
                 server.FlushMutationJournal?.Invoke();
                 server.EnforceJournalDepth();
@@ -67,7 +84,7 @@ public static class WorldServerStepShell {
             work.Complete();
 
             if (
-                pacing.StepsOneTickPerFrame ||
+                resuming || pacing.StepsOneTickPerFrame ||
                 (tape is not { WantsFastForwardStep: true }) ||
                 (++burst >= tape.FastForwardBurst)
             ) {

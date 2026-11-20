@@ -1,5 +1,6 @@
 using System.Numerics;
 using Puck.Abstractions.Machines;
+using Puck.Abstractions.Waiting;
 
 namespace Puck.World.Server;
 
@@ -116,6 +117,8 @@ public interface IWorldMachineHost : IWorldExtensionRuntime, IWorldMachineMemory
     /// <param name="stepTicks">The exact engine-tick budget of one fixed simulation step.</param>
     /// <param name="pads">This tick's per-screen merged engagement pad lane.</param>
     void Advance(ulong stepTicks, ReadOnlyMemory<ScreenPadSnapshot> pads);
+    /// <summary>Advances the same tick until it settles, returning the dependency still outstanding after a slice.</summary>
+    WaitReason? TryAdvance(ulong stepTicks, ReadOnlyMemory<ScreenPadSnapshot> pads, WaitDeadline deadline);
     /// <summary>Returns the live named machine a screen shows as its audio drain seam,
     /// or <see langword="null"/> when no machine (or no capability) is available.</summary>
     /// <param name="index">The engine screen-surface index.</param>

@@ -1,6 +1,7 @@
 using System.Collections.Frozen;
 using System.Numerics;
 using Puck.Abstractions.Machines;
+using Puck.Abstractions.Waiting;
 using Puck.Abstractions.Sources;
 
 namespace Puck.Machines;
@@ -249,6 +250,12 @@ public abstract class QueuedMachineHost : IMachineRuntime, IQueuedMachineRuntime
             deltaTicks: deltaTicks,
             input: in declared
         );
+    }
+
+    /// <inheritdoc/>
+    public QueuedMachineSubmission StepSegment(ulong deltaTicks, bool drain, ref ulong generation, WaitDeadline deadline) {
+        var declared = Declared(inputs: in m_inputs);
+        return m_worker.StepSegment(deltaTicks, in declared, drain, ref generation, deadline);
     }
 
     // Neutralizes the seats this host declares no port for, so the replay ring and a checkpoint record the same image.

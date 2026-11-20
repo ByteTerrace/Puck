@@ -92,6 +92,7 @@ public static class WorldApplicationDefaults {
 /// light turn a held map tolerates): far shadows by rasterization, which need no ray hardware. Absent draws none.</param>
 /// <param name="FarShadows">How often the device refreshes the far shadow cascade and the light turn a held cascade
 /// tolerates (<see cref="WorldFarShadows"/>). Absent refreshes it every frame.</param>
+/// <param name="ViewsRate">The maximum shared shading footprint and classification tile size. Absent shades every pixel.</param>
 [method: JsonConstructor]
 public readonly record struct WorldQualityPreset(
     ShadowTier Shadows,
@@ -110,7 +111,8 @@ public readonly record struct WorldQualityPreset(
     Puck.Hosting.BloomQuality Bloom = Puck.Hosting.BloomQuality.High,
     bool RayQueries = false,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldDistantShadows? DistantShadows = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldFarShadows? FarShadows = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldFarShadows? FarShadows = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] SdfViewsRate? ViewsRate = null
 );
 /// <summary>The world's render-lever defaults — the boot values <c>Puck.World.WorldRenderSettings</c> wakes on and the
 /// <c>world.quality</c> preset table. Session state, not identity: these are engine-wide levers (shadows, AO, render
@@ -184,6 +186,7 @@ public readonly record struct WorldQualityPreset(
 /// (<see cref="WorldDistantShadows"/>); a quality preset's row replaces it. Absent draws none.</param>
 /// <param name="FarShadows">How often the world boots refreshing the far shadow cascade (<see cref="WorldFarShadows"/>);
 /// a quality preset's row replaces it. Absent refreshes it every frame.</param>
+/// <param name="ViewsRate">The maximum shared shading footprint and classification tile size. Absent shades every pixel.</param>
 public sealed record WorldRenderDefaults(
     ShadowTier Shadows = ShadowTier.Off,
     bool AmbientOcclusion = false,
@@ -217,7 +220,8 @@ public sealed record WorldRenderDefaults(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldNestedViewQuality>? Nested = null,
     bool RayQueries = false,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldDistantShadows? DistantShadows = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldFarShadows? FarShadows = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldFarShadows? FarShadows = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] SdfViewsRate? ViewsRate = null
 ) {
     /// <summary>The most world lanes <see cref="Lanes"/> holds (<c>SdfLanes.WorldCount</c>).</summary>
     public const int MaxLanes = SdfLanes.WorldCount;

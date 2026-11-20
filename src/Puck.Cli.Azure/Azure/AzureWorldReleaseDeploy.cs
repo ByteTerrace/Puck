@@ -121,14 +121,16 @@ public static partial class AzureCommand {
                 ).ConfigureAwait(continueOnCapturedContext: false);
 
                 if (retained is null) {
-                    retained = await PrepareWorldReleaseDeploymentAsync(
+                    var prepared = await PrepareWorldReleaseDeploymentAsync(
                         manifest,
                         context.ResourceGroup,
                         context.Clock
                     ).ConfigureAwait(continueOnCapturedContext: false);
+
                     await context.Deployments.SaveAsync(
                         cancellationToken: token,
-                        configuration: retained,
+                        configuration: prepared.Configuration,
+                        keys: prepared.Keys,
                         manifest: manifest
                     ).ConfigureAwait(continueOnCapturedContext: false);
                 }

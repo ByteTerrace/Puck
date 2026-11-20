@@ -128,15 +128,17 @@ public sealed partial class SdfWorldPasses {
         // program pays nothing for them.
         private bool RequestsBins => (View?.Residency.ShadesInBins ?? false);
 
+        private bool RequestsViewsRate => RequestsTemporal && View?.Residency.Frame?.Settings.ViewsRate is { MaxRate: > 1 };
+
         public RenderGraphPackageFragment Fragment => Shadowed(fragment: Glassed(fragment: Binned(fragment: (RequestsTemporal
-            ? SdfWorldPackage.TemporalFragment
+            ? (RequestsViewsRate ? SdfWorldPackage.RateFragment : SdfWorldPackage.TemporalFragment)
             : (Snapshot.Reconstructs ? SdfWorldPackage.Fragment : SdfWorldPackage.NativeFragment)))));
 
         // The low bits distinguish temporal reconstruction, the shadows, their resolution, the second slot's cascade, the
         // glass passes, the binned views passes, the distant map's shape and the far cascade's static layer. Render ceilings are quantized fractions from
         // zero through one (RenderGraphExtent.Quantize): their binary exponents share the two high bits shifted out here,
         // and their mantissas' low bits, which these bits land in, are zero.
-        long IShaderPipelineRenderExtent.Revision => (BitConverter.DoubleToInt64Bits(value: Ceiling) << 2) | ((RequestsShadows && RequestsFarStatic) ? 4096L : 0L) | (RequestsShadows ? (((long)DistantShape) << 8) : 0L) | (RequestsBins ? 128L : 0L) |
+        long IShaderPipelineRenderExtent.Revision => (BitConverter.DoubleToInt64Bits(value: Ceiling) << 2) | (RequestsViewsRate ? 8192L : 0L) | ((RequestsShadows && RequestsFarStatic) ? 4096L : 0L) | (RequestsShadows ? (((long)DistantShape) << 8) : 0L) | (RequestsBins ? 128L : 0L) |
             (RequestsGlassShadows ? 64L : 0L) | (RequestsGlass ? 32L : 0L) | (RequestsSecondShadow ? 16L : 0L) | (((long)ShadowResolution) << 2) | (RequestsShadows ? 2L : 0L) | (RequestsTemporal ? 1L : 0L);
 
         private RenderGraphPackageFragment Binned(RenderGraphPackageFragment fragment) =>

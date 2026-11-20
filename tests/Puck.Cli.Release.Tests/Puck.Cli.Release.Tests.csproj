@@ -23,6 +23,7 @@
         <!-- The repository data these laws read outside the project: a change under it selects this suite in `puck
              affected`, which reaches .github/ through such a declaration alone. -->
         <PuckAffectedInput Include="../../.github/**" />
+        <PuckAffectedInput Include="../../build/**" />
     </ItemGroup>
     <ItemGroup>
         <Compile Include="../Shared/Cli/ConsoleCapture.cs" Link="ConsoleCapture.cs" />
