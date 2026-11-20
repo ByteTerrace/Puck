@@ -1,4 +1,5 @@
 {
+  "description": "Gets the authored groups member as written; reading it notes Groups.",
   "type": [
     "object",
     "null"

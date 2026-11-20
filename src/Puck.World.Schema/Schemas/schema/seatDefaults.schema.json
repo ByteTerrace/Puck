@@ -1,4 +1,5 @@
 {
+  "description": "Gets the authored seatDefaults member as written; reading it notes SeatDefaults.",
   "type": [
     "object",
     "null"

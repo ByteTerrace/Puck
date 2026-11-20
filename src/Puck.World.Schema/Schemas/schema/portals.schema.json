@@ -1,4 +1,5 @@
 {
+  "description": "Gets the authored portals member as written; reading it notes Portals.",
   "type": [
     "object",
     "null"

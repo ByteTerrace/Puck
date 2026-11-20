@@ -1,4 +1,5 @@
 {
+  "description": "Gets the authored state member as written; reading it notes every part of it (State).",
   "type": [
     "object",
     "null"

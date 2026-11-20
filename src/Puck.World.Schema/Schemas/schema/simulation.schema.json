@@ -1,4 +1,5 @@
 {
+  "description": "Gets the authored simulation member as written; reading it notes Simulation.",
   "type": [
     "object",
     "null"

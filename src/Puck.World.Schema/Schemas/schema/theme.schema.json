@@ -1,4 +1,5 @@
 {
+  "description": "Gets the authored theme member as written; reading it notes Theme.",
   "type": [
     "object",
     "null"

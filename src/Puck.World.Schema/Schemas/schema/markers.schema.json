@@ -1,4 +1,5 @@
 {
+  "description": "Gets the authored markers member as written; reading it notes Markers.",
   "type": [
     "array",
     "null"

@@ -1,4 +1,5 @@
 {
+  "description": "Gets the authored schedule member as written; reading it notes Schedule.",
   "type": [
     "object",
     "null"

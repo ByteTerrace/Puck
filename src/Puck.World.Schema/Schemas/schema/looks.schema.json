@@ -1,4 +1,5 @@
 {
+  "description": "Gets the authored looks member as written; reading it notes every part of it (Looks).",
   "type": [
     "object",
     "null"

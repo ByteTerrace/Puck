@@ -1,4 +1,5 @@
 {
+  "description": "Gets the authored generation member as written; reading it notes Generation.",
   "type": [
     "object",
     "null"

@@ -5,7 +5,8 @@ using Xunit;
 
 namespace Puck.SdfVm.Tests;
 
-// The far cascade's rate (SdfUpdateRates.ShadowFar): a view holds its far cascade for the frames a 30 Hz refresh spans,
+// The far cascade's rate (SdfUpdateRates.ShadowFar) at an authored 30 Hz (SdfFrame.FarShadows): a view holds its far
+// cascade for the frames a refresh spans,
 // splits every refresh the rate alone calls for over two frames whatever the frames' pace, and every change the fit
 // stands for ends the hold at once and redraws both layers.
 public sealed partial class SdfWorldPassesLawTests {
@@ -18,7 +19,7 @@ public sealed partial class SdfWorldPassesLawTests {
         var counts = SdfUpdateRateCounts.Counters();
         using var rig = new TemporalRig(displayHertz: displayHertz, views: 1);
 
-        rig.SourceFrame = (DrawnFrame() with { RateCounts = counts, RateIntervals = intervals, UpdateRates = rates });
+        rig.SourceFrame = (DrawnFrame() with { RateCounts = counts, RateIntervals = intervals, UpdateRates = rates, FarShadows = new SdfFarShadows(Hertz: 30, TurnRadians: 0f) });
         if (cull is { } mode) { rig.SourceFrame = rig.SourceFrame with { MeshCull = mode }; }
         // The first frames fit and render the far cascade whatever the lever holds. A cull level other than the frame's
         // changes the view's fragment (SdfWorldPasses.FragmentOf) and the new graph's first recording draws both layers
@@ -46,11 +47,11 @@ public sealed partial class SdfWorldPassesLawTests {
         Views = [frame.Views[0] with { Camera = CameraSnapshot.LookAt(fieldOfViewRadians: 1f, position: position, target: target, viewportHeight: Extent, viewportWidth: Extent) }],
     });
     // The drawn frame's key light turned by a share of the far cascade's light tolerance
-    // (SdfUpdateRateTiers.ShadowFarLightTurnRadians), about an axis across it.
+    // (SdfFarShadows.TurnRadiansFor), about an axis across it.
     private static Vector3 TurnedLight(SdfFrame frame, float share) {
         var original = Vector3.Normalize(value: DrawnFrame().Lights[0].Direction);
         var far = SdfMeshShadowCascades.Fit(frame: frame, view: 0);
-        var angle = (share * SdfUpdateRateTiers.ShadowFarLightTurnRadians(camera: far[1], texels: far.Texels));
+        var angle = (share * SdfFarShadows.EveryFrame.TurnRadiansFor(camera: far[1], texels: far.Texels));
         var axis = Vector3.Normalize(value: Vector3.Cross(vector1: original, vector2: ((MathF.Abs(x: original.Y) < 0.99f) ? Vector3.UnitY : Vector3.UnitX)));
 
         return Vector3.Transform(value: original, rotation: Quaternion.CreateFromAxisAngle(axis: axis, angle: angle));

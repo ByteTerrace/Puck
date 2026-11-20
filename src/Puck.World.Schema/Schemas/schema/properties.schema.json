@@ -1,4 +1,5 @@
 {
+  "description": "Gets the authored properties member as written; reading it notes Properties.",
   "type": [
     "object",
     "null"

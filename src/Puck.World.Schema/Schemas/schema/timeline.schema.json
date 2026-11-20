@@ -1,4 +1,5 @@
 {
+  "description": "Gets the authored timeline member as written; reading it notes Timeline.",
   "type": [
     "object",
     "null"

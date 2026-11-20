@@ -1,4 +1,5 @@
 {
+  "description": "Gets the authored kits member as written; reading it notes every part of it (Kits).",
   "type": [
     "object",
     "null"

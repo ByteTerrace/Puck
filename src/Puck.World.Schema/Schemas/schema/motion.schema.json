@@ -1,4 +1,5 @@
 {
+  "description": "Gets the authored motion member as written; reading it notes Motion.",
   "type": [
     "object",
     "null"

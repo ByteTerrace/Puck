@@ -1,4 +1,5 @@
 {
+  "description": "Gets the authored metadata member as written; reading it notes Metadata.",
   "type": [
     "object",
     "null"

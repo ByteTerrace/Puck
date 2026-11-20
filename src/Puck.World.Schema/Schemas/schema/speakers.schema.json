@@ -1,4 +1,5 @@
 {
+  "description": "Gets the authored speakers member as written; reading it notes Speakers.",
   "type": [
     "array",
     "null"

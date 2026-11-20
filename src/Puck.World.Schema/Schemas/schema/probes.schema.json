@@ -1,4 +1,5 @@
 {
+  "description": "Gets the authored probes member as written; reading it notes Probes.",
   "type": [
     "array",
     "null"

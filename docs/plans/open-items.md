@@ -1771,14 +1771,11 @@ migrated to standard programs.
   keeps the tier bias moving (`SdfMeshTier.Biased`); read the bias and the mesh
   region's budget on the RTX 2060 itself, since a detail that never settles
   re-bakes tiers in play.
-- [medium] A Direct3D 12 player without `dxcompiler.dll` refuses a prewarmed
-  kernel at the reflection check (`SdfShadePipelines.BuildAsync`), so a
-  `puck world player` folder on a consumer machine (no DXC installed) shades
-  through the interpreter on Direct3D 12 while Vulkan, whose SPIR-V the managed
-  reader reflects, takes the specialized kernels. A managed reader of the DXIL
-  container's own binding data would remove the dependency. A frame
-  holding a program its document does not declare requests a set the prewarm
-  did not compile.
+- [low] A player without a shader compiler shades a program its documents do
+  not declare through the interpreter: the prewarm (`world prepare`) compiles
+  and reflects only the declared program sets, so a frame holding another
+  program requests a set no shipping cache holds, and a player with no DXC
+  cannot compile it.
 - [low] `SdfWorldPipelines.Acquire` leases `ViewsPlain` and `GlassPlain` up
   front beside the interpreter pair, so every boot builds both pairs while a
   world uses one. Making the pair a demand (`SdfWorldPipelines.AcquiredOnDemand`)

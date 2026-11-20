@@ -1,4 +1,5 @@
 {
+  "description": "Gets the authored interactions member as written; reading it notes Interactions.",
   "type": [
     "object",
     "null"

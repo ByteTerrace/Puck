@@ -1,4 +1,5 @@
 {
+  "description": "Gets the authored placements member as written; reading it notes every part of it (Placements).",
   "type": [
     "object",
     "null"

@@ -1,4 +1,5 @@
 {
+  "description": "Gets the authored commands member as written; reading it notes Commands.",
   "type": [
     "array",
     "null"

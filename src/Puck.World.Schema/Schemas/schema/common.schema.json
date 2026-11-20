@@ -56,6 +56,11 @@
         "turnDegrees": {
           "description": "The light turn, in degrees, a held map tolerates before it is drawn again: the most its shadows lag a moving sun by, in (0, 10].",
           "type": "number"
+        },
+        "frames": {
+          "description": "The frames one redraw is spread over, from 1 through MaxFrames: each draws a share of the casters into a back map, and the map the receivers read changes only once the last share lands, so a redraw costs any one frame about this share of a whole one and lands this many frames later. One draws a redraw whole.",
+          "type": "integer",
+          "default": 1
         }
       },
       "required": [
@@ -65,6 +70,29 @@
       ],
       "additionalProperties": false,
       "title": "WorldDistantShadows"
+    },
+    "WorldFarShadows": {
+      "description": "How the key light\u0027s far shadow cascade keeps up with what moves: it is drawn again at least Hertz times a second of presentation time and held between, and a held cascade is drawn again at once when the light turns past TurnDegrees, the camera moves or turns past the cascade\u0027s receiver margin, or its fit changes. A dynamic caster\u0027s shadow lags it by up to one period, and every shadow lags a turning light by up to the turn. A device\u0027s quality row chooses it (FarShadows).",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "hertz": {
+          "description": "The refreshes a second, a whole number from 1 through MaxHertz, where MaxHertz draws it every frame. A refresh draws the cascade\u0027s two layers on consecutive frames.",
+          "type": "integer"
+        },
+        "turnDegrees": {
+          "description": "The light turn, in degrees, a held cascade tolerates, in (0, MaxTurnDegrees]: past it the cascade is drawn again at once, so a light that turns faster than this a period refreshes the cascade on its turn rather than its rate.",
+          "type": "number"
+        }
+      },
+      "required": [
+        "hertz",
+        "turnDegrees"
+      ],
+      "additionalProperties": false,
+      "title": "WorldFarShadows"
     },
     "WorldQualityPreset": {
       "type": [
@@ -167,6 +195,11 @@
         "distantShadows": {
           "$ref": "#/$defs/WorldDistantShadows",
           "description": "The distant shadow map the device draws past the far cascade (its reach, texels and the light turn a held map tolerates): far shadows by rasterization, which need no ray hardware. Absent draws none.",
+          "default": null
+        },
+        "farShadows": {
+          "$ref": "#/$defs/WorldFarShadows",
+          "description": "How often the device refreshes the far shadow cascade and the light turn a held cascade tolerates (WorldFarShadows). Absent refreshes it every frame.",
           "default": null
         }
       },

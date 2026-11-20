@@ -1,4 +1,5 @@
 {
+  "description": "Gets the authored audio member as written; reading it notes Audio.",
   "type": [
     "object",
     "null"

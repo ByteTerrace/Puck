@@ -5,10 +5,11 @@ namespace Puck.Shaders;
 /// <summary>
 /// Reads the descriptor bindings of compiled bytecode of either backend, whichever it is, in the shape
 /// <see cref="ShaderInterfaceLayout.Mismatch"/> holds a module to: a SPIR-V module through
-/// <see cref="SpirvInterfaceReader"/>, and a DXIL container through a <see cref="DxilInterfaceReader"/> over the
+/// <see cref="SpirvInterfaceReader"/>, and a DXIL container from the bindings a build reflected and shipped beside the
+/// player (<see cref="PreparedShaderBindings"/>), or otherwise through a <see cref="DxilInterfaceReader"/> over the
 /// <c>dxcompiler.dll</c> beside the <c>dxc</c> a <see cref="ShaderToolchain"/> resolves, loaded on the first container it
-/// reads and kept until the reflector is disposed. Only Windows loads that library, so a DXIL container is refused
-/// elsewhere.
+/// reflects and kept until the reflector is disposed. Only Windows loads that library, so a container no shipping cache
+/// describes is refused elsewhere.
 /// </summary>
 public sealed class ShaderBytecodeReflector : IDisposable {
     private readonly ShaderToolchain m_toolchain;
@@ -32,9 +33,9 @@ public sealed class ShaderBytecodeReflector : IDisposable {
     /// <exception cref="ObjectDisposedException">The reflector is disposed.</exception>
     /// <exception cref="InvalidDataException">The bytes are neither a SPIR-V module nor a DXIL container, or the reader
     /// refuses them.</exception>
-    /// <exception cref="InvalidOperationException">The bytes are a DXIL container and no <c>dxcompiler.dll</c> can be
-    /// loaded to reflect it: the host is not Windows, or the toolchain resolves no <c>dxc</c> with the library beside
-    /// it.</exception>
+    /// <exception cref="InvalidOperationException">The bytes are a DXIL container no shipping cache describes and no
+    /// <c>dxcompiler.dll</c> can be loaded to reflect it: the host is not Windows, or the toolchain resolves no
+    /// <c>dxc</c> with the library beside it.</exception>
     public IReadOnlyList<ShaderInterfaceBinding> Read(ReadOnlySpan<byte> bytecode) {
         ObjectDisposedException.ThrowIf(condition: m_disposed, instance: this);
 
@@ -43,6 +44,10 @@ public sealed class ShaderBytecodeReflector : IDisposable {
         }
         if (!ShaderBytecode.IsDxbcContainer(bytecode: bytecode)) {
             throw new InvalidDataException(message: "The bytecode is neither a SPIR-V module nor a DXIL container.");
+        }
+        // A container a build reflected and shipped beside the player needs no compiler library.
+        if (PreparedShaderBindings.TryRead(bindings: out var prepared, bytecode: bytecode)) {
+            return prepared!;
         }
         if (!OperatingSystem.IsWindows()) {
             throw new InvalidOperationException(message: "Reflecting a DXIL container needs dxcompiler.dll, which only Windows loads.");

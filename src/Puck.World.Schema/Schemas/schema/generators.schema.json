@@ -1,4 +1,5 @@
 {
+  "description": "Gets the authored generators member as written; reading it notes Generators.",
   "type": [
     "array",
     "null"

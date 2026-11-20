@@ -1,4 +1,5 @@
 {
+  "description": "Gets the authored defaultSeatKit member as written; reading it notes DefaultSeatKit.",
   "type": [
     "string",
     "null"

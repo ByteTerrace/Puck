@@ -1,4 +1,5 @@
 {
+  "description": "Gets the authored machines member as written; reading it notes Machines.",
   "type": [
     "array",
     "null"

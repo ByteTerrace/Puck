@@ -1,4 +1,5 @@
 {
+  "description": "Gets the authored addons member as written; reading it notes Addons.",
   "type": [
     "array",
     "null"

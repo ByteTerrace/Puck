@@ -1,4 +1,5 @@
 {
+  "description": "Gets the authored text member as written; reading it notes Text.",
   "type": [
     "object",
     "null"

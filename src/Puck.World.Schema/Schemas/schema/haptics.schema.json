@@ -1,4 +1,5 @@
 {
+  "description": "Gets the authored haptics member as written; reading it notes Haptics.",
   "type": [
     "array",
     "null"

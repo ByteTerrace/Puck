@@ -1,4 +1,5 @@
 {
+  "description": "Gets the authored replays member as written; reading it notes Replays.",
   "type": [
     "array",
     "null"

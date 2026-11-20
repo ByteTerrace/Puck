@@ -538,6 +538,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
             // The distant shadow map's reach, texels and tolerance are a device table's row, so the presenting session's
             // lever too, as the rays are.
             DistantShadows = WorldRenderFarDistance.ResolveDistantShadows(authored: ((Session is { } session) ? session.DistantShadows : m_mirror.Definition.Render.DistantShadows)),
+            FarShadows = WorldRenderFarDistance.ResolveFarShadows(authored: ((Session is { } presenting) ? presenting.FarShadows : m_mirror.Definition.Render.FarShadows)),
             IndirectSources = environment.Indirect.Gains.Sources,
             IndirectGains = environment.Indirect.Gains,
             IndirectBounces = environment.Indirect.Bounces,

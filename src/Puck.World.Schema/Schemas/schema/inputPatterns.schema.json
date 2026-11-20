@@ -1,4 +1,5 @@
 {
+  "description": "Gets the authored inputPatterns member as written; reading it notes InputPatterns.",
   "type": [
     "array",
     "null"

@@ -7,80 +7,305 @@
  * The definition of this world — the aggregate describing what the world is, distinct from the live session state that plays in it. It gathers named spawn points (SpawnPoints), motion defaults (Motion), and render-lever defaults and quality presets (Render). Every consumer takes it by construction.
  */
 export type WorldDefinition = {
+  /**
+   * Gets the authored motion member as written; reading it notes Motion.
+   */
   motion?: WorldMotionDefaults | null;
+  /**
+   * Gets the authored spawnPoints member as written; reading it notes SpawnPoints.
+   */
   spawnPoints?: WorldSpawnPoint[] | null;
+  /**
+   * Gets the authored render member as written; reading it notes Render.
+   */
   render?: WorldRenderDefaults | null;
+  /**
+   * Gets the authored screens member as written; reading it notes Screens.
+   */
   screens?: (WorldScreen | null)[] | null;
+  /**
+   * Gets the authored screenMaterials member as written; reading it notes ScreenMaterials.
+   */
   screenMaterials?: (WorldScreenMaterial | null)[] | null;
+  /**
+   * Gets the authored cameras member as written; reading it notes Cameras.
+   */
   cameras?: (WorldCamera | null)[] | null;
+  /**
+   * Gets the authored bodies member as written; reading it notes Bodies.
+   */
   bodies?: WorldBodiesDefaults | null;
+  /**
+   * Gets the authored seatDefaults member as written; reading it notes SeatDefaults.
+   */
   seatDefaults?: WorldPlayerDefaults | null;
+  /**
+   * Gets the authored channels member as written; reading it notes Channels.
+   */
   channels?: (WorldChannel | null)[] | null;
+  /**
+   * Gets the authored inputModes member as written; reading it notes InputModes.
+   */
   inputModes?: WorldInputModes | null;
+  /**
+   * Gets the authored inputHistory member as written; reading it notes InputHistory.
+   */
   inputHistory?: WorldInputHistory | null;
+  /**
+   * Gets the authored inputPatterns member as written; reading it notes InputPatterns.
+   */
   inputPatterns?: (WorldInputPattern | null)[] | null;
+  /**
+   * Gets the authored targetRegisters member as written; reading it notes TargetRegisters.
+   */
   targetRegisters?: (WorldTargetRegister | null)[] | null;
+  /**
+   * Gets the authored bodyMotionPrograms member as written; reading it notes BodyMotionPrograms.
+   */
   bodyMotionPrograms?: (BodyMotionProgram | null)[] | null;
+  /**
+   * Gets the authored kits member as written; reading it notes every part of it (Kits).
+   */
   kits?: WorldKitsSection | null;
+  /**
+   * Gets the authored defaultSeatKit member as written; reading it notes DefaultSeatKit.
+   */
   defaultSeatKit?: string | null;
+  /**
+   * Gets the authored addons member as written; reading it notes Addons.
+   */
   addons?: (WorldAddonRow | null)[] | null;
+  /**
+   * Gets the authored bindingOverlays member as written; reading it notes BindingOverlays.
+   */
   bindingOverlays?: (WorldBindingOverlay | null)[] | null;
+  /**
+   * Gets the authored storage member as written; reading it notes Storage.
+   */
   storage?: WorldStorageDefaults | null;
+  /**
+   * Gets the authored prototypes member as written; reading it notes Prototypes.
+   */
   prototypes?: (WorldPrototype | null)[] | null;
+  /**
+   * Gets the authored placements member as written; reading it notes every part of it (Placements).
+   */
   placements?: WorldPlacementsSection | null;
+  /**
+   * Gets the authored speakers member as written; reading it notes Speakers.
+   */
   speakers?: (WorldSpeaker | null)[] | null;
+  /**
+   * Gets the authored tunes member as written; reading it notes Tunes.
+   */
   tunes?: (WorldTune | null)[] | null;
+  /**
+   * Gets the authored patches member as written; reading it notes Patches.
+   */
   patches?: (WorldPatch | null)[] | null;
+  /**
+   * Gets the authored audio member as written; reading it notes Audio.
+   */
   audio?: WorldAudioDefaults | null;
+  /**
+   * Gets the authored collision member as written; reading it notes Collision.
+   */
   collision?: WorldCollision | null;
+  /**
+   * Gets the authored gravity member as written; reading it notes Gravity.
+   */
   gravity?: WorldGravity | null;
+  /**
+   * Gets the authored host member as written; reading it notes Host.
+   */
   host?: WorldHostDefaults | null;
+  /**
+   * Gets the authored views member as written; reading it notes Views.
+   */
   views?: WorldViewDefaults | null;
+  /**
+   * Gets the authored looks member as written; reading it notes every part of it (Looks).
+   */
   looks?: WorldLooksSection | null;
+  /**
+   * Gets the authored dynamics member as written; reading it notes Dynamics.
+   */
   dynamics?: (DynamicsRow | null)[] | null;
+  /**
+   * Gets the authored grants member as written; reading it notes Grants.
+   */
   grants?: WorldGrant[] | null;
+  /**
+   * Gets the authored hud member as written; reading it notes Hud.
+   */
   hud?: WorldHudSection | null;
+  /**
+   * Gets the authored icons member as written; reading it notes Icons.
+   */
   icons?: WorldIconographySection | null;
+  /**
+   * Gets the authored state member as written; reading it notes every part of it (State).
+   */
   state?: WorldStateSection | null;
+  /**
+   * Gets the authored inputHold member as written; reading it notes InputHold.
+   */
   inputHold?: WorldInputHoldAuthoring | null;
+  /**
+   * Gets the authored theme member as written; reading it notes Theme.
+   */
   theme?: WorldThemeSection | null;
+  /**
+   * Gets the authored markers member as written; reading it notes Markers.
+   */
   markers?: (WorldMarkerRow | null)[] | null;
+  /**
+   * Gets the authored haptics member as written; reading it notes Haptics.
+   */
   haptics?: (WorldHapticRow | null)[] | null;
+  /**
+   * Gets the authored rules member as written; reading it notes Rules.
+   */
   rules?: (WorldRule | null)[] | null;
+  /**
+   * Gets the authored identity member as written; reading it notes Identity.
+   */
   identity?: WorldIdentityDefinition | null;
+  /**
+   * Gets the authored groups member as written; reading it notes Groups.
+   */
   groups?: WorldGroupsSection | null;
+  /**
+   * Gets the authored properties member as written; reading it notes Properties.
+   */
   properties?: WorldPropertyRegistrySection | null;
+  /**
+   * Gets the authored interactions member as written; reading it notes Interactions.
+   */
   interactions?: WorldInteractionsSection | null;
+  /**
+   * Gets the authored generation member as written; reading it notes Generation.
+   */
   generation?: WorldGenerationDefaults | null;
+  /**
+   * Gets the authored generators member as written; reading it notes Generators.
+   */
   generators?: (GeneratorRow | null)[] | null;
+  /**
+   * Gets the authored references member as written; reading it notes References.
+   */
   references?: (WorldReference | null)[] | null;
+  /**
+   * Gets the authored portals member as written; reading it notes Portals.
+   */
   portals?: WorldPortalsSection | null;
+  /**
+   * Gets the authored simulation member as written; reading it notes Simulation.
+   */
   simulation?: WorldSimulationDefaults | null;
+  /**
+   * Gets the authored destinations member as written; reading it notes Destinations.
+   */
   destinations?: (WorldDestination | null)[] | null;
+  /**
+   * Gets the authored admission member as written; reading it notes Admission.
+   */
   admission?: (WorldAdmissionEntry | null)[] | null;
+  /**
+   * Gets the authored adjacencies member as written; reading it notes Adjacencies.
+   */
   adjacencies?: (WorldAdjacency | null)[] | null;
+  /**
+   * Gets the authored text member as written; reading it notes Text.
+   */
   text?: TextFontCatalogDefinition | null;
+  /**
+   * Gets the authored metadata member as written; reading it notes Metadata.
+   */
   metadata?: WorldMetadataSection | null;
+  /**
+   * Gets the authored update member as written; reading it notes Update.
+   */
   update?: WorldUpdateDefaults | null;
+  /**
+   * Gets the authored music member as written; reading it notes Music.
+   */
   music?: (WorldMusicRow | null)[] | null;
+  /**
+   * Gets the authored seatModes member as written; reading it notes SeatModes.
+   */
   seatModes?: (WorldSeatModeFamily | null)[] | null;
+  /**
+   * Gets the authored probes member as written; reading it notes Probes.
+   */
   probes?: (WorldProbe | null)[] | null;
+  /**
+   * Gets the authored captures member as written; reading it notes Captures.
+   */
   captures?: WorldCapturesSection | null;
+  /**
+   * Gets the authored schedule member as written; reading it notes Schedule.
+   */
   schedule?: WorldScheduleSection | null;
+  /**
+   * Gets the authored curves member as written; reading it notes Curves.
+   */
   curves?: (WorldCurveRow | null)[] | null;
+  /**
+   * Gets the authored navigation member as written; reading it notes Navigation.
+   */
   navigation?: WorldNavigationSection | null;
+  /**
+   * Gets the authored patterns member as written; reading it notes Patterns.
+   */
   patterns?: (PatternRow | null)[] | null;
+  /**
+   * Gets the authored tables member as written; reading it notes Tables.
+   */
   tables?: (TableRow | null)[] | null;
+  /**
+   * Gets the authored search member as written; reading it notes Search.
+   */
   search?: WorldSearchSection | null;
+  /**
+   * Gets the authored machines member as written; reading it notes Machines.
+   */
   machines?: (WorldMachine | null)[] | null;
+  /**
+   * Gets the authored ruleGroups member as written; reading it notes RuleGroups.
+   */
   ruleGroups?: (RuleGroupDeclaration | null)[] | null;
+  /**
+   * Gets the authored sets member as written; reading it notes Sets.
+   */
   sets?: (CellSetRow | null)[] | null;
+  /**
+   * Gets the authored editor member as written; reading it notes Editor.
+   */
   editor?: WorldEditorDefaults | null;
+  /**
+   * Gets the authored timeline member as written; reading it notes Timeline.
+   */
   timeline?: WorldTimelineSection | null;
+  /**
+   * Gets the authored commands member as written; reading it notes Commands.
+   */
   commands?: (WorldConsoleCommand | null)[] | null;
+  /**
+   * Gets the authored replays member as written; reading it notes Replays.
+   */
   replays?: (WorldScopedReplay | null)[] | null;
+  /**
+   * Gets the authored roles member as written; reading it notes Roles.
+   */
   roles?: (WorldRole | null)[] | null;
+  /**
+   * Gets the authored seatPrograms member as written; reading it notes SeatPrograms.
+   */
   seatPrograms?: (WorldSeatProgram | null)[] | null;
+  /**
+   * Gets the authored routes member as written; reading it notes Routes.
+   */
   routes?: (WorldRoute | null)[] | null;
   /**
    * Gets or initializes the world's shade programs, each under its computed identity: read, the table a document carried, which resolves the uses that name a program by key; written, every program this definition's uses name (Of), so a row no use names is never written and a use that holds its program carries it. ABSENT when nothing uses a program.
@@ -7159,6 +7384,10 @@ export type WorldDistantShadows = {
    * The light turn, in degrees, a held map tolerates before it is drawn again: the most its shadows lag a moving sun by, in (0, 10].
    */
   turnDegrees: number;
+  /**
+   * The frames one redraw is spread over, from 1 through MaxFrames: each draws a share of the casters into a back map, and the map the receivers read changes only once the last share lands, so a redraw costs any one frame about this share of a whole one and lands this many frames later. One draws a redraw whole.
+   */
+  frames?: number;
 };
 
 /**
@@ -7776,6 +8005,20 @@ export type WorldExports = {
    * The names a host's presentation may bind: HUD elements and templates, overlay predicates, camera program scalars, binding wheels and bars.
    */
   bindings?: (string | null)[] | null;
+};
+
+/**
+ * How the key light's far shadow cascade keeps up with what moves: it is drawn again at least Hertz times a second of presentation time and held between, and a held cascade is drawn again at once when the light turns past TurnDegrees, the camera moves or turns past the cascade's receiver margin, or its fit changes. A dynamic caster's shadow lags it by up to one period, and every shadow lags a turning light by up to the turn. A device's quality row chooses it (FarShadows).
+ */
+export type WorldFarShadows = {
+  /**
+   * The refreshes a second, a whole number from 1 through MaxHertz, where MaxHertz draws it every frame. A refresh draws the cascade's two layers on consecutive frames.
+   */
+  hertz: number;
+  /**
+   * The light turn, in degrees, a held cascade tolerates, in (0, MaxTurnDegrees]: past it the cascade is drawn again at once, so a light that turns faster than this a period refreshes the cascade on its turn rather than its rate.
+   */
+  turnDegrees: number;
 };
 
 export type WorldFieldCondition = {
@@ -10823,6 +11066,10 @@ export type WorldQualityPreset = {
    * The distant shadow map the device draws past the far cascade (its reach, texels and the light turn a held map tolerates): far shadows by rasterization, which need no ray hardware. Absent draws none.
    */
   distantShadows?: WorldDistantShadows | null;
+  /**
+   * How often the device refreshes the far shadow cascade and the light turn a held cascade tolerates (WorldFarShadows). Absent refreshes it every frame.
+   */
+  farShadows?: WorldFarShadows | null;
 };
 
 export type WorldReaction = WorldReactionDiffuse | WorldReactionDecay | WorldReactionTransform | WorldReactionEmit | WorldReactionExpose | WorldReactionFlow | null;
@@ -11141,6 +11388,10 @@ export type WorldRenderDefaults = {
    * The distant shadow map the world boots drawing past the far cascade (WorldDistantShadows); a quality preset's row replaces it. Absent draws none.
    */
   distantShadows?: WorldDistantShadows | null;
+  /**
+   * How often the world boots refreshing the far shadow cascade (WorldFarShadows); a quality preset's row replaces it. Absent refreshes it every frame.
+   */
+  farShadows?: WorldFarShadows | null;
 };
 
 export type WorldRenderEnvironment = {

@@ -1,4 +1,5 @@
 {
+  "description": "Gets the authored host member as written; reading it notes Host.",
   "type": [
     "object",
     "null"

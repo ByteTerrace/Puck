@@ -1,4 +1,5 @@
 {
+  "description": "Gets the authored hud member as written; reading it notes Hud.",
   "type": [
     "object",
     "null"

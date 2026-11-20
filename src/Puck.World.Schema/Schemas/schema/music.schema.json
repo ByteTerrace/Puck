@@ -1,4 +1,5 @@
 {
+  "description": "Gets the authored music member as written; reading it notes Music.",
   "type": [
     "array",
     "null"

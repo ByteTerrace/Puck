@@ -1,4 +1,5 @@
 {
+  "description": "Gets the authored icons member as written; reading it notes Icons.",
   "type": [
     "object",
     "null"

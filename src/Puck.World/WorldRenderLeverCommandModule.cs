@@ -57,12 +57,16 @@ public sealed partial class WorldRenderLeverCommandModule(WorldRenderSettings se
             ? "on"
             : "off")} dynamic-resolution={(settings.DynamicResolution
             ? "on"
-            : "off")} render-scale={RenderScaleName(scale: settings.RenderScale)} upscale={UpscaleSharpnessName(sharpness: settings.UpscaleSharpness)} sky={SkyQualityName(tier: settings.SkyQuality)} sky-field-scale={settings.SkyFieldScale.ToString(format: "0.###", provider: CultureInfo.InvariantCulture)} indirect={settings.IndirectTier.ToString().ToLowerInvariant()} distant-shadows={DistantShadowsName(map: settings.DistantShadows)}]";
+            : "off")} render-scale={RenderScaleName(scale: settings.RenderScale)} upscale={UpscaleSharpnessName(sharpness: settings.UpscaleSharpness)} sky={SkyQualityName(tier: settings.SkyQuality)} sky-field-scale={settings.SkyFieldScale.ToString(format: "0.###", provider: CultureInfo.InvariantCulture)} indirect={settings.IndirectTier.ToString().ToLowerInvariant()} distant-shadows={DistantShadowsName(map: settings.DistantShadows)} far-shadows={FarShadowsName(rate: settings.FarShadows)}]";
     }
-    // The distant shadow map's spelling in an echo: off, or its reach, texels and light tolerance.
+    // The distant shadow map's spelling in an echo: off, or its reach, texels, light tolerance and the frames a redraw spans.
     private static string DistantShadowsName(WorldDistantShadows? map) => ((map is { } value)
-        ? string.Create(provider: CultureInfo.InvariantCulture, handler: $"{value.Reach:0.#}m/{value.Texels}/{value.TurnDegrees:0.###}deg")
+        ? string.Create(provider: CultureInfo.InvariantCulture, handler: $"{value.Reach:0.#}m/{value.Texels}/{value.TurnDegrees:0.###}deg/{value.Frames}f")
         : "off");
+    // The far cascade rate's spelling in an echo: every-frame, or its rate and light tolerance.
+    private static string FarShadowsName(WorldFarShadows? rate) => ((rate is { } value)
+        ? string.Create(provider: CultureInfo.InvariantCulture, handler: $"{value.Hertz}hz/{value.TurnDegrees:0.####}deg")
+        : "every-frame");
     // A sky tier's spelling, as the document and world.sky-quality spell it.
     private static string SkyQualityName(WorldSkyTier tier) => tier switch {
         WorldSkyTier.Low => "low",
@@ -104,11 +108,8 @@ public sealed partial class WorldRenderLeverCommandModule(WorldRenderSettings se
         _ = echo.Append(value: " longest-ms:");
         foreach (var lever in SdfUpdateRateIntervals.Levers) {
             foreach (var tier in SdfUpdateRateIntervals.Tiers) {
-                // Only bodies take the tiers below 15 Hz, and only the far cascade's own tier records.
-                if (
-                    ((lever == SdfUpdateRates.ShadowFar) && (tier != SdfUpdateRateTiers.ShadowFarHertz)) ||
-                    ((lever != SdfUpdateRates.Bodies) && (tier < 15))
-                ) {
+                // Only bodies and the far cascade, whose rate the device table chooses, take the tiers below 15 Hz.
+                if ((lever is not (SdfUpdateRates.Bodies or SdfUpdateRates.ShadowFar)) && (tier < 15)) {
                     continue;
                 }
 
@@ -325,16 +326,16 @@ public sealed partial class WorldRenderLeverCommandModule(WorldRenderSettings se
     }
 
     /// <inheritdoc/>
-    public CommandResult Apply(CommandContext context, QualityTier tier, WorldQualityPreset preset) {
+    public CommandResult Apply(Principal principal, QualityTier tier, WorldQualityPreset preset) {
         SubmitLever(
             link: link,
-            principal: context.Principal,
+            principal: principal,
             name: WorldSessionLevers.Shadows,
             a: ((int)preset.Shadows)
         );
         SubmitLever(
             link: link,
-            principal: context.Principal,
+            principal: principal,
             name: WorldSessionLevers.AmbientOcclusion,
             a: (preset.AmbientOcclusion
             ? 1.0
@@ -342,7 +343,7 @@ public sealed partial class WorldRenderLeverCommandModule(WorldRenderSettings se
         );
         SubmitLever(
             link: link,
-            principal: context.Principal,
+            principal: principal,
             name: WorldSessionLevers.Temporal,
             a: (preset.Temporal
             ? 1.0
@@ -350,35 +351,36 @@ public sealed partial class WorldRenderLeverCommandModule(WorldRenderSettings se
         );
         SubmitLever(
             link: link,
-            principal: context.Principal,
+            principal: principal,
             name: WorldSessionLevers.RenderScale,
             b: ((double)(preset.DynamicResolution ? WorldRenderScaleOperation.Auto : WorldRenderScaleOperation.Off)),
             a: 0.0
         );
 
-        link.SubmitSessionLever(lever: WorldSessionLevers.ShadowPolicy(preset: preset), principal: context.Principal);
-        link.SubmitSessionLever(lever: WorldSessionLevers.DistantShadowPolicy(preset: preset), principal: context.Principal);
+        link.SubmitSessionLever(lever: WorldSessionLevers.ShadowPolicy(preset: preset), principal: principal);
+        link.SubmitSessionLever(lever: WorldSessionLevers.DistantShadowPolicy(preset: preset), principal: principal);
+        link.SubmitSessionLever(lever: WorldSessionLevers.FarShadowPolicy(preset: preset), principal: principal);
         SubmitLever(
             link: link,
-            principal: context.Principal,
+            principal: principal,
             name: WorldSessionLevers.SkyQuality,
             a: ((double)preset.Sky)
         );
-        SubmitLever(link, context.Principal, WorldSessionLevers.SkyFieldScale, preset.SkyFieldScale);
-        SubmitLever(link, context.Principal, WorldSessionLevers.BloomQuality, ((double)preset.Bloom));
-        SubmitLever(link, context.Principal, WorldSessionLevers.RayQueries, (preset.RayQueries ? 1.0 : 0.0));
-        SubmitLever(link, context.Principal, WorldSessionLevers.Indirect, ((double)(preset.Indirect ?? (tier switch {
+        SubmitLever(link, principal, WorldSessionLevers.SkyFieldScale, preset.SkyFieldScale);
+        SubmitLever(link, principal, WorldSessionLevers.BloomQuality, ((double)preset.Bloom));
+        SubmitLever(link, principal, WorldSessionLevers.RayQueries, (preset.RayQueries ? 1.0 : 0.0));
+        SubmitLever(link, principal, WorldSessionLevers.Indirect, ((double)(preset.Indirect ?? (tier switch {
             QualityTier.Low or QualityTier.Medium => SdfIndirectTier.Medium,
             _ => SdfIndirectTier.High,
         }))));
-        SubmitLever(link, context.Principal, WorldSessionLevers.RenderScale,
+        SubmitLever(link, principal, WorldSessionLevers.RenderScale,
             WorldRenderScaleTiers.Scale(tier: preset.RenderScaleFloor), b: ((double)WorldRenderScaleOperation.Floor),
             section: WorldSection.Views);
         // The echo formats inside the last lever's completion — every setting has applied (or the last was
         // refused) by the time formatEcho runs, since loopback drains each inline before its Submit* returns.
         return SubmitLever(
             link: link,
-            principal: context.Principal,
+            principal: principal,
             name: WorldSessionLevers.RenderScale,
             a: preset.RenderScale,
             b: ((double)WorldRenderScaleOperation.Ceiling),
@@ -953,7 +955,7 @@ public sealed partial class WorldRenderLeverCommandModule(WorldRenderSettings se
                     return CommandResult.Error(output: $"[world.quality: this world authors no {QualityTiers.Name(tier: tier)} preset]");
                 }
 
-                return Apply(context: context, preset: preset, tier: tier);
+                return Apply(principal: context.Principal, preset: preset, tier: tier);
             }
         );
     }

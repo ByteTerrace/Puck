@@ -1,4 +1,5 @@
 {
+  "description": "Gets the authored dynamics member as written; reading it notes Dynamics.",
   "type": [
     "array",
     "null"

@@ -1,4 +1,5 @@
 {
+  "description": "Gets the authored gravity member as written; reading it notes Gravity.",
   "type": [
     "object",
     "null"

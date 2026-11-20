@@ -1,4 +1,5 @@
 {
+  "description": "Gets the authored screens member as written; reading it notes Screens.",
   "type": [
     "array",
     "null"

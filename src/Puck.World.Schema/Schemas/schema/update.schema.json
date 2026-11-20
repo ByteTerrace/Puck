@@ -1,4 +1,5 @@
 {
+  "description": "Gets the authored update member as written; reading it notes Update.",
   "type": [
     "object",
     "null"

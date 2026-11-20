@@ -1,4 +1,5 @@
 {
+  "description": "Gets the authored tunes member as written; reading it notes Tunes.",
   "type": [
     "array",
     "null"

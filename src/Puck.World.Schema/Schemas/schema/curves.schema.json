@@ -1,4 +1,5 @@
 {
+  "description": "Gets the authored curves member as written; reading it notes Curves.",
   "type": [
     "array",
     "null"

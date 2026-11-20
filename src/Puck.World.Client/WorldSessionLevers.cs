@@ -50,9 +50,12 @@ public static partial class WorldSessionLevers {
     public const string Shadows = "shadows";
     /// <summary>The complete shadow policy: stable slots, fade slots, fade ticks and overflow in lanes A through D.</summary>
     public const string ShadowSlots = "shadow-slots";
-    /// <summary>The distant shadow map: its reach in metres in lane A (zero for none), its texels a side in lane B and the
-    /// light turn a held map tolerates, in degrees, in lane C.</summary>
+    /// <summary>The distant shadow map: its reach in metres in lane A (zero for none), its texels a side in lane B, the
+    /// light turn a held map tolerates, in degrees, in lane C, and the frames a redraw is spread over in lane D.</summary>
     public const string DistantShadows = "distant-shadows";
+    /// <summary>The far shadow cascade's rate: its refreshes a second in lane A (zero for every frame, the unauthored
+    /// default) and the light turn a held cascade tolerates, in degrees, in lane B.</summary>
+    public const string FarShadows = "far-shadows";
     /// <summary>The sky's quality tier ordinal (<c>world.sky-quality</c>), a <see cref="WorldSkyTier"/>.</summary>
     public const string SkyQuality = "sky-quality";
     /// <summary>The independent sky field grid fraction (<c>world.sky-field-scale</c>), one or one half.</summary>
@@ -97,7 +100,14 @@ public static partial class WorldSessionLevers {
     public static WorldSessionLever DistantShadowPolicy(WorldQualityPreset preset) => new(
         Section: WorldSection.Render, Name: DistantShadows,
         A: (preset.DistantShadows?.Reach ?? 0f), B: (preset.DistantShadows?.Texels ?? 0),
-        C: (preset.DistantShadows?.TurnDegrees ?? 0f));
+        C: (preset.DistantShadows?.TurnDegrees ?? 0f), D: (preset.DistantShadows?.Frames ?? 1));
+    /// <summary>Creates the one lever that installs a preset's far cascade rate, or restores the every-frame default for a
+    /// preset that authors none.</summary>
+    /// <param name="preset">The authored quality row.</param>
+    /// <returns>The rate and tolerance in one accepted settings write.</returns>
+    public static WorldSessionLever FarShadowPolicy(WorldQualityPreset preset) => new(
+        Section: WorldSection.Render, Name: FarShadows,
+        A: (preset.FarShadows?.Hertz ?? 0), B: (preset.FarShadows?.TurnDegrees ?? 0f));
     /// <summary>Composes the applier every shipped knob is registered on.</summary>
     /// <param name="settings">The live render-lever settings the frame source reads.</param>
     /// <param name="pacing">The live present-rate control the window pump reads.</param>
@@ -234,13 +244,27 @@ public static partial class WorldSessionLevers {
                 return;
             }
             // The values arrive off the wire, so they are judged here as the document validator judges an authored map.
-            var map = new WorldDistantShadows(Reach: ((float)lever.A), Texels: ((int)lever.B), TurnDegrees: ((float)lever.C));
+            var map = new WorldDistantShadows(Reach: ((float)lever.A), Texels: ((int)lever.B), TurnDegrees: ((float)lever.C), Frames: ((int)lever.D));
 
             if (map.Refusal(path: "distant-shadows") is { } refusal) {
                 WorldClientDiagnostics.Report(channel: "world.quality", text: $"{refusal} — lever dropped");
                 return;
             }
             settings.DistantShadows = map;
+        });
+        sink.Register(name: FarShadows, setter: lever => {
+            if (lever.A <= 0d) {
+                settings.FarShadows = null;
+                return;
+            }
+            // The values arrive off the wire, so they are judged here as the document validator judges an authored row.
+            var rate = new WorldFarShadows(Hertz: ((int)lever.A), TurnDegrees: ((float)lever.B));
+
+            if (rate.Refusal(path: "far-shadows") is { } refusal) {
+                WorldClientDiagnostics.Report(channel: "world.quality", text: $"{refusal} — lever dropped");
+                return;
+            }
+            settings.FarShadows = rate;
         });
         return sink;
     }

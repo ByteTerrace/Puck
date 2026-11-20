@@ -1,4 +1,5 @@
 {
+  "description": "Gets the authored identity member as written; reading it notes Identity.",
   "type": [
     "object",
     "null"

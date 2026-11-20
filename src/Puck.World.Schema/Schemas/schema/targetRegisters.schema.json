@@ -1,4 +1,5 @@
 {
+  "description": "Gets the authored targetRegisters member as written; reading it notes TargetRegisters.",
   "type": [
     "array",
     "null"

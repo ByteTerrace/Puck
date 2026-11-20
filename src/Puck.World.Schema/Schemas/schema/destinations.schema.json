@@ -1,4 +1,5 @@
 {
+  "description": "Gets the authored destinations member as written; reading it notes Destinations.",
   "type": [
     "array",
     "null"

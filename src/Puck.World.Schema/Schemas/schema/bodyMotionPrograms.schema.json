@@ -1,4 +1,5 @@
 {
+  "description": "Gets the authored bodyMotionPrograms member as written; reading it notes BodyMotionPrograms.",
   "type": [
     "array",
     "null"

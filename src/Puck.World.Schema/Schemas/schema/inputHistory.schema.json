@@ -1,4 +1,5 @@
 {
+  "description": "Gets the authored inputHistory member as written; reading it notes InputHistory.",
   "type": [
     "object",
     "null"

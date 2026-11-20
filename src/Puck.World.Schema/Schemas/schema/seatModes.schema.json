@@ -1,4 +1,5 @@
 {
+  "description": "Gets the authored seatModes member as written; reading it notes SeatModes.",
   "type": [
     "array",
     "null"

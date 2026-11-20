@@ -1,4 +1,5 @@
 {
+  "description": "Gets the authored bindingOverlays member as written; reading it notes BindingOverlays.",
   "type": [
     "array",
     "null"

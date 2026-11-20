@@ -1,4 +1,5 @@
 {
+  "description": "Gets the authored views member as written; reading it notes Views.",
   "type": [
     "object",
     "null"

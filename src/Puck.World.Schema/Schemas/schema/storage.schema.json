@@ -1,4 +1,5 @@
 {
+  "description": "Gets the authored storage member as written; reading it notes Storage.",
   "type": [
     "object",
     "null"

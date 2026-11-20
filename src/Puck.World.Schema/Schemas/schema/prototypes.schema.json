@@ -1,4 +1,5 @@
 {
+  "description": "Gets the authored prototypes member as written; reading it notes Prototypes.",
   "type": [
     "array",
     "null"
