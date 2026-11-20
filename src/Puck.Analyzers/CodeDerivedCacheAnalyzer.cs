@@ -69,7 +69,7 @@ public sealed class CodeDerivedCacheAnalyzer : DiagnosticAnalyzer {
         }
     }
     private static void Check(SymbolAnalysisContext context, ISymbol symbol, ITypeSymbol type) {
-        if (!Mentions(type: type) || InsideTheDoor(symbol: symbol) || Marked(symbol: symbol)) {
+        if (!Mentions(type: type) || InsideTheDoor(symbol: symbol) || Carries(symbol: symbol, attribute: MarkName)) {
             return;
         }
 
@@ -113,15 +113,6 @@ public sealed class CodeDerivedCacheAnalyzer : DiagnosticAnalyzer {
     private static bool InsideTheDoor(ISymbol symbol) {
         for (var type = symbol.ContainingType; (type is not null); type = type.ContainingType) {
             if (Is(type: type, @namespace: DoorNamespace, name: DoorType)) {
-                return true;
-            }
-        }
-
-        return false;
-    }
-    private static bool Marked(ISymbol symbol) {
-        foreach (var attribute in symbol.GetAttributes()) {
-            if (attribute.AttributeClass?.ToDisplayString() == MarkName) {
                 return true;
             }
         }

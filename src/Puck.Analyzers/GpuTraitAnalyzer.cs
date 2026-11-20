@@ -331,15 +331,7 @@ public sealed class GpuTraitAnalyzer : DiagnosticAnalyzer {
     // Dispose, DisposeAsync and InitializeAsync without parameters: IDisposable, IAsyncDisposable and IAsyncLifetime.
     private static bool Lifecycle(IMethodSymbol method) =>
         (!method.IsStatic && (method.Parameters.Length == 0) && (method.Name is "Dispose" or "DisposeAsync" or "InitializeAsync"));
-    private static bool Marked(ISymbol symbol) {
-        foreach (var attribute in symbol.GetAttributes()) {
-            if (attribute.AttributeClass?.ToDisplayString() == MarkerName) {
-                return true;
-            }
-        }
-
-        return false;
-    }
+    private static bool Marked(ISymbol symbol) => NamedTypes.Carries(attribute: MarkerName, symbol: symbol);
     // Whether xUnit discovers the type as a test class: it, or a base type it inherits tests from, declares a test method.
     private static bool TestClass(INamedTypeSymbol type, XunitTypes xunit) {
         for (var current = type; (current is not null); current = current.BaseType) {

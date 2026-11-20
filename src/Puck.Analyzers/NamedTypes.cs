@@ -23,6 +23,20 @@ internal static class NamedTypes {
             (definition.ContainingNamespace?.ToDisplayString() == @namespace)
         );
     }
+    /// <summary>Returns whether a symbol carries an attribute of the named type, matched by its full display name so a
+    /// mark linked into each project as source is recognised whichever assembly declares the copy.</summary>
+    /// <param name="symbol">The symbol.</param>
+    /// <param name="attribute">The attribute type's full name, such as <c>Puck.SideTableAttribute</c>.</param>
+    /// <returns><see langword="true"/> when the symbol carries the attribute.</returns>
+    public static bool Carries(ISymbol symbol, string attribute) {
+        foreach (var data in symbol.GetAttributes()) {
+            if (data.AttributeClass?.ToDisplayString() == attribute) {
+                return true;
+            }
+        }
+
+        return false;
+    }
     /// <summary>Returns whether a type is, or implements, the named type.</summary>
     /// <param name="type">The type, or <see langword="null"/>.</param>
     /// <param name="namespace">The namespace's display name.</param>
