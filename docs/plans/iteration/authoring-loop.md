@@ -253,7 +253,9 @@ members the current vocabulary accepts.
 
 ### The World
 
-- **`world.reload`** (`WorldReload`) compiles, composes, draws and settles the
+- **`world.reload`** (`WorldReload`, the desktop's reader for `WorldReloadDoor`,
+  which a silo row's published-definition reload also runs) compiles, composes,
+  draws and settles the
   current source on the thread pool without admitting it
   (`WorldDefinitionLoader.TryLoadFileForEdit`), answers a source that still
   composes to the revision the authority holds (`WorldServer.SourceRevision`)

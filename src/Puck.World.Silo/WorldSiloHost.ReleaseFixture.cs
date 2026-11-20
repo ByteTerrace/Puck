@@ -69,7 +69,7 @@ public sealed partial class WorldSiloHost {
                     ) ||
                         bookkeeping.Initializing ||
                         bookkeeping.Released ||
-                        bookkeeping.PersistenceBlocked ||
+                        bookkeeping.Publications.Blocked ||
                         !Instances.TryGet(
                         declared.World.Value,
                         out var row
@@ -102,25 +102,14 @@ public sealed partial class WorldSiloHost {
                         Owner: declared.Owner,
                         World: declared.World
                     );
-                    // Insert the root read behind this capture's preceding publications and ahead of all later
+                    // The root read joins the queue behind this capture's preceding publications and ahead of all later
                     // mutations. Only the small root read holds the queue; its immutable graph is copied afterward.
-                    Task<WorldAuthorityRootSnapshot> selected;
-
-                    lock (bookkeeping.TailGate) {
-                        selected = ReadFixtureRootAsync(
-                            bookkeeping: bookkeeping,
-                            identity: identity,
-                            previous: bookkeeping.JournalTail,
-                            token: cancellationToken
-                        );
-                        bookkeeping.JournalTail = ObserveFixtureReadAsync(selected: selected);
-                    }
                     rows.Add(
                         key: declared.World.Value,
                         value: new(
                             Checkpoint: bytes,
                             Identity: identity,
-                            Root: selected,
+                            Root: bookkeeping.Publications.After(operation: published => ReadFixtureRootAsync(identity: identity, published: published, token: cancellationToken)),
                             Tick: tick
                         )
                     );
@@ -174,10 +163,10 @@ public sealed partial class WorldSiloHost {
         return published;
     }
 
-    private async Task<WorldAuthorityRootSnapshot> ReadFixtureRootAsync(WorldAuthorityIdentity identity, RowBookkeeping bookkeeping,
-        Task previous, CancellationToken token) {
-        await previous.WaitAsync(cancellationToken: token).ConfigureAwait(continueOnCapturedContext: false);
-        if (bookkeeping.PersistenceBlocked) { throw new InvalidOperationException(message: "fixture capture requires healthy preceding publications"); }
+    // Runs in the row's publication queue; a failed or cancelled read belongs to the export request and leaves the
+    // queue serving.
+    private async Task<WorldAuthorityRootSnapshot> ReadFixtureRootAsync(WorldAuthorityIdentity identity, RowPublished published, CancellationToken token) {
+        if (published.Blocked) { throw new InvalidOperationException(message: "fixture capture requires healthy preceding publications"); }
         var selected = await m_store.LoadRootAsync(
             cancellationToken: token,
             identity: identity
@@ -185,9 +174,9 @@ public sealed partial class WorldSiloHost {
 
         if (
             (selected is not { } root) ||
-            (root.Root.Epoch != bookkeeping.Fence.Epoch) ||
-            (root.Root.FenceToken != bookkeeping.Fence.Token) ||
-            (root.Root.JournalSequence != bookkeeping.PublishedJournalSequence)
+            (root.Root.Epoch != published.Fence.Epoch) ||
+            (root.Root.FenceToken != published.Fence.Token) ||
+            (root.Root.JournalSequence != published.JournalSequence)
         ) {
             throw new InvalidOperationException(message: "fixture capture lost its authority or publication boundary");
         }
@@ -198,17 +187,12 @@ public sealed partial class WorldSiloHost {
                 timeProvider: m_clock
             ).EstablishRewindBoundaryAsync(
                 identity,
-                bookkeeping.Fence,
+                published.Fence,
                 RewindBoundary,
                 token
             ).ConfigureAwait(continueOnCapturedContext: false)
             : root
         );
-    }
-    private static async Task ObserveFixtureReadAsync(Task selected) {
-        try { await selected.ConfigureAwait(continueOnCapturedContext: false); }
-        // A failed/canceled read belongs to the export request; it must not poison the serving publication queue.
-        catch { }
     }
     private async Task RequireFixtureSourceAsync(CancellationToken token) {
         var state = (await ReadManagedReleaseAsync(ct: token).ConfigureAwait(continueOnCapturedContext: false)).Record;

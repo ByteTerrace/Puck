@@ -488,7 +488,10 @@ shipped engine content resolves through `PuckPaths.Shipped`.
 **A reload is a keyed delta between two source revisions.** The authority keeps the
 revision of the source it last took (`WorldServer.SourceRevision`: the document the
 source composed, drew and settled to, and its content pin), set at boot, load and
-reload and retained in checkpoints. `world.reload` (`WorldReload`)
+reload and retained in checkpoints. A reload runs through one door, `WorldReloadDoor`,
+with a reader per source: `world.reload` (`WorldReload`) reads a file, and a silo row
+reads its published definition (`WorldHostedOrigin.ReadPublishedAsync`). The pin is the
+hash of the composition read, before any draw, whichever reader read it. The door
 captures that revision on the pump and reads the source on the thread pool as an edit
 (`WorldDefinitionLoader.TryLoadFileForEdit`: composed, drawn and settled, never
 admitted, so only the authority validates). A source that still composes to the

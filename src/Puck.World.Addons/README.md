@@ -137,12 +137,12 @@ fallible gate for an `UpsertAddon`/`RemoveAddon` mutation (refusing by name
 first when no addon host is attached at all), after every cheaper refusal;
 `WorldAddonRuntime.TryCreate` calls it at boot (against no prior state, and
 `WorldPostBuildWiring` turns a refusal into an ordinary boot refusal rather
-than an unhandled exception), `WorldDocument.ApplyRebuild` calls it
-unconditionally for `world.reset`/`.load`/`.reload` (a whole-document swap
-can move any section, including the channel table), and `ApplyUndo` calls
-it both as a throwaway per-entry probe (proving an intermediate journal
-candidate COULD have mounted, disposed immediately either way) and once for
-real, at the end, for the final restored document. An enabled row that
+than an unhandled exception), and the one install door
+(`WorldDocument.TryStageInstall`) calls it for a mutation, a rebuild
+(`world.reset`/`.load`/`.reload`) and an undo's restored document whenever the
+candidate changed a part the host's last preparation read. An undo also calls
+it as a throwaway per-entry probe (proving an intermediate journal
+candidate COULD have mounted, disposed immediately either way). An enabled row that
 cannot prepare refuses the WHOLE mutation (or rebuild, or the whole world
 installation at boot, or the whole undo)—the candidate discarded, the
 live document byte-identical.

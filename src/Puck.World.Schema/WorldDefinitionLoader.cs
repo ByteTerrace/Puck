@@ -195,22 +195,9 @@ public static partial class WorldDefinitionLoader {
         string catalogFingerprint = "", IMachineValidationCatalog? catalog = null, string? documentDirectory = null, WorldDrawSampler? keys = null
     ) {
         cancellationToken.ThrowIfCancellationRequested();
-        if (
-            !TryDecode(
-            json: out var json,
-            reason: out var reason,
-            sourceName: sourceName,
-            utf8: utf8
-        ) ||
-            !WorldDefinitionFileSource.TryParseDocument(
-            definition: out var parsed,
-            reason: out reason,
-            sourceName: sourceName,
-            utf8: json
-        )
-        ) { return (null, reason); }
-        var input = parsed! with { DocumentDirectory = documentDirectory };
-        if (!TryPrepareBootValues(keys: keys, definition: input, instanceIdentity: instanceIdentity, reason: out reason, resolved: out var prepared, sourceName: sourceName)) { return (null, reason); }
+        if (!TryLoadForEdit(definition: out var prepared, documentDirectory: documentDirectory, instanceIdentity: instanceIdentity, keys: keys, reason: out var reason, sourceName: sourceName, utf8: utf8)) {
+            return (null, reason);
+        }
         var neighbours = new ResolvedNeighbours();
 
         foreach (var reference in (prepared!.References ?? [])) {

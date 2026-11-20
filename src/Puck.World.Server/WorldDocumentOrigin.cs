@@ -211,12 +211,13 @@ public sealed class WorldHostedOrigin : WorldDocumentOrigin {
         timeProvider: m_clock
     );
 
-    /// <summary>Reads a hosted definition and its neighbours without blocking on storage I/O.</summary>
-    /// <param name="instanceIdentity">The running instance's identity for boot draws.</param>
-    /// <param name="cancellationToken">Cancels root and neighbour reads.</param>
-    /// <param name="keys">The live authority, or the explicit sampler of a preview.</param>
-    /// <returns>The fully validated document, or a named load refusal.</returns>
-    public async ValueTask<(WorldDefinition? Definition, string Reason)> LoadAsync(string instanceIdentity, CancellationToken cancellationToken, WorldPrivateDrawKeys? keys = null) {
+    /// <summary>Reads the published definition's bytes and their content pin without blocking on storage I/O, parsing
+    /// and admitting nothing.</summary>
+    /// <param name="cancellationToken">Cancels the read.</param>
+    /// <returns>The published bytes with their content pin
+    /// (<see cref="WorldDefinitionFileSource.ComputeContentHash"/> over the bytes as published, before any draw, the
+    /// pin a file read takes of its composition); or no bytes, an empty pin and the named refusal.</returns>
+    public async ValueTask<(ReadOnlyMemory<byte>? Published, string ContentHash, string Reason)> ReadPublishedAsync(CancellationToken cancellationToken) {
         var address = WorldAuthorityBlobStore.RootAddress(identity: new WorldAuthorityIdentity(
             Owner: m_owner,
             World: m_world
@@ -236,9 +237,41 @@ public sealed class WorldHostedOrigin : WorldDocumentOrigin {
                 m_target,
                 timeout.Token
             ).ConfigureAwait(continueOnCapturedContext: false);
-        } catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; } catch (Exception error) { return (null, $"could not read '{address.Key}' — {error.Message.ReplaceLineEndings(replacementText: " ")}"); }
+        } catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; } catch (Exception error) { return (null, string.Empty, $"could not read '{address.Key}' — {error.Message.ReplaceLineEndings(replacementText: " ")}"); }
         cancellationToken.ThrowIfCancellationRequested();
-        if (content is not { } found) { return (null, $"no cloud copy at '{address.Key}'"); }
+        return ((content is { } found)
+            ? (found.Content, WorldDefinitionFileSource.ComputeContentHash(content: found.Content.Span), string.Empty)
+            : (null, string.Empty, $"no cloud copy at '{address.Key}'"));
+    }
+    /// <summary>Prepares published bytes as an edit of a running world: parses them, fills their first-fill draw sites
+    /// for <paramref name="instanceIdentity"/> and settles their boot values beside this origin's document directory.
+    /// It admits nothing: the authority the edit is sent to validates what it installs once.</summary>
+    /// <param name="published">The bytes <see cref="ReadPublishedAsync"/> read.</param>
+    /// <param name="instanceIdentity">The running instance's identity for first-fill draws.</param>
+    /// <param name="definition">The drawn, settled definition; <see langword="null"/> on refusal.</param>
+    /// <param name="reason">The named refusal, or empty on success.</param>
+    /// <param name="keys">The live authority, or the explicit sampler of a preview.</param>
+    /// <returns>Whether the bytes parsed, drew and settled.</returns>
+    public bool TryPrepareEdit(ReadOnlyMemory<byte> published, string instanceIdentity, out WorldDefinition? definition, out string reason, WorldPrivateDrawKeys? keys = null) =>
+        WorldDefinitionLoader.TryLoadForEdit(
+            definition: out definition,
+            documentDirectory: m_documentDirectory,
+            instanceIdentity: instanceIdentity,
+            keys: keys,
+            reason: out reason,
+            sourceName: WorldAuthorityBlobStore.RootAddress(identity: new WorldAuthorityIdentity(Owner: m_owner, World: m_world)).Key,
+            utf8: published
+        );
+    /// <summary>Reads a hosted definition and its neighbours without blocking on storage I/O.</summary>
+    /// <param name="instanceIdentity">The running instance's identity for boot draws.</param>
+    /// <param name="cancellationToken">Cancels root and neighbour reads.</param>
+    /// <param name="keys">The live authority, or the explicit sampler of a preview.</param>
+    /// <returns>The fully validated document, or a named load refusal.</returns>
+    public async ValueTask<(WorldDefinition? Definition, string Reason)> LoadAsync(string instanceIdentity, CancellationToken cancellationToken, WorldPrivateDrawKeys? keys = null) {
+        var (published, _, readReason) = await ReadPublishedAsync(cancellationToken: cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
+
+        if (published is not { } found) { return (null, readReason); }
+        var address = WorldAuthorityBlobStore.RootAddress(identity: new WorldAuthorityIdentity(Owner: m_owner, World: m_world));
         var neighbours = new WorldStorageNeighbourResolver(
             containerId: m_owner,
             @namespace: WorldStorageNamespace.Hosted,
@@ -248,7 +281,7 @@ public sealed class WorldHostedOrigin : WorldDocumentOrigin {
         );
 
         var loaded = await WorldDefinitionLoader.LoadAsync(
-            found.Content,
+            found,
             address.Key,
             instanceIdentity,
             neighbours.ResolveHostedAsync,

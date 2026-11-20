@@ -48,18 +48,20 @@ public sealed partial class WorldDocument {
         [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out WorldPreparedMutation? prepared, out string reason, out bool denied, bool derived = false) =>
         WorldPreparedMutation.TryPrepare(this, mutation, tick, engineTick, preMetered, out prepared, out reason, out denied, derived);
 
-    private bool TryStageDocument(WorldMutation mutation, ulong tick, ulong engineTick, out DocumentStage stage, out string reason) {
+    private bool TryStageDocument(WorldMutation mutation, ulong tick, ulong engineTick, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out DocumentStage? stage, out CellName? evictedKey, out string reason) {
         if (EditsShadingAlone(mutation, m_definition)) {
-            if (!TryStageDocument(m_definition, mutation, tick, engineTick, out stage, out reason)) { return false; }
+            if (!TryStageDocument(m_definition, mutation, tick, engineTick, out stage, out evictedKey, out reason)) { return false; }
             if (stage.Kind == WorldInstallKind.Presentation) { return true; }
             stage.Dispose();
         }
-        return TryStageDocument(Host.MaterializeArena(), mutation, tick, engineTick, out stage, out reason);
+        return TryStageDocument(Host.MaterializeArena(), mutation, tick, engineTick, out stage, out evictedKey, out reason);
     }
 
+    // A mutation's own gates (composition, classification, validation, the arena its install adopts) before the one
+    // install door stages the candidate.
     private bool TryStageDocument(WorldDefinition current, WorldMutation mutation, ulong tick, ulong engineTick,
-        out DocumentStage prepared, out string reason) {
-        prepared = default;
+        [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out DocumentStage? prepared, out CellName? evictedKey, out string reason) {
+        prepared = null;
         if (!TryCompose(
             prepareAuthority: false,
             authority: Host.GrantTable,
@@ -70,7 +72,7 @@ public sealed partial class WorldDocument {
             instanceIdentity: Host.InstanceIdentity,
             candidate: out var candidate,
             reason: out reason,
-            evictedKey: out var evictedKey,
+            evictedKey: out evictedKey,
             refusalCode: out var refusalCode
         )) {
             m_lastMutationFailureCode = (refusalCode ?? "world.mutation.refused");
@@ -162,7 +164,6 @@ public sealed partial class WorldDocument {
             return false;
         }
         var compilation = (admission ?? validatedAdmission)?.Compilation;
-        if (!Host.Input.TryValidateDefinition(candidate, arena, out reason)) { return false; }
         if (!TryAdmitPipelineOverrides(
             candidate: candidate,
             current: current,
@@ -185,13 +186,6 @@ public sealed partial class WorldDocument {
             return false;
         }
 
-        if (ExceedsBootDerivedFaceReservation(
-            candidate: candidate,
-            reason: out reason
-        )) {
-            return false;
-        }
-
         // The compiled products a full install keeps unless a part they were built from changed; a presentation
         // install keeps every product but the envelope's fit, and a value install keeps them all.
         // Planned against the installed document the products were built from, not the arena export the mutation
@@ -202,219 +196,24 @@ public sealed partial class WorldDocument {
             WorldInstallKind.Presentation => PlanProducts(previous: m_definition, candidate: candidate).ForPresentation(),
             _ => default(WorldProductPlan),
         };
-        WorldDocumentInputs? envelopeInputs = null;
 
-        if (!products.Envelope.IsEmpty) {
-            if (!TryFitEnvelope(candidate: candidate, inputs: out var fitted, reason: out reason)) {
-                return false;
-            }
-            envelopeInputs = fitted;
-        }
-
-        if (!Host.Population.CanInstallFields(
-            definition: candidate,
-            reason: out var fieldReason
-        )) {
-            reason = fieldReason!;
-
-            return false;
-        }
-
-        if (!TryStageSolids(candidate: candidate, products: products, reason: out reason, solids: out var solids)) {
-            return false;
-        }
-
-        // The addon and machine hosts stage their resources against the same candidate, last. A plan is set only on
-        // success, and a refusal or a throw after one was obtained disposes it, so nothing staged outlives a
-        // mutation that does not install. A server with no addon host attached refuses a candidate holding an
-        // enabled addon row by name rather than accepting a no-op.
-        IWorldAddonPreparedPlan? addonPlan = null;
-        IWorldMachinePreparedPlan? machinePlan = null;
-        WorldDocumentInputs? addonInputs = null;
-        WorldDocumentInputs? machineInputs = null;
-        int[]? tickWrittenEntity = null;
-        Principal[]? tickWrittenPrincipal = null;
-        bool[]? tickCollided = null;
-        var staged = false;
-
-        try {
-            if (!products.Addons.IsEmpty) {
-                if (Host.Addons is not { } addons) {
-                    if (TryFindEnabledAddonRow(candidate: candidate, name: out var enabledRowName)) {
-                        reason = $"addon '{enabledRowName}' cannot mount — no addon host is attached to this server";
-
-                        return false;
-                    }
-                } else {
-                    if (!TryPrepareAddons(
-                        addons: addons,
-                        candidate: candidate,
-                        current: current,
-                        inputs: out var preparedAddons,
-                        plan: out addonPlan,
-                        reason: out var addonReason
-                    )) {
-                        reason = (addonReason ?? "addon preparation refused");
-
-                        return false;
-                    }
-                    addonInputs = preparedAddons;
-
-                    if (addonPlan is not null) {
-                        StageAddonContentionArrays(
-                            mountedCount: addonPlan.MountedCount,
-                            entity: out tickWrittenEntity,
-                            principal: out tickWrittenPrincipal,
-                            collided: out tickCollided
-                        );
-                    }
-                }
-            }
-
-            if (!products.Machines.IsEmpty) {
-                if (!TryPrepareMachines(
-                    admission: admission,
-                    candidate: candidate,
-                    current: current,
-                    inputs: out var preparedMachines,
-                    plan: out machinePlan,
-                    reason: out var machineReason
-                )) {
-                    reason = (machineReason ?? "screen machine preparation refused");
-
-                    return false;
-                }
-                machineInputs = preparedMachines;
-            }
-
-            if (!Host.GrantTable.TryPrepareDocument(mutation.Principal, current, candidate,
-                (WorldMutationKindCatalog.SectionOf(mutation: mutation) == WorldSection.Grants), out var authority, out reason)) { return false; }
-            prepared = new DocumentStage(
-                addonPlan: addonPlan,
-                arena: arena,
-                authority: authority!,
-                candidate: candidate,
-                compilation: compilation,
-                engineTick: engineTick,
-                evictedKey: evictedKey,
-                kind: kind,
-                machinePlan: machinePlan,
-                mutation: mutation,
-                products: products,
-                productInputs: (envelopeInputs, addonInputs, machineInputs),
-                solids: solids,
-                tick: tick,
-                tickCollided: tickCollided,
-                tickWrittenEntity: tickWrittenEntity,
-                tickWrittenPrincipal: tickWrittenPrincipal
-            );
-            reason = string.Empty;
-            staged = true;
-
-            return true;
-        } finally {
-            if (!staged) {
-                addonPlan?.Dispose();
-                machinePlan?.Dispose();
-            }
-        }
-    }
-    /// <summary>Installs a prepared mutation: swaps the live definition, rebuilds the derived state the mutation
-    /// moved, commits the staged addon and machine plans, journals the mutation and echoes it. Nothing here
-    /// refuses.</summary>
-    /// <param name="prepared">What <see cref="TryPrepareMutation"/> produced, against the document installed
-    /// now.</param>
-    /// <param name="connectionId">The submitting envelope's connection id.</param>
-    /// <param name="correlationId">The submitting envelope's correlation id.</param>
-    /// <param name="record">Whether to journal and echo here; a coalesced cell run records each original act.</param>
-    /// <param name="derived">Whether the mutation is guest output excluded from the external-edit recovery tail.</param>
-    /// <param name="privateWords">Private inputs used by the prepared mutation.</param>
-    /// <param name="commitJournal">Publishes the reserved journal entry once the edit has installed.</param>
-    private void InstallPrepared(DocumentStage prepared, int connectionId, long correlationId, bool record = true, bool derived = false, MutationDrawHistory? privateWords = null, Action? commitJournal = null) {
-        var mutation = prepared.Mutation;
-        var candidate = prepared.Candidate;
-        var engineTick = prepared.EngineTick;
-        var tick = prepared.Tick;
-        var addonPlan = prepared.AddonPlan;
-        var machinePlan = prepared.MachinePlan;
-        var previous = m_definition;
-
-        try {
-            // The candidate field is published immediately before the install rebuilds bodies against it.
-            if (
-                !prepared.Products.Solids.IsEmpty &&
-                !ReferenceEquals(
-                objA: prepared.Solids,
-                objB: m_solids
-            )
-            ) {
-                SetSolids(solids: prepared.Solids);
-                m_solidRevision++;
-            }
-
-            // The kind the prepare step decided against the document the candidate was composed over
-            // (InstallKindOf); a value install carries a prepared arena only for pool storage.
-            switch (prepared.Kind) {
-                case WorldInstallKind.Value:
-                    prepared.Authority.Install();
-                    InstallRuntimeStateValue(definition: candidate, mutation: mutation, arena: prepared.Arena);
-                    break;
-                case WorldInstallKind.Presentation:
-                    prepared.Authority.Install();
-                    InstallPresentation(definition: candidate);
-                    NarrateProducts(plan: prepared.Products, population: false);
-                    break;
-                default:
-                    Install(
-                        authority: prepared.Authority,
-                        arena: prepared.Arena,
-                        definition: candidate,
-                        compilation: prepared.Compilation,
-                        products: prepared.Products
-                    );
-                    NarrateProducts(plan: prepared.Products, population: prepared.Products.RebuildsPopulation);
-                    break;
-            }
-            AdoptProductInputs(addons: prepared.ProductInputs.Addons, envelope: prepared.ProductInputs.Envelope, machines: prepared.ProductInputs.Machines);
-
-            // Whatever moved a lattice row's draw pass — a Generate, or a whole-row upsert that re-authored its
-            // cursor, drawn masks or fill — repaints that row; every other row keeps its evolved cells.
-            Host.RepaintChangedLatticeDraws(
-                current: candidate,
-                previous: previous
-            );
-
-            // Registration, disclosure narration and disposal of a superseded guest move only after the install.
-            // Finish runs after the journal write below, so nothing it does can still be unwound.
-            if (addonPlan is not null) {
-                Host.Addons!.Commit(plan: addonPlan);
-                prepared.MarkAddonCommitted();
-
-                if (prepared.TickWrittenEntity is not null) {
-                    Host.AdoptContentionArrays(
-                        collided: prepared.TickCollided!,
-                        entity: prepared.TickWrittenEntity,
-                        principal: prepared.TickWrittenPrincipal!
-                    );
-                }
-            }
-
-            if (machinePlan is not null) {
-                Host.Machines.Commit(plan: machinePlan);
-                prepared.MarkMachineCommitted();
-            }
-        } finally {
-            prepared.Dispose();
-        }
-
-        if (record) { RecordPrepared(connectionId: connectionId, correlationId: correlationId, derived: derived, mutation: mutation, prepared: prepared, privateWords: privateWords, commitJournal: commitJournal); }
+        return TryStageInstall(
+            request: new InstallRequest(Candidate: candidate, Current: current, Kind: kind, Principal: mutation.Principal, Products: products) {
+                Admission = admission,
+                Arena = arena,
+                Compilation = compilation,
+                GrantsWrite = (WorldMutationKindCatalog.SectionOf(mutation: mutation) == WorldSection.Grants),
+                Mutation = mutation,
+            },
+            reason: out reason,
+            stage: out prepared
+        );
     }
 
-    private void RecordPrepared(DocumentStage prepared, int connectionId, long correlationId, WorldMutation mutation, bool derived, MutationDrawHistory? privateWords, Action? commitJournal) =>
-        RecordCommittedMutation(mutation: mutation, tick: prepared.Tick, engineTick: prepared.EngineTick, connectionId: connectionId,
-            correlationId: correlationId, evictedKey: prepared.EvictedKey, addonPlan: prepared.AddonPlan, machinePlan: prepared.MachinePlan, derived: derived, privateWords: privateWords, commitJournal: commitJournal);
+    // Journals and echoes a mutation whose state transaction or staged install just committed, then finishes what the
+    // install committed: nothing the hosts do at their finish can unwind the journal entry.
     private void RecordCommittedMutation(WorldMutation mutation, ulong tick, ulong engineTick, int connectionId, long correlationId,
-        CellName? evictedKey = null, IWorldAddonPreparedPlan? addonPlan = null, IWorldMachinePreparedPlan? machinePlan = null, bool derived = false, MutationDrawHistory? privateWords = null, Action? commitJournal = null) {
+        CellName? evictedKey, DocumentStage? stage, bool derived, MutationDrawHistory? privateWords, Action? commitJournal) {
         var entry = new WorldJournalEntry(
             EngineTick: engineTick,
             Mutation: mutation,
@@ -425,14 +224,7 @@ public sealed partial class WorldDocument {
         // Guest decisions belong to the checkpoint's tick, not the external-edit recovery tail.
         if (!derived) { Host.MutationJournalTap?.Invoke(entry); }
         foreach (var scope in Host.ScopedReplaySpan) { scope.Observe(mutation: mutation); }
-
-        if (addonPlan is not null) {
-            Host.Addons!.Finish(plan: addonPlan);
-        }
-
-        if (machinePlan is not null) {
-            Host.Machines.Finish(plan: machinePlan);
-        }
+        if (stage is not null) { FinishInstall(stage: stage); }
 
         // A defaults-class mutation updates the document while live session levers keep their values (world.save
         // folds them). Fields read from the delivered definition, including authored lighting, still apply live.

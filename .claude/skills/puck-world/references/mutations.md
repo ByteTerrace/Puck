@@ -223,6 +223,36 @@ table — a row added there grants nothing until relaunch.
 
 ## Whole-document rebuild-and-swap and undo
 
+**One install door.** A document mutation, a rebuild and a full undo each run
+their own gates (composition and validation, the content pin and the merge, the
+journal replay) and then install through one door on `WorldDocument`:
+`TryStageInstall` runs every refusal of an install in one order before anything
+live changes, `CommitInstall` installs and commits the hosts' plans, and
+`FinishInstall` finishes them after the caller published its own record of the
+change (a journal entry, a moved base, a shortened journal).
+
+- **Stage.** The boot-reserved face screens, the render envelope's fit, the
+  boot-allocated field lattices, the solid field's build, the addon host's
+  preparation (a candidate with an enabled addon row and no host attached
+  refuses by name), the machine host's preparation, the input runtime's mode
+  selection, then the authority transition. A host's plan exists only once its
+  preparation accepted, and a later refusal disposes it.
+- **Commit.** The solid field, the install its kind takes (value, presentation
+  or full), the lattices (restarted with a state installed whole, otherwise
+  repainted where a draw moved), then the addon plan and the machine plan, in
+  that order. Every exit disposes whichever plan no host committed.
+- **Arena.** A caller that installs a document's state whole (a load, a reset,
+  an undo) prepares the replacement arena first (`TryPrepareWholeArena`), so a
+  state section that does not load refuses before the install.
+
+`DocumentStage` is made only by `TryStageInstall`, and the full install and the
+hosts' prepare and commit calls are private to `WorldDocument`, so a new caller
+cannot commit a plan before the document installs or skip a refusal. A reload or
+an undo that changes only values or presentation takes the narrower
+`TryInstallEdit`. A replay start's reinstall of its checkpoint's definition
+(`InstallReplayStart`) is a step of that checkpoint's restore, not an install of
+its own.
+
 - **Rebuild** (`ApplyRebuild`, the `world.reset`/`world.load`/`world.reload`
   path — one `WorldRebuildRequest` closed over `WorldRebuildKind`): resolve
   the candidate and its CAS `sha256-64` content hash FIRST (Reset: the
@@ -266,7 +296,8 @@ table — a row added there grants nothing until relaunch.
   (`WorldPersistence.DroppedPresentation`, `WorldDocument.TryInstallEdit`):
   state, deals, draws and every compiled product but the envelope's fit stay,
   and only the changed rows are delivered. Any other undo installs the replayed
-  document whole, which also restores the state and deals the document holds. Proven
+  document whole through the install door, which also restores the state and
+  deals the document holds and keeps the live field lattices and rule latches. Proven
   in-process by `tests/Puck.World.Server.Tests/MutationAllOrNothingLawTests.cs`
   against the shared apply gate; the replay loop's own early-return on a
   genuine mid-replay failure is unproven (see that law's own remarks).

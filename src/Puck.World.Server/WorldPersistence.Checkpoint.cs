@@ -168,151 +168,27 @@ public sealed partial class WorldPersistence {
             }
         }
 
-        // Field storage is boot allocated. Prove the final replay result can retain the live lattice before building
-        // or swapping any other derived runtime product; InstallFields is then an infallible compatible plan swap.
-        if (!Host.Population.CanInstallFields(
-            definition: candidate,
-            reason: out var undoFieldReason
-        )) {
-            var refusal = $"undo refused: restored field runtime is incompatible — {undoFieldReason}";
+        // The restored document installs through the one install door, as a load does: its state whole, into an arena
+        // prepared before anything changes. It keeps the live field lattices and rule latches, as a mutation does.
+        // The replay checked every kept entry above, so the door is expected to accept; a step that still refuses
+        // leaves the live document as it stood.
+        var live = Host.Document.Definition;
 
-            return RefuseUndo(
-                connectionId: connectionId,
-                correlationId: correlationId,
-                refusal: refusal
-            );
+        if (
+            !Host.Document.TryPrepareWholeArena(candidate: candidate, arena: out var arena, reason: out var stageReason, settled: out var restoredDocument) ||
+            !Host.Document.TryStageInstall(
+                request: new WorldDocument.InstallRequest(Candidate: restoredDocument, Current: live, Kind: WorldInstallKind.Full, Principal: principal,
+                    Products: Host.Document.PlanProducts(candidate: candidate, previous: live)) { Arena = arena },
+                reason: out stageReason,
+                stage: out var stage
+            )
+        ) {
+            return RefuseUndo(connectionId: connectionId, correlationId: correlationId, refusal: $"undo refused: {stageReason}");
         }
-
-        // The install rebuilds the products whose inputs the restored document changed against the live one. The
-        // replay checked every entry above, so a field rebuild is expected to succeed; still checked and still loud on
-        // failure rather than installing a half-built field: no step here is allowed to half-apply.
-        var plan = Host.Document.PlanUndo(candidate: candidate);
-
-        if (!Host.Document.TryStageSolids(
-            candidate: candidate,
-            products: plan,
-            reason: out var undoSolidReason,
-            solids: out var undoSolids
-        )) {
-            var refusal = $"undo refused: solid field rebuild failed — {undoSolidReason}";
-
-            return RefuseUndo(
-                connectionId: connectionId,
-                correlationId: correlationId,
-                refusal: refusal
-            );
-        }
-
-        // The final current-to-candidate reconcile, when a part the hosts' last preparation read changed. A restored
-        // document whose addon rows are structurally the ones already mounted reuses every guest's memory untouched.
-        // Commits only after Install succeeds, mirroring a mutation's gate-then-commit shape.
-        IWorldAddonPreparedPlan? addonPlan = null;
-        int[]? newTickWrittenEntity = null;
-        Principal[]? newTickWrittenPrincipal = null;
-        bool[]? newTickCollided = null;
-        var addonPlanCommitted = false;
-        IWorldMachinePreparedPlan? machinePlan = null;
-        WorldDocumentInputs? addonInputs = null;
-        WorldDocumentInputs? machineInputs = null;
-
-        // The whole sequence from here through Commit runs under ONE try/finally — see TryApplyMutation's identical
-        // shape for why: addonPlan starts null, so a refusal before TryPrepare ever succeeds leaves the finally a
-        // no-op, and a downstream throw from contention-array staging, Install, or Commit alike still disposes an
-        // uncommitted plan.
-        try {
-            if (!plan.Addons.IsEmpty && (Host.Addons is { } addonsForUndo)) {
-                if (!WorldDocument.TryPrepareAddons(
-                    addons: addonsForUndo,
-                    candidate: candidate,
-                    current: Host.Document.Definition,
-                    inputs: out var preparedAddons,
-                    plan: out addonPlan,
-                    reason: out var addonReason
-                )) {
-                    var refusal = $"undo refused: the restored document's addon {addonReason}";
-
-                    return RefuseUndo(
-                        connectionId: connectionId,
-                        correlationId: correlationId,
-                        refusal: refusal
-                    );
-                }
-                addonInputs = preparedAddons;
-
-                if (addonPlan is not null) {
-                    Host.Document.StageAddonContentionArrays(
-                        mountedCount: addonPlan.MountedCount,
-                        entity: out newTickWrittenEntity,
-                        principal: out newTickWrittenPrincipal,
-                        collided: out newTickCollided
-                    );
-                }
-            }
-
-            if (!plan.Machines.IsEmpty) {
-                if (!Host.Document.TryPrepareMachines(
-                    candidate: candidate,
-                    current: Host.Document.Definition,
-                    inputs: out var preparedMachines,
-                    plan: out machinePlan,
-                    reason: out var machineReason
-                )) {
-                    return RefuseUndo(
-                        connectionId: connectionId,
-                        correlationId: correlationId,
-                        refusal: $"undo refused: the restored document's machines could not prepare — {machineReason}"
-                    );
-                }
-                machineInputs = preparedMachines;
-            }
-
-            var previousDefinition = Host.Document.Definition;
-
-            if (!Host.GrantTable.TryPrepareDocument(actor: principal, candidate: candidate, current: previousDefinition, grantsWrite: false, prepared: out var authority, reason: out var authorityReason)) {
-                return RefuseUndo(connectionId: connectionId, correlationId: correlationId, refusal: $"undo refused: {authorityReason}");
-            }
-
-            Host.Document.SwapSolids(solids: undoSolids);
-            Host.Document.Install(
-                authority: authority!,
-                definition: candidate,
-                products: plan
-            );
-            Host.Document.FinishUndoProducts(addons: addonInputs, machines: machineInputs, products: plan);
-            Host.Tick.PrimeDealProjection();
-            Host.RepaintChangedLatticeDraws(
-                current: candidate,
-                previous: previousDefinition
-            );
-
-            if (machinePlan is not null) {
-                Host.Machines.Commit(plan: machinePlan);
-                Host.Machines.Finish(plan: machinePlan);
-            }
-
-            if (addonPlan is not null) {
-                Host.Addons!.Commit(plan: addonPlan);
-                addonPlanCommitted = true;
-
-                if (newTickWrittenEntity is not null) {
-                    Host.Tick.AdoptContentionArrays(
-                        collided: newTickCollided!,
-                        entity: newTickWrittenEntity,
-                        principal: newTickWrittenPrincipal!
-                    );
-                }
-            }
-        } finally {
-            machinePlan?.Dispose();
-            if (!addonPlanCommitted) {
-                addonPlan?.Dispose();
-            }
-        }
-
-        if (addonPlanCommitted) {
-            Host.Addons!.Finish(plan: addonPlan!);
-        }
-        return AcceptUndo(connectionId: connectionId, correlationId: correlationId, detail: (", full install" + changed), drop: drop, kept: kept);
+        Host.Document.CommitInstall(stage: stage);
+        // The restored document already carries the deal projection its replay made.
+        Host.Tick.PrimeDealProjection();
+        return AcceptUndo(connectionId: connectionId, correlationId: correlationId, detail: (", full install" + changed), drop: drop, kept: kept, stage: stage);
     }
 
     // What the dropped tail of the journal changed, read by composing it again over the restored document (every entry
@@ -383,11 +259,13 @@ public sealed partial class WorldPersistence {
         return changed;
     }
 
-    // Keeps the journal's replayed prefix and answers the submitting line the way a refusal does (RefuseUndo), through
-    // the same tap; that answer is the undo's one report, so nothing narrates it beside.
-    private bool AcceptUndo(int drop, List<WorldJournalEntry> kept, string detail, int connectionId, long correlationId) {
+    // Keeps the journal's replayed prefix, finishes what a full install committed, and answers the submitting line the
+    // way a refusal does (RefuseUndo), through the same tap; that answer is the undo's one report, so nothing narrates
+    // it beside.
+    private bool AcceptUndo(int drop, List<WorldJournalEntry> kept, string detail, int connectionId, long correlationId, WorldDocument.DocumentStage? stage = null) {
         Host.Document.Journal.Clear();
         Host.Document.Journal.AddRange(collection: kept);
+        if (stage is not null) { Host.Document.FinishInstall(stage: stage); }
         Host.EchoTap?.Invoke(obj: new WorldEditEcho(
             Message: $"dropped {drop}, {Host.Document.Journal.Count} remaining{detail}",
             Rejected: false,

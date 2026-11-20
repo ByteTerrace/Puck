@@ -20,14 +20,19 @@ public sealed partial class WorldSiloHost {
     }
 
     // The console submits a row's lines through its own link, registered under the row's name; the silo's own reload
-    // and the replay tape use the bare one, registering nothing. No console link before the silo attaches answers.
+    // registers in the silo's own table (m_reloadEchoes), and the replay tape uses the bare link, registering nothing.
+    // No console link before the silo attaches answers.
     private WorldConsoleServerLink? ConsoleLinkFor(LoopbackTransport link, string row) =>
         ((Volatile.Read(location: ref m_deferredVerbAnswers) is { } answers)
             ? link.ForConsole(row: answers.Echoes.ForRow(row: row))
             : null
         );
-    // Taps an admitted row's echoes into the console's answers under the row's name, once the silo attached them.
+    // Taps an admitted row's echoes into the silo's own reload verdicts and, once the silo attached them, into the
+    // console's answers, each under the row's name.
     private void TapDeferredVerbs(WorldInstance row) {
+        var name = row.Name;
+
+        row.Server.EchoTap += echo => m_reloadEchoes.Answer(echo: in echo, row: name);
         if (Volatile.Read(location: ref m_deferredVerbAnswers) is { } answers) {
             TapEchoes(
                 answers: answers,
