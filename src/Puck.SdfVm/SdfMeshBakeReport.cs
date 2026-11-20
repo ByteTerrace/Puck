@@ -371,18 +371,18 @@ internal static class SdfMeshBakeReport {
     /// <param name="selector">The group's selector.</param>
     /// <param name="peak">The group's peak bytes.</param>
     /// <param name="admitted">The groups admitted this take.</param>
-    public static void Deferred(string residency, int selector, long peak, int admitted) => Say(line: () => $"[sdf.mesh-bake] deferred residency={residency} group={selector} peak={peak} admitted={admitted} budget={MemoryAccount.Shared.Read().Budget} room={MemoryAccount.Shared.ReadAdmission(pool: Puck.Abstractions.Memory.PhysicalMemory.Host).Room}");
+    public static void Deferred(string residency, int selector, long peak, int admitted) => Say(line: () => $"[sdf.mesh-bake] deferred residency={residency} group={selector} peak={peak} admitted={admitted} budget={MemoryAccount.Shared.Read().Budget} room={MemoryAccount.Shared.ReadAdmission(pool: Puck.Abstractions.Memory.PhysicalMemory.Host).RoomFor(allowance: MemoryAllowance.Authoring)}");
     /// <summary>Writes the line for a group admitted alone as the process's one forced job, whatever the account's host
     /// pool holds.</summary>
     /// <param name="residency">The residency's name.</param>
     /// <param name="selector">The group's selector.</param>
     /// <param name="peak">The group's peak bytes.</param>
-    public static void AdmittedAlone(string residency, int selector, long peak) => Say(line: () => $"[sdf.mesh-bake] admitted alone residency={residency} group={selector} peak={peak} budget={MemoryAccount.Shared.Read().Budget} room={MemoryAccount.Shared.ReadAdmission(pool: Puck.Abstractions.Memory.PhysicalMemory.Host).Room}");
+    public static void AdmittedAlone(string residency, int selector, long peak) => Say(line: () => $"[sdf.mesh-bake] admitted alone residency={residency} group={selector} peak={peak} budget={MemoryAccount.Shared.Read().Budget} room={MemoryAccount.Shared.ReadAdmission(pool: Puck.Abstractions.Memory.PhysicalMemory.Host).RoomFor(allowance: MemoryAllowance.Authoring)}");
     /// <summary>Writes the line for a bake whose takes wait for the readback reservation that answers their lattices,
     /// which the host memory account has no room for; no lattice is taken and no group admitted until it is held.</summary>
     /// <param name="residency">The residency's name.</param>
     /// <param name="bytes">The reservation, in bytes.</param>
-    public static void ReadbackDeferred(string residency, long bytes) => Say(line: () => $"[sdf.mesh-bake] readback deferred residency={residency} bytes={bytes} budget={MemoryAccount.Shared.Read().Budget} room={MemoryAccount.Shared.ReadAdmission(pool: Puck.Abstractions.Memory.PhysicalMemory.Host).Room}");
+    public static void ReadbackDeferred(string residency, long bytes) => Say(line: () => $"[sdf.mesh-bake] readback deferred residency={residency} bytes={bytes} budget={MemoryAccount.Shared.Read().Budget} room={MemoryAccount.Shared.ReadAdmission(pool: Puck.Abstractions.Memory.PhysicalMemory.Host).RoomFor(allowance: MemoryAllowance.Authoring)}");
     /// <summary>Writes the line for a group whose copy into the mesh library (its published mesh, or its renumbered take
     /// of its leader's) the host memory account refused; it waits where it stands until the group can reserve the copy's
     /// bytes.</summary>

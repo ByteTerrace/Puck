@@ -124,6 +124,16 @@ public static partial class HostMemory {
 
         return null;
     }
+    /// <summary>Returns how much more memory the process could take now, in bytes: the free physical memory
+    /// (<see cref="AvailablePhysicalBytes"/>), or what is left of the commit limit (<see cref="CommitBytes"/>) where the
+    /// platform enforces one and that is smaller, since an allocation fails at the limit whatever physical memory is
+    /// free.</summary>
+    /// <returns>The bytes, or <see langword="null"/> when this platform or this moment cannot say how much is free.</returns>
+    public static long? AdmissibleBytes() {
+        if (AvailablePhysicalBytes() is not { } available) { return null; }
+
+        return ((CommitBytes() is { } commit) ? Math.Min(val1: available, val2: Math.Max(val1: 0L, val2: (commit.Limit - commit.Charge))) : available);
+    }
     /// <summary>Returns the physical memory the machine has installed and the operating system can use, in bytes: on
     /// Windows the memory status's total physical bytes, on Linux <c>/proc/meminfo</c>'s <c>MemTotal</c>. Firmware and
     /// device reservations make it slightly less than the nominal size.</summary>

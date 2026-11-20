@@ -259,6 +259,30 @@ public sealed class MemoryAdmissionLawTests {
         Assert.Equal(expected: 3L, actual: account.ReadAdmission(pool: PhysicalMemory.Host).ForcedJobs);
     }
     [Fact]
+    public void AuthoringDrawsOnTheMachinesRoomApartFromThePlayBarUnlessThePlayBarHoldsIt() {
+        var free = ((long?)(32L * Gibibyte));
+        var account = new MemoryAccount(availablePhysicalBytes: () => free, installedPhysicalBytes: (64L * Gibibyte));
+        using var play = account.CreateOwner(memoryClass: MemoryClass.Workspace, name: "play");
+        using var bake = account.CreateOwner(allowance: MemoryAllowance.Authoring, memoryClass: MemoryClass.Workspace, name: "bake");
+
+        // The bar also counts this test process's private bytes beyond the owners, well under the margin left here.
+        account.SetHostBar(bytes: (8L * Gibibyte));
+        Assert.True(condition: play.TryReserve(peak: (4L * Gibibyte)));
+        Assert.True(condition: bake.TryReserve(peak: (16L * Gibibyte)));
+        Assert.False(condition: play.TryReserve(peak: (9L * Gibibyte)));
+
+        var host = account.ReadAdmission(pool: PhysicalMemory.Host);
+
+        Assert.Equal(expected: ((4L * Gibibyte), (16L * Gibibyte), false), actual: (host.Promised, host.AuthoringPromised, host.AuthoringOnPlayBar));
+        // The machine's room counts play and authoring together.
+        Assert.False(condition: bake.TryReserve(peak: (32L * Gibibyte)));
+        // A player's build holds authoring to the play bar: a bake there is refused and degrades.
+        account.SetAuthoringOnPlayBar(onPlayBar: true);
+        Assert.False(condition: bake.TryReserve(peak: (17L * Gibibyte)));
+        Assert.Equal(expected: ((20L * Gibibyte), 0L), actual: (account.ReadAdmission(pool: PhysicalMemory.Host).Promised, account.ReadAdmission(pool: PhysicalMemory.Host).AuthoringPromised));
+        account.SetHostBar(bytes: null);
+    }
+    [Fact]
     public void TheHostPoolIsHeldToTheFreeMemoryTheAccountReads() {
         var free = ((long?)(8L * Gibibyte));
         var account = new MemoryAccount(availablePhysicalBytes: () => free, installedPhysicalBytes: (64L * Gibibyte));

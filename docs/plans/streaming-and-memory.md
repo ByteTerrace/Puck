@@ -240,9 +240,16 @@ What the memory side holds today:
   large rentals. `MemoryAccount.Owner.TryAcquire` checks new storage,
   including the overlap when replacing an allocation. The probe cache is
   sampled. Process memory outside these owners reduces room for admission.
+- **The host bar is a play budget.** Each host owner draws on one allowance
+  (`MemoryAllowance`), fixed when it is created: play, held to the authored
+  host bar with the private bytes beyond every owner, or authoring, held to
+  the machine's room alone (its free memory and commit room, under three
+  quarters of what it has installed). A player's build counts authoring as
+  play (`MemoryAccount.SetAuthoringOnPlayBar`). The owners and their
+  allowances are in [the large host owners](#the-large-host-owners).
 - **Progress is forced once in the process.** A bake with nothing admitted
-  can spend headroom on its next group while the authored host bar has room
-  and no other owner holds the allowance (`MemoryAccount.Owner.TryReserveForced`, reported by
+  can spend headroom on its next group while its allowance has room
+  and no other owner holds the forced allowance (`MemoryAccount.Owner.TryReserveForced`, reported by
   `SdfMeshBakeReport.AdmittedAlone`).
 - **Device bytes are admitted before they exist.** `GpuDeviceMemoryWork`
   counts an allocation only under a grant, at the driver's size, in the
@@ -489,24 +496,53 @@ negative prints as nothing and is counted.
 
 ### The large host owners
 
-Each owner of host memory large enough to matter, with what bounds it. "Named"
-means measured and printed with no bound: it is what the envelope still holds.
+Each owner of host memory large enough to matter, with what bounds it and the
+allowance it draws on. "Named" means measured and printed with no bound: it is
+what the envelope still holds.
 
-| Owner | Bounded by | Step |
-|---|---|---|
-| Mesh payloads on the CPU | The selector's grant: a payload exists because a tier is resident or cached, and [decision 6](#decision-6-what-a-landed-mesh-keeps-on-the-cpu) releases the planes a landed mesh no longer needs | 3, 6 |
-| Bake workspaces: final lattices, contour tables, the material cut's lists (`SdfMeshMaterialCut`) | The workspace class's reservation, with one forced job in the process; a group whose peak passes the class is split or failed by name. The reserved peak (`SdfMeshPathBake`'s `PeakOf`) covers the lattice's and fine samples' owned storage only: the contour's rented workspace and the refinement's per-cell masks (`SdfSampledLattice.Refine`) lie outside it, so the account cannot pace the collections they cause (in a lane: bake-garbage) | 3, 11 |
-| The trace scene's CPU hierarchy and a scene build's pieces beside the old scene | A reservation for the build's peak; the hierarchy goes when placement reads the GPU trace | 9 |
-| `GpuRegion`'s host copies and staging | Reserved with the region they mirror, at the same grant | 2, 3 |
-| The probe cache's blocks | A cached owner in bytes, trimmed first | 9 |
-| The composed-document store | Released after boot where nothing reads it | 6 |
-| Speculative work: bakes, loads and decodes for a predicted demand | A share of the workspace class, cancelled when the demand leaves or pressure asks | 3, 10 |
-| Rented arrays the shared pool keeps | `RentedArrays` limits shared buckets by payload size. All element types share one retention limit for larger reference-free arrays. The cache admits each returned array against host room and releases its charge on reuse or trim. | 2, 11 |
-| Native allocator slack | Collected when an arrival settles and on pressure (`IAllocatorStatistics`); named | 2 |
-| The managed heap's other tenants | Named by a heap walk; each one past a stated size becomes an owner with a capacity. No hard limit on the heap: it would turn pressure into an exception where everything else turns it into a coarser picture | 2, then per tenant |
-| Runtime code and loader heaps | Named; not controllable at run time | 2 |
-| Driver memory and swapchain images | Named, as the API's usage less the ledger | 1 |
-| Capture and media buffers, and a pagefile-backed section no Puck code creates | Named by step 2's page walk before anything is cut | 2 |
+**Play and authoring.** A device profile's authored host bar is a play budget
+(the owner's ruling): it bounds what a player's process holds while playing on
+that device, and work a player never does draws on the machine's measured
+headroom, as an engine cooks offline on a workstation and a player never pays
+the cook. Each host owner is created with one `MemoryAllowance`. Play storage
+fits the bar on what play holds and has promised with the private bytes beyond
+every owner, and fits the machine's room; authoring storage fits the machine's
+room alone (the free memory or commit room `HostMemory.AdmissibleBytes`
+reads, with what the pool held at that reading, under three quarters of
+installed memory), counting play and authoring together. The account's room
+arithmetic is the one place that enforces this, and each door reaches it with
+the owner's allowance (`MemoryAccount`). A player's build (a finished
+`puck world player` folder or an installed release, `PlayerBuildLayout.ProcessRunsAsPlayer`)
+counts authoring as play, so a bake there degrades under the bar and never
+fails. Device grants are play. A mesh a bake publishes into the library is
+play: it is what a prewarmed boot decodes into the same owners, and only the
+group's transient workspace is authoring. `host.memory` prints play's limit,
+held and promised bytes as the pool's, then the machine's limit and authoring's
+held, promised and room.
+
+| Owner | Allowance | Bounded by | Step |
+|---|---|---|---|
+| Mesh payloads on the CPU (`mesh`, `mesh-materials`) | Play | The selector's grant: a payload exists because a tier is resident or cached, and [decision 6](#decision-6-what-a-landed-mesh-keeps-on-the-cpu) releases the planes a landed mesh no longer needs | 3, 6 |
+| Bake workspaces: final lattices, contour tables, the material cut's lists (`SdfMeshMaterialCut`), under `mesh-bake-group` | Authoring | The workspace class's reservation, with one forced job in the process; a group whose peak passes the class is split or failed by name. The reserved peak (`SdfMeshPathBake`'s `PeakOf`) covers the lattice's and fine samples' owned storage only: the contour's rented workspace and the refinement's per-cell masks (`SdfSampledLattice.Refine`) lie outside it, so the account cannot pace the collections they cause (in a lane: bake-garbage) | 3, 11 |
+| A bake's answered samples (`mesh-bake-readback`) | Authoring | A standing reservation of `SdfMeshPathBake.ReadbackBytes`, a progress floor | 3 |
+| The store's writes of what a bake baked (`mesh-store-writes`) and the sample sets a bake reads in place of a dispatch (`mesh-bake-samples`) | Authoring | A workspace reservation; a refused write or read does without | 3 |
+| The store's reads of an entry a boot decodes (`mesh-entry`) | Play | A workspace reservation; a refused read leaves the entry in the store | 3 |
+| The trace scene's CPU hierarchy and a scene build's pieces beside the old scene | Play | A reservation for the build's peak; the hierarchy goes when placement reads the GPU trace | 9 |
+| `GpuRegion`'s host copies and staging | Play | Reserved with the region they mirror, at the same grant | 2, 3 |
+| The probe cache's blocks | Play | A cached owner in bytes, trimmed first, read again on the frame thread (`MemoryAccount.ServiceSampledOwners`) | 9 |
+| The composed-document store | Play | Released after boot where nothing reads it | 6 |
+| Speculative work: bakes, loads and decodes for a predicted demand | As the work it speculates | A share of the workspace class, cancelled when the demand leaves or pressure asks | 3, 10 |
+| Rented arrays the shared pool keeps | Play | `RentedArrays` limits shared buckets by payload size. All element types share one retention limit for larger reference-free arrays. The cache admits each returned array against host room and releases its charge on reuse or trim. | 2, 11 |
+| Native allocator slack | Beyond the owners | Collected when an arrival settles and on pressure (`IAllocatorStatistics`); named | 2 |
+| The managed heap's other tenants | Beyond the owners | Named by a heap walk; each one past a stated size becomes an owner with a capacity. No hard limit on the heap: it would turn pressure into an exception where everything else turns it into a coarser picture | 2, then per tenant |
+| Runtime code and loader heaps | Beyond the owners | Named; not controllable at run time | 2 |
+| Driver memory and swapchain images | Beyond the owners | Named, as the API's usage less the ledger | 1 |
+| Capture and media buffers, and a pagefile-backed section no Puck code creates | Beyond the owners | Named by step 2's page walk before anything is cut | 2 |
+
+The bytes beyond the owners count against play: no admission can tell which
+work left them, and a player's process holds the same kinds. While a bake
+runs, the garbage and slack it leaves therefore press on play's room, and the
+cold bake's play figures read higher than a prewarmed boot's.
 
 ## The decisions
 
