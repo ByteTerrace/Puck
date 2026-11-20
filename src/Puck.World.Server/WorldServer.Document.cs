@@ -86,13 +86,6 @@ public sealed partial class WorldServer {
             return Tick.PresentLocalCues(snapshot, views);
         });
     });
-    /// <summary>Attaches a sink with the supplied body disclosure policy.</summary>
-    public IDisposable AttachSink(IClientSink sink, in WorldSinkDisclosure disclosure) {
-        using (EnterAtTickBoundary()) {
-            ThrowIfTickPending();
-            return m_document.AttachSink(sink, in disclosure);
-        }
-    }
     /// <inheritdoc cref="WorldDocument.EnqueueMutation"/>
     public void EnqueueMutation(WorldMutation mutation, int connectionId = SubmissionEnvelope.LocalConnectionId, long correlationId = 0, long sourceAddonInstanceId = -1L, ushort actOrdinal = 0, Action<bool>? outcomeObserved = null, WorldMutationBinding? binding = null, Action<WorldSubmissionResult>? completion = null) =>
         m_document.EnqueueMutation(

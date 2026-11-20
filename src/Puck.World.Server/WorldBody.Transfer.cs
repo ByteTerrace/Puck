@@ -255,15 +255,6 @@ public sealed partial class WorldBody {
             }
         }
     }
-    /// <summary>Reads this body's whole register file out of the arena slot lanes, one raw value per slot.</summary>
-    /// <returns>The lane image, parallel to the kit's compiled definitions.</returns>
-    public long[] CaptureActionState() {
-        var image = new long[m_actionStateDefinitions.Length];
-
-        ReadActionState(image: image);
-
-        return image;
-    }
 
     // An array of the given length, taken from the buffers when there are some and fresh otherwise.
     private static T[] Take<T>(CaptureBuffers? buffers, int length) => (buffers?.Take<T>(length: length) ?? ((length == 0)
