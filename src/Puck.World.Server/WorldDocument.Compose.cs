@@ -14,10 +14,7 @@ public sealed partial class WorldDocument {
         WorldMutation.UpsertInteraction or WorldMutation.RemoveInteraction => (current.Interactions != candidate.Interactions),
         _ => false,
     };
-    // Whether a mutation recompiles the population's fixed-point derived state (kit table, kit indices, live bodies'
-    // compiled tuning/actions, AND the analytic collider set). A screen/collision edit rebuilds the collider set so a
-    // live screens or collision change takes effect on the next tick with no restart.
-    // A batch is classified by its members: it affects whatever any member affects.
+    // A batch is classified by its members: it is whatever any member is.
     private static bool AnyMember(WorldMutation mutation, Func<WorldMutation, bool> affects) {
         if (mutation is not WorldMutation.Batch batch) {
             return false;
@@ -29,84 +26,6 @@ public sealed partial class WorldDocument {
         }
         return false;
     }
-    private static bool AffectsPopulation(WorldMutation mutation) => (AnyMember(
-        affects: AffectsPopulation,
-        mutation: mutation
-    ) || (mutation is
-        WorldMutation.UpsertKit or WorldMutation.RemoveKit or WorldMutation.SetDefaultSeatKit or
-        WorldMutation.SetKitAssignment or WorldMutation.SetMotion or WorldMutation.SetSpawns or
-        WorldMutation.SetCollision or WorldMutation.SetInputModes or
-        WorldMutation.UpsertScreen or WorldMutation.RemoveScreen or
-        // The LOOK mutations re-resolve the population's look table (PRESENTATION-ONLY, but Rebuild is the one path that
-        // re-runs ResolveLookIndices and bumps the client's program-rebuild revision).
-        WorldMutation.UpsertLook or WorldMutation.RemoveLook or WorldMutation.SetLookAssignment or
-        // SetPopulationDefaults carries the distribution and variation rows: Rebuild recompiles their fixed spawn
-        // policy so it is LIVE for future activations (the live census count still stays the world.population verb — this
-        // Rebuild re-seeds SpawnPosition but never re-activates or teleports a standing body).
-        WorldMutation.SetPopulationDefaults or WorldMutation.SetPopulationDistribution or WorldMutation.SetPopulationCensus or
-        // A placement row can change the census (Arc 7's Inhabit facet: a placement contributes driven bodies), and an
-        // inhabited row's kit resolution reads the creation's Locomotion, so a creation swap can move a body between
-        // kits — all must trigger Rebuild + ReconcileInhabitants. (R13: the third and last edit to this switch.)
-        WorldMutation.UpsertPlacement or WorldMutation.RemovePlacement or
-        WorldMutation.UpsertCreation or WorldMutation.RemoveCreation or
-        // A dynamics row retune must recompile every fixed-point table that resolved it (a kit's planar shaping
-        // among them), the same live-recompile rule a motion/collision edit already rides.
-        WorldMutation.UpsertDynamics or WorldMutation.RemoveDynamics or
-        // A curves row retune must recompile the population's curve table index a body-motion producer's curve
-        // target source resolves by ordinal, the same live-recompile rule a dynamics retune already rides.
-        WorldMutation.UpsertCurve or WorldMutation.RemoveCurve));
-
-    // Whether a mutation touches the addons section — the only door WorldAddonRow row content (or document order)
-    // moves through OUTSIDE a whole-document rebuild (ApplyRebuild carries its own unconditional prepare, which
-    // also covers a channel-table change by restaging the whole host), so a per-row structural diff gated on JUST
-    // these two kinds is the whole trigger a live mutation needs — see IWorldAddonHost.TryPrepare's own remarks.
-    internal static bool AffectsAddons(WorldMutation mutation) => (AnyMember(
-        affects: AffectsAddons,
-        mutation: mutation
-    ) || (mutation is
-        WorldMutation.UpsertAddon or WorldMutation.RemoveAddon));
-
-    // Whether a mutation touches the screens section — the transactional prepare/commit gate for screen machines.
-    private static bool AffectsScreens(WorldMutation mutation) => (AnyMember(
-        affects: AffectsScreens,
-        mutation: mutation
-    ) || (mutation is
-        WorldMutation.UpsertScreen or WorldMutation.RemoveScreen));
-    // Machine declarations change runtime ownership, independently of render or population capacity.
-    private static bool AffectsMachines(WorldMutation mutation) => (AnyMember(
-        affects: AffectsMachines,
-        mutation: mutation
-    ) || (mutation is
-        WorldMutation.UpsertMachine or WorldMutation.RemoveMachine));
-
-    // Whether a mutation can grow the SDF program past the probed render envelope (screen slabs / creation stamps — an
-    // UpsertCreation re-shapes every live placement of it, so it measures too).
-    internal static bool AffectsRenderEnvelope(WorldMutation mutation) => (AnyMember(
-        affects: AffectsRenderEnvelope,
-        mutation: mutation
-    ) || (mutation is
-        WorldMutation.UpsertScreen or WorldMutation.RemoveScreen or
-        WorldMutation.UpsertCreation or WorldMutation.RemoveCreation or
-        WorldMutation.UpsertPlacement or WorldMutation.RemovePlacement or
-        // A creation look will change the emitted program word count (a body worn as a stamp) once creation-look
-        // rendering lands (Arc 7); catalog looks add zero words today, so this arm is honest groundwork — all three look
-        // mutations already ride the envelope gate so the loud capacity rejection will fire at apply time, not at a later
-        // GPU allocation, the moment creation stamps render.
-        WorldMutation.UpsertLook or WorldMutation.RemoveLook or WorldMutation.SetLookAssignment));
-    // Whether a mutation can change the SDF contact field: the collision tuning, every solid-bearing section
-    // (screens, creations that reshape a stamp, placements), and the inputs of the field's contact band — the kit
-    // colliders and the bodies row naming the scale row. Coarse by section, matching AffectsPopulation/
-    // AffectsRenderEnvelope; a whole-row upsert of the scale row itself is not listed, since every state-row edit
-    // would then rebuild the population.
-    internal static bool AffectsSolidField(WorldMutation mutation) => (AnyMember(
-        affects: AffectsSolidField,
-        mutation: mutation
-    ) || (mutation is
-        WorldMutation.SetCollision or
-        WorldMutation.UpsertScreen or WorldMutation.RemoveScreen or
-        WorldMutation.UpsertCreation or WorldMutation.RemoveCreation or
-        WorldMutation.UpsertPlacement or WorldMutation.RemovePlacement or
-        WorldMutation.UpsertKit or WorldMutation.RemoveKit or WorldMutation.SetPopulationDefaults));
 
     private static bool ContainsMember(IReadOnlyList<WorldGroupMember> members, Principal member) {
         foreach (var existing in members) {
@@ -421,8 +340,10 @@ public sealed partial class WorldDocument {
         _ => null,
     };
     // A state write re-resolves every document value bound to its row; when one of those values is a
-    // look-assignment row name, the population's look indices are derived from it and must re-resolve too —
-    // KEEP IN SYNC with AffectsPopulation, which lists the mutation KINDS that rebuild.
+    // look-assignment row name, the population's look indices are derived from it, so the write takes the full
+    // install, whose plan rebuilds the population because the refreshed assignment is another instance. Other bound
+    // values (a creation's shape) refresh in a value install, which keeps the population: the read table names
+    // members, not the fields of a row a build reads, so it cannot yet tell the two apart.
     private bool RefreshesLookAssignment(WorldMutation mutation, WorldDefinition candidate) {
         if (StateRowOf(mutation: mutation) is { } row) {
             return WorldStateDocumentValues.ReferencesRow(

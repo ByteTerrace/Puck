@@ -818,8 +818,9 @@ added to that instrument, never to a second one.
    a live edit followed by a file edit to another row keeps both. Left: the
    source watch is still off until asked; the install still clears the journal
    and only the operator may send it; a presentation install still delivers the
-   whole definition to each client; a mutation's install still decides what it
-   rebuilds from mutation-kind lists. *Check:* `world.iteration` for a
+   whole definition to each client. A mutation's and a reload's full install
+   rebuild the compiled products whose recorded inputs the candidate changed
+   (`WorldDocument.PlanProducts`). *Check:* `world.iteration` for a
    one-colour file edit reports a presentation install with no rule compile and
    no arena build.
 5. **Narrow validation**, for the delta and for `world.row.set` alike:

@@ -306,17 +306,25 @@ public sealed partial class WorldPopulation {
     /// <param name="arena">The live store.</param>
     public void ReconcileInstall(WorldDefinition definition, ulong tick, List<WorldPeerEventEntry> admitted, List<WorldPeerEventEntry> disconnected, StateArena arena) {
         ArgumentNullException.ThrowIfNull(argument: definition);
-        Reconcile(
-            arena: arena,
-            definition: definition,
-            slots: new LiveSlots(
-                admitted: admitted,
-                disconnected: disconnected,
-                population: this
-            ),
-            structural: true,
-            tick: tick
-        );
+
+        // The structural reconcile follows every build, so what it reads joins what the population was built from.
+        var recording = WorldDocumentReads.Begin();
+
+        try {
+            Reconcile(
+                arena: arena,
+                definition: definition,
+                slots: new LiveSlots(
+                    admitted: admitted,
+                    disconnected: disconnected,
+                    population: this
+                ),
+                structural: true,
+                tick: tick
+            );
+        } finally {
+            BuiltFrom |= recording.End();
+        }
     }
 
     /// <summary>Activates the first <paramref name="count"/> census stand-ins (indices <c>4..</c>), clamped to

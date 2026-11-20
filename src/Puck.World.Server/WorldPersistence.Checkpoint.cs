@@ -98,6 +98,7 @@ public sealed partial class WorldPersistence {
 
         var candidate = Host.Tick.ProjectDealsForEdit(Host.Document.Base, previous: null);
         var kept = new List<WorldJournalEntry>(capacity: keep);
+        var products = Host.Document.BeginProductReplay();
 
         for (var index = 0; (index < keep); index++) {
             var entry = Host.Document.Journal[index];
@@ -111,30 +112,15 @@ public sealed partial class WorldPersistence {
                 );
             }
 
-            // Cross-document claims were proved before the journal was admitted; replay repeats only local checks.
-            // Addon preparation joins these all-or-nothing gates: an intermediate candidate this pass builds but
-            // never installs still owes proof it COULD have mounted, because a kept entry whose pinned module has
-            // since gone missing must refuse the WHOLE undo rather than silently landing on a document that would
-            // boot differently than the one it names. The probe plan is disposed immediately either way — see
-            // AddonsCanPrepare.
+            // Cross-document claims were proved before the journal was admitted; replay repeats only local checks,
+            // and the envelope, solid field and addon checks each run when the replayed document changed a part the
+            // check last read (WorldDocument.WorldProductReplay).
             if (
                 !WorldDefinitionValidator.TryValidateLocally(
                 definition: next,
                 reason: out var reason
             ) ||
-                (WorldDocument.AffectsRenderEnvelope(mutation: entry.Mutation) && !Host.Envelope.TryFit(
-                candidate: next,
-                reason: out reason
-            )) ||
-                (WorldDocument.AffectsSolidField(mutation: entry.Mutation) && !WorldDocument.TryBuildSolids(
-                definition: next,
-                reason: out reason,
-                solids: out _
-            )) ||
-                (WorldDocument.AffectsAddons(mutation: entry.Mutation) && !AddonsCanPrepare(
-                candidate: next,
-                reason: out reason
-            ))
+                !products.TryCheck(next: next, reason: out reason)
             ) {
                 var refusal = $"undo refused: replay failed at journal entry {index} ({WorldServer.Describe(mutation: entry.Mutation)}) — {reason}";
 
@@ -171,11 +157,14 @@ public sealed partial class WorldPersistence {
             );
         }
 
-        // The full replay validated every entry above, so this rebuild is expected to succeed; still checked and
-        // still loud on failure rather than installing a half-built field, for the same reason the loop above refuses
-        // rather than tolerates: no step here is allowed to half-apply.
-        if (!WorldDocument.TryBuildSolids(
-            definition: candidate,
+        // The install rebuilds the products whose inputs the restored document changed against the live one. The
+        // replay checked every entry above, so a field rebuild is expected to succeed; still checked and still loud on
+        // failure rather than installing a half-built field: no step here is allowed to half-apply.
+        var plan = Host.Document.PlanUndo(candidate: candidate);
+
+        if (!Host.Document.TryStageSolids(
+            candidate: candidate,
+            products: plan,
             reason: out var undoSolidReason,
             solids: out var undoSolids
         )) {
@@ -188,27 +177,29 @@ public sealed partial class WorldPersistence {
             );
         }
 
-        // The final current-to-candidate reconcile: unconditional (never gated on whether the kept journal touched
-        // Addons), because TryPrepare's own structural diff against the live m_mounted set already answers "does
-        // anything about addons actually differ" cheaply on its own — a restored document whose addon rows are
-        // structurally the ones already mounted reuses every guest's memory untouched. Commits only after Install
-        // succeeds, mirroring TryApplyMutation's identical gate-then-commit shape.
+        // The final current-to-candidate reconcile, when a part the hosts' last preparation read changed. A restored
+        // document whose addon rows are structurally the ones already mounted reuses every guest's memory untouched.
+        // Commits only after Install succeeds, mirroring a mutation's gate-then-commit shape.
         IWorldAddonPreparedPlan? addonPlan = null;
         int[]? newTickWrittenEntity = null;
         Principal[]? newTickWrittenPrincipal = null;
         bool[]? newTickCollided = null;
         var addonPlanCommitted = false;
         IWorldMachinePreparedPlan? machinePlan = null;
+        WorldDocumentInputs? addonInputs = null;
+        WorldDocumentInputs? machineInputs = null;
 
         // The whole sequence from here through Commit runs under ONE try/finally — see TryApplyMutation's identical
         // shape for why: addonPlan starts null, so a refusal before TryPrepare ever succeeds leaves the finally a
         // no-op, and a downstream throw from contention-array staging, Install, or Commit alike still disposes an
         // uncommitted plan.
         try {
-            if (Host.Addons is { } addonsForUndo) {
-                if (!addonsForUndo.TryPrepare(
+            if (!plan.Addons.IsEmpty && (Host.Addons is { } addonsForUndo)) {
+                if (!WorldDocument.TryPrepareAddons(
+                    addons: addonsForUndo,
                     candidate: candidate,
                     current: Host.Document.Definition,
+                    inputs: out var preparedAddons,
                     plan: out addonPlan,
                     reason: out var addonReason
                 )) {
@@ -220,6 +211,7 @@ public sealed partial class WorldPersistence {
                         refusal: refusal
                     );
                 }
+                addonInputs = preparedAddons;
 
                 if (addonPlan is not null) {
                     Host.Document.StageAddonContentionArrays(
@@ -231,17 +223,21 @@ public sealed partial class WorldPersistence {
                 }
             }
 
-            if (!Host.Machines.TryPrepare(
-                candidate: candidate,
-                current: Host.Document.Definition,
-                plan: out machinePlan,
-                reason: out var machineReason
-            )) {
-                return RefuseUndo(
-                    connectionId: connectionId,
-                    correlationId: correlationId,
-                    refusal: $"undo refused: the restored document's machines could not prepare — {machineReason}"
-                );
+            if (!plan.Machines.IsEmpty) {
+                if (!Host.Document.TryPrepareMachines(
+                    candidate: candidate,
+                    current: Host.Document.Definition,
+                    inputs: out var preparedMachines,
+                    plan: out machinePlan,
+                    reason: out var machineReason
+                )) {
+                    return RefuseUndo(
+                        connectionId: connectionId,
+                        correlationId: correlationId,
+                        refusal: $"undo refused: the restored document's machines could not prepare — {machineReason}"
+                    );
+                }
+                machineInputs = preparedMachines;
             }
 
             var previousDefinition = Host.Document.Definition;
@@ -254,16 +250,19 @@ public sealed partial class WorldPersistence {
             Host.Document.Install(
                 authority: authority!,
                 definition: candidate,
-                rebuildPopulation: true
+                rebuildPopulation: plan.RebuildsPopulation
             );
+            Host.Document.FinishUndoProducts(addons: addonInputs, machines: machineInputs, products: plan);
             Host.Tick.PrimeDealProjection();
             Host.RepaintChangedLatticeDraws(
                 current: candidate,
                 previous: previousDefinition
             );
 
-            Host.Machines.Commit(plan: machinePlan!);
-            Host.Machines.Finish(plan: machinePlan!);
+            if (machinePlan is not null) {
+                Host.Machines.Commit(plan: machinePlan);
+                Host.Machines.Finish(plan: machinePlan);
+            }
 
             if (addonPlan is not null) {
                 Host.Addons!.Commit(plan: addonPlan);
@@ -306,10 +305,6 @@ public sealed partial class WorldPersistence {
         return true;
     }
 
-    // Undo's own throwaway addon-prepare probe for an INTERMEDIATE journal-replay candidate: proves the row set
-    // this candidate carries could still mount, without ever registering, disclosing, or journaling anything — the
-    // plan is disposed immediately regardless of outcome. Only the FINAL candidate's prepare (after the loop above)
-    // ever actually commits. A server with no addon runtime attached vacuously succeeds.
     // Every ApplyUndo gate refuses identically: echoed to the same tap a rejected live mutation reaches, whose answer
     // is the refusal's one report, and false to the caller.
     private bool RefuseUndo(string refusal, int connectionId, long correlationId) {
@@ -320,29 +315,6 @@ public sealed partial class WorldPersistence {
             ConnectionId: connectionId,
             CorrelationId: correlationId
         ));
-
-        return false;
-    }
-    private bool AddonsCanPrepare(WorldDefinition candidate, out string reason) {
-        if (Host.Addons is not { } addons) {
-            reason = string.Empty;
-
-            return true;
-        }
-
-        if (addons.TryPrepare(
-            candidate: candidate,
-            current: Host.Document.Definition,
-            plan: out var plan,
-            reason: out var addonReason
-        )) {
-            plan?.Dispose();
-            reason = string.Empty;
-
-            return true;
-        }
-
-        reason = (addonReason ?? string.Empty);
 
         return false;
     }

@@ -18,7 +18,7 @@ public sealed partial class WorldDocument {
         AdoptDefinition(definition);
         m_pendingStateDelivery = true;
         if (!solidsMoved) { return; }
-        if (WorldContactSelection.RequiresField(definition.Collision) || WorldTargetSelection.RequiresLineOfSight(definition)) {
+        if (RequiresSolidField(definition: definition)) {
             if (!TryBuildSolids(definition, out var solids, out var reason)) { throw new InvalidOperationException(reason); }
             AdoptSolidField(solids);
         }

@@ -33,9 +33,15 @@ public sealed partial class WorldDocument {
                     return false;
                 }
             }
-            if ((kind == WorldInstallKind.Presentation) && !Host.Envelope.TryFit(candidate: candidate, reason: out var capacityReason)) {
-                RejectRebuild(connectionId: connectionId, correlationId: correlationId, reason: capacityReason, verb: verb);
-                return false;
+            WorldDocumentInputs? envelopeInputs = null;
+            var plan = ((kind == WorldInstallKind.Presentation) ? PlanProducts(previous: previous, candidate: candidate).ForPresentation() : (WorldProductPlan?)null);
+
+            if (plan is { Envelope.IsEmpty: false }) {
+                if (!TryFitEnvelope(candidate: candidate, inputs: out var fitted, reason: out var capacityReason)) {
+                    RejectRebuild(connectionId: connectionId, correlationId: correlationId, reason: capacityReason, verb: verb);
+                    return false;
+                }
+                envelopeInputs = fitted;
             }
             if ((kind == WorldInstallKind.Value) && !Host.Arena.TryValidateLoad(rows: Host.ReplacedRows(definition: candidate, previous: previous), reason: out var loadReason)) {
                 RejectRebuild(connectionId: connectionId, correlationId: correlationId, reason: $"the state section does not load into the arena: {loadReason}", verb: verb);
@@ -52,6 +58,8 @@ public sealed partial class WorldDocument {
                 detail = $", state rows re-seeded {rows.Count}, state kept";
             } else {
                 InstallPresentation(definition: candidate);
+                AdoptProductInputs(addons: null, envelope: envelopeInputs, machines: null);
+                NarrateProducts(plan: plan!.Value, population: false);
                 detail = ", presentation install, state kept";
             }
         }
@@ -81,8 +89,8 @@ public sealed partial class WorldDocument {
         return true;
     }
 
-    // The root members a reload changed, for its verdict.
-    private static string DescribeChanged(IReadOnlyList<string> changed) => DescribeList(items: changed, lead: ", changed ");
+    // The parts of the document a reload changed, for its verdict.
+    private static string DescribeChanged(WorldDocumentInputs changed) => (changed.IsEmpty ? string.Empty : (", changed " + changed));
     // The rows and values a reload's source won from the session's own edits, for its verdict.
     private static string DescribeConflicts(IReadOnlyList<string> conflicts) => DescribeList(items: conflicts, lead: ", the source won over the session's edits at ");
     private static string DescribeList(IReadOnlyList<string> items, string lead) => ((items.Count == 0) ? string.Empty : (lead + string.Join(separator: ", ", values: items)));

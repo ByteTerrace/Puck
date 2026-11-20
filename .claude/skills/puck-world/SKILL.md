@@ -467,6 +467,11 @@ install rebuilds only what the candidate changed: `WorldDocument.InstallKindOf`
 answers value, presentation (a creation edit that changes shading alone keeps the
 arena, the rules and the population) or full, once per prepared mutation
 ([what an install rebuilds](../../../src/Puck.World.Server/README.md#what-an-install-rebuilds)).
+Within a full install each compiled product (population, solid field, envelope
+fit, addon and machine hosts) rebuilds only when a part of the document its build
+read changed (`WorldDocument.PlanProducts` over the reads `WorldDocumentReads`
+records); no list of mutation kinds decides it, and a new document member needs
+a property that notes its part (`WorldDocumentInputs.cs`).
 Document values never change once built; binding, resolving and flattening copy
 only the paths to the references they replace (`WorldStateDocumentValues`). Rule
 effects write the tick's `StateArena` and publish once at the end of the tick.

@@ -147,22 +147,32 @@ journal → echo. Precisely:
    candidate — builders and appliers never repeat semantic checks. A
    state-value write validates only the rows it touched
    (`TryValidateStateMutation`).
-4. **Capacity.** If the kind is render-envelope-affecting
-   (`AffectsRenderEnvelope`), `m_envelope.TryFit(candidate)` counts the
-   candidate's render scene on the CPU (`WorldSceneEnvelope`, registered on
-   every boot) against the engine's instance and material ceilings — a loud
-   apply-time rejection, never a later GPU allocation failure.
-5. **Solids.** If the kind is solid-affecting (`AffectsSolidField`), rebuild
-   the SDF contact field (`WorldSolidField.TryBuild`) — a solid naming an op
-   the warp-free evaluator cannot interpret is a loud apply-time rejection.
-   `SetCollision` alone re-wraps the live field with new tuning instead of
-   recompiling (`WorldSolidField.WithTuning`).
-6. **Install.** Swap the live definition; `Install` rebuilds only the changed
-   section's derived state, with a population rebuild when
-   `AffectsPopulation(mutation)` (or a field change under the field provider).
-7. **Journal.** Append a `WorldJournalEntry(Tick, EngineTick, Mutation)` to `WorldDocument`'s journal. The `dirty` count in
+4. **Plan the products.** `WorldDocument.PlanProducts` compares the
+   candidate with the document it was composed over part by part
+   (`WorldDocumentInputs.Changed`) and rebuilds each compiled product whose
+   recorded inputs hold a changed part: the render envelope's fit, the solid
+   field, the addon and machine hosts' preparations and the population. A
+   product records its inputs by building inside `WorldDocumentReads.Begin`,
+   which every `WorldDefinition` member property notes into, so no list of
+   mutation kinds decides what rebuilds. A reload's install and an undo's
+   replay follow the same plan; a load or a reset changes every part.
+5. **Capacity.** When the plan names the envelope, `m_envelope.TryFit(candidate)`
+   counts the candidate's render scene on the CPU (`WorldSceneEnvelope`,
+   registered on every boot) against the engine's instance and material
+   ceilings — a loud apply-time rejection, never a later GPU allocation failure.
+6. **Solids.** When the plan names the solid field, rebuild the SDF contact
+   field (`WorldSolidField.TryBuild`) — a solid naming an op the warp-free
+   evaluator cannot interpret is a loud apply-time rejection. A plan whose
+   only changed field input is `collision` re-wraps the live field with new
+   tuning instead of recompiling (`WorldSolidField.WithTuning`).
+7. **Install.** Swap the live definition; `Install` installs the field
+   lattices and rebuilds the population when the plan says so (a part it was
+   built from changed, or it receives a new solid field). The
+   `[world.products]` line (`host.log category world.products`) names what
+   changed, what rebuilt and what each rebuild was moved by.
+8. **Journal.** Append a `WorldJournalEntry(Tick, EngineTick, Mutation)` to `WorldDocument`'s journal. The `dirty` count in
    `world.status` IS the journal length.
-8. **Echo.** One `[world.mutation: … applied]` stderr line plus a
+9. **Echo.** One `[world.mutation: … applied]` stderr line plus a
    `WorldEditEcho` carrying the submitting envelope's
    connection/correlation identity, so a deferred echo routes to its
    submitter.
@@ -495,10 +505,11 @@ steps below apply.
    same style as its neighbors. A kind whose row names state rows adds them to the recipient
    footprint in `WorldRecipientMutations.Admits`, for the incoming row and the row it replaces.
 2. **Server:** an arm in `TryCompose` (`WorldDocument.Compose.cs`, compose the candidate),
-   plus membership in the classification predicates that apply:
-   `AffectsPopulation`, `AffectsSolidField`, `AffectsRenderEnvelope`,
-   `IsDocumentDefaults`, and a `WorldServer.Describe` arm
-   (`WorldServer.Describe.cs`).
+   membership in `IsDocumentDefaults` when it applies, and a `WorldServer.Describe` arm
+   (`WorldServer.Describe.cs`). What the install rebuilds follows from the parts the
+   candidate changes (`WorldDocument.PlanProducts`); a new kind joins no list for it. A new
+   document member gets a property that notes its part and a row in the read table
+   (`WorldDocumentInputs.cs`), which its first build checks.
 3. **Validator:** whatever whole-document invariant the new row needs lives in
    `WorldDefinitionValidator`, never in the apply arm.
 4. **Console:** a verb in the owning command module submitting

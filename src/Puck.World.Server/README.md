@@ -502,8 +502,7 @@ population forecast all read that answer:
   solid field and the population stay as they are, and such an edit composes over
   the installed document, so it exports no state section either.
 - **Full**: everything else recompiles the rules and reconciles fields and
-  screens, rebuilding the population when the mutation reaches it
-  (`RecompilesPopulation`). A mutation that named no state row (the candidate
+  screens, and rebuilds each compiled product its candidate reaches (below). A mutation that named no state row (the candidate
   holds the installed state section, compiled to the catalog the arena stores:
   `WorldServer.KeepsArena`) installs the live arena itself, so its key ordinals
   and every value stay, and the validator's seed view and the client mirror,
@@ -537,8 +536,8 @@ What survives an arena install is decided in one place,
   merged over the live document (`WorldReloadDelta.TryMergeOver`), so it holds
   the live document's own object for every member and row the change leaves
   equal, on a live run and a replay drive's re-read alike.
-  `WorldDocument.ReloadInstallKindOf` names the install by which root members
-  are other objects: none installs nothing, state values alone take the value
+  `WorldDocument.ReloadInstallKindOf` names the install by which parts of the document
+  (`WorldDocumentInputs.Changed`) are other objects: none installs nothing, state values alone take the value
   install and creations changed only in shading (with shade programs) the
   presentation install. Any other change takes the full install, where
   `WorldDocument.NameReloadEdit` seeds again only the rows whose serialized
@@ -558,6 +557,47 @@ What survives an arena install is decided in one place,
 `world.boot.full-installs`, `value-installs` and `presentation-installs` count each
 kind, and `world.boot.arena-builds` counts every arena a world builds from a state
 section.
+
+#### Which compiled products rebuild
+
+A compiled product is rebuilt exactly when a part of the document it was built
+from changed. The parts are the document's root members, with the kits, looks,
+placements and state sections split into their own parts
+(`WorldDocumentInput`). Every `WorldDefinition` member property notes its part
+when read (`WorldDocumentReads.Note`), so a build run inside
+`WorldDocumentReads.Begin` learns exactly what it read, and that set is the
+product's declaration: nothing keeps it by hand. `WorldDocumentInputs.Changed`
+names the parts a candidate holds as another instance than the document it was
+made from, and `WorldDocument.PlanProducts` intersects the two for each product:
+
+| Product | Records its inputs in |
+|---|---|
+| The population | `WorldPopulation.BuiltFrom`: its construction or its last `Rebuild`, and the reconcile of inhabited placements after it |
+| The solid field | `WorldSolidField.BuiltFrom`, with what deciding whether the document needs a field reads (`WorldDocument.SolidInputsOf`) |
+| The render envelope's fit | the last fit an install ran |
+| The addon host | the last `IWorldAddonHost.TryPrepare` an install ran |
+| The machine host | the boot preparation, then the last `IWorldMachineHost.TryPrepare` an install ran |
+
+A rebuilt solid field that the population would build its contact and
+line-of-sight consumers from also rebuilds the population. A mutation's full
+install, a reload's full install and an undo's install follow one plan; a load or
+a reset changes every part; a presentation install fits the envelope alone. The
+`[world.products]` line names the changed parts, each rebuilt product with the
+parts that moved it, and the products kept; `world.boot.product-plans`,
+`envelope-fits`, `solid-builds`, `addon-prepares`, `machine-prepares` and
+`population-rebuilds` count them.
+
+The invariant is that no product reads a part it does not declare. It holds by
+construction for every read made through a `WorldDefinition` property on the
+building thread, and the read table's check (`WorldDocumentInputTable`, run at the
+first recording or comparison) refuses a member whose property notes no part or
+the wrong one. It stops at three edges. A read on another thread is not
+recorded, so no product build forks document reads to workers. A part is a
+member, not the fields of a row: a placement move rebuilds everything that read
+any placement, and the value install's look-assignment promotion
+(`RefreshesLookAssignment`) is still a hand rule for the same reason. Rule
+compilation is not planned: a full install validates the whole candidate, which
+compiles the rules, until validation narrows (the authoring loop's step 5).
 
 ## Local flock steering
 

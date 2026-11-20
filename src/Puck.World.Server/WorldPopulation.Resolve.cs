@@ -103,9 +103,7 @@ public sealed partial class WorldPopulation {
             compiled: FixedWorldGravity.Compile(definition: definition)
         );
 
-        // Field state exists independently of the selected contact/target provider. A world may use its lattice only
-        // for reactions, exposure rows, snapshots, or rendering and still owes the same authoritative state.
-        InstallFields(definition: definition);
+        // The field lattices (InstallFields) were installed before this build; the solid consumers read them.
         CompileSolidConsumers(
             definition: definition,
             previousNavigation: previousNavigation,
@@ -140,7 +138,7 @@ public sealed partial class WorldPopulation {
 
         if (
             (derivedSolids is null) &&
-            (WorldContactSelection.RequiresField(collision: definition.Collision) || WorldTargetSelection.RequiresLineOfSight(definition: definition))
+            WorldDocument.RequiresSolidField(definition: definition)
         ) {
             if (!WorldSolidField.TryBuild(
                 built: out derivedSolids,
@@ -701,23 +699,24 @@ public sealed partial class WorldPopulation {
     /// running producer phase, and swaps every live body's compiled tuning/actions/program in place — bodies keep their
     /// pose/velocity/tape, only the compiled feel swaps. Bumps <see cref="Revision"/> so the client rebuilds the avatar
     /// program. New activations re-seed fully from these fresh tables.</summary>
-    /// <param name="definition">The new live definition.</param>
+    /// <param name="definition">The new live definition, whose field lattices were installed first
+    /// (<see cref="InstallFields"/>).</param>
     /// <param name="solids">The server's pre-built SDF contact field for the field provider (built once at apply time so
     /// a runtime edit never rebuilds it twice), or <see langword="null"/> under the analytic provider.</param>
     /// <exception cref="ArgumentNullException"><paramref name="definition"/> is <see langword="null"/>.</exception>
-    /// <exception cref="InvalidOperationException">The candidate changes the boot-allocated field lattice shape,
-    /// topology, cadence, or field envelope.</exception>
     public void Rebuild(WorldDefinition definition, WorldSolidField? solids) {
         ArgumentNullException.ThrowIfNull(argument: definition);
 
-        var previousNavigation = m_navigation;
+        var recording = WorldDocumentReads.Begin();
 
-        if (!CanInstallFields(
-            definition: definition,
-            reason: out var fieldReason
-        )) {
-            throw new InvalidOperationException(message: fieldReason);
+        try {
+            RebuildCore(definition: definition, solids: solids);
+        } finally {
+            BuiltFrom = recording.End();
         }
+    }
+    private void RebuildCore(WorldDefinition definition, WorldSolidField? solids) {
+        var previousNavigation = m_navigation;
 
         m_seatSpawns = CompileSeatSpawns(
             spawnPoints: definition.SpawnPoints,
@@ -768,8 +767,8 @@ public sealed partial class WorldPopulation {
             );
         }
 
-        // Re-resolve the look table too — a live look row/assignment mutation flows through Rebuild (AffectsRenderEnvelope
-        // + the client program rebuild the bumped revision triggers). PRESENTATION-ONLY, so it touches no body state.
+        // Re-resolve the look table too — a live look row or assignment edit rebuilds the population, whose bumped
+        // revision rebuilds the client program. PRESENTATION-ONLY, so it touches no body state.
         ResolveLookIndices(definition: definition);
         // The selections index the fresh kit and look tables, so they resolve before anything reads a body's kit.
         _ = ResolveSelections(definition: definition);
