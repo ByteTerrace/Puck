@@ -2,6 +2,7 @@ using System.Numerics;
 using System.Runtime.InteropServices;
 using System.Runtime.Intrinsics;
 using Puck.Abstractions.Machines;
+using Puck.Abstractions.Waiting;
 using Puck.Abstractions.Sources;
 using Puck.Maths;
 
@@ -249,7 +250,7 @@ public sealed class QueuedMachineWorker : IDisposable {
             }
         } while (written == scratch.Length);
     }
-    private QueuedMachineSubmission EnqueueStep(ulong deltaTicks, in MachinePads input, bool forceStage) {
+    private QueuedMachineSubmission EnqueueStep(ulong deltaTicks, in MachinePads input, bool forceStage, ref ulong generation, WaitDeadline deadline) {
         if (
             (0 != Volatile.Read(location: ref m_disposed)) ||
             (m_lifecycle.Worker is null) ||
@@ -258,11 +259,10 @@ public sealed class QueuedMachineWorker : IDisposable {
             return QueuedMachineSubmission.Rejected;
         }
 
-        return m_lifecycle.Submit(item: WorkItem.Step(
-            deltaTicks: deltaTicks,
-            forceStage: forceStage,
-            input: in input
-        ));
+        var item = WorkItem.Step(deltaTicks: deltaTicks, forceStage: forceStage, input: in input);
+        return forceStage
+            ? m_lifecycle.Step(in item, ref generation, deadline)
+            : m_lifecycle.Submit(in item, deadline);
     }
     private void ExecuteCheckpoint(IQueuedMachineCore core, CheckpointRequest request) {
         if (request.Restore is { } restore) {
@@ -742,7 +742,7 @@ public sealed class QueuedMachineWorker : IDisposable {
                         current.Completion!.Set();
                         break;
                     case WorkKind.Barrier:
-                        current.Completion!.Set();
+                        m_lifecycle.CompleteBarrier(current.BarrierGeneration);
                         break;
                     case WorkKind.Stop:
                         current.Completion!.Set();
@@ -1138,30 +1138,25 @@ public sealed class QueuedMachineWorker : IDisposable {
     /// <param name="input">The seat image held over the budget.</param>
     /// <returns><see langword="true"/> when the machine stepped.</returns>
     public bool Step(ulong deltaTicks, in MachinePads input) {
-        if (EnqueueStep(
-            deltaTicks: deltaTicks,
-            forceStage: true,
-            input: in input
-        ) == QueuedMachineSubmission.Rejected) {
-            m_lifecycle.ThrowIfFaulted();
-
-            return false;
-        }
-
-        m_lifecycle.Drain();
-
-        return true;
+        var generation = 0UL;
+        var result = StepSegment(deltaTicks: deltaTicks, input: in input, drain: true, generation: ref generation,
+            deadline: QueuedWorkerLifecycle<WorkItem>.StandaloneDeadline());
+        return QueuedWorkerLifecycle<WorkItem>.RequireSettled(result) != QueuedMachineSubmission.Rejected;
     }
     /// <summary>Accepts one exact tick/input segment for ordered execution, applying producer backpressure at capacity.</summary>
     /// <param name="deltaTicks">The segment's fixed-step tick budget.</param>
     /// <param name="input">The seat image held for the whole segment.</param>
     /// <returns>The observable submission outcome.</returns>
-    public QueuedMachineSubmission Submit(ulong deltaTicks, in MachinePads input) =>
-        EnqueueStep(
-            deltaTicks: deltaTicks,
-            forceStage: false,
-            input: in input
-        );
+    public QueuedMachineSubmission Submit(ulong deltaTicks, in MachinePads input) {
+        var generation = 0UL;
+        var result = EnqueueStep(deltaTicks: deltaTicks, input: in input, forceStage: false, generation: ref generation,
+            deadline: QueuedWorkerLifecycle<WorkItem>.StandaloneDeadline());
+        return QueuedWorkerLifecycle<WorkItem>.RequireSettled(result);
+    }
+
+    /// <summary>Submits or resumes a segment within the caller’s deadline.</summary>
+    public QueuedMachineSubmission StepSegment(ulong deltaTicks, in MachinePads input, bool drain, ref ulong generation, WaitDeadline deadline) =>
+        EnqueueStep(deltaTicks: deltaTicks, input: in input, forceStage: drain, generation: ref generation, deadline: deadline);
     /// <summary>Writes the latest complete frame into an uploaded source's region: its one plane of tightly packed RGBA8
     /// rows, at <see cref="ImageSourceUploadLayout.HeaderOf"/>'s offset for this worker's extent, leaving the header as it
     /// is. The copy runs under the frame lock, which the worker holds only to swap its buffers, so the frame is written
@@ -1251,11 +1246,13 @@ public sealed class QueuedMachineWorker : IDisposable {
         TimeTravelRequest? TimeTravel,
         MemoryRequest? Memory,
         ReconfigureRequest? Reconfigure,
-        CheckpointRequest? Checkpoint = null
+        CheckpointRequest? Checkpoint = null,
+        ulong BarrierGeneration = 0
     ) : IQueuedWorkItem<WorkItem> {
-        public static WorkItem Barrier(ManualResetEventSlim completion) =>
+        public static WorkItem Barrier(ulong generation) =>
             new(
-                Completion: completion,
+                BarrierGeneration: generation,
+                Completion: null,
                 DeltaTicks: 0UL,
                 ForceFlush: false,
                 ForceStage: false,

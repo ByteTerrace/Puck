@@ -33,6 +33,7 @@ public sealed partial class WorldPersistence {
     [Replaces(root: typeof(StateArena))]
     public void RestoreReplayStart(WorldAuthorityCheckpoint checkpoint, bool restoreOwnedIdentities = true, string? documentDirectory = null) {
         lock (Host.AuthorityGate) {
+            Host.ThrowIfTickPending();
             var keys = Host.DrawKeys;
             keys.AdvanceGeneration();
             var admission = ((documentDirectory is null && checkpoint.Server.DrawPositions is null) ? CheckpointAdmission(json: checkpoint.Server.DefinitionJson)
