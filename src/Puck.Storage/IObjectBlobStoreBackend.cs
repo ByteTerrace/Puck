@@ -34,6 +34,19 @@ public interface IObjectBlobStoreBackend {
         string? ifMatchVersion = null,
         CancellationToken cancellationToken = default
     );
+    /// <summary>See <see cref="IObjectBlobStore.ContentEqualsAsync"/>. The default reads the whole blob through
+    /// <see cref="ReadAsync"/>.</summary>
+    /// <param name="target">The backend's own target.</param>
+    /// <param name="address">The blob address.</param>
+    /// <param name="expected">The bytes the blob must hold.</param>
+    /// <param name="cancellationToken">A token to observe.</param>
+    /// <returns><see langword="true"/> when the blob exists with exactly those bytes.</returns>
+    async ValueTask<bool> ContentEqualsAsync(ObjectStorageTarget target, ObjectBlobAddress address, ReadOnlyMemory<byte> expected,
+        CancellationToken cancellationToken = default) => ((await ReadAsync(
+            address: address,
+            cancellationToken: cancellationToken,
+            target: target
+        ).ConfigureAwait(continueOnCapturedContext: false)) is { } found) && found.Content.Span.SequenceEqual(other: expected.Span);
     /// <summary>See <see cref="IObjectBlobStore.ListAsync"/>.</summary>
     /// <param name="target">The backend's own target.</param>
     /// <param name="objectId">The object (container) id to list within.</param>
