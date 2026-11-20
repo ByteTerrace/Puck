@@ -508,22 +508,13 @@ public sealed partial class SdfProgram {
             y: candidate
         );
 
-        if (blend is ((uint)SdfBlendOp.GrooveUnion) or ((uint)SdfBlendOp.PipeUnion) or ((uint)SdfBlendOp.GrooveSubtraction) or ((uint)SdfBlendOp.PipeSubtraction)) {
-            // Cauchy-Schwarz bounds (a*grad(a)+b*grad(b))/sqrt(a²+b²).
-            // Unlike the chamfer's sum, this also covers unequal operand bounds.
-            return float.Hypot(x: current, y: candidate);
-        }
-        return ((
-            (blend == ((uint)SdfBlendOp.ChamferUnion)) ||
-            (blend == ((uint)SdfBlendOp.ChamferIntersection)) ||
-            (blend == ((uint)SdfBlendOp.ChamferSubtraction))
-        )
-            ? MathF.Max(
-            x: bound,
-            y: ((current + candidate) * SqrtHalf)
-        )
-            : bound
-        );
+        return SdfFieldBlends.LipschitzOf(value: ((SdfBlendOp)blend)) switch {
+            SdfBlendLipschitzAction.Maximum => bound,
+            // Cauchy-Schwarz bounds (a*grad(a)+b*grad(b))/sqrt(a²+b²) for unequal operand bounds too.
+            SdfBlendLipschitzAction.RoundSeam => float.Hypot(x: current, y: candidate),
+            SdfBlendLipschitzAction.Chamfer => MathF.Max(x: bound, y: ((current + candidate) * SqrtHalf)),
+            _ => throw new InvalidOperationException(message: "Invalid blend Lipschitz action."),
+        };
     }
     // A coordinate-keyed plane rotation's Jacobian is an orthonormal rotation R times (I + a·n·mᵀ) — a rank-1 shear of
     // magnitude a = |rate| * rho. Its largest singular value depends on the angle between the shear direction n and the
@@ -806,18 +797,22 @@ public sealed partial class SdfProgram {
             var reach = (((translateReach - translateReachAtOp) + shapeReach) + grown);
             var ownReach = (reach / minScale);
 
-            switch (warp.Op) {
-                case SdfOp.GaussianPush:
+            switch (SdfFieldOps.WarpBoundOf(value: warp.Op)) {
+                case SdfWarpBoundAction.GaussianPush:
                     grown += (new Vector3(x: warp.Data0.W, y: warp.Data1.W, z: BitConverter.UInt32BitsToSingle(value: warp.Shape)).Length() * maxScale);
                     break;
-                case SdfOp.Shear:
+                case SdfWarpBoundAction.Shear:
                     domainProduct *= ShearOperatorNorm(warp.Data0.X, warp.Data0.Y, warp.Data0.Z, ownReach);
                     grown += ((ownReach * (MathF.Abs(x: warp.Data0.X) + (ownReach * (MathF.Abs(x: warp.Data0.Y) + (ownReach * MathF.Abs(x: warp.Data0.Z)))))) * maxScale);
                     break;
-                case SdfOp.AxialProfile:
+                case SdfWarpBoundAction.AxialProfile:
                     domainProduct *= FlareOperatorNorm(warp.Data0.X, warp.Data0.Y, warp.Data0.W, warp.Data1.X, ownReach, warp.Data1.Y);
                     grown += (reach * (MathF.Max(x: 1f, y: FlareExtrema(amount: warp.Data0.X, bulge: warp.Data0.Y, startScale: warp.Data1.Y).MaxS) - 1f));
                     break;
+                case SdfWarpBoundAction.Ignore:
+                    break;
+                default:
+                    throw new InvalidOperationException(message: "Invalid WarpBound action.");
             }
         }
         foreach (var warp in warpRates) {
@@ -975,12 +970,7 @@ public sealed partial class SdfProgram {
                 continue;
             }
 
-            if (
-                (instruction.Op == SdfOp.Onion) ||
-                (instruction.Op == SdfOp.Dilate) ||
-                (instruction.Op == SdfOp.Displace) ||
-                (instruction.Op is SdfOp.NoiseDisplace or SdfOp.CellDisplace)
-            ) {
+            if (SdfFieldOps.ScopeReachOf(value: instruction.Op) != SdfScopeReachAction.None) {
                 return true;
             }
 
@@ -1101,13 +1091,13 @@ public sealed partial class SdfProgram {
                 continue;
             }
 
-            scopeReach += instruction.Op switch {
-                SdfOp.Onion => MathF.Abs(x: instruction.Data0.X),
-                SdfOp.Dilate => MathF.Abs(x: instruction.Data0.X),
-                SdfOp.Displace => MathF.Abs(x: instruction.Data0.W),
-                SdfOp.NoiseDisplace => MathF.Abs(x: instruction.Data0.Y),
-                SdfOp.CellDisplace => (0.5f * instruction.Data0.Y),
-                _ => 0.0f,
+            scopeReach += SdfFieldOps.ScopeReachOf(value: instruction.Op) switch {
+                SdfScopeReachAction.Data0X => MathF.Abs(x: instruction.Data0.X),
+                SdfScopeReachAction.Data0W => MathF.Abs(x: instruction.Data0.W),
+                SdfScopeReachAction.Data0Y => MathF.Abs(x: instruction.Data0.Y),
+                SdfScopeReachAction.HalfData0Y => (0.5f * instruction.Data0.Y),
+                SdfScopeReachAction.None => 0.0f,
+                _ => throw new InvalidOperationException(message: "Invalid ScopeReach action."),
             };
         }
 
@@ -1170,25 +1160,15 @@ public sealed partial class SdfProgram {
                 radius /= instruction.Data1.Y;
             }
 
-            if (
-                (instruction.Blend == ((uint)SdfBlendOp.SmoothUnion)) ||
-                (instruction.Blend == ((uint)SdfBlendOp.SmoothSubtraction)) ||
-                (instruction.Blend == ((uint)SdfBlendOp.ChamferSubtraction))
-            ) {
-                margin = MathF.Max(
-                    x: margin,
-                    y: radius
-                );
-            } else if (instruction.Blend is ((uint)SdfBlendOp.PipeUnion) or ((uint)SdfBlendOp.PipeSubtraction)) {
-                margin = MathF.Max(x: margin, y: ((1f + MathF.Sqrt(x: 2f)) * radius));
-            } else if (instruction.Blend is ((uint)SdfBlendOp.GrooveUnion) or ((uint)SdfBlendOp.GrooveSubtraction) or ((uint)SdfBlendOp.StairsUnion) or ((uint)SdfBlendOp.StairsSubtraction)) {
-                margin = MathF.Max(x: margin, y: radius);
-            } else if (instruction.Blend == ((uint)SdfBlendOp.ChamferUnion)) {
-                margin = MathF.Max(
-                    x: margin,
-                    y: (ChamferUnionHaloScale * radius)
-                );
-            }
+            var halo = SdfFieldBlends.HaloOf(value: ((SdfBlendOp)instruction.Blend)) switch {
+                SdfBlendHaloAction.None => 0f,
+                SdfBlendHaloAction.Radius => radius,
+                SdfBlendHaloAction.Pipe => ((1f + MathF.Sqrt(x: 2f)) * radius),
+                SdfBlendHaloAction.ChamferUnion => (ChamferUnionHaloScale * radius),
+                _ => throw new InvalidOperationException(message: "Invalid blend halo action."),
+            };
+
+            margin = MathF.Max(x: margin, y: halo);
         }
 
         return (margin * NestedFieldMarginScale(end: end, first: first));
@@ -1369,11 +1349,10 @@ public sealed partial class SdfProgram {
     private static bool TryGetLocalBound(SdfInstruction instruction, int instructionIndex, (int InstructionIndex, Vector2[] Vertices)[] convexPolygonProfiles, SdfSweepCurve[] sweepCurves, out Vector3 center, out float radius) {
         var data0 = instruction.Data0;
 
-        switch ((SdfShapeType)instruction.Shape) {
-            case SdfShapeType.Sweep:
+        switch (SdfFieldShapes.LocalBoundOf(value: (SdfShapeType)instruction.Shape)) {
+            case SdfLocalBoundAction.Sweep:
                 return TryGetSweepBound(center: out center, instruction: instruction, instructionIndex: instructionIndex, radius: out radius, sweepCurves: sweepCurves);
-            case SdfShapeType.Box:
-            case SdfShapeType.ScreenSlab: {
+            case SdfLocalBoundAction.Box: {
                     // The rounded box is contained in the sharp half-extents box; the rounding is added anyway as slack
                     // against degenerate authoring (round exceeding a half-extent).
                     center = Vector3.Zero;
@@ -1385,7 +1364,7 @@ public sealed partial class SdfProgram {
 
                     return true;
                 }
-            case SdfShapeType.Capsule: {
+            case SdfLocalBoundAction.Capsule: {
                     var endpoint = new Vector3(
                         x: data0.X,
                         y: data0.Y,
@@ -1397,26 +1376,26 @@ public sealed partial class SdfProgram {
 
                     return true;
                 }
-            case SdfShapeType.Sphere: {
+            case SdfLocalBoundAction.Sphere: {
                     center = Vector3.Zero;
                     radius = MathF.Abs(x: data0.X);
 
                     return true;
                 }
-            case SdfShapeType.Torus: {
+            case SdfLocalBoundAction.Torus: {
                     center = Vector3.Zero;
                     radius = (MathF.Abs(x: data0.X) + MathF.Abs(x: data0.Y));
 
                     return true;
                 }
-            case SdfShapeType.Cylinder: {
+            case SdfLocalBoundAction.Cylinder: {
                     // Data0.xy are the rounding-inset legs; adding Data1.w back reproduces the authored extent.
                     center = Vector3.Zero;
                     radius = (MathF.Sqrt(x: ((data0.X * data0.X) + (data0.Y * data0.Y))) + MathF.Abs(x: instruction.Data1.W));
 
                     return true;
                 }
-            case SdfShapeType.Vesica: {
+            case SdfLocalBoundAction.Vesica: {
                     // Exact and convex, so a real containment bound: the lens reaches (r − d) radially in XZ and
                     // b = data0.z axially along Y (max of the two is the farthest point from the local origin).
                     center = Vector3.Zero;
@@ -1430,7 +1409,7 @@ public sealed partial class SdfProgram {
             // The 2D-primitive family: each 2D core has an exact 2D bounding radius (its reach from the local 2D
             // origin); LiftedBoundRadius grows it to a 3D containment sphere per the shape's lift (revolve/extrude).
             // All exact + 1-Lipschitz, so — like Vesica — they earn a real cull bound (unlike the superellipsoid's underestimating gauge).
-            case SdfShapeType.RoundedRectangle: {
+            case SdfLocalBoundAction.RoundedRectangle: {
                     center = Vector3.Zero;
                     // The rounded corners round INWARD, so the sharp half-extents box (data0.xy) contains the shape.
                     radius = LiftedBoundRadius(
@@ -1443,7 +1422,7 @@ public sealed partial class SdfProgram {
 
                     return true;
                 }
-            case SdfShapeType.ChamferedRectangle: {
+            case SdfLocalBoundAction.ChamferedRectangle: {
                     center = Vector3.Zero;
                     // The chamfer cuts INWARD (like RoundedRectangle's corner rounding), so the sharp half-extents
                     // box (data0.xy) still contains the shape.
@@ -1457,8 +1436,7 @@ public sealed partial class SdfProgram {
 
                     return true;
                 }
-            case SdfShapeType.RegularPolygon:
-            case SdfShapeType.Star: {
+            case SdfLocalBoundAction.RegularPolygon: {
                     center = Vector3.Zero;
                     // Every vertex/tip is within the (circum/outer) radius data0.x of the 2D origin.
                     radius = LiftedBoundRadius(
@@ -1468,7 +1446,7 @@ public sealed partial class SdfProgram {
 
                     return true;
                 }
-            case SdfShapeType.Trapezoid: {
+            case SdfLocalBoundAction.Trapezoid: {
                     center = Vector3.Zero;
                     // The farthest vertex: bottom (±r1, −he) or top (±r2, +he).
                     radius = LiftedBoundRadius(
@@ -1487,7 +1465,7 @@ public sealed partial class SdfProgram {
 
                     return true;
                 }
-            case SdfShapeType.Ellipse: {
+            case SdfLocalBoundAction.Ellipse: {
                     center = Vector3.Zero;
                     radius = LiftedBoundRadius(
                         radius2D: MathF.Max(
@@ -1499,7 +1477,7 @@ public sealed partial class SdfProgram {
 
                     return true;
                 }
-            case SdfShapeType.RoundCone: {
+            case SdfLocalBoundAction.RoundCone: {
                     // The hull of the two end spheres (origin, r1) and ((0, h, 0), r2).
                     var halfHeight = (data0.Z * 0.5f);
 
@@ -1515,7 +1493,7 @@ public sealed partial class SdfProgram {
 
                     return true;
                 }
-            case SdfShapeType.SampledRegion: {
+            case SdfLocalBoundAction.SampledRegion: {
                     // The brick's box CIRCUMSPHERE: the box runs [boxMin, boxMin + dims*cellSize] in local space, so its
                     // centre is boxMin + extent/2 and its radius is |extent|/2. This contains the whole box and thus the
                     // brick's zero set (strictly interior by the bake margin), so a Subtraction-blend brick instance masks
@@ -1544,12 +1522,12 @@ public sealed partial class SdfProgram {
             // grown to a 3D containment sphere per the shape's lift exactly as LiftedBoundRadius does for the rest
             // of the family. Requires the vertex table (not packable into Data0/Data1 alone), so it is looked up by
             // instruction index rather than decoded from the instruction itself.
-            case SdfShapeType.Path: {
+            case SdfLocalBoundAction.Path: {
                     center = Vector3.Zero;
                     radius = MathF.Sqrt(x: ((data0.Z * data0.Z) + (data0.W * data0.W)));
                     return float.IsFinite(f: radius);
                 }
-            case SdfShapeType.ConvexPolygon: {
+            case SdfLocalBoundAction.ConvexPolygon: {
                     if (!TryFindConvexPolygonVertices(
                         convexPolygonProfiles: convexPolygonProfiles,
                         instructionIndex: instructionIndex,
@@ -1578,12 +1556,14 @@ public sealed partial class SdfProgram {
 
                     return true;
                 }
-            default: {
+            case SdfLocalBoundAction.Unbounded: {
                     center = Vector3.Zero;
                     radius = 0f;
 
                     return false;
                 }
+            default:
+                throw new InvalidOperationException(message: "Invalid LocalBound action.");
         }
     }
     private void WriteBound(int entryBase, in BoundRecord record) {

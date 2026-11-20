@@ -49,14 +49,14 @@ public sealed partial class SdfProgram {
         for (var index = 0; (index < m_instructions.Length); index++) {
             var instruction = m_instructions[index];
 
-            switch (instruction.Op) {
-                case SdfOp.PushField:
+            switch (SdfFieldOps.ScopeClampOf(value: instruction.Op)) {
+                case SdfScopeClampAction.PushField:
                     scopes[depth++] = (index, shapes);
                     break;
-                case SdfOp.ShapeBlend:
+                case SdfScopeClampAction.ShapeBlend:
                     shapes++;
                     break;
-                case SdfOp.PopField:
+                case SdfScopeClampAction.PopField:
                     var scope = scopes[--depth];
                     if (instruction.Data1.Y is > 0f and < 1f) {
                         (clamps ??= []).Add(item: new(
@@ -68,6 +68,10 @@ public sealed partial class SdfProgram {
                         ));
                     }
                     break;
+                case SdfScopeClampAction.Ignore:
+                    break;
+                default:
+                    throw new InvalidOperationException(message: "Invalid ScopeClamp action.");
             }
         }
 

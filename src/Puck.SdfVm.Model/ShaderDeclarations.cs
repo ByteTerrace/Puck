@@ -105,7 +105,7 @@ public static class ShaderDeclarations {
 
         return [
             new ShaderDeclaration(Generate: SdfIsaHlsl.Generate, Path: $"{SdfKernelInterfaces.KernelDirectory}/isa/{SdfIsaHlsl.FileName}"),
-            new ShaderDeclaration(Generate: SdfFieldHlsl.Generate, Path: $"{SdfKernelInterfaces.KernelDirectory}/isa/{SdfFieldHlsl.FileName}"),
+            .. SdfFieldHlsl.Declarations,
             new ShaderDeclaration(Generate: SdfRenderHlsl.Generate, Path: $"{SdfKernelInterfaces.KernelDirectory}/isa/{SdfRenderHlsl.FileName}"),
             new ShaderDeclaration(Generate: SdfShadeHlsl.Generate, Path: $"{SdfKernelInterfaces.KernelDirectory}/isa/{SdfShadeHlsl.FileName}"),
             new ShaderDeclaration(Generate: SdfMeshBakeTapsHlsl.Generate, Path: $"{SdfKernelInterfaces.KernelDirectory}/isa/{SdfMeshBakeTapsHlsl.FileName}"),

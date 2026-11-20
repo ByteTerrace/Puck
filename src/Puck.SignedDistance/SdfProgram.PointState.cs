@@ -6,11 +6,12 @@ public sealed partial class SdfProgram {
     // Whether an instruction opens a fold whose lattice has no edge. Repeat, CellJitter (a cell lattice at zero jitter
     // too) and LogSphere (shells at every scale) never end; a RepeatLimited or WallpaperFold ends only at its limit.
     // The one test the classifier reads.
-    private static bool OpensUnboundedFold(SdfInstruction instruction) => instruction.Op switch {
-        SdfOp.Repeat or SdfOp.CellJitter or SdfOp.LogSphere => true,
-        SdfOp.RepeatLimited => SdfDomainOps.IsUnboundedRepeat(limit: new Vector3(x: instruction.Data1.X, y: instruction.Data1.Y, z: instruction.Data1.Z)),
-        SdfOp.WallpaperFold => SdfWallpaperFold.IsUnbounded(limit: new Vector2(x: instruction.Data1.X, y: instruction.Data1.Y)),
-        _ => ((SdfOpRoles.Of(op: instruction.Op) == SdfOpRole.Lattice) ? throw new InvalidOperationException(message: $"SDF lattice op {instruction.Op} has no unbounded-limit rule.") : false),
+    private static bool OpensUnboundedFold(SdfInstruction instruction) => SdfFieldOps.UnboundedFoldOf(value: instruction.Op) switch {
+        SdfUnboundedFoldAction.Unbounded => true,
+        SdfUnboundedFoldAction.RepeatLimit => SdfDomainOps.IsUnboundedRepeat(limit: new Vector3(x: instruction.Data1.X, y: instruction.Data1.Y, z: instruction.Data1.Z)),
+        SdfUnboundedFoldAction.WallpaperLimit => SdfWallpaperFold.IsUnbounded(limit: new Vector2(x: instruction.Data1.X, y: instruction.Data1.Y)),
+        SdfUnboundedFoldAction.Bounded => false,
+        _ => throw new InvalidOperationException(message: "Invalid UnboundedFold action."),
     };
     // A segment (the unit the directory skips, and an instance's compiled part program evaluates alone) starts from the
     // world point. ResetPoint says so where the stream splits at one, but the stream also splits at every instance's first
@@ -40,7 +41,7 @@ public sealed partial class SdfProgram {
                 var op = m_instructions[index].Op;
 
                 hasShape |= (op == SdfOp.ShapeBlend);
-                readsPoint |= (op is not (SdfOp.ResetPoint or SdfOp.PushField or SdfOp.PopField));
+                readsPoint |= SdfFieldOps.ReadsPointOf(value: op);
 
                 if (
                     (firstMover < 0) &&

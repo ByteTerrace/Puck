@@ -286,8 +286,8 @@ public sealed partial class SdfFieldEvaluator {
 
             ++visited;
 
-            switch (instruction.Op) {
-                case SdfOp.ResetPoint: {
+            switch (instruction.IntervalAction) {
+                case SdfIntervalAction.ResetPoint: {
                         local = world;
                         distanceScale = Point(value: FixedQ4816.One);
                         laneErodeSkip = false;
@@ -301,7 +301,7 @@ public sealed partial class SdfFieldEvaluator {
 
                         break;
                     }
-                case SdfOp.Translate: {
+                case SdfIntervalAction.Translate: {
                         local = new(
                             X: (local.X - FixedInterval.FromPoint(value: instruction.Data0X)),
                             Y: (local.Y - FixedInterval.FromPoint(value: instruction.Data0Y)),
@@ -309,7 +309,7 @@ public sealed partial class SdfFieldEvaluator {
                         );
                         break;
                     }
-                case SdfOp.Rotate: {
+                case SdfIntervalAction.Rotate: {
                         if (TryAxialRotationBounds(instruction: instruction, p: local, rotated: out var axial)) {
                             local = axial;
                         } else {
@@ -318,7 +318,7 @@ public sealed partial class SdfFieldEvaluator {
                         }
                         break;
                     }
-                case SdfOp.Scale: {
+                case SdfIntervalAction.Scale: {
                         // A unit scale divides by one and multiplies by one, both exact on a point interval.
                         if (IsUnitScale(instruction: in instruction)) {
                             break;
@@ -334,61 +334,51 @@ public sealed partial class SdfFieldEvaluator {
                         distanceScale *= Point(value: instruction.Data0W);
                         break;
                     }
-                case SdfOp.Repeat:
-                case SdfOp.RepeatLimited:
-                case SdfOp.SymmetryPlane:
-                case SdfOp.Elongate: {
+                case SdfIntervalAction.Fold: {
                         local = FoldBounds(instruction: in instruction, local: local);
                         break;
                     }
-                case SdfOp.AxialProfile:
-                case SdfOp.RotatePlane: {
+                case SdfIntervalAction.Warp: {
                         local = WarpBounds(distanceScale: ref distanceScale, instruction: in instruction, local: local);
                         break;
                     }
-                case SdfOp.Shear:
-                case SdfOp.GaussianPush:
-                case SdfOp.DomainWarp:
-                case SdfOp.RepeatPolar:
-                case SdfOp.WallpaperFold:
-                case SdfOp.LogSphere:
-                case SdfOp.CellJitter: {
+                case SdfIntervalAction.RenderWarp: {
                         local = RenderWarpBounds(distanceScale: ref distanceScale, instruction: in instruction, local: local);
                         break;
                     }
-                case SdfOp.LaneErode: {
+                case SdfIntervalAction.LaneErode: {
                         var amount = LaneErodeBounds(instruction: in instruction);
 
                         laneErodeSkip = (amount is null);
                         laneErodeAmount = (amount ?? FixedInterval.FromPoint(value: FixedQ4816.Zero));
                         break;
                     }
-                case SdfOp.Onion:
-                case SdfOp.CellDisplace:
-                case SdfOp.Dilate: {
+                case SdfIntervalAction.EditField: {
                         result = EditFieldBounds(instruction: in instruction, local: local, result: result);
                         break;
                     }
-                case SdfOp.Displace: {
+                case SdfIntervalAction.RenderEditField: {
                         result = RenderEditFieldBounds(instruction: in instruction, result: result);
                         break;
                     }
-                case var relief when SdfFieldOps.Contains(value: relief): {
-                        if (SdfFieldOps.IntervalOf(value: relief) == SdfReliefAction.Noise) {
-                            result = NoiseDisplaceBounds(instruction: in instruction, local: local, result: result, weight: ((instruction.ReliefMasks is { } masks) ? MaskProductBounds(masks: masks, q: local) : null));
-                        }
+                case SdfIntervalAction.WeightedRelief: {
+                        result = NoiseDisplaceBounds(instruction: in instruction, local: local, result: result, weight: ((instruction.ReliefMasks is { } masks) ? MaskProductBounds(masks: masks, q: local) : null));
                         break;
                     }
-                case SdfOp.PushField: {
+                case SdfIntervalAction.Identity: {
+                        // Data for the following relief.
+                        break;
+                    }
+                case SdfIntervalAction.PushField: {
                         scopes[scopeDepth++] = result;
                         result = FixedInterval.FromPoint(value: FarDistance);
                         break;
                     }
-                case SdfOp.PopField: {
+                case SdfIntervalAction.PopField: {
                         result = PopFieldBounds(candidate: result, instruction: instruction, saved: scopes[--scopeDepth]);
                         break;
                     }
-                case SdfOp.ShapeBlend: {
+                case SdfIntervalAction.ShapeBlend: {
                         var erosion = laneErodeAmount;
                         var skipped = laneErodeSkip;
 
@@ -404,10 +394,12 @@ public sealed partial class SdfFieldEvaluator {
                         result = BlendBounds(blend: instruction.Blend, candidate: candidate, current: result, smoothRadius: instruction.Data1X);
                         break;
                     }
-                default: {
+                case SdfIntervalAction.Unsupported: {
                         ThrowNoInclusionRule(op: instruction.Op);
                         break;
                     }
+                default:
+                    throw new InvalidOperationException(message: "Invalid Interval action.");
             }
         }
 
@@ -419,8 +411,8 @@ public sealed partial class SdfFieldEvaluator {
     // The box folds, the cold half of WalkBounds' switch, kept out of it so its hot cases inline their helpers.
     [MethodImpl(MethodImplOptions.NoInlining)]
     private static IntervalVector3 FoldBounds(in CompiledInstruction instruction, IntervalVector3 local) {
-        switch (instruction.Op) {
-            case SdfOp.Repeat: {
+        switch (SdfFieldOps.IntervalFoldOf(value: instruction.Op)) {
+            case SdfIntervalFoldAction.Repeat: {
                     var spacing = Vector(instruction: instruction);
                     var inverseSpacing = Vector1(instruction: instruction);
 
@@ -430,7 +422,7 @@ public sealed partial class SdfFieldEvaluator {
                         Z: (local.Z - (Point(value: spacing.Z) * FixedInterval.Round(value: (local.Z * Point(value: inverseSpacing.Z)))))
                     );
                 }
-            case SdfOp.RepeatLimited: {
+            case SdfIntervalFoldAction.RepeatLimited: {
                     var spacing = Vector(instruction: instruction);
                     var limit = Vector1(instruction: instruction);
 
@@ -440,7 +432,7 @@ public sealed partial class SdfFieldEvaluator {
                         Z: (local.Z - (Point(value: spacing.Z) * FixedInterval.Clamp(value: FixedInterval.Round(value: (local.Z / Point(value: spacing.Z))), minimum: -limit.Z, maximum: limit.Z)))
                     );
                 }
-            case SdfOp.SymmetryPlane: {
+            case SdfIntervalFoldAction.SymmetryPlane: {
                     var normal = Vector(instruction: instruction);
                     var t = (Dot(left: local, right: normal) + Point(value: instruction.Data0W));
                     var twiceMin = (FixedInterval.Min(first: t, second: Point(value: FixedQ4816.Zero)) * Point(value: Two));
@@ -451,7 +443,7 @@ public sealed partial class SdfFieldEvaluator {
                         Z: (local.Z - (Point(value: normal.Z) * twiceMin))
                     );
                 }
-            default: {
+            case SdfIntervalFoldAction.Elongate: {
                     var extents = Vector(instruction: instruction);
 
                     return new(
@@ -460,19 +452,25 @@ public sealed partial class SdfFieldEvaluator {
                         Z: ElongateBounds(extent: extents.Z, value: local.Z)
                     );
                 }
+            case SdfIntervalFoldAction.Unsupported:
+                throw new InvalidOperationException(message: "Unsupported IntervalFold action.");
+            default:
+                throw new InvalidOperationException(message: "Invalid IntervalFold action.");
         }
     }
     // The box field edits (Onion, CellDisplace, Dilate), kept out of WalkBounds with the folds.
     [MethodImpl(MethodImplOptions.NoInlining)]
-    private static FixedInterval EditFieldBounds(in CompiledInstruction instruction, IntervalVector3 local, FixedInterval result) => instruction.Op switch {
-        SdfOp.Onion => (FixedInterval.Abs(value: result) - Point(value: instruction.Data0X)),
-        SdfOp.CellDisplace => (result + (Point(value: instruction.Data0Y) * (CellBounds(
+    private static FixedInterval EditFieldBounds(in CompiledInstruction instruction, IntervalVector3 local, FixedInterval result) => SdfFieldOps.IntervalFieldEditOf(value: instruction.Op) switch {
+        SdfIntervalFieldEditAction.Onion => (FixedInterval.Abs(value: result) - Point(value: instruction.Data0X)),
+        SdfIntervalFieldEditAction.CellDisplace => (result + (Point(value: instruction.Data0Y) * (CellBounds(
             mode: ((SdfCellMode)instruction.Blend),
             point: (local * instruction.Data0X),
             randomness: instruction.Data0Z,
             seed: instruction.Shape
         ) - Point(value: Half)))),
-        _ => (result - Point(value: instruction.Data0X)),
+        SdfIntervalFieldEditAction.Dilate => (result - Point(value: instruction.Data0X)),
+        SdfIntervalFieldEditAction.Unsupported => throw new InvalidOperationException(message: "The point walk selected an unsupported field edit."),
+        _ => throw new InvalidOperationException(message: "Invalid IntervalFieldEdit action."),
     };
     // The render reading's warps over a box (WarpPoint's inclusion rules). AxialProfile divides the two other axes by an s
     // of at least FlareMinScale, so each lies between zero and its range over FlareMinScale. RotatePlane uses directed
@@ -533,56 +531,12 @@ public sealed partial class SdfFieldEvaluator {
 
     /// <summary>Gets the ops the bounds interpreter has an inclusion rule for. Every op the point interpreter accepts
     /// under either reading must appear here; the sync law holds the two sets equal.</summary>
-    public static IReadOnlyList<SdfOp> BoundedOps { get; } = [
-        SdfOp.ResetPoint,
-        SdfOp.Translate,
-        SdfOp.Rotate,
-        SdfOp.Scale,
-        SdfOp.Repeat,
-        SdfOp.RepeatLimited,
-        SdfOp.SymmetryPlane,
-        SdfOp.Elongate,
-        SdfOp.Onion,
-        SdfOp.CellDisplace,
-        SdfOp.Dilate,
-        SdfOp.PushField,
-        SdfOp.PopField,
-        SdfOp.ShapeBlend,
-        SdfOp.AxialProfile,
-        SdfOp.RotatePlane,
-        SdfOp.Shear,
-        SdfOp.GaussianPush,
-        SdfOp.DomainWarp,
-        SdfOp.RepeatPolar,
-        SdfOp.WallpaperFold,
-        SdfOp.LogSphere,
-        SdfOp.CellJitter,
-        SdfOp.LaneErode,
-        SdfOp.Displace,
-        SdfOp.NoiseDisplace,
-        SdfOp.ReliefRow,
-    ];
+    public static IReadOnlyList<SdfOp> BoundedOps { get; } = Array.AsReadOnly(Enum.GetValues<SdfOp>()
+        .Where(static op => SdfFieldOps.IntervalOf(value: op) != SdfIntervalAction.Unsupported).ToArray());
     /// <summary>Gets the shapes the bounds interpreter has an inclusion rule for. Every shape the point interpreter
     /// accepts must appear here; the sync law holds the two sets equal.</summary>
-    public static IReadOnlyList<SdfShapeType> BoundedShapes { get; } = [
-        SdfShapeType.Box,
-        SdfShapeType.ScreenSlab,
-        SdfShapeType.Capsule,
-        SdfShapeType.Sphere,
-        SdfShapeType.Torus,
-        SdfShapeType.Cylinder,
-        SdfShapeType.Plane,
-        SdfShapeType.Vesica,
-        SdfShapeType.RoundedRectangle,
-        SdfShapeType.Ellipse,
-        SdfShapeType.Trapezoid,
-        SdfShapeType.ChamferedRectangle,
-        SdfShapeType.RoundCone,
-        SdfShapeType.ConvexPolygon,
-        SdfShapeType.Superellipsoid,
-        SdfShapeType.Sweep,
-        SdfShapeType.Path,
-    ];
+    public static IReadOnlyList<SdfShapeType> BoundedShapes { get; } = Array.AsReadOnly(Enum.GetValues<SdfShapeType>()
+        .Where(static shape => SdfFieldShapes.ShapeIntervalOf(value: shape) != SdfShapeIntervalAction.Entire).ToArray());
 
     private static FixedInterval Point(FixedQ4816 value) =>
         FixedInterval.FromPoint(value: value);
@@ -792,21 +746,22 @@ public sealed partial class SdfFieldEvaluator {
         var chamfer = Point(value: FixedQ4816.Max(x: smoothRadius, y: FixedQ4816.Zero));
         var root = Point(value: SqrtHalf);
 
-        return blend switch {
-            ((uint)SdfBlendOp.SmoothUnion) => SmoothUnionBounds(a: current, b: candidate, k: smoothK),
-            ((uint)SdfBlendOp.Subtraction) => FixedInterval.Max(first: current, second: -candidate),
-            ((uint)SdfBlendOp.Intersection) => FixedInterval.Max(first: current, second: candidate),
-            ((uint)SdfBlendOp.Xor) => FixedInterval.Max(first: FixedInterval.Min(first: current, second: candidate), second: -FixedInterval.Max(first: current, second: candidate)),
-            ((uint)SdfBlendOp.SmoothIntersection) => -SmoothUnionBounds(a: -current, b: -candidate, k: smoothK),
-            ((uint)SdfBlendOp.SmoothSubtraction) => -SmoothUnionBounds(a: candidate, b: -current, k: smoothK),
-            ((uint)SdfBlendOp.GrooveUnion) => FixedInterval.Max(first: FixedInterval.Min(first: current, second: candidate), second: (chamfer - FixedInterval.Magnitude(x: current, y: candidate))),
-            ((uint)SdfBlendOp.PipeUnion) => FixedInterval.Min(first: FixedInterval.Min(first: current, second: candidate), second: (FixedInterval.Magnitude(x: current, y: candidate) - chamfer)),
-            ((uint)SdfBlendOp.GrooveSubtraction) => FixedInterval.Max(first: FixedInterval.Max(first: current, second: -candidate), second: (chamfer - FixedInterval.Magnitude(x: current, y: candidate))),
-            ((uint)SdfBlendOp.PipeSubtraction) => FixedInterval.Min(first: FixedInterval.Max(first: current, second: -candidate), second: (FixedInterval.Magnitude(x: current, y: candidate) - chamfer)),
-            ((uint)SdfBlendOp.ChamferUnion) => FixedInterval.Min(first: FixedInterval.Min(first: current, second: candidate), second: (((current + candidate) - chamfer) * root)),
-            ((uint)SdfBlendOp.ChamferIntersection) => FixedInterval.Max(first: FixedInterval.Max(first: current, second: candidate), second: (((current + candidate) + chamfer) * root)),
-            ((uint)SdfBlendOp.ChamferSubtraction) => FixedInterval.Max(first: FixedInterval.Max(first: current, second: -candidate), second: (((current - candidate) + chamfer) * root)),
-            _ => FixedInterval.Min(first: current, second: candidate),
+        return SdfFieldBlends.IntervalBlendOf(value: ((SdfBlendOp)blend)) switch {
+            SdfIntervalBlendAction.SmoothUnion => SmoothUnionBounds(a: current, b: candidate, k: smoothK),
+            SdfIntervalBlendAction.Subtraction => FixedInterval.Max(first: current, second: -candidate),
+            SdfIntervalBlendAction.Intersection => FixedInterval.Max(first: current, second: candidate),
+            SdfIntervalBlendAction.Xor => FixedInterval.Max(first: FixedInterval.Min(first: current, second: candidate), second: -FixedInterval.Max(first: current, second: candidate)),
+            SdfIntervalBlendAction.SmoothIntersection => -SmoothUnionBounds(a: -current, b: -candidate, k: smoothK),
+            SdfIntervalBlendAction.SmoothSubtraction => -SmoothUnionBounds(a: candidate, b: -current, k: smoothK),
+            SdfIntervalBlendAction.GrooveUnion => FixedInterval.Max(first: FixedInterval.Min(first: current, second: candidate), second: (chamfer - FixedInterval.Magnitude(x: current, y: candidate))),
+            SdfIntervalBlendAction.PipeUnion => FixedInterval.Min(first: FixedInterval.Min(first: current, second: candidate), second: (FixedInterval.Magnitude(x: current, y: candidate) - chamfer)),
+            SdfIntervalBlendAction.GrooveSubtraction => FixedInterval.Max(first: FixedInterval.Max(first: current, second: -candidate), second: (chamfer - FixedInterval.Magnitude(x: current, y: candidate))),
+            SdfIntervalBlendAction.PipeSubtraction => FixedInterval.Min(first: FixedInterval.Max(first: current, second: -candidate), second: (FixedInterval.Magnitude(x: current, y: candidate) - chamfer)),
+            SdfIntervalBlendAction.ChamferUnion => FixedInterval.Min(first: FixedInterval.Min(first: current, second: candidate), second: (((current + candidate) - chamfer) * root)),
+            SdfIntervalBlendAction.ChamferIntersection => FixedInterval.Max(first: FixedInterval.Max(first: current, second: candidate), second: (((current + candidate) + chamfer) * root)),
+            SdfIntervalBlendAction.ChamferSubtraction => FixedInterval.Max(first: FixedInterval.Max(first: current, second: -candidate), second: (((current - candidate) + chamfer) * root)),
+            SdfIntervalBlendAction.Union => FixedInterval.Min(first: current, second: candidate),
+            _ => throw new InvalidOperationException(message: "Invalid IntervalBlend action."),
         };
     }
     // BlendSmoothUnion over intervals. The exact polynomial smooth minimum rises with each operand (its gradient is
@@ -921,40 +876,40 @@ public sealed partial class SdfFieldEvaluator {
             : (second - first));
     }
     private static FixedInterval ShapeBounds(in CompiledInstruction instruction, IntervalVector3 p) {
-        return ((SdfShapeType)instruction.Shape) switch {
-            SdfShapeType.Sphere => SphereBounds(p: p, radius: Point(value: instruction.Data0X)),
-            SdfShapeType.Box or SdfShapeType.ScreenSlab => BoxBounds(p: p, halfExtents: Vector(instruction: instruction), cornerRadius: instruction.Data0W),
-            SdfShapeType.Torus => TorusBounds(p: p, majorRadius: Point(value: instruction.Data0X), minorRadius: Point(value: instruction.Data0Y)),
-            SdfShapeType.Plane => PlaneBounds(p: p, normal: Interval(value: Vector(instruction: instruction)), offset: Point(value: instruction.Data0W)),
-            SdfShapeType.RoundCone => RoundConeBounds(p: p, lowerRadius: instruction.Data0X, upperRadius: instruction.Data0Y, height: instruction.Data0Z, b: instruction.Data0W, a: instruction.Data1Y),
-            SdfShapeType.Capsule => CapsuleBounds(p: p, endpoint: Vector(instruction: instruction), radius: instruction.Data0W),
-            SdfShapeType.Cylinder => (Extrude2DBounds(distance2D: (FixedInterval.Magnitude(x: p.X, y: p.Z) - Point(value: instruction.Data0X)), z: p.Y, halfDepth: instruction.Data0Y) - Point(value: instruction.Data1W)),
-            SdfShapeType.Vesica => VesicaBounds(p: p, r: instruction.Data0X, d: instruction.Data0Y, b: instruction.Data0Z),
-            SdfShapeType.RoundedRectangle or SdfShapeType.Ellipse => (LiftedBounds(
+        return instruction.ShapeIntervalAction switch {
+            SdfShapeIntervalAction.Sphere => SphereBounds(p: p, radius: Point(value: instruction.Data0X)),
+            SdfShapeIntervalAction.Box => BoxBounds(p: p, halfExtents: Vector(instruction: instruction), cornerRadius: instruction.Data0W),
+            SdfShapeIntervalAction.Torus => TorusBounds(p: p, majorRadius: Point(value: instruction.Data0X), minorRadius: Point(value: instruction.Data0Y)),
+            SdfShapeIntervalAction.Plane => PlaneBounds(p: p, normal: Interval(value: Vector(instruction: instruction)), offset: Point(value: instruction.Data0W)),
+            SdfShapeIntervalAction.RoundCone => RoundConeBounds(p: p, lowerRadius: instruction.Data0X, upperRadius: instruction.Data0Y, height: instruction.Data0Z, b: instruction.Data0W, a: instruction.Data1Y),
+            SdfShapeIntervalAction.Capsule => CapsuleBounds(p: p, endpoint: Vector(instruction: instruction), radius: instruction.Data0W),
+            SdfShapeIntervalAction.Cylinder => (Extrude2DBounds(distance2D: (FixedInterval.Magnitude(x: p.X, y: p.Z) - Point(value: instruction.Data0X)), z: p.Y, halfDepth: instruction.Data0Y) - Point(value: instruction.Data1W)),
+            SdfShapeIntervalAction.Vesica => VesicaBounds(p: p, r: instruction.Data0X, d: instruction.Data0Y, b: instruction.Data0Z),
+            SdfShapeIntervalAction.LiftedWithCap => (LiftedBounds(
                 p: p,
                 instruction: instruction,
                 liftAmount: instruction.Data0W,
                 lift: instruction.Data1Y,
                 capChamfer: instruction.Data1Z
             ) - Point(value: instruction.Data1W)),
-            SdfShapeType.Trapezoid => (LiftedBounds(
+            SdfShapeIntervalAction.Trapezoid => (LiftedBounds(
                 p: p,
                 instruction: instruction,
                 liftAmount: instruction.Data0W,
                 lift: instruction.Data1Y,
                 capChamfer: instruction.Data1Z
             ) - Point(value: instruction.Data1W)),
-            SdfShapeType.ChamferedRectangle => (LiftedBounds(
+            SdfShapeIntervalAction.ChamferedRectangle => (LiftedBounds(
                 p: p,
                 instruction: instruction,
                 liftAmount: instruction.Data0W,
                 lift: instruction.Data1Y,
                 capChamfer: instruction.Data0Z
             ) - Point(value: instruction.Data1W)),
-            SdfShapeType.Superellipsoid => SuperellipsoidBounds(p: p, radii: Vector(instruction: instruction), exponent: instruction.Data0W),
-            SdfShapeType.Sweep => SweepBounds(p: p, curve: (instruction.SweepCurve ?? throw new UnreachableException(message: "Compile always attaches a SweepCurve to a Sweep instruction.")), strandOffset: instruction.Data0W),
-            SdfShapeType.Path => PathBounds(instruction: in instruction, p: p),
-            SdfShapeType.ConvexPolygon => (LiftedBounds(
+            SdfShapeIntervalAction.Superellipsoid => SuperellipsoidBounds(p: p, radii: Vector(instruction: instruction), exponent: instruction.Data0W),
+            SdfShapeIntervalAction.Sweep => SweepBounds(p: p, curve: (instruction.SweepCurve ?? throw new UnreachableException(message: "Compile always attaches a SweepCurve to a Sweep instruction.")), strandOffset: instruction.Data0W),
+            SdfShapeIntervalAction.Path => PathBounds(instruction: in instruction, p: p),
+            SdfShapeIntervalAction.ConvexPolygon => (LiftedBounds(
                 p: p,
                 instruction: instruction,
                 liftAmount: instruction.Data0W,
@@ -962,7 +917,8 @@ public sealed partial class SdfFieldEvaluator {
                 capChamfer: instruction.Data1Z
             ) - Point(value: instruction.Data1W)),
             // A shape with no rule proves nothing: the unbounded interval, which shrinks the frame and never grants it.
-            _ => FixedInterval.Entire,
+            SdfShapeIntervalAction.Entire => FixedInterval.Entire,
+            _ => throw new InvalidOperationException(message: "Invalid ShapeInterval action."),
         };
     }
     private static FixedInterval BoxBounds(IntervalVector3 p, FixedVector3 halfExtents, FixedQ4816 cornerRadius) =>
@@ -1157,13 +1113,14 @@ public sealed partial class SdfFieldEvaluator {
 
         return ProfileBounds(instruction: instruction, p: new(X: (FixedInterval.Magnitude(x: p.X, y: p.Z) - Point(value: liftAmount)), Y: p.Y));
     }
-    private static FixedInterval ProfileBounds(in CompiledInstruction instruction, IntervalVector2 p) => ((SdfShapeType)instruction.Shape) switch {
-        SdfShapeType.RoundedRectangle => RoundedRectangle2DBounds(p: p, halfWidth: instruction.Data0X, halfHeight: instruction.Data0Y, cornerRadius: instruction.Data0Z),
-        SdfShapeType.Ellipse => Ellipse2DBounds(p: p, semiX: instruction.Data0X, semiY: instruction.Data0Y),
-        SdfShapeType.Trapezoid => Trapezoid2DBounds(p: p, r1: instruction.Data0X, r2: instruction.Data0Y, halfHeight: instruction.Data0Z),
-        SdfShapeType.ChamferedRectangle => ChamferBox2DBounds(p: p, halfWidth: instruction.Data0X, halfHeight: instruction.Data0Y, chamfer: instruction.Data0Z),
-        SdfShapeType.ConvexPolygon => ConvexPolygon2DBounds(p: p, vertices: (instruction.ConvexPolygonVertices ?? [])),
-        _ => throw new NotSupportedException(message: $"The bounds interpreter has no profile for shape {((SdfShapeType)instruction.Shape)}."),
+    private static FixedInterval ProfileBounds(in CompiledInstruction instruction, IntervalVector2 p) => SdfFieldShapes.ProfileIntervalOf(value: ((SdfShapeType)instruction.Shape)) switch {
+        SdfProfileIntervalAction.RoundedRectangle => RoundedRectangle2DBounds(p: p, halfWidth: instruction.Data0X, halfHeight: instruction.Data0Y, cornerRadius: instruction.Data0Z),
+        SdfProfileIntervalAction.Ellipse => Ellipse2DBounds(p: p, semiX: instruction.Data0X, semiY: instruction.Data0Y),
+        SdfProfileIntervalAction.Trapezoid => Trapezoid2DBounds(p: p, r1: instruction.Data0X, r2: instruction.Data0Y, halfHeight: instruction.Data0Z),
+        SdfProfileIntervalAction.ChamferedRectangle => ChamferBox2DBounds(p: p, halfWidth: instruction.Data0X, halfHeight: instruction.Data0Y, chamfer: instruction.Data0Z),
+        SdfProfileIntervalAction.ConvexPolygon => ConvexPolygon2DBounds(p: p, vertices: (instruction.ConvexPolygonVertices ?? [])),
+        SdfProfileIntervalAction.Unsupported => throw new NotSupportedException(message: $"The bounds interpreter has no profile for shape {((SdfShapeType)instruction.Shape)}."),
+        _ => throw new InvalidOperationException(message: "Invalid ProfileInterval action."),
     };
     private static FixedInterval Extrude2DBounds(FixedInterval distance2D, FixedInterval z, FixedQ4816 halfDepth) =>
         Extrude2DBounds(distance2D: distance2D, z: z, halfDepth: Point(value: halfDepth));

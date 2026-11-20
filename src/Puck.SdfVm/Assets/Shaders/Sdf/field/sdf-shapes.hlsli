@@ -769,46 +769,8 @@ precise float evaluateShape(uint shapeType, float3 p, float4 data0, float4 data1
     float result = SDF_FAR_DISTANCE;
 
     switch (shapeType) {
-        case SDF_SHAPE_SPHERE:      result = sdfSphere(p, data0.x); break;
-        // A ScreenSlab IS a box; only its material sentinel distinguishes it (see SDF_SCREEN_MATERIAL).
-        case SDF_SHAPE_BOX:
-        case SDF_SHAPE_SCREEN_SLAB: result = sdfBox(p, data0.xyz, data0.w); break;
-        case SDF_SHAPE_TORUS:       result = sdfTorus(p, data0.x, data0.y); break;
-        // The plane normal is normalized HOST-SIDE (SdfProgramBuilder.Plane) — the biggest per-eval saving of all:
-        // the plane is in nearly every scene, and a per-sample normalize would run for EVERY map() sample.
-        case SDF_SHAPE_PLANE:       result = sdfPlane(p, data0.xyz, data0.w); break;
-        case SDF_SHAPE_ROUND_CONE:  result = sdfRoundCone(p, data0.x, data0.y, data0.z, data0.w, data1.y); break;
-        case SDF_SHAPE_VESICA:      result = sdfVesica(p, data0.x, data0.y, data0.z); break;
-        // e == 2 takes the ellipsoid's pow-free gauge; any other exponent the general power path.
-        case SDF_SHAPE_SUPERELLIPSOID:  result = sdfSuperellipsoid(p, data0.xyz, data1.yzw, data0.w); break;
-        // Articulated-character core: limbs overwhelmingly lower to capsules/cylinders.
-        case SDF_SHAPE_CAPSULE:     result = sdfCapsule(p, data0.xyz, data0.w); break;
-        // data0.xy arrive inset by the edge-rounding radius data1.w; subtracting it offsets the rims back out.
-        case SDF_SHAPE_CYLINDER:    result = (sdfCylinder(p, data0.x, data0.y) - data1.w); break;
-        // The 2D-primitive family: each lifted wrapper reads its lift mode (data1.y) and lift amount (data0.w) itself.
-        // A regular polygon is sdfStar2D's m = 2 case, so it shares the star's body verbatim.
-        case SDF_SHAPE_ROUNDED_RECTANGLE:    result = sdfRoundedRect(p, data0, data1); break;
-        case SDF_SHAPE_CHAMFERED_RECTANGLE:  result = sdfChamferedRect(p, data0, data1); break;
-        case SDF_SHAPE_REGULAR_POLYGON:
-        case SDF_SHAPE_STAR:            result = sdfPolyStar(p, data0, data1); break;
-        case SDF_SHAPE_TRAPEZOID:       result = sdfTrapezoidSolid(p, data0, data1); break;
-        case SDF_SHAPE_ELLIPSE:         result = sdfEllipseSolid(p, data0, data1); break;
-        case SDF_SHAPE_CONVEX_POLYGON:  result = sdfConvexPolygonSolid(p, data0, data1); break;
-        case SDF_SHAPE_PATH: result = sdfPathSolid(p, data0, data1); break;
-        case SDF_SHAPE_SWEEP:           result = sdfSweep(p, data0, data1); break;
-        // A glyph is the atlas-sampled letter where the atlas is bound (the bake), else the conservative extruded quad,
-        // a solid cell box (never a hole).
-        case SDF_SHAPE_GLYPH:
-#ifdef SDF_GLYPH_ATLAS
-            result = sdfGlyph(p, data0, data1);
-#else
-            result = sdfGlyphQuad(p, data0, data1);
-#endif
-            break;
-        // A sampled brick where the pool is bound (the bake), else the conservative union-hull fallback — so a kernel
-        // without the pool sees SDF_FAR_DISTANCE and the Subtraction compose leaves the accumulator untouched (uncarved
-        // far distance, never a hole). sdfSampledRegion self-guards on SDF_SAMPLED_REGIONS, so this case is a plain call.
-        case SDF_SHAPE_SAMPLED_REGION:  result = sdfSampledRegion(p, data0, data1); break;
+#include "../isa/sdf-field-shapes.hlsli"
+        default: return asfloat(0x7fc00000u);
     }
 
     return result;

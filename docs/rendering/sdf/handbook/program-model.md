@@ -295,7 +295,7 @@ bake interpreter fast.
   [Lipschitz and field correctness](../reference/lipschitz-and-field-correctness.md).
 - Field scopes (`PushField`/`PopField`) and the margin rule:
   the `SdfOp.PushField`/`PopField` doc comments in
-  [`src/Puck.SignedDistance/SdfOp.cs`](../../../../src/Puck.SignedDistance/SdfOp.cs).
+  [`src/Puck.SignedDistance/SdfFieldOps.cs`](../../../../src/Puck.SignedDistance/SdfFieldOps.cs).
 - The ISA admission rule and the partners a new instruction touches:
   "Changing the instruction set" in [the rendering skill](../../../../.claude/skills/rendering/SKILL.md),
   with every C#↔HLSL coupling in its [sync pairs](../../../../.claude/skills/rendering/references/sync-pairs.md).

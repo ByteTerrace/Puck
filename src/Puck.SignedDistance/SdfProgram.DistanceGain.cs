@@ -82,15 +82,13 @@ public sealed partial class SdfProgram {
         for (var cursor = instance.First; (cursor < instance.End); cursor++) {
             var instruction = m_instructions[cursor];
 
-            switch (instruction.Op) {
-                case SdfOp.ResetPoint:
+            switch (SdfFieldOps.DistanceGainOf(value: instruction.Op)) {
+                case SdfDistanceGainAction.ResetPoint:
                     chain = 1f;
                     break;
-                case SdfOp.Translate:
-                case SdfOp.Rotate:
-                case SdfOp.TransformDynamic:
+                case SdfDistanceGainAction.Identity:
                     break;
-                case SdfOp.Scale:
+                case SdfDistanceGainAction.Scale:
                     // The candidate is min(s) f(S^-1 q), and S^-1 shortens no distance by more than 1/max(s), so the
                     // candidate is at least min(s)/max(s) times f's gain times the distance to the scaled solid.
                     var scale = instruction.Data0;
@@ -101,13 +99,10 @@ public sealed partial class SdfProgram {
                     }
                     chain *= ((scale.W == largest) ? 1f : (scale.W / largest));
                     break;
-                case SdfOp.PushField:
+                case SdfDistanceGainAction.PushField:
                     scopes[++depth] = new DistanceBound(Gain: UnconstrainedGain, Sag: 0f);
                     break;
-                case SdfOp.ReliefRow:
-                    // A relief's data row moves no point and writes no field; the relief after it bounds nothing.
-                    break;
-                case SdfOp.ShapeBlend:
+                case SdfDistanceGainAction.ShapeBlend:
                     var shapeGain = ShapeDistanceGain(instruction: instruction, instructionIndex: cursor);
 
                     if (!TryCompose(
@@ -118,7 +113,7 @@ public sealed partial class SdfProgram {
                         smoothRadius: instruction.Data1.X
                     )) { return default; }
                     break;
-                case SdfOp.PopField:
+                case SdfDistanceGainAction.PopField:
                     var child = scopes[depth--];
                     var candidateScale = ((instruction.Data1.Y > 0f) ? instruction.Data1.Y : 1f);
 
@@ -130,8 +125,10 @@ public sealed partial class SdfProgram {
                         smoothRadius: instruction.Data1.X
                     )) { return default; }
                     break;
-                default:
+                case SdfDistanceGainAction.Uncertified:
                     return default;
+                default:
+                    throw new InvalidOperationException(message: "Invalid DistanceGain action.");
             }
         }
 
@@ -145,14 +142,14 @@ public sealed partial class SdfProgram {
             : default);
     }
     private static bool TryCompose(ref DistanceBound accumulator, SdfBlendOp blend, DistanceBound candidate, bool optional, float smoothRadius) {
-        switch (blend) {
-            case SdfBlendOp.Union:
+        switch (SdfFieldBlends.BlendDistanceGainOf(value: blend)) {
+            case SdfBlendDistanceGainAction.Union:
                 accumulator = new DistanceBound(
                     Gain: MathF.Min(x: accumulator.Gain, y: candidate.Gain),
                     Sag: MathF.Max(x: accumulator.Sag, y: candidate.Sag)
                 );
                 return true;
-            case SdfBlendOp.SmoothUnion:
+            case SdfBlendDistanceGainAction.SmoothUnion:
                 // blendSmoothUnion is nondecreasing in both operands and at least min(a, b) - k/4. With one operand at
                 // least M and the other at least M - S, it is at least M - max(S, k); with both sagging, at least
                 // M - max(S) - k/4. The kernel floors the radius at SDF_SMOOTH_RADIUS_MIN.
@@ -163,12 +160,10 @@ public sealed partial class SdfProgram {
 
                 accumulator = new DistanceBound(Gain: MathF.Min(x: accumulator.Gain, y: candidate.Gain), Sag: sag);
                 return true;
-            case SdfBlendOp.Subtraction:
-            case SdfBlendOp.SmoothSubtraction:
+            case SdfBlendDistanceGainAction.Subject:
                 // max(a, -b) and its smooth form never fall below the subject.
                 return true;
-            case SdfBlendOp.Intersection:
-            case SdfBlendOp.SmoothIntersection:
+            case SdfBlendDistanceGainAction.Smaller:
                 // The composed bound is the smaller operand's, so the gain must hold for either. A walk that drops an
                 // optional clipper leaves the subject, whose solid that bound need not contain.
                 if (optional) { return false; }
@@ -177,20 +172,21 @@ public sealed partial class SdfProgram {
                     Sag: MathF.Max(x: accumulator.Sag, y: candidate.Sag)
                 );
                 return true;
-            default:
+            case SdfBlendDistanceGainAction.Uncertified:
                 return false;
+            default:
+                throw new InvalidOperationException(message: "Invalid BlendDistanceGain action.");
         }
     }
     private float ShapeDistanceGain(SdfInstruction instruction, int instructionIndex) {
-        switch ((SdfShapeType)instruction.Shape) {
-            case SdfShapeType.Superellipsoid:
+        switch (SdfFieldShapes.ShapeDistanceGainOf(value: (SdfShapeType)instruction.Shape)) {
+            case SdfShapeDistanceGainAction.Superellipsoid:
                 return SuperellipsoidDistanceGain(instruction: instruction);
             // Their fields are bounded against their own spheres, not exact distances to their solids, and are capped
             // at the far sentinel in local units.
-            case SdfShapeType.Sweep:
-            case SdfShapeType.Path:
+            case SdfShapeDistanceGainAction.Uncertified:
                 return 0f;
-            default:
+            case SdfShapeDistanceGainAction.FromLocalBound:
                 return (TryGetLocalBound(
                     center: out _,
                     convexPolygonProfiles: m_convexPolygonProfiles,
@@ -199,6 +195,8 @@ public sealed partial class SdfProgram {
                     radius: out _,
                     sweepCurves: m_sweepCurves
                 ) ? 1f : 0f);
+            default:
+                throw new InvalidOperationException(message: "Invalid ShapeDistanceGain action.");
         }
     }
     // The gauge (sdfSuperellipsoid in field/sdf-shapes.hlsli) is minR (N(q) - 1) with q = |p| * inverseRadii and N the

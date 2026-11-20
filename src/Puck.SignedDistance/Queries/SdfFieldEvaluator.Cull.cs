@@ -123,17 +123,13 @@ public sealed partial class SdfFieldEvaluator {
         for (var index = instance.First; (index < instance.End); index++) {
             ref readonly var instruction = ref compiled[index];
 
-            switch (instruction.Op) {
-                case SdfOp.ResetPoint:
-                case SdfOp.Translate:
-                case SdfOp.Rotate:
-                case SdfOp.Scale:
-                case SdfOp.ReliefRow: {
+            switch (SdfFieldOps.CullChainOf(value: instruction.Op)) {
+                case SdfCullChainAction.Allowed: {
                         // A relief's data row composes nothing and moves no point; the weight it gives its relief only
                         // lowers the relief the scope's slack is charged at its whole reach.
                         continue;
                     }
-                case SdfOp.PushField: {
+                case SdfCullChainAction.PushField: {
                         if (depth != 0) {
                             return false;
                         }
@@ -145,7 +141,7 @@ public sealed partial class SdfFieldEvaluator {
                         steps.Add(item: new ScopeStep(Blend: SdfBlendOp.Union, Op: SdfOp.PushField, Scale: 0.0, Shape: default, Smooth: 0.0));
                         continue;
                     }
-                case SdfOp.PopField: {
+                case SdfCullChainAction.PopField: {
                         if ((depth != 1) || (instruction.Blend != ((uint)SdfBlendOp.Union))) {
                             return false;
                         }
@@ -165,7 +161,7 @@ public sealed partial class SdfFieldEvaluator {
                         steps.Add(item: new ScopeStep(Blend: SdfBlendOp.Union, Op: SdfOp.PopField, Scale: scale, Shape: default, Smooth: 0.0));
                         continue;
                     }
-                case SdfOp.ShapeBlend: {
+                case SdfCullChainAction.ShapeBlend: {
                         if (instruction.Detail) {
                             continue;
                         }
@@ -181,11 +177,11 @@ public sealed partial class SdfFieldEvaluator {
                                 return false;
                             }
                         } else {
-                            switch ((SdfBlendOp)instruction.Blend) {
-                                case SdfBlendOp.Union: {
+                            switch (SdfFieldBlends.CullBoundOf(value: (SdfBlendOp)instruction.Blend)) {
+                                case SdfCullBoundAction.Union: {
                                         break;
                                     }
-                                case SdfBlendOp.SmoothUnion: {
+                                case SdfCullBoundAction.SmoothUnion: {
                                         var k = FixedQ4816.Max(x: instruction.Data1X, y: SmoothRadiusMin);
 
                                         quarterRaws += ((((Int128)k.Value) + 3L) >> 2);
@@ -193,20 +189,20 @@ public sealed partial class SdfFieldEvaluator {
                                         roundingRaws += SmoothBlendRoundingRaws(k: k);
                                         break;
                                     }
-                                case SdfBlendOp.Subtraction:
-                                case SdfBlendOp.Intersection: {
+                                case SdfCullBoundAction.Local: {
                                         lowers = false;
                                         break;
                                     }
-                                case SdfBlendOp.SmoothSubtraction:
-                                case SdfBlendOp.SmoothIntersection: {
+                                case SdfCullBoundAction.LocalWithRadius: {
                                         lowers = false;
                                         roundingRaws += SmoothBlendRoundingRaws(k: FixedQ4816.Max(x: instruction.Data1X, y: SmoothRadiusMin));
                                         break;
                                     }
-                                default: {
+                                case SdfCullBoundAction.Disable: {
                                         return false;
                                     }
+                                default:
+                                    throw new InvalidOperationException(message: "Invalid CullBound action.");
                             }
                         }
 
@@ -218,7 +214,7 @@ public sealed partial class SdfFieldEvaluator {
                         steps.Add(item: new ScopeStep(Blend: ((SdfBlendOp)instruction.Blend), Op: SdfOp.ShapeBlend, Scale: 0.0, Shape: shape, Smooth: ((double)FixedQ4816.Max(x: instruction.Data1X, y: SmoothRadiusMin))));
                         continue;
                     }
-                case SdfOp.NoiseDisplace: {
+                case SdfCullChainAction.Relief: {
                         // A relief inside the scope lowers the scope's field by at most its certified reach, wherever it
                         // stands among the scope's shapes, so it joins the slack every lowering member is charged at the
                         // pop. Its box reach is not carried, so the box walk never skips the instance.
@@ -230,6 +226,7 @@ public sealed partial class SdfFieldEvaluator {
                         boxed = false;
                         continue;
                     }
+                case SdfCullChainAction.Disable:
                 default: {
                         return false;
                     }
@@ -351,12 +348,12 @@ public sealed partial class SdfFieldEvaluator {
         var depth = 0;
 
         foreach (ref readonly var instruction in compiled.AsSpan()) {
-            switch (instruction.Op) {
-                case SdfOp.PushField: {
+            switch (SdfFieldOps.CullInstancesOf(value: instruction.Op)) {
+                case SdfCullInstancesAction.PushField: {
                         depth++;
                         break;
                     }
-                case SdfOp.PopField: {
+                case SdfCullInstancesAction.PopField: {
                         depth--;
 
                         if ((depth == 0) && (instruction.Blend != ((uint)SdfBlendOp.Union))) {
@@ -365,25 +362,24 @@ public sealed partial class SdfFieldEvaluator {
 
                         break;
                     }
-                case SdfOp.ShapeBlend: {
+                case SdfCullInstancesAction.ShapeBlend: {
                         if ((depth == 0) && !instruction.Detail && (instruction.Blend != ((uint)SdfBlendOp.Union))) {
                             return false;
                         }
 
                         break;
                     }
-                case SdfOp.Onion:
-                case SdfOp.Dilate:
-                case SdfOp.CellDisplace:
-                case SdfOp.Displace:
-                case SdfOp.ReliefRow:
-                case SdfOp.NoiseDisplace: {
+                case SdfCullInstancesAction.EditsField: {
                         if (depth == 0) {
                             return false;
                         }
 
                         break;
                     }
+                case SdfCullInstancesAction.Ignore:
+                    break;
+                default:
+                    throw new InvalidOperationException(message: "Invalid CullInstances action.");
             }
         }
 
@@ -450,11 +446,11 @@ public sealed partial class SdfFieldEvaluator {
                         break;
                     }
 
-                    switch ((SdfBlendOp)instruction.Blend) {
-                        case SdfBlendOp.Union: {
+                    switch (SdfFieldBlends.CullGuardOf(value: (SdfBlendOp)instruction.Blend)) {
+                        case SdfCullGuardAction.Union: {
                                 break;
                             }
-                        case SdfBlendOp.SmoothUnion: {
+                        case SdfCullGuardAction.SmoothUnion: {
                                 var k = FixedQ4816.Max(x: instruction.Data1X, y: SmoothRadiusMin);
                                 var required = ((((Int128)k.Value) + (k.Value >> 15)) + 16L);
 
@@ -468,14 +464,16 @@ public sealed partial class SdfFieldEvaluator {
                                 margin = FixedQ4816.Max(x: margin, y: FixedQ4816.FromRawBits(value: ((long)required)));
                                 break;
                             }
-                        case SdfBlendOp.Subtraction: {
+                        case SdfCullGuardAction.Subtraction: {
                                 carves = true;
                                 break;
                             }
-                        default: {
+                        case SdfCullGuardAction.Disable: {
                                 qualifies = false;
                                 break;
                             }
+                        default:
+                            throw new InvalidOperationException(message: "Invalid CullGuard action.");
                     }
 
                     if (!qualifies) {

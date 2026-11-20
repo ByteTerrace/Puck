@@ -477,7 +477,9 @@ constants, all the field interpreter and the mesh bake read. What the renderer
 alone reads (lights, exposure, the visibility record, mesh records, the debug
 views) is in `isa/sdf-render.hlsli` (`SdfRenderHlsl`), which includes it, so a
 renderer constant leaves the bake kernels, and the stored meshes they key, as
-they were. Both are checked in and never edited by hand. This project references
+they were. The field catalogues also drive the dispatch and operand includes
+through `SdfFieldHlsl`. Check these generated files in after regeneration.
+This project references
 `Puck.Shaders.Generator` as a build-only reference, so building it writes every
 declaration the model has changed before its kernels compile
 ([generated declarations](../../docs/reference/shaders.md#generated-declarations));

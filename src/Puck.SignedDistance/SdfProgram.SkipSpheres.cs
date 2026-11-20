@@ -120,13 +120,13 @@ public sealed partial class SdfProgram {
         for (var index = segmentStart; (index <= segmentEnd); index++) {
             var instruction = m_instructions[index];
 
-            switch (instruction.Op) {
-                case SdfOp.ResetPoint: {
+            switch (SdfFieldOps.SkipSphereOf(value: instruction.Op)) {
+                case SdfSkipSphereAction.ResetPoint: {
                         // Only ever the segment's first instruction (segments split before each ResetPoint) — the walk's
                         // initial state IS the reset state.
                         break;
                     }
-                case SdfOp.Translate: {
+                case SdfSkipSphereAction.Translate: {
                         // The offset is authored in the scaled frame, so it reaches the chain's outer frame times k
                         // (exact when k is 1, which keeps every scale-free chain's center bit-identical).
                         position += Vector3.Transform(
@@ -139,7 +139,7 @@ public sealed partial class SdfProgram {
                         );
                         break;
                     }
-                case SdfOp.Rotate: {
+                case SdfSkipSphereAction.Rotate: {
                         // A uniform scale commutes with every rotation, so k stays a scalar beside the quaternion.
                         rotation = Quaternion.Concatenate(
                             value1: new Quaternion(
@@ -152,7 +152,7 @@ public sealed partial class SdfProgram {
                         );
                         break;
                     }
-                case SdfOp.Scale: {
+                case SdfSkipSphereAction.Scale: {
                         // mapCore divides the point by Data0.xyz and multiplies every later candidate by Data0.w (the min
                         // axis). When the three axes and the min are one positive value s, the op is the similarity
                         // q = s·q': a later shape's candidate is c(p) = k·s·f(q'), and for f >= |q' - c| - r (what
@@ -184,7 +184,7 @@ public sealed partial class SdfProgram {
 
                         break;
                     }
-                case SdfOp.TransformDynamic: {
+                case SdfSkipSphereAction.TransformDynamic: {
                         // One dynamic per chain, and NO rotation or scale before it — otherwise the shader-side center
                         // would need the very quaternion rotate the skip exists to avoid (or a scaled entity position);
                         // be conservative and evaluate fully.
@@ -203,7 +203,7 @@ public sealed partial class SdfProgram {
 
                         break;
                     }
-                case SdfOp.ShapeBlend: {
+                case SdfSkipSphereAction.ShapeBlend: {
                         if (
                             chainBoundable &&
                             (((uint)SdfBlendOp.Union) == instruction.Blend) &&
@@ -250,8 +250,7 @@ public sealed partial class SdfProgram {
 
                         break;
                     }
-                case SdfOp.PushField:
-                case SdfOp.PopField: {
+                case SdfSkipSphereAction.ScopeBoundary: {
                         // A scope boundary op mutates the FIELD (the running accumulator), not the point/transform, so the
                         // chain's world-space sphere stays sound — chainBoundable is left TRUE, and any Union shape after the
                         // Push in this SAME chain still earns its per-shape cull bound (the accumulator-plan correction: the
@@ -262,12 +261,12 @@ public sealed partial class SdfProgram {
 
                         break;
                     }
-                case SdfOp.ReliefRow: {
+                case SdfSkipSphereAction.Ignore: {
                         // A relief's data row moves no point and writes no field; the relief after it ends the chain's
                         // sphere and the segment's skip.
                         break;
                     }
-                default: {
+                case SdfSkipSphereAction.Disable: {
                         // Repeat/RepeatLimited/SymmetryPlane/WallpaperFold/CellJitter/RepeatPolar
                         // (space folding), Twist/Bend/Elongate/DomainWarp/AxialProfile/Shear/GaussianPush(Data) (non-isometries),
                         // Onion/Dilate/Displace/NoiseDisplace (field ops a skip must never jump over):
@@ -277,6 +276,8 @@ public sealed partial class SdfProgram {
 
                         break;
                     }
+                default:
+                    throw new InvalidOperationException(message: "Invalid SkipSphere action.");
             }
         }
 

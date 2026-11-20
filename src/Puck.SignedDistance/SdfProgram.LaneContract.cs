@@ -30,66 +30,70 @@ public sealed partial class SdfProgram {
     private static SdfLaneContract RequireLaneContract(SdfInstruction instruction, int index, string paramName) {
         var audit = new LaneAudit(index: index, instruction: instruction, paramName: paramName);
 
-        switch (instruction.Op) {
-            case SdfOp.ResetPoint:
+        if (!SdfFieldOps.Contains(value: instruction.Op)) {
+            throw new ArgumentException(message: $"Instruction {index} is {instruction.Op}, which has no row in the program's lane contract.", paramName: paramName);
+        }
+
+        switch (SdfFieldOps.AdmissionOf(value: instruction.Op)) {
+            case SdfAdmissionAction.Zero:
                 audit.Zero(lanes: SdfOperandLanes.All);
                 break;
-            case SdfOp.Translate:
+            case SdfAdmissionAction.Translate:
                 audit.Zero(lanes: (SdfOperandLanes.Header | SdfOperandLanes.Data0W | SdfOperandLanes.Data1));
                 break;
-            case SdfOp.Rotate:
+            case SdfAdmissionAction.Rotate:
                 audit.Unit(lanes: SdfOperandLanes.Data0, subject: "rotation quaternion");
                 audit.Zero(lanes: (SdfOperandLanes.Header | SdfOperandLanes.Data1));
                 break;
-            case SdfOp.Scale:
+            case SdfAdmissionAction.Scale:
                 audit.AtLeast(lanes: (SdfOperandLanes.Data0X | SdfOperandLanes.Data0Y | SdfOperandLanes.Data0Z), minimum: SdfSolidGeometry.MinimumScale, magnitude: true);
                 audit.Derived(lane: SdfOperandLanes.Data0W, expected: SdfDerivedLanes.ScaleCorrection(scale: audit.Data0Xyz), derivation: "distance correction, its smallest axis");
                 audit.Zero(lanes: (SdfOperandLanes.Header | SdfOperandLanes.Data1));
                 break;
-            case SdfOp.TransformDynamic:
+            case SdfAdmissionAction.TransformDynamic:
                 _ = DecodeDynamicSlot(value: instruction.Data0.X, paramName: paramName);
                 audit.Zero(lanes: (SdfOperandLanes.Header | SdfOperandLanes.Data0Y | SdfOperandLanes.Data0Z | SdfOperandLanes.Data0W | SdfOperandLanes.Data1));
                 break;
-            case SdfOp.RotatePlane:
+            case SdfAdmissionAction.RotatePlane:
                 audit.Require(condition: Enum.IsDefined(value: ((SdfPlane)instruction.Shape)), lane: SdfOperandLanes.Shape, requirement: "it names the rotated plane, a defined SdfPlane");
                 audit.Require(condition: Enum.IsDefined(value: ((SdfAxis)instruction.Blend)), lane: SdfOperandLanes.Blend, requirement: "it names the driving axis, a defined SdfAxis");
                 audit.Zero(lanes: (SdfOperandLanes.Material | SdfOperandLanes.Data0Z | SdfOperandLanes.Data0W | SdfOperandLanes.Data1));
                 break;
-            case SdfOp.Elongate:
+            case SdfAdmissionAction.Elongate:
                 audit.AtLeast(lanes: (SdfOperandLanes.Data0X | SdfOperandLanes.Data0Y | SdfOperandLanes.Data0Z), minimum: 0f);
                 audit.Zero(lanes: (SdfOperandLanes.Header | SdfOperandLanes.Data0W | SdfOperandLanes.Data1));
                 break;
-            case SdfOp.ShapeBlend:
+            case SdfAdmissionAction.ShapeBlend:
                 RequireShapeLanes(audit: ref audit);
                 break;
-            case SdfOp.Repeat:
+            case SdfAdmissionAction.Repeat:
                 audit.AtLeast(lanes: (SdfOperandLanes.Data0X | SdfOperandLanes.Data0Y | SdfOperandLanes.Data0Z), minimum: SdfDerivedLanes.MinRepeatSpacing);
                 audit.Derived(lanes: (SdfOperandLanes.Data1X | SdfOperandLanes.Data1Y | SdfOperandLanes.Data1Z), expected: SdfDerivedLanes.Reciprocal(extents: audit.Data0Xyz), derivation: "reciprocal spacing");
                 audit.Zero(lanes: (SdfOperandLanes.Header | SdfOperandLanes.Data0W | SdfOperandLanes.Data1W));
                 break;
-            case SdfOp.RepeatLimited:
+            case SdfAdmissionAction.RepeatLimited:
                 audit.AtLeast(lanes: (SdfOperandLanes.Data0X | SdfOperandLanes.Data0Y | SdfOperandLanes.Data0Z), minimum: SdfDerivedLanes.MinRepeatSpacing);
                 audit.AtLeast(lanes: (SdfOperandLanes.Data1X | SdfOperandLanes.Data1Y | SdfOperandLanes.Data1Z), minimum: 0f);
                 audit.Zero(lanes: (SdfOperandLanes.Header | SdfOperandLanes.Data0W | SdfOperandLanes.Data1W));
                 break;
-            case SdfOp.Onion:
+            case SdfAdmissionAction.Onion:
                 audit.AtLeast(lanes: SdfOperandLanes.Data0X, minimum: 0f);
                 audit.Zero(lanes: (SdfOperandLanes.Header | SdfOperandLanes.Data0Y | SdfOperandLanes.Data0Z | SdfOperandLanes.Data0W | SdfOperandLanes.Data1));
                 break;
-            case SdfOp.Dilate:
+            case SdfAdmissionAction.Dilate:
                 audit.Zero(lanes: (SdfOperandLanes.Header | SdfOperandLanes.Data0Y | SdfOperandLanes.Data0Z | SdfOperandLanes.Data0W | SdfOperandLanes.Data1));
                 break;
-            case SdfOp.WallpaperFold:
+            case SdfAdmissionAction.WallpaperFold:
                 RequireContinuousWallpaper(index: index, instruction: instruction, paramName: paramName);
                 audit.MarkDerived(lanes: (SdfOperandLanes.Data0Z | SdfOperandLanes.Data0W));
                 audit.Zero(lanes: (SdfOperandLanes.Data1Z | SdfOperandLanes.Data1W));
                 break;
-            case SdfOp.LogSphere:
+            case SdfAdmissionAction.LogSphere:
                 audit.AtLeast(lanes: SdfOperandLanes.Data0X, minimum: MathF.Log(x: SdfDerivedLanes.MinLogSphereRatio));
                 audit.Derived(lane: SdfOperandLanes.Data0Z, expected: SdfDerivedLanes.LogSphereInverseCell(logCell: instruction.Data0.X), derivation: "reciprocal log cell");
                 audit.Zero(lanes: (SdfOperandLanes.Header | SdfOperandLanes.Data0W | SdfOperandLanes.Data1));
                 break;
-            case SdfOp.CellJitter: {
+            case SdfAdmissionAction.CellJitter: {
                     audit.Require(condition: Enum.IsDefined(value: ((SdfNoiseFlavor)instruction.Blend)), lane: SdfOperandLanes.Blend, requirement: "it names the offset's distribution, a defined SdfNoiseFlavor");
                     audit.AtLeast(lanes: (SdfOperandLanes.Data0X | SdfOperandLanes.Data0Y | SdfOperandLanes.Data0Z), minimum: SdfDerivedLanes.MinRepeatSpacing);
 
@@ -100,7 +104,7 @@ public sealed partial class SdfProgram {
                     audit.Require(condition: ((instruction.Data1.W >= 0f) && (instruction.Data1.W <= 1f)), lane: SdfOperandLanes.Data1W, requirement: "a tumble lies in [0, 1]");
                     break;
                 }
-            case SdfOp.RepeatPolar: {
+            case SdfAdmissionAction.RepeatPolar: {
                     audit.Require(condition: Enum.IsDefined(value: ((SdfAxis)instruction.Shape)), lane: SdfOperandLanes.Shape, requirement: "it names the rotation axis, a defined SdfAxis");
                     audit.Require(condition: (instruction.Blend <= 1u), lane: SdfOperandLanes.Blend, requirement: "the mirror flag is 0 or 1");
 
@@ -116,59 +120,55 @@ public sealed partial class SdfProgram {
                     audit.Zero(lanes: SdfOperandLanes.Data1);
                     break;
                 }
-            case SdfOp.Displace:
-            case SdfOp.DomainWarp:
+            case SdfAdmissionAction.Displacement:
                 audit.Zero(lanes: (SdfOperandLanes.Header | SdfOperandLanes.Data1));
                 break;
-            case SdfOp.SymmetryPlane:
+            case SdfAdmissionAction.SymmetryPlane:
                 audit.Unit(lanes: (SdfOperandLanes.Data0X | SdfOperandLanes.Data0Y | SdfOperandLanes.Data0Z), subject: "plane normal");
                 audit.Zero(lanes: (SdfOperandLanes.Header | SdfOperandLanes.Data1));
                 break;
-            case SdfOp.PushField:
-                audit.Zero(lanes: SdfOperandLanes.All);
-                break;
-            case SdfOp.PopField:
+            case SdfAdmissionAction.PopField:
                 RequirePopLanes(audit: ref audit);
                 break;
-            case SdfOp.NoiseDisplace:
+            case SdfAdmissionAction.NoiseDisplace:
                 // Material counts the mask rows before the relief, an authored lane the program's door checks against
                 // the run (DecodeReliefRuns).
                 _ = SdfNoiseDisplacement.Of(instruction: instruction);
                 audit.MarkDerived(lanes: SdfOperandLanes.Data1X);
                 audit.Zero(lanes: (SdfOperandLanes.Data1Y | SdfOperandLanes.Data1Z | SdfOperandLanes.Data1W));
                 break;
-            case SdfOp.AxialProfile:
+            case SdfAdmissionAction.AxialProfile:
                 audit.Require(condition: Enum.IsDefined(value: ((SdfAxis)instruction.Shape)), lane: SdfOperandLanes.Shape, requirement: "it names the profile axis, a defined SdfAxis");
                 audit.Require(condition: (instruction.Data0.W > 0f), lane: SdfOperandLanes.Data0W, requirement: "an inverse span is above zero");
                 audit.Require(condition: (instruction.Data1.Y > 0f), lane: SdfOperandLanes.Data1Y, requirement: "a start scale is above zero");
                 audit.Derived(lane: SdfOperandLanes.Data1X, expected: SdfDerivedLanes.AxialProfileCorrection(amount: instruction.Data0.X, bulge: instruction.Data0.Y, startScale: instruction.Data1.Y), derivation: "distance correction, one over its largest scale");
                 audit.Zero(lanes: (SdfOperandLanes.Blend | SdfOperandLanes.Material | SdfOperandLanes.Data1Z | SdfOperandLanes.Data1W));
                 break;
-            case SdfOp.Shear:
+            case SdfAdmissionAction.Shear:
                 audit.Require(condition: Enum.IsDefined(value: ((SdfAxis)instruction.Shape)), lane: SdfOperandLanes.Shape, requirement: "it names the sheared axis, a defined SdfAxis");
                 audit.Require(condition: (Enum.IsDefined(value: ((SdfAxis)instruction.Blend)) && (instruction.Blend != instruction.Shape)), lane: SdfOperandLanes.Blend, requirement: "it names the driving axis, a defined SdfAxis other than the sheared one");
                 audit.Zero(lanes: (SdfOperandLanes.Material | SdfOperandLanes.Data0W | SdfOperandLanes.Data1));
                 break;
-            case SdfOp.GaussianPush:
+            case SdfAdmissionAction.GaussianPush:
                 audit.Require(condition: float.IsFinite(f: BitConverter.UInt32BitsToSingle(value: instruction.Shape)), lane: SdfOperandLanes.Shape, requirement: "it carries the push's z component as a finite float's bits");
                 audit.AtLeast(lanes: (SdfOperandLanes.Data1X | SdfOperandLanes.Data1Y | SdfOperandLanes.Data1Z), minimum: SdfProgramBuilder.GaussianPushMinRadius);
                 audit.Zero(lanes: (SdfOperandLanes.Blend | SdfOperandLanes.Material));
                 break;
-            case SdfOp.LaneErode:
+            case SdfAdmissionAction.LaneErode:
                 RequireLaneErodeLaneIndex(index: index, instruction: instruction, paramName: paramName);
                 audit.Require(condition: (instruction.Data0.Y != instruction.Data0.Z), lane: SdfOperandLanes.Data0Z, requirement: "an erosion's from and to differ");
                 audit.AtLeast(lanes: SdfOperandLanes.Data1X, minimum: 0f);
                 audit.Zero(lanes: (SdfOperandLanes.Header | SdfOperandLanes.Data1Y | SdfOperandLanes.Data1Z | SdfOperandLanes.Data1W));
                 break;
-            case SdfOp.CellDisplace:
+            case SdfAdmissionAction.CellDisplace:
                 new SdfCellDisplacement(instruction.Data0.X, instruction.Data0.Y, instruction.Shape, ((SdfCellMode)instruction.Blend), instruction.Data0.Z).Validate();
                 audit.Zero(lanes: (SdfOperandLanes.Material | SdfOperandLanes.Data0W | SdfOperandLanes.Data1));
                 break;
-            case SdfOp.ReliefRow:
+            case SdfAdmissionAction.ReliefRow:
                 RequireReliefRowLanes(audit: ref audit);
                 break;
             default:
-                throw new ArgumentException(message: $"Instruction {index} is {instruction.Op}, which has no row in the program's lane contract.", paramName: paramName);
+                throw new InvalidOperationException(message: "Invalid Admission action.");
         }
 
         return audit.Contract;
@@ -180,8 +180,8 @@ public sealed partial class SdfProgram {
         audit.MarkWritten(lanes: SdfOperandLanes.Data1Y);
         audit.Zero(lanes: (SdfOperandLanes.Shape | SdfOperandLanes.Material | SdfOperandLanes.Data1W));
 
-        switch ((SdfBlendOp)instruction.Blend) {
-            case SdfBlendOp.Morph: {
+        switch (SdfFieldBlends.PopAdmissionOf(value: (SdfBlendOp)instruction.Blend)) {
+            case SdfPopAdmissionAction.Morph: {
                     var lane = instruction.Data0.X;
 
                     audit.Require(condition: ((lane >= 0f) && (lane <= 3f) && (lane == MathF.Floor(x: lane))), lane: SdfOperandLanes.Data0X, requirement: "a morph's lane index is a whole number in [0, 3]");
@@ -189,8 +189,7 @@ public sealed partial class SdfProgram {
                     audit.Zero(lanes: (SdfOperandLanes.Data0W | SdfOperandLanes.Data1X | SdfOperandLanes.Data1Z));
                     break;
                 }
-            case SdfBlendOp.StairsUnion:
-            case SdfBlendOp.StairsSubtraction: {
+            case SdfPopAdmissionAction.Stairs: {
                     var steps = instruction.Data1.Z;
 
                     audit.Require(condition: (instruction.Data1.X > 0f), lane: SdfOperandLanes.Data1X, requirement: "a stairs radius is above zero (a zero radius is a plain Union or Subtraction pop)");
@@ -198,10 +197,12 @@ public sealed partial class SdfProgram {
                     audit.Zero(lanes: SdfOperandLanes.Data0);
                     break;
                 }
-            default:
+            case SdfPopAdmissionAction.Radius:
                 audit.AtLeast(lanes: SdfOperandLanes.Data1X, minimum: 0f);
                 audit.Zero(lanes: (SdfOperandLanes.Data0 | SdfOperandLanes.Data1Z));
                 break;
+            default:
+                throw new InvalidOperationException(message: "Invalid PopAdmission action.");
         }
     }
     // A relief mask's row, by its kind (SdfReliefRowKind, the Blend lane). Every lane of every kind is classed, and each
@@ -214,26 +215,28 @@ public sealed partial class SdfProgram {
         audit.Zero(lanes: SdfOperandLanes.Material);
         audit.Within(lanes: (SdfOperandLanes.Data0 | SdfOperandLanes.Data1), limit: SdfReliefRegion.MaxMagnitude);
 
-        switch ((SdfReliefRowKind)instruction.Blend) {
-            case SdfReliefRowKind.Band: {
+        if (!SdfFieldReliefRows.Contains(value: (SdfReliefRowKind)instruction.Blend)) {
+            audit.Require(condition: false, lane: SdfOperandLanes.Blend, requirement: "it names the row's kind, a defined SdfReliefRowKind");
+        }
+        switch (SdfFieldReliefRows.ReliefRowAdmissionOf(value: (SdfReliefRowKind)instruction.Blend)) {
+            case SdfReliefRowAdmissionAction.Band: {
                     var refusal = SdfReliefBand.TryRead(band: out _, row: instruction);
 
                     audit.Zero(lanes: (SdfOperandLanes.Shape | SdfOperandLanes.Data1));
                     audit.Require(condition: (refusal is null), lane: SdfOperandLanes.Data0X, requirement: (refusal ?? string.Empty));
                     break;
                 }
-            case SdfReliefRowKind.Pose:
+            case SdfReliefRowAdmissionAction.Pose:
                 audit.Zero(lanes: (SdfOperandLanes.Shape | SdfOperandLanes.Data0W));
                 audit.Unit(lanes: SdfOperandLanes.Data1, subject: "region pose quaternion");
                 break;
-            case SdfReliefRowKind.Primitive:
+            case SdfReliefRowAdmissionAction.Primitive:
                 audit.Require(condition: SdfReliefRegion.IsListed(shape: ((SdfShapeType)instruction.Shape)), lane: SdfOperandLanes.Shape, requirement: "a region's primitive is a Box, a Superellipsoid, a Capsule or a Plane");
                 audit.Zero(lanes: SdfOperandLanes.Data1X);
                 RequireShapeLanes(audit: ref audit);
                 break;
             default:
-                audit.Require(condition: false, lane: SdfOperandLanes.Blend, requirement: "it names the row's kind, a defined SdfReliefRowKind");
-                break;
+                throw new InvalidOperationException(message: "Invalid Admission action.");
         }
     }
     private static void RequireShapeLanes(ref LaneAudit audit) {
@@ -252,35 +255,34 @@ public sealed partial class SdfProgram {
         const SdfOperandLanes Dimensions = (SdfOperandLanes.Data0X | SdfOperandLanes.Data0Y | SdfOperandLanes.Data0Z);
         const SdfOperandLanes Data1Tail = (SdfOperandLanes.Data1Y | SdfOperandLanes.Data1Z | SdfOperandLanes.Data1W);
 
-        switch (shape) {
-            case SdfShapeType.Box:
-            case SdfShapeType.ScreenSlab:
+        switch (SdfFieldShapes.ShapeAdmissionOf(value: shape)) {
+            case SdfShapeAdmissionAction.Box:
                 audit.AtLeast(lanes: SdfOperandLanes.Data0, minimum: 0f);
                 audit.Zero(lanes: Data1Tail);
                 break;
-            case SdfShapeType.Capsule:
+            case SdfShapeAdmissionAction.Capsule:
                 // Both readers project onto the endpoint by its own squared length, which must stay finite in float.
                 audit.AtLeast(lanes: SdfOperandLanes.Data0W, minimum: 0f);
                 audit.Require(condition: float.IsFinite(f: Vector3.Dot(vector1: audit.Data0Xyz, vector2: audit.Data0Xyz)), lane: SdfOperandLanes.Data0X, requirement: "a capsule's endpoint has a finite squared length");
                 audit.Zero(lanes: Data1Tail);
                 break;
-            case SdfShapeType.Sphere:
+            case SdfShapeAdmissionAction.Sphere:
                 audit.AtLeast(lanes: SdfOperandLanes.Data0X, minimum: 0f);
                 audit.Zero(lanes: (SdfOperandLanes.Data0Y | SdfOperandLanes.Data0Z | SdfOperandLanes.Data0W | Data1Tail));
                 break;
-            case SdfShapeType.Torus:
+            case SdfShapeAdmissionAction.Torus:
                 audit.AtLeast(lanes: (SdfOperandLanes.Data0X | SdfOperandLanes.Data0Y), minimum: 0f);
                 audit.Zero(lanes: (SdfOperandLanes.Data0Z | SdfOperandLanes.Data0W | Data1Tail));
                 break;
-            case SdfShapeType.Cylinder:
+            case SdfShapeAdmissionAction.Cylinder:
                 audit.AtLeast(lanes: (SdfOperandLanes.Data0X | SdfOperandLanes.Data0Y | SdfOperandLanes.Data1W), minimum: 0f);
                 audit.Zero(lanes: (SdfOperandLanes.Data0Z | SdfOperandLanes.Data0W | SdfOperandLanes.Data1Y | SdfOperandLanes.Data1Z));
                 break;
-            case SdfShapeType.Plane:
+            case SdfShapeAdmissionAction.Plane:
                 audit.Unit(lanes: Dimensions, subject: "plane normal");
                 audit.Zero(lanes: Data1Tail);
                 break;
-            case SdfShapeType.Vesica: {
+            case SdfShapeAdmissionAction.Vesica: {
                     var radius = instruction.Data0.X;
 
                     audit.AtLeast(lanes: SdfOperandLanes.Data0X, minimum: 0f);
@@ -289,8 +291,7 @@ public sealed partial class SdfProgram {
                     audit.Zero(lanes: (SdfOperandLanes.Data0W | Data1Tail));
                     break;
                 }
-            case SdfShapeType.RoundedRectangle:
-            case SdfShapeType.ChamferedRectangle:
+            case SdfShapeAdmissionAction.Rectangle:
                 audit.AtLeast(lanes: (SdfOperandLanes.Data0 | SdfOperandLanes.Data1W), minimum: 0f);
                 audit.Lift();
 
@@ -301,14 +302,14 @@ public sealed partial class SdfProgram {
                 }
 
                 break;
-            case SdfShapeType.RegularPolygon:
+            case SdfShapeAdmissionAction.RegularPolygon:
                 audit.AtLeast(lanes: (SdfOperandLanes.Data0X | SdfOperandLanes.Data0W | SdfOperandLanes.Data1W), minimum: 0f);
                 audit.HalfSector(lane: SdfOperandLanes.Data0Y, minimumSides: 3);
                 audit.Derived(lane: SdfOperandLanes.Data1Z, expected: 1f, derivation: "regular-polygon sharpness constant");
                 audit.Lift();
                 audit.Zero(lanes: SdfOperandLanes.Data0Z);
                 break;
-            case SdfShapeType.Star: {
+            case SdfShapeAdmissionAction.Star: {
                     audit.AtLeast(lanes: (SdfOperandLanes.Data0X | SdfOperandLanes.Data0W), minimum: 0f);
 
                     var sides = audit.HalfSector(lane: SdfOperandLanes.Data0Y, minimumSides: 2);
@@ -323,7 +324,7 @@ public sealed partial class SdfProgram {
                     audit.Zero(lanes: SdfOperandLanes.Data1W);
                     break;
                 }
-            case SdfShapeType.RoundCone: {
+            case SdfShapeAdmissionAction.RoundCone: {
                     audit.AtLeast(lanes: Dimensions, minimum: 0f);
 
                     var (slope, cosine) = SdfDerivedLanes.RoundConeSlope(lowerRadius: instruction.Data0.X, upperRadius: instruction.Data0.Y, height: instruction.Data0.Z);
@@ -333,24 +334,24 @@ public sealed partial class SdfProgram {
                     audit.Zero(lanes: (SdfOperandLanes.Data1Z | SdfOperandLanes.Data1W));
                     break;
                 }
-            case SdfShapeType.Trapezoid:
+            case SdfShapeAdmissionAction.Trapezoid:
                 audit.AtLeast(lanes: (SdfOperandLanes.Data0 | SdfOperandLanes.Data1Z | SdfOperandLanes.Data1W), minimum: 0f);
                 RequireTrapezoidProfileSlant(index: audit.Index, instruction: instruction, paramName: audit.ParamName);
                 audit.Lift();
                 break;
-            case SdfShapeType.Ellipse:
+            case SdfShapeAdmissionAction.Ellipse:
                 audit.AtLeast(lanes: (SdfOperandLanes.Data0X | SdfOperandLanes.Data0Y | SdfOperandLanes.Data0W | SdfOperandLanes.Data1Z | SdfOperandLanes.Data1W), minimum: 0f);
                 audit.Lift();
                 audit.Zero(lanes: SdfOperandLanes.Data0Z);
                 break;
-            case SdfShapeType.Glyph:
+            case SdfShapeAdmissionAction.Glyph:
                 // Data0.xy are atlas UVs packed as integer bits. The sampling correction (Data1.w) is derived from the
                 // atlas's pixels, which the program identifies only by hash, so the door checks its range alone.
                 audit.AtLeast(lanes: (SdfOperandLanes.Data0Z | SdfOperandLanes.Data0W), minimum: 0f);
                 audit.Require(condition: ((instruction.Data1.Y > 0f) && (instruction.Data1.Z > 0f)), lane: SdfOperandLanes.Data1Y, requirement: "a glyph's cell half-extents are above zero");
                 audit.Require(condition: ((instruction.Data1.W > 0f) && (instruction.Data1.W <= 1f)), lane: SdfOperandLanes.Data1W, requirement: "a glyph's sampling correction lies in (0, 1]");
                 break;
-            case SdfShapeType.SampledRegion: {
+            case SdfShapeAdmissionAction.SampledRegion: {
                     var dims = BitConverter.SingleToUInt32Bits(value: instruction.Data1.Y);
                     var mask = ((uint)SdfProgramBuilder.MaxSampledRegionDim);
                     var x = (dims & mask);
@@ -364,7 +365,7 @@ public sealed partial class SdfProgram {
                     audit.Zero(lanes: SdfOperandLanes.Data1X);
                     break;
                 }
-            case SdfShapeType.Superellipsoid:
+            case SdfShapeAdmissionAction.Superellipsoid:
                 // The radii and the exponent are values both carriers hold exactly (SdfDerivedLanes.FixedGrid), so the
                 // kernel and the fixed-point evaluator scale the gauge by the same smallest radius.
                 audit.AtLeast(lanes: Dimensions, minimum: SdfDerivedLanes.MinSuperellipsoidRadius);
@@ -372,13 +373,13 @@ public sealed partial class SdfProgram {
                 audit.OnFixedGrid(lanes: SdfOperandLanes.Data0);
                 audit.Derived(lanes: Data1Tail,expected: SdfDerivedLanes.Reciprocal(extents: audit.Data0Xyz), derivation: "inverse radii");
                 break;
-            case SdfShapeType.ConvexPolygon:
+            case SdfShapeAdmissionAction.ConvexPolygon:
                 audit.MarkWritten(lanes: SdfOperandLanes.Data0X);
                 audit.AtLeast(lanes: (SdfOperandLanes.Data0W | SdfOperandLanes.Data1Z | SdfOperandLanes.Data1W), minimum: 0f);
                 audit.Lift();
                 audit.Zero(lanes: (SdfOperandLanes.Data0Y | SdfOperandLanes.Data0Z));
                 break;
-            case SdfShapeType.Sweep: {
+            case SdfShapeAdmissionAction.Sweep: {
                     var strands = instruction.Data0.Y;
 
                     audit.MarkWritten(lanes: SdfOperandLanes.Data0X);
@@ -387,15 +388,17 @@ public sealed partial class SdfProgram {
                     audit.Zero(lanes: Data1Tail);
                     break;
                 }
-            case SdfShapeType.Path:
+            case SdfShapeAdmissionAction.Path:
                 // ValidatePaths checks the edge count and the reach against the edge table, with the depth, the mode and
                 // the reserved lanes.
                 audit.MarkWritten(lanes: SdfOperandLanes.Data0X);
                 audit.MarkDerived(lanes: (SdfOperandLanes.Data0Y | SdfOperandLanes.Data0Z));
                 audit.Zero(lanes: (SdfOperandLanes.Data1Z | SdfOperandLanes.Data1W));
                 break;
-            default:
+            case SdfShapeAdmissionAction.Unknown:
                 throw new ArgumentException(message: $"Instruction {audit.Index} is a {shape} shape, which has no row in the program's lane contract.", paramName: audit.ParamName);
+            default:
+                throw new InvalidOperationException(message: "Invalid ShapeAdmission action.");
         }
     }
 

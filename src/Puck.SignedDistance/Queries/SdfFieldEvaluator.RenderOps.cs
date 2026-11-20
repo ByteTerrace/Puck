@@ -28,39 +28,41 @@ public sealed partial class SdfFieldEvaluator {
     // variant count also writes the delta a later shape's material takes (mapCore's parityMaterialDelta).
     [MethodImpl(MethodImplOptions.NoInlining)]
     private static FixedVector3 RenderWarpPoint(in CompiledInstruction instruction, FixedVector3 localPosition, ref FixedQ4816 distanceScale, ref int materialDelta) {
-        switch (instruction.Op) {
-            case SdfOp.Shear: {
+        switch (SdfFieldOps.RenderWarpOf(value: instruction.Op)) {
+            case SdfRenderWarpAction.Shear: {
                     var target = (int)instruction.Shape;
                     var t = localPosition[((int)instruction.Blend)];
                     var offset = ((((instruction.Data0Z * t) + instruction.Data0Y) * t) + instruction.Data0X) * t;
 
                     return localPosition.With(axis: target, value: (localPosition[target] + offset));
                 }
-            case SdfOp.GaussianPush: {
+            case SdfRenderWarpAction.GaussianPush: {
                     var push = new FixedVector3(X: instruction.Data0W, Y: instruction.Data1W, Z: instruction.Aux);
                     var offset = FixedVector3.Divide(left: (localPosition - Vector(instruction: instruction)), right: Vector1(instruction: instruction));
 
                     return (localPosition - (push * Exp(value: -FixedVector3.Dot(left: offset, right: offset))));
                 }
-            case SdfOp.DomainWarp: {
+            case SdfRenderWarpAction.DomainWarp: {
                     return (localPosition + (new FixedVector3(
                         X: FixedQ4816.Sin(angle: (instruction.Data0X * localPosition.Y)),
                         Y: FixedQ4816.Sin(angle: (instruction.Data0Y * localPosition.Z)),
                         Z: FixedQ4816.Sin(angle: (instruction.Data0Z * localPosition.X))
                     ) * instruction.Data0W));
                 }
-            case SdfOp.RepeatPolar: {
+            case SdfRenderWarpAction.RepeatPolar: {
                     return RepeatPolar(instruction: in instruction, localPosition: localPosition, materialDelta: ref materialDelta);
                 }
-            case SdfOp.WallpaperFold: {
+            case SdfRenderWarpAction.WallpaperFold: {
                     return WallpaperFold(instruction: in instruction, localPosition: localPosition, materialDelta: ref materialDelta);
                 }
-            case SdfOp.LogSphere: {
+            case SdfRenderWarpAction.LogSphere: {
                     return LogSphere(distanceScale: ref distanceScale, instruction: in instruction, localPosition: localPosition);
                 }
-            default: {
+            case SdfRenderWarpAction.Unsupported: {
                     return CellJitter(instruction: in instruction, localPosition: localPosition, materialDelta: ref materialDelta);
                 }
+            default:
+                throw new InvalidOperationException(message: "Invalid RenderWarp action.");
         }
     }
     // SDF_OP_REPEAT_POLAR: the plane perpendicular to the axis folded into count sectors, each sector turned onto the

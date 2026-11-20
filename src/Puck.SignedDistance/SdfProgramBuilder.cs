@@ -417,12 +417,11 @@ public sealed partial class SdfProgramBuilder {
             );
         }
     }
-    private static void RequireDefined(SdfBlendOp value, string paramName) =>
-        RequireDefined(
-            maximum: SdfBlendOp.StairsSubtraction,
-            paramName: paramName,
-            value: value
-        );
+    private static void RequireDefined(SdfBlendOp value, string paramName) {
+        if (!SdfFieldBlends.Contains(value: value)) {
+            throw new ArgumentOutOfRangeException(paramName: paramName, actualValue: value, message: "Expected a defined SdfBlendOp.");
+        }
+    }
     private static void RequireDefined(SdfAxis value, string paramName) =>
         RequireDefined(
             maximum: SdfAxis.Z,
@@ -1053,7 +1052,7 @@ public sealed partial class SdfProgramBuilder {
             value: blend,
             paramName: nameof(blend)
         );
-        if (blend is SdfBlendOp.Morph or SdfBlendOp.StairsUnion or SdfBlendOp.StairsSubtraction) {
+        if (SdfFieldBlends.ScopeOnlyOf(value: blend)) {
             throw new ArgumentException(
                 message: $"Blend operation '{blend}' is supported only as a PopField composition.",
                 paramName: nameof(blend)

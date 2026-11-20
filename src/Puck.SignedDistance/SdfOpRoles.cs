@@ -23,14 +23,5 @@ public static class SdfOpRoles {
     /// <param name="op">A defined op.</param>
     /// <returns>The op's role.</returns>
     /// <exception cref="InvalidOperationException"><paramref name="op"/> has no role.</exception>
-    public static SdfOpRole Of(SdfOp op) => op switch {
-        _ when SdfFieldOps.Contains(value: op) => SdfFieldOps.RoleOf(value: op),
-        SdfOp.ShapeBlend or SdfOp.ResetPoint or SdfOp.PushField or SdfOp.PopField => SdfOpRole.Structure,
-        SdfOp.Onion or SdfOp.Dilate or SdfOp.Displace or SdfOp.CellDisplace => SdfOpRole.Field,
-        SdfOp.Translate or SdfOp.Rotate or SdfOp.Scale or SdfOp.TransformDynamic or SdfOp.RotatePlane or SdfOp.Elongate or
-        SdfOp.RepeatPolar or SdfOp.DomainWarp or SdfOp.SymmetryPlane or SdfOp.AxialProfile or SdfOp.Shear or
-        SdfOp.GaussianPush or SdfOp.LaneErode => SdfOpRole.Point,
-        SdfOp.Repeat or SdfOp.RepeatLimited or SdfOp.WallpaperFold or SdfOp.CellJitter or SdfOp.LogSphere => SdfOpRole.Lattice,
-        _ => throw new InvalidOperationException(message: $"SDF op {op} has no point-state role; classify it in SdfOpRoles.Of."),
-    };
+    public static SdfOpRole Of(SdfOp op) => SdfFieldOps.RoleOf(value: op);
 }

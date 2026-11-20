@@ -60,16 +60,16 @@ public sealed partial class SdfProgram {
                 chainIndex++;
             }
 
-            switch (instruction.Op) {
-                case SdfOp.PushField: {
+            switch (SdfFieldOps.StepScaleBinderOf(value: instruction.Op)) {
+                case SdfStepScaleBinderAction.PushField: {
                         depth++;
                         break;
                     }
-                case SdfOp.PopField: {
+                case SdfStepScaleBinderAction.PopField: {
                         depth--;
                         break;
                     }
-                case SdfOp.ShapeBlend: {
+                case SdfStepScaleBinderAction.ShapeBlend: {
                         var factor = chainFactors[chainIndex];
 
                         if (
@@ -91,9 +91,7 @@ public sealed partial class SdfProgram {
 
                         break;
                     }
-                case SdfOp.Displace:
-                case SdfOp.NoiseDisplace:
-                case SdfOp.CellDisplace: {
+                case SdfStepScaleBinderAction.Relief: {
                         var factor = (1.0f + (reliefCharges?[index] ?? 0.0f));
 
                         if ((depth == 0) && (factor > 1.0f) && ((best is not { } current) || (factor > current.Factor))) {
@@ -108,9 +106,11 @@ public sealed partial class SdfProgram {
 
                         break;
                     }
-                default: {
+                case SdfStepScaleBinderAction.Ignore: {
                         break;
                     }
+                default:
+                    throw new InvalidOperationException(message: "Invalid StepScaleBinder action.");
             }
         }
 
@@ -160,8 +160,8 @@ public sealed partial class SdfProgram {
                 chainIndex++;
             }
 
-            switch (instruction.Op) {
-                case SdfOp.ShapeBlend: {
+            switch (SdfFieldOps.CompositionLipschitzOf(value: instruction.Op)) {
+                case SdfCompositionLipschitzAction.ShapeBlend: {
                         accumulator = ComposeLipschitz(
                             blend: instruction.Blend,
                             candidate: chainFactors[chainIndex],
@@ -169,7 +169,7 @@ public sealed partial class SdfProgram {
                         );
                         break;
                     }
-                case SdfOp.PushField: {
+                case SdfCompositionLipschitzAction.PushField: {
                         savedAccumulators[scopeDepth++] = accumulator;
                         accumulator = 0.0f;
                         break;
@@ -181,23 +181,23 @@ public sealed partial class SdfProgram {
                 // and never carries the relief's charge. A masked relief's gradient is a·(w∇n + n∇w) with |n| ≤ 1 and
                 // 0 ≤ w ≤ 1, so its masks add |a| times their slopes, which are per unit of the same frame and take the
                 // same point factor (SdfNoiseDisplacement.MaskedSlope). A row charges nothing: its relief reads it.
-                case SdfOp.Displace: {
+                case SdfCompositionLipschitzAction.Displace: {
                         reliefCharges![index] = (DisplaceSlope(instruction: instruction) * reliefPointFactors[index]);
                         accumulator += reliefCharges[index];
                         break;
                     }
-                case SdfOp.NoiseDisplace: {
+                case SdfCompositionLipschitzAction.NoiseDisplace: {
                         reliefCharges![index] = (SdfNoiseDisplacement.Of(instruction: instruction).MaskedSlope(maskSlope: (maskSlopes?[index] ?? 0f)) * reliefPointFactors[index]);
                         accumulator += reliefCharges[index];
                         break;
                     }
-                case SdfOp.CellDisplace: {
+                case SdfCompositionLipschitzAction.CellDisplace: {
                         reliefCharges![index] = (new SdfCellDisplacement(instruction.Data0.X, instruction.Data0.Y, instruction.Shape,
                             ((SdfCellMode)instruction.Blend), instruction.Data0.Z).ReliefSlope * reliefPointFactors[index]);
                         accumulator += reliefCharges[index];
                         break;
                     }
-                case SdfOp.PopField: {
+                case SdfCompositionLipschitzAction.PopField: {
                         if (!float.IsFinite(f: accumulator)) {
                             throw new InvalidOperationException(message: $"A field scope's Lipschitz accumulator became non-finite ({accumulator}) at PopField instruction {index}. Check for extreme warp rates or degenerate geometries inside the scope.");
                         }
@@ -233,11 +233,13 @@ public sealed partial class SdfProgram {
                         );
                         break;
                     }
-                default: {
+                case SdfCompositionLipschitzAction.Ignore: {
                         // Every other op acts on the POINT (or is a field op whose factor pass 1 already folded into the
                         // chain), so it changes no accumulator BOUND here.
                         break;
                     }
+                default:
+                    throw new InvalidOperationException(message: "Invalid CompositionLipschitz action.");
             }
         }
 
@@ -335,8 +337,8 @@ public sealed partial class SdfProgram {
                 chainScale = Vector3.One;
             }
 
-            switch (instruction.Op) {
-                case SdfOp.Scale: {
+            switch (SdfFieldOps.ChainLipschitzOf(value: instruction.Op)) {
+                case SdfChainLipschitzAction.Scale: {
                         chainScale = new Vector3(
                             x: (chainScale.X * MathF.Abs(x: instruction.Data0.X)),
                             y: (chainScale.Y * MathF.Abs(x: instruction.Data0.Y)),
@@ -344,7 +346,7 @@ public sealed partial class SdfProgram {
                         );
                         break;
                     }
-                case SdfOp.Translate: {
+                case SdfChainLipschitzAction.Translate: {
                         var maxScale = MathF.Max(
                             x: chainScale.X,
                             y: MathF.Max(
@@ -360,7 +362,7 @@ public sealed partial class SdfProgram {
                         ).Length() * maxScale);
                         break;
                     }
-                case SdfOp.RotatePlane: {
+                case SdfChainLipschitzAction.RotatePlane: {
                         var normalAxis = (((SdfPlane)instruction.Shape) switch {
                             SdfPlane.XY => SdfAxis.Z,
                             SdfPlane.YZ => SdfAxis.X,
@@ -370,7 +372,7 @@ public sealed partial class SdfProgram {
                         chainWarpRates.Add(item: (MathF.Abs(x: instruction.Data0.X), (instruction.Blend != ((uint)normalAxis)), MinAxis(scale: chainScale), chainTranslateReach));
                         break;
                     }
-                case SdfOp.ShapeBlend: {
+                case SdfChainLipschitzAction.ShapeBlend: {
                         chainHasShapeBlend = true;
                         var maxScale = MathF.Max(
                             x: chainScale.X,
@@ -392,14 +394,14 @@ public sealed partial class SdfProgram {
 
                         break;
                     }
-                case SdfOp.LogSphere: {
+                case SdfChainLipschitzAction.LogSphere: {
                         // The log-spherical shell fold's metric-distortion factor compounds over nested folds (a product,
                         // not a max — like a twisted ellipsoid compounding both its errors). Reach-INDEPENDENT, so it does
                         // not join chainWarpRates (which fold over the chain reach); it multiplies the whole chain's factor.
                         chainLogSphereProduct *= LogSphereLipschitz(instruction: instruction);
                         break;
                     }
-                case SdfOp.CellJitter: {
+                case SdfChainLipschitzAction.CellJitter: {
                         // TWO orthogonal Lipschitz contributions, both kept:
                         //
                         // (1) REACH under a downstream warp. The per-cell displacement is INDEPENDENT on each axis
@@ -440,7 +442,7 @@ public sealed partial class SdfProgram {
                         ), instruction.Data0.W, chainTranslateReach, MinAxis(scale: chainScale)));
                         break;
                     }
-                case SdfOp.DomainWarp: {
+                case SdfChainLipschitzAction.DomainWarp: {
                         // Same reach-independent metric-stretch factor (1 + amp*max|freq_i|) as Displace. As a POINT op it also
                         // moves the point by up to amp*sqrt(3), extending a downstream twist/bend's reach like a Translate.
                         var maxScale = MathF.Max(
@@ -455,7 +457,7 @@ public sealed partial class SdfProgram {
                         chainTranslateReach += ((1.7320508f * MathF.Abs(x: instruction.Data0.W)) * maxScale);
                         break;
                     }
-                case SdfOp.LaneErode: {
+                case SdfChainLipschitzAction.LaneErode: {
                         // The candidate's spatially-varying part is exactly the noise swing (the saturated lane
                         // fraction is a per-frame constant across the chain and contributes no gradient) — a
                         // single-octave, unit-gain/lacunarity NoiseDisplace field of amplitude reach*RaggedAmount at
@@ -470,20 +472,20 @@ public sealed partial class SdfProgram {
                         );
                         break;
                     }
-                case SdfOp.AxialProfile: {
+                case SdfChainLipschitzAction.AxialProfile: {
                         // Reach-DEPENDENT like Bend/Twist (its shear term scales with the chain's XZ reach), unlike
                         // LogSphere/Displace/NoiseDisplace's reach-independent products — so it is stashed here and
                         // folded at chain-close against the FINAL reach, exactly like CellJitter's boundary factor.
                         chainReachWarps.Add(item: (instruction, MinAxis(scale: chainScale), MaxAxis(scale: chainScale), chainTranslateReach));
                         break;
                     }
-                case SdfOp.Shear: {
+                case SdfChainLipschitzAction.Shear: {
                         // Reach-DEPENDENT like Bend/Twist/AxialProfile (the slope grows with the chain's Y reach) — stashed
                         // here and folded at chain-close against the FINAL reach (SdfProgram.ShearOperatorNorm).
                         chainReachWarps.Add(item: (instruction, MinAxis(scale: chainScale), MaxAxis(scale: chainScale), chainTranslateReach));
                         break;
                     }
-                case SdfOp.GaussianPush: {
+                case SdfChainLipschitzAction.GaussianPush: {
                         // The derivative bound is global; its displacement also expands preceding warps' input domains.
                         chainReachWarps.Add(item: (instruction, MinAxis(scale: chainScale), MaxAxis(scale: chainScale), chainTranslateReach));
                         chainDisplaceWarpProduct *= GaussianPushLipschitz(
@@ -500,7 +502,7 @@ public sealed partial class SdfProgram {
                         );
                         break;
                     }
-                default: {
+                case SdfChainLipschitzAction.Ignore: {
                         // ResetPoint/Rotate/TransformDynamic/SymmetryPlane/Repeat/RepeatLimited/WallpaperFold/RepeatPolar/
                         // Elongate/Onion/Dilate/PushField/PopField, and the reliefs (Displace/NoiseDisplace/CellDisplace,
                         // which AnalyzeLipschitz charges at their own instruction): factor 1 (isometry, non-expansive
@@ -510,6 +512,8 @@ public sealed partial class SdfProgram {
                         // isometries.)
                         break;
                     }
+                default:
+                    throw new InvalidOperationException(message: "Invalid ChainLipschitz action.");
             }
         }
 

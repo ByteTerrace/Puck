@@ -128,7 +128,7 @@ public sealed partial class SdfProgram {
 
             var domain = -1;
 
-            if (m_instructions[cursor].Op is SdfOp.Scale or SdfOp.AxialProfile or SdfOp.Shear) {
+            if (SdfFieldOps.PartDomainOf(value: m_instructions[cursor].Op)) {
                 domain = cursor++;
             }
             if (
@@ -240,8 +240,7 @@ public sealed partial class SdfProgram {
                     if (instruction.Blend != ((uint)SdfBlendOp.Union)) {
                         return false;
                     }
-                } else if (instruction.Op is not (SdfOp.ResetPoint or SdfOp.Translate or SdfOp.Rotate
-                    or SdfOp.Scale or SdfOp.TransformDynamic)) {
+                } else if (!SdfFieldOps.PartPosePrefixOf(value: instruction.Op)) {
                     // Other root operations can carry state or alter the accumulated field. Keep the full march.
                     return false;
                 }
