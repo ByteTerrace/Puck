@@ -180,12 +180,12 @@ public sealed class CreationCommandTests {
         Assert.Contains(
             actualString: output,
             comparisonType: StringComparison.Ordinal,
-            expectedSubstring: "static: globalStepScale 1, scoped clamps 1 (1 shared)"
+            expectedSubstring: "static: queryStepScale 1, shape clamps 0, scoped clamps 1 (1 shared)"
         );
         Assert.Contains(
             actualString: output,
             comparisonType: StringComparison.Ordinal,
-            expectedSubstring: "creation: globalStepScale 1, scoped clamps 1 (1 shared)"
+            expectedSubstring: "creation: queryStepScale 1, shape clamps 0, scoped clamps 1 (1 shared)"
         );
         Assert.Contains(
             actualString: output,

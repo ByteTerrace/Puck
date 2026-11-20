@@ -171,7 +171,9 @@ public static class SdfIsaHlsl {
         declarations.Count(name: "SDF_BOUND_RECORD_VECTORS", value: SdfProgram.BoundRecordVectors);
         declarations.Count(name: "SDF_DIRECTORY_HEADER_VECTORS", value: SdfProgram.DirectoryHeaderVectors);
         declarations.Lane(lane: SdfProgram.SegmentCountLane, name: "SDF_SEGMENT_COUNT");
-        declarations.Lane(lane: SdfProgram.SegmentStepScaleLane, name: "SDF_SEGMENT_STEP_SCALE");
+        declarations.Lane(lane: SdfProgram.BoundShapeStepScaleLane, name: "SDF_SHAPE_STEP_SCALE");
+        declarations.Lane(lane: SdfProgram.InstructionShapeLane, name: "SDF_RESET_FRAME_LENGTH");
+        declarations.Lane(lane: SdfProgram.InstructionBlendLane, name: "SDF_RESET_FRAME_KEY");
         declarations.Lane(lane: SdfProgram.SegmentRigidPlanLane, name: "SDF_SEGMENT_RIGID_PLAN_OFFSET");
         declarations.Bits(name: "SDF_PART_LEAF_COUNT_MASK", value: SdfProgram.PartLeafCountMask);
         declarations.Count(name: "SDF_PART_DISTANCE_GAIN_SHIFT", value: SdfProgram.PartDistanceGainShift);

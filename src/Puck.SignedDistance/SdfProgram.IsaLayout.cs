@@ -33,14 +33,13 @@ public sealed partial class SdfProgram {
     /// <summary>The vectors of a bound record, a shape's, a segment's or an instance's: its bound sphere, then its
     /// meta (<c>SDF_BOUND_RECORD_VECTORS</c>).</summary>
     public const int BoundRecordVectors = 2;
+    /// <summary>The shape metadata lane carrying a candidate's Lipschitz clamp, as float bits.</summary>
+    public const int BoundShapeStepScaleLane = 2;
     /// <summary>The header vectors before a directory's records: the segment directory's, the instance directory's and
     /// the world-segment list's (<c>SDF_DIRECTORY_HEADER_VECTORS</c>).</summary>
     public const int DirectoryHeaderVectors = 1;
     /// <summary>The segment directory header's lane holding the segment count (<c>SDF_SEGMENT_COUNT_LANE</c>).</summary>
     public const int SegmentCountLane = 0;
-    /// <summary>The segment directory header's lane holding the program's step scale, as float bits
-    /// (<c>SDF_SEGMENT_STEP_SCALE_LANE</c>).</summary>
-    public const int SegmentStepScaleLane = 1;
     /// <summary>The segment directory header's lane holding the rigid-leaf plan's vector offset
     /// (<c>SDF_SEGMENT_RIGID_PLAN_LANE</c>).</summary>
     public const int SegmentRigidPlanLane = 2;

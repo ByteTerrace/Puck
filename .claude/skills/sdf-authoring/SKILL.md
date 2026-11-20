@@ -169,12 +169,11 @@ Two rules decide whether facets are available at all:
    non-uniformly scaled sphere or ellipsoid does not: it bakes into the
    1-Lipschitz exponent-2 superellipsoid gauge. A warped shape whose scope is
    free clamps only itself at its own pop: `creation stats` shows
-   `scoped clamps 1 (0 shared)` and `globalStepScale 1`, and no other shape
-   marches shorter. Only when that depth is already occupied (the shape sits
-   in a group or creation scope) is its bound shared at the enclosing pop, and
-   only an unscoped chain taxes the program-wide step scale. So a warp does not
-   by itself soften a whole model: read the shared and global clamps
-   `creation stats` prints before naming the cause of a soft image.
+   its shape clamp, and independent shapes keep their own bounds. A blend or
+   relief that reads field magnitudes keeps the original candidate distances
+   inside its scope. The scope clamps its completed field at the pop. Read
+   the shape and scope counts in `creation stats` before naming the cause of
+   a soft image.
    `ShapePointOps` derives the warp predicate from the point chain's emission
    mask; static and pooled scopes, bake partitioning, bounds and detail share it.
 2. **The creation-wide scope.** If a creation has a `noise` facet, an engraved

@@ -160,8 +160,8 @@ divides by it, and refusing it would ban a legitimately flat panel.
 ## Operand lane finiteness
 
 Every operand lane packs into a GPU word bit-for-bit; nothing normalizes it on
-the way. A non-finite value therefore survives into the program-wide Lipschitz
-step scale, into the cull bounds derived from the same lanes, and through every
+the way. A non-finite value therefore survives into the Lipschitz bounds,
+into the cull bounds derived from the same lanes, and through every
 blend downstream, so the packed constructor sweeps all eight lanes of every
 instruction rather than trusting the builder that usually produced them.
 

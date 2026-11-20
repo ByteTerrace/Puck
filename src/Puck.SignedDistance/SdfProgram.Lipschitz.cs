@@ -3,14 +3,10 @@ using System.Numerics;
 namespace Puck.SignedDistance;
 
 public sealed partial class SdfProgram {
-    // The per-program Lipschitz factor L, returned as the STEP SCALE 1/L in (0, 1]. A SEPARATE static pass over the
-    // instruction stream — deliberately NOT grafted into AnalyzeSegment/AnalyzeBounds (they sit at their CA150x
-    // complexity ceilings). It answers the one question sphere tracing needs: by how much can this program's packed
-    // distance field OVERESTIMATE true distance? A field that overestimates by factor L lets the marcher step L times
-    // too far and tunnel through thin/twisted surfaces, so mapCore scales its final distance by 1/L to keep every step
-    // conservative (KEEP IN SYNC with the stepScale read + final multiply in Assets/Shaders/Sdf/field/sdf-map.hlsli's mapCore).
+    // Derives a local clamp at a shape or scope boundary and returns the residual root bound as 1/L for CPU
+    // queries. The bake samples the field with the local clamps already applied.
     //
-    // TWO passes, because a chain's factor bounds one CANDIDATE while the program's L bounds the ACCUMULATOR the
+    // A chain's factor bounds one candidate while the residual L bounds the accumulator the
     // candidates compose into; chamfers and round seams can exceed both of their input bounds:
     //
     //   Pass 1 — AnalyzeChainLipschitz: the per-chain candidate factor (see its own remarks).
@@ -39,11 +35,9 @@ public sealed partial class SdfProgram {
     //   * A chamfer PopField is this same composition, not a program-wide multiply. For one pop against an accumulator
     //     dominating both operands the recurrence gives max(L, L, 2L/√2) = √2·L; it additionally counts repeated pops,
     //     including both nested and sequential scopes.
-    // What binds the global step scale below 1: the depth-0 chain with the largest factor, or an unscoped relief whose
-    // charge (AnalyzeLipschitz's reliefCharges, read as the factor 1 + charge) is larger. A scoped chain's factor and a
-    // scoped relief's charge are clamped to 1 at their pop, so neither binds it. Null when nothing unscoped carries a
-    // factor above 1, which is every isometric program. A diagnostic, never an input to the packed words.
-    private static SdfStepScaleBinder? AnalyzeStepScaleBinder(SdfInstruction[] instructions, SdfInstanceRange[] instances, List<float> chainFactors, float[]? reliefCharges) {
+    // The diagnostic names the largest contribution still present at the root. A shape or scope clamp
+    // has already accounted for its own contribution.
+    private SdfStepScaleBinder? AnalyzeStepScaleBinder(SdfInstruction[] instructions, SdfInstanceRange[] instances, List<float> chainFactors, float[]? reliefCharges) {
         // Reuse admission's chain factors: AnalyzeLipschitz only patches PopField.Data1.Y, which the chain
         // analysis ignores. Repeating that analysis here would walk the full capacity-probe program twice.
         SdfStepScaleBinder? best = null;
@@ -72,8 +66,12 @@ public sealed partial class SdfProgram {
                 case SdfStepScaleBinderAction.ShapeBlend: {
                         var factor = chainFactors[chainIndex];
 
+                        if (!float.IsFinite(f: factor)) {
+                            throw new InvalidOperationException(message: $"The shape at instruction {index} has a non-finite Lipschitz factor ({factor}).");
+                        }
                         if (
                             (depth == 0) &&
+                            (ShapeStepScaleAt(instructionIndex: index) == 1f) &&
                             (factor > 1.0f) &&
                             ((best is not { } current) || (factor > current.Factor))
                         ) {
@@ -131,7 +129,7 @@ public sealed partial class SdfProgram {
     // maskSlopes: per instruction, the summed slope of a masked relief's masks per unit of the frame it samples (the
     // door's ReliefMaskSlopes), null when none is masked. reliefCharges: per instruction, what each relief added to its
     // accumulator, for AnalyzeStepScaleBinder; null for a program with no relief.
-    private static float AnalyzeLipschitz(SdfInstruction[] instructions, (int InstructionIndex, Vector2[] Vertices)[] convexPolygonProfiles, SdfSweepCurve[] sweepCurves, float[]? maskSlopes, out List<float> chainFactors, out float[]? reliefCharges) {
+    private static float AnalyzeLipschitz(SdfInstruction[] instructions, (int InstructionIndex, Vector2[] Vertices)[] convexPolygonProfiles, SdfSweepCurve[] sweepCurves, float[]? maskSlopes, HashSet<int>? rawExcerptShapes, out List<float> chainFactors, out float[]? reliefCharges, out float[]? shapeStepScales) {
         chainFactors = AnalyzeChainLipschitz(
             convexPolygonProfiles: convexPolygonProfiles,
             instructions: instructions,
@@ -146,6 +144,8 @@ public sealed partial class SdfProgram {
         var scopeDepth = 0;
         var reliefPointFactors = AnalyzeReliefPointFactors(instructions: instructions);
         var chainIndex = 0;
+        var readsMagnitude = FindMagnitudeReaders(instructions: instructions);
+        shapeStepScales = null;
 
         reliefCharges = ((reliefPointFactors.Length == 0) ? null : new float[instructions.Length]);
 
@@ -162,9 +162,16 @@ public sealed partial class SdfProgram {
 
             switch (SdfFieldOps.CompositionLipschitzOf(value: instruction.Op)) {
                 case SdfCompositionLipschitzAction.ShapeBlend: {
+                        var factor = chainFactors[chainIndex];
+
+                        if (!readsMagnitude[index] && (factor > 1f) && !(rawExcerptShapes?.Contains(item: index) ?? false)) {
+                            shapeStepScales ??= new float[instructions.Length];
+                            shapeStepScales[index] = (1f / factor);
+                            factor = 1f;
+                        }
                         accumulator = ComposeLipschitz(
                             blend: instruction.Blend,
-                            candidate: chainFactors[chainIndex],
+                            candidate: factor,
                             current: accumulator
                         );
                         break;
@@ -205,7 +212,7 @@ public sealed partial class SdfProgram {
                         // The scope's own bound becomes a BAKED per-candidate scale: Data1.y = 1/L_scope, applied by
                         // mapCore/mapGradCore (and the CPU evaluator) to the scope's field at the pop — a positively
                         // scaled distance keeps its zero set, and (1/L)·f of an L-Lipschitz f is exactly 1-Lipschitz,
-                        // so the scope's warps/relief stop taxing the GLOBAL step scale. A factor-1 scope writes
+                        // so the scope's warps and relief are accounted for before composition. A factor-1 scope writes
                         // Data1.y = 0, which reads as no scale. The lane is this pass's alone: it is written whatever the
                         // caller supplied, so neither a hand-packed scale nor one an excerpt carried from a larger scope
                         // reaches the kernels.
@@ -244,9 +251,8 @@ public sealed partial class SdfProgram {
         }
 
         // stepScale = 1 / max(L, 1), clamped to (0, 1]. A warp-free, seam-free program composes
-        // nothing but factor-1 candidates through max-only arms, so L == 1 exactly and this returns 1.0f to the bit
-        // (max(1,1) = 1, 1/1 = 1). A non-finite accumulator is refused, never clamped: the shader reads a non-positive
-        // step scale as "no clamp", and a silent floor would hide the authored warp that overflowed it.
+        // nothing but factor-1 candidates through max-only arms, so L == 1 exactly. Refuse an overflow before
+        // publishing a query certificate.
         if (!float.IsFinite(f: accumulator)) {
             throw new InvalidOperationException(message: $"The program's Lipschitz accumulator became non-finite ({accumulator}); an authored warp's factor overflowed.");
         }

@@ -308,7 +308,7 @@ public sealed partial class SdfFieldEvaluator {
                         break;
                     }
                 case SdfCertificateChainAction.ShapeBlend: {
-                        if (!instruction.Detail) {
+                        if (!instruction.Detail && (instruction.ScopeScale == 0L)) {
                             reaches[index] = chain.Certify(instruction: in instruction);
                         }
 

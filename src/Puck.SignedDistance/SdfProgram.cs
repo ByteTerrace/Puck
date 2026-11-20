@@ -6,16 +6,14 @@ namespace Puck.SignedDistance;
 
 // Packed layout (each element is one uvec4 = 16 bytes); KEEP IN SYNC with Shaders/Sdf/isa/sdf-world.interface.hlsli sdfWords[] indexing:
 //   word[0]             = (instructionCount, materialCount, dataOffset, materialOffset) in uvec4 units
-//   [1 .. 1+N)          = instruction headers (op, shape, blend, material)
+//   [1 .. 1+N)          = instruction headers (op, shape, blend, material). ResetPoint uses the shape and blend
+//                         lanes for the length and key of a shared prefix.
 //   [dataOffset ..)     = instruction data, 2 uvec4 per instruction (data0, data1 as float bits)
 //   [dataOffset + 2*instructionCount ..) = the per-SHAPE bounding-sphere table, 2 uvec4 per instruction:
-//                         b0 = center/offset.xyz + radius (float bits), b1 = (mode, dynamicSlot, index, index+1).
-//   [.. + 2*instructionCount ..) = the SEGMENT directory: one (segmentCount, stepScale, rigidPlanOffset, 0) header uvec4, then 2
+//                         b0 = center/offset.xyz + radius (float bits), b1 = (mode, dynamicSlot, clamp, 0).
+//   [.. + 2*instructionCount ..) = the SEGMENT directory: one (segmentCount, 0, rigidPlanOffset, 0) header uvec4, then 2
 //                         uvec4 per segment — s0 = center/offset.xyz + radius (float bits), s1 = (mode, dynamicSlot,
-//                         first, end) — the chain-level skip map()'s outer loop walks. The header's .y lane (float
-//                         bits) is the per-PROGRAM Lipschitz STEP SCALE (1/L, AnalyzeLipschitz): mapCore multiplies
-//                         its FINAL returned distance by it so sphere tracing cannot overstep a non-1-Lipschitz warp
-//                         (twist/bend) or an overestimating blend and hole — == 1.0 for an isometric program. Both
+//                         first, end) — the chain-level skip map()'s outer loop walks. Both
 //                         tables' offsets derive from word[0]'s instruction count and data offset. See PackBounds.
 //   [.. + 1 + 2*segmentCount ..) = the INSTANCE directory: one (instanceCount, partProgramOffset, 0, 0) header uvec4,
 //                         then 2 uvec4 per instance — i0 = bound center/offset.xyz + radius (float bits), i1 = (mode,
@@ -151,7 +149,8 @@ public sealed partial class SdfProgram {
     /// <param name="sampledBindings">Each sampled instruction's field (<see cref="SampledFields"/>).</param>
     /// <param name="glyphAtlas">The content identity of the atlas pixels the glyph shapes sample (<see cref="GlyphAtlas"/>).</param>
     /// <param name="glyphStroke">The thinnest stroke the glyph shapes are taken to have (<see cref="GlyphStroke"/>).</param>
-    private SdfProgram(IReadOnlyList<SdfInstruction> instructions, SdfAppearanceOutline appearance, IReadOnlyList<SdfInstanceRange>? instances, IReadOnlyList<(int InstructionIndex, Vector2[] Vertices)>? convexPolygonProfiles, IReadOnlyList<SdfSweepCurve>? sweepCurves, IReadOnlyList<SdfCompiledPath>? paths, int reservedPathWords, IReadOnlyList<SdfSampledBinding>? sampledBindings, ulong glyphAtlas, float glyphStroke) {
+    /// <param name="rawExcerptShapes">In an excerpt, the shape indices whose source candidates the full field reads unscaled.</param>
+    private SdfProgram(IReadOnlyList<SdfInstruction> instructions, SdfAppearanceOutline appearance, IReadOnlyList<SdfInstanceRange>? instances, IReadOnlyList<(int InstructionIndex, Vector2[] Vertices)>? convexPolygonProfiles, IReadOnlyList<SdfSweepCurve>? sweepCurves, IReadOnlyList<SdfCompiledPath>? paths, int reservedPathWords, IReadOnlyList<SdfSampledBinding>? sampledBindings, ulong glyphAtlas, float glyphStroke, HashSet<int>? rawExcerptShapes = null) {
         ArgumentNullException.ThrowIfNull(instructions);
         ArgumentOutOfRangeException.ThrowIfNegative(reservedPathWords);
         if (!float.IsFinite(f: glyphStroke) || (glyphStroke < 0f)) {
@@ -199,10 +198,11 @@ public sealed partial class SdfProgram {
         ValidatePaths();
         BindSampledFields();
 
-        var instructionOwners = ValidatePackedContract(
+        var (instructionOwners, ranges) = ValidatePackedContract(
             instancesParamName: nameof(instances),
             instructionsParamName: nameof(instructions)
         );
+        m_rootFrames = FindRootFrames(instructionOwners: instructionOwners, ranges: ranges);
 
         InstancesComposable = CanTracePartsIndependently();
 
@@ -214,7 +214,7 @@ public sealed partial class SdfProgram {
         // The Lipschitz pass PATCHES scoped PopField instructions in place (Data1.y gains the scope's 1/L candidate
         // scale), so it runs before packing: the packed words and the typed stream describe one program. A warp-free,
         // seam-free program gets exactly 1.0f, and a factor-1 scope stays unpatched (Data1.y = 0 reads as no scale).
-        var stepScale = AnalyzeLipschitz(chainFactors: out var chainFactors, convexPolygonProfiles: m_convexPolygonProfiles, instructions: m_instructions, maskSlopes: ReliefMaskSlopes(), reliefCharges: out var reliefCharges, sweepCurves: m_sweepCurves);
+        StepScale = AnalyzeLipschitz(chainFactors: out var chainFactors, convexPolygonProfiles: m_convexPolygonProfiles, instructions: m_instructions, maskSlopes: ReliefMaskSlopes(), rawExcerptShapes: rawExcerptShapes, reliefCharges: out var reliefCharges, shapeStepScales: out m_shapeStepScales, sweepCurves: m_sweepCurves);
 
         FieldScopeClamps = ReadFieldScopeClamps(instructionOwners: instructionOwners);
 
@@ -226,7 +226,7 @@ public sealed partial class SdfProgram {
         );
 
         // The bounds analysis runs FIRST: the segment directory's length is part of the packed layout below.
-        var (shapeBounds, segments) = AnalyzeBounds(instructionOwners: instructionOwners);
+        var (shapeBounds, segments) = AnalyzeBounds(instructionOwners: instructionOwners, ranges: ranges);
         var rigidPlan = CompileRigidPlan(segments: segments);
         var partPrograms = CompilePartPrograms();
 
@@ -356,6 +356,10 @@ public sealed partial class SdfProgram {
             m_words[(headerBase + InstructionShapeLane)] = instruction.Shape;
             m_words[(headerBase + InstructionBlendLane)] = instruction.Blend;
             m_words[(headerBase + InstructionMaterialLane)] = instruction.Material;
+            if ((m_rootFrames is { } rootFrames) && (rootFrames[index] is { Length: > 0 } root)) {
+                m_words[(headerBase + InstructionShapeLane)] = ((uint)root.Length);
+                m_words[(headerBase + InstructionBlendLane)] = ((uint)root.Key);
+            }
 
             var dataBase = ((dataOffsetVectors + (InstructionDataVectors * index)) * WordsPerVector);
 
@@ -382,7 +386,6 @@ public sealed partial class SdfProgram {
             segmentOffsetVectors: segmentOffsetVectors,
             segments: segments,
             shapeBounds: shapeBounds,
-            stepScale: stepScale,
             rigidPlanOffsetVectors: rigidPlanOffsetVectors,
             rigidSegments: rigidPlan.Segments
         );
@@ -466,30 +469,15 @@ public sealed partial class SdfProgram {
     /// past the supplied per-frame transform table. Equals one plus the highest <see cref="SdfOp.TransformDynamic"/>
     /// or dynamic-instance slot, or 0 for a static program.</summary>
     public int RequiredDynamicTransformCapacity { get; }
-    /// <summary>Gets the unscoped shape chain that binds <see cref="StepScale"/> below 1 (the largest-factor chain outside
-    /// every field scope), or <see langword="null"/> when no unscoped chain carries a factor above 1. The cost-sheet
-    /// read-back behind <c>world.budget</c>: a frame-wide march tax names the instance and shape that levy it.</summary>
+    /// <summary>Gets the largest unscaled shape or relief contribution at the root, when there is one. The query
+    /// diagnostic in <c>world.budget</c> uses it to name the instruction and instance behind a shortened march step.</summary>
     public SdfStepScaleBinder? StepScaleBinder { get; }
     /// <summary>Gets each non-unit clamp baked into a field scope, in instruction order. A shared scope applies
     /// its clamp to all its shapes. Empty means no scope clamps, not necessarily a unit global step scale.</summary>
     public IReadOnlyList<SdfFieldScopeClamp> FieldScopeClamps { get; }
-    /// <summary>Gets the per-program Lipschitz step scale (1/L, in (0, 1]) baked into the packed words — read back here
-    /// from the segment-directory header's <c>.y</c> lane, which the packed stream makes the single source of truth.
-    /// <c>mapCore</c> (field/sdf-map.hlsli) multiplies its final returned distance by it so sphere tracing takes
-    /// field-rate-safe steps through a non-1-Lipschitz warp (twist/bend) or an overestimating blend without
-    /// overstepping and holing. Exactly <c>1.0f</c> for a warp-free, seam-free (isometric) program, so
-    /// isometric scenes stay byte-identical. See <see cref="AnalyzeLipschitz"/>. The <c>&gt; 0</c> guard mirrors the
-    /// shader: an all-zero header lane reads as 1.0.</summary>
-    public float StepScale {
-        get {
-            var raw = BitConverter.UInt32BitsToSingle(value: m_words[(SegmentDirectoryWord() + SegmentStepScaleLane)]);
-
-            return ((raw > 0f)
-                ? raw
-                : 1.0f
-            );
-        }
-    }
+    /// <summary>Gets the CPU query's residual Lipschitz multiplier for a magnitude-reading root field.
+    /// Shape and scope clamps already applied by the evaluator are accounted for in this bound.</summary>
+    public float StepScale { get; }
     /// <summary>Gets the packed 32-bit words uploaded to the GPU.</summary>
     public ReadOnlySpan<uint> Words => m_words;
 
@@ -1176,20 +1164,27 @@ public sealed partial class SdfProgram {
     }
     // Packs the analysis into the two word-stream tables: the per-shape table (2 uvec4 per INSTRUCTION, only shape
     // records populated) and the segment directory (a count header, then 2 uvec4 per segment).
-    private void PackBounds(int boundsOffsetVectors, int segmentOffsetVectors, List<BoundRecord> shapeBounds, List<BoundRecord> segments, float stepScale, int rigidPlanOffsetVectors, RigidSegmentPlan[] rigidSegments) {
+    private void PackBounds(int boundsOffsetVectors, int segmentOffsetVectors, List<BoundRecord> shapeBounds, List<BoundRecord> segments, int rigidPlanOffsetVectors, RigidSegmentPlan[] rigidSegments) {
         foreach (var record in shapeBounds) {
             WriteBound(
                 entryBase: ((boundsOffsetVectors + (BoundRecordVectors * record.Instruction)) * WordsPerVector),
-                record: record
+                // Only a segment directory record carries an instruction range. A shape uses this lane for its clamp.
+                record: record with { Instruction = 0, End = 0 }
             );
+        }
+        if (m_shapeStepScales is { } scales) {
+            for (var index = 0; index < scales.Length; index++) {
+                if (!(scales[index] > 0f)) { continue; }
+
+                var metadata = (boundsOffsetVectors + (BoundRecordVectors * index) + 1) * WordsPerVector;
+
+                m_words[metadata + BoundShapeStepScaleLane] = BitConverter.SingleToUInt32Bits(value: scales[index]);
+            }
         }
 
         var segmentHeaderBase = (segmentOffsetVectors * WordsPerVector);
 
         m_words[(segmentHeaderBase + SegmentCountLane)] = ((uint)segments.Count);
-        // The header's .y carries the final field's Lipschitz correction; .z locates the rigid plan directory.
-        // KEEP IN SYNC with sdfLoadProgramLayout in field/sdf-layout.hlsli.
-        m_words[(segmentHeaderBase + SegmentStepScaleLane)] = BitConverter.SingleToUInt32Bits(value: stepScale);
         // Absolute uint4 offset of the plan directory, which follows the world-segment list.
         m_words[(segmentHeaderBase + SegmentRigidPlanLane)] = ((uint)rigidPlanOffsetVectors);
 

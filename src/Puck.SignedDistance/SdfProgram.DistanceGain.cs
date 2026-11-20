@@ -108,7 +108,7 @@ public sealed partial class SdfProgram {
                     if (!TryCompose(
                         accumulator: ref scopes[depth],
                         blend: ((SdfBlendOp)instruction.Blend),
-                        candidate: new DistanceBound(Gain: (shapeGain * chain), Sag: 0f),
+                        candidate: new DistanceBound(Gain: (shapeGain * chain * ShapeStepScaleAt(instructionIndex: cursor)), Sag: 0f),
                         optional: instruction.Detail,
                         smoothRadius: instruction.Data1.X
                     )) { return default; }
