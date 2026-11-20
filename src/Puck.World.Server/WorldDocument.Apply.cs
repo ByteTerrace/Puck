@@ -514,12 +514,11 @@ public sealed partial class WorldDocument {
             try {
                 var change = (request.Delta ?? WorldReloadDelta.Between(previous: m_revision.Definition, next: next));
 
-                if (!change.TryMergeOver(m_revision.Definition, next, priorDefinition, out var merged, out conflicts, out var mergeReason)) {
+                if (!change.TryMergeOver(m_revision.Definition, next, priorDefinition, out var merged, out conflicts, out journalPatch, out var mergeReason)) {
                     RejectRebuild(connectionId: connectionId, correlationId: correlationId, reason: mergeReason, verb: verb);
                     return false;
                 }
                 candidate = merged;
-                journalPatch = change.AcceptedPatch(priorDefinition, candidate);
             } catch (InvalidDataException exception) {
                 RejectRebuild(connectionId: connectionId, correlationId: correlationId, reason: exception.Message, verb: verb);
                 return false;

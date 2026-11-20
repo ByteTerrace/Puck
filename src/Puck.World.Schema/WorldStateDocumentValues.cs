@@ -42,6 +42,10 @@ public sealed class WorldLiveValues(Func<ArenaTime> clock) {
 /// </remarks>
 public static class WorldStateDocumentValues {
     private static readonly WorldDocumentWalker Walker = new(isSurface: static type => typeof(IDocumentStateValue).IsAssignableFrom(c: type));
+    [SideTable("The live binder records the authored object it copied without changing its serialized value.")]
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<object, object> BindingSources = new();
+
+    internal static object SourceOfBinding(object value) => BindingSources.TryGetValue(value, out var source) ? source : value;
     // The rows each definition's document values name, collected once per definition. A rewrite can drop a reference
     // (a flattening) but never add one, so a set collected earlier is never missing a row the definition names.
     private static readonly Puck.Abstractions.CodeDerivedTable<WorldDefinition, HashSet<string>> ReferencedRowSets = new();
@@ -174,6 +178,9 @@ public static class WorldStateDocumentValues {
         public void Left(object value, object rewritten) {
             if (!rewritten.GetType().IsValueType) {
                 _ = Kept.Add(item: rewritten);
+                if (!ReferenceEquals(value, rewritten)) {
+                    BindingSources.AddOrUpdate(rewritten, SourceOfBinding(value));
+                }
             }
         }
         public object Replace(object value, WorldDocumentSite site) {

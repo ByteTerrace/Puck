@@ -97,7 +97,7 @@ public static class WorldDocumentBasis {
     private static readonly string[] RowKeyPrecedence = ["id", "name", "key", "index", "grantee+capability+subject"];
     private const char CompositeKeySeparator = '+';
 
-    internal static Dictionary<JsonNode, int> IndexRows(JsonArray list, string key, out string duplicate) {
+    internal static Dictionary<JsonNode, int> IndexRows(IList<JsonNode?> list, string key, out string duplicate) {
         var rows = new Dictionary<JsonNode, int>(list.Count, DocumentValueEqualityComparer.Instance);
         var firstDuplicate = int.MaxValue;
         duplicate = string.Empty;
@@ -218,46 +218,50 @@ public static class WorldDocumentBasis {
                 continue;
             }
 
-            if (TypeDiscriminatorsDiffer(
-                basis: basisObject,
-                overlay: targetObject
-            )) {
-                delta.Add(value: targetObject.DeepClone());
-
-                continue;
-            }
-
-            var rowDelta = DiffObject(
-                basis: basisObject,
-                target: targetObject
-            );
-
-            CopyRowIdentity(
-                key: key,
-                source: targetObject,
-                target: rowDelta
-            );
-            delta.Add(value: rowDelta);
+            delta.Add(DiffKeyedRow(key, basisObject, targetObject));
         }
 
         foreach (var basisRow in basis) {
             var basisObject = ((JsonObject)basisRow!);
 
             if (!targetRows.ContainsKey(key: RowIdentity(key: key, row: basisObject)!)) {
-                var tombstone = new JsonObject();
-
-                CopyRowIdentity(
-                    key: key,
-                    source: basisObject,
-                    target: tombstone
-                );
-                tombstone[propertyName: DropMemberName] = true;
-                delta.Add(value: tombstone);
+                delta.Add(DiffKeyedRow(key, basisObject, null));
             }
         }
 
         return delta;
     }
+
+    private static JsonObject DiffKeyedRow(string key, JsonObject? basis, JsonObject? target) {
+        if (target is null) {
+            var tombstone = new JsonObject();
+            CopyRowIdentity(basis!, tombstone, key);
+            tombstone[DropMemberName] = true;
+            return tombstone;
+        }
+        if (basis is null || TypeDiscriminatorsDiffer(basis, target)) { return (JsonObject)target.DeepClone(); }
+
+        var delta = DiffObject(basis, target);
+        CopyRowIdentity(target, delta, key);
+        return delta;
+    }
+
+    internal static bool TryDiffReloadRow(string key, JsonObject? live, JsonObject? next, string path, out JsonObject delta) {
+        delta = DiffKeyedRow(key, live, next);
+        try {
+            var list = live is null ? new JsonArray() : new JsonArray(live.DeepClone());
+            var result = MergeList(list, new JsonArray(delta.DeepClone()), path, origins: null, consume: false);
+            return next is null ? result.Count == 0 : result.Count == 1 && Puck.Abstractions.Documents.OrderedJson.Equals(result[0], next);
+        } catch (JsonException) {
+            return false;
+        }
+    }
+
+    internal static string RowPath(string path, string key, JsonNode identity) => $"{path}[{key}={DescribeKey(identity)}]";
+
+    private static readonly HashSet<string> RowKeyMembers = new(RowKeyPrecedence.SelectMany(key => key.Split(CompositeKeySeparator)), StringComparer.Ordinal);
+
+    internal static bool IsRowKeyMember(string name) => RowKeyMembers.Contains(name);
     private static JsonObject DiffObject(JsonObject basis, JsonObject target) {
         // Member-wise merging keeps surviving basis keys and appends new ones. Replace just this object when that
         // sequence cannot express the target, including a pure key reorder inside an otherwise unchanged row.
@@ -341,7 +345,7 @@ public static class WorldDocumentBasis {
     }
     // Whether a delta object replaces its target whole rather than merging into it member by member.
     internal static bool ReplacesObject(JsonObject delta) => IsTrue(node: delta[propertyName: ReplaceMemberName]);
-    private static bool HasDuplicateKey(JsonArray list, string key, out string duplicate) {
+    private static bool HasDuplicateKey(IList<JsonNode?> list, string key, out string duplicate) {
         _ = IndexRows(list, key, out duplicate);
         return duplicate.Length != 0;
     }
@@ -376,7 +380,7 @@ public static class WorldDocumentBasis {
             parsed
         );
     }
-    private static bool ListCarriesKey(JsonArray list, string key) {
+    private static bool ListCarriesKey(IList<JsonNode?> list, string key) {
         if (list.Count == 0) {
             return false;
         }
@@ -902,7 +906,7 @@ public static class WorldDocumentBasis {
     /// <param name="key">The shared identity member, or empty.</param>
     /// <param name="ambiguity">The duplicate identity refusal, or empty when the lists simply have no shared key.</param>
     /// <returns>Whether both lists can be matched by one unique identity.</returns>
-    public static bool TryFindRowKey(JsonArray basis, JsonArray overlay, out string key, out string ambiguity) {
+    public static bool TryFindRowKey(IList<JsonNode?> basis, IList<JsonNode?> overlay, out string key, out string ambiguity) {
         key = string.Empty;
         ambiguity = string.Empty;
 
@@ -1041,11 +1045,14 @@ public static class WorldDocumentBasis {
     /// <returns>The merged value.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="path"/> or <paramref name="conflicts"/> is
     /// <see langword="null"/>.</exception>
-    public static JsonNode? MergeThree(JsonNode? previous, JsonNode? live, JsonNode? next, string path, ICollection<string> conflicts) {
+    public static JsonNode? MergeThree(JsonNode? previous, JsonNode? live, JsonNode? next, string path, ICollection<string> conflicts) =>
+        MergeThree(previous, live, next, path, conflicts, countReloadRows: false);
+
+    internal static JsonNode? MergeThree(JsonNode? previous, JsonNode? live, JsonNode? next, string path, ICollection<string> conflicts, bool countReloadRows) {
         ArgumentNullException.ThrowIfNull(argument: path);
         ArgumentNullException.ThrowIfNull(argument: conflicts);
 
-        return MergeThree(previous: new Side(Node: previous, Present: true), live: new Side(Node: live, Present: true), next: new Side(Node: next, Present: true), path: path, conflicts: conflicts, row: false).Node;
+        return MergeThree(previous: new Side(Node: previous, Present: true), live: new Side(Node: live, Present: true), next: new Side(Node: next, Present: true), path: path, conflicts: conflicts, row: false, countReloadRows: countReloadRows).Node;
     }
 
     // A member's value on one side of a three-way merge, or its absence.
@@ -1057,11 +1064,17 @@ public static class WorldDocumentBasis {
     }
 
     // A row is merged whole: both sides changing it is one conflict, whatever members each changed.
-    private static Side MergeThree(Side previous, Side live, Side next, string path, ICollection<string> conflicts, bool row) {
+    private static Side MergeThree(Side previous, Side live, Side next, string path, ICollection<string> conflicts, bool row, bool countReloadRows) {
+        if (row) {
+            if (countReloadRows) { WorldBootWork.Count(WorldBootWork.ReloadRowsMerged); }
+            if (!SourceWinsRow(previous.Node, live.Node, next.Node, out var conflict)) { return live.Copy(); }
+            if (conflict) { conflicts.Add(path); }
+            return next.Copy();
+        }
         if (previous.Same(other: next)) { return live.Copy(); }
         if (previous.Same(other: live) || live.Same(other: next)) { return next.Copy(); }
 
-        if (!row && (previous.Node is JsonObject previousObject) && (live.Node is JsonObject liveObject) && (next.Node is JsonObject nextObject) &&
+        if ((previous.Node is JsonObject previousObject) && (live.Node is JsonObject liveObject) && (next.Node is JsonObject nextObject) &&
             !TypeDiscriminatorsDiffer(basis: previousObject, overlay: liveObject) && !TypeDiscriminatorsDiffer(basis: previousObject, overlay: nextObject) &&
             !IsTrue(node: liveObject[ReplaceMemberName]) && !IsTrue(node: nextObject[ReplaceMemberName])) {
             var merged = new JsonObject();
@@ -1074,7 +1087,8 @@ public static class WorldDocumentBasis {
                     next: Side.Of(name: name, owner: nextObject),
                     path: $"{path}.{name}",
                     previous: Side.Of(name: name, owner: previousObject),
-                    row: false
+                    row: false,
+                    countReloadRows: countReloadRows
                 );
 
                 if (member.Present) { merged[name] = member.Node; }
@@ -1101,9 +1115,10 @@ public static class WorldDocumentBasis {
                     conflicts: conflicts,
                     live: new Side(Node: liveRow, Present: true),
                     next: RowOf(index: nextIndex, identity: identity, rows: nextRows),
-                    path: $"{path}[{key}={DescribeKey(value: identity)}]",
+                    path: RowPath(path, key, identity),
                     previous: RowOf(index: previousIndex, identity: identity, rows: previousRows),
-                    row: true
+                    row: true,
+                    countReloadRows: countReloadRows
                 ));
             }
             foreach (var nextRow in nextRows) {
@@ -1114,9 +1129,10 @@ public static class WorldDocumentBasis {
                         conflicts: conflicts,
                         live: Side.Absent,
                         next: new Side(Node: nextRow, Present: true),
-                        path: $"{path}[{key}={DescribeKey(value: identity)}]",
+                        path: RowPath(path, key, identity),
                         previous: RowOf(index: previousIndex, identity: identity, rows: previousRows),
-                        row: true
+                        row: true,
+                        countReloadRows: countReloadRows
                     ));
                 }
             }
@@ -1125,6 +1141,13 @@ public static class WorldDocumentBasis {
 
         conflicts.Add(item: path);
         return next.Copy();
+    }
+
+    internal static bool SourceWinsRow(JsonNode? previous, JsonNode? live, JsonNode? next, out bool conflict) {
+        conflict = false;
+        if (Puck.Abstractions.Documents.OrderedJson.Equals(previous, next) || Puck.Abstractions.Documents.OrderedJson.Equals(live, next)) { return false; }
+        conflict = !Puck.Abstractions.Documents.OrderedJson.Equals(previous, live);
+        return true;
     }
 
     /// <summary>Returns the pointer a node of a composed tree stands at in one of the layers composed into it, so a

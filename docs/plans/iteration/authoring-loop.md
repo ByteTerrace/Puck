@@ -261,10 +261,10 @@ members the current vocabulary accepts.
   their member bytes (`WorldReloadDelta.Between` over
   `WorldDefinitionMembers`). The authority reconstructs the next revision off
   its tick (`WorldRebuildPreparation`), merges it over the live document
-  (`WorldReloadDelta.TryMergeOver`, the source winning and naming each row both
-  changed), validates the result once and installs it by which root members
-  changed (`WorldDocument.ReloadInstallKindOf`): a colour edit is a
-  presentation install with no rule compile. The sender still serializes both
+  (`WorldReloadDelta.TryMergeOver`, which keeps unchanged live rows and names
+  every row both sides changed and the source won), validates the result once
+  and installs it by which root members changed (`WorldDocument.ReloadInstallKindOf`).
+  A colour edit is a presentation install with no rule compile. The sender still serializes both
   revisions once to slice them. A file reload adds its accepted overlay to
   the undo journal and preserves body poses and unrelated live edits.
 - **`world.watch on`** (`WorldSourceWatch`) polls the stamps of every file
@@ -771,9 +771,9 @@ a session with edits does not replay (replay), a spelling costs more to tune
 
 Each step names the reading that shows it worked. The loop clock
 (`world.iteration`) is the instrument: it already counts a loop's compiles,
-compositions, root members merged, documents read and validations, and a count
-a check names that it does not yet report is added to it, never to a second
-instrument. Step 9 needs nothing from the others and can start at any time;
+compositions, root members composed, keyed rows merged on reload, documents
+read and validations. Add new counts here when a check needs them. Step 9
+needs nothing from the others and can start at any time;
 the rest follow the order given unless a step says otherwise.
 
 Steps 1 and 2 are built. The three bookkeeping costs are gone
@@ -799,14 +799,11 @@ stage order is in [the duplicates](#duplicates-to-remove).
    by the reload's sender from two composed revisions rather than emitted by
    the session from the rows that moved, so the sender still reads the whole
    next revision into the typed model and draws it
-   (`WorldDefinitionLoader.TryLoadFileForEdit`). The authority also merges a
-   whole member three ways whenever the live document holds any of its rows
-   bound to live state: `WorldReloadDelta.TryMergeOver` takes the next
-   revision's member only when the live member is the revision's own instance,
-   and binding gives each row that reads state a new one. In the debug world 27
-   of the creations are bound, so a one-colour save writes, merges and reads
-   again the whole creation roster; a merge by row, taking the next revision's
-   row wherever the live row is the revision's row or its binding, removes it.
+   (`WorldDefinitionLoader.TryLoadFileForEdit`). The authority's keyed merge
+   and the undo patch now consider only the changed rows in an ordinary keyed
+   overlay (`WorldDefinitionMembers.MergeReload`). A live row that is the source
+   revision's own row or its binding counts as unchanged. `world.boot.reload-rows-merged`
+   measures this work separately from source composition.
    *Check:* for a one-value
    edit, the first after a boot included, the session's counters read one
    source lowered, a handful of rows merged and no whole-document
@@ -816,10 +813,10 @@ stage order is in [the duplicates](#duplicates-to-remove).
    the reload boundary. The authority merges the change over the live
    document, names conflicts where the source wins and records the accepted
    overlay as one undo entry. The merged document holds the live document's
-   own instance of every row the edit left alone, because
-   `WorldDefinitionMembers.Replace` resolves the value it read before sharing it
-   with the basis, so a row bound to live state keeps its instance. Presentation
-   delivery therefore carries only the changed creation and shade rows, and
+   own instance of every row the edit left alone. The keyed merge adopts only
+   changed rows, and `WorldDefinitionMembers.Replace` shares unchanged rows after
+   reading and resolving a replacement. Presentation delivery therefore
+   carries only the changed creation and shade rows, and
    value delivery uses changed snapshot rows. `world.undo` of a presentation
    edit is a presentation install too: the dropped journal tail is composed
    again over the restored document, and when it changed only creations in

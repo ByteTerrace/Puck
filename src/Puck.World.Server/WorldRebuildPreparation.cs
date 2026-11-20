@@ -61,13 +61,13 @@ internal sealed record WorldRebuildPreparation(WorldRebuildRequest Request, Prin
             if (!Operator) {
                 failure = "world.reload requires the operator";
             } else if (!delta.TryReconstruct(Revision, out var next, out var deltaReason) ||
-                !delta.TryMergeOver(Revision, next, Live, out var candidate, out var conflicts, out deltaReason)) {
+                !delta.TryMergeOver(Revision, next, Live, out var candidate, out var conflicts, out var accepted, out deltaReason)) {
                 failure = deltaReason;
             } else {
                 var kind = WorldDocument.ReloadInstallKindOf(candidate: candidate, live: Live, rows: out var rows);
 
                 reload = new WorldReloadPreparation(Candidate: candidate, Conflicts: conflicts, Kind: kind, Live: Live, Next: next, Revision: Revision, Rows: rows, Validated: false) {
-                    JournalPatch = kind == WorldInstallKind.Nothing ? null : delta.AcceptedPatch(Live, candidate)
+                    JournalPatch = kind == WorldInstallKind.Nothing ? null : accepted
                 };
             }
         }

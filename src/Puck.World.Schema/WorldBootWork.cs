@@ -54,6 +54,9 @@ public sealed class WorldBootWork : WorkLedger<WorkCounterSet> {
     /// document composed whole, and only the members a changed layer writes differently when a held composition is
     /// recomposed by layer.</summary>
     public static WorkKind CompositionMembers { get; } = Registry.Declare(name: "world.boot.composition-members", unit: "count", workClass: WorkClass.Pacing);
+
+    /// <summary>Gets the kind counting keyed rows considered by a source reload's three-way merge.</summary>
+    public static WorkKind ReloadRowsMerged { get; } = Registry.Declare("world.boot.reload-rows-merged", "count", WorkClass.Pacing);
     /// <summary>Gets the documents read while compiling a source, including its inherited basis declarations. A
     /// held compile performs none of this work.</summary>
     public static WorkKind CompileDocumentsRead { get; } = Registry.Declare(name: "world.boot.compile-documents-read", unit: "count", workClass: WorkClass.Pacing);

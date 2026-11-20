@@ -291,10 +291,10 @@ rows, [the checks](#checks) below are owed.
   composes to that revision's content pin as unchanged without parsing or
   sending it, and otherwise cuts the delta between the two revisions
   (`WorldReloadDelta.Between`). The authority reconstructs the next revision
-  (`TryReconstruct`) and merges it over the live document (`TryMergeOver`): a
-  member the session has not changed takes the source's, and any other merges
-  three ways, the source winning each row both changed. The verdict names those
-  rows and the members the reload changed.
+  (`TryReconstruct`) and merges it over the live document (`TryMergeOver`). An
+  ordinary keyed overlay visits the rows it changes, preserving the instances of
+  unchanged live rows. The source wins whenever both sides changed the same row
+  differently. The verdict names those rows and the members the reload changed.
 - **Undo follows the accepted edit.** A local file reload appends the overlay
   that actually installed to the same journal as console mutations
   (`WorldJournalEntry.TryCompose`). An unchanged reload advances the source
@@ -348,7 +348,8 @@ rows, [the checks](#checks) below are owed.
   load, its text check and the delta (`[world.reload] source`), then the
   authority's reconstruction, validation and install (`[world.rebuild]`).
   The loop's own `world.iteration` line counts the source work beside its
-  stages (compiles, compositions, the root members merged, documents read and
+  stages (compiles, compositions, root members composed, keyed rows merged on
+  reload, documents read and
   validations), so a reading of seconds and a reading of work come from one
   loop.
 
