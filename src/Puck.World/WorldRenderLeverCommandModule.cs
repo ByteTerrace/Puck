@@ -57,7 +57,7 @@ public sealed partial class WorldRenderLeverCommandModule(WorldRenderSettings se
             ? "on"
             : "off")} dynamic-resolution={(settings.DynamicResolution
             ? "on"
-            : "off")} render-scale={RenderScaleName(scale: settings.RenderScale)} upscale={UpscaleSharpnessName(sharpness: settings.UpscaleSharpness)} sky={SkyQualityName(tier: settings.SkyQuality)} sky-field-scale={settings.SkyFieldScale.ToString(format: "0.###", provider: CultureInfo.InvariantCulture)} indirect={settings.IndirectTier.ToString().ToLowerInvariant()} distant-shadows={DistantShadowsName(map: settings.DistantShadows)} far-shadows={FarShadowsName(rate: settings.FarShadows)}]";
+            : "off")} render-scale={RenderScaleName(scale: settings.RenderScale)} upscale={UpscaleSharpnessName(sharpness: settings.UpscaleSharpness)} sky={SkyQualityName(tier: settings.SkyQuality)} sky-field-scale={settings.SkyFieldScale.ToString(format: "0.###", provider: CultureInfo.InvariantCulture)} indirect={settings.IndirectTier.ToString().ToLowerInvariant()} distant-shadows={DistantShadowsName(map: settings.DistantShadows)} far-shadows={FarShadowsName(rate: settings.FarShadows)} views-rate={(settings.ViewsRate ?? SdfViewsRate.Full).MaxRate} tile-size={(settings.ViewsRate ?? SdfViewsRate.Full).TileSize}]";
     }
     // The distant shadow map's spelling in an echo: off, or its reach, texels, light tolerance and the frames a redraw spans.
     private static string DistantShadowsName(WorldDistantShadows? map) => ((map is { } value)
@@ -366,6 +366,8 @@ public sealed partial class WorldRenderLeverCommandModule(WorldRenderSettings se
             name: WorldSessionLevers.SkyQuality,
             a: ((double)preset.Sky)
         );
+        var rate = preset.ViewsRate ?? SdfViewsRate.Full;
+        SubmitLever(link, principal, WorldSessionLevers.ViewsRate, rate.MaxRate, b: rate.TileSize);
         SubmitLever(link, principal, WorldSessionLevers.SkyFieldScale, preset.SkyFieldScale);
         SubmitLever(link, principal, WorldSessionLevers.BloomQuality, ((double)preset.Bloom));
         SubmitLever(link, principal, WorldSessionLevers.RayQueries, (preset.RayQueries ? 1.0 : 0.0));

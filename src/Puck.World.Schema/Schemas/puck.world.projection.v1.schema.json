@@ -343,6 +343,28 @@
               "additionalProperties": false,
               "default": null,
               "title": "WorldFarShadows"
+            },
+            "viewsRate": {
+              "description": "The maximum shared shading footprint and classification tile size. Absent shades every pixel.",
+              "type": [
+                "object",
+                "null"
+              ],
+              "properties": {
+                "maxRate": {
+                  "description": "Shading samples are at most this many pixels apart along each axis.",
+                  "type": "integer",
+                  "default": 1
+                },
+                "tileSize": {
+                  "description": "Edge length of the region that must qualify together.",
+                  "type": "integer",
+                  "default": 8
+                }
+              },
+              "additionalProperties": false,
+              "default": null,
+              "title": "SdfViewsRate"
             }
           },
           "required": [
@@ -491,6 +513,10 @@
             "farShadows": {
               "$ref": "#/properties/render/properties/low/properties/farShadows",
               "default": null
+            },
+            "viewsRate": {
+              "$ref": "#/properties/render/properties/low/properties/viewsRate",
+              "default": null
             }
           },
           "required": [
@@ -638,6 +664,10 @@
             },
             "farShadows": {
               "$ref": "#/properties/render/properties/low/properties/farShadows",
+              "default": null
+            },
+            "viewsRate": {
+              "$ref": "#/properties/render/properties/low/properties/viewsRate",
               "default": null
             }
           },
@@ -12132,6 +12162,10 @@
                   "farShadows": {
                     "$ref": "#/properties/render/properties/low/properties/farShadows",
                     "default": null
+                  },
+                  "viewsRate": {
+                    "$ref": "#/properties/render/properties/low/properties/viewsRate",
+                    "default": null
                   }
                 },
                 "required": [
@@ -12276,6 +12310,28 @@
           "additionalProperties": false,
           "default": null,
           "title": "WorldFarShadows"
+        },
+        "viewsRate": {
+          "description": "The maximum shared shading footprint and classification tile size. Absent shades every pixel.",
+          "type": [
+            "object",
+            "null"
+          ],
+          "properties": {
+            "maxRate": {
+              "description": "Shading samples are at most this many pixels apart along each axis.",
+              "type": "integer",
+              "default": 1
+            },
+            "tileSize": {
+              "description": "Edge length of the region that must qualify together.",
+              "type": "integer",
+              "default": 8
+            }
+          },
+          "additionalProperties": false,
+          "default": null,
+          "title": "SdfViewsRate"
         }
       },
       "additionalProperties": false,

@@ -1,4 +1,4 @@
-// Generated from shader interface 'sdf-world' (sha256/653c1c308f4893b0b89244bd5b70c942122b8855a3ae375751ea88755b95b064). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'sdf-world' (sha256/05fe855c69d23dfde46d1cc97a83719ed53e94eb18e7096d83881fa1e9981aeb). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SDF_WORLD
 #define PUCK_SHADER_INTERFACE_SDF_WORLD
 
@@ -242,11 +242,12 @@ struct SdfWorldPass {
     [[vk::offset(1356)]] uint _pad1356;
     [[vk::offset(1360)]] float3 viewUp;
     [[vk::offset(1372)]] uint viewportCount;
-    [[vk::offset(1376)]] uint workCounterRow;
-    [[vk::offset(1380)]] uint workCounterRowDetail;
-    [[vk::offset(1384)]] uint _pad1384;
-    [[vk::offset(1388)]] uint _pad1388;
-    [[vk::offset(1392)]] float4 worldLanes;
+    [[vk::offset(1376)]] uint4 viewsRate;
+    [[vk::offset(1392)]] uint workCounterRow;
+    [[vk::offset(1396)]] uint workCounterRowDetail;
+    [[vk::offset(1400)]] uint _pad1400;
+    [[vk::offset(1404)]] uint _pad1404;
+    [[vk::offset(1408)]] float4 worldLanes;
 };
 [[vk::binding(0, 3)]] ConstantBuffer<SdfWorldPass> passGroupIsaE29704FA : register(b0, space3);
 #define passGroup passGroupIsaE29704FA
@@ -277,6 +278,7 @@ struct SdfWorldPass {
 [[vk::binding(56, 3)]] StructuredBuffer<uint> sdfShadeTiles : register(t56, space3);
 [[vk::binding(57, 3)]] RWStructuredBuffer<uint> sdfShadeTilesRW : register(u57, space3);
 [[vk::binding(58, 3)]] RWStructuredBuffer<uint> sdfShadeArgumentsRW : register(u58, space3);
+[[vk::binding(59, 3)]] StructuredBuffer<uint> historySurface : register(t59, space3);
 
 // The pushed index: Vulkan push constants at offset 0, Direct3D 12 root constants at register b0, space 4.
 struct SdfWorldPushedIndex {

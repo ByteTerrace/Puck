@@ -3,7 +3,7 @@
 // representative pixel of the cell, and written into the cell's probe record; views then reads the record for every pixel
 // of the cell whose receiver is compatible with the representative's, and gathers for itself only where it is not
 // (sdfViewsProbesAt). The gather is the expensive part of the lookup (each corner's angular surface test), while the
-// cube reads that follow it stay per pixel, along each pixel's own shading normal and mirror direction.
+// cube reads that follow it stay per shading sample, along each pixel's own shading normal and mirror direction.
 //
 // What a reused gather may differ in: the representative's trilinear shares, facing fade and surface visibility, taken at
 // a receiver within SdfViewsProbeReach of the pixel's, on the same tangent plane within SdfViewsProbePlane and facing within
@@ -19,7 +19,7 @@
 // 2 to 9: the sixteen corner weights as UNORM16, corner 2k in the low half of word 2 + k and corner 2k + 1 in its high half.
 // 10: the chosen stage's share as UNORM16 in bits 0 to 15, its measured flag in bit 16, the remainder's in bit 17, the
 //     representative's pixel within the cell (x + SDF_VIEWS_PROBE_RATE * y) in bits 18 to 25, and in bit 26 whether a
-//     representative was gathered at all (a cell with no pixel that wants the lookup holds none).
+//     representative was gathered at all (a cell with no pixel that wants the lookup holds none). Bits 27..28 select shared shading along x and y.
 #ifndef PASSES_SDF_VIEWS_PROBES_HLSLI
 #define PASSES_SDF_VIEWS_PROBES_HLSLI
 #include "../shade/sdf-mesh-irradiance.hlsli"
@@ -41,6 +41,7 @@ static const uint SdfViewsProbeStateWord = 10u;
 static const uint SdfViewsProbeMeasured = (1u << 16u);
 static const uint SdfViewsProbeRemainderMeasured = (1u << 17u);
 static const uint SdfViewsProbeLaneShift = 18u;
+static const uint SdfViewsRateShift = 27u;
 static const uint SdfViewsProbePresent = (1u << 26u);
 
 // Whether a pixel shades with the irradiance volume: a hit of an ordinary material in a view that shades finally, or any
@@ -65,9 +66,10 @@ uint sdfViewsProbeRecord(uint2 cell, uint viewIndex) {
 #if defined(SDF_VIEWS_PROBES_PASS)
 // Writes a cell's record: the representative's gather and its pixel within the cell, or with `present` false a cell
 // whose every record word but the state is left as it was.
-void sdfViewsProbesStore(uint record, SdfMeshProbes probes, uint lane, bool present) {
+void sdfViewsProbesStore(uint record, SdfMeshProbes probes, uint lane, bool present, uint rateMask) {
+    uint rate = rateMask << SdfViewsRateShift;
     if (!present) {
-        sdfViewsProbeRecordBuffer[record + SdfViewsProbeStateWord] = 0u;
+        sdfViewsProbeRecordBuffer[record + SdfViewsProbeStateWord] = rate;
         return;
     }
     sdfViewsProbeRecordBuffer[record] = probes.cage;
@@ -80,7 +82,7 @@ void sdfViewsProbesStore(uint record, SdfMeshProbes probes, uint lane, bool pres
     }
     sdfViewsProbeRecordBuffer[record + SdfViewsProbeStateWord] = ((uint)round(saturate(probes.share) * 65535.0)
         | (probes.measured ? SdfViewsProbeMeasured : 0u) | (probes.remainderMeasured ? SdfViewsProbeRemainderMeasured : 0u)
-        | (lane << SdfViewsProbeLaneShift) | SdfViewsProbePresent);
+        | (lane << SdfViewsProbeLaneShift) | SdfViewsProbePresent | rate);
 }
 #else
 // Reads a cell's gather; false for a cell with no representative.
