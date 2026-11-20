@@ -260,6 +260,7 @@ public readonly record struct BodyMotionSection(
 /// <param name="UpNeedsReseat">Whether the next solved gravity direction reseats the up axis.</param>
 /// <param name="FieldUpTurnRemainder">The solved-field up-turn accumulator's remainder.</param>
 /// <param name="ContactUpTurnRemainder">The contact-normal up-turn accumulator's remainder.</param>
+/// <param name="IdleSleepGravity">The acceleration a sleeping kit last observed, or null for ordinary kit gravity.</param>
 /// <param name="AsleepSinceTick">The simulation tick the body fell asleep at, or 0 while awake.</param>
 /// <param name="SleepIdleTicks">The idle engine ticks accumulated toward the sleep floor.</param>
 /// <param name="RigidSleepRootPlusOne">Zero while awake; otherwise one plus the root slot of the parked island.</param>
@@ -273,6 +274,7 @@ public readonly record struct BodyClocksSection(
     bool UpNeedsReseat,
     long FieldUpTurnRemainder,
     long ContactUpTurnRemainder,
+    FixedVector3? IdleSleepGravity,
     ulong AsleepSinceTick,
     ulong SleepIdleTicks,
     int RigidSleepRootPlusOne,
@@ -287,7 +289,9 @@ public readonly record struct BodyClocksSection(
     /// <inheritdoc/>
     public static void Write(WireWriter writer, in BodyClocksSection section) {
         writer.WriteFixedQuaternion(value: section.Frame);
-        writer.WriteBoolean(value: section.UpNeedsReseat);
+        var flags = (byte)((section.UpNeedsReseat ? 1 : 0) | (section.IdleSleepGravity.HasValue ? 2 : 0));
+        writer.WriteByte(value: flags);
+        if (section.IdleSleepGravity is { } gravity) { writer.WriteFixedVector(value: gravity); }
         writer.WriteInt64(value: section.FieldUpTurnRemainder);
         writer.WriteInt64(value: section.ContactUpTurnRemainder);
         writer.WriteUInt64(value: section.AsleepSinceTick);
@@ -302,19 +306,25 @@ public readonly record struct BodyClocksSection(
         writer.WriteUInt64(value: section.RigidRestingHoldTicks);
     }
     /// <inheritdoc/>
-    public static BodyClocksSection Read(ref WireReader reader) => new(
-        Frame: reader.ReadFixedQuaternion(),
-        UpNeedsReseat: reader.ReadBoolean(),
-        FieldUpTurnRemainder: reader.ReadInt64(),
-        ContactUpTurnRemainder: reader.ReadInt64(),
-        AsleepSinceTick: reader.ReadUInt64(),
-        SleepIdleTicks: reader.ReadUInt64(),
-        RigidSleepRootPlusOne: reader.ReadInt32(),
-        OrdinaryAdvanceAdmitted: reader.ReadBoolean(),
-        ContinuumConsumedThroughEngineTick: reader.ReadOptional(readValue: static (ref WireReader r) => r.ReadUInt64()),
-        OverlayRemainingTicks: reader.ReadUInt64(),
-        RigidRestingHoldTicks: reader.ReadUInt64()
-    );
+    public static BodyClocksSection Read(ref WireReader reader) {
+        var frame = reader.ReadFixedQuaternion();
+        var flags = reader.ReadByte();
+        if ((flags & ~3) != 0) { reader.Fail(detail: "unknown body clock flags", refusal: WireRefusal.PayloadMalformed); }
+        return new(
+            Frame: frame,
+            UpNeedsReseat: (flags & 1) != 0,
+            IdleSleepGravity: ((flags & 2) != 0) ? reader.ReadFixedVector() : null,
+            FieldUpTurnRemainder: reader.ReadInt64(),
+            ContactUpTurnRemainder: reader.ReadInt64(),
+            AsleepSinceTick: reader.ReadUInt64(),
+            SleepIdleTicks: reader.ReadUInt64(),
+            RigidSleepRootPlusOne: reader.ReadInt32(),
+            OrdinaryAdvanceAdmitted: reader.ReadBoolean(),
+            ContinuumConsumedThroughEngineTick: reader.ReadOptional(readValue: static (ref WireReader r) => r.ReadUInt64()),
+            OverlayRemainingTicks: reader.ReadUInt64(),
+            RigidRestingHoldTicks: reader.ReadUInt64()
+        );
+    }
 }
 /// <summary>The motion program's Recently-gate clocks, one per gate of the kit's shaping table.</summary>
 /// <param name="Clocks">The clocks, in the table's slot order.</param>

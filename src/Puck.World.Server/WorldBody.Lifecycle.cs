@@ -793,6 +793,7 @@ public sealed partial class WorldBody {
     public void SetGravityField(WorldGravityField? field) {
         if (!ReferenceEquals(objA: m_gravityField, objB: field)) { InvalidateRigidRest(); }
         m_gravityField = field;
+        if (IdleSleepGravity.HasValue && field is not { IsActive: true }) { WakeUp(); }
     }
     /// <summary>Sets the capture latch — a PROJECTION of the owning principal's control-application set, written by
     /// <c>Server.WorldEngagement.SyncLatch</c> alone and never independently: engaged means that set omits this

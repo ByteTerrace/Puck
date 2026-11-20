@@ -103,7 +103,12 @@ public sealed class WorldEventFeed {
     // Region containment, per (regionId, bodyIndex). Keyed by region id (== the carrying placement's Id) rather
     // than a derived ordinal, so a document edit that reorders placements does not silently reinterpret stale state
     // under a reused ordinal — a region's identity is its name, exactly as GrantSubject.Region already keys it.
-    private readonly Dictionary<string, bool[]> m_regionOccupancy = new(comparer: StringComparer.Ordinal);
+    private ulong m_occupancySequence;
+    private sealed record RegionOccupancy(bool[] Bodies) {
+        internal ulong Version { get; set; }
+    }
+    private readonly Dictionary<string, RegionOccupancy> m_regionOccupancy = new(comparer: StringComparer.Ordinal);
+    internal ulong OccupancyVersion(string region) => m_regionOccupancy.GetValueOrDefault(region)?.Version ?? 0UL;
 
     private readonly FixedSweepSphere[] m_collisionBodies;
     private readonly FixedSweepGrid m_collisionGrid;
@@ -576,7 +581,7 @@ public sealed class WorldEventFeed {
                 key: placement.Id,
                 value: out var occupancy
             )) {
-                occupancy = new bool[population.Capacity];
+                occupancy = new RegionOccupancy(new bool[population.Capacity]);
                 m_regionOccupancy[placement.Id] = occupancy;
             }
 
@@ -616,7 +621,7 @@ public sealed class WorldEventFeed {
                 );
 
                 if (EmitTransition(
-                    latch: ref occupancy[body],
+                    latch: ref occupancy.Bodies[body],
                     now: inside,
                     onClear: new WorldEventEdge(
                         Family: WorldEventFamily.RegionExit,
@@ -632,8 +637,9 @@ public sealed class WorldEventFeed {
                         A: body,
                         B: thisOrdinal
                     )
-                ) && (body < m_seatPlaces.Length)) {
-                    m_seatPlacesStale[body] = true;
+                )) {
+                    occupancy.Version = ++m_occupancySequence;
+                    if (body < m_seatPlaces.Length) { m_seatPlacesStale[body] = true; }
                 }
             }
         }
@@ -725,7 +731,7 @@ public sealed class WorldEventFeed {
         CollisionPending: [.. m_collisionPending.Order()],
         SeatOccupied: [.. m_seatOccupied],
         Overlapping: [.. m_overlapping.OrderBy(keySelector: static pair => pair.A).ThenBy(keySelector: static pair => pair.B)],
-        RegionOccupancy: [.. m_regionOccupancy.Select(selector: static pair => (pair.Key, ((bool[])pair.Value.Clone())))],
+        RegionOccupancy: [.. m_regionOccupancy.Select(selector: static pair => (pair.Key, ((bool[])pair.Value.Bodies.Clone())))],
         Links: [.. m_links.Select(selector: static pair => new WorldEventLinkState(
                 Adjacency: pair.Key,
                 DeliveredTick: pair.Value.DeliveredTick,
@@ -808,8 +814,8 @@ public sealed class WorldEventFeed {
         key: placementId,
         value: out var occupancy
     ) &&
-        (((uint)body) < ((uint)occupancy.Length)) &&
-        occupancy[body]
+        (((uint)body) < ((uint)occupancy.Bodies.Length)) &&
+        occupancy.Bodies[body]
     );
     /// <summary>Returns whether the adjacency row named <paramref name="adjacencyName"/> is currently dropped — the
     /// link pass's own latched verdict as of the most recent <see cref="Collect"/> (set on the tick the staleness
@@ -897,7 +903,7 @@ public sealed class WorldEventFeed {
 
         var count = 0;
 
-        foreach (var occupied in occupancy) {
+        foreach (var occupied in occupancy.Bodies) {
             if (occupied) {
                 count++;
             }
@@ -958,7 +964,7 @@ public sealed class WorldEventFeed {
         }
         m_regionOccupancy.Clear();
         foreach (var row in checkpoint.RegionOccupancy) {
-            m_regionOccupancy[row.Region] = ((bool[])row.Occupancy.Clone());
+            m_regionOccupancy[row.Region] = new RegionOccupancy((bool[])row.Occupancy.Clone()) { Version = ++m_occupancySequence };
         }
         // The restored latches may name other places; each seat's is named again at the next collection.
         Array.Fill(array: m_seatPlacesStale, value: true);

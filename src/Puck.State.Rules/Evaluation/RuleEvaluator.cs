@@ -48,10 +48,12 @@ public interface IRuleOwner {
     [Replaces(root: typeof(StateArena))]
     bool TryEvaluateOwn(RuleEvaluator evaluator, CompiledRule rule, RuleLatch latch, RuleLatch.RuleState bindings, ulong stepTicks, out bool applied, out RuleOutcome outcome);
     /// <summary>Returns whether <see cref="TryEvaluateOwn"/> claims a rule: the same answer it gives for that rule on
-    /// every tick. A due list visits a claimed rule every tick, since only the host knows what it reads.</summary>
+    /// every tick. The owner can name its binding dependencies through <see cref="TryScheduleIteration"/>.</summary>
     /// <param name="rule">The compiled rule.</param>
     /// <returns><see langword="true"/> when the host evaluates the rule itself.</returns>
     bool Owns(CompiledRule rule);
+    /// <summary>Names the rows and host facts that determine this owned rule's binding set.</summary>
+    bool TryScheduleIteration(CompiledRule rule, List<int> rows, List<FactRead> facts) => false;
 }
 /// <summary>Evaluates compiled rules over a host: gates in document order, edge latching per binding, bindings
 /// computed before the gate, and one arena journal scope per firing. The evaluator is the evaluation in flight —
@@ -85,11 +87,14 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
 
     /// <summary>Initializes a new evaluator over a host.</summary>
     /// <param name="host">The host every read and write goes through.</param>
-    public RuleEvaluator(IEffectHost host) {
+    /// <param name="additionalFamilies">Latches for additional due-list passes sharing this host's moved-fact feed.</param>
+    public RuleEvaluator(IEffectHost host, params RuleLatch[] additionalFamilies) {
         ArgumentNullException.ThrowIfNull(argument: host);
 
         m_host = host;
         m_owner = (host as IRuleOwner);
+        m_additionalFamilies = additionalFamilies;
+        m_dueLists = new RuleDueList?[additionalFamilies.Length + 1];
     }
 
     /// <inheritdoc/>
@@ -210,6 +215,12 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
             reader: m_host,
             reads: m_readScratch
         );
+        if ((m_owner is { } owner) && owner.Owns(rule: rule)) {
+            var rows = new List<int>();
+            var facts = new List<FactRead>();
+            var tracked = owner.TryScheduleIteration(rule: rule, rows: rows, facts: facts);
+            schedule = schedule with { IterationRows = [.. rows], IterationFacts = [.. facts], IterationVersioned = tracked };
+        }
         var locals = (rule.Locals ?? []);
         var localSchedules = new RuleSchedule[locals.Length];
 
@@ -527,6 +538,8 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
         )
         ) {
             applied = own;
+            // A firing may change a later pair's inputs and another firing restore them before the next drain.
+            m_anyRerun |= ownOutcome == RuleOutcome.Fired;
 
             return ownOutcome;
         }
