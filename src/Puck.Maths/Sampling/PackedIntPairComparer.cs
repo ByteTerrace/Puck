@@ -20,5 +20,5 @@ public sealed class PackedIntPairComparer : IEqualityComparer<long> {
     /// <param name="obj">The packed pair, with either signed or unsigned 32-bit halves.</param>
     /// <returns>A deterministic hash of the pair.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public int GetHashCode(long obj) => unchecked((int)((((ulong)obj) * 0x9E3779B97F4A7C15UL) >> 32));
+    public int GetHashCode(long obj) => unchecked((int)((((ulong)obj) * SplitMix64.GoldenGamma) >> 32));
 }

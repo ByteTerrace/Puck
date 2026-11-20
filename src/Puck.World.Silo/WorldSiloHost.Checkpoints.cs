@@ -159,9 +159,10 @@ public sealed partial class WorldSiloHost {
     // Exponential backoff on engine time, from one second to the ceiling. Checkpointing is operational, never
     // simulation state, so the schedule needs no jitter: one silo owns each row.
     private void DeferCadence(RowBookkeeping bookkeeping) {
-        var delay = Math.Min(
-            val1: (Puck.Maths.FixedTickConversion.TicksPerSecond << Math.Min(val1: bookkeeping.CadenceFailures, val2: 6)),
-            val2: CadenceBackoffCeilingTicks
+        var delay = Puck.Maths.ExponentialBackoff.After(
+            ceiling: CadenceBackoffCeilingTicks,
+            failures: bookkeeping.CadenceFailures,
+            first: Puck.Maths.FixedTickConversion.TicksPerSecond
         );
 
         bookkeeping.CadenceFailures++;

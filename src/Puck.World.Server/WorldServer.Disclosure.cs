@@ -1,5 +1,6 @@
 using Puck.Commands;
 using Puck.World.Protocol;
+using Puck.Maths;
 
 namespace Puck.World.Server;
 
@@ -169,7 +170,7 @@ internal sealed class WorldDeliveryRows {
         if (!passThrough) { AppendRun(span[run..]); }
         if (rows) {
             var changedCount = m_changed.Count;
-            if (m_changedRows.Length < changedCount) { m_changedRows = new int[System.Numerics.BitOperations.RoundUpToPowerOf2((uint)changedCount)]; }
+            if (m_changedRows.Length < changedCount) { m_changedRows = new int[((uint)changedCount).NextPowerOfTwo()]; }
             m_changed.Members.CopyTo(m_changedRows);
             var changedRows = m_changedRows.AsSpan(0, changedCount);
             changedRows.Sort();
@@ -199,7 +200,7 @@ internal sealed class WorldDeliveryRows {
     private void AppendRun(ReadOnlySpan<FieldCellDelta> cells) {
         if (cells.IsEmpty) { return; }
         if ((m_count + cells.Length) > m_cells.Length) {
-            Array.Resize(ref m_cells, (int)System.Numerics.BitOperations.RoundUpToPowerOf2((uint)Math.Max(16, m_count + cells.Length)));
+            Array.Resize(ref m_cells, (int)((uint)Math.Max(16, m_count + cells.Length)).NextPowerOfTwo());
         }
         cells.CopyTo(m_cells.AsSpan(m_count));
         m_count += cells.Length;

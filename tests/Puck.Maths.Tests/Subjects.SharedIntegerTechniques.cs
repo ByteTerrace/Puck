@@ -113,6 +113,27 @@ internal static partial class Subjects {
 
         return null;
     }
+    public static string? ExponentialBackoffSchedule() {
+        // Written out by hand: 250, 500, 1000 then capped at 1000; a first wait above the ceiling is capped; a
+        // doubling that would pass the carrier's top stays at the ceiling.
+        int[] expected = [250, 500, 1000, 1000, 1000];
+        var wait = 0;
+
+        for (var index = 0; (index < expected.Length); index++) {
+            wait = ExponentialBackoff.Next(ceiling: 1000, current: wait, first: 250);
+
+            if (wait != expected[index]) { return $"step {index}: Next gave {wait}, but the schedule holds {expected[index]}"; }
+            if (ExponentialBackoff.After(ceiling: 1000, failures: index, first: 250) != expected[index]) { return $"After {index} failures gave {ExponentialBackoff.After(ceiling: 1000, failures: index, first: 250)}, but the schedule holds {expected[index]}"; }
+        }
+
+        if (ExponentialBackoff.After(ceiling: 1000, failures: int.MaxValue, first: 250) != 1000) { return "a huge failure count leaves the ceiling"; }
+        if (ExponentialBackoff.Next(ceiling: 100, current: 0, first: 400) != 100) { return "a first wait above the ceiling is not capped"; }
+        if (ExponentialBackoff.Next(ceiling: int.MaxValue, current: (int.MaxValue - 1), first: 1) != int.MaxValue) { return "a doubling past the carrier overflowed"; }
+        if (ExponentialBackoff.Next(ceiling: 32, current: 20, first: 1) != 32) { return "a doubling past the ceiling is not capped"; }
+        if (ExponentialBackoff.Next(ceiling: 32, current: 16, first: 1) != 32) { return "a doubling onto the ceiling is not the ceiling"; }
+
+        return null;
+    }
     public static string? SequenceEqualityKeys() {
         var comparer = SequenceEqualityComparer<string>.Instance;
         string[] array = ["a", "b"];

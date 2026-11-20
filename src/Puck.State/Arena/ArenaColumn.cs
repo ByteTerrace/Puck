@@ -1,3 +1,5 @@
+using Puck.Maths;
+
 namespace Puck.State;
 
 /// <summary>One storage column of a <see cref="StateArena"/> — the unit a journal entry names, a rewind restores,
@@ -147,7 +149,7 @@ public static class ArenaColumns {
     /// <param name="size">How many positions the column addresses.</param>
     /// <returns>The column's bytes.</returns>
     public static long StorageBytes(ArenaColumn column, long size) => (column switch {
-        ArenaColumn.Presence or ArenaColumn.LaneRoster => (((size + 63L) / 64L) * sizeof(ulong)),
+        ArenaColumn.Presence or ArenaColumn.LaneRoster => (size.CeilingDivide(divisor: 64L) * sizeof(ulong)),
         ArenaColumn.Vector or ArenaColumn.CellCapacity => 0L,
         ArenaColumn.MemberKey or ArenaColumn.NextSlot or ArenaColumn.PreviousSlot => (size * sizeof(int)),
         ArenaColumn.Behavior or ArenaColumn.ClockSet => size,

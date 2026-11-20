@@ -154,7 +154,7 @@ internal sealed class SdfMeshBakeGpuWork : ISdfGpuWorkClient {
         var samples = batch.Samples;
         var sampleBytes = (ulong)batch.OutputBytes;
         var maskWords = program.InstanceMaskWordCount;
-        var maskBytes = (((ulong)(SdfWorldPackage.MeshBakeBatch * (maskWords + ((maskWords + 31) >> 5)))) * sizeof(uint));
+        var maskBytes = (((ulong)(SdfWorldPackage.MeshBakeBatch * program.InstanceMaskStorageWordCount)) * sizeof(uint));
         var pointBytes = (((ulong)Math.Max(val1: 1, val2: batch.InputRows)) * PointRowBytes);
         var sampledBytes = (((ulong)batch.SampledWords) * sizeof(uint));
         // Every buffer the batch holds is asked for before anything is recorded or written, so a batch the device has

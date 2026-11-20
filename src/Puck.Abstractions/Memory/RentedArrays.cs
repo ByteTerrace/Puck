@@ -1,6 +1,7 @@
 using System.Buffers;
 using System.Numerics;
 using System.Runtime.CompilerServices;
+using Puck.Maths;
 
 namespace Puck.Abstractions.Memory;
 
@@ -77,7 +78,7 @@ public static class RentedArrays {
         if (minimumLength == 0) { return []; }
         var shared = minimumLength <= PooledLengthLimit<T>();
         var references = RuntimeHelpers.IsReferenceOrContainsReferences<T>();
-        var capacity = shared ? (int)BitOperations.RoundUpToPowerOf2((uint)Math.Max(16, minimumLength))
+        var capacity = shared ? (int)((uint)Math.Max(16, minimumLength)).NextPowerOfTwo()
             : references ? minimumLength : ClassLengthOf(minimumLength);
         // An idle array already occupies this memory. Drop its cache charge before the borrower takes it. It may be longer
         // than asked for, and the borrower is charged for the length it holds.
