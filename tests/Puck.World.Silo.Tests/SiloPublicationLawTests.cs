@@ -10,7 +10,8 @@ namespace Puck.World.Silo.Tests;
 
 public sealed class SiloPublicationLawTests {
     // Publication needs a mailbox turn. A handler must return while that mailbox is still unpumped, so the
-    // command thread can answer its next line and reach the turn that actually publishes the definition.
+    // command thread can answer its next line and reach the turn that admits the publication. That turn only admits
+    // it: the definition is encoded and written off the mailbox thread, which is the tick thread.
     [Fact]
     public async Task PublicationReturnsBeforeItsMailboxTurnAndTheNextLineIsAnswered() {
         using var directory = new TemporaryDirectory();
@@ -47,6 +48,6 @@ public sealed class SiloPublicationLawTests {
 
         host.DrainActivationMailbox();
 
-        Assert.True(condition: (store.WriteCount > 0));
+        Assert.True(condition: SpinWait.SpinUntil(condition: () => (store.WriteCount > 0), timeout: TimeSpan.FromSeconds(seconds: 10)));
     }
 }
