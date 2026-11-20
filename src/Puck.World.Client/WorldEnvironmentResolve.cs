@@ -128,43 +128,7 @@ public sealed partial class WorldEnvironmentResolve : IDisposable {
             m_clocks.Moved(mirror: mirror) ||
             BoundSlotMoved(mirror: mirror)
         ) {
-            m_mirror = mirror;
-            m_layers = layers;
-            m_layersRevision = (layers?.Revision ?? 0);
-            m_bound.Clear();
-            m_clocks.Clear();
-            m_integrals.Clear();
-            Write(
-                atmosphere: definition.Render.Atmosphere,
-                environment: definition.Render.Environment,
-                exposure: WorldRenderExposure.Resolve(exposure: definition.Render.Exposure),
-                lighting: m_lighting,
-                mirror: mirror,
-                sky: m_sky
-            );
-            WriteIndirect(mirror, definition.Render.Indirect);
-            m_lanes = Lanes(mirror: mirror, lanes: definition.Render.Lanes);
-            m_exposure = WorldRenderExposure.Held(
-                exposure: definition.Render.Exposure,
-                value: (scalar, field) => Scalar(
-                    fallback: 0f,
-                    field: field,
-                    mirror: mirror,
-                    scalar: scalar,
-                    site: new WorldValueSite(Index: 0, Section: "render.exposure")
-                ),
-                hold: Scalar(
-                    fallback: 0f,
-                    field: WorldValueFields.ExposureHold,
-                    mirror: mirror,
-                    scalar: definition.Render.Exposure?.Hold,
-                    site: new WorldValueSite(Index: 0, Section: "render.exposure")
-                )
-            );
-            m_generation = mirror.Generation;
-            m_resolvedAt = mirror.Revision;
-            m_tick = mirror.Presented;
-            m_resolutions++;
+            ResolveAgain(definition: definition, layers: layers, mirror: mirror);
         } else if ((m_integrals.Count > 0) && (mirror.Presented != m_tick)) {
             AdvanceIntegrals(mirror: mirror);
             m_tick = mirror.Presented;
@@ -190,6 +154,47 @@ public sealed partial class WorldEnvironmentResolve : IDisposable {
         return new WorldResolvedEnvironment(Indirect: m_indirect, Lights: lights, Sky: sky, Exposure: m_exposure, Lanes: m_lanes);
     }
 
+    // The full resolution, apart from Resolve so that the closure over the exposure's mirror is built only when one runs.
+    private void ResolveAgain(WorldDefinition definition, WorldSkyAudition? layers, WorldStateMirror mirror) {
+        m_mirror = mirror;
+        m_layers = layers;
+        m_layersRevision = (layers?.Revision ?? 0);
+        m_bound.Clear();
+        m_clocks.Clear();
+        m_integrals.Clear();
+        Write(
+            atmosphere: definition.Render.Atmosphere,
+            environment: definition.Render.Environment,
+            exposure: WorldRenderExposure.Resolve(exposure: definition.Render.Exposure),
+            lighting: m_lighting,
+            mirror: mirror,
+            sky: m_sky
+        );
+        WriteIndirect(mirror, definition.Render.Indirect);
+        m_lanes = Lanes(mirror: mirror, lanes: definition.Render.Lanes);
+        m_exposure = WorldRenderExposure.Held(
+            exposure: definition.Render.Exposure,
+            state: (Resolver: this, Mirror: mirror),
+            value: static (state, scalar, field) => state.Resolver.Scalar(
+                fallback: 0f,
+                field: field,
+                mirror: state.Mirror,
+                scalar: scalar,
+                site: new WorldValueSite(Index: 0, Section: "render.exposure")
+            ),
+            hold: Scalar(
+                fallback: 0f,
+                field: WorldValueFields.ExposureHold,
+                mirror: mirror,
+                scalar: definition.Render.Exposure?.Hold,
+                site: new WorldValueSite(Index: 0, Section: "render.exposure")
+            )
+        );
+        m_generation = mirror.Generation;
+        m_resolvedAt = mirror.Revision;
+        m_tick = mirror.Presented;
+        m_resolutions++;
+    }
     // The world's render lanes (render.lanes), each resolved through the one binding path; a missing entry reads zero.
     private Vector4 Lanes(WorldStateMirror mirror, IReadOnlyList<BindableScalar>? lanes) {
         if (lanes is null) { return Vector4.Zero; }

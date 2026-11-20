@@ -323,21 +323,25 @@ public sealed record WorldRenderExposure(
             return SdfExposure.Default;
         }
 
-        return ResolveSection(exposure: exposure, value: static (scalar, _, brightest) => Brightest(brightest: brightest, scalar: scalar));
+        return ResolveSection(exposure: exposure, state: false, value: static (_, scalar, _, brightest) => Brightest(brightest: brightest, scalar: scalar));
     }
     /// <summary>Returns the exposure a frame's views map luminance by: each bindable value as the caller resolves it
     /// (a literal, a state cell or keys on a clock), the pinned manual exposure while <paramref name="hold"/> is above
     /// zero.</summary>
+    /// <typeparam name="TState">What <paramref name="value"/> reads, passed to it so the delegate captures nothing.</typeparam>
     /// <param name="exposure">The authored section, or <see langword="null"/>.</param>
+    /// <param name="state">What <paramref name="value"/> reads.</param>
     /// <param name="value">Resolves a bindable value, with the field whose domain bounds it, to its current number; called
     /// only for an authored one.</param>
     /// <param name="hold">The resolved <see cref="Hold"/>, in <c>EV100</c>; zero or less is no hold.</param>
     /// <returns>The exposure.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="value"/> is <see langword="null"/>.</exception>
-    public static SdfExposure Held(WorldRenderExposure? exposure, Func<BindableScalar, WorldValueField, float> value, float hold) {
+    public static SdfExposure Held<TState>(WorldRenderExposure? exposure, TState state, Func<TState, BindableScalar, WorldValueField, float> value, float hold) {
         ArgumentNullException.ThrowIfNull(value);
 
-        var authored = ((exposure is null) ? SdfExposure.Default : ResolveSection(exposure: exposure, value: (scalar, field, _) => value(scalar, field)));
+        var authored = ((exposure is null)
+            ? SdfExposure.Default
+            : ResolveSection(exposure: exposure, state: (State: state, Value: value), value: static (held, scalar, field, _) => held.Value(held.State, scalar, field)));
 
         return ((hold > 0f) ? authored.HeldAt(ev100: hold) : authored);
     }
@@ -351,11 +355,11 @@ public sealed record WorldRenderExposure(
     }
 
     // The section with each authored bindable value through `value`, given its field and whether a lower value brightens.
-    private static SdfExposure ResolveSection(WorldRenderExposure exposure, Func<BindableScalar, WorldValueField, bool, float> value) {
+    private static SdfExposure ResolveSection<TState>(WorldRenderExposure exposure, TState state, Func<TState, BindableScalar, WorldValueField, bool, float> value) {
         var automatic = (exposure.Mode == SdfExposureMode.Auto);
-        float? ev100 = ((exposure.Ev100 is { } ev) ? value(ev, WorldValueFields.ExposureEv100, true) : null);
-        var minimum = ((exposure.Minimum is { } low) ? value(low, WorldValueFields.ExposureMinimum, true) : (automatic ? SdfPhotometry.MinimumEv100 : (ev100 ?? SdfExposure.DefaultEv100)));
-        var maximum = ((exposure.Maximum is { } high) ? value(high, WorldValueFields.ExposureMaximum, false) : (automatic ? SdfPhotometry.MaximumEv100 : (ev100 ?? SdfExposure.DefaultEv100)));
+        float? ev100 = ((exposure.Ev100 is { } ev) ? value(state, ev, WorldValueFields.ExposureEv100, true) : null);
+        var minimum = ((exposure.Minimum is { } low) ? value(state, low, WorldValueFields.ExposureMinimum, true) : (automatic ? SdfPhotometry.MinimumEv100 : (ev100 ?? SdfExposure.DefaultEv100)));
+        var maximum = ((exposure.Maximum is { } high) ? value(state, high, WorldValueFields.ExposureMaximum, false) : (automatic ? SdfPhotometry.MaximumEv100 : (ev100 ?? SdfExposure.DefaultEv100)));
 
         return new SdfExposure(
             Adaptation: (exposure.Adaptation ?? SdfExposure.DefaultAdaptation),
@@ -363,7 +367,7 @@ public sealed record WorldRenderExposure(
             Center: (automatic ? (exposure.Center ?? 0f) : 0f),
             High: (automatic ? (exposure.High ?? 1f) : 1f),
             Low: (automatic ? (exposure.Low ?? 0f) : 0f),
-            Compensation: ((exposure.Compensation is { } compensation) ? value(compensation, WorldValueFields.ExposureCompensation, false) : 0f),
+            Compensation: ((exposure.Compensation is { } compensation) ? value(state, compensation, WorldValueFields.ExposureCompensation, false) : 0f),
             Ev100: (ev100 ?? (automatic ? ((minimum + maximum) / 2f) : SdfExposure.DefaultEv100)),
             Local: (automatic ? (exposure.Local ?? 0f) : 0f),
             Maximum: maximum,

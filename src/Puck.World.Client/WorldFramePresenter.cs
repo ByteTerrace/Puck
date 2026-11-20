@@ -95,6 +95,10 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
     private PresentationRate m_presentationRate;
 
     private readonly Func<string, OverlayResolvedGlyph> m_resolveIcon;
+    // The per-frame delegates over this presenter's methods, converted once: a method group converted at a call site
+    // allocates a new delegate on every frame.
+    private readonly Func<int, NormalizedRect?> m_matteOf;
+    private readonly Func<WorldAnchor, SdfAnchor?> m_resolveLightAnchor;
     private readonly PlayerRoster m_roster;
     // The first-party puck.sdf.v1 document emitter (world.sdf.load) — a SECOND tenant of the same live composition
     // seam m_emitter already exercises, never a parallel composition point (see WorldSdfDocumentEmitter's remarks).
@@ -1508,7 +1512,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
                 ? WorldScreenFraming.Fill(screen: m_engagedViews[0].Screen)
                 : null),
             mattes: ((m_engagedViews.Count > 0)
-                ? MatteOf
+                ? m_matteOf
                 : null),
             panesCover: panesCover,
             rendered: ViewRendered,
@@ -2170,7 +2174,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             definition: m_client.Definition,
             revision: m_client.DefinitionRevision,
             mirror: m_client.StateMirror,
-            resolveLightAnchor: ResolveLightAnchor,
+            resolveLightAnchor: m_resolveLightAnchor,
             shadows: m_settings.ShadowSlots,
             layers: m_settings.SkyLayers,
             shadowSelection: m_deliveredShadows,
@@ -2328,6 +2332,8 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
 
         m_markers = markers;
         m_resolveIcon = resolveIcon;
+        m_matteOf = MatteOf;
+        m_resolveLightAnchor = ResolveLightAnchor;
         m_domains = domains;
         m_environment = new WorldEnvironmentResolve(domains: domains);
 
