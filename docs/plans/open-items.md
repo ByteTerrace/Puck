@@ -3722,6 +3722,8 @@ presentation view. The owner lifted test requirements for this campaign
 (AGENTS.md). A duplicate is
 fixed when found; this packet holds one only between waves. A `.puck` rewrite
 proves itself with `puck compile` lowering to the same document.
+[Code size](code-size.md) holds the measured map, the generator families and
+their lane order; this packet keeps the single duplicates and leads.
 
 - Two mirrors of the boot world's snapshot, both hub subscribers copying every
   entry per tick: `WorldClient` and the boot endpoint's `WorldSessionMirror`
