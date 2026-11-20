@@ -139,11 +139,7 @@ public static partial class AzureCommand {
                 identity: identity
             ).ConfigureAwait(continueOnCapturedContext: false);
 
-            if (
-                (root is { } existing) &&
-                ((existing.Root.FenceToken != Guid.Empty) || (existing.Root.CheckpointHash is not null) ||
-                (existing.Root.JournalHash is not null) || (existing.Root.JournalEntryCount != 0) || (existing.Root.ReceiptHash is not null) || (existing.Root.ReceiptIndexHash is not null))
-            ) {
+            if (root is { Root.HoldsGameplay: true }) {
                 throw new InvalidDataException(message: "bootstrap cannot replace existing authoritative gameplay state");
             }
             var current = await authority.LoadPublishedDefinitionBytesAsync(

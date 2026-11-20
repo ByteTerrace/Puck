@@ -57,6 +57,17 @@ public readonly record struct WorldAuthorityRoot(
     /// enforce that boundary before admission; older root readers refuse this member.</summary>
     [JsonPropertyName("rewindBoundary"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? RewindBoundary { get; init; }
+    /// <summary>Gets whether this root holds gameplay: an activation fence, a checkpoint, a journal or a receipt chain.
+    /// A root holding none names at most a published definition, as the unowned epoch-zero root a definition's first
+    /// publication creates (a release bootstrap, a bootstrap qualification fixture) does.</summary>
+    [JsonIgnore]
+    public bool HoldsGameplay => ((FenceToken != Guid.Empty) || (CheckpointHash is not null) || (JournalHash is not null) ||
+        (JournalEntryCount != 0) || (ReceiptHash is not null) || (ReceiptIndexHash is not null));
+    /// <summary>Gets whether this root is a drain: unowned, with a checkpoint that covers its whole journal, as a source
+    /// release's protected root must be before a release transforms or publishes over it.</summary>
+    [JsonIgnore, System.Diagnostics.CodeAnalysis.MemberNotNullWhen(returnValue: true, member: nameof(CheckpointHash))]
+    public bool IsDrainedCheckpoint => ((FenceToken == Guid.Empty) && (CheckpointHash is not null) && (JournalEntryCount == 0) &&
+        (JournalSequence == CheckpointCoverageSequence));
 }
 /// <summary>A root together with the blob version token that must guard its next CAS.</summary>
 public readonly record struct WorldAuthorityRootSnapshot(WorldAuthorityRoot Root, string VersionToken);

@@ -1009,8 +1009,9 @@ Release Azure prepares the package before deploying it. Deploy automatically
 exports a coherent capture from the active source, preserving admission while
 all hosted rows are captured at one simulation boundary. Immutable fixture
 objects are uploaded before their inventory; the CLI materializes an isolated
-store with exact checkpoints and test signing keys. Bootstrap uses an empty
-fixture built from the package. The source's uncapturable state refuses deployment.
+store with exact checkpoints and test signing keys. Bootstrap uses a fixture
+built from the package: each world's definition published under an unowned root
+and no gameplay state. The source's uncapturable state refuses deployment.
 
 Explicit restore is implemented and undergoing local acceptance. Cloud interruption
 acceptance is still outstanding. Do not treat a successful local qualification
