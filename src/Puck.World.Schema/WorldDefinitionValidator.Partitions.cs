@@ -185,7 +185,7 @@ public static partial class WorldDefinitionValidator {
             name: "captures",
             granularity: WorldValidationGranularity.Section,
             owns: WorldDocumentInputs.Of(WorldDocumentInput.Captures),
-            reads: WorldDocumentInputs.None,
+            reads: WorldDocumentInputs.Of(WorldDocumentInput.Cameras, WorldDocumentInput.Screens, WorldDocumentInput.Views),
             validate: static (run, _) => ValidateCaptures(definition: run.Definition, errors: run.Errors)
         ),
         new(
