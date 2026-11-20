@@ -218,7 +218,7 @@ public sealed class SdfLaneContractLawTests {
             _ => builder.CellDisplace(amplitude: 0.1f, frequency: 1f, mode: SdfCellMode.F1, randomness: 0.2f, seed: 0u),
         };
 
-        var refusal = Assert.Throws<ArgumentException>(testCode: builder.Build);
+        var refusal = Assert.Throws<ArgumentException>(testCode: () => builder.Build());
 
         Assert.Contains(expectedSubstring: $"{relief} at instruction", actualString: refusal.Message, comparisonType: StringComparison.Ordinal);
         Assert.Contains(expectedSubstring: "Repeat", actualString: refusal.Message, comparisonType: StringComparison.Ordinal);
