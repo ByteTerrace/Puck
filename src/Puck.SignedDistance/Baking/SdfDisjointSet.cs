@@ -9,12 +9,15 @@ namespace Puck.SignedDistance.Baking;
 /// table to the collector.
 /// </summary>
 public sealed class SdfDisjointSet : IDisposable {
+    private readonly IAllocationObserver? m_owner;
     private int[] m_parents;
 
     /// <summary>Initializes a new instance of the <see cref="SdfDisjointSet"/> class, each element its own set.</summary>
     /// <param name="count">The number of elements; not negative.</param>
-    public SdfDisjointSet(int count) {
-        m_parents = RentedArrays.Rent<int>(minimumLength: count);
+    /// <param name="owner">The workspace owner charged for the table, or null for an unmetered set.</param>
+    public SdfDisjointSet(int count, IAllocationObserver? owner = null) {
+        m_owner = owner;
+        m_parents = RentedArrays.Rent<int>(minimumLength: count, owner: owner);
 
         for (var element = 0; (element < count); element++) {
             m_parents[element] = element;
@@ -46,6 +49,6 @@ public sealed class SdfDisjointSet : IDisposable {
         var parents = m_parents;
 
         m_parents = [];
-        RentedArrays.Return(array: parents);
+        RentedArrays.Return(array: parents, owner: m_owner);
     }
 }

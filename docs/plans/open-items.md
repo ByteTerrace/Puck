@@ -601,11 +601,10 @@ runtime is [later work](memory-pooling.md). Open beside them:
 
 - [medium] Managed working memory per admitted bake group is not all in a
   group's peak, so the account cannot pace the collections it causes. The
-  field check's projection and the crossing roots are now owned storage
-  charged to the group; the contour's rented workspace and the refinement's
-  per-cell masks (`SdfSampledLattice.Refine`) are not. The cure is moving
-  those into the group's owned storage, not a count cap (in a lane:
-  bake-garbage, which holds the masks and the large rented arrays).
+  field check's projection, the crossing roots, the contour's rented scratch
+  and the refinement's per-cell masks are charged to the group's owner; the
+  stages after the contour (the planar merge, the collapse, chunks, the
+  material cut's builds) still allocate managed arrays no owner claims.
 - [low] The library releases evicted claims, which frees native payloads,
   under its own gate (`SdfMeshLibrary`'s `Retain`), the gate the frame thread
   takes in `Restart` through `TryTake`.

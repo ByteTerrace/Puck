@@ -2,12 +2,14 @@ namespace Puck.Abstractions.Memory;
 
 /// <summary>
 /// A growable run of elements whose storage comes from <see cref="RentedArrays"/>. Spans and references it hands out
-/// are borrows that end at the next append or at disposal, which releases its storage.
+/// are borrows that end at the next append or at disposal, which releases its storage. Under an owner, every array it
+/// holds is charged to that owner, and the list releases each charge as it replaces or disposes the array.
 /// </summary>
 /// <typeparam name="T">The element.</typeparam>
 /// <param name="capacity">The elements the first rented array holds at least.</param>
-public sealed class RentedList<T>(int capacity = 0) : IDisposable {
-    private T[] m_items = RentedArrays.Rent<T>(minimumLength: capacity);
+/// <param name="owner">The workspace owner charged for the list's storage, or null for an unmetered list.</param>
+public sealed class RentedList<T>(int capacity = 0, IAllocationObserver? owner = null) : IDisposable {
+    private T[] m_items = RentedArrays.Rent<T>(minimumLength: capacity, owner: owner);
     private int m_count;
 
     /// <summary>Gets the elements appended since the list was created or last cleared.</summary>
@@ -51,8 +53,8 @@ public sealed class RentedList<T>(int capacity = 0) : IDisposable {
 
         m_items = [];
         m_count = 0;
-        RentedArrays.Return(array: items);
+        RentedArrays.Return(array: items, owner: owner);
     }
 
-    private void Grow(int minimumLength) => m_items = RentedArrays.Grow(array: m_items, keep: m_count, minimumLength: Math.Max(val1: minimumLength, val2: ((int)Math.Clamp(value: (2L * m_items.Length), min: 16L, max: Array.MaxLength))));
+    private void Grow(int minimumLength) => m_items = RentedArrays.Grow(array: m_items, keep: m_count, minimumLength: Math.Max(val1: minimumLength, val2: ((int)Math.Clamp(value: (2L * m_items.Length), min: 16L, max: Array.MaxLength))), owner: owner);
 }
