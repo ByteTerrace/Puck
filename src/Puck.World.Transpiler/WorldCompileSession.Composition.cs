@@ -269,7 +269,6 @@ public sealed partial class WorldCompileSession {
     /// <param name="origins">Optional authored scalar origins. When supplied, even a flat root returns a composed
     /// tree. Reused import images preserve the origins of their authored values.</param>
     /// <param name="composed">The composed tree (basis/imports members stripped) on success.</param>
-    /// <param name="chainBytes">The bytes of every file touched composing the root.</param>
     /// <param name="reason">The one-line refusal reason, or empty on success.</param>
     /// <param name="catalogFingerprint">The stable metadata fingerprint for the selected host catalog.</param>
     /// <param name="catalog">The selected host machine catalog used for provider rewriting, or null for structural composition.</param>
@@ -281,7 +280,6 @@ public sealed partial class WorldCompileSession {
         string rootResolvedPath,
         byte[] rootBytes,
         out JsonObject? composed,
-        out IReadOnlyList<byte[]> chainBytes,
         out string reason,
         string catalogFingerprint = "",
         IMachineValidationCatalog? catalog = null,
@@ -296,7 +294,6 @@ public sealed partial class WorldCompileSession {
         return WorldDefinitionFileSource.TryComposeChainWithImports(
             origins: origins,
             retainRoot: retainRoot,
-            chainBytes: out chainBytes,
             composed: out composed,
             reason: out reason,
             rootBytes: rootBytes,

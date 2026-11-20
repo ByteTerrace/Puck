@@ -137,7 +137,6 @@ public static class WorldStaging {
             catalog: catalog,
             origins: origins,
             retainRoot: false,
-            chainBytes: out _,
             composed: out var composed,
             reason: out reason,
             rootBytes: CanonicalJsonDocument.Serialize(node: world),

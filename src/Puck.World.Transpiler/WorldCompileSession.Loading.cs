@@ -164,7 +164,6 @@ public sealed partial class WorldCompileSession {
         if (!WorldDefinitionFileSource.TryComposeChainBytes(
             catalog: catalog,
             catalogFingerprint: catalogFingerprint,
-            chainBytes: out _,
             composedJson: out var composed,
             reason: out var composeReason,
             rootBytes: document,

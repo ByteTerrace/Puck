@@ -41,7 +41,6 @@ internal static partial class AuthoredGameFixtures {
                 catalog: puckCatalog,
                 rootBytes: rootBytes,
                 rootResolvedPath: path,
-                chainBytes: out _,
                 composed: out var composed,
                 reason: out var composeReason
             ),

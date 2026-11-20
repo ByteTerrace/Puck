@@ -36,8 +36,7 @@ public static partial class WorldDefinitionFileSource {
             serveHeldImage: true,
             source: source,
             stack: out _,
-            touched: out _,
-            touchedPaths: out _
+            touched: out _
         )) {
             return false;
         }
@@ -54,7 +53,7 @@ public static partial class WorldDefinitionFileSource {
     // import layer) — what a derivation-preserving save diffs a target against; `composed` is the final tree.
     // `ancestors` is the resolution path from the top down to (not including) `resolvedPath`: a stack, not a global
     // visited set, so two imports independently reaching the same shared ancestor (a diamond) is never a cycle.
-    private static bool TryComposeLayers(IWorldDocumentSource source, string resolvedPath, byte[] bytes, IReadOnlyList<string> ancestors, bool serveHeldImage, out JsonObject? stack, out JsonObject? composed, out List<byte[]> touched, out List<string> touchedPaths, out int reach, out string reason, string catalogFingerprint = "", IMachineValidationCatalog? catalog = null, WorldDocumentOrigins? origins = null, bool retainImage = true) => TryComposeLayersHeld(
+    private static bool TryComposeLayers(IWorldDocumentSource source, string resolvedPath, byte[] bytes, IReadOnlyList<string> ancestors, bool serveHeldImage, out JsonObject? stack, out JsonObject? composed, out ComposedChain touched, out int reach, out string reason, string catalogFingerprint = "", IMachineValidationCatalog? catalog = null, WorldDocumentOrigins? origins = null, bool retainImage = true) => TryComposeLayersHeld(
         ancestors: ancestors,
         bytes: bytes,
         catalog: catalog,
@@ -70,12 +69,11 @@ public static partial class WorldDefinitionFileSource {
         serveHeldImage: serveHeldImage,
         source: source,
         stack: out stack,
-        touched: out touched,
-        touchedPaths: out touchedPaths
+        touched: out touched
     );
     // The composer as above, also handing back the image the composition was served from or held as (null when none
     // was held). With `parseHeld` false a served image is not parsed: `composed` is null and the image's bytes answer.
-    private static bool TryComposeLayersHeld(IWorldDocumentSource source, string resolvedPath, byte[] bytes, IReadOnlyList<string> ancestors, bool serveHeldImage, bool parseHeld, out JsonObject? stack, out JsonObject? composed, out WorldComposedDocument? image, out List<byte[]> touched, out List<string> touchedPaths, out int reach, out string reason, string catalogFingerprint = "", IMachineValidationCatalog? catalog = null, WorldDocumentOrigins? origins = null, bool retainImage = true) {
+    private static bool TryComposeLayersHeld(IWorldDocumentSource source, string resolvedPath, byte[] bytes, IReadOnlyList<string> ancestors, bool serveHeldImage, bool parseHeld, out JsonObject? stack, out JsonObject? composed, out WorldComposedDocument? image, out ComposedChain touched, out int reach, out string reason, string catalogFingerprint = "", IMachineValidationCatalog? catalog = null, WorldDocumentOrigins? origins = null, bool retainImage = true) {
         // Typed channel nodes are interpreted by alias/export walks before strict deserialization. Their malformed
         // shapes are document refusals here too, including for in-memory composition callers with no file wrapper.
         try {
@@ -95,22 +93,20 @@ public static partial class WorldDefinitionFileSource {
                 serveHeldImage: serveHeldImage,
                 source: source,
                 stack: out stack,
-                touched: out touched,
-                touchedPaths: out touchedPaths
+                touched: out touched
             );
         } catch (JsonException exception) {
             stack = null;
             composed = null;
             image = null;
-            touched = [];
-            touchedPaths = [];
+            touched = new ComposedChain();
             reach = 0;
             reason = $"{WorldDocumentLabel.Of(path: resolvedPath)} contains an invalid document value: {exception.Message.ReplaceLineEndings(replacementText: " ")}";
 
             return false;
         }
     }
-    private static bool TryComposeLayersCore(IWorldDocumentSource source, string resolvedPath, byte[] bytes, IReadOnlyList<string> ancestors, bool serveHeldImage, bool parseHeld, out JsonObject? stack, out JsonObject? composed, out WorldComposedDocument? image, out List<byte[]> touched, out List<string> touchedPaths, out int reach, out string reason, string catalogFingerprint = "", IMachineValidationCatalog? catalog = null, WorldDocumentOrigins? origins = null, bool retainImage = true) {
+    private static bool TryComposeLayersCore(IWorldDocumentSource source, string resolvedPath, byte[] bytes, IReadOnlyList<string> ancestors, bool serveHeldImage, bool parseHeld, out JsonObject? stack, out JsonObject? composed, out WorldComposedDocument? image, out ComposedChain touched, out int reach, out string reason, string catalogFingerprint = "", IMachineValidationCatalog? catalog = null, WorldDocumentOrigins? origins = null, bool retainImage = true) {
         image = null;
 
         var reads = new CompileInputLog();
@@ -118,8 +114,7 @@ public static partial class WorldDefinitionFileSource {
 
         stack = null;
         composed = null;
-        touched = [bytes];
-        touchedPaths = [resolvedPath];
+        touched = new ComposedChain();
         reach = 0;
 
         if (catalog is not null) {
@@ -178,18 +173,18 @@ public static partial class WorldDefinitionFileSource {
             reach: out var heldReach,
             resolvedPath: resolvedPath,
             source: source,
-            touched: out var heldTouched,
-            touchedPaths: out var heldTouchedPaths
+            touched: out var heldTouched
         )
         ) {
             composed = held;
             reach = heldReach;
             touched = heldTouched;
-            touchedPaths = heldTouchedPaths;
             reason = string.Empty;
 
             return true;
         }
+
+        touched.Add(link: new WorldComposedLink(bytes: bytes, path: resolvedPath));
 
         return TryComposeBody(
             ancestors: ancestors,
@@ -208,8 +203,7 @@ public static partial class WorldDefinitionFileSource {
             serveHeldImage: serveHeldImage,
             source: source,
             stack: out stack,
-            touched: touched,
-            touchedPaths: touchedPaths
+            touched: touched
         );
     }
     // Shares TryComposeLayers' cycle/depth walk and basis-then-imports-then-own-body recursion order, but collects
@@ -455,7 +449,7 @@ public static partial class WorldDefinitionFileSource {
         // model only ever sees the finished composition — with the consumed `basis`/`imports` members stripped,
         // which is why a live document's Basis/Imports are always null. The substring gate keeps flat documents on
         // the untouched single-parse path.
-        var chain = ((IReadOnlyList<byte[]>)[bytes]);
+        IReadOnlyList<WorldComposedLink>? chain = null;
 
         if (
             (json.Span.IndexOf(value: "\"basis\""u8) >= 0) ||
@@ -466,7 +460,7 @@ public static partial class WorldDefinitionFileSource {
                 rootResolvedName: PuckPaths.Normalize(path: path),
                 rootBytes: bytes,
                 composedJson: out var composed,
-                chainBytes: out var chainBytes,
+                chain: out var composedChain,
                 reason: out var composeReason,
                 catalogFingerprint: catalogFingerprint,
                 catalog: catalog
@@ -481,13 +475,14 @@ public static partial class WorldDefinitionFileSource {
             // wording.
             if (composed is not null) {
                 json = composed;
-                chain = chainBytes;
+                chain = composedChain;
             }
         }
 
-        var hash = ((chain.Count == 1)
+        // A composition's pin folds the digest of every document it read, each once, the root first.
+        var hash = (((chain is null) || (chain.Count == 1))
             ? ComputeContentHash(content: bytes)
-            : ComputeChainContentHash(chain: chain)
+            : ComputeChainContentHash(chain: [.. chain.Select(selector: static link => link.Digest)])
         );
 
         // The source revision the caller already holds: the composition it would parse is the one it has.
@@ -633,11 +628,10 @@ public static partial class WorldDefinitionFileSource {
     // records: every other source names its documents in a space of its own (an in-memory pair calls them "host"
     // and "fragment"), and nothing else may resolve one of those names onto a file image. With `parse` false the tree is
     // not parsed (`composed` is null): the caller reads the image's bytes, which are checked to hold one JSON object.
-    private static bool TryServeComposedImage(IWorldDocumentSource source, string resolvedPath, string catalogFingerprint, byte[] bytes, IReadOnlyList<string> ancestors, bool parse, out JsonObject? composed, out WorldComposedDocument? image, out List<byte[]> touched, out List<string> touchedPaths, out int reach, WorldDocumentOrigins? origins) {
+    private static bool TryServeComposedImage(IWorldDocumentSource source, string resolvedPath, string catalogFingerprint, byte[] bytes, IReadOnlyList<string> ancestors, bool parse, out JsonObject? composed, out WorldComposedDocument? image, out ComposedChain touched, out int reach, WorldDocumentOrigins? origins) {
         composed = null;
         image = null;
-        touched = [];
-        touchedPaths = [];
+        touched = new ComposedChain();
         reach = 0;
 
         if (
@@ -697,10 +691,7 @@ public static partial class WorldDefinitionFileSource {
             return false;
         }
 
-        foreach (var link in image.Chain) {
-            touched.Add(item: link.Bytes);
-            touchedPaths.Add(item: link.Path);
-        }
+        touched.AddRange(links: image.Chain);
 
         if ((tree is not null) && (origins is not null) && (image.Origins is { } snapshot)) {
             origins.Restore(node: tree, snapshot: snapshot);
@@ -1179,8 +1170,7 @@ public static partial class WorldDefinitionFileSource {
             catalogFingerprint: catalogFingerprint,
             catalog: catalog,
             stack: out _,
-            touched: out _,
-            touchedPaths: out _
+            touched: out _
         );
     }
     /// <summary>Composes <paramref name="path"/>'s basis-and-imports graph, stopping BEFORE its own body — the
@@ -1211,8 +1201,7 @@ public static partial class WorldDefinitionFileSource {
                 catalogFingerprint: catalogFingerprint,
                 catalog: catalog,
                 stack: out var result,
-                touched: out _,
-                touchedPaths: out _
+                touched: out _
             )) {
                 return false;
             }
@@ -1648,7 +1637,7 @@ public static partial class WorldDefinitionFileSource {
                 total += image.ComposedJson.LongLength;
 
                 for (var index = 0; (index < image.Chain.Count); index++) {
-                    total += image.Chain[index].Bytes.LongLength;
+                    total += (image.Chain[index].Bytes?.LongLength ?? 0L);
                 }
             }
 

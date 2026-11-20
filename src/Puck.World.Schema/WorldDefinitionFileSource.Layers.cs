@@ -259,7 +259,7 @@ public static partial class WorldDefinitionFileSource {
     // composer, shaped (relocated, aliased, exports taken), checked against the modules' exports and merged in that
     // order. A composition held by layer reuses every layer whose document composed to the image it composed from, and
     // merges again only the root members a layer shaped afresh writes differently.
-    private static bool TryComposeBody(IWorldDocumentSource source, string resolvedPath, byte[] bytes, IReadOnlyList<string> ancestors, bool serveHeldImage, bool parseHeld, bool retainImage, CompileInputLog reads, List<byte[]> touched, List<string> touchedPaths, ref int reach, out JsonObject? stack, out JsonObject? composed, out WorldComposedDocument? image, out string reason, string catalogFingerprint, IMachineValidationCatalog? catalog, WorldDocumentOrigins? origins) {
+    private static bool TryComposeBody(IWorldDocumentSource source, string resolvedPath, byte[] bytes, IReadOnlyList<string> ancestors, bool serveHeldImage, bool parseHeld, bool retainImage, CompileInputLog reads, ComposedChain touched, ref int reach, out JsonObject? stack, out JsonObject? composed, out WorldComposedDocument? image, out string reason, string catalogFingerprint, IMachineValidationCatalog? catalog, WorldDocumentOrigins? origins) {
         stack = null;
         composed = null;
         image = null;
@@ -321,8 +321,7 @@ public static partial class WorldDefinitionFileSource {
                         reach: reach,
                         resolvedPath: resolvedPath,
                         source: source,
-                        touched: touched,
-                        touchedPaths: touchedPaths
+                        touched: touched
                     );
                 }
 
@@ -370,8 +369,7 @@ public static partial class WorldDefinitionFileSource {
                 serveHeldImage: true,
                 source: source,
                 stack: out _,
-                touched: out var basisTouched,
-                touchedPaths: out var basisTouchedPaths
+                touched: out var basisTouched
             )) {
                 return false;
             }
@@ -407,8 +405,7 @@ public static partial class WorldDefinitionFileSource {
                 val1: reach,
                 val2: (basisReach + 1)
             );
-            touched.AddRange(collection: basisTouched);
-            touchedPaths.AddRange(collection: basisTouchedPaths);
+            touched.AddRange(links: basisTouched.Links);
         }
 
         var imports = new List<Slot>();
@@ -470,8 +467,7 @@ public static partial class WorldDefinitionFileSource {
                     serveHeldImage: true,
                     source: source,
                     stack: out _,
-                    touched: out var importTouched,
-                    touchedPaths: out var importTouchedPaths
+                    touched: out var importTouched
                 )) {
                     return false;
                 }
@@ -556,8 +552,7 @@ public static partial class WorldDefinitionFileSource {
                     imports.Add(item: new Slot(description: importDescription, image: importImage, path: importResolvedName) { Exports = exports, Tree = importTree });
                 }
                 entries.Add(item: (importName, importAlias));
-                touched.AddRange(collection: importTouched);
-                touchedPaths.AddRange(collection: importTouchedPaths);
+                touched.AddRange(links: importTouched.Links);
             }
         }
 
@@ -708,8 +703,7 @@ public static partial class WorldDefinitionFileSource {
                 reach: reach,
                 resolvedPath: resolvedPath,
                 source: source,
-                touched: touched,
-                touchedPaths: touchedPaths
+                touched: touched
             );
         }
         if ((composed is null) && parseHeld) {
