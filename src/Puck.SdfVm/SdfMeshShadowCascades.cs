@@ -161,6 +161,7 @@ public readonly struct SdfMeshShadowCascades {
     /// <exception cref="ArgumentNullException"><paramref name="frame"/> is <see langword="null"/>.</exception>
     public static SdfMeshShadowCascades Fit(SdfFrame frame, int view, int? texels = null, int? distantTexels = null) {
         ArgumentNullException.ThrowIfNull(argument: frame);
+        SdfCadenceWork.ProcessWork.Count(kind: SdfCadenceWork.Fits);
 
         var snapshot = frame.Views[Math.Clamp(value: view, min: 0, max: (frame.Views.Count - 1))];
         var lights = frame.Lights;

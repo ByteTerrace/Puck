@@ -96,6 +96,7 @@ public sealed partial class SdfWorldTables {
     /// <param name="part">The fragment pass name.</param>
     /// <returns>The pass group's input identity.</returns>
     public ulong PassSignature(SdfFrame frame, int view, string part) {
+        SdfCadenceWork.ProcessWork.Count(kind: SdfCadenceWork.Signatures);
         var block = SignatureBlockOf(frame: frame, view: view);
         var composite = Fnv1aHash.Create();
 
@@ -255,6 +256,7 @@ public sealed partial class SdfWorldTables {
     /// <param name="view">The view's index in <see cref="SdfFrame.Views"/>.</param>
     /// <returns>The signature.</returns>
     public ulong ViewSignature(SdfFrame frame, int view) {
+        SdfCadenceWork.ProcessWork.Count(kind: SdfCadenceWork.Signatures);
         var hash = Fnv1aHash.Create();
         var block = SignatureBlockOf(frame: frame, view: view);
         Span<byte> tables = stackalloc byte[sizeof(ulong)];
