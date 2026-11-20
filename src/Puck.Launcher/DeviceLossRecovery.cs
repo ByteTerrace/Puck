@@ -42,17 +42,24 @@ public sealed record PresenterDeviceRebuild(IDeviceLostRecoverable Presenter, Na
 /// through an <see cref="IDeviceRebuild"/>, retrying every <see cref="ReacquireBackoff"/> while the adapter is absent,
 /// for up to <see cref="ReacquireBudget"/>. The fixed-step simulation is never touched. A host gives up when there is
 /// nothing to rebuild through, when the device does not return within the budget, or when
-/// <see cref="MaxConsecutiveRecoveries"/> losses follow one another with no frame produced between them; it has drained
-/// and released the render root, refusing every armed capture, before it gives up, the same as when it recovers.
+/// <see cref="MaxConsecutiveRecoveries"/> losses follow one another with fewer than <see cref="StableFrames"/> frames
+/// produced after each rebuild: a loss the rebuilt device meets again within a few frames (an invalid call the next frame
+/// repeats) continues the streak rather than counting as recovered. It has drained and released the render root,
+/// refusing every armed capture, before it gives up, the same as when it recovers.
 /// </summary>
 public sealed class DeviceLossRecovery {
     /// <summary>The prefix of the console line written to standard error for each loss: <c>[device-lost] reason
     /// 0x…; recovering (attempt n/max)</c>, the reason being the low 32 bits of
-    /// <see cref="DeviceLostException.ReasonCode"/> (a Direct3D 12 removal reason, or a Vulkan result).</summary>
+    /// <see cref="DeviceLostException.ReasonCode"/> (a Direct3D 12 removal reason, or a Vulkan result); a loss within a
+    /// streak adds the frames the previous rebuild produced, and every line ends with what surfaced the loss (the first
+    /// line of the exception's message).</summary>
     public const string LossLinePrefix = "[device-lost]";
-    /// <summary>The most losses recovered from with no frame produced between them before the run gives up, so a
-    /// permanently dead device fails the run rather than spinning.</summary>
+    /// <summary>The most losses in one streak recovered from before the run gives up, so a permanently dead device, or
+    /// one every rebuild loses again, fails the run rather than spinning.</summary>
     public const int MaxConsecutiveRecoveries = 8;
+    /// <summary>The frames a rebuilt device produces before its recovery counts as done and the streak ends; a loss
+    /// before then continues the streak.</summary>
+    public const int StableFrames = 120;
 
     /// <summary>The wait between rebuild attempts while the adapter is absent.</summary>
     public static readonly TimeSpan ReacquireBackoff = TimeSpan.FromMilliseconds(value: 250);
@@ -68,6 +75,8 @@ public sealed class DeviceLossRecovery {
     private readonly Action<string> m_writeLine;
 
     private int m_streak;
+    // The frames produced since the last rebuild, while a streak is open.
+    private int m_framesSinceRebuild;
 
     /// <summary>Initializes a new instance of the <see cref="DeviceLossRecovery"/> class for one host run.</summary>
     /// <param name="logger">The host's logger, which records the reason's detail and the recovery's outcome.</param>
@@ -92,8 +101,8 @@ public sealed class DeviceLossRecovery {
         m_writeLine = writeLine;
     }
 
-    /// <summary>Gets the number of losses recovered from, or being recovered from, since the last produced
-    /// frame.</summary>
+    /// <summary>Gets the number of losses recovered from, or being recovered from, in the current streak: since the
+    /// device last produced <see cref="StableFrames"/> frames after a rebuild.</summary>
     public int Streak => m_streak;
 
     /// <summary>Counts one frame a GPU host is about to produce against the operator's armed loss
@@ -113,9 +122,10 @@ public sealed class DeviceLossRecovery {
             state: rootHostContext
         );
 
-    /// <summary>Records a frame produced on the device, which ends the current streak of losses.</summary>
+    /// <summary>Records a frame produced on the device; the <see cref="StableFrames"/>th since the last rebuild ends the
+    /// current streak of losses.</summary>
     public void NoteFrameProduced() {
-        if (0 == m_streak) {
+        if ((0 == m_streak) || (++m_framesSinceRebuild < StableFrames)) {
             return;
         }
 
@@ -124,6 +134,7 @@ public sealed class DeviceLossRecovery {
             m_streak
         );
         m_streak = 0;
+        m_framesSinceRebuild = 0;
     }
     /// <summary>Recovers from one device loss (see the class summary for the order).</summary>
     /// <param name="deviceLost">The loss the frame surfaced.</param>
@@ -134,10 +145,15 @@ public sealed class DeviceLossRecovery {
     public bool TryRecover(DeviceLostException deviceLost, IDeviceRebuild? rebuild) {
         ArgumentNullException.ThrowIfNull(deviceLost);
 
+        var since = ((m_streak > 0) ? string.Create(provider: CultureInfo.InvariantCulture, handler: $", {m_framesSinceRebuild} frame(s) after the previous rebuild") : string.Empty);
+        var surfaced = deviceLost.Message.AsSpan();
+        var lineEnd = surfaced.IndexOfAny(value0: '\r', value1: '\n');
+
         ++m_streak;
+        m_framesSinceRebuild = 0;
         m_writeLine(string.Create(
             provider: CultureInfo.InvariantCulture,
-            handler: $"{LossLinePrefix} reason 0x{unchecked((uint)deviceLost.ReasonCode):X8}; recovering (attempt {m_streak}/{MaxConsecutiveRecoveries})"
+            handler: $"{LossLinePrefix} reason 0x{unchecked((uint)deviceLost.ReasonCode):X8}; recovering (attempt {m_streak}/{MaxConsecutiveRecoveries}{since}): {((lineEnd < 0) ? surfaced : surfaced[..lineEnd])}"
         ));
 
         var givesUp = ((rebuild is null) || (m_streak > MaxConsecutiveRecoveries));
@@ -151,8 +167,9 @@ public sealed class DeviceLossRecovery {
         } else if (givesUp) {
             m_logger.LogError(
                 exception: deviceLost,
-                message: "Graphics device-loss recovery failed {Count} times in a row (reason 0x{Reason:X}); ending the run.",
+                message: "Graphics device lost {Count} times in a row, each rebuilt device lost again within {Frames} frames (reason 0x{Reason:X}); ending the run.",
                 MaxConsecutiveRecoveries,
+                StableFrames,
                 deviceLost.ReasonCode
             );
         } else {

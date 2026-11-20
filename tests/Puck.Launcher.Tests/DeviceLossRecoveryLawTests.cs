@@ -6,6 +6,7 @@ using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Presentation;
 using Puck.Abstractions.Windowing;
 using Puck.Hosting;
+using Puck.Testing;
 using Xunit;
 
 namespace Puck.Launcher.Tests;
@@ -43,7 +44,7 @@ public sealed class DeviceLossRecoveryLawTests {
         );
         Assert.Equal(
             actual: Assert.Single(collection: rig.Lines),
-            expected: "[device-lost] reason 0x887A0006; recovering (attempt 1/8)"
+            expected: "[device-lost] reason 0x887A0006; recovering (attempt 1/8): hung"
         );
 
         var refusal = Assert.IsType<DeviceLostException>(@object: (await request.Completion).Error);
@@ -86,7 +87,7 @@ public sealed class DeviceLossRecoveryLawTests {
         Assert.True(condition: (rig.Time.Slept < (DeviceLossRecovery.ReacquireBudget + DeviceLossRecovery.ReacquireBackoff)));
     }
     [Fact]
-    public void LossesWithNoFrameBetweenThemEndTheRunPastTheCapAndAFrameEndsTheStreak() {
+    public void LossesSoonAfterEachRebuildEndTheRunPastTheCapAndStableFramesEndTheStreak() {
         var rig = new Rig();
 
         for (var loss = 0; (loss < DeviceLossRecovery.MaxConsecutiveRecoveries); loss++) {
@@ -94,14 +95,22 @@ public sealed class DeviceLossRecoveryLawTests {
                 deviceLost: new DeviceLostException(message: "removed"),
                 rebuild: rig.Rebuild
             ));
+            // A rebuilt device that renders a frame and is lost again has not recovered.
+            rig.Recovery.NoteFrameProduced();
         }
 
+        Assert.Equal(
+            actual: rig.Lines[1],
+            expected: "[device-lost] reason 0x00000000; recovering (attempt 2/8, 1 frame(s) after the previous rebuild): removed"
+        );
         Assert.False(condition: rig.Recovery.TryRecover(
             deviceLost: new DeviceLostException(message: "removed"),
             rebuild: rig.Rebuild
         ));
 
-        rig.Recovery.NoteFrameProduced();
+        for (var frame = 0; (frame < DeviceLossRecovery.StableFrames); frame++) {
+            rig.Recovery.NoteFrameProduced();
+        }
 
         Assert.Equal(
             actual: rig.Recovery.Streak,
@@ -451,7 +460,8 @@ public sealed class DeviceLossRecoveryLawTests {
         public GpuMemoryProfile MemoryProfile => default;
         public GpuMemoryReading MemoryReading => GpuMemoryReading.Absent;
         public void RefreshMemoryReading() { }
-        public GpuDeviceServices Services => throw new NotSupportedException();
+        // An empty retirement, which the loss drains; every other service refuses.
+        public GpuDeviceServices Services { get; } = new RefusingGpuDevice().Services;
 
         // A removed device's drain throws, which the policy tolerates.
         public void WaitIdle() {
@@ -468,7 +478,8 @@ public sealed class DeviceLossRecoveryLawTests {
         public GpuMemoryProfile MemoryProfile => default;
         public GpuMemoryReading MemoryReading => GpuMemoryReading.Absent;
         public void RefreshMemoryReading() { }
-        public GpuDeviceServices Services => throw new NotSupportedException();
+        // An empty retirement, which the loss drains; every other service refuses.
+        public GpuDeviceServices Services { get; } = new RefusingGpuDevice().Services;
 
         public bool RemoveDevice() {
             log.Add(item: "remove");

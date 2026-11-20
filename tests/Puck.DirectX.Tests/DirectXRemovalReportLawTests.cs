@@ -30,7 +30,7 @@ public sealed class DirectXRemovalReportLawTests {
         Assert.All(collection: lines, action: static line => Assert.StartsWith(expectedStartString: DirectXRemovalReport.LinePrefix, actualString: line));
         Assert.Equal(
             actual: lines[0],
-            expected: "[d3d12-dred] device removed, reason 0x887A0005; 2 command lists in the breadcrumb trail, 1 unfinished"
+            expected: "[d3d12-dred] device removed, reason 0x887A0005 (DXGI_ERROR_DEVICE_REMOVED); 2 command lists in the breadcrumb trail, 1 unfinished"
         );
         Assert.Equal(
             actual: lines[1],
@@ -82,6 +82,19 @@ public sealed class DirectXRemovalReportLawTests {
         Assert.Equal(
             actual: DirectXRemovalReport.Format(pageFault: new DirectXPageFault(Address: 16UL, Existing: [], RecentlyFreed: []), reason: 7, trails: null)[^1],
             expected: "[d3d12-dred]   no allocation, live or recently freed, lies at the address"
+        );
+    }
+    [Fact]
+    public void AnInvalidCallRemovalSaysNoGpuRecordHoldsItAndTheDebugLayerNamesIt() {
+        var lines = DirectXRemovalReport.Format(pageFault: null, reason: unchecked((int)0x887A0001), trails: []);
+
+        Assert.Equal(
+            actual: lines,
+            expected: [
+                "[d3d12-dred] device removed, reason 0x887A0001 (DXGI_ERROR_INVALID_CALL); 0 command lists in the breadcrumb trail, 0 unfinished",
+                "[d3d12-dred] the runtime removed the device for an invalid API call, not for GPU work, so no breadcrumb or page fault records it; the debug layer (--debug-layers) names the call in a [d3d12-debug] line",
+                "[d3d12-dred] no page fault recorded",
+            ]
         );
     }
     [Fact]

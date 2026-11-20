@@ -10,8 +10,26 @@ public static class HResultExtensions {
     // DXGI device-removal HRESULTs. A removed, reset or hung device is a recoverable signal, surfaced as the neutral
     // DeviceLostException so the host's device-loss recovery catches it rather than a DirectXException.
     internal const int DxgiErrorDeviceHung = unchecked((int)0x887A0006);
+    internal const int DxgiErrorInvalidCall = unchecked((int)0x887A0001);
     private const int DxgiErrorDeviceRemoved = unchecked((int)0x887A0005);
     private const int DxgiErrorDeviceReset = unchecked((int)0x887A0007);
+    private const int DxgiErrorDriverInternalError = unchecked((int)0x887A0020);
+    private const int OutOfMemory = unchecked((int)0x8007000E);
+
+    /// <summary>Gets the name of a result a removed device reports as its removal reason
+    /// (<c>ID3D12Device::GetDeviceRemovedReason</c>).</summary>
+    /// <param name="result">The result code.</param>
+    /// <returns>The code's name, such as <c>DXGI_ERROR_INVALID_CALL</c>, or <see langword="null"/> for a code that is no
+    /// removal reason named here.</returns>
+    public static string? RemovalReasonName(int result) => result switch {
+        DxgiErrorInvalidCall => "DXGI_ERROR_INVALID_CALL",
+        DxgiErrorDeviceRemoved => "DXGI_ERROR_DEVICE_REMOVED",
+        DxgiErrorDeviceHung => "DXGI_ERROR_DEVICE_HUNG",
+        DxgiErrorDeviceReset => "DXGI_ERROR_DEVICE_RESET",
+        DxgiErrorDriverInternalError => "DXGI_ERROR_DRIVER_INTERNAL_ERROR",
+        OutOfMemory => "E_OUTOFMEMORY",
+        _ => null,
+    };
 
     /// <summary>Returns whether a result reports a removed device: <c>DXGI_ERROR_DEVICE_REMOVED</c>, <c>_RESET</c> or
     /// <c>_HUNG</c>.</summary>

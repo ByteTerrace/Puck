@@ -1,4 +1,5 @@
 using System.Globalization;
+using Puck.DirectX.Interop;
 using Windows.Win32.Graphics.Direct3D12;
 
 namespace Puck.DirectX;
@@ -29,28 +30,32 @@ public static partial class DirectXRemovalReport {
     /// <param name="reason">The device's removal reason (<c>ID3D12Device::GetDeviceRemovedReason</c>).</param>
     /// <param name="trails">The breadcrumb trails, oldest first, or <see langword="null"/> when DRED kept none.</param>
     /// <param name="pageFault">The page fault, or <see langword="null"/> when DRED recorded none.</param>
-    /// <returns>The record's lines: a headline, then each unfinished trail, the finished ones, and the page fault.</returns>
+    /// <returns>The record's lines: a headline naming the reason, a line saying what an invalid-call removal means when
+    /// the reason is <c>DXGI_ERROR_INVALID_CALL</c>, then each unfinished trail, the finished ones, and the page
+    /// fault.</returns>
     public static IReadOnlyList<string> Format(int reason, IReadOnlyList<DirectXBreadcrumbTrail>? trails, DirectXPageFault? pageFault) {
         var lines = new List<string>();
+        var reasonName = ((HResultExtensions.RemovalReasonName(result: reason) is { } name) ? $" ({name})" : string.Empty);
+        var unfinished = (trails?.Where(predicate: static trail => trail.Completed < trail.Operations.Count).ToArray() ?? []);
+        var finished = (trails?.Where(predicate: static trail => trail.Completed >= trail.Operations.Count).ToArray() ?? []);
 
-        if (trails is null) {
-            lines.Add(item: Line(text: $"device removed, reason 0x{reason:X8}; no breadcrumb trail (DRED was off, or the runtime kept none)"));
-        } else {
-            var unfinished = trails.Where(predicate: static trail => trail.Completed < trail.Operations.Count).ToArray();
-            var finished = trails.Where(predicate: static trail => trail.Completed >= trail.Operations.Count).ToArray();
+        lines.Add(item: Line(text: ((trails is null)
+            ? $"device removed, reason 0x{reason:X8}{reasonName}; no breadcrumb trail (DRED was off, or the runtime kept none)"
+            : $"device removed, reason 0x{reason:X8}{reasonName}; {trails.Count} command lists in the breadcrumb trail, {unfinished.Length} unfinished")));
 
-            lines.Add(item: Line(text: $"device removed, reason 0x{reason:X8}; {trails.Count} command lists in the breadcrumb trail, {unfinished.Length} unfinished"));
+        if (reason == HResultExtensions.DxgiErrorInvalidCall) {
+            lines.Add(item: Line(text: "the runtime removed the device for an invalid API call, not for GPU work, so no breadcrumb or page fault records it; the debug layer (--debug-layers) names the call in a [d3d12-debug] line"));
+        }
 
-            foreach (var trail in unfinished) {
-                WriteUnfinished(lines: lines, trail: trail);
-            }
+        foreach (var trail in unfinished) {
+            WriteUnfinished(lines: lines, trail: trail);
+        }
 
-            if (finished.Length > 0) {
-                var named = string.Join(separator: ", ", values: finished.Take(count: FinishedListsNamed).Select(selector: static trail => $"'{trail.CommandList}'"));
-                var more = ((finished.Length > FinishedListsNamed) ? $" and {finished.Length - FinishedListsNamed} more" : string.Empty);
+        if (finished.Length > 0) {
+            var named = string.Join(separator: ", ", values: finished.Take(count: FinishedListsNamed).Select(selector: static trail => $"'{trail.CommandList}'"));
+            var more = ((finished.Length > FinishedListsNamed) ? $" and {finished.Length - FinishedListsNamed} more" : string.Empty);
 
-                lines.Add(item: Line(text: $"finished: {named}{more}"));
-            }
+            lines.Add(item: Line(text: $"finished: {named}{more}"));
         }
 
         if (pageFault is null) {
