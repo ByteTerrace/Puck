@@ -15,12 +15,12 @@ public sealed class IncrementalCompositionLawTests {
     private static Composition Compose(WorldCompileSession session, string root, byte[] bytes) {
         var work = new WorldBootWork();
         using var attribution = WorldBootWork.Attribute(work: work);
-        var composed = WorldDefinitionFileSource.TryComposeChainWithImports(session, root, bytes, out var tree, out var chain, out var reason);
+        var composed = WorldDefinitionFileSource.TryComposeChainBytes(composedJson: out var json, contentPin: out var pin, reason: out var reason, rootBytes: bytes, rootResolvedName: root, source: session);
 
         return new Composition(
             Composed: composed,
-            Hash: (composed ? WorldDefinitionFileSource.ComputeChainContentHash(chain: chain) : string.Empty),
-            Json: tree?.ToJsonString(),
+            Hash: pin,
+            Json: ((json is null) ? null : System.Text.Encoding.UTF8.GetString(bytes: json)),
             Members: work.Read(kind: WorldBootWork.CompositionMembers),
             Reason: reason
         );

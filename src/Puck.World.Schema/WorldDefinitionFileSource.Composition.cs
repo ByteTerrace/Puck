@@ -123,14 +123,29 @@ public static partial class WorldDefinitionFileSource {
     /// <param name="catalog">The explicit machine catalog used for metadata rewriting, or <see langword="null"/>.</param>
     /// <returns><see langword="true"/> when the graph composed (or the root names neither basis nor imports).</returns>
     public static bool TryComposeChainBytes(IWorldDocumentSource source, string rootResolvedName, byte[] rootBytes, out byte[]? composedJson, out string reason, string catalogFingerprint = "", IMachineValidationCatalog? catalog = null) =>
-        TryComposeChainBytes(catalog: catalog, catalogFingerprint: catalogFingerprint, chain: out _, composedJson: out composedJson, reason: out reason, rootBytes: rootBytes, rootResolvedName: rootResolvedName, source: source);
-    // The composition above, also handing back every document it read, each once, the root first (null where
-    // `composedJson` is): what the loader's content pin is taken over.
-    private static bool TryComposeChainBytes(IWorldDocumentSource source, string rootResolvedName, byte[] rootBytes, out byte[]? composedJson, out IReadOnlyList<WorldComposedLink>? chain, out string reason, string catalogFingerprint, IMachineValidationCatalog? catalog) {
+        TryComposeChainBytes(catalog: catalog, catalogFingerprint: catalogFingerprint, composedJson: out composedJson, contentPin: out _, reason: out reason, rootBytes: rootBytes, rootResolvedName: rootResolvedName, source: source);
+    /// <summary>Composes <paramref name="rootBytes"/>' graph exactly as the overload without a pin does, and hands back
+    /// the composition's content pin: what a reload compares to learn that a source still composes to the revision it
+    /// holds.</summary>
+    /// <param name="source">The document byte source basis/import references resolve against.</param>
+    /// <param name="rootResolvedName">The root's own canonical resolved name — seeds cycle detection.</param>
+    /// <param name="rootBytes">The root document's own already-read raw bytes.</param>
+    /// <param name="composedJson">The composed document's compact UTF-8 JSON, as the overload without a pin hands it
+    /// back.</param>
+    /// <param name="contentPin">The pin: over the root's bytes alone when nothing composed
+    /// (<see cref="ComputeContentHash"/>), and otherwise over the digest of every document the composition read, each
+    /// once, the root first (<see cref="ComputeChainContentHash"/>); empty on refusal.</param>
+    /// <param name="reason">The one-line refusal reason, or empty on success.</param>
+    /// <param name="catalogFingerprint">Stable metadata fingerprint used to partition the composition cache.</param>
+    /// <param name="catalog">The explicit machine catalog used for metadata rewriting, or <see langword="null"/>.</param>
+    /// <returns><see langword="true"/> when the graph composed (or the root names neither basis nor imports).</returns>
+    public static bool TryComposeChainBytes(IWorldDocumentSource source, string rootResolvedName, byte[] rootBytes, out byte[]? composedJson, out string contentPin, out string reason, string catalogFingerprint = "", IMachineValidationCatalog? catalog = null) {
+        ArgumentNullException.ThrowIfNull(argument: rootBytes);
+
         var composedOk = TryComposeGraph(
             catalog: catalog,
             catalogFingerprint: catalogFingerprint,
-            chain: out chain,
+            chain: out var chain,
             composed: out var composed,
             composedJson: out var bytes,
             origins: null,
@@ -143,7 +158,11 @@ public static partial class WorldDefinitionFileSource {
         );
 
         composedJson = (bytes ?? ((composed is null) ? null : Compact(members: out _, tree: composed)));
-        if (composedJson is null) { chain = null; }
+        contentPin = (!composedOk
+            ? string.Empty
+            : (((composedJson is null) || (chain is null) || (chain.Count == 1))
+                ? ComputeContentHash(content: rootBytes)
+                : ComputeChainContentHash(chain: [.. chain.Select(selector: static link => link.Digest)])));
 
         return composedOk;
     }

@@ -59,6 +59,7 @@ public sealed partial class WorldCompileSession : IWorldCompositionStore, IWorld
     // What every view of one session shares; a view rooted at an already compiled source (WithRoot) shares it whole.
     private sealed class State(string? directory, PuckSourceTable sources) {
         public string? Directory = directory;
+        public bool DeferCompositionWrites;
 
         public ConcurrentDictionary<string, Lock> Compiling { get; } = new(comparer: StringComparer.Ordinal);
         public ConcurrentDictionary<string, WorldCompiledSource> Held { get; } = new(comparer: StringComparer.Ordinal);
@@ -205,6 +206,11 @@ public sealed partial class WorldCompileSession : IWorldCompositionStore, IWorld
             );
         }
     }
+    /// <summary>Writes this session's composed images to its directory off the thread that composed them from now on,
+    /// one at a time in the order they came: a long-lived host whose reload must not wait for the disk (the World) calls
+    /// this once at startup. A read of a composition waits for the writes queued before it, and the process waits for
+    /// them as it exits; a session that never calls this writes each image as it is held.</summary>
+    public void DeferCompositionWrites() => Volatile.Write(location: ref m_state.DeferCompositionWrites, value: true);
     /// <summary>Compiles <paramref name="source"/> to its canonical world document through this session: its import
     /// walk reads every library through <see cref="Sources"/>, and a basis read for its enums or a test's composed
     /// state composes through this session. The result is the caller's own and is not held; a source on disk that only

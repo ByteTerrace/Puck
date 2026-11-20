@@ -315,6 +315,8 @@ static async Task<int> RunWorldAsync(string[] args, string? script, WorldTestHos
     );
     // A world source compiles once across boots.
     Puck.World.Transpiler.WorldCompileSession.Shared.Persist(directory: caches.Compilations);
+    // A reload's recomposition never waits for its image to reach the disk.
+    Puck.World.Transpiler.WorldCompileSession.Shared.DeferCompositionWrites();
     // Parse the nullable host CLI overrides at the boundary, keeping World's loud typo hard-exits for --backend / --present-
     // mode. A null override means "the document decides" (WorldHostSettings.Resolve coalesces to the authored defaults).
     WorldBackendPreference? backendOverride = null;

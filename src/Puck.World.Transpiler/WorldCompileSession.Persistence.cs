@@ -61,16 +61,12 @@ public sealed partial class WorldCompileSession {
         }
     }
 
-    // Composed images are written off the thread that composed them, one at a time in the order they came: a reload's
-    // recomposition holds its image in memory at once (WorldDefinitionFileSource) and never waits for the disk. A read
-    // of a composition waits for the writes queued before it, and the process waits for them as it ends.
-    private static readonly BoundedWorkQueue<Action> CompositionWrites = CreateCompositionWrites();
+    // A deferring session's composed images (DeferCompositionWrites) are written here, off the thread that composed
+    // them, one at a time in the order they came: a reload's recomposition holds its image in memory at once
+    // (WorldDefinitionFileSource) and never waits for the disk. A read of a composition waits for the writes queued
+    // before it, and the process waits for them as it ends.
     private static readonly TimeSpan CompositionWritesExitDrain = TimeSpan.FromSeconds(seconds: 10);
-
-    private static BoundedWorkQueue<Action> CreateCompositionWrites() {
-        AppDomain.CurrentDomain.ProcessExit += static (_, _) => _ = CompositionWrites.WaitIdle(timeout: CompositionWritesExitDrain);
-        return new BoundedWorkQueue<Action>(concurrency: 1, run: static write => write());
-    }
+    private static readonly BoundedWorkQueue<Action> CompositionWrites = BoundedWorkQueue<Action>.DrainedAtExit(concurrency: 1, exitDrain: CompositionWritesExitDrain, run: static write => write());
 
     /// <inheritdoc />
     public WorldComposedDocument? ReadComposition(string key) {
@@ -98,13 +94,19 @@ public sealed partial class WorldCompileSession {
         return new WorldComposedDocument(Chain: links, ComposedJson: json, Inputs: inputs, Reach: reach);
     }
     /// <inheritdoc />
-    /// <remarks>The image is queued and written off the calling thread; <see cref="ReadComposition"/> waits for it.</remarks>
+    /// <remarks>A session that defers its composition writes (<see cref="DeferCompositionWrites"/>) queues the image and
+    /// writes it off the calling thread; <see cref="ReadComposition"/> waits for it.</remarks>
     public void WriteComposition(string key, WorldComposedDocument image) {
         ArgumentNullException.ThrowIfNull(argument: image);
 
         var inputs = (image.Inputs ?? throw new ArgumentException(message: "A persistent composition requires its input facts.", paramName: nameof(image)));
+        void Write() => WritePersisted(key: ("composition\0" + key), write: writer => WriteImage(image: image, inputs: inputs, writer: writer));
 
-        CompositionWrites.Enqueue(item: () => WritePersisted(key: ("composition\0" + key), write: writer => WriteImage(image: image, inputs: inputs, writer: writer)));
+        if (Volatile.Read(location: ref m_state.DeferCompositionWrites)) {
+            CompositionWrites.Enqueue(item: Write);
+        } else {
+            Write();
+        }
     }
     private static void WriteImage(WorldComposedDocument image, IReadOnlyList<CompileInput> inputs, BinaryWriter writer) {
         writer.Write(value: inputs.Count);

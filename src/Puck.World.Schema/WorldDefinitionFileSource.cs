@@ -449,7 +449,8 @@ public static partial class WorldDefinitionFileSource {
         // model only ever sees the finished composition — with the consumed `basis`/`imports` members stripped,
         // which is why a live document's Basis/Imports are always null. The substring gate keeps flat documents on
         // the untouched single-parse path.
-        IReadOnlyList<WorldComposedLink>? chain = null;
+        // The pin of a flat document is over its own bytes; a composition hands back its own.
+        var hash = string.Empty;
 
         if (
             (json.Span.IndexOf(value: "\"basis\""u8) >= 0) ||
@@ -460,7 +461,7 @@ public static partial class WorldDefinitionFileSource {
                 rootResolvedName: PuckPaths.Normalize(path: path),
                 rootBytes: bytes,
                 composedJson: out var composed,
-                chain: out var composedChain,
+                contentPin: out var composedPin,
                 reason: out var composeReason,
                 catalogFingerprint: catalogFingerprint,
                 catalog: catalog
@@ -471,19 +472,16 @@ public static partial class WorldDefinitionFileSource {
             }
 
             // composed is null when the root names neither basis nor imports, or its bytes are not a JSON object at
-            // all — the already-decoded `json`/`chain` above are left untouched and the strict parse below owns the
-            // wording.
+            // all — the root's own `json` and pin stand, and the strict parse below owns the wording.
             if (composed is not null) {
                 json = composed;
-                chain = composedChain;
+                hash = composedPin;
             }
         }
 
-        // A composition's pin folds the digest of every document it read, each once, the root first.
-        var hash = (((chain is null) || (chain.Count == 1))
-            ? ComputeContentHash(content: bytes)
-            : ComputeChainContentHash(chain: [.. chain.Select(selector: static link => link.Digest)])
-        );
+        if (hash.Length == 0) {
+            hash = ComputeContentHash(content: bytes);
+        }
 
         // The source revision the caller already holds: the composition it would parse is the one it has.
         if (string.Equals(a: hash, b: unchangedFrom, comparisonType: StringComparison.Ordinal)) {
