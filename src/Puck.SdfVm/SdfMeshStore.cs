@@ -546,6 +546,9 @@ public sealed class SdfMeshStore {
             // A file the listing named that is gone (evicted, or another World's set) is a miss like any other.
             Forget(identity, SampleExtension, key);
             return false;
+        } catch (HostMemoryRefusedException) {
+            // A read the host memory account has no room for is a miss; the entry stays known for a later probe.
+            return false;
         }
     }
 
@@ -562,7 +565,9 @@ public sealed class SdfMeshStore {
 
         try {
             copy.CopyFrom(samples);
-        } catch (OutOfMemoryException) {
+        } catch (Exception exception) when (exception is OutOfMemoryException or HostMemoryRefusedException) {
+            // A copy the host memory account has no room for is not kept, as one the writer has no room for is not: the
+            // store is a cache, and a later bake samples the lattice again.
             copy.Dispose();
             _ = Interlocked.Increment(location: ref m_droppedWrites);
             return;

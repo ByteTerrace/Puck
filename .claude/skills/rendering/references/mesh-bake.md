@@ -412,10 +412,27 @@ laws exercise that boundary.
   never behind the pool (`SdfMeshBakeGpuWork.Complete`'s `Readers`, a
   `BoundedWorkQueue` of a reader a slot on the host's thread pool), and its slot
   is released as soon as the copy is taken, so neither the frame thread nor a
-  worker busy contouring holds the GPU's next batch back; the reader decodes
-  each group's answer buffers and queues each answer on the pool ahead of every
-  queued stage, then advances `Progress` (`SdfMeshPathBake.Progressed`), since a
-  field slice's answer queues no work item. A request's points are its group's
+  worker busy contouring holds the GPU's next batch back; the reader copies a
+  final lattice's slab into the lattice and queues each answer on the pool ahead
+  of every queued stage, each answer reading its slice of the copy in place
+  (`SdfMeshPathBake.AnsweredSamples`, shared until its last answer ends), then
+  advances `Progress` (`SdfMeshPathBake.Progressed`), since a field slice's
+  answer queues no work item.
+- **A dispatch's answer never waits for host memory.** The copy, and a sample
+  set read in place of a dispatch, are charged to the bake's readback owner
+  inside a standing reservation of `SdfMeshPathBake.ReadbackBytes`: the take
+  grants a lattice its output bytes only while they fit what is left of it, and
+  takes nothing, admitting no group, until the reservation is held, so the
+  groups the account admitted can always be answered (the done line's
+  `stop=[readback:…]` and `host-refusals=[readback-waits:…]`). The reservation
+  goes once a take finds nothing to take, or the residency is released, and no
+  answer holds any of it. Elsewhere a host-memory refusal defers rather than
+  fails (`SdfMeshPathBake.Refusals`): a sample set the store keeps or reads past
+  the account's room is dropped or missed (`store-writes-dropped`), a published
+  copy the account refuses waits at the group's landing until the group can
+  reserve its bytes (`publish-waits`), and any other refused stage starts its
+  group's final lattice again under an admission of at least what it held and
+  the bytes refused (`Group.PeakFloor`, `readmitted`). A request's points are its group's
   workspace (a final lattice's one point buffer, reused round to round; the
   group's crease and material points, cut to nothing by the answer that
   finishes them), so the reader reads a lattice's request and group only while
@@ -437,7 +454,8 @@ laws exercise that boundary.
   handed back unanswered (`Abandon`: a job whose recording failed or whose
   service was disposed) keeps its admission;
   counting its retry as a new one let returned first slabs fill every admission
-  and stall the bake. A stage that throws finishes its group with no new mesh
+  and stall the bake. A stage the host memory account refused starts its
+  group's final lattice again (`Readmit`); any other stage that throws finishes its group with no new mesh
   (`[sdf.mesh-bake] ... failed`, `Fail`), releasing its reservation and
   workspace, and a later program bakes it again. A group a later program does
   not keep, or whose residency is released, is retired (`Group.Retired`): the

@@ -3,7 +3,6 @@ using System.IO.Hashing;
 using System.Runtime.InteropServices;
 
 using Puck.Abstractions;
-using Puck.Abstractions.Memory;
 using Puck.SignedDistance;
 using BakeGate = Puck.SdfVm.SdfMeshBakeReport.Gate;
 
@@ -195,9 +194,12 @@ public sealed partial class SdfMeshPathBake {
         return true;
     }
     // Its own method, so a probe that returns early above allocates no closure.
+    // The load is granted the lattice's output bytes of readback, as a dispatch of it would be (ReadbackBytes), which its
+    // read holds until it ends.
     private void QueueSampleLoad(Group group, in SdfMeshBakeRequest request, SampleKeys keys) {
         var pending = request;
 
+        GrantReadback(bytes: request.OutputBytes);
         Enqueue(group: group, urgent: true, work: () => LoadSamples(group, pending, keys));
     }
 
@@ -205,28 +207,34 @@ public sealed partial class SdfMeshPathBake {
     // take, which dispatches it (ProbeMissed, which that take counts as the miss). On the pool, holding the group
     // (ProbeSamples).
     private void LoadSamples(Group group, SdfMeshBakeRequest request, SampleKeys keys) {
-        if (group.Retired) { return; }
-
-        var key = SampleInput(keys, in request);
         var length = request.OutputBytes;
-        using var samples = new OwnedBuffer<byte>(allocator: Library.Allocator, observer: group.Memory);
+        // Charged to the bake's readback owner within the bytes QueueSampleLoad granted, which its release gives back.
+        var samples = new AnsweredSamples(bake: this, granted: length);
 
-        if (keys.Store.MayHoldSamples(keys.Sampling, key) && keys.Store.TryReadSamples(keys.Sampling, key, length, samples)) {
-            using var answer = Decode(group, in request, samples.GetSpan());
-            using (EnterGate(site: BakeGate.Checkpoint)) {
-                if (!GroupList.Holds(group: group)) { return; }
-                group.Contouring = false;
-                group.InFlight = true;
-                group.Next = null;
-                m_accounts.SampleHits++;
+        try {
+            if (group.Retired) { return; }
+
+            var key = SampleInput(keys, in request);
+
+            if (keys.Store.MayHoldSamples(keys.Sampling, key) && keys.Store.TryReadSamples(keys.Sampling, key, length, samples.Storage)) {
+                using var answer = Decode(group, in request, samples, offset: 0);
+                using (EnterGate(site: BakeGate.Checkpoint)) {
+                    if (!GroupList.Holds(group: group)) { return; }
+                    group.Contouring = false;
+                    group.InFlight = true;
+                    group.Next = null;
+                    m_accounts.SampleHits++;
+                }
+                AnswerGroup(group, in request, answer);
+                return;
             }
-            AnswerGroup(group, in request, answer);
-            return;
-        }
 
-        using (EnterGate(site: BakeGate.Checkpoint)) {
-            group.Contouring = false;
-            group.ProbeMissed = true;
+            using (EnterGate(site: BakeGate.Checkpoint)) {
+                group.Contouring = false;
+                group.ProbeMissed = true;
+            }
+        } finally {
+            samples.Release();
         }
     }
 
