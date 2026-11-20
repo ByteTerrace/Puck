@@ -202,6 +202,9 @@ type kubernetesServiceConfigType = {
 }
 @export()
 type logAnalyticsWorkspaceConfigType = {
+  // The most data the workspace ingests in a day, in GB; omitted means no cap. A safety net against a runaway
+  // source, set well above the expected volume, since ingestion stops until the daily reset once it is reached.
+  dailyQuotaGb: int?
   name: string
   tags: tagsType?
 }
@@ -479,6 +482,10 @@ var frontDoorDnsValidationMap = reduce(frontDoor.outputs.dnsValidation, {}, (res
     dnsTxtRecordValue: validation.?dnsTxtRecordValue
   }
 })
+// Every Front Door edge location probes every origin on this interval, so one origin sees a request per edge
+// location per interval (the static site's blob origin took about a million HEAD requests a week at 127 seconds).
+// 255 is the longest interval Front Door accepts.
+var frontDoorProbeIntervalInSeconds = 255
 var frontDoorSkuMap = {
   premium: 'Premium_AzureFrontDoor'
   standard: 'Standard_AzureFrontDoor'
@@ -831,7 +838,7 @@ module frontDoor 'br/public:avm/res/cdn/profile:0.20.0' = {
           }
         }
         healthProbeSettings: {
-          probeIntervalInSeconds: 127
+          probeIntervalInSeconds: frontDoorProbeIntervalInSeconds
           probePath: '/api/health-check'
           probeProtocol: 'Https'
           probeRequestType: 'GET'
@@ -886,7 +893,7 @@ module frontDoor 'br/public:avm/res/cdn/profile:0.20.0' = {
           }
         }
         healthProbeSettings: {
-          probeIntervalInSeconds: 127
+          probeIntervalInSeconds: frontDoorProbeIntervalInSeconds
           probePath: '/${storage.staticSiteContainerName}/index.html'
           probeProtocol: 'Https'
           probeRequestType: 'HEAD'
@@ -922,7 +929,7 @@ module frontDoor 'br/public:avm/res/cdn/profile:0.20.0' = {
           }
         }
         healthProbeSettings: {
-          probeIntervalInSeconds: 127
+          probeIntervalInSeconds: frontDoorProbeIntervalInSeconds
           probePath: '/keys?api-version=1.0'
           probeProtocol: 'Https'
           probeRequestType: 'GET'
@@ -945,7 +952,7 @@ module frontDoor 'br/public:avm/res/cdn/profile:0.20.0' = {
       }
       {
         healthProbeSettings: {
-          probeIntervalInSeconds: 127
+          probeIntervalInSeconds: frontDoorProbeIntervalInSeconds
           probePath: '/health/ready'
           probeProtocol: 'Https'
           probeRequestType: 'GET'
@@ -2478,6 +2485,7 @@ module kubernetesService_containerServiceDnsZoneRoleAssignment 'br/public:avm/pt
 }
 module logAnalyticsWorkspace 'br/public:avm/res/operational-insights/workspace:0.16.1' = {
   params: {
+    dailyQuotaGb: string(resources.logAnalyticsWorkspace.?dailyQuotaGb ?? -1)
     dataRetention: 30
     diagnosticSettings: []
     enableTelemetry: enableTelemetry
@@ -2987,6 +2995,12 @@ module actors_containerApplication 'br/public:avm/res/app/container-app:0.23.0' 
           {
             name: 'DataProtection__KeyUri'
             value: '${keyVault.outputs.uri}keys/${encryption.dataProtection.keyName}'
+          }
+          {
+            // Stops the Azure Monitor exporter sending its per-interval resource metric, an `_APPRESOURCEPREVIEW_`
+            // row that nothing reads.
+            name: 'OTEL_DOTNET_AZURE_MONITOR_ENABLE_RESOURCE_METRICS'
+            value: 'false'
           }
           {
             name: 'OVERRIDE_USE_MI_FIC_ASSERTION_CLIENTID'

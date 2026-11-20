@@ -86,6 +86,41 @@
         },
         {
             "content_type": "",
+            "key": "Logging:LogLevel:Azure.Core",
+            "label": null,
+            "tags": {},
+            "value": "Warning"
+        },
+        {
+            "content_type": "",
+            "key": "Logging:LogLevel:Azure.Identity",
+            "label": null,
+            "tags": {},
+            "value": "Warning"
+        },
+        {
+            "content_type": "",
+            "key": "Logging:LogLevel:Default",
+            "label": null,
+            "tags": {},
+            "value": "Warning"
+        },
+        {
+            "content_type": "",
+            "key": "Logging:LogLevel:Microsoft.AspNetCore",
+            "label": null,
+            "tags": {},
+            "value": "Warning"
+        },
+        {
+            "content_type": "",
+            "key": "Logging:LogLevel:Puck",
+            "label": null,
+            "tags": {},
+            "value": "Information"
+        },
+        {
+            "content_type": "",
             "key": "OnBehalfOf:ClientId",
             "label": null,
             "tags": {},

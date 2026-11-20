@@ -403,6 +403,7 @@ param resources = {
     name: '${prefix}aksp000'
   }
   logAnalyticsWorkspace: {
+    dailyQuotaGb: 1
     name: '${prefix}logp000'
   }
   monitorPrivateLinkScope: {
