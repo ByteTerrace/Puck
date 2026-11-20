@@ -309,7 +309,9 @@ jobs:
   # The player channel: the consumer build (what the RTX 2060 test machine installs) as a signed release in the
   # deployment's own hosting. A hosted runner has no GPU, so the build is assembled without baking boots and takes its
   # baked mesh store from the cache set a GPU machine pushed for the same mesh bake identity (`puck world caches produce
-  # --push`); the release notes name each backend's set, or the miss. It runs after deploy and nothing waits on it.
+  # --push`). A player never bakes, so a backend with no set for this identity, or a set missing groups the world
+  # needs, fails the fetch step before anything is signed or uploaded: the job summary names the miss and what the
+  # lead runs, and the channel keeps its last complete release. It runs after deploy and nothing waits on it.
   player:
     concurrency:
       cancel-in-progress: false
@@ -349,7 +351,7 @@ jobs:
         shell: bash
       - env:
           GH_TOKEN: ${{ github.token }}
-        name: Take the mesh cache sets whose bake identity matches this build
+        name: Take the mesh cache sets whose bake identity matches this build, or hold the channel
         run: puck world caches fetch artifacts/player --notes artifacts/player-notes.txt
         shell: bash
       - name: Write the player release tree

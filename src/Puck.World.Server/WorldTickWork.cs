@@ -61,10 +61,17 @@ public static class WorldTickWork {
     /// <summary>Gets the kind counting the spatial neighbourhoods built over a frozen image, one per cell width a query
     /// asked for since the freeze.</summary>
     public static WorkKind PerceptionGrids { get; } = new(name: "world.tick.perception-grids", unit: "count", workClass: WorkClass.Deterministic);
+    /// <summary>Body candidates inspected by the recipient spatial grid.</summary>
+    public static WorkKind InterestCandidates { get; } = new("world.tick.interest-candidates", "count", WorkClass.Deterministic);
+    /// <summary>Body records serialized for distinct projected audiences and acknowledged baselines.</summary>
+    public static WorkKind InterestBodies { get; } = new("world.tick.interest-bodies", "count", WorkClass.Deterministic);
+    /// <summary>Bytes of body records serialized before sharing across streams.</summary>
+    public static WorkKind InterestBytes { get; } = new("world.tick.interest-bytes", "bytes", WorkClass.Deterministic);
     /// <summary>Gets the ledger a host's servers count into. Declared after the kinds, which it reads as it is
     /// created.</summary>
     public static WorkCounterSet Process { get; } = new(
         kinds: [
+            InterestCandidates, InterestBodies, InterestBytes,
             FactDerives, FactSlots, ContinuationFolds, ContinuationSlots, ContinuationEncodes, ContinuationBytes, PerceptionFreezes, PerceptionPoints, PerceptionGrids,
             ContinuationProfiles, ContinuationProfileBytes, ContinuationTailBytes, .. SectionEncodes, .. SectionBytes,
             .. SectionComparedBytes, .. SectionFilteredCompares, .. SectionUnchangedEncodes,

@@ -677,6 +677,7 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
         // order (another stream, an earlier generation, an ordinal not ahead) ends the session, which closes the
         // reader's span. The reader's own ingress orders the records again across sessions.
         var ingress = new WorldStreamIngress();
+        var bodies = new WorldSnapshotReceiver();
 
         observed.Session = ingress;
         bool Admits(ReadOnlySpan<byte> record, out WorldStreamStamp stamp, out ReadOnlySpan<byte> body, out WireFailure failure) {
@@ -737,6 +738,7 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
                         // The ended span's projection goes with it: the generation the cut opens starts from its whole
                         // projection, which nothing of the ended span can complete.
                         hold = new WorldProjectionHold(fetch: Fetch);
+                        bodies = new WorldSnapshotReceiver();
                         sink.DeliverCut(stream: cut, terminal: terminal);
                         if (terminal) {
                             return false;
@@ -830,12 +832,9 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
 
                         break;
                     }
-                case WorldFederationResponse.Snapshot: {
-                        if (!Admits(record: frame.Body.Span, stamp: out var snapshotStream, body: out var snapshotBody, failure: out var snapshotFailure) || !WorldFederationCodec.TryDecodeSnapshot(
-                            body: snapshotBody,
-                            snapshot: out var snapshot,
-                            failure: out snapshotFailure
-                        )) {
+                case WorldFederationResponse.Snapshot:
+                case WorldFederationResponse.SnapshotDelta: {
+                        if (!Admits(record: frame.Body.Span, stamp: out var snapshotStream, body: out var snapshotBody, failure: out var snapshotFailure) || !bodies.TryReceive(snapshotStream, (WorldFederationResponse)frame.Kind == WorldFederationResponse.SnapshotDelta, snapshotBody, out var snapshot)) {
                             if (m_narrationHub is { HasNarrationSink: true }) {
                                 m_narrationHub?.Narrate(
                                     channel: "world.projection",
@@ -855,6 +854,8 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
                             value: snapshot.Authority
                         );
                         sink.DeliverSnapshot(snapshot: in snapshot, stream: snapshotStream);
+                        await stream.WriteAsync(frame.Body[..WorldFederationCodec.StreamStampBytes], ct).ConfigureAwait(false);
+                        await stream.FlushAsync(ct).ConfigureAwait(false);
                         break;
                     }
             }

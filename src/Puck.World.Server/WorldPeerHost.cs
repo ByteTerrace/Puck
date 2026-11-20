@@ -1830,15 +1830,14 @@ public sealed class WorldPeerHost : IDisposable {
                 refusal: WorldFederationRefusal.AuthenticationFailed, stream: stream).ConfigureAwait(continueOnCapturedContext: false);
             return;
         }
+        var view = m_server.DeliveryView(null, tier);
         var sink = new WorldFederationProjectionSink(
             isCurrent: () => (ReferenceEquals(objA: policy, objB: m_server.Definition.Admission) && credential.IsValid()),
             authority: m_server.AuthorityIdentity,
             server: m_server,
             tier: tier,
-            disclosure: () => new WorldSinkDisclosure(
-                Policy: m_server.Definition.Population.ObserverDisclosure,
-                ObserverBodyIndex: -1
-            )
+            view: view,
+            disclosure: () => view.Bodies
         );
         // The sink resolves the live policy and redacts only a sampled frame. Attaching it unfiltered here avoids
         // copying a 4,096-body radius view on every authority tick merely to discard seven out of eight copies.
