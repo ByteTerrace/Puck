@@ -85,8 +85,9 @@ public sealed partial class WorldPopulation {
     }
 
     // Hands every live body the navigation and contact field the solid consumers compiled. With no reach every rigid
-    // body wakes. With one, every collider the change moved lies inside its box: only the rigid bodies within its margin
-    // of that box wake (their rest latch cleared), and the sleepers settle on the new field now, so the change owes the
+    // body wakes, and the idle sleepers wake at the next settlement. With one, every collider the change moved lies
+    // inside its box: only the rigid bodies within its margin of that box wake (their rest latch cleared), as do the idle
+    // sleepers it reaches, and the sleepers settle on the new field now, so the change owes the
     // next PrepareBodyStep nothing and a checkpoint between the two finds no sleeper behind the field it rests in.
     private void RebindSolidConsumers(NavigationRuntime previousNavigation, (WorldColliderBox Box, FixedQ4816 Margin)? reach) {
         var sleepersBefore = m_sleepingBodies.Count;
@@ -106,11 +107,12 @@ public sealed partial class WorldPopulation {
                 );
             }
         }
-        if (reach is null) { return; }
+        if (reach is not { } settled) { return; }
         var version = ContactFieldVersion;
 
         WorldBodyWork.Process.Add(amount: (sleepersBefore - m_sleepingBodies.Count), kind: WorldBodyWork.FieldWakes);
         WorldBodyWork.Process.Add(amount: m_sleepingBodies.Count, kind: WorldBodyWork.FieldObserved);
+        SettleIdleSleepers(box: in settled.Box, everyone: false, margin: settled.Margin, version: version);
         m_sleepFieldVersion = version;
         RecordSleepFieldObservation(known: true);
     }

@@ -39,6 +39,7 @@ public sealed partial class WorldPopulation {
     private bool m_sleepFieldTermsKnown;
 
     private readonly List<int> m_fieldWakes = [];
+    private readonly List<int> m_idleFieldWakes = [];
 
     /// <summary>Number of rigid bodies parked outside the tick's integration and contact work sets.</summary>
     public int SleepingRigidBodies => m_sleepingBodies.Count;
@@ -215,9 +216,11 @@ public sealed partial class WorldPopulation {
             if (local && (terms.Fields != m_sleepFieldTerms.Fields)) { FoldFieldRegionChanges(box: ref box); }
             if (local && (box is { Any: true, Unbounded: false })) {
                 WakeSleepersNear(box: in box, margin: FieldWakeMargin());
+                SettleIdleSleepers(box: in box, everyone: false, margin: FieldWakeMargin(), version: version);
             } else {
                 WorldBodyWork.Process.Add(amount: m_sleepingBodies.Count, kind: WorldBodyWork.FieldWakes);
                 while (m_sleepingBodies.Count > 0) { WakeBodyIsland(index: m_sleepingBodies.Min); }
+                SettleIdleSleepers(box: in box, everyone: true, margin: FixedQ4816.Zero, version: version);
             }
             m_sleepFieldVersion = version;
         }
@@ -249,6 +252,32 @@ public sealed partial class WorldPopulation {
         foreach (var index in m_fieldWakes) { WakeBodyIsland(index: index); }
         WorldBodyWork.Process.Add(amount: (before - m_sleepingBodies.Count), kind: WorldBodyWork.FieldWakes);
         WorldBodyWork.Process.Add(amount: (found - m_fieldWakes.Count), kind: WorldBodyWork.FieldObserved);
+    }
+    // The idle sleepers (WorldBody.Asleep: a kit body past its authored idle floor) stay in the awake work set and skip
+    // their advance one by one. A settled change wakes, in slot order, every one whose bounds grown by the margin and
+    // its own reach (WorldBody.IdleFieldReach) meet the box (every one when the change is unbounded), and the rest
+    // observe the version, so the change reaches only the sleepers it can touch. Only a sleeper that stood observed
+    // against the population's previous observation (m_sleepFieldVersion) may observe the new one: a sleeper behind it
+    // (restored or handed over stale) missed a change the box does not describe, so it wakes. Every change the rigid
+    // sleepers settle against reaches here too; call it before m_sleepFieldVersion takes the new version.
+    private void SettleIdleSleepers(in WorldColliderBox box, bool everyone, FixedQ4816 margin, ulong version) {
+        m_idleFieldWakes.Clear();
+        var observed = 0;
+
+        foreach (var index in m_awakeBodies) {
+            if (m_entries[index].Body is not { Asleep: true } body) { continue; }
+            if (everyone || (body.LastContactFieldVersion != m_sleepFieldVersion) ||
+                FieldChangeReaches(box: in box, body: body, margin: (margin + body.IdleFieldReach))) {
+                m_idleFieldWakes.Add(item: index);
+            } else {
+                body.ObserveContactField(contactFieldVersion: version);
+                observed++;
+            }
+        }
+        // Collected first: a wake can wake a rigid island the body supports, which changes the awake set.
+        foreach (var index in m_idleFieldWakes) { m_entries[index].Body!.WakeUp(); }
+        WorldBodyWork.Process.Add(amount: m_idleFieldWakes.Count, kind: WorldBodyWork.FieldWakes);
+        WorldBodyWork.Process.Add(amount: observed, kind: WorldBodyWork.FieldObserved);
     }
     // How far past a sleeper's broadphase radius a change still reaches it: the farthest a contact acts (the tuning's
     // ContactReach) plus the travel of a rigid body's downward support probe (RefreshRigidStaticSupport), so a body a

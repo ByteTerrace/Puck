@@ -7,6 +7,7 @@ namespace Puck.World.Server;
 
 public sealed partial class WorldTick : IFieldLatticeHost {
     private FieldLattice? m_steppingRegion;
+    private FixedQ4816[] m_regionResistance = [];
 
     /// <summary>Describes the field lattice for a console read-back.</summary>
     /// <returns>One line, or a none line when the world declares no <c>fields</c> section.</returns>
@@ -15,7 +16,14 @@ public sealed partial class WorldTick : IFieldLatticeHost {
 
     /// <summary>Clears departed exposure outputs, advances each physical region on its own cadence, and settles the
     /// parked bodies on the cells that changed (<see cref="WorldPopulation.ObserveFieldSteps"/>).</summary>
+    /// <remarks>Every state write the pass makes commits and publishes in write order, while the state consumers settle
+    /// once when the pass ends (<see cref="WorldServer.DeferStateConsumers"/>) and the writes ride the tick's one
+    /// delivery after the response sweep.</remarks>
     public void StepFields(ulong tick) {
+        using (Host.DeferStateConsumers()) { StepRegions(tick: tick); }
+        Host.Population.ObserveFieldSteps();
+    }
+    private void StepRegions(ulong tick) {
         var regions = Host.Population.FieldRegions;
 
         // A shared exposure row belongs to the regions containing the body. Clear it only after the body leaves
@@ -38,7 +46,6 @@ public sealed partial class WorldTick : IFieldLatticeHost {
                 m_steppingRegion.Step(bodyCount: Host.Population.Capacity, host: this, tick: tick);
             }
         } finally { m_steppingRegion = null; }
-        Host.Population.ObserveFieldSteps();
     }
 
     private static bool HasExposureRegion(IReadOnlyList<WorldFieldRegion> regions, StateHandle row, in FixedVector3 position) {
@@ -55,26 +62,19 @@ public sealed partial class WorldTick : IFieldLatticeHost {
         return false;
     }
 
-    /// <summary>Samples the containing region's motion input before body integration.</summary>
-    public void SampleTravelResistance(ulong tick) {
-        if (Host.Population.FieldRegions.Count == 0) { return; }
-        for (var index = 0; (index < Host.Population.Capacity); index++) {
-            if (Host.Body(index: index) is not { } body) { continue; }
-            var resistance = FixedQ4816.Zero;
+    /// <summary>Reads each field region's travel resistance once and has the population sample what its bodies read
+    /// of the regions before body integration (<see cref="WorldPopulation.SampleFieldInputs"/>).</summary>
+    /// <param name="tick">The simulation tick being stepped.</param>
+    public void SampleFieldInputs(ulong tick) {
+        var regions = Host.Population.FieldRegions;
 
-            var regions = Host.Population.FieldRegions;
-
-            for (var regionIndex = 0; (regionIndex < regions.Count); regionIndex++) {
-                var region = regions[regionIndex];
-
-                if (!region.Lattice.TryCellOf(body.FixedPosition, out _)) { continue; }
-                if (region.TravelResistance is { } scalar) {
-                    resistance = ((scalar.Row is { } row) ? ReadScalarSlot(row: row, tick: tick) : FixedQ4816.FromDouble(value: (scalar.Literal ?? 0f)));
-                }
-                break;
-            }
-            body.SetTravelResistance(resistance: resistance);
+        if (m_regionResistance.Length != regions.Count) { m_regionResistance = new FixedQ4816[regions.Count]; }
+        for (var index = 0; (index < regions.Count); index++) {
+            m_regionResistance[index] = ((regions[index].TravelResistance is { } scalar)
+                ? ((scalar.Row is { } row) ? ReadScalarSlot(row: row, tick: tick) : FixedQ4816.FromDouble(value: (scalar.Literal ?? 0f)))
+                : FixedQ4816.Zero);
         }
+        Host.Population.SampleFieldInputs(regionResistance: m_regionResistance);
     }
 
     FixedVector3? IFieldLatticeHost.BodyPosition(int body) {
@@ -168,7 +168,6 @@ public sealed partial class WorldTick : IFieldLatticeHost {
             correlationId: 0,
             preMetered: false
         );
-        Host.Document.DeliverPending();
         return accepted ? FixedQ4816.FromRawBits(clamped - current) : FixedQ4816.Zero;
     }
     // Placement response traits are authored outside the field reaction program and therefore name their row rather
@@ -228,6 +227,5 @@ public sealed partial class WorldTick : IFieldLatticeHost {
             correlationId: 0,
             preMetered: false
         );
-        Host.Document.DeliverPending();
     }
 }

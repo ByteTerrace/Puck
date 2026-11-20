@@ -1096,12 +1096,21 @@ widening.
 
 A non-seat body sleeps once its program has produced no motion and it has
 received no intent for `bodies.sleepAfterSeconds` (`WorldBody.Sleep.cs`;
-0, the default, never sleeps). `WorldPopulation.AdvanceSimulated` skips a
-sleeping body outright—no producer staging, no motion program, no contact
-solve—until something wakes it: an adopted intent (tape, submitted, or
-producer), a hard teleport, a transfer, a targeted effect, a designation
-written into one of its own registers, a parked peer resuming, or a bump to
-`WorldPopulation.ContactFieldVersion`. That version sums
+0, the engine default, never sleeps; the standard authors half a second in
+`worlds/standard/kits.puck`, which the debug world's bodies take). A body
+whose source names a producer never counts idle, since its producer reads the
+world only while it advances. `WorldPopulation.AdvanceSimulated` skips a
+sleeping body outright—no producer staging, no field-input sampling, no motion
+program, no contact solve—until something wakes it: an adopted intent (tape,
+submitted, or producer), a hard teleport, a transfer, a targeted effect, a
+designation written into one of its own registers, a parked peer resuming, a
+kit recompile that changes its program, holds, tuning or collider, or a
+contact-field change that reaches it. Idle sleepers settle field changes with
+the parked rigid islands (`WorldPopulation.SettleIdleSleepers`): a bounded
+change wakes only those whose bounds, grown by the margin below and their own
+hold reach, ground snap and step height (`WorldBody.IdleFieldReach`), meet its
+box, and the rest observe the new `WorldPopulation.ContactFieldVersion`; a
+sleeper whose observation lags it wakes on its own. That version sums
 three independently-increasing counters—a document install/adjacency
 reconfigure, `WorldColliderSet.RefreshAttached` finding an attached row at a
 new pose, and each field lattice's `BodyReadRevision`, which moves only for a
@@ -1123,8 +1132,7 @@ box wake. The lattices' own step is settled right after `WorldTick.StepFields`
 response swap that rebuilds the analytic set wakes only the rigid bodies within
 that same reach of the changed rows' colliders (`InstallResponseSolids`, old and
 new colliders). Every other sleeper observes the new version without waking; a
-document install, a half-space or a change already owed wakes them all, as does
-any change for a non-rigid sleeper. Waking every rigid island on each change
+document install, a half-space or a change already owed wakes them all. Waking every rigid island on each change
 would cost the debug world about 550 rigid advances a tick against about 70
 idle: its hydrology lattice changes every eight ticks and a carrier moves on
 every ride. `world.counters

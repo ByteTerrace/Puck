@@ -74,7 +74,10 @@ that flies it, and the key that toggles it. The importing world owns the populat
 
 `physics.puck` authors `collision.bodyContacts`' soft-contact frequency, damping
 ratio and maximum push-out speed. The standard chooses 30 Hz, 10 and 3 m/s;
-an importing world overrides those fields in its own collision section.
+an importing world overrides those fields in its own collision section. It also
+hands `bodies.sleepAfterSeconds` the idle floor `kits.puck` authors
+(`idleSleepAfter`, half a second): how long a body nothing drives or moves stays
+idle before its motion program stops until something wakes it.
 
 `styles.puck` is a library of cel styles (`celStyle`, `celHardStyle`, `continuousStyle`): a palette row names one
 as its own (`toon: celStyle`) and a world names one as the default every other material inherits

@@ -1108,7 +1108,7 @@ absent entirely (a body outside every medium field's footprint floats
 against nothing). `medium` refuses without a `heightScale` greater than
 zero—a surface-less medium is meaningless. A kit's `bond: "Medium"` hold row
 is the live consumer—its law reads the surface
-`WorldPopulation.SampleMediumSurfaces` resamples onto each body every tick—
+`WorldPopulation.SampleFieldInputs` samples onto each body that advances, every tick—
 and a hover kit's float-over height remains a later, not-yet-built consumer.
 `world.status` echoes the declared medium field names (`none` when there is
 no medium row).

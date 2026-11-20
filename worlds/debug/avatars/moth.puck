@@ -1978,7 +1978,8 @@ bodies {
   seatSpawns [
     "stage"
   ]
-  sleepAfterSeconds: 0s
+  // The standard's idle floor (../../standard/kits.puck).
+  sleepAfterSeconds: idleSleepAfter
 }
 
 // A 320 by 450 tile of a layout, 0.62 radians wide.

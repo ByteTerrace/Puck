@@ -1,3 +1,5 @@
+using Puck.Maths;
+
 namespace Puck.World.Server;
 
 /// <summary>
@@ -80,10 +82,31 @@ public sealed partial class WorldBody {
         m_asleepSinceTick = 0UL;
         m_sleepIdleTicks = 0UL;
     }
+    /// <summary>Gets how far past its broadphase radius, in metres, a contact-field change can still decide this idle
+    /// body's next step: the farthest of its holds' reach, its ground snap and its step height, at its scale or at one,
+    /// whichever is farther. The population grows a sleeper's bounds by this before testing a change against it, so a
+    /// surface that supports the body from within a hold's reach is never moved away unseen.</summary>
+    internal FixedQ4816 IdleFieldReach {
+        get {
+            var reach = FixedQ4816.Max(x: m_tuning.GroundSnap, y: m_tuning.StepHeight);
+
+            foreach (var hold in m_holds) { reach = FixedQ4816.Max(x: reach, y: hold.Reach); }
+            return FixedQ4816.Max(x: reach, y: (reach * m_scale));
+        }
+    }
+    /// <summary>Records that this sleeper answered a contact-field change it could not be reached by: the population
+    /// settled the change (<see cref="WorldPopulation"/>'s field observation) and found this body outside everything
+    /// it moved, so the body now stands observed against <paramref name="contactFieldVersion"/>.</summary>
+    /// <param name="contactFieldVersion">The population's <see cref="WorldPopulation.ContactFieldVersion"/> the
+    /// settlement observed.</param>
+    internal void ObserveContactField(ulong contactFieldVersion) => m_lastContactFieldVersion = contactFieldVersion;
     /// <summary>Returns <see langword="true"/> when this body is asleep and nothing this tick wakes it, so the
-    /// caller may skip <see cref="Advance"/> outright. Wakes (and returns <see langword="false"/>) on a changed
-    /// <paramref name="contactFieldVersion"/> or a tape/submitted/producer intent staged for this tick — every other
-    /// wake path (<see cref="WakeUp"/>) already cleared the latch before this runs.</summary>
+    /// caller may skip <see cref="Advance"/> outright. Wakes (and returns <see langword="false"/>) on a
+    /// <paramref name="contactFieldVersion"/> this body never observed or a tape/submitted/producer intent staged for
+    /// this tick — every other wake path (<see cref="WakeUp"/>) already cleared the latch before this runs. A field
+    /// change the population settled has already woken the sleepers it reaches and advanced the rest's observation
+    /// (<see cref="ObserveContactField"/>), so the version test here wakes only a body whose observation no
+    /// settlement covered: one restored or handed over behind the field.</summary>
     /// <param name="contactFieldVersion">The population's current <see cref="WorldPopulation.ContactFieldVersion"/>.</param>
     internal bool TryDeferSleepingAdvance(ulong contactFieldVersion) {
         if (m_asleepSinceTick == 0UL) {
@@ -108,12 +131,15 @@ public sealed partial class WorldBody {
     }
 
     // Folds one ordinary Advance's outcome into the idle floor. Called at the end of Advance, after every effect the
-    // program could have fired this tick, so "moved" reflects where the body actually ended up.
+    // program could have fired this tick, so "moved" reflects where the body actually ended up. A body driven by a
+    // producer never counts idle: its producer reads the world (a target, a sensor, a route) only while the body
+    // advances, so a producer resting at its goal would sleep through the goal moving away.
     private void UpdateSleepEligibility(ulong tick, ulong stepTicks, ulong sleepAfterTicks, ulong contactFieldVersion, bool hadIncomingIntent, bool moved) {
         m_lastContactFieldVersion = contactFieldVersion;
 
         if (
             (sleepAfterTicks == 0UL) ||
+            InputImages.Source.IsProducer ||
             m_timedMove.IsActive ||
             hadIncomingIntent ||
             moved

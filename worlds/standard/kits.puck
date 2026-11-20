@@ -5,6 +5,11 @@
 let standardGravity = { fall: 46, rise: 28 }
 let standardSink = { sinkSpeed: 40 }
 
+// How long a body that nothing drives, presses or moves stays idle before its motion program and contact solve stop
+// until something wakes it: half a second, about as long as a dealt card or a set-down piece takes to stop reading as
+// motion. A world's `bodies.sleepAfterSeconds` takes it (physics.puck); a seat and a producer-driven body never sleep.
+let idleSleepAfter = 0.5s
+
 // A walking body's holds: the ground it stands on within reach, and the fall that takes over off it.
 let groundHold = {
   name: "ground"

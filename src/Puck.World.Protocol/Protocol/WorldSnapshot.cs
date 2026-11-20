@@ -117,7 +117,8 @@ public readonly record struct EntitySnapshot(
 /// <param name="Tick">The simulation tick this snapshot reports.</param>
 /// <param name="Revision">The declared-set/palette revision; a change drives the client program rebuild.</param>
 /// <param name="StepTicks">The engine ticks the reported step advanced by — the client's easer-decay delta.</param>
-/// <param name="Entries">The active entries this tick (one <see cref="EntitySnapshot"/> per drawn body).</param>
+/// <param name="Entries">The active entries this tick (one <see cref="EntitySnapshot"/> per drawn body). The memory is
+/// borrowed scratch the next snapshot overwrites: a consumer copies what it keeps.</param>
 /// <param name="Authority">The authority identity every entry belongs to.</param>
 /// <param name="FieldCells">Field-lattice writes and typed document-cell values since the previous snapshot.
 /// A primer carries every streamed document cell, and every lattice cell when <paramref name="FieldsFull"/> is set.
@@ -128,7 +129,8 @@ public readonly record struct EntitySnapshot(
 /// reader (a HUD binding, a gait driver) must pass to evaluate a <c>StateAdvance</c> row's live value; never derived
 /// from <see cref="Tick"/> at a simulation rate.</param>
 /// <param name="Inputs">Authority-issued input epochs and continuation decisions, disclosed only to their owner.</param>
-/// <param name="SolidScales">The sizes contact sampled before this tick's body motion.</param>
+/// <param name="SolidScales">The sizes contact sampled before this tick's body motion. The memory is borrowed scratch the
+/// next snapshot overwrites: a consumer copies what it keeps.</param>
 /// <param name="Cues">The one-shot rule effects disclosed to this recipient for this tick.</param>
 /// <param name="MusicBoundary">The score's beat and bar boundary flags for this step.</param>
 /// <param name="MusicSenses">The ambient score conditions disclosed to this recipient.</param>
