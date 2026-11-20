@@ -532,9 +532,10 @@ public sealed class SdfMeshStore {
     }
 
     // Keeps a lattice's samples, copied now while the caller's span lives, on the store's writer: `key` is the sample
-    // input the probe asks by (SdfMeshPathBake.SampleInput), computed on the writer. A writer already holding
-    // MostPendingWriteBytes keeps nothing: a later bake samples that lattice again.
-    internal void KeepSamples(UInt128 identity, ReadOnlySpan<byte> samples, Func<UInt128> key) {
+    // input the probe asks by (SdfMeshPathBake.SampleInput), computed by the caller while the group's state still
+    // describes this lattice. A writer already holding MostPendingWriteBytes keeps nothing: a later bake samples that
+    // lattice again.
+    internal void KeepSamples(UInt128 identity, ReadOnlySpan<byte> samples, UInt128 key) {
         if ((Interlocked.Read(location: ref m_pendingWriteBytes) + samples.Length) > MostPendingWriteBytes) {
             _ = Interlocked.Increment(location: ref m_droppedWrites);
             return;
@@ -550,7 +551,7 @@ public sealed class SdfMeshStore {
             return;
         }
         if (!WriteLater(bytes: copy.Length, behind: Behind.Drop, write: () => {
-            using (copy) { WriteSamples(identity, key(), copy.GetSpan()); }
+            using (copy) { WriteSamples(identity, key, copy.GetSpan()); }
         })) {
             copy.Dispose();
         }

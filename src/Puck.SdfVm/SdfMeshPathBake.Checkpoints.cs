@@ -185,12 +185,12 @@ public sealed partial class SdfMeshPathBake {
         }
     }
 
-    // Keeps a dispatched lattice's samples for a later bake, on the store's writer; the answer does not wait for it.
+    // Keeps a dispatched lattice's samples for a later bake, on the store's writer; the answer does not wait for the
+    // write. The key is taken here: it reads the group's pose rows and sample geometry, which move on with the bake
+    // before the writer runs.
     private void KeepSamples(Group group, in SdfMeshBakeRequest request, ReadOnlySpan<byte> samples) {
         if (CheckpointStore(group) is not { } store) { return; }
 
-        var kept = request;
-
-        store.KeepSamples(group.Checkpoints!.Sampling, samples, key: () => SampleInput(group, in kept));
+        store.KeepSamples(group.Checkpoints!.Sampling, samples, key: SampleInput(group, in request));
     }
 }
