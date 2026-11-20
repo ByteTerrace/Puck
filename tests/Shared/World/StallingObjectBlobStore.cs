@@ -21,6 +21,9 @@ internal enum StoreCall {
 /// <param name="inner">The store that answers every call <paramref name="stalls"/> does not select.</param>
 /// <param name="stalls">Selects a call by its kind and its key (a list call's key prefix).</param>
 internal sealed class StallingObjectBlobStore(IObjectBlobStore inner, Func<StoreCall, string, bool> stalls) : IObjectBlobStore {
+    public ValueTask<bool> DeleteAsync(ObjectStorageTarget target, ObjectBlobAddress address, CancellationToken cancellationToken = default) =>
+        inner.DeleteAsync(target, address, cancellationToken);
+
     private readonly TaskCompletionSource m_stalled = new(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously);
 
     /// <summary>Gets a task that completes once a selected call has begun to stall — the point at which the caller's

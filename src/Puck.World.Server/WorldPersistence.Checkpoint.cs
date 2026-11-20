@@ -334,8 +334,7 @@ public sealed partial class WorldPersistence {
             Principal: principal
         ));
     }
-    /// <summary>Bounds the journal to at most <c>host.journalDepth</c> trailing entries (0 = unbounded, the default —
-    /// a no-op). The oldest entries past the horizon fold forward, in order, into the base the journal already
+    /// <summary>Bounds the journal to at most <c>host.journalDepth</c> trailing entries (explicit 0 opts into unbounded history). The oldest entries past the horizon fold forward, in order, into the base the journal already
     /// keeps — the same per-entry compose-and-rebase <see cref="ApplyUndo"/>'s own replay performs, run forward
     /// instead of backward, so a checkpoint captured after this call restores to the identical live definition a
     /// checkpoint captured before it would have. Called once per completed tick.</summary>

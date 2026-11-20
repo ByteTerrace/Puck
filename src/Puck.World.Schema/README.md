@@ -1612,11 +1612,10 @@ those are the door for a value the row carries by another route — an authored
 literal cell, a checkpoint, a live write — whose single outcome no source check
 can see.
 
-**`host.journalDepth`** is the undo horizon, in journal entries: `0` (the
-default, every world authored before the field existed) is unbounded, today's
-behavior; a positive value is refused only if negative here—the fold that
-actually bounds the journal (`WorldServer.EnforceJournalDepth`, run once per
-tick) lives in `Puck.World.Server`, not this project.
+**`host.journalDepth`** sets the number of document edits available to undo.
+Omission uses `WorldHostDefaults.DefaultJournalDepth`. Explicit zero keeps
+unbounded history. `WorldServer.EnforceJournalDepth` folds older edits into
+the document base.
 
 **A row's trait is the default behavior of every cell it carries, including a
 key a later write mints; a cell replaces that default wholesale, or opts out

@@ -19,6 +19,7 @@ public sealed partial class WorldSiloHost {
                 Kind: WorldAuthorityJournalEntryKind.Crossing,
                 Tick: entry.Tick
             );
+            host.FlushJournal(bookkeeping);
             Task<(WorldCrossingDurability Durability, string Reason)> append;
 
             lock (bookkeeping.TailGate) {
@@ -65,6 +66,13 @@ public sealed partial class WorldSiloHost {
             );
         } catch (InvalidDataException exception) {
             return (WorldCrossingDurability.Uncertain, exception.Message);
+        }
+        if (outcome.PublishedRoot is { } publication) {
+            Post(() => {
+                if (m_rows.TryGetValue(identity.World.Value, out var current) && ReferenceEquals(current, bookkeeping)) {
+                    bookkeeping.JournalSegments = publication.Root.JournalSegmentCount;
+                }
+            });
         }
         return (outcome.Kind switch {
             WorldAuthorityStoreOutcomeKind.Ok => (WorldCrossingDurability.Durable, string.Empty),

@@ -818,16 +818,13 @@ revision and live document. A presentation install still delivers the whole
 definition and composes every audience's disclosure on the tick; delivering only
 the changed rows is the next edit-to-running work.
 
-`host.journalDepth` bounds the undo horizon: `0` (the default) leaves the
-journal growing for the life of the process, exactly as before the field
-existed; a positive depth makes `WorldServer.EnforceJournalDepth` fold the
-oldest entries past the horizon forward into the base the journal already
-keeps—the same per-entry compose-and-rebase `ApplyUndo` performs, run
-forward instead of backward—once per completed tick
-(`WorldServerStepShell.Step`), so the journal never grows past the depth and
-`world.undo` can never reach further back than what it kept (it refuses by
-name, naming the depth, rather than silently undoing fewer than asked).
-`world.status` echoes the authored depth.
+By default, `WorldHostDefaults.DefaultJournalDepth` bounds the document
+edits available to `world.undo`. Explicit zero retains unbounded history.
+`WorldServer.EnforceJournalDepth` folds older entries into the document
+base on each completed tick. A request past the retained horizon reports the
+depth. Arena turn undo keeps its own byte limit in `StateArena.ConfigureUndo`.
+The document edit journal contributes to the checkpoint's server section
+and overall byte limits.
 
 World-rule failures accumulate in the evaluator's ledger, one entry per
 category. The first occurrence is narrated; repeated Level-rule failures only
@@ -2635,8 +2632,12 @@ programmed against opaque encoded bytes throughout. `AcquireActivationAsync`
 advances the epoch and unique fence token in the one root CAS; every writer
 operation is bound to that fence, so a paused writer cannot publish after a
 takeover. `WriteCheckpointAsync` accepts the caller's captured absolute journal
-sequence and preserves the newer suffix when publishing; an omitted or stale
-watermark refuses rather than resetting later appends. Successful writes expose
+sequence and preserves the newer suffix when publishing. An omitted or stale
+watermark refuses while a later tail exists. A root names the newest immutable
+journal segment. Each segment names its predecessor, and recovery stops at
+the checkpoint watermark, including when it falls inside a segment.
+Checkpoint publication retires covered segments and keeps the current and
+previous images. Release recovery roots have separate protected payloads. Successful writes expose
 the committed root snapshot and watermark through `PublishedRoot`.
 `LoadRecoveryAsync` verifies the root, its immutable checkpoint/journal blobs,
 and its root-qualified validated definition as one coherent view, and retains

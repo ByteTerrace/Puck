@@ -862,10 +862,10 @@ public static class WorldAuthorityCheckpointCadence {
     public const ulong EngineTicks = (60UL * Puck.Maths.FixedTickConversion.TicksPerSecond);
 ```
 
-Between checkpoints, mutations are journaled asynchronously with a bounded lag
-(`src/Puck.World.Silo/README.md:313-315`), while crossing records are
-appended synchronously (section 4) **[opened]**. A crash can therefore lose
-recent mutations but no crossing step a peer saw **[inference]**.
+Between checkpoints, the silo journals external edits asynchronously. Its
+[acknowledgement and backlog contract](../../../src/Puck.World.Silo/README.md#live-journaling)
+describes when those edits become durable. Crossing records are published
+synchronously (section 4) **[opened]**.
 
 ### What a desktop host persists
 

@@ -317,22 +317,43 @@ activation's fence and requires recovery.
 
 ## Live journaling
 
-Every non-guest mutation `WorldServer` applies reaches the writer installed with `WorldServer.SetMutationJournalTap`
-(wired once per row, right after activation's own tail replay so a replayed
-entry is never re-appended as a duplicate). `WorldSiloHost.ScheduleJournalAppend`
-encodes it with `WorldAuthorityCheckpointCodec.TryEncodeJournalMutation` and schedules the
-store write as a continuation of that row's own append chain
-(`RowBookkeeping.JournalTail`)—never two appends racing concurrently for one
-row, since `WorldAuthorityBlobStore.AppendJournalAsync` rewrites the whole
-journal blob if-match per append and a race would drop one. Appends are
-acknowledged **asynchronously with a bounded lag**, never a block on the tick
-thread: `silo.grains`' `journalPending`/`journalOutcome` columns read the
-count of outstanding appends and the most recently acknowledged one back.
-Guest-derived mutations stay in the checkpoint's tick image and are excluded from
-the external-edit tail: recovery never applies later guest decisions to earlier
-guest memory. Console and peer edits still enter that tail.
-Recovery uses `WorldAuthorityCheckpointCodec.TryDecodeJournalMutation`. A mutation that drew privately carries its recorded words and starting positions. Every new activation advances the generation so an uncommitted draw seen after the last durable entry cannot predict the next draw. These trusted-storage leaves admit
-the world's own authored effects; live submissions still refuse a world actor.
+An ordinary mutation acknowledgement means the authority applied the edit to
+the live world. A crash before the journal root is published can lose an
+acknowledged edit. Crossing acknowledgements require a durable write. A
+successful checkpoint publishes a durable image through the same root.
+
+`WorldPreparedMutation` asks the hosted journal to admit each external edit
+before installing it. `WorldSiloHost.PrepareJournalMutation` bounds outstanding
+entries by `WorldSiloLifecycle.JournalBacklogLimit` and outstanding payload
+bytes by `WorldSiloHost.JournalBacklogBytes`. A full row returns a retryable
+refusal before applying another edit. A failed or uncertain publication closes
+journal admission for that activation until recovery. Guest and world-authored
+effects travel in the checkpoint's tick image, so storage timing cannot refuse
+a simulation-authored mutation.
+
+The silo flushes each row's tick batch into one immutable, hash-linked journal
+segment, then publishes its head with a fenced root compare-and-swap. A crossing
+or checkpoint flushes any earlier edits before taking its place in the same row
+queue. Recovery walks only the suffix above checkpoint coverage and replays
+entries in publication order. Each privately drawn edit carries its recorded
+words and starting positions. A new activation advances the generation so an
+uncommitted draw seen before restart cannot predict the next draw.
+
+A landed checkpoint retains its own image, the preceding image, and any
+uncovered journal segments. It retires superseded payloads through the object
+store and retries cleanup at the next checkpoint if deletion fails. Explicit
+release recovery points keep archive copies under their operation IDs, so an
+ordinary checkpoint can retire the live copies without affecting a protected
+restore. A cadence request stays pending per row until that row's upload
+succeeds. Other rows can checkpoint on schedule while a row is deferred.
+
+In a hosted run, use `silo.grains` to watch `journalPending` and
+`journalPendingBytes` level off at their limits under a stalled store.
+`journalSegments` should rise once per nonempty tick batch and fall when a
+covering checkpoint lands. Divide changes in `journalBytesWritten` by
+`journalMutationsWritten` to measure segment bytes per mutation as the
+tail grows. `retiredAuthorityObjects` should increase as covering checkpoints
+retire journal and checkpoint objects.
 
 ## Document validation
 

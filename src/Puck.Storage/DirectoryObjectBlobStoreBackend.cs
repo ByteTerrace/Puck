@@ -37,6 +37,16 @@ internal sealed class DirectoryObjectBlobStoreBackend : IObjectBlobStoreBackend 
         return (Path.GetDirectoryName(path: path)!, segments[^1]);
     }
     private static string Token(ReadOnlySpan<byte> content) => Convert.ToHexStringLower(inArray: SHA256.HashData(source: content));
+
+    public ValueTask<bool> DeleteAsync(ObjectStorageTarget target, ObjectBlobAddress address, CancellationToken cancellationToken = default) {
+        cancellationToken.ThrowIfCancellationRequested();
+        var local = ObjectStorageTarget.Require<DirectoryObjectStorageTarget>(target, "a directory target");
+        var (parent, name) = Resolve(local, address);
+        using var directory = ConfinedDirectory.Open(parent, create: false);
+        if (directory is null) { return ValueTask.FromResult(false); }
+        using var gate = directory.AcquireLock(LockName, LockWait, cancellationToken);
+        return ValueTask.FromResult(directory.DeleteFile(name));
+    }
     private static void Walk(ConfinedDirectory directory, string path, string prefix, List<string> keys, ref int remaining,
         CancellationToken cancellationToken) {
         foreach (var entry in directory.Entries()) {
@@ -56,6 +66,9 @@ internal sealed class DirectoryObjectBlobStoreBackend : IObjectBlobStoreBackend 
             ));
             // A link is opened as a directory so that the open refuses it, as it refuses a linked file below.
             if (entry.Kind is ConfinedEntryKind.Directory or ConfinedEntryKind.Link) {
+                var subdirectory = key + "/";
+                if (!prefix.StartsWith(subdirectory, StringComparison.Ordinal) &&
+                    !subdirectory.StartsWith(prefix, StringComparison.Ordinal)) { continue; }
                 using var child = directory.Child(name: name);
 
                 if (child is not null) {
@@ -63,7 +76,7 @@ internal sealed class DirectoryObjectBlobStoreBackend : IObjectBlobStoreBackend 
                     cancellationToken: cancellationToken,
                     directory: child,
                     keys: keys,
-                    path: (key + "/"),
+                    path: subdirectory,
                     prefix: prefix,
                     remaining: ref remaining
                 );

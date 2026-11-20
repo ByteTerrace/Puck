@@ -3,6 +3,8 @@ namespace Puck.Storage;
 /// <summary>The routed byte-level blob store — reads and writes opaque blobs at an <see cref="ObjectBlobAddress"/>
 /// against a chosen <see cref="ObjectStorageTarget"/>, carrying a version token for optimistic concurrency (§2.5.2).</summary>
 public interface IObjectBlobStore {
+    /// <summary>Deletes a blob, returning whether it existed.</summary>
+    ValueTask<bool> DeleteAsync(ObjectStorageTarget target, ObjectBlobAddress address, CancellationToken cancellationToken = default);
     /// <summary>Reads a blob's bytes and version token, or <see langword="null"/> when it does not exist.</summary>
     /// <param name="target">The storage target the address resolves against.</param>
     /// <param name="address">The blob address.</param>

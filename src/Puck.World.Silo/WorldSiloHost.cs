@@ -23,6 +23,7 @@ public enum WorldReleaseAdmissionPublication { Opened, CandidatePrivate, Refused
 public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateResolver {
     private sealed class RowBookkeeping {
         public required WorldAdjacencyFields Adjacencies { get; init; }
+        public required WorldAuthorityIdentity Identity { get; init; }
         public required WorldAuthorityFence Fence { get; init; }
         public required WorldConsoleWaitGate Gate { get; init; }
         public required bool Pinned { get; init; }
@@ -44,12 +45,21 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
 
         public int CheckpointDeferredCount;
         public long CheckpointTimestamp;
-        public bool JournalFailed;
-        public ulong JournalFailureTick;
         public long JournalTimestamp;
         public ulong LastCheckpointTick;
         public int PendingJournalAppends;
-        public bool PersistenceBlocked;
+        public long PendingJournalBytes;
+        public List<WorldAuthorityJournalEntry> JournalBatch = [];
+        public long JournalBatchBytes;
+        public int JournalSegments;
+        public long JournalMutationsWritten;
+        public long JournalBytesWritten;
+        public long RetiredObjects;
+        public bool CadenceRequested;
+        public ulong CadenceRetryAfter;
+        public bool CadenceDeferred;
+        public Task<WorldAuthorityStoreOutcome>? CadenceUpload;
+        public volatile bool PersistenceBlocked;
         public bool Released;
     }
 
@@ -61,6 +71,7 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
     private readonly TimeProvider m_clock;
 
     private readonly WorldAuthorityCheckpointCadenceCounter m_cadence = new();
+    private bool m_hasCadenceRequests;
 
     private readonly WorldSiloDefinition m_definition;
     private readonly WorldMachineCatalog m_machineCatalog;
@@ -682,39 +693,44 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
         return true;
     }
     private void CaptureRowsArmedByCadence() {
-        foreach (var name in Instances.Names) {
-            if (
-                !Instances.TryGet(
-                instance: out var row,
-                name: name
-            ) ||
-                (row is not { AwaitingMirrors: false }) ||
-                (FindWorldRow(name: name) is not { } declared)
-            ) {
+        if (m_cadence.IsArmed) {
+            foreach (var bookkeeping in m_rows.Values) {
+                bookkeeping.CadenceRequested = true;
+            }
+            // The master alarm has been delivered. Each row now holds its own request until its upload lands.
+            m_cadence.Clear();
+            m_hasCadenceRequests = m_rows.Count != 0;
+        }
+        if (!m_hasCadenceRequests) { return; }
+        m_hasCadenceRequests = false;
+        foreach (var (name, bookkeeping) in m_rows) {
+            if (!bookkeeping.CadenceRequested) { continue; }
+            if (bookkeeping.CadenceUpload is { } upload) {
+                if (!upload.IsCompleted) { m_hasCadenceRequests = true; continue; }
+                bookkeeping.CadenceUpload = null;
+                if (upload.IsCompletedSuccessfully && upload.Result.Ok) {
+                    bookkeeping.CadenceRequested = false;
+                    bookkeeping.CadenceDeferred = false;
+                    continue;
+                }
+                bookkeeping.CadenceRetryAfter = m_masterElapsedEngineTicks + Puck.Maths.FixedTickConversion.TicksPerSecond;
+            }
+            m_hasCadenceRequests = true;
+            if (bookkeeping.Initializing || bookkeeping.Released || bookkeeping.PersistenceBlocked ||
+                bookkeeping.CheckpointUpload is { IsCompleted: false } ||
+                m_masterElapsedEngineTicks < bookkeeping.CadenceRetryAfter ||
+                !Instances.TryGet(name, out var row) || row is not { AwaitingMirrors: false }) {
                 continue;
             }
 
-            if (!TryQueueCheckpoint(
-                cancellationToken: CancellationToken.None,
-                identity: new WorldAuthorityIdentity(
-                    Owner: declared.Owner,
-                    World: declared.World
-                ),
-                outcome: out var outcome,
-                row: row,
-                upload: out _
-            )) {
-                if (m_rows.TryGetValue(
-                    key: name,
-                    value: out var bookkeeping
-                )) {
+            if (!TryQueueCheckpoint(row, bookkeeping.Identity, CancellationToken.None, out _, out var outcome)) {
+                if (!bookkeeping.CadenceDeferred) {
                     bookkeeping.CheckpointDeferredCount++;
-                    bookkeeping.LastCheckpointOutcome = outcome;
+                    bookkeeping.CadenceDeferred = true;
                 }
+                bookkeeping.LastCheckpointOutcome = outcome;
             }
         }
-
-        m_cadence.Clear();
     }
     private WorldSiloWorldRow? FindWorldRow(string name) => m_definition.Worlds.FirstOrDefault(predicate: row => string.Equals(
         a: row.World.Value,
@@ -1443,7 +1459,9 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
                         Adjacencies = adjacencies,
                         Gate = gate,
                         Fence = fence,
+                        Identity = identity,
                         PublishedJournalSequence = recovery.Root.Root.JournalSequence,
+                        JournalSegments = recovery.Root.Root.JournalSegmentCount,
                         LastCheckpointOrdinal = (checkpointBlob?.Ordinal ?? -1),
                         LastCheckpointOutcome = ((checkpointBlob is null)
                         ? "never captured"
@@ -1468,12 +1486,9 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
                         return;
                     }
                     // Recovered entries already belong to the store; only live mutations are appended.
-                    server.SetMutationJournalTap(drawKeys, entry => ScheduleJournalAppend(
-                        identity: identity,
-                        entry: entry,
-                        worldId: identity.World.Value,
-                        source: server
-                    ));
+                    server.SetMutationJournalPublisher(drawKeys,
+                        entry => PrepareJournalMutation(bookkeeping, entry),
+                        () => FlushJournal(bookkeeping));
                     server.InstallCrossingLog(log: new RowCrossingLog(
                         bookkeeping: bookkeeping,
                         host: this,
@@ -1767,9 +1782,7 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
         m_masterElapsedEngineTicks += stepTicks;
         m_cadence.NoteMasterStep(stepTicks: stepTicks);
 
-        if (m_cadence.IsArmed) {
-            CaptureRowsArmedByCadence();
-        }
+        CaptureRowsArmedByCadence();
     }
     /// <summary>Builds one row's own read-back — <c>silo.grains</c>' per-row payload and <see cref="IWorldGrain.StatusAsync"/>'s
     /// answer.</summary>
@@ -1815,6 +1828,11 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
             LastJournalOutcome = (bookkeeping?.LastJournalOutcome ?? "none yet"),
             Paused = row.IsPaused,
             PendingJournalAppends = (bookkeeping?.PendingJournalAppends ?? 0),
+            PendingJournalBytes = (bookkeeping?.PendingJournalBytes ?? 0),
+            JournalSegmentCount = (bookkeeping?.JournalSegments ?? 0),
+            JournalMutationsWritten = (bookkeeping?.JournalMutationsWritten ?? 0),
+            JournalBytesWritten = (bookkeeping?.JournalBytesWritten ?? 0),
+            RetiredAuthorityObjects = (bookkeeping?.RetiredObjects ?? 0),
             RateHz = row.Server.Definition.SimulationRateHz,
             ScheduleAccumulatorTicks = row.ScheduleAccumulatorTicks,
             Tick = row.CompletedTicks,

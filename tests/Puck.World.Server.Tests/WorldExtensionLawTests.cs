@@ -783,6 +783,9 @@ public sealed class WorldExtensionLawTests {
         }
     }
     private sealed class FailOutcomeStore : IObjectBlobStore {
+        public ValueTask<bool> DeleteAsync(ObjectStorageTarget target, ObjectBlobAddress address, CancellationToken cancellationToken = default) =>
+            m_inner.DeleteAsync(target, address, cancellationToken);
+
         private readonly FakeObjectBlobStore m_inner = new();
 
         private int m_writes;

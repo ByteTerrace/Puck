@@ -917,6 +917,9 @@ public sealed partial class WorldReleaseCutoverLawTests {
     }
 
     private sealed class RewindInterruptionStore(IObjectBlobStore inner) : IObjectBlobStore {
+        public ValueTask<bool> DeleteAsync(ObjectStorageTarget target, ObjectBlobAddress address, CancellationToken cancellationToken = default) =>
+            inner.DeleteAsync(target, address, cancellationToken);
+
         public ulong? InterruptAtTick;
 
         public ValueTask<IReadOnlyList<string>> ListAsync(ObjectStorageTarget target, Guid owner, string prefix, CancellationToken cancellationToken = default) => inner.ListAsync(
