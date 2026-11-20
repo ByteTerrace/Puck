@@ -205,8 +205,6 @@ Rigid creation copies share one local bake and palette. Each live copy owns one 
 - `WorldBindingBarVisibility.cs`—the live per-seat binding-bar visibility
   override the `binding-bar` lever writes and the root's bar-policy resolver
   reads.
-- `WorldSessionWindowLeases.cs`—the process-wide window-lease counter
-  `world.faces` reads back. Session programs and transforms grow from the live scene.
 - `WorldWindowFrustumFit.cs`—the border-pair isometry and asymmetric-frustum
   fit a cross-authority window projects through.
 - `WorldAuthorityRoute.cs`, `WorldContinuum.cs`, `WorldSeatAuthorityRouter.cs`

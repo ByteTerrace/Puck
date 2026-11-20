@@ -25,16 +25,8 @@ public sealed partial class WorldRigidAssets {
     private ulong m_staticSeed;
     private string? m_staticScope;
 
-    /// <summary>Gets the number of admitted static placement rows.</summary>
-    public int StaticRows => m_staticPlacements.Count;
-    /// <summary>Gets the number of actual admitted lattice occurrences.</summary>
-    public int StaticCopies => m_staticCopies.Count;
     /// <summary>Gets the last emission's occurrences with at least one shape left visible by isolation.</summary>
     public int StaticVisibleCopies { get; private set; }
-    /// <summary>Gets the number of shared local static prototypes, independent of occurrence scale.</summary>
-    public int StaticAssets => m_staticAssets.Count;
-    /// <summary>Gets counts of ordinary static rows kept on the existing emission path, by eligibility reason.</summary>
-    public IReadOnlyDictionary<string, int> StaticUnsupported => m_staticUnsupported;
     /// <summary>Returns whether this exact row is owned by the retained static-copy roster.</summary>
     public bool ContainsPlacement(WorldPlacement placement) => m_staticPlacements.Contains(placement);
 

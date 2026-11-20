@@ -123,10 +123,6 @@ public static class WorldRigCatalog {
 
     /// <summary>The compact dynamic-transform lane of the procedural catalog.</summary>
     public static int DynamicTransformCapacity => (WorldBodiesLimits.CapacityCeiling * MaxLeafCount);
-    /// <summary>The maximum authored VM instruction total for the procedural catalog representation.</summary>
-    public static int InstructionCapacity => (WorldBodiesLimits.CapacityCeiling * MaxInstructionCount);
-    /// <summary>Gets the maximum leaf-cull-instance count of one active catalog body.</summary>
-    public static int MaxInstancesPerAvatar => MaxLeafCount;
     public static int MaxInstructionCount => (MaxLeafCount * InstructionsPerLeaf);
     /// <summary>The minimum and maximum authored instruction counts of any catalog avatar.</summary>
     public static int MinInstructionCount => (MinLeafCount * InstructionsPerLeaf);

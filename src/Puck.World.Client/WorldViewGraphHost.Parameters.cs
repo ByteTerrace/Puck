@@ -27,9 +27,6 @@ public sealed partial class WorldViewGraphHost {
     public sealed partial class Entry {
         private BoundParameter[] m_parameters = [];
 
-        /// <summary>Gets how many of the row's bound parameters the installed graph accepted.</summary>
-        public int BoundParameterCount => m_parameters.Length;
-
         // Whether a live preview may set a pass's field: a field the row binds is never overridden.
         internal bool Binds(string pass, string field) => (
             (Row?.Parameters is { } parameters) &&

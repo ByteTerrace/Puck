@@ -65,8 +65,6 @@ public sealed class WorldRigReads {
     /// <summary>Gets whether this is a guessing view (<see cref="ForGuess"/>).</summary>
     public bool AnswersLeads => (m_ages is not null);
 
-    /// <summary>Gets the rig whose reads the view answers.</summary>
-    public CreationRig Rig => m_rig;
     /// <summary>Gets the wearing body's simulation facts this frame, or <see cref="BodyFacts.None"/> for a registration
     /// with no body or before the first <see cref="Bind"/>.</summary>
     public BodyFacts Facts => (((m_client is { } client) && (m_body >= 0)) ? client.Facts(index: m_body) : BodyFacts.None);
