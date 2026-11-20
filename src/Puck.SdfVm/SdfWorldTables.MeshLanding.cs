@@ -77,7 +77,7 @@ public sealed partial class SdfWorldTables {
                 m_owedOrder.Add(item: (((demand is null) ? 0f : (SdfMeshDemand.BoxOf(center: out var center, draw: in draw, half: out var half) ? demand.Priority(center: center, half: half) : float.PositiveInfinity)), index));
             }
         }
-        System.Runtime.InteropServices.CollectionsMarshal.AsSpan(list: m_owedOrder).Sort(comparison: ByPriority);
+        System.Runtime.InteropServices.CollectionsMarshal.AsSpan(list: m_owedOrder).Sort(comparer: new SdfMeshPriorityOrder());
         foreach (var (_, index) in m_owedOrder) {
             var mesh = draws[index].Mesh;
 

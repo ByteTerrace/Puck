@@ -389,9 +389,9 @@ laws exercise that boundary.
   whatever its size; one under a pixel ranks after. Ranking by projected size
   instead let far terrain and shells outrank the lobby's small parts, and the
   occupied area landed no sooner than in plan order. `TryTake` takes
-  lattices in the order `Prioritize` sorts once per measure, outside the bake's
-  gate (`SdfMeshPathBake.Order`; a take orders again only when the group list
-  changed since, `GroupList.Version`), the work queue runs store loads and
+  lattices in `ByRank` order of the groups the tally holds as offering a lattice
+  (`GroupTally.Offered`, into two heaps), at the ranks `Prioritize` last
+  measured, the work queue runs store loads and
   lattice answers ahead of its stages (`Enqueue`, urgent) and every CPU stage of
   the bake (`Schedule`), and `SdfWorldTables.OrderLanding`
   orders owed meshes for landing in that order, the plan's or the list's order among
@@ -476,15 +476,21 @@ laws exercise that boundary.
   frame thread's waits on the gate, and `gate=[site:entries/wait/hold/max]`
   every entry's wait and hold by site (`SdfMeshBakeReport.Gate`, taken through
   `EnterGate`, the one door to `m_gate`): on a cold debug-world bake the
-  frame thread's entries (`frame`, `retier`, `dress`, `take`, `observe`) hold the
+  frame thread's entries (`frame`, `prioritize`, `retier`, `judge`, `dress`,
+  `take`, `observe`, `evict`, `begin`) hold the
   gate far longer than the workers' own sections do, so the
-  workers' waits are the frame thread's holds. Whether a group still stands in
+  workers' waits are the frame thread's holds; `begin` (`Start`'s call of
+  `Begin`) and `evict` (the eviction sweep, and the evictions a frame makes) run
+  inside another entry's hold and are counted out of it. Whether a group still stands in
   the bake is its `Listed` flag, which only `GroupList.Set` and `Clear` move,
   never a search of the list. No entry walks the list for counts either:
   the take reads how many groups fly, run a stage, hold an admission, wait for
   their first stage or hold a lattice from `GroupTally`, which every setter of
   those states settles (`Group.Settle`, the one place a group's contribution
-  moves a count), and `ObserveResidency` walks only the groups that landed or
+  moves a count or a set), and the take walks only the groups the tally holds as
+  offering a lattice, the ready and the wanting an admission apart, which it
+  does not read at all while the pool backlog closes admissions and does not
+  start when none holds one. `ObserveResidency` walks only the groups that landed or
   were drawn again and have not stood in the mesh region
   (`Group.AwaitResidency`, the one door a group joins that set by, queued from
   any thread and taken in under the gate). A start decides whether the store
@@ -494,8 +500,20 @@ laws exercise that boundary.
   thread holds a gate waits for the gate's release
   (`SdfMeshBakeReport.GateLeft`): a write to a piped standard error can block
   on its reader, and a frame thread blocked there holds every worker.
-  `Prioritize` still walks and measures every group still baking on each
-  prepared frame, outside the gate but on the frame thread.
+  `Prioritize` measures a share of the groups' priority and view each prepared
+  frame, outside the gate but on the frame thread, from a cursor
+  (`GroupSweep`, the one cursor `MeasureDemands` shares): a rank is up to a
+  measure old, a restart ranks every group it plans, and a group planned in a
+  listed group's place takes that group's rank (`Replace`). The counts of the
+  groups that owe the frame and of those with nothing to draw
+  (`CountHoles`) move with each visit and each `Replace`. The dresser reads the
+  groups the bake names changed since its last read (`Touch`, taken by
+  `FrameAccess`) and every group only when the list was replaced, the program or
+  the copy layout moved, or a verdict declined (`TouchAll`). The groups that keep
+  a floor (`m_keepers`) are the only ones the eviction sweep, the mesh region's
+  naming of kept floors and the trace judge read, the judge through the groups
+  whose floor, done state or product changed (`Judgeable`). The retier decision
+  still reads every group once a measure.
 - **A stage's scratch is rented, its result exact.** A CPU stage grows its
   per-vertex and per-quad workspace in `RentedList<T>` and leases its tables
   (`RentedArrays.Rent(minimumLength, out array)`). Arrays up to 1 MiB reuse the
@@ -520,7 +538,7 @@ laws exercise that boundary.
 - **One geometry bakes once a bake.** A group whose sealed geometry another
   group of the same restart already bakes or loads waits on it
   (`Group.Leader`, `Follow`) and takes the library's mesh, renumbered, when the
-  leader lands; the debug world plans 1,115 of its 2,090 groups that way. The
+  leader lands; the start line's `shared=` counts the groups a restart plans that way. The
   renumbering shares immutable geometry and allocates remapped triangle materials, so it runs on the pool
   (`TakeLanded`), outside the gate the frame takes; a leader that found no
   surface lands the follower empty too (`Draw(group, null)`), or it would keep

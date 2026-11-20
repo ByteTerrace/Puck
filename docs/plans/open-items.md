@@ -3767,17 +3767,16 @@ proves itself with `puck compile` lowering to the same document.
     read the World build's disassembly (the proof is static, so the World
     gets it). Its comment requires the vector and scalar paths to agree bit
     for bit, in the repacked bytes and the average colour.
-  - **SdfVm: one priority order, as a struct comparer.** [medium]
-    `SdfMeshPathBake.ByPriority` and `SdfWorldTables.ByPriority` are the same
-    `Comparison<(float Priority, int Index)>` written twice. Replace both with
-    one public `readonly struct` comparer in a shared home and sort the spans
-    both callers already take through `CollectionsMarshal.AsSpan`. That fixes
-    the duplicate, and on .NET 11 a struct comparer on a span sort is not boxed
-    and its comparison inlines, where the delegate costs a call per
-    comparison. Claim speed only with a counted or traced reading of
-    `SdfWorldTables.OrderLanding` or the path bake's plan. The other
-    `Comparison` lambdas beside them (`SdfMeshIrradiance`'s candidate order,
-    the path bake's tiers) move the same way if a profile shows them hot.
+  - **SdfVm: the frame thread's remaining array-sized walks in the bake.** [medium]
+    The bake's frame-thread entries read the groups changed or holding something
+    (`SdfMeshPathBake.Touch`, `GroupTally`, `m_keepers`), except `Retier`'s
+    decision, which reads every group once a measure, `ServeAhead`, which names
+    every kept floor's pieces to the mesh region whenever a floor or the list
+    moved, and a locked (lockstep) dress, which rebuilds every row from empty
+    (`SdfMeshDresser.StartOver`, `CountsChange`) whenever a group's piece count
+    changes. Read the done line's `retier`, `observe` and `dress` holds on a clean
+    cold bake, then keep the aggregates the decision sums and the kept floors'
+    names incrementally.
   - **SdfVm and Assets: zlib through stream adapters.** [medium]
     `SdfMeshStoreDecoder.TryDecode` expands every store entry through a `fixed`
     block, an `UnmanagedMemoryStream`, a `ZLibStream` and an end-of-stream

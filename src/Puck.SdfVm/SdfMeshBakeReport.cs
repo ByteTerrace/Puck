@@ -36,13 +36,19 @@ internal static class SdfMeshBakeReport {
     /// <summary>Where the bake's gate is taken: the frame thread's entries (its frame preparation and takes, its
     /// residency observation, the readers), and each worker stage that publishes its group's next step. The done line
     /// reports each site's entries, its waits for the gate and how long it held it, so whether the workers wait on the
-    /// gate because a section holds it long, or because many sections take it, reads per site.</summary>
+    /// gate because a section holds it long, or because many sections take it, reads per site. A section the frame
+    /// thread runs inside another's hold (<see cref="Gate.Begin"/>) is counted under its own site and out of the
+    /// enclosing one.</summary>
     public enum Gate {
         Frame,
+        Prioritize,
         Retier,
+        Judge,
         Dress,
         Take,
         Observe,
+        Evict,
+        Begin,
         Read,
         Ticket,
         Slice,
@@ -95,6 +101,9 @@ internal static class SdfMeshBakeReport {
         public readonly long[] GateWaitTicks = new long[GateSites];
         public readonly long[] GateHoldTicks = new long[GateSites];
         public readonly long[] GateHoldMax = new long[GateSites];
+        /// <summary>The Stopwatch ticks of sections counted under a site of their own inside another entry's hold
+        /// (<see cref="GateNested"/>), which that entry leaves out of its own; written under the gate.</summary>
+        public long GateNestedTicks;
 
         private static readonly int GateSites = Enum.GetValues<Gate>().Length;
 
@@ -168,6 +177,7 @@ internal static class SdfMeshBakeReport {
             Array.Clear(array: GateWaitTicks);
             Array.Clear(array: GateHoldTicks);
             Array.Clear(array: GateHoldMax);
+            GateNestedTicks = 0L;
             m_allocatedAtStart = GC.GetTotalAllocatedBytes(precise: false);
             m_pausedAtStart = GC.GetTotalPauseDuration();
             m_gen0AtStart = GC.CollectionCount(generation: 0);
@@ -186,6 +196,14 @@ internal static class SdfMeshBakeReport {
             GateWaitTicks[index] += waited;
             GateHoldTicks[index] += held;
             GateHoldMax[index] = Math.Max(val1: GateHoldMax[index], val2: held);
+        }
+        /// <summary>Counts a section run inside a hold of the gate under a site of its own, with no wait, and leaves its time
+        /// out of the entry that encloses it.</summary>
+        /// <param name="site">The section's site.</param>
+        /// <param name="held">The Stopwatch ticks the section ran.</param>
+        public void GateNested(Gate site, long held) {
+            GateHeld(site: site, waited: 0L, held: held);
+            GateNestedTicks += held;
         }
         /// <summary>Counts one wait for the bake's gate on the frame thread.</summary>
         /// <param name="waited">The wait, in Stopwatch ticks.</param>

@@ -610,11 +610,50 @@ public sealed partial class SdfMeshPathBake {
 
         try {
             FinishReplacements();
-            Evict(frame: frame);
+            if (m_evictions.Count > 0) {
+                scope.Continue(site: BakeGate.Evict);
+                Evict(frame: frame);
+                scope.Continue(site: BakeGate.Retier);
+            }
             Retier(frame: frame);
+            scope.Continue(site: BakeGate.Judge);
             JudgeFloors();
             return new FrameAccess(owner: this, scope: scope);
         } catch { scope.Dispose(); throw; }
+    }
+
+    // The groups whose drawn state (their mesh, its tier or trace, or their place in the list) changed since the dresser
+    // last read the groups, so the dresser reconciles those alone. Invariant: every change of what the dresser reads of a
+    // group goes through Touch, which also moves the product revision the dresser stands its whole walk on, and a change
+    // no group names (the list replaced, a verdict declined, which moves every floor's trace) marks the whole list
+    // changed. FrameAccess takes the list under the gate, so a change made after that lands in the next. Under the gate.
+    private List<Group> m_touched = [];
+    private List<Group> m_touchedSpare = [];
+    private bool m_touchedAll = true;
+
+    private void Touch(Group group) {
+        m_productRevision++;
+        if (m_touchedAll || group.Touched) { return; }
+        group.Touched = true;
+        m_touched.Add(item: group);
+    }
+    // Marks every group changed, for a change that names none.
+    private void TouchAll() {
+        m_productRevision++;
+        m_touchedAll = true;
+    }
+    // Hands the dresser the groups changed since it last took them, and starts the next list.
+    private List<Group> TakeTouched(out bool whole) {
+        var taken = m_touched;
+
+        whole = m_touchedAll;
+        m_touchedAll = false;
+        foreach (var group in taken) { group.Touched = false; }
+        m_touched = m_touchedSpare;
+        m_touched.Clear();
+        m_touchedSpare = taken;
+
+        return taken;
     }
 
     // Invariant: the dresser reads the bake's groups (their list, drawn meshes, traces, tiers and copies) only while it
@@ -625,6 +664,7 @@ public sealed partial class SdfMeshPathBake {
     internal ref struct FrameAccess {
         private readonly SdfMeshPathBake m_owner;
 
+        private readonly List<Group> m_touched;
         private GateScope m_scope;
         private bool m_released;
 
@@ -634,14 +674,31 @@ public sealed partial class SdfMeshPathBake {
             m_scope.Continue(site: BakeGate.Dress);
             Revision = owner.m_productRevision;
             CopyLayoutRevision = owner.m_copyLayoutRevision;
+            m_touched = owner.TakeTouched(whole: out var whole);
+            Whole = whole;
         }
 
         internal long Revision { get; }
         internal long CopyLayoutRevision { get; }
+        // Whether the groups changed since the dresser last took the list are not named (the list was replaced, or a
+        // change named none), so the dresser reads every group.
+        internal bool Whole { get; }
+        // The groups changed since the dresser last took the list (Touch), read by index and valid only while the
+        // access holds the gate; with `Whole` the list is not the changes.
+        internal readonly int TouchedCount {
+            get {
+                _ = Owner;
+
+                return m_touched.Count;
+            }
+        }
         // The groups are read by index, so a dress allocates no enumerator.
         internal readonly int GroupCount => Owner.m_groups.Count;
 
         internal readonly SdfMeshBakeGroup GroupAt(int index) => Owner.m_groups[index];
+        internal readonly SdfMeshBakeGroup TouchedAt(int index) => Held(m_touched[index]);
+        // Whether the group stands in the bake's list, which the groups the dresser reads by index all do.
+        internal readonly bool Lists(SdfMeshBakeGroup group) => Held((Group)group).Listed;
         internal readonly SdfMesh? MeshOf(SdfMeshBakeGroup group) => Held((Group)group).Shown;
         // The mesh the irradiance volume traces in place of the group's drawn one (Group.Trace), null for the drawn one.
         internal readonly SdfMesh? TraceOf(SdfMeshBakeGroup group) => Held((Group)group).Trace;
@@ -879,22 +936,38 @@ public sealed partial class SdfMeshPathBake {
                 m_accounts.WaitingGroups += waiting;
                 m_accounts.FlyingGroups += flying;
                 m_accounts.WorkingGroups += working;
-                // A tier's replacement set into the list since the latest measure is ordered here, once until the next.
-                if (m_orderVersion != m_groups.Version) {
-                    Order(order: m_order, from: from);
-                    m_orderVersion = m_groups.Version;
-                }
             }
             var stop = 0;
             // The first group the account defers holds its place: no group behind it starts its final lattice
             // before it does, so a large group never starves behind a stream of smaller ones.
             var admissionWaits = false;
             var queued = -1;
+            var ready = m_readyHeap;
+            var wanting = m_wantingHeap;
 
-            foreach (var (_, index) in (pending ? CollectionsMarshal.AsSpan(list: m_order) : [])) {
-                var group = m_groups[index];
+            if (waiting > 0) {
+                // While the pool holds the stages an admission's lead would only wait behind, no group can begin its final
+                // lattice, so the groups wanting an admission are not read at all.
+                if (admitted > 0) {
+                    queued = QueuedStages();
+                    admissionWaits = Backlogged(awaiting: awaiting, queued: queued);
+                }
+                m_tally.Offered(includeWanting: !admissionWaits, ready: m_offeredReady, wanting: m_offeredWanting);
+                Rank(groups: m_offeredReady, heap: ready, owedOnly: owedOnly);
+                Rank(groups: m_offeredWanting, heap: wanting, owedOnly: owedOnly);
+            }
+            // The better ranked of the two sets' next groups, each set in its own order, and the plan's order among equals.
+            while (true) {
+                (float Priority, int Index) readyAt = default;
+                (float Priority, int Index) wantingAt = default;
 
-                if (!Offers(group: group, owedOnly: owedOnly)) { continue; }
+                var haveReady = ready.TryPeek(element: out _, priority: out readyAt);
+                var haveWanting = (!admissionWaits && wanting.TryPeek(element: out _, priority: out wantingAt));
+
+                if (!haveReady && !haveWanting) { break; }
+
+                var group = ((haveReady && (!haveWanting || (ByRank.Compare(x: readyAt, y: wantingAt) <= 0))) ? ready.Dequeue() : wanting.Dequeue());
+
                 if (lattices.Count >= SdfWorldPackage.MeshBakeBatch) { stop = 3; break; }
 
                 var next = group.Next!.Value;
@@ -971,6 +1044,9 @@ public sealed partial class SdfMeshPathBake {
                 m_takenKeys.Add(item: keys);
                 foreach (var (handle, snapshot) in group.SampledSnapshots) { m_takenSampled[handle] = snapshot; }
             }
+            // The heaps hold no group between takes, so none outlives the list that held it.
+            ready.Clear();
+            wanting.Clear();
             if (pending) {
                 if (lattices.Count == 0) { m_accounts.IdleTakes++; }
                 switch (stop) {
@@ -1019,24 +1095,21 @@ public sealed partial class SdfMeshPathBake {
         return true;
     }
 
-    // The order a take offers groups in: every group not done from the done cursor, as the list stood at m_orderVersion,
-    // by ByPriority over RankOf. Invariant: a take walks the order a sort of its candidates would give. A rank changes
-    // only in Prioritize, which takes the order again after measuring (into the spare, outside the gate, swapped in
-    // under it), and the list changes only through GroupList, whose Version the take compares, ordering again under the
-    // gate when a group was set in since. A group done since is passed over (Offers), and Done only turns on.
-    private List<(float Priority, int Index)> m_order = [];
-    private List<(float Priority, int Index)> m_spareOrder = [];
-    private int m_orderVersion = -1;
+    // The order a take offers groups in. Invariant: a take offers its candidates in the order a sort of them by ByRank
+    // would give, each at the rank it holds when the take reads it. A take reads only the groups the tally holds as
+    // offering (GroupTally), into two heaps (the ready, and the wanting an admission) it takes the better top of, so
+    // the cost of a take is the groups holding a lattice, and a rank changing while Prioritize measures it needs no
+    // index kept in step.
+    private readonly List<Group> m_offeredReady = [];
+    private readonly List<Group> m_offeredWanting = [];
+    private readonly PriorityQueue<Group, (float Priority, int Index)> m_readyHeap = new(comparer: ByRank);
+    private readonly PriorityQueue<Group, (float Priority, int Index)> m_wantingHeap = new(comparer: ByRank);
 
-    // Orders the groups not done from `from` by take priority into `order`.
-    private void Order(List<(float Priority, int Index)> order, int from) {
-        order.Clear();
-        for (var index = from; (index < m_groups.Count); index++) {
-            var group = m_groups[index];
-
-            if (!group.Done) { order.Add(item: (RankOf(group: group), index)); }
+    // Puts the groups a take may take a lattice of into a heap by their ranks.
+    private static void Rank(List<Group> groups, PriorityQueue<Group, (float Priority, int Index)> heap, bool owedOnly) {
+        foreach (var group in groups) {
+            if (Offers(group: group, owedOnly: owedOnly)) { heap.Enqueue(element: group, priority: (RankOf(group: group), group.Index)); }
         }
-        CollectionsMarshal.AsSpan(list: order).Sort(comparison: ByPriority);
     }
     // Whether a take may take a lattice of a group: one it owes, with none in flight or being worked, and, for an owed
     // take, owed to the frame.
@@ -1048,8 +1121,7 @@ public sealed partial class SdfMeshPathBake {
     // order kept.
     private static float RankOf(Group group) => (group.InView ? group.Priority : (-1f / (1f + group.Priority)));
     // Higher priority first, then the plan's order.
-    private static readonly Comparison<(float Priority, int Index)> ByPriority = static (left, right) =>
-        ((right.Priority.CompareTo(value: left.Priority) is var order and not 0) ? order : left.Index.CompareTo(value: right.Index));
+    private static readonly SdfMeshPriorityOrder ByRank = new();
 
     /// <summary>Returns a taken batch's lattices still unanswered to their groups, as when its dispatch never completed or
     /// its answer stopped part way; each group dispatches its lattice again. Their samples count as discarded when the GPU
@@ -1323,11 +1395,23 @@ public sealed partial class SdfMeshPathBake {
     // Puts a group at an index of the list, under the gate: with Restart's clear, the list's one writer, so it moves the
     // product revision the dresser stands its group walk on (SdfMeshDresser).
     private void Replace(int index, Group group) {
+        var displaced = m_groups[index];
+
         m_allResident = false;
         m_floorRevision++;
-        m_productRevision++;
         group.Owner = this;
+        // A group planned in a listed group's place ranks as that group last did, until a sweep measures it.
+        if (!ReferenceEquals(objA: displaced, objB: group) && displaced.Listed) {
+            group.Priority = displaced.Priority;
+            group.InView = displaced.InView;
+        }
         m_groups.Set(group: group, index: index);
+        Touch(group: group);
+        if (!ReferenceEquals(objA: displaced, objB: group)) {
+            Touch(group: displaced);
+            CountHoles(group: displaced, listed: false);
+        }
+        CountHoles(group: group, listed: true);
         m_doneThrough = Math.Min(val1: m_doneThrough, val2: index);
     }
     // Starts the bake of a new program: one group per dynamic slot and per run of static instances baked together (one rigid
@@ -1346,7 +1430,7 @@ public sealed partial class SdfMeshPathBake {
         m_program = program;
         m_sampled = sampled;
         m_groups.Clear();
-        m_productRevision++;
+        TouchAll();
         m_doneThrough = 0;
         // A slice samples one program and set: a new one takes every lattice again.
         m_slice?.Reset();
@@ -1405,9 +1489,10 @@ public sealed partial class SdfMeshPathBake {
             if (!planned.Contains(item: old)) { m_retiredGroups.Add(item: old); old.Retired = true; }
         }
         ListReaders();
+        ListKeepers();
         BeginOrphans(indices: null, started: ref started);
         m_firstDetailsOwed = m_groups.Count(predicate: static group => group.FirstDetailOwed);
-        Prioritize();
+        Prioritize(whole: true);
         BeginAccounts(cause: "program", fresh: true, instances: program.Instances.Count, restarted: restarted, started: started);
         m_restartMilliseconds = Stopwatch.GetElapsedTime(startingTimestamp: restarted).TotalMilliseconds;
     }
@@ -2738,6 +2823,8 @@ public sealed partial class SdfMeshPathBake {
                 if (value) { AwaitResidency(); }
             }
         }
+        // The index the group stands at in its bake's group list (GroupList.Set), which breaks ties among equal ranks.
+        public int Index { get; set; }
 
         private bool m_contouring;
         private bool m_done;
@@ -2746,10 +2833,30 @@ public sealed partial class SdfMeshPathBake {
         private long m_residentAt;
         private int m_awaitsResidency;
 
-        // What the group adds to its bake's counts (GroupTally), as recorded under the tally's lock.
+        // What the group adds to its bake's counts (GroupTally), as recorded under the tally's lock, and where it stands
+        // in the set of groups holding a lattice it is in.
         public int Tallied { get; set; }
+        public int OfferedAt { get; set; }
+        // What the group last added to the counts of the frame's holes, and the epoch it was counted in (CountHoles).
+        public int HoleBits { get; set; }
+        public int HoleEpoch { get; set; }
+        // Whether the group is on its bake's list of groups changed since the dresser read them (Touch), and on its list of
+        // groups that keep a floor (Keep).
+        public bool Touched { get; set; }
+        public bool Keeping { get; set; }
 
-        public int TallyOf() => GroupTally.Of(admitted: Admitted, awaiting: AwaitsStage, contouring: m_contouring, done: m_done, hasNext: (Next is not null), inFlight: m_inFlight, listed: m_listed);
+        private int m_awaitsJudging;
+
+        // Takes the group's place in the queue of groups the trace judge may owe a verdict on (Judgeable): true once until
+        // the scan reads it.
+        public bool TryQueueJudging() => (Interlocked.CompareExchange(location1: ref m_awaitsJudging, value: 1, comparand: 0) == 0);
+        public void ClearJudging() => Volatile.Write(location: ref m_awaitsJudging, value: 0);
+
+        public int TallyOf() {
+            var next = Next;
+
+            return GroupTally.Of(admitted: Admitted, awaiting: AwaitsStage, contouring: m_contouring, done: m_done, firstSlab: (next is { Slab: 0 }), hasNext: (next is not null), inFlight: m_inFlight, listed: m_listed);
+        }
         // Moves the group's contribution to its bake's counts to what its state now is; a group no bake owns yet adds none.
         private void Settle() => Owner?.m_tally.Settle(group: this);
         // Hands a landed group whose mesh has not stood in the mesh region to its bake's observer (ObserveResidency): the
@@ -2768,6 +2875,10 @@ public sealed partial class SdfMeshPathBake {
                 m_done = value;
                 Settle();
                 if (value) {
+                    // A done group may now be the trace of its own floor (Trace), which the dresser reads, and owe the
+                    // judge a verdict on it.
+                    Owner?.Touch(group: this);
+                    Owner?.Judgeable(group: this);
                     AwaitResidency();
                     Memory.ReleaseReservation();
                     EndShare();
@@ -2817,6 +2928,7 @@ public sealed partial class SdfMeshPathBake {
                     }
                     m_mesh = next;
                     SdfMeshSkin.Count(counters: owner.Library.Skins, mesh: next);
+                    owner.Judgeable(group: this);
                     return;
                 }
                 m_mesh = next;
@@ -2826,7 +2938,8 @@ public sealed partial class SdfMeshPathBake {
                 }
                 if (!ReferenceEquals(objA: next, objB: m_standIn)) { m_standIn = null; }
                 if (owner is not null) {
-                    owner.m_productRevision++;
+                    owner.Touch(group: this);
+                    owner.Judgeable(group: this);
                     if (next is not null) { SdfMeshSkin.Count(counters: owner.Library.Skins, mesh: next); }
                 }
                 old?.Release();
@@ -2845,7 +2958,7 @@ public sealed partial class SdfMeshPathBake {
             m_shown = null;
             shown.Release();
             if (ReferenceEquals(objA: shown, objB: m_standIn)) { m_standIn = null; }
-            if (Owner is { } owner) { owner.m_productRevision++; }
+            Owner?.Touch(group: this);
         }
         // Marks the mesh the group draws as the stand-in it took from the group it replaced (ShowReplaced), which shows
         // the geometry before the change rather than its own.
@@ -3023,6 +3136,10 @@ public sealed partial class SdfMeshPathBake {
         private Group? m_leader;
         private List<Group>? m_followers;
 
+        // The groups that named this group their leader and have not been handed over (TakeFollowers), some of which have
+        // since left it.
+        public IReadOnlyList<Group>? Followers => m_followers;
+
         // Hands over the groups that named this group their leader since the last hand-over.
         public List<Group> TakeFollowers() {
             var followers = (m_followers ?? []);
@@ -3136,7 +3253,12 @@ public sealed partial class SdfMeshPathBake {
             FloorGeometry = geometry;
             m_floorShape = shape;
             FloorVerdict = (atFloor ? new TraceVerdict() : old.FloorVerdict);
-            if (Owner is { } owner) { owner.m_floorRevision++; }
+            if (Owner is { } owner) {
+                owner.m_floorRevision++;
+                owner.Touch(group: this);
+                owner.Keep(group: this);
+                owner.Judgeable(group: this);
+            }
         }
 
         // Takes the demand box from the planned box, once.
