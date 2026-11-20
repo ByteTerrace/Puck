@@ -1,6 +1,7 @@
 using System.Buffers.Binary;
 using System.IO.Hashing;
 using System.Numerics;
+using Puck.Abstractions;
 using Puck.Input.Hid;
 using Puck.Input.Output;
 
@@ -259,15 +260,13 @@ public sealed class DualSenseController : IGamepadParser, IRumbleParser, ILedPar
         };
     }
     private async ValueTask LoadCalibrationAsync(CancellationToken cancellationToken) {
-        for (var attempt = 0; (attempt < CalibrationReadAttempts); ++attempt) {
-            if (TryLoadCalibration()) {
-                return;
-            }
-
-            await Task.Delay(
-                cancellationToken: cancellationToken,
-                millisecondsDelay: CalibrationRetryDelayMilliseconds
-            );
+        if (await Retry.UntilAsync(
+            attempt: TryLoadCalibration,
+            attempts: CalibrationReadAttempts,
+            cancellationToken: cancellationToken,
+            delay: TimeSpan.FromMilliseconds(CalibrationRetryDelayMilliseconds)
+        )) {
+            return;
         }
 
         Console.Error.WriteLine(value: $"[gamepad] DualSense IMU calibration unavailable after {CalibrationReadAttempts} attempts; using nominal scale");
