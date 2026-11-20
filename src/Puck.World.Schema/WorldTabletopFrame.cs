@@ -44,28 +44,17 @@ public static class WorldTabletopFrame {
     public static bool TryFind(WorldDefinition definition, string placementId, out WorldTabletopEngage engage, out CompiledTopology topology) {
         ArgumentNullException.ThrowIfNull(argument: definition);
 
-        var placements = definition.Placements;
+        if (
+            (WorldDefinitionRows.FindPlacement(id: placementId, placements: definition.Placements) is { Board: { Engage: { } found } board }) &&
+            (WorldTopologyCompilation.Find(
+            definition: definition,
+            name: board.Topology
+        ) is { } compiled)
+        ) {
+            engage = found;
+            topology = compiled;
 
-        for (var index = 0; (index < placements.Count); index++) {
-            var placement = placements[index];
-
-            if (
-                string.Equals(
-                a: placement.Id,
-                b: placementId,
-                comparisonType: StringComparison.Ordinal
-            ) &&
-                (placement.Board is { Engage: { } found } board) &&
-                (WorldTopologyCompilation.Find(
-                definition: definition,
-                name: board.Topology
-            ) is { } compiled)
-            ) {
-                engage = found;
-                topology = compiled;
-
-                return true;
-            }
+            return true;
         }
 
         engage = null!;

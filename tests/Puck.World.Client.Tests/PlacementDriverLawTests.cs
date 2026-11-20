@@ -167,7 +167,8 @@ public sealed class PlacementDriverLawTests {
         );
         var root = transforms[0];
 
-        Assert.True(condition: pool.TryShapePosition(client: client, placementId: "grass", position: out var initial, shapeId: 0));
+        Assert.True(condition: WorldAnchorPoses.TryPlacement(placementId: "grass", shapeId: 0, source: client, stamps: pool, pose: out var initialPose));
+        var initial = initialPose.Position;
 
         for (ulong tick = 2; (tick <= 31); tick++) {
             CreationDomainParentLawTests.Advance(
@@ -185,7 +186,8 @@ public sealed class PlacementDriverLawTests {
             root.Orientation,
             transforms[0].Orientation
         );
-        Assert.True(condition: pool.TryShapePosition(client: client, placementId: "grass", position: out var current, shapeId: 0));
+        Assert.True(condition: WorldAnchorPoses.TryPlacement(placementId: "grass", shapeId: 0, source: client, stamps: pool, pose: out var currentPose));
+        var current = currentPose.Position;
         var movement = Vector3.Distance(value1: initial, value2: current);
 
         if (requireGrounded) {

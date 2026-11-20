@@ -8,13 +8,26 @@ namespace Puck.World;
 /// the write door (<c>WorldRecipientMutations</c>) finds the installed row a write replaces through the same one, so
 /// the two cannot key a section differently. A key bound to a state row (a creation's id, a look's name) is its live
 /// value, which composition compares and the door never reads: it asks <see cref="ReferenceOf"/> instead, and treats
-/// a row with a bound key as one any write to the section may target.</remarks>
+/// a row with a bound key as one any write to the section may target.
+/// <para>A list of at least <see cref="IndexedRowCount"/> rows finds a key through its <see cref="WorldRowIndex{T, TKey}"/>,
+/// derived once per list instance (<see cref="IndexOf"/>), rather than a scan: every placement a scene emits or a
+/// collider set compiles resolves its creation, so a scan is a row count times a lookup count per pass. The index holds
+/// only the rows before the list's first bound key, because a bound key reads a live value that the list's identity
+/// cannot vouch for; a miss in a list holding one scans, reading (or throwing for) the bound keys exactly as the scan
+/// always has. A key function is therefore a pure function of its row unless <paramref name="referenceOf"/> names the
+/// binding it reads.</para></remarks>
 /// <typeparam name="T">The row type.</typeparam>
 /// <typeparam name="TKey">The key type.</typeparam>
 /// <param name="keyOf">Reads a row's key: its resolved or live value.</param>
 /// <param name="referenceOf">Reads the state reference a bound key reads, or <see langword="null"/> for a literal
 /// key; omitted for a section whose keys are always literal.</param>
-public sealed class WorldRowKey<T, TKey>(Func<T, TKey> keyOf, Func<T, string?>? referenceOf = null) {
+public sealed class WorldRowKey<T, TKey>(Func<T, TKey> keyOf, Func<T, string?>? referenceOf = null) where TKey : notnull {
+    /// <summary>The row count from which <see cref="Find"/> resolves a key through the list's index: below it,
+    /// comparing every row costs less than the weak-table lookup that finds the index.</summary>
+    public const int IndexedRowCount = 16;
+
+    private readonly Puck.Abstractions.CodeDerivedTable<IReadOnlyList<T>, WorldRowIndex<T, TKey>> m_indices = new();
+
     /// <summary>Reads a row's key as composition compares it.</summary>
     /// <param name="row">The row.</param>
     /// <returns>The key.</returns>
@@ -36,11 +49,116 @@ public sealed class WorldRowKey<T, TKey>(Func<T, TKey> keyOf, Func<T, string?>? 
     /// unresolved reference.</exception>
     public T? Find(IReadOnlyList<T>? rows, TKey key) {
         if (rows is null) { return default; }
-        for (var index = 0; index < rows.Count; index++) {
-            var row = rows[index];
+        if (rows.Count >= IndexedRowCount) {
+            var index = IndexOf(rows: rows);
+
+            if (index.TryGetPosition(key: key, position: out var position)) { return rows[position]; }
+            if (!index.Bound) { return default; }
+        }
+        for (var position = 0; position < rows.Count; position++) {
+            var row = rows[position];
             if ((row is not null) && Same(keyOf(row), key)) { return row; }
         }
         return default;
+    }
+    /// <summary>Gets a list's index, derived once per list instance, and again should the list have grown since it
+    /// was indexed (composition reads lists it is still appending to).</summary>
+    /// <param name="rows">The section's rows.</param>
+    /// <returns>The index, the first row of a key winning as in <see cref="Find"/>'s scan.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="rows"/> is <see langword="null"/>.</exception>
+    /// <remarks>The invariant is that an indexed list is never changed in place: a document's rows are replaced
+    /// wholesale, a new list per edit. Growth is detected; a row replaced in place is not, and nothing enforces that
+    /// an arbitrary <see cref="IReadOnlyList{T}"/> stays unchanged, so a caller that edits a list it has already
+    /// passed here reads a stale index.</remarks>
+    public WorldRowIndex<T, TKey> IndexOf(IReadOnlyList<T> rows) {
+        ArgumentNullException.ThrowIfNull(argument: rows);
+
+        if (m_indices.TryGetValue(key: rows, value: out var held) && (held.RowCount == rows.Count)) {
+            return held;
+        }
+
+        var built = new WorldRowIndex<T, TKey>(keyOf: keyOf, referenceOf: referenceOf, rows: rows);
+
+        m_indices.AddOrUpdate(key: rows, value: built);
+
+        return built;
+    }
+}
+
+/// <summary>A keyed section's rows by key, derived from one list instance by <see cref="WorldRowKey{T, TKey}.IndexOf"/>:
+/// each key's first position over the rows before the list's first bound key, read as a dictionary of those rows. A
+/// null row and a null key are skipped.</summary>
+/// <typeparam name="T">The row type.</typeparam>
+/// <typeparam name="TKey">The key type.</typeparam>
+public sealed class WorldRowIndex<T, TKey> : IReadOnlyDictionary<TKey, T> where TKey : notnull {
+    private readonly IReadOnlyList<T> m_rows;
+    private readonly Dictionary<TKey, int> m_positions;
+
+    internal WorldRowIndex(IReadOnlyList<T> rows, Func<T, TKey> keyOf, Func<T, string?>? referenceOf) {
+        m_rows = rows;
+        RowCount = rows.Count;
+        m_positions = new Dictionary<TKey, int>(capacity: rows.Count);
+
+        for (var position = 0; (position < rows.Count); position++) {
+            var row = rows[position];
+            if (row is null) { continue; }
+            if (referenceOf?.Invoke(arg: row) is not null) {
+                Bound = true;
+
+                break;
+            }
+            if (keyOf(arg: row) is { } key) { _ = m_positions.TryAdd(key: key, value: position); }
+        }
+    }
+
+    /// <summary>Gets whether the list holds a bound key, at and past which nothing is indexed.</summary>
+    public bool Bound { get; }
+    /// <summary>Gets the number of rows the list held when it was indexed.</summary>
+    public int RowCount { get; }
+    /// <summary>Gets the number of keys indexed.</summary>
+    public int Count => m_positions.Count;
+    /// <summary>Gets the keys indexed, in no particular order.</summary>
+    public IEnumerable<TKey> Keys => m_positions.Keys;
+    /// <summary>Gets each key's first row, in no particular order.</summary>
+    public IEnumerable<T> Values {
+        get {
+            foreach (var position in m_positions.Values) { yield return m_rows[position]; }
+        }
+    }
+
+    /// <summary>Gets a key's first row.</summary>
+    /// <param name="key">The key.</param>
+    /// <exception cref="KeyNotFoundException">No indexed row has the key.</exception>
+    public T this[TKey key] => m_rows[m_positions[key]];
+
+    /// <summary>Returns whether an indexed row has the key.</summary>
+    /// <param name="key">The key.</param>
+    public bool ContainsKey(TKey key) => m_positions.ContainsKey(key: key);
+    /// <summary>Enumerates each key with its first row.</summary>
+    public IEnumerator<KeyValuePair<TKey, T>> GetEnumerator() {
+        foreach (var (key, position) in m_positions) { yield return new KeyValuePair<TKey, T>(key: key, value: m_rows[position]); }
+    }
+    System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
+    /// <summary>Finds a key's first position in the indexed list.</summary>
+    /// <param name="key">The key.</param>
+    /// <param name="position">The position, or -1.</param>
+    /// <returns><see langword="true"/> when an indexed row has the key.</returns>
+    public bool TryGetPosition(TKey key, out int position) {
+        if (m_positions.TryGetValue(key: key, value: out position)) { return true; }
+        position = -1;
+        return false;
+    }
+    /// <summary>Gets a key's first row.</summary>
+    /// <param name="key">The key.</param>
+    /// <param name="value">The row, or <see langword="null"/>.</param>
+    /// <returns><see langword="true"/> when an indexed row has the key.</returns>
+    public bool TryGetValue(TKey key, [System.Diagnostics.CodeAnalysis.MaybeNullWhen(returnValue: false)] out T value) {
+        if (m_positions.TryGetValue(key: key, value: out var position)) {
+            value = m_rows[position];
+            return true;
+        }
+        value = default;
+        return false;
     }
 }
 

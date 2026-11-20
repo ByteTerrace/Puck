@@ -152,9 +152,9 @@ A point light's `anchor` is a `WorldAnchor.Placement` only (every other anchor
 kind is refused by name): its position then rides that placement's — or, with
 `shapeId`, one of the placement's creation shapes' — dynamic transform every
 frame instead of the authored `position`, so the light follows the placement.
-Resolved in `WorldFramePresenter` (`WorldCreationInstances.TryShapeTransformSlot`),
-fresh every produced frame. Renderer contract: `rendering` skill sync pairs, the
-lights table.
+Resolved in `WorldFramePresenter` through `WorldAnchorPoses`, the resolver
+cameras, speakers and overlays read, fresh every produced frame. Renderer
+contract: `rendering` skill sync pairs, the lights table.
 
 `WorldRenderLight.Occluder` uses ordinary light rows to attenuate nearby
 surface illumination. It declares `position`, positive `radius`,

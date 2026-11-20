@@ -104,12 +104,9 @@ public sealed partial class WorldTick : IWorldPersistedSection<WorldBoardEnforce
 
         var placements = Host.Document.Definition.Placements;
 
-        for (var index = 0; (index < placements.Count); index++) {
-            var placement = placements[index];
-
-            if (placement.Board is not { Enforcement: WorldBoardEnforcement.Return } board) {
-                continue;
-            }
+        foreach (var ordinal in WorldPlacementIndex.Of(placements: placements).ReturnBoards) {
+            var placement = placements[ordinal];
+            var board = placement.Board!;
 
             if (
                 (board.Verdict is not { } verdictName) ||
@@ -173,11 +170,10 @@ public sealed partial class WorldTick : IWorldPersistedSection<WorldBoardEnforce
         }
 
         var live = new HashSet<string>(comparer: StringComparer.Ordinal);
+        var placements = definition.Placements;
 
-        foreach (var placement in definition.Placements) {
-            if (placement.Board is { Enforcement: WorldBoardEnforcement.Return }) {
-                _ = live.Add(item: placement.Id);
-            }
+        foreach (var ordinal in WorldPlacementIndex.Of(placements: placements).ReturnBoards) {
+            _ = live.Add(item: placements[ordinal].Id);
         }
 
         List<string>? stale = null;

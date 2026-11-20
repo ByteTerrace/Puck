@@ -324,42 +324,13 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
             picks: m_picks
         );
     }
-    // The camera row's anchor pose as the destination's mirror resolves it: a Placement anchor reads the destination's
-    // own authored transform, and an Entity anchor its mirrored body's interpolated pose while the body is active. Any
-    // other anchor (a body part, a group, a seat) resolves to the world origin: the mirror carries no part poses, and the
-    // presentation seats no one in the destination.
-    private static (Vector3 Position, Quaternion Orientation) ResolveAnchorPose(WorldSessionMirror mirror, WorldDefinition definition, WorldAnchor? anchor) {
-        switch (anchor) {
-            case WorldAnchor.Placement placement:
-                return (WorldAnchorGeometry.StaticPlacementPosition(
-                    definition: definition,
-                    placementId: placement.PlacementId,
-                    shapeId: placement.ShapeId
-                ), Quaternion.Identity);
-            case WorldAnchor.Entity entity when (
-                (((uint)entity.Index) < WorldBodiesLimits.CapacityCeiling) &&
-                mirror.IsActive(index: entity.Index)
-            ):
-                var alpha = mirror.InterpolationAlpha;
-
-                return (WorldPoseInterpolation.Position(
-                    alpha: alpha,
-                    previous: mirror.PreviousPosition(index: entity.Index),
-                    current: mirror.CurrentPosition(index: entity.Index)
-                ), WorldPoseInterpolation.Orientation(
-                    alpha: alpha,
-                    previous: mirror.PreviousOrientation(index: entity.Index),
-                    current: mirror.CurrentOrientation(index: entity.Index)
-                ));
-            default:
-                return (Vector3.Zero, Quaternion.Identity);
-        }
-    }
 
     // The rig each authored camera program compiles to against one state mirror, recompiled only when the cache's
     // inputs move. A rig ResolveCamera resolves holds no history (its look and spread stay at rest), so the cached
     // rig answers what a fresh compile would.
     private static readonly Puck.Abstractions.CodeDerivedTable<WorldStateMirror, Puck.Abstractions.CodeDerivedTable<WorldCameraProgram, WorldCameraRigCompiler.Cache>> ResolvedRigs = new();
+    // Each destination mirror read as the pose source its cameras' anchors resolve against, so a resolve allocates none.
+    private static readonly Puck.Abstractions.CodeDerivedTable<WorldSessionMirror, WorldSessionStampSource> AnchorSources = new();
 
     /// <summary>Resolves the camera a session's ordinary projection renders a destination through this frame: the named
     /// camera if the destination still declares it, else the destination's first declared camera, else a fixed overview
@@ -384,11 +355,16 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
         );
 
         if (row is { } cameraRow) {
-            var (position, orientation) = ResolveAnchorPose(
+            // The one resolver over the destination's mirrored poses, with no stamp pool: a placement rides its rest
+            // pose, an entity its mirrored body, and what the mirror cannot answer (a part, a seat, since the
+            // presentation seats no one in the destination) frames the origin.
+            var (position, orientation) = (WorldAnchorPoses.TryResolve(
                 anchor: cameraRow.Anchor,
-                definition: definition,
-                mirror: mirror
-            );
+                pose: out var anchorPose,
+                scope: new WorldAnchorScope(Source: AnchorSources.GetValue(key: mirror, derive: static held => new WorldSessionStampSource(mirror: held)), Stamps: null, Transforms: default)
+            )
+                ? (anchorPose.Position, anchorPose.Orientation)
+                : (Vector3.Zero, Quaternion.Identity));
             var state = mirror.FollowState();
             var cache = ResolvedRigs.GetValue(key: state, derive: static _ => new()).GetValue(key: cameraRow.Rig, derive: static _ => new());
             IWorldCameraProgramRig rig;

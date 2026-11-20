@@ -8,8 +8,8 @@ namespace Puck.World;
 /// against — the closed "what a camera program can key off" vocabulary. Distinct from <see cref="WorldAnchor"/> (WHERE
 /// a whole placeable camera or speaker rides, resolved OUTSIDE the program and handed in as one reference pose): this
 /// is presentation math INSIDE the program, so it stays float and needs no live entity table — a placement's pose
-/// resolves through the same static stamped-transform math a placeable camera's own anchor and a speaker read
-/// (<c>Puck.World.Client.WorldAnchorGeometry</c>).
+/// is its rest pose (<c>Puck.World.Client.WorldAnchorPoses.TryRestPlacement</c>), the document-only branch of the
+/// resolver a placeable camera's own anchor and a speaker read live.
 /// </summary>
 [System.Text.Json.Serialization.JsonDerivedType(typeof(WorldCameraSubject.Reference), typeDiscriminator: "reference")]
 [System.Text.Json.Serialization.JsonDerivedType(typeof(WorldCameraSubject.Placement), typeDiscriminator: "placement")]
