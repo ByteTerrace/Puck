@@ -141,10 +141,9 @@ public static class ShapeEmission {
     /// <param name="smooth">The blend radius, world units.</param>
     /// <param name="detail">Whether the primitive is a detail shape.</param>
     /// <param name="curve">Whether to carry the shape's sweep curve; a trim's reference re-reads only the primitive.</param>
-    /// <param name="contact">Whether the primitive is emitted for authoritative fixed-point contact.</param>
     /// <returns>The builder.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="shape"/> is <see langword="null"/>.</exception>
-    public static SdfProgramBuilder AppendPrimitive(SdfProgramBuilder chain, ShapeDocument shape, Vector3 scale, int material, SdfBlendOp blend = SdfBlendOp.Union, float smooth = 0f, bool detail = false, bool curve = true, bool contact = false) {
+    public static SdfProgramBuilder AppendPrimitive(SdfProgramBuilder chain, ShapeDocument shape, Vector3 scale, int material, SdfBlendOp blend = SdfBlendOp.Union, float smooth = 0f, bool detail = false, bool curve = true) {
         ArgumentNullException.ThrowIfNull(shape);
 
         return SdfSolidGeometry.AppendScaledPrimitive(
@@ -163,8 +162,7 @@ public static class ShapeEmission {
             material: material,
             blend: blend,
             smooth: smooth,
-            detail: detail,
-            contact: contact
+            detail: detail
         );
     }
 

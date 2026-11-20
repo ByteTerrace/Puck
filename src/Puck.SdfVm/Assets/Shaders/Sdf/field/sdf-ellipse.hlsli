@@ -1,75 +1,88 @@
 #ifndef PUCK_SDF_ELLIPSE_HLSLI
 #define PUCK_SDF_ELLIPSE_HLSLI
 
-// The signed Euclidean distance from p to the ellipse of semi-axes ab, negative inside: Eberly's robust projection, the
-// one root of F(u) = (r·z0 / (u − 1 + r))² + (z1 / u)² − 1 bisected on its bracket, where z is the point over the
-// semi-axes with the major axis first, r the squared ratio of the axes and u the minor axis's projection parameter plus
-// one. Bisecting u rather than the parameter itself keeps its relative precision where it nears zero, beside the major
-// axis inside the ellipse; float cannot hold a closed form's cancellation there or along either axis. The points on
-// either axis take the CPU evaluator's branches (SdfEllipse2D in SdfFieldEvaluator.Ellipse.cs, KEEP IN SYNC), which
-// answers the same distance in Q48.16.
+// F's sign at u for the root below: a ratio at or above one makes it positive without squaring anything past one.
+bool sdfEllipseRootAbove(float2 numerator, float2 gap, float u) {
+    float2 w = (numerator / (u + gap));
+
+    return ((w.x >= 1.0) || (w.y >= 1.0) || ((dot(w, w) - 1.0) > 0.0));
+}
+
+// The signed Euclidean distance from p to the ellipse of semi-axes ab, negative inside: the same root as the CPU's
+// FixedEllipsoidProjection, in binary32 and with no interval. With m the least axis, gap_i = (e_i - e_m)(e_i + e_m) and
+// w_i(u) = e_i p_i / (u + gap_i), F(u) = sum(w_i^2) - 1 falls strictly for u > 0 and the foot at u is q_i = e_i w_i; u is
+// measured from the least axis's pole, so no step subtracts two like quantities. Every length is first scaled by one power
+// of two that puts the largest below two, so no square overflows at any radius a document admits. The side comes from the
+// implicit test; the bracket runs from e_m p_m to e_m^2 inside and to |e p| outside, halved geometrically while its ends
+// differ by more than two to one and arithmetically after, until it has no middle; a point on the minor axis's plane takes
+// the pole when the other term's square there is at most one. A result that is not finite answers the scaled circle's
+// bound, (|p / e| - 1) min(e).
 precise float sdfEllipse2D(float2 p, float2 ab) {
+    float2 e = max(ab, 1.0e-30);
     float2 y = abs(p);
-    float2 e = ab;
+    float widest = max(max(e.x, e.y), max(y.x, y.y));
+    // 2^-k for widest in [2^(k-1), 2^k): the scaled widest lies in [0.5, 1).
+    int exponent = (int)((asuint(widest) >> 23u) & 0xFFu) - 126;
+    float scale = ldexp(1.0, -exponent);
 
-    // The major axis first.
-    if (e.x < e.y) {
-        y = y.yx;
-        e = e.yx;
+    e *= scale;
+    y *= scale;
+
+    float2 z = (y / e);
+
+    if ((z.x < 1.0) && (z.y < 1.0) && (dot(z, z) == 1.0)) {
+        return 0.0;
     }
-    if (y.y > 0.0) {
-        if (y.x <= 0.0) {
-            return (y.y - e.y);
+
+    bool outside = ((z.x >= 1.0) || (z.y >= 1.0) || (dot(z, z) > 1.0));
+    float least = min(e.x, e.y);
+    float2 gap = ((e - least) * (e + least));
+    float2 numerator = (e * y);
+    float start = max(((gap.x == 0.0) ? numerator.x : 0.0), ((gap.y == 0.0) ? numerator.y : 0.0));
+    float pole = (least * least);
+    float low = start;
+    float high = pole;
+
+    if (outside) {
+        low = max(start, pole);
+        high = length(numerator);
+    } else if (start == 0.0) {
+        // Every least axis's coordinate is zero: the root is the pole when the other term's square there is at most one.
+        float2 w = float2(((gap.x > 0.0) ? (numerator.x / gap.x) : 0.0), ((gap.y > 0.0) ? (numerator.y / gap.y) : 0.0));
+        float sum = dot(w, w);
+
+        if ((w.x < 1.0) && (w.y < 1.0) && (sum <= 1.0)) {
+            float2 foot = (e * w);
+            float rest = (least * sqrt(max(0.0, (1.0 - sum))));
+
+            if (gap.x == 0.0) { foot.x = rest; } else { foot.y = rest; }
+            return (-length(foot - y) / scale);
         }
+    }
 
-        float2 z = (y / e);
-        float g = (dot(z, z) - 1.0);
-        float ratio = (e.x / e.y);
-        float r = (ratio * ratio);
-        float n = (r * z.x);
-        // The minor axis's term bounds u below by z1; zero inside and the projection's reach outside bound the parameter
-        // above.
-        float low = z.y;
-        float high = ((g < 0.0) ? 1.0 : length(float2(n, z.y)));
-        float u = low;
+    [loop]
+    for (uint step = 0u; (step < SDF_ELLIPSE_ROOT_STEPS); step++) {
+        float middle = (((low > 0.0) && (high > (2.0 * low))) ? (sqrt(low) * sqrt(high)) : (0.5 * (low + high)));
 
-        [loop]
-        for (uint step = 0u; (step < SDF_ELLIPSE_ROOT_STEPS); step++) {
-            u = (0.5 * (low + high));
-            if ((u <= low) || (u >= high)) {
-                break;
-            }
-
-            float a = (n / ((u - 1.0) + r));
-            float b = (z.y / u);
-            float value = (((a * a) + (b * b)) - 1.0);
-
-            if (value > 0.0) {
-                low = u;
-            } else {
-                high = u;
-            }
+        if ((middle <= low) || (middle >= high)) {
+            break;
         }
-
-        float2 nearest = float2(((r * y.x) / ((u - 1.0) + r)), (y.y / u));
-        float distance = length(nearest - y);
-
-        return ((g < 0.0) ? -distance : distance);
+        if (sdfEllipseRootAbove(numerator, gap, middle)) {
+            low = middle;
+        } else {
+            high = middle;
+        }
     }
 
-    // On the major axis: inside, nearest a point off it while the axis point lies within its evolute's cusp; otherwise
-    // nearest the vertex.
-    float numerator = (e.x * y.x);
-    float denominator = ((e.x * e.x) - (e.y * e.y));
+    float u = (0.5 * (low + high));
+    float2 nearest = ((e * numerator) / (u + gap));
+    float distance = (length(nearest - y) / scale);
 
-    if (numerator < denominator) {
-        float t = (numerator / denominator);
-        float2 nearest = float2((e.x * t), (e.y * sqrt(max(0.0, (1.0 - (t * t))))));
-
-        return -length(nearest - float2(y.x, 0.0));
+    if (!isfinite(distance)) {
+        return ((length(z) - 1.0) * least / scale);
     }
 
-    return (y.x - e.x);
+    return (outside ? distance : -distance);
 }
 
 #endif

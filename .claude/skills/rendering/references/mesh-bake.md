@@ -141,6 +141,12 @@ device sampling. Do not infer a GPU race from a whole-store hash alone.
   fine from interpolated coarse values and merge each piece into one vertex,
   which keeps the mesh crack-free. Never refine a cell without that ring: a
   whole cell next to measured fine samples cracks (`SdfSampledLatticeLawTests`).
+  A thin sheet's cells take a finer split where the ordinary one leaves room
+  (`SdfMeshPathBake.ThinSplit`), and so does every measured cell sharing a face
+  or an edge with one: a sheet runs past the last coarse line that caught it,
+  and a coarser stride beside it steps over the sheet between the fine samples
+  the two cells share, ending it in a cap inside the solid whose merged vertex
+  sits between the sheet's faces (the range windows' rims).
   The ring's crossings carry interpolated coarse gradients, so a crease inside
   it is cut: a gap between two inside samples refines only where the falls meet
   half a fine cell below the surface. Solids that touch (a stair's treads, a

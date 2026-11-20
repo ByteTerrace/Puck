@@ -1105,7 +1105,9 @@ Next: fill the engine gaps first
    tier's floor still refines the cells it cannot resolve at all
    (`SdfMeshPathBake.FactorOf`), so the swallow's streamer tips are no longer
    lost. A broad sheet can also take an extra split when the ordinary
-   refinement would still leave a coarse cell (`SdfMeshPathBake.ThinSplit`).
+   refinement would still leave a coarse cell (`SdfMeshPathBake.ThinSplit`), and
+   so do the measured cells beside it (`SdfSampledLattice.Refine`), which closed
+   the range windows' flips, folds and off-surface vertices.
    Still open, each read in the exhibit's own vertices: the junction
    where a groove's lips meet a box edge (`shape-groove-union`) and where a
    rounded rim fades into a sharp edge (`shape-smooth-subtraction`), where the
@@ -1216,13 +1218,26 @@ Next: fill the engine gaps first
   her flipped triangles in two groups, nearly all under a square millimetre
   and strung along the blades' edges: each blade tapers to a rim thinner than
   the 2 mm floor, two creases in one cell, which one vertex a patch cannot
-  hold. `blinkCrease-*` and `nozzleGlow-*` are next on her, and
-  `range-window` and the Humble Brick's face are the worst of a wider sample;
-  none of those four is examined. The contour needs a rule for a face it cannot
+  hold. `blinkCrease-*` and `nozzleGlow-*` are next on her, and the Humble
+  Brick's face is the worst of a wider sample; none of those three is examined. The contour needs a rule for a face it cannot
   resolve (close it to one crease, as `SdfSampledLattice.CloseSheets` closes a
   sheet, or refine it), and the non-manifold edges on the shins' soles sit on
   the same edges. The one detail rule exposes the defect and does not cause
-  it.
+  it. Read in the left blade group's contour: 940 of its 1,003 narrow faces
+  lie in measured cells of stride one (2.1 mm), as triangles 0.3 to 0.4 mm
+  high beside crease vertices on the shell's cut edge, where the flared field
+  reads a fifth of the distance (slope 0.2), so the rule acts in the measured
+  contour, not in the ring or the refinement.
+- [high] `shape-blend-xor`'s 112 flipped triangles lie along the pinch curves
+  where the sphere crosses the box's faces, where the XOR's two solids touch
+  along a line. 102 of its 108 narrow faces lie in ring cells, and the usual
+  flip joins two lattice vertices to a ring cell's merged vertex (24 to 33
+  fine vertices of one 15 mm cell) that the field check then moved 2 to 4 mm
+  onto one sheet. Declaring the XOR's seam as detail, to refine the pinch at
+  2 mm, moved the defects into measured cells and left 101 flips and 314
+  folds, so the cause is the contour at a pinch at any spacing: it needs a
+  rule that keeps the two wedges' vertices on the pinch line and never joins
+  them through one vertex, not more refinement.
 - [high] [Moving blends](moving-blends.md) steps 4 and 5 still need the lead's
   presented striped-neck check and the quiet-window cost of a skinned
   close-up and a crowd on both backends.
@@ -1231,10 +1246,6 @@ Next: fill the engine gaps first
   than a cell. A measured cell whose fine samples are two affine faces takes
   its split as its contour stride
   ([the memo's step 4](bake-demand-tiers.md#steps-and-checks)).
-- [high] A rim thinner than a group's final cell is lost (`range-window`'s
-  2 cm rim): a declared feature narrower than the cell must refine or be
-  reported. This is the engine gap above (gap 7), with the tapered tip of the
-  tapered-tip item below it.
 - [medium] Glyphs have no CPU reference: `SdfFieldEvaluator` has no
   interpreter for the `Glyph` shape, so `puck mesh audit --cpu` and
   `puck mesh preview` bake a plaque's text empty and no audit covers text. Add
