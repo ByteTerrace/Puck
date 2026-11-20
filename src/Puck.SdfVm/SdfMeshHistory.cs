@@ -136,10 +136,6 @@ public sealed class SdfMeshHistory {
     /// <param name="cause">The cause.</param>
     /// <returns>The <c>sdf.instances.rows.packed.&lt;cause&gt;</c> kind.</returns>
     public static WorkKind RowsPackedOf(SdfMeshStagingCause cause) => RowsPackedKinds[((int)cause)];
-    /// <summary>Returns the kind counting the stagings that packed a record under a cause.</summary>
-    /// <param name="cause">The cause.</param>
-    /// <returns>The <c>sdf.instances.frames.&lt;cause&gt;</c> kind.</returns>
-    public static WorkKind FramesOf(SdfMeshStagingCause cause) => FramesKinds[((int)cause)];
     /// <summary>Returns the kind counting the stagings whose records under a cause number more than
     /// <see cref="ChunkRecords"/>.</summary>
     /// <param name="cause">The cause.</param>

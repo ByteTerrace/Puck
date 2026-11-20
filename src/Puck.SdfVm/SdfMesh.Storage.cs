@@ -454,7 +454,6 @@ public sealed partial record SdfMesh {
             block.Resize(length, clear: false, preserve: false);
             return block;
         }
-        public ReadOnlyMemory<T> Copy<T>(ReadOnlyMemory<T> source, IAllocator allocator) where T : unmanaged => Copy(allocator: allocator, block: out _, source: source);
         public ReadOnlyMemory<T> Copy<T>(ReadOnlyMemory<T> source, IAllocator allocator, out OwnedBuffer<T>? block) where T : unmanaged {
             block = null;
             if (source.IsEmpty) { return default; }
