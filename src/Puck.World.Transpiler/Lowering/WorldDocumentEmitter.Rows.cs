@@ -238,6 +238,7 @@ public static partial class WorldDocumentEmitter {
 
             case ForStatementNode loop:
                 foreach (var (produced, iteration) in DocumentLowering.ExpandForStatements(
+                    bindLets: true,
                     loop: loop,
                     scope: scope
                 )) {

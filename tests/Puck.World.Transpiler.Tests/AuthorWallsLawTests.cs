@@ -1,9 +1,7 @@
 using System.Text.Json;
-using System.Text.Json.Nodes;
 using Puck.State.Rules;
 using Puck.Transpiler.Formatting;
 using Puck.Transpiler.Parsing;
-using Puck.World;
 using Puck.World.Transpiler.Lowering;
 using Xunit;
 
@@ -42,7 +40,7 @@ public class AuthorWallsLawTests {
             }
             """;
 
-        var result = WorldCompileSession.Shared.Compile(source: Source);
+        var result = WorldCompileSession.Shared.Compile(cancellationToken: TestContext.Current.CancellationToken, source: Source);
 
         Assert.False(condition: result.Diagnostics.HasErrors, userMessage: result.Diagnostics.FormatReport(sourceText: Source));
         Assert.Equal(expected: 3, actual: result.TestWorlds.Count);
@@ -96,7 +94,7 @@ public class AuthorWallsLawTests {
             }
             """;
 
-        var compiled = WorldCompileSession.Shared.Compile(source: Source);
+        var compiled = WorldCompileSession.Shared.Compile(cancellationToken: TestContext.Current.CancellationToken, source: Source);
 
         Assert.False(condition: compiled.Diagnostics.HasErrors, userMessage: compiled.Diagnostics.FormatReport(sourceText: Source));
 
@@ -128,12 +126,13 @@ public class AuthorWallsLawTests {
             }
             """;
 
-        var compiled = WorldCompileSession.Shared.Compile(source: Source);
+        var compiled = WorldCompileSession.Shared.Compile(cancellationToken: TestContext.Current.CancellationToken, source: Source);
 
         Assert.True(condition: compiled.Diagnostics.HasErrors);
         Assert.Contains(
-            collection: compiled.Diagnostics.Errors,
-            filter: static error => error.Message.Contains(value: "capacity(auto)", comparisonType: StringComparison.Ordinal)
+            actualString: compiled.Diagnostics.FormatReport(sourceText: Source),
+            comparisonType: StringComparison.Ordinal,
+            expectedSubstring: "capacity(auto)"
         );
     }
 
@@ -148,12 +147,13 @@ public class AuthorWallsLawTests {
             host: baseObj with notAnObject
             """;
 
-        var compiled = WorldCompileSession.Shared.Compile(source: Source);
+        var compiled = WorldCompileSession.Shared.Compile(cancellationToken: TestContext.Current.CancellationToken, source: Source);
 
         Assert.True(condition: compiled.Diagnostics.HasErrors);
         Assert.Contains(
-            collection: compiled.Diagnostics.Errors,
-            filter: static error => error.Message.Contains(value: "'with'", comparisonType: StringComparison.Ordinal)
+            actualString: compiled.Diagnostics.FormatReport(sourceText: Source),
+            comparisonType: StringComparison.Ordinal,
+            expectedSubstring: "'with'"
         );
     }
 
@@ -178,12 +178,12 @@ public class AuthorWallsLawTests {
 
         Assert.False(condition: parsed.Diagnostics.HasErrors, userMessage: parsed.Diagnostics.FormatReport(sourceText: Source));
 
-        var printedOnce = PuckPrinter.Print(document: parsed.Value!, source: Source);
+        var printedOnce = PuckPrinter.Print(document: PuckSyntaxTrivia.Attach(document: parsed.Value!, source: Source));
         var reparsed = PuckParser.ParseDocumentWithDiagnostics(source: printedOnce, vocabulary: WorldDocumentVocabulary.Instance);
 
         Assert.False(condition: reparsed.Diagnostics.HasErrors, userMessage: reparsed.Diagnostics.FormatReport(sourceText: printedOnce));
 
-        var printedTwice = PuckPrinter.Print(document: reparsed.Value!, source: printedOnce);
+        var printedTwice = PuckPrinter.Print(document: PuckSyntaxTrivia.Attach(document: reparsed.Value!, source: printedOnce));
 
         Assert.Equal(expected: printedOnce, actual: printedTwice);
     }

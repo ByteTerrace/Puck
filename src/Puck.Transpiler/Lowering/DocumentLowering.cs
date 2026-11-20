@@ -1439,14 +1439,16 @@ public static partial class DocumentLowering {
     /// <param name="target">The object the body's statements land in.</param>
     /// <param name="scope">The enclosing scope.</param>
     /// <param name="sink">The vocabulary's own statement processor.</param>
+    /// <param name="bindLets">Whether to evaluate and bind compile-time <c>let</c> statements inside the loop body.</param>
     /// <remarks>Compile-time: the document carries the statements produced, never the loop. The bound names are
     /// locals, so they shadow a constant of the same name for the length of one iteration and are gone after.</remarks>
-    public static void ExpandFor(ForStatementNode loop, JsonObject target, DocumentScope scope, Action<StatementNode, JsonObject, DocumentScope> sink) {
+    public static void ExpandFor(ForStatementNode loop, JsonObject target, DocumentScope scope, Action<StatementNode, JsonObject, DocumentScope> sink, bool bindLets = false) {
         ArgumentNullException.ThrowIfNull(loop);
         ArgumentNullException.ThrowIfNull(scope);
         ArgumentNullException.ThrowIfNull(sink);
 
         foreach (var (statement, iteration) in ExpandForStatements(
+            bindLets: bindLets,
             loop: loop,
             scope: scope
         )) {
@@ -1461,8 +1463,11 @@ public static partial class DocumentLowering {
     /// live in, for a section whose rows a dedicated dispatcher reads.</summary>
     /// <param name="loop">The loop as written.</param>
     /// <param name="scope">The enclosing scope.</param>
+    /// <param name="bindLets">Whether to evaluate and bind compile-time <c>let</c> statements inside the loop body
+    /// rather than yielding them (false for vocabularies such as <c>shade</c> whose <c>let</c>s hold runtime
+    /// expressions).</param>
     /// <returns>Each produced statement and the scope to lower it under.</returns>
-    public static IEnumerable<(StatementNode Statement, DocumentScope Scope)> ExpandForStatements(ForStatementNode loop, DocumentScope scope) {
+    public static IEnumerable<(StatementNode Statement, DocumentScope Scope)> ExpandForStatements(ForStatementNode loop, DocumentScope scope, bool bindLets = false) {
         ArgumentNullException.ThrowIfNull(loop);
         ArgumentNullException.ThrowIfNull(scope);
         using var expansion = scope.Budget.Enter(span: loop.Span);
@@ -1488,7 +1493,7 @@ public static partial class DocumentLowering {
                     count: 1,
                     span: statement.Span
                 );
-                if (statement is LetNode binding) {
+                if (bindLets && (statement is LetNode binding)) {
                     active = BindLocalLet(binding: binding, scope: active);
                     continue;
                 }
@@ -1746,9 +1751,6 @@ public static partial class DocumentLowering {
                 count: 1,
                 span: stmt.Span
             );
-            if (stmt is LetNode or TemplateNode) {
-                continue;
-            }
             var diagnosticStart = scope.Diagnostics.Count;
 
             try {

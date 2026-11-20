@@ -392,6 +392,7 @@ public static partial class WorldDocumentEmitter {
 
             case ForStatementNode loop:
                 DocumentLowering.ExpandFor(
+                    bindLets: true,
                     loop: loop,
                     scope: scope,
                     sink: ProcessStatement,
