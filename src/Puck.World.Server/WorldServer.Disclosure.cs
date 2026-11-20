@@ -22,9 +22,9 @@ public sealed partial class WorldServer {
     // per audience while nothing it reads moves.
     internal Puck.Assets.ContentPin WholeSceneIdentity() => (m_wholeView ??= DeliveryView(Principal.Console, WorldDisclosureTier.Replica)).SceneIdentity!.Value;
 
-    internal WorldRecipientView DeliveryView(Principal? recipient, WorldDisclosureTier tier, Func<bool>? observes = null) =>
+    internal WorldRecipientView DeliveryView(Principal? recipient, WorldDisclosureTier tier, Func<bool>? observes = null, Func<bool>? readsDocument = null) =>
         new(() => Definition, () => Arena, recipient, tier, observes ?? (() => true), m_disclosureImages,
-            AuthorityIdentity, () => DeliveryTime, () => recipient is { } actor && Grants.IsOperator(actor));
+            AuthorityIdentity, () => DeliveryTime, () => recipient is { } actor && Grants.IsOperator(actor), readsDocument);
 
     /// <summary>Mints the live capability this ingress-stamped console invocation reads through.</summary>
     /// <param name="context">The invocation's context, carrying its stamped principal.</param>
@@ -57,7 +57,13 @@ public sealed partial class WorldServer {
     // mints the policy's own tier for every principal: never a session's delivery ceiling or its live observation,
     // which restrict what its stream carries, not what it may write. Whether a session may act at all is the
     // submission door's (a stale epoch is refused before admission), and what it may write is its grants'.
-    internal WorldRecipientView WriteView(Principal? recipient) => PolicyView(recipient);
+    // A guard over the document is a read of it, so a session's write capability answers one only while its read
+    // door hands it a replica document (WorldRecipientView.AdmitsDefinition); every other principal reads at Replica.
+    internal WorldRecipientView WriteView(Principal? recipient) => (recipient is { Kind: PrincipalKind.Session } session)
+        ? DeliveryView(session, WorldDisclosureTier.Replica, readsDocument: () => ReadsDocument(session))
+        : PolicyView(recipient);
+    private bool ReadsDocument(Principal session) => AllowsSessionQuery(session, StateObservationsQuery) &&
+        m_sessionSinks.TryGetValue(session, out var attached) && (attached.Observation.View.Ceiling == WorldDisclosureTier.Replica);
 
     internal StateReadAccess ReadForWrite(WorldRecipientView view) {
         var arena = Arena;

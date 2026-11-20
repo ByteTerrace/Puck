@@ -13,6 +13,20 @@ using Puck.World.Machines;
 namespace Puck.World.Testing;
 
 internal static partial class Fixtures {
+    /// <summary>Submits one mutation as its own principal through the local submission door, steps one tick, and
+    /// returns the typed outcome the submitter is answered with.</summary>
+    /// <param name="fixture">The running world.</param>
+    /// <param name="mutation">The mutation, carrying the acting principal.</param>
+    /// <returns>The outcome.</returns>
+    public static WorldMutationOutcome SubmitMutation(this WorldFixture fixture, WorldMutation mutation) {
+        var results = new List<WorldSubmissionResult>();
+
+        fixture.Server.Submit(new SubmissionEnvelope(ConnectionId: SubmissionEnvelope.LocalConnectionId,
+            SessionGeneration: 0, Sequence: 1, CorrelationId: 1, Principal: mutation.Principal,
+            Payload: new WorldSubmissionPayload.Mutation(Value: mutation), OperationId: Guid.NewGuid()), results.Add);
+        fixture.Step();
+        return Assert.IsType<WorldSubmissionResult.Mutation>(@object: Assert.Single(collection: results)).Outcome;
+    }
     /// <summary>Starts a world with a live replica peer. The admission grants no mutation or row access.</summary>
     public static WorldFixture FreshServerWithPeer(WorldDefinition definition, out Principal peer) {
         var entry = new WorldAdmissionEntry(Domain: "https://issuer.test", Subject: "reader",

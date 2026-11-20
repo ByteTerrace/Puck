@@ -8,14 +8,6 @@ namespace Puck.World.Server.Tests;
 // A recipient's write or guard answers alike whatever withheld state holds. Each case varies only a withheld value
 // and compares what the recipient is told; running a World cannot construct the two variants side by side.
 public sealed class RecipientOracleLawTests {
-    private static WorldMutationOutcome Submit(WorldFixture fixture, WorldMutation mutation) {
-        var results = new List<WorldSubmissionResult>();
-        fixture.Server.Submit(new SubmissionEnvelope(ConnectionId: SubmissionEnvelope.LocalConnectionId,
-            SessionGeneration: 0, Sequence: 1, CorrelationId: 1, Principal: mutation.Principal,
-            Payload: new WorldSubmissionPayload.Mutation(Value: mutation), OperationId: Guid.NewGuid()), results.Add);
-        fixture.Step();
-        return Assert.IsType<WorldSubmissionResult.Mutation>(Assert.Single(results)).Outcome;
-    }
 
     private static WorldStateRow Audience(string token, bool cellVisibility = true) =>
         new(CellName.Parse("audience"), CellKind.Text, Domain: StateDomain.Keys.Instance, CellVisibility: cellVisibility,
@@ -70,7 +62,7 @@ public sealed class RecipientOracleLawTests {
             var batch = new WorldMutation.Batch(Principal.Seat(0),
                 [new WorldMutation.UpsertStateCell(Principal.Seat(0), "marker", StateRow.SlotKey.Value, 1, WorldDocumentWriteKind.Set)],
                 ExpectedSpatialReads: [new WorldSpatialReadDependency(-131072, -131072, 131072, 131072, new string('0', 64))]);
-            var outcome = Submit(fixture, batch);
+            var outcome = fixture.SubmitMutation(batch);
             outcomes.Add($"{outcome.Code}:{outcome.Detail}");
         }
         Assert.Equal(outcomes[0], outcomes[1]);
@@ -92,7 +84,7 @@ public sealed class RecipientOracleLawTests {
             var document = Fixtures.BuildDocument().WithWorldState([cards, pile, rank]);
             Assert.True(WorldDefinitionValidator.TryValidateLocally(document, out var reason), reason);
             using var fixture = Fixtures.FreshServer(document);
-            var outcome = Submit(fixture, new WorldMutation.TransformState(Principal.Seat(0), new StateTransform.Arrange("pile", "rank")));
+            var outcome = fixture.SubmitMutation(new WorldMutation.TransformState(Principal.Seat(0), new StateTransform.Arrange("pile", "rank")));
             outcomes.Add($"{outcome.Code}:{outcome.Detail}");
         }
         Assert.Equal(outcomes[0], outcomes[1]);
@@ -111,7 +103,7 @@ public sealed class RecipientOracleLawTests {
             var document = Fixtures.BuildDocument().WithWorldState([cards, hand]);
             Assert.True(WorldDefinitionValidator.TryValidateLocally(document, out var reason), reason);
             using var fixture = Fixtures.FreshServer(document);
-            var outcome = Submit(fixture, new WorldMutation.UpsertStateCell(Principal.Seat(0), "hand", "x", 5, WorldDocumentWriteKind.Set));
+            var outcome = fixture.SubmitMutation(new WorldMutation.UpsertStateCell(Principal.Seat(0), "hand", "x", 5, WorldDocumentWriteKind.Set));
             outcomes.Add($"{outcome.Code}:{outcome.Detail}");
         }
         Assert.Equal(outcomes[0], outcomes[1]);
@@ -150,7 +142,7 @@ public sealed class RecipientOracleLawTests {
             using var fixture = Fixtures.FreshServer(document);
             fixture.Server.Grant(actor: Principal.Console, grant: new WorldGrant(Capability: WorldCapability.Edit, Exclusive: false,
                 Grantee: Principal.Seat(0), Subject: GrantSubject.State("cards")));
-            var outcome = Submit(fixture, new WorldMutation.RemoveStateCell(Principal.Seat(0), "cards", "x"));
+            var outcome = fixture.SubmitMutation(new WorldMutation.RemoveStateCell(Principal.Seat(0), "cards", "x"));
             outcomes.Add($"{outcome.Code}:{outcome.Detail}");
             Assert.Equal(2, fixture.Server.ExportDefinition().State[0].Cells!.Count);
         }
@@ -171,7 +163,7 @@ public sealed class RecipientOracleLawTests {
             using var fixture = Fixtures.FreshServer(document);
             var probe = new WorldStateRow(CellName.Parse("probe"), CellKind.Int, Domain: new StateDomain.KeysOf(CellName.Parse("cards")),
                 Cells: [new StateCell(CellName.Parse("x"), CellValue.Int(0))]);
-            var outcome = Submit(fixture, new WorldMutation.UpsertStateRow(Principal.Seat(0), probe));
+            var outcome = fixture.SubmitMutation(new WorldMutation.UpsertStateRow(Principal.Seat(0), probe));
             outcomes.Add($"{outcome.Code}:{outcome.Detail}");
             Assert.Single(fixture.Server.ExportDefinition().State);
         }
@@ -223,7 +215,7 @@ public sealed class RecipientOracleLawTests {
                 KindMask: WorldMutationKindCatalog.KindsOf(WorldSection.Placements), Grantee: Principal.Seat(0),
                 Subject: GrantSubject.Section(WorldSection.Placements)));
             var probe = new WorldPlacement("probe", document.Creations[0].Id, new DocumentVector3(0, 0, 0), 0, 1);
-            var outcome = Submit(fixture, new WorldMutation.UpsertPlacement(Principal.Seat(0), probe));
+            var outcome = fixture.SubmitMutation(new WorldMutation.UpsertPlacement(Principal.Seat(0), probe));
             outcomes.Add($"{outcome.Applied}:{outcome.Code}:{outcome.Detail}");
         }
         Assert.Equal(outcomes[0], outcomes[1]);
@@ -244,7 +236,7 @@ public sealed class RecipientOracleLawTests {
             Assert.True(WorldDefinitionValidator.TryValidateLocally(document, out var reason), reason);
             using var fixture = Fixtures.FreshServer(document);
             var rule = new WorldRule(CellName.Parse("probe"), [new ActionEffect.SetState("marker", FromState: "vault", FromKey: "x")]);
-            var outcome = Submit(fixture, new WorldMutation.UpsertWorldRule(Principal.Seat(0), rule));
+            var outcome = fixture.SubmitMutation(new WorldMutation.UpsertWorldRule(Principal.Seat(0), rule));
             outcomes.Add($"{outcome.Code}:{outcome.Detail}");
             Assert.Empty(fixture.Server.ExportDefinition().Rules ?? []);
         }
@@ -271,7 +263,7 @@ public sealed class RecipientOracleLawTests {
             using var fixture = Fixtures.FreshServer(document);
             fixture.Step();
             Assert.Equal(dealt, fixture.Server.ExportDefinition().Placements.Any(placement => placement.Id == WorldPlacementDeal.ChildId("tmpl", "x")));
-            var outcome = Submit(fixture, new WorldMutation.UpsertPlacement(Principal.Seat(0), template with { Deal = null }));
+            var outcome = fixture.SubmitMutation(new WorldMutation.UpsertPlacement(Principal.Seat(0), template with { Deal = null }));
             outcomes.Add($"{outcome.Code}:{outcome.Detail}");
         }
         Assert.Equal(outcomes[0], outcomes[1]);
@@ -330,6 +322,6 @@ public sealed class RecipientOracleLawTests {
         using var fixture = Fixtures.FreshServer(document);
         var batch = new WorldMutation.Batch(Principal.Seat(0), [new WorldMutation.UpsertPlacement(Principal.Seat(0), a with { Parent = "b" }),
             new WorldMutation.RemovePlacement(Principal.Seat(0), "b")]);
-        Assert.False(string.IsNullOrEmpty(Submit(fixture, batch).Code));
+        Assert.False(string.IsNullOrEmpty(fixture.SubmitMutation(batch).Code));
     }
 }

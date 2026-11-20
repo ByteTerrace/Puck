@@ -18,15 +18,6 @@ public sealed class MutationIndirectObservationLawTests {
     private void Observe(WorldFixture fixture, string row) => fixture.Server.Grant(
         actor: Principal.Console, grant: new WorldGrant(Grantee: m_actor, Capability: WorldCapability.Observe,
             Subject: GrantSubject.State(name: row), Exclusive: false, Budget: 16));
-    private WorldMutationOutcome Apply(WorldFixture fixture, WorldMutation mutation) {
-        var results = new List<WorldSubmissionResult>();
-
-        fixture.Server.Submit(new SubmissionEnvelope(ConnectionId: SubmissionEnvelope.LocalConnectionId,
-            SessionGeneration: 0, Sequence: 1, CorrelationId: 1, Principal: m_actor,
-            Payload: new WorldSubmissionPayload.Mutation(Value: mutation), OperationId: Guid.NewGuid()), results.Add);
-        fixture.Step();
-        return Assert.IsType<WorldSubmissionResult.Mutation>(@object: Assert.Single(collection: results)).Outcome;
-    }
 
     [InlineData(false)]
     [InlineData(true)]
@@ -49,13 +40,13 @@ public sealed class MutationIndirectObservationLawTests {
         var mutation = new WorldMutation.TransformState(m_actor, (combine
             ? new StateTransform.BoardCombine(Row: "target", Operation: BoardCombineOp.Or, Left: "selection", Right: "selection")
             : new StateTransform.WriteSet(Row: "target", Set: "selection", Value: 1)));
-        var denied = Apply(fixture: fixture, mutation: mutation);
+        var denied = fixture.SubmitMutation(mutation: mutation);
 
         Assert.False(condition: denied.Applied);
         Assert.Contains("cannot observe state:secret", denied.Detail);
         Assert.Empty(collection: (WorldDefinitionRows.FindStateRow(fixture.Server.ExportDefinition().State, "target")!.Cells ?? []));
         Observe(fixture: fixture, row: "secret");
-        var allowed = Apply(fixture: fixture, mutation: mutation);
+        var allowed = fixture.SubmitMutation(mutation: mutation);
 
         Assert.True(condition: allowed.Applied, userMessage: allowed.Detail);
         Assert.Equal(1, WorldDefinitionRows.FindStateRow(fixture.Server.ExportDefinition().State, "target")!.Cells![0].Value.AsInt);
@@ -74,13 +65,13 @@ public sealed class MutationIndirectObservationLawTests {
 
         GrantMutation(fixture: fixture, section: WorldSection.Placements);
         var mutation = new WorldMutation.UpsertPlacement(Placement: placement, Principal: m_actor);
-        var denied = Apply(fixture: fixture, mutation: mutation);
+        var denied = fixture.SubmitMutation(mutation: mutation);
 
         Assert.False(condition: denied.Applied);
         Assert.Contains("cannot observe state:secret", denied.Detail);
         Assert.Null(@object: WorldDefinitionRows.FindPlacement(fixture.Server.ExportDefinition().Placements, "placed"));
         Observe(fixture: fixture, row: "secret");
-        var allowed = Apply(fixture: fixture, mutation: mutation);
+        var allowed = fixture.SubmitMutation(mutation: mutation);
 
         Assert.True(condition: allowed.Applied, userMessage: allowed.Detail);
         Assert.Equal(new System.Numerics.Vector3(x: 2, y: 3, z: 4), WorldDefinitionRows.ResolvedPosition(definition: fixture.Server.ExportDefinition(), placement: WorldDefinitionRows.FindPlacement(fixture.Server.ExportDefinition().Placements, "placed")!));
