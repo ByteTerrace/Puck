@@ -198,7 +198,7 @@ In this worktree, Puck divides outbound filtering across three mechanisms:
      /// authority tick; the default is 0.03 seconds (30 Hz on the standard 240 Hz authority after whole-step
      /// quantization). Local in-process sinks are unaffected.</param>
      ```
-   - `src/Puck.World.Server/WorldOutputHub.cs:372-406` **[opened]** runs `Redact` per non-full subscriber by scanning `entries.Length` linearly to find `observerPosition` and then scanning `entries.Length` a second time to filter by `disclosure.Policy.Discloses(...)`.
+   - `src/Puck.World.Server/WorldOutputHub.cs@d1ac00b941:372-406` **[opened]** runs `Redact` per non-full subscriber by scanning `entries.Length` linearly to find `observerPosition` and then scanning `entries.Length` a second time to filter by `disclosure.Policy.Discloses(...)`.
    - **Four MMO-scale gaps in Puck's current body interest management (`[inference]` from the `[opened]` code above):**
      1. **$O(N \times M)$ scan in the former hub redaction pass:** For $M$ remote observers under `WorldObserverDisclosureMode.Radius` and $N$ active bodies, `Redact` performs $2 \times N \times M$ linear array scans every delivery tick with no spatial grid.
      2. **No radius hysteresis:** A body stepping back and forth across `Radius` enters and leaves the observer's snapshot on consecutive ticks.
@@ -319,7 +319,7 @@ In Puck's current codebase, "running without a frame" is already supported at tw
        - **Explicit unembodied observer policy (closes Attack A16):** Replace the implicit fallback where `All` exposes every body to an unembodied connection (`docs/plans/mmo-foundations/attacks.md:537-542` **[opened]**) and `Radius` delivers nothing (`src/Puck.World.Schema/WorldObserverDisclosure.cs:13` **[opened]**). Require an unembodied observer under `Radius` to read only from an authorised camera/portal anchor (the `window` counterpart frame or spectator camera position), or receive zero bodies unless the admission row explicitly grants full-map observation.
        - **Distance/priority cadence tiers inside `WorldDeliveryCursor` (mitigates Attack A12):** Instead of one flat `UpdateSeconds = 0.03f` (`src/Puck.World.Schema/WorldObserverDisclosure.cs:33` **[opened]**) and detaching the sink when `PendingDeliveryLimit = 8` fills, let `WorldDeliveryCursor` decimate distant body pose updates (for example: full rate within near radius, half/quarter rate in mid/far rings, while keeping `WorldClockAnchorLedger` affine clock anchors intact) so a dense town hub degrades distant animation smoothness before disconnecting the peer.
   3. **`WorldDisclosureTier.Replica`:** Receives the full disclosed document and state cells the recipient's `WorldRecipientView` permits (`docs/plans/disclosure.md:237-241` **[opened]**), used for trusted shadows, co-simulating peers or full-map spectators.
-- **What it costs:** Replaces the former hub redaction pass's stateless two-loop scan (`src/Puck.World.Server/WorldOutputHub.cs:372-406` **[opened]**) with a per-tick spatial grid bin and per-cursor AoI membership bitset.
+- **What it costs:** Replaces the former hub redaction pass's stateless two-loop scan (`src/Puck.World.Server/WorldOutputHub.cs@d1ac00b941:372-406` **[opened]**) with a per-tick spatial grid bin and per-cursor AoI membership bitset.
 - **Attacks closed:** Closes **A16** (unembodied scouting under `Presentation`), narrows **A12** (backpressure disconnects in crowds), and aligns body visibility with the fog-of-war skirmish fixture already planned in `docs/plans/disclosure.md:589-590` **[opened]** (`"a small fog-of-war skirmish (hidden positions, physics, a search over what a side can see)"`).
 
 #### Option I2: Keep `WorldObserverDisclosure` as a separate post-tick filter in `WorldOutputHub`, adding only a spatial grid and an `Unembodied` mode field
@@ -426,7 +426,7 @@ Each leading option can be proved in `worlds/debug` with a small, concrete scena
 3. **Whether player-hosted worlds may ever host raw PvP without a neutral witness/referee (Owner call + Lane B):**
    - Option C2 proves simulation honesty between two peers via determinism and state hashes, but still requires a witness (a relay or silo) to attribute a disconnect/stall or arbitrate a hash mismatch when real stakes or durable progress are on the line (Lane B's custody/write-through scope).
 4. **Measured CPU and bandwidth crossover for spatial-grid AoI in `WorldOutputHub` (Measurement):**
-   - At what exact body count $N$ and subscriber count $M$ does a 2D spatial grid inside `WorldRecipientView` / `WorldOutputHub` beat the current contiguous `Span<EntitySnapshot>` scan (`src/Puck.World.Server/WorldOutputHub.cs:372-406` **[opened]**) on cache locality? A `puck bench` measurement over $N \in \{32, 128, 512\}$ and $M \in \{16, 64, 256\}$ settles this.
+   - At what exact body count $N$ and subscriber count $M$ does a 2D spatial grid inside `WorldRecipientView` / `WorldOutputHub` beat the current contiguous `Span<EntitySnapshot>` scan (`src/Puck.World.Server/WorldOutputHub.cs@d1ac00b941:372-406` **[opened]**) on cache locality? A `puck bench` measurement over $N \in \{32, 128, 512\}$ and $M \in \{16, 64, 256\}$ settles this.
 
 ---
 

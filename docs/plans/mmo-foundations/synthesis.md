@@ -95,7 +95,7 @@ the memo:
    ```
 
    and `WorldFederationCodec.TryDecodeReservation`
-   (`src/Puck.World.Server/WorldFederationCodec.cs:1443`):
+   (`src/Puck.World.Server/WorldFederationCodec.cs@d1ac00b941:1443`):
 
    ```csharp
            PeerAdmission: true,
@@ -663,10 +663,10 @@ escape, and Puck's seam contact field is today a griefing lever
 ```
 
 No `.puck` file under `worlds/` authors an `adjacencies` row (a search finds
-none) **[opened]**, so every seam check must author one first. Body disclosure
-is a two-scan filter at the hub with three modes and a flat cadence
+none) **[opened]**, so every seam check must author one first. At the revision
+examined here body disclosure was a two-scan filter at the hub with three modes and a flat cadence
 **[opened]** (`src/Puck.World.Schema/WorldObserverDisclosure.cs:8-18`,
-`src/Puck.World.Server/WorldOutputHub.cs:376`):
+`src/Puck.World.Server/WorldOutputHub.cs@d1ac00b941:376`):
 
 ```csharp
     public static WorldSnapshot Redact(in WorldSinkDisclosure disclosure, in WorldSnapshot snapshot, ref EntitySnapshot[] scratch) {
@@ -742,7 +742,7 @@ none, because `Redact` anchors only to a body **[opened]**
     /// plus that body itself. An observer with no body of its own is delivered nothing.</summary>
 ```
 
-and (`src/Puck.World.Server/WorldOutputHub.cs:378-379`):
+and (`src/Puck.World.Server/WorldOutputHub.cs@d1ac00b941:378-379`):
 
 ```csharp
         var observerIndex = disclosure.ObserverBodyIndex;
