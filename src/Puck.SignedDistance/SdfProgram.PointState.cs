@@ -27,11 +27,11 @@ public sealed partial class SdfProgram {
     // moved when it was moved on entry or a point op follows. A skippable segment (an instance's, or a world segment with a
     // shape, the only kind the directory gives a bound) also leaves whatever entered it. A world segment with no shape is
     // always evaluated.
-    private void RequireSegmentsStartAtTheWorldPoint(int[] instructionOwners, string paramName) {
+    private void RequireSegmentsStartAtTheWorldPoint(int[] instructionOwners, string paramName, List<(int Start, int End)> ranges) {
         var moved = false;
         var mover = -1;
 
-        foreach (var (first, last) in SegmentRanges()) {
+        foreach (var (first, last) in ranges) {
             var startsWithReset = (m_instructions[first].Op == SdfOp.ResetPoint);
             var firstMover = -1;
             var hasShape = false;

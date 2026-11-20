@@ -95,13 +95,6 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
     uint segmentOffset = sdfProgramLayout.segmentOffset;
     uint segmentCount = sdfProgramLayout.segmentCount;
     uint rigidPlanOffset = sdfProgramLayout.rigidPlanOffset;
-    // The per-PROGRAM Lipschitz STEP SCALE (1/L; see sdfStepScale). Applied as ONE multiply on the FINAL returned
-    // distance below, it clamps sphere-tracing steps to the field's true rate of change so a non-1-Lipschitz warp
-    // (twist/bend/chamfer/displace/domain-warp) cannot overstep and hole. DISTINCT from the
-    // per-sample distanceScale below (the true DOMAIN corrections: Scale's min-axis factor and LogSphere's r/density
-    // factor) — that one is applied per candidate mid-walk; this is the field-preserving step clamp on the final min.
-    // Never merge the two.
-    float stepScale = sdfProgramLayout.stepScale;
     uint instanceOffset = sdfProgramLayout.instanceOffset;
     uint instanceCount = sdfProgramLayout.instanceCount;
     uint worldSegmentOffset = sdfProgramLayout.worldSegmentOffset;
@@ -138,11 +131,20 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
     float3 localPosition = worldPosition;
     // distanceScale is the PER-SAMPLE, PER-CANDIDATE domain correction: SDF_OP_SCALE folds its min-axis factor in here
     // and SDF_OP_LOG_SPHERE its r/density shell factor, composing multiplicatively. It multiplies EACH shape candidate
-    // before blending, so it participates in the min, the material winner, and the field ops. This is a SEPARATE channel
-    // from the per-program stepScale above — that one clamps only the FINAL returned distance to keep a marcher's
-    // steps 1-Lipschitz-safe and never touches a candidate mid-walk. Keep the two distinct.
+    // before blending. A separate candidate clamp applies in hard fields with no magnitude readers.
     float distanceScale = 1.0;
     int currentSlot = SDF_TRANSFORM_SLOT_NONE;
+    uint frameKey = 0u;
+    uint framePending = SDF_SEGMENT_NONE;
+    float3 framePosition = worldPosition;
+    float frameScale = 1.0;
+    int frameSlot = SDF_TRANSFORM_SLOT_NONE;
+    SdfDynamicRoot dynamicRoot;
+    dynamicRoot.slot = SDF_TRANSFORM_SLOT_NONE;
+    dynamicRoot.localPosition = worldPosition;
+#ifdef SDF_DYNAMIC_TRANSFORMS
+    uint rootDynamicIndex = 0u;
+#endif
     // SDF_OP_LANE_ERODE's pending effect on the NEXT SDF_OP_SHAPE_BLEND: a cheap early-out skip (no field cost) or,
     // otherwise, a world-unit additive erosion. Consumed and cleared there; reset with the chain.
     bool laneErodeSkipShape = false;
@@ -208,7 +210,7 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                     }
                 }
                 if (partReady) {
-                    sdfComposePartProgram(result, worldPosition, part, dataOffset, (int)pendingInstance, trackMaterial);
+                    sdfComposePartProgram(result, worldPosition, part, dataOffset, (int)pendingInstance, trackMaterial, dynamicRoot);
                     sdfNextVisibleInstanceRange(instanceMaskBase, instanceOffset, instanceCount, maskWordIndex,
                         maskWordBits, instanceSegment, instanceSegmentEnd, pendingInstance);
                     continue;
@@ -280,9 +282,7 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                 if (plan.z != SDF_TRANSFORM_SLOT_STATIC_WORD) {
                     uint dynamicSlot = (uint)SDF_TRANSFORM_SLOT_UNPACK(plan.z);
                     rigidSlot = (int)dynamicSlot;
-                    float4 dynamicPosition = sdfDynamicTransformRow(3u * dynamicSlot);
-                    float4 dynamicOrientation = sdfDynamicTransformRow((3u * dynamicSlot) + 1u);
-                    rigidBasePosition = rotatePointByInverseQuaternion((worldPosition - dynamicPosition.xyz), dynamicOrientation);
+                    rigidBasePosition = sdfWorldPointInSlot(worldPosition, dynamicSlot, dynamicRoot);
                 }
 #endif
 
@@ -342,6 +342,13 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
 
         [loop]
         for (uint index = segmentMeta.z; index < min(segmentMeta.w, sdfProgramLayout.instructionCount); index++) {
+            if (index == framePending) {
+                framePosition = localPosition;
+                frameScale = distanceScale;
+                frameSlot = currentSlot;
+                framePending = SDF_SEGMENT_NONE;
+            }
+
             // The validated layout spans and this loop's index bound admit direct header and payload reads.
             uint4 instructionHeader = sdfFieldHeader(index);
             uint op = SDF_INSTRUCTION_OP(instructionHeader);
@@ -378,17 +385,6 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
         }
     }
 
-    // The Lipschitz clamp: scale the FINAL nearest-surface distance by the per-program 1/L, as the CPU marchers over
-    // the same stream do. Applied ONCE here, AFTER the walk — the per-candidate blends, the material-winner
-    // compares, the Onion/Dilate/Displace field ops, and the exact-cull skip tests all ran on UNCORRECTED candidates, so
-    // the zero set, the seams, the materials, and the cull contract are all preserved; only the step LENGTH shrinks. A
-    // uniform positive scale never moves the zero crossing, and a normal probe's common factor cancels under normalize
-    // (true of both the 4-tap tetrahedron and the 6-tap central difference), so shading is unchanged. stepScale == 1.0
-    // leaves the result bit-identical.
-    //
-    // The bake receives the clamped field: its sign and zero set are the unclamped field's, and its gradient taps'
-    // common factor cancels under normalize.
-    result.distance *= stepScale;
     return result;
 }
 

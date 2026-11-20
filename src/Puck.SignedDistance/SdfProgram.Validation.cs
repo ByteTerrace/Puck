@@ -393,7 +393,7 @@ public sealed partial class SdfProgram {
     // by instruction: it is only well-defined once the instance-range sweep below has refused a range reaching past
     // the stream, and building it earlier would replace that named refusal with an IndexOutOfRangeException.
     // Material and screen references are checked against the appearance's outline; SdfAppearance validates the values.
-    private int[] ValidatePackedContract(string instancesParamName, string instructionsParamName) {
+    private (int[] Owners, List<(int Start, int End)> Ranges) ValidatePackedContract(string instancesParamName, string instructionsParamName) {
         var materialCount = m_outline.Materials;
 
         for (var index = 0; (index < m_instructions.Length); index++) {
@@ -493,12 +493,15 @@ public sealed partial class SdfProgram {
             paramName: instructionsParamName
         );
         DecodeReliefRuns(instructionOwners: instructionOwners, paramName: instructionsParamName);
+        var ranges = SegmentRanges();
+
         RequireSegmentsStartAtTheWorldPoint(
             instructionOwners: instructionOwners,
-            paramName: instructionsParamName
+            paramName: instructionsParamName,
+            ranges: ranges
         );
 
-        return instructionOwners;
+        return (instructionOwners, ranges);
     }
 
     public void ValidateIsa() {

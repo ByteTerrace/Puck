@@ -238,6 +238,10 @@ public sealed partial class SdfProgram {
                     // query point nor distance scale, so it does not require a generic segment.
                     break;
                 case SdfRigidPlanAction.ShapeBlend: {
+                        if (ShapeStepScaleAt(instructionIndex: index) != 1f) {
+                            dynamicSlot = NoDynamicTransformSlot;
+                            return false;
+                        }
                         // Leaves retain their original shape header, as the generic walks read it.
                         if (int.MinValue == commonDynamicSlot) {
                             commonDynamicSlot = chainDynamicSlot;
