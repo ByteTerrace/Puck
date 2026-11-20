@@ -25,17 +25,18 @@ public static class VulkanGpuFormats {
         ? DepthAspect
         : ColorAspect
     );
-    /// <summary>Converts declared image usages to <c>VkImageUsageFlags</c>. A color image is also a transfer source and
-    /// destination, which readbacks, uploads and zero clears need; a depth image is a depth attachment, sampled when it
-    /// declares <see cref="GpuImageUsage.Sampled"/>.</summary>
+    /// <summary>Converts declared image usages to <c>VkImageUsageFlags</c>. Every image is also a transfer source and
+    /// destination: a color image for readbacks, uploads and zero clears, a depth image for
+    /// <see cref="IGpuRecorder.CopyImage"/> between two depths (a held shadow layer copied into its cascade). A depth image
+    /// is a depth attachment, sampled when it declares <see cref="GpuImageUsage.Sampled"/>.</summary>
     /// <param name="usage">The declared usages.</param>
     /// <returns>The Vulkan usage flags.</returns>
     public static uint ToVkImageUsage(GpuImageUsage usage) {
-        if ((usage & GpuImageUsage.DepthAttachment) != 0) {
-            return (VulkanImageUsageFlags.DepthStencilAttachment | (((usage & GpuImageUsage.Sampled) != 0) ? VulkanImageUsageFlags.Sampled : 0u));
-        }
-
         var flags = VulkanImageUsageFlags.TransferSource | VulkanImageUsageFlags.TransferDestination;
+
+        if ((usage & GpuImageUsage.DepthAttachment) != 0) {
+            return (flags | VulkanImageUsageFlags.DepthStencilAttachment | (((usage & GpuImageUsage.Sampled) != 0) ? VulkanImageUsageFlags.Sampled : 0u));
+        }
 
         if ((usage & GpuImageUsage.Sampled) != 0) {
             flags |= VulkanImageUsageFlags.Sampled;
