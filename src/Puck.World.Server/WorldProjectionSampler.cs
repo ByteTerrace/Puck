@@ -12,14 +12,11 @@ public sealed class WorldProjectionSampler {
     private bool m_hasDeliveredSnapshot;
     private bool m_hasObservedSnapshot;
     private ulong m_lastObservedTick;
-    private int m_pendingContinuityCount;
     private bool m_pendingFieldsFull;
     private ulong m_updateTicks;
 
     private readonly Dictionary<(string Region, string Name, int Row, int Cell, byte Field), FieldCellDelta> m_pendingFields = [];
-    private readonly EntityContinuity[] m_pendingContinuity = new EntityContinuity[WorldBodiesLimits.CapacityCeiling];
-    private readonly int[] m_pendingContinuityGeneration = new int[WorldBodiesLimits.CapacityCeiling];
-    private readonly bool[] m_hasPendingContinuity = new bool[WorldBodiesLimits.CapacityCeiling];
+    private readonly Dictionary<int, (int Generation, EntityContinuity Hint)> m_pendingContinuity = [];
     private float m_updateSeconds = float.NaN;
 
     /// <summary>Creates a sampler. Zero delivers every snapshot; a positive interval delivers the first snapshot
@@ -46,53 +43,32 @@ public sealed class WorldProjectionSampler {
 
             m_pendingFields[key] = delta;
         }
+    }
 
-        foreach (var entry in snapshot.Entries.Span) {
+    private void AccumulateContinuity(in WorldSnapshot snapshot, WorldBodyView? view) {
+        var events = view is { } recipient ? recipient.Frame.Continuity : snapshot.Entries.Span;
+        foreach (ref readonly var entry in events) {
             if (
                 (entry.Continuity.Kind == EntityContinuityKind.Continuous) ||
-                (((uint)entry.Index) >= ((uint)m_hasPendingContinuity.Length))
-            ) {
-                continue;
-            }
-            if (!m_hasPendingContinuity[entry.Index]) {
-                m_pendingContinuityCount++;
-            }
-            // Two in-place crossings of one occupant between deliveries reach the projection as their composition.
-            m_pendingContinuity[entry.Index] = ((m_hasPendingContinuity[entry.Index] && (m_pendingContinuityGeneration[entry.Index] == entry.Generation))
-                ? m_pendingContinuity[entry.Index].Then(later: entry.Continuity)
-                : entry.Continuity
-            );
-            m_hasPendingContinuity[entry.Index] = true;
-            m_pendingContinuityGeneration[entry.Index] = entry.Generation;
+                (view is { } bodyView && !bodyView.Contains(entry.Index, entry.Generation)) ||
+                (uint)entry.Index >= WorldBodiesLimits.CapacityCeiling
+            ) { continue; }
+            var hint = m_pendingContinuity.TryGetValue(entry.Index, out var held) && held.Generation == entry.Generation
+                ? held.Hint.Then(entry.Continuity) : entry.Continuity;
+            m_pendingContinuity[entry.Index] = (entry.Generation, hint);
         }
     }
     private void ClearAccumulation() {
         m_pendingFields.Clear();
         m_pendingFieldsFull = false;
-        if (m_pendingContinuityCount == 0) {
-            return;
-        }
-        Array.Clear(array: m_hasPendingContinuity);
-        m_pendingContinuityCount = 0;
+        m_pendingContinuity.Clear();
     }
-    private WorldSnapshot Compose(in WorldSnapshot snapshot) {
+    private WorldSnapshot Compose(in WorldSnapshot snapshot, WorldBodyView? view) {
         var entries = snapshot.Entries;
-
-        if (m_pendingContinuityCount != 0) {
-            var patched = snapshot.Entries.ToArray();
-
-            for (var ordinal = 0; (ordinal < patched.Length); ordinal++) {
-                ref var entry = ref patched[ordinal];
-
-                if (
-                    (((uint)entry.Index) < ((uint)m_hasPendingContinuity.Length)) &&
-                    m_hasPendingContinuity[entry.Index] &&
-                    (m_pendingContinuityGeneration[entry.Index] == entry.Generation)
-                ) {
-                    entry = entry with { Continuity = m_pendingContinuity[entry.Index] };
-                }
-            }
-            entries = patched;
+        if (m_pendingContinuity.Count != 0) {
+            entries = view is { } recipient
+                ? recipient.Frame.ApplyContinuity(entries, m_pendingContinuity)
+                : ApplyContinuity(entries, m_pendingContinuity);
         }
 
         var fields = snapshot.FieldCells;
@@ -128,6 +104,19 @@ public sealed class WorldProjectionSampler {
         };
     }
 
+    internal static ReadOnlyMemory<EntitySnapshot> ApplyContinuity(ReadOnlyMemory<EntitySnapshot> entries,
+        Dictionary<int, (int Generation, EntityContinuity Hint)> hints) {
+        EntitySnapshot[]? patched = null;
+        for (var i = 0; i < entries.Length; i++) {
+            ref readonly var entry = ref entries.Span[i];
+            if (hints.TryGetValue(entry.Index, out var held) && held.Generation == entry.Generation) {
+                patched ??= entries.ToArray();
+                patched[i] = entry with { Continuity = held.Hint.Then(entry.Continuity) };
+            }
+        }
+        return patched is null ? entries : patched;
+    }
+
     /// <summary>Changes the cadence without discarding the interval already accumulated. This lets a live
     /// <c>bodies.disclosure</c> edit take effect on an existing projection without losing skipped field writes or
     /// continuity hints.</summary>
@@ -158,7 +147,9 @@ public sealed class WorldProjectionSampler {
     /// <param name="due">Whether the image is owed now whatever the cadence, as the primer of a stream's new generation
     /// is.</param>
     /// <returns><see langword="true"/> when <paramref name="projected"/> should be delivered.</returns>
-    public bool TryProject(in WorldSnapshot snapshot, out WorldSnapshot projected, bool due = false) {
+    public bool TryProject(in WorldSnapshot snapshot, out WorldSnapshot projected, bool due = false) => TryProject(snapshot, out projected, due, null);
+
+    internal bool TryProject(in WorldSnapshot snapshot, out WorldSnapshot projected, bool due, WorldBodyView? view) {
         if (
             m_hasObservedSnapshot &&
             (snapshot.Tick <= m_lastObservedTick)
@@ -180,11 +171,13 @@ public sealed class WorldProjectionSampler {
             (m_updateTicks != 0UL) &&
             (m_accumulatedStepTicks < m_updateTicks)
         ) {
+            AccumulateContinuity(snapshot, view);
             projected = default;
             return false;
         }
 
-        projected = Compose(snapshot: in snapshot);
+        var disclosed = view is { } recipient ? snapshot with { Entries = recipient.Project() } : snapshot;
+        projected = Compose(disclosed, view);
         m_accumulatedStepTicks = 0UL;
         m_hasDeliveredSnapshot = true;
         ClearAccumulation();

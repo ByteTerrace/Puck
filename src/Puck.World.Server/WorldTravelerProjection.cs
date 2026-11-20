@@ -75,10 +75,7 @@ internal static class WorldTravelerProjection {
             // delivery, and one that turns redacting cuts this stream.
             sink = new(
                 authority: server.AuthorityIdentity,
-                disclosure: () => new WorldSinkDisclosure(
-                    Policy: server.Definition.Population.ObserverDisclosure,
-                    ObserverBodyIndex: principal.Index
-                ),
+                disclosure: () => view.Bodies,
                 isCurrent: Current,
                 recipient: principal,
                 server: server,

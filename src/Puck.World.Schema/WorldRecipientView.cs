@@ -25,6 +25,12 @@ public sealed partial class WorldRecipientView(Func<WorldDefinition> definition,
     public WorldDisclosureTier Ceiling => ceiling;
     /// <summary>Whether the capability currently discloses a document.</summary>
     public bool Observes => observes() && ceiling != WorldDisclosureTier.Frames;
+    /// <summary>The live body policy and the recipient's authority-assigned body, when embodied.</summary>
+    public WorldSinkDisclosure Bodies => Observes
+        ? new(Source.Population.ObserverDisclosure, recipient is { Kind: PrincipalKind.Seat or PrincipalKind.Peer } body ? body.Index : -1)
+        : new(WithheldBodies, -1);
+    private static readonly WorldObserverDisclosure WithheldBodies = new(Mode: WorldObserverDisclosureMode.SelfOnly);
+
     /// <summary>The document the recipient may hold at its ceiling.</summary>
     public WorldDefinition Definition {
         get {

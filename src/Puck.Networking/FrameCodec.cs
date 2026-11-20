@@ -15,18 +15,18 @@ public static class FrameCodec {
     /// <param name="payload">The payload bytes.</param>
     /// <returns>The complete frame.</returns>
     public static byte[] Join(byte kind, ReadOnlySpan<byte> payload) {
-        var following = checked((payload.Length + sizeof(byte)));
-        var frame = new byte[checked((sizeof(uint) + following))];
-
-        BinaryPrimitives.WriteUInt32LittleEndian(
-            destination: frame,
-            value: checked((uint)following)
-        );
-        frame[sizeof(uint)] = kind;
+        var frame = new byte[checked(PrefixBytes + payload.Length)];
+        WritePrefix(frame, kind, payload.Length);
         payload.CopyTo(destination: frame.AsSpan(start: PrefixBytes));
 
         return frame;
     }
+    /// <summary>Writes the framing prefix for a payload supplied in one or more owned segments.</summary>
+    public static void WritePrefix(Span<byte> destination, byte kind, int payloadLength) {
+        BinaryPrimitives.WriteUInt32LittleEndian(destination, checked((uint)(payloadLength + 1)));
+        destination[sizeof(uint)] = kind;
+    }
+
     /// <summary>Splits one complete frame into its kind byte and payload span, checked against a caller-supplied
     /// payload cap. The kind byte is returned unvalidated — a closed kind vocabulary belongs to the caller,
     /// never to this transport-neutral grammar.</summary>

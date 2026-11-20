@@ -13,7 +13,7 @@ namespace Puck.World.Server;
 /// feed holds. The answers, compositions and levers this world's hub fans out belong to its own clients and never
 /// reach a session. An observer that throws, or that ends its own subscription as an
 /// <see cref="IWorldDetachableSink"/>, ends its observation; the hub detaches it.</summary>
-internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservation observation, IClientSink inner) : IWorldDetachableSink {
+internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservation observation, IClientSink inner) : IWorldDetachableSink, IWorldInterestSink {
     private readonly IWorldDetachableSink? m_detachable = (inner as IWorldDetachableSink);
     private readonly WorldProjectionFeed m_feed = new(
         recipient: observation.Session,
@@ -26,7 +26,6 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
     private bool m_deliveringSnapshot;
     private bool m_streamEnded;
 
-    private EntitySnapshot[] m_redacted = [];
     private readonly WorldDeliveryCursor m_cursor = new();
     private readonly WorldDeliveryRows m_rows = new();
     private readonly WorldSolidScaleDisclosure m_scales = new();
@@ -195,9 +194,9 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
     // Observes the live body policy outside a snapshot: an install can turn it redacting while no snapshot follows (a
     // paused world), and the cut is owed with the document that carries it.
     private void ObserveBodies() {
-        var bodies = server.Definition.Population.ObserverDisclosure;
+        var bodies = m_view.Bodies;
 
-        m_cursor.ObserveBodies(mode: bodies.Mode, radius: bodies.Radius);
+        m_cursor.ObserveBodies(mode: bodies.Policy.Mode, radius: bodies.Policy.Radius);
     }
     // Sends the record a cut the cursor decided owes, once: the new generation, with no content. True when one was sent,
     // after which the stream owes its whole disclosed document and a primer before anything newer.
@@ -414,23 +413,18 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
     private WorldInputAnswer[] m_answerDisclosure = [];
 
     public void DeliverSnapshot(in WorldSnapshot snapshot, in WorldStreamStamp stream) {
+        DeliverSnapshot(snapshot, WorldInterestFrame.ForPrimer(snapshot));
+    }
+    public void DeliverSnapshot(in WorldSnapshot snapshot, WorldInterestFrame frame) {
         if (!Discloses()) {
             return;
         }
 
-        var bodies = server.Definition.Population.ObserverDisclosure;
+        var bodies = m_view.Bodies;
 
-        m_cursor.ObserveBodies(mode: bodies.Mode, radius: bodies.Radius);
+        m_cursor.ObserveBodies(mode: bodies.Policy.Mode, radius: bodies.Policy.Radius);
 
-        var redacted = WorldOutputHub.Redact(
-            disclosure: new WorldSinkDisclosure(
-                ObserverBodyIndex: -1,
-                Policy: bodies
-            ),
-            scratch: ref m_redacted,
-            snapshot: in snapshot
-        );
-
+        var redacted = snapshot with { Entries = frame.Project(bodies) };
         var tick = snapshot.Tick;
         var engineTick = snapshot.EngineTick;
 
@@ -474,9 +468,9 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
             }
             // The authority's declared-set revision moves for bodies the stream may never be shown, so the stream carries
             // its own, moved only by the roster it is delivered.
-            redacted = redacted with { Revision = m_roster.Observe(entries: redacted.Entries.Span) };
+            redacted = redacted with { Revision = m_roster.Observe(frame.Roster(bodies, redacted.Entries.Span)) };
             redacted = server.PresentCues(redacted, m_view,
-                fullBodies: server.Definition.Population.ObserverDisclosure.Mode == WorldObserverDisclosureMode.All);
+                fullBodies: bodies.IsFull);
             inner.DeliverSnapshot(snapshot: in redacted, stream: m_cursor.Stamp());
             observation.SettleSceneProof(tick: tick);
             FollowObserverDetach();

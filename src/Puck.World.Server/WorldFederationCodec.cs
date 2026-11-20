@@ -113,6 +113,8 @@ public enum WorldFederationResponse : byte {
     /// <summary>A stream's cut or end: its stamp and whether the stream ends, with no content
     /// (<see cref="WorldFederationCodec.EncodeCut"/>).</summary>
     Cut = 19,
+    /// <summary>Body changes relative to an acknowledged snapshot in this stream generation.</summary>
+    SnapshotDelta = 20,
 }
 /// <summary>The stable names a federation authority refuses under. A refusal frame's text always opens with one of
 /// these, so a peer and a read-back can both count refusals by name rather than by sentence.</summary>
@@ -175,7 +177,7 @@ public static partial class WorldFederationCodec {
     /// <see cref="HandshakeWireFormat.WriteHelloAsync"/> — that is the only hello; the challenge/authenticate exchange
     /// that follows rides ordinary frames. The key's final digit is the contract's version: raise it whenever the
     /// federation wire contract changes.</summary>
-    public const ulong WireKey = 0x344445464B435550UL; // "PUCKFED4"
+    public const ulong WireKey = 0x354445464B435550UL; // "PUCKFED5"
     /// <summary>The length of a document leaf's header, in bytes: the tier byte, then the document version's 16
     /// activation bytes and 8 sequence bytes, both little-endian. The document's payload starts here.</summary>
     public const int DocumentHeaderBytes = 25;
@@ -911,39 +913,48 @@ public static partial class WorldFederationCodec {
     public static byte[] EncodeSnapshot(in WorldSnapshot snapshot) {
         var writer = new WireWriter(capacity: (256 + (snapshot.Entries.Length * 64)));
 
+        WriteSnapshotHeader(writer, snapshot, snapshot.Entries.Length);
+        foreach (ref readonly var entry in snapshot.Entries.Span) { WriteEntity(writer, entry); }
+        WriteSnapshotTail(writer, snapshot);
+        return writer.ToArray();
+    }
+
+    internal static void WriteSnapshotHeader(WireWriter writer, in WorldSnapshot snapshot, int count) {
         writer.WriteUInt64(value: snapshot.Tick);
         writer.WriteInt32(value: snapshot.Revision);
         writer.WriteUInt64(value: snapshot.StepTicks);
         writer.WriteString(value: snapshot.Authority);
-        writer.WriteInt32(value: snapshot.Entries.Length);
+        writer.WriteInt32(value: count);
+    }
 
-        foreach (var entry in snapshot.Entries.Span) {
-            writer.WriteInt32(value: entry.Index);
-            writer.WriteVector(value: entry.Position);
-            writer.WriteQuaternion(value: entry.Orientation);
-            writer.WriteSingle(value: entry.Heading);
-            writer.WriteVector(value: entry.BodyColor);
-            writer.WriteBoolean(value: entry.Active);
-            writer.WriteByte(value: entry.Kit);
-            writer.WriteByte(value: entry.Look);
-            writer.WriteByte(value: entry.CatalogRig);
-            writer.WriteByte(value: ((byte)entry.Continuity.Kind));
-            writer.WriteSingle(value: entry.Continuity.Seconds);
-            if (entry.Continuity.Carried is { } carried) {
-                writer.WriteQuaternion(value: carried.Rotation);
-                writer.WriteVector(value: carried.Translation);
-                writer.WriteSingle(value: carried.Scale);
-            }
-            writer.WriteInt32(value: entry.Generation);
-            writer.WriteNullableString(value: entry.PlacementId);
-            writer.WriteUInt32(value: ((uint)entry.Facts));
-            writer.WriteInt32(value: entry.State.Length);
-
-            foreach (var value in entry.State.Span) {
-                writer.WriteInt64(value: value);
-            }
+    internal static void WriteEntity(WireWriter writer, in EntitySnapshot entry) {
+        writer.WriteInt32(value: entry.Index);
+        writer.WriteVector(value: entry.Position);
+        writer.WriteQuaternion(value: entry.Orientation);
+        writer.WriteSingle(value: entry.Heading);
+        writer.WriteVector(value: entry.BodyColor);
+        writer.WriteBoolean(value: entry.Active);
+        writer.WriteByte(value: entry.Kit);
+        writer.WriteByte(value: entry.Look);
+        writer.WriteByte(value: entry.CatalogRig);
+        writer.WriteByte(value: ((byte)entry.Continuity.Kind));
+        writer.WriteSingle(value: entry.Continuity.Seconds);
+        if (entry.Continuity.Carried is { } carried) {
+            writer.WriteQuaternion(value: carried.Rotation);
+            writer.WriteVector(value: carried.Translation);
+            writer.WriteSingle(value: carried.Scale);
         }
+        writer.WriteInt32(value: entry.Generation);
+        writer.WriteNullableString(value: entry.PlacementId);
+        writer.WriteUInt32(value: ((uint)entry.Facts));
+        writer.WriteInt32(value: entry.State.Length);
 
+        foreach (var value in entry.State.Span) {
+            writer.WriteInt64(value: value);
+        }
+    }
+
+    internal static void WriteSnapshotTail(WireWriter writer, in WorldSnapshot snapshot) {
         writer.WriteBoolean(value: snapshot.FieldsFull);
         writer.WriteInt32(value: snapshot.FieldCells.Length);
 
@@ -992,7 +1003,6 @@ public static partial class WorldFederationCodec {
             writer.WriteInt32(cue.Generation);
         }
 
-        return writer.ToArray();
     }
     /// <summary>Encodes one forwarded submission frame behind its traveler credential.</summary>
     /// <param name="sourceAuthority">The authenticated source namespace.</param>
@@ -1062,7 +1072,7 @@ public static partial class WorldFederationCodec {
         WorldFederationResponse.Challenge => MaxChallengeBytes,
         WorldFederationResponse.Refusal => WireLimits.MaxStringBytes,
         WorldFederationResponse.Commit => (2 * WireLimits.MaxStringBytes),
-        WorldFederationResponse.Snapshot => (((4 * 1024) * 1024) + StreamStampBytes),
+        WorldFederationResponse.Snapshot or WorldFederationResponse.SnapshotDelta => (((4 * 1024) * 1024) + StreamStampBytes),
         WorldFederationResponse.Cut => (StreamStampBytes + 1),
         WorldFederationResponse.Completion => (1024 * 1024),
         WorldFederationResponse.Definition => (WireLimits.MaxDocumentBytes + StreamStampBytes),

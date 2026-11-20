@@ -56,6 +56,8 @@ retarget them, and read the references' mentions of them as prior art
 
 ## Live state reads and writes
 
+**Body delivery.** The recipient view supplies the body policy. A publication shares its spatial index, and the federation receiver acknowledges the stamped image it reconstructed. See [body interest and acknowledgements](../../../docs/decisions/worlds-and-federation.md#body-interest-and-acknowledgements).
+
 **The write boundary.** `WorldRecipientView.Admits` decides from declared policy before any
 recipient mutation or guard reads state; seats are recipients too. The mutation adapter and shared
 guard check live in `Puck.World.Protocol/Protocol/WorldRecipientMutations.cs`; the server's complete

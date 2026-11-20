@@ -786,7 +786,7 @@ The operator reads the live document whole (`WorldStateReadView.IsOperator`,
 current visibility.
 
 Local and colocated sinks take every body **[opened]**
-(`src/Puck.World.Server/WorldOutputHub.cs:11-15`):
+(`src/Puck.World.Server/WorldOutputHub.cs@d1ac00b941:11-15`):
 
 ```csharp
 public readonly record struct WorldSinkDisclosure(WorldObserverDisclosure Policy, int ObserverBodyIndex) {

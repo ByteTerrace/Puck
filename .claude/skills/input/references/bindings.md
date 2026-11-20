@@ -316,7 +316,7 @@ including boundaries which do not change its authority route.
 
 Each owner's snapshot also carries its `WorldInputAnswer` (`WorldInputRuntime.Answers`,
 filtered by `WorldOwnedRecords.ForOwner` like the publication; a body-disclosure
-observer is handed none, `WorldOutputHub.Observed`): the epoch, the highest event
+observer is handed none, `WorldOutputHub.DeliverSnapshot`): the epoch, the highest event
 sequence of the last batch of the owner's current epoch, for its own route, that the
 authority took or refused, and the tick it answered in. The submission door writes it
 through `WorldInputRuntime.Answer` before any check (a drive gate, a Drive denial, a
