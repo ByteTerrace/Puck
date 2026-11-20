@@ -1,14 +1,19 @@
 // Shared by visibility, surface, glass, shadows and previous-position reprojection. No field walk.
 #ifndef SDF_MESH_SKIN_HLSLI
 #define SDF_MESH_SKIN_HLSLI
+void sdfMeshMemberRest(uint entry, out float3 position, out float4 rotation) {
+    position = asfloat(sdfMeshWords3(entry + 1u));
+    rotation = asfloat(sdfMeshWords4(entry + 4u));
+}
 // Carries a member's motion into the group's frame, removing its baked rest pose.
 void sdfMeshMemberDelta(uint entry, float3 rootPosition, float4 rootRotation, float scale,
     float3 position, float4 rotation, out float4 q, out float3 t) {
     q = float4(0.0, 0.0, 0.0, 1.0);
     t = 0.0;
     if (entry == 0u) { return; }
-    float3 restPosition = asfloat(sdfMeshWords3(entry + 1u));
-    float4 restRotation = asfloat(sdfMeshWords4(entry + 4u));
+    float3 restPosition;
+    float4 restRotation;
+    sdfMeshMemberRest(entry, restPosition, restRotation);
     q = sdfQuaternionProduct(sdfQuaternionProduct(sdfQuaternionConjugate(rootRotation), rotation), sdfQuaternionConjugate(restRotation));
     t = rotatePointByInverseQuaternion(position - rootPosition, rootRotation) / scale - rotatePointByQuaternion(restPosition, q);
 }

@@ -688,8 +688,7 @@ no gain); at scales past the admitted ratios; and at a C# caller that writes
 `SdfProgramBuilder.Scale` itself.
 
 1. The record is corrected, and the exhibits and this design exist.
-2. **The spheroid, first to build.** It needs no new solve and no new
-   instruction.
+2. **The rendered spheroid uses the existing ellipse.**
    - `SdfProgramBuilder.Ellipse` keeps both radii as authored: its `1e-4`
      move of a near-circle goes, with the three places that carry it
      (`SdfSolidGeometry.GetLocalBounds`'s prism box, `LocalBox`'s factor

@@ -6,13 +6,13 @@ out how such a seam holds under continuous motion and recommends one design,
 reviewed before code. The Moth's rebuild relies on whatever lands here, so each
 step names its owner type and the check that shows it worked.
 
-Steps 1 to 3 are built: a skinned group bakes at its authored rest, each vertex
+Steps 1 to 4 are built: a skinned group bakes at its authored rest, each vertex
 rides one owner rigidly or two through a normalized dual-quaternion blend, and a
 blend past its admitted envelope is split and bakes as a crease, which PUCK122
 reports. The rendering skill's
 [mesh-bake reference](../../.claude/skills/rendering/references/mesh-bake.md#groups-poses-and-materials)
-owns the built contract. What remains is step 4 (paints and lanes across the
-seam), step 5 (the cost reading), the envelope published as a bound, and gap 8
+owns the built contract. What remains is the presented material check for
+step 4, step 5 (the cost reading), the envelope published as a bound, and gap 8
 (a cutter that moves against the surface it cuts), whose first step deletes the
 settle mechanism. The tags (F1) to (F9) in the headings name the
 design review's findings each section answers.
@@ -203,17 +203,13 @@ them sound:
 
 ### Paints and lanes across the seam (F7)
 
-Material coordinates follow the skin rather than one rigid slot. A mesh's
-vertex positions are already its rest positions in the group's frame. The
-surface pass interpolates them at the hit's barycentrics, which gives the hit's
-rest point, and maps that point into a layer's parent frame through that
-parent's baked pose (`SdfMesh.Members` holds it). This replaces
-`sdfLayerFrame`'s inverse of the live slot transform. For a vertex with one
-owner the result is unchanged, since the live inverse undoes the live forward
-transform. Across a seam, paints, insets and weathering deform with the
-surface: nothing swims, and nothing jumps at the nearest-vertex boundary. Lanes
-are scalars, and they blend by the hit's interpolated shares. The glass pass
-takes the same rule through the shared helpers.
+Opaque and glass shading share `sdfLayerFrame`. A seam vertex reads its
+position in each owner's baked frame (`SdfMesh.Members`) and its live lanes
+and orientation from the same slots as skinning. `sdfLayerSkinFrame` mixes
+those readings by owner share, then interpolates the three corners at the
+hit. A triangle that rides one owner rigidly uses that slot's live inverse.
+Adjacent triangles share material coordinates and lane values on their common
+edge because their vertex copies share the same influence tuples.
 
 ### Cost against the frame bar (F9)
 
@@ -245,17 +241,6 @@ takes the same rule through the shared helpers.
 
 ## Engine gaps first
 
-Two of the engine gaps in the
-[rendering plan's list](rendering-research.md#engine-gaps-filled-first) are
-this plan's, and each is filled before the work that sculpts or tunes around
-it (the owner's ruling, [AGENTS.md](../../AGENTS.md#pucks-purpose)):
-
-- **Gap 10: a paint does not follow a blended seam between parts that move.**
-  Material coordinates across a blended seam are not blended, so a painted
-  marking on the Moth's or the swallow's head swims. This is step 4 below, the
-  next step of this plan, and it goes first. The two creations wait for the
-  owner's pair session, so the step's own check is the striped palette across a
-  moving neck, not either creation.
 - **Gap 8: a creation with a cutter that moves against the surface it cuts
   takes no relief.** The design is
   [its own section below](#gap-8-a-cutter-that-moves-against-the-surface-it-cuts).
@@ -307,9 +292,8 @@ whose own envelope fits. Empty inflated-box intersections contribute no seam bou
 Followers and timeline descendants inherit their actual parent's slot. Unbounded
 followers cannot enter an admitted blend.
 
-Step 4 is next: material coordinates and blended lanes. Steps 1–3 do not claim that
-paints already follow the seam. A skin bakes once, at the pose its program arrived in;
-no group is baked again because its members settled.
+A skin bakes once, at the pose its program arrived in. Member motion keeps
+the same stored mesh. Step 4 still needs the presented striped-neck check.
 
 ### Lead verification request
 
@@ -366,7 +350,7 @@ ran them.
 The rendering skill carries a capability eval, `moving-blend-crease-copies`, for the
 lead's eval window.
 
-4. **Material coordinates.** The rest-point mapping for paints, insets and
+4. **Material coordinates (built).** The rest-point mapping for paints, insets and
    weathering, and blended lanes, in the opaque and glass passes. Check: a
    striped palette across a moving neck, captured in a presented burst, shows
    stripes fixed to the surface.

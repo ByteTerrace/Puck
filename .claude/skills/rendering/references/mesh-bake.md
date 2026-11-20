@@ -883,8 +883,8 @@ laws exercise that boundary.
 - **A skin bakes once.** A skinned group bakes at the pose its program arrived in (a rest skin at rest) and
   is never baked again for its members' motion. A moving cutter is an operand instead, and its group is
   planned again through `SdfMeshPathBake.Revisit` as the operand moves a step
-  ([moving blends](../SKILL.md#moving-blends)). Material coordinates still use the nearest member until
-  step 4; geometry continuity alone does not prove that paints and lanes follow the seam.
+  ([moving blends](../SKILL.md#moving-blends)). `sdfLayerFrame` interpolates rest coordinates and lanes
+  through the skin. The lead's presented striped-neck burst checks the material result in motion.
 - **A landing mesh rebuilds the draws.** A group that bakes again draws the mesh
   it replaces until its own lands, so it counts as drawn already; `Land` and
   `Load` hand the new mesh over through `SdfMeshPathBake.Draw`, which marks the

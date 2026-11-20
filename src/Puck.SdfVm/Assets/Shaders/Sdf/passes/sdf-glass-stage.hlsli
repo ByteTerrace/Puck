@@ -318,9 +318,10 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
             float3 layerNormal;
             float3 layerRay;
             float4 layerRotation;
+            float4 lanes;
             float revealed;
 
-            sdfLayerFrame(frameSlot, surfacePoint, normal, rayDirection, layerPoint, layerNormal, layerRay, layerRotation);
+            sdfLayerFrame(hit, frameSlot, surfacePoint, normal, rayDirection, layerPoint, layerNormal, layerRay, layerRotation, lanes);
             uint paintFirst;
             uint paintCount;
             float3 painted = sdfMaterialPaints(materialId, paintFirst, paintCount);
@@ -329,7 +330,7 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
                 (sdfShadeReadsOf(shadeBinding) & SDF_SHADE_READ_PAINT) != 0u, painted, paintCoverage);
             material.albedo = painted;
             SdfShadeStamp shadeStamp = sdfShadeStamp(material, surfacePoint, layerPoint, normal, rayDirection,
-                curvature, footprint * t, sdfFrameLanes(frameSlot), sdfGlassContact(material, opaque - t), share, layerRotation, frameSlot, hit);
+                curvature, footprint * t, lanes, sdfGlassContact(material, opaque - t), share, layerRotation, frameSlot, hit);
             sdfShadeSet_surface_geometricNormal(shadeStamp, face);
             sdfShadeSet_paint_coverage(shadeStamp, paintCoverage);
             // A program's surface phase replaces the flow layer; a program that omits it (one that only lights or composes)
@@ -338,7 +339,7 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
                 sdfShadeSurfacePhase(shadeBinding, shadeStamp, material, normal, revealed);
                 roughness = material.roughness;
             } else {
-                normal = sdfShadeFlow(surfacePoint, normal, layerPoint, layerNormal, layerRotation, frameSlot, hit, (footprint * t), sdfFrameLanes(frameSlot),
+                normal = sdfShadeFlow(surfacePoint, normal, layerPoint, layerNormal, layerRotation, frameSlot, hit, (footprint * t), lanes,
                     sdfGlassContact(material, (opaque - t)), material, revealed);
                 if (sdfShadeBound(shadeBinding)) { sdfShadeSurfaceInputs(shadeStamp, material, normal, revealed); }
             }
