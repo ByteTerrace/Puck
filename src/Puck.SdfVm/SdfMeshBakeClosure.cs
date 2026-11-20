@@ -9,7 +9,7 @@ namespace Puck.SdfVm;
 /// (<see cref="SdfMeshBakeIdentity.Code"/>). Sampling, contouring and simplification also have their own reachable code
 /// identities. Each walk starts at the actual producing or restoring calls.
 /// <para>The contour walk ends at <see cref="SdfMeshPathBake.SimplificationStage"/>. The simplification walk starts
-/// there, and the landing identity covers the complete production path and entry codec.
+/// there, and the landing identity covers the complete production path and entry encoder.
 /// The walk stops at the library and the store, which hold meshes rather than make them; at a mesh's claims and the parts
 /// its store can restore (<see cref="SdfMesh"/>'s payload and restorable storage), which own a mesh's memory once it is made; at the bake's report
 /// (<see cref="SdfMeshBakeReport"/>), which words, counts and writes what the bake says about itself and so changes no
@@ -25,6 +25,18 @@ namespace Puck.SdfVm;
 /// runtime callback into a type it never constructs, is outside the walk and needs a root. Immutable.</para>
 /// </summary>
 public sealed class SdfMeshBakeClosure {
+    private static readonly (string Assembly, string Type, string? Method)[] SampleInputs = [
+        // The words and addresses read by the sampling kernels, including the field and the glyph atlas.
+        ("Puck.SdfVm", "Puck.SdfVm.SdfMeshBakeBatch", "PointRuns"),
+        ("Puck.SdfVm", "Puck.SdfVm.SdfMeshBakeBatch", "get_InputRows"),
+        ("Puck.SdfVm", "Puck.SdfVm.SdfMeshBakeBatch", "PoseBase"),
+        ("Puck.SdfVm", "Puck.SdfVm.SdfMeshBakeBatch", "WriteSampled"),
+        ("Puck.SdfVm", "Puck.SdfVm.SdfMeshBakeBlock", "Write"),
+        ("Puck.SdfVm", "Puck.SdfVm.SdfWorldTables", "WriteProgramWords"),
+        ("Puck.SdfVm", "Puck.SdfVm.SdfWorldTables", nameof(SdfWorldTables.SetGlyphAtlas)),
+        ("Puck.SignedDistance", "Puck.SignedDistance.SdfProgram", ".ctor"),
+    ];
+
     /// <summary>The roots of the bake's closure: each an assembly, a type's full name, and one method of it by name (every
     /// overload), or <see langword="null"/> for every method of the type and of the types nested in it.</summary>
     public static readonly IReadOnlyList<(string Assembly, string Type, string? Method)> BakeRoots = [
@@ -34,22 +46,11 @@ public sealed class SdfMeshBakeClosure {
         ("Puck.SdfVm", "Puck.SdfVm.SdfMeshPathBake", "PrepareFrame"),
         ("Puck.SdfVm", "Puck.SdfVm.SdfMeshPathBake", "PlanAhead"),
         ("Puck.SdfVm", "Puck.SdfVm.SdfMeshPathBake", "TryTake"),
-        // Input values and addresses are semantic; allocation, upload and dispatch transport are not. The GPU client
-        // (SdfMeshBakeGpuWork) calls these and nothing else reaches them.
-        ("Puck.SdfVm", "Puck.SdfVm.SdfMeshBakeBatch", "PointRuns"),
-        ("Puck.SdfVm", "Puck.SdfVm.SdfMeshBakeBatch", "get_InputRows"),
-        ("Puck.SdfVm", "Puck.SdfVm.SdfMeshBakeBatch", "PoseBase"),
-        ("Puck.SdfVm", "Puck.SdfVm.SdfMeshBakeBatch", "WriteSampled"),
         ("Puck.SdfVm", "Puck.SdfVm.SdfMeshPathBake", "Complete"),
-        ("Puck.SdfVm", "Puck.SdfVm.SdfMeshBakeBlock", "Write"),
-        // The encoder, decoder and format tag govern the mesh every later run draws.
+        .. SampleInputs,
+        // The encoder and its quantization determine the stored product.
         ("Puck.SdfVm", "Puck.SdfVm.SdfMeshStoreCodec", nameof(SdfMeshStoreCodec.Encode)),
-        ("Puck.SdfVm", "Puck.SdfVm.SdfMeshStoreCodec", nameof(SdfMeshStoreCodec.TryDecode)),
         ("Puck.SdfVm", "Puck.SdfVm.SdfMeshStoreCodec", nameof(SdfMeshStoreCodec.Conform)),
-        // The program's only constructor derives the field words the bake kernel walks, from the field's inputs and the
-        // appearance's outline alone; SdfProgram.Of packs the appearance after it, outside this closure. A group's
-        // geometry hashes its instructions, not their packing.
-        ("Puck.SignedDistance", "Puck.SignedDistance.SdfProgram", ".ctor"),
     ];
     private static readonly HashSet<string> StopTypes = new(collection: [
         "Puck.Abstractions.CacheRetention",
@@ -66,6 +67,8 @@ public sealed class SdfMeshBakeClosure {
         "Puck.SdfVm.SdfKernelInterfaces",
         "Puck.SdfVm.SdfMesh/Payload",
         "Puck.SdfVm.SdfMesh/Restorable",
+        // The backlog paces admission by measured worker throughput.
+        "Puck.SdfVm.SdfMeshBakeBacklog",
         "Puck.SdfVm.SdfMeshBakeClosure",
         "Puck.SdfVm.SdfMeshBakeIdentity",
         "Puck.SdfVm.SdfMeshBakeReport",
@@ -115,8 +118,7 @@ public sealed class SdfMeshBakeClosure {
     /// <summary>Whether the closure reads an updated type.</summary>
     /// <param name="type">The updated type.</param>
     /// <returns>Whether it is read.</returns>
-    public bool Reads(Type type) => m_code.Reads(type: type) || (m_sampling?.Reads(type) ?? false) ||
-        (m_contouring?.Reads(type) ?? false) || (m_simplification?.Reads(type) ?? false) || (m_checkpoints?.Reads(type) ?? false);
+    public bool Reads(Type type) => m_code.Reads(type: type);
     /// <summary>Walks the bake's production roots.</summary>
     /// <param name="directory">The deployed build directory.</param>
     /// <returns>The bake closure.</returns>
@@ -126,26 +128,23 @@ public sealed class SdfMeshBakeClosure {
         var contourStops = new HashSet<string>(StopTypes, StringComparer.Ordinal) { simplification };
         var contourRoots = BakeRoots.Where(root => root.Type != codec).ToArray();
         (string Assembly, string Type, string? Method)[] sampleRoots = [
-            ("Puck.SdfVm", typeof(SdfMeshBakeGpuWork).FullName!, nameof(SdfMeshBakeGpuWork.Record)),
-            ("Puck.SdfVm", typeof(SdfWorldTables).FullName!, "WriteProgramWords"),
-            ("Puck.SdfVm", typeof(SdfWorldTables).FullName!, nameof(SdfWorldTables.SetGlyphAtlas)),
+            .. SampleInputs,
             ("Puck.SdfVm", typeof(SdfMeshPathBake).FullName!, "SampleInput"),
             ("Puck.SdfVm", typeof(SdfMeshPathBake).FullName!, "CheckpointInput"),
             ("Puck.SdfVm", typeof(SdfMeshStore).FullName!, nameof(SdfMeshStore.TryReadSamples)),
             ("Puck.SdfVm", typeof(SdfMeshStore).FullName!, nameof(SdfMeshStore.WriteSamples)),
-            ("Puck.SignedDistance", typeof(Puck.SignedDistance.SdfProgram).FullName!, ".ctor"),
         ];
         var sampling = Puck.Assets.CodeClosure.Of(directory, stopTypes: StopTypes, roots: sampleRoots);
         var contouring = Puck.Assets.CodeClosure.Of(directory, roots: contourRoots, stopTypes: contourStops);
         var meshCheckpoints = Puck.Assets.CodeClosure.Of(directory, stopTypes: StopTypes, roots: [
             ("Puck.SdfVm", codec, nameof(SdfMeshStoreCodec.EncodeExact)),
-            ("Puck.SdfVm", codec, nameof(SdfMeshStoreCodec.TryDecode)),
+            ("Puck.SdfVm", typeof(SdfMeshStoreDecoder).FullName!, nameof(SdfMeshStoreDecoder.TryDecode)),
         ]);
         var simplified = Puck.Assets.CodeClosure.Of(directory, stopTypes: StopTypes, roots: [
             ("Puck.SdfVm", simplification, nameof(SdfMeshPathBake.SimplificationStage.Run)),
         ]);
         return new SdfMeshBakeClosure(
-            Puck.Assets.CodeClosure.Of(directory, roots: [.. BakeRoots, .. sampleRoots], stopTypes: StopTypes), ReadEntryVersion(directory),
+            Puck.Assets.CodeClosure.Of(directory, roots: BakeRoots, stopTypes: StopTypes), ReadEntryVersion(directory),
             sampling: sampling, contouring: contouring, simplification: simplified, checkpoints: meshCheckpoints);
     }
     /// <summary>Walks explicit roots with the bake's transport boundaries.</summary>

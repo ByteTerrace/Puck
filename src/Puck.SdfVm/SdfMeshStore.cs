@@ -134,7 +134,7 @@ public sealed class SdfMeshStore {
 
     // Reads a geometry's entry into a storage as TryRead does: the entry is stamped when it is sound, and deleted when its
     // bytes are refused. `taking` is the taking group's ids, which the decode writes the triangle materials in when the mesh
-    // can be renumbered back by place (SdfMeshStoreCodec.TryDecode); `declined` is set for a sound entry the storage did not take.
+    // can be renumbered back by place (SdfMeshStoreDecoder.TryDecode); `declined` is set for a sound entry the storage did not take.
     internal bool TryReadInto(UInt128 identity, SdfMeshGeometry geometry, SdfMeshStorage storage, int[]? taking, out SdfMesh? mesh, out int[] materials, out string? refusal, out bool declined, string extension = Extension) {
         var path = PathOf(identity: identity, key: KeyOf(geometry: geometry, identity: identity), extension: extension);
         var read = TryReadEntry(damaged: out var damaged, declined: out declined, geometry: geometry, identity: identity, materials: out materials, mesh: out mesh, refusal: out refusal, storage: storage, taking: taking, extension: extension);
@@ -219,7 +219,7 @@ public sealed class SdfMeshStore {
 
         var bytes = entry.GetSpan();
 
-        return ((bytes.Length >= (HeaderBytes + ChecksumBytes)) && SdfMeshStoreCodec.TryDecode(bytes: bytes, declined: out _, key: BinaryPrimitives.ReadUInt128LittleEndian(source: bytes[8..]), materials: out materials, mesh: out mesh, refusal: out _, storage: new SdfMeshManagedStorage(), taking: null, owner: owner, workspace: in workspace));
+        return ((bytes.Length >= (HeaderBytes + ChecksumBytes)) && SdfMeshStoreDecoder.TryDecode(bytes: bytes, declined: out _, key: BinaryPrimitives.ReadUInt128LittleEndian(source: bytes[8..]), materials: out materials, mesh: out mesh, refusal: out _, storage: new SdfMeshManagedStorage(), taking: null, owner: owner, workspace: in workspace));
     }
 
     /// <summary>How long a store read waits for its account to have room for its workspace before it declines the
@@ -306,7 +306,7 @@ public sealed class SdfMeshStore {
         }
 
         var read = System.Diagnostics.Stopwatch.GetTimestamp();
-        var decoded = SdfMeshStoreCodec.TryDecode(allocator: m_allocator, bytes: entry.GetSpan(), declined: out declined, key: key, materials: out materials, mesh: out mesh, refusal: out var why, storage: storage, taking: taking, owner: owner, workspace: in workspace);
+        var decoded = SdfMeshStoreDecoder.TryDecode(allocator: m_allocator, bytes: entry.GetSpan(), declined: out declined, key: key, materials: out materials, mesh: out mesh, refusal: out var why, storage: storage, taking: taking, owner: owner, workspace: in workspace);
 
         _ = Interlocked.Increment(location: ref m_reads);
         _ = Interlocked.Add(location1: ref m_readBytes, value: entry.Length);
@@ -384,13 +384,13 @@ public sealed class SdfMeshStore {
         using var entry = new OwnedBuffer<byte>(m_allocator, owner);
         try {
             if (!TryReadEntryBytes(entry, owner, path, in workspace)) { return false; }
-            if (!SdfMeshStoreCodec.TryPayload(entry.GetSpan(), key, out var compressed, out var storedLength, out _) || (storedLength != length)) {
+            if (!SdfMeshStoreDecoder.TryPayload(entry.GetSpan(), key, out var compressed, out var storedLength, out _) || (storedLength != length)) {
                 Delete(path);
                 return false;
             }
             if (!workspace.TryReserve(owner, checked((long)entry.Length + length))) { return false; }
             samples.Resize(length, clear: false, preserve: false);
-            if (!SdfMeshStoreCodec.TryInflate(compressed, samples.GetSpan())) {
+            if (!SdfMeshStoreDecoder.TryInflate(compressed, samples.GetSpan())) {
                 Delete(path);
                 return false;
             }

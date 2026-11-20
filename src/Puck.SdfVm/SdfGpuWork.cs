@@ -560,19 +560,23 @@ public sealed class SdfGpuWork : IDisposable {
     public void Drive(SdfWorldTables tables) {
         Enter(driven: true, tables: tables);
         try {
-            var deadline = WaitDeadline.In(budget: DriveSlice);
+            var started = m_time.GetTimestamp();
 
             m_drives++;
             while (true) {
                 var stepped = Stopwatch.GetTimestamp();
 
-                _ = Step(tables: tables, within: deadline.Remaining);
+                var remaining = DriveSlice - m_time.GetElapsedTime(started);
+                if (remaining <= TimeSpan.Zero) { return; }
+                _ = Step(tables: tables, within: remaining);
 
                 var waiting = Stopwatch.GetTimestamp();
 
                 m_driveStepTicks += (waiting - stepped);
-                if ((m_clients.Count == 0) || !tables.BindsBackgroundWork || deadline.HasPassed) { return; }
+                remaining = DriveSlice - m_time.GetElapsedTime(started);
+                if ((m_clients.Count == 0) || !tables.BindsBackgroundWork || (remaining <= TimeSpan.Zero)) { return; }
 
+                var deadline = WaitDeadline.In(budget: remaining);
                 var flying = HandOff();
                 // One wait for both: a job's fence and a client's offer set the same signal, and one set while the step
                 // above ran is still set here.

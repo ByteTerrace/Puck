@@ -191,6 +191,7 @@ public sealed partial class SdfMeshPathBakeLawTests {
         var arrived = awayDresser.Dress(frame: PosedFrame(groups: 1, offset: 0.36f, program: program, time: 0f)).DressedDraws();
 
         Assert.Same(expected: baked, actual: Assert.Single(collection: arrived).Mesh);
-        Assert.False(condition: away.Pending);
+        // The arrival draws its own form immediately. Its floor can still owe the demanded detail tier.
+        Assert.True(condition: away.DrawsOwn);
     }
 }

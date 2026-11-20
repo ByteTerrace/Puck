@@ -146,7 +146,7 @@ allocators of an arrival **[reading]**.
 ### The store decode
 
 A host's load decodes an entry straight into the storage its mesh keeps:
-`SdfMeshLibrary.TryLoad` hands `SdfMeshStoreCodec.TryDecode` the mesh's native
+`SdfMeshLibrary.TryLoad` hands `SdfMeshStoreDecoder.TryDecode` the mesh's native
 storage (`SdfMesh.Native`), the group's material ids are applied as the
 material planes are read, and `SdfMeshStore` reads the entry into owned
 scratch **[opened]**. Managed arrays remain only for an offline library, which
@@ -730,7 +730,7 @@ producing managed arrays the native copy then discards.
 | 4b. One decoder that writes each plane into storage its caller supplies | The plane readers already read from native scratch through spans; the native mesh's blocks are spans | Medium | Nothing found |
 | 4c. Map the entry and draw from it | No decode | The entry is delta-coded and compressed; a second on-disk form | The store's bytes on every machine |
 
-**Favoured: 4b.** `SdfMeshStoreCodec.TryDecode` takes a storage that hands out a
+**Favoured: 4b.** `SdfMeshStoreDecoder.TryDecode` takes a storage that hands out a
 span per part: managed arrays for an offline library, blocks of the mesh's
 native payload for a host. The mesh is built over those blocks, so the native
 copy of a store load goes; the group's material ids are applied as the material
