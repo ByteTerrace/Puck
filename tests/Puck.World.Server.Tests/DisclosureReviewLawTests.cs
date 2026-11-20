@@ -92,8 +92,8 @@ public sealed class DisclosureReviewLawTests {
         };
         var target = server.Definition.WithWorldState([..server.Definition.AuthoredState, tray]);
         Assert.True(WorldDefinitionLoader.TryDraw(target, "store", server.InstanceIdentity, out var preview, out var reason, WorldDrawSampler.Preview), reason);
-        var delta = WorldReloadDelta.Create(server.Definition, server.DocumentVersion, preview);
-        Assert.True(delta.TryPrepare(server.Definition, server.DocumentVersion, out var candidate, out reason), reason);
+        var delta = WorldReloadDelta.Between(server.SourceRevision.Definition, preview);
+        Assert.True(delta.TryReconstruct(server.SourceRevision.Definition, out var candidate, out reason), reason);
         Assert.Equal(0, candidate.AuthoredState.Single(r => r.Name == tray.Name).DrawCursor);
         var before = keys.Reads;
         var origin = new WorldRebuildOrigin.Store(Guid.NewGuid(), SafeName.Parse("table"));

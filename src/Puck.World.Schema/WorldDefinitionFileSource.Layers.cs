@@ -66,8 +66,10 @@ public static partial class WorldDefinitionFileSource {
         Member[] Composed
     );
 
-    // The root members of a compact JSON object, in order. Null when the bytes are not one JSON object.
-    private static Member[]? MembersOf(byte[] json) {
+    // The root members of a compact JSON object, in order. Null when the bytes are not one JSON object. The one reader
+    // of a document's root members by their bytes: a held composition's layers and a definition's member slices
+    // (WorldDefinitionMembers) both read through it.
+    internal static Member[]? MembersOf(byte[] json) {
         var reader = new Utf8JsonReader(jsonData: json);
         var members = new List<Member>();
 

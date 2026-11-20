@@ -583,7 +583,9 @@ public sealed partial class WorldDocument {
 }
 
 /// <summary>What installing a prepared mutation rebuilds (<see cref="WorldDocument.InstallKindOf"/>).</summary>
-internal enum WorldInstallKind {
+public enum WorldInstallKind {
+    /// <summary>Nothing the live document holds changed: nothing installs.</summary>
+    Nothing,
     /// <summary>State values moved alone: the arena loads the rows the write replaced and every compiled product
     /// stays.</summary>
     Value,

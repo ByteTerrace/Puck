@@ -169,7 +169,7 @@ public sealed partial class WorldTick {
             expectedContentHash: rebuild.ExpectedContentHash,
             preparationFailure: rebuild.PreparationFailure,
             admission: rebuild.Admission,
-            basis: rebuild.Basis
+            reload: rebuild.Reload
         ),
             WorldPendingOp.Undo undo => Host.Persistence.ApplyUndo(
             count: undo.Count,

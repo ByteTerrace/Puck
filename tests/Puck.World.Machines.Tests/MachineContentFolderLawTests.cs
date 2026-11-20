@@ -447,7 +447,7 @@ public sealed class MachineContentFolderLawTests {
                 payload: new WorldSubmissionPayload.Rebuild(Value: new WorldRebuildRequest(
                     ContentHash: WorldDefinitionFileSource.ComputeContentHash(content: WorldDefinitionSerialization.Serialize(definition: reread)),
                     Definition: null,
-                    Delta: WorldReloadDelta.Create(fixture.Server.Definition, fixture.Server.DocumentVersion, reread),
+                    Delta: WorldReloadDelta.Between(fixture.Server.SourceRevision.Definition, reread),
                     Force: true,
                     Kind: WorldRebuildKind.Reload,
                     Origin: new WorldRebuildOrigin.File(Path: Path.Combine(path1: root.PathOf(name: "world"), path2: "cabinet.world.json"))

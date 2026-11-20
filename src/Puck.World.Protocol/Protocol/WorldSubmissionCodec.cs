@@ -503,7 +503,6 @@ public static partial class WorldSubmissionCodec {
         );
         WorldReloadDelta? delta = null;
         if (reader.ReadBoolean()) {
-            var version = new WorldDocumentVersion(reader.ReadGuid(), reader.ReadInt64());
             var baseHash = reader.ReadNullableString(field: "Rebuild.Delta.BaseHash");
             var targetHash = reader.ReadNullableString(field: "Rebuild.Delta.TargetHash");
             var patch = reader.ReadBlock(field: "Rebuild.Delta.Patch", maxBytes: WorldFrameCodec.MaxPayloadBytes(WorldSubmissionKind.Rebuild)).ToArray();
@@ -511,7 +510,7 @@ public static partial class WorldSubmissionCodec {
             if (baseHash is null || targetHash is null) {
                 throw new LeafCodecException(Fail(WorldCodecRefusal.PayloadMalformed, "a reload delta requires base and target fingerprints"));
             }
-            delta = new(version, baseHash, targetHash, patch, directory);
+            delta = new(baseHash, targetHash, patch, directory);
         }
 
         if (reader.Failed) {
@@ -965,7 +964,7 @@ public static partial class WorldSubmissionCodec {
     private static bool ValidRebuildShape(WorldRebuildRequest request) => request.Kind switch {
         WorldRebuildKind.Reset => ((request.Definition is null) && (request.Delta is null) && (request.Origin is null) && (request.ContentHash is null)),
         WorldRebuildKind.Load => ((request.Definition is not null) && (request.Delta is null) && (request.Origin is not null) && (request.ContentHash is not null)),
-        WorldRebuildKind.Reload => ((request.Definition is null) && (request.Delta is { BaseVersion.IsDelivered: true, BaseHash.Length: > 0, TargetHash.Length: > 0, Patch.Length: > 0 }) && (request.Origin is not null) && (request.ContentHash is not null)),
+        WorldRebuildKind.Reload => ((request.Definition is null) && (request.Delta is { BaseHash.Length: > 0, TargetHash.Length: > 0, Patch.Length: > 0 }) && (request.Origin is not null) && (request.ContentHash is not null)),
         _ => false,
     };
     private static void WriteCommand(WireWriter writer, WorldCommand command) {
@@ -1304,8 +1303,6 @@ public static partial class WorldSubmissionCodec {
             }
         );
         writer.WriteOptionalClass(request.Delta, static (w, delta) => {
-            w.WriteGuid(delta.BaseVersion.Activation);
-            w.WriteInt64(delta.BaseVersion.Sequence);
             w.WriteNullableString(delta.BaseHash);
             w.WriteNullableString(delta.TargetHash);
             w.WriteBlock(delta.Patch);

@@ -22,9 +22,9 @@ public sealed class DocumentBasisLawTests {
         target["_reload"]![0]!["configuration"] = JsonNode.Parse(configuration);
         var current = WorldDefinitionSerialization.Deserialize(System.Text.Encoding.UTF8.GetBytes(basis.ToJsonString()));
         var next = WorldDefinitionSerialization.Deserialize(System.Text.Encoding.UTF8.GetBytes(target.ToJsonString()));
-        var version = new Puck.World.Protocol.WorldDocumentVersion(Guid.NewGuid(), 1);
-        var delta = Puck.World.Protocol.WorldReloadDelta.Create(current, version, next);
-        Assert.True(delta.TryPrepare(current, version, out var prepared, out var reason), reason);
+        var delta = Puck.World.Protocol.WorldReloadDelta.Between(current, next);
+        // A copy holds no reconstruction this process kept, so the delta's own bytes reproduce the next revision.
+        Assert.True(delta.TryReconstruct(current with { }, out var prepared, out var reason), reason);
         Assert.Equal(WorldDefinitionSerialization.SerializeCompact(next), WorldDefinitionSerialization.SerializeCompact(prepared!));
     }
 

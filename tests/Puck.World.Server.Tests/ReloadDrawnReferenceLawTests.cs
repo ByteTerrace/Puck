@@ -103,7 +103,7 @@ public sealed class ReloadDrawnReferenceLawTests {
             request: new WorldRebuildRequest(
                 ContentHash: contentHash,
                 Definition: null,
-                Delta: WorldReloadDelta.Create(fixture.Server.Definition, fixture.Server.DocumentVersion, admission.Definition),
+                Delta: WorldReloadDelta.Between(fixture.Server.SourceRevision.Definition, admission.Definition),
                 Force: false,
                 Kind: WorldRebuildKind.Reload,
                 Origin: new WorldRebuildOrigin.File(Path: path)

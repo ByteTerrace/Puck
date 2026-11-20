@@ -130,7 +130,7 @@ public sealed class SiloDeferredVerbAnswerLawTests {
         var reloadRequest = new WorldRebuildRequest(
             ContentHash: "published",
             Definition: null,
-            Delta: WorldReloadDelta.Create(fixture.Server.Definition, fixture.Server.DocumentVersion, fixture.Server.Definition),
+            Delta: WorldReloadDelta.Between(fixture.Server.SourceRevision.Definition, fixture.Server.Definition),
             Force: false,
             Kind: WorldRebuildKind.Reload,
             Origin: new WorldRebuildOrigin.Store(Owner: Guid.Empty, World: SafeName.Parse(candidate: "row"))

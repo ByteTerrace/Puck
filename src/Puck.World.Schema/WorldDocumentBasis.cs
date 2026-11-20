@@ -640,10 +640,15 @@ public static class WorldDocumentBasis {
                 (value is JsonObject overlayObject)
             ) {
                 // A shades row is a program under its own content identity: a layer's row of the same key is the same
-                // program, so rows are adopted whole and never merged member by member (WorldShadeTable).
-                if ((path == "$") && (name == ShadesMemberName)) {
+                // program, so rows are adopted whole and never merged member by member (WorldShadeTable). A delta
+                // removes a row with a null and replaces the table whole with "$replace", as it does any object.
+                if ((path == "$") && (name == ShadesMemberName) && !IsTrue(node: overlayObject[ReplaceMemberName])) {
                     foreach (var (key, row) in overlayObject) {
-                        basisObject[key] = WorldDocumentOrigins.Clone(node: row, origins: origins);
+                        if (row is null) {
+                            _ = basisObject.Remove(propertyName: key);
+                        } else {
+                            basisObject[key] = WorldDocumentOrigins.Clone(node: row, origins: origins);
+                        }
                     }
 
                     continue;
@@ -1063,6 +1068,120 @@ public static class WorldDocumentBasis {
             target: target
         );
     }
+    /// <summary>Computes the delta from one value to another under <see cref="Diff"/>'s rules for a value of any
+    /// kind: an object's member-wise delta, a list's keyed delta, or the target itself for anything else.</summary>
+    /// <param name="basis">The value the delta is taken from.</param>
+    /// <param name="target">The value the delta reproduces.</param>
+    /// <returns>The delta, or a copy of <paramref name="target"/> when the two are not both objects or both lists.</returns>
+    public static JsonNode? DiffValue(JsonNode? basis, JsonNode? target) => (((basis is JsonObject basisObject) && (target is JsonObject targetObject) && !TypeDiscriminatorsDiffer(basis: basisObject, overlay: targetObject))
+        ? DiffObject(basis: basisObject, target: targetObject)
+        : (((basis is JsonArray basisList) && (target is JsonArray targetList))
+            ? DiffList(basis: basisList, target: targetList)
+            : target?.DeepClone()));
+
+    /// <summary>Merges the change from <paramref name="previous"/> to <paramref name="next"/> into
+    /// <paramref name="live"/>, a value that has moved from <paramref name="previous"/> on its own: a three-way merge
+    /// where the next value wins wherever both sides changed the same thing.</summary>
+    /// <remarks>Where only one side changed a value, its change is kept. Objects merge member by member; a keyed list
+    /// (the identity vocabulary <see cref="TryFindRowKey"/> finds across all three lists) merges row by row, keeping the
+    /// live list's order and appending rows only the next list adds. A row both sides changed, a row one side removed
+    /// that the other changed, and any other value both sides changed differently are conflicts: the next value is
+    /// taken and the conflict's path is added to <paramref name="conflicts"/>, a keyed row named by its identity.
+    /// Equality is <see cref="Puck.Abstractions.Documents.OrderedJson.Equals"/>. No input is mutated.</remarks>
+    /// <param name="previous">The value both sides moved from.</param>
+    /// <param name="live">The value one side moved to.</param>
+    /// <param name="next">The value the other side moved to, which wins a conflict.</param>
+    /// <param name="path">The value's path, the prefix of each conflict named.</param>
+    /// <param name="conflicts">Receives the path of every conflict, in document order.</param>
+    /// <returns>The merged value.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="path"/> or <paramref name="conflicts"/> is
+    /// <see langword="null"/>.</exception>
+    public static JsonNode? MergeThree(JsonNode? previous, JsonNode? live, JsonNode? next, string path, ICollection<string> conflicts) {
+        ArgumentNullException.ThrowIfNull(argument: path);
+        ArgumentNullException.ThrowIfNull(argument: conflicts);
+
+        return MergeThree(previous: new Side(Node: previous, Present: true), live: new Side(Node: live, Present: true), next: new Side(Node: next, Present: true), path: path, conflicts: conflicts, row: false).Node;
+    }
+
+    // A member's value on one side of a three-way merge, or its absence.
+    private readonly record struct Side(JsonNode? Node, bool Present) {
+        public static Side Absent => new(Node: null, Present: false);
+        public static Side Of(JsonObject owner, string name) => (owner.TryGetPropertyValue(propertyName: name, jsonNode: out var node) ? new Side(Node: node, Present: true) : Absent);
+        public bool Same(Side other) => ((Present == other.Present) && (!Present || Puck.Abstractions.Documents.OrderedJson.Equals(left: Node, right: other.Node)));
+        public Side Copy() => (Present ? new Side(Node: Node?.DeepClone(), Present: true) : Absent);
+    }
+
+    // A row is merged whole: both sides changing it is one conflict, whatever members each changed.
+    private static Side MergeThree(Side previous, Side live, Side next, string path, ICollection<string> conflicts, bool row) {
+        if (previous.Same(other: next)) { return live.Copy(); }
+        if (previous.Same(other: live) || live.Same(other: next)) { return next.Copy(); }
+
+        if (!row && (previous.Node is JsonObject previousObject) && (live.Node is JsonObject liveObject) && (next.Node is JsonObject nextObject) &&
+            !TypeDiscriminatorsDiffer(basis: previousObject, overlay: liveObject) && !TypeDiscriminatorsDiffer(basis: previousObject, overlay: nextObject) &&
+            !IsTrue(node: liveObject[ReplaceMemberName]) && !IsTrue(node: nextObject[ReplaceMemberName])) {
+            var merged = new JsonObject();
+            var names = liveObject.Select(selector: static member => member.Key).Concat(second: nextObject.Select(selector: static member => member.Key).Where(predicate: name => !liveObject.ContainsKey(propertyName: name)));
+
+            foreach (var name in names.ToArray()) {
+                var member = MergeThree(
+                    conflicts: conflicts,
+                    live: Side.Of(name: name, owner: liveObject),
+                    next: Side.Of(name: name, owner: nextObject),
+                    path: $"{path}.{name}",
+                    previous: Side.Of(name: name, owner: previousObject),
+                    row: false
+                );
+
+                if (member.Present) { merged[name] = member.Node; }
+            }
+            return new Side(Node: merged, Present: true);
+        }
+
+        if ((previous.Node is JsonArray previousRows) && (live.Node is JsonArray liveRows) && (next.Node is JsonArray nextRows) &&
+            TryFindRowKey(ambiguity: out _, basis: previousRows, key: out var key, overlay: liveRows) &&
+            TryFindRowKey(ambiguity: out _, basis: liveRows, key: out var nextKey, overlay: nextRows) && string.Equals(a: key, b: nextKey, comparisonType: StringComparison.Ordinal) &&
+            ((liveRows.Count == 0) || !IsReplaceMarker(node: liveRows[0])) && ((nextRows.Count == 0) || !IsReplaceMarker(node: nextRows[0]))) {
+            var previousIndex = IndexRows(list: previousRows, key: key, duplicate: out _);
+            var nextIndex = IndexRows(list: nextRows, key: key, duplicate: out _);
+            var liveIndex = IndexRows(list: liveRows, key: key, duplicate: out _);
+            var merged = new JsonArray();
+
+            Side RowOf(JsonArray rows, Dictionary<JsonNode, int> index, JsonNode identity) => (index.TryGetValue(key: identity, value: out var at) ? new Side(Node: rows[at], Present: true) : Side.Absent);
+            void Add(Side side) { if (side.Present) { merged.Add(value: side.Node); } }
+
+            foreach (var liveRow in liveRows) {
+                var identity = RowIdentity(key: key, row: liveRow)!;
+
+                Add(side: MergeThree(
+                    conflicts: conflicts,
+                    live: new Side(Node: liveRow, Present: true),
+                    next: RowOf(index: nextIndex, identity: identity, rows: nextRows),
+                    path: $"{path}[{key}={DescribeKey(value: identity)}]",
+                    previous: RowOf(index: previousIndex, identity: identity, rows: previousRows),
+                    row: true
+                ));
+            }
+            foreach (var nextRow in nextRows) {
+                var identity = RowIdentity(key: key, row: nextRow)!;
+
+                if (!liveIndex.ContainsKey(key: identity)) {
+                    Add(side: MergeThree(
+                        conflicts: conflicts,
+                        live: Side.Absent,
+                        next: new Side(Node: nextRow, Present: true),
+                        path: $"{path}[{key}={DescribeKey(value: identity)}]",
+                        previous: RowOf(index: previousIndex, identity: identity, rows: previousRows),
+                        row: true
+                    ));
+                }
+            }
+            return new Side(Node: merged, Present: true);
+        }
+
+        conflicts.Add(item: path);
+        return next.Copy();
+    }
+
     /// <summary>Returns the pointer a node of a composed tree stands at in one of the layers composed into it, so a
     /// finding against the composed document can be read against the layer that authored the node. Each list index
     /// is traced by the merge's own rules: through the row identity key a keyed list merges by, past a leading

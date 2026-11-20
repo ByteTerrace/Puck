@@ -146,9 +146,15 @@ public sealed class WorldIterationClock(WorldServer server) : IWorldIterationRea
     /// already reached its frame or stopped is left as it stands. Call on the host pump.</summary>
     /// <param name="number">The loop's number, as <see cref="Begin"/> returned it.</param>
     /// <param name="refusal">The refusal's text.</param>
-    public void Refuse(long number, string refusal) {
+    public void Refuse(long number, string refusal) => End(number: number, reason: $"refused: {refusal}");
+    /// <summary>Ends a loop whose edit will never reach a frame (a refusal, a source unchanged since the revision the
+    /// authority holds), naming why. A loop that has already reached its frame or stopped is left as it stands. Call on
+    /// the host pump.</summary>
+    /// <param name="number">The loop's number, as <see cref="Begin"/> returned it.</param>
+    /// <param name="reason">Why the loop ended.</param>
+    public void End(long number, string reason) {
         if ((Latest is { Number: var latest, Frame: null, Ended: null } loop) && (latest == number)) {
-            loop.Ended = $"refused: {refusal}";
+            loop.Ended = reason;
         }
     }
 

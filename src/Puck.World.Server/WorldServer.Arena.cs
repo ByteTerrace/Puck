@@ -690,11 +690,17 @@ public sealed partial class WorldServer {
             definition = SettleInstalledRows(definition: definition);
         }
         m_document.AdoptDefinition(definition: definition);
-        // Recomposition may change dependencies: only the exact definition can reuse its validation result.
+        // Recomposition may change dependencies: a compilation is reused for its exact definition, or for one that differs
+        // from it only in state rows' values over the same compiled catalog, as a value install keeps the compiled rules.
         if (!ReferenceEquals(
             objA: compilation?.Definition,
             objB: definition
-        )) { compilation = WorldRuleCompilation.Compile(definition: definition); }
+        )) {
+            compilation = (((compilation ?? m_ruleCompilation) is { } held) &&
+                (WorldDocument.ReloadInstallKindOf(candidate: definition, live: held.Definition, rows: out _) is WorldInstallKind.Nothing or WorldInstallKind.Value))
+                ? held
+                : WorldRuleCompilation.Compile(definition: definition);
+        }
         m_ruleHost.Install(compilation: compilation!);
         m_ruleCompilation = compilation;
         if (arena is null) {

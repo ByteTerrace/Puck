@@ -408,9 +408,10 @@ public static partial class WorldDefinitionFileSource {
 
     // The composition and content pin every file read shares: the admission door draws, settles and admits what it
     // returns, and the pin read keeps only the hash. It returns the parsed, undrawn document, which nothing may
-    // admit or carry before the draw.
+    // admit or carry before the draw. A composition whose pin is `unchangedFrom` is not parsed: the call succeeds with
+    // that pin and no document.
     internal static bool TryLoadParsed(string path, out WorldDefinition? definition, out string contentHash, out string reason,
-        string catalogFingerprint, IMachineValidationCatalog? catalog, IWorldDocumentSource? documents = null, string? displayName = null) {
+        string catalogFingerprint, IMachineValidationCatalog? catalog, IWorldDocumentSource? documents = null, string? displayName = null, string? unchangedFrom = null) {
         // What a refusal calls the document: the name its caller gave it for display, or its path when it gave none.
         var shown = (displayName ?? path);
 
@@ -485,6 +486,19 @@ public static partial class WorldDefinitionFileSource {
             }
         }
 
+        var hash = ((chain.Count == 1)
+            ? ComputeContentHash(content: bytes)
+            : ComputeChainContentHash(chain: chain)
+        );
+
+        // The source revision the caller already holds: the composition it would parse is the one it has.
+        if (string.Equals(a: hash, b: unchangedFrom, comparisonType: StringComparison.Ordinal)) {
+            contentHash = hash;
+            reason = string.Empty;
+
+            return true;
+        }
+
         try {
             if (!TryParseDocument(
                 definition: out var parsed,
@@ -495,10 +509,7 @@ public static partial class WorldDefinitionFileSource {
                 return false;
             }
 
-            contentHash = ((chain.Count == 1)
-                ? ComputeContentHash(content: bytes)
-                : ComputeChainContentHash(chain: chain)
-            );
+            contentHash = hash;
             definition = (parsed! with { DocumentDirectory = WorldDocumentPaths.DirectoryOf(documentPath: path) });
 
             return true;
