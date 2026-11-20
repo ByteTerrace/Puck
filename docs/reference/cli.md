@@ -3824,8 +3824,9 @@ never writes the store, so it reads a store a running World owns.
   store.
 - `--prototype <id>...` keeps the groups of bodies wearing those creations
   (repeat it, or name several);
-  `--group <text>` keeps the groups whose label holds the text, such as a
-  shape's name.
+  `--group <text>` keeps the groups whose label holds the text, as a group's
+  heading prints it: a shape's name, or its `geometry=` hash, which singles
+  out one tier's group where several tiers share a label.
 - `--level <n>` audits the surface that forced render level draws (zero by
   default), clamped to each chunk's last available level. Only referenced
   vertices count. The error threshold and coverage lattice retain level zero's

@@ -189,7 +189,15 @@ device sampling. Do not infer a GPU race from a whole-store hash alone.
   topology: inside a union the interpolated value is no distance (a 2 cm layer
   under a 6 cm coarse cell measures to the face it shares with its neighbour),
   and its linear estimate put a slab's underside a centimetre up inside the
-  slab. Only samples displaced by `CloseSheets` keep their lattice
+  slab. The field along such an edge need not change sign where the
+  interpolated end says it does (a coarse cell's corners interpolate the two
+  wedges of an XOR's pinch as one solid), and the search then ends against
+  that end, off the surface: a crossing whose bracket still ends at an
+  interpolated value (`CrossingRoot.Bracketed`) and whose field there does not
+  read zero gives no plane (`Lattice.TryCrossingNormal`). Its measured
+  gradient is the nearer face's, and a plane through the lattice point along it
+  stands up to a fine cell off that face and keeps a merged piece's planes from
+  meeting at its crease. Only samples displaced by `CloseSheets` keep their lattice
   interpolation: their intentional surface differs from the original field.
   The search (`CrossingRoot`) measures two trials a round, a tolerance apart
   about an estimate (the linear one, then the secant through the last round's
@@ -266,7 +274,16 @@ device sampling. Do not infer a GPU race from a whole-store hash alone.
     finds every quad neither of whose splits faces out and returns the vertex
     whose return fixes it, or all of them, to its crossings' mean, which lies in
     its own cell. A merged piece's vertex stands for several cells and has no
-    region of its own, so the settle is all that holds a transition fan.
+    region of its own, so the settle is all that holds a transition fan. A
+    piece whose vertex the settle returns and whose planes meet along a crease
+    past its block (the faces of a wedge whose edge the neighbouring measured
+    cells hold) has no point on both faces, and its returned vertex lies inside
+    the solid, where the field check moves it onto one face and turns the other
+    face's triangles against the field; the merge runs again with each such
+    piece split into one piece per face (`SdfDualContouring.SplitAtCreases`).
+    A piece the settle leaves alone keeps its one vertex: splitting every
+    creased piece, or every piece holding two opposite sheets, turns more
+    triangles on the XOR and the range windows than it fixes.
   - *The split* (`SdfSampledLattice.SelectDiagonals`) takes the diagonal whose
     triangles face out where only one's do, before any normal is read. Two
     quads that hold one pair of vertices as opposite corners (a merged vertex
