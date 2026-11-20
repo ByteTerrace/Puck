@@ -66,6 +66,7 @@ Decisions: [rendering](../decisions/rendering.md), [residency](../decisions/resi
 
 - [Rendering](rendering.md): the frame graph's remaining packages: sky vocabulary, wallpaper bounds, hardware observations and follow-ups.
 - [Rendering research](rendering-research.md): the renderer's plan: what is wrong at the size the bar is read at, the RTX 4070's budget, the thesis and its bets, fifteen decisions (whose steps and checks live in their owning plans), and a build order that fills engine gaps first and runs as waves of parallel lanes; cross-cutting tables (missing measurements, properties, authored looks, research owed, sources) stay in [the cross-cutting reference](rendering-research/step-designs.md).
+- [State-of-the-art audit](state-of-the-art/audit.md): a research record that ranks fourteen places Puck's algorithms are behind or ahead of shipped practice, from the resolve to rule scheduling; each finding is filed as open work in the plan that owns its area, and the page lists where.
 - [Streaming and memory](streaming-and-memory.md): the campaign that builds residency with the memory work inside it, from device readings and pools to areas and the moons; its research round is in `streaming-and-memory/`.
 - [Visibility and submission](visibility.md): retained instances, instance updates proportional to change, geometry reduced at the source, and shared multi-view work.
 - [Virtual geometry](virtual-geometry.md): levels of detail, member boxes, far-field parents and the finest tier as a demand-baked cache.

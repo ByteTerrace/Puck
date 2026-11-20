@@ -297,3 +297,46 @@ lead's batched GPU leg:
   [certified field contact](open-items.md#certified-field-contact): whether
   affine enclosures cut unproved sweeps on rotated creations enough to pay
   for their per-op cost.
+
+## What the state-of-the-art audit adds
+
+[The audit](state-of-the-art/audit.md#3-the-bake-samples-a-dense-lattice-and-contours-on-the-cpu)
+compared the bake with Keeter's massively parallel renderer (SIGGRAPH 2020),
+which prunes by interval arithmetic coarse to fine on the GPU and specializes
+the tape per region. Today's main bake samples a dense lattice in a narrowed
+box over several readback rounds, takes four tetrahedral gradient taps, and
+contours on the CPU. The program's step scale reaches only the checkpoint
+header and the geometry key in that path: the refinement skips by a measured
+slope (`SdfSampledLattice.Refine`), and only the offline field levels skip by
+the certified bound (`SdfMeshPathBake.ContourLevel`).
+
+The measurement above limits what this is worth. The bake kernel is about 2.4
+percent of a cold bake's wall time, so pruning the GPU evaluation alone gains
+little, which is why per-brick pruning is decided against. The audit's
+findings that survive that measurement are the ones that remove CPU stage
+work, and each is a step here with its own check:
+
+- **Certified skipping in the main bake.** Extend the offline levels'
+  certified skipping (`SdfMeshPathBake.ContourLevel`'s `TryCertified`) to the
+  main bake's refinement and crossing stages, so a cell a certified bound
+  proves empty is neither sampled nor refined, and add the per-vertex field
+  certification the dual-contouring core lacks. This continues step 5's local
+  clamps, which make the bound usable inside a clamped scope. Check: a cold
+  bake of the debug world reports fewer cells measured and fewer worker-stage
+  seconds in `SdfSampledLattice` than the build before it, and `puck mesh
+  audit --cpu` passes the same shapes with no missed crossing.
+- **A GPU crossing search and contour.** The wall-time page puts the final
+  lattice's refinement, crossing choice and contour at about half of the worker
+  stage seconds, so moving the crossing search and the contour onto the GPU
+  attacks the share that costs time. It reads the same data and must give the
+  same surface within the audit's tolerance, so the CPU path stays as the
+  oracle (the device law pattern). Check: the cold bake's CPU stage seconds
+  fall by the contour and crossing share, readback rounds fall, and the mesh
+  audit and the debug world's gallery read unchanged.
+- **Interval or Lipschitz culling on the GPU, with per-region bytecode
+  specialization and forward-mode gradients.** Held until the per-group GPU
+  time line under [deferred work](#deferred-work-and-open-measurements) shows
+  the kernel back on the critical path, as the decision above says; the audit
+  does not change that, and notes that analytical gradients still need finite
+  differences for noise, relief, path and sweep ops. Check: the per-group
+  GPU-time reading names a creation whose kernel time exceeds its CPU stages.

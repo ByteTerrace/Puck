@@ -126,6 +126,20 @@ The steps, each after the one it names:
    traffic: it would save about a third of a small share and give up the
    window's fixed-order sum. A vendor's upscaler as an authored alternative is
    [rank 9](rendering-research.md#gpu-capabilities-puck-does-not-use-yet).
+   The [state-of-the-art audit](state-of-the-art/audit.md#1-the-resolve-does-per-output-pixel-work)
+   adds the design the capture decides between. The resolve loads a 5 by 5
+   luma window, more colour, fog and a rebuilt motion vector for every output
+   pixel, so each render sample is read about 44 times at a render scale of
+   0.75 (arithmetic, not measured), where FSR 2 and Unreal's temporal super
+   resolution do that work at render resolution. The alternative is one
+   compact record per render pixel, written in the views pass's epilogue
+   (luma and chroma halves, a feature bit, reactivity, identity, distance,
+   packed motion and packed transport), with the resolve reading nine records
+   or a 12 by 12 group-shared tile. Build it only if the capture shows the
+   limiter is the live registers and memory operations (about 180 a pixel)
+   and not bandwidth. Check: the capture names the limiter; then the same
+   route reads fewer loads for each output pixel and the resolve pass is no
+   slower, with the history identity and motion vectors unchanged.
 4. **The shadows.** First on the RTX 4070, since neither change below has run
    on a GPU. At an authored rate below every frame (`farShadows`,
    `SdfFarShadows.HoldsStaticLayer`), the far cascade holds a static layer and
@@ -907,6 +921,29 @@ The [temporal packet](open-items.md#temporal-shimmer-and-cadence-flicker) owns
 remaining image work. Dynamic resolution follows GPU frame timing, with present
 timing as its fallback; without timing or a display period it holds its grid
 ([frame handbook](../rendering/sdf/handbook/frame-rendering.md)).
+
+The [state-of-the-art audit](state-of-the-art/audit.md#10-temporal-reconstruction-details)
+names four open improvements, each a step of this package with its own check
+and each judged on presented frames in motion:
+
+- **The jitter period scales with the upscale ratio.** It is fixed at eight
+  samples (`SdfWorldPackage.TemporalPeriod`), where FSR 2 scales the phase
+  count with the squared ratio, about 14 at a render scale of 0.75. Check:
+  at 0.75 a pan across thin geometry shows no more shimmer than at full scale,
+  and the history weight a pixel saturates at follows the period.
+- **History is clipped by variance, not by a min and max box.** Variance
+  clipping on luma (Salvi 2016) keeps more of a stable history than the box.
+  Check: a pan past specular and ink detail shows less ghosting at equal
+  shimmer, with a still pixel's history unchanged.
+- **Shading rate is measured on the RTX 4070.** Per-tile `viewsRate` is
+  authored only in the RTX 2060's row (`worlds/standard/quality.puck`);
+  whether it pays at 2560 by 1440 on the 4070 is read, not assumed. Check:
+  the 4070 route read at `maxRate` 1 and 2, with captures of the tiles it
+  coarsens.
+- **Ink is remembered as a feature.** The views pass writes an ink bit so the
+  resolve treats ink as a remembered sub-pixel feature, as FSR 2's lock does.
+  This joins [the ink plan](ink.md)'s resolve work. Check: a moving ink line
+  holds its width without crawl.
 
 ### P18 — Sky and atmosphere
 

@@ -2604,7 +2604,10 @@ invariant and land beside the rendering work that uses them:
   shared spatial grid and `WorldBodyHistory` supplies acknowledged federation
   baselines. [Body interest and acknowledgements](../decisions/worlds-and-federation.md#body-interest-and-acknowledgements).
   I1 still needs the authority-granted window or camera anchor, hysteresis and
-  distance-tiered cadence. Under `All` an unembodied spectator currently
+  distance-tiered cadence, and the state-of-the-art audit adds a priority
+  accumulator under a per-packet byte budget, authored as a `.puck` program
+  ([the transfers packet](open-items.md#transfers-federation-and-server) owns
+  the item). Under `All` an unembodied spectator currently
   receives every body. Under `Radius` it receives none. Check 5 in
   [the MMO memo](mmo-foundations/synthesis.md#5-how-the-debug-world-proves-each-favoured-option)
   exercises those cases and a body oscillating at the radius.

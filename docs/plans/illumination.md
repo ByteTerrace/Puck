@@ -1171,6 +1171,66 @@ and the hills stay clean.
   is built once and reused while the geometry stands, and only the top level
   over the draws is rebuilt per scene change.
 
+## What the state-of-the-art audit adds
+
+[The audit](state-of-the-art/audit.md) read Puck's lighting against published and
+shipped practice. It found the structure ahead (probes relit rather than
+retraced, cascades held under a moving sun) and these gaps in amortisation.
+Where an item already exists above, the audit's evidence extends it; the rest
+are new. All of them move work from every pixel or every frame to the moment
+the field or a light changes, and each is judged on presented frames in motion.
+
+- **Per-vertex probe visibility from the certified field**
+  ([finding 2](state-of-the-art/audit.md#2-the-probe-gather-tests-16-probes-per-cell-per-frame)).
+  The gather tests 16 probes against a 12 by 12 octahedral depth map for every
+  shaded cell every frame. Precompute each static vertex's probe visibility
+  weights with `SdfFieldEvaluator.TryCertifiedLineOfSight` when geometry or the
+  probe placement changes, and keep the full gather for moving bodies. This
+  is the field-for-triangles move of [tracing light with the field](#after-the-gpu-trace),
+  applied to the lookup instead of the trace, and it shares that step's rule
+  that a proof is withdrawn when a blocker arrives. Check: stills at the gather
+  stops stay within the gather's tolerance, depth taps per pixel fall for static
+  receivers, and a body crossing a proved pair withdraws its weights in the
+  same frame.
+- **Per-vertex baked occlusion and bent normal from the field**
+  ([finding 8](state-of-the-art/audit.md#8-local-lights-ambient-occlusion-and-the-suns-cascades)).
+  Decision 4's bitmask march covers detail below the probe spacing per pixel.
+  A field-derived per-vertex occlusion and bent normal carry the part that does
+  not move, so the march spends its taps on moving casters and thin surfaces.
+  Visibility-bitmask AO itself is decision 4 and its build-order step 4, with
+  XeGTAO's cost at about 0.56 ms at 1080p on an RTX 2060 as its reference.
+  Check: `world.debug-view ao` on the gallery's crevices shows the baked term
+  and the march agreeing where nothing moves.
+- **A real shadow for a local light by a per-pixel ray.** Decision 5's budgeted
+  shadow residency (an atlas of point, spot and area shadows) is one route.
+  The other is a per-pixel shadow ray through the any-hit ray-query door
+  already used by the probe trace (`shade/sdf-probe-trace.hlsli`), which
+  needs no atlas and no residency but costs a ray a pixel per shadowed light.
+  Choose between them by counted work at 68 fixtures and at ten times that,
+  inside step 5's list measurement; the ray route is the 4070's path and
+  falls back to the atlas where ray queries are absent. Check: a local light
+  that lost its atlas slot still shadows in the ray path, with the same
+  shadow edge within the still tolerance.
+- **The sun's cascades at small penumbra.** One cascade spans 16 to 120 m at
+  2048 texels, about 10 cm a texel. Weigh a third cascade, or rays at small
+  penumbra, for the 4070 at 1440p, against the eye-centred cascade memo in
+  build-order step 1. Contact shadows are a low-priority add. Check: a
+  close-up of a thin shadow caster at the near edge of the span reads sharp at
+  the owner's reference without a visible handover.
+- **An exact visibility brick cache from the field.** The distant shadow's
+  refresh, probe visibility, sky occlusion and local-light shadows all ask the
+  same question of a static scene: what can this point see? Evaluate it once
+  from the field at bake time into bricks and serve all four. This is the
+  distance-brick option in [tracing light with the field](#after-the-gpu-trace),
+  widened from the probe trace's visibility to the three other consumers. It
+  is not a main picture: a distance volume was built once as one and lost the
+  materials, and bricks here hold visibility only. A quick check comes first:
+  does the distant pass draw the coarsest tier? If it draws a finer tier than
+  the distance warrants, that is a defect to fix before any cache. Check: the
+  distant map's refresh cost falls with no change in the shadows it casts, and
+  one brick read answers a probe, a distant receiver and a local light's
+  shadow test for the same static point.
+
 ---
 
 [Plans](README.md) · [Rendering](rendering.md) · [The engine job system](engine-job-system.md) · [Decisions](../decisions/rendering.md)
