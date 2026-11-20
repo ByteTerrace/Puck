@@ -49,7 +49,87 @@ public sealed partial class WorldDocumentWalker {
         )!;
     }
 
+    /// <summary>Returns a copy of <paramref name="root"/> with each named member, by its JSON name, holding the given
+    /// value; every other member is <paramref name="root"/>'s own instance.</summary>
+    /// <typeparam name="T">The root's type, a record the document model describes.</typeparam>
+    /// <param name="root">The value whose members are replaced; it is left as it is.</param>
+    /// <param name="members">Each member's JSON name and the value it holds in the copy.</param>
+    /// <returns>The copy, or <paramref name="root"/> itself when <paramref name="members"/> is empty.</returns>
+    /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException">A name is no member of <typeparamref name="T"/>.</exception>
+    /// <exception cref="NotSupportedException"><typeparamref name="T"/> cannot be copied, or a member cannot be set.</exception>
+    public static T WithMembers<T>(T root, IReadOnlyDictionary<string, object?> members) where T : class {
+        ArgumentNullException.ThrowIfNull(argument: root);
+        ArgumentNullException.ThrowIfNull(argument: members);
+
+        return ((members.Count == 0)
+            ? root
+            : (T)new Cursor(rewriter: null!, tables: Everything.CurrentTables(), visitor: null!).WithMembers(members: members, value: root));
+    }
+    /// <summary>Reads one member of a value by its JSON name.</summary>
+    /// <param name="root">The value, a record the document model describes.</param>
+    /// <param name="name">The member's JSON name.</param>
+    /// <returns>The member's value.</returns>
+    /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException"><paramref name="name"/> is no member of the value's type.</exception>
+    public static object? ReadMember(object root, string name) {
+        ArgumentNullException.ThrowIfNull(argument: root);
+        ArgumentNullException.ThrowIfNull(argument: name);
+
+        return (FindMember(name: name, owner: root.GetType()) ?? throw new ArgumentException(message: $"{root.GetType()} has no document member '{name}'.", paramName: nameof(name))).Read(arg: root);
+    }
+    /// <summary>Returns the declared type of one member of a type by its JSON name.</summary>
+    /// <param name="owner">The type, which the document model describes.</param>
+    /// <param name="name">The member's JSON name.</param>
+    /// <returns>The member's declared type, or <see langword="null"/> when the type has no such member.</returns>
+    /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
+    public static Type? MemberType(Type owner, string name) {
+        ArgumentNullException.ThrowIfNull(argument: owner);
+        ArgumentNullException.ThrowIfNull(argument: name);
+
+        return FindMember(name: name, owner: owner)?.Property.PropertyType;
+    }
+    /// <summary>Returns the JSON names of the document members of a type, the members <see cref="ReadMember"/> and
+    /// <see cref="WithMembers{T}"/> read and set, in the serializer's order.</summary>
+    /// <param name="owner">The type, which the document model describes.</param>
+    /// <returns>The members' JSON names; empty for a type the model does not describe.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="owner"/> is <see langword="null"/>.</exception>
+    public static IReadOnlyList<string> MemberNames(Type owner) {
+        ArgumentNullException.ThrowIfNull(argument: owner);
+
+        var tables = Everything.CurrentTables();
+
+        return ((tables.ShapeOf(type: owner) is { } shape) ? [.. tables.MembersOf(shape: shape).Select(selector: static member => member.Name)] : []);
+    }
+    private static Member? FindMember(Type owner, string name) {
+        var tables = Everything.CurrentTables();
+
+        if (tables.ShapeOf(type: owner) is not { } shape) { return null; }
+        foreach (var member in tables.MembersOf(shape: shape)) {
+            if (string.Equals(a: member.Name, b: name, comparisonType: StringComparison.Ordinal)) { return member; }
+        }
+        return null;
+    }
+
     internal sealed partial class Cursor {
+        // A copy of the value with each named member set; every other member stays the value's own.
+        public object WithMembers(object value, IReadOnlyDictionary<string, object?> members) {
+            var copy = Copy(value: value);
+            var set = 0;
+
+            foreach (var member in tables.MembersOf(shape: (tables.ShapeOf(type: value.GetType()) ?? throw Unsupported(what: $"{value.GetType()}, which the document model does not describe")))) {
+                if (members.TryGetValue(key: member.Name, value: out var next)) {
+                    m_path.Add(item: new Segment(Index: 0, Key: null, Name: member.Name));
+                    Set(copy: copy, member: member, value: next);
+                    m_path.RemoveAt(index: (m_path.Count - 1));
+                    set++;
+                }
+            }
+            if (set != members.Count) {
+                throw new ArgumentException(message: $"{value.GetType()} has no document member among {string.Join(separator: ", ", values: members.Keys)}.", paramName: nameof(members));
+            }
+            return copy;
+        }
         // The value a site holds once shared: the basis's own where the patch names nothing below it, a copy of the
         // value with its unchanged members and rows shared where it names something, and the value itself otherwise.
         // An object shares only with one of its own type (a polymorphic arm the patch replaced keeps the value's); a

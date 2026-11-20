@@ -135,7 +135,7 @@ public sealed partial class WorldSiloHost {
                                 payload: new WorldSubmissionPayload.Rebuild(Value: new(
                                     ContentHash: hash,
                                     Definition: null,
-                                    Delta: WorldReloadDelta.Create(row.Server.Definition, row.Server.DocumentVersion, definition),
+                                    Delta: WorldReloadDelta.Between(previous: row.Server.SourceRevision.Definition, next: definition),
                                     Force: false,
                                     Kind: WorldRebuildKind.Reload,
                                     Origin: origin.Store

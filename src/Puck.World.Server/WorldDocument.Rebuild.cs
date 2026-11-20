@@ -58,29 +58,13 @@ public sealed partial class WorldDocument {
             request: request
         ));
     }
-    // Everything a preparation reads, taken from the authority now: the installed declarations a delta names, their
-    // version, the operator check, and the proof transport for the candidate's path. A delta names the declarations
-    // it was diffed against, which an install since may have replaced while its sender still holds them; any other
-    // request, or a base nothing holds any longer, is prepared against the live definition (a delta then refuses as
-    // stale).
-    private WorldRebuildPreparation CaptureRebuild(WorldRebuildRequest request, Principal principal, int connectionId, long correlationId, string? expectedContentHash) {
-        var named = ((request.Delta is { } delta) ? Installed(version: delta.BaseVersion) : null);
-
-        return CaptureRebuild(
-            basis: (named ?? m_definition),
-            connectionId: connectionId,
-            correlationId: correlationId,
-            expectedContentHash: expectedContentHash,
-            principal: principal,
-            request: request,
-            version: ((named is null) ? Host.DocumentVersion : request.Delta!.BaseVersion)
-        );
-    }
-    private WorldRebuildPreparation CaptureRebuild(WorldRebuildRequest request, Principal principal, int connectionId, long correlationId, string? expectedContentHash, WorldDefinition basis, WorldDocumentVersion version) => new(
-        Basis: basis,
+    // Everything a preparation reads, taken from the authority now: the source revision a delta is cut from, the live
+    // document it merges over, the operator check, and the proof transport for the candidate's path.
+    private WorldRebuildPreparation CaptureRebuild(WorldRebuildRequest request, Principal principal, int connectionId, long correlationId, string? expectedContentHash) => new(
         ConnectionId: connectionId,
         CorrelationId: correlationId,
         ExpectedContentHash: expectedContentHash,
+        Live: m_definition,
         Machines: Host.Machines.ValidationCatalog,
         Neighbours: ((request.Origin is WorldRebuildOrigin.File { Path: var candidatePath })
             ? ResolveRebuildNeighbours(path: candidatePath)
@@ -88,7 +72,7 @@ public sealed partial class WorldDocument {
         Operator: Host.Grants.IsOperator(principal),
         Principal: principal,
         Request: request,
-        Version: version
+        Revision: m_revision.Definition
     );
     /// <summary>Moves every finished rebuild preparation, oldest first, into the buffered ops. Runs at the start of
     /// each drain, so a prepared rebuild installs at a tick boundary.</summary>
@@ -107,24 +91,38 @@ public sealed partial class WorldDocument {
         verb: RebuildVerb(kind: preparation.Request.Kind)
     ));
 
-    // A replay drive's Load/Reload carries no document, so the pinned path is re-read through the door the live verb
-    // read it through: drawn for this instance and admitted on its own facts, since the tick path reaches no transport.
-    private WorldDefinition RereadForReplay(string verb, string path, out string contentHash) {
-        if (!WorldDefinitionLoader.TryLoadFileForAdmission(
-            keys: WorldPrivateDrawKeys.Preview,
-            admission: out var reread,
-            catalog: Host.Machines.ValidationCatalog,
-            contentHash: out contentHash,
-            documents: Host.RebuildDocuments,
-            instanceIdentity: Host.InstanceIdentity,
-            path: path,
-            proveNeighbours: false,
-            reason: out var reason
-        )) {
-            throw ReplayRefusal.RebuildSourceUnavailable.Raise(message: $"{verb}: cannot re-read '{path}' for replay — {reason}");
-        }
+    // A replay drive's Load or Reload carries no document, so the pinned path is re-read through the door the live verb
+    // read it through: drawn for this instance and, for a load, admitted on its own facts, since the tick path reaches no
+    // transport; a reload's re-read is an edit, which the apply validates once as the live run's preparation did.
+    private WorldDefinition RereadForReplay(string verb, string path, bool edit, out string contentHash) {
+        WorldDefinition? reread = null;
+        WorldDefinitionAdmission? admission = null;
+        var read = (edit
+            ? WorldDefinitionLoader.TryLoadFileForEdit(
+                keys: WorldPrivateDrawKeys.Preview,
+                catalog: Host.Machines.ValidationCatalog,
+                contentHash: out contentHash,
+                definition: out reread,
+                documents: Host.RebuildDocuments,
+                instanceIdentity: Host.InstanceIdentity,
+                path: path,
+                reason: out var reason
+            )
+            : WorldDefinitionLoader.TryLoadFileForAdmission(
+                keys: WorldPrivateDrawKeys.Preview,
+                admission: out admission,
+                catalog: Host.Machines.ValidationCatalog,
+                contentHash: out contentHash,
+                documents: Host.RebuildDocuments,
+                instanceIdentity: Host.InstanceIdentity,
+                path: path,
+                proveNeighbours: false,
+                reason: out reason
+            ));
 
-        return reread!.Definition;
+        return ((read && ((reread ?? admission?.Definition) is { } definition))
+            ? definition
+            : throw ReplayRefusal.RebuildSourceUnavailable.Raise(message: $"{verb}: cannot re-read '{path}' for replay — {reason}"));
     }
 
     /// <summary>Resolves the proof transport appropriate to one replacement document path.</summary>

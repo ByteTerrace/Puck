@@ -21,7 +21,7 @@ public sealed class ReloadDeltaLawTests {
         deltaWorld.Step();
         wholeWorld.Step();
         var hash = WorldDefinitionFileSource.ComputeContentHash(WorldDefinitionSerialization.Serialize(target));
-        var delta = WorldReloadDelta.Create(deltaWorld.Server.Definition, deltaWorld.Server.DocumentVersion, target);
+        var delta = WorldReloadDelta.Between(deltaWorld.Server.SourceRevision.Definition, target);
         var request = new WorldRebuildRequest(WorldRebuildKind.Reload, null, new WorldRebuildOrigin.File("palette.world.json"), false, hash, delta);
         Assert.True(WorldSubmissionCodec.TryEncodeRebuild(request, out var bytes, out var failure), failure.ToString());
         Assert.True(WorldSubmissionCodec.TryDecodeRebuild(bytes, out var decoded, out failure), failure.ToString());
@@ -54,18 +54,13 @@ public sealed class ReloadDeltaLawTests {
     }
 
     [Theory]
-    [InlineData("stale", WorldReloadDelta.StaleBaseCode)]
-    [InlineData("activation", WorldReloadDelta.StaleBaseCode)]
-    [InlineData("base", WorldReloadDelta.BaseMismatchCode)]
+    [InlineData("base", WorldReloadDelta.StaleBaseCode)]
     [InlineData("target", WorldReloadDelta.TargetMismatchCode)]
     public void TheAuthorityRefusesADeltaWhosePinsDoNotAgree(string fault, string code) {
         using var fixture = Fixtures.FreshServer();
         var current = fixture.Server.Definition;
-        var delta = WorldReloadDelta.Create(current, fixture.Server.DocumentVersion, current);
+        var delta = WorldReloadDelta.Between(fixture.Server.SourceRevision.Definition, current);
         delta = fault switch {
-            // A version this activation never installed: nothing can hold its declarations.
-            "stale" => delta with { BaseVersion = delta.BaseVersion with { Sequence = delta.BaseVersion.Sequence + 1 } },
-            "activation" => delta with { BaseVersion = new(Guid.NewGuid(), delta.BaseVersion.Sequence) },
             "base" => delta with { BaseHash = "wrong" },
             _ => delta with { TargetHash = "wrong" },
         };
@@ -81,19 +76,45 @@ public sealed class ReloadDeltaLawTests {
         Console.WriteLine(refusal.Message);
     }
 
-    // The delta was reconstructed against the exact declarations it names, so an install queued ahead of it changes
-    // nothing about what it installs: the reload lands its target over whatever stands, as a reload always replaces it.
+    // The delta is cut between two source revisions and merged over the live document, so an install queued ahead of
+    // it does not make it stale: it merges over whatever stands.
     [Fact]
-    public void AnInstallBetweenPreparationAndApplyKeepsTheQueuedDeltaTarget() {
+    public void AnInstallBetweenPreparationAndApplyMergesTheQueuedDelta() {
         using var fixture = Fixtures.FreshServer();
         var server = fixture.Server;
-        var target = server.Definition;
-        var delta = WorldReloadDelta.Create(server.Definition, server.DocumentVersion, target);
+        var delta = WorldReloadDelta.Between(server.SourceRevision.Definition, server.SourceRevision.Definition);
         var echoes = new List<WorldEditEcho>();
         server.EchoTap += echoes.Add;
         server.EnqueueRebuild(new(WorldRebuildKind.Reset, null, null, false), Principal.Console);
         server.EnqueueRebuild(new(WorldRebuildKind.Reload, null, new WorldRebuildOrigin.File("palette.world.json"), false, "source", delta), Principal.Console);
         fixture.Step();
         Assert.Contains(echoes, echo => !echo.Rejected && echo.Message.StartsWith("world.reload applied", StringComparison.Ordinal));
+    }
+
+    // A file edit and a live edit to different rows both stand; a row both changed takes the file's value and is
+    // named, so the author sees which live edit the save replaced.
+    [Fact]
+    public void ASourceChangeMergesOverLiveEditsAndNamesTheRowsBothChanged() {
+        var previous = System.Text.Json.Nodes.JsonNode.Parse("""{"rows":[{"id":"a","v":1},{"id":"b","v":1},{"id":"c","v":1}],"look":{"wrap":1,"tint":1}}""");
+        var live = System.Text.Json.Nodes.JsonNode.Parse("""{"rows":[{"id":"a","v":2},{"id":"b","v":1},{"id":"c","v":5},{"id":"d","v":1}],"look":{"wrap":2,"tint":1}}""");
+        var next = System.Text.Json.Nodes.JsonNode.Parse("""{"rows":[{"id":"a","v":1},{"id":"b","v":3},{"id":"c","v":4}],"look":{"wrap":1,"tint":3}}""");
+        var conflicts = new List<string>();
+
+        var merged = WorldDocumentBasis.MergeThree(previous, live, next, "$", conflicts);
+
+        Assert.Equal("""{"rows":[{"id":"a","v":2},{"id":"b","v":3},{"id":"c","v":4},{"id":"d","v":1}],"look":{"wrap":2,"tint":3}}""", merged!.ToJsonString());
+        Assert.Equal(["$.rows[id=\"c\"]"], conflicts);
+    }
+
+    // A shade program is keyed by its content, so a changed program removes one key and adds another; the delta carries
+    // that as a removal and an addition the root merge applies.
+    [Fact]
+    public void AShadingChangeMergesAsARemovedAndAnAddedProgram() {
+        var basis = System.Text.Json.Nodes.JsonNode.Parse("""{"shades":{"k1":{"body":"a"},"k2":{"body":"b"}}}""")!.AsObject();
+        var target = System.Text.Json.Nodes.JsonNode.Parse("""{"shades":{"k1":{"body":"a"},"k3":{"body":"c"}}}""")!.AsObject();
+        var delta = WorldDocumentBasis.Diff(basis, target);
+
+        Assert.True(WorldDocumentBasis.TryMerge(basis, delta, out var merged, out var reason), reason);
+        Assert.Equal(target.ToJsonString(), merged!.ToJsonString());
     }
 }

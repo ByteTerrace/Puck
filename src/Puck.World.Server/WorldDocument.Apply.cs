@@ -375,26 +375,22 @@ public sealed partial class WorldDocument {
         }
     }
     // The whole-document rebuild-and-swap (SubmitRebuild / world.reset, world.load, world.reload): resolve the
-    // candidate (the server's own base for Reset, the console-resolved document for Load/Reload — or, on a REPLAY
-    // drive, a fresh re-read of the tape's path hint) → compute/check its CAS content hash → validate → capacity-check
-    // → solids rebuild → swap → journal RESET → re-mint every admitted peer connection's admission grant
-    // (the document swap re-syncs group/ownership grant state but never re-mints the admitted peers' admission grants
-    // on its own, and a rebuild is exactly the kind of whole-state swap a future authority change might reasonably
-    // reset around — this closes that loudly, by construction, rather than by omission). A Load/Reload candidate was
-    // drawn and admitted by WorldDefinitionLoader.TryLoadFileForAdmission; this is the apply-time gate every install passes.
-    // A prepared admission replaces the apply-time local validation only for the exact candidate and machine catalog it
-    // validated (WorldDefinitionAdmission.AppliesTo). A delta reconstructed against the exact declarations it names (its
-    // basis, whose content preparation compared with the base pin) is a complete target, which an install since does not
-    // change, as a reload replaces the document whatever stands; only a delta whose basis is unknown (a pending op a
-    // checkpoint restored) is checked against the live document here.
-    internal bool ApplyRebuild(WorldRebuildRequest request, Principal principal, int connectionId, long correlationId, string? expectedContentHash = null, string? preparationFailure = null, WorldDefinitionAdmission? admission = null, WorldDefinition? basis = null,
+    // candidate (the server's own base for Reset, the console-resolved document for Load, a reload's next source revision
+    // merged over the live document — or, on a REPLAY drive, a fresh re-read of the tape's path hint) → compute/check its
+    // CAS content hash → validate → capacity-check → install as the change it is → journal RESET → re-mint every
+    // admitted peer connection's admission grant when the authority moved (the document swap re-syncs group/ownership
+    // grant state but never re-mints the admitted peers' admission grants on its own). A prepared admission replaces the
+    // apply-time local validation only for the exact candidate and machine catalog it validated
+    // (WorldDefinitionAdmission.AppliesTo); a reload's preparation is taken only while the revision and the live document
+    // it was merged against are still the authority's, and is merged again here otherwise.
+    internal bool ApplyRebuild(WorldRebuildRequest request, Principal principal, int connectionId, long correlationId, string? expectedContentHash = null, string? preparationFailure = null, WorldDefinitionAdmission? admission = null, WorldReloadPreparation? reload = null,
         double reconstructMilliseconds = 0, double admitMilliseconds = 0) {
         var reads = Host.DrawKeys.Reads;
         var accepted = false;
         var started = System.Diagnostics.Stopwatch.GetTimestamp();
 
         try {
-            accepted = ApplyRebuildCore(request, principal, connectionId, correlationId, expectedContentHash, preparationFailure, admission, basis);
+            accepted = ApplyRebuildCore(request, principal, connectionId, correlationId, expectedContentHash, preparationFailure, admission, reload);
             // Where an installed rebuild's time went off the tick (the delta's reconstruction, the candidate's
             // admission) and on it (the install), beside the console's own line for the source's compile.
             if (accepted && Host.Output.HasNarrationSink) {
@@ -407,7 +403,7 @@ public sealed partial class WorldDocument {
         }
     }
 
-    private bool ApplyRebuildCore(WorldRebuildRequest request, Principal principal, int connectionId, long correlationId, string? expectedContentHash, string? preparationFailure, WorldDefinitionAdmission? admission, WorldDefinition? basis) {
+    private bool ApplyRebuildCore(WorldRebuildRequest request, Principal principal, int connectionId, long correlationId, string? expectedContentHash, string? preparationFailure, WorldDefinitionAdmission? admission, WorldReloadPreparation? reload) {
         var verb = RebuildVerb(kind: request.Kind);
 
         if (!Host.Grants.IsOperator(principal: principal)) {
@@ -431,8 +427,7 @@ public sealed partial class WorldDocument {
 
 
 
-        if ((request.Delta is { } delta) &&
-            ((preparationFailure ?? ((basis is null) ? delta.RefuseBase(current: m_definition, version: Host.DocumentVersion) : null)) is { } deltaFailure)) {
+        if ((request.Delta is not null) && (preparationFailure is { } deltaFailure)) {
             RejectRebuild(connectionId: connectionId, correlationId: correlationId, reason: deltaFailure, verb: verb);
             return false;
         }
@@ -443,16 +438,35 @@ public sealed partial class WorldDocument {
         //   here, never the request's (Reset carries none). Its hash is the base's canonical bytes AT THIS MOMENT,
         //   which is why it must be computed here rather than at submission (m_base can move between submission and
         //   drain — see EnqueueRebuild's remarks).
-        //   Load/Reload: request.Definition is non-null on the LIVE path (the console already read + validated the
-        //   file and computed request.ContentHash from those exact bytes) and null on a REPLAY drive (the tape never
-        //   embeds the document — WorldReplaySnapshot.Drive passes only Kind/Origin/Force/ContentHash, so a
-        //   re-drive proves the file on disk still matches what was recorded rather than trusting a stored copy).
+        //   Load: request.Definition is non-null on the LIVE path (the console already read + validated the file and
+        //   computed request.ContentHash from those exact bytes) and null on a REPLAY drive (the tape never embeds the
+        //   document — WorldReplaySnapshot.Drive passes only Kind/Origin/Force/ContentHash, so a re-drive proves the file
+        //   on disk still matches what was recorded rather than trusting a stored copy).
+        //   Reload: the next source revision, reconstructed from the delta over the revision this authority holds (or the
+        //   whole document a holder supplied, or a replay drive's re-read), merged over the live document below.
         WorldDefinition candidate;
+        WorldDefinition? next = null;
         string contentHash;
+        IReadOnlyList<string> conflicts = [];
+        var prepared = ((reload is not null) && ReferenceEquals(objA: reload.Revision, objB: m_revision.Definition) && ReferenceEquals(objA: reload.Live, objB: priorDefinition))
+            ? reload
+            : null;
 
         if (request.Kind == WorldRebuildKind.Reset) {
             candidate = m_base;
             contentHash = WorldDefinitionFileSource.ComputeContentHash(content: WorldDefinitionSerialization.Serialize(definition: candidate));
+        } else if (prepared is not null) {
+            candidate = prepared.Candidate;
+            next = prepared.Next;
+            conflicts = prepared.Conflicts;
+            contentHash = (request.ContentHash ?? throw new InvalidOperationException(message: $"{verb}: a reload request carrying a delta must also carry its content hash."));
+        } else if ((request.Kind == WorldRebuildKind.Reload) && (request.Delta is { } delta)) {
+            if (!delta.TryReconstruct(m_revision.Definition, out next, out var reconstructReason)) {
+                RejectRebuild(connectionId: connectionId, correlationId: correlationId, reason: reconstructReason, verb: verb);
+                return false;
+            }
+            candidate = next;
+            contentHash = (request.ContentHash ?? throw new InvalidOperationException(message: $"{verb}: a reload request carrying a delta must also carry its content hash."));
         } else if (request.Definition is { } supplied) {
             candidate = supplied;
             contentHash = (request.ContentHash ?? throw new InvalidOperationException(message: $"{verb}: a Load/Reload request carrying a document must also carry its content hash."));
@@ -463,6 +477,7 @@ public sealed partial class WorldDocument {
         } else {
             candidate = RereadForReplay(
                 contentHash: out contentHash,
+                edit: (request.Kind == WorldRebuildKind.Reload),
                 path: path,
                 verb: verb
             );
@@ -484,21 +499,32 @@ public sealed partial class WorldDocument {
             throw ReplayRefusal.RebuildContentMismatch.Raise(message: $"{verb}: content hash mismatch on {pinned} — found {contentHash}, expected {expected} (recorded). The pinned content has changed since this recording was made; re-record it.");
         }
 
-        // A reload installs the change it is. Its candidate holds the installed declarations' own instance of every
-        // member and keyed row their content diff leaves unchanged, which a delta prepared against exactly these
-        // declarations reconstructed; any other holder of the whole target (a replay drive's re-read, a delta an
-        // install overtook) is shared here by the same diff, so the state rows the install re-seeds and the products it
-        // keeps by instance are the same on a live run and on its replay.
-        if ((request.Kind == WorldRebuildKind.Reload) && !((request.Delta is not null) && ReferenceEquals(objA: basis, objB: priorDefinition))) {
+        // A reload installs the change it is: the next source revision's change from the revision this authority holds,
+        // merged over the live document, which keeps every edit the session made that the source did not also change
+        // and holds the live document's own instance of every member and row the change leaves equal. A merge prepared
+        // off the tick is taken while its revision and live document still stand; any other holder of the next revision
+        // (a replay drive's re-read, a supplied document, a delta whose preparation an install overtook) merges here by
+        // the same computation, so a live run and its replay install the same candidate.
+        if ((request.Kind == WorldRebuildKind.Reload) && (prepared is null)) {
+            next = candidate;
             try {
-                candidate = WorldReloadDelta.Share(current: priorDefinition, target: candidate);
-            } catch (InvalidDataException) {
-                // A target the diff cannot reproduce shares nothing, and installs whole.
+                var change = (request.Delta ?? WorldReloadDelta.Between(previous: m_revision.Definition, next: next));
+
+                if (!change.TryMergeOver(m_revision.Definition, next, priorDefinition, out var merged, out conflicts, out var mergeReason)) {
+                    RejectRebuild(connectionId: connectionId, correlationId: correlationId, reason: mergeReason, verb: verb);
+                    return false;
+                }
+                candidate = merged;
+            } catch (InvalidDataException exception) {
+                RejectRebuild(connectionId: connectionId, correlationId: correlationId, reason: exception.Message, verb: verb);
+                return false;
             }
         }
+        // A loaded document is the source revision it installs from.
+        next ??= candidate;
 
         var keepAuthority = ((request.Kind == WorldRebuildKind.Reload) && priorDefinition.Grants.SequenceEqual(second: candidate.Grants) &&
-            (System.Text.Json.JsonSerializer.Serialize(priorDefinition.Admission,
+            (ReferenceEquals(objA: priorDefinition.Admission, objB: candidate.Admission) || System.Text.Json.JsonSerializer.Serialize(priorDefinition.Admission,
                 WorldJsonContext.Default.Options.GetTypeInfo(type: typeof(IReadOnlyList<WorldAdmissionEntry>))) ==
             System.Text.Json.JsonSerializer.Serialize(candidate.Admission,
                 WorldJsonContext.Default.Options.GetTypeInfo(type: typeof(IReadOnlyList<WorldAdmissionEntry>)))));
@@ -561,6 +587,31 @@ public sealed partial class WorldDocument {
             );
 
             return false;
+        }
+
+        // A reload that changes nothing the simulation reads, or only state values, installs as the edit it is and keeps
+        // every compiled product; anything else takes the full install below.
+        var changedMembers = ((request.Kind == WorldRebuildKind.Reload) ? DescribeChanged(changed: ChangedMembers(candidate: candidate, live: priorDefinition)) : string.Empty);
+
+        if ((request.Kind == WorldRebuildKind.Reload) && keepAuthority) {
+            var kind =((prepared is not null) ? prepared.Kind : ReloadInstallKindOf(candidate: candidate, live: priorDefinition, rows: out _));
+
+            if (kind != WorldInstallKind.Full) {
+                return ApplyReloadEdit(
+                    candidate: candidate,
+                    changed: changedMembers,
+                    conflicts: conflicts,
+                    connectionId: connectionId,
+                    contentHash: contentHash,
+                    correlationId: correlationId,
+                    kind: kind,
+                    next: next!,
+                    prepared: prepared,
+                    principal: principal,
+                    request: request,
+                    verb: verb
+                );
+            }
         }
 
         // Cross-document claims were proved before enqueue. Apply-time validation runs from Step, so it repeats only
@@ -897,8 +948,9 @@ public sealed partial class WorldDocument {
         }
 
         // A new base starts a fresh deal lifecycle, even when its source rows equal the previous session's.
-        // Keeping a completed memo would skip materialization after reset or a live replay drive.
-        Host.ResetPlacementDeals();
+        // Keeping a completed memo would skip materialization after reset or a live replay drive. A reload merges over
+        // the live document, whose dealt placements it keeps, so its deals stand.
+        if (request.Kind != WorldRebuildKind.Reload) { Host.ResetPlacementDeals(); }
         m_journal.Clear();
 
         // Snapshot, for every CURRENTLY CONNECTED (admitted, not parked) peer, exactly
@@ -943,6 +995,7 @@ public sealed partial class WorldDocument {
             origin = m_baseOrigin;
         } else {
             m_base = candidate;
+            m_revision = new WorldSourceRevision(ContentHash: contentHash, Definition: (next ?? candidate));
             origin = new WorldBaseOrigin(
                 Kind: ((request.Kind == WorldRebuildKind.Load)
                     ? WorldBaseOriginKind.Load
@@ -954,7 +1007,7 @@ public sealed partial class WorldDocument {
             Host.PipelineSources = rebuildPipelineSources;
         }
 
-        var message = $"{verb} applied — base is {origin}, journal cleared{stateKept}";
+        var message = $"{verb} applied — base is {origin}, journal cleared{stateKept}{changedMembers}{DescribeConflicts(conflicts: conflicts)}";
 
         if ((request.Delta is { } appliedDelta) &&
             WorldSubmissionCodec.TryEncodeRebuild(request with { Definition = null }, out var payload, out _)) {
@@ -1312,7 +1365,12 @@ public sealed partial class WorldDocument {
     private readonly List<WorldPeerEventEntry> m_inhabitCountAdmitted = [];
     private readonly List<WorldPeerEventEntry> m_inhabitCountDisconnected = [];
 
-    private void InstallRuntimeStateValue(WorldDefinition definition, WorldMutation mutation, StateArena? arena = null) {
+    private void InstallRuntimeStateValue(WorldDefinition definition, WorldMutation mutation, StateArena? arena = null) =>
+        InstallRuntimeStateValue(arena: arena, definition: definition, driveGate: TouchesDriveGate(definition: definition, mutation: mutation));
+    // A value install of named rows (a reload whose source moved only state values).
+    private void InstallRuntimeStateValue(WorldDefinition definition, IReadOnlyCollection<string> rows) =>
+        InstallRuntimeStateValue(arena: null, definition: definition, driveGate: GatesDrive(definition: definition, rows: rows));
+    private void InstallRuntimeStateValue(WorldDefinition definition, StateArena? arena, bool driveGate) {
         var previous = m_definition;
 
         WorldBootWork.Count(kind: WorldBootWork.ValueInstalls);
@@ -1328,7 +1386,7 @@ public sealed partial class WorldDocument {
 
         ReconcileStateConsumers(
             definition: definition,
-            driveGate: TouchesDriveGate(definition: definition, mutation: mutation),
+            driveGate: driveGate,
             fields: true
         );
     }
@@ -1370,13 +1428,14 @@ public sealed partial class WorldDocument {
     private bool TouchesDriveGate(WorldDefinition definition, WorldMutation mutation) {
         m_touchedRows.Clear();
 
-        if (!TryCollectStateMutationRowNames(definition: definition, mutation: mutation, names: m_touchedRows, reason: out _)) {
-            return true;
-        }
-
+        return (!TryCollectStateMutationRowNames(definition: definition, mutation: mutation, names: m_touchedRows, reason: out _) ||
+            GatesDrive(definition: definition, rows: m_touchedRows));
+    }
+    // Whether any of the named rows gates drive.
+    private bool GatesDrive(WorldDefinition definition, IReadOnlyCollection<string> rows) {
         var catalog = definition.StateCatalog;
 
-        foreach (var name in m_touchedRows) {
+        foreach (var name in rows) {
             if (
                 catalog.TryResolve(handle: out var handle, lane: StateLane.Document, name: name) &&
                 StateReader.TryResolveRowHandle(arena: Host.Arena, catalog: catalog, handle: handle, rowOrdinal: out var ordinal, row: out _) &&

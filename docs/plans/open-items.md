@@ -2940,12 +2940,11 @@ The edit loop:
   whether `MSBuildCopyContentTransitively` can be turned off.
 - [low] Reload delta follow-ups: the rebuilt document skips the codec's
   grantee check, so `world.load` and `world.reload` accept different
-  documents; a merge refusal surfaces the composer's raw message with no
-  `world.reload.*` code; a remote sender's base is nameable only while the
-  authority still holds it (`WorldDocument.Installed` holds installs weakly),
-  so a remote reload into a world that mutates its document most ticks can
-  still refuse `stale-base`; the "CAS resolution first" comment in
-  `WorldDocument.Apply` is false.
+  documents; the "CAS resolution first" comment in `WorldDocument.Apply` is
+  false; the authority's source revision (`WorldServer.SourceRevision`) is not
+  part of a checkpoint, so a restore takes its base as the revision and a
+  replay begun from a checkpoint taken after a reload that met a live edit can
+  merge a row both changed differently from the live run.
 
 State across an install:
 

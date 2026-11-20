@@ -137,12 +137,12 @@ What the baseline shows:
   bake's wall time, and the GPU is idle most of the time a job is in flight
   ([the measurement](field-programs/research-measure.md)). Residencies bake the
   same groups twice.
-- **An author's `.puck` edit takes the slow door.** A saved file reaches the
-  running World only as a `world.reload` (by hand, or queued by `world.watch
-  on`), which composes and validates the whole world again for one changed
-  value before [the live edit path](#the-live-edit-path-step-3) installs it,
-  while the same value set through `world.row.set` lands in a fraction of a
-  second. [The authoring loop](iteration/authoring-loop.md)
+- **An author's `.puck` edit still composes the whole world.** A saved file
+  reaches the running World as a `world.reload` (by hand, or queued by
+  `world.watch on`), which composes the whole source again for one changed
+  value; the authority then validates it once and installs it as the edit it
+  is ([the live edit path](#the-live-edit-path-step-3)).
+  [The authoring loop](iteration/authoring-loop.md)
   maps that path through the compiler, the caches, the CLI, the World, the
   editor and the save back to source, and designs the loop that replaces it.
 
@@ -186,7 +186,8 @@ them.
 |---|---|
 | Follow a source and its imports for changes | `WorldSourceWatch`, driven by `world.watch` |
 | Read the source again and install it | `WorldReload`, the `world.reload` verb |
-| Describe a document change by key, and prove it | `WorldDocumentBasis.Diff` and `WorldDocumentBasis.TryMerge`, carried as a `WorldReloadDelta` |
+| Describe a document change by key, and prove it | `WorldReloadDelta.Between`: the root members whose digests moved (`WorldDefinitionMembers`), each diffed and proved by `WorldDocumentBasis.Diff` and `TryMerge` |
+| Merge a source change over the session's own edits | `WorldReloadDelta.TryMergeOver` over `WorldDocumentBasis.MergeThree` |
 | Keep what a change did not touch | `WorldDocumentWalker.Share`: the new document holds the old one's own object for every member and keyed row the patch leaves unchanged |
 | Install a small change without rebuilding the simulation | `WorldMutation` through `WorldDocument.InstallKindOf` |
 | Emit again only the placements that changed | `WorldStaticPalettes.Emissions`, keyed by the placement row and the creation |
@@ -198,11 +199,13 @@ them.
 
 ### The diff, and why no table lists consequences
 
-The old compiled world and the new one are compared once, by content, as
-documents. `WorldDocumentBasis.Diff` over their canonical trees gives a keyed
-patch, and `WorldDocumentWalker.Share` rebuilds the new document so that
-everything the patch does not name is the old document's own object. After
-that, whether a row or a member changed is an identity test.
+Two revisions of the source are compared once, by content, member by member:
+the root members whose canonical bytes moved (`WorldDefinitionMembers`) are
+diffed by `WorldDocumentBasis.Diff`, and `WorldDocumentWalker.Share` builds the
+next revision so that everything the patch does not name is the last
+revision's own object. The change is then merged over the live document, which
+keeps the live document's own object wherever the change leaves it equal.
+After that, whether a row or a member changed is an identity test.
 
 Every product downstream is derived from particular rows and members and is
 kept under their identity, or under a key hashed from exactly what the product
@@ -226,20 +229,39 @@ while this step was built, so [the checks](#checks) below are owed.
 
 ### How a reload installs
 
-- **As the edit it is.** `WorldDocument.ApplyRebuild` names the state rows the
-  source changed (`WorldDocument.NameReloadEdit`: a row is unchanged when it
-  is the installed object or serializes to the same bytes) and installs a
-  reload as a mutation installs: the live
-  arena itself when no row changed, otherwise a replacement born with the
-  changed rows that carries every other row's live values
-  (`WorldServer.TryPrepareArenaReplacement`), under
-  `WorldArenaContinuity.Edit`, with lattices keeping their cells. A colour
-  edit does not reset a game in progress, a lift, a suit or a noclip flight.
-  `world.reset` and `world.load` install a document whole.
-- **Without reconstructing in process.** `WorldReloadDelta.Create` holds both
-  documents, so it shares the candidate itself and keeps it beside the
-  declarations it diffed; `WorldReloadDelta.TryPrepare` over that same object
-  answers it. The wire and a remote authority carry the patch and reconstruct.
+- **Against the revision the authority took, merged over the live document.**
+  The authority keeps the source revision it last took
+  (`WorldServer.SourceRevision`). The sender reads the source as an edit,
+  composed, drawn and settled but never admitted
+  (`WorldDefinitionLoader.TryLoadFileForEdit`), answers a source that still
+  composes to that revision's content pin as unchanged without parsing or
+  sending it, and otherwise cuts the delta between the two revisions
+  (`WorldReloadDelta.Between`). The authority reconstructs the next revision
+  (`TryReconstruct`) and merges it over the live document (`TryMergeOver`): a
+  member the session has not changed takes the source's, and any other merges
+  three ways, the source winning each row both changed. The verdict names those
+  rows and the members the reload changed.
+- **As the edit it is.** `WorldDocument.ReloadInstallKindOf` classifies the
+  candidate by which root members are other objects than the live document's:
+  nothing installs when none is; state values alone take the value install;
+  creations changed only in shading, and shade programs, take the presentation
+  install; anything else takes the full install. Only the full install compiles
+  rules, and `WorldServer.RecompileRules` reuses a compilation whose document
+  differs from the installed one only in state values. The full install names
+  the state rows the source changed (`WorldDocument.NameReloadEdit`) and
+  installs as a mutation installs: the live arena itself when no row changed,
+  otherwise a replacement born with the changed rows that carries every other
+  row's live values (`WorldServer.TryPrepareArenaReplacement`), under
+  `WorldArenaContinuity.Edit`, with lattices keeping their cells. A colour edit
+  does not reset a game in progress, a lift, a suit or a noclip flight, and no
+  reload deals placements again. `world.reset` and `world.load` install a
+  document whole.
+- **Validated once, off the tick.** The authority's preparation
+  (`WorldRebuildPreparation`) validates as the kind needs: the touched rows for
+  a value install, the document without compiling rules for a presentation
+  install, an admission whose programs the install adopts for a full one.
+  `ApplyRebuild` takes the preparation while the revision and the live document
+  it was merged against still stand, and merges again on the tick otherwise.
 - **Floor first for an edited group.** A planned group whose shape
   (`SdfMeshBakeGroup.Shape`: its geometry before its tier joins the hash) no
   held group has was made by an edit. It plans its floor and owes its demanded
@@ -248,84 +270,88 @@ while this step was built, so [the checks](#checks) below are owed.
   A group whose selector alone moved has a shape the bake held and takes its
   mesh from the library at once.
 - **Timed where the time goes.** A reload prints the source's compile, its
-  composition and admission, its text check and the diff
-  (`[world.reload] source`), then the authority's reconstruction, admission
-  and install (`[world.rebuild]`). Composition and admission are most of the
-  wait and the diff is most of the rest; the install is a small share. These
-  lines move into the loop clock when it lands.
-- **A refused delta says where.** A patch whose merge is not the target names
-  the first path that differs. `WorldDocumentBasis.Diff` replaces an object
-  that gains an explicit null, which a member-wise delta cannot express, so a
-  reload after a live creation edit installs.
+  load, its text check and the delta (`[world.reload] source`), then the
+  authority's reconstruction, validation and install (`[world.rebuild]`).
+  These lines move into the loop clock when it lands.
+
+Counted in a headless debug World (`world.counters world.boot`, the change in
+each count across one `world.reload`):
+
+| Reload | Validations | Rule compilations | Installs | Parses | Patch |
+|---|---|---|---|---|---|
+| Unchanged source, first reload after boot (the boot revision carries no content pin) | 0 | 0 | none | 1 | 2 bytes |
+| Unchanged source, later | 0 | 0 | none (not sent) | 0 | none |
+| One palette colour in `worlds/debug/auction.puck` | 1 | 0 | 1 presentation | 1 | 209 bytes |
 
 ### The invariant
 
-> What an install keeps is decided by the content diff between the installed
-> declarations and the candidate, and by nothing else.
+> What a reload installs is the source's change between the revision the
+> authority took and the next one, merged over the live document; what the
+> install keeps is decided by which root members of that candidate are other
+> objects than the live document's, and by nothing else.
 
 - **Enforced by** one door. Every reload candidate reaches
-  `WorldDocument.ApplyRebuild` shared with the installed declarations through
-  `WorldReloadDelta`: a live delta by `TryPrepare`, and any other holder of
-  the whole target (a replay drive's re-read, a delta an install overtook) by
-  `WorldReloadDelta.Share` at the top of the apply. Both share by the same
-  patch, so an object's identity means "the source did not change this" on a
-  live run and on its replay alike. What the simulation keeps rests on
-  content directly: `WorldDocument.NameReloadEdit` compares each state row
-  with the installed one, so the rows a reload seeds do not depend on what
-  was shared. A recorded reload is a path and a content pin, the replay reads
-  the file again, and it seeds the same rows.
-- **Where it stops.** A product that reads more of the document than the rows
-  it is kept under would stand stale; the keys in the table above are what
-  this path trusts. A draw row a document fills at install is filled again by
-  a reload. Sharing is an economy, never a proof: `WorldDocumentWalker.Share`
-  keeps a list whole when its typed rows and its tree's rows do not line up,
-  as the state rows do not once one of them changes, and what was not shared
-  is derived again.
+  `WorldDocument.ApplyRebuild` through `WorldReloadDelta.TryMergeOver`: a live
+  delta's preparation off the tick, and any other holder of the next revision
+  (a replay drive's re-read, a supplied document, a preparation an install
+  overtook) at the apply, by the same cut and merge. So an object's identity
+  means "neither the source nor this reload changed this" on a live run and on
+  its replay alike. The narrower installs are named by the members they may
+  change (`WorldDocument.ReloadInstallKindOf`), so a change to any other member
+  takes the full install. A recorded reload is a path and a content pin; the
+  replay reads the file again and installs the same candidate.
+- **Where it stops.** The authority's revision is not part of a checkpoint: a
+  restore takes its base as the revision, so a replay begun from a checkpoint
+  taken after a reload that met a live edit can merge a row both changed
+  differently from the live run. Sharing is an economy, never a proof:
+  `WorldDocumentWalker.Share` keeps a list whole when its typed rows and its
+  tree's rows do not line up, and what was not shared is derived again.
 
 ### The door the authoring loop asks for
 
 [The authoring loop](iteration/authoring-loop.md#an-edit-is-one-keyed-delta)
 needs a door that takes a keyed delta with the revision it was made against.
-That door is `WorldRebuildRequest` carrying a `WorldReloadDelta`: the patch,
-the authority document version it was diffed against, and both fingerprints.
-It reuses `WorldDocumentBasis.Diff`, `TryMerge` and `WorldDocumentWalker.Share`
-and installs as an edit. It differs from that memo's target in three ways:
+That door is `WorldRebuildRequest` carrying a `WorldReloadDelta`: the patch and
+the pins of both source revisions. Two differences from that memo's target
+remain:
 
 | The door | The target | Owned by |
 |---|---|---|
-| The patch is diffed against the installed declarations, so it also undoes what the session changed live | A patch between two source revisions that merges over the live document and refuses a row both changed | Authoring loop steps 3 and 4 |
 | The install clears the journal and moves the base, and only the operator may send it | One journal entry, admitted by the sender's grants for the sections the patch names | Authoring loop step 4 |
-| The simulation's products are rebuilt from the new document on every reload; what they keep (state, latches, poses, lattice cells) they keep by continuity | A patch that reaches nothing the simulation reads is a presentation install | The next step on this door, below |
+| A mutation's install still decides what it rebuilds from lists of mutation kinds (`AffectsPopulation`, `AffectsSolidField` and their siblings) | Each compiled product names the document members it is built from, and a mutation and a patch are judged alike | The next step on this door, below |
 
-On the third row this door should lead. `WorldDocument.InstallKindOf` decides
-by mutation kind from lists (`AffectsPopulation`, `AffectsSolidField`), and a
-keyed patch has no kind. The rule both need is the one the client side runs
-on: each compiled product names the document members it is built from, as the
-parameters of the function that builds it, and is kept while those are the
-same objects. A mutation and a patch are then judged alike, a placement that
-is neither solid nor inhabited stops rebuilding the population, and the lists
-go. It is a refactor of the server's install. Its check is `world.counters
-world.boot` after a one-colour reload reading no rule compile and no
-population rebuild.
+The second row needs each product's real inputs. A root member is too coarse
+to stand for them: `SetAuthoringDefaults` writes the placements section's
+policy, so a test by the placements member would rebuild the population and the
+solid field for it, and a reload can change members (`bodyMotionPrograms`, the
+simulation rate) no mutation kind writes, so a list built from the mutation
+kinds would leave the population stale for them. The reload's narrower installs
+are therefore named by the members they may change rather than by what each
+product reads.
 
 ### Checks
 
 | What | How to see it | Seen |
 |---|---|---|
 | A reload with no state change keeps the arena | The verb answers `state kept` | Headless |
-| An authority in the sender's process reconstructs nothing | `[world.rebuild]` prints `reconstruct=0 ms` | Headless |
 | A reload after a live creation edit installs | `world.row.set creations <id> document.palette[0].color <json>`, then `world.reload` | Headless |
-| A reload that changes one state row seeds that row alone | The verb answers `state rows re-seeded 1 kept N`, and a cell written in another row reads the same after | Headless |
+| A reload that changes one state row's values seeds that row alone | The verb answers `state rows re-seeded 1, state kept`, and a cell written in another row reads the same after | Owed |
 | A colour edit bakes nothing | `host.log category sdf.mesh-bake` shows no group begun after the reload | Owed, windowed |
 | A form edit bakes that creation's groups, floor first | The same log names only those groups, and `world.residency`'s floor line counts them before their detail lands | Owed, windowed |
 | A recorded reload reproduces | `puck test --reproduce` over a scenario that reloads mid-run | Owed |
+| An unchanged source is not sent | The verb answers `the source is unchanged since the revision the authority holds` | Headless |
+| A one-colour reload is a presentation install | The verdict names `presentation install` and `changed prototypes shades`; `world.boot.rule-compilations` does not move | Headless |
+| A live edit and a file edit to another row both stand | `world.row.set` one creation, edit another in the file, `world.reload`, read both with `world.row` | Headless |
+| A row both changed takes the source's and is named | The verdict names `the source won over the session's edits at $.prototypes[id="…"]` | Headless |
 
 ### What is left
 
-- **Composition and admission in front of the diff** are most of a reload's
-  wait: the authoring loop's steps 1 to 5.
-- **The diff serializes both documents.** It goes when the compile session
-  hands over the patch it already knows (authoring loop step 3).
+- **Composition in front of the delta** is most of a reload's wait now that
+  the sender admits nothing: the authoring loop's steps 3 and 5.
+- **The sender serializes both revisions once.** `WorldDefinitionMembers`
+  slices a revision's compact bytes the first time a delta reads it; the next
+  revision's slices come from one serialization of it. It goes when the compile
+  session hands over the members it already knows (authoring loop step 3).
 - **A material change relights the whole window.** The materials key
   (`SdfMeshIrradiance.MaterialsKey`) already reads only the materials the
   static scene's triangles carry, but a change to one of them moves the
@@ -336,20 +362,13 @@ population rebuild.
   the window for the bounce; it needs a relight driven by which probes' inputs
   moved, which is step 4.
 - **Every edit holds the frame while the server applies it.** A live row set
-  runs the mutation's compose, whole-world validation and the definition's
-  delivery through the recipient's disclosure walk on the step the host pump
-  waits for, and the client receives the whole definition again. A look value
-  reaches nothing the simulation reads; making it a presentation install that
-  delivers only the rows it changed belongs to the authoring loop's steps 3
-  and 4. `world.iteration`'s `worst-frame` reads the hold.
-- **A reload that changes a shading program is refused.** The `shades` table is
-  keyed by program identity, so the edit removes one member and adds another,
-  and `WorldReloadDelta` refuses the patch
-  (`world.reload.delta-unrepresentable: … at $.shades`). An author's shading
-  edit reaches a running World only by restart until the diff expresses it.
-- **A reload deals placements again.** Its document holds no dealt placement,
-  so the deal sweep adds them back and the client builds its program a second
-  time. It stops when a patch merges over the live document.
+  and a reload's install deliver the definition through the recipient's
+  disclosure walk on the step the host pump waits for, and the client receives
+  the whole definition again; a presentation install still delivers it whole
+  (`WorldDocument.InstallPresentation` marks the delivery,
+  `WorldDeliveryCursor.DeliverDefinition` hashes the whole serialized document
+  for a view that is not a replica). Delivering only the changed rows is the
+  authoring loop's step 4. `world.iteration`'s `worst-frame` reads the hold.
 - **The watch is off until asked.** `world.watch on` starts it. Turning it on
   at boot for a local operator's source tree is the authoring loop's step 4;
   its poll runs on the host pump and wants a reading of its cost in a frame

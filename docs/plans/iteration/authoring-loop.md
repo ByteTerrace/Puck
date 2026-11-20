@@ -240,18 +240,20 @@ members the current vocabulary accepts.
 
 ### The World
 
-- **`world.reload`** (`WorldReload`) compiles, composes, validates and admits
-  the current source on the thread pool, diffs the result against the
-  installed declarations (`WorldReloadDelta.Create`) and submits the keyed
-  patch. The authority reconstructs a candidate from the patch off its tick
-  (`WorldRebuildPreparation`), shares every unchanged row with what is
-  installed (`WorldDocumentWalker.Share`), admits it again and installs it at
-  a tick boundary as a whole-document rebuild. The patch on the wire is small.
-  Everything on either side of it is the size of the world: the sender
-  serializes both documents to diff them, and the authority serializes,
-  merges, reads back and fingerprints a whole document to apply it. A reload
-  is always a full install, clears the journal and reseeds state the document
-  declares. It keeps a body's pose.
+- **`world.reload`** (`WorldReload`) compiles, composes, draws and settles the
+  current source on the thread pool without admitting it
+  (`WorldDefinitionLoader.TryLoadFileForEdit`), answers a source that still
+  composes to the revision the authority holds (`WorldServer.SourceRevision`)
+  as unchanged, and otherwise cuts the delta between the two revisions from
+  their member bytes (`WorldReloadDelta.Between` over
+  `WorldDefinitionMembers`). The authority reconstructs the next revision off
+  its tick (`WorldRebuildPreparation`), merges it over the live document
+  (`WorldReloadDelta.TryMergeOver`, the source winning and naming each row both
+  changed), validates the result once and installs it by which root members
+  changed (`WorldDocument.ReloadInstallKindOf`): a colour edit is a
+  presentation install with no rule compile. The sender still serializes both
+  revisions once to slice them. A reload clears the journal and keeps a body's
+  pose and every live edit the source did not also change.
 - **`world.watch on`** (`WorldSourceWatch`) polls the stamps of every file
   fact the last compile read and queues an ordinary `world.reload` after a
   quiet moment. It is off by default and is described only in the World guide
@@ -275,9 +277,8 @@ members the current vocabulary accepts.
   the engine developer's loop and is manual. An authored shading program is
   document data and follows the document's loop.
 
-After one live edit to a creation's palette, `world.reload` refuses until the
-edit is undone ([found](#defects-found-on-the-way)). The two doors do not
-compose.
+A live edit and a reload compose: the reload merges over the live document,
+and a row both changed takes the source's value and is named in the verdict.
 
 What a reload does to baked meshes and settled lighting was not measured
 here, since it needs a windowed World
@@ -749,7 +750,7 @@ a session with edits does not replay (replay), a spelling costs more to tune
 |---|---|---|
 | A revision's document is what a compile from nothing produces | There is one path. A compile from nothing is the session with no held state, so no second implementation exists to disagree | A lowering that depends on something it did not read through the session |
 | Every read a product depends on is in its key | The stages receive files, parses and declarations only from the session's reader, which records the read. The stage assemblies have no other route to the file system: the direct reads that remain today (`WorldSourceSave`) move behind the reader, and a banned-call check on the transpiler projects holds it | A dependency that is not a read: evaluation order, a process-wide table. `puck compile --tree --check` and the law below see those |
-| A delta merged over its base reproduces its target | The session proves each delta by merging it, as `WorldReloadDelta.Create` does, comparing row digests | Nothing: a delta that fails the proof is not sent |
+| A delta merged over its base reproduces its target | The session proves each delta by merging it, as `WorldReloadDelta.Between` does member by member, comparing row digests | Nothing: a delta that fails the proof is not sent |
 | Incremental equals clean over real edits | A law that replays a recorded sequence of source edits through one session and compares each revision's row digests with a fresh session's. It is an invariant test running cannot show, and it claims equality because incremental work claims to change nothing | Edit shapes the corpus lacks. The corpus grows with each defect |
 | An authority never trusts a sender's validation | The authority validates what the delta reaches itself. Narrowed validators take a view that holds only the sections they declared, so a validator cannot read a section it did not name | A cross-row rule whose reach is declared too small. This is a trust boundary and takes an adversarial review until a check covers it |
 | A save writes only what its author asked for | The save applies its source edit in the session and compares the resulting delta with the one it was asked to save, before writing | Nothing: an edit that reaches further is named, not written |
@@ -805,12 +806,22 @@ added to that instrument, never to a second one.
    session's counters read one source lowered, a handful of rows merged and
    no whole-document serialization, and the incremental-equals-clean law
    passes over an edit corpus drawn from the debug world.
-4. **Join the door.** The source watch hands each revision's delta to the
-   `live-edit` lane's door as one batch, with conflicts refused by row. The
-   watch is on from boot for a local operator's source tree. *Check:*
-   `world.iteration` for a one-colour file edit reports a presentation
-   install with no rule compile and no arena build, and a live edit followed
-   by a file edit to another row keeps both.
+4. **Join the door.** Partly landed. The authority keeps the source revision
+   it took (`WorldServer.SourceRevision`); a reload's delta is cut between that
+   revision and the next from member bytes (`WorldReloadDelta.Between`), merged
+   over the live document with conflicts named by row
+   (`WorldReloadDelta.TryMergeOver`), validated once at the authority and
+   installed by which root members changed (`WorldDocument.ReloadInstallKindOf`).
+   In a headless debug World an unchanged source moves no
+   `world.boot` count past the composition and is not sent, and a one-colour
+   edit reads one validation, no rule compilation and one presentation install;
+   a live edit followed by a file edit to another row keeps both. Left: the
+   source watch is still off until asked; the install still clears the journal
+   and only the operator may send it; a presentation install still delivers the
+   whole definition to each client; a mutation's install still decides what it
+   rebuilds from mutation-kind lists. *Check:* `world.iteration` for a
+   one-colour file edit reports a presentation install with no rule compile and
+   no arena build.
 5. **Narrow validation**, for the delta and for `world.row.set` alike:
    sections first, then rows by digest. *Check:* `world.boot.validations`
    counts rows validated, and a palette edit validates one creation.
@@ -885,14 +896,12 @@ added to that instrument, never to a second one.
 
 ## Defects found on the way
 
-The first and third are recorded in
+The first and second are recorded in
 [open items](../open-items.md#edit-to-running-hot-reload-and-boot); the rest
 are removed by the step named or carried by a verification request.
 
 - `puck decompile` writes a source the compiler refuses when the document
   holds a shading program. Step 8 fixes it.
-- An unchanged reload is not a no-op: it installs fully, clears the journal
-  and resets dealt placements. Step 4 takes the reload out of the edit loop.
 - `WorldCompileSession.CompilerIdentity` uses assembly build identities, which
   the puck-world skill rules out as a derivation key. Step 6 fixes it.
 - The browser engine's README measures a debug world two orders of magnitude

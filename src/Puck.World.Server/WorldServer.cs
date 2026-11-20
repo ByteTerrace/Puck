@@ -280,6 +280,9 @@ public sealed partial class WorldServer : IWorldServerHost {
     /// <summary>Gets installed declarations without exporting tick values. State reads use the arena or
     /// <see cref="Definition"/>; scheduling and other declaration-only work use this view.</summary>
     public WorldDefinition Configuration => m_document.Definition;
+    /// <summary>Gets the revision of the world's source this authority last took: what a reload's delta is cut from
+    /// and the live document's own edits are merged against.</summary>
+    public WorldSourceRevision SourceRevision => m_document.Revision;
     /// <summary>Gets the version of <see cref="Definition"/>: this server's activation, minted once at construction,
     /// and the install ordinal within it. Every delivered document and every mutation verdict carries it.</summary>
     public WorldDocumentVersion DocumentVersion => new(

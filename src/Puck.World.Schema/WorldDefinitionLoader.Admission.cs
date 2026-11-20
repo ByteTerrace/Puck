@@ -109,6 +109,47 @@ public static partial class WorldDefinitionLoader {
             return false;
         }
     }
+    /// <summary>Reads a file as an edit of a running world: composes it, fills its first-fill draw sites for
+    /// <paramref name="instanceIdentity"/> and settles its boot values, exactly as <see cref="TryLoadFileForAdmission"/>
+    /// prepares a document, but admits nothing. The authority the edit is sent to validates what it installs once; a
+    /// sender validating the same document first would only repeat that work.</summary>
+    /// <param name="path">The document file.</param>
+    /// <param name="definition">The drawn, settled definition; <see langword="null"/> on refusal and when the file still
+    /// composes to <paramref name="unchangedFrom"/>.</param>
+    /// <param name="contentHash">The content-address pin of the composition read
+    /// (<see cref="WorldDefinitionFileSource.ComputeContentHash"/>); empty on refusal.</param>
+    /// <param name="reason">The named refusal, classed as <see cref="TryLoadFileForAdmission"/> classes its own but for
+    /// validation, which this read never runs; empty on success.</param>
+    /// <param name="unchangedFrom">The pin of the source revision the caller holds, or <see langword="null"/>: a file
+    /// that composes to it is not parsed or drawn, and the read succeeds with no definition.</param>
+    /// <param name="instanceIdentity">The instance identity used for first-fill draws.</param>
+    /// <param name="documents">The source the root and every basis/import reference read through, or
+    /// <see langword="null"/> for <see cref="WorldDefinitionFileSource.LocalDocuments"/>.</param>
+    /// <param name="catalog">The selected catalog, or null to defer provider checks.</param>
+    /// <param name="keys">The installed world sampler, required for private draws.</param>
+    /// <returns>Whether the file composed, and drew and settled unless it was unchanged.</returns>
+    public static bool TryLoadFileForEdit(string path, out WorldDefinition? definition, out string contentHash, out string reason, string? unchangedFrom = null,
+        string instanceIdentity = BootInstanceName, IWorldDocumentSource? documents = null, IMachineValidationCatalog? catalog = null, WorldDrawSampler? keys = null) {
+        definition = null;
+        contentHash = string.Empty;
+        try {
+            if (!WorldDefinitionFileSource.TryLoadParsed(catalog: catalog, catalogFingerprint: string.Empty, contentHash: out var parsedHash,
+                    definition: out var parsed, documents: documents, path: path, reason: out reason, unchangedFrom: unchangedFrom)) {
+                return false;
+            }
+            if ((parsed is not null) &&
+                !TryPrepareBootValues(keys: keys, definition: parsed with { ReadFromFile = true }, instanceIdentity: instanceIdentity, reason: out reason, resolved: out definition, sourceName: path)) {
+                return false;
+            }
+
+            contentHash = parsedHash;
+            return true;
+        } catch (Exception exception) {
+            definition = null;
+            reason = $"{path} is not a valid {WorldDefinition.SchemaVersion} document: {WorldJsonPayload.Reason(exception: exception)}";
+            return false;
+        }
+    }
     /// <summary>Loads a file and retains the final, draw-resolved document's validation and programs — the one door
     /// every document file is admitted through: the boot, an instance start, a transfer's destination,
     /// <c>world.load</c>/<c>world.reload</c> with the replay drive's re-read of what they pinned, the owned-world

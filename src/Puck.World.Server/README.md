@@ -532,15 +532,21 @@ What survives an arena install is decided in one place,
   row's `status` to -2 (`WorldScopedReplayRuntime.NoStartStatus`) and names the
   refusal on stderr; the next capture request records afresh and returns it to 0.
   The chess demo's `chess-demo-lost-start` rule reads -2 to clear its `ready` flag.
-- **Reload** (`world.reload`): an edit's continuity, above. The candidate holds
-  the installed declarations' own object for every row the source left
-  unchanged (`WorldReloadDelta.Share`, decided by the content diff, so a replay
-  drive's re-read shares the same rows), and `WorldDocument.NameReloadEdit`
-  seeds again only the rows whose serialized declaration differs from the
-  installed one: the live arena stays when none does, and a replacement born
-  with the changed rows carries the rest otherwise. Lattices keep their cells, and a row whose draw pass the source
-  changed repaints. A reload that changes a part of the state section other
-  than its rows, or a section that declares pools, loads whole, as below.
+- **Reload** (`world.reload`): an edit's continuity, above. The candidate is the
+  source's change between the revision the authority holds and the next one,
+  merged over the live document (`WorldReloadDelta.TryMergeOver`), so it holds
+  the live document's own object for every member and row the change leaves
+  equal, on a live run and a replay drive's re-read alike.
+  `WorldDocument.ReloadInstallKindOf` names the install by which root members
+  are other objects: none installs nothing, state values alone take the value
+  install and creations changed only in shading (with shade programs) the
+  presentation install. Any other change takes the full install, where
+  `WorldDocument.NameReloadEdit` seeds again only the rows whose serialized
+  declaration differs from the installed one: the live arena stays when none
+  does, and a replacement born with the changed rows carries the rest otherwise.
+  Lattices keep their cells, and a row whose draw pass the source changed
+  repaints. A reload that changes a part of the state section other than its
+  rows, or a section that declares pools, loads whole, as below.
 - **Load** (`world.load`, `world.reset`, a history seek, a
   checkpoint restore): the document's state replaces the arena's whether the
   arena is replaced or reloaded in place, so the rule and interaction latches
@@ -719,50 +725,49 @@ are checked against staged register values before installation, so a forbidden
 current tuple refuses the whole replacement. The `dirty` count in `world.status`
 is the journal length.
 
-Reload submissions carry a `WorldReloadDelta`, not the composed document. Its
-patch is the existing `WorldDocumentBasis.Diff` vocabulary (keyed refinements,
-deletions and list replacement where order changes); the sender proves its
-`TryMerge` round trip before submitting. The Rebuild payload cap remains 16 MiB.
+Reload submissions carry a `WorldReloadDelta`, not the composed document: the
+change between the source revision the authority holds
+(`WorldServer.SourceRevision`) and the next, cut from member bytes
+(`WorldReloadDelta.Between` over `WorldDefinitionMembers`). Each moved root
+member travels as its `WorldDocumentBasis.Diff` delta, proved to merge, or whole
+when its delta cannot reproduce it; both revision pins ride beside the patch. The
+Rebuild payload cap remains 16 MiB.
 
 A live Load or Reload is prepared off the authority's tick and gate. Its
 submission captures what the candidate alone decides from
-(`WorldRebuildPreparation`: the declarations a delta names, their version, the
-operator check, the proof transport and the machine catalog), and a host with
-workers runs the preparation on the thread pool (`WorldRebuildPreparations`, one
+(`WorldRebuildPreparation`: the source revision, the live document, the operator
+check, the proof transport and the machine catalog), and a host with workers runs
+the preparation on the thread pool (`WorldRebuildPreparations`, one
 `BackgroundBuild` per rebuild); the drain at the start of each tick's pending ops
 takes finished ones, oldest first, so a prepared rebuild enters the buffered ops at
 a tick boundary as a submission arriving then would, and the tape records it where
 it applies. The replay drive and a history seek prepare inline
-(`EnqueueRebuild`), so a re-drive installs at its recorded tick. Preparation
-reconstructs the delta against the declarations it names (`WorldDocument.Installed`
-holds every installed definition weakly by install ordinal, so the sender's capture
-keeps its base nameable across installs since), checks the canonical base/result
-fingerprints, and admits the candidate once with the neighbour proof and the machine
-catalog (`WorldDefinitionValidator.TryAdmit`); `ApplyRebuild` adopts the admission's
-programs (`WorldDefinitionAdmission.AppliesTo`) instead of validating again. The
-reconstruction shares every member and keyed row the patch leaves unchanged with the
-named declarations (`WorldDocumentWalker.Share`), and the target pin is checked on
-that shared candidate, so sharing never changes the installed bytes while collider
-sets, stamps and the other reference-keyed products carry over
-(`world.boot.collider-placements-reused`). A delta reconstructed against its named
-base is a complete target, so an install between preparation and apply does not
-refuse it; only a buffered delta whose basis is unknown (one a checkpoint restored)
-is checked against the live document at apply. The named refusals are
-`world.reload.stale-base` (another activation, or replaced declarations nothing
-holds), `world.reload.base-mismatch` and `world.reload.target-mismatch` (content),
-and `world.rebuild.preparation-failed` for a preparation that threw. A malformed
-delta or invalid candidate also refuses without installation; a rebuild still
-preparing when the activation stops or retires is refused, never checkpointed. Wire
-shape validation excludes a client-supplied reconstructed document on Reload; only
-the server fills it. The success echo prints delta and complete payload bytes.
+(`EnqueueRebuild`), so a re-drive installs at its recorded tick. A reload's
+preparation reconstructs the next revision (`WorldReloadDelta.TryReconstruct`,
+which shares every member and keyed row the change leaves equal with the held
+revision), merges it over the live document (`TryMergeOver`: the source wins each
+row both changed, and the verdict names it), classifies the candidate
+(`WorldDocument.ReloadInstallKindOf`) and validates it as its kind needs, admitting
+a full install's candidate once with the neighbour proof and the machine catalog
+(`WorldDefinitionValidator.TryAdmit`), whose programs `ApplyRebuild` adopts
+(`WorldDefinitionAdmission.AppliesTo`) instead of validating again. `ApplyRebuild`
+takes the preparation while the revision and the live document it was merged
+against are still the authority's, and merges again on the tick otherwise, so an
+install between preparation and apply does not refuse a reload. The named refusals
+are `world.reload.stale-base` (a delta cut from another revision),
+`world.reload.target-mismatch` (one that does not reproduce its pin),
+`world.reload.delta-invalid`, `world.reload.delta-unrepresentable`, and
+`world.rebuild.preparation-failed` for a preparation that threw. A rebuild still
+preparing when the activation stops or retires is refused, never checkpointed.
+Wire shape validation excludes a client-supplied reconstructed document on Reload;
+only the server fills it. The success echo prints the members changed, delta and
+complete payload bytes.
 
-The reconstructed candidate then uses the same `ApplyRebuild` door as an
-in-process whole-document reload, preserving its simulation, input and journal
-semantics. Replay records the source pin and rereads that source, not the
-activation-specific patch. This transport change does not turn reload into
-`InstallKindOf`'s presentation mutation: the install still settles the state rows,
-loads the arena in place and composes every audience's disclosure on the tick.
-Those are the next edit-to-running work, separately from sending unchanged content.
+Replay records the source pin and rereads that source, not the patch: the drive
+reads the file as an edit and runs the same cut and merge against its own
+revision and live document. A presentation install still delivers the whole
+definition and composes every audience's disclosure on the tick; delivering only
+the changed rows is the next edit-to-running work.
 
 `host.journalDepth` bounds the undo horizon: `0` (the default) leaves the
 journal growing for the life of the process, exactly as before the field

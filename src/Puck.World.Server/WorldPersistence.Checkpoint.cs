@@ -905,6 +905,9 @@ public sealed partial class WorldPersistence {
             definition: restoredBase,
             origin: restoredOrigin
         );
+        // A checkpoint carries no source revision: the next reload is cut from the restored base, which no source read
+        // matches as unchanged.
+        Host.Document.AdoptRevision(revision: new WorldSourceRevision(ContentHash: string.Empty, Definition: restoredBase));
         Host.Document.Journal.Clear();
         Host.Document.Journal.AddRange(server.Journal);
         Host.Document.Pending.Clear();
