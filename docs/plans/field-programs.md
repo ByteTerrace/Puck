@@ -143,7 +143,7 @@ compiled bake shader settles five disagreements:
   [The kernel measurement](field-programs/research-measure.md) and
   [gpu cost](../../.claude/skills/rendering/references/gpu-cost.md#pucks-open-cases)
   named `SdfBakeTaps` as one spill source. Disassembling
-  `src/Puck.SdfVm/Assets/Shaders/Sdf/passes/sdf-mesh-bake.comp.dxil` with
+  the compiled bake kernel (`sdf-mesh-bake.comp.dxil`, a build output of `src/Puck.SdfVm/Assets/Shaders/Sdf/passes/sdf-mesh-bake.comp.hlsl`) with
   `dxc -dumpbin` finds ten `alloca`s plus the constant array
   `@SdfBakeTaps.v.1dim` (48 bytes):
   - Eight `[4 x float]` and `[4 x i32]` allocas (128 bytes) come from the
