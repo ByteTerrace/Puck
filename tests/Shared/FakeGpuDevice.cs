@@ -84,6 +84,7 @@ internal sealed class FakeGpuDevice :
             ImageFactory = this,
             Naming = m_naming,
             PipelineFactory = this,
+            Retirement = new GpuDeviceRetirement(),
             QueueSubmitter = this,
             Recorder = this,
             RenderPassFactory = this,

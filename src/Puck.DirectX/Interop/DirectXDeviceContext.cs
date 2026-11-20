@@ -293,6 +293,7 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
             CommandPoolFactory = new DirectXGpuCommandPoolFactory(deviceContext: this),
             ImageFactory = new DirectXGpuImageFactory(deviceContext: this),
             PipelineFactory = new DirectXGpuPipelineFactory(deviceContext: this),
+            Retirement = new GpuDeviceRetirement(),
             QueueSubmitter = m_submitter,
             Recorder = new DirectXGpuRecorder(deviceContext: this),
             RenderPassFactory = new DirectXGpuRenderPassFactory(deviceContext: this),

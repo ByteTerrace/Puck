@@ -330,7 +330,14 @@ nonzero and within `IGpuBindings.MaxConstantBufferBytes`, the current backend's 
 A growing table picks its next size with `GpuCapacity`: `Grown` (a fraction of the current size, for amortized growth)
 or `Headroom` (a fraction over the need, for a table fitted to its need). An object replaced while a queue may still
 read it waits in a `GpuRetirementQueue` keyed by a completion point counted on one queue (an upload's sequence, a native
-fence value). A package recorder never sees a fence: a result its recording captured (a readback, a publication, a
+fence value). An owner that lets go of objects other nodes' submissions read, and that no longer records itself (a
+released residency, a dropped portal's or routed view's tables), hands them to the device's one retirement
+(`GpuDeviceServices.Retirement`, a `GpuDeviceRetirement`) instead of waiting for idle: `RenderGraphRuntime` polls it
+after each frame's batch, which queues a timeline checkpoint behind it, and the hosts drain it at a loss
+(`DeviceLossRecovery`) and at teardown (`LauncherHostRun.DrainRetirement`). Never add a `TryWaitIdle` to a release
+path; `SdfWorldTables.Dispose` and `IGpuSurfaceUpload.DisposeCompleted` wait for nothing. A render node's build in
+flight retires into its runtime's `GpuImageLeases.RetiredBuilds`, which `DrainDisposals` waits out before the device
+goes. A package recorder never sees a fence: a result its recording captured (a readback, a publication, a
 submission's shading identities) lives in a `RenderGraphSlotResults` and is read only when the node reports the slot
 complete (`IRenderGraphPackageReadback.Completed`), which the node does from `WaitSlot` as it reuses the slot or as
 soon as an owed slot's fence reads signaled (`ShaderPipelineRenderNode.PollReadbacks`), and before it disposes a

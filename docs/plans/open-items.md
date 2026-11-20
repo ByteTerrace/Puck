@@ -704,7 +704,8 @@ What an arrival and a hand-over still cost the frame:
   (`PresentPacingPolicy`); a quiet window holds the bar. Whether a loaded
   machine should cost Vulkan's pacer more than Direct3D 12's is not found.
 - [medium] A residency's final release waits on the frame thread for two
-  builds: `SdfWorldPipelineSource.Release` cancels and waits its lease
+  builds once the device's retirement runs it (`GpuDeviceRetirement.Poll`, from
+  `RenderGraphRuntime`'s frame): `SdfWorldPipelineSource.Release` cancels and waits its lease
   acquisition, releasing a last `GpuBuildLease` whose entry is still building
   waits out the creation in the driver (`GpuBuildCache.Retire`), and
   `SdfWorldResidency.CancelShaderReload` waits a reload's builds. A routed

@@ -217,7 +217,8 @@ public sealed class OffscreenHostPresentation {
                         }
                     }
                 ),
-                    ("dispose render root", m_root.Dispose)
+                    ("dispose render root", m_root.Dispose),
+                    ("drain device retirement", () => LauncherHostRun.DrainRetirement(rootHostContext: m_rootHostContext))
                 );
             } finally {
                 m_applicationLifetime.StopApplication();

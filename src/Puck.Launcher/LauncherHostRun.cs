@@ -4,6 +4,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Puck.Abstractions;
 using Puck.Abstractions.Gpu;
+using Puck.Hosting;
 
 namespace Puck.Launcher;
 
@@ -170,6 +171,22 @@ public static class LauncherHostRun {
         if (failure is not null) {
             ExceptionDispatchInfo.Throw(source: failure);
         }
+    }
+    /// <summary>The teardown step between the render root's disposal and the device's: waits for the device (a lost one
+    /// counts as idle) and disposes everything owners retired to it (<see cref="GpuDeviceRetirement.Drain"/>), such as the
+    /// tables of residencies the root released. A host whose context publishes no device has nothing to drain.</summary>
+    /// <param name="rootHostContext">The root host context whose published device context is drained.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="rootHostContext"/> is <see langword="null"/>.</exception>
+    /// <exception cref="AggregateException">A retired object's disposal threw.</exception>
+    public static void DrainRetirement(IHostContext rootHostContext) {
+        ArgumentNullException.ThrowIfNull(rootHostContext);
+
+        if (!rootHostContext.TryResolveCapability<IGpuDeviceContext>(capability: out var deviceContext)) {
+            return;
+        }
+
+        deviceContext.TryWaitIdle();
+        deviceContext.Services.Retirement.Drain();
     }
     /// <summary>Returns the start of the unsupported line, which a supervising process matches to recognise the outcome.</summary>
     /// <param name="label">The host label, such as <c>world</c>.</param>

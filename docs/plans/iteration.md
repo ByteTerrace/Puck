@@ -381,18 +381,6 @@ both.
   thread and emits from the snapshot. The presentation query field already
   works that way (`WorldFramePresenter.RebuildStaticField`). Delivering only
   the changed rows (step 4) shrinks the same emission.
-- **Releasing a residency still drains the device.** The last
-  `SdfWorldResidency.Release` calls `TryWaitIdle` before it disposes its tables
-  (whose own `Dispose` waits for idle again), irradiance, dresser and library,
-  so a portal or routed view dropped mid-play holds the frame until the GPU is
-  idle; a retired render node's `CancelBuilds` likewise waits out its build in
-  flight. A kernel reload's replaced pipelines and a residency's pipeline
-  builds no longer wait (`SdfWorldTables.InstallReload`,
-  `GpuBuildLease.Release(RetiredBuilds)`). The rest needs a retirement owned by
-  the device rather than by one residency: replaced objects held behind a
-  timeline checkpoint (`GpuRetirementQueue`) that whatever submits each frame
-  polls, drained at device loss and teardown, with a tables release that skips
-  the idle wait once that checkpoint has completed.
 - **The watch is off until asked.** `world.watch on` starts it. Turning it on
   at boot for a local operator's source tree is the authoring loop's step 4;
   its poll runs on the host pump and wants a reading of its cost in a frame

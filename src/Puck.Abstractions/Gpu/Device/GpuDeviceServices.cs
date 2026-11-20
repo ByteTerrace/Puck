@@ -27,6 +27,9 @@ public sealed class GpuDeviceServices {
     public required IGpuPipelineFactory PipelineFactory { get; init; }
     /// <summary>Gets the queue submitter.</summary>
     public required IGpuQueueSubmitter QueueSubmitter { get; init; }
+    /// <summary>Gets the device's one retirement of objects queue work may still read, which every wrap carries over
+    /// as the same instance: its frame submitter polls it and its owner drains it at a loss and at teardown.</summary>
+    public required GpuDeviceRetirement Retirement { get; init; }
     /// <summary>Gets the command recorder, for compute and graphics work alike.</summary>
     public required IGpuRecorder Recorder { get; init; }
     /// <summary>Gets the factory for render passes and the framebuffers that bind them to images.</summary>

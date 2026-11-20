@@ -205,11 +205,11 @@ public sealed partial class ShaderPipelineRenderNode {
         // The preview is owned now, and its promise is spent.
         SettleReservation();
     }
-    // Drops a pending preview selection and waits out its build, which creates objects on the device being released.
+    // Drops a pending preview selection and retires its build as CancelBuilds retires the graph's.
     private void CancelPreviewBuild() {
         m_previewRequest = null;
         m_previewBuilding = null;
-        m_previewBuild.CancelAndWait(discard: static built => built.Dispose());
+        m_previewBuild.Retire(discard: static built => built.Dispose(), retired: m_images?.RetiredBuilds);
         SettleReservation();
     }
 

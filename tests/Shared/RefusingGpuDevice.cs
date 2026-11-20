@@ -31,6 +31,7 @@ internal sealed class RefusingGpuDevice :
             CommandPoolFactory = this,
             ImageFactory = this,
             PipelineFactory = this,
+            Retirement = new GpuDeviceRetirement(),
             QueueSubmitter = this,
             Recorder = this,
             RenderPassFactory = this,

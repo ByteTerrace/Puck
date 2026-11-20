@@ -257,7 +257,13 @@ public sealed class GpuSurfaceUpload : IGpuSurfaceUpload {
     /// Safe to call more than once.</summary>
     /// <exception cref="InvalidOperationException">The device was destroyed first, so these resources can no longer be
     /// released and the owner's teardown order is wrong; the upload stays undisposed.</exception>
-    public void Dispose() {
+    public void Dispose() => Release(waitIdle: true);
+    /// <inheritdoc/>
+    /// <exception cref="InvalidOperationException">The device was destroyed first, so these resources can no longer be
+    /// released and the owner's teardown order is wrong; the upload stays undisposed.</exception>
+    public void DisposeCompleted() => Release(waitIdle: false);
+
+    private void Release(bool waitIdle) {
         if (m_disposed) {
             return;
         }
@@ -268,10 +274,12 @@ public sealed class GpuSurfaceUpload : IGpuSurfaceUpload {
                 holder: nameof(GpuSurfaceUpload)
             );
 
-            try {
-                m_deviceContext.WaitIdle();
-            } catch (DeviceLostException) {
-                // Nothing on a lost device runs again.
+            if (waitIdle) {
+                try {
+                    m_deviceContext.WaitIdle();
+                } catch (DeviceLostException) {
+                    // Nothing on a lost device runs again.
+                }
             }
         }
 

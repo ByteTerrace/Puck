@@ -37,7 +37,8 @@ public sealed record PresenterDeviceRebuild(IDeviceLostRecoverable Presenter, Na
 /// The one device-loss policy both GPU hosts follow, on the pump thread, when a frame surfaces a
 /// <see cref="DeviceLostException"/>: it writes a <see cref="LossLinePrefix"/> console line naming the reason, drains
 /// what it can, has the render root release its device resources (<see cref="IRenderRoot.OnDeviceLost"/>, which also
-/// fails every capture armed at the loss with <c>CaptureRequestSlot.DeviceLostReason</c>), and then rebuilds the device
+/// fails every capture armed at the loss with <c>CaptureRequestSlot.DeviceLostReason</c>), drains the device's retirement
+/// (<see cref="GpuDeviceRetirement.Drain"/>), and then rebuilds the device
 /// through an <see cref="IDeviceRebuild"/>, retrying every <see cref="ReacquireBackoff"/> while the adapter is absent,
 /// for up to <see cref="ReacquireBudget"/>. The fixed-step simulation is never touched. A host gives up when there is
 /// nothing to rebuild through, when the device does not return within the budget, or when
@@ -164,14 +165,16 @@ public sealed class DeviceLossRecovery {
 
         // A still-working device (a reset, or the synthetic loss) must finish its work before anything on it is
         // destroyed; a removed one has nothing left to finish, and the drain says so by throwing, which is tolerated.
-        if (m_rootHostContext.TryResolveCapability<IGpuDeviceContext>(capability: out var deviceContext)) {
-            deviceContext.TryWaitIdle();
-        }
+        var deviceContext = (m_rootHostContext.TryResolveCapability<IGpuDeviceContext>(capability: out var resolved) ? resolved : null);
+
+        deviceContext.TryWaitIdle();
 
         // Every object on the device is released before the device goes, and every capture armed at the loss is refused,
         // whether or not the run goes on: a run that gives up must not leave a capture to end as unserved or to meet a
-        // disposed root. The rebuild below replaces the device in place.
+        // disposed root. The rebuild below replaces the device in place. What owners retired to the device (a released
+        // residency's tables) waits for no checkpoint of the lost device.
         m_root.OnDeviceLost();
+        deviceContext?.Services.Retirement.Drain();
 
         if ((rebuild is null) || givesUp) {
             return false;

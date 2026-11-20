@@ -1366,9 +1366,11 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
         ReleaseRegions();
         ReleaseRegionCopy();
     }
-    // A build in flight creates objects on the device being released, so it is waited out and discarded first.
+    // A build in flight creates objects on the device, so it never outlives the device: a node whose runtime has an image
+    // table retires it there, discarded on the pool as it finishes, and the runtime waits it out before the device is
+    // recreated or destroyed (GpuImageLeases.DrainDisposals); a node on its own waits it out here.
     private void CancelBuilds() {
-        m_build.CancelAndWait(discard: built => built.Discard(later: DisposeLater));
+        m_build.Retire(discard: built => built.Discard(later: DisposeLater), retired: m_images?.RetiredBuilds);
         m_buildKey = default;
         CancelPreviewBuild();
     }

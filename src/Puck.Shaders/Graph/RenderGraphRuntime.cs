@@ -1608,6 +1608,9 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
         // retire displaced package owners against this actual reader fence, without another producer submission.
         foreach (var node in m_nodes) { node?.RetireAfterConsumers(submitter: submitter); }
         ArmRetiring(submitter: submitter);
+        // The frame's recordings are all handed to the queue, so a checkpoint now follows every reader of what an owner
+        // retired to the device before it (a released residency's tables).
+        m_device.Services.Retirement.Poll(timeline: queue.Timeline);
 
         return Shown(
             image: RootImage(),

@@ -75,6 +75,7 @@ internal sealed class UploadModelGpu :
             CommandPoolFactory = this,
             ImageFactory = m_inner.Services.ImageFactory,
             PipelineFactory = this,
+            Retirement = new GpuDeviceRetirement(),
             QueueSubmitter = this,
             Recorder = this,
             RenderPassFactory = m_inner.Services.RenderPassFactory,
