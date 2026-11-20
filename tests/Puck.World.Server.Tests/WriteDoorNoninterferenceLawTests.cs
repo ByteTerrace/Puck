@@ -6,22 +6,21 @@ using Xunit;
 
 namespace Puck.World.Server.Tests;
 
-/// <summary>The write door answers a recipient alike whatever it cannot read: every name a submission spells,
-/// wherever it spells it, is refused the same way whether the row it names is withheld from the writer or declared
-/// nowhere, and whatever a withheld row holds. The sites are read from the code: every state name position the name
-/// registry reads in each document value a writer can submit, and every entry of the mutation vocabulary's own table
-/// (<see cref="WorldMutationNames.Fields"/>), so a position either learns reaches these laws without a list of
-/// their own.</summary>
+/// <summary>The write door answers a recipient alike whatever it cannot read, end to end through a live server: every
+/// name a submission spells, at every position of a small world's values and of the mutation vocabulary's own table
+/// (<see cref="WorldMutationNames.Fields"/>), is refused the same way whether the row it names is withheld from the
+/// writer or declared nowhere, and whatever a withheld row holds. <see cref="WriteDoorFootprintLawTests"/> enumerates
+/// every position, kind and replaced value from the code at the door itself.</summary>
 public sealed class WriteDoorNoninterferenceLawTests {
     private const string Probe = "vault";
     private static readonly Principal Writer = Principal.Seat(slot: 1);
     private static readonly string Unknown = new('0', 64);
 
-    private enum Vault : byte { Absent, Withheld, WithheldOther, Public }
+    internal enum Vault : byte { Absent, Withheld, WithheldOther, Public }
 
     // A world whose rows a writer reads whole, with the probe row absent, withheld from the writer (holding one of
     // two contents), or public: the documents the corpus's values are drawn from and submitted to.
-    private static WorldDefinition Document(Vault vault) {
+    internal static WorldDefinition Document(Vault vault) {
         var rows = new List<WorldStateRow> {
             new(CellName.Parse(candidate: "pub"), CellKind.Int, Cells: [new StateCell(CellName.Parse(candidate: "a"), CellValue.Int(value: 1))]),
             new(CellName.Parse(candidate: "spot"), CellKind.Text, Cells: [new StateCell(StateRow.SlotKey, CellValue.Text(value: "[0,0,0]"))]),
@@ -154,28 +153,6 @@ public sealed class WriteDoorNoninterferenceLawTests {
     [Fact]
     public void EveryMutationMemberIsANamePositionADocumentValueOrExcluded() =>
         Assert.True(WorldMutationNames.Uncovered.Count == 0, string.Join(", ", WorldMutationNames.Uncovered));
-
-    // A kind that replaces or removes an installed value outside a program section must have the door read that
-    // value, or its state names would escape the footprint. A state row is admitted with its name, a placement with
-    // its chain, and a grant or group change is the grants' own transition.
-    [Fact]
-    public void EveryKindThatReplacesAnInstalledValueHasTheDoorReadIt() {
-        var judgedElsewhere = new HashSet<Type> {
-            typeof(WorldMutation.UpsertStateRow), typeof(WorldMutation.RemoveStateRow), typeof(WorldMutation.UpsertStateCell),
-            typeof(WorldMutation.RemoveStateCell), typeof(WorldMutation.UpsertPlacement), typeof(WorldMutation.RemovePlacement),
-            typeof(WorldMutation.UpsertGrant), typeof(WorldMutation.RemoveGrant), typeof(WorldMutation.UpsertGroupKind),
-            typeof(WorldMutation.RemoveGroupKind),
-        };
-        var unresolved = typeof(WorldMutation).GetNestedTypes()
-            .Where(kind => typeof(WorldMutation).IsAssignableFrom(kind) && !kind.IsAbstract &&
-                (kind.Name.StartsWith("Upsert", StringComparison.Ordinal) || kind.Name.StartsWith("Remove", StringComparison.Ordinal)))
-            .Where(kind => !judgedElsewhere.Contains(kind) &&
-                !WorldMutationKindCatalog.SectionOf((WorldMutation)System.Runtime.CompilerServices.RuntimeHelpers.GetUninitializedObject(kind)).IsProgram())
-            .Where(kind => !WorldRecipientMutations.ResolvesReplaced(kind))
-            .Select(kind => kind.Name).ToArray();
-
-        Assert.Empty(unresolved);
-    }
 
     // Decision 3a's H1: removing a key from a public domain is judged by the hidden row keyed over it whatever that
     // row holds, empty, holding the removed key or holding another, so the verdict is the declaration's, never the

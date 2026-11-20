@@ -42,6 +42,16 @@ public static partial class WorldNameRegistry {
     /// <returns>Every name-shaped member the list leaves neither registered nor excluded.</returns>
     public static IReadOnlyList<string> UncoveredUnder(IReadOnlyList<WorldNameField> fields) =>
         Walk.Run(fields: fields).Uncovered;
+    /// <summary>Gets every path a registered member reaches in a value of one model type, rooted at that type: the
+    /// positions a value a writer submits on its own (a placement, a section's defaults) carries, which the write
+    /// door's laws enumerate.</summary>
+    /// <param name="root">The model type the paths start at.</param>
+    /// <returns>The sites, in model order; a path ending in <c>…</c> re-enters a type above it.</returns>
+    public static IReadOnlyList<WorldNameSite> SitesUnder(Type root) {
+        ArgumentNullException.ThrowIfNull(argument: root);
+
+        return Walk.Run(fields: Fields, root: root).Sites;
+    }
     /// <summary>Renders the registry as the Markdown document <c>docs/world-name-registry.md</c> holds.</summary>
     /// <returns>The document text, LF-terminated.</returns>
     public static string Render() {
@@ -152,15 +162,15 @@ public static partial class WorldNameRegistry {
     /// <param name="propertyType">The member's declared type.</param>
     /// <param name="field">The registration, when one applies.</param>
     /// <returns><see langword="true"/> when the member carries a name.</returns>
-    public static bool TryResolve(Type declaringType, string member, Type propertyType, out WorldNameField field) {
-        if (TryFind(
-            declaringType: declaringType,
-            field: out field,
-            member: member
-        )) {
-            return true;
-        }
-
+    public static bool TryResolve(Type declaringType, string member, Type propertyType, out WorldNameField field) => TryFind(
+        declaringType: declaringType,
+        field: out field,
+        member: member
+    ) || TryImplicit(declaringType: declaringType, member: member, propertyType: propertyType, field: out field);
+    // The registration a member's type carries when no explicit one names it; the walk that renders and checks the
+    // registry and the respelling that reads a document both resolve through it.
+    private static bool TryImplicit(Type declaringType, string member, Type propertyType, out WorldNameField field) {
+        field = null!;
         var leaf = Unwrap(type: propertyType);
 
         // A value a state cell may stand in for binds a row by its token, whatever member holds it.
@@ -246,12 +256,8 @@ public static partial class WorldNameRegistry {
         private Walk(IReadOnlyList<WorldNameField> fields) => m_fields = fields;
 
         private void Record(string path, Type declaringType, string member, Type propertyType) {
-            if (TryFind(
-                declaringType: declaringType,
-                field: out var field,
-                fields: m_fields,
-                member: member
-            )) {
+            if (TryFind(declaringType: declaringType, field: out var field, fields: m_fields, member: member) ||
+                TryImplicit(declaringType: declaringType, member: member, propertyType: propertyType, field: out field)) {
                 Sites.Add(item: new WorldNameSite(
                     Field: field,
                     Path: path
@@ -261,25 +267,6 @@ public static partial class WorldNameRegistry {
             }
 
             var leaf = Unwrap(type: propertyType);
-
-            if (
-                (leaf == typeof(BindableScalar)) ||
-                (leaf == typeof(BindableColor)) ||
-            (leaf == typeof(BindableAngle))
-            ) {
-                Sites.Add(item: new WorldNameSite(
-                    Path: path,
-                    Field: new WorldNameField(
-                        Facet: WorldExportFacet.Binding,
-                        Kind: WorldNameKind.State,
-                        Member: member,
-                        Owner: declaringType,
-                        Role: WorldNameRole.Binding
-                    )
-                ));
-
-                return;
-            }
 
             if (leaf == typeof(WorldLatticeScalar)) {
                 return;
@@ -345,6 +332,14 @@ public static partial class WorldNameRegistry {
                         );
                     }
                 }
+
+                return;
+            }
+
+            // A creation document is read by hand (WorldModuleNamespace.VisitCreationBindings): every binding token in
+            // it is one position.
+            if (type == typeof(Puck.World.Authoring.CreationDocument)) {
+                Sites.Add(item: new WorldNameSite(Path: $"{path}{{state}}", Field: CreationBinding));
 
                 return;
             }
@@ -464,12 +459,12 @@ public static partial class WorldNameRegistry {
             m_stack.RemoveAt(index: (m_stack.Count - 1));
         }
 
-        public static Walk Run(IReadOnlyList<WorldNameField> fields) {
+        public static Walk Run(IReadOnlyList<WorldNameField> fields, Type? root = null) {
             var walk = new Walk(fields: fields);
 
             walk.VisitType(
                 path: string.Empty,
-                type: typeof(WorldDefinition)
+                type: (root ?? typeof(WorldDefinition))
             );
 
             return walk;

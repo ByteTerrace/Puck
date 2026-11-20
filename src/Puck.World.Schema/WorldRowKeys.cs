@@ -58,7 +58,7 @@ public static class WorldRowKeys {
     /// <summary>Mounted addons, by name.</summary>
     public static WorldRowKey<WorldAddonRow, string> Addons { get; } = new(static addon => addon.Name);
     /// <summary>Creations, by the id's value, which a bound id reads from its state cell.</summary>
-    public static WorldRowKey<WorldPrototype, string> Creations { get; } = new(static creation => creation.Id.Value, static creation => creation.Id.Reference);
+    public static WorldRowKey<WorldPrototype, string> Creations { get; } = new(static creation => creation.Id?.Value!, static creation => creation.Id?.Reference);
     /// <summary>Placements, by id.</summary>
     public static WorldRowKey<WorldPlacement, string> Placements { get; } = new(static placement => placement.Id);
     /// <summary>Speakers, by name.</summary>
@@ -70,7 +70,7 @@ public static class WorldRowKeys {
     /// <summary>Binding overlays, by id.</summary>
     public static WorldRowKey<WorldBindingOverlay, string> BindingOverlays { get; } = new(static overlay => overlay.Id);
     /// <summary>Looks, by the name's value, which a bound name reads from its state cell.</summary>
-    public static WorldRowKey<WorldLook, string> Looks { get; } = new(static look => look.Name.Value, static look => look.Name.Reference);
+    public static WorldRowKey<WorldLook, string> Looks { get; } = new(static look => look.Name?.Value!, static look => look.Name?.Reference);
     /// <summary>Dynamics rows, by name.</summary>
     public static WorldRowKey<DynamicsRow, string> Dynamics { get; } = new(static row => row.Name);
     /// <summary>Curve rows, by name.</summary>

@@ -494,24 +494,7 @@ public static class WorldModuleNamespace {
                 }
 
                 rewriter.Scope = parent;
-                switch (WorldChannelNodes.Spelled(
-                    memberType: memberType,
-                    value: value
-                )) {
-                    case JsonArray list when (field.Role == WorldNameRole.Names):
-                        for (var index = 0; (index < list.Count); index++) {
-                            if ((list[index] is JsonValue element) && element.TryGetValue<string>(value: out var item)) {
-                                list[index] = rewriter.Rewrite(item, field.Role, field.Kind);
-                            }
-                        }
-                        break;
-                    case JsonValue leaf when leaf.TryGetValue<string>(value: out var text):
-                        var rewritten = rewriter.Rewrite(text, field.Role, field.Kind);
-                        parent[name] = ((value is JsonObject)
-                            ? WorldChannelNodes.Node(spelling: rewritten)
-                            : rewritten);
-                        break;
-                }
+                rewriter.RewriteSite(field: field, memberType: memberType, name: name, parent: parent, value: value);
             }
         );
 
@@ -688,15 +671,7 @@ public static class WorldModuleNamespace {
     }
 
     // A creation document rides its own serializer, so the walk reads it by hand: every value in it a state cell may
-    // stand in for — a shape's spatial value, a palette color, an identifier — binds a row by its `state.<row>` token.
-    private static readonly WorldNameField CreationBinding = new(
-        Facet: WorldExportFacet.Binding,
-        Kind: WorldNameKind.State,
-        Member: "state binding",
-        Owner: typeof(Puck.World.Authoring.CreationDocument),
-        Role: WorldNameRole.Binding
-    );
-
+    // stand in for binds a row by its `state.<row>` token (WorldNameRegistry.CreationBinding).
     private static void VisitCreationBindings(JsonNode node, WorldNameVisitor visitor) {
         switch (node) {
             case JsonObject obj:
@@ -710,7 +685,7 @@ public static class WorldModuleNamespace {
                             obj,
                             name,
                             value,
-                            CreationBinding,
+                            WorldNameRegistry.CreationBinding,
                             typeof(string)
                         );
                     } else if (value is not null) {
@@ -1483,14 +1458,15 @@ public static class WorldModuleNamespace {
             return inner;
         }
 
-        // Rewrites one registered site in place: a list of names, or one name-bearing value. A member that holds a
-        // call node holds one again, its row arguments renamed.
+        // Rewrites one registered site in place: a list holding one value of the site's role per element (names,
+        // binding tokens such as a list of bindable scalars or colors, templates, keys), or one name-bearing value. A
+        // member that holds a call node holds one again, its row arguments renamed.
         public void RewriteSite(JsonObject parent, string name, JsonNode value, WorldNameField field, Type memberType) {
             switch (WorldChannelNodes.Spelled(
                 memberType: memberType,
                 value: value
             )) {
-                case JsonArray list when (field.Role == WorldNameRole.Names):
+                case JsonArray list when (field.Role is WorldNameRole.Names or WorldNameRole.Binding or WorldNameRole.Template or WorldNameRole.Key):
                     for (var index = 0; (index < list.Count); index++) {
                         if (
                             (list[index: index] is JsonValue element) &&
