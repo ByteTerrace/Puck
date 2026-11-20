@@ -21,12 +21,12 @@ public static partial class SdfWorldPackage {
     public const string HistoryColorWritten = "historyColorRW";
     /// <summary>The preceding frame's history surface: the part of each output pixel's history that follows its motion,
     /// read at the position the pixel's motion reaches. <see cref="HistorySurfaceWords"/> words an output pixel, stored as
-    /// that many planes of one word a pixel (<c>sdfHistoryWord</c> in <c>passes/sdf-resolve.comp.hlsl</c>): the
+    /// that many planes of one word a pixel (<c>sdfHistoryWord</c> in <c>frame/sdf-history-surface.hlsli</c>): the
     /// receiver's visibility identity, then its tangent-plane distance along the output ray and the gathered weight
     /// as two half floats, the distance low, then the accumulated surface transport's two
     /// words as <see cref="Parts.Transport"/> packs them, then the sub-pixel feature the pixel's footprint last showed:
     /// its YCoCg as three half floats, Y and Co in one word and Cg low in the next, with the frames the memory has left
-    /// above it, zero for none. It is history, so it keeps two allocations: the one this frame reads and the one it
+    /// above it, zero for none, and two high bits marking axes along which a low-contrast footprint can share shading. It is history, so it keeps two allocations: the one this frame reads and the one it
     /// writes.</summary>
     public const string HistorySurface = "historySurface";
     /// <summary>The history surface the resolve writes for the next frame.</summary>
@@ -97,6 +97,18 @@ public static partial class SdfWorldPackage {
     /// image, the surface transport, the history color and the history surface. The sky never enters the history: it is
     /// evaluated and composited after the resolve.</summary>
     public static RenderGraphPackageFragment TemporalFragment => TemporalDeclaration.Value;
+
+    /// <summary>The temporal graph whose probe cells classify shading from the preceding resolve.</summary>
+    public static RenderGraphPackageFragment RateFragment => RateDeclaration.Value;
+
+    private static class RateDeclaration {
+        internal static readonly RenderGraphPackageFragment Value = TemporalFragment with {
+            Passes = [.. TemporalFragment.Passes.Select(static pass => pass.Name == Parts.ViewsProbes ? pass with {
+                Inputs = [.. pass.Inputs, new ResourceReference(Name: Parts.HistorySurface, PreviousFrame: true)],
+                InputAccesses = [.. pass.InputAccesses, RenderGraphPortAccess.ComputeRead],
+            } : pass)],
+        };
+    }
 
     // The resolve's inputs in either mode, in port order: the render-grid color, then the visibility records the samples
     // are read through.

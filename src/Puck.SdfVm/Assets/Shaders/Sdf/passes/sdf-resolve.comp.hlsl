@@ -36,6 +36,7 @@
 #include "../frame/sdf-viewport.hlsli"
 #include "../frame/sdf-debug-modes.hlsli"
 #include "../frame/sdf-reprojection.hlsli"
+#include "../frame/sdf-history-surface.hlsli"
 #include "../frame/sdf-work.hlsli"
 #include "../shade/sdf-transport.hlsli"
 #include "Shared/reconstruction.hlsli"
@@ -47,7 +48,7 @@
 // distance low; the far limit 8192 and the weight cap stay normal halves, each within a relative 2^-11, far inside
 // SdfHistoryDepthTolerance), then the accumulated transport's two words (sdfPackTransport), then the remembered feature:
 // its YCoCg as three half floats, Y low and Co high in the fifth word, Cg low in the sixth with the frames the memory has
-// left above it, zero for none. The weight saturates at SDF_HISTORY_WEIGHT_CAP, one jitter period of full-weight samples
+// left above it, zero for none, and two high bits for the directions eligible for shared shading. The weight saturates at SDF_HISTORY_WEIGHT_CAP, one jitter period of full-weight samples
 // (SdfWorldPackage.TemporalPeriod), or at SDF_HISTORY_FEATURE_WEIGHT_CAP while the pixel carries a feature.
 // The stationary window (historyWindowRW, SDF_HISTORY_WINDOW_WORDS a pixel in the same planar layout) is one buffer the
 // resolve updates in place, not history in two copies: word zero is the phase mask, and from SDF_HISTORY_WINDOW_OFFSET
@@ -74,11 +75,7 @@ static const float SdfResolveFeatureTravel = 0.05;
 uint2 sdfResolveClamp(int2 pixel, uint2 dims) {
     return (uint2)clamp(pixel, int2(0, 0), (int2(dims) - 1));
 }
-// The address of history surface word `word` of output pixel `pixel` (its row-major index) in an output of `extent`: the
-// one place the surface's planar layout is spelled.
-uint sdfHistoryWord(uint pixel, uint word, uint2 extent) {
-    return ((word * (extent.x * extent.y)) + pixel);
-}
+
 // The address of stationary window word `word` of the invocation at `id` in an output of `extent`. The window is
 // updated in place, so it is addressed only by the invocation's own pixel, never a reprojected one.
 uint sdfHistoryWindowWord(uint3 id, uint word, uint2 extent) {
@@ -279,6 +276,7 @@ void sdfResolveTemporal(uint3 id, uint2 extent, uint2 render, float2 jitter, flo
     uint nearestIdentity = 0u;
     float nearestT = 0.0;
     bool sighted = false;
+    float2 axisContrast = 0.0;
     float sightedContrast = 0.0;
     float3 sightedYCoCg = float3(0.0, 0.0, 0.0);
 
@@ -292,7 +290,11 @@ void sdfResolveTemporal(uint3 id, uint2 extent, uint2 render, float2 jitter, flo
             float3 ycocg = sdfToYCoCg(color.rgb);
             float4 transport = float4(0.0, 0.0, 0.0, 0.0);
             float contrast;
-            bool feature = sdfResolveFeature(window, (uint)(((dy + 2) * 5) + (dx + 2)), contrast);
+            uint at = uint((dy + 2) * 5 + dx + 2);
+            bool feature = sdfResolveFeature(window, at, contrast);
+            if (passGroup.viewsRate.x > 1u) {
+                axisContrast = max(axisContrast, abs(window[at] - float2(window[at + 1u], window[at + 5u])));
+            }
 
             float tapReactive = reactivity[sdfReactivityIndex(pixel, 0u, render)];
             footprintStill = (footprintStill && (tapReactive <= 0.0));
@@ -411,7 +413,7 @@ void sdfResolveTemporal(uint3 id, uint2 extent, uint2 render, float2 jitter, flo
 
                 historyWeightGathered = f16tof32(distanceAndWeight >> 16u);
                 featureYCoCg = float3(f16tof32(featureWordA & 0xFFFFu), f16tof32(featureWordA >> 16u), f16tof32(featureWordB & 0xFFFFu));
-                featureLife = (featureWordB >> 16u);
+                featureLife = ((featureWordB & SdfHistoryFeatureMask) >> 16u);
                 [unroll] for (uint tap = 0u; tap < 9u; tap++) {
                     bool matches = ((identities[tap] == 0u)
                         ? (historyIdentity == 0u)
@@ -566,7 +568,21 @@ void sdfResolveTemporal(uint3 id, uint2 extent, uint2 render, float2 jitter, flo
     historySurfaceRW[sdfHistoryWord(pixelIndex, 2u, extent)] = historyTransportWords.x;
     historySurfaceRW[sdfHistoryWord(pixelIndex, 3u, extent)] = historyTransportWords.y;
     historySurfaceRW[sdfHistoryWord(pixelIndex, 4u, extent)] = (f32tof16(writtenFeature.x) | (f32tof16(writtenFeature.y) << 16u));
-    historySurfaceRW[sdfHistoryWord(pixelIndex, 5u, extent)] = (f32tof16(writtenFeature.z) | (writtenLife << 16u));
+    // Use the same neighborhood and motion acceptance that reconstructed this pixel. A moving receiver
+    // needs accumulated weight; a stationary one must have completed its jitter window.
+    uint rate = 0u;
+    if (passGroup.viewsRate.x > 1u && reusable && accepted && sampleValid && writtenLife == 0u &&
+        coverageMin == 1.0 && (complete || (travel > SdfResolveFeatureTravel && historyWeightGathered >= 1.0))) {
+        float tolerance = max(0.001, 0.06 * boxMax.x);
+        bool smooth = all((boxMax - boxMin) <= tolerance);
+        [unroll] for (uint tap = 0u; tap < 9u; tap++) {
+            smooth = smooth && identities[tap] == centerIdentity;
+        }
+        if (smooth) {
+            rate = (axisContrast.x <= 0.5 * tolerance ? 1u : 0u) | (axisContrast.y <= 0.5 * tolerance ? 2u : 0u);
+        }
+    }
+    historySurfaceRW[sdfHistoryWord(pixelIndex, 5u, extent)] = (f32tof16(writtenFeature.z) | (writtenLife << 16u) | (rate << SdfHistoryRateShift));
 }
 
 [numthreads(8, 8, 1)]

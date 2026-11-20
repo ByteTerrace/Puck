@@ -16,7 +16,8 @@ namespace Puck.SdfVm;
 /// output converges over one period and then stands.</param>
 /// <param name="Unread">The frames the instance's render graph has left it unread and absent from displayed outputs,
 /// including held consumer outputs: a view shown again after it was parked renders in a new epoch.</param>
-public readonly record struct SdfTemporalEpoch(long Binding, long Cut, uint Width, uint Height, float Ceiling, bool Enabled, int Debug, bool Temporal = false, long Unread = 0);
+/// <param name="ViewsRate">An active coarse shading policy. Changing it restarts the color history.</param>
+public readonly record struct SdfTemporalEpoch(long Binding, long Cut, uint Width, uint Height, float Ceiling, bool Enabled, int Debug, bool Temporal = false, long Unread = 0, Puck.SignedDistance.SdfViewsRate? ViewsRate = null);
 /// <summary>A rendered camera and its sample grid, retained for motion reconstruction.</summary>
 /// <param name="Camera">The camera whose basis and off-axis lens projected the sample.</param>
 /// <param name="Jitter">The ray offset in render pixels.</param>

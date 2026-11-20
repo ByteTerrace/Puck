@@ -5,6 +5,7 @@
 #define SDF_VIEWS_PROBES_PASS
 #include "sdf-pixel-pass.hlsli"
 #include "sdf-views-probes.hlsli"
+#include "sdf-views-rate.hlsli"
 
 [numthreads(SDF_VISIBILITY_GROUP_EDGE, SDF_VISIBILITY_GROUP_EDGE, 1)]
 void CSMain(uint3 id : SV_DispatchThreadID) {
@@ -18,6 +19,7 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
     uint2 dims = worldViewDims(view);
     uint2 origin = (id.xy * SDF_VIEWS_PROBE_RATE);
 
+    uint rate = sdfRateTile(view, viewIndex, id.xy, origin);
     if (any(origin >= dims) || any(id.xy >= sdfViewsProbeCells())) {
         return;
     }
@@ -58,7 +60,7 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
         probes = sdfMeshProbesAt(surfacePoint, normal);
         sdfWorkTexels = 1u;
     }
-    sdfViewsProbesStore(sdfViewsProbeRecord(id.xy, viewIndex), probes, lane, present);
+    sdfViewsProbesStore(sdfViewsProbeRecord(id.xy, viewIndex), probes, lane, present, rate);
 
     // The pass counts a cell whose gather it wrote.
     puckCountWork(sdfWorkSteps, sdfWorkTexels);

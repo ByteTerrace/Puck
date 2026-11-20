@@ -56,6 +56,8 @@ public static partial class WorldSessionLevers {
     /// <summary>The far shadow cascade's rate: its refreshes a second in lane A (zero for every frame, the unauthored
     /// default) and the light turn a held cascade tolerates, in degrees, in lane B.</summary>
     public const string FarShadows = "far-shadows";
+    /// <summary>The maximum shading footprint in A and the classification tile edge in B.</summary>
+    public const string ViewsRate = "views-rate";
     /// <summary>The sky's quality tier ordinal (<c>world.sky-quality</c>), a <see cref="WorldSkyTier"/>.</summary>
     public const string SkyQuality = "sky-quality";
     /// <summary>The independent sky field grid fraction (<c>world.sky-field-scale</c>), one or one half.</summary>
@@ -265,6 +267,14 @@ public static partial class WorldSessionLevers {
                 return;
             }
             settings.FarShadows = rate;
+        });
+        sink.Register(name: ViewsRate, setter: lever => {
+            var rate = new SdfViewsRate(MaxRate: (int)lever.A, TileSize: (int)lever.B);
+            if (rate.Refusal(path: ViewsRate) is { } refusal) {
+                WorldClientDiagnostics.Report(channel: "world.quality", text: $"{refusal} — lever dropped");
+                return;
+            }
+            settings.ViewsRate = rate;
         });
         return sink;
     }

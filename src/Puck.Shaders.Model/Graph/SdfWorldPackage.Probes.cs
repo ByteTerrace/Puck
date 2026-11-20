@@ -1,6 +1,8 @@
 namespace Puck.Shaders;
 
 public static partial class SdfWorldPackage {
+    /// <summary>The shading sample spacing, classification tile edge and history output dimensions in pixels.</summary>
+    public const string ViewsRate = "viewsRate";
     /// <summary>The probe lookup's records as views reads them: <see cref="ViewsProbeWords"/> words a cell of
     /// <see cref="ViewsProbeRate"/> by <see cref="ViewsProbeRate"/> render-extent pixels, the irradiance volume's gather at
     /// one representative pixel of the cell (<c>sdf-views-probes.hlsli</c> owns the packing), addressed by cell like the

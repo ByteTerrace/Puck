@@ -16,7 +16,7 @@
 // history. A surface debug view draws the whole pixel, so it covers it and is not fogged. Sky cost retains the surface's
 // real coverage so the composite can measure the visible sky. A lane past the render extent returns black, which the
 // caller never stores.
-float3 sdfViewsStage(SdfPixel p, out float coverage, out float reactivity) {
+float3 sdfViewsStage(SdfPixel p, bool shadesPixel, out float coverage, out float reactivity) {
     coverage = 0.0;
     reactivity = 0.0;
 
@@ -35,7 +35,7 @@ float3 sdfViewsStage(SdfPixel p, out float coverage, out float reactivity) {
     // The record's hit (every hit the surface pass writes is a mesh's), resolved through the mesh hit door; a hit the door
     // rejects shades as a miss.
     SdfMeshHit meshHit = (SdfMeshHit)0;
-    if (p.active) {
+    if (p.active && shadesPixel) {
         s = sdfLoadSurfaceSample(worldVisibilityRecord(p.pixel, p.viewIndex));
         if (s.hit) {
             s.hit = sdfMeshResolveHit(s.meshDraw, s.meshTriangle, meshHit);
@@ -49,7 +49,7 @@ float3 sdfViewsStage(SdfPixel p, out float coverage, out float reactivity) {
     // The view's mode is uniform across the group, so every lane reaches the tile's barriers or none does.
     SdfLightMasks lights = sdfViewsTileLights(p, useFinalShading, s.hit, surfacePoint, s.t);
 
-    if (!p.active) {
+    if (!p.active || !shadesPixel) {
         return float3(0.0, 0.0, 0.0);
     }
 
