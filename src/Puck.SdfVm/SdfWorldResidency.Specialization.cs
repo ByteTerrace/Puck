@@ -180,7 +180,7 @@ public sealed partial class SdfWorldResidency {
     // it completed anyway on the pool as it finishes and outlives this residency; a device loss drains the catalog's
     // retired builds before the device is recreated (ReleaseShadePipelines), the host's teardown before it is destroyed.
     private void CancelShadeBuild() {
-        m_pipelines.Catalog.RetiredShadeBuilds.Retire(build: m_shadeBuild.Detach(), discard: static result => result.Dispose());
+        m_pipelines.Catalog.RetiredBuilds.Retire(build: m_shadeBuild.Detach(), discard: static result => result.Dispose());
         m_shadeRequest = null;
     }
     private void RetireShade() {
@@ -222,7 +222,7 @@ public sealed partial class SdfWorldResidency {
     // no lease of the lost device outlives its recovery.
     private void ReleaseShadePipelines(bool deviceLost) {
         CancelShadeBuild();
-        if (deviceLost) { m_pipelines.Catalog.RetiredShadeBuilds.Drain(); }
+        if (deviceLost) { m_pipelines.Catalog.RetiredBuilds.Drain(); }
         m_shadeCurrent?.Dispose();
         m_shadeCurrent = null;
         foreach (var retired in m_shadeRetired) { retired.Dispose(); }

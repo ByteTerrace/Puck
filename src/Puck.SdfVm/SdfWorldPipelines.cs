@@ -154,7 +154,10 @@ public sealed partial class SdfWorldPipelines : IDisposable {
     /// <remarks>Releases every lease at once (<see cref="GpuBuildLease{TKey, T}.Release(IReadOnlyList{GpuBuildLease{TKey, T}?})"/>):
     /// every build no other holder leases is canceled before any is waited for, so disposal waits only for the creations
     /// already in the driver.</remarks>
-    public void Dispose() {
+    public void Dispose() => Release(retired: null);
+    // Disposes the set, handing every build its leases leave unheld to retired rather than waiting for it, when given
+    // (GpuBuildLease.Release(RetiredBuilds)).
+    internal void Release(RetiredBuilds? retired) {
         GpuBuildLease<GpuPassPipelineKey, GpuPassPipeline>?[] leases;
 
         lock (m_gate) {
@@ -164,7 +167,7 @@ public sealed partial class SdfWorldPipelines : IDisposable {
             m_disposed = true;
             leases = [.. m_slots.Select(selector: static slot => slot?.Lease)];
         }
-        GpuBuildLease<GpuPassPipelineKey, GpuPassPipeline>.Release(leases: leases);
+        GpuBuildLease<GpuPassPipelineKey, GpuPassPipeline>.Release(leases: leases, retired: retired);
     }
     /// <summary>Returns whether every pipeline of the set is ready, starting again any build that failed. Allocates
     /// nothing while a build runs or once every pipeline is ready.</summary>
@@ -366,10 +369,12 @@ public sealed partial class SdfWorldPipelines : IDisposable {
         }
     }
 
-    internal void Commit(SdfWorldPipelineReload reload) {
+    // Commits a reload, returning the leases it replaced, which the caller releases once no submission records with them.
+    internal IDisposable? Commit(SdfWorldPipelineReload reload) {
         lock (m_gate) {
             m_kernels = reload.Kernels;
-            reload.Commit();
+
+            return reload.Commit();
         }
     }
     internal void Exchange(SdfWorldPipelineReload reload) {
@@ -524,7 +529,8 @@ public sealed partial class SdfWorldPipelines : IDisposable {
 /// <summary>
 /// Replacement pipelines for the kernels that changed, leased by <see cref="SdfWorldPipelines.PrepareReload"/> and put
 /// into service by <see cref="SdfWorldTables.InstallReload"/> once built (<see cref="WaitAsync"/>). Disposing a reload that
-/// was never installed releases its leases; a committed reload releases the leases it replaced.
+/// was never installed releases its leases; committing one hands the leases it replaced to the tables, which release them
+/// once the submissions that recorded with them have completed.
 /// </summary>
 public sealed class SdfWorldPipelineReload : IDisposable {
     private readonly (int Index, GpuBuildLease<GpuPassPipelineKey, GpuPassPipeline> Lease)[] m_replacements;
@@ -574,14 +580,18 @@ public sealed class SdfWorldPipelineReload : IDisposable {
         m_state = State.Disposed;
     }
 
-    internal void Commit() {
-        if (m_state == State.Exchanged) {
-            foreach (var retired in m_retired) {
-                retired?.Release();
-            }
-        }
+    // Commits the reload, returning the leases its exchange replaced, or null when it replaced none.
+    internal IDisposable? Commit() {
+        var replaced = ((m_state == State.Exchanged) ? new ReplacedLeases(leases: m_retired) : null);
 
         m_state = State.Committed;
+
+        return replaced;
+    }
+
+    // The leases a committed reload replaced, released together once nothing in flight records with them.
+    private sealed class ReplacedLeases(GpuBuildLease<GpuPassPipelineKey, GpuPassPipeline>?[] leases) : IDisposable {
+        public void Dispose() => GpuBuildLease<GpuPassPipelineKey, GpuPassPipeline>.Release(leases: leases);
     }
     internal void Exchange(SdfWorldPipelines.Slot?[] slots) {
         for (var index = 0; (index < m_replacements.Length); index++) {

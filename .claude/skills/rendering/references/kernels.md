@@ -74,8 +74,9 @@ for the request to settle, and its outcome prints on stderr
 `status` stays `pending` while the sources compile, the bytecode loads and the
 changed pipelines are created on the thread pool
 (`SdfWorldPipelines.PrepareReload`); a later frame
-installs them (`SdfWorldTables.InstallReload`), which waits for the device to go idle, swaps the changed
-pipelines in and retires the old ones; a failed load or pipeline build keeps
+installs them (`SdfWorldTables.InstallReload`) without waiting for the GPU: it swaps the changed
+pipelines in and retires the old ones with the tables' other replaced objects, released once a checkpoint
+queued after the submissions that recorded with them completes; a failed load or pipeline build keeps
 the previous kernels, and so does a tree whose kernels do not read the host's
 interface: a kernel compiled against another instruction set (its pass block's
 stamp) or binding anything where the host does not place it. Reflecting a DXIL

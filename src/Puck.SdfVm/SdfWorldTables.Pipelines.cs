@@ -93,8 +93,9 @@ public sealed partial class SdfWorldTables {
         );
 
     /// <summary>Installs a kernel reload prepared by <see cref="SdfWorldPipelines.PrepareReload"/> at a render-thread
-    /// boundary, preserving buffers, images, descriptors and scene state. A reload that changed nothing
-    /// installs without a GPU wait; otherwise the device drains and the changed pipelines swap in. The caller disposes the
+    /// boundary, preserving buffers, images, descriptors and scene state. Nothing waits for the GPU: the changed
+    /// pipelines swap in, and the ones they replace are retired with the tables' other replaced objects, released once a
+    /// device checkpoint queued after every submission that recorded with them has completed. The caller disposes the
     /// reload afterwards: a committed reload's pipelines belong to the set.</summary>
     /// <param name="reload">A reload prepared against these tables' pipeline set and its current kernels.</param>
     /// <returns>The number of changed pipelines installed.</returns>
@@ -114,15 +115,17 @@ public sealed partial class SdfWorldTables {
         m_pipelines.ThrowIfNotCurrent(reload: reload);
 
         if (reload.ChangedPipelines == 0) {
-            m_pipelines.Commit(reload: reload);
+            m_pipelines.Commit(reload: reload)?.Dispose();
 
             return 0;
         }
 
-        // Every view's submission in flight records with the pipelines about to be replaced.
-        m_deviceContext.TryWaitIdle();
+        // Every view's submission in flight may record with the pipelines being replaced; the next upload's checkpoint
+        // follows them on the one queue, so the replaced leases are released once it completes (ServiceRetirements).
         m_pipelines.Exchange(reload: reload);
-        m_pipelines.Commit(reload: reload);
+        if (m_pipelines.Commit(reload: reload) is { } replaced) {
+            Retire(replaced: replaced);
+        }
         // The environment map's kernels may be among them: its graph producer renders again when a consumer needs it.
         m_skyEnvironment.Forget();
         m_screenEmission.Forget();

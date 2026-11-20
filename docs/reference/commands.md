@@ -843,10 +843,11 @@ describes authoring, endpoint eligibility and the exposed-HDR cutoff option.
 
 `world.iteration` reads how long each edit took to show in the running World
 (`WorldIterationClock`). Every loop is timed from the edit to the first
-produced frame that finds each of five stages true:
+produced frame that finds each of six stages true:
 
 | Stage | The frame that first finds |
 |---|---|
+| `first` | nothing more than that a frame was produced: for the boot, the process started, composed its renderer and produced its first frame |
 | `frame` | the edited document (or a reloaded kernel) rendered with the program its content calls for: a look value shows |
 | `shaded` | every shading program the frame runs drawn with its own kernel: an edited or added shading program's look shows once the specialization that holds it publishes, and until then it draws as a material with no program (`SdfWorldResidency.ShadesWhole`) |
 | `shown` | every mesh group drawing its own geometry at some tier, no stand-in from before the edit and no hole: a changed form shows whole |
@@ -858,7 +859,9 @@ composition's `builds` (programs that derived a field) and `appearances`
 (rebuilds that took the held program's field with a new appearance: a colour,
 a material value or a shade parameter packs and builds none; an exposure or a
 light edit is neither), the `worst-frame` (the longest wait between produced
-frames from the edit until `shaded`), and the source work from the edit to the
+frames from the edit until `shaded`; the wait before the first frame a World
+ever produces is the boot's `first` stage, not a held frame), and the source
+work from the edit to the
 settled frame, as the `world.boot` ledger counts it: `compiles`,
 `compositions`, `composition-members` (the root members compositions merged
 from their layers), `documents-read` and `validations`. Work a loop running

@@ -301,7 +301,7 @@ public static class WorldRenderRoot {
             // before the binder's GPU holdings and the world's creator hold, after the runtime's passes have retired.
             // These services can predate the device context, so their later container disposal is too late for GPU owners.
             // The specializations those residencies retired unfinished are waited out last, while the device lives.
-            Holdings = [compareCapture, host, binder, residency, pipelines.RetiredShadeBuilds],
+            Holdings = [compareCapture, host, binder, residency, pipelines.RetiredBuilds],
             Prepare = (in FrameContext context) => {
                 // The memory bars of the profile the world authors for this adapter bind once the device is up and has
                 // named its adapter, before the first frame's residencies stage anything; the device opens lazily, so

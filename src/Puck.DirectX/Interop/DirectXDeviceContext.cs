@@ -24,7 +24,7 @@ namespace Puck.DirectX.Interop;
 /// </para>
 /// </summary>
 [SupportedOSPlatform("windows10.0.10240")]
-public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDeviceContext, IGpuDeviceRemoval, IGpuPipelineCache, IDisposable {
+public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDeviceContext, IGpuDeviceRemoval, IDisposable {
     private DirectXHeapArena? m_heapArena;
 
     private readonly long m_adapterLuid;
@@ -643,8 +643,6 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
         );
         DrainDebugMessages();
     }
-    /// <inheritdoc/>
-    public void Persist() => PipelineLibrary?.Persist();
     /// <summary>Writes any Direct3D 12 debug-layer messages accumulated since the last drain to <see cref="DebugOutput"/>, then
     /// clears them. A no-op when the debug layer / info queue is unavailable (the default; opt in with
     /// <see cref="Validation"/>). Also called at the end of <see cref="WaitIdle"/>; callers that no longer drain the

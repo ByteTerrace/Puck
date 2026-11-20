@@ -495,10 +495,15 @@ the value on its own device.
 Every logical device owns a `VulkanPipelineCache`. `VulkanLogicalDeviceFactory`
 creates it with the device, seeded from the file kept for that device and
 driver, and passes it to every `vkCreateComputePipelines` and
-`vkCreateGraphicsPipelines` call. The device writes it back to disk before it
-is destroyed, and an engine pipeline build writes it back when it finishes
-(`IGpuPipelineCache.Persist`). The cache is internally synchronized, so
-pipelines may be created on several threads at once.
+`vkCreateGraphicsPipelines` call. The cache file writes it back to disk in the
+background once creations have been quiet for `GpuPipelineCacheFile.WriteQuiet`,
+or once the oldest creation it owes has waited `GpuPipelineCacheFile.WriteLatest`
+while they keep coming, and
+the device writes what is still owed before it is destroyed. No pipeline
+build writes the file itself, so a cold start writes it a handful of times
+rather than once a pipeline. The cache is internally synchronized, so
+pipelines may be created on several threads at once; reading its data for a
+write waits for the creations in flight, which the quiet period makes rare.
 
 A file is loaded only when its header matches the device: header version one,
 the device's vendor and device IDs, and its `pipelineCacheUUID`, which the
@@ -521,8 +526,8 @@ new file rather than loading one that could never hit.
 
 Each backend keeps at most eight `.bin` files (`GpuPipelineCacheFile.RetainedFiles`),
 counted across all its device directories, and evicts the least recently used.
-Opening a device's file, and every creation the cache answers, sets that file's
-last-write time to now. Opening then keeps the backend's eight most recently
+Opening a device's file, and the background write after a creation the cache
+answers, sets that file's last-write time to now. Opening then keeps the backend's eight most recently
 written files, the opened file always among them even before its first write,
 deletes the rest, and removes each device directory left empty. Equal times
 fall to the ordinally lesser path. Several worktrees or sessions running

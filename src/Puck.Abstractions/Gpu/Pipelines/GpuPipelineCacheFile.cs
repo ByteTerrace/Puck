@@ -12,14 +12,22 @@ namespace Puck.Abstractions.Gpu;
 /// one that could never hit.
 /// </para>
 /// <para>
-/// Each backend keeps at most <see cref="RetainedFiles"/> files, least recently used first out (<see cref="CacheRetention"/>). Opening a file, and every
-/// creation it answers, moves its last-write time to now. Opening a file then keeps the backend's most recently written
+/// Each backend keeps at most <see cref="RetainedFiles"/> files, least recently used first out (<see cref="CacheRetention"/>). Opening a file moves
+/// its last-write time to now, and so does the next write once a creation it answers. Opening a file then keeps the backend's most recently written
 /// files across all its device directories, the opened file always among them, deletes the rest, counting each as
 /// <see cref="GpuWork.PipelineCachePruned"/>, and removes every device directory left empty; equal times fall to the
 /// ordinally lesser path. Worktrees and sessions of different commits sharing one state root therefore keep each
 /// other's files while a directory named for an old driver or key format ages out. A temporary is never deleted and
 /// keeps its directory, another backend's files are never touched, and a file another process holds open is reported
 /// on standard error and left in place.
+/// </para>
+/// <para>
+/// The file is written in the background, never by the thread that created a pipeline: once a backend
+/// <see cref="Attach"/>es its serializer, a miss owes a write (and a hit a refresh of the last-write time), which runs on
+/// the thread pool once creations have been quiet for <see cref="WriteQuiet"/>, or once the oldest owed one has waited
+/// <see cref="WriteLatest"/>, whichever comes first (<see cref="QuietTrigger"/>). A cold start creating pipelines for a
+/// minute therefore writes the file a handful of times rather than once a pipeline, and its bytes written grow with the
+/// cache, not with its square. <see cref="Close"/> writes what is still owed when the backend's cache goes away.
 /// </para>
 /// <para>
 /// Several processes may share the directory. A write goes to a temporary file beside the target and then replaces the
@@ -35,10 +43,21 @@ public sealed class GpuPipelineCacheFile {
     /// Opening a file deletes the least recently written files beyond this many.</summary>
     public const int RetainedFiles = 8;
 
+    /// <summary>How long creations must stop before an owed write runs.</summary>
+    public static readonly TimeSpan WriteQuiet = TimeSpan.FromSeconds(seconds: 2L);
+    /// <summary>The longest an owed write waits while creations keep coming.</summary>
+    public static readonly TimeSpan WriteLatest = TimeSpan.FromSeconds(seconds: 10L);
+
     private const string Extension = ".bin";
 
     private readonly GpuPipelineCacheWork m_work;
+    // Serializes writes, so a background write and the closing one never interleave and an older serialization never
+    // replaces a newer one.
+    private readonly Lock m_writeGate = new();
 
+    private Func<ReadOnlyMemory<byte>>? m_serialize;
+    private QuietTrigger? m_trigger;
+    private int m_touched;
     private long m_unsaved;
 
     private GpuPipelineCacheFile(string? path, GpuPipelineCacheWork work) {
@@ -209,21 +228,62 @@ public sealed class GpuPipelineCacheFile {
             work: work
         );
     }
-    /// <summary>Counts one pipeline created through the cache. A hit refreshes the file's last-write time; a miss leaves
-    /// a write owed to the next <see cref="Persist{TState}"/>.</summary>
+    /// <summary>Binds the backend's serializer, so a write a creation owes runs on the thread pool once creations go
+    /// quiet, and <see cref="Close"/> writes what is still owed. A file kept in memory only binds nothing.</summary>
+    /// <param name="serialize">Serializes the backend's cache on whatever thread writes; empty when the cache is gone or
+    /// its serialization failed (reported by the backend). It synchronizes with the backend's own creations and
+    /// release.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="serialize"/> is <see langword="null"/>.</exception>
+    /// <exception cref="InvalidOperationException">A serializer is already bound.</exception>
+    public void Attach(Func<ReadOnlyMemory<byte>> serialize) {
+        ArgumentNullException.ThrowIfNull(argument: serialize);
+
+        if (Path is null) {
+            return;
+        }
+
+        if (Interlocked.CompareExchange(comparand: null, location1: ref m_serialize, value: serialize) is not null) {
+            throw new InvalidOperationException(message: "The pipeline-cache file already has a serializer.");
+        }
+
+        _ = Interlocked.Exchange(
+            location1: ref m_trigger,
+            value: new QuietTrigger(
+                action: Flush,
+                latest: WriteLatest,
+                quiet: WriteQuiet
+            )
+        );
+    }
+    /// <summary>Stops the background writes and writes what is still owed with the bound serializer, on the calling
+    /// thread. The backend calls it before it releases its cache; a later creation's count owes a write no one makes.
+    /// Closing twice writes nothing more.</summary>
+    public void Close() {
+        if (Interlocked.Exchange(location1: ref m_trigger, value: null) is { } trigger) {
+            trigger.Dispose();
+        }
+
+        Flush();
+    }
+    /// <summary>Counts one pipeline created through the cache. A miss owes a write and a hit a refresh of the file's
+    /// last-write time; both run in the background once a serializer is bound (<see cref="Attach"/>), or at the next
+    /// <see cref="Persist{TState}"/>.</summary>
     /// <param name="cacheHit">Whether the driver answered the creation from its cache.</param>
     public void Count(bool cacheHit) {
         m_work.Count(cacheHit: cacheHit);
 
         if (!cacheHit) {
             _ = Interlocked.Increment(location: ref m_unsaved);
-        } else if (Path is not null) {
-            Refresh(path: Path);
+        } else {
+            Volatile.Write(location: ref m_touched, value: 1);
         }
+
+        Volatile.Read(location: ref m_trigger)?.Request();
     }
-    /// <summary>Writes the cache to the file when a creation missed it since the last write. The caller serializes
-    /// calls; a failed serialization is reported by the backend and drops the owed write, and a failed file write is
-    /// reported and leaves it owed, so the next call retries.</summary>
+    /// <summary>Writes the cache to the file now when a creation missed it since the last write, or refreshes the
+    /// file's last-write time when one only hit it. Writes are serialized; a failed serialization is reported by the
+    /// backend and drops the owed write, and a failed file write is reported and leaves it owed, so the next write
+    /// retries.</summary>
     /// <typeparam name="TState">What <paramref name="serialize"/> reads.</typeparam>
     /// <param name="state">The backend's cache.</param>
     /// <param name="serialize">Serializes the backend's cache; empty when there is nothing to write or it failed
@@ -231,29 +291,46 @@ public sealed class GpuPipelineCacheFile {
     public void Persist<TState>(TState state, Func<TState, ReadOnlyMemory<byte>> serialize) {
         ArgumentNullException.ThrowIfNull(argument: serialize);
 
-        var unsaved = Interlocked.Exchange(
-            location1: ref m_unsaved,
-            value: 0L
-        );
-
-        if ((Path is null) || (unsaved == 0L)) {
-            return;
-        }
-
-        var data = serialize(arg: state);
-
-        if (data.IsEmpty) {
-            return;
-        }
-
-        if (!Save(
-            data: data.Span,
-            path: Path
-        )) {
-            _ = Interlocked.Add(
+        lock (m_writeGate) {
+            var unsaved = Interlocked.Exchange(
                 location1: ref m_unsaved,
-                value: unsaved
+                value: 0L
             );
+            var touched = (Interlocked.Exchange(location1: ref m_touched, value: 0) != 0);
+
+            if (Path is null) {
+                return;
+            }
+
+            if (unsaved == 0L) {
+                if (touched) {
+                    Refresh(path: Path);
+                }
+
+                return;
+            }
+
+            var data = serialize(arg: state);
+
+            if (data.IsEmpty) {
+                return;
+            }
+
+            if (!Save(
+                data: data.Span,
+                path: Path
+            )) {
+                _ = Interlocked.Add(
+                    location1: ref m_unsaved,
+                    value: unsaved
+                );
+            }
+        }
+    }
+    // The background write and the closing one: what is owed, through the bound serializer.
+    private void Flush() {
+        if (Volatile.Read(location: ref m_serialize) is { } serialize) {
+            Persist(serialize: static serialize => serialize(), state: serialize);
         }
     }
     /// <summary>Reads the file.</summary>

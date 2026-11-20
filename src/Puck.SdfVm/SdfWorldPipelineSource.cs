@@ -139,27 +139,34 @@ internal sealed class SdfWorldPipelineSource(SdfWorldPipelineCatalog catalog) {
 
         return waited;
     }
-    // Waits out leases still being taken and gives up the leases, which disposes each pipeline no other holder leases,
-    // and forgets a refused build: the next build is tried afresh. Call after disposing every table built from the set and
-    // before the device goes away.
-    public void Release() {
-        m_acquire.CancelAndWait(discard: static leases => leases.Release());
-        m_lease?.Dispose();
+    // Gives up the leases, which disposes each pipeline no other holder leases, and forgets a refused build: the next
+    // build is tried afresh. Leases still being taken, and builds a last lease leaves unheld, are waited out, or, given
+    // retired, handed to it and discarded on the pool as they finish, so a release on the frame thread never waits for
+    // the driver. Call after disposing every table built from the set and before the device goes away; whatever releases
+    // the device drains retired first.
+    public void Release(RetiredBuilds? retired = null) {
+        if (retired is null) {
+            m_acquire.CancelAndWait(discard: static leases => leases.Release());
+        } else {
+            retired.Retire(build: m_acquire.Detach(), discard: static leases => leases.Release());
+        }
+
+        m_lease?.Release(retired: retired);
         m_lease = null;
         m_ready = false;
-        m_regionCopy?.Release();
+        m_regionCopy?.Release(retired: retired);
         m_regionCopy = null;
-        m_meshRaster?.Release();
+        m_meshRaster?.Release(retired: retired);
         m_meshRaster = null;
-        m_shadowRaster?.Release();
+        m_shadowRaster?.Release(retired: retired);
         m_shadowRaster = null;
-        m_shadowExitRaster?.Release();
+        m_shadowExitRaster?.Release(retired: retired);
         m_shadowExitRaster = null;
-        m_shadowGlassRaster?.Release();
+        m_shadowGlassRaster?.Release(retired: retired);
         m_shadowGlassRaster = null;
-        m_glassRaster?.Release();
+        m_glassRaster?.Release(retired: retired);
         m_glassRaster = null;
-        m_occlusion?.Release();
+        m_occlusion?.Release(retired: retired);
         m_occlusion = null;
         m_refusal = null;
         m_refusedInputs = null;

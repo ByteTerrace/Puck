@@ -5,12 +5,13 @@ namespace Puck.Vulkan.Interop;
 
 /// <summary>
 /// One logical device's <c>VkPipelineCache</c>, seeded from the device's <see cref="GpuPipelineCacheFile"/>, passed to
-/// every compute and graphics pipeline creation on the device, and written back by <see cref="Persist"/> and on
-/// disposal. Created without the externally-synchronized flag, so the driver synchronizes it internally and pipelines
-/// may be created on several threads at once; reading the cache's data still waits for every creation in flight
-/// (<see cref="Enter"/>): a cold boot that read it while other threads created pipelines through it faulted inside
-/// <c>vkGetPipelineCacheData</c> on NVIDIA's driver under the validation layer. The file owns where the cache lives and when it is written; this type
-/// owns only the native cache and the header check.
+/// every compute and graphics pipeline creation on the device, and written back by the file in the background once
+/// creations go quiet, and on disposal. Created without the externally-synchronized flag, so the driver synchronizes it
+/// internally and pipelines may be created on several threads at once; reading the cache's data still waits for every
+/// creation in flight (<see cref="Enter"/>): a cold boot that read it while other threads created pipelines through it
+/// faulted inside <c>vkGetPipelineCacheData</c> on NVIDIA's driver under the validation layer. Because the file writes
+/// only after creations have been quiet, that wait rarely meets a creation. The file owns where the cache lives and when
+/// it is written; this type owns only the native cache and the header check.
 /// <para>
 /// A file is loaded only when its header names this device: header version one, the device's vendor and device IDs
 /// and its pipeline-cache UUID (<see cref="GpuDeviceIdentity.PipelineCacheUuid"/>). A file that fails that check, or
@@ -190,11 +191,17 @@ public sealed unsafe class VulkanPipelineCache : IDisposable {
             Console.Error.WriteLine(value: $"[pipeline-cache] vulkan: vkCreatePipelineCache failed ({result}); pipelines are created uncached");
         }
 
-        return new VulkanPipelineCache(
+        var cache = new VulkanPipelineCache(
             device: device,
             file: file,
             handle: handle
         );
+
+        if (0 != handle) {
+            file.Attach(serialize: cache.SerializeUnlessDisposed);
+        }
+
+        return cache;
     }
     /// <summary>Holds a cache for one pipeline creation through it, which other creations share and a read of its data
     /// waits for.</summary>
@@ -209,14 +216,17 @@ public sealed unsafe class VulkanPipelineCache : IDisposable {
     /// <param name="feedback">The driver's report on the creation; a report without the valid bit counts as a miss.</param>
     public void Count(in VkPipelineCreationFeedback feedback) =>
         m_file.Count(cacheHit: feedback.IsCacheHit);
-    /// <summary>Writes the cache to its file, then destroys it. Call before the device is destroyed.</summary>
+    /// <summary>Writes the cache to its file when a creation owes a write, then destroys it. Call before the device is
+    /// destroyed.</summary>
     public void Dispose() {
+        // Outside the gate: the write serializes through SerializeUnlessDisposed, which takes it.
+        m_file.Close();
+
         lock (m_gate) {
             if (m_disposed) {
                 return;
             }
 
-            PersistLocked();
             m_disposed = true;
             m_device.Destroy(
                 destroy: m_device.DestroyPipelineCache,
@@ -225,25 +235,12 @@ public sealed unsafe class VulkanPipelineCache : IDisposable {
         }
         m_use.Dispose();
     }
-    /// <summary>Writes the cache to its file when a creation missed it since the last write. Safe on any thread; a
-    /// failed read of the cache data or a failed write is reported and leaves the previous file whole.</summary>
-    public void Persist() {
+
+    // The cache's data for the file's writer, on whatever thread writes, or empty once the cache is destroyed.
+    private ReadOnlyMemory<byte> SerializeUnlessDisposed() {
         lock (m_gate) {
-            if (!m_disposed) {
-                PersistLocked();
-            }
+            return (m_disposed ? ReadOnlyMemory<byte>.Empty : Serialize(cache: this));
         }
-    }
-
-    private void PersistLocked() {
-        if (0 == Handle) {
-            return;
-        }
-
-        m_file.Persist(
-            serialize: static cache => Serialize(cache: cache),
-            state: this
-        );
     }
 
     /// <summary>One creation's hold on a cache (<see cref="Enter"/>).</summary>

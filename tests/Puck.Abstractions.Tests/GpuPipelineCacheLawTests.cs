@@ -8,8 +8,8 @@ namespace Puck.Abstractions.Tests;
 /// Laws for the neutral half of the persistent pipeline cache. <see cref="GpuPipelineCacheFile"/> names one file per
 /// backend, device and content in the same format on every backend, reads a missing file as empty, writes only when a
 /// creation missed the cache, replaces a file whole in one rename, and leaves the old file whole when the rename is
-/// blocked, never a temporary behind, with the write still owed. Opening a file and every hit on it refresh its
-/// last-write time; opening keeps the backend's <see cref="GpuPipelineCacheFile.RetainedFiles"/> most recently written
+/// blocked, never a temporary behind, with the write still owed. Opening a file, and the next write after a hit on it,
+/// refresh its last-write time; opening keeps the backend's <see cref="GpuPipelineCacheFile.RetainedFiles"/> most recently written
 /// files across all its devices, the opened one always among them, deletes the rest, removes each device directory
 /// left empty, and never touches a temporary, another backend's tree, or a file another process holds open. Every
 /// timestamp is set explicitly; nothing sleeps. A content key depends on every part and its boundaries.
@@ -541,6 +541,10 @@ public sealed class GpuPipelineCacheLawTests : IDisposable {
         );
         before = DateTime.UtcNow;
         file.Count(cacheHit: true);
+        file.Persist(
+            serialize: static _ => ReadOnlyMemory<byte>.Empty,
+            state: 0
+        );
         Assert.InRange(
             actual: File.GetLastWriteTimeUtc(path: path),
             high: DateTime.UtcNow,

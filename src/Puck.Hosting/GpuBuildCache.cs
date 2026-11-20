@@ -10,8 +10,9 @@ namespace Puck.Hosting;
 /// region-copy pipeline among them. A holder takes
 /// a <see cref="GpuBuildLease{TKey, T}"/>; the first lease on a pair starts its build on the thread pool
 /// (<see cref="BackgroundBuild{T}"/>), every later lease on that pair joins it, and the built value is disposed when its
-/// last lease is released. That release cancels a build still in flight and waits, outside the cache's lock, only for
-/// the creation already in the driver.
+/// last lease is released. That release cancels a build still in flight and either waits, outside the cache's lock, only
+/// for the creation already in the driver, or hands the canceled build to a <see cref="RetiredBuilds"/> the holder names,
+/// which discards it on the pool as it finishes, so a holder on the frame thread never waits for the driver.
 /// <para>
 /// At most the cache's concurrency of its builds run at once, however many entries are building: each build awaits one
 /// of the cache's turns before it creates anything and gives it back after its last creation. A build waiting for a turn
@@ -129,11 +130,12 @@ public sealed class GpuBuildCache<TKey, T> where TKey : IEquatable<TKey> where T
             return TakeLocked(entry: entry);
         }
     }
-    internal void Release(GpuBuildLease<TKey, T>.Entry entry) {
+    internal void Release(GpuBuildLease<TKey, T>.Entry entry, RetiredBuilds? retired) {
         if (Detach(entry: entry) is { } build) {
             Retire(
                 build: build,
-                entry: entry
+                entry: entry,
+                retired: retired
             );
         }
     }
@@ -153,9 +155,16 @@ public sealed class GpuBuildCache<TKey, T> where TKey : IEquatable<TKey> where T
         }
     }
     // With its last lease released and the entry out of the list, nothing else reaches the entry, so the wait for the
-    // creation still in the driver holds no lock another holder's poll or acquire needs.
-    internal static void Retire(CanceledBuild<T> build, GpuBuildLease<TKey, T>.Entry entry) {
-        build.Wait(discard: static value => value.Dispose());
+    // creation still in the driver holds no lock another holder's poll or acquire needs; handed to a retired-builds table,
+    // the build is discarded on the pool as it finishes and nothing waits here. A ready value is in no build, so it is
+    // disposed at once either way.
+    internal static void Retire(CanceledBuild<T> build, GpuBuildLease<TKey, T>.Entry entry, RetiredBuilds? retired) {
+        if (retired is null) {
+            build.Wait(discard: static value => value.Dispose());
+        } else {
+            retired.Retire(build: build, discard: static value => value.Dispose());
+        }
+
         entry.Value?.Dispose();
         entry.Value = null;
     }
@@ -327,12 +336,20 @@ public sealed class GpuBuildLease<TKey, T> where TKey : IEquatable<TKey> where T
     /// <summary>Gives up the lease. The last lease on an entry waits out a build still in flight, discarding its
     /// result, and disposes the value; call it once nothing recorded with the value is in flight and before the device
     /// goes away. Releasing twice does nothing.</summary>
-    public void Release() {
+    public void Release() => Release(retired: null);
+    /// <summary>Gives up the lease without waiting for the driver: the last lease on an entry cancels a build still in
+    /// flight and hands it to <paramref name="retired"/>, which discards its result on the pool as it finishes, and
+    /// disposes a ready value at once. Call it once nothing recorded with the value is in flight; whatever releases the
+    /// device drains <paramref name="retired"/> first (<see cref="RetiredBuilds.Drain"/>). Releasing twice does
+    /// nothing.</summary>
+    /// <param name="retired">The table the holder drains before the device goes away or is recreated, or
+    /// <see langword="null"/> to wait for the creation already in the driver, as <see cref="Release()"/> does.</param>
+    public void Release(RetiredBuilds? retired) {
         if (Interlocked.Exchange(
             location1: ref m_cache,
             value: null
         ) is { } cache) {
-            cache.Release(entry: m_entry);
+            cache.Release(entry: m_entry, retired: retired);
         }
     }
     /// <summary>Gives up several leases at once: every build a last lease leaves unheld is canceled before any is waited
@@ -341,7 +358,15 @@ public sealed class GpuBuildLease<TKey, T> where TKey : IEquatable<TKey> where T
     /// <see langword="null"/> lease is skipped.</summary>
     /// <param name="leases">The leases.</param>
     /// <exception cref="ArgumentNullException"><paramref name="leases"/> is <see langword="null"/>.</exception>
-    public static void Release(IReadOnlyList<GpuBuildLease<TKey, T>?> leases) {
+    public static void Release(IReadOnlyList<GpuBuildLease<TKey, T>?> leases) => Release(leases: leases, retired: null);
+    /// <summary>Gives up several leases at once, as <see cref="Release(IReadOnlyList{GpuBuildLease{TKey, T}?})"/> does,
+    /// handing every build a last lease leaves unheld to <paramref name="retired"/> instead of waiting for it
+    /// (<see cref="Release(RetiredBuilds)"/>).</summary>
+    /// <param name="leases">The leases.</param>
+    /// <param name="retired">The table the holder drains before the device goes away or is recreated, or
+    /// <see langword="null"/> to wait for the creations already in the driver.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="leases"/> is <see langword="null"/>.</exception>
+    public static void Release(IReadOnlyList<GpuBuildLease<TKey, T>?> leases, RetiredBuilds? retired) {
         ArgumentNullException.ThrowIfNull(argument: leases);
 
         var canceled = new (CanceledBuild<T> Build, Entry Entry)?[leases.Count];
@@ -360,10 +385,11 @@ public sealed class GpuBuildLease<TKey, T> where TKey : IEquatable<TKey> where T
         }
 
         foreach (var retiring in canceled) {
-            if (retiring is { } retired) {
+            if (retiring is not null) {
                 GpuBuildCache<TKey, T>.Retire(
-                    build: retired.Build,
-                    entry: retired.Entry
+                    build: retiring.Value.Build,
+                    entry: retiring.Value.Entry,
+                    retired: retired
                 );
             }
         }

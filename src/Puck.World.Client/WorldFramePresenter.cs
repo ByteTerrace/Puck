@@ -45,7 +45,8 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
     // moves every derivation together.
     private readonly WorldPerceptionAnchor m_anchor;
 
-    // The query field's static placements' palettes, reused across rebuilds (WorldPlacementStamper.EmitStatic).
+    // The query field's static placements' palettes, reused across rebuilds (WorldPlacementStamper.EmitStatic). Only the
+    // one presentation field build in flight touches them, on its pool thread.
     private readonly WorldStaticPalettes m_queryPalettes = new();
 
     private readonly WorldCreationInstances m_animator;
@@ -128,6 +129,10 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
     private double m_presentedSeconds;
     private SdfProgram? m_lastProgram;
 
+    // The derived face rows of the delivery ReconcileDelivery last reconciled, which the binder, the emitter and the
+    // presentation field all read: one WorldPrototypeFacets.Derive call per delivery.
+    private IReadOnlyList<WorldScreen> m_deliveredFaces = [];
+
     // The definition delivery and neighbour revision the presentation field was built from (RebuildStaticField).
     private int m_staticFieldDefinition = -1;
 
@@ -136,8 +141,11 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
     private int m_staticFieldNeighbours = -1;
     private int m_staticFieldResponses = -1;
 
-    // The presentation field's evaluator under construction off the frame thread, until a frame adopts it.
-    private Task<SdfFieldEvaluator>? m_staticFieldBuild;
+    // The presentation field under construction off the frame thread, until a frame adopts it, and whether a rebuild
+    // came due while it ran: one build runs at a time, since each reuses m_queryPalettes, and the owed one starts once
+    // the frame adopts the build before it.
+    private Task<StaticFieldBuild>? m_staticFieldBuild;
+    private bool m_staticFieldOwed;
 
     // Each placement exclusion the presentation field has narrated, so a rebuild repeats none of them.
     private readonly HashSet<(string Placement, string Reason)> m_reportedFieldExclusions = [];
@@ -224,8 +232,6 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
     private readonly WorldScreenDecals m_decals;
     // Every engine screen slot's surface transform, which moves a carried screen's picture with its carrier.
     private readonly IReadOnlyDictionary<int, Func<SdfScreenSurfaceTransform?>> m_screenTransforms;
-    // The colors the presentation query field's build resolves; the query reads no material, so nothing follows them.
-    private readonly WorldBakedColors m_queryColors;
 
     // The BUILTIN viewport ladder for the player at slot-order position `index` of `count`, used only when the
     // world authors no `views.layouts` (WorldViewComposer.ResolveBuiltin's fallback). NormalizedRect convention:
@@ -458,20 +464,53 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
     // the client so the chase camera's clearance sweep and the stamp pool's limb probes share ONE evaluator. The live
     // program cannot be queried directly because its avatar catalog carries TransformDynamic instructions;
     // reconstructing only the static placements/screens/adjacency geometry also keeps a body from treating itself, or
-    // the avatar a camera follows, as an obstacle. The program is emitted here, from the frame's own state; the
-    // evaluator it compiles to is built on the thread pool while the field it replaces stays published, and the first
-    // frame dressed after it finishes publishes it (AdoptStaticField). Until then a tick-locked or converging frame
-    // answers waiting (Waiting), so a still of one tick reads the field that tick delivered.
+    // the avatar a camera follows, as an obstacle. Only the neighbours' strips are emitted on the frame thread, since
+    // they share the adjacency emitter's scratch with the composition's own emission; the delivered definition's
+    // placements and screens, which the frame thread never mutates, are stamped on the thread pool with the evaluator
+    // they compile to, while the field they replace stays published, and the first frame dressed after the build
+    // finishes publishes it (AdoptStaticField). Until then a tick-locked or converging frame answers waiting (Waiting),
+    // so a still of one tick reads the field that tick delivered.
     private void RebuildStaticField() {
-        SdfProgramBuilder builder;
+        if (m_staticFieldBuild is not null) {
+            m_staticFieldOwed = true;
+
+            return;
+        }
+
+        m_staticFieldOwed = false;
+
+        var definition = m_client.Definition;
+        var faces = m_deliveredFaces;
+        var palettes = m_queryPalettes;
+        var builder = new SdfProgramBuilder();
 
         try {
-            var definition = m_client.Definition;
+            m_adjacencies.EmitCurrent(builder: builder, queryOnly: true);
+        } catch (ArgumentException exception) {
+            m_client.PublishStaticField(field: null);
+            ReportStaticFieldUnavailable(exception: exception);
 
-            builder = new SdfProgramBuilder();
+            return;
+        }
+
+        m_staticFieldBuild = Task.Run(function: () => BuildStaticField(
+            builder: builder,
+            definition: definition,
+            faces: faces,
+            palettes: palettes
+        ));
+        AdoptStaticField();
+    }
+    // The presentation field's pool half: the delivered definition's solid placements and its screens, then the program
+    // and its evaluator. The query reads no material, so the placements bake the document's own colors rather than the
+    // live state mirror's, which the frame thread moves. A refusal is returned for the frame thread to report, with the
+    // placements the field excluded.
+    private static StaticFieldBuild BuildStaticField(SdfProgramBuilder builder, WorldDefinition definition, IReadOnlyList<WorldScreen> faces, WorldStaticPalettes palettes) {
+        var excluded = new List<(WorldPlacement Placement, string Reason)>();
+
+        try {
             // Only what a body can touch: a solid placement. A presentation-only placement (the wallpaper-folded
             // ground texture) has no fixed-point query twin and would refuse the whole field.
-            m_queryColors.Begin();
             WorldPlacementStamper.EmitStatic(
                 builder: builder,
                 definition: definition,
@@ -479,53 +518,54 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
                 placements: WorldPlacementStamper.Queryable(
                     definition: definition,
                     placements: [.. definition.Placements.Where(predicate: static placement => (placement.Solid is not null))],
-                    excluded: ReportFieldExclusion
+                    excluded: (placement, reason) => excluded.Add(item: (placement, reason))
                 ),
-                colors: m_queryColors,
-                palettes: m_queryPalettes
+                palettes: palettes
             );
-
-            var facets = WorldPrototypeFacets.Derive(
-                definition: definition,
-                derivedFaceBase: WorldPlacementPolicy.DerivedFaceBase(definition: definition),
-                derivedFaceScreens: definition.DerivedFaceScreens
-            );
-
+            // The faces the binder and the emitter reconciled this delivery against (ReconcileDelivery runs before every
+            // dress), so the field's screen slabs are the ones the frame composes.
             WorldStaticSceneEmit.Emit(
                 builder: builder,
-                derivedFaces: facets.Faces,
+                derivedFaces: faces,
                 screens: definition.Screens
             );
 
-            m_adjacencies.EmitCurrent(builder: builder, queryOnly: true);
+            return new StaticFieldBuild(Excluded: excluded, Field: new SdfFieldEvaluator(program: builder.Build()), Refusal: null);
         } catch (ArgumentException exception) {
-            m_staticFieldBuild = null;
-            m_client.PublishStaticField(field: null);
-            ReportStaticFieldUnavailable(exception: exception);
-
-            return;
+            return new StaticFieldBuild(Excluded: excluded, Field: null, Refusal: exception);
         }
-
-        // The program and its evaluator build off the frame thread; a refusal from either reaches AdoptStaticField.
-        m_staticFieldBuild = Task.Run(function: () => new SdfFieldEvaluator(program: builder.Build()));
-        AdoptStaticField();
     }
+    // A finished presentation field build: its evaluator, or the refusal that left none, and the placements it excluded.
+    private readonly record struct StaticFieldBuild(SdfFieldEvaluator? Field, ArgumentException? Refusal, List<(WorldPlacement Placement, string Reason)> Excluded);
     private void ReportFieldExclusion(WorldPlacement placement, string reason) {
         if (m_reportedFieldExclusions.Add(item: (placement.Id, reason))) {
             WorldClientDiagnostics.Report(channel: "world.presentation-field", text: $"excluded placement '{placement.Id}': {reason}");
         }
     }
-    // Publishes the presentation field's evaluator once its build has finished; a build still running is never waited for.
+    // Publishes the presentation field's evaluator once its build has finished, then starts the rebuild that came due
+    // while it ran; a build still running is never waited for.
     private void AdoptStaticField() {
+        StaticFieldBuild built;
+
         if ((m_staticFieldBuild is { } build) && build.IsCompleted) {
             m_staticFieldBuild = null;
+            built = build.GetAwaiter().GetResult();
+        } else {
+            return;
+        }
 
-            try {
-                m_client.PublishStaticField(field: build.GetAwaiter().GetResult());
-            } catch (ArgumentException exception) {
-                m_client.PublishStaticField(field: null);
-                ReportStaticFieldUnavailable(exception: exception);
-            }
+        foreach (var (placement, reason) in built.Excluded) {
+            ReportFieldExclusion(placement: placement, reason: reason);
+        }
+
+        m_client.PublishStaticField(field: built.Field);
+
+        if (built.Refusal is { } refusal) {
+            ReportStaticFieldUnavailable(exception: refusal);
+        }
+
+        if (m_staticFieldOwed) {
+            RebuildStaticField();
         }
     }
     /// <summary>The <see cref="Waiting"/> reason of a tick-locked or converging frame dressed while the presentation query
@@ -589,6 +629,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             definition: m_client.Definition,
             derivedFaces: facets.Faces
         );
+        m_deliveredFaces = facets.Faces;
         m_builtDefinitionRevision = definitionRevision;
         m_builtCodeRevision = codeRevision;
     }
@@ -2212,7 +2253,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
         FitSkyViews?.Invoke(m_frameViews, lighting.Sky, width, height);
         // The next pack holds no body a shadow of this frame's views and lights may show.
         m_animator.ShadowBy(frame: m_dressedFrame, height: height, width: width);
-        m_dressedBeforeField = (m_staticFieldBuild is not null);
+        m_dressedBeforeField = ((m_staticFieldBuild is not null) || m_staticFieldOwed);
 
         return m_dressedFrame;
     }
@@ -2313,7 +2354,6 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             textAt: binder.TextSourceAt
         );
         m_screenTransforms = animator.ScreenSurfaceTransforms(client: client);
-        m_queryColors = new WorldBakedColors(mirror: client.StateMirror);
         m_anchor = anchor;
         m_speech = speech;
         m_overlayFacts = overlayFacts;
