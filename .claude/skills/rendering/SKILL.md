@@ -281,7 +281,8 @@ places (must be zero), and geometry keys. `--pose '1=0,0,0,0,0.05,0,0.9987492'` 
 delta by member slot offset in the group frame and audits against the posed field. Compare both
 envelope extremes. A build cannot prove motion: request a 60-frame presented burst on both backends,
 with motion diagnostics on still parts, as the [moving-blends memo](../../../docs/plans/moving-blends.md) specifies.
-Material rest coordinates remain step 4 and the quiet cost window step 5.
+Opaque and glass shading share `sdfLayerFrame` for material coordinates and lanes.
+The striped-neck burst and quiet cost window remain lead readings.
 
 A retained separate bake group must still ride the newly planned `Slot`, even
 when its instance selector and local geometry stay unchanged. Rigid draw poses

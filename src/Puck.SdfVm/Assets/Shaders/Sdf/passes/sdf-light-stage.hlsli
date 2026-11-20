@@ -132,7 +132,8 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, SdfMeshHit meshHit, float3 
             float3 layerNormal;
             float3 layerRay;
             float4 frameRotation;
-            sdfLayerFrame(s.frameSlot, surfacePoint, normal, p.rayDirection, layerPoint, layerNormal, layerRay, frameRotation);
+            float4 lanes;
+            sdfLayerFrame(meshHit, s.frameSlot, surfacePoint, normal, p.rayDirection, layerPoint, layerNormal, layerRay, frameRotation, lanes);
             // The paints draw on the albedo before the rest of the material is loaded, so none of it is live across their
             // shape dispatch.
             uint paintFirst;
@@ -150,7 +151,7 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, SdfMeshHit meshHit, float3 
 
             shadeMaterial.albedo = paintedAlbedo;
             SdfShadeStamp shadeStamp = sdfShadeStamp(shadeMaterial, surfacePoint, layerPoint, normal, p.rayDirection,
-                s.curvature, p.pixelFootprint * s.t, s.lanes, 0.0, 0.0, frameRotation, s.frameSlot, meshHit);
+                s.curvature, p.pixelFootprint * s.t, lanes, 0.0, 0.0, frameRotation, s.frameSlot, meshHit);
             sdfShadeSet_paint_coverage(shadeStamp, paintCoverage);
             float revealed;
             // A program's surface phase replaces the material layers; a program that omits it (the standard's `cel`, which
@@ -162,12 +163,12 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, SdfMeshHit meshHit, float3 
                 revealed = 0.0;
 #else
                 applyInset(layerPoint, layerNormal, layerRay, shadeMaterial);
-                applyWeathering(layerPoint, layerNormal, normal.y, s.curvature, p.pixelFootprint * s.t, s.lanes, shadeMaterial);
+                applyWeathering(layerPoint, layerNormal, normal.y, s.curvature, p.pixelFootprint * s.t, lanes, shadeMaterial);
                 normal = sdfShadeFlow(surfacePoint, normal, layerPoint, layerNormal, frameRotation, s.frameSlot, meshHit, p.pixelFootprint * s.t,
-                    s.lanes, 0.0, shadeMaterial, revealed);
+                    lanes, 0.0, shadeMaterial, revealed);
 #endif
             }
-            sdfApplyEmissiveLane(s.lanes, shadeMaterial);
+            sdfApplyEmissiveLane(lanes, shadeMaterial);
             sdfShadeSurfaceInputs(shadeStamp, shadeMaterial, normal, revealed);
             float4 shadowMeasured = float4(1.0, 1.0, 1.0, 1.0);
             if (sdfShadeBound(shadeBinding) && !worldSoftShadowsDisabled()) {

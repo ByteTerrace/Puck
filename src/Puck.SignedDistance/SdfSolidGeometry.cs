@@ -52,6 +52,7 @@ public static class SdfSolidGeometry {
     );
     // The turn that carries an extruded profile's depth axis (Z) onto a primitive's height (Y), its profile plane onto XZ.
     private static readonly Quaternion EllipticCylinderTurn = Quaternion.CreateFromAxisAngle(axis: Vector3.UnitX, angle: (MathF.PI / 2f));
+    private static readonly Quaternion SpheroidTurnToX = Quaternion.CreateFromAxisAngle(axis: Vector3.UnitZ, angle: (-MathF.PI / 2f));
     private static readonly Vector3 EllipsoidRadii = new(
         x: 1f,
         y: 1f,
@@ -474,10 +475,11 @@ public static class SdfSolidGeometry {
     /// dimensions — <paramref name="scale"/> must be uniform for a Sweep (refused otherwise, by name) and is baked
     /// as one multiplier onto every one of the curve's lengths, exactly as a uniform scale bakes onto every other
     /// primitive's own unit dimensions via the <see cref="SdfProgramBuilder.Scale"/> transform.</param>
+    /// <param name="contact">Whether the primitive is emitted for authoritative fixed-point contact.</param>
     public static SdfProgramBuilder AppendScaledPrimitive(SdfProgramBuilder chain, SdfSolidPrimitive type, Vector3 scale,
         int material, SdfBlendOp blend = SdfBlendOp.Union, float smooth = 0f, float taper = 0.5f, SdfPrismProfile? profile = null,
         SdfLift lift = SdfLift.Extrude, float rounding = 0f, float chamfer = 0f, bool detail = false, float exponent = SdfProgramBuilder.MinSuperellipsoidExponent,
-        SdfSweepParameters? curve = null) {
+        SdfSweepParameters? curve = null, bool contact = false) {
         ArgumentNullException.ThrowIfNull(chain);
         // A native lowering spells the scale into its shape's dimensions, so a non-finite scale is refused here by name
         // rather than as whichever dimension it reaches first.
@@ -566,6 +568,10 @@ public static class SdfSolidGeometry {
             );
         }
 
+        if (!contact && AppendSpheroid(chain, type, effectiveScale, exponent, material, blend, smooth, detail)) {
+            return chain;
+        }
+
         if (IsUniform(scale: effectiveScale)) {
             return AppendPrimitive(
                 chain: chain.Scale(scale: effectiveScale),
@@ -614,6 +620,36 @@ public static class SdfSolidGeometry {
                 type: type
             );
     }
+    // The revolution axis carries the odd radius. The existing ellipse formula supplies both render readers.
+    private static bool AppendSpheroid(SdfProgramBuilder chain, SdfSolidPrimitive type, Vector3 scale, float exponent, int material, SdfBlendOp blend, float smooth, bool detail) {
+        if (type != SdfSolidPrimitive.Sphere && type != SdfSolidPrimitive.Ellipsoid &&
+            (type != SdfSolidPrimitive.Superellipsoid || exponent != SdfProgramBuilder.MinSuperellipsoidExponent)) {
+            return false;
+        }
+
+        var radii = (((type == SdfSolidPrimitive.Sphere) ? new Vector3(SphereRadius) : EllipsoidRadii) * scale);
+        if (IsUniform(scale: radii)) {
+            return false;
+        }
+
+        float radial;
+        float axial;
+        if (radii.X == radii.Z) {
+            (radial, axial) = (radii.X, radii.Y);
+        } else if (radii.Y == radii.Z) {
+            (radial, axial) = (radii.Y, radii.X);
+            chain = chain.Rotate(rotation: SpheroidTurnToX);
+        } else if (radii.X == radii.Y) {
+            (radial, axial) = (radii.X, radii.Z);
+            chain = chain.Rotate(rotation: EllipticCylinderTurn);
+        } else {
+            return false;
+        }
+
+        _ = chain.Ellipse(semiX: radial, semiY: axial, lift: SdfLift.Revolve, liftAmount: 0f, material: material, blend: blend, smooth: smooth, detail: detail);
+        return true;
+    }
+
     /// <summary>Appends a primitive with its scale spelled into its own dimensions, never riding a
     /// <see cref="SdfProgramBuilder.Scale"/> transform: the arms <see cref="AppendScaledPrimitive"/> takes at a non-uniform
     /// scale, callable at any scale. A box packs its scaled half-extents (or a chamfered rectangle when it is chamfered),
@@ -667,8 +703,7 @@ public static class SdfSolidGeometry {
             round: boxRound,
             smooth: smooth
         ),
-            // A non-uniformly scaled Sphere or Ellipsoid bakes its radii into the exact exponent-2 superellipsoid gauge:
-            // 1-Lipschitz at any eccentricity, so it needs no step clamp and no field scope.
+            // The exponent-2 gauge for a triaxial ellipsoid or a fixed contact read is 1-Lipschitz at any eccentricity.
             SdfSolidPrimitive.Sphere => chain.Superellipsoid(
             blend: blend,
             detail: detail,
@@ -782,10 +817,9 @@ public static class SdfSolidGeometry {
     /// <returns>The finite local bounds, or the unbounded marker for <see cref="SdfSolidPrimitive.Plane"/>.</returns>
     public static SdfSolidBounds GetLocalBounds(SdfSolidPrimitive type) {
         return type switch {
-            // The exact ellipse builder nudges a unit circle's Y radius by 1e-4 to avoid its degeneracy.
             SdfSolidPrimitive.Prism => new(
             Center: Vector3.Zero,
-            HalfExtents: new Vector3(value: 1.0001f)
+            HalfExtents: Vector3.One
         ),
             // The box's faces sit at its half-extents and an authored rounding is inset from them, so the bound is the
             // box itself: the analytic contact provider collides a box as exactly this extent times its scale.
@@ -1029,17 +1063,13 @@ public static class SdfSolidGeometry {
 
         var up = Support(axis: Vector3.UnitY, lift: lift, scale: scale, type: type);
         var down = Support(axis: -Vector3.UnitY, lift: lift, scale: scale, type: type);
-        // A Prism's support reads its profile's canonical unit extent; the ellipse profile's builder nudges a unit
-        // circle's radius by 1e-4 past it (GetLocalBounds and Reach carry the same factor), which a box must hold.
-        var nudge = ((type == SdfSolidPrimitive.Prism) ? 1.0001f : 1f);
-
         return new SdfSolidBounds(
             Center: new Vector3(x: 0f, y: (0.5f * (up - down)), z: 0f),
-            HalfExtents: (new Vector3(
+            HalfExtents: new Vector3(
                 x: Support(axis: Vector3.UnitX, lift: lift, scale: scale, type: type),
                 y: (0.5f * (up + down)),
                 z: Support(axis: Vector3.UnitZ, lift: lift, scale: scale, type: type)
-            ) * nudge)
+            )
         );
     }
     /// <summary>A primitive's dilation gain per local axis: how far, per unit of <c>d</c>, the zero set of its emitted field
@@ -1328,15 +1358,14 @@ public static class SdfSolidGeometry {
         var magnitude = EffectiveScale(scale: scale);
 
         // A revolved prism has no unit reach to scale: scale.z is the radial offset the profile sits at, so the
-        // farthest surface point is (offset + radial extent) out and (axial extent) up. The 1.0001 factor is the
-        // ellipse profile's own circle-degeneracy nudge, carried here so one bound covers every profile kind.
+        // farthest surface point is (offset + radial extent) out and (axial extent) up.
         if (
             (type == SdfSolidPrimitive.Prism) &&
             (lift == SdfLift.Revolve)
         ) {
             return new Vector2(
-                x: (MathF.Abs(x: scale.Z) + (magnitude.X * 1.0001f)),
-                y: (magnitude.Y * 1.0001f)
+                x: (MathF.Abs(x: scale.Z) + magnitude.X),
+                y: magnitude.Y
             ).Length();
         }
 
@@ -1357,7 +1386,7 @@ public static class SdfSolidGeometry {
             )
         );
         var reach = type switch {
-            SdfSolidPrimitive.Prism => (MathF.Sqrt(x: 3f) * 1.0001f),
+            SdfSolidPrimitive.Prism => MathF.Sqrt(x: 3f),
             SdfSolidPrimitive.Box => BoxHalfExtents.Length(),
             SdfSolidPrimitive.Torus => (TorusMajor + TorusMinor),
             SdfSolidPrimitive.Cylinder => MathF.Sqrt(x: ((CylinderRadius * CylinderRadius) + (CylinderHalfHeight * CylinderHalfHeight))),

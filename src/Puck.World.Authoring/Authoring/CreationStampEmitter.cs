@@ -177,6 +177,7 @@ public static partial class CreationStampEmitter {
             shape: shape,
             scale: shapeScale,
             material: material,
+            contact: true,
             detail: detail
         )
             .Dilate(radius: margin)
@@ -462,7 +463,8 @@ public static partial class CreationStampEmitter {
                         scale: shapeScale,
                         material: materialFor(arg: shape),
                         blend: blend,
-                        smooth: smooth
+                        smooth: smooth,
+                        contact: true
                     );
 
                     continue;

@@ -1971,7 +1971,7 @@ public sealed partial class SdfMeshPathBake {
             var factor = FactorOf(final: final);
 
             if (factor >= 2) {
-                points = final.Sampled.Refine(factor: factor, regions: final.Regions);
+                points = final.Sampled.Refine(factor: factor, regions: final.Regions, thinFactor: ThinSplit(final: final, factor: factor));
             }
             if (points.Length == 0) {
                 points = ChooseCrossingPoints(final: final);
@@ -2032,11 +2032,23 @@ public sealed partial class SdfMeshPathBake {
     // buffers, so an admitted group's charges stay within its reservation.
     private const long WorkspaceBytesPerSample = 96;
 
+    // Let detected sheets use a finer split when a part's ordinary grid still leaves room above the bake's fine spacing.
+    // A finer virtual grid also subdivides transition cells, so keep a lattice already near that spacing on its own grid.
+    private static int ThinSplit(FinalLattice final, int factor) {
+        var cell = final.Lattice.Cell;
+        var shortest = MathF.Min(x: cell.X, y: MathF.Min(x: cell.Y, y: cell.Z));
+
+        while ((factor <= (MaxDetailRefinement / 2)) && (shortest >= (2 * factor * FineCell))) { factor *= 2; }
+
+        return factor;
+    }
+
     // A final lattice's simultaneous peak: its own samples, and the fine samples its refinement measures, at most the
     // bound its spacing and factor allow (SdfSampledLattice.FineSampleBound) until the refinement names them.
     private static long PeakOf(FinalLattice final, int? fineSamples = null) {
         var (x, y, z) = final.Lattice.Dims;
-        var fine = (fineSamples ?? SdfSampledLattice.FineSampleBound(factor: FactorOf(final: final), samplesX: x, samplesY: y, samplesZ: z));
+        var factor = FactorOf(final: final);
+        var fine = (fineSamples ?? SdfSampledLattice.FineSampleBound(factor: ThinSplit(final: final, factor: factor), samplesX: x, samplesY: y, samplesZ: z));
 
         return checked(((((long)final.Lattice.Samples) + fine) * WorkspaceBytesPerSample));
     }
