@@ -101,7 +101,7 @@ public sealed class WorldWaitTickExactnessLawTests {
             Source = new TextCommandSource(registry: registry);
             Pump = new FixedStepPump(
                 beforeStep: (drainBeforeEveryStep
-                    ? Source.Collect
+                    ? _ => Source.Collect()
                     : null
                 ),
                 captureOriginTicks: 0UL,

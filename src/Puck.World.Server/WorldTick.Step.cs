@@ -144,7 +144,9 @@ public sealed partial class WorldTick {
 
     private readonly List<WorldPendingOp.Mutate> m_cellBurst = [];
 
-    internal bool ExecutionInterrupted { get; private set; }
+    /// <summary>Gets whether this authority froze mid-tick (a guest timed out, or a held tick passed its stall) and steps
+    /// no further; it recovers only from its last durable checkpoint.</summary>
+    public bool ExecutionInterrupted { get; private set; }
 
     private bool ApplyPendingOp(WorldPendingOp op, ulong tick) {
         var ok = op switch {
@@ -233,7 +235,7 @@ public sealed partial class WorldTick {
     /// a paused world shows the state it was moved to. The seek withholds every delivery of its span
     /// (<see cref="WorldOutputHub.WithholdsTimeline"/>), so this is the one delivery a viewer observes per seek.</summary>
     internal void PresentRestoredTimeline() {
-        lock (Host.AuthorityGate) {
+        using (Host.EnterAtTickBoundary()) {
             Host.ThrowIfTickPending();
             Host.Document.MarkDefinitionDeliveryPending();
             Host.Document.DeliverPending();
@@ -264,18 +266,16 @@ public sealed partial class WorldTick {
     // Submit and a socket worker's gated authority operation both reach this queue, and a drain skipped because a
     // different thread held the guard would leave an already-applied population change (an admitted arrival)
     // standing without the grant rows its own event carries. lock is reentrant, so an authority operation that
-    // dispatches from inside the gate re-enters here without deadlocking.
+    // dispatches from inside the gate re-enters here without deadlocking. An entry that arrives while a tick is held
+    // across wait slices and could not wait for it (WorldServer.EnterAtTickBoundary) stays queued: the next RunTick, or
+    // a paused world's DrainAdministrative, applies it at the boundary.
     private void EnqueueOrdered(WorldOrderedEntry entry) {
-        lock (Host.AuthorityGate) {
+        using (Host.EnterAtTickBoundary()) {
             if (
                 (entry is WorldOrderedEntry.Submission retiringSubmission) &&
                 Host.AuthorityRetiring
             ) {
                 retiringSubmission.Completion?.Invoke(Host.RetiredRefusal());
-                return;
-            }
-            if ((BlockedDetail is { } pending) && (entry is WorldOrderedEntry.Submission submission)) {
-                submission.Completion?.Invoke(new WorldSubmissionResult.Refusal("world.authority.pending", $"authority tick is incomplete while waiting for {pending}"));
                 return;
             }
             m_ordered.Enqueue(item: entry);
@@ -986,6 +986,7 @@ public sealed partial class WorldTick {
             Host.MutationBudget.BeginTick();
             // A paused or stopped world still ends a session whose observer faulted or detached itself.
             Host.EndObserverEndedSessions();
+            DrainOrdered();
             Host.Extensions.Drain();
             var applied = DrainPendingOps(tick: m_lastCompletedTick);
             Host.FlushMutationJournal?.Invoke();
@@ -1005,7 +1006,12 @@ public sealed partial class WorldTick {
     private PendingTick m_pendingTick;
     private bool m_resumingTick;
     private volatile TickBlock? m_tickBlock;
-    private sealed record TickBlock(WaitReason Reason, ulong PreviousEngineTicks, string Detail);
+    // Owner is the thread that ran the slice the tick went pending on: the one thread that resumes it, and so the one
+    // thread that must never wait for its boundary.
+    private sealed record TickBlock(WaitReason Reason, ulong PreviousEngineTicks, string Detail, int Owner);
+    private static readonly WaitReason BoundaryWait = new(Subsystem: "authority", WaitsFor: "the pending tick's boundary");
+    // Pulsed whenever a held tick settles or freezes; waited on by AwaitBoundary without the authority gate.
+    private readonly object m_boundary = new();
 
     private struct PendingTick {
         public FixedStepContext Context;
@@ -1020,6 +1026,26 @@ public sealed partial class WorldTick {
     private bool ResumingOnOwner => Host.AuthorityGate.IsHeldByCurrentThread && m_resumingTick;
     internal WaitReason? BlockedReason => PendingReason is { } reason && !ResumingOnOwner ? reason : null;
     internal string? BlockedDetail => m_tickBlock is { } block && !ResumingOnOwner ? block.Detail : null;
+    /// <summary>Gets whether the calling thread, entering the authority gate, waits for the held tick's boundary: a tick
+    /// is held across wait slices, it can still settle, and the calling thread is not the one that resumes it.</summary>
+    internal bool AwaitsBoundary => m_tickBlock is { } block && !ExecutionInterrupted && (block.Owner != Environment.CurrentManagedThreadId);
+
+    /// <summary>Blocks the calling thread, which must not hold the authority gate, until the held tick settles or
+    /// freezes, for at most the tick stall.</summary>
+    /// <returns><see langword="false"/> when the stall passed with the tick still held.</returns>
+    internal bool AwaitBoundary() {
+        var deadline = WaitDeadline.In(TickStall);
+        lock (m_boundary) {
+            while ((m_tickBlock is not null) && !ExecutionInterrupted) {
+                if (HostWaits.OnCondition(deadline: deadline, monitor: m_boundary, reason: in BoundaryWait) != WaitOutcome.Completed) { return false; }
+            }
+        }
+        return true;
+    }
+
+    private void SignalBoundary() {
+        lock (m_boundary) { Monitor.PulseAll(obj: m_boundary); }
+    }
 
     /// <summary>Advances the authoritative world by one exact host tick: run every mounted addon's guest code first (see
     /// <see cref="IWorldAddonHost.TickAddons"/>, which applies nothing) → drain the buffered live edits (mutations,
@@ -1085,7 +1111,7 @@ public sealed partial class WorldTick {
                 if (PendingReason != reason) {
                     var partitions = (reason == Puck.Hosting.Jobs.JobPool.JoinWait) ? Host.Jobs?.DescribeHeldPartitions() : null;
                     var detail = string.IsNullOrEmpty(partitions) ? reason.ToString() : $"{reason} (held partitions {partitions})";
-                    m_tickBlock = new TickBlock(reason, m_pendingTick.PreviousEngineTicks, detail);
+                    m_tickBlock = new TickBlock(reason, m_pendingTick.PreviousEngineTicks, detail, Environment.CurrentManagedThreadId);
                 }
                 if (m_pendingTick.Stall.HasPassed) { FreezeStalledTick(reason); }
                 return pending;
@@ -1095,10 +1121,12 @@ public sealed partial class WorldTick {
         } finally {
             m_resumingTick = false;
             if (!held) {
+                var settled = m_tickBlock is not null;
                 m_pendingTick = default;
                 m_tickBlock = null;
                 foreach (var scope in scopes) { scope.CloseDrawInput(); }
                 Host.LeaveArenaTick();
+                if (settled) { SignalBoundary(); }
             }
         }
     }
@@ -1106,6 +1134,7 @@ public sealed partial class WorldTick {
     private void FreezeStalledTick(WaitReason reason) {
         ExecutionInterrupted = true;
         Host.Output.Narrate("world.tick", $"[world.tick {m_pendingTick.Context.Tick + 1}: authority stalled waiting for {m_tickBlock?.Detail ?? reason.ToString()}]");
+        SignalBoundary();
     }
 
     private WaitReason? ResumeTick(WaitDeadline deadline) {

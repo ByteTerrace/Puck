@@ -44,7 +44,7 @@ public sealed partial class WorldServer {
     // a revoked grant refuse here, the same decision the query door makes, so no read answers a session that the
     // query door refuses, and an admitted session reads at its own delivery ceiling.
     internal WorldRecipientView ReadView(Principal? recipient) {
-        lock (AuthorityGate) {
+        using (EnterAtTickBoundary()) {
             ThrowIfTickPending();
             return ReadSettledView(recipient);
         }

@@ -99,6 +99,10 @@ internal sealed class WorldHostStep(WorldServer server, WorldReplayTape replayTa
     private StepPhase m_phase;
     private bool m_stepsBoot;
 
+    /// <summary>Gets whether the step in progress can no longer finish: the boot authority froze at a stall while its
+    /// tick was held. A row that freezes is skipped, so only the boot phase can hold the step for good.</summary>
+    public bool StepInterrupted => (m_phase == StepPhase.Boot) && m_server.Tick.ExecutionInterrupted;
+
     /// <summary>Runs one fixed step, resuming after the next control phase if a dependency exceeds the slice.</summary>
     /// <param name="context">The pump's tick context; only its step width reaches the server.</param>
     /// <param name="afterInstances">The shell's own post-step, run after every instance has stepped and before the
