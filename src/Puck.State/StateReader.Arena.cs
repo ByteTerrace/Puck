@@ -101,11 +101,10 @@ public static partial class StateReader {
         var time = ArenaTime.At(tick: tick, engineTick: engineTick);
         var cursor = 0; var best = -1; var bestValue = 0L; string? bestKey = null;
         while (arena.TryNextCell(rowOrdinal: handle.Ordinal, cursor: ref cursor, key: out var key)) {
-            var name = arena.Keys[key].Value;
-            if (!TryParseCandidateIndex(key: name, index: out var index) || !isCandidateIndex(index, state) ||
+            if (!arena.Keys.TryCandidateIndex(key: key, index: out var index) || !isCandidateIndex(index, state) ||
                 !arena.TryReadLiveNumber(rowOrdinal: handle.Ordinal, key: key, time: in time, value: out var raw)) { continue; }
             if ((best < 0) || (op == StateReduceOp.Max ? raw > bestValue : raw < bestValue) || ((raw == bestValue) && (index < best))) {
-                best = index; bestValue = raw; bestKey = name;
+                best = index; bestValue = raw; bestKey = arena.Keys[key].Value;
             }
         }
         return bestKey;

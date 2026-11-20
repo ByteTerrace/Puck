@@ -144,6 +144,8 @@ public sealed partial class WorldServer {
     private bool m_consumersOwed;
     private bool m_driveGateOwed;
     private bool m_fieldsOwed;
+    // Open DeferStateConsumers scopes; publications settle the consumers only while none is open.
+    private int m_consumerDeferrals;
     // Document rows occupy the catalog's first ordinals, so this bounds every walk that only the exported document
     // depends on — a slot lane's write moves its own row's version and nothing the document carries.
     private int m_documentRowCount;
@@ -483,8 +485,28 @@ public sealed partial class WorldServer {
             m_driveGateOwed |= proposal.DriveGate;
             m_consumersOwed = true;
         }
-        if (reconcile) { SettleStateConsumers(); }
+        if (reconcile && (m_consumerDeferrals == 0)) { SettleStateConsumers(); }
         return proposal.Moved;
+    }
+
+    /// <summary>Holds the state consumers (drive gates, field inputs, inhabit counts) unsettled across a run of
+    /// publications until the returned scope is disposed, which settles everything those publications owed once. A
+    /// writer that publishes many small writes in one pass (a field lattice's reactions) opens one so each write
+    /// commits and publishes without re-deriving the consumers between writes; nothing inside the scope may read a
+    /// consumer it expects one of its own writes to have moved. Scopes nest; the outermost disposal settles.</summary>
+    /// <returns>The scope to dispose when the run of publications ends.</returns>
+    internal StateConsumerDeferral DeferStateConsumers() {
+        m_consumerDeferrals++;
+        return new StateConsumerDeferral(server: this);
+    }
+
+    /// <summary>A run of publications whose state consumers settle once, at disposal (<see cref="DeferStateConsumers"/>).</summary>
+    /// <param name="server">The server whose consumers the scope holds.</param>
+    internal readonly ref struct StateConsumerDeferral(WorldServer server) {
+        /// <summary>Ends the scope, settling the consumers when it is the outermost one.</summary>
+        public void Dispose() {
+            if (--server.m_consumerDeferrals == 0) { server.SettleStateConsumers(); }
+        }
     }
 
     private void SettleStateConsumers() {

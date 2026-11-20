@@ -13,6 +13,31 @@ public sealed partial class WorldTick {
         public bool Swept;
         public WorldPlacement? Template;
         public ulong WorldSeed;
+        // The dealt and variant rows' ordinals in the catalog IndexDealTemplates resolved them against, -1 when absent.
+        public int RowOrdinal;
+        public int VariantOrdinal;
+    }
+    // The dealt templates of the placement list the sweep last indexed, in placement order, each with its memo, and
+    // the list and catalog their indices and ordinals were resolved against.
+    private readonly List<(int Index, DealMemo Memo)> m_dealTemplates = [];
+    private IReadOnlyList<WorldPlacement>? m_dealTemplatesOf;
+    private StateCatalog? m_dealTemplatesCatalog;
+
+    private void IndexDealTemplates(IReadOnlyList<WorldPlacement> placements, StateCatalog catalog) {
+        if (ReferenceEquals(objA: m_dealTemplatesOf, objB: placements) && ReferenceEquals(objA: m_dealTemplatesCatalog, objB: catalog)) { return; }
+        m_dealTemplatesOf = placements;
+        m_dealTemplatesCatalog = catalog;
+        m_dealTemplates.Clear();
+        for (var index = 0; (index < placements.Count); index++) {
+            if (placements[index] is not { Deal: { } deal } template) { continue; }
+            if (!m_dealMemos.TryGetValue(key: template.Id, value: out var memo)) {
+                memo = new DealMemo();
+                m_dealMemos[template.Id] = memo;
+            }
+            memo.RowOrdinal = (catalog.TryResolve(StateLane.Document, deal.Row, out var rowHandle) ? rowHandle.Ordinal : -1);
+            memo.VariantOrdinal = (((deal.Variants is { } variants) && catalog.TryResolve(StateLane.Document, variants.Row, out var variantHandle)) ? variantHandle.Ordinal : -1);
+            m_dealTemplates.Add(item: (index, memo));
+        }
     }
     // What one template projection moved this tick, narrated after installation.
     private readonly record struct DealReport(string Template, string Row, int Cells, int Offsets, int Added, int Removed, int Replaced, int Overflow, string? Refused = null);
@@ -208,29 +233,19 @@ public sealed partial class WorldTick {
 
         m_dealChanges.Clear();
         m_dealReports.Clear();
+        IndexDealTemplates(placements: placements, catalog: Host.Arena.Catalog);
 
-        for (var index = 0; (index < placements.Count); index++) {
+        foreach (var (index, memo) in m_dealTemplates) {
             var template = placements[index];
-
-            if (template.Deal is not { } deal) {
-                continue;
-            }
+            var deal = template.Deal!;
 
             templates++;
 
             var arena = Host.Arena;
-            var rowOrdinal = (arena.Catalog.TryResolve(StateLane.Document, deal.Row, out var rowHandle) ? rowHandle.Ordinal : -1);
-            var variantOrdinal = (((deal.Variants is { } variants) && arena.Catalog.TryResolve(StateLane.Document, variants.Row, out var variantHandle)) ? variantHandle.Ordinal : -1);
+            var rowOrdinal = memo.RowOrdinal;
+            var variantOrdinal = memo.VariantOrdinal;
             var rowVersion = ((rowOrdinal < 0) ? 0UL : arena.RowVersion(rowOrdinal: rowOrdinal));
             var variantVersion = ((variantOrdinal < 0) ? 0UL : arena.RowVersion(rowOrdinal: variantOrdinal));
-
-            if (!m_dealMemos.TryGetValue(
-                key: template.Id,
-                value: out var memo
-            )) {
-                memo = new DealMemo();
-                m_dealMemos[template.Id] = memo;
-            }
 
             if (
                 !projectionMoved && memo.Swept &&

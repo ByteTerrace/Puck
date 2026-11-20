@@ -179,9 +179,9 @@ public sealed partial class WorldRuleHost {
             rowOrdinal: rowOrdinal
         )) {
             if (
-                StateReader.TryParseCandidateIndex(
+                Host.Arena.Keys.TryCandidateIndex(
                 index: out var index,
-                key: Host.Arena.Keys[key]
+                key: key
             )
             ) {
                 into.Add(item: index);
@@ -206,9 +206,9 @@ public sealed partial class WorldRuleHost {
             rowOrdinal: rowOrdinal
         )) {
             if (
-                !StateReader.TryParseCandidateIndex(
+                !Host.Arena.Keys.TryCandidateIndex(
                 index: out var index,
-                key: Host.Arena.Keys[key]
+                key: key
             ) ||
                 (Host.Body(index: index) is null) ||
                 !Host.ReadArenaCell(

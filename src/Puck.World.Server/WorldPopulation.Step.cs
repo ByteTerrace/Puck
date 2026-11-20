@@ -10,6 +10,13 @@ public sealed partial class WorldPopulation {
     /// <summary>Gets the latest peer-advance cadence work. Counts only bodies whose kit authors a nonzero cadence.</summary>
     public WorldAutonomyStatistics AutonomyStatistics { get; private set; }
 
+    // The field-input pass (SampleFieldInputs): each region's travel resistance this pass, the pass counter, and the
+    // pass each slot last sampled in, so a body the pass skipped samples before it advances. Derived each tick from the
+    // regions and state; never simulation state.
+    private FixedQ4816[] m_regionResistance = [];
+    private ulong m_fieldInputPass;
+    private ulong[] m_fieldInputPasses = [];
+
     private static void ApplyVariation(Entry entry, CompiledBodyProducer producer, FixedQ4816 phase, FixedQ4816 weaveUnit, FixedQ4816 activityUnit, bool resetPhase) {
         entry.ProducerState.WeaveFrequency = (producer.Scalar(parameter: BodyProducerParameter.WeaveFrequencyBase) + (producer.Scalar(parameter: BodyProducerParameter.WeaveFrequencyRange) * weaveUnit));
 
@@ -143,6 +150,9 @@ public sealed partial class WorldPopulation {
                     minimumDot: fixedSource.MinimumDot,
                     distanceSquared: out var squared
                 ) ||
+                    // Nearer first: a candidate no nearer than the best so far loses whatever its sight line, so only
+                    // a nearer one pays the line-of-sight query.
+                    (squared >= candidate.DistanceSquared) ||
                     (sensed.RequiresLineOfSight && !HasLineOfSight(
                     from: self,
                     fromOrientation: (frozen
@@ -157,13 +167,11 @@ public sealed partial class WorldPopulation {
                     continue;
                 }
 
-                if (squared < candidate.DistanceSquared) {
-                    candidate = new BodySensorTarget(
-                        DistanceSquared: squared,
-                        Index: index,
-                        Position: position
-                    );
-                }
+                candidate = new BodySensorTarget(
+                    DistanceSquared: squared,
+                    Index: index,
+                    Position: position
+                );
             }
         } else if (targetSource?.Source is BodyTargetSource.CurveFollow) {
             var fixedSource = targetSource.Value;
@@ -549,6 +557,15 @@ public sealed partial class WorldPopulation {
             Z: (basePoint.Z + scatterZ)
         );
     }
+    // The named producer in a kit's table, looked up again only when the table or the name changes.
+    private static CompiledBodyProducer? ResolveProducer(Entry entry, string name, IReadOnlyDictionary<string, CompiledBodyProducer> table) {
+        if (!ReferenceEquals(objA: entry.ProducerLookupTable, objB: table) || !ReferenceEquals(objA: entry.ProducerLookupName, objB: name)) {
+            entry.ProducerLookupTable = table;
+            entry.ProducerLookupName = name;
+            entry.ProducerLookup = (table.TryGetValue(key: name, value: out var found) ? found : null);
+        }
+        return entry.ProducerLookup;
+    }
     // Run the named producer before motion. Live and Idle name no producer.
     private void StageProducer(Entry entry, WorldBody body, int index, ulong stepTicks) {
         body.SetFlockMovementDomain(domain: null);
@@ -556,10 +573,7 @@ public sealed partial class WorldPopulation {
 
         if (
             (body.Source.ProducerName is not { } name) ||
-            !m_kits[kitIndex].Producers.TryGetValue(
-            key: name,
-            value: out var producer
-        )
+            (ResolveProducer(entry: entry, name: name, table: m_kits[kitIndex].Producers) is not { } producer)
         ) {
             // Leaving the producer lane is itself a producer transition. Do not let a prior route (or curve
             // station) remain observable through rule facts while the body is idle, live-driven, or names a
@@ -646,32 +660,51 @@ public sealed partial class WorldPopulation {
         );
     }
 
-    /// <summary>Samples every active body's medium free surface at its coupled lattice cell (the same coupling
-    /// <see cref="Puck.Physics.Fields.FieldLattice.TryBodyCellOf"/> resolves) and pushes it to the body — <see langword="null"/>
-    /// for a body outside the lattice or over a zero-value medium cell. Called once per tick, before
-    /// <see cref="AdvanceSimulated"/>/<see cref="AdvanceSeats"/>, so a medium hold's phase-4 law reads this
-    /// tick's surface rather than a stale one. A no-op world without a <c>fields</c> section costs one null
-    /// check.</summary>
-    public void SampleMediumSurfaces() {
-        for (var index = 0; (index < Capacity); index++) {
-            var entry = m_entries[index];
-
-            if (
-                !entry.Active ||
-                (entry.Body is not { } body)
-            ) {
-                continue;
-            }
-
-            Puck.Physics.Fields.FixedFieldSurface? surface = null;
-
-            for (var regionIndex = 0; (regionIndex < m_fieldRegions.Length); regionIndex++) {
-                var region = m_fieldRegions[regionIndex];
-
-                if (region.Lattice.MediumSurface(position: body.FixedPosition) is { } candidate) { surface = candidate; break; }
-            }
-            body.SetMediumSurface(surface: surface);
+    /// <summary>Samples what each body that can advance this tick reads of the field regions, before
+    /// <see cref="AdvanceSimulated"/>/<see cref="AdvanceSeats"/>: its medium free surface at its coupled lattice cell
+    /// (the same coupling <see cref="Puck.Physics.Fields.FieldLattice.TryBodyCellOf"/> resolves; <see langword="null"/>
+    /// outside every medium or over a zero-value medium cell), so a medium hold's law reads this tick's surface, and
+    /// the travel resistance of the first region containing it (zero outside every region). A parked rigid body and an
+    /// idle sleeper read neither while they rest and are skipped; one that wakes this tick samples at its pose then,
+    /// before its first staging (<see cref="EnsureFieldInputs"/>), so no advance reads an answer from an earlier pass.</summary>
+    /// <param name="regionResistance">The travel resistance of each field region this tick, by region index, read once
+    /// per region; a region authoring none reads zero.</param>
+    /// <exception cref="ArgumentException"><paramref name="regionResistance"/> does not hold one value per field
+    /// region.</exception>
+    public void SampleFieldInputs(ReadOnlySpan<FixedQ4816> regionResistance) {
+        if (regionResistance.Length != m_fieldRegions.Length) {
+            throw new ArgumentException(message: "One travel resistance per field region is required.", paramName: nameof(regionResistance));
         }
+        if (m_regionResistance.Length != regionResistance.Length) { m_regionResistance = new FixedQ4816[regionResistance.Length]; }
+        if (m_fieldInputPasses.Length != m_entries.Length) { m_fieldInputPasses = new ulong[m_entries.Length]; }
+        regionResistance.CopyTo(destination: m_regionResistance);
+        m_fieldInputPass++;
+        foreach (var index in m_awakeBodies) {
+            if (m_entries[index].Body is { Asleep: false } body) { SampleBodyFieldInputs(index: index, body: body); }
+        }
+    }
+    // Samples a body this pass skipped (an idle sleeper that woke) before it stages or advances.
+    private void EnsureFieldInputs(int index, WorldBody body) {
+        if ((m_fieldInputPass != 0UL) && (m_fieldInputPasses[index] != m_fieldInputPass)) { SampleBodyFieldInputs(index: index, body: body); }
+    }
+    private void SampleBodyFieldInputs(int index, WorldBody body) {
+        Puck.Physics.Fields.FixedFieldSurface? surface = null;
+        var resistance = FixedQ4816.Zero;
+        var contained = false;
+
+        m_fieldInputPasses[index] = m_fieldInputPass;
+        for (var regionIndex = 0; (regionIndex < m_fieldRegions.Length); regionIndex++) {
+            var lattice = m_fieldRegions[regionIndex].Lattice;
+
+            if ((surface is null) && (lattice.MediumSurface(position: body.FixedPosition) is { } candidate)) { surface = candidate; }
+            if (!contained && lattice.TryCellOf(body.FixedPosition, out _)) {
+                resistance = m_regionResistance[regionIndex];
+                contained = true;
+            }
+            if (contained && (surface is not null)) { break; }
+        }
+        body.SetMediumSurface(surface: surface);
+        body.SetTravelResistance(resistance: resistance);
     }
     /// <summary>Advances every active seat body by one exact simulation tick: a producer-sourced seat gets this tick's
     /// producer image staged first (the same deterministic path as a peer), then the body integrates its submitted
@@ -690,6 +723,7 @@ public sealed partial class WorldPopulation {
     public void AdvanceSeats(ulong tick, ulong stepTicks, ulong stepStartEngineTick, ReadOnlySpan<int> engageProbeOrdinals, Span<bool> engageEdges) {
         for (var slot = 0; (slot < LocalSeatCount); slot++) {
             if (m_entries[slot] is { Active: true, Body: { } body } entry) {
+                EnsureFieldInputs(body: body, index: slot);
                 if (!body.TryBeginOrdinaryAdvance(stepStartEngineTick: stepStartEngineTick)) {
                     engageEdges[slot] = false;
                     continue;
@@ -874,6 +908,7 @@ public sealed partial class WorldPopulation {
             if (player.TryDeferSleepingAdvance(contactFieldVersion: contactFieldVersion)) {
                 continue;
             }
+            EnsureFieldInputs(body: player, index: index);
 
             var kit = m_kits[KitIndex(index: index)];
             var locallyAutonomous = (
