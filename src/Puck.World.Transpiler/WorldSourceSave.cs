@@ -221,7 +221,6 @@ public static class WorldSourceSave {
         WorldDefinitionFileSource.TryComposeChainWithImports(
             catalog: catalog,
             catalogFingerprint: catalogFingerprint,
-            chainBytes: out _,
             composed: out composed,
             origins: (origins ?? new WorldDocumentOrigins()),
             reason: out reason,

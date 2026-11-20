@@ -343,7 +343,6 @@ public sealed class BrowserWorkspace {
         }
 
         var composed = (WorldCompileSession.Shared.TryCompose(
-            chainBytes: out _,
             composed: out var tree,
             reason: out _,
             rootBytes: CanonicalJsonDocument.Serialize(node: root),

@@ -3000,12 +3000,10 @@ The edit loop:
   95 MB document); step 4's delta from the session is what removes it. The
   hundreds of milliseconds the earlier trace read on the adopting tick
   predate the keyed delta and need a new reading.
-- A shading edit still runs the whole validator over its candidate and
-  canonicalizes and digests the edited creation twice; reload's sender
-  serializes and diffs whole trees and the server validates the whole
-  candidate, off the tick but in proportion to the document, not the edit.
-  Capture the edit's allocations, then narrow the validation as
-  `TryValidateTouchedStateRows` narrows a state write.
+- A shading edit validates its one creation (`WorldDefinitionValidator.TryValidateChange`)
+  but still canonicalizes and digests the edited creation twice, and reload's
+  sender serializes and diffs whole trees, in proportion to the document, not
+  the edit. Capture the edit's allocations.
 - Every other mutation composes over `MaterializeArena`, which exports every
   document row anew. Export only the rows whose arena version moved, and
   reload a same-catalog arena in place (`StateCatalog.MatchesShape` answers

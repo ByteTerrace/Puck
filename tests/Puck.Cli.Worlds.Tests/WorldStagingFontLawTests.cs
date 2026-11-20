@@ -21,7 +21,7 @@ public sealed class WorldStagingFontLawTests {
         var firstOrigins = new WorldDocumentOrigins();
 
         Assert.True(condition: WorldCompileSession.Shared.TryCompose(rootResolvedPath: path, rootBytes: bytes,
-            composed: out var first, chainBytes: out _, reason: out var reason, origins: firstOrigins), userMessage: reason);
+            composed: out var first, reason: out var reason, origins: firstOrigins), userMessage: reason);
         Assert.True(condition: firstOrigins.TryGetOrigin(value: first!["title"], origin: out var original));
         first!["title"] = "mutated by caller";
 
@@ -30,7 +30,7 @@ public sealed class WorldStagingFontLawTests {
         var secondOrigins = new WorldDocumentOrigins();
 
         Assert.True(condition: WorldCompileSession.Shared.TryCompose(rootResolvedPath: path, rootBytes: bytes,
-            composed: out var second, chainBytes: out _, reason: out reason, origins: secondOrigins), userMessage: reason);
+            composed: out var second, reason: out reason, origins: secondOrigins), userMessage: reason);
         Assert.Equal(expected: "inherited", actual: second!["title"]!.GetValue<string>());
         Assert.True(condition: secondOrigins.TryGetOrigin(value: second!["title"], origin: out var held));
         Assert.Equal(actual: held, expected: original);
@@ -41,7 +41,7 @@ public sealed class WorldStagingFontLawTests {
         var changedOrigins = new WorldDocumentOrigins();
 
         Assert.True(condition: WorldCompileSession.Shared.TryCompose(rootResolvedPath: path, rootBytes: bytes,
-            composed: out var changed, chainBytes: out _, reason: out reason, origins: changedOrigins), userMessage: reason);
+            composed: out var changed, reason: out reason, origins: changedOrigins), userMessage: reason);
         Assert.Equal(expected: "edited source", actual: changed!["title"]!.GetValue<string>());
         Assert.True(condition: changedOrigins.TryGetOrigin(value: changed!["title"], origin: out var edited));
         Assert.Equal(expected: "\"edited source\"", actual: edited.Json);
@@ -138,11 +138,11 @@ public sealed class WorldStagingFontLawTests {
         var bytes = CanonicalJsonDocument.Serialize(node: world);
 
         Assert.True(condition: WorldCompileSession.Shared.TryCompose(rootResolvedPath: rootPath, rootBytes: bytes,
-            composed: out var cached, chainBytes: out _, reason: out var reason), userMessage: reason);
+            composed: out var cached, reason: out var reason), userMessage: reason);
         var origins = new WorldDocumentOrigins();
 
         Assert.True(condition: WorldCompileSession.Shared.TryCompose(rootResolvedPath: rootPath, rootBytes: bytes,
-            composed: out var tracked, chainBytes: out _, reason: out reason, origins: origins), userMessage: reason);
+            composed: out var tracked, reason: out reason, origins: origins), userMessage: reason);
         Assert.True(condition: JsonNode.DeepEquals(node1: cached, node2: tracked));
         var fonts = tracked!["text"]!["fonts"]!.AsArray();
 

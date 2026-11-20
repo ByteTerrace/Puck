@@ -1545,9 +1545,9 @@ public sealed partial class WorldDocument {
             return TryValidateStateMutation(candidate: candidate, mutation: mutation, reason: out reason);
         }
 
-        return (retainCompilation
-            ? WorldDefinitionValidator.TryValidateLocally(compilation: out compilation, definition: candidate, reason: out reason)
-            : WorldDefinitionValidator.TryValidateLocally(definition: candidate, reason: out reason));
+        // Only the units the change reaches are judged (WorldDefinitionValidator.Partitions), so a unit the mutation
+        // does not name, hidden or not, cannot refuse it.
+        return WorldDefinitionValidator.TryValidateChange(after: candidate, before: current, compilation: out compilation, reason: out reason, retainCompilation: retainCompilation);
     }
 
     // A state mutation can only have changed the rows it names, so validation covers those rows and the rows keyed

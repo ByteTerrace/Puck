@@ -22,7 +22,6 @@ public sealed class EmittedNameLawTests {
     // Composes a root beside the tree whose basis is the document `foo`, returning the composed documentId.
     private static (bool Composed, string? DocumentId, string Reason) ComposeFoo(string tree) {
         var composed = WorldCompileSession.Shared.TryCompose(
-            chainBytes: out _,
             composed: out var document,
             reason: out var reason,
             rootBytes: Encoding.UTF8.GetBytes(s: """{ "schema": "puck.world.definition.v1", "basis": "foo" }"""),
@@ -151,7 +150,6 @@ public sealed class EmittedNameLawTests {
         directory.WriteText(name: "worlds/foo.puck", text: (Module + "world north = room(1)\nworld south = room(2)\n"));
 
         var composed = WorldCompileSession.Shared.TryCompose(
-            chainBytes: out _,
             composed: out var document,
             reason: out var reason,
             rootBytes: Encoding.UTF8.GetBytes(s: """{ "schema": "puck.world.definition.v1", "basis": "north" }"""),

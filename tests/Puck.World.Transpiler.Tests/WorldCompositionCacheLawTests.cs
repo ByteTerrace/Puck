@@ -10,9 +10,9 @@ public sealed class WorldCompositionCacheLawTests {
         var work = new WorldBootWork();
         using var attribution = WorldBootWork.Attribute(work: work);
 
-        Assert.True(condition: WorldDefinitionFileSource.TryComposeChainWithImports(
-            source, root, File.ReadAllBytes(path: root), out var composed, out var chain, out var reason, catalogFingerprint: catalog), userMessage: reason);
-        return (composed!.ToJsonString(), WorldDefinitionFileSource.ComputeChainContentHash(chain: chain), work.Read(kind: WorldBootWork.Compositions));
+        Assert.True(condition: WorldDefinitionFileSource.TryComposeChainBytes(
+            catalogFingerprint: catalog, composedJson: out var composed, contentPin: out var pin, reason: out var reason, rootBytes: File.ReadAllBytes(path: root), rootResolvedName: root, source: source), userMessage: reason);
+        return (System.Text.Encoding.UTF8.GetString(bytes: composed!), pin, work.Read(kind: WorldBootWork.Compositions));
     }
 
     [InlineData("root.world.json")]

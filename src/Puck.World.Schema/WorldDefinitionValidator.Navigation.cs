@@ -80,32 +80,32 @@ public static partial class WorldDefinitionValidator {
             }
             RequirePositive(
                 value: domain.CellSize,
-                name: $"{path}.cellSize",
+                name: new Subject(Member: ".cellSize", Path: path),
                 errors: errors
             );
             RequirePositive(
                 value: domain.AgentRadius,
-                name: $"{path}.agentRadius",
+                name: new Subject(Member: ".agentRadius", Path: path),
                 errors: errors
             );
             RequirePositive(
                 value: domain.ArrivalDistance,
-                name: $"{path}.arrivalDistance",
+                name: new Subject(Member: ".arrivalDistance", Path: path),
                 errors: errors
             );
             RequireQuantizesNonZero(
                 value: domain.CellSize,
-                name: $"{path}.cellSize",
+                name: new Subject(Member: ".cellSize", Path: path),
                 errors: errors
             );
             RequireQuantizesNonZero(
                 value: domain.AgentRadius,
-                name: $"{path}.agentRadius",
+                name: new Subject(Member: ".agentRadius", Path: path),
                 errors: errors
             );
             RequireQuantizesNonZero(
                 value: domain.ArrivalDistance,
-                name: $"{path}.arrivalDistance",
+                name: new Subject(Member: ".arrivalDistance", Path: path),
                 errors: errors
             );
             if (
@@ -125,44 +125,44 @@ public static partial class WorldDefinitionValidator {
             if (domain.Kind == WorldNavigationKind.Surface) {
                 RequirePositive(
                     value: domain.ProbeUp,
-                    name: $"{path}.probeUp",
+                    name: new Subject(Member: ".probeUp", Path: path),
                     errors: errors
                 );
                 RequirePositive(
                     value: domain.ProbeDown,
-                    name: $"{path}.probeDown",
+                    name: new Subject(Member: ".probeDown", Path: path),
                     errors: errors
                 );
                 RequirePositive(
                     value: domain.AgentHeight,
-                    name: $"{path}.agentHeight",
+                    name: new Subject(Member: ".agentHeight", Path: path),
                     errors: errors
                 );
                 RequireQuantizesNonZero(
                     value: domain.ProbeUp,
-                    name: $"{path}.probeUp",
+                    name: new Subject(Member: ".probeUp", Path: path),
                     errors: errors
                 );
                 RequireQuantizesNonZero(
                     value: domain.ProbeDown,
-                    name: $"{path}.probeDown",
+                    name: new Subject(Member: ".probeDown", Path: path),
                     errors: errors
                 );
                 RequireQuantizesNonZero(
                     value: domain.AgentHeight,
-                    name: $"{path}.agentHeight",
+                    name: new Subject(Member: ".agentHeight", Path: path),
                     errors: errors
                 );
                 RequireNonNegative(
                     value: domain.MaxStepHeight,
-                    name: $"{path}.maxStepHeight",
+                    name: new Subject(Member: ".maxStepHeight", Path: path),
                     errors: errors
                 );
                 RequireRange(
                     value: domain.MaxSlopeDegrees,
                     min: 0f,
                     max: 89f,
-                    name: $"{path}.maxSlopeDegrees",
+                    name: new Subject(Member: ".maxSlopeDegrees", Path: path),
                     errors: errors
                 );
                 if (domain.Layers != 1) {

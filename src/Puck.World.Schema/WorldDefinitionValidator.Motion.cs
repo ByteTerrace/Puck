@@ -32,7 +32,7 @@ public static partial class WorldDefinitionValidator {
     }
     // A positive authored scalar that rounds to raw zero is not positive in the simulation. Keep that refusal beside
     // the float-domain sign check so every caller still receives a document refusal before fixed compilation.
-    private static void RequirePositiveFixed(float value, string name, List<string> errors) {
+    private static void RequirePositiveFixed(float value, Subject name, List<string> errors) {
         RequirePositive(
             errors: errors,
             name: name,
@@ -45,7 +45,7 @@ public static partial class WorldDefinitionValidator {
         );
     }
     // The non-negative sibling: zero is an admitted authored value, but a positive one must still survive Q48.16.
-    private static void RequireNonNegativeFixed(float value, string name, List<string> errors) {
+    private static void RequireNonNegativeFixed(float value, Subject name, List<string> errors) {
         RequireNonNegative(
             errors: errors,
             name: name,
@@ -59,7 +59,7 @@ public static partial class WorldDefinitionValidator {
     }
     // A positive authored value that rounds to zero in Q48.16 would silently disable what it tunes; the sign check
     // is the caller's, this is only the quantization door both fixed-valued requirements share.
-    private static void RequireQuantizesNonZero(float value, string name, List<string> errors) {
+    private static void RequireQuantizesNonZero(float value, Subject name, List<string> errors) {
         if (
             float.IsFinite(f: value) &&
             (value > 0f) &&
@@ -106,20 +106,8 @@ public static partial class WorldDefinitionValidator {
     // The authored rows keyed the same way the compiled table is (first row of a duplicated name wins, matching
     // ValidateBodyMotionPrograms). The target source a producer senses is authored vocabulary rather than compiled
     // instruction state, so the checks over it read the row rather than the compiled program.
-    private static Dictionary<string, BodyMotionProgram> BodyMotionProgramRows(IReadOnlyList<BodyMotionProgram> programs) {
-        var rows = new Dictionary<string, BodyMotionProgram>(comparer: StringComparer.Ordinal);
-
-        foreach (var program in programs) {
-            if (program is { Name: not null }) {
-                _ = rows.TryAdd(
-                    key: program.Name,
-                    value: program
-                );
-            }
-        }
-
-        return rows;
-    }
+    private static Dictionary<string, BodyMotionProgram> BodyMotionProgramRows(IReadOnlyList<BodyMotionProgram> programs) =>
+        FirstRowsByName(rows: programs, name: static program => program.Name);
     private static Dictionary<string, CompiledBodyMotionProgram> ValidateBodyMotionPrograms(IReadOnlyList<BodyMotionProgram> programs, ISet<string> targetRegisterNames, ISet<string> navigationDomainNames, ISet<string> curveNames, int simulationRateHz, List<string> errors) {
         var compiled = new Dictionary<string, CompiledBodyMotionProgram>(comparer: StringComparer.Ordinal);
 
@@ -140,14 +128,14 @@ public static partial class WorldDefinitionValidator {
                     value: planarTarget.Strafe,
                     min: 0f,
                     max: 1f,
-                    name: $"{path}.planarTarget.strafe",
+                    name: new Subject(Member: ".planarTarget.strafe", Path: path),
                     errors: errors
                 );
                 RequireRange(
                     value: planarTarget.Backward,
                     min: 0f,
                     max: 1f,
-                    name: $"{path}.planarTarget.backward",
+                    name: new Subject(Member: ".planarTarget.backward", Path: path),
                     errors: errors
                 );
             }
@@ -207,7 +195,7 @@ public static partial class WorldDefinitionValidator {
                                 value: sensed.HalfAngleDegrees,
                                 min: 0f,
                                 max: 180f,
-                                name: $"{path}.target.halfAngleDegrees",
+                                name: new Subject(Member: ".target.halfAngleDegrees", Path: path),
                                 errors: errors,
                                 minExclusive: true
                             );
@@ -228,7 +216,7 @@ public static partial class WorldDefinitionValidator {
                                 value: curve.Rate,
                                 min: -WorldCurves.MaxFollowRate,
                                 max: WorldCurves.MaxFollowRate,
-                                name: $"{path}.target.rate",
+                                name: new Subject(Member: ".target.rate", Path: path),
                                 errors: errors
                             );
 
@@ -350,12 +338,12 @@ public static partial class WorldDefinitionValidator {
 
         RequireNonNegativeFixed(
             value: tuning.GroundSnap,
-            name: $"{path}.groundSnap",
+            name: new Subject(Member: ".groundSnap", Path: path),
             errors: errors
         );
         RequireNonNegativeFixed(
             value: tuning.StepHeight,
-            name: $"{path}.stepHeight",
+            name: new Subject(Member: ".stepHeight", Path: path),
             errors: errors
         );
     }
@@ -364,7 +352,7 @@ public static partial class WorldDefinitionValidator {
     private static void ValidateSpeed(WorldSpeed speed, string path, ISet<string> channelNames, List<string> errors) {
         RequirePositiveFixed(
             value: speed.Value,
-            name: $"{path}.value",
+            name: new Subject(Member: ".value", Path: path),
             errors: errors
         );
 
@@ -388,7 +376,7 @@ public static partial class WorldDefinitionValidator {
 
             RequirePositiveFixed(
                 value: held.Multiplier,
-                name: $"{path}.held.multiplier",
+                name: new Subject(Member: ".held.multiplier", Path: path),
                 errors: errors
             );
         }
@@ -398,19 +386,19 @@ public static partial class WorldDefinitionValidator {
     private static void ValidateTurn(WorldTurn turn, string path, List<string> errors) {
         RequirePositiveFixed(
             value: turn.Rate,
-            name: $"{path}.rate",
+            name: new Subject(Member: ".rate", Path: path),
             errors: errors
         );
         RequireNonNegative(
             value: turn.PitchRate,
-            name: $"{path}.pitchRate",
+            name: new Subject(Member: ".pitchRate", Path: path),
             errors: errors
         );
 
         if (turn.ReferenceSpeed is { } referenceSpeed) {
             RequirePositiveFixed(
                 errors: errors,
-                name: $"{path}.referenceSpeed",
+                name: new Subject(Member: ".referenceSpeed", Path: path),
                 value: referenceSpeed
             );
         }
@@ -440,12 +428,12 @@ public static partial class WorldDefinitionValidator {
     private static void ValidateUpTurn(WorldUpTurnRates upTurn, string path, List<string> errors) {
         RequirePositiveFixed(
             value: upTurn.Field,
-            name: $"{path}.field",
+            name: new Subject(Member: ".field", Path: path),
             errors: errors
         );
         RequirePositiveFixed(
             value: upTurn.Contact,
-            name: $"{path}.contact",
+            name: new Subject(Member: ".contact", Path: path),
             errors: errors
         );
     }
@@ -453,12 +441,12 @@ public static partial class WorldDefinitionValidator {
     private static void ValidateObstructionLatch(WorldObstructionLatch obstruction, string path, List<string> errors) {
         RequirePositiveFixed(
             value: obstruction.Displacement,
-            name: $"{path}.displacement",
+            name: new Subject(Member: ".displacement", Path: path),
             errors: errors
         );
         RequireNonNegative(
             value: obstruction.IdleThreshold,
-            name: $"{path}.idleThreshold",
+            name: new Subject(Member: ".idleThreshold", Path: path),
             errors: errors
         );
         if (
@@ -531,21 +519,21 @@ public static partial class WorldDefinitionValidator {
                 errors: errors,
                 max: 1f,
                 min: 0f,
-                name: $"{rowPath}.upLean",
+                name: new Subject(Member: ".upLean", Path: rowPath),
                 value: hold.UpLean
             );
             RequireRange(
                 errors: errors,
                 max: 1f,
                 min: 0f,
-                name: $"{rowPath}.driveAlignment",
+                name: new Subject(Member: ".driveAlignment", Path: rowPath),
                 value: hold.DriveAlignment
             );
 
             if (hold.Speed is { } speed) {
                 RequirePositiveFixed(
                     errors: errors,
-                    name: $"{rowPath}.speed",
+                    name: new Subject(Member: ".speed", Path: rowPath),
                     value: speed
                 );
             }
@@ -563,7 +551,7 @@ public static partial class WorldDefinitionValidator {
 
                 RequirePositiveFixed(
                     errors: errors,
-                    name: $"{rowPath}.reach",
+                    name: new Subject(Member: ".reach", Path: rowPath),
                     value: hold.Reach
                 );
             } else if (hold.Cone is not null) {
@@ -575,17 +563,17 @@ public static partial class WorldDefinitionValidator {
                 } else {
                     RequirePositiveFixed(
                         errors: errors,
-                        name: $"{rowPath}.medium.equilibriumOffset",
+                        name: new Subject(Member: ".medium.equilibriumOffset", Path: rowPath),
                         value: medium.EquilibriumOffset
                     );
                     RequireFinite(
                         errors: errors,
-                        name: $"{rowPath}.medium.idleDrift",
+                        name: new Subject(Member: ".medium.idleDrift", Path: rowPath),
                         value: medium.IdleDrift
                     );
                     RequirePositiveFixed(
                         errors: errors,
-                        name: $"{rowPath}.medium.settleRate",
+                        name: new Subject(Member: ".medium.settleRate", Path: rowPath),
                         value: medium.SettleRate
                     );
                 }
@@ -614,14 +602,14 @@ public static partial class WorldDefinitionValidator {
                 } else {
                     RequirePositiveFixed(
                         errors: errors,
-                        name: $"{rowPath}.gravity.rise",
+                        name: new Subject(Member: ".gravity.rise", Path: rowPath),
                         value: gravity.Rise
                     );
 
                     if (!fullLift) {
                         RequirePositiveFixed(
                             errors: errors,
-                            name: $"{rowPath}.gravity.fall",
+                            name: new Subject(Member: ".gravity.fall", Path: rowPath),
                             value: gravity.Fall
                         );
                     }
@@ -641,7 +629,7 @@ public static partial class WorldDefinitionValidator {
                 } else {
                     RequirePositiveFixed(
                         errors: errors,
-                        name: $"{rowPath}.envelope.sinkSpeed",
+                        name: new Subject(Member: ".envelope.sinkSpeed", Path: rowPath),
                         value: envelope.SinkSpeed
                     );
 
@@ -651,7 +639,7 @@ public static partial class WorldDefinitionValidator {
                         } else {
                             RequirePositiveFixed(
                                 errors: errors,
-                                name: $"{rowPath}.envelope.riseSpeed",
+                                name: new Subject(Member: ".envelope.riseSpeed", Path: rowPath),
                                 value: riseSpeed
                             );
                         }
@@ -666,7 +654,7 @@ public static partial class WorldDefinitionValidator {
                 errors: errors,
                 max: 1f,
                 min: 0f,
-                name: $"{rowPath}.thrust",
+                name: new Subject(Member: ".thrust", Path: rowPath),
                 value: hold.Thrust
             );
             if (
@@ -678,7 +666,7 @@ public static partial class WorldDefinitionValidator {
             if (hold.Hold == BodyHoldKind.Pull) {
                 RequirePositiveFixed(
                     errors: errors,
-                    name: $"{rowPath}.pull",
+                    name: new Subject(Member: ".pull", Path: rowPath),
                     value: hold.Pull
                 );
 
@@ -691,7 +679,7 @@ public static partial class WorldDefinitionValidator {
                     errors: errors,
                     max: 1f,
                     min: 0f,
-                    name: $"{rowPath}.lift",
+                    name: new Subject(Member: ".lift", Path: rowPath),
                     value: hold.Lift
                 );
             }
@@ -722,7 +710,7 @@ public static partial class WorldDefinitionValidator {
 
                 RequirePositiveFixed(
                     errors: errors,
-                    name: $"{rowPath}.spend.ratePerSecond",
+                    name: new Subject(Member: ".spend.ratePerSecond", Path: rowPath),
                     value: spend.RatePerSecond
                 );
             }
@@ -732,17 +720,17 @@ public static partial class WorldDefinitionValidator {
     private static void ValidateMotionDefaults(in WorldMotionDefaults motion, string path, List<string> errors) {
         RequirePositiveFixed(
             value: motion.MoveSpeed,
-            name: $"{path}.moveSpeed",
+            name: new Subject(Member: ".moveSpeed", Path: path),
             errors: errors
         );
         RequirePositiveFixed(
             value: motion.TurnSpeed,
-            name: $"{path}.turnSpeed",
+            name: new Subject(Member: ".turnSpeed", Path: path),
             errors: errors
         );
         RequirePositiveFixed(
             value: motion.MaxSmoothError,
-            name: $"{path}.maxSmoothError",
+            name: new Subject(Member: ".maxSmoothError", Path: path),
             errors: errors
         );
     }
@@ -1007,7 +995,7 @@ public static partial class WorldDefinitionValidator {
             }
         }
     }
-    private static void ValidateNavigatedProducerMobility(WorldDefinition definition, WorldKit kit, CompiledBodyMotionProgram? motionProgram, IReadOnlyDictionary<string, BodyMotionProgram> programRows, string path, List<string> errors) {
+    private static void ValidateNavigatedProducerMobility(WorldDefinition definition, bool hasMoveUpChannel, WorldKit kit, CompiledBodyMotionProgram? motionProgram, IReadOnlyDictionary<string, BodyMotionProgram> programRows, string path, List<string> errors) {
         foreach (var (name, parameters) in kit.Producers) {
             if (
                 (parameters is null) ||
@@ -1103,7 +1091,7 @@ public static partial class WorldDefinitionValidator {
             ) {
                 errors.Add(item: $"{producerPath} targets {domain.Kind.ToString().ToLowerInvariant()} navigation domain '{domain.Name}', but kit '{kit.Name}' bodyMotionProgram has no compatible vertical consumer (ComputeLocalTargetVelocity, an ApplyHold row's own thrust, or a medium ApplyHold).");
             }
-            if (!definition.Channels.Any(predicate: channel => (channel.Role == ChannelRole.MoveUp))) {
+            if (!hasMoveUpChannel) {
                 errors.Add(item: $"{producerPath} targets {domain.Kind.ToString().ToLowerInvariant()} navigation domain '{domain.Name}', but the world declares no MoveUp channel.");
             }
         }
@@ -1170,7 +1158,7 @@ public static partial class WorldDefinitionValidator {
                 if (row.Across.Lateral is { } lateral) {
                     RequirePositiveFixed(
                         errors: errors,
-                        name: $"{rowPath}.across.lateral",
+                        name: new Subject(Member: ".across.lateral", Path: rowPath),
                         value: lateral
                     );
                 }
@@ -1180,14 +1168,14 @@ public static partial class WorldDefinitionValidator {
                 if (along.Engage is { } engage) {
                     RequirePositiveFixed(
                         errors: errors,
-                        name: $"{rowPath}.along.engage",
+                        name: new Subject(Member: ".along.engage", Path: rowPath),
                         value: engage
                     );
                 }
                 if (along.Release is { } release) {
                     RequirePositiveFixed(
                         errors: errors,
-                        name: $"{rowPath}.along.release",
+                        name: new Subject(Member: ".along.release", Path: rowPath),
                         value: release
                     );
                 }
@@ -1196,14 +1184,14 @@ public static partial class WorldDefinitionValidator {
                     if (along.ReversalRate is { } reversalRate) {
                         RequirePositiveFixed(
                             errors: errors,
-                            name: $"{rowPath}.along.reversalRate",
+                            name: new Subject(Member: ".along.reversalRate", Path: rowPath),
                             value: reversalRate
                         );
                     }
                     if (along.BackwardSpeed is { } backwardSpeed) {
                         RequireNonNegative(
                             errors: errors,
-                            name: $"{rowPath}.along.backwardSpeed",
+                            name: new Subject(Member: ".along.backwardSpeed", Path: rowPath),
                             value: backwardSpeed
                         );
                     }
@@ -1234,7 +1222,7 @@ public static partial class WorldDefinitionValidator {
 
             RequirePositiveFixed(
                 value: row.TurnScale,
-                name: $"{rowPath}.turnScale",
+                name: new Subject(Member: ".turnScale", Path: rowPath),
                 errors: errors
             );
         }

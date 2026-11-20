@@ -67,7 +67,7 @@ public sealed partial class WorldDocument {
         if (rows is null) { _ = ReloadInstallKindOf(candidate: candidate, live: previous, rows: out rows); }
         if (!validated && !((kind == WorldInstallKind.Value)
             ? WorldDefinitionValidator.TryValidateTouchedStateRows(definition: candidate, reason: out reason, rowNames: rows)
-            : WorldDefinitionValidator.TryValidateLocally(definition: candidate, reason: out reason))) {
+            : WorldDefinitionValidator.TryValidateChange(after: candidate, before: previous, compilation: out _, reason: out reason))) {
             return false;
         }
 
