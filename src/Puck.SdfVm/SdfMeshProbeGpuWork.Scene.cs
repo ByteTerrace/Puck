@@ -1,8 +1,8 @@
-using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.InteropServices;
 using System.Threading.Channels;
 using Puck.Abstractions.Gpu;
+using Puck.Abstractions.Memory;
 
 namespace Puck.SdfVm;
 
@@ -101,7 +101,7 @@ internal sealed partial class SdfMeshProbeGpuWork {
                     for (var offset = 0; offset < count;) {
                         m_cancel.Token.ThrowIfCancellationRequested();
                         var take = Math.Min(count - offset, SdfGpuWork.UploadChunkBytes / sizeof(uint));
-                        var chunk = new SceneChunk(word + offset, ArrayPool<uint>.Shared.Rent(take), take, Export);
+                        var chunk = new SceneChunk(word + offset, RentedArrays.Rent<uint>(minimumLength: take), take, Export);
                         try {
                             Export.Read(word + offset, chunk.Words.AsSpan(0, take));
                             await Chunks.Writer.WriteAsync(chunk, m_cancel.Token).ConfigureAwait(false);
@@ -156,16 +156,16 @@ internal sealed partial class SdfMeshProbeGpuWork {
             if (trailing != 0) { WriteGap(buffer, destinationOffsetBytes + (ulong)(leading + cached) * 4, start + cached, trailing); }
         }
         private void WriteGap(IGpuStorageBuffer buffer, ulong destination, int word, int count) {
-            var merged = ArrayPool<uint>.Shared.Rent(count);
-            try {
-                export!.Read(word, merged.AsSpan(0, count));
-                buffer.Write<uint>(merged.AsSpan(0, count), destination);
-            } finally { ArrayPool<uint>.Shared.Return(merged); }
+            using var lease = RentedArrays.Rent<uint>(minimumLength: count, array: out var merged);
+            var words = merged.AsSpan(0, count);
+
+            export!.Read(word, words);
+            buffer.Write<uint>(words, destination);
         }
         public void Dispose() {
             if (m_disposed) { return; }
             m_disposed = true;
-            if (export is not null) { ArrayPool<uint>.Shared.Return(Words); }
+            if (export is not null) { RentedArrays.Return(array: Words); }
         }
     }
 }
