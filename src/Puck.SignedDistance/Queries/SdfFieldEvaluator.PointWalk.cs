@@ -278,12 +278,10 @@ public sealed partial class SdfFieldEvaluator {
                         resultDistance = EditField(instruction: in instruction, localPosition: localPosition, resultDistance: resultDistance);
                         break;
                     }
-                case SdfOp.NoiseDisplace: {
-                        resultDistance = WeightedRelief(instruction: in instruction, localPosition: localPosition, powerWork: ref powerWork, resultDistance: resultDistance);
-                        break;
-                    }
-                case SdfOp.ReliefRow: {
-                        // A relief's data row: its relief reads it (instruction.ReliefMasks); it does nothing here.
+                case var relief when SdfFieldOps.Contains(value: relief): {
+                        if (SdfFieldOps.PointOf(value: relief) == SdfReliefAction.Noise) {
+                            resultDistance = WeightedRelief(instruction: in instruction, localPosition: localPosition, powerWork: ref powerWork, resultDistance: resultDistance);
+                        }
                         break;
                     }
                 case SdfOp.Displace: {

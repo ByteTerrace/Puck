@@ -60,7 +60,7 @@ public static class SdfIsaHlsl {
     public static uint DescribeFingerprint() =>
         FingerprintOf(
             encoding: SdfEncodingProbe.Describe(),
-            include: ((((GenerateLayout() + SdfRenderHlsl.GenerateLayout()) + SdfSkyKindsHlsl.Generate()) + SdfSkyKindsHlsl.GenerateTable()) + SdfShadeHlsl.Generate())
+            include: (((((GenerateLayout() + SdfFieldHlsl.Generate()) + SdfRenderHlsl.GenerateLayout()) + SdfSkyKindsHlsl.Generate()) + SdfSkyKindsHlsl.GenerateTable()) + SdfShadeHlsl.Generate())
         );
     /// <summary>Returns the fingerprint of the field's instruction set, which the mesh bake's interface carries as its
     /// stamp: <see cref="FingerprintOf"/> of this include's layout alone and the encoding described over each probe
@@ -71,7 +71,7 @@ public static class SdfIsaHlsl {
     public static uint DescribeFieldFingerprint() =>
         FingerprintOf(
             encoding: SdfEncodingProbe.Describe(calls: SdfEncodingProbe.Calls(), wordsOf: static program => program.FieldWords.ToArray()),
-            include: GenerateLayout()
+            include: (GenerateLayout() + SdfFieldHlsl.Generate())
         );
     /// <summary>Generates the source that records the fingerprints as <c>SdfIsaFingerprint.Value</c> and
     /// <c>SdfIsaFingerprint.Field</c>.</summary>

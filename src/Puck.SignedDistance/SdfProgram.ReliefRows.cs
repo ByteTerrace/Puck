@@ -32,15 +32,16 @@ public sealed partial class SdfProgram {
 
         for (var index = 0; (index < m_instructions.Length); index++) {
             var instruction = m_instructions[index];
+            var stream = (SdfFieldOps.Contains(value: instruction.Op) ? SdfFieldOps.StreamOf(value: instruction.Op) : SdfReliefStreamRole.None);
 
-            if (instruction.Op == SdfOp.ReliefRow) {
+            if (stream == SdfReliefStreamRole.ReliefRow) {
                 if (runStart < 0) { runStart = index; }
                 continue;
             }
 
             var runLength = ((runStart < 0) ? 0 : (index - runStart));
 
-            if (instruction.Op == SdfOp.NoiseDisplace) {
+            if (stream == SdfReliefStreamRole.ReliefOwner) {
                 var rows = ((int)instruction.Material);
 
                 if (rows != runLength) {

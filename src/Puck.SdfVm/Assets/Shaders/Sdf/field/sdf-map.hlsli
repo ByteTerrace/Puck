@@ -747,38 +747,7 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                     result.distance += data0.y * (value - 0.5);
                     break;
                 }
-                case SDF_OP_NOISE_DISPLACE: {
-                    SDF_VM_LOAD_DATA0;
-                    SDF_VM_LOAD_DATA1;
-                    // The relief's mask rows stand directly before it in its segment (the program's door, SdfProgram.
-                    // ReliefRows.cs); malformed words that count past the segment's start or the row cap are refused here.
-                    uint reliefRows = SDF_INSTRUCTION_MATERIAL(instructionHeader);
-                    if ((reliefRows > SDF_MAX_RELIEF_ROWS) || (reliefRows > (index - segmentMeta.z))) { return sdfIsaErrorHit(); }
-                    float maskProduct = ((reliefRows == 0u) ? 1.0 : sdfMaskProduct((index - reliefRows), reliefRows, localPosition, dataOffset));
-                    // A weight of exactly zero adds no relief, so the noise is not evaluated.
-                    if (maskProduct <= 0.0) { break; }
-                    // Keep the field continuous, including outside the zero-set neighborhood: the bake's lattice,
-                    // material points and gradient taps all consume these values (see SDF_OP_DISPLACE).
-                    float3 q = (localPosition * data0.x);
-                    float octaveAmplitude = 1.0;
-                    float noiseSum = 0.0;
-                    uint octaveCount = SDF_INSTRUCTION_BLEND(instructionHeader);
-                    for (uint octave = 0u; octave < SDF_MAX_NOISE_OCTAVES; octave++) {
-                        if (octave >= octaveCount) { break; }
-                        uint octaveSeed = (SDF_INSTRUCTION_SHAPE(instructionHeader) + octave);
-                        noiseSum += (octaveAmplitude * sdfValueNoise3(q, uint3(octaveSeed, (octaveSeed * SDF_HASH_STREAM_A), (octaveSeed * SDF_HASH_STREAM_B))));
-                        q *= data0.w;
-                        octaveAmplitude *= data0.z;
-                    }
-                    // A relief its masks left at weight one adds exactly what an unmasked one adds.
-                    result.distance += (((data0.y * data1.x) * noiseSum) * maskProduct);
-                    break;
-                }
-                // A relief mask's data row (KEEP IN SYNC with SdfOp.ReliefRow): the relief after its run reads it
-                // (sdfMaskProduct); it moves no point and writes no field.
-                case SDF_OP_RELIEF_ROW: {
-                    break;
-                }
+#include "../isa/sdf-field-map.hlsli"
                 case SDF_OP_WALLPAPER_FOLD: {
                     SDF_VM_LOAD_DATA0;
                     SDF_VM_LOAD_DATA1;

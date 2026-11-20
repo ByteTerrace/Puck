@@ -373,12 +373,10 @@ public sealed partial class SdfFieldEvaluator {
                         result = RenderEditFieldBounds(instruction: in instruction, result: result);
                         break;
                     }
-                case SdfOp.NoiseDisplace: {
-                        result = NoiseDisplaceBounds(instruction: in instruction, local: local, result: result, weight: ((instruction.ReliefMasks is { } masks) ? MaskProductBounds(masks: masks, q: local) : null));
-                        break;
-                    }
-                case SdfOp.ReliefRow: {
-                        // A relief's data row: its relief reads it (instruction.ReliefMasks); it bounds nothing here.
+                case var relief when SdfFieldOps.Contains(value: relief): {
+                        if (SdfFieldOps.IntervalOf(value: relief) == SdfReliefAction.Noise) {
+                            result = NoiseDisplaceBounds(instruction: in instruction, local: local, result: result, weight: ((instruction.ReliefMasks is { } masks) ? MaskProductBounds(masks: masks, q: local) : null));
+                        }
                         break;
                     }
                 case SdfOp.PushField: {

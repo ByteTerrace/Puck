@@ -7,6 +7,7 @@ public sealed partial class SdfFieldEvaluator {
     /// <returns><see langword="true"/> when the op is interpreted.</returns>
     public static bool IsSupportedOp(SdfOp op) {
         return op switch {
+            _ when SdfFieldOps.Contains(value: op) => SdfFieldOps.ContactOf(value: op),
             SdfOp.ResetPoint or
             SdfOp.Translate or
             SdfOp.Rotate or
@@ -20,11 +21,6 @@ public sealed partial class SdfFieldEvaluator {
             SdfOp.Onion or
             SdfOp.Dilate or
             SdfOp.CellDisplace or
-            // Creation relief: inside the scope that holds it, the pop's 1/L makes the relieved field a lower bound on
-            // the distance to the drawn surface, which a solid's contact reads (a collider follows the drawn solid).
-            SdfOp.NoiseDisplace or
-            // A relief's mask rows: its relief reads them, so contact reads the masked relief drawn.
-            SdfOp.ReliefRow or
             SdfOp.SymmetryPlane or
             SdfOp.PushField or
             SdfOp.PopField => true,
