@@ -167,12 +167,7 @@ internal sealed class WorldOverlayFeed {
             return GamepadType.Unknown;
         }
 
-        var devices = gamepads.ConnectedDevices();
-
-        return (((devices.Count > 0) && gamepads.TryGetType(
-            deviceId: devices[0],
-            type: out var type
-        ))
+        return (gamepads.TryGetFirstType(type: out var type)
             ? type
             : GamepadType.Unknown
         );

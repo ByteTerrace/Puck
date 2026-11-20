@@ -56,21 +56,50 @@ public sealed partial class WorldCreationInstances {
             var half = (((Vector3)shapes[slot].Scale) * scale);
             var normal = Vector3.Transform(value: -Vector3.UnitZ, rotation: pose.Orientation);
 
-            carried = screen with {
-                Origin = (pose.Position + (normal * half.Z)),
-                Right = Vector3.Transform(value: -Vector3.UnitX, rotation: pose.Orientation),
-                Up = Vector3.Transform(value: Vector3.UnitY, rotation: pose.Orientation),
-                HalfWidth = half.X,
-                HalfHeight = half.Y,
-                HalfDepth = half.Z,
-                Round = 0f,
-            };
+            carried = CarriedFrame(
+                half: half,
+                live: live,
+                origin: (pose.Position + (normal * half.Z)),
+                right: Vector3.Transform(value: -Vector3.UnitX, rotation: pose.Orientation),
+                screen: screen,
+                up: Vector3.Transform(value: Vector3.UnitY, rotation: pose.Orientation)
+            );
 
             return true;
         }
 
         return false;
     }
+    // The screen row at a carried frame. The presenter, the scene emitter and the surface providers each ask for the same
+    // frame, so the row built for it is kept on the carrier and handed back while the frame it was built for repeats.
+    private static WorldScreen CarriedFrame(Registration live, WorldScreen screen, Vector3 origin, Vector3 right, Vector3 up, Vector3 half) {
+        var built = (live.CarriedScreens ??= new Dictionary<WorldScreen, WorldScreen>(comparer: ReferenceEqualityComparer.Instance));
+
+        if (
+            built.TryGetValue(key: screen, value: out var held) &&
+            (held.Origin == origin) && (held.Right == right) && (held.Up == up) &&
+            (held.HalfWidth == half.X) && (held.HalfHeight == half.Y) && (held.HalfDepth == half.Z)
+        ) {
+            return held;
+        }
+
+        // A screen row edited in the document is a new instance, so the old key never repeats; the few a carrier holds
+        // are dropped together rather than tracked.
+        if (built.Count >= MaxCarriedScreens) {
+            built.Clear();
+        }
+
+        return (built[screen] = (screen with {
+            Origin = origin,
+            Right = right,
+            Up = up,
+            HalfWidth = half.X,
+            HalfHeight = half.Y,
+            HalfDepth = half.Z,
+            Round = 0f,
+        }));
+    }
+    private const int MaxCarriedScreens = 4;
     /// <summary>Resolves a screen row to where its picture is this frame: the row at its carrier's box while a body carries
     /// it (<see cref="TryCarriedScreen"/>), else the row as authored.</summary>
     /// <param name="screen">The screen row.</param>

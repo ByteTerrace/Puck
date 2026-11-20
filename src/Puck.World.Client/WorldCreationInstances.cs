@@ -110,6 +110,9 @@ public sealed partial class WorldCreationInstances : IWorldBodyPoses {
 
         public int Slots => Motion.SlotCount;
 
+        // The screen rows this registration last carried, by the authored row (reference), each at the frame it was built for.
+        public Dictionary<WorldScreen, WorldScreen>? CarriedScreens;
+
         public readonly DynamicTransform[] ShapeTransforms = new DynamicTransform[rig.ShapeCount];
 
         public DynamicTransform? PackedRoot;

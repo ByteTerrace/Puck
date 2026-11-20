@@ -30,7 +30,7 @@ public sealed record ToonStyleDocument(
     public bool IsOn => (Enabled ?? true);
     /// <summary>Gets whether the style authors every value an on style inks with.</summary>
     [JsonIgnore]
-    public bool IsComplete => !Missing().Any();
+    public bool IsComplete => ((OutlineWidth is not null) && (OutlineDistance is not null) && (OutlineNormal is not null) && (OutlineTint is not null));
 
     /// <summary>Returns the style's presentation parameters, each value it leaves out zero.</summary>
     /// <returns>The style.</returns>
@@ -60,7 +60,7 @@ public sealed record ToonStyleDocument(
         return required.Concat(second: ranges).Select(selector: refusal => $"{path}.{refusal}");
     }
 
-    // The document fields the style leaves out, by the names SdfToon.Refusals gives them.
+    // The document fields the style leaves out, by the names SdfToon.Refusals gives them; IsComplete tests the same four.
     private IEnumerable<string> Missing() {
         if (OutlineWidth is null) { yield return "outlineWidth"; }
         if (OutlineDistance is null) { yield return "outlineDistance"; }

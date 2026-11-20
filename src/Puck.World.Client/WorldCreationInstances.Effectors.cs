@@ -469,10 +469,7 @@ public sealed partial class WorldCreationInstances {
 
             return goal.Resolve(normal: out normal, target: out target);
         }
-        if (plant.Replant is { } authored) {
-            // A replant's lengths are the body's own, at its scale.
-            var replant = (authored with { Distance = (authored.Distance * scale), Height = (authored.Height * scale) });
-
+        if (plant.Replant is { } replant) {
             if (driverWeight <= WorldGaitDrivers.RestWeight) {
                 var resting = goal.Resolve(normal: out normal, target: out target);
 
@@ -484,6 +481,7 @@ public sealed partial class WorldCreationInstances {
                     normal: ref normal,
                     replant: replant,
                     resolved: resting,
+                    scale: scale,
                     target: ref target,
                     up: StepUp(
                         effector: effector.Document,
@@ -539,8 +537,9 @@ public sealed partial class WorldCreationInstances {
     // resolves to drifts past the replant distance, then steps there along a raised arc, one effector per plant
     // driver at a time. A latch survives a probe that misses this frame; a step heading for a point the probe has
     // since lost keeps the last point it found. The contact normal travels with the point: latched with it, and
-    // turned from the left point's normal to the landing point's over the step.
-    private static bool ApplyRestingPlant(Registration live, int driver, int index, CreationReplantDocument replant, bool resolved, float deltaSeconds, Vector3 up, ref Vector3 target, ref Vector3 normal) {
+    // turned from the left point's normal to the landing point's over the step. The replant's lengths are the body's own,
+    // at its scale.
+    private static bool ApplyRestingPlant(Registration live, int driver, int index, CreationReplantDocument replant, float scale, bool resolved, float deltaSeconds, Vector3 up, ref Vector3 target, ref Vector3 normal) {
         if (!live.EffectorPlanted[index]) {
             live.EffectorStepping[index] = false;
 
@@ -584,7 +583,7 @@ public sealed partial class WorldCreationInstances {
 
             target = StepPoint(
                 from: live.EffectorStepFrom[index],
-                height: replant.Height,
+                height: (replant.Height * scale),
                 progress: progress,
                 to: live.EffectorStepTo[index],
                 up: up
@@ -608,7 +607,7 @@ public sealed partial class WorldCreationInstances {
 
         if (
             resolved &&
-            (Vector3.Distance(value1: latch, value2: fresh) > replant.Distance) &&
+            (Vector3.Distance(value1: latch, value2: fresh) > (replant.Distance * scale)) &&
             !SiblingStepping(
                 driver: driver,
                 index: index,
