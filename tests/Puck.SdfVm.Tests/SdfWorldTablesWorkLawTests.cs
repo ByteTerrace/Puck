@@ -95,12 +95,16 @@ public sealed partial class SdfWorldTablesWorkLawTests {
         var first = rig.Engine.ViewSignature(frame: frame, view: 0);
 
         Assert.Equal(actual: rig.Engine.ViewSignature(frame: frame, view: 1), expected: first);
+        // A producer rewrites what a frame borrows only in a capture, after which the tables read their frame afresh; a
+        // copy stands for one here.
         views[1] = views[1] with { Quality = new SdfViewQuality { DisableAmbientOcclusion = true } };
+        frame = frame with { };
         var second = rig.Engine.ViewSignature(frame: frame, view: 1);
 
         Assert.NotEqual(actual: second, expected: first);
         Assert.Equal(actual: rig.Engine.ViewSignature(frame: frame, view: 0), expected: first);
         views[0] = views[0] with { Quality = new SdfViewQuality { DisableSoftShadows = true } };
+        frame = frame with { };
         Assert.NotEqual(actual: rig.Engine.ViewSignature(frame: frame, view: 0), expected: first);
         Assert.Equal(actual: rig.Engine.ViewSignature(frame: frame, view: 1), expected: second);
     }

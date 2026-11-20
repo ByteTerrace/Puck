@@ -281,6 +281,7 @@ public sealed partial class SdfWorldTables {
             condition: m_disposed,
             instance: this
         );
+        ForgetViewInputs();
 
         if (frame.Views.Count == 0) {
             throw new ArgumentException(

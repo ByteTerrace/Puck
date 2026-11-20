@@ -172,8 +172,9 @@ public readonly struct SdfMeshShadowCascades {
         }
 
         var camera = snapshot.Camera;
-        var side = (texels ?? SdfShadowResolutions.Texels(resolution: snapshot.Quality.ShadowResolution));
-        var distantSide = (distantTexels ?? frame.DistantShadows.TexelsAt(resolution: snapshot.Quality.ShadowResolution));
+        var quality = TexelsFor(frame: frame, view: view);
+        var side = (texels ?? quality.Texels);
+        var distantSide = (distantTexels ?? quality.DistantTexels);
         var coverage = frame.ShadowCoverage;
         var far = MathF.Min(coverage.Far, frame.FarDistance);
         var forward = -SdfLights.UnitDirection(direction: lights[key].Direction);
@@ -209,6 +210,21 @@ public readonly struct SdfMeshShadowCascades {
             second: second,
             texels: side
         );
+    }
+
+    /// <summary>Returns the texels a view's quality fits its cascade set at when a pass names none
+    /// (<see cref="Fit"/>): the view's shadow resolution, and the frame's distant map at that resolution.</summary>
+    /// <param name="frame">The frame.</param>
+    /// <param name="view">The view's index in <see cref="SdfFrame.Views"/>, clamped to the frame's views.</param>
+    /// <returns>The texels along each side of the near, far and secondary depths, and of the distant map's depth (zero
+    /// while the frame's distant map is off).</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="frame"/> is <see langword="null"/>.</exception>
+    public static (int Texels, int DistantTexels) TexelsFor(SdfFrame frame, int view) {
+        ArgumentNullException.ThrowIfNull(argument: frame);
+
+        var resolution = frame.Views[Math.Clamp(value: view, min: 0, max: (frame.Views.Count - 1))].Quality.ShadowResolution;
+
+        return (SdfShadowResolutions.Texels(resolution: resolution), frame.DistantShadows.TexelsAt(resolution: resolution));
     }
 
     // The cascade enclosing the frustum slice from the eye to `depth`: the slice's bounding sphere, whose center lies on

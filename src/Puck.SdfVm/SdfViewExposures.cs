@@ -71,6 +71,10 @@ public sealed class SdfViewExposures {
     /// <summary>Gets the brightest luminance, in nits, of the sky the irradiance volume's lighting sees, for the frame
     /// last staged; zero while the volume holds no sky.</summary>
     public float SkyPeakLuminance { get; private set; }
+    /// <summary>Gets the revision of every value a read returns: it moves at each <see cref="Stage"/>, and between two
+    /// stages each view's reads return the same values (the first read in the frame stages the view, and nothing else
+    /// changes what a read returns).</summary>
+    public long Revision => m_frameSerial;
 
     /// <summary>Returns the seconds a staging adapts exposure over: a lockstep frame's (<see cref="SdfFrame.TickLocked"/>)
     /// own presentation time since the frame staged before it, which the ticks decide, so a frame the render graph did
