@@ -378,6 +378,12 @@ A pair that ran and failed a leg's claim is a `WorldReleaseQualificationResult.F
 verdict (the coordinator refuses the group claim with it; `qualify` exits 1); only a
 run that cannot exercise the pair throws (exit 2). `IWorldReleaseQualificationContainers`
 is the container seam: Docker in production, scripted in `WorldReleaseFixtureBuilderTests`.
+It returns the packaged engine's captured output, and a leg that exits nonzero carries the
+tail of its standard error and output in its failure, so the deploy's refusal names the cause.
+On a Linux host, `WorldReleaseQualificationDocker` runs each leg as the runner's own user and
+group (`ProcessIdentity.LinuxUserAndGroup`): the directory store takes a lock file in every
+directory it reads, which the image's default root cannot create under `--cap-drop ALL` in a
+runner-owned tree, and its 0700/0600 entries must stay readable for the next leg's copy.
 Each package must preserve the same source import and candidate-written reverse
 import, advance simulation, and checkpoint successfully. A same-image control proves
 the runner only. Named handheld machines support complete durable checkpoints;

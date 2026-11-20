@@ -32,20 +32,8 @@ public static partial class TestCommand {
         return (StartupBudget + (ProgressBudget * (steps + 1UL)));
     }
 
-    // The last few lines of a failing leg's stderr: the boot or validation refusal sits at the end, and the whole
-    // transcript would bury it.
-    private static string Tail(string text, int lines = 12) {
-        var kept = text
-            .ReplaceLineEndings(replacementText: "\n")
-            .Split(separator: '\n')
-            .Where(predicate: static line => (line.Trim().Length != 0))
-            .TakeLast(count: lines);
-
-        return string.Join(
-            separator: Environment.NewLine,
-            values: kept
-        );
-    }
+    // The last few lines of a failing leg's stderr, one per line.
+    private static string Tail(string text) => CliText.Tail(count: 12, separator: Environment.NewLine, text: text);
     // The World every leg boots: the --world-artifact the caller named, or the build of this checkout's sources, reused
     // when an earlier run built it and leased until every leg has exited.
     private static bool TryResolveArtifact(string? worldArtifact, string repositoryRoot, string runDirectory, out string? artifact, out WorldBuild? lease) {

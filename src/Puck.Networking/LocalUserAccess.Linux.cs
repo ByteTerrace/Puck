@@ -46,7 +46,7 @@ public static partial class LocalUserAccess {
                 info: out var info
             ) != 0) { throw new IOException(message: "Cannot inspect private capability inode."); }
             if (
-                (info.Owner != GetEuid()) ||
+                (info.Owner != Puck.Abstractions.ProcessIdentity.LinuxUserId) ||
                 (info.Links != 1) ||
                 ((info.Mode & 0xF000) != 0x8000) ||
                 ((info.Mode & 0x3F) != 0)
@@ -74,6 +74,4 @@ public static partial class LocalUserAccess {
     private static partial int OpenAt(int directory, string path, int flags, uint mode);
     [LibraryImport("libc", EntryPoint = "fstat", SetLastError = true)]
     private static partial int Fstat(SafeFileHandle file, out LinuxFileInformation info);
-    [LibraryImport("libc", EntryPoint = "geteuid")]
-    private static partial uint GetEuid();
 }
