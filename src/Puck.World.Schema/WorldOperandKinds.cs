@@ -197,20 +197,6 @@ public sealed class BodyStateOperand : WorldOperandFact {
     /// <c>state.identity</c>).</summary>
     public int Slot { get; }
 }
-/// <summary>One fact on the identity a body drives under, read from the body's lane cell in the world's reserved
-/// <see cref="WorldIdentityFactLane"/> row (<see cref="WorldRuleFacts.IdentityPrefix"/>); a body driving under no
-/// identity, or a fact the identity never wrote, reads 0.</summary>
-public sealed class IdentityFactOperand : WorldOperandFact {
-    public IdentityFactOperand(CompiledBodyRef body, string fact, StateHandle lane) : base(CellKind.Int) {
-        Body = body;
-        Fact = fact;
-        Lane = lane;
-    }
-
-    public CompiledBodyRef Body { get; }
-    public string Fact { get; }
-    public StateHandle Lane { get; }
-}
 /// <summary>The staleness of an adjacency link, in ticks (<see cref="WorldRuleFacts.LinkPrefix"/>).</summary>
 public sealed class LinkStalenessOperand : WorldOperandFact {
     public LinkStalenessOperand(string adjacencyName) : base(CellKind.Int) => AdjacencyName = adjacencyName;

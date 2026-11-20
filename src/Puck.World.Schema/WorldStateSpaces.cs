@@ -14,14 +14,6 @@ public static class WorldStateSpaces {
     /// <returns>The resolved <see cref="StateSpace"/>, or <see langword="null"/> if not found.</returns>
     public static StateSpace? Find(WorldStateSection? state, string name) =>
         Find(spaces: state?.Spaces, name: name);
-    /// <summary>Finds a vector space by name in a world definition.</summary>
-    /// <param name="definition">The world definition.</param>
-    /// <param name="name">The space name.</param>
-    /// <returns>The resolved <see cref="StateSpace"/>, or <see langword="null"/> if not found.</returns>
-    public static StateSpace? Find(WorldDefinition definition, string name) {
-        ArgumentNullException.ThrowIfNull(argument: definition);
-        return Find(state: definition.StateRaw, name: name);
-    }
     /// <summary>Resolves the space for a state row from declared spaces, supporting single-space default resolution.</summary>
     /// <param name="spaces">The declared spaces.</param>
     /// <param name="row">The state row.</param>

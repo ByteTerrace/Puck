@@ -226,16 +226,6 @@ public static class WorldImageProducerSettings {
         settings: out qr,
         source: source
     );
-    /// <summary>Reads a source as the test-pattern producer's, when it is one whose settings bind.</summary>
-    /// <param name="source">The source.</param>
-    /// <param name="pattern">The test-pattern settings, or <see langword="null"/>.</param>
-    /// <returns><see langword="true"/> when <paramref name="source"/> names the test-pattern producer with valid
-    /// settings.</returns>
-    public static bool TryTestPattern(WorldScreenSource? source, [NotNullWhen(returnValue: true)] out WorldTestPatternSettings? pattern) => TryReadShipped(
-        id: TestPatternId,
-        settings: out pattern,
-        source: source
-    );
 
     // One source's settings object, written once as JSON, and its last binding.
     private sealed class Binding(byte[] Json) {

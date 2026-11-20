@@ -731,15 +731,4 @@ public sealed class WorldFieldProgram {
             cellCount: checked(((document.Lattice.Width * document.Lattice.Depth) * document.Lattice.Layers))
         );
     }
-    /// <summary>Determines whether a complete companion composite still carries exactly the field declarations and
-    /// ordered reactions represented by this program. Topology placement, cadence, colour, and paint remain owned by
-    /// the companion and therefore do not participate.</summary>
-    /// <param name="document">The complete companion composite to inspect.</param>
-    /// <returns><see langword="true"/> when the companion's program-owned inputs match.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="document"/> is null.</exception>
-    public bool MatchesProgram(WorldFieldsSection document) {
-        ArgumentNullException.ThrowIfNull(argument: document);
-
-        return m_programSource.HasSameProgram(other: document);
-    }
 }

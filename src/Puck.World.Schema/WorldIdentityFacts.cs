@@ -132,14 +132,6 @@ public static class WorldIdentityFactLane {
             }
         }
     }
-    /// <summary>Returns whether a lane key belongs to <paramref name="bodyIndex"/>.</summary>
-    /// <param name="key">The lane key.</param>
-    /// <param name="bodyIndex">The body index.</param>
-    public static bool BelongsTo(ReadOnlySpan<char> key, int bodyIndex) => (TryParse(
-        bodyIndex: out var owner,
-        fact: out _,
-        key: key
-    ) && (owner == bodyIndex));
     /// <summary>Spells the lane key of one (body, fact) pair.</summary>
     /// <param name="bodyIndex">The 0-based body index.</param>
     /// <param name="fact">The fact key.</param>

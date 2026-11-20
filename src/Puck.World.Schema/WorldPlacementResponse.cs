@@ -196,31 +196,6 @@ public sealed record WorldPlacementResponse(WorldPlacementResponseCondition When
             ? WorldPlacementChange.Facets
             : WorldPlacementChange.Appearance);
     }
-    /// <summary>Determines whether any entry of a row's response facet reads one of the named rows — a state
-    /// condition's row or comparand row, or a field condition's scalar row.</summary>
-    /// <param name="placement">The placement.</param>
-    /// <param name="rows">Determines whether a row name is one of the named rows.</param>
-    /// <returns><see langword="true"/> when an entry reads a named row.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="placement"/> or <paramref name="rows"/> is
-    /// <see langword="null"/>.</exception>
-    public static bool Reads(WorldPlacement placement, Func<string, bool> rows) {
-        ArgumentNullException.ThrowIfNull(argument: placement);
-        ArgumentNullException.ThrowIfNull(argument: rows);
-
-        foreach (var response in (placement.Respond ?? [])) {
-            var read = (response?.When switch {
-                WorldPlacementResponseCondition.StateCondition state => (rows(arg: state.State) || ((state.ComparandState is { } comparand) && rows(arg: comparand))),
-                WorldPlacementResponseCondition.FieldCondition { Value.Row: { } row } => rows(arg: row),
-                _ => false,
-            });
-
-            if (read) {
-                return true;
-            }
-        }
-
-        return false;
-    }
 }
 /// <summary>What a value delivery moved in a definition's placement rows
 /// (<see cref="WorldPlacementResponse.ComparePlacements"/>).</summary>

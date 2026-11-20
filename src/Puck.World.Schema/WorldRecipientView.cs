@@ -151,13 +151,6 @@ public sealed partial class WorldRecipientView(Func<WorldDefinition> definition,
         }
         return false;
     }
-    /// <summary>Reads a stored value at this ceiling; absent and withheld values return the same empty carrier.</summary>
-    public bool TryRead(string row, string? key, out CellValue value) {
-        value = default;
-        if (!Arena.Catalog.TryResolve(StateLane.Document, row, out var handle) || !Discloses(handle.Ordinal, key) ||
-            !Arena.Keys.TryResolve(CellName.Parse(key ?? StateRow.SlotKey.Value), out var cell)) { return false; }
-        return Arena.TryRead(handle.Ordinal, cell, out value);
-    }
     /// <summary>One immutable observable row, shared by content and audience.</summary>
     public WorldRecipientImage Image(int row) => images.Image(this, row);
     /// <summary>The live observations, including rows a presentation explicitly reads.</summary>
