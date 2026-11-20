@@ -377,8 +377,6 @@ Rigid creation copies share one local bake and palette. Each live copy owns one 
   and `WorldWheelCommandNames`) the root player and wheel command modules in
   `Puck.World` forward their own declarations to, single-sourced here since
   the binding-authoring files above cannot reference those root types.
-  `AddonSourceVocabulary.cs` narrows the input-source vocabulary to the value
-  kinds an addon input act can carry.
 - `PlayerAssignmentCommand.cs`—the shared `player.assign` definition and
   outcome narration over `PlayerRoster`; the root module registers this exact
   definition and command-level laws drive it through `CommandRegistry`.

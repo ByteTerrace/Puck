@@ -96,7 +96,7 @@ The same session's own stream is filtered by more than that. Its document comes
 from the cursor's disclosed images, and each snapshot's fields, solid sizes and
 inputs and input answers are filtered for the recipient:
 
-`src/Puck.World.Server/WorldSessionSink.cs:492-495`
+`src/Puck.World.Server/WorldSessionSink.cs:479-482`
 
 ```csharp
                 FieldCells = m_rows.Advance(m_view, m_cursor, cells, replica),
@@ -385,7 +385,7 @@ The first draft compared policy answers instead, and that misses a real loss.
 A cell is unreadable when it is a member of a zone whose policy denies the
 recipient, and that changes while every policy and every answer stays fixed:
 
-`src/Puck.World.Schema/WorldStateDisclosure.cs:833-848`
+`src/Puck.World.Schema/WorldStateDisclosure.cs:794-809`
 
 ```csharp
                 if (!m_arena.TryCellSlot(

@@ -3774,10 +3774,11 @@ their lane order; this packet keeps the single duplicates and leads.
   disassembly (`puck bench kernels`) must match the hand-written form.
 - The weight audit's next targets, from a whole-solution semantic reference
   walk (a scratch Roslyn pass that marks every symbol any syntax node in any
-  project resolves to): about 18,000 lines of `Puck.Maths` that only its own
-  tests reach (344 types and methods), led by the `Research` wing; 690 lines
-  of `Puck.HumbleGamingBrick.Forge` and 491 of `Puck.Text` that nothing
-  reaches; and the interface members whose every caller uses the concrete
+  project resolves to), read for duplicates and leftovers rather than line
+  count (the owner's ruling; `Puck.Maths`' `Research` and `Oracle` folders stay
+  as product source even where only tests reach them): 690 lines of
+  `Puck.HumbleGamingBrick.Forge` and 491 of `Puck.Text` that nothing reaches;
+  and the interface members whose every caller uses the concrete
   type (`IWorldMachineHost`, `IWorldAuthorityStore`, `IWorldGrantsView`,
   `IWorldAuthorityHost`), which can drop off their interfaces. The walk does
   not credit an abstract or interface member called through a derived type,

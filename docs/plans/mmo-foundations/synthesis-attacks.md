@@ -75,7 +75,7 @@ contact field's replay boundary and `LocalResponds` call
 `Seed` (`src/Puck.World.Server/WorldOwnedWorlds.cs:691`); `TryAdopt`'s fact
 loop (`src/Puck.World.Schema/WorldIdentity.Records.cs:129-130`);
 `SubjectBindingValidity` (`src/Puck.Azure.Functions/Services/IssuingKeyOptions.cs:28`);
-`Redact` (`src/Puck.World.Server/WorldOutputHub.cs:372`); and the debug world's
+and the debug world's
 `Replica` row for `*` (`worlds/debug/debug.puck:80-83`). No code claim in the
 memo is wrong at this tree.
 
