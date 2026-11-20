@@ -24,4 +24,11 @@ public readonly record struct SdfFarShadows(int Hertz, float TurnRadians) {
     public float TurnRadiansFor(in SdfMeshShadowCamera camera, int texels) => ((TurnRadians > 0f)
         ? TurnRadians
         : (((2f * camera.HalfHeight) / Math.Max(val1: texels, val2: 1)) / Math.Max(val1: camera.Far, val2: 1f)));
+    /// <summary>Returns whether a far cascade at this rate holds a static layer under the levers a frame enables: one
+    /// refreshed at a reduced rate (<see cref="SdfUpdateRates.ShadowFar"/> on and <see cref="Hertz"/> below
+    /// <see cref="SdfUpdateRateTiers.EveryFrameHertz"/>) draws the static scene's casters only when a static draw changes
+    /// or its fit no longer stands, and each refresh draws the moving casters over a copy of them.</summary>
+    /// <param name="rates">The levers the frame enables (<see cref="SdfFrame.UpdateRates"/>).</param>
+    /// <returns>Whether the far cascade holds a static layer.</returns>
+    public bool HoldsStaticLayer(SdfUpdateRates rates) => (((rates & SdfUpdateRates.ShadowFar) != 0) && (Hertz < SdfUpdateRateTiers.EveryFrameHertz));
 }

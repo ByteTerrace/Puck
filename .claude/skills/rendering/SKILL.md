@@ -390,6 +390,16 @@ include a moving camera and reduced/temporal render grids. The receiver scratch
 shares the depth allocation and its existing slot-fence retirement; early
 compute samples camera depth, late compute samples light depth, in separate sets.
 
+A far cascade at a reduced rate holds a static layer (`SdfFarShadows.HoldsStaticLayer`; the far pass's
+`ShadowFarStaticDepth` and `ShadowFarStaticExit` outputs, `SdfWorldPackage.WithShadows`' `farStatic`). Its invariant is
+that the layer is copied only into a cascade drawn from the camera it was drawn from, holding the static revision it
+drew; `SdfWorldPasses.RecordFar` is the one door (`SdfFarStaticLayer`, its `drawsStatic`), and `SubmittedFar` commits the
+layer. The recorder stages the static draws through a second `SdfMeshOcclusion` (`SdfMeshMotion.Static`, its own mesh
+set group after the cascade's, `OcclusionGroups`) and the moving draws plus every glass draw through the cascade's own
+(`SdfMeshMotion.Dynamic`) over a `CopyDepth` of the layer; the kernel leaves a draw a motion filter excludes untouched.
+A path that draws the layer must call `SdfWorldTables.CastersRead`, or a caster absent then never redraws it on landing.
+`sdf.rates`' `shadow-far.static` counts the layer's redraws.
+
 ## The distant shadow map
 
 The cascade set's fourth entry (`SdfMeshShadowCascades.DistantEntry`, primary role) is the far shadows past the

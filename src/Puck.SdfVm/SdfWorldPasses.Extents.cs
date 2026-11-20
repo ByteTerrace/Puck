@@ -24,7 +24,7 @@ public sealed partial class SdfWorldPasses {
     private static readonly int DistantShapes = ((2 * DistantSizes) + 1);
     // The shapes a fragment's cascades take: each resolution with and without the second slot's cascade, with each
     // distant map.
-    private static readonly int ShadowShapes = (6 * DistantShapes);
+    private static readonly int ShadowShapes = (12 * DistantShapes);
 
     // Each fragment with its display stage (SdfWorldPackage.WithDisplay), one per bloom quality in BloomQuality's order,
     // made once for the same reason.
@@ -109,6 +109,9 @@ public sealed partial class SdfWorldPasses {
         // Whether the view's distant map spreads a redraw over several frames, so its fragment keeps the back map
         // (SdfWorldPackage.WithShadows).
         private bool RequestsDistantSliced => (View?.Residency.Frame?.DistantShadows.IsSliced ?? false);
+        // Whether the view's far cascade holds a static layer (SdfFarShadows.HoldsStaticLayer), so its fragment keeps the
+        // layer's two depths (SdfWorldPackage.WithShadows).
+        private bool RequestsFarStatic => (View?.Residency.Frame is { } frame) && frame.FarShadows.HoldsStaticLayer(rates: frame.UpdateRates);
         // The distant map's shape: zero for none, else one more than its size's power of two above the least, past every
         // size without a back map for one with it.
         private int DistantShape => ((RequestsDistantTexels is var texels and > 0)
@@ -130,10 +133,10 @@ public sealed partial class SdfWorldPasses {
             : (Snapshot.Reconstructs ? SdfWorldPackage.Fragment : SdfWorldPackage.NativeFragment)))));
 
         // The low bits distinguish temporal reconstruction, the shadows, their resolution, the second slot's cascade, the
-        // glass passes, the binned views passes and the distant map's shape. Render ceilings are quantized fractions from
+        // glass passes, the binned views passes, the distant map's shape and the far cascade's static layer. Render ceilings are quantized fractions from
         // zero through one (RenderGraphExtent.Quantize): their binary exponents share the two high bits shifted out here,
         // and their mantissas' low bits, which these bits land in, are zero.
-        long IShaderPipelineRenderExtent.Revision => (BitConverter.DoubleToInt64Bits(value: Ceiling) << 2) | (RequestsShadows ? (((long)DistantShape) << 8) : 0L) | (RequestsBins ? 128L : 0L) |
+        long IShaderPipelineRenderExtent.Revision => (BitConverter.DoubleToInt64Bits(value: Ceiling) << 2) | ((RequestsShadows && RequestsFarStatic) ? 4096L : 0L) | (RequestsShadows ? (((long)DistantShape) << 8) : 0L) | (RequestsBins ? 128L : 0L) |
             (RequestsGlassShadows ? 64L : 0L) | (RequestsGlass ? 32L : 0L) | (RequestsSecondShadow ? 16L : 0L) | (((long)ShadowResolution) << 2) | (RequestsShadows ? 2L : 0L) | (RequestsTemporal ? 1L : 0L);
 
         private RenderGraphPackageFragment Binned(RenderGraphPackageFragment fragment) =>
@@ -150,14 +153,15 @@ public sealed partial class SdfWorldPasses {
             var second = RequestsSecondShadow;
             var distantTexels = RequestsDistantTexels;
             var distantSliced = RequestsDistantSliced;
+            var farStatic = RequestsFarStatic;
             var shaped = ShadowedFragments.GetValue(derive: static _ => new RenderGraphPackageFragment[ShadowShapes], key: fragment);
-            var index = ((((((int)resolution) * 2) + (second ? 1 : 0)) * DistantShapes) + DistantShape);
+            var index = ((((((((int)resolution) * 2) + (second ? 1 : 0)) * DistantShapes) + DistantShape) * 2) + (farStatic ? 1 : 0));
 
             // The first fragment made for a shape is the one every later frame takes, whichever thread made it.
             return (Volatile.Read(location: ref shaped[index]) ?? (Interlocked.CompareExchange(
                 comparand: null,
                 location1: ref shaped[index],
-                value: SdfWorldPackage.WithShadows(distantSliced: distantSliced, distantTexels: distantTexels, fragment: fragment, second: second, texels: SdfShadowResolutions.Texels(resolution: resolution))
+                value: SdfWorldPackage.WithShadows(distantSliced: distantSliced, distantTexels: distantTexels, farStatic: farStatic, fragment: fragment, second: second, texels: SdfShadowResolutions.Texels(resolution: resolution))
             ) ?? shaped[index]!));
         }
 

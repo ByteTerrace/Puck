@@ -209,10 +209,12 @@ public sealed partial class SdfWorldTables {
     private long[] m_stagedCasterState = [];
     private const long CasterNeverStood = long.MinValue;
     private const long CasterStands = -1;
-    // One more for every recording of a pass that draws the static casters alone (the distant shadow map).
+    // One more for every recording of a pass that draws the static casters alone (the distant shadow map, the far
+    // cascade's static layer).
     private long m_castersRead;
 
-    /// <summary>Records that a pass drawing the static casters alone and holding them (the distant shadow map) recorded
+    /// <summary>Records that a pass drawing the static casters alone and holding them (the distant shadow map, the far
+    /// cascade's static layer) recorded
     /// over the staged records as they stand now: a caster absent now and landing later moves
     /// <see cref="StaticDrawRevision"/>, since the map may have been drawn without it. Called on the frame thread by the
     /// recording.</summary>
