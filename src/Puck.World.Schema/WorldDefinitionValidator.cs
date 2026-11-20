@@ -837,12 +837,44 @@ public static partial class WorldDefinitionValidator {
     // never populated when throwOnErrors is true, since none of those callers read it.
     private static WorldRuleCompilation? ValidateCore(WorldDefinition definition, IWorldNeighbourResolver? neighbours, bool validateAdjacencyClaims, bool retainCompilation, bool throwOnErrors, ICollection<string>? errorSink, ICollection<string>? deferredSink, IMachineValidationCatalog? machines = null, bool proveCensusOutcomes = true) {
         ArgumentNullException.ThrowIfNull(definition);
-        WorldBootWork.Count(kind: WorldBootWork.Validations);
 
-        var errors = new List<string>();
-        var scope = new ValidationScope { Machines = machines };
+        var run = new WorldValidationRun {
+            Definition = definition,
+            Deferred = deferredSink,
+            Machines = machines,
+            Neighbours = neighbours,
+            ProveCensusOutcomes = proveCensusOutcomes,
+            RetainCompilation = retainCompilation,
+            ValidateAdjacencyClaims = validateAdjacencyClaims,
+        };
 
-        if (!ValidatePoolExpansion(definition: definition, errorSink: errorSink, throwOnErrors: throwOnErrors)) { return null; }
+        RunPartitions(run: run, plan: null);
+
+        if (throwOnErrors) {
+            RefuseCollected(errors: run.Errors);
+
+            return run.Compilation;
+        }
+        if (errorSink is not null) {
+            foreach (var error in run.Errors) {
+                errorSink.Add(item: error);
+            }
+        }
+
+        return ((run.Errors.Count == 0) ? run.Compilation : null);
+    }
+    // The document partition: every check of a part no other partition owns. It runs last, so the checks it gates on a
+    // clean collection see the other partitions' refusals, and it returns the compiled programs when the run keeps them
+    // and nothing was refused.
+    private static WorldRuleCompilation? ValidateDocumentPartition(WorldValidationRun run) {
+        var definition = run.Definition;
+        var neighbours = run.Neighbours;
+        var validateAdjacencyClaims = run.ValidateAdjacencyClaims;
+        var retainCompilation = run.RetainCompilation;
+        var deferredSink = run.Deferred;
+        var proveCensusOutcomes = run.ProveCensusOutcomes;
+        var errors = run.Errors;
+        var scope = new ValidationScope { Machines = run.Machines };
 
         if (!string.Equals(
             a: definition.Schema,
@@ -876,11 +908,6 @@ public static partial class WorldDefinitionValidator {
             errors: errors
         );
 
-        ValidateMetadata(
-            metadata: definition.Metadata,
-            errors: errors
-        );
-
         ValidatePostPasses(
             views: definition.Views,
             errors: errors,
@@ -898,7 +925,6 @@ public static partial class WorldDefinitionValidator {
             definition: definition,
             errors: errors
         );
-        ValidateScopedReplays(definition: definition, errors: errors);
         ValidateKeyedValues(
             definition: definition,
             errors: errors
@@ -1274,17 +1300,6 @@ public static partial class WorldDefinitionValidator {
             iconNames: iconNames,
             iconsAuthored: iconsAuthored
         );
-        ValidateHaptics(
-            definition: definition,
-            errors: errors,
-            localSeats: localSeats
-        );
-
-        ValidateStorage(
-            storage: definition.Storage,
-            errors: errors
-        );
-
         ValidateIdentityMotionState(
             identity: definition.Identity,
             stateRows: stateRows,
@@ -1521,13 +1536,7 @@ public static partial class WorldDefinitionValidator {
         scope.FontNames = fontNames;
         scope.HasTextCatalog = (definition.Text is not null);
 
-        var prototypeIds = ValidatePrototypes(
-            definition: definition,
-            creations: definition.Creations,
-            fontNames: fontNames,
-            hasTextCatalog: (definition.Text is not null),
-            errors: errors
-        );
+        var prototypeIds = CreationIds(definition: definition);
 
         scope.PrototypeIds = prototypeIds;
 
@@ -1670,21 +1679,6 @@ public static partial class WorldDefinitionValidator {
 
         scope.Cameras = cameras;
 
-        // An owned world (Identity not null) authors seat-scope panels: WorldHudCapacity.MaxSeatPanels of them, each
-        // capped at MaxElementsPerSeatPanel, WorldHudLayer.Replace refused (a panel confined to one seat's viewport
-        // has no base slot to take over). Either scope is capped at MaxFrameSources structurally unique frame sources.
-        // A plain world document keeps the world-scope panel/element ceilings and admits Replace. Runs here (not
-        // beside State, above) because a hud.panels Frame element's source resolves against the SAME declared camera
-        // set a screen row's own 'view' arm does — the cameras set just built above.
-        ValidateHud(
-            cameras: cameras,
-            definition: definition,
-            hud: definition.Hud,
-            stateRows: stateRows,
-            isIdentityScope: (definition.Identity is not null),
-            errors: errors
-        );
-
         // A probe socket's 'view' arm resolves against the SAME declared camera set a screen row's own 'view' arm
         // does, so this runs only once that set is fully built above — never earlier, and never twice.
         ValidateProbes(
@@ -1694,19 +1688,7 @@ public static partial class WorldDefinitionValidator {
             errors: errors
         );
 
-        ValidateCaptures(
-            definition: definition,
-            errors: errors
-        );
-        ValidateSchedule(
-            definition: definition,
-            errors: errors
-        );
         ValidateCommands(
-            definition: definition,
-            errors: errors
-        );
-        ValidateRoutes(
             definition: definition,
             errors: errors
         );
@@ -1962,16 +1944,6 @@ public static partial class WorldDefinitionValidator {
             errors: errors
         );
 
-        // Admission validates last of all: it references nothing else in the document except the population
-        // capacity its templates' body subjects bound against (already in scope), and it is the newest section,
-        // appended over the already-shipped set for the same reason Grants/Links are.
-        ValidateAdmission(
-            entries: definition.Admission,
-            populationCapacity: definition.Population.Capacity,
-            errors: errors,
-            deferred: deferredSink
-        );
-
         // A candidate already refused is not probed: its own refusals are the answer, and every census would repeat
         // them.
         if (
@@ -1983,30 +1955,6 @@ public static partial class WorldDefinitionValidator {
                 errors: errors,
                 machines: scope.Machines
             );
-        }
-
-        if (throwOnErrors) {
-            RefuseCollected(errors: errors);
-
-            return (retainCompilation
-                ? new WorldRuleCompilation(
-                    definition,
-                    compiledRules,
-                    compiledGroups,
-                    compiledInteractions,
-                    WorldRuleCompilation.CompileTables(
-                        context: ruleContext,
-                        definition: definition
-                    ), context: ruleContext, work: work
-                )
-                : null
-            );
-        }
-
-        if (errorSink is not null) {
-            foreach (var error in errors) {
-                errorSink.Add(item: error);
-            }
         }
 
         return ((retainCompilation && (errors.Count == 0))

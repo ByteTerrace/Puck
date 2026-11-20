@@ -76,9 +76,11 @@ public sealed class WorldBootWork : WorkLedger<WorkCounterSet> {
     /// parse and not its <c>DEFN</c> load. Either way a boot counts the same parses whether or not it finds a compiled
     /// world.</summary>
     public static WorkKind Parses { get; } = Registry.Declare(name: "world.boot.parses", unit: "count", workClass: WorkClass.Deterministic);
-    /// <summary>Gets the kind counting whole-document validations: one per run of the validator over a
-    /// <see cref="WorldDefinition"/>, local or with its adjacency proofs. One admitted load counts one; an environment
-    /// completion over an existing receipt counts none.</summary>
+    /// <summary>Gets the kind counting validation units: one per unit a validation partition judged
+    /// (<see cref="WorldDefinitionValidator.Partitions"/>), and one per state row a state write's row walk judged. A
+    /// whole-document validation counts every unit of the document (<see cref="WorldDefinitionValidator.UnitsIn"/>); a
+    /// change validated through <see cref="WorldDefinitionValidator.TryValidateChange"/> counts the units it reached; an
+    /// environment completion over an existing receipt counts none.</summary>
     public static WorkKind Validations { get; } = Registry.Declare(name: "world.boot.validations", unit: "count", workClass: WorkClass.Deterministic);
     /// <summary>Gets the kind counting rule compilations: one per <see cref="WorldRuleCompilation"/> produced, whether
     /// a validation retained it or a host compiled it directly. A load that reuses its receipt counts one.</summary>

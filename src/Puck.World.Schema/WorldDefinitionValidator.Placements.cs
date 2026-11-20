@@ -472,7 +472,7 @@ public static partial class WorldDefinitionValidator {
             }
 
             if (drivers[index].Lead is { Length: > 0 } lead) {
-                var channel = definition.Channels.FirstOrDefault(predicate: row => string.Equals(a: row.Name, b: lead, comparisonType: StringComparison.Ordinal));
+                var channel = definition.Channels.FirstOrDefault(predicate: row => string.Equals(a: row?.Name, b: lead, comparisonType: StringComparison.Ordinal));
 
                 if (channel is null) {
                     errors.Add(item: $"{path}.drivers[{index}].lead '{lead}' names no declared channel.");
@@ -646,39 +646,82 @@ public static partial class WorldDefinitionValidator {
             errors.Add(item: $"{path} '{name}' is not drawn left to right; a driver curve is open, each knot further along X than the last, each tangent pointing toward +X.");
         }
     }
-    private static HashSet<string> ValidateCreations(WorldDefinition definition, IReadOnlyList<WorldPrototype> creations, HashSet<string> fontNames, bool hasTextCatalog, List<string> errors) {
+    // The ids a reference to a creation resolves against: every creation row's non-blank id.
+    private static HashSet<string> CreationIds(WorldDefinition definition) {
         var ids = new HashSet<string>(comparer: StringComparer.Ordinal);
 
-        if (creations is null) {
-            errors.Add(item: "creations is required.");
+        foreach (var creation in definition.Creations) {
+            if (!string.IsNullOrWhiteSpace(value: creation?.Id.Value)) { _ = ids.Add(item: creation.Id.Value); }
+        }
+        return ids;
+    }
+    // The prototypes partition: every creation row (a null list) or the listed rows. A row is judged alone: the one
+    // fact it shares with the rows beside it is that no other row carries its id.
+    private static void ValidateCreationRows(WorldDefinition definition, IReadOnlyList<int>? rows, List<string> errors) {
+        var creations = definition.Creations;
+        var text = definition.Text;
+        var fontNames = new HashSet<string>(comparer: StringComparer.Ordinal);
 
-            return ids;
+        foreach (var font in (text?.Fonts ?? [])) {
+            if (!string.IsNullOrWhiteSpace(value: font?.Name)) { _ = fontNames.Add(item: font.Name); }
+        }
+        if (rows is null) {
+            var ids = new HashSet<string>(comparer: StringComparer.Ordinal);
+
+            for (var index = 0; (index < creations.Count); index++) {
+                ValidateCreationRow(definition: definition, errors: errors, fontNames: fontNames, hasTextCatalog: (text is not null), index: index, seen: ids);
+            }
+            return;
         }
 
-        for (var index = 0; (index < creations.Count); index++) {
-            var creation = creations[index];
-            var path = $"prototypes[{index}]";
+        var counts = new Dictionary<string, int>(comparer: StringComparer.Ordinal);
 
-            if (creation is null) {
-                errors.Add(item: $"{path} is required.");
+        foreach (var creation in creations) {
+            if (!string.IsNullOrWhiteSpace(value: creation?.Id.Value)) { counts[creation.Id.Value] = (counts.GetValueOrDefault(key: creation.Id.Value) + 1); }
+        }
+        foreach (var index in rows) {
+            // The ids of the other rows, as far as this row's own uniqueness asks: its id when another row carries it.
+            var others = new HashSet<string>(comparer: StringComparer.Ordinal);
 
-                continue;
-            }
+            if ((creations[index]?.Id.Value is { } id) && (counts.GetValueOrDefault(key: id) > 1)) { _ = others.Add(item: id); }
+            ValidateCreationRow(definition: definition, errors: errors, fontNames: fontNames, hasTextCatalog: (text is not null), index: index, seen: others);
+        }
+    }
+    // One creation row: its id, the document's own schema and invariants through CreationCanonicalizer (the one
+    // pipeline), the hash pin, the facets that reach outside the creation, and its inline mesh.
+    private static void ValidateCreationRow(WorldDefinition definition, int index, HashSet<string> seen, HashSet<string> fontNames, bool hasTextCatalog, List<string> errors) {
+        var creation = definition.Creations[index];
+        var path = $"prototypes[{index}]";
 
-            RequireUniqueName(
-                value: creation.Id,
-                seen: ids,
-                path: path,
-                field: "id",
-                errors: errors
+        if (creation is null) {
+            errors.Add(item: $"{path} is required.");
+
+            return;
+        }
+
+        RequireUniqueName(
+            value: creation.Id,
+            seen: seen,
+            path: path,
+            field: "id",
+            errors: errors
+        );
+
+        if (creation.Document is null) {
+            errors.Add(item: $"{path}.doc is required.");
+
+            return;
+        }
+        if (creation.Mesh is { } mesh) {
+            ValidatePrototypeMesh(
+                errors: errors,
+                mesh: mesh,
+                paletteCount: (creation.Document.Palette?.Count ?? 0),
+                path: $"{path}.mesh"
             );
+        }
 
-            if (creation.Document is null) {
-                errors.Add(item: $"{path}.doc is required.");
-
-                continue;
-            }
-
+        {
             var violations = Puck.World.Authoring.CreationCanonicalizer.Validate(document: creation.Document);
 
             if (violations.Count > 0) {
@@ -686,7 +729,7 @@ public static partial class WorldDefinitionValidator {
                     errors.Add(item: $"{path}.doc.{violation.Path}: {violation.Message}");
                 }
 
-                continue;
+                return;
             }
 
             // The hash pin: the only accepted hash is the one the pipeline itself computes over this document's
@@ -755,8 +798,6 @@ public static partial class WorldDefinitionValidator {
                 }
             }
         }
-
-        return ids;
     }
     // The per-instance face overrides: each names a declared creation face, no duplicate face names.
     private static void ValidateFaceSources(WorldDefinition definition, IReadOnlyList<WorldPlacementFace>? faceSources, WorldPlacement placement, IReadOnlyDictionary<string, WorldPrototype> creationsById, WorldFaceCatalog faces, ValidationScope scope, string path, List<string> errors) {

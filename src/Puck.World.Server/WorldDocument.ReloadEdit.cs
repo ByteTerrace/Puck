@@ -26,7 +26,7 @@ public sealed partial class WorldDocument {
             if (!(prepared is { Validated: true } && ReferenceEquals(objA: prepared.Candidate, objB: candidate))) {
                 var validated = ((kind == WorldInstallKind.Value)
                     ? WorldDefinitionValidator.TryValidateTouchedStateRows(definition: candidate, reason: out var validationReason, rowNames: rows)
-                    : WorldDefinitionValidator.TryValidateLocally(definition: candidate, reason: out validationReason));
+                    : WorldDefinitionValidator.TryValidateChange(after: candidate, before: previous, compilation: out _, reason: out validationReason));
 
                 if (!validated) {
                     RejectRebuild(connectionId: connectionId, correlationId: correlationId, reason: validationReason, verb: verb);
