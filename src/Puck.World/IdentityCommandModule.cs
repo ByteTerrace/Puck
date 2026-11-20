@@ -449,26 +449,6 @@ internal sealed class IdentityCommandModule(WorldOwnedWorlds worlds, PlayerRoste
             handler: $"[identity.show: p{player} world={identity!.Id} name={identity.Name} color={identity.ColorHex} move={DescribeRate(rate: identity.FixedMoveSpeed)} moveEffective={effectiveMoveSpeed} turn={DescribeRate(rate: identity.FixedTurnSpeed)} hud={hud} path={m_worlds.FilePath}]"
         ));
     }
-    private static bool TryBool(ReadOnlySpan<char> token, out bool value) {
-        value = (token.Equals(
-            comparisonType: StringComparison.OrdinalIgnoreCase,
-            other: "on"
-        ) || token.Equals(
-            comparisonType: StringComparison.OrdinalIgnoreCase,
-            other: "true"
-        ));
-        return (
-            value ||
-            token.Equals(
-            comparisonType: StringComparison.OrdinalIgnoreCase,
-            other: "off"
-        ) ||
-            token.Equals(
-            comparisonType: StringComparison.OrdinalIgnoreCase,
-            other: "false"
-        )
-        );
-    }
     private bool TryPlayer(CommandContext context, in WireArgs args, int optionalAt, string verb, out int player, out WorldIdentity? identity, out string error) {
         identity = null;
         error = string.Empty;
