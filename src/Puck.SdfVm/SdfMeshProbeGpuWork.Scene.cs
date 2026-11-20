@@ -29,7 +29,7 @@ internal sealed partial class SdfMeshProbeGpuWork {
             estimatedSeconds = SdfGpuWork.UploadSecondsOf(bytes: SdfGpuWork.UploadChunkBytes);
             return false;
         }
-        if (!upload.Chunks.Reader.TryRead(out var chunk) && (m_sceneInFlight != 0 || !upload.TryRoot(out chunk))) { return false; }
+        if (!upload.Deferred.TryDequeue(out var chunk) && !upload.Chunks.Reader.TryRead(out chunk) && (m_sceneInFlight != 0 || !upload.TryRoot(out chunk))) { return false; }
         m_sceneInFlight++;
         job = chunk;
         estimatedSeconds = SdfGpuWork.UploadSecondsOf(bytes: chunk.Count * sizeof(uint));
@@ -85,6 +85,7 @@ internal sealed partial class SdfMeshProbeGpuWork {
         internal readonly IReadOnlyDictionary<SdfMesh, SdfMeshRegionMesh> Placements;
         internal readonly Channel<SceneChunk> Chunks = Channel.CreateBounded<SceneChunk>(new BoundedChannelOptions(SdfGpuWork.SlotCount) { SingleReader = true, SingleWriter = true });
         private readonly CancellationTokenSource m_cancel = new();
+        internal readonly Queue<SceneChunk> Deferred = new();
         private SceneChunk? m_root;
         internal readonly Task Work;
         internal SdfMeshIrradianceScene.GpuExport? Export;
@@ -130,6 +131,7 @@ internal sealed partial class SdfMeshProbeGpuWork {
             catch when (Work.IsFaulted) { } // TryTake reports packing faults; teardown must still release device resources.
             finally {
                 while (Chunks.Reader.TryRead(out var chunk)) { chunk.Dispose(); }
+                while (Deferred.TryDequeue(out var deferred)) { deferred.Dispose(); }
                 Scene.Dispose(); m_cancel.Dispose();
             }
         }
