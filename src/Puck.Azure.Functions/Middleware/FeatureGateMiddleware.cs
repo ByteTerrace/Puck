@@ -33,13 +33,13 @@ public sealed class FeatureGateAttribute : Attribute {
 public static partial class FeatureGateLog {
     [LoggerMessage(
         EventId = 0,
-        Level = LogLevel.Information,
+        Level = LogLevel.Warning,
         Message = "Access to {Resource} denied for {UserId} by feature(s): [{Features}]."
     )]
     public static partial void AccessDenied(ILogger logger, string features, string resource, string userId);
     [LoggerMessage(
         EventId = 1,
-        Level = LogLevel.Information,
+        Level = LogLevel.Debug,
         Message = "Access to {Resource} granted for {UserId} by feature(s): [{Features}]."
     )]
     public static partial void AccessGranted(ILogger logger, string features, string resource, string userId);
