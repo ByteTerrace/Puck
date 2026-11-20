@@ -189,11 +189,14 @@ public sealed record RemoveCellStatementNode(
     Line,
     Column
 );
-/// <summary><c>schedule row in Ns</c> — a <c>scheduleState</c> effect. The <c>s</c> suffix is required (PUCK010
-/// otherwise); <c>DelaySeconds</c> is a plain decimal on the wire, never a <c>ExpressionProgram</c>.</summary>
+/// <summary><c>schedule row in delay</c> — a <c>scheduleState</c> effect. <c>Delay</c> is any value expression the
+/// call form's <c>delaySeconds</c> argument takes (a number with or without a time unit, a name, a template parameter,
+/// arithmetic over them), lowered against the same field, so <c>schedule row in 0.4s</c> and
+/// <c>scheduleState(state: row, delaySeconds: 0.4s)</c> are one effect. It is a plain decimal on the wire, never an
+/// <c>ExpressionProgram</c>.</summary>
 public sealed record ScheduleStatementNode(
     RowRefNode Target,
-    decimal DelaySeconds,
+    ExpressionNode Delay,
     int Offset = 0,
     int Length = 0,
     int Line = 1,

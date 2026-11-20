@@ -514,8 +514,9 @@ document's fields is a time is that document's own vocabulary—`WorldDocumentEm
 `delaySeconds` is a `Seconds`, and hands the number to `UnitConversion` to divide. A second vocabulary adds its own
 classification and reuses the same arithmetic; it never restates that `ms` divides by 1000.
 
-The one place the core itself asserts a dimension is `schedule <row> in 250ms`, where the grammar—not a field
-name—says the operand is a time.
+`schedule <row> in 250ms` reads its delay as the value `scheduleState(delaySeconds: 250ms)` takes, so it converts
+against the same field and accepts the same expressions (a number, a template parameter, arithmetic); the two
+spellings lower to one effect.
 
 ## Rewriting a source: `PuckSyntaxRewriter` and `puck migrate`
 

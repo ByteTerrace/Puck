@@ -63,7 +63,7 @@ public static class VerbsCommand {
         var cacheDirectory = new Option<string?>(name: "--cache-dir") { Description = "The device-cache root for both World boots; absent uses the per-user store." };
         var check = CliOptions.Check(description: "Boot, regenerate in memory and compare against src/Puck.World.Vocabulary/Assets/puck.console.verbs.json; write nothing, and exit 1 naming the first differing line.");
         var headlessOnly = new Option<bool>(name: "--headless-only") {
-            Description = "Boot headless alone (no GPU) and keep every catalogued verb the headless World does not register.",
+            Description = "Boot headless alone (no GPU) and keep every catalogued verb the headless World does not register. A verb only a rendered World registers enters the catalog at the next full run.",
         };
         var command = new Command(
             description: "Generate or check the console verb catalog authored commands are validated against.",
