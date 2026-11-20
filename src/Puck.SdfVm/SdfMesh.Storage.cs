@@ -432,7 +432,6 @@ public sealed partial record SdfMesh {
     // one claim on each source for each claim held on it: the parts it was built with (a chunked mesh's shared
     // attributes and chunks) and the storage it borrows (a renumbered variant's original).
     private sealed class Payload(MemoryAccount.Owner owner) {
-        public MemoryAccount.Owner Owner => owner;
 
         private readonly Lock m_gate = new();
         private readonly List<IDisposable> m_blocks = [];

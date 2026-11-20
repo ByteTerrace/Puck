@@ -27,8 +27,6 @@ namespace Puck.SdfVm;
 /// <param name="byteBudget">The retained byte budget, or null for the machine-derived default.</param>
 /// <param name="allocator">The host allocator for published payloads; null keeps an offline library managed.</param>
 public sealed class SdfMeshLibrary(SdfMeshStore? store = null, long? byteBudget = null, IAllocator? allocator = null) : IDisposable {
-    /// <summary>Gets the process account's machine-derived retained cache allowance, bounded to 16..512 MiB.</summary>
-    public static long DefaultByteBudget => MemoryAccount.Shared.CacheBudget;
     /// <summary>Gets the maximum retained bytes; live residencies retain their own in-use meshes independently.</summary>
     public long ByteBudget => Math.Max(val1: 0, val2: Math.Min(val1: (byteBudget ?? Account.CacheBudget), val2: (Account.Read().Budget / 16)));
 

@@ -221,10 +221,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
     /// <summary>Gets the residency's tables, or <see langword="null"/> before its pipeline set is built and its first
     /// frame captured, and after a device loss until they are rebuilt.</summary>
     public SdfWorldTables? Tables => m_tables;
-    /// <summary>Gets whether the current staged mesh geometry has landed and its upload completed; false before
-    /// tables exist. Pose and irradiance uploads do not delay it. Read on the frame thread; never waits.</summary>
-    public bool MeshesResident => (m_tables?.MeshesResident ?? false);
-    /// <summary>Names what keeps <see cref="MeshesResident"/> false (<see cref="SdfWorldTables.MeshResidencyPending"/>),
+    /// <summary>Names what keeps the meshes from being resident (<see cref="SdfWorldTables.MeshResidencyPending"/>),
     /// or <see langword="null"/> once resident. Read on the frame thread; never waits.</summary>
     public string? MeshResidencyPending => ((m_tables is { } tables) ? tables.MeshResidencyPending() : "its tables are not built");
     /// <summary>Gets whether the residency's meshes are still arriving, and only frames that render one of its views
@@ -266,7 +263,6 @@ public sealed partial class SdfWorldResidency : IDisposable {
     public int LiveProgramInstances { get; private set; }
     public int LiveProgramMaterials => (m_frame?.Program.MaterialCount ?? 0);
     public int LiveDynamicTransforms => (m_frame?.DynamicTransforms.Count ?? 0);
-    public long ProgramBuilds => ((m_frameSource as SdfCompositionFrameSource)?.ProgramBuilds ?? 0);
     /// <summary>Gets the bounded volume count in the latest captured frame, before per-ray rejection.</summary>
     public int LiveVolumes { get; private set; }
     /// <summary>Gets the last uploaded program's residual CPU query multiplier, or 0 before the first upload.</summary>
