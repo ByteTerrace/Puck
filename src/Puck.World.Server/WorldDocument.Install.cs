@@ -49,6 +49,7 @@ public sealed partial class WorldDocument {
     /// so no caller commits a plan before the document installs or disposes one a host already holds.</remarks>
     internal sealed class DocumentStage : IDisposable {
         private bool m_addonCommitted;
+        private bool m_disposed;
         private bool m_machineCommitted;
 
         internal DocumentStage(in InstallRequest request, WorldGrants.PreparedAuthorityTransition authority, WorldSolidField? solids) {
@@ -91,14 +92,10 @@ public sealed partial class WorldDocument {
         /// <summary>Releases each plan no host committed. A committed plan is its host's, which
         /// <see cref="FinishInstall"/> finishes.</summary>
         public void Dispose() {
-            if (!m_addonCommitted) {
-                m_addonCommitted = true;
-                AddonPlan?.Dispose();
-            }
-            if (!m_machineCommitted) {
-                m_machineCommitted = true;
-                MachinePlan?.Dispose();
-            }
+            if (m_disposed) { return; }
+            m_disposed = true;
+            if (!m_addonCommitted) { AddonPlan?.Dispose(); }
+            if (!m_machineCommitted) { MachinePlan?.Dispose(); }
         }
     }
 
