@@ -42,7 +42,7 @@ public sealed class WorldLiveValues(Func<ArenaTime> clock) {
 /// </remarks>
 public static class WorldStateDocumentValues {
     private static readonly WorldDocumentWalker Walker = new(isSurface: static type => typeof(IDocumentStateValue).IsAssignableFrom(c: type));
-    [Puck.Abstractions.SideTable("The live binder records the authored object it copied without changing its serialized value.")]
+    [SideTable("The live binder records the authored object it copied without changing its serialized value.")]
     private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<object, object> BindingSources = new();
 
     internal static object SourceOfBinding(object value) => BindingSources.TryGetValue(value, out var source) ? source : value;

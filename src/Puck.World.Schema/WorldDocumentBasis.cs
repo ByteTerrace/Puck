@@ -250,7 +250,7 @@ public static class WorldDocumentBasis {
         delta = DiffKeyedRow(key, live, next);
         try {
             var list = live is null ? new JsonArray() : new JsonArray(live.DeepClone());
-            var result = MergeList(list, new JsonArray(delta.DeepClone()), path, origins: null);
+            var result = MergeList(list, new JsonArray(delta.DeepClone()), path, origins: null, consume: false);
             return next is null ? result.Count == 0 : result.Count == 1 && Puck.Abstractions.Documents.OrderedJson.Equals(result[0], next);
         } catch (JsonException) {
             return false;
@@ -906,10 +906,7 @@ public static class WorldDocumentBasis {
     /// <param name="key">The shared identity member, or empty.</param>
     /// <param name="ambiguity">The duplicate identity refusal, or empty when the lists simply have no shared key.</param>
     /// <returns>Whether both lists can be matched by one unique identity.</returns>
-    public static bool TryFindRowKey(JsonArray basis, JsonArray overlay, out string key, out string ambiguity) =>
-        TryFindRowKey((IList<JsonNode?>)basis, overlay, out key, out ambiguity);
-
-    internal static bool TryFindRowKey(IList<JsonNode?> basis, IList<JsonNode?> overlay, out string key, out string ambiguity) {
+    public static bool TryFindRowKey(IList<JsonNode?> basis, IList<JsonNode?> overlay, out string key, out string ambiguity) {
         key = string.Empty;
         ambiguity = string.Empty;
 
