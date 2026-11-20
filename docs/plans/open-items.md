@@ -3688,6 +3688,26 @@ proves itself with `puck compile` lowering to the same document.
   and `Commit(overwrite: false)` preserves a concurrent winner only where
   `File.Move` without overwrite is create-only. A law that races two stamps
   on each platform settles the second.
+- [low] `PrimeKernels.TrialDivision` writes each vector width's rung by hand:
+  `HasTrialFactor512Core`, `HasTrialFactor256Core` and `HasTrialFactor128Core`
+  are one fold-and-compare loop at three widths, and so are the three
+  `HasNarrowTrialFactor*Core` loops. One generic rung over a lanes interface
+  (`VectorLanes.cs` already carries `IByteVectorLanes` and
+  `ISignedByteWideningLanes`; this needs 32- and 64-bit multiply, compare-any
+  and the 16-bit multiply-add) would hold each loop once, as
+  `BinaryFieldKernels`' region rungs now do. The law
+  `prime-field.trial-division-rungs-vs-remainder` checks every rung, and the
+  disassembly (`puck bench kernels`) must match the hand-written form.
+- The weight audit's next targets, from a whole-solution semantic reference
+  walk (a scratch Roslyn pass that marks every symbol any syntax node in any
+  project resolves to): about 18,000 lines of `Puck.Maths` that only its own
+  tests reach (344 types and methods), led by the `Research` wing; 690 lines
+  of `Puck.HumbleGamingBrick.Forge` and 491 of `Puck.Text` that nothing
+  reaches; and the interface members whose every caller uses the concrete
+  type (`IWorldMachineHost`, `IWorldAuthorityStore`, `IWorldGrantsView`,
+  `IWorldAuthorityHost`), which can drop off their interfaces. The walk does
+  not credit an abstract or interface member called through a derived type,
+  so treat its interface results as leads.
 - The `.puck` sources still under-use the language:
   `worlds/debug/avatars/moth.puck` holds thousands of decimal literals and
   raw quaternions, with the pod's band groups pasted (a uniform row table
