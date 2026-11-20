@@ -146,9 +146,10 @@ public sealed partial class SdfMeshIrradiance {
         TrimGpuHits(layout: layout, lows: snapshot.Lows);
         var now = Time.GetTimestamp();
         candidates.Clear();
-        // This is a snapshot pack, with no eligibility decision. The device evaluates changed-box/ray reach,
-        // missing traces, rebase, sweep and lighting versions; the host keeps the existing stable priority order.
-        for (var level = 0; level < m_levels.Length; level++) {
+        var deferred = false;
+        // Nothing reads cached hits for a skipped row. The selector validates the allocation token on the device
+        // for every row that can consume those hits, including a rebase across changed geometry.
+        for (var level = layout.Finest; level < m_levels.Length; level++) {
             var low = snapshot.Lows[level];
             var dims = layout.DimsOf(level);
             var spacing = layout.SpacingOf(level);
@@ -158,52 +159,47 @@ public sealed partial class SdfMeshIrradiance {
                         var i = candidates.Count;
                         var present = m_levels[level].Cache.TryGetValue((x, y, z), out var probe);
                         var center = new Vector3(x + .5f, y + .5f, z + .5f) * spacing;
-                        origins[i] = new(center, 0);
-                        var row = input.AsSpan(i * SdfMeshProbeRelight.SelectionInputWords, SdfMeshProbeRelight.SelectionInputWords);
                         var slot = layout.OffsetOf(level) + SlotOf(x, y, z, dims);
-                        var written = (records[slot * SdfMeshIrradianceProbe.ProbeWords] & ~SdfMeshIrradianceProbe.InvalidFlag) == (KeyOf(x, y, z) | SdfMeshIrradianceProbe.WrittenFlag);
-                        row[0] = (present ? 1u : 0) | (written ? 0 : 2u) | ((uint)ProbePhase(x, y, z) << 2);
-                        row[1] = (uint)probe.Geometry; row[2] = (uint)probe.Lighting; row[3] = (uint)probe.Sweep; row[4] = (uint)level;
-                        row[5] = BitConverter.SingleToUInt32Bits(probe.Offset.X);
-                        row[6] = BitConverter.SingleToUInt32Bits(probe.Offset.Y);
-                        row[7] = BitConverter.SingleToUInt32Bits(probe.Offset.Z);
-                        row[8] = probe.GpuSlot;
+                        var written = Holds(records.AsSpan(slot * SdfMeshIrradianceProbe.ProbeWords), (x, y, z));
+                        var phase = ProbePhase(x, y, z);
                         var token = m_hitOwners.TryGetValue((level, (x, y, z)), out var owner) && owner.Token == probe.GpuToken ? probe.GpuToken : 0;
-                        row[9] = PackedIntPair.Low(value: token);
-                        row[10] = PackedIntPair.High(value: token);
-                        var age = !present || probe.Lighting == snapshot.Lighting.Version ? 0 : (float)Time.GetElapsedTime(StaleSince(probe.Lighting, in snapshot), now).TotalSeconds;
-                        row[11] = BitConverter.SingleToUInt32Bits(age);
-                        var priority = ProbePriority((x, y, z), low, center, snapshot.Camera, spacing);
+                        var change = ChangeOf(in probe, snapshot.Lighting, spacing, center, snapshot.Scene, m_inputChanges);
+                        var age = !present || change == InputChange.None ? 0 : (float)Time.GetElapsedTime(StaleSince(probe.Lighting, in snapshot), now).TotalSeconds;
                         var bound = SdfMeshProbeRelight.AgeBoundOf(level, snapshot.AgeTarget);
+                        if (present) { RecordAge(ages, level, age, change != InputChange.None); }
+                        var required = !written || token == 0 || probe.Geometry != snapshot.Geometry;
+                        if (!required && !OwesRelight(in probe, change, in snapshot, all, interleave, level, age, bound, phase, now, ref deferred)) { continue; }
+                        origins[i] = new(center, probe.Reach);
+                        var row = input.AsSpan(i * SdfMeshProbeRelight.SelectionInputWords, SdfMeshProbeRelight.SelectionInputWords);
+                        row[0] = (uint)probe.Geometry;
+                        row[1] = (uint)level;
+                        row[2] = BitConverter.SingleToUInt32Bits(probe.Offset.X);
+                        row[3] = BitConverter.SingleToUInt32Bits(probe.Offset.Y);
+                        row[4] = BitConverter.SingleToUInt32Bits(probe.Offset.Z);
+                        row[5] = probe.GpuSlot;
+                        row[6] = PackedIntPair.Low(value: token);
+                        row[7] = PackedIntPair.High(value: token);
+                        var priority = ProbePriority((x, y, z), low, center, snapshot.Camera, spacing);
+                        var visible = InAnyView(center, in snapshot);
                         candidates.Add(new Candidate(Cell: (x, y, z), Band: priority.Band, Morton: priority.Morton, Level: level, LitAt: present ? probe.LitAt : 0, Trace: false,
-                            Overdue: bound > 0 && age >= bound, Stale: present && probe.Lighting != snapshot.Lighting.Version, Urgency: AgePriority(age, bound, InAnyView(center, in snapshot), probe.Moved)));
-                        if (present && layout.Measures(level: level)) { RecordAge(ages, level, age); }
+                            Overdue: bound > 0 && age >= bound, Stale: present && change != InputChange.None, Urgency: AgePriority(age, bound, visible, probe.Moved), Visible: visible));
                     }
                 }
             }
         }
+        var count = candidates.Count;
+        if (count == 0) { return deferred; }
         var changes = new List<Vector4> {
-            new(all ? 1 : 0, BitConverter.Int32BitsToSingle(snapshot.Geometry), BitConverter.Int32BitsToSingle(snapshot.Lighting.Version), BitConverter.Int32BitsToSingle(snapshot.Sweep)),
+            new(BitConverter.Int32BitsToSingle(snapshot.Geometry), 0, 0, 0),
             new(snapshot.Changes.Length, 0, BitConverter.Int32BitsToSingle(snapshot.Changes.Length == 0 ? 0 : snapshot.Changes[0].Geometry), layout.Reach),
             new(layout.SpacingOf(0), 0), new(layout.SpacingOf(1), 0), new(layout.SpacingOf(2), 0),
         };
-        for (var level = 0; level < m_levels.Length; level++) {
-            changes.Add(new(interleave ? 1 : 0, SdfMeshProbeRelight.InterleaveOf(level), SdfMeshProbeRelight.AgeBoundOf(level, snapshot.AgeTarget), BitConverter.Int32BitsToSingle(m_selectionSweep)));
-        }
         changes[1] = changes[1] with { Y = WriteChanges(changes: snapshot.Changes, rows: changes) };
-        var selected = GpuTrace!.Select(snapshot.Scene, origins.AsMemory(start: 0, length: layout.TotalCount), input.AsMemory(start: 0, length: inputWords), [.. changes], GpuHitCapacity, reuse: m_gpuAnswer);
+        var selected = GpuTrace!.Select(snapshot.Scene, origins.AsMemory(start: 0, length: count), input.AsMemory(start: 0, length: count * SdfMeshProbeRelight.SelectionInputWords), [.. changes], GpuHitCapacity, reuse: m_gpuAnswer);
         m_gpuAnswer = selected;
-        var take = 0;
-        var stale = false;
-        // The selection answers every slot, so the slots keep one layout; a level the views do not read takes no work.
-        for (var i = 0; i < layout.TotalCount; i++) {
-            if (!layout.Measures(level: candidates[i].Level)) { continue; }
-            stale |= (selected[i] & 4) != 0;
-            if ((selected[i] & 2) != 0) { candidates[take++] = candidates[i] with { Trace = (selected[i] & 1) != 0 }; }
-        }
-        candidates.RemoveRange(take, candidates.Count - take);
+        for (var i = 0; i < count; i++) { candidates[i] = candidates[i] with { Trace = selected[i] != 0 }; }
         OrderCandidates(candidates, all);
-        return stale;
+        return deferred;
     }
 
     // Grows an array to hold at least `length` entries, never shrinking it. The entries a caller does not write keep an

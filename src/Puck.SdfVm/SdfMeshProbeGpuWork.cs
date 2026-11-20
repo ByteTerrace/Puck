@@ -225,9 +225,9 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
     // only, which the jobs' timestamps measure: a walk that visits more of a change near the probe costs more than this
     // counts, and the measured rate follows.
     private long SelectTestsOf(ReadOnlySpan<uint> row, Vector4[] changes) {
-        if (((row[0] & 1u) == 0) || (row[1] == BitConverter.SingleToUInt32Bits(value: changes[0].Y))) { return 1L; }
+        if (((row[6] | row[7]) == 0) || (row[0] == BitConverter.SingleToUInt32Bits(value: changes[0].X))) { return 1L; }
         var newer = 0;
-        for (var index = (m_selectNewer.Count - 1); ((index >= 0) && (m_selectNewer[index].Geometry > row[1])); index--) { newer = m_selectNewer[index].Walks; }
+        for (var index = (m_selectNewer.Count - 1); ((index >= 0) && (m_selectNewer[index].Geometry > row[0])); index--) { newer = m_selectNewer[index].Walks; }
         return (1L + ((long)newer * SdfMeshProbeDepth.HitCount));
     }
     internal Task<uint[]> CameraSample(SdfMeshIrradianceScene scene, Memory<Vector4> origins, Vector4[] lighting, int words, int geometry, int window) =>

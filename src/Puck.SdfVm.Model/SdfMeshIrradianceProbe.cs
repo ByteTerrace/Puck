@@ -21,7 +21,9 @@ public static class SdfMeshIrradianceProbe {
     /// <summary>The volume's nested levels, finest first; each level's slots follow the finer level's in the table.</summary>
     public const int Levels = Puck.Shaders.SdfWorldPackage.MeshIrradianceLevelCount;
     /// <summary>The words one probe takes in the volume table.</summary>
-    public const int ProbeWords = (DepthWord + DepthWords);
+    public const int ProbeWords = CellWord + 3;
+    /// <summary>The three signed world-cell coordinates owning the toroidal slot.</summary>
+    public const int CellWord = DepthWord + DepthWords;
     /// <summary>Two words of FP16 offset XYZ and back-face share. Every directional read uses this relocated origin.</summary>
     public const int OffsetWord = 17;
     /// <summary>The least distance in metres between a probe and any surface.</summary>

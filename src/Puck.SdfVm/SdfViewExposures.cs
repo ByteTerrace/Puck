@@ -28,10 +28,9 @@ public sealed class SdfViewExposures {
     private bool[] m_adapting = [];
     private float[] m_metered = [];
     private string[] m_meterSources = [];
-    private long[] m_cuts = [];
+    private SdfViewCut[] m_cuts = [];
     // Each slot's occupant (its view's source and cut) and generation, which moves whenever another occupant takes the
     // slot: a reading carries the generation its view was recorded under, and one from a retired generation is discarded.
-    private object?[] m_occupants = [];
     private long[] m_generations = [];
     // A cut owes the camera sample a fresh reading at the camera and the meter a reading rendered after it.
     private bool[] m_sampleOwed = [];
@@ -164,7 +163,6 @@ public sealed class SdfViewExposures {
             Array.Resize(array: ref m_metered, newSize: grown);
             Array.Resize(array: ref m_meterSources, newSize: grown);
             Array.Resize(array: ref m_cuts, newSize: grown);
-            Array.Resize(array: ref m_occupants, newSize: grown);
             Array.Resize(array: ref m_generations, newSize: grown);
             Array.Resize(array: ref m_sampleOwed, newSize: grown);
             Array.Resize(array: ref m_meterOwed, newSize: grown);
@@ -215,10 +213,10 @@ public sealed class SdfViewExposures {
 
         m_stagedAt[index] = m_clock;
         // Another view in the slot is a cut: a new generation, whose camera sample and meter the slot owes afresh.
-        if ((view.CutRevision != m_cuts[index]) || !ReferenceEquals(objA: view.Source, objB: m_occupants[index])) {
-            m_cuts[index] = view.CutRevision;
-            m_occupants[index] = view.Source;
+        if (view.Cut != m_cuts[index]) {
+            m_cuts[index] = view.Cut;
             m_generations[index]++;
+            m_sampled[index] = false;
             m_sampleOwed[index] = true;
             m_meterOwed[index] = true;
         }

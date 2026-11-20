@@ -425,12 +425,9 @@ both.
 - **A material change relights the whole window.** The materials key
   (`SdfMeshIrradiance.MaterialsKey`) already reads only the materials the
   static scene's triangles carry, but a change to one of them moves the
-  lighting version, and every relight sweep lists every probe not relit in the
-  current sweep (`SdfMeshIrradiance.List`, and the GPU selection beside it)
-  until no probe moves past its bound. Narrowing the first sweep to the probes
-  whose hits carry the material would change nothing while later sweeps relight
-  the window for the bounce; it needs a relight driven by which probes' inputs
-  moved, which is step 4.
+  local lighting version. Sun and sky updates already compare per-probe inputs
+  in `SdfMeshIrradiance.ChangeOf`. A material edit still needs an index of
+  which probes hit that material, with later sweeps propagating the bounce.
 - **A delivery emits the whole program on the frame thread.**
   `SdfCompositionFrameSource.CaptureFrame` runs every emitter's `Emit` on the
   frame that finds the content moved, and only the build after it runs on the

@@ -75,16 +75,16 @@ deferred phases within that sweep. A probe relit in the current sweep under
 lighting since replaced is due at once, subject to its phase, so a lighting
 change never waits for the sweep to end; a change within a sweep turns
 interleaving on for the rest of it, and the next sweep interleaves too.
-`sdf-probe-select.comp.hlsl` alone sets the GPU
-due bit; missing geometry, rebase and unwritten publication bypass the phase,
-and lighting age at the level's bound forces it even in the current sweep.
+`SdfMeshIrradiance.OwesRelight` selects light updates on both paths. Missing
+geometry, rebase and unwritten cells bypass the phase. The GPU validates each
+selected hit allocation and decides whether its rays need tracing.
 The worker lists again whenever the lighting version moves (`Work`'s
 `m_listLighting`), rather than resuming a list made under the old lighting.
 The bound is the authored age target times that level's interleave and is
 reported in `world.budget`. A sweep beginning under the same lighting version
 as its predecessor visits every phase so bounce propagation cannot stop on an
 unvisited phase. The
-CPU reference uses the same eligibility rule; lockstep always visits all cells.
+CPU reference uses the same eligibility rule. A drain requests exact inputs for every cell and resets every bounce receiver.
 Partial interleaved sweeps neither certify convergence nor consume the
 full-window `MaxSweeps` limit.
 The combined ages remain diagnostic totals; `behind` compares each level to
@@ -206,8 +206,8 @@ An unheld frame meters the volume's work on the presentation's one budget,
 ordered across residencies by what the player sees. A residency's service draws
 by its frame's share of the display's pixels (`SdfFrame.DisplayShare`, a turn
 in `SdfGpuWorkBudget.Takes`); a residency nothing read last frame takes
-`SdfGpuWorkBudget.LeastWeight`. While a seen frame's views read a level that
-has not published (`SdfMeshIrradiance.OwesFirstLight`, `first-light-owed=` on
+`SdfGpuWorkBudget.LeastWeight`. While a displayed camera has a cell awaiting its first publication at every
+level covering it (`SdfMeshIrradiance.OwesFirstLight`, `first-light-owed=` on
 the `[sdf.mesh-gi]` line), the probe service's jobs are owed work: they take
 the owed allowance an arrival's bake work takes and the coordinator cuts them to it.
 A glass's world measures only the levels its frame reads
@@ -286,14 +286,14 @@ read again is refilled and republished whole.
   `meshIrradianceLevels` row (first cell, packed dims, ten bits each) and a
   `meshIrradianceSpacings` row (xyz spacing, zero until the level first
   publishes); `meshIrradianceVolume` is the enabled flag. Each level publishes
-  on its own once every slot of its window is measured. Every rule that sizes
+  as soon as its first slots land. Slots carry all three signed world-cell coordinates. Every rule that sizes
   by spacing takes the vector: `Lattice`, `Beyond` and
   `sdfMeshIrradianceBeyond` divide per axis, `SurfaceReachOf` is 1.5 cell
   diagonals, `Place` searches a cell whose half extent is per axis.
   A receiver's stages run finest first (`Select`, `sdfMeshProbesAt`): each finer
   level whose boundary probes' surface maps reach it past their window
   (`SdfMeshIrradiance.SurfaceReachOf`), then the level whose window holds it
-  (the coarsest past every window) bounded, the same probes unbounded
+  (the coarsest past every window) bounded, then available coarser levels for any missing corners, the chosen probes unbounded
   (`SdfMeshProbeDepth.Visibility(bounded: false)`: a miss no longer rejects a
   receiver past its reach, but a measured hit still blocks), then the finest
   level's boundary probes unbounded. The first stage that answers is chosen in
@@ -405,14 +405,13 @@ read again is refilled and republished whole.
   channel, anchored to the current channel peak's power-of-two range; tiny
   texels do not each trigger a new capture. These are functions of the
   current frame, never the last capture. Gridded lighting uses this policy in
-  asynchronous and converged modes without the wall-clock capture throttle.
+  both modes. Asynchronous captures also observe the wall-clock capture interval.
   Converged sky comparison is exact, with or without a grid. Only continuous
   asynchronous skies retain `SkyTolerance` against the preceding capture, per
   texel and channel relative to that texel's own value, so a probe that sees
   the sky through a few rays still relights when those rays' sky changes.
   A relight's bounce reads the volume about each hit as it stands, so
-  the bounce is one iteration over the whole window: a sweep relights every
-  probe once, and another follows while any probe of the last moved past
+  the bounce iteration visits probes with front-facing hits. A probe with only back faces and misses reads no neighbours. Another sweep follows while any probe of the last moved past
   `ConvergedShare` (plus `ConvergedFloor` nits) in any colour channel of any
   axis of either cube a relight reads (`Moves`: the radiance and the sky light,
   so an open probe whose sky light alone changed still owes the sweep its
@@ -454,7 +453,7 @@ read again is refilled and republished whole.
   recorded (`Affected`, with a millimetre margin so a hit on the draw's own face
   counts); every other probe keeps its hits and is relit. The walk skips a
   subtree that neither overlaps the placement region nor comes within the
-  probe's farthest ray (`RayReach`), so a wave of thousands of swaps retraces
+  probe's farthest ray (`ProbeData.Reach`), so a wave of thousands of swaps retraces
   only the probes its draws reach. Past `MaxChangeLeaves` a change's subtrees
   below `CutDepth` stand as leaves of their bounds, which name more probes but
   never fewer. A layout or reach change, a draw with no box, or a probe older
@@ -571,13 +570,7 @@ read again is refilled and republished whole.
   (`outside` in `sdfMeshProbesAt` and `Gather`). Every boundary probe lies on the
   window's side of such a receiver, so the hemisphere weight would light only
   the normals turned toward the window: a body or surface out there reads half
-  dark, split at the plane that faces the window. A body posed ahead of the
-  window's refill stands outside the published window until the moved cells are
-  measured (`world.probe` answers `unsettled` meanwhile): on a fresh boot whose
-  first trace ran at the spawn, a pose across the hall reads the spawn's window
-  for the refill's duration. Reproduce a boundary finding by posing past the
-  published window and taking a presented capture before the refill lands; a
-  settled capture or a pose before the first trace hides it.
+  dark, split at the plane that faces the window. Reproduce a boundary finding by posing beyond the coarsest window during motion.
   This easing applies only past the coarsest window, the one level a receiver
   outside reads; inside it the coarser levels supply far-field coverage, and the
   extended read lights a receiver past every probe's reach.
@@ -660,18 +653,19 @@ read again is refilled and republished whole.
   nearest first), then those whose lighting is stale or whose bounce has not
   converged (oldest lighting first), and works through the list a batch at a
   time while the budget (`render.indirect.budget`, `SdfIndirectBudget`), a rate a second of wall time whatever the frame rate,
-  grants relights and traces. A lighting that changes every frame keeps the
-  relight cycling over the window; overload lengthens the lighting's age, not
-  the frame. Each cycle's start records the window's age (median and oldest,
+  grants relights and traces. `ChangeOf` compares each probe's last sampled
+  directional lights and open sky-ray groups with the new capture. Small changes
+  within the authored angular and radiance grid can wait for their cell phase
+  within the level's age bound. An angular change spanning more than one cell
+  at the probe's recorded reach makes it eligible under the existing cadence.
+  This bounds input displacement. Check shadow crossings on the moving-day
+  route. The GPU receives only cells with light, geometry or publication work.
+  Under overload the lighting ages. Each cycle's start records the window's age (median and oldest,
   `world.budget` and `Describe`); a level past its scaled age bound counts
   `behind` and prints `[sdf.mesh-gi] behind` (at most every ten seconds) with
   that level, its bound and the relit and needed rates. A re-traced probe keeps drawing its previous
   measurement until its trace lands. Clear the CPU cache and staging volume
-  only when the layout changes. On a resize or window move, retain the uploaded
-  GPU table **and its old coordinates** until every new slot has a measured
-  sample. Never publish unwritten cells as darkness or initialize them to
-  unoccluded sky. Until a level first publishes, no level has spacing, and views
-  still shade by the volume's model, never by an unoccluded sky ambient. The volume
+  only when the layout changes. On a window move, publish its new coordinates and copy each completed slot. A wrong cell contributes no weight. The gather tries coarser measured corners for the missing share. A camera cut clears the previous view’s sample so its authored sky can light the first frame until a destination sample arrives. The volume
   measures at every tier: Off measures the Medium layout and applies none of its
   light (`SdfFrameBlock`'s `indirectApply` intensity zero, which also brings in
   the authored fill), while its probes keep occluding the traced lights, the
@@ -693,8 +687,7 @@ read again is refilled and republished whole.
   Only pixel passes read it; a relight never does. `world.probe` answers `unsettled` only while geometry is owed (a scene
   build, a trace, a refill, a traced probe not yet published); a relight in
   progress reads as `relighting=1` on its first line.
-- A frame requesting `SdfFrame.ConvergesLighting` (`Drain`) relights its whole window from no bounce, each
-  later pass relighting every probe from the one before, until a whole pass
+- A frame requesting `SdfFrame.ConvergesLighting` (`Drain`) starts bounce receivers from no bounce. It keeps an independent probe whose inputs still match exactly. Each later pass relights the bounce receivers from the preceding pass until a whole pass
   moves nothing past the bound or `MaxSweeps` passes, whenever its geometry, lighting, windows or layout
   differ from the last drain or asynchronous work relit since. Its light is a
   function of those alone, never of bounce asynchronous frames left; the law
@@ -739,13 +732,12 @@ read again is refilled and republished whole.
   the published volume exactly, is cleared before its first copies, retires
   through the frame ring and increments the binding revision when replaced;
   until the volume first publishes into a residency's tables the World set
-  binds the dummy buffer and the parameters are disabled. Keep the old table
-  and coordinates until every new slot is measured. A device reattach brings
+  binds the dummy buffer and the parameters are disabled. A moved window publishes each completed slot. A device reattach brings
   new tables with no table: nothing publishes until a completed relight carries
   the volume's full snapshot into the new feedback, then every slot republishes
   at once (`RepublishAll`).
   The GPU feedback table and the published table are distinct: a relight reads
-  completed prior batches, while views retain their last complete window.
+  completed prior batches, while views read the slots published for their current window.
   Feedback has a CPU shadow for reset snapshots; hierarchy staging streams
   from the scene arrays with only a root-word shadow. Upload buffers shrink
   after small flushes. `world.residency` reports scene, hit-cache and feedback

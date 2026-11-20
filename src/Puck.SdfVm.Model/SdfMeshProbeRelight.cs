@@ -2,10 +2,10 @@ namespace Puck.SdfVm;
 
 /// <summary>Captured probe relight packet shared with the compute kernel.</summary>
 public static class SdfMeshProbeRelight {
-    /// <summary>Presence/phase, geometry, lighting, sweep, level, offset, hit-block token and lighting age for selection.</summary>
-    public const int SelectionInputWords = 12;
-    /// <summary>Selection state, change limits, three spacings and three cadence rows preceding changed boxes.</summary>
-    public const int SelectionHeaderRows = 8;
+    /// <summary>Geometry, level, offset, cached hit slot and its two-word allocation token for a selected probe.</summary>
+    public const int SelectionInputWords = 8;
+    /// <summary>Scene version, change limits and three spacings preceding the geometry changes.</summary>
+    public const int SelectionHeaderRows = 5;
     /// <summary>Moving-light selection cycles between visits to a level's phase. Stable light takes full sweeps.</summary>
     public static int InterleaveOf(int level) => level == 0 ? 1 : level == 1 ? 4 : 8;
     /// <summary>A level's overload age target, scaled by its interleave; zero means no authored age target.</summary>
