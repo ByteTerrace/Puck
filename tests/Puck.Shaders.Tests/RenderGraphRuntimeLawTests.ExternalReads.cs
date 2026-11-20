@@ -1,3 +1,4 @@
+using Puck.Abstractions.Collections;
 using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Presentation;
 using Puck.Abstractions.Sources;
@@ -459,7 +460,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
                 Layout: GpuImageLayout.ShaderReadOnly,
                 Lease: new GpuImageLease(
                     ImageViewHandle: image.ImageViewHandle,
-                    Publication: new GpuImagePublication(Owner: this, Sequence: Produced),
+                    Publication: new ReferenceRevision(Owner: this, Revision: Produced),
                     Release: _ => Released++
                 ),
                 Tainted: false
@@ -479,7 +480,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
         public string? PendingCapturePath => null;
 
         public List<(string Producer, nint ImageView)> Seen { get; } = [];
-        public List<GpuImagePublication> Publications { get; } = [];
+        public List<ReferenceRevision> Publications { get; } = [];
 
         public bool Takes { get; set; }
         public bool Throws { get; set; }

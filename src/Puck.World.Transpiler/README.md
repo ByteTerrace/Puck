@@ -751,7 +751,7 @@ no text that recompiles to a null comparand.
 New codes: PUCK002 (operand failed `ExpressionSpelling.TryParse`), PUCK003 (a row reference wasn't exactly one
 state read), PUCK005 (an unknown declared kind), PUCK006 (never
 emitted: a `local`'s kind is inferred, never required), PUCK007 (`local` missing its initializer), PUCK009 (an `rhs` shape the target effect's fields can't carry—a string
-on `addState`/`push`, seconds on `push`), PUCK010 (`schedule ... in` missing a time unit, or carrying one the seconds dimension does not admit), PUCK011 (`rule`
+on `addState`/`push`, seconds on `push`), PUCK011 (`rule`
 missing its name), PUCK012 (a second `when` in one rule/option), PUCK013 (`option`/`decision` structure: a missing
 name or a missing `score`), PUCK014 (`onFailure` used more than once on one `transaction`), PUCK019 (nested
 `transaction`), PUCK026 (a rule with no effect statements), PUCK028 (a placement authoring both the bare `solid`

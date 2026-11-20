@@ -62,11 +62,15 @@ public sealed partial class WorldInputRuntime {
         var target = m_host.Body(index: body)!;
         var channels = Catalog.Mappings[batch.Mapping].Channels;
         var accepted = batch.Image with { Channels = default };
+        var remap = channels.RemapTo(target: target.Channels);
 
         foreach (var logical in Catalog.Mappings[batch.Mapping].Live) {
             var address = Catalog.Mappings[batch.Mapping].Address(logicalId: logical);
 
-            if ((address < 0) || !target.Channels.TryGetOrdinal(name: channels.Name(ordinal: address)!, ordinal: out var destination)) { continue; }
+            if (address < 0) { continue; }
+            var destination = remap[address];
+
+            if (destination < 0) { continue; }
             accepted = ((channels.Shape(ordinal: address) == ChannelShape.Relative)
                 ? accepted.WithRelative(ordinal: destination, value: batch.Image.Channels.Relative(ordinal: address))
                 : accepted.WithChannel(ordinal: destination, value: batch.Image[address]));

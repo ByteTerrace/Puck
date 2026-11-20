@@ -1,0 +1,23 @@
+// `schedule row in delay` takes the value `scheduleState(delaySeconds: delay)` takes: a template parameter, arithmetic
+// over one, a number with a unit, or a bare number of seconds.
+schema: "puck.world.definition.v1"
+documentId: "pair"
+
+template tick(delay) {
+  rule "tick" {
+    when go == 1
+    schedule due in delay
+    schedule due in delay * 2
+    schedule due in 500ms
+    schedule due in 2
+  }
+}
+
+state {
+  world {
+    slot go = 0
+    slot due = 0
+  }
+}
+
+tick(0.25)

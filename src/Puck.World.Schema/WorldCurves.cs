@@ -140,17 +140,7 @@ public sealed record WorldCurveRow(
         public bool Equals(CurveShape? other) =>
             ((other is not null) && (other.Closed == Closed) && other.Knots.AsSpan().SequenceEqual(other: Knots));
         public override bool Equals(object? obj) => Equals(other: (obj as CurveShape));
-        public override int GetHashCode() {
-            var hash = new HashCode();
-
-            hash.Add(value: Closed);
-
-            foreach (var knot in Knots) {
-                hash.Add(value: knot);
-            }
-
-            return hash.ToHashCode();
-        }
+        public override int GetHashCode() => HashCode.Combine(Closed, SequenceHash.Of<CurvatureSplineKnot>(Knots.AsSpan()));
     }
 
     private CurvatureSplineKnot[] ToSplineKnots() {

@@ -53,23 +53,33 @@ public sealed class SequenceEqualityComparer<T> :
     /// <summary>Hashes a read-only list by its elements.</summary>
     /// <param name="obj">The list.</param>
     /// <returns>A hash equal for lists that compare equal, and for the same elements as an array or span.</returns>
-    public int GetHashCode(IReadOnlyList<T> obj) {
+    public int GetHashCode(IReadOnlyList<T> obj) => SequenceHash.Of(obj);
+    /// <summary>Hashes a span by its elements.</summary>
+    /// <param name="alternate">The span.</param>
+    /// <returns>A hash equal for sequences that compare equal, array or list included.</returns>
+    public int GetHashCode(ReadOnlySpan<T> alternate) => SequenceHash.Of(alternate);
+}
+
+/// <summary>Hashes ordered elements for in-memory structural keys using the process-local seed.</summary>
+public static class SequenceHash {
+    /// <summary>Hashes the elements of a span in order.</summary>
+    public static int Of<T>(ReadOnlySpan<T> elements) {
         var hash = new HashCode();
 
-        for (var index = 0; (index < obj.Count); index++) {
-            hash.Add(value: obj[index]);
+        foreach (ref readonly var element in elements) {
+            hash.Add(value: element);
         }
 
         return hash.ToHashCode();
     }
-    /// <summary>Hashes a span by its elements.</summary>
-    /// <param name="alternate">The span.</param>
-    /// <returns>A hash equal for sequences that compare equal, array or list included.</returns>
-    public int GetHashCode(ReadOnlySpan<T> alternate) {
-        var hash = new HashCode();
 
-        foreach (var element in alternate) {
-            hash.Add(value: element);
+    /// <summary>Hashes the elements of a list in order, using zero for an absent list.</summary>
+    public static int Of<T>(IReadOnlyList<T>? elements) {
+        if (elements is null) { return 0; }
+
+        var hash = new HashCode();
+        for (var index = 0; index < elements.Count; index++) {
+            hash.Add(elements[index]);
         }
 
         return hash.ToHashCode();
