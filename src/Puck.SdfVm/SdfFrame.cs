@@ -364,6 +364,10 @@ public sealed record SdfFrame(
     /// <summary>The key light's distant shadow map (<c>render.distantShadows</c> or the device table's row), which
     /// <see cref="SdfMeshShadowCascades.Fit"/> adds to every view's cascade set while it is on; the default is off.</summary>
     public SdfDistantShadows DistantShadows { get; init; }
+    /// <summary>How the key light's far shadow cascade keeps up with what moves (<c>render.farShadows</c> or the device
+    /// table's row) while <see cref="SdfUpdateRates.ShadowFar"/> is on: its refreshes a second and the light turn a held
+    /// cascade tolerates; the default refreshes it every frame (<see cref="SdfFarShadows.EveryFrame"/>).</summary>
+    public SdfFarShadows FarShadows { get; init; } = SdfFarShadows.EveryFrame;
     /// <summary>The camera exposure every exposed view of the frame maps the luminance it shades to the display by
     /// (<c>render.exposure</c>). The default is the manual exposure an unauthored world renders at.</summary>
     public SdfExposure Exposure { get; init; } = SdfExposure.Default;

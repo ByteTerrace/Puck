@@ -304,7 +304,8 @@ public sealed class VulkanGpuRecorder(IVulkanDeviceContext deviceContext, IVulka
             height: height,
             sourceImageHandle: sourceImageHandle,
             sourceImageLayout: ToVulkanLayout(layout: GpuImageLayout.TransferSource),
-            width: width
+            width: width,
+            aspectMask: (VulkanGpuImage.IsDepth(imageHandle: sourceImageHandle) ? VulkanGpuFormats.DepthAspect : VulkanGpuFormats.ColorAspect)
         );
     /// <inheritdoc/>
     public uint CopyRowAlignment => 1U;

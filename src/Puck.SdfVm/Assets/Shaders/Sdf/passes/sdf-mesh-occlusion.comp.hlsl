@@ -239,6 +239,10 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
     // A pass that draws static casters alone (the distant shadow map, SdfMeshOcclusion.Stage) keeps no dynamic or glass
     // draw, boxed or not: what it holds stands until a static draw changes.
     bool staticOnly = (header.w & 16u) != 0u;
+    // A share of a draw list split over several frames (the distant map's back map, SdfMeshOcclusion.Stage) keeps the
+    // draws whose index leaves its remainder, so the shares draw each draw exactly once.
+    uint slices = ((header.w >> 8u) & 0xFFu) + 1u;
+    uint slice = ((header.w >> 16u) & 0xFFu);
 
     // Each phase draws one command a candidate, empty or not.
     if (id.x == 0u) {
@@ -274,7 +278,7 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
         // A culled draw can retain another mesh's level in history; its current table may have fewer levels.
         uint level = min(state.y, d.w);
         if (step == SDF_OCCLUSION_EARLY_STEP) {
-            kept = (!staticOnly || ((a.w & SDF_MESH_DYNAMIC_FLAG) == 0u)) &&
+            kept = (!staticOnly || ((a.w & SDF_MESH_DYNAMIC_FLAG) == 0u)) && ((draw % slices) == slice) &&
                 (splitExit || (((a.w >> 1u) & 1u) == (header.w & 1u))) && (unboxed || sdfSelectionKeeps(asfloat(a.xyz), asfloat(b.xyz), asfloat(c.xyz), asfloat(d.xyz)));
             if (kept && splitExit && occlude && !unboxed) {
                 kept = sdfReceiverMayShadow(asfloat(a.xyz), asfloat(b.xyz), asfloat(c.xyz), asfloat(d.xyz));

@@ -2232,6 +2232,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             ShadowCoverage = WorldRenderFarDistance.ResolveShadowCoverage(defaults: m_client.Definition.Render),
             // The distant shadow map: render.distantShadows at boot, then the device table's row a quality preset applies.
             DistantShadows = WorldRenderFarDistance.ResolveDistantShadows(authored: m_settings.DistantShadows),
+            FarShadows = WorldRenderFarDistance.ResolveFarShadows(authored: m_settings.FarShadows),
             // The lights and the sky: render.lighting, render.sky and render.environment with every keyed value at its
             // clock's presented phase (a world.row.set render lands on the next frame).
             Lights = lighting.Lights,

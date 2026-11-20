@@ -18,6 +18,29 @@ public sealed class DerivedBytes {
         Path.Combine(path1: AppContext.BaseDirectory, path2: ShippingDirectoryName),
         Path.Combine(path1: Environment.CurrentDirectory, path2: ShippingDirectoryName),
     ];
+    /// <summary>Reads the derived entry of a kind and input that the shipping caches hold (<see cref="ShippingDirectories"/>,
+    /// in order). The store verifies the entry's bytes; an absent, damaged or unreadable entry is an ordinary miss, never a
+    /// refusal.</summary>
+    /// <param name="kind">The derived artifact kind the entry was set under (<see cref="ContentAddressedStore.SetDerived"/>).</param>
+    /// <param name="input">The input's pin.</param>
+    /// <param name="content">When this method returns <see langword="true"/>, the entry's bytes; otherwise empty.</param>
+    /// <returns><see langword="true"/> when a shipping cache holds a verified entry.</returns>
+    public static bool TryReadShipped(string kind, ContentPin input, out byte[] content) {
+        foreach (var directory in ShippingDirectories()) {
+            if (!Directory.Exists(path: directory)) { continue; }
+            try {
+                var store = new ContentAddressedStore(root: directory);
+
+                if (store.TryResolveDerived(kind: kind, inputHash: input, hash: out var pin) && store.TryGet(pin: pin, content: out content)) {
+                    return true;
+                }
+            } catch (Exception exception) when (exception is IOException or UnauthorizedAccessException) {
+            }
+        }
+        content = [];
+
+        return false;
+    }
     private readonly CodeClosure m_code;
     private readonly string m_name;
     private long m_hits;

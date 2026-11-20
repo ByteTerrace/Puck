@@ -31,19 +31,8 @@ public sealed partial class ShaderCompiler {
     }
 
     // The store verifies the whole envelope; an absent, damaged or unreadable entry is an ordinary miss, never a refusal.
-    private static byte[]? ReadPrepared(ShaderOutputPlan plan) {
-        foreach (var directory in DerivedBytes.ShippingDirectories()) {
-            if (!Directory.Exists(path: directory)) { continue; }
-            try {
-                var store = new ContentAddressedStore(root: directory);
-
-                if (store.TryResolveDerived(kind: PreparedKind, inputHash: ContentPin.Parse(text: "sha256/" + plan.Inputs), hash: out var pin) &&
-                    store.TryGet(pin: pin, content: out var envelope) && (envelope.Length > PreparedKeyBytes)) {
-                    return envelope[PreparedKeyBytes..];
-                }
-            } catch (Exception exception) when (exception is IOException or UnauthorizedAccessException) {
-            }
-        }
-        return null;
-    }
+    private static byte[]? ReadPrepared(ShaderOutputPlan plan) =>
+        ((DerivedBytes.TryReadShipped(content: out var envelope, input: ContentPin.Parse(text: "sha256/" + plan.Inputs), kind: PreparedKind) && (envelope.Length > PreparedKeyBytes))
+            ? envelope[PreparedKeyBytes..]
+            : null);
 }

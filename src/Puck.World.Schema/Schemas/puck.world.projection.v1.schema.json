@@ -304,6 +304,11 @@
                 "turnDegrees": {
                   "description": "The light turn, in degrees, a held map tolerates before it is drawn again: the most its shadows lag a moving sun by, in (0, 10].",
                   "type": "number"
+                },
+                "frames": {
+                  "description": "The frames one redraw is spread over, from 1 through MaxFrames: each draws a share of the casters into a back map, and the map the receivers read changes only once the last share lands, so a redraw costs any one frame about this share of a whole one and lands this many frames later. One draws a redraw whole.",
+                  "type": "integer",
+                  "default": 1
                 }
               },
               "required": [
@@ -314,6 +319,30 @@
               "additionalProperties": false,
               "default": null,
               "title": "WorldDistantShadows"
+            },
+            "farShadows": {
+              "description": "How often the device refreshes the far shadow cascade and the light turn a held cascade tolerates (WorldFarShadows). Absent refreshes it every frame.",
+              "type": [
+                "object",
+                "null"
+              ],
+              "properties": {
+                "hertz": {
+                  "description": "The refreshes a second, a whole number from 1 through MaxHertz, where MaxHertz draws it every frame. A refresh draws the cascade\u0027s two layers on consecutive frames.",
+                  "type": "integer"
+                },
+                "turnDegrees": {
+                  "description": "The light turn, in degrees, a held cascade tolerates, in (0, MaxTurnDegrees]: past it the cascade is drawn again at once, so a light that turns faster than this a period refreshes the cascade on its turn rather than its rate.",
+                  "type": "number"
+                }
+              },
+              "required": [
+                "hertz",
+                "turnDegrees"
+              ],
+              "additionalProperties": false,
+              "default": null,
+              "title": "WorldFarShadows"
             }
           },
           "required": [
@@ -458,6 +487,10 @@
             "distantShadows": {
               "$ref": "#/properties/render/properties/low/properties/distantShadows",
               "default": null
+            },
+            "farShadows": {
+              "$ref": "#/properties/render/properties/low/properties/farShadows",
+              "default": null
             }
           },
           "required": [
@@ -601,6 +634,10 @@
             },
             "distantShadows": {
               "$ref": "#/properties/render/properties/low/properties/distantShadows",
+              "default": null
+            },
+            "farShadows": {
+              "$ref": "#/properties/render/properties/low/properties/farShadows",
               "default": null
             }
           },
@@ -12091,6 +12128,10 @@
                   "distantShadows": {
                     "$ref": "#/properties/render/properties/low/properties/distantShadows",
                     "default": null
+                  },
+                  "farShadows": {
+                    "$ref": "#/properties/render/properties/low/properties/farShadows",
+                    "default": null
                   }
                 },
                 "required": [
@@ -12196,6 +12237,11 @@
             "turnDegrees": {
               "description": "The light turn, in degrees, a held map tolerates before it is drawn again: the most its shadows lag a moving sun by, in (0, 10].",
               "type": "number"
+            },
+            "frames": {
+              "description": "The frames one redraw is spread over, from 1 through MaxFrames: each draws a share of the casters into a back map, and the map the receivers read changes only once the last share lands, so a redraw costs any one frame about this share of a whole one and lands this many frames later. One draws a redraw whole.",
+              "type": "integer",
+              "default": 1
             }
           },
           "required": [
@@ -12206,6 +12252,30 @@
           "additionalProperties": false,
           "default": null,
           "title": "WorldDistantShadows"
+        },
+        "farShadows": {
+          "description": "How often the world boots refreshing the far shadow cascade (WorldFarShadows); a quality preset\u0027s row replaces it. Absent refreshes it every frame.",
+          "type": [
+            "object",
+            "null"
+          ],
+          "properties": {
+            "hertz": {
+              "description": "The refreshes a second, a whole number from 1 through MaxHertz, where MaxHertz draws it every frame. A refresh draws the cascade\u0027s two layers on consecutive frames.",
+              "type": "integer"
+            },
+            "turnDegrees": {
+              "description": "The light turn, in degrees, a held cascade tolerates, in (0, MaxTurnDegrees]: past it the cascade is drawn again at once, so a light that turns faster than this a period refreshes the cascade on its turn rather than its rate.",
+              "type": "number"
+            }
+          },
+          "required": [
+            "hertz",
+            "turnDegrees"
+          ],
+          "additionalProperties": false,
+          "default": null,
+          "title": "WorldFarShadows"
         }
       },
       "additionalProperties": false,

@@ -40,6 +40,14 @@ public static class WorldRenderFarDistance {
     /// <param name="authored">The authored map, or <see langword="null"/> for none.</param>
     /// <returns>The map.</returns>
     public static SdfDistantShadows ResolveDistantShadows(WorldDistantShadows? authored) => ((authored is { } map)
-        ? new SdfDistantShadows(Reach: map.Reach, Texels: map.Texels, TurnRadians: float.DegreesToRadians(degrees: map.TurnDegrees))
+        ? new SdfDistantShadows(Reach: map.Reach, Texels: map.Texels, TurnRadians: float.DegreesToRadians(degrees: map.TurnDegrees), Frames: map.Frames)
         : default);
+    /// <summary>Resolves an authored far cascade rate (<c>render.farShadows</c> or a quality preset's row) to the one a
+    /// frame holds the cascade by, the tolerance converted from degrees to radians; every frame when none is
+    /// authored.</summary>
+    /// <param name="authored">The authored rate, or <see langword="null"/> for none.</param>
+    /// <returns>The rate.</returns>
+    public static SdfFarShadows ResolveFarShadows(WorldFarShadows? authored) => ((authored is { } rate)
+        ? new SdfFarShadows(Hertz: rate.Hertz, TurnRadians: float.DegreesToRadians(degrees: rate.TurnDegrees))
+        : SdfFarShadows.EveryFrame);
 }

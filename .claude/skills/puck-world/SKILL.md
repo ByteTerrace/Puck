@@ -820,9 +820,10 @@ check the flag: the owner may be holding the pad.
   tier's preset (`WorldDeviceProfile.TableIn`), and memory bars. A windowed or offscreen boot selects the row whose
   `match` the adapter's name contains once the device names its adapter, caps the device and host pools at its bars
   before the first frame stages anything (`WorldDeviceProfileState.ApplyAtBoot`, over `MemoryAccount.SetBudget`, which
-  only lowers a limit), then submits `world.device-profile auto`, which writes the table through the `world.quality`
-  levers (`IWorldQualityPresets`); a lever command after it overrides it, and `world.device-profile` echoes
-  `table=<tier or profile name>`. `puck benchmark --profile` sends it before the first chapter, and the run report's
+  only lowers a limit), then writes the table on the frame thread through the `world.quality` levers
+  (`IWorldQualityPresets`) by the door `world.device-profile` takes (`WorldDeviceProfileState.Select`), never as a queued
+  console line a session hold could delay; a lever command after it overrides it, and `world.device-profile` echoes
+  `table=<tier or profile name>` (`pending` while the levers are written). `puck benchmark --profile` sends it before the first chapter, and the run report's
   `profile` and `topology` objects name what applied. No device name or figure is engine code.
 - `puck test <source>` boots each `.puck` `test` block headless and prints one
   verdict per line ([references/schedules-and-tests.md](references/schedules-and-tests.md)).

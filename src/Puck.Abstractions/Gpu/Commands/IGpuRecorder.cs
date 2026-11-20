@@ -132,7 +132,8 @@ public interface IGpuRecorder {
     /// <param name="format">The image's format: RGBA8, BGRA8, RGBA16F or RGBA32F.</param>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="format"/> is not one of those.</exception>
     void ClearStorageImage(nint commandBufferHandle, nint imageHandle, GpuPixelFormat format);
-    /// <summary>Records a copy of the whole of one single-level color image into another of its format and extent.</summary>
+    /// <summary>Records a copy of the whole of one single-level image into another of its format and extent: two color
+    /// images, or two depth images (a depth attachment, such as a shadow map's).</summary>
     /// <param name="commandBufferHandle">The command buffer being recorded.</param>
     /// <param name="sourceImageHandle">The image copied, in <see cref="GpuImageLayout.TransferSource"/>.</param>
     /// <param name="destinationImageHandle">The image written, in <see cref="GpuImageLayout.TransferDestination"/>.</param>

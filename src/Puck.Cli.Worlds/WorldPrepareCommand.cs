@@ -184,7 +184,9 @@ public static class WorldPrepareCommand {
     /// <summary>Specializes the views and glass kernels for each declared program set exactly as a residency requests
     /// them (SdfWorldResidency's PrepareShade), for both targets, from the deployed tree a player compiles against, and
     /// exports them into the shipping cache beside <paramref name="output"/>, so a player's first boot finds them and
-    /// interprets only a program its documents did not declare. The kernels are a cache whose miss the runtime derives
+    /// interprets only a program its documents did not declare. Each kernel is held to this host's interface here, and
+    /// the bindings it was reflected to ship with it (<see cref="PreparedShaderBindings"/>), so a player without
+    /// <c>dxcompiler.dll</c> admits a prewarmed DXIL kernel. The kernels are a cache whose miss the runtime derives
     /// again, so a target this machine's toolchain cannot compile (no dxc, a dxc without SPIR-V, an install without the
     /// kernel sources) is skipped and named, never fatal.</summary>
     /// <param name="sets">The declared program sets (<see cref="Composition.ShadeSets"/>).</param>
@@ -202,16 +204,28 @@ public static class WorldPrepareCommand {
                 // Read as a runtime's kernel set reads them at load (SdfKernelSet.Load), so the plans key alike.
                 var sources = SdfShadeKernels.SourcesOf(tree: SdfKernelSet.DeployedTree);
 
+                using var reflector = new ShaderBytecodeReflector(toolchain: compiler.Toolchain);
+
                 foreach (var programs in distinct) {
                     var plans = SdfShadeKernels.Plan(compiler: compiler, programs: programs, sources: sources, target: target);
+                    var bytecodes = SdfShadeKernels.CompileAsync(compiler: compiler, plans: plans).GetAwaiter().GetResult();
 
-                    _ = SdfShadeKernels.CompileAsync(compiler: compiler, plans: plans).GetAwaiter().GetResult();
-                    foreach (var (_, plan) in plans) {
-                        compiler.ExportPrepared(directory: store, plan: plan);
+                    for (var index = 0; (index < plans.Count); index++) {
+                        // The interface check a player's specialization makes, made here where the compiler is: a kernel
+                        // that reads anything but this host's interface is never shipped, and the bindings that passed ship
+                        // beside it, so a player reflects it without the compiler library.
+                        var (kernel, bytecode) = bytecodes[index];
+                        var bindings = reflector.Read(bytecode: bytecode.Span);
+
+                        if (SdfKernelSet.InterfaceMismatch(kernel: kernel, reflected: bindings) is { } mismatch) {
+                            throw new InvalidDataException(message: $"The specialized '{SdfKernelSet.StemOf(kernel: kernel)}' does not read this host's interface: {mismatch}");
+                        }
+                        compiler.ExportPrepared(directory: store, plan: plans[index].Plan);
+                        PreparedShaderBindings.Export(bindings: bindings, bytecode: bytecode.Span, directory: store);
                         kernels++;
                     }
                 }
-            } catch (Exception exception) when (exception is InvalidDataException or IOException or UnauthorizedAccessException or ShaderToolMissingException or ShaderClosureRefusedException) {
+            } catch (Exception exception) when (exception is InvalidDataException or InvalidOperationException or IOException or UnauthorizedAccessException or ShaderToolMissingException or ShaderClosureRefusedException) {
                 Console.Error.WriteLine(value: $"world prepare: specialized shading kernels for {target} skipped, the runtime compiles them on a miss: {exception.Message}");
             }
         }

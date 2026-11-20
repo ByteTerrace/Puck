@@ -14,11 +14,17 @@ namespace Puck.SdfVm;
 /// <see cref="SdfWorldPackage.MeshDistantShadowMaxResolution"/> while on.</param>
 /// <param name="TurnRadians">The light turn, in radians, a held map tolerates before it is drawn again: the most the
 /// shadows it holds lag a moving light by.</param>
-public readonly record struct SdfDistantShadows(float Reach, int Texels, float TurnRadians) {
+/// <param name="Frames">The frames one redraw is spread over (<see cref="Slices"/>): each draws a share of the casters
+/// into the back map, and the map receivers read changes only when the last share lands.</param>
+public readonly record struct SdfDistantShadows(float Reach, int Texels, float TurnRadians, int Frames = 1) {
     /// <summary>The cells of the map's grid across its reach: the eye may move one cell, an eighth of the reach, before
     /// the map is centred again.</summary>
     public const int CellsPerReach = 8;
 
+    /// <summary>Gets the shares one redraw is drawn in, one a frame: <see cref="Frames"/>, at least one.</summary>
+    public int Slices => Math.Max(val1: Frames, val2: 1);
+    /// <summary>Gets whether a redraw is spread over more than one frame through the back map.</summary>
+    public bool IsSliced => (IsOn && (Slices > 1));
     /// <summary>Gets whether the map is drawn at all.</summary>
     public bool IsOn => ((Reach > 0f) && (Texels > 0));
     /// <summary>Gets the side of one cell of the grid the map's centre snaps to, in metres.</summary>

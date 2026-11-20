@@ -17,6 +17,7 @@ public sealed partial class WorldRenderSettings {
     private bool m_ambientOcclusion;
     private bool m_rayQueries;
     private WorldDistantShadows? m_distantShadows;
+    private WorldFarShadows? m_farShadows;
     private bool m_cadenceGate;
     private SdfMeshCullLevel m_cull;
     private SdfMeshDetailLevel m_detail;
@@ -56,6 +57,7 @@ public sealed partial class WorldRenderSettings {
         IndirectTier = (defaults.Indirect?.Tier ?? SdfIndirectTier.Medium);
         RayQueries = defaults.RayQueries;
         DistantShadows = defaults.DistantShadows;
+        FarShadows = defaults.FarShadows;
         DynamicResolution = defaults.DynamicResolution;
         CadenceGate = true;
         Cull = SdfMeshCullLevel.Occlusion;
@@ -76,6 +78,11 @@ public sealed partial class WorldRenderSettings {
     /// <see langword="null"/> for none. Boots at <c>render.distantShadows</c>; a quality preset's row (the device table)
     /// moves it live.</summary>
     public WorldDistantShadows? DistantShadows { get => m_distantShadows; set { m_distantShadows = value; m_revision++; } }
+    /// <summary>The key light's far cascade rate (<see cref="Puck.SdfVm.SdfFrame.FarShadows"/>) for every residency the
+    /// session presents, routed worlds' included: its refreshes a second and the light turn a held cascade tolerates, or
+    /// <see langword="null"/> to refresh it every frame. Boots at <c>render.farShadows</c>; a quality preset's row (the
+    /// device table) moves it live.</summary>
+    public WorldFarShadows? FarShadows { get => m_farShadows; set { m_farShadows = value; m_revision++; } }
     /// <summary>The exposure pin (<c>world.exposure pin</c>): an <c>EV100</c> every view the session presents renders
     /// manual at, with no local adaptation (<see cref="SdfExposure.HeldAt"/>), so look comparisons hold one exposure;
     /// <see langword="null"/> (the default) leaves each world's authored and held exposure exactly as it is. Presentation

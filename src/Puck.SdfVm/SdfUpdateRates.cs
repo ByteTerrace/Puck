@@ -25,8 +25,8 @@ public enum SdfUpdateRates : byte {
     /// <summary>An in-world screen's source image upload at least 30 or 15 times a second once it is shown below its
     /// native size; the machine behind it still runs at full rate.</summary>
     Screens = 4,
-    /// <summary>The key light's far shadow cascade refreshed at least 30 times a second, its fit held between
-    /// refreshes.</summary>
+    /// <summary>The key light's far shadow cascade refreshed at the rate the device table authors
+    /// (<see cref="SdfFrame.FarShadows"/>), its fit held between refreshes.</summary>
     ShadowFar = 8,
     /// <summary>The key light's distant shadow map held while the light turns within its authored tolerance and the eye
     /// stays inside its cell (<see cref="SdfDistantShadows"/>); off, it is drawn again on every frame the light moves at
@@ -75,26 +75,12 @@ public static class SdfUpdateRateTiers {
     /// <summary>The share of its native height at and below which a screen's image uploads at 15 Hz: four texels a step,
     /// two pixels or less at half its native size.</summary>
     public const float ScreenQuarterRateShare = 0.5f;
-    /// <summary>The rate the far shadow cascade refreshes at, in hertz: a dynamic caster lags it by a 30th of a second,
-    /// under one of its texels at walking speed (the cascade covers 120 m in at most 2,048 texels, so a texel is 12 cm or
-    /// more) and beyond the near cascade's 16 m.</summary>
-    public const int ShadowFarHertz = 30;
     /// <summary>The camera turn, in radians, past which a held far cascade refreshes at once: at its 120 m reach the
     /// view's frustum moves about a metre, within the shadow filter's reach the cascade's caster cull keeps beside
     /// every receiver (<see cref="SdfMeshCull.ShadowFilterTexels"/>).</summary>
     public const float ShadowFarTurnRadians = 0.0087f;
     /// <summary>The camera move, in metres, past which a held far cascade refreshes at once.</summary>
     public const float ShadowFarMoveMetres = 0.5f;
-    /// <summary>Returns the light turn, in radians, past which a held far cascade refreshes at once: the turn that moves
-    /// the shadow of a caster at the far end of the cascade's depth span (<see cref="SdfMeshShadowCamera.Far"/>, its
-    /// sphere and the casters' reach toward the light) by one of its texels. A sun on a day clock turns less in a 30th of a
-    /// second (a 24-minute day turns it 0.15 milliradians, against about 0.3 for the debug world's far cascade), so a
-    /// steadily moving sun holds and a light that jumps ends a hold.</summary>
-    /// <param name="camera">The far cascade's camera.</param>
-    /// <param name="texels">The texels along each side of its depth.</param>
-    /// <returns>The turn, in radians.</returns>
-    public static float ShadowFarLightTurnRadians(in SdfMeshShadowCamera camera, int texels) =>
-        (((2f * camera.HalfHeight) / Math.Max(val1: texels, val2: 1)) / Math.Max(val1: camera.Far, val2: 1f));
 
     /// <summary>Returns the rate a posed creation (a body, or a placed creation) updates at for its largest pixels per
     /// metre over the views that may see it and the fastest its parts move relative to its root: the slowest tier at
@@ -381,6 +367,10 @@ public static class SdfUpdateRateCounts {
     public static readonly WorkKind ShadowFarHeld = new(name: "sdf.rates.shadow-far.held", unit: "frames", workClass: WorkClass.Pacing);
     /// <summary>Counts each frame a view drew its distant shadow map.</summary>
     public static readonly WorkKind ShadowDistantRendered = new(name: "sdf.rates.shadow-distant.rendered", unit: "frames", workClass: WorkClass.Pacing);
+    /// <summary>Counts each frame a view drew one share of a distant shadow map redraw spread over several frames
+    /// (<see cref="SdfDistantShadows.Slices"/>) that completed no map; the share that completes one counts as
+    /// <see cref="ShadowDistantRendered"/>.</summary>
+    public static readonly WorkKind ShadowDistantShared = new(name: "sdf.rates.shadow-distant.share", unit: "frames", workClass: WorkClass.Pacing);
     /// <summary>Counts each frame a view held its distant shadow map.</summary>
     public static readonly WorkKind ShadowDistantHeld = new(name: "sdf.rates.shadow-distant.held", unit: "frames", workClass: WorkClass.Pacing);
     /// <summary>Counts each frame a nested view was shown at a reduced rate.</summary>
@@ -391,7 +381,7 @@ public static class SdfUpdateRateCounts {
     /// <summary>Counts each frame a screen's source was shown at a reduced rate.</summary>
     public static readonly WorkKind ScreensRated = new(name: "sdf.rates.screens.rated", unit: "footprints", workClass: WorkClass.Pacing);
 
-    private static readonly WorkKind[] DeclaredKinds = [BodiesPosed, BodiesHeld, PlacementsPosed, PlacementsHeld, ShadowFarRendered, ShadowFarSplit, ShadowFarHeld, ShadowDistantRendered, ShadowDistantHeld, ViewsRated, ViewsHeld, ScreensRated];
+    private static readonly WorkKind[] DeclaredKinds = [BodiesPosed, BodiesHeld, PlacementsPosed, PlacementsHeld, ShadowFarRendered, ShadowFarSplit, ShadowFarHeld, ShadowDistantRendered, ShadowDistantShared, ShadowDistantHeld, ViewsRated, ViewsHeld, ScreensRated];
 
     /// <summary>Creates the counters a host's frames count into.</summary>
     /// <returns>A set over every kind this class declares, in report order, every count zero.</returns>

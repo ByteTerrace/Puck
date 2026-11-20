@@ -303,18 +303,23 @@ public static class WorldRenderRoot {
             // The specializations those residencies retired unfinished are waited out last, while the device lives.
             Holdings = [compareCapture, host, binder, residency, pipelines.RetiredBuilds],
             Prepare = (in FrameContext context) => {
-                // The memory bars of the profile the world authors for this adapter bind once the device is up and has
-                // named its adapter, before the first frame's residencies stage anything; the device opens lazily, so
-                // it may have no identity when the root is composed. Its quality table then applies through the same
-                // command a benchmark or an operator runs, so the device runs the path its table enables from its first
-                // frames; a lever command after it overrides it as usual.
+                // The profile the world authors for this adapter applies once the device is up and has named its
+                // adapter, before the first frame's residencies stage anything; the device opens lazily, so it may have
+                // no identity when the root is composed. Its memory bars and then its quality table apply here, on the
+                // frame thread, through the door world.device-profile takes, so the device runs the path its table
+                // enables from its first frame; a lever command after it overrides it as usual.
                 if (!profileBound && (device.Identity is { } identity)) {
                     profileBound = true;
+
+                    var render = sp.GetRequiredService<Puck.World.Server.WorldServer>().Definition.Render;
+
                     if (profiles?.ApplyAtBoot(
                         adapter: identity.AdapterName,
-                        profile: WorldDeviceProfiles.Select(adapterName: identity.AdapterName, render: sp.GetRequiredService<Puck.World.Server.WorldServer>().Definition.Render)
-                    ) == true) {
-                        sp.GetRequiredService<Puck.Commands.TextCommandSource>().Enqueue(line: "world.device-profile auto");
+                        presets: sp.GetService<IWorldQualityPresets>(),
+                        profile: WorldDeviceProfiles.Select(adapterName: identity.AdapterName, render: render),
+                        render: render
+                    ) is { } applied) {
+                        Console.Error.WriteLine(value: applied.Output);
                     }
                 }
                 display.Follow(

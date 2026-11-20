@@ -86,7 +86,7 @@ public static partial class WorldSessionLevers {
     private static WorldRenderDefaults? FoldRender(WorldRenderDefaults? render, WorldRenderSettings settings) {
         if ((render is null) && (settings.RenderScale == WorldRenderDefaults.Absent.RenderScale) &&
             (settings.IndirectTier == Puck.SignedDistance.SdfIndirectTier.Medium) && (settings.SkyFieldScale == 1f) && settings.ShadeOverride is null &&
-            !settings.RayQueries && settings.DistantShadows is null) {
+            !settings.RayQueries && settings.DistantShadows is null && settings.FarShadows is null) {
             return null;
         }
 
@@ -103,6 +103,7 @@ public static partial class WorldSessionLevers {
             AmbientOcclusion = settings.AmbientOcclusion,
             RayQueries = settings.RayQueries,
             DistantShadows = settings.DistantShadows,
+            FarShadows = settings.FarShadows,
             RenderScale = settings.RenderScale,
             UpscaleSharpness = settings.UpscaleSharpness,
             Temporal = settings.Temporal,

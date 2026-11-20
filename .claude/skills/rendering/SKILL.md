@@ -405,6 +405,20 @@ figure is a refresh's cost, not a frame's; `world.counters sdf.rates` counts the
 through `SdfMeshShadowCascades.Holds`), and the surface pass reads no optical term for it. Because its count makes
 the set four long while the secondary entry may be empty, test entries with `Holds`, never `index < Count`.
 
+A redraw spread over `distantShadows.frames` frames (`SdfDistantShadows.Slices`) draws one share of the casters a
+frame into the back map (`SdfWorldPackage.Parts.ShadowDistantBackDepth` and `BackExit`, allocated only while the map is
+sliced, `SdfWorldPackage.WithShadows`), every share from the camera the redraw started from, and the last share copies
+the back map into the map receivers read (`SdfWorldPassRecorder.CopyDepth`, `IGpuRecorder.CopyImage` on two depth
+images). The selection kernel keeps the draws whose index leaves the share's remainder (`SdfMeshOcclusion.Stage`'s
+`slice` and `slices`), so the shares draw every draw once. The invariant is that receivers read the map only through a
+committed camera: `SdfWorldPasses.RecordDistant` stages a camera for this frame's readers only when the drawing
+completes a map (`SdfDistantDraw.Completes`), and `SubmittedDistant` advances the redraw past a share only on
+submission, so an abandoned share is drawn again. A graph still without the back map draws a chosen share whole
+(`RecordDistant`'s `hasBack`). A sliced map holds only while the static scene stands at the revision it committed
+(which `SubmittedDistant` commits beside the camera), so a static change starts a sliced redraw rather than a whole one through the
+signature; a change during a redraw is redrawn by the next decision. `world.rates` counts each share that completes no
+map as `shadow-distant.share`.
+
 ## Evidence-preserving diagnostics
 
 `world.debug-view colliders|contacts` uses the beauty path through temporal
@@ -1411,9 +1425,11 @@ by its fence share is GPU back-pressure, not CPU work.
   `world.counters sdf.rates` counts `shadow-far.rendered` (both layers),
   `.split` (one layer of a split refresh) and `.held`: a 60 Hz view that splits
   shows `.split` on every frame; one that shows `.rendered` on every frame pays
-  a whole refresh each frame. The hold tolerates the light turning by
-  `SdfUpdateRateTiers.ShadowFarLightTurnRadians` (a day clock's sun turns every
-  frame); a timed refresh always draws the depth on one frame and the exit
+  a whole refresh each frame. The rate and the light turn a hold tolerates are
+  the device table's `farShadows { hertz, turnDegrees }` (`SdfFrame.FarShadows`,
+  `SdfFarShadows.TurnRadiansFor`; an unauthored world refreshes every frame and
+  tolerates a one-texel turn), so a rate at half the frame rate or more splits
+  on every frame and a lower one stands between refreshes; a timed refresh always draws the depth on one frame and the exit
   layer on the next (`SdfFarLayers`), so no frame draws both layers for the
   rate's sake and a slow frame is never held slow by its own cascade. The pass
   asks `SdfWorldPasses.RecordFar`, which answers both for a layer its graph has

@@ -5,20 +5,20 @@ using Puck.Maths;
 
 namespace Puck.SdfVm;
 
-// The far cascade's rate (SdfUpdateRates.ShadowFar): a view holds its layers and fit while a refresh at
-// least 30 times a second of presentation time allows (SdfUpdateRateTiers.Holds), so the shadow-far pass stands between
+// The far cascade's rate (SdfUpdateRates.ShadowFar): a view holds its layers and fit while a refresh at the authored
+// rate of presentation time allows (SdfFrame.FarShadows, SdfUpdateRateTiers.Holds), so the shadow-far pass stands between
 // refreshes whatever else of the frame renders. A hold ends early when the fit it stands for no longer covers what the
-// view shows: the light turns by more than the far camera's depth span moves a shadow one texel, the camera turns or
-// moves past the tiers' tolerances, the cascade's extent or texels change, the camera cuts, the instance follows another
-// view or residency, or a capture converges. A sun on a day clock turns every frame, by less than that in a 30th of a
-// second, so it holds as a still light does. Receiver-conditioned occlusion additionally requires both retained layers'
+// view shows: the light turns past the authored tolerance (SdfFarShadows.TurnRadiansFor), the camera turns or moves past
+// the tiers' tolerances, the cascade's extent or texels change, the camera cuts, the instance follows another view or
+// residency, or a capture converges. A sun on a day clock that turns less than the tolerance in one period holds as a
+// still light does. Receiver-conditioned occlusion additionally requires both retained layers'
 // receiver coverage identities to match: newly exposed receivers cannot use a mask from a previous view.
 //
 // A refresh the rate alone calls for (the fit still covers the view) draws the cascade's two layers on consecutive frames:
 // the depth (with its glass extinction) first, then the exit layer on a frame that holds the depth (SdfFarLayers). A frame
-// so never draws more than one far layer, whatever its pace: a 60 Hz view pays half a refresh every frame and each layer
-// still refreshes 30 times a second; a slower view also draws one layer a frame, each layer refreshing every two frames,
-// so the cascade never costs a slow frame a whole refresh and holds it slow. A refresh that ends a hold redraws both. The
+// so never draws more than one far layer, whatever its pace: at a rate of half the frame rate or more every frame draws
+// one layer, and at a lower rate the frames between refreshes stand; the cascade never costs a slow frame a whole refresh
+// and holds it slow. A refresh that ends a hold redraws both. The
 // exit layer's camera trails the depth's for the one frame between, and the surface pass reads the exit layer through
 // that camera (the cascades' fourth).
 //
@@ -166,6 +166,7 @@ public sealed partial class SdfWorldPasses {
         var snapshot = frame.Views[Math.Clamp(value: view, min: 0, max: (frame.Views.Count - 1))];
         var camera = snapshot.Camera;
         var rated = ((frame.UpdateRates & SdfUpdateRates.ShadowFar) != 0);
+        var authored = frame.FarShadows;
         var receivers = ReceiverSignatureOf(entry: entry);
         // Every frame since the refresh decided, so the time since it is this view's presentation time.
         var continuous = (entry.FarDecided == (m_frame - 1));
@@ -180,7 +181,7 @@ public sealed partial class SdfWorldPasses {
             (entry.FarTexels == cascades.Texels) &&
             // The chord between unit directions is their angle to well under a part in a million at these turns, where a
             // float cosine would round to one.
-            (Vector3.Distance(value1: drawn.Forward, value2: fresh.Forward) <= SdfUpdateRateTiers.ShadowFarLightTurnRadians(camera: in fresh, texels: cascades.Texels)) &&
+            (Vector3.Distance(value1: drawn.Forward, value2: fresh.Forward) <= authored.TurnRadiansFor(camera: in fresh, texels: cascades.Texels)) &&
             (drawn.HalfHeight == fresh.HalfHeight) &&
             (drawn.Far == fresh.Far) &&
             (entry.FarCut == snapshot.CutRevision) &&
@@ -192,7 +193,7 @@ public sealed partial class SdfWorldPasses {
             (entry.Convergence is not { IsActive: true })
         );
         // A split refresh's exit layer is drawn on the frame after its depth, which holds the depth.
-        var held = (covers && (entry.FarExitOwed || SdfUpdateRateTiers.Holds(elapsedSeconds: elapsed, frameSeconds: m_context.FrameDeltaSeconds, hertz: SdfUpdateRateTiers.ShadowFarHertz, rate: rate)));
+        var held = (covers && (entry.FarExitOwed || SdfUpdateRateTiers.Holds(elapsedSeconds: elapsed, frameSeconds: m_context.FrameDeltaSeconds, hertz: authored.Hertz, rate: rate)));
 
         entry.FarDecided = m_frame;
         entry.FarHeld = held;
@@ -203,7 +204,7 @@ public sealed partial class SdfWorldPasses {
             return;
         }
         if (rated && continuous) {
-            frame.RateIntervals?.Record(hertz: SdfUpdateRateTiers.ShadowFarHertz, lever: SdfUpdateRates.ShadowFar, seconds: elapsed);
+            frame.RateIntervals?.Record(hertz: authored.Hertz, lever: SdfUpdateRates.ShadowFar, seconds: elapsed);
         }
 
         // The rate alone calls for this refresh and the exit layer has a camera to be read through until the next frame

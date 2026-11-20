@@ -494,7 +494,8 @@ public unsafe sealed class VulkanNativeCommandBufferRecordingApi : IVulkanComman
         nint destinationImageHandle,
         uint destinationImageLayout,
         uint width,
-        uint height
+        uint height,
+        uint aspectMask = VulkanGpuFormats.ColorAspect
     ) {
         var copyImage = device.CmdCopyImage;
         var imageCopy = new VkImageCopy {
@@ -504,7 +505,7 @@ public unsafe sealed class VulkanNativeCommandBufferRecordingApi : IVulkanComman
             z: 0
         ),
             DstSubresource = new VkImageSubresourceLayers {
-                AspectMask = ImageAspectColorBit,
+                AspectMask = aspectMask,
                 BaseArrayLayer = 0,
                 LayerCount = 1,
                 MipLevel = 0,
@@ -520,7 +521,7 @@ public unsafe sealed class VulkanNativeCommandBufferRecordingApi : IVulkanComman
             z: 0
         ),
             SrcSubresource = new VkImageSubresourceLayers {
-                AspectMask = ImageAspectColorBit,
+                AspectMask = aspectMask,
                 BaseArrayLayer = 0,
                 LayerCount = 1,
                 MipLevel = 0,
