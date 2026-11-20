@@ -54,6 +54,28 @@ public sealed class RentedArraysLawTests {
     }
 
     [Fact]
+    public void ARentalTakesAnIdleLargeArrayUpToHalfAgainLongerButNotAFarLongerOne() {
+        const int Length = (1 << 20);
+        var big = RentedArrays.Rent<Cell>(minimumLength: ((Length * 5) / 4));
+
+        RentedArrays.Return(array: big);
+
+        var near = RentedArrays.Rent<Cell>(minimumLength: Length);
+
+        try {
+            Assert.Same(expected: big, actual: near);
+            RentedArrays.Return(array: near);
+
+            var far = RentedArrays.Rent<Cell>(minimumLength: (Length / 2));
+
+            Assert.NotSame(expected: big, actual: far);
+            RentedArrays.Return(array: far);
+        } finally {
+            RentedArrays.TrimLarge();
+        }
+    }
+
+    [Fact]
     public void AGrownLargeArrayLeavesItsPredecessorForTheNextRental() {
         const int Length = (1 << 20);
         var small = RentedArrays.Rent<Cell>(minimumLength: Length);

@@ -79,9 +79,11 @@ public static class RentedArrays {
         var references = RuntimeHelpers.IsReferenceOrContainsReferences<T>();
         var capacity = shared ? (int)BitOperations.RoundUpToPowerOf2((uint)Math.Max(16, minimumLength))
             : references ? minimumLength : ClassLengthOf(minimumLength);
-        var bytes = (long)capacity * Unsafe.SizeOf<T>();
-        // An idle array already occupies this memory. Drop its cache charge before the borrower takes it.
+        // An idle array already occupies this memory. Drop its cache charge before the borrower takes it. It may be longer
+        // than asked for, and the borrower is charged for the length it holds.
         var cached = !shared && !references ? LargePool<T>.Take(capacity) : null;
+        if (cached is not null) { capacity = cached.Length; }
+        var bytes = (long)capacity * Unsafe.SizeOf<T>();
         owner?.Acquire(bytes, MemoryBacking.Managed);
         try {
             var array = shared ? ArrayPool<T>.Shared.Rent(minimumLength)
@@ -199,18 +201,28 @@ public static class RentedArrays {
             lock (TrimGate) { Trimmers.Add(item: Trim); }
         }
 
+        // The shortest idle array holding at least `length` elements and no more than a half again as many: bakes of
+        // different sizes rent scratch in neighbouring classes, which an exact match would leave for the collector.
         public static T[]? Take(int length) {
-            lock (TrimGate) {
-                for (var index = (Arrays.Count - 1); (index >= 0); index--) {
-                    var array = Arrays[index];
+            var most = (length + (length / 2L));
 
-                    if (array.Length != length) { continue; }
-                    Arrays.RemoveAt(index: index);
-                    Release(bytes: Bytes(array));
-                    return array;
+            lock (TrimGate) {
+                var found = -1;
+
+                for (var index = (Arrays.Count - 1); (index >= 0); index--) {
+                    var candidate = Arrays[index].Length;
+
+                    if ((candidate < length) || (candidate > most)) { continue; }
+                    if ((found < 0) || (candidate < Arrays[found].Length)) { found = index; }
                 }
+                if (found < 0) { return null; }
+
+                var array = Arrays[found];
+
+                Arrays.RemoveAt(index: found);
+                Release(bytes: Bytes(array));
+                return array;
             }
-            return null;
         }
         public static void Return(T[] array) {
             var bytes = Bytes(array: array);
