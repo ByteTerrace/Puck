@@ -171,7 +171,7 @@ public sealed unsafe class DirectXGpuMappedBuffer : IGpuMappedBuffer {
 
         var end = (offset + bytes);
         // A chunk lies wholly inside when the range covers it to its end, or to the buffer's end for the last, partial one.
-        var first = ((int)((offset + (ChunkBytes - 1UL)) / ChunkBytes));
+        var first = ((int)offset.CeilingDivide(divisor: ChunkBytes));
         var stop = ((end == SizeBytes) ? m_chunks.Length : ((int)(end / ChunkBytes)));
         List<(int Chunk, DirectXTilePlacement Tiles)>? revoked = null;
         var released = 0UL;
