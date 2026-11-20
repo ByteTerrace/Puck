@@ -269,7 +269,9 @@ field; generated code calls the field's reader directly. A record made only
 of fixed-width fields is written as one block, as `IStateTransfer`'s `Block`
 does for machine state.
 
-**What more it does.** The state-of-the-art audit found the wire rewrites an
+**What more it does.**
+[The state-of-the-art audit](state-of-the-art/audit.md#7-the-wire-is-wasteful)
+found the wire rewrites an
 entity whole when any field changed and sends raw floats. A generator is the
 one place to add a changed-field mask and an exact quantised form of
 fixed-point values, so every record gets deltas that still hash and verify.
@@ -483,31 +485,37 @@ recipient streams, each was sized and not read, so
 
 ## Where a better algorithm is also less code
 
-The state-of-the-art audit of Puck's algorithms names four changes that
-improve the frame or the wire and also remove special cases. Each belongs to
-its own plan; they are recorded here because they are where "does more" and
-"less code" coincide.
+[The state-of-the-art audit](state-of-the-art/audit.md) names four changes
+that improve the frame or the wire and also remove special cases. Each is
+filed in the plan that owns its area; they are recorded here because they are
+where "does more" and "less code" coincide.
 
-- **One exact quantised wire form**, described under
-  [wire and checkpoint records](#1-wire-and-checkpoint-records). It replaces
-  the federation codec's whole-entity rewrite and is a product of the same
-  generator.
+- **One exact quantised wire form**
+  ([the audit's finding](state-of-the-art/audit.md#7-the-wire-is-wasteful),
+  filed in [the transfers packet](open-items.md#transfers-federation-and-server)).
+  It replaces the federation codec's whole-entity rewrite, and it is a product
+  of the generator under
+  [wire and checkpoint records](#1-wire-and-checkpoint-records), so the wire
+  lanes are where it is built.
 - **A visibility brick cache from the exact field**, serving distant shadows,
   probe visibility, sky occlusion and local-light shadows
-  ([illumination](illumination.md)). Today each has its own code
-  (`SdfMeshProbeDepth`, `SdfMeshOcclusion`, the distant shadow pass). One
-  cache with four readers is fewer mechanisms, and the lane reports the lines
-  each reader gives up.
+  ([the finding](state-of-the-art/audit.md#9-distant-shadows-refresh-at-full-cost),
+  filed in [illumination](illumination.md#what-the-state-of-the-art-audit-adds)).
+  Today each has its own code (`SdfMeshProbeDepth`, `SdfMeshOcclusion`, the
+  distant shadow pass). One cache with four readers is fewer mechanisms, and
+  the lane reports the lines each reader gives up.
 - **A cluster hierarchy** in place of the bake's tiers, its two coarser
   levels and its fixed chunk seams
-  ([virtual geometry](virtual-geometry.md#d4-clusters-inside-a-draw)). About
-  7,200 lines carry those cases today. A hierarchy is new code of similar
-  size, so this is more capability for about the same lines, not a reduction,
-  and it is not counted in the targets.
+  ([the finding](state-of-the-art/audit.md#4-level-of-detail-is-two-discrete-levels),
+  filed in [virtual geometry](virtual-geometry.md#rejected-and-watched)).
+  About 7,200 lines carry those cases today. A hierarchy is new code of
+  similar size, so this is more capability for about the same lines, not a
+  reduction, and it is not counted in the targets.
 - **One compact record per render pixel**, which the resolve reads instead of
   rebuilding motion and reloading colour for every output pixel
-  ([rendering research](rendering-research.md#13-shade-through-one-path-and-shrink-the-image-history)).
-  The line change is small; the frame-time change is the point.
+  ([the finding](state-of-the-art/audit.md#1-the-resolve-does-per-output-pixel-work),
+  filed in [rendering](rendering.md#the-rtx-2060s-frame)). The line change is
+  small; the frame-time change is the point.
 
 ## Where halving holds
 
