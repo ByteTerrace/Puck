@@ -26,6 +26,15 @@ the custody protocol, disclosure, remote home adoption) have open steps.
   MMO. [AGENTS.md](../../AGENTS.md#pucks-purpose) records the purpose and how
   every design round weighs it.
 - Portals are meant to solve many of an MMO's hard problems.
+- Local games reveal the MMO ([the ruling](../decisions/play.md#the-game)). A
+  player starts in local games on their own machine, and finishing them
+  reveals that the MMO exists; the same worlds then run against a hosted
+  server. So every world runs well both locally and from the server, and the
+  hosted deployment's scale (interest, deltas, per-row stepping, durable
+  storage) is ordinary work now, not a later phase. The ruling came after the
+  round closed and changes none of its decisions; it puts the move from a
+  local authority to a hosted one into a player's first hours, so the custody,
+  seam and storage decisions are exercised from the start.
 - The card and board game systems exist to satisfy the "casino fantasy" that
   many RPGs implement poorly.
 - Puck's world model (every zone, character and server is the same kind of
@@ -106,6 +115,85 @@ waits on them.
 2. The scope of hidden dealing, when per-seat table sessions and the settlement
    door have landed.
 3. How the standard's layer move feels, when the layer mechanism exists.
+
+## What later readings of the code showed
+
+A read of what limits one remote authority at scale, made after the round
+closed, contradicts none of the register's decisions. It extends several: the
+register decided the shape, and the code does not have it yet. Each follow-up
+is filed in open items'
+[transfers, federation and server](open-items.md#transfers-federation-and-server)
+packet (its scale items) or in the plan named, and the register's
+[building it](../decisions/worlds-and-federation.md#building-it) list does not
+yet route them.
+
+- **Interest management and deltas.** The register maps interest onto the
+  disclosure tiers: `Presentation` is the recipient view's rows plus a body set
+  under radius, hysteresis and cadence tiers, joined with a spatial grid
+  ([seams](../decisions/worlds-and-federation.md#seams)). The code sends every
+  active body to every session each tick (`WorldDocument.BuildSnapshotCore`,
+  `WorldOutputHub`), redacts per sink by a linear scan
+  (`WorldOutputHub.Redact`), and has no deltas, so its cost is sessions times
+  bodies every tick. This is the decision unbuilt, not a different answer. Two
+  plans hold parts of it: the disclosure plan's I1 item folds the grid,
+  hysteresis and the unembodied observer into the recipient view
+  ([disclosure, open items](disclosure.md#open-items)), and open items' scale
+  item adds the per-sink interest set, deltas against an acknowledged
+  baseline, and one encoding per audience.
+- **Whole-document delivery.** The register gives only `Replica` the whole
+  disclosed document. The code delivers the whole definition to every sink on
+  any shape change (`WorldDocument.DeliverPending`), serializing and hashing it
+  per sink below the replica tier (`WorldDeliveryCursor.DeliverDefinition`)
+  and embedding audio inline. Row-level delivery is open items' scale item and
+  the [authoring loop's step 4](iteration/authoring-loop.md#build-order).
+- **One thread per silo.** The register's hosting abstraction promises a
+  place to run with a durable crossing log, a checkpoint cadence and a fenced
+  activation, and says nothing about concurrency. The silo steps every row in
+  turn on one thread, each under its authority gate for its whole step
+  (`WorldSiloSimulation.Step`, `WorldServerStepShell.Step`), though rows never
+  observe one another. Per-row stepping is the job system's
+  [T4](engine-job-system.md#6-build-order).
+- **Checkpoint stalls.** The cadence arms every row on one master step, and
+  each captures and encodes its whole image under its gate
+  (`WorldSiloHost.CaptureRowsArmedByCadence`, `TryCaptureRow`); only the upload
+  is asynchronous. The cadence the register asks for holds, but its cost grows
+  with the silo's total state. Staggered rows and encoding off the step are in
+  open items' scale item and T4; incremental checkpoints have no design yet.
+- **Credential checks.** The synthesis records that the deployed silo
+  re-validates a bearer token each second. That fact changed: a connection's
+  verdict is cached (`WorldPeerHost`'s `Credential`), a timer sweep each second
+  refreshes issuer trust off the tick, and a proof is verified again only when
+  the admission policy or the issuer's trust changes or its window ends. No
+  decision rested on the old behaviour; the identity abstraction still wants a
+  signature over the challenge, not a bearer token.
+- **Hard caps.** A world holds at most 4096 bodies
+  (`WorldBodiesLimits.CapacityCeiling`, sized with the client's per-entity
+  view arrays), a host at most 256 authenticated federation connections
+  (`WorldPeerHost.MaximumFederationConnections`), and a server's mailbox is one
+  unbounded channel with no quota per connection. The register settles no
+  population ceiling; its layers and spatial shards are how a zone grows past
+  one world, so the caps fit it. What decides each cap, and a per-connection
+  ingress bound that refuses by name, is open items' scale item.
+- **Authority storage.** The register's storage abstraction asks for fenced,
+  conditional writes and an append that answers only once the store knows the
+  outcome. The silo's journal now publishes immutable segments through the
+  fenced root's compare-and-swap at tick and crossing boundaries, retires
+  superseded payloads, bounds its backlog by entries and bytes and refuses a
+  mutation by name when it is full (`WorldSiloHost.PrepareJournalMutation`),
+  and keeps a deferred checkpoint armed. One gap against the abstraction
+  stands: an ordinary edit is answered as applied when the tick drains it
+  (`WorldTick`'s pending-operation completion), before its segment lands, and
+  a failed segment only blocks later publication (`PersistenceBlocked`). The window is bounded but not zero. Scarce value is
+  meant to settle at the settlement door instead, which is not built, so
+  whether an edit's acknowledgement must wait for durability is a question for
+  the [settlement packet](open-items.md#settlement-trust-roles-and-revocation),
+  and no plan owns it yet.
+- **Transfers.** A federated transfer no longer blocks the shared tick thread:
+  the source cohort is held while reservation, companion authorization, commit
+  and route discovery await the peer, and the reply applies on the row thread
+  at a tick boundary (`WorldRemoteAuthority`). That is the crossing as one
+  custody transaction the register decided, without the stall a hung peer used
+  to put on every row.
 
 ## Records
 

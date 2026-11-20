@@ -22,6 +22,7 @@ observation left is listed under [deferred checks](#deferred-to-the-end). The
 |---|---|
 | P1a, durable functional fixtures | [No-driver boot](#deferred-to-the-end) |
 | P1b, foundation qualification | [Reference devices and driver removal](#p1b--foundation-qualification) |
+| The RTX 2060's frame | [A reading of the player build, then the passes it names](#the-rtx-2060s-frame) |
 | P10, bound rows and tiers | [Hardware qualification at high](#deferred-to-the-end) |
 | P12, image sources | [Real camera](#deferred-to-the-end) |
 | P13, hit-to-source mapping and input | [Windows passthrough click](#p13--hit-to-source-mapping-and-input-destinations) |
@@ -54,6 +55,106 @@ The remaining reference-device and driver-removal observations are listed
 under [deferred checks](#deferred-to-the-end). Qualify the debug world at
 `high` and retain the actual memory and timing readings. No recorded work-count
 ceiling substitutes for a device observation.
+
+### The RTX 2060's frame
+
+The RTX 2060 machine is a release target that stands in for a consumer
+([AGENTS.md](../../AGENTS.md#the-bars)). It runs the player build of a
+release, installed and updated by the launcher from the player channel, with
+the mesh caches the lead machine baked
+([the player channel](../decisions/runtime-and-delivery.md#the-player-channel)).
+It never builds from source, compiles a cartridge or cold-bakes, so every
+reading taken on it is a reading of what a player runs. Its frame bar is read
+at 1920 by 1080 on its own device table, the `rtx2060` row of `render.devices`
+in `worlds/standard/quality.puck`. A windowed boot applies that table on the
+frame thread once the device names its adapter, through the same door
+`world.device-profile` takes (`WorldDeviceProfileState.Select`).
+
+No current reading exists. The only one was taken from a source Release build
+before the table ever applied (`world.device-profile` echoed `table=none`),
+before the far cascade held a static layer, before distant redraws were
+sliced, and before the frame thread stopped waiting on pipeline-cache writes
+and device idles. None of its figures stand. It showed where to look first:
+the views pass was the largest GPU pass by far, the shadow passes and the
+resolve came next, the simulation and the frame's produce each took a large
+share of the CPU's frame, and host memory, not device memory, was what the
+16 GB machine ran out of.
+
+The steps, each after the one it names:
+
+1. **The reading.** The prewarmed player build of a release, through the
+   player channel, booted windowed at 1920 by 1080 with `--devices none` on
+   each backend. At the stage and over the debug route (`world.benchmark run
+   debug`, typed into the build's console, as
+   [the benchmark's frame-bar reading](benchmark.md#comparing-runs) describes for
+   this machine), read `world.device-profile` and `world.quality`,
+   `world.iteration`, `host.frames`, `world.gpu-timing` with its timeline,
+   `world.rates`, `host.memory` and a gc-verbose trace. A pass's rolling mean
+   counts only the frames that recorded it (`ShaderPipelineRenderNode`'s
+   timing window), so a held pass's mean is the cost of one redraw: the
+   timeline shows the frame's real shape. A gap between the backends is
+   attributed only at matched clocks or from a capture
+   ([the Vulkan packet](open-items.md#vulkan-regressions-and-gpu-robustness)
+   records the earlier, unattributed one). Check: the reading names the
+   device, size, backend, topology and the table it ran (`table=rtx2060`), and
+   the Direct3D 12 boot shades through its prepared kernels with no shader
+   compiler on the machine (`PreparedShaderBindings`), not through the
+   interpreter.
+2. **The views pass.** After 1. Nothing yet attributes this pass on this
+   device. The table's render scale shades a little over half the display's
+   pixels, which by arithmetic alone leaves the old reading's views pass above
+   the whole frame's 16.7 ms. Read its share on the table first, then capture
+   the views kernel on this device (register count, spills and occupancy, and
+   its walk over the lights) to name what limits it, with the surface pass,
+   which also shades by pixel, read in the same capture. The two planned cuts
+   to this pass, the probe lookup once per view
+   ([decision 13](rendering-research.md#13-shade-through-one-path-and-shrink-the-image-history))
+   and shading at the rate each tile needs
+   ([rank 1](rendering-research.md#gpu-capabilities-puck-does-not-use-yet)),
+   are sized by what they give the RTX 4070; this step says whether either
+   reaches the 2060's bar, and what else must if neither does.
+3. **The resolve.** After 1. It runs at the display's size whatever the render
+   scale, since its history follows the display
+   (`SdfWorldPackage.HistoryWindowWords`). Its window's memory traffic is not
+   what limits it: a still pixel moves about 168 bytes of window a frame,
+   about 0.35 GB a frame at 1920 by 1080, about 1 ms of the RTX 2060's
+   336 GB/s, where the old reading's resolve took ten times that. Its limiter
+   is unknown, so the step is a capture first (register spills of the luma
+   window it gathers, and occupancy), and no change is made before it. A
+   running sum over the window is not pursued unless the capture shows memory
+   traffic: it would save about a third of a small share and give up the
+   window's fixed-order sum. A vendor's upscaler as an authored alternative is
+   [rank 9](rendering-research.md#gpu-capabilities-puck-does-not-use-yet).
+4. **The shadows.** First on the RTX 4070, since neither change below has run
+   on a GPU. At an authored rate below every frame (`farShadows`,
+   `SdfFarShadows.HoldsStaticLayer`), the far cascade holds a static layer and
+   draws only the moving casters over it. The distant map redraws only for a
+   changed caster (`SdfMeshDraw.SameCaster`), and a table that spreads a
+   redraw over frames (`distantShadows.frames`, `SdfDistantShadows.Slices`)
+   draws one share a frame into a back map and commits the map when the last
+   share lands. Check: `world.rates` counts the far cascade held between
+   refreshes and its static layer redrawn (`shadow-far.static`) only when a
+   static caster changes; a body walking under the far cascade casts a shadow
+   that keeps up at the authored rate; a sliced redraw shows no partly drawn
+   map in motion; then, on the 2060, its shadow passes' timeline at the stage
+   and on the route.
+5. **Device and host memory.** After 1. Read live residency and view-target
+   bytes, including device-local and host-visible device-local use and
+   Vulkan's aperture heaps, live and retiring residency and graph bytes, and
+   the host's private bytes and managed heap. Share tables for the same
+   mirror and stage infrequently changed data where the measured budget calls
+   for it. The `rtx2060` row sets a device bar and no host bar, so its host
+   pool follows the account's own budget (`MemoryAccount.DefaultBudget`); the
+   [streaming plan](streaming-and-memory.md#how-the-bars-are-read) sets the
+   RTX 4070's and the Steam Deck's memory bars and no plan yet sets this
+   machine's host bar.
+6. **The one-off passes.** After 1. The old reading held one sample of a
+   `glass-clear` pass costing about as much as the resolve. Whether it
+   recurs, and on what event, is read from the timeline before it is
+   attributed.
+
+The CPU half of the frame (the simulation's steps, produce and its fence)
+belongs to the [engine job system](open-items.md#engine-job-system).
 
 ### Global illumination
 
@@ -724,14 +825,14 @@ instance buckets): the meadow draws many copies of few geometries, and sparse
 visibility, per-draw level choice and stable depth-tie ordering need an
 instance map and per-geometry, per-level ranges, never `instanceCount` alone.
 
-- Re-measure RTX 2060 pixel passes at matched clocks before attributing a
-  Vulkan/Direct3D 12 gap. Inspect surface and resolve register pressure and
-  occupancy; measure geometry instancing in the indirect records rather
-  than repeating the slower one-draw vertex-search experiment.
 - Reopen either unattributed Vulkan device-loss case on recurrence: the
   first-frame fault whose last checkpoint is `glass-clear`, or the fault as
   Nsight GPU Trace begins whose checkpoint is root `place`. Repeated successful
-  boots do not establish a cause; retain fresh fault and validation logs.
+  boots do not establish a cause; retain fresh fault and validation logs. A
+  Direct3D 12 device removal on the integration branch is under diagnosis in
+  a lane.
+- Measure geometry instancing in the indirect records rather than repeating
+  the slower one-draw vertex-search experiment.
 - Measure front-to-back order or a depth prepass against mesh overdraw,
   retained descriptor writes for Vulkan pane sources, batching graph command
   lists into fewer submissions and queue idle time.
@@ -744,10 +845,6 @@ instance map and per-geometry, per-level ranges, never `instanceCount` alone.
   per-socket refusal without a constructor exception, local-device sockets
   refused by name, and lifetime following the presented world. Remote screen
   sessions, machine frames and text also need their transport and font origin.
-- Measure live residency and view-target bytes on the RTX 2060, including
-  device-local and host-visible-device-local usage and Vulkan aperture heaps.
-  Share tables for the same mirror and stage infrequently changed data where
-  the measured budget calls for it.
 - A package pass takes its extent from its first image port. Resolve the
   output-extent contract for a pass whose only image is a fixed-size atlas.
 - Account a graph's storage by lifetime before reusing any of it. The plan
@@ -943,10 +1040,11 @@ Remaining observations specific to visibility are:
   path on the device at 45 FPS.
 
 The far cascade's snap is never coarsened to save frame time: a coarser snap
-gives up shadow resolution and cannot repair a missed frame bar. A cascade
-held between changes is a different thing and is still planned, for terrain
-alone: the [terrain pass](terrain-pass.md#distance)'s far-shadow step is its
-one home.
+gives up shadow resolution and cannot repair a missed frame bar. Holding the
+cascade between changes is the answer taken instead: at an authored rate below
+every frame it keeps a static layer and redraws only the moving casters over
+it (`SdfFarShadows`). Its GPU check is step 4 of
+[the RTX 2060's frame](#the-rtx-2060s-frame).
 
 ## Deferred to the end
 
@@ -959,9 +1057,9 @@ worst-frame timing, and keep their packages open until observed.
 - P1b: qualification on the reference AMD devices and a driver-initiated
   removal/recovery exercise. Record actual peak device-local memory alongside
   timing; the RTX 4070 observations do not qualify another device.
-- P10 and sky/GI: paired-backend hardware observations at `high` on the
-  RTX 2060, including live and retiring residency/graph bytes and aperture
-  usage. The frame remains under 16.7 ms; lower-tier observations cannot close it.
+- P10 and sky/GI: paired-backend observations on the RTX 2060's own table,
+  from the player build, after [its reading](#the-rtx-2060s-frame). Every
+  frame stays under 16.7 ms; a lower tier cannot close it.
 - P12b-4: a real camera feeds a screen on both backends.
 - P13b-4: a real Windows editor receives the click at the mapped point, and the
   focus-return chord returns input to the game.

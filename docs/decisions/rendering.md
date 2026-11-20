@@ -568,8 +568,11 @@ all; a nested
 portal or session view renders at least 30 times a second at or below 120
 display pixels high and at least 15 at or below 60; a screen's source uploads
 at least 30 times a second once shown at or below its own height and at least
-15 at or below half of it; the far shadow cascade refreshes at least 30 times a
-second, its fit held between refreshes so a static shadow stays exact.
+15 at or below half of it. The far shadow cascade refreshes at the rate its
+world authors (`SdfFarShadows`), every frame where none is authored, with its fit
+held between refreshes so a static shadow stays exact; at a reduced rate it holds
+a static layer, redrawn only when a static draw changes or the fit no longer
+stands, and each refresh draws the moving casters over it.
 
 A tier is a floor held by presentation time, since the two-pixel bound holds
 only if the content really updates that often: a rated item updates on the

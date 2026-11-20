@@ -4,39 +4,44 @@ An author changes one value in a `.puck` file and waits to see it. This memo
 follows that wait from the keystroke to the frame and back to the file, says
 where the time and memory go as the code stands, and designs the loop Puck
 should have. It is the design behind step 3 of
-[the iteration plan](../iteration.md#order-of-work). It stops where two other
-pieces of work begin: the World-side door a small edit enters by (the
-`live-edit` lane) and the bake's keys (the `bake-keys` lane).
+[the iteration plan](../iteration.md#order-of-work). It stops at the World-side
+door a small edit enters by, which that plan's
+[live edit path](../iteration.md#the-live-edit-path-step-3) describes, and at
+the bake's keys.
 
 ## Summary
 
-**What is wrong today.**
+**What is wrong today.** The memo's first profile found that the compiler was
+not the slow part: everything after it was done for the whole world on every
+edit, and half of a warm whole-world compile was bookkeeping
+([what was measured](#what-was-measured)). Steps 1 and 2 removed the
+bookkeeping and put every host behind one compile session, and parts of steps
+3 and 4 made a file edit a keyed delta: a one-colour edit now recompiles one
+source, merges the one root member it writes, and installs as a presentation
+install with no rule compile, keeping every live edit the source did not also
+change. What is still wrong:
 
-- The compiler is not the slow part. Compiling one changed source of the debug
-  world takes well under a second. What takes the time is everything after it,
-  and all of it is done for the whole world on every edit: resolving names,
-  composing dozens of documents into one, reading the composed document into
-  the typed model, validating it, diffing it against the installed document and
-  installing the result. With every source already compiled and cached, a
-  `puck compile --validate` of the debug world still spends about 4% of its
-  time compiling the root source, about 60% composing and about 36% reading
-  and validating, allocates 5 GB and peaks above 2 GB
-  ([what was measured](#what-was-measured)).
-- The World has two doors for the same edit, and a saved file goes through the
-  slow one. A palette colour changed with `world.row.set` lands as a
-  presentation-only install in a fraction of a second, with no compile, no
-  rule compile and no arena build. The same kind of value changed in a file
-  and picked up by `world.reload` takes tens of seconds and installs the whole
-  world again.
-- The loop's parts exist and are not joined. Puck already has a keyed document
-  patch, install kinds that rebuild only what changed, a source watch, a
-  save that rewrites only the touched spans of a source, and a record of every
-  file fact a compile read. Each is used by one door. Nothing carries one edit
-  through all of them.
-- There are several of everything. Five drivers order the compiler's stages
-  differently, three delta forms describe a document change, four identities
-  say which code built a cached product, and five copies of the CLI run on one
-  machine, most with a compile cache partition of their own.
+- **The unit is a root member, held only in memory.** A changed member merges
+  its whole list again across the layers that write it, and a process's first
+  recomposition of a persisted image merges the root whole.
+- **Validation is whole.** Every install but a state-value one validates the
+  whole candidate, and so does every `world.row.set` that changes more than
+  state values.
+- **A file edit is still a rebuild, not a mutation.** The install clears the
+  journal, only the operator may send it, the tape records a path rather than
+  the delta, and each client receives the whole definition again while the
+  frame waits.
+- **The watch is off until asked**, so a saved file reaches the World only by a
+  typed `world.reload` unless the author turns `world.watch` on.
+- **Caches are keyed by path and by assembly build identity**, so two checkouts
+  share nothing and any rebuild of a compiler assembly empties the compile
+  cache.
+- **The save refuses the debug world**, which writes nearly every row through
+  templates, and the decompiler prints a spelling the compiler refuses.
+- **There are still several of everything.** The cartridge vocabulary orders
+  its own compiler stages, three forms describe a document change, four
+  identities say which code built a cached product, and five copies of the CLI
+  run on one machine, most with a compile cache partition of their own.
 
 **What this memo proposes.**
 
@@ -58,28 +63,28 @@ pieces of work begin: the World-side door a small edit enters by (the
    that re-reads every input.
 5. The CLI's verbs are **thin hosts** of the session for one-shot work (a
    check, a release, a test). The edit loop belongs to the World and the
-   editor. `puck compile --watch` goes.
+   editor, and `puck compile --watch` is deleted.
 
 **What the owner settled** ([below](#what-the-owner-settled)): a granted
 author may live-edit a published world; saved files drive the running World
 first; World Studio stays a browser sandbox and utility.
 
-**The first two build steps** have landed. The first removed three
-bookkeeping costs that were about half of every whole-world compile: the name
-index that re-read a directory for every import, the cache validity check that
-re-read and hashed every input each time, and the origin tracking that ran
-whether or not anything read it. The second made `WorldCompileSession` the one
-door into the compiler for every host, with library parses shared by content,
-and deleted the second watcher, the sweep's second cache and the language
-server's own dependency table ([the build order](#build-order)).
+**Where the build order stands** ([below](#build-order)): steps 1 and 2 are
+built; steps 3 and 4 are built in part, with what is left named in each; steps
+5 to 11 are not started.
 
 ## What was measured
 
-The readings below were taken for this memo on the integration tip, with a
+The readings below were taken for this memo, before any build step, with a
 private Release build of the CLI and a headless debug World started from the
 same checkout. Shares and counts do not depend on machine load. Times do, so
 the memo gives them only as a scale; the commit that adds this memo carries
-the exact figures and commands.
+the exact figures and commands. They are the profile the design answers, not
+the code's state today: since step 1 a warm compile of the debug world reads
+about 200 files where it read about 38,000 and allocates about 1 GB, and since
+step 3 a one-colour edit merges 2 compositions where it merged 59. The defects
+the table shows in `world.reload` (the full install, the reset deals, the
+refusal after a live edit) are fixed.
 
 | What ran | What it showed |
 |---|---|
@@ -173,10 +178,10 @@ code now works this way:
 |---|---|---|---|
 | Held declarations (`WorldSourceIndex`) | What each source declares it emits | The digest of the source's bytes; on disk, also the compiler's identity | Fine as a table. The reads that feed it are the cost above |
 | Held compiles (`WorldCompileSession.TryCompile`, in memory and under the `compilations` directory) | One source's documents and every file fact its compile read | The compiler's identity, the source's full path, and whether tests are lowered. Served only while every recorded input re-reads the same | The path is in the key, so two checkouts holding the same bytes share nothing. The identity is the build identity of every non-framework assembly the compiler references (`WorldCompileSession.CompilerIdentity`), so any rebuild of any of them empties the cache. A source is compiled twice when one caller wants tests and another does not |
-| Held compositions (`WorldDefinitionFileSource.HoldComposedImage`, persisted through `IWorldCompositionStore`) | A composed document whole, with its chain's bytes | The resolved path, the machine catalog's fingerprint and the source type; valid while every input re-reads the same | Whole-document images: the debug root's is 26 MiB, written again for each compiler build. An edit to any link discards the whole image |
+| Held compositions (`WorldDefinitionFileSource.HoldComposedImage`, persisted through `IWorldCompositionStore`) | A composed document whole, with its chain's bytes | The resolved path, the machine catalog's fingerprint and the source type; valid while every input re-reads the same | Whole-document images: the debug root's is 26 MiB, written again for each compiler build. In memory an image keeps the layers it composed from (`WorldDefinitionFileSource.ComposedLayers`), so a recomposition merges again only the root members a changed layer writes; a persisted image keeps no layers, so a new process's first recomposition merges whole |
 | Compiled worlds (`CompiledWorldCache`, `.puckb`) | The drawn definition, assets and curves, as chunks | A file named for the document's path; each chunk by the code that derives it (`CompiledWorldChunks.EngineBuild`, a closure over the methods the producers reach) and its recorded inputs | Keyed by reached code, which is the right identity, but one chunk covers the whole definition, so one row's change derives it all again |
 | The device cache (`WorldCacheRoots`) | The three directories above for compiles, compiled worlds and meshes, per user or under `--cache-dir` | — | The compile directory is bounded at 256 MiB (`WorldCompileSession.MaxPersistedBytes`). One compiler build's entries for the debug world are about 75 MiB, so three or four builds fill it and a machine with several worktrees evicts constantly |
-| The mesh store (`SdfMeshStore`) | Baked meshes | Geometry (`SdfMeshGeometryBuilder`) and the bake's identity | The `bake-keys` lane's work, not this memo's |
+| The mesh store (`SdfMeshStore`) | Baked meshes | Geometry (`SdfMeshGeometryBuilder`) and the bake's identity; each bake stage's products by that stage's own code closure | Not this memo's: the iteration plan's step 2 keyed the stages |
 | The shade program table (a document's root `shades`) | Each authored shading program once | The program's name and the SHA-256 of its canonical form (`ShadeReference.KeyOf`) | Nothing. It is the model the others should follow: identity is content, so equal programs are one row wherever they are written |
 | Specialized shading kernels (`SdfWorldResidency.PrepareShade`, the shader cache) | Compiled kernels for the active programs | The programs' identities, the op table's fingerprint and the kernel sources' content | Nothing for this loop: the interpreter shows an edited program on the next frame and the specialized kernel follows |
 
@@ -202,8 +207,9 @@ it). What still differs is the order a host asks the session for things:
   session's `CompileBuffer`, lint, compose, validate, then lint references
   over the composed world.
 - A boot runs the session's `TryCompile`, then its `TryLoadForAdmission`. A
-  reload runs `WorldDefinitionLoader.TryLoadFileForAdmission` over the
-  session as its document source.
+  reload runs `WorldDefinitionLoader.TryLoadFileForEdit` over the session as
+  its document source, which composes, draws and settles the source without
+  admitting it.
 - `world.save` runs its own load, compose and proof (`WorldSourceSave`),
   through the session.
 - `puck test` and `SweepRoute.TryLoad` compile through the shared session
@@ -257,8 +263,7 @@ members the current vocabulary accepts.
 - **`world.watch on`** (`WorldSourceWatch`) polls the stamps of every file
   fact the last compile read and queues an ordinary `world.reload` after a
   quiet moment. It is off by default and is described only in the World guide
-  and one debug page. So the iteration plan's statement that a saved file has
-  no live path is not quite right: the path exists, and it is the reload.
+  and one debug page.
 - **`world.load`** validates another file and submits its whole definition,
   refusing over unsaved edits unless forced.
 - **Document mutations** (`world.row.set`, `world.row.add`, `world.row.remove`,
@@ -387,9 +392,10 @@ the tick it arrives on is recorded, as a console line's is.
 
 ### Several authors at once
 
-- **A person and a file.** A reload replaces the document and clears the
-  journal, so a person's unsaved live edits are lost when a watched file
-  changes, or the reload refuses, as measured.
+- **A person and a file.** A reload merges the file's change over the live
+  document, so a person's live edits survive except on a row the file also
+  changed, where the file wins and the verdict names the row. The reload still
+  clears the journal, so those edits can no longer be undone one by one.
 - **Two writers of one file.** `world.save` writes its target without
   checking it still holds what the save read.
 - **An agent beside a person.** An agent's `puck_exec` mutations in the
@@ -535,8 +541,8 @@ enforcement is aimed at it.
 overlay `WorldDocumentBasis.Diff` produces (used by the reload's wire delta,
 by the save and by a JSON world that names a basis), the typed
 `WorldMutation`, and the pointer list `WorldSourceEdits` walks. A file edit
-is turned into the first by diffing two whole documents, and applied as a
-whole-document rebuild.
+is cut into the first between two source revisions, member by member, and
+applied as a rebuild.
 
 **The proposal.** The keyed overlay is the one form an edit travels in. It
 exists, it is proved by merging, and its bytes are already the wire format.
@@ -544,23 +550,21 @@ What changes is where it comes from and where it goes:
 
 | Stage | Today | Target |
 |---|---|---|
-| Made by | Serializing the installed and the new definition and diffing the trees | The session, from the rows whose digest moved between two revisions of the source |
-| Describes | Installed declarations against the source on disk | The previous source revision against the new one |
-| Pinned by | Fingerprints of both whole documents | The same pins, kept as a digest over row digests, so checking them costs what the delta costs |
-| Applied as | A whole-document rebuild: journal cleared, full install | A batch through the ordinary mutation door: admitted against the sender's grants, classified by `WorldDocument.InstallKindOf`, one journal entry |
+| Made by | The sender, from the root members whose bytes moved between two composed revisions (`WorldReloadDelta.Between` over `WorldDefinitionMembers`) | The session, from the rows whose digest moved between two revisions of the source |
+| Describes | The source revision the authority took against the new one | The same |
+| Pinned by | Content pins of both revisions | The same pins, kept as a digest over row digests, so checking them costs what the delta costs |
+| Applied as | A rebuild merged over the live document and installed by kind (`WorldDocument.ReloadInstallKindOf`), with the journal cleared | A batch through the ordinary mutation door: admitted against the sender's grants, classified by `WorldDocument.InstallKindOf`, one journal entry |
+| A row both changed | The source's value wins and the verdict names the row | Refused by the row's name with both values, and the author chooses |
 | Recorded as | A path and a content hash | The delta's bytes |
 | Sent to a remote authority as | The patch, operator only | The same bytes, admitted like any mutation |
 
 Describing the change between two source revisions, never against the live
-document, is what lets the file and the World be edited together. The
-authority holds the source revision it last took. A delta that changes a row
-the live session has also changed since that revision is a conflict, refused
-by the row's name with both values, and the author chooses. Every other row
-merges. The refusal measured above cannot arise, because the live document is
-never diffed against a file. Simulation state follows the door's existing
-rule: a state row whose declaration the delta changes is seeded from it, and
-every other row keeps its live value, so a colour edit no longer deals the
-cards again.
+document, is what lets the file and the World be edited together, and that
+part is built: the authority holds the source revision it last took
+(`WorldServer.SourceRevision`), every row the live session changed and the
+file did not keeps its live value, and a state row is seeded again only when
+the delta changes its declaration. What is left is the door the delta enters
+by, its journal entry, its grants and its record.
 
 This is the release transition at the size of one save. The runtime plan's
 authored delta between two releases, applied as admitted changes and refused
@@ -568,14 +572,15 @@ on a conflicting live edit, is the same computation by the same session
 through the same door. Puck needs one of these, not a small one for editing
 and a large one for shipping.
 
-`world.reload` stays as the verb that reads the source afresh and discards
-what the session changed. It leaves the edit loop.
+`world.reset` and `world.load` stay as the verbs that read a source afresh and
+discard what the session changed.
 
-**The seam with the `live-edit` lane.** That lane owns the door: how a small
-change is admitted, classified and shown, with look values as appearance
-uploads and form edits as a rebake of the creations touched. This memo needs
-only that the door takes a keyed delta with the revision it was made against.
-Where the lane's door differs in shape, the door wins and the session adapts.
+**The seam with the iteration plan.** Its
+[live edit path](../iteration.md#the-door-the-authoring-loop-asks-for) owns
+the door: how a small change is admitted, classified and shown. The door takes
+a keyed delta with the revision it was made against (`WorldRebuildRequest`
+carrying a `WorldReloadDelta`), which is all this memo needs; where the two
+differ in shape, the door wins and the session adapts.
 
 ### Saving an edit to source
 
@@ -637,7 +642,7 @@ construct at a time.
 | Today | Becomes |
 |---|---|
 | Held declarations, held compiles, the composer's input checks | The session's file facts and parses in memory. On disk, one content store: a product is named by the digest of the code that made it and the digests of what it read, so the same bytes compiled in two checkouts are one entry and a lookup is a key comparison with no second read of the inputs |
-| Assembly build identities as the compiler's identity | A reached-method closure over the compiler (`CodeClosure`, as `CompiledWorldChunks.EngineBuild` uses), with any hot-reload update folded in. An engine edit the compiler does not reach keeps every compile. The helper that computes it is shared with the bake's keys |
+| Assembly build identities as the compiler's identity, with any applied hot-reload update folded in | A reached-method closure over the compiler (`CodeClosure`, as `CompiledWorldChunks.EngineBuild` and the bake's stage keys use), with the update still folded in. An engine edit the compiler does not reach keeps every compile |
 | Whole composed images | Gone. A root persists a small manifest of its row digests; the rows are content-addressed entries shared between roots and builds |
 | The compiled world's whole-definition chunk | Per-row derived products keyed by the row's digest and the producer's closure: a curve's compiled spline by its curve row, an asset by its asset row |
 | Two compiles of one source, with and without tests | One product. A test block's world is a row set derived from it |
@@ -650,8 +655,7 @@ construct at a time.
   check this package, build this release tree, run these tests. It holds no
   driver of its own.
 - **The edit loop is not the CLI's.** The World watches the sources it booted
-  from and the editor's language server follows its buffers. `puck compile
-  --watch` is deleted with its documentation. A world booted from a source
+  from and the editor's language server follows its buffers. A world booted from a source
   tree by its local operator watches it from boot; an explicit `world.watch
   off` stops it.
 - **A world check is cheap from a cold process** once the content store holds
@@ -738,9 +742,9 @@ a session with edits does not replay (replay), a spelling costs more to tune
 | Drivers that order the stages | The world's are on the session (step 2). Left: the cartridge vocabulary's `CompileCommand.CompileCartridge`, `CartridgeLanguageServices` and `CartridgeSource` | The session |
 | In-memory compile caches | The held images in `WorldDefinitionFileSource`, beside the session's held compiles | The session |
 | Compiles of one source | The document compile and the tests compile | One product |
-| Forms of a document change | The keyed overlay, `WorldReloadDelta`'s whole-document diff, `WorldSourceEdits`'s pointer walk, `WorldProjectionDelta` | The keyed overlay, made by the session |
+| Forms of a document change | The keyed overlay (which `WorldReloadDelta` now carries member by member), `WorldMutation`, `WorldSourceEdits`'s pointer walk, `WorldProjectionDelta` | The keyed overlay, made by the session |
 | Code identities for a derived product | Assembly identities in `WorldCompileSession`, the closures in `CompiledWorldChunks` and the bake, the shader include closure | One reached-code helper, used per stage |
-| Validations of the same bytes | A preview's `ComposeSource` then `Compile` in the browser engine; a reload's sender and its authority, both whole | Narrowed validation, once per side that must not trust the other |
+| Validations of the same bytes | A preview's `ComposeSource` then `Compile` in the browser engine. A reload's sender no longer validates; its authority validates whole | Narrowed validation, once per side that must not trust the other |
 | Ways to run the checkout's CLI | The global tool, the lane copy, the MCP install, the build store | The build store behind the stub |
 | Token grammars | `PuckParser` and the VS Code TextMate file | The parser, with the grammar generated or dropped |
 
@@ -758,86 +762,84 @@ a session with edits does not replay (replay), a spelling costs more to tune
 
 ## Build order
 
-The steps slot behind the `live-edit` lane's door and beside the `bake-keys`
-work and the loop clock, the instrument the iteration plan's first step is
-building as a `world.iteration` verb. Steps 1, 2 and 9 need nothing from the
-door and can start at once. Each step names the reading that shows it worked.
-Where the loop clock does not yet report a count a check names, the count is
-added to that instrument, never to a second one.
+Each step names the reading that shows it worked. The loop clock
+(`world.iteration`) is the instrument: it already counts a loop's compiles,
+compositions, root members merged, documents read and validations, and a count
+a check names that it does not yet report is added to it, never to a second
+instrument. Step 9 needs nothing from the others and can start at any time;
+the rest follow the order given unless a step says otherwise.
 
-1. **Remove the three bookkeeping costs.** Landed
-   ([the language and its compiler](#the-language-and-its-compiler) describes
-   the result). `puck compile --validate --measure` reports the door's
-   `file-content-reads`, about the number of files a warm debug compile reads;
-   the commit that landed it carries the before and after readings.
-2. **One session, every host through it.** Landed. The compile cache, the
-   document composer and the source loader merged into
-   `WorldCompileSession`, the only caller of the now internal `WorldCompiler`;
-   the import walk reads every library through the session's parses
-   (`PuckSourceTable`, by content digest, which the cartridge vocabulary's walk
-   shares); the CLI verbs, the loader, the save, the sweep and `puck test`, the
-   World's watch and the language server go through it;
-   `puck compile --watch`, the sweep's second cache and the language server's
-   dependency table are deleted. What it did not merge, and where it goes: the
-   held composed images still live in `WorldDefinitionFileSource` (step 3
-   holds them by layer; step 6's content keys replace them), `WorldSourceIndex` stays a static index
-   the session reads, and the cartridge vocabulary still orders its own stages
-   in `CompileCommand.CompileCartridge`, `CartridgeLanguageServices` and
-   `CartridgeSource`. The commit that landed it carries the counted readings.
-3. **Deltas from changed sources.** Partly landed. A compile rests on what a
-   sibling it resolved a name in declares, not on its bytes: a
-   `CompileInputKind.Declaration` fact is answered by the declarer
-   `WorldSourceIndex` registers with `CompileInputs`, so a value edit
-   recompiles only the source it is in. A composite document's held image
-   keeps the layers it composed from (`WorldDefinitionFileSource.ComposedLayers`):
-   a recomposition reuses every layer whose document composed to the same
-   image and merges again only the root members a layer shaped afresh writes
-   differently, counted as `world.boot.composition-members`. The loader takes
-   the composed bytes without parsing and printing them again, and the reload
-   diff serializes each side once. The incremental-equals-clean law is
-   `IncrementalCompositionLawTests`, over an edit corpus and a one-colour
-   debug-world edit. Left: the unit is a root member, not a keyed row, so a
-   changed member merges its whole list again across the layers that write
-   it; changed sources are not lowered in parallel; layers are held in
-   memory only, so a process's first recomposition of a persisted image
-   merges whole; and the session does not yet emit the delta between
-   revisions, so the World still parses, validates and diffs whole
-   documents, which step 4 replaces. *Check:* for a one-value edit, the
-   session's counters read one source lowered, a handful of rows merged and
-   no whole-document serialization, and the incremental-equals-clean law
-   passes over an edit corpus drawn from the debug world.
-4. **Join the door.** Partly landed. The authority keeps the source revision
-   it took (`WorldServer.SourceRevision`); a reload's delta is cut between that
-   revision and the next from member bytes (`WorldReloadDelta.Between`), merged
-   over the live document with conflicts named by row
-   (`WorldReloadDelta.TryMergeOver`), validated once at the authority and
-   installed by which root members changed (`WorldDocument.ReloadInstallKindOf`).
-   In a headless debug World an unchanged source moves no
-   `world.boot` count past the composition and is not sent, and a one-colour
-   edit reads one validation, no rule compilation and one presentation install;
-   a live edit followed by a file edit to another row keeps both. Left: the
-   source watch is still off until asked; the install still clears the journal
-   and only the operator may send it; a presentation install still delivers the
-   whole definition to each client. A mutation's and a reload's full install
-   rebuild the compiled products whose recorded inputs the candidate changed
-   (`WorldDocument.PlanProducts`). *Check:* `world.iteration` for a
-   one-colour file edit reports a presentation install with no rule compile and
-   no arena build.
+Steps 1 and 2 are built. The three bookkeeping costs are gone
+([the language and its compiler](#the-language-and-its-compiler) describes the
+code now), and `WorldCompileSession` is the one door into the compiler for every
+host, with library parses shared by content (`PuckSourceTable`). What step 2
+did not merge goes elsewhere: the held composed images in
+`WorldDefinitionFileSource` go with step 6's content keys, `WorldSourceIndex`
+stays a static index the session reads, and the cartridge vocabulary's own
+stage order is in [the duplicates](#duplicates-to-remove).
+
+3. **Deltas from changed sources.** Built in part: a value edit recompiles
+   only the source it is in, because a compile rests on what a sibling it
+   resolved a name in declares (`CompileInputKind.Declaration`), not on the
+   sibling's bytes; a recomposition reuses every layer that composed to the
+   same image and merges again only the root members a changed layer writes
+   (`WorldDefinitionFileSource.ComposedLayers`, counted as
+   `world.boot.composition-members`); and the incremental-equals-clean law is
+   `IncrementalCompositionLawTests`. Left: the unit is a root member, not a
+   keyed row, so a changed member merges its whole list again; changed sources
+   are not lowered in parallel; layers are held in memory only, so a process's
+   first recomposition of a persisted image merges whole; and the delta is cut
+   by the reload's sender from two composed revisions rather than emitted by
+   the session from the rows that moved, so the sender still reads the whole
+   next revision into the typed model and draws it
+   (`WorldDefinitionLoader.TryLoadFileForEdit`). *Check:* for a one-value
+   edit, the first after a boot included, the session's counters read one
+   source lowered, a handful of rows merged and no whole-document
+   serialization, and the incremental-equals-clean law passes over an edit
+   corpus drawn from the debug world.
+4. **Join the door.** Built in part: a reload is a delta between the source
+   revision the authority took (`WorldServer.SourceRevision`) and the next,
+   merged over the live document (`WorldReloadDelta.TryMergeOver`), validated
+   once at the authority and installed by which parts of the document changed
+   (`WorldDocument.ReloadInstallKindOf`), and a full install rebuilds only the
+   compiled products whose recorded inputs it changed
+   (`WorldDocument.PlanProducts`). Left: the watch starts on for a World a
+   local operator boots from a source tree ([what the owner settled](#what-the-owner-settled));
+   the delta enters as one journal entry, admitted by the sender's grants,
+   instead of clearing the journal under the operator's authority; a row both
+   the source and the session changed follows the rule this step settles
+   (today the source wins and is named; the target above refuses and asks);
+   and an install delivers only the changed rows to each client, so the frame
+   no longer waits on a whole definition
+   ([what is left](../iteration.md#what-is-left) in the live edit path).
+   *Check:* a one-colour file edit, saved with the watch on from boot, leaves
+   one journal entry that `world.undo` reverts, is admitted from a
+   non-operator principal granted the creations section, and moves the
+   client's delivery by that row alone.
 5. **Narrow validation**, for the delta and for `world.row.set` alike:
-   sections first, then rows by digest. *Check:* `world.boot.validations`
-   counts rows validated, and a palette edit validates one creation.
+   sections first, then rows by digest. Not started: only a state-value
+   install validates part of the document
+   (`WorldDefinitionValidator.TryValidateTouchedStateRows`). *Check:*
+   `world.boot.validations` counts rows validated, and a palette edit validates
+   one creation.
 6. **Content keys.** One store, products named by input digests and reached
-   code, composed images and path keys deleted, the bound restated. Build the
-   reached-code helper with the `bake-keys` lane so both use one. *Check:* two
+   code, composed images and path keys deleted, the bound restated. Not
+   started: a held compile is still keyed by the compiler's assembly build
+   identities and the source's full path (`WorldCompileSession.CompilerIdentity`).
+   The reached code comes from the walker the compiled world's chunks and the
+   bake's stage keys already share (`CodeClosure`), never a third. *Check:* two
    checkouts at one commit share every entry (hits counted, no misses), and an
    edit to a renderer file misses no compile.
-7. **Record the delta.** The tape holds a file edit's delta bytes. *Check:*
-   `puck test --reproduce` over a scenario that edits a source mid-run passes
-   with the working tree restored to its starting state.
+7. **Record the delta.** The tape holds a file edit's delta bytes. Not
+   started: a recorded reload is still its kind, origin path and content hash,
+   and a replay reads the file again. *Check:* `puck test --reproduce` over a
+   scenario that edits a source mid-run passes with the working tree restored
+   to its starting state.
 8. **Save by derivation.** Carry derivations for literals, `let`s and
    template arguments; bound each save by the delta it produces; write
    against file digests; decompile shading programs as blocks; fix the debug
-   world's refusal. *Check:* in the debug world, a palette colour changed by
+   world's refusal. Not started: `WorldDecompiler` still has no case for a
+   shading program. *Check:* in the debug world, a palette colour changed by
    `world.row.set` on a template-written creation saves into the call that
    passed it, `puck format --check` still passes, `git diff` shows that one
    span, and the decompile round trip holds over the shade corpus.
@@ -875,13 +877,13 @@ added to that instrument, never to a second one.
 
 ## Verification requests
 
-- **What a reload costs presentation.** A windowed debug World, the loop
-  clock on: `world.reload` with no source change, then with a one-colour
-  change in `day.puck`. Read `world.iteration` and `host.log category
-  sdf.mesh-bake`. Expected with today's code: no group rebakes for either,
-  and the lighting stage shows whether an unchanged reload relights. It
-  decides how much of the presentation side step 4 inherits already and how
-  much is the lighting work in [the iteration plan](../iteration.md#order-of-work).
+- **What a reload costs presentation.** A windowed debug World: a one-colour
+  change in `day.puck`, then `world.reload`. Read its `world.iteration` line
+  and `host.log category sdf.mesh-bake`. Expected with today's code: no group
+  bakes, `builds=0`, and a relight of the whole window, since the materials
+  key moves. It gives step 4 its first seconds for a saved look edit, and says
+  how much of what remains is the lighting work in
+  [the iteration plan](../iteration.md#order-of-work).
 - **World Studio on the debug world.** Run the studio's island check on the
   debug world as it stands. The native compile peaks above 2 GB, which is
   near what a browser allows a 32-bit WebAssembly module (4 GB at most), and
@@ -889,11 +891,13 @@ added to that instrument, never to a second one.
   composed to a few hundred kilobytes. It decides whether the studio needs
   the session's row-level memory before anything else there, and whoever
   runs it refreshes that README's table.
-- **Step 1's timings on a quiet machine.** Frozen builds before and after,
-  `puck compile worlds/debug/debug.puck --validate --measure` three times
-  each with the cache warm, and one `world.reload` of an unchanged source in
-  each. The counted reads decide the step; the timing says what the author
-  gets from it.
+- **Steps 1 to 4 on a quiet machine.** Frozen builds from before step 1 and
+  from the current tip, `puck compile worlds/debug/debug.puck --validate
+  --measure` three times each with the cache warm, and in a headless World
+  one `world.reload` of a one-colour edit to `day.puck`, the first after boot
+  and a second. The counts already decided the steps; the timing says what the
+  author gets from them, and the first-after-boot reload says what the
+  persisted image's missing layers cost.
 
 ## Defects found on the way
 
@@ -919,9 +923,9 @@ capability and the technique, not only the expected name.
 | Compile a source once and reuse it | `WorldCompileSession` (once the compile cache, the document composer and the source loader), `WorldSourceIndex`, the held images in `WorldDefinitionFileSource`, `CompiledWorldCache` | They are the session's parts. The session merges them and adds row-level state; it is not a new cache beside them |
 | Know what a compile read | `CompileInputs`, `CompileInputLog` | Reused as the one read door, extended with a stamp-trusting digest |
 | Trust a file by its stamp | `CompileInputs` (`Current`, `Digest`, `List`), which `WorldSourceWatch` polls through | The one home, used by every reader |
-| Watch a dependency set | `DependencyWatch`, `WorldSourceWatch` | Reused. `puck compile --watch` is the duplicate |
+| Watch a dependency set | `DependencyWatch`, `WorldSourceWatch` | Reused. `puck compile --watch` was the duplicate and is deleted |
 | Describe a document change by key | `WorldDocumentBasis.Diff` and `TryMerge`, `WorldReloadDelta`, `WorldProjectionDelta` | The overlay is reused as the one form |
-| Apply a small change and rebuild only what it reaches | `WorldMutation`, `WorldDocument.InstallKindOf`, `WorldPrototype.DiffersInShadingAlone`, `WorldDocumentWalker.Share` | Reused as the door. It is the `live-edit` lane's to extend |
+| Apply a small change and rebuild only what it reaches | `WorldMutation`, `WorldDocument.InstallKindOf`, `WorldPrototype.DiffersInShadingAlone`, `WorldDocumentWalker.Share` | Reused as the door, which the iteration plan's live edit path extends |
 | Validate only what a change reaches | `WorldDefinitionValidator.TryValidateTouchedStateRows` | The precedent step 5 generalizes |
 | Write an edit back into source text | `WorldSourceSave`, `WorldSourceEdits`, `WorldDocumentOrigins`, `SourceOrigin`, `PuckPrinter` | Reused. Step 8 adds derivations and the bounded proof |
 | Identify the code behind a product | `CodeClosure`, `AssemblyReach`, `CodeRevision`, `SdfMeshBakeClosure` | `CodeClosure` is the one to use; `AssemblyReach` as a key is the defect |

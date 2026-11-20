@@ -39,35 +39,62 @@ one.
   per-view command recording (`ShaderPipelineRenderNode.RenderFrame`) sums to
   about 1 ms in the debug world, while total produce reaches about 26 ms at
   2560 by 1440 (beside 7 to 10 ms of tick). Most of produce is therefore
-  outside recording and unexplained until the frame-thread breakdown separates
-  work from GPU waits. Inside package preparation (`SdfWorldPasses.BeginFrame`),
+  outside recording. The breakdown by part now exists (below); the 2060's one
+  reading split its 26 ms of `produce-work` at the stage into capture 8.9,
+  pack 9.2 and pump 4.5 ms, with the fence wait apart (p50 8.8, p99 41.7 ms),
+  and the 4070's standing split is owed. Inside package preparation (`SdfWorldPasses.BeginFrame`),
   per-body pose packing (`WorldCreationInstances.PackTransforms`, about 0.9 ms
   of 3.4 ms) partitions by registration.
-- During a cold bake the machine is oversubscribed by construction: the bake
-  runs one worker per logical processor (`SdfMeshPathBake.Workers`),
-  the irradiance trace a quarter of the processors more
-  (`SdfMeshIrradiance`), the frame thread runs beside both, and no
-  priority separates the frame from the bake.
+- During a cold bake the machine is oversubscribed by construction. Each
+  subsystem sizes its own workers from `Environment.ProcessorCount`: the bake
+  keeps a pool of its own with one dedicated thread per logical processor
+  (`SdfMeshPathBake.Workers`), the irradiance volume has its drain and
+  background counts (`SdfMeshIrradiance.DrainWorkers`, `BackgroundWorkers`),
+  mesh restore its own (`SdfMesh.Restore`), pipeline creation up to four
+  (`GpuPassPipelineCache.BuildConcurrency`), the runtime compile turnstile one
+  per processor (`ShaderCompileTurns`), and the tick's `JobPool` one fewer than
+  `JobWorkers.Count`. The frame thread runs beside all of them, and no priority
+  separates the frame from the bake. On the RTX 2060 machine's six-thread
+  i5-8400 those counts add up to about 27 workers (6 + 4 + 1 + 1 + 4 + 6 + 5)
+  beside the frame and audio threads; how many run at once in a cold bake is
+  unmeasured.
+- The authority's step and a shape change's delivery run on the frame thread.
+  `HostLoop.Run` steps the simulation and then produces, on one thread. A
+  shape change delivers the whole definition to every sink
+  (`WorldDocument.DeliverPending`), and for every view that is not a replica
+  the cursor serializes and hashes the whole document
+  (`WorldDeliveryCursor.DeliverDefinition`) and embeds audio inline
+  (`WorldAssetRowLoader.EmbedAudio`). The 2060's one reading, taken before
+  its device table applied, read `simulate` at p50 42 ms with single steps up
+  to 3.4 s on a cold boot and p50 30 ms warm at the stage (two to three steps
+  an iteration). What those steps spend their time on was not traced.
 - Background allocation is a frame cost whichever thread allocates, since a
   collection suspends every managed thread
   ([data and memory](../../.claude/skills/dotnet-performance/references/data-and-memory.md#a-young-collection-costs-what-survives-and-what-old-objects-point-at)).
   One measured run allocated 68 MB in a single iteration and took 47
   collections totalling 674 ms of pauses over 600 iterations (worst pauses of
-  20 to 28 ms, longer than a full frame).
+  20 to 28 ms, longer than a full frame). The 2060's cold boot took 226 gen0
+  collections and about 2.1 s of pause over 233 iterations. A read of the
+  frame thread's per-frame presentation paths found only a few kilobytes a
+  frame, so the bake's workers most likely own that garbage; renting the
+  bake's CPU scratch cut a cold lockstep bake's allocation from 124 to 80 GB
+  and halved its collections. `Puck.World` runs workstation GC with
+  `System.GC.ConserveMemory` at 5 (its project file) and sets no latency mode.
+  Whether that setting costs pauses (more frequent large-object compaction) is
+  read from a `gc-verbose` trace, not assumed; the trace also says which
+  thread allocates.
 
 ### Frame-thread measurements owed
 
 Before optimizing smaller frame-thread costs or settling where the tick runs,
-the job system's work packet adds five measurements on the RTX 4070:
+the job system's work packet needs five measurements on the RTX 4070. The
+first two have their instruments: produce and the tick are split into named
+parts (`HostFrameWorkPart`, with fence waits deducted), and each world
+instance's steps and parts are kept apart (`HostWorldWork`, filled by
+`HostFrameWork.MeasureWorld`). Their standing readings on the benchmark route
+are owed. The other three are owed whole (the host already reports the frame
+thread's own allocation, `frameThreadAllocatedBytes`, beside every thread's):
 
-- **Produce split by part** (following `RenderRecordWork`): pumping, capture,
-  packing, staging lighting, exposure, scheduling, preparing packages,
-  recording and flushing, keeping time spent waiting for the GPU apart from CPU
-  work. Parts must sum to within 5% of `host.frames`' `produce-work`.
-- **The tick split by phase, chapter and world instance**: every world instance
-  currently steps in series on the frame thread (`WorldInstanceHost.StepInstances`),
-  and this breakdown ranks the parallel partitions (T3, T2) against the tick's
-  serial causes.
 - **Captures and prepares during produce, counted by cause**: a scheduled
   render, an owed upload, a consumer minimum, or a freshness check
   (`RenderGraphRuntime.WithUnchanged`), feeding the
@@ -121,21 +148,36 @@ field. What that means for the design of the packet's first item:
 
 Decision: one engine-wide pool, `Puck.Hosting.Jobs`, of `max(2,
 Environment.ProcessorCount - 2)` worker threads: every logical processor less
-the frame thread and the audio render thread
-(`WorldAudioRenderService.cs:179`), which are the two threads that must never
-wait on a worker. The Steam Deck (4 cores, 8 threads) runs 6 workers. Nothing else in the engine starts a CPU worker:
-the bake's static pool (`SdfMeshPathBake.WorkQueue`), the irradiance
-worker counts, `Parallel.For` in the engine's runtime paths
-(`SdfMeshIrradiance.cs:1527`, `SdfMeshIrradianceScene.cs:103,579,756`,
-`SdfMeshChunks.cs:96`) and the thread-pool `Task.Run` sites listed below all
-move onto it. Three more sites size work from `Environment.ProcessorCount` on
-their own and move with them: the pipeline cache's `BuildConcurrency`
-(`GpuPassPipelineCache.cs:47-51`), the kernel-tree load's compile semaphore
-(`SdfKernelTreeLoad.cs:174-177`) and the font atlas's raster `Parallel.For`
-(`ManagedFontAtlasGenerator.cs:500-504`). The worker count itself is
-`JobWorkers`, which T0 registers from `Puck.World --workers`; the pool reads
-it rather than a count of its own. The pool never oversubscribes the machine, which is what today's
-three independent worker counts do during a cold bake.
+the frame thread and the audio render thread (`WorldAudioRenderService`),
+which are the two threads that must never wait on a worker. The Steam Deck (4
+cores, 8 threads) runs 6 workers. Nothing else in the engine starts a CPU
+worker. These move onto it:
+
+- **The bake's own pool.** `SdfMeshPathBake` keeps a static work queue and an
+  answer queue served by one dedicated thread per logical processor
+  (`SdfMeshPathBake.Workers`), each idle on an operating-system semaphore and
+  taking work by the bake's rank (`SdfMeshPathBake.TakeWork`). That is the
+  mechanism `JobPool` already has, written a second time; J1 folds it into the
+  one pool rather than leaving the two side by side.
+- **The irradiance volume's workers**: its drain and background counts
+  (`SdfMeshIrradiance.DrainWorkers`, `BackgroundWorkers`), its worker, scene
+  build and refill tasks, and its `Parallel.For` sites, including probe
+  placement (`SdfMeshIrradiance.Placement`) and the trace scene's builds
+  (`SdfMeshIrradianceScene`).
+- **The other `Parallel.For` sites on the engine's runtime paths**: the mesh
+  chunks' levels (`SdfMeshChunks`), the CPU field (`SdfMeshCpuField`) and a
+  large refined lattice's sign priming (`SdfSampledLattice.PrimeSigns`).
+- **The thread-pool `Task.Run` sites** in the table below.
+- **The sites that size work from `Environment.ProcessorCount` on their own**:
+  mesh restore's worker count (`SdfMesh.Restore`), the pipeline cache's
+  `BuildConcurrency` (`GpuPassPipelineCache`), the runtime compile turnstile
+  (`ShaderCompileTurns`, which reloads and authored specializations share) and
+  the font atlas's raster `Parallel.For` (`ManagedFontAtlasGenerator`).
+
+The worker count itself is `JobWorkers`, which T0 registers from
+`Puck.World --workers`; the pool reads it rather than a count of its own. The
+pool never oversubscribes the machine, which is what today's independent
+worker counts do during a cold bake.
 
 The pool's first part, the one the tick needs, exists: `JobPool`
 (`Puck.Hosting.Jobs`, a container singleton `AddWorldBoot` registers and every
@@ -155,9 +197,8 @@ classes and comparers, bounded background units, channels, and `0`'s count
 reconciled with `max(2, ProcessorCount - 2)`); it does not add another.
 
 The pool lives in `Puck.Hosting` because every consumer already reaches it:
-`Puck.Shaders` (`Puck.Shaders.csproj:14`), `Puck.SdfVm` (`Puck.SdfVm.csproj:24`),
-`Puck.World.Server` (`Puck.World.Server.csproj:13`) and `Puck.World.Client`
-(`Puck.World.Client.csproj:11`) reference it, and `BackgroundBuild`,
+`Puck.Shaders`, `Puck.SdfVm`, `Puck.World.Server` and `Puck.World.Client`
+reference it in their project files, and `BackgroundBuild`,
 `GpuImageLeases` and `RenderGraphScheduler` are there. `Puck.State` does not
 reference it and does not need to: the parallel tick's fork runs in
 `Puck.World.Server` over the arena, and the arena's only changes are
@@ -176,23 +217,22 @@ class with ready work, and within a class the job its comparer ranks first
 
 | Class | Work | Who forks it |
 |---|---|---|
-| `Frame` | The frame's own parallel work: view recording (section 3), the pose pack and the other `BeginFrame` partitions, a lockstep frame's synchronous irradiance drain (`SdfMeshIrradiance.cs:531-549`). | The frame thread, inside produce. |
+| `Frame` | The frame's own parallel work: view recording (section 3), the pose pack and the other `BeginFrame` partitions, a lockstep frame's converging irradiance drain (the scene build, refill and drain the frame waits for through `SdfMeshIrradiance.AwaitScene`, `AwaitRefill` and `AwaitYield`). | The frame thread, inside produce. |
 | `Tick` | The parallel tick's partitions (section 2). | The frame thread, inside the step. |
-| `Bake` | The mesh bake's group stages, kernel-tree compiles on reload (`SdfKernelTreeLoad.cs:62`), shader pipeline builds (`BackgroundBuild`), the composition build (`SdfCompositionFrameSource.cs:268`), the static field build (`WorldFramePresenter.RebuildStaticField`). | Residencies and render nodes. |
-| `Lighting` | The irradiance worker's traces and relights, its scene build and refill (`SdfMeshIrradiance.cs:558,1011,1147`), response preparation (`WorldFramePresenter.PrepareResponses`), the reflow preview (`WorldServer.Reflow.cs:79`). | The irradiance volume, the presenter and the server. |
+| `Bake` | The mesh bake's group stages and lattice answers, kernel-tree compiles on reload (`SdfKernelTreeLoad`), shader pipeline builds (`BackgroundBuild`), the composition build (`SdfCompositionFrameSource`), the presentation query field's build (`WorldFramePresenter.RebuildStaticField`). | Residencies and render nodes. |
+| `Lighting` | The irradiance volume's CPU work (its worker, scene build, refill and probe placement), response preparation (`WorldFramePresenter.PrepareResponses`), the reflow preview (`WorldServer.Reflow`). | The irradiance volume, the presenter and the server. |
 
-The `Bake` comparer ranks the group with the **largest** demand priority first:
-`SdfMeshDemand.Priority` grows with nearness and view density
-(`SdfMeshDemand.cs:70-78`, "past one for a demanded box, below one for another")
-and the bake takes the largest today (`SdfMeshPathBake.TakeWork`,
-`WorkQueue[index].Group.Priority > WorkQueue[best].Group.Priority`). The
-priority is read live at take time, as `TakeWork` reads it ("as the frame thread
-last left it"), so a demand change reorders queued work, and a
-leader inherits the largest of its members' (`SdfMeshPathBake.Prioritize`). The `Lighting` comparer
-is the order the irradiance worker already sorts by (`SdfMeshIrradiance.cs:1459-1467`):
-probes to trace first, by level and distance, then relights by their lighting's
-age, passes, level and distance. The scheduler takes the policies
-as comparers; it decides no priority of its own.
+The `Bake` comparer is the bake's own rank: `SdfMeshPathBake.TakeWork` takes
+the earliest queued lattice answer first, then the queued stage whose group
+ranks highest (`SdfMeshPathBake.RankOf`: a group some view may see first, then
+the larger demand priority). `SdfMeshDemand.Priority` grows with nearness and
+view density. The rank is read live at take time, "as the frame thread last
+left it", so a demand change reorders queued work, and a leader inherits the
+largest of its members' (`SdfMeshPathBake.Prioritize`). The `Lighting`
+comparer is the order the irradiance worker already sorts by
+(`SdfMeshIrradiance`): probes to trace first, by level and distance, then
+relights by their lighting's age, passes, level and distance. The scheduler
+takes the policies as comparers; it decides no priority of its own.
 
 `Frame` and `Tick` are forks the frame thread drives and joins for the same
 frame or tick, so they never queue behind each other; their order matters only
@@ -208,34 +248,36 @@ frame or tick can complete across host iterations
 Decision: a background job (`Bake`, `Lighting`) is a sequence of resumable units,
 each bounded in work, and a worker checks for higher-class work between units.
 The latency for a `Frame` or `Tick` fork to acquire every worker is therefore
-one unit, never a whole bake stage. The bake's stages already run as bounded
-slabs: planes per frame (`SdfMeshPathBake.cs:1359`), points per frame (`:1515`,
-`:1646`), all sized from `LatticeTaps`; the irradiance trace's unit is one
-probe (`Process`, tracing its hits or relighting them, inside the `Parallel.For`
-at `SdfMeshIrradiance.cs:1527`).
+one unit, never a whole bake stage. The bake's GPU lattices are already
+bounded slabs sized from `LatticeTaps`, and the irradiance trace and relight
+run on the GPU. The CPU stages are not bounded: the bake's pool says its
+stages "run for seconds" (`SdfMeshPathBake`'s comment on its workers), and a
+large refined lattice's first crossing stage still took several seconds
+offline after its signs were primed in parallel.
 The unit bound is 2 ms of work, a design parameter measured when the pool
 lands (open question 3). Which queued bake actions exceed it is unknown from
-the code: the dispatcher (`SdfMeshPathBake.Work`) runs whatever action was
+the code: the bake's worker (`SdfMeshPathBake.Work`) runs whatever action was
 queued and times each as one figure for the pool's backlog
-(`SdfMeshBakeBacklog.ObserveStage`), so J1 measures each action kind's duration and splits those
-over the bound; the Bake proportional to change packet's narrower closure
-shrinks them anyway.
+(`SdfMeshBakeBacklog.ObserveStage`), so J1 measures each action kind's
+duration and splits those over the bound; the Bake proportional to change
+packet's narrower closure shrinks them anyway.
 
 ### Dependencies: a wait is not a unit
 
 Decision: no job waits inside a unit, and no worker ever blocks on another job.
 
 - **Nested parallel work is a fork the parent helps with.** A job that today
-  joins a `Parallel.For` (the worker, `SdfMeshIrradiance.cs:558` joining `:1527`;
-  the scene build, `SdfMeshIrradianceScene.cs:103`) becomes a fork whose parent
+  joins a `Parallel.For` (the irradiance worker; the trace scene's build in
+  `SdfMeshIrradianceScene`; a bake stage priming a lattice's signs) becomes a
+  fork whose parent
   takes partitions itself until the fork is done, so a parent holding a worker
   is always working, never waiting, and every worker is free to take the same
   fork's partitions. A fork's partitions inherit the parent's class.
 - **Job-to-job dependencies are run-after edges, and queues hold only runnable
   work.** A job enters its class's ready queue when its last prerequisite has
-  completed; it is never in a queue while unrunnable. `BackgroundBuild`'s
+  completed; it is never in a queue while unrunnable. `BackgroundBuild.Start`'s
   asynchronous overload (a build that awaits another build or a residency's
-  tables, `BackgroundBuild.cs:140-152`) becomes a run-after edge on that job
+  tables) becomes a run-after edge on that job
   where the wait is on engine work; a wait on I/O stays asynchronous outside the
   pool and enqueues the job when the I/O completes.
 - **A `Frame` job never waits on a background job.** It reads the latest
@@ -250,8 +292,8 @@ Decision: no job waits inside a unit, and no worker ever blocks on another job.
 
 ### The cap that protects the frame
 
-Decision: while the frame thread is inside its work (from `BeginIteration` to the
-end of produce, `HostLoop.cs:59-105`) background classes run on at most `cap -
+Decision: while the frame thread is inside its work (from the control phase to
+the end of produce in `HostLoop.Run`) background classes run on at most `cap -
 foregroundWidth` workers, where `foregroundWidth` is the number of workers the
 frame's current fork holds, so a fork never finds the cap already spent. The
 cap moves with hysteresis, never one-for-one: an iteration whose work time
@@ -261,9 +303,9 @@ iterations and non-tick iterations keep separate records, so a clean non-tick
 frame cannot raise the cap a tick frame then misses. The budget and the work
 time are `HostFrameTimeline`'s, judged with the paced wait excluded as `Scan`
 and `host.frames` both do (`HostFrameTimeline.WorkOf`). During the pacer wait
-(`:109`) every worker is open to background, and a unit does not start within one unit bound of the
-pacer's deadline, which the loop computes (`:109-110`), so the wake finds no
-worker mid-unit. The cap exists because the bounded unit protects the frame
+(`HostWaits.Pace`) every worker is open to background, and a unit does not
+start within one unit bound of the pacer's deadline, which the loop computes,
+so the wake finds no worker mid-unit. The cap exists because the bounded unit protects the frame
 from waiting but not from sharing cache, memory bandwidth and SMT siblings
 with background work, which the Deck's four cores feel.
 
@@ -290,14 +332,16 @@ owner's direction is no added latency. So:
   `BackgroundBuild.TryTake` is the owner's drain of its own channel, not a
   second reader of a shared one.
 - **The owner drains at its own latest install point**, on the frame thread,
-  exactly where it polls today: `BackgroundBuild.TryTake` once a frame
-  (`BackgroundBuild.cs:4-8`), the composition source where it adopts a build
-  (`SdfCompositionFrameSource.cs:565`), the bake's background GPU work where `SdfGpuWork.Pump` polls its
-  slots' fences, the irradiance volume where it publishes (`SdfMeshIrradiance.cs:708`).
-  A result ready before the poll installs on the same frame it does today.
-- **A synchronous dependency settles in the same frame.** A lockstep frame waits
-  for its scene build and refill and traces before it renders
-  (`SdfMeshIrradiance.cs:531-549`). That work runs as a `Frame` fork the
+  exactly where it polls today: `BackgroundBuild.TryTake` once a frame, the
+  composition source where it adopts a build
+  (`SdfCompositionFrameSource.AdoptBuild`), the bake's background GPU work
+  where `SdfGpuWork.Pump` polls its slots' fences, the irradiance volume where
+  it publishes (`SdfMeshIrradiance.Publish`). A result ready before the poll
+  installs on the same frame it does today.
+- **A synchronous dependency settles in the same frame.** A lockstep frame that
+  converges lighting waits for its scene build, refill and drain before it
+  renders; C0.3 moved that work onto worker tasks the frame waits for through
+  the wait door. Under J1 that work runs as a `Frame` fork the
   frame thread helps with, and its results install when it joins, before the
   frame renders, so lockstep publication stays synchronous and a `[still]`
   traces the frame's own scene. The same frame is the same logical frame: a
@@ -306,9 +350,9 @@ owner's direction is no added latency. So:
   ([C0](#how-it-composes)).
 - **Simulation never reads a channel.** No tick depends on background work,
   which keeps the tick deterministic whatever the workers did. The reflow
-  preview (`WorldServer.Reflow.cs:67-84`) is a server-owned channel the drain
-  verb reads on the host loop's thread, so a headless host with no produce
-  callback (`HostLoop.cs:103-105`) still completes it.
+  preview (`WorldServer.Reflow`) is a server-owned channel the drain verb reads
+  on the host loop's thread, so a headless host with no produce callback still
+  completes it.
 - **Capacity and parking.** A channel's capacity is the most results its
   producer can land in one frame, the queued results' bytes are a reservation
   from the memory owner, and a producer that finds its channel full parks
@@ -316,8 +360,8 @@ owner's direction is no added latency. So:
 - **Failure, cancellation and shutdown.** A faulted job delivers its exception
   through the same channel and the owner reports it where it reports a faulted
   `Task` today. A cancelled job's result, if it completes anyway, goes to the
-  owner's discard action, as `BackgroundBuild.Cancel` does
-  (`BackgroundBuild.cs:68-78`); `CancelAndWait`'s contract holds because a
+  owner's discard action, as `BackgroundBuild.Cancel` does;
+  `CancelAndWait`'s contract holds because a
   cancelled job's unit boundaries are bounded. At shutdown the host cancels
   every job, runs the pool to quiescence (every unit ends within its bound,
   every parked result is discarded through its owner), drains every channel
@@ -329,30 +373,36 @@ Every site below moves onto it, with its result kind:
 
 | Site today | Mechanism today | After |
 |---|---|---|
-| `SdfKernelTreeLoad.cs:16-18,62` | `ConcurrentQueue` of ready kernels and errors, polled by `TakeReady` | `Bake` jobs per source; results into the load's kernel channel, drained by `TakeReady`. |
-| `SdfCompositionFrameSource.cs:268` | A `Task` polled each frame | One `Bake` job; the built program and delta into the source's program channel, drained where `AdoptBuild` runs (`:565`). |
-| `SdfMeshIrradiance.cs:558,1011,1147` | Three `Task.Run` and a `Parallel.For` (`:1527`) | `Lighting` jobs and forks; landed probe blocks and the built scene into the volume's lighting channel; `Publish` drains it (`:708`). Lockstep: a `Frame` fork. |
-| `SdfMeshPathBake.cs:1099`, `SdfMeshPathBake.Work` | A static work queue, `Task.Run` workers, fire-and-forget | `Bake` jobs under the descending demand comparer; landings into the residency's bake channel; the static pool is deleted. |
-| `BackgroundBuild.cs:134,149` | `Task.Run` on the thread pool, `TryTake` once a frame | `Start` enqueues a `Bake` job; `TryTake` drains the build's own channel. The candidate lifecycle (take-or-discard, cancel callbacks) is kept as a consumer, as the packet says. |
-| `GpuImageLeases.cs:67` | A `Task.Run` disposer | A `Bake` job per retirement batch; a deferred disposal is engine work, not I/O. |
-| `WorldFramePresenter.cs:511,2436` | `Task.Run` | `Bake` (the static field) and `Lighting` (responses) jobs; results into the presenter's channels. |
-| `WorldServer.Reflow.cs:79` | `Task.Run` | A `Lighting` job; the preview into the server's reflow channel, read by the drain verb. |
-| `ShaderCompiler.cs:97,165` | `Task.Run` | `Bake` jobs. |
+| `SdfKernelTreeLoad` | A `Task` per load and a `ConcurrentQueue` of ready kernels and errors, polled by `TakeReady` | `Bake` jobs per source; results into the load's kernel channel, drained by `TakeReady`. |
+| `SdfCompositionFrameSource`'s build | A `Task` polled each frame | One `Bake` job; the built program and delta into the source's program channel, drained where `AdoptBuild` runs. |
+| `SdfMeshIrradiance` (its worker, drawn-scene build, scene build and refill) and `SdfMeshProbeGpuWork.Scene`'s upload export | `Task.Run`, plus `Parallel.For` in the volume and in `SdfMeshIrradiance.Placement` | `Lighting` jobs and forks; landed results and the built scene into the volume's lighting channel; `Publish` drains it. Lockstep: a `Frame` fork. |
+| `SdfMeshPathBake`'s pool (`WorkQueue`, `AnswerQueue`, `Workers`) and its floor judge (`SdfMeshPathBake.Floor`'s `Judge`) | A static queue on dedicated threads, one per processor; the judge as one thread-pool task | `Bake` jobs under the bake's rank (answers first by a reserved rank); landings into the residency's bake channel; the static pool and its threads are deleted. |
+| `BackgroundBuild.Start` | `Task.Run` on the thread pool, `TryTake` once a frame | `Start` enqueues a `Bake` job; `TryTake` drains the build's own channel. The candidate lifecycle (take-or-discard, cancel callbacks) is kept as a consumer, as the packet says. |
+| `GpuImageLeases`' disposer | A `Task.Run` disposer | A `Bake` job per retirement batch; a deferred disposal is engine work, not I/O. |
+| `WorldFramePresenter` (`RebuildStaticField`, `PrepareResponses`) | `Task.Run` | `Bake` (the query field) and `Lighting` (responses) jobs; results into the presenter's channels. |
+| `WorldServer.Reflow` | `Task.Run` | A `Lighting` job; the preview into the server's reflow channel, read by the drain verb. |
+| `ShaderCompiler`'s compiles and `ShaderCompileTurns` | `Task.Run` behind a processor-count semaphore | `Bake` jobs; the turnstile goes, since the class order and the cap already bound them. |
+| `NavigationRuntime`'s domain bake | `Task.Run` | A `Bake` job; the baked domain into the runtime's channel. |
 
 Not moved, and why:
 
 - I/O stays asynchronous and completes into its owner's channel: the mesh
-  store's disk account (`SdfMeshPathBake.cs:1099` prints and records; its disk
-  read is I/O), the camera device open (`WorldScreenBinder.Device.Camera.cs:434,1046`),
-  the blob store (`WorldAuthorityBlobStore.cs:125`), extensions' network work,
-  and every `PersistentRequestLane`, `PeerLink`, `WorldSiloHost.Mailbox` and
+  store's account at a bake's start (`SdfMeshBakeReport.Start` reads the
+  store's directory off the frame thread), the camera device open and scan
+  (`WorldScreenBinder.Device.Camera`, `CameraDeviceScanner`), the blob store
+  (`WorldAuthorityBlobStore`), the silo's journal and checkpoint uploads
+  (`WorldSiloHost`), extensions' network work, and every
+  `PersistentRequestLane`, `PeerLink`, `WorldSiloHost.Mailbox` and
   `WorldAgentMailbox` stream, which already use channels where they fit.
+- The capture encoder (`FrameCaptureRequest`) and the diagnostic evaluation
+  (`WorldDiagnostics`) are tools a verb asks for; they move only if a reading
+  shows them competing with the frame.
 - Dedicated threads stay: the audio render thread, input device loops, socket
   readers and the accept loop, the hot-reload agent, the code warmer, and the
-  machine worker. `QueuedWorkerLifecycle` (`QueuedWorkerLifecycle.cs:36-50`) is a
-  request-and-reply rendezvous with an ordered queue and producer backpressure,
-  which a stream does not express. Its per-request `ManualResetEventSlim`
-  (`Drain`, `:131`; `Stop`, `:232`) is worth pooling: `Drain` runs once per
+  machine worker. `QueuedWorkerLifecycle` is a request-and-reply rendezvous
+  with an ordered queue and producer backpressure, which a stream does not
+  express. Its per-request `ManualResetEventSlim` (in `Drain` and `Stop`) is
+  worth pooling: `Drain` runs once per
   synchronous machine step from one producer (the frame thread), so one retained
   handle per lifecycle, reset before each barrier, removes an allocation from a
   60 Hz path that must allocate nothing. `Stop` runs once and keeps its own.
@@ -397,71 +447,71 @@ checked against:
    phase names what it reads and guarantees nothing it reads is written during
    the phase. The arena is read-only inside every partitioned phase, and every
    cache the arena builds lazily on a read is built on the frame thread before
-   the fork: `CellSlotAt` allocates and fills a row's positional array on first
-   read and publishes it by generation (`StateArena.Order.cs:30-43`), which two
-   first readers would race, so a partitioned phase whose reads reach a linked
-   row by position needs the arena to gain a `PrepareReads` that fills every
-   row's positions before the fork, and a partition never builds one. E4 needs
-   none: its only arena reads are participant lane slots
-   (`StateArena.TryReadSlot`, `StateArena.Participants.cs:128-235`), which
-   address a column directly and build no cache, so T1 built no
-   `PrepareReads`; the first phase that reads a linked row builds it. Every write
-   a partition would make goes into a partition-owned log, replayed at the join.
+   the fork: `StateArena.CellSlotAt` allocates and fills a row's positional
+   array on first read and publishes it by generation, which two first readers
+   would race, so a partitioned phase whose reads reach a linked row by
+   position needs the arena to gain a `PrepareReads` that fills every row's
+   positions before the fork, and a partition never builds one. E4 needs none:
+   its only arena reads are participant lane slots (`StateArena.TryReadSlot`),
+   which address a column directly and build no cache, so T1 built no
+   `PrepareReads`; the first phase that reads a linked row builds it. Every
+   write a partition would make goes into a partition-owned log, replayed at
+   the join.
 3. **Partition-owned scratch.** Scratch is owned by the partition index and
    retained between ticks: a `WorldBody.StepScratch` per partition in place of
-   the population's one (`WorldPopulation.cs:332`), a collider candidate list per
-   partition in place of `WorldColliderSet.m_candidates` (`WorldColliderSet.cs:73`),
-   and a field-walk scratch per partition in place of `SdfFieldEvaluator`'s
-   `[ThreadStatic]` reach array (`SdfFieldEvaluator.PointWalk.cs:11-12`), because
-   thread-local state is indexed by the thread and the memo wants nothing
-   indexed by the thread.
+   the population's one (`WorldPopulation`'s step scratch), and a field-walk
+   scratch per partition in place of `SdfFieldEvaluator`'s `[ThreadStatic]`
+   reach array (`SdfFieldEvaluator.PointWalk`), because thread-local state is
+   indexed by the thread and the memo wants nothing indexed by the thread. The
+   collider set no longer has the one candidate list this memo first named;
+   which of `WorldColliderSet`'s working lists a rigid body's step writes is
+   T2's first task (open question 1).
 4. **A stable commit order that is today's execution order.** The join merges
    partition logs by a commit key of (loop, entity index), where the loop order
-   is the step's: simulated bodies first (`WorldTick.Step.cs:421`), then local
-   seats (`:426`). Seats occupy the lowest indices (`WorldPopulation.cs:412-414`)
-   and the simulated loop skips them (`WorldPopulation.Step.cs:855-858`), so an
-   ascending-index merge alone would put seat 0's outputs before a peer's where
-   today they follow; the loop component of the key keeps today's order exactly.
+   is the step's: simulated bodies first (`WorldPopulation.AdvanceSimulated`),
+   then local seats (`WorldPopulation.AdvanceSeats`). Seats occupy the lowest
+   indices and the simulated loop skips them, so an ascending-index merge alone
+   would put seat 0's outputs before a peer's where today they follow; the loop
+   component of the key keeps today's order exactly.
 5. **A fixed order for slot allocation, key minting and draw order.** Pool
    claims (`StateArena.TryClaim` and `StateArena.TryClaimPair` select the lowest
    free slot; `StateArena.TryBirthPoolSlot` initializes and commits it) and key
-   minting (`StateArena.Members.cs:30`) run
-   only in serial phases; no partitioned phase in this memo requests one. Draw
-   order is positional: the pose pack writes a registration's slots at fixed
-   positions, so recording order does not change what the GPU reads.
+   minting (`StateArena.Members`) run only in serial phases; no partitioned
+   phase in this memo requests one. Draw order is positional: the pose pack
+   writes a registration's slots at fixed positions, so recording order does
+   not change what the GPU reads.
 6. **Snapshots only at publication boundaries.** `EmitSnapshot` runs once at the
-   step's end (`WorldTick.Step.cs:646`), after every join.
+   step's end (`WorldTick.StepCore`), after every join.
 
 ### The step's phases
 
-Today's step order is `StepCore` (`WorldTick.Step.cs:307-653`): input and drains,
-`AdvanceSimulated` (`:421`), `AdvanceSeats` (`:426`), `ResolveDynamicContacts`
-(`:433`), tethers and carried bodies, `CompleteStep`, outputs applied, events,
-`EvaluateWorldRules` (`:598`), the serial tail (`SyncBodyCells`, grants, board,
-search, fields, deadlines, responses, deals, addons, engagement, machines) and
-`EmitSnapshot` (`:646`); the instance host's portal scan runs after the server's
-step. The parallel tick keeps that order and forks three phases:
+Today's step order is `WorldTick.StepCore`: input and drains,
+`AdvanceSimulated`, `AdvanceSeats`, `ResolveDynamicContacts`, tethers and
+carried bodies, `CompleteStep`, outputs applied, events, `EvaluateWorldRules`,
+the serial tail (`SyncBodyCells`, grants, board, search, fields, deadlines,
+responses, deals, addons, engagement, machines) and `EmitSnapshot`; the
+instance host's portal scan runs after the server's step. The parallel tick
+keeps that order and forks three phases:
 
 | Phase | Epoch (reads) | Writes during the phase | Join |
 |---|---|---|---|
-| **E1 rigid advance** (the bodies whose kit is rigid, `WorldBody.Step.cs:60-70`, by entity partition, inside `AdvanceSimulated`'s order) | The body's own fields and its solved gravity. `WorldBody.PrepareRigidStep` reads no other body and no arena: it writes its own velocity, its step's acceleration and its start image. The contact generation and the solve that follow (`WorldPopulation.SolveRigidContacts`) read other bodies and stay serial; lesson 7 of the physics lessons plan is the partition for them. | The body's own fields; the partition's work counters. | Counters summed in partition order; then the kit bodies and seats advance serially as today, reading the rigid bodies' new poses as a lower-index body's would today (below). |
-| **E3 crossing scan** (seats by partition, per instance) | Every body's final pose for the tick (`FixedPreviousPosition`, `FixedPosition`), the face catalog, the occupancy as the phase started. | The seat's winner (`winners[seat]`, `WorldInstanceHost.Adjacency.cs:423-432`) and an occupancy delta per partition: the `(placement, face, seat, inside)` rows `Observe` would write and the rows `Forget` would remove. | Deltas applied to the one occupancy dictionary in seat order, then `ResolveAndEnqueueCoalescedTransfers` over the winners, serial (`:355-369`). |
-| **E4 snapshot** (entity rows by partition; built) | The final state: population entries, each body's own fields, and participant lane slots, which build no arena cache (contract rule 2). | Positional writes into `SnapshotEntries` at offsets a prefix sum assigns (below); each row's register-file range of the snapshot's state scratch; the body's own continuity hint. | The field and input tail of `BuildSnapshotCore` (`WorldDocument.Apply.cs:940-997`) and `DeliverSnapshot`, serial and unchanged. |
+| **E1 rigid advance** (the bodies whose kit is rigid, the branch at the top of `WorldBody`'s step, by entity partition, inside `AdvanceSimulated`'s order) | The body's own fields and its solved gravity. `WorldBody.PrepareRigidStep` reads no other body and no arena: it writes its own velocity, its step's acceleration and its start image. The contact generation and the solve that follow (`WorldPopulation.SolveRigidContacts`) read other bodies and stay serial; lesson 7 of the physics lessons plan is the partition for them. | The body's own fields; the partition's work counters. | Counters summed in partition order; then the kit bodies and seats advance serially as today, reading the rigid bodies' new poses as a lower-index body's would today (below). |
+| **E3 crossing scan** (seats by partition, per instance) | Every body's final pose for the tick (`FixedPreviousPosition`, `FixedPosition`), the face catalog, the occupancy as the phase started. | The seat's winner (the scan's per-seat winners in `WorldInstanceHost.Adjacency`) and an occupancy delta per partition: the `(placement, face, seat, inside)` rows `Observe` would write and the rows `Forget` would remove. | Deltas applied to the one occupancy dictionary in seat order, then `ResolveAndEnqueueCoalescedTransfers` over the winners, serial. |
+| **E4 snapshot** (entity rows by partition; built) | The final state: population entries, each body's own fields, and participant lane slots, which build no arena cache (contract rule 2). | Positional writes into `SnapshotEntries` at offsets a prefix sum assigns (below); each row's register-file range of the snapshot's state scratch; the body's own continuity hint. | The field and input tail of `WorldDocument.BuildSnapshotCore` and `DeliverSnapshot`, serial and unchanged. |
 
 **E1's scope.** Only rigid bodies partition. A rigid kit "hands the whole step to
 the population's rigid solve instead of the grounded/free motion program: no
 intent, action track, or hold list applies" (`WorldBody.Step.cs`), and
 `PrepareRigidStep` touches the body's own fields alone. A kit body's advance cannot partition without a
 larger change, because it is an arena transaction: `BeginKitStep` opens a scope
-on the one journal (`WorldInputRuntime.Effects.cs:18-24`, `WorldBody.Step.cs:82`),
-validation writes and rewinds the arena (`:101-132`), a foreign state effect
-mutates another body at once (`:58-71`, `WorldBody.Step.cs:337-340`), and a
-selector commit synchronizes every input owner (`:74-83`). Kit bodies and seats
-therefore stay serial, in today's order, with today's semantics: no frozen
-cross-body image is introduced, the flock keeps its own frozen image
-(`WorldPopulation.Flock.cs:136-143`), and shared navigation
-(`NavigationRuntime.Shared.cs:118-146`) and flock perception
-(`WorldPopulation.Flock.cs:209-230`) keep their caller order. The one semantic
+on the one journal (`WorldInputRuntime.Effects`, called from `WorldBody`'s
+step), validation writes and rewinds the arena, a foreign state effect mutates
+another body at once, and a selector commit (`CommitKitEffects`) synchronizes
+every input owner. Kit bodies and seats therefore stay serial, in today's
+order, with today's semantics: no frozen cross-body image is introduced, the
+flock keeps its own frozen image (`WorldPopulation.Flock`), and shared
+navigation (`NavigationRuntime.Shared`) and flock perception keep their caller
+order. The one semantic
 consequence of E1: a kit body reads a rigid body's post-step pose whatever their
 relative index, where today a kit body with a lower index reads the rigid body's
 pre-step pose. A scenario with a kit producer targeting a rigid body changes
@@ -480,24 +530,23 @@ runs against the partition's view; and the input runtime's undo state
 redesign with its own review, filed in the packet, and nothing in this memo's
 steps depends on it.
 
-**E3's occupancy.** `WorldPortalOccupancy` keeps every seat in one `Dictionary`
-(`WorldPortalOccupancy.cs:12`), which `Observe` writes and `Forget` removes from
-(`:23-24,42-49`); distinct keys are not distinct storage, so partitions record
-deltas and the join applies them in seat order. Seats become the outer loop
-(today faces are, `WorldInstanceHost.Adjacency.cs:311-348`); the winner per seat
-is unchanged because `WorldFaceCrossingClaim.Outranks` is a total order on the
-claim's own parameter and document identity (`WorldFaceCrossingClaim.Outranks`), not on
-scan order.
+**E3's occupancy.** `WorldPortalOccupancy` keeps every seat in one
+`Dictionary`, which `Observe` writes and `Forget` removes from; distinct keys
+are not distinct storage, so partitions record deltas and the join applies
+them in seat order. Seats become the outer loop (today faces are, in
+`WorldInstanceHost.Adjacency`'s scan); the winner per seat is unchanged
+because `WorldFaceCrossingClaim.Outranks` is a total order on the claim's own
+parameter and document identity, not on scan order.
 
 **E4's offsets.** The snapshot is compact: inactive slots are skipped and each
-active body writes at `count++` (`WriteSnapshotRows`, `WorldDocument.Apply.cs:1024-1070`),
-and only that prefix is delivered (`:971`). A serial pass on the forking thread
-counts each partition's delivered rows and assigns each partition the running
-total before it, an exclusive prefix sum (`CountSnapshotPartitions`,
-`:994-1012`); the fork then has each partition write its rows in index order
-from that offset (`SnapshotRows`, `:1079-1088`). The count pass reads two fields
-per slot, so it stays serial rather than costing a second fork and join. Under
-two full partitions of delivered rows (`SnapshotForkRows`, 512, `:989`), where
+active body writes at the next free row (`WorldDocument.WriteSnapshotRows`),
+and only that prefix is delivered. A serial pass on the forking thread counts
+each partition's delivered rows and assigns each partition the running total
+before it, an exclusive prefix sum (`CountSnapshotPartitions`); the fork then
+has each partition write its rows in index order from that offset
+(`SnapshotRows`). The count pass reads two fields per slot, so it stays serial
+rather than costing a second fork and join. Under two full partitions of
+delivered rows (`SnapshotForkRows`), where
 T1 measured no gain, the snapshot does not fork. The serial path, taken then,
 at one worker or at one partition, is the same `WriteSnapshotRows` over every
 row, so the delivered sequence is byte-identical to the serial code's at any
@@ -624,15 +673,14 @@ machine itself, which is the case Puck controls.
 ### Proof by reproduce and by recorded oracle
 
 `puck test --reproduce` proves a recording reproduces in place: `WorldTestBatch`
-drives a `WorldReplayProbe` per authority (`WorldTestBatch.cs:193-206`), which
-advances the server directly tick by tick and compares each tick's authority
-hash (`WorldReplayProbe.cs:63-75`), and the verdict reads `reproduction.json`
-(`TestCommand.cs:183-190`). That path never runs the instance host's portal scan,
+drives a `WorldReplayProbe` per authority, which advances the server directly
+tick by tick and compares each tick's authority hash, and the verdict reads
+`reproduction.json`. That path never runs the instance host's portal scan,
 so it cannot prove E3, and a run at one worker count compared with itself proves
 nothing about partitioning.
 
-Decision, step T0: `Puck.World` gains `--workers N` (0 means the machine's
-count; 1 runs every partition on the frame thread), and `puck test` gains
+Step T0 is built: `Puck.World` takes `--workers N` (0 means the machine's
+count; 1 runs every partition on the frame thread), and `puck test` takes
 `--workers 1,2,0`, which runs each scenario as a **full authored host run** per
 count (the batch host with its instance host and portal scan, not the in-place
 probe) and requires every count's per-tick authority hash sequence, canonical
@@ -649,32 +697,28 @@ and re-records once. The fixtures are focused `*-tests.puck` sources under
 ### What the code does today
 
 Each render node records its frame into one command list and submits alone:
-`RenderFrame` (`ShaderPipelineRenderNode.cs:1727-1790`) waits the slot's fence
-(`:1736`), retires the slot's leases and binds its region buffers (`:1740-1742`),
-begins the slot's command buffer (`BeginFrameCommands`, `:756-762`), records every
-pass (`RecordPasses`, `ShaderPipelineRenderNode.Work.cs:81-152`), the region
-copies, the preview and the outputs, then `SubmitCounted` (`:159-170`). Every
-node has its own command pool per slot (`ShaderPipelineRenderNode.Build.cs:714-724`):
-on Direct3D 12 a `DirectXGpuCommandPool` is one allocator and one list
-(`DirectXGpuCommandPool.cs:21-38`), and `BeginCommandBuffer` resets that list
-against its own allocator (`DirectXGpuRecorder.cs:30-41`); on Vulkan
-`VulkanGpuCommandPoolFactory.Create` makes one `VkCommandPool` holding one
-buffer per request (`VulkanGpuCommandPoolFactory.cs:14-33`). Command recording
-itself is therefore already isolated per node. Three things reached from
-recording are not:
+`ShaderPipelineRenderNode`'s frame waits the slot's fence (`WaitSlot`), retires
+the slot's leases and binds its region buffers, begins the slot's command
+buffer, records every pass (`RecordPasses`), the region copies, the preview and
+the outputs, then submits (`SubmitCounted`). Every node has its own command
+pool per slot: on Direct3D 12 a `DirectXGpuCommandPool` is one allocator and
+one list, and `DirectXGpuRecorder.BeginCommandBuffer` resets that list against
+its own allocator; on Vulkan `VulkanGpuCommandPoolFactory.Create` makes one
+`VkCommandPool` holding one buffer per request. Command recording itself is
+therefore already isolated per node. Three things reached from recording are
+not:
 
 - The graph runtime binds a consumer's reads after its producers have produced
-  and published this frame (`RenderGraphRuntime.cs:1420-1439`, `Bind` resolving a
-  scheduled producer; `:1487-1492` publishing after `ProduceFrame`), and refuses
-  an absent buffer (`:872-894`).
+  and published this frame (`RenderGraphRuntime`'s `Bind` resolving a scheduled
+  producer, and its publication after `ProduceFrame`), and refuses an absent
+  buffer.
 - A node's descriptor preparation for a slot follows that slot's fence wait,
-  and the package's mesh sets are slot-specific (`SdfWorldPassRecorder.cs:745-746`,
-  `MeshSetOf`).
-- A pass recorder submits its residency's upload during recording
-  (`SdfWorldPassRecorder.cs:429-431`, `residency.Submit`; `SdfWorldResidency.cs:620-623`,
-  an unsynchronized `m_submitted` check-and-set around `tables.SubmitUpload`),
-  and recording mutates the residency's requested extent (`:415-417`) and bound
-  screen handles (`:683`). Package preparation (`SdfWorldPasses.BeginFrame`,
+  and the package's mesh sets are slot-specific
+  (`SdfWorldPassRecorder.MeshSetOf`).
+- A pass recorder submits its residency's upload during recording (the
+  residency's `Submit`, an unsynchronized `m_submitted` check-and-set around
+  `SdfWorldTables.SubmitUpload`), and recording mutates the residency's
+  requested extent and bound screen handles. Package preparation (`SdfWorldPasses.BeginFrame`,
   `SdfWorldPasses.PrepareRead`) begins and prepares each residency the frame
   reads but does not perform this upload.
 
@@ -690,7 +734,7 @@ published this frame. Most of the debug world's nodes (views and screens) are
 leaves or one level deep, so the common frame is two waves.
 
 Preparation, on the frame thread, per node and before its wave's fork, in this
-order: the slot's fence wait (`:1736`) and lease retirement; `Bind` of its reads
+order: the slot's fence wait (`WaitSlot`) and lease retirement; `Bind` of its reads
 against the published producers; the residency's upload submission, extent
 requests and screen-handle binding, moved from the pass recorder into
 `SdfWorldResidency`'s per-frame preparation so one owner performs them once per
@@ -749,19 +793,20 @@ list and the scratch contract.
 
 ### One byte-accounting owner
 
-Decision: `Puck.Hosting.Jobs.MemoryAccount`, one per process, beside the
-scheduler and landing before it. It accounts each physical allocation once by
-owner and category (payload, slack, headers, metadata, scratch, retirement,
-cache contents, queued results), with allocator overhead and fragmentation as
-separate headroom, and reports live, reserved, cached, retirement, metadata and
-allocator committed and reserved bytes separately through `host.memory`. Its
-physical reading is `HostMemory` (`HostMemory.cs:6-11`), which stays an
-observation, never a promise. A job's admission reserves its simultaneous peak
-before it runs; a reservation that cannot be met defers the job, never refuses
-it. The mesh library's `ByteBudget` (one twelfth of the account's budget
-bounded to 16 to 512 MiB) bounds the storage its retained meshes are charged,
-which the account counts as cached; an unused allowance is never reserved, so
-it never holds work back. The residency's machine byte budget
+Built: `Puck.Hosting.Jobs.MemoryAccount`, one per process
+(`MemoryAccount.Shared`), beside the scheduler and landed before it. It
+accounts each physical allocation once by owner and category, reads each pool
+as disjoint physical rows (device blocks; in host memory the native
+allocator's committed bytes, native storage outside it, the collector's
+committed bytes and the runtime's and driver's private memory), and reports
+them through `host.memory`. Its physical reading of free memory is
+`HostMemory`, which stays an observation, never a promise. A job's admission
+reserves its simultaneous peak before it runs; a reservation that cannot be
+met defers the job, never refuses it. The mesh library's `ByteBudget` (at most
+the account's `CacheBudget`, a twelfth of its default budget held between 16
+and 512 MiB, and a sixteenth of its current budget) bounds the storage its
+retained meshes are charged, which the account counts as cached; an unused
+allowance is never reserved, so it never holds work back. The residency's machine byte budget
 ([decision](../decisions/residency.md)) becomes a reservation from this account,
 and the bake's group admission (section 1) is one. The account is a ledger of
 reservations and readings, not a tracing collector, a reference count or a
@@ -769,26 +814,24 @@ registry of buffers.
 
 ### The native-storage list
 
-Which consumers move onto `IAllocator` (`IAllocator.cs:8`) and `MimallocAllocator`
-(`MimallocAllocator.cs:14`), in order, each with the measurement that puts it
-there. The rule for the order: large, reference-free, long-lived or
-LOH-churning storage first; small managed scratch is reused in place, not moved;
-anything that holds a managed reference stays managed.
+Which consumers move onto `IAllocator` and `MimallocAllocator`, in order,
+each with the measurement that puts it there. The rule for the order: large,
+reference-free, long-lived or LOH-churning storage first; small managed
+scratch is reused in place, not moved; anything that holds a managed reference
+stays managed. The first two movers are built: published mesh payloads live in
+native storage charged to the account (`SdfMesh.NativeCopy`), and a bake
+group's points, contour projection and crossing roots are `OwnedBuffer`
+storage through the group's allocator. What remains of the bake's managed
+garbage (the sample codec's stream, rented arrays past the shared pool's 1 MiB
+limit, which `RentedArrays` allocates afresh and leaves to the collector,
+refine's masks and per-piece scratch) is in a lane under the
+[Bake proportional to change](open-items.md#bake-proportional-to-change)
+packet.
 
-1. **Mesh payloads.** `SdfMesh`'s positions, normals, indices and materials,
-   held as `ReadOnlyMemory` over managed arrays (`SdfMesh.cs:139-152`), about
-   1.1 GB for the debug world and the LOH's main tenant; they are the cold
-   bake's 345 collections and the mesh library's eviction churn. Native blocks
-   owned by the mesh, uploaded from native memory, freed by the last consumer
-   (the library's cache claim or the residency's, whichever ends last;
-   `SdfMeshLibrary.cs:233-240` evicts a claim, never the storage).
-2. **Bake workspaces.** A group's lattice planes and point buffers (`group.Points`,
-   `SdfMeshPathBake.cs:1483`), owned by the group's job slot and retained between
-   its stages.
 3. **Irradiance blocks and the scene.** A `ProbeBlock` is one trace batch's
    geometry words and a `LightBlock` one relight batch's light words, each
-   allocated per batch at LOH size on purpose (`SdfMeshIrradiance.cs:1517-1520`,
-   the classes at `:2187-2211`), and every cached probe is a slice of its
+   allocated per batch at LOH size on purpose (`SdfMeshIrradiance`'s private
+   block classes), and every cached probe is a slice of its
    blocks, installed into the cache directly and retained while bounce
    converges. The job and the landed result therefore cannot share
    one reusable block. Decision: a block is rented from the account by the job
@@ -801,10 +844,10 @@ anything that holds a managed reference stays managed.
 4. **State, reference-free only.** `ArenaScratch` keeps its nesting and zeroed
    leases; leases of unmanaged element types get native backing per partition,
    and leases whose element type holds references stay managed, as the lease
-   already distinguishes them (`ArenaScratch.cs:115-119`). The journal's entries
-   carry an `object? Reference` (`ArenaJournal.cs:9`), an undo root for an
-   overwritten text or reference cell, so the journal splits: its numeric
-   fields (column, index, number) and the component buffer (`:30-37`) go native,
+   already distinguishes them (`ArenaScratch`). The journal's entries carry an
+   `object? Reference` (`ArenaJournalEntry`), an undo root for an overwritten
+   text or reference cell, so the journal splits: its numeric fields (column,
+   index, number) and the component buffer (`ArenaJournal`) go native,
    and a parallel managed array holds the reference roots with the same scope
    and rewind lifetime. Numeric columns go native; reference columns stay
    managed. `Adopt(source)` on relayout moves and detaches, as the packet says.
@@ -834,14 +877,41 @@ limit, waits for a measured need; none of the consumers above has one.
 ### The bake as jobs
 
 Each group stage the bake schedules today (`SdfMeshPathBake.Schedule`)
-becomes a `Bake` job under the descending
-demand comparer (section 1); urgent answers (`SdfMeshPathBake.RunFirst`) keep their
-place ahead by a reserved rank. Admission of a group's final lattice reads the
-pool's backlog as wall time (`SdfMeshBakeBacklog`: the stages queued and on
-their way against what the workers drain in an admission's lead), which under
-J1 reads the `Bake` class's ready queue and the pool's worker count. The GPU dispatch share is the background GPU
-work's (`SdfGpuWork.GpuShare` of measured GPU time), recorded and submitted by the frame
-thread as GPU work. The CPU stages are bounded units under the memory account.
+becomes a `Bake` job under the bake's rank (section 1); urgent answers
+(`SdfMeshPathBake.RunFirst`) keep their place ahead by a reserved rank.
+Admission of a group's final lattice reads the pool's backlog as wall time
+(`SdfMeshBakeBacklog`: the stages queued and on their way against what the
+workers drain in an admission's lead), which under J1 reads the `Bake` class's
+ready queue and the pool's worker count. The GPU dispatch share is the
+background GPU work's (`SdfGpuWork.GpuShare` of measured GPU time), recorded
+and submitted by the frame thread as GPU work. The CPU stages are bounded
+units under the memory account.
+
+Three handoffs between the GPU and the pool hold the bake's critical path
+today, and each is fixed before or with J1 (in a lane, under the
+[Bake proportional to change](open-items.md#bake-proportional-to-change)
+packet):
+
+- **A lattice answer frees its readback slot only on a pool worker.** The
+  background service has four slots (`SdfGpuWork.SlotCount`), shared with
+  landing and probes. A completed batch's samples are copied out and the slot
+  released inside an answer job (`SdfMeshBakeGpuWork.Complete` queues it with
+  `RunFirst`), so while every worker is in a long contour stage the slot stays
+  busy and the GPU idles behind contouring. Under J1 the copy runs where the
+  owner polls its fence, or on a reader that is not a contour worker, so a
+  slot frees as soon as its fence signals.
+- **Admission pacing measures the wrong lead.** The backlog's lead is meant to
+  be how long the GPU takes to round a lattice (`SdfMeshBakeBacklog`), and a
+  group's lead ends at the first stage queued after admission
+  (`SdfMeshPathBake.Schedule`, `ObserveLead`). That first stage is the
+  sample-checkpoint probe, queued in the same take, so the lead reads
+  microseconds and admission clamps to its floor. The lead is observed at the
+  group's first real stage instead.
+- **Every lattice probes the sample store on the normal queue** before it may
+  dispatch, and on a cold store each probe misses by throwing, so each lattice
+  waits for a free worker and a take. The probe stops after a group's first
+  miss, runs inline or ahead of the stages, and tests existence without an
+  exception.
 What a bake rebakes is the [Bake proportional to change](open-items.md#bake-proportional-to-change)
 packet's: per-group content keys, the narrowed closure, one store for both
 backends; the scheduler runs whatever that packet leaves to bake.
@@ -1187,15 +1257,20 @@ and its operation, never of the file the wait sits in.
   an iteration once its backoff deadline has passed, the frame answers waiting
   with the recovery's reason in between, and the reacquire budget is its stall
   deadline. The sleep delegate, and the default `Thread.Sleep` it binds, go.
-- **The attach primer.** The packet's unconfirmed item (`WorldDocument.AttachSink`
-  reading `WorldDisclosureImages.Current` outside `WorldServer.AuthorityGate`)
-  is fixed by routing the attach through `WorldServer.ExecuteAuthorityOperation`,
-  as an authenticated peer's attach and `TryObserveAsSession` already are. That
-  operation is a synchronous lock (`EnterAuthorityGate`), not a bounded
-  submission, so C0 leaves the residual wait a lock wait, outside the door as
-  stated above; C0.7 audits the lock order of the callbacks the attach delivers
-  to inside it (definition and primer delivery), and a pending submission belongs
-  to J1's channels.
+- **The attach primer.** The packet's unconfirmed item: `WorldServer.AttachSink`
+  calls `WorldDocument.AttachSink`, which delivers the live definition and a
+  primer snapshot (`WorldDocument.BuildPrimerSnapshot`) without taking
+  `WorldServer.AuthorityGate`, and the loopback transport attaches that way
+  directly (`LoopbackTransport`; which thread calls it was not read). An
+  authenticated peer's attach
+  already reaches the tick thread through the row's mailbox
+  (`WorldServer.RunOnTickThreadAsync`, which runs it as an authority
+  operation). The fix routes every attach through
+  `WorldServer.ExecuteAuthorityOperation`. That operation is a synchronous lock
+  (`EnterAuthorityGate`), not a bounded submission, so C0 leaves the residual
+  wait a lock wait, outside the door as stated above; C0.7 audits the lock
+  order of the callbacks the attach delivers to inside it (definition and
+  primer delivery), and a pending submission belongs to J1's channels.
 
 ### The waits C0 rules on
 
@@ -1206,80 +1281,92 @@ The list is the compiler's (`WAIT001`, above). The text survey (the patterns
 over `src/`, less the CLI, Post, Azure and research projects) cross-checks it.
 It finds no `SpinUntil`, `SpinWait` or `Thread.Yield` in the engine's runtime,
 and no condition loop that spins on a flag: the loops that re-test a flag do so
-under `Monitor.Wait`. The rows below are the ones this design decides, each by
-its caller and operation, with the line each was read at.
+under `Monitor.Wait`. The rows below are the ones this design decides and has
+not built, each by its caller and operation. C0.3 and C0.4 built the converging
+frame's drain, the presentation query field's adoption, the composition
+program's adoption and the display encode's pipeline lease as publications or
+polls that answer waiting; C0.2 built the pacer's sleep as the door's pacer
+form; and the streaming plan's step 3 built a withheld frame's drive as one
+door wait on the background service's wake.
+
+Waits the pump reached when a residency or node was released, or kernels were
+reloaded, no longer wait: the device owns retirement (`GpuDeviceRetirement`,
+polled by `RenderGraphRuntime` after each frame's batch), a still-building
+pipeline lease is handed to a retired-builds table (`RetiredBuilds`) instead
+of waiting for the driver, a released residency and its tables no longer wait
+for the device to go idle, and a kernel reload retires the replaced
+pipelines through the tables' retirement queue. A render node still waits for
+the device on `Dispose` (teardown, below), and on device loss it releases
+without waiting.
 
 Reached from the pump thread inside an iteration:
 
 | Wait | Today | Under C0 |
 |---|---|---|
-| `SdfMeshIrradiance.Stage`'s converging branch | Built in C0.3. The scene build, the refill and the drain run on the pool; the frame waits for each through the door, clipped to the pump's allowance | `FrameRender.Waiting` naming the stage and its progress (`SdfMeshConvergence`); the tick is held between iterations |
-| `WorldFramePresenter.AdoptStaticField` | Built in C0.4. Adopts the field's evaluator only once its build completed; a tick-locked or converging frame dressed against the field before it answers `WorldFramePresenter.StaticFieldWaiting` (latched as the dress ends) and is never held for a still | The build publishes; adoption reads the publication, and a frame that needs it answers waiting |
-| `SdfCompositionFrameSource.CaptureFrame` (the build adoption and the layout change) | Built in C0.4. No frame waits for a build: every program builds on the pool, and the one door before packing films nothing (a `null` frame) while no program emitted under the current slot layout is held (`FirstProgramWaiting`, `LayoutWaiting`), and a tick-locked or converging frame carries the held program with `LockedWaiting` while a build stands. The residency reads the reason (`ISdfFrameSource.Waiting`, `SdfWorldResidency.SourceWaiting`), keeps its frame standing, and withholds its views with it (`SdfWorldPasses.WithheldOf`), so a lockstep host holds its tick | The same: published program, or waiting with the reason |
-| `SdfMeshPathBake.WaitForProgress` (a `Monitor.Wait` with the caller's timeout) | Read in C0.4: its one caller is the CLI's CPU bake (`MeshCpuBake`, a tool assembly WAIT001 never holds); no pump or tick path reaches it | `HostWaits.OnCondition` with the caller's deadline, in the step that turns `WAIT001` on for `Puck.SdfVm` (left to it while another lane works in that file) |
-| `SdfWorldResidency.cs:434` | Waits for a reload's kernel load under a cancellation token | The door, with the caller's deadline |
-| `SdfWorldResidency`'s withheld frame (`SdfGpuWork.Drive`) | Built with the streaming plan's step 3: one wait on the service's wake, which a job's fence and a client's offer both set, through the door with the drive's slice as its deadline | The pump's allowance clips it, as every pump wait |
-| The display encode's pipeline lease (`SurfaceEncoder.ReadSdr`, the two compositors' `EnsureEncode`) | Built in C0.4. Polled: each compositor builds its encode's sets and draws on the first present after the pipeline lands and skips the present before it (counted as `presentation.skipped` on Direct3D 12), so the window keeps the image it shows; a read refuses before `IsReady`, and a presented-surface read answers empty, which leaves that frame uncaptured | Polled; the present shows the latest image while it builds |
-| `ShaderPipelineRenderNode.cs:1546` (`WaitSlot`, the one door a slot's fence is waited through) | Unbounded fence wait before a slot is reused | The door; on expiry the node answers waiting and its image stands |
-| `RenderGraphRuntime.StandIns.cs:126`, `GpuCommandSlot.cs:17`, `GpuSurfaceReadback.cs:71` and `:91`, `GpuSurfaceUpload.cs:127`, `SdfWorldTables.Upload.cs:38` and `:103` | Unbounded fence and slot waits | The door, as device waits |
-| `ISwapChainPacing.TryWaitForFrame` (`DirectXSurfaceCompositor.cs:572`, also from `BeginFrame`; `VulkanFramePresenter.cs:313`) | Native waits of up to 100 ms and 50 ms with no caller deadline | The loop's pacing deadline, through the door and into the native timeout |
-| `DeviceLossRecovery.TryRecover` (`:212`) | Up to 10 s of 250 ms backoff sleeps inside one iteration, through a delegate | An operation polled across iterations; the frame answers waiting between attempts |
-| `GpuWorkCountingFence.cs:37`, `GpuBatchedSubmissionFence` (`Wait`), `VulkanFrameSynchronization.cs:111`, `VulkanGpuQueueSubmitter.cs:216`, `DirectXGpuQueueSubmitter.cs:246`, `DirectXSurfaceCompositor.cs:490` and `:511` | The fence implementations and the two backends' native waits | Take the deadline and return the outcome; the native call receives the remainder as its timeout, and the stall deadline keeps the 30-second watchdog |
-| `VulkanQueueSubmitter.cs:221` (`vkQueueWaitIdle`), `VulkanLogicalDevice.cs:152` (`vkDeviceWaitIdle`) | Queue and device idle waits outside the fence wrappers | Replaced by fence-based progress where a deadline applies, or named as native teardown and loss-path waits in C0.6 |
-| The pacer's sleep (`HostWaits.Until`) | A one-millisecond sleep where no precision waiter exists | Built in C0.2: the door's pacer form, bounded by the pacer's deadline |
-| `SdfMeshProbeGpuWork.cs:194`, `ShaderCompiler.cs:92`, `ShaderPackager.cs:358`, `ShaderPackager.Store.cs:310`, `ShaderPipelineLoader.cs:200` | Synchronous waits on asynchronous work; which thread calls each was not read for this design | C0.8 reads each caller: on the pump they become waiting answers, on a worker a run-after edge (J1) |
+| `SdfMeshPathBake.WaitForProgress` (a `Monitor.Wait` with the caller's timeout) | Its one caller is the CLI's CPU bake (`MeshCpuBake`, a tool assembly WAIT001 never holds); no pump or tick path reaches it | `HostWaits.OnCondition` with the caller's deadline, in the step that turns `WAIT001` on for `Puck.SdfVm` |
+| `SdfWorldResidency.WaitPipelineBuilds` | Waits for a reload's kernel load under a cancellation token | The door, with the caller's deadline |
+| `ShaderPipelineRenderNode.WaitSlot`, the one door a slot's fence is waited through | Unbounded fence wait before a slot is reused | The door; on expiry the node answers waiting and its image stands |
+| `RenderGraphRuntime`'s stand-in disposal, `GpuCommandSlot.Wait`, `GpuSurfaceReadback`'s slot waits, `GpuSurfaceUpload`'s slot wait, `SdfWorldTables.SubmitUpload`'s wait on the previous upload | Unbounded fence and slot waits | The door, as device waits |
+| `ISwapChainPacing.TryWaitForFrame` (`DirectXSurfaceCompositor`, also from its `BeginFrame`; `VulkanFramePresenter`) | Native waits of up to 100 ms (`FrameLatencyWaitTimeoutMilliseconds`) and 50 ms (`PresentWaitTimeoutNanoseconds`) with no caller deadline | The loop's pacing deadline, through the door and into the native timeout |
+| `DeviceLossRecovery.TryRecover` | Up to 10 s (`ReacquireBudget`) of 250 ms backoff sleeps (`ReacquireBackoff`) inside one iteration, through a sleep delegate that defaults to `Thread.Sleep` | An operation polled across iterations; the frame answers waiting between attempts |
+| `GpuWorkCountingFence.Wait`, `GpuBatchedSubmissionFence.Wait`, `VulkanFrameSynchronization`, `VulkanGpuQueueSubmitter`, `DirectXGpuQueueSubmitter`, and `DirectXSurfaceCompositor`'s own fence waits | The fence implementations and the two backends' native waits | Take the deadline and return the outcome; the native call receives the remainder as its timeout, and the stall deadline keeps the 30-second watchdog |
+| `VulkanQueueSubmitter` (`vkQueueWaitIdle`), `VulkanLogicalDevice.WaitIdle` (`vkDeviceWaitIdle`) | Queue and device idle waits outside the fence wrappers | Replaced by fence-based progress where a deadline applies, or named as native teardown and loss-path waits in C0.6 |
+| `SdfMeshProbeGpuWork`'s answers, `ShaderCompiler`'s synchronous compile, `ShaderPackager`, `ShaderPackager.Store`, `ShaderPipelineLoader` | Synchronous waits on asynchronous work; which thread calls each was not read for this design | C0.8 reads each caller: on the pump they become waiting answers, on a worker a run-after edge (J1) |
 
 The tick's waits (C0.5):
 
 | Wait | Today | Under C0 |
 |---|---|---|
-| `QueuedWorkerLifecycle.cs:147` (`Drain`, once a synchronous machine step) | Unbounded, and allocates an event a step | A tick wait with one retained barrier and its generation; past its slice the tick is incomplete |
-| `QueuedWorkerLifecycle.cs:274` (`Submit` with a full pending window) | The producer waits on the condition for another thread's completions | A tick wait with a deadline, never the idle form; past its slice the tick is incomplete |
-| `JobPool.cs:108` (a fork's join) | Unbounded | A tick or frame wait; the fork keeps its storage while pending, and expiry names the partition still held |
+| `QueuedWorkerLifecycle.Drain`, once a synchronous machine step | Unbounded, and allocates an event a step | A tick wait with one retained barrier and its generation; past its slice the tick is incomplete |
+| `QueuedWorkerLifecycle.Submit` with a full pending window | The producer waits on the condition for another thread's completions | A tick wait with a deadline, never the idle form; past its slice the tick is incomplete |
+| `JobPool.Fork`'s join | Unbounded | A tick or frame wait; the fork keeps its storage while pending, and expiry names the partition still held |
 
 Live requests (C0.8):
 
 | Wait | Today | Under C0 |
 |---|---|---|
-| `QueuedWorkerLifecycle.cs:170` (`EnqueueAndWait`, from `QueuedMachineWorker`'s checkpoint, memory, time-travel and reconfigure requests) | Unbounded wait on a completion the caller disposes | Refused, accepted, pending or completed; the lifecycle owns a pending request's completion until the worker acknowledges it |
-| `WasmModuleLoader.cs:132` (`CompilationSlots.Wait` in `Load`) | Unbounded admission | Admission with a deadline: acquired, or refused having taken no permit |
-| `BackgroundBuild.cs:161` (`WaitOut`, reached by `GpuBuildCache`'s pipeline lease), `GpuBuildCache.cs:387` | A live result wait | Pending or completed; the pump rows above poll it |
-| `FrameCaptureRequest.cs:193` (`m_pending.Wait`, the encoder window released at `:214`) | CPU encoder back-pressure before a frame is queued for PNG encoding | The capture stays armed and queues the frame on a later iteration, or the request is refused with the encoder's reason |
+| `QueuedWorkerLifecycle.EnqueueAndWait`, from `QueuedMachineWorker`'s checkpoint, memory, time-travel and reconfigure requests | Unbounded wait on a completion the caller disposes | Refused, accepted, pending or completed; the lifecycle owns a pending request's completion until the worker acknowledges it |
+| `WasmModuleLoader.Load`'s compilation slots | Unbounded admission | Admission with a deadline: acquired, or refused having taken no permit |
+| `BackgroundBuild`'s wait for its result, reached by `GpuBuildCache`'s pipeline lease | A live result wait | Pending or completed; the pump rows above poll it |
+| `FrameCaptureRequest`'s encoder window | CPU encoder back-pressure before a frame is queued for PNG encoding | The capture stays armed and queues the frame on a later iteration, or the request is refused with the encoder's reason |
 
-Teardown, with [its three outcomes](#teardown): `BackgroundBuild.cs:84` and
-`:254`, `GpuBuildCache.cs:158` and `:176`, `RetiredBuilds.cs:76`
-(`Task.WaitAll`), `GpuImageLeases.cs:93`, `SdfKernelTreeLoad.cs:142`,
-`SdfMesh.Restore.cs:173`, `SdfGpuWorkReadback.WaitReleased` and
-`SdfGpuWork.Dispose`'s fence waits, `SdfMeshProbeGpuWork.Scene.cs:117`, `JobPool.cs:127`,
-`QueuedWorkerLifecycle.cs:247` and `:250`, `QueuedMachineWorker.cs:840`,
-`LinkedMachineGroup.cs:300`, `GamepadDevice.cs:800` (`Task.WaitAny` on a join's
-deadline), `WorldAudioRenderService.cs:190`, `PersistentRequestLane.cs:540`.
+Teardown, with [its three outcomes](#teardown): `BackgroundBuild`'s and
+`GpuBuildCache`'s waits at disposal, `RetiredBuilds` (`Task.WaitAll`),
+`GpuImageLeases`' disposer, `SdfKernelTreeLoad`'s disposal, `SdfMesh.Restore`'s
+workers, `SdfGpuWorkReadback.WaitReleased` and `SdfGpuWork.Dispose`'s fence
+waits, `SdfMeshProbeGpuWork.Scene`'s upload, `JobPool.Dispose`,
+`QueuedWorkerLifecycle.Stop`, `QueuedMachineWorker`, `LinkedMachineGroup`,
+`GamepadDevice` (`Task.WaitAny` on a join's deadline),
+`WorldAudioRenderService.StopAsync`, `PersistentRequestLane`, a render node's
+`ShaderPipelineRenderNode.Dispose` (which waits for the device to go idle) and
+the render graph runtime's release of its retiring instances.
 
-Startup rendezvous and lifetime parks: `MimallocAllocator.cs:34`'s load
-(`GetResult` on the owner's start) and the owner's infinite sleep at `:30`,
-`WasapiAudioRenderDevice.cs:80` and `WasapiAudioCaptureSource.cs:57`
-(`m_initDone.Wait`). `RecordingSession.cs:197` (`WaitHandle.WaitAny` over its
-stop signal and its muxer's readiness) is its own thread's consumer wait.
+Startup rendezvous and lifetime parks: `MimallocAllocator`'s load (a result
+read on the owner thread's start) and the owner thread's infinite sleep, and
+`WasapiAudioRenderDevice`'s and `WasapiAudioCaptureSource`'s initialization
+waits. `RecordingSession`'s wait over its stop signal and its muxer's readiness
+is its own thread's consumer wait.
 
-Not read after completion, so not waits: `WorldViewGraphHost.cs:970` (guarded
-by `IsCompleted`), `WorldConfiguredExtensions.Observations.cs:109` (guarded by
-`IsCompleted` at `:106`), `SdfMeshProbeGpuWork.Scene.cs:25` (rethrows a task
-already `IsFaulted`), `SdfGpuWork`'s poll (after `IsSignaled`),
-`WorldCaptureScheduler.cs:818` and `WorldCompareCapture.cs:84` (a served
-request's result). The analyzer lets these through only where the completion is
+Not read after completion, so not waits: `WorldViewGraphHost`'s and
+`WorldConfiguredExtensions.Observations`' reads (each guarded by
+`IsCompleted`), `SdfMeshProbeGpuWork.Scene`'s rethrow of a task already
+`IsFaulted`, `SdfGpuWork`'s poll (after `IsSignaled`), and
+`WorldCaptureScheduler`'s and `WorldCompareCapture`'s reads of a served
+request's result. The analyzer lets these through only where the completion is
 proven on the path; a proof that crosses a helper boundary
 (`WorldCaptureScheduler`'s) is restated at the read or the read moves behind the
 check.
 
-Storage, federation and extension I/O waited synchronously
-(`WorldOwnedWorldSync.cs:166`, `:375`, `:605`, `:731` and `:811`,
-`WorldRemoteAuthority.cs:311` and `:1092`, `WorldFederatedServerLink.cs:158`,
-`WorldDocumentOrigin.cs:271`, `WorldStorageDocumentSource.cs:49`,
-`WorldStorageNeighbourResolver.cs:136` and `:160`,
-`WorldStorageCommandModule.cs:66`, `UpdateCommandModule.cs:56` and `:78`):
-section 1 already rules that I/O completes into its owner's channel. C0.8 reads
-which of these run on the pump or the tick thread, bounds those through the door
-as live requests, and leaves the rest to J1's channels.
+Storage and extension I/O waited synchronously (`WorldOwnedWorldSync`, which
+holds the console pump for up to 15 s a blob, `WorldDocumentOrigin`,
+`WorldStorageDocumentSource`, `WorldStorageNeighbourResolver`,
+`WorldStorageCommandModule` and `UpdateCommandModule`): section 1 already rules
+that I/O completes into its owner's channel. C0.8 reads which of these run on
+the pump or the tick thread, bounds those through the door as live requests,
+and leaves the rest to J1's channels. Federated transfers no longer wait on
+the tick thread: a transfer step holds its source cohort while it awaits a
+peer and applies the reply on the row thread at the next tick boundary
+(`WorldRemoteAuthority`).
 
 Dedicated threads keep their loops (section 1): the platform's camera, capture
 and audio threads, the recording session, the gamepad loops, the silo and the
@@ -1291,12 +1378,22 @@ and migrate with their projects.
 Each lands on its own, in this order. A project turns `WAIT001` on in the step
 that clears its last site; the compiler's list says which step that is.
 
+C0.1 to C0.4 are built: the door and its forms in `Puck.Abstractions` with
+`WAIT001` behind `PuckWaitRule`; the control phase minting `HostIteration` and
+the control gap in `host.frames`; a converging frame's drain on worker tasks
+under one stall deadline (`ConvergenceStall`, `SdfMeshConvergence`); the query
+field, composition program and display encode published or polled; and
+`WAIT001` on for `Puck.World.Client`, `Puck.DirectX.Presentation` and
+`Puck.Vulkan.Presentation`. Two windowed readings they owe are verification
+requests for the lead's batch: at a lockstep walkthrough stop that converges
+lighting, a console verb during the drain answers within one iteration (the
+control gap under the wait budget plus a pacer period) and the stop's still
+matches the build before it within the capture noise, on both backends; and a
+`world.reload` that changes the slot layout keeps the control gap under the
+same bound on both backends.
+
 | Step | Lands | Check |
 |---|---|---|
-| **C0.1** | Built. `HostWaits` and its forms, `WaitReason`, `WaitDeadline`, `WaitOutcome`, `WaitConsumer`, the pump allowance and the wait records, in `Puck.Abstractions`; `WAIT001` behind `PuckWaitRule`, with every managed family, method groups and delegate conversions, the completion proof and `ConfinedDirectory.AcquireLock` | A law: a wait on a handle nobody signals returns deadline passed within its budget and the door lists its reason; a pump-thread wait is clipped to the iteration's allowance; a consumer claim on the pump thread and a consumer used on another thread are refused; a completed wait allocates 0 B (`AllocationWindow`). Analyzer laws for a method group, a delegate conversion and the completion proof. The compiler's list for `Puck.Launcher`, `Puck.Hosting`, `Puck.Machines` and `Puck.Abstractions` against the survey's, each difference explained. |
-| **C0.2** | Built. The control phase mints the iteration (`HostIteration` a `ref struct` checked against the loop's phase); the pump allowance opened at each control phase; the pacer's sleep through `HostWaits.Until`; the control gap in `host.frames`; `HoldGate` and `ITextCommandHoldGate` deleted | A headless debug World: `host.frames 600` reads a control gap that matches the iteration interval's distribution, any excess coming from the drain's own position in its iteration (a collection before the drain adds to it), and a session's own hold holds only that session (`TextCommandSourceTests.ASessionsOwnHoldHoldsOnlyThatSession`), which is what lets a second control attachment answer while the first holds on `world.wait`; the MCP adapter runs one call at a time per World, so two attachments cannot be raced through it. |
-| **C0.3** | Built. A converging frame's scene build, refill and drain run on the pool, on the CPU-trace and GPU-trace paths both; the frame waits for each through the door under one stall deadline counted from the convergence's first wait (`ConvergenceStall`), which the pump's allowance clips to a slice, and otherwise answers waiting with `SdfMeshConvergence` (stage and drain progress) while the loop holds the tick. A GPU trace's worker is read, never waited for, since its jobs advance only as the frame pumps the residency's GPU work. The held version rule's one test is `SdfMeshIrradiance.DrainStands`: a drain's every batch and its record of what it drained pass it, and its fresh successor's first pass relights from no bounce. A scene build that faults keeps the volume `Settling` and fails the next frame to resolve a scene (`RefreshScene`, the one door every build passes); a faulted refill stays owed and fails every converging frame (`AwaitRefill`) | The law `AConvergedLightingFrameDrainsAcrossIterationsAndDiscardsAPassWhoseLightingChanged`: with no allowance, the drain spans iterations with its waits expiring on the pump, and a lighting change mid-drain converges to a fresh volume's words; `AConvergingFramesSceneBuildThatFaultsAfterItsSliceKeepsTheFrameWithheldAndReportsTheFault` faults a build after its slice returned. Owed, windowed (presentation `none` stages no irradiance): at a lockstep walkthrough stop that converges lighting, a console verb during the drain answers within one iteration (the control gap under the wait budget plus a pacer period), and the stop's still against the build before it, on both backends. |
-| **C0.4** | Built. The static field, the composition program and the display encode's pipeline lease are published or polled, and a frame that needs them answers waiting with the build's reason (the survey rows above). A `world.wait` that releases before its condition holds names what stands (`WorldWaitCommandModule`'s one `Standing`: the renderer's reason, then `HostWaits.DescribeStanding`), its tick forms included. `WAIT001` is on for `Puck.World.Client`, `Puck.DirectX.Presentation` and `Puck.Vulkan.Presentation`; `Puck.World.Console` keeps two completed-task reads in `WorldCaptureScheduler` whose proof sits in a continuation and a helper (C0.8) | The laws `ABackgroundBuildNeverBlocksTheFrameAndLockedPresentationAnswersWaitingUntilItLands`, `ALayoutChangeWhileABuildStandsFilmsNothingUntilTheNewLayoutsProgramLands` (a build held in its own thread while frames answer), `AFrameSourceWaitingOnABuildAnswersWaitingWithItsReasonAndKeepsTheFrameStanding` (the residency withholds and the graph answers waiting with the reason) and `AWaitReleasedWhileABuildStandsNamesThatBuild` (`world.wait ready 5`, `captures 5` and a tick wait release with the build's reason). Owed, windowed: a `world.reload` that changes the slot layout keeps the control gap under the wait budget plus a pacer period on both backends. |
 | **C0.5** | The tick's waits: the drain, the producer's capacity wait and the fork join bounded; the incomplete-tick record, the read view's refusal and the stall deadline; first, the list of read paths that bypass the read view | A law over `QueuedWorkerLifecycle` and the authority with a worker held past its slice: the step answers pending within its budget; a console read, a checkpoint, an attach and a reset issued while the record stands are refused or wait with the stall's reason; the late worker completion finishes the same tick, whose hash equals an unheld run's; a completed drain allocates 0 B. A held fork the same way. `puck test --reproduce` and `--workers 1,2,0` on the machine and snapshot fixtures. |
 | **C0.6** | Fences, device, present and recovery waits through the door: the native entry points in `WAIT001`; `GpuFenceBlocking`'s per-thread blocked time folded into the door's own accounting, so produce-fence reads one mechanism; `TryWaitForFrame` and `BeginFrame` on the pacing deadline; recovery as an operation; the teardown outcomes and the retirement list; the wait budget and stall deadlines set from readings | An armed device loss (`gpu.faults`) during a fence wait recovers across iterations on both backends with the console answering between attempts. A minimized or occluded window keeps the control gap under the wait budget plus a pacer period on both backends. A fence, a readback lease and a build that complete after their teardown deadline leave no device-after-dispose message in stderr and the narration lists what was kept. `host.frames` standing at the lobby: produce-fence against the build before. |
 | **C0.7** | The attach primer under the authority's operation, with its callbacks' lock order audited | First a law that shows the defect or clears the item: an attach from a second thread while a tick writes. Then the route, with `puck test --reproduce` on the session fixtures. |
@@ -1351,10 +1448,10 @@ how it composes (point 4).
 Small steps, each landing on its own and checked on the debug world. Test
 requirements are lifted for the campaign (AGENTS.md); each step is verified by
 building what it touched and running the check named, and each check is chosen
-to fail when the step's main risk is real. Built: the scheduling stage (S1), C0.1 and C0.2,
-the memory account, native movers 1 and 2, the worker-count harness (`--workers` and
-`puck test --workers`), snapshot partitions and GPU culling in the indirect
-path.
+to fail when the step's main risk is real. Built: the scheduling stage (S1),
+C0.1 to C0.4, the memory account, native movers 1 and 2, the worker-count
+harness (T0: `--workers` and `puck test --workers`), snapshot partitions (T1)
+and GPU culling in the indirect path (R2).
 
 This table is the one statement of the job system's order; the
 [packet](open-items.md#engine-job-system) and the shared queue point at "the
@@ -1380,17 +1477,17 @@ as `puck mesh audit` for bake defects.
 
 | Step | Lands | Check on `worlds/debug` that catches its failure |
 |---|---|---|
-| **Lift slow steps and frame-thread breakdowns** | Fix the lift chapter's 0.6 to 0.8 s steps at their cause: make installed rigid-body contact probes and per-session state delivery on a door swap (`WorldSessionSink.DeliverState`, `WorldDeliveryCursor.FrameMoved`) follow only the rows that changed. In the same pass, add the [frame-thread measurements owed](#frame-thread-measurements-owed) (produce split, tick split, capture counts by cause, per-iteration allocations, and the +1 world / +1 nested view readings). | `puck benchmark --headless --route debug --chapter "the lift"` shows no step in the hundreds of milliseconds, and the windowed route agrees; produce parts sum within 5% of `produce-work` with GPU waits separate; +1 world and +1 nested view each report a distinct delta. The lift's cause is open items' thread trace of the headless chapter, not reopened for this plan. |
-| **Per-frame allocation cuts** | Eliminate per-iteration managed allocations on the frame thread and background threads at the sources the trace names (no dependency on the pool; runs immediately). Do not switch the GC mode to mask allocations: it hides the problem without fixing its cause. | Allocations per iteration drop at the traced sources and 20 to 28 ms GC pauses disappear on the benchmark route; no garbage collection pauses the steady loop. |
+| **Lift slow steps and frame-thread breakdowns** | Fix the lift chapter's 0.6 to 0.8 s steps at their cause: make installed rigid-body contact probes and per-session state delivery on a door swap (`WorldSessionSink.DeliverState`, `WorldDeliveryCursor.FrameMoved`) follow only the rows that changed. In the same pass, add the remaining [frame-thread measurements owed](#frame-thread-measurements-owed) (capture counts by cause, per-iteration allocations by source, and the +1 world / +1 nested view readings) and take the standing produce and tick splits. | `puck benchmark --headless --route debug --chapter "the lift"` shows no step in the hundreds of milliseconds, and the windowed route agrees; produce parts sum within 5% of `produce-work` with GPU waits separate; +1 world and +1 nested view each report a distinct delta. The lift's cause is open items' thread trace of the headless chapter, not reopened for this plan. |
+| **Per-frame allocation cuts** | Eliminate per-iteration managed allocations on the frame thread and background threads at the sources the trace names (no dependency on the pool; runs immediately). The frame thread's per-frame presentation garbage is a few kilobytes a frame; the per-frame cartridge hash, the environment's rebuild, the pack's quadratic offsets and the per-frame delegates are already gone, and the rest is the packet's churn item. A `gc-verbose` trace with allocation stacks, on a windowed World in motion and through a cold bake (on the RTX 2060 machine too, whose 16 GB is the tighter case), names the threads that allocate and whether the pauses are gen0, gen1 or compactions of the large-object heap. Do not switch the GC mode to mask allocations: it hides the problem without fixing its cause. `ConserveMemory` is the exception the trace may name: it is a setting that adds compactions of its own, and if they dominate the pauses the setting is lowered. | Allocations per iteration drop at the traced sources and 20 to 28 ms GC pauses disappear on the benchmark route; no garbage collection pauses the steady loop. |
 | **S1's reading** | Nothing more to build: the scheduling stage is in. Its standing reading on a windowed World is owed. | At `debug.go desktop` and `debug.go overlook`, `world.rates`' `burst` reads about half of each lever's items rated at one tier, where one shared phase reads all of them, and `host.frames` standing there shows no iteration over 16.7 ms of work from a tick meeting the burst. |
-| **C0 The control plane's phase, and bounded waits** ([designed and reviewed above](#the-control-planes-phase-and-bounded-waits), steps C0.1 to C0.8) | The host loop gives the control plane (console, MCP, input) a guaranteed phase of every iteration, held iterations included; every cross-subsystem wait carries a deadline and a named reason, so a presentation wait on lighting convergence cannot starve the console. Headless; no new thread. It is first because J1 moves the waits it names, and a wait with no deadline moved onto a pool is still a stall. | A lockstep walkthrough tour stop that converges lighting: a console verb issued during the drain answers within one iteration, and a wait that exceeds its deadline reports its named reason in `world.wait`'s answer instead of holding. |
-| **J1 The pool and the channels** | The design comes first, as a document reviewed by another family before any build: the hand-rolled concurrency sites moved onto the job system project by project, with the scheduler analyzer and `puck scan`'s `LockAnalyzer` switched on for each project as it migrates. Then `Puck.Hosting.Jobs`: classes with their comparers, bounded units, the dependency rules, a fork that returns an operation its forking thread owns (C0's contract for a join past the wait budget), the cap with hysteresis, per-owner channels drained at each owner's install point, parking, shutdown settlement; every site in section 1's table moved; the bake's static pool, the irradiance worker counts and the engine's `Parallel.For` deleted; `JobWorkers`' `0` reconciled with the pool's `max(2, ProcessorCount - 2)` workers plus the frame thread. A worker preempted while it holds a partition holds the join, so the cap against oversubscription is measured with other programs running before smaller partitions are tried. | A cold bake with `host.frames` sampled through it, and the process's thread count at `workers + 2` plus the dedicated threads. A lockstep `world.at` still after a `world.reload` traces its own scene (`[sdf.mesh-gi]` reports the frame's draw count). A channel forced full by a scratch world with more groups than its capacity lands every group (`[sdf.mesh-bake]` done counts match). A headless boot with a reflow verb answers it. `quit` during a cold bake exits cleanly with no device-after-dispose message in stderr on both backends. The first visible group bakes before any unseen one (`[sdf.mesh-bake]` order against `world.view.pick`). |
+| **C0 The control plane's phase, and bounded waits** ([designed and reviewed above](#the-control-planes-phase-and-bounded-waits); C0.5 to C0.8 remain) | The tick's waits and the incomplete-tick record (C0.5), the device, present and recovery waits (C0.6), the attach primer under the authority's operation (C0.7), and the live requests and remaining projects (C0.8). Headless; no new thread. It comes before J1 because J1 moves the waits it names, and a wait with no deadline moved onto a pool is still a stall. | Each step's check in [the steps](#the-steps); for the whole: a console verb issued while a tick's join is held past its slice answers within one iteration, and an armed device loss recovers across iterations with the console answering between attempts. |
+| **J1 The pool and the channels** | The design comes first, as a document reviewed by another family before any build: the hand-rolled concurrency sites moved onto the job system project by project, with the scheduler analyzer and `puck scan`'s `LockAnalyzer` switched on for each project as it migrates. Then `Puck.Hosting.Jobs`: classes with their comparers, bounded units, the dependency rules, a fork that returns an operation its forking thread owns (C0's contract for a join past the wait budget), the cap with hysteresis, per-owner channels drained at each owner's install point, parking, shutdown settlement; every site in section 1's lists moved; the bake's own pool and its dedicated threads folded into `JobPool`, the irradiance worker counts, mesh restore's count, the compile turnstile and the engine's `Parallel.For` (the bake's sign priming included) deleted; `JobWorkers`' `0` reconciled with the pool's `max(2, ProcessorCount - 2)` workers plus the frame thread. The bake's three GPU handoffs (section 5) are fixed first, so the pool inherits a bake whose readback slots free at their fence. A worker preempted while it holds a partition holds the join, so the cap against oversubscription is measured with other programs running before smaller partitions are tried. | A cold bake with `host.frames` sampled through it, and the process's thread count at `workers + 2` plus the dedicated threads. A lockstep `world.at` still after a `world.reload` traces its own scene (`[sdf.mesh-gi]` reports the frame's draw count). A channel forced full by a scratch world with more groups than its capacity lands every group (`[sdf.mesh-bake]` done counts match). A headless boot with a reflow verb answers it. `quit` during a cold bake exits cleanly with no device-after-dispose message in stderr on both backends. The first visible group bakes before any unseen one (`[sdf.mesh-bake]` order against `world.view.pick`). |
 | **T3 Crossing scan partitions** | E3 by seat partition with occupancy deltas (note: 32 seats per partition saves nothing in today's debug world with a handful of seats, so the tick breakdown ranks this against serial tick fixes below). | T0 on a fixture of 40 seats where two seats enter one party-travel door on one tick and seats straddle the 32-seat boundary; the crossing log (transfer tick, cohort) identical across counts and against the recording. |
 | **T2 Rigid advance partitions** | E1 for rigid bodies with partition scratch; the rigid share is read from the tick breakdown first; the one pose-read change re-recorded. | T0 on a fixture of 200 rigid bodies (a rack and a domino line) beside kit bodies whose producers target a rigid body; hashes identical across counts; `puck bench world` at 0 B median a tick; a standing `host.frames` simulate read. |
-| **Serial tick and produce cuts** | Fix the tick's serial bottlenecks ranked by the tick breakdown — in particular the bounds cache missing for every box of a moving body (`BodySupportMemo.Query`, `SdfBoundsCache`) and scanning every body's facts on every rule pass (`WorldRuleHost.DeriveFacts`). On the produce side, cut the largest named parts in breakdown order: field queries are about a third of the meadow's frame (measured once), so first replace the 6-sample field gradient (`SdfFieldEvaluator.TryFieldGradient`) with the 4-sample form without building a second cache beside `WorldFieldAnswer`, eliminate redundant draw-record uploads ([visibility](visibility.md#the-build-order)), move interpreted motion to compiled programs ([dense landscapes](dense-landscapes.md)), and run remaining pose packing (`WorldCreationInstances.PackTransforms`) in parallel on the J1 pool. | Each cut reports the breakdown drop it claimed on the benchmark route; deterministic tick hashes hold for the tick cuts, and field-query counts drop on the meadow chapter. |
+| **T4 Rows as jobs** | A silo steps every row in turn on its one simulation thread (`WorldSiloSimulation.Step` calls `WorldInstanceHost.StepInstances`), each row holding its authority gate for its whole step (`WorldServerStepShell.Step`), though rows never observe one another (the remark in `StepInstances` says so). Each row's step becomes a `Tick` job, forked after the serial drain of pending transfers (`WorldInstanceHost.DrainPendingTransfers`) and joined before the extensions pump; a row reads a neighbour only through what was published before the fork. The silo registers the pool, which today only the desktop boot does (`AddWorldBoot`). Socket handlers already marshal into the row's mailbox (`WorldServer.RunOnTickThreadAsync`); the operator and grant paths that still take the gate synchronously move into the mailbox too. A cadence checkpoint stops stalling every row on one step: rows are staggered over the cadence, and each encodes from a captured copy off its step rather than under its gate (`WorldSiloHost.TryCaptureRow`). The same fork serves the desktop's instance host once open question 7 settles where its tick runs. | A silo fixture with several rows: each row's per-tick hash sequence identical at one worker and at the machine's count, and against the serial build; the master step reads near the longest row's step plus the fork in the per-world parts (`HostWorldWork`), not their sum; on a cadence tick no step carries more than one row's capture. |
+| **Serial tick and produce cuts** | Fix the tick's serial bottlenecks ranked by the tick breakdown — in particular the bounds cache missing for every box of a moving body (`BodySupportMemo.Query`, `SdfBoundsCache`) and scanning every body's facts on every rule pass (`WorldRuleHost.DeriveFacts`). A shape change's whole-document delivery on the frame thread (`WorldDeliveryCursor.DeliverDefinition` serializing and hashing per sink) is the [authoring loop's step 4](iteration/authoring-loop.md#build-order), delivering only the changed rows, and is not repeated here. On the produce side, cut the largest named parts in breakdown order: field queries are about a third of the meadow's frame (measured once), so first replace the 6-sample field gradient (`SdfFieldEvaluator.TryFieldGradient`) with the 4-sample form without building a second cache beside `WorldFieldAnswer`, eliminate redundant draw-record uploads ([visibility](visibility.md#the-build-order)), move interpreted motion to compiled programs ([dense landscapes](dense-landscapes.md)), and run remaining pose packing (`WorldCreationInstances.PackTransforms`) in parallel on the J1 pool. | Each cut reports the breakdown drop it claimed on the benchmark route; deterministic tick hashes hold for the tick cuts, and field-query counts drop on the meadow chapter. |
 | **R1 Parallel recording in waves** (held until it pays) | Admission first: recording is taken only on a workload whose serial record sum (`world.counters render.record`, `record-microseconds` over `frames`) is several milliseconds with the critical path (`longest-microseconds` over `frames`) well below it; with residency staging moved into package preparation the debug world's sum is about a millisecond, so concurrency could save about half of one and is not yet worth workers. When admitted: waves, prepare-before-fork with the fence first, residency upload and extent in preparation, in-order submission, the pose pack fork; and before it is safe, a thread-safe pipeline cache lookup, a counting recorder and per-worker command pools, with queue operations still serialized and the join before commit. The prepare, record and commit separation of a node's frame stays whether or not recording forks. Direct3D 12 and a windowed Vulkan boot. | `host.frames` produce avg at the lobby; a `world.at` script that moves a portal view and changes a screen's source every frame for 120 frames, with stills at three ticks compared as above with the serial build's on both backends (a one-frame-late read or a descriptor overwritten under a slot in flight shows as a localized difference beyond the noise); GPU-based validation clean on Direct3D 12 and the validation layer clean on Vulkan. |
 | **B1 GI's CPU work as jobs** | The change-set closure is built; what lands is the scene build, placement and selection as `Lighting` jobs under J1's pool. | After a `world.reload` that removes a wall and one that moves a draw: the probe tables and a still compared with a full retrace's (the windowed check the closure still owes); `[sdf.mesh-gi]` probes traced against the whole window; no `Parallel.For` left in the irradiance code. |
-| **M2b Probe block ownership** (the streaming plan's) | Written when the CPU held every probe's hit blocks. The trace and relight now run on the GPU and the full CPU hit blocks are released; what the probe cache and the trace scene keep is bounded in bytes by the streaming plan's [step 9](streaming-and-memory.md#step-9-lighting-on-the-same-demand), which owns this work. | That step's `probe-cache-bytes` and `probe-cache-blocks` staying bounded along a valley flight. This row stays only so the memory steps' numbering holds; nothing is built here. |
 | **M3 Native movers 4 and 5** | Unmanaged scratch leases, the split journal, numeric columns; the tick's deliveries. | T0 at every count; `puck bench world` unchanged; a scratch world whose rules overwrite text cells and rewind (`world.undo`) reads the restored text. |
 
 The meadow's blade draws share a few hundred geometries; grouping them needs
@@ -1411,7 +1508,7 @@ shell over `WorldHostStep`, the client's arrival-form interpolation fraction).
 That fraction already adds about half a step of presentation latency against
 the old accumulator form, since the inline host stamps a tick's arrival just
 before producing the frame that shows it; nothing that overlaps work may add to
-it. Three items from that memo are ordinary work, independent of threading:
+it. Two items from that memo are ordinary work, independent of threading:
 
 - **A replay burst stops at every due hook.** One outer step can advance many
   replay ticks (`WorldServerStepShell`, the fast-forward in
@@ -1423,13 +1520,6 @@ it. Three items from that memo are ordinary work, independent of threading:
   it completed; the post-step hooks run per completed tick in order. Check: a
   `world.at` line and a capture row inside a fast-forward each run at their own
   tick.
-- **`CodeDerivedTable` ties each derivation to its generation.** A derivation
-  begun under code revision R can insert after the table cleared for R+1
-  (`CodeDerivedTable.GetValue` reads `Refresh`, then derives, then inserts into
-  the one table). `Refresh` returns a generation object owning its own weak
-  table, and `GetValue` inserts into that generation only. Check: a test that
-  bumps the revision between derive and insert reads the fresh derivation (the
-  one check running cannot show).
 - **A produce path that reads no server state** merges into the presentation
   view's last cut ([runtime plan](runtime-and-delivery.md#the-presentation-view)).
   It is good hygiene for that cut and for the silo, not a precondition for any
@@ -1465,8 +1555,14 @@ step that meets it.
    ([frame-thread measurements owed](#frame-thread-measurements-owed)) and the
    [benchmark's input-to-display latency column](benchmark.md#presentation-timing-and-admission-stage-8),
    which reports tick-integrated motion and between-tick pointer look
-   (`WorldSeatViewState.PresentedLook`) apart. The design weighs three
-   arrangements:
+   (`WorldSeatViewState.PresentedLook`) apart. The pump thread steps the
+   authority before it produces (`HostLoop.Run`), so whatever a step does (a
+   shape change's whole-document delivery, a machine's drain, rules) is frame
+   time; the 2060's one reading put `simulate` at a p50 of 30 ms at the stage,
+   which alone is past its 16.7 ms frame (read before its device table
+   applied, which changes no tick work). The silo has the same shape on a server: one
+   thread steps every row in turn (T4 forks them, since rows never observe one
+   another). The design weighs three arrangements:
    - *Worlds the player is not acting in step on other threads*, while the
      world the player's body is in keeps its tick ahead of the frame: adds no
      input-to-display latency and stops the frame thread paying for worlds it

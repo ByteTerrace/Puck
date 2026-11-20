@@ -12,7 +12,7 @@ makes each slow today, and the order of the work that makes them fast.
 | Look value | A colour, a shade program's parameter, a light, exposure, a style | An appearance upload: no rebake, no recompile of what did not change, lighting relit only where the value reaches |
 | One creation's form | A shape moved, resized or added in one creation | A rebake of that creation's groups alone, a coarse tier first and finer tiers after, lighting relit only around it |
 | A place's layout | A placement moved, added or removed | The same, for the placements touched |
-| Engine code | A C# or HLSL edit | Shaders reload live; a restart reuses every baked mesh and settled light the edit did not invalidate |
+| Engine code | A C# or HLSL edit | Shaders reload live. A method-body edit in a project the watch lists applies to the running World, and every product of that code derives again ([edit to running](../development/contributing.md#edit-to-running)). Any other edit restarts, and the restart reuses every baked mesh and settled light the edit did not invalidate |
 | A cold machine | An empty store | About a minute per backend to bake the debug world's meshes, lighting settled soon after |
 
 A reload keeps the live value of every state row the edited source did not
@@ -68,11 +68,10 @@ build's seconds beside it.
 The debug world on Direct3D 12, windowed, `--devices none`, each loop run once
 with a scripted edit on the RTX 4070 lead machine. Seconds from the edit
 (from process start for a boot) to each stage; the commit that adds this table
-carries the commands and the World's own lines. The readings predate the
-live edit path's reload install, the faster whole-world compile and the shared
-in-flight bake, which landed beside them, so the saved-edit and boot rows are
-the first to re-read. Later lanes improve on these figures and replace the
-table with their own readings.
+carries the commands and the World's own lines. It is still the only windowed
+reading of every loop, and most of its rows no longer describe the code: the
+next list says which. The lead's quiet window reads every loop again, and that
+reading replaces the table.
 
 | Loop | The edit | frame | shown | meshes | lit |
 |---|---|---|---|---|---|
@@ -87,89 +86,139 @@ table with their own readings.
 | Boot, every mesh missed | first boot after an edit to `SdfMeshPathBake`, which the bake identity reads | 53.2 | 322.0 | 322.3 | not reached |
 | Cold boot, empty cache | fresh `--cache-dir`, on the merged tip | 51.0 | 314.3 | 314.5 | not reached |
 
-What the baseline shows:
+What has changed since, row by row:
+
+- **The look rows.** A palette colour, an exposure and a light edit now build
+  no program (`builds=0`) and begin no bake, counted in a windowed World. A
+  rebuild hands the builder the program it replaces, and an emission whose
+  field inputs are unchanged takes that program's field derivation
+  (`SdfProgram.Of`, `SdfProgram.SharesField`). The live colour's 20.9 seconds
+  to `shown` were dealt placements the client had never drawn, which now show
+  on their own tick (`WorldPlacementResponse.ComparePlacements`). The seconds
+  are unread.
+- **The saved-edit rows.** A one-colour file edit now recompiles one source,
+  merges only the root members it writes and installs as a presentation
+  install with no rule compile ([the live edit path](#the-live-edit-path-step-3)).
+  Those are headless counts; the seconds are unread.
+- **The restart and missed-mesh rows.** An engine edit outside the bake's
+  stages now keeps every stored mesh, and an edit inside them re-runs only the
+  stages it reaches (step 2). An edit to the field or the bake kernel still
+  rebakes every group.
+- **The cold boot.** A free-running cold bake now takes 114 seconds on
+  Direct3D 12 and 123 on Vulkan, against the table's 268, from the
+  `[sdf.mesh-bake] done` line of one windowed boot each on a shared machine.
+  Those figures are indicative; the quiet reading is owed.
+- **The kernel reload** no longer waits for the device to go idle when it
+  replaces pipelines; the replaced ones retire once the next upload completes.
+  Its seconds are unread.
+- **The `lit` column.** Most of step 4 has been built since; the stage is
+  unread.
+
+What the readings show:
 
 - **`lit` is never reached on the debug world.** Its day clock moves the sun
-  every frame, and the irradiance volume's relight falls behind it: it relit
+  every frame, and the irradiance volume's relight fell behind it: it relit
   about 1,500 to 1,900 probes a second where its age bound needs about 2,500
   (`[sdf.mesh-gi] behind level=0 … needed-per-second=2496`), over ten minutes
-  of watching. Lighting from a stable proxy, relit incrementally (step 4), is
-  the fix this figure waits on.
-- **Every look value cost a program build.** An exposure or light edit, read
-  live off the definition each frame, still rebuilt the composition's program
-  (`builds=1`) before a frame showed it. A rebuild now hands the builder the
-  program it replaces, and an emission whose field inputs are unchanged takes
-  that program's field derivation (`SdfProgram.Of`, `SdfProgram.SharesField`):
-  the same program for an exposure or light edit, and the held field with the
-  new appearance packed into its tail for a colour or material value. The bake
-  and the dresser keep every group across such a program, and `builds=0` on
-  every look row.
-- **A palette colour seemed to rebake meshes.** The colour itself never
-  reached a bake key: two compositions of the debug world before and after
-  the colour (`puck mesh audit` with an empty identity) plan the same 6,568
-  geometries. The 15 groups that baked were dealt placements the client had
-  never drawn: the deal sweep installs its children through a value delivery,
-  and the client compared only same-length placement lists by holding, so
-  added, removed or moved rows waited for the next whole definition delivery,
-  which the colour edit happened to be. `WorldPlacementResponse.ComparePlacements`
-  now treats any replaced, added or removed row as a scene change, so deals
-  show on their own tick and a colour edit begins no bake.
-- **A saved edit spends most of its time before the first frame.** Each
+  of watching.
+- **A saved edit spent most of its time before the first frame.** Each
   `world.reload` took 9 to 15 seconds to reach a frame, though the rebake after
-  it took 0 to 3: compiling, admitting, diffing and installing the document is
-  the live edit path's first cost (step 3).
+  it took 0 to 3. Compiling, composing, diffing and installing the document was
+  the cost; the counts above say how much of it is gone.
 - **A kernel reload shows in 3 seconds and finishes in 49.** The first changed
   pipeline installs quickly; the request stays pending until every carried
   source in the tree has compiled.
-- **A cold boot shows the whole world after five minutes.** With an empty
-  cache the bake ran 268 seconds (`[sdf.mesh-bake] done … loaded=0 …
-  seconds=268.045`, GPU busy 241 s at an occupancy of 0.03), on top of the
-  51 seconds to the first frame.
 - **A restart spends 47 seconds before its first frame** even with every mesh
   in the store (`loaded=2`, no dispatches), and the World's own build after
   the engine edit ran for more than two minutes before that (the store build
-  was still running at 124 seconds).
+  was still running at 124 seconds). Nothing yet says where the boot's wait
+  goes.
 
 ## What makes the loops slow today
 
-- **A code edit cold-bakes the world.** The bake's identity covers several
-  hundred code members, so almost any engine edit misses every stored mesh.
-- **Lighting settles in minutes.** The irradiance scene is rebuilt as detail
-  tiers land and a retier relights the whole window; a first boot's main volume
-  settled after nearly ten minutes.
+AGENTS.md sets two figures as forcing functions: about half a minute from an
+engine C# or HLSL edit to seeing it in the running debug world, and about a
+minute to bake the debug world's meshes from an empty store, per backend. The
+latest readings against them:
+
+| Loop | Latest reading | Against the figure |
+|---|---|---|
+| HLSL kernel edit, `world.shaders.reload` | 3.2 s to the first frame that draws the reloaded kernel (the baseline) | Within it |
+| C# edit that hot reload applies | Well under a second after the watch's first edit ([edit to running](../development/contributing.md#edit-to-running)); the loop clock does not time it | Within it |
+| C# edit that needs a restart | The World's build, still running at 124 s, then 47 s to the first frame (the baseline) | Several times over |
+| Cold bake, empty store | 114 s on Direct3D 12 and 123 s on Vulkan, free-running, on a shared machine | About twice over |
+
+- **A restart is the C# loop's cost.** An edit hot reload cannot apply (a rude
+  edit, or one in a project the watch does not list) rebuilds the World and
+  boots it. The bake no longer adds to that for most edits, but the build and
+  the boot to the first frame together take minutes, and nothing attributes
+  the boot's wait. The [edit-to-running packet](open-items.md#edit-to-running-hot-reload-and-boot)
+  owns the restart, the build and their quiet timing.
 - **A cold bake is latency-bound.** The bake kernel is about 2.4% of a cold
   bake's wall time, and the GPU is idle most of the time a job is in flight
-  ([the measurement](field-programs/research-measure.md)). Residencies bake the
-  same groups twice.
-- **An author's `.puck` edit still composes the whole world.** A saved file
-  reaches the running World as a `world.reload` (by hand, or queued by
-  `world.watch on`), which composes the whole source again for one changed
-  value; the authority then validates it once and installs it as the edit it
-  is ([the live edit path](#the-live-edit-path-step-3)).
-  [The authoring loop](iteration/authoring-loop.md)
+  ([the measurement](field-programs/research-measure.md)). Under lockstep the
+  CPU worker pool set the pace, with about a sixth of the wall time stopped for
+  garbage collection and another sixth of the workers' samples waiting on the
+  bake's own lock ([where the time goes](field-programs/research-bake-time.md)).
+  Step 5 holds what is built and what is in flight.
+- **The cold bake also paces releases.** The player channel's mesh cache sets
+  are baked on the lead machine, one cold bake per backend and per device
+  target, whenever the bake's identity moves
+  ([the player build](runtime-and-delivery.md#the-player-build-and-its-channel)).
+- **Lighting settled in minutes.** The irradiance scene was rebuilt as detail
+  tiers landed and a retier relit the whole window; a first boot's main volume
+  settled after nearly ten minutes. Step 4 holds what is built since.
+- **An author's `.puck` edit still validates and delivers the whole world.**
+  A saved file reaches the running World as a `world.reload` (by hand, or
+  queued by `world.watch on`). The compile and composition now do work in
+  proportion to the edit, but a process's first recomposition after it starts
+  merges whole, every install but a state-value one validates the whole
+  candidate, the install clears the journal, and each client receives the
+  whole definition again while the frame waits
+  ([what is left](#what-is-left)). [The authoring loop](iteration/authoring-loop.md)
   maps that path through the compiler, the caches, the CLI, the World, the
   editor and the save back to source, and designs the loop that replaces it.
 
-Two diagnosis lanes (`bake-trace`, `light-trace`) account for the bake's and
-lighting's time, and one fix lane (`bake-share`) removes the duplicate bakes.
-
 ## Order of work
 
-Step 1, the instrument, is built: [how each loop is measured](#how-each-is-measured).
+Step 1, the instrument ([how each loop is measured](#how-each-is-measured)),
+and step 2, bake keys by stage, are built. `puck mesh identity --against`
+reports which of sampling, contouring, simplification and landing an edit
+reaches, and the bake resumes from the stored products of the stages it did
+not reach.
 
-2. Bake keys by stage, built. `puck mesh identity --against` reports whether
-   sampling, contouring, simplification and landing can reuse their previous
-   products, so an engine edit outside the field and its kernel reuses every
-   stored mesh.
-3. The live edit path: a saved `.puck` reaches the running World as the
+3. **The live edit path.** A saved `.puck` reaches the running World as the
    smallest change it is, with look values as appearance uploads and form
-   edits as a progressive rebake of only the creations touched.
-4. Lighting from a stable proxy, relit incrementally, settled at boot with the
-   whole GPU.
-5. The cold bake fed: groups in flight bounded by the GPU rather than round
-   trips. An arrival's bake work already takes the GPU the frame
-   leaves idle ([the bake-time research](field-programs/research-bake-time.md#ranked-fixes),
-   fix 1).
+   edits as a progressive rebake of only the creations touched. The door is
+   built ([below](#the-live-edit-path-step-3)). What is left is the authoring
+   loop's steps 3 to 8, in [its build order](iteration/authoring-loop.md#build-order),
+   which depend on nothing outside that memo.
+4. **Lighting from a stable proxy, relit incrementally, settled at boot with
+   the whole GPU.** Built: the irradiance scene traces each static group's
+   floor, so view retiers and the budget's bias leave it standing; a rebuild
+   keeps the batch in flight; a probe keeps its local cube across a change that
+   misses it; a change is a box hierarchy rather than one union box; rebuilds
+   are paced by trace progress; one GPU budget is shared across residencies by
+   their share of the display; and a seen volume's first light takes the
+   allowance an arriving bake takes
+   ([the settle research's fixes](illumination/research-settle-time.md#the-ranked-fixes)).
+   Left: the reading that says whether `lit` is reached under the day clock; a
+   session that renders the boot world sharing the world's meshes instead of
+   holding its own copy (that research's fix 3, a streaming change); uploading
+   only the top level of a scene change (its fix 9); and a relight driven by
+   which probes' inputs moved, which a material edit needs. *Check:* the boot
+   loop's `world.iteration` line reports `lit` on the debug world.
+5. **The cold bake fed.** Built: an arriving group's bake work takes its own
+   allowance of the GPU the frame leaves idle, the bake starts once its own two
+   kernels compile, only groups arriving in view plan a coarse first tier, the
+   contour and crossing stages rent their scratch, and an in-flight bake is
+   shared across residencies. In flight: the bake's critical path from the
+   sample checkpoint probe to the store write (`bake-latency`), its remaining
+   garbage (`bake-garbage`) and its repeated CPU work (`bake-cpu`). After
+   them, the quiet readings and the shared cross-backend store, in
+   [bake proportional to change](open-items.md#bake-proportional-to-change).
+   *Check:* a free-running cold boot's `[sdf.mesh-bake] done` line on each
+   backend, read in the lead's quiet window, against the minute figure.
 
 The missing look tools, authored large terrain form and a stylized surface
 detail layer, are built alongside, each judged through these loops.
@@ -227,9 +276,10 @@ which are form.
 | A state row's declaration or seed | The row is a new object | That row is seeded again. Every other row keeps its live value |
 | A rule, a kit, anything the simulation compiles | The compiled product is rebuilt from the new document | Rules keep their latches and bodies keep their poses |
 
-The first five rows describe what the keys above imply. They have not been
-watched in a windowed World: the lead machine had no memory headroom for one
-while this step was built, so [the checks](#checks) below are owed.
+The first five rows describe what the keys above imply. The same look values
+set live (`world.row.set`) were watched in a windowed World and built no
+program and began no bake; through a reload, and for the form and placement
+rows, [the checks](#checks) below are owed.
 
 ### How a reload installs
 
@@ -276,7 +326,10 @@ while this step was built, so [the checks](#checks) below are owed.
 - **Timed where the time goes.** A reload prints the source's compile, its
   load, its text check and the delta (`[world.reload] source`), then the
   authority's reconstruction, validation and install (`[world.rebuild]`).
-  These lines move into the loop clock when it lands.
+  The loop's own `world.iteration` line counts the source work beside its
+  stages (compiles, compositions, the root members merged, documents read and
+  validations), so a reading of seconds and a reading of work come from one
+  loop.
 
 Counted in a headless debug World (`world.counters world.boot`, the change in
 each count across one `world.reload`):
@@ -316,12 +369,13 @@ each count across one `world.reload`):
 [The authoring loop](iteration/authoring-loop.md#an-edit-is-one-keyed-delta)
 needs a door that takes a keyed delta with the revision it was made against.
 That door is `WorldRebuildRequest` carrying a `WorldReloadDelta`: the patch and
-the pins of both source revisions. One difference from that memo's target
-remains:
+the pins of both source revisions. Two differences from that memo's target
+remain:
 
 | The door | The target | Owned by |
 |---|---|---|
 | The install clears the journal and moves the base, and only the operator may send it | One journal entry, admitted by the sender's grants for the sections the patch names | Authoring loop step 4 |
+| A row both the source and the session changed takes the source's value, and the verdict names it | The delta is refused by the row's name with both values, and the author chooses | Authoring loop step 4, which settles which of the two is right |
 
 A mutation's full install and a reload's full install already decide alike what
 they rebuild: each compiled product records the parts of the document its build
@@ -349,8 +403,11 @@ both.
 
 ### What is left
 
-- **Composition in front of the delta** is most of a reload's wait now that
-  the sender admits nothing: the authoring loop's steps 3 and 5.
+- **Composition and validation in front of the install.** The sender admits
+  nothing, and a one-colour edit merges one root member, but a process's first
+  recomposition of a persisted image merges whole, a changed member merges its
+  whole list, and the authority validates the whole candidate for every install
+  but a state-value one: the authoring loop's steps 3 and 5.
 - **The sender serializes both revisions once.** `WorldDefinitionMembers`
   slices a revision's compact bytes the first time a delta reads it; the next
   revision's slices come from one serialization of it. It goes when the compile

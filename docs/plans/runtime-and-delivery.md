@@ -3,7 +3,9 @@
 A world is authored once and then has to reach a player. That path runs from
 the content root a product declares, through the derivation that turns a
 document into a running world, out to a deployed server that can be rolled
-forward, rolled back, and restored without losing what the players earned.
+forward, rolled back, and restored without losing what the players earned, and
+to the installed build a player runs, which updates itself from a release
+channel.
 This programme makes the whole path one unit: a product tree that declares what
 it holds, ships its authored sources, derives its data on demand as a cache,
 and is deployed, retained and returned to as one thing. It also settles the
@@ -23,8 +25,9 @@ cache derived from the sources on demand, never the shipped truth; the ledger
 supplies the boundary between house content and someone else's; release pairs
 supply the operation (release B replaces A inside a maintenance window, players
 earn items and cross place boundaries under B, an operator rolls back to A, and
-the items and completed transfers survive); and the evidence package proves one
-candidate carrying all four.
+the items and completed transfers survive); the player channel carries each
+release to the RTX 2060 consumer machine as a player installs it; and the
+evidence package proves one candidate carrying all of them.
 
 **Check:** `puck_world_start` boots the debug package from its folder with
 `world`, and the same start without one refuses and names what it needs; every
@@ -54,13 +57,143 @@ prepare`, `puck official build`, `puck azure build` and the silo image
    over a shared `objects/sha256` store; the manifest supplies the identity,
    channels, and publication base that are hard-coded today.
 3. The release manifest pins the package's content and required extensions;
-   the desktop artifact carries no content.
+   the desktop artifact carries no content. Today the player channel's release
+   carries the compiled package and its caches among its payload files
+   ([below](#the-player-build-and-its-channel)), which is the content-bearing
+   folder this step replaces.
 4. The procedure for authoring a package outside this repository is written
    and followed once from an empty folder to a booting world.
 
 **Check:** `puck official build --worlds worlds/debug` then `puck official
 verify` passes; `puck azure build` produces a bundle with no hard-coded package
 name or channel.
+
+### The player build and its channel
+
+**Owns:** `puck world player` (`WorldPlayerCommand`), `puck world caches`
+(`WorldCachesCommand`), the player folder's layout (`PlayerBuildLayout`), the
+`player` job in the Azure workflow, and the installed build's first boot and
+updates.
+
+The owner's rulings set what this path must do. The RTX 2060 machine is a
+consumer release target: it installs and updates each release from the player
+channel and runs only what a player runs, so it never builds from source,
+compiles a cartridge or cold-bakes. The lead machine produces the prewarmed
+mesh caches, the lead creates the cache-set tags and prereleases, and CI
+releases what is pushed
+([the decision](../decisions/runtime-and-delivery.md#the-player-channel)).
+
+**What exists.** `puck world player <package> --output <folder>` assembles the
+folder a player installs from the existing pipelines: a self-contained
+`Puck.World` published as one composite ReadyToRun image for the machine
+running the verb, extension projects beside it, the package compiled by
+`puck compile --tree`, the shading kernels `puck world prepare` specializes
+with the bindings reflected from them (`PreparedShaderBindings`, so a player
+needs no shader compiler), every cartridge the package's machines can mount
+prepared through its engine's content provider (`CartridgeContentProvider`),
+and the firmware and addon guests the publish prewarms. Windowed boots of the
+published engine itself, one per backend and per `--target` (a device profile
+and window size), fill the mesh store, so every identity the folder ships is
+the one a player's boot derives; `--no-bake` replaces them with one headless
+boot that warms only the device-free caches. The launcher's stub and installer
+(`Puck.Launcher.Setup`) go in the folder's `launcher/`.
+
+A hosted runner has no GPU, so the meshes travel separately. The lead machine
+bakes a player folder and runs `puck world caches produce --push`, which packs
+each backend's mesh set into a cache set named by the build's mesh bake
+identity (`MeshBuildIdentity`). After each deploy, the `player` job assembles
+the folder with `--no-bake`, takes the cache set whose identity equals its
+build's (`puck world caches fetch`, which verifies every file's content pin),
+writes the release tree with `puck publish` and signs and uploads it with
+`puck channel push` under the channel host's root key (`ReleaseChannelHost`).
+An install pins its channel (`ChannelSubscription`), and a World running from
+it updates from that channel.
+
+Composite ReadyToRun puts the framework and Puck in one version bubble, so the
+generic instantiations a per-assembly image left to the JIT are precompiled:
+about 4,100 methods are still compiled by the JIT before `world.status`
+answers, where a per-assembly publish compiled about 33,000. Its cost is one
+image of about 291 MB that every Puck change rewrites.
+
+**Delivers, in this order:**
+
+1. **A player release never ships a mesh miss.** Today a backend whose cache
+   set is missing is named in the release notes and released anyway, so the
+   2060 bakes that backend's whole world on its first boot, against the
+   ruling. A miss has two shapes: the build's bake identity moved (a change to
+   the bake's code or kernel bytecode since the lead last produced a set), or
+   the identity matches but the set was baked from an older document, so the
+   groups whose geometry changed are missing and bake on the player. The
+   [delivery packet](open-items.md#delivery-launcher-and-ci) holds the first
+   shape; nothing yet holds the second. The `player` job publishes only when
+   every backend's set matches the identity and covers the geometries the
+   release's document plans at every target it ships; otherwise it publishes
+   no player release (the deploy itself goes ahead), names the miss and the
+   missing group count in the run, and the channel keeps its last complete
+   release until the lead pushes a set. The lead produces a set before
+   pushing a change that moves the identity, so the hold is a guard rather
+   than the usual path. Coverage is counted without a GPU, as `puck mesh
+   audit` already plans a composition's geometries. The
+   [decision](../decisions/runtime-and-delivery.md#the-player-channel)'s
+   sentence that a stale set's missing groups "are derived on the consumer
+   like any other miss" changes with this step. A device whose detail never
+   settles re-bakes tiers in play however complete its set is, which the
+   `rtx2060` profile on Direct3D 12 may do
+   ([residency and streaming](open-items.md#residency-and-streaming)).
+   *Check:* a run whose set lacks one group publishes no player release and
+   names that group; the next run with a covering set publishes, and the
+   2060's first boot of it reports zero groups baked on both backends.
+2. **The first boot after an update.** The driver's pipeline cache is per
+   adapter and driver, so it is never shipped, and every release's first boot
+   compiles the engine's pipelines on the player's machine; the 2060's one
+   cold reading, from a source build, had 16 of its 27 pipelines built 89
+   seconds in. First, read it: the 2060's first boot of a fresh release, to
+   `world.iteration`'s `first` and `shaded`, with the pipelines built
+   counted. If the wait is long for a first boot, build the pipelines once per
+   update on the player's own device before the first play, for example from
+   the installer once it has applied the release. *Check:* the reading names
+   the first boot's wait and its pipeline count, and the second boot of the
+   same release builds no pipeline.
+3. **What an update downloads.** Content addressing fetches only the files an
+   install lacks, but the composite image changes with every Puck change, so
+   every release downloads it whole. Read the bytes a typical update fetches,
+   and weigh a split (the framework in one composite image, Puck in another)
+   by its JIT count and its download; the
+   [delivery packet](open-items.md#delivery-launcher-and-ci) holds the
+   question. *Check:* the update's fetched bytes and the JIT count at
+   `world.status`, both reported per release.
+4. **What the remaining JIT work is.** Nothing yet attributes the about 4,100
+   methods composite ReadyToRun leaves to the JIT, or says whether any is
+   compiled on the frame thread after the first frame. A JIT event trace of
+   the installed build's boot names them. *Check:* the trace's methods are
+   grouped by assembly and by whether the frame thread compiled them.
+5. **A reading of the consumer machine ties to its release.** The 2060's
+   reading itself belongs to [the rendering plan](rendering.md#the-rtx-2060s-frame)
+   and is typed into the installed build's console, which the stub forwards.
+   This step makes the reading attributable: it names the release version,
+   the cache sets' identities (the `caches` member `puck world caches fetch`
+   writes into the folder's record, `PlayerBuildLayout.RecordName`, and
+   `update.status`), the
+   backend, the size and the device table, and a gc-verbose trace can attach
+   to the installed self-contained process. *Check:* one reading from the 2060
+   carries each of those, and its trace opens.
+6. **A Linux player release.** The channel publishes `win-x64` only, and the
+   verb publishes for the runtime of the machine running it, so the Steam
+   Deck has no player build. Its path is written as if the hardware were on
+   hand: a `linux-x64` release with a Vulkan cache set, assembled on a Linux
+   runner. Testing it waits until the RTX 4070 meets both bars (AGENTS.md).
+   *Check:* the channel lists a `linux-x64` release whose Vulkan set matches
+   its build's identity.
+
+The installed build's mesh store is read and filled inside its version
+directory, duplicating the shipped set beside the install's objects; the
+read-only package cache that fixes it is
+[the rendering plan's](rendering.md#bake-quality) item, not this programme's.
+
+**Check:** the release a push to `main` produces installs on the RTX 2060
+machine through the player channel, updates in place when the next one
+lands, and boots on both backends with no source build, no cartridge compile
+and zero groups baked.
 
 ### The ledger
 
@@ -326,7 +459,8 @@ displayed output via replay or visual checks.
 ### Release pairs
 
 Frozen until the first shipped release. A qualified pair protects a deployed
-predecessor, and nothing has shipped; compatibility is bounded to deployed
+predecessor, and nothing has shipped: the player channel's releases are
+development releases until the owner says one ships. Compatibility is bounded to deployed
 official artifacts and their retained predecessor
 ([the releases decision](../decisions/runtime-and-delivery.md#releases)). The
 maintenance and recovery sequence already landed
@@ -410,7 +544,7 @@ carries the commands and results against the candidate.
 
 | Step | Packages, in parallel | Why here |
 |---|---|---|
-| 1 | The rest of the asset packages; the ledger; the view's conformance law | Neither of the first two reads `Puck.State`; the law is `Puck.World.Schema` alone, and every later cut is measured by it. |
+| 1 | The player build's steps; the rest of the asset packages; the ledger; the view's conformance law | The player build's first step closes a gap against an owner's ruling and needs nothing else; its readings need only a release on the RTX 2060 machine. Neither the asset packages nor the ledger reads `Puck.State`; the law is `Puck.World.Schema` alone, and every later cut is measured by it. |
 | 2 | The view's static sections; the call-graph derivation key for shader packages | A disclosed static section is one compose and hydrate arm each; the derivation-key slice touches no simulation state. |
 | 3 | Target registers and the authoring envelope; a simulation chunk only once it is measured to save time | Both by-design members change what a client submits or recomputes, so they are decided before state crosses. |
 | 4 | Everything else in the compiled world, each after a measured saving; bound state as observations | `RULE` needs ordinal operands; the observation channel needs the rebuilt substrate's delivery seam. |
@@ -423,6 +557,9 @@ carries the commands and results against the candidate.
 What the programme still owes. A line is deleted when its work lands, never
 ticked; the [open items](open-items.md#next) rank the work packets drawn from it.
 
+- [The player build](#the-player-build-and-its-channel): no release with a
+  mesh miss, the first boot after an update, what an update downloads, the
+  remaining JIT work, readings tied to their release, and a Linux release.
 - The rest of the [asset packages](#asset-packages): branding from the manifest,
   per-package official trees, the release manifest pinning package content.
 - [The ledger](#the-ledger), including the split of firmware by origin.
