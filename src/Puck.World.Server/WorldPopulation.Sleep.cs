@@ -255,16 +255,19 @@ public sealed partial class WorldPopulation {
     }
     // The idle sleepers (WorldBody.Asleep: a kit body past its authored idle floor) stay in the awake work set and skip
     // their advance one by one. A settled change wakes, in slot order, every one whose bounds grown by the margin and
-    // its own reach (WorldBody.IdleFieldReach) meet the box (every one when the change is unbounded), and the rest observe the version, so the change reaches only
-    // the sleepers it can touch; a body whose observation no settlement advanced wakes on its own version test
-    // (WorldBody.TryDeferSleepingAdvance). Every change the rigid sleepers settle against reaches here too.
+    // its own reach (WorldBody.IdleFieldReach) meet the box (every one when the change is unbounded), and the rest
+    // observe the version, so the change reaches only the sleepers it can touch. Only a sleeper that stood observed
+    // against the population's previous observation (m_sleepFieldVersion) may observe the new one: a sleeper behind it
+    // (restored or handed over stale) missed a change the box does not describe, so it wakes. Every change the rigid
+    // sleepers settle against reaches here too; call it before m_sleepFieldVersion takes the new version.
     private void SettleIdleSleepers(in WorldColliderBox box, bool everyone, FixedQ4816 margin, ulong version) {
         m_idleFieldWakes.Clear();
         var observed = 0;
 
         foreach (var index in m_awakeBodies) {
             if (m_entries[index].Body is not { Asleep: true } body) { continue; }
-            if (everyone || FieldChangeReaches(box: in box, body: body, margin: (margin + body.IdleFieldReach))) {
+            if (everyone || (body.LastContactFieldVersion != m_sleepFieldVersion) ||
+                FieldChangeReaches(box: in box, body: body, margin: (margin + body.IdleFieldReach))) {
                 m_idleFieldWakes.Add(item: index);
             } else {
                 body.ObserveContactField(contactFieldVersion: version);
