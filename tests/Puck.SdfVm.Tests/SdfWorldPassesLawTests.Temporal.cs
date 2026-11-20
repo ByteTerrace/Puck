@@ -327,7 +327,11 @@ public sealed partial class SdfWorldPassesLawTests {
 
         rig.Produce();
         Assert.Equal(expected: (frames + 1u), actual: rig.HistoryFrames());
-        Assert.NotEqual(expected: Vector2.Zero, actual: rig.Jitter());
+        // The sample is the sequence's at the frame count, which is the pixel center once a period (the frames the rig's
+        // readiness loop took decide which); the next frame's differs from it.
+        Assert.Equal(expected: SdfTemporalHistory.Sample(index: rig.HistoryFrames()), actual: rig.Jitter());
+        rig.Produce();
+        Assert.NotEqual(expected: SdfTemporalHistory.Sample(index: (frames + 1u)), actual: rig.Jitter());
     }
     // Under cadence a still temporal view renders one jitter period from the frame its inputs last changed, the first at
     // the pixel center with no history, and then stands converged, whatever sample would come next.
@@ -527,6 +531,8 @@ public sealed partial class SdfWorldPassesLawTests {
         // The device's clock moves one display period for each frame the rig produces, so the frames it drives, never the
         // wall time they take, decide when the background work they meter lands.
         private readonly VirtualClock m_clock = VirtualClock.ForDevice();
+        // The frames that carry the clock past the volume's lighting interval (a tenth of a second).
+        private const int SettledFrames = 8;
         private readonly UploadModelGpu m_gpu;
 
         private readonly FrameContext m_context;
@@ -598,6 +604,10 @@ public sealed partial class SdfWorldPassesLawTests {
                     (World.Extent == (Extent, Extent)) && !World.IsBuildingCandidate && !Selected.MeshPathBake.Pending &&
                     !Selected.MeshIrradiance.Settling && !(Second?.MeshIrradiance.Settling ?? false));
             }, reason: () => Selected.NotReadyReason, wait: Selected.WaitPipelineBuilds);
+            // Past one lighting interval, so the capture the volume throttles to it has run, and then settled again: a
+            // law counts frames from a rig the periodic lighting work has nothing more to change.
+            for (var settled = 0; (settled < SettledFrames); settled++) { Produce(); }
+            SettleLighting();
             Produce();
 
             SdfWorldResidency Residency(string name) => new(

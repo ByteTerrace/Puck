@@ -217,7 +217,8 @@ public sealed partial class SdfWorldTablesUploadLawTests {
     public void ADeviceLossRebuildsTheResidencysTablesOwingEveryTable() {
         const int Slots = 24;
 
-        var gpu = new UploadModelGpu();
+        // The device's clock stands still, so no background work is metered in beyond the budget's first credit.
+        var gpu = new UploadModelGpu(clock: VirtualClock.ForDevice());
         var transforms = Transforms(slots: Slots);
         // One produced frame of a still producer: every later render owes nothing but what an engine rebuild owes.
         var moved = new SdfMovedTransforms();
