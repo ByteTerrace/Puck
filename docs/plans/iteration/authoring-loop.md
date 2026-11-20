@@ -151,17 +151,27 @@ code now works this way:
 
 - **Choosing a name's file reads no source again.** An import names a
   document, and any source in the directory may emit that name, so
-  `WorldCompileSession.TrySelectCarrier` asks `WorldSourceIndex.Claims` for
-  every claim in the directory. `Claims` holds each directory's claims while
-  its listing and every source's digest are the ones they were built from,
-  and holds what a source declares by the digest of its bytes.
-- **Proving a cached product still stands costs a stat per input.**
-  `CompileInputs` remembers each file's digest and each directory's listing
-  under the stamp (existence, length, last write, creation) the path had when it was
-  read, and answers `CompileInput.StillHolds`, `CompileInputs.Digest` and
-  `CompileInputs.List` from that memory while the stamp holds. A stamp too
-  recent to vouch for a same-tick write (`CompileInputs.RacyStampWindow`) is
-  never trusted. `WorldSourceWatch` polls through the same memory.
+  `WorldCompileSession.TrySelectCarrier` asks `WorldSourceIndex.Index` for
+  the directory's claims, indexed by the names they claim. The index is held
+  while the directory's listing and every source's digest are the ones it was
+  built from, and what a source declares is held by the digest of its bytes,
+  with the declaration fact's own digest held by declarer and file digest.
+- **Proving a cached product still stands costs at most a stat per input per
+  pass.** `CompileInputs` remembers each file's digest and each directory's
+  listing under the stamp (existence, length, last write, creation) the path
+  had when it was read, and answers `CompileInput.StillHolds`,
+  `CompileInputs.Digest` and `CompileInputs.List` from that memory while the
+  stamp holds. A stamp too recent to vouch for a same-tick write
+  (`CompileInputs.RacyStampWindow`) is never trusted. Within one pass
+  (`CompileInputs.Pass`: a reload's preparation, a session compile, a
+  composition, a load) each path is asked of the file system once, however
+  many held compiles and images name it. `WorldSourceWatch` polls through the
+  same memory.
+- **A composed world is read from its bytes.** A held image is the composed
+  document's compact UTF-8 JSON, which the loader deserializes directly
+  (`WorldDefinitionFileSource.TryParseDocument` over bytes); it is never
+  decoded into a string, and an unchanged reload's pin check runs before any
+  parse.
 - **A composition tracks where each value was written only when asked.**
   `WorldSemanticValidator.ValidateComposedWorld` composes without a
   `WorldDocumentOrigins`. A finding the source's own layer does not author
@@ -175,7 +185,7 @@ code now works this way:
 |---|---|---|---|
 | Held declarations (`WorldSourceIndex`) | What each source declares it emits | The digest of the source's bytes; on disk, also the compiler's identity | Fine as a table. The reads that feed it are the cost above |
 | Held compiles (`WorldCompileSession.TryCompile`, in memory and under the `compilations` directory) | One source's documents and every file fact its compile read | The compiler's identity, the source's full path, and whether tests are lowered. Served only while every recorded input re-reads the same | The path is in the key, so two checkouts holding the same bytes share nothing. The identity is the build identity of every non-framework assembly the compiler references (`WorldCompileSession.CompilerIdentity`), so any rebuild of any of them empties the cache. A source is compiled twice when one caller wants tests and another does not |
-| Held compositions (`WorldDefinitionFileSource.HoldComposedImage`, persisted through `IWorldCompositionStore`) | A composed document whole, with its chain's bytes | The resolved path, the machine catalog's fingerprint and the source type; valid while every input re-reads the same | Whole-document images: the debug root's is 26 MiB, written again for each compiler build. In memory an image keeps the layers it composed from (`WorldDefinitionFileSource.ComposedLayers`), so a recomposition merges again only the root members a changed layer writes; a persisted image keeps no layers, so a new process's first recomposition merges whole |
+| Held compositions (`WorldDefinitionFileSource.HoldComposedImage`, persisted through `IWorldCompositionStore`) | A composed document whole, its own document's bytes, and the digest of every document it read, each once | The resolved path, the machine catalog's fingerprint and the source type; valid while every input re-reads the same | Whole-document images: the debug root's is 26 MiB, written again for each compiler build, off the thread that composed it. In memory an image keeps the layers it composed from (`WorldDefinitionFileSource.ComposedLayers`), so a recomposition merges again only the root members a changed layer writes; a persisted image keeps no layers, so a new process's first recomposition merges whole |
 | Compiled worlds (`CompiledWorldCache`, `.puckb`) | The drawn definition, assets and curves, as chunks | A file named for the document's path; each chunk by the code that derives it (`CompiledWorldChunks.EngineBuild`, a closure over the methods the producers reach) and its recorded inputs | Keyed by reached code, which is the right identity, but one chunk covers the whole definition, so one row's change derives it all again |
 | The device cache (`WorldCacheRoots`) | The three directories above for compiles, compiled worlds and meshes, per user or under `--cache-dir` | — | The compile directory is bounded at 256 MiB (`WorldCompileSession.MaxPersistedBytes`). One compiler build's entries for the debug world are about 75 MiB, so three or four builds fill it and a machine with several worktrees evicts constantly |
 | The mesh store (`SdfMeshStore`) | Baked meshes | Geometry (`SdfMeshGeometryBuilder`) and the bake's identity; each bake stage's products by that stage's own code closure | Not this memo's: the iteration plan's step 2 keyed the stages |
@@ -251,10 +261,10 @@ members the current vocabulary accepts.
   their member bytes (`WorldReloadDelta.Between` over
   `WorldDefinitionMembers`). The authority reconstructs the next revision off
   its tick (`WorldRebuildPreparation`), merges it over the live document
-  (`WorldReloadDelta.TryMergeOver`, the source winning and naming each row both
-  changed), validates the result once and installs it by which root members
-  changed (`WorldDocument.ReloadInstallKindOf`): a colour edit is a
-  presentation install with no rule compile. The sender still serializes both
+  (`WorldReloadDelta.TryMergeOver`, which keeps unchanged live rows and names
+  every row both sides changed and the source won), validates the result once
+  and installs it by which root members changed (`WorldDocument.ReloadInstallKindOf`).
+  A colour edit is a presentation install with no rule compile. The sender still serializes both
   revisions once to slice them. A file reload adds its accepted overlay to
   the undo journal and preserves body poses and unrelated live edits.
 - **`world.watch on`** (`WorldSourceWatch`) polls the stamps of every file
@@ -761,9 +771,9 @@ a session with edits does not replay (replay), a spelling costs more to tune
 
 Each step names the reading that shows it worked. The loop clock
 (`world.iteration`) is the instrument: it already counts a loop's compiles,
-compositions, root members merged, documents read and validations, and a count
-a check names that it does not yet report is added to it, never to a second
-instrument. Step 9 needs nothing from the others and can start at any time;
+compositions, root members composed, keyed rows merged on reload, documents
+read and validations. Add new counts here when a check needs them. Step 9
+needs nothing from the others and can start at any time;
 the rest follow the order given unless a step says otherwise.
 
 Steps 1 and 2 are built. The three bookkeeping costs are gone
@@ -789,14 +799,11 @@ stage order is in [the duplicates](#duplicates-to-remove).
    by the reload's sender from two composed revisions rather than emitted by
    the session from the rows that moved, so the sender still reads the whole
    next revision into the typed model and draws it
-   (`WorldDefinitionLoader.TryLoadFileForEdit`). The authority also merges a
-   whole member three ways whenever the live document holds any of its rows
-   bound to live state: `WorldReloadDelta.TryMergeOver` takes the next
-   revision's member only when the live member is the revision's own instance,
-   and binding gives each row that reads state a new one. In the debug world 27
-   of the creations are bound, so a one-colour save writes, merges and reads
-   again the whole creation roster; a merge by row, taking the next revision's
-   row wherever the live row is the revision's row or its binding, removes it.
+   (`WorldDefinitionLoader.TryLoadFileForEdit`). The authority's keyed merge
+   and the undo patch now consider only the changed rows in an ordinary keyed
+   overlay (`WorldDefinitionMembers.MergeReload`). A live row that is the source
+   revision's own row or its binding counts as unchanged. `world.boot.reload-rows-merged`
+   measures this work separately from source composition.
    *Check:* for a one-value
    edit, the first after a boot included, the session's counters read one
    source lowered, a handful of rows merged and no whole-document
@@ -806,10 +813,10 @@ stage order is in [the duplicates](#duplicates-to-remove).
    the reload boundary. The authority merges the change over the live
    document, names conflicts where the source wins and records the accepted
    overlay as one undo entry. The merged document holds the live document's
-   own instance of every row the edit left alone, because
-   `WorldDefinitionMembers.Replace` resolves the value it read before sharing it
-   with the basis, so a row bound to live state keeps its instance. Presentation
-   delivery therefore carries only the changed creation and shade rows, and
+   own instance of every row the edit left alone. The keyed merge adopts only
+   changed rows, and `WorldDefinitionMembers.Replace` shares unchanged rows after
+   reading and resolving a replacement. Presentation delivery therefore
+   carries only the changed creation and shade rows, and
    value delivery uses changed snapshot rows. `world.undo` of a presentation
    edit is a presentation install too: the dropped journal tail is composed
    again over the restored document, and when it changed only creations in

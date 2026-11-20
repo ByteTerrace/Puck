@@ -129,7 +129,6 @@ public static class WorldSemanticValidator {
         if (!WorldCompileSession.Shared.TryCompose(
             catalog: machines,
             catalogFingerprint: catalogFingerprint,
-            chainBytes: out _,
             composed: out var chain,
             origins: origins,
             reason: out var composeReason,

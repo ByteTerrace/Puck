@@ -147,7 +147,10 @@ render {
     rayQueries: true
   }
   high {
-    viewsRate { maxRate: 1, tileSize: 4 }
+    viewsRate {
+      maxRate: 1
+      tileSize: 4
+    }
     distantShadows {
       reach: 1200
       texels: 2048

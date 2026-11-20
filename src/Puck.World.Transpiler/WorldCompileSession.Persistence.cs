@@ -2,6 +2,7 @@ using Puck.Confinement;
 using System.Security.Cryptography;
 using System.Text;
 using Puck.Assets;
+using Puck.Hosting.Jobs;
 
 namespace Puck.World.Transpiler;
 
@@ -60,8 +61,19 @@ public sealed partial class WorldCompileSession {
         }
     }
 
+    // A deferring session's composed images (DeferCompositionWrites) are written here, off the thread that composed
+    // them, one at a time in the order they came: a reload's recomposition holds its image in memory at once
+    // (WorldDefinitionFileSource) and never waits for the disk. A read of a composition waits for the writes queued
+    // before it, and the process waits for them as it ends.
+    private static readonly TimeSpan CompositionWritesExitDrain = TimeSpan.FromSeconds(seconds: 10);
+    private static readonly BoundedWorkQueue<Action> CompositionWrites = BoundedWorkQueue<Action>.DrainedAtExit(concurrency: 1, exitDrain: CompositionWritesExitDrain, run: static write => write());
+
     /// <inheritdoc />
-    public WorldComposedDocument? ReadComposition(string key) => ReadPersisted(key: ("composition\0" + key), read: static reader => {
+    public WorldComposedDocument? ReadComposition(string key) {
+        if (CompositionWrites.Unfinished > 0) { _ = CompositionWrites.WaitIdle(timeout: CompositionWritesExitDrain); }
+        return ReadPersisted(key: ("composition\0" + key), read: ReadImage);
+    }
+    private static WorldComposedDocument ReadImage(BinaryReader reader) {
         var inputs = new CompileInput[ReadCount(reader: reader)];
 
         for (var index = 0; (index < inputs.Length); index++) {
@@ -72,15 +84,31 @@ public sealed partial class WorldCompileSession {
         var links = new WorldComposedLink[ReadCount(reader: reader)];
 
         for (var index = 0; (index < links.Length); index++) {
-            links[index] = new WorldComposedLink(reader.ReadString(), ReadBytes(reader: reader));
+            var path = reader.ReadString();
+            var digest = reader.ReadBytes(count: 32);
+
+            links[index] = new WorldComposedLink(bytes: (reader.ReadBoolean() ? ReadBytes(reader: reader) : null), digest: digest, path: path);
         }
+        if ((links.Length > 0) && (links[0].Bytes is null)) { throw new InvalidDataException(message: "A composition's own document has no bytes."); }
         if ((links.Length == 0) || (reach < 0) || (reach >= WorldDocumentBasis.MaxChainDepth)) { throw new InvalidDataException(message: "Invalid composition reach or chain."); }
         return new WorldComposedDocument(Chain: links, ComposedJson: json, Inputs: inputs, Reach: reach);
-    });
+    }
     /// <inheritdoc />
-    public void WriteComposition(string key, WorldComposedDocument image) => WritePersisted(key: ("composition\0" + key), write: writer => {
-        var inputs = (image.Inputs ?? throw new ArgumentException(message: "A persistent composition requires its input facts.", paramName: nameof(image)));
+    /// <remarks>A session that defers its composition writes (<see cref="DeferCompositionWrites"/>) queues the image and
+    /// writes it off the calling thread; <see cref="ReadComposition"/> waits for it.</remarks>
+    public void WriteComposition(string key, WorldComposedDocument image) {
+        ArgumentNullException.ThrowIfNull(argument: image);
 
+        var inputs = (image.Inputs ?? throw new ArgumentException(message: "A persistent composition requires its input facts.", paramName: nameof(image)));
+        void Write() => WritePersisted(key: ("composition\0" + key), write: writer => WriteImage(image: image, inputs: inputs, writer: writer));
+
+        if (Volatile.Read(location: ref m_state.DeferCompositionWrites)) {
+            CompositionWrites.Enqueue(item: Write);
+        } else {
+            Write();
+        }
+    }
+    private static void WriteImage(WorldComposedDocument image, IReadOnlyList<CompileInput> inputs, BinaryWriter writer) {
         writer.Write(value: inputs.Count);
         foreach (var input in inputs) {
             writer.Write(value: input.Path);
@@ -90,13 +118,21 @@ public sealed partial class WorldCompileSession {
         writer.Write(value: image.Reach);
         writer.Write(value: image.ComposedJson.Length);
         writer.Write(buffer: image.ComposedJson);
+        // Every link is kept by its digest, which the content pin folds; only the image's own document keeps its
+        // bytes, which a reader compares with its own (the input facts prove every other read).
         writer.Write(value: image.Chain.Count);
-        foreach (var link in image.Chain) {
+        for (var index = 0; (index < image.Chain.Count); index++) {
+            var link = image.Chain[index];
+
             writer.Write(value: link.Path);
-            writer.Write(value: link.Bytes.Length);
-            writer.Write(buffer: link.Bytes);
+            writer.Write(buffer: link.Digest);
+            writer.Write(value: (index == 0));
+            if (index == 0) {
+                writer.Write(value: link.Bytes!.Length);
+                writer.Write(buffer: link.Bytes);
+            }
         }
-    });
+    }
 
     private static int ReadCount(BinaryReader reader) {
         var count = reader.ReadInt32();

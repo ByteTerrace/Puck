@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Puck.Abstractions.Documents;
 using Puck.Assets;
 
 namespace Puck.World;
@@ -236,6 +237,68 @@ public sealed class WorldDefinitionMembers {
         (((value is not null) && (basis is not null) && (valueTree is not null) && (basisTree is not null) && (patch is not null) && IsModelMember(name: name))
             ? WorldDocumentWalker.Share(basis: basis, basisTree: basisTree, patch: patch, value: value, valueTree: valueTree)
             : value);
+
+    /// <summary>Merges a reconstructed source delta over the live definition and records the change for undo.</summary>
+    /// <remarks>Keyed merges retain live rows by identity and resolve only adopted rows. A value outside the keyed
+    /// overlay vocabulary is merged as JSON and shares unchanged values through <see cref="Replace"/>.</remarks>
+    /// <param name="previous">The preceding source revision.</param>
+    /// <param name="next">The source revision reconstructed from <paramref name="patch"/>.</param>
+    /// <param name="live">The definition to merge over.</param>
+    /// <param name="patch">The patch between the source revisions.</param>
+    /// <param name="patchOf">Produces a proved patch for a member merged as JSON.</param>
+    /// <param name="conflicts">Receives the paths where the source won a conflict.</param>
+    /// <param name="accepted">The patch that replays the accepted edit over the live definition.</param>
+    /// <returns>The candidate to validate and install.</returns>
+    public static WorldDefinition MergeReload(WorldDefinition previous, WorldDefinition next, WorldDefinition live, JsonObject patch,
+        Func<string, JsonNode?, JsonNode?, JsonNode?> patchOf, ICollection<string> conflicts, out byte[] accepted) {
+        var before = Of(previous);
+        var after = Of(next);
+        var values = new Dictionary<string, object?>(StringComparer.Ordinal);
+        var pending = new Dictionary<string, Func<WorldDefinition, object?>>(StringComparer.Ordinal);
+        var merged = new List<(string Name, ReadOnlyMemory<byte>? Value)>();
+        var liveTrees = new Dictionary<string, JsonNode?>(StringComparer.Ordinal);
+        var acceptedTree = new JsonObject();
+
+        foreach (var (name, delta) in patch) {
+            var prior = Value(previous, name);
+            var current = Value(live, name);
+            var target = Value(next, name);
+            var priorTree = before.TryGet(name, out var priorMember) ? priorMember.Tree() : null;
+            var targetTree = after.TryGet(name, out var targetMember) ? targetMember.Tree() : null;
+            var path = $"$.{name}";
+
+            if (WorldDocumentWalker.MergeReloadRows(prior, current, target, priorTree, targetTree, delta, path, conflicts) is { } edit) {
+                WorldBootWork.Count(WorldBootWork.ReloadRowsMerged, edit.Rows);
+                if (ReferenceEquals(current, edit.Value)) { continue; }
+                values.Add(name, edit.Value);
+                acceptedTree.Add(name, edit.Patch);
+                if (edit.Resolve is { } resolve) { pending.Add(name, resolve); }
+            } else if (ReferenceEquals(current, prior)) {
+                if (OrderedJson.Equals(priorTree, targetTree)) { continue; }
+                values.Add(name, ShareValue(name, target, current, targetTree, priorTree, delta));
+                acceptedTree.Add(name, delta?.DeepClone());
+            } else {
+                var liveTree = Write(name, current);
+                var three = WorldDocumentBasis.MergeThree(priorTree, liveTree, targetTree, path, conflicts, countReloadRows: true);
+                if (OrderedJson.Equals(liveTree, three)) { continue; }
+                liveTrees.Add(name, liveTree);
+                merged.Add((name, three is null ? null : CanonicalJsonDocument.SerializeCompact(three)));
+            }
+        }
+
+        var installed = Replace(With(live, values, next.DocumentDirectory), merged, next.DocumentDirectory, liveTrees);
+        if (pending.Count > 0) {
+            var resolved = pending.ToDictionary(pair => pair.Key, pair => pair.Value(installed), StringComparer.Ordinal);
+            installed = With(installed, resolved, next.DocumentDirectory);
+        }
+        foreach (var (name, _) in merged) {
+            var target = Write(name, Value(installed, name));
+            if (!OrderedJson.Equals(liveTrees[name], target)) { acceptedTree.Add(name, patchOf(name, liveTrees[name], target)); }
+        }
+        accepted = CanonicalJsonDocument.SerializeCompact(acceptedTree);
+        return installed;
+    }
+
     /// <summary>Returns <paramref name="basis"/> with each named member holding a typed value already resolved, held
     /// beside <paramref name="slices"/> when given: the slices the result serializes to, which the caller vouches for
     /// (the values were read from, or share every row with, a document whose slices those are).</summary>

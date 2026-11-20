@@ -256,14 +256,14 @@ public static partial class WorldDefinitionValidator {
 
         RequirePositive(
             value: rigid.Mass,
-            name: $"{path}.mass",
+            name: new Subject(Member: ".mass", Path: path),
             errors: errors
         );
         RequireRange(
             value: rigid.Restitution,
             min: 0f,
             max: 1f,
-            name: $"{path}.restitution",
+            name: new Subject(Member: ".restitution", Path: path),
             errors: errors
         );
         // Friction is a Coulomb coefficient (unbounded above — over 1 is physically ordinary), rolling resistance a
@@ -323,7 +323,7 @@ public static partial class WorldDefinitionValidator {
 
         RequirePositive(
             value: carry.MassEquivalent,
-            name: $"{path}.massEquivalent",
+            name: new Subject(Member: ".massEquivalent", Path: path),
             errors: errors
         );
 
@@ -336,7 +336,7 @@ public static partial class WorldDefinitionValidator {
 
         RequirePositive(
             value: carry.MaxReach,
-            name: $"{path}.maxReach",
+            name: new Subject(Member: ".maxReach", Path: path),
             errors: errors
         );
 
@@ -353,14 +353,14 @@ public static partial class WorldDefinitionValidator {
 
         RequireNonNegativeFixed(
             errors: errors,
-            name: $"{path}.maxAnchorDistance",
+            name: new Subject(Member: ".maxAnchorDistance", Path: path),
             value: facet.MaxAnchorDistance
         );
         RequireRange(
             errors: errors,
             max: 180f,
             min: 0f,
-            name: $"{path}.aimHalfAngleDegrees",
+            name: new Subject(Member: ".aimHalfAngleDegrees", Path: path),
             value: facet.AimHalfAngleDegrees
         );
         if (float.IsFinite(f: facet.AimHalfAngleDegrees) && (facet.AimHalfAngleDegrees > 0f) && (FixedQ4816.FromDegrees(degrees: facet.AimHalfAngleDegrees) <= FixedQ4816.Zero)) {
@@ -368,17 +368,17 @@ public static partial class WorldDefinitionValidator {
         }
         RequireNonNegativeFixed(
             errors: errors,
-            name: $"{path}.lengthRate",
+            name: new Subject(Member: ".lengthRate", Path: path),
             value: facet.LengthRate
         );
         RequireNonNegativeFixed(
             errors: errors,
-            name: $"{path}.minLength",
+            name: new Subject(Member: ".minLength", Path: path),
             value: facet.MinLength
         );
         RequireNonNegativeFixed(
             errors: errors,
-            name: $"{path}.releaseVelocityScale",
+            name: new Subject(Member: ".releaseVelocityScale", Path: path),
             value: facet.ReleaseVelocityScale
         );
 
@@ -995,6 +995,10 @@ public static partial class WorldDefinitionValidator {
 
         var kits = definition.Kits;
         var hasMoveUpChannel = definition.Channels.Any(predicate: channel => (channel.Role == ChannelRole.MoveUp));
+        // What every kit reads of the channels, read once: the held channels a producer may name, and the relative ones
+        // a pad may not.
+        var heldChannelNames = new HashSet<string>(collection: definition.Channels.Where(predicate: channel => (channel is { Shape: not ChannelShape.Relative })).Select(selector: channel => channel.Name), comparer: StringComparer.Ordinal);
+        var relativeChannelNames = new HashSet<string>(collection: definition.Channels.Where(predicate: channel => (channel is { Shape: ChannelShape.Relative })).Select(selector: channel => channel.Name), comparer: StringComparer.Ordinal);
 
         // A kit is required exactly when the census implies a body to move (a derived refusal, not a flat floor):
         // zero declared capacity needs no kit at all.
@@ -1059,13 +1063,14 @@ public static partial class WorldDefinitionValidator {
                 producers: kit.Producers,
                 programs: programs,
                 programRows: programRows,
-                channelNames: new HashSet<string>(collection: definition.Channels.Where(predicate: channel => (channel is { Shape: not ChannelShape.Relative })).Select(selector: channel => channel.Name), comparer: StringComparer.Ordinal),
+                channelNames: heldChannelNames,
                 path: $"{path}.producers",
                 errors: errors
             );
             ValidateNavigatedProducerMobility(
                 definition: definition,
                 errors: errors,
+                hasMoveUpChannel: hasMoveUpChannel,
                 kit: kit,
                 motionProgram: motionProgram,
                 path: $"{path}.producers",
@@ -1076,14 +1081,14 @@ public static partial class WorldDefinitionValidator {
                 value: kit.Autonomy.MotionSeconds,
                 min: 0f,
                 max: WorldAutonomyCadence.MaximumSeconds,
-                name: $"{path}.autonomy.motionSeconds",
+                name: new Subject(Member: ".autonomy.motionSeconds", Path: path),
                 errors: errors
             );
             RequireRange(
                 value: kit.Autonomy.SteeringSeconds,
                 min: 0f,
                 max: WorldAutonomyCadence.MaximumSeconds,
-                name: $"{path}.autonomy.steeringSeconds",
+                name: new Subject(Member: ".autonomy.steeringSeconds", Path: path),
                 errors: errors
             );
             if (
@@ -1133,7 +1138,7 @@ public static partial class WorldDefinitionValidator {
                         continue;
                     }
 
-                    if (definition.Channels.Any(predicate: channel => ((channel is { Shape: ChannelShape.Relative }) && (channel.Name == channelName)))) {
+                    if (relativeChannelNames.Contains(item: channelName)) {
                         errors.Add(item: $"{path}.pad['{channelName}'] requires a held level, not relative displacement.");
                     }
                     if (!Enum.IsDefined(value: element)) {
@@ -1263,7 +1268,7 @@ public static partial class WorldDefinitionValidator {
 
             RequirePositive(
                 value: look.Scale,
-                name: $"{path}.scale",
+                name: new Subject(Member: ".scale", Path: path),
                 errors: errors
             );
 
@@ -1276,12 +1281,12 @@ public static partial class WorldDefinitionValidator {
 
             RequireNonNegative(
                 value: look.Motion.GaitAmplitude,
-                name: $"{path}.motion.gaitAmplitude",
+                name: new Subject(Member: ".motion.gaitAmplitude", Path: path),
                 errors: errors
             );
             RequireNonNegative(
                 value: look.Motion.SecondsPerFrame,
-                name: $"{path}.motion.secondsPerFrame",
+                name: new Subject(Member: ".motion.secondsPerFrame", Path: path),
                 errors: errors
             );
 
@@ -1639,7 +1644,7 @@ public static partial class WorldDefinitionValidator {
 
             RequireFinite(
                 value: placement.YawDegrees,
-                name: $"{path}.yawDegrees",
+                name: new Subject(Member: ".yawDegrees", Path: path),
                 errors: errors
             );
 
@@ -1675,7 +1680,7 @@ public static partial class WorldDefinitionValidator {
 
                 RequireFinite(
                     value: mirror.Offset,
-                    name: $"{path}.mirror.offset",
+                    name: new Subject(Member: ".mirror.offset", Path: path),
                     errors: errors
                 );
             }
@@ -1692,7 +1697,7 @@ public static partial class WorldDefinitionValidator {
             if (placement.Solid is { } placementSolid) {
                 RequireFinite(
                     value: placementSolid.Margin,
-                    name: $"{path}.solid.margin",
+                    name: new Subject(Member: ".solid.margin", Path: path),
                     errors: errors
                 );
 
@@ -1929,7 +1934,7 @@ public static partial class WorldDefinitionValidator {
 
                 RequireFinite(
                     value: attach.LocalYawDegrees,
-                    name: $"{path}.attach.localYawDegrees",
+                    name: new Subject(Member: ".attach.localYawDegrees", Path: path),
                     errors: errors
                 );
 
@@ -2195,7 +2200,7 @@ public static partial class WorldDefinitionValidator {
                 errors: errors,
                 max: WorldBodiesLimits.CapacityCeiling,
                 min: 1,
-                name: $"{path}.capacity",
+                name: new Subject(Member: ".capacity", Path: path),
                 value: capacity
             );
         }

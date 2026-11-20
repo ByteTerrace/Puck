@@ -145,6 +145,10 @@ internal sealed class WorldReload(WorldServer server, IServerLink link, WorldDef
         string reason;
         bool loadedSource;
         var started = System.Diagnostics.Stopwatch.GetTimestamp();
+        var stamps = CompileInputs.StampReads;
+        var contents = CompileInputs.ContentReads;
+        // The compile and the load ask about the same files: one pass reads each once.
+        using var pass = CompileInputs.Pass();
         long compiled;
 
         if (reads is null) {
@@ -158,6 +162,10 @@ internal sealed class WorldReload(WorldServer server, IServerLink link, WorldDef
                 loadedSource = Load(loaded: out loaded, contentHash: out contentHash, reason: out reason);
             }
         }
+        // What proving the sources and held compositions cost, through the one read door. Its counters are
+        // process-wide, so a read another thread makes meanwhile counts here too.
+        WorldBootWork.Count(amount: (CompileInputs.StampReads - stamps), kind: WorldBootWork.CompileStampReads);
+        WorldBootWork.Count(amount: (CompileInputs.ContentReads - contents), kind: WorldBootWork.CompileContentReads);
         if (!loadedSource) {
             return new Prepared(ContentHash: string.Empty, Delta: null, Refusal: reason);
         }

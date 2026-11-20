@@ -211,14 +211,14 @@ public static partial class WorldDefinitionValidator {
     private static void RequireViewTransition(WorldViewTransition transition, string path, List<string> errors) {
         RequireNonNegative(
             value: transition.Seconds,
-            name: $"{path}.seconds",
+            name: new Subject(Member: ".seconds", Path: path),
             errors: errors
         );
         RequireRange(
             value: transition.RenderScale,
             min: 0f,
             max: 1f,
-            name: $"{path}.renderScale",
+            name: new Subject(Member: ".renderScale", Path: path),
             errors: errors,
             minExclusive: true
         );

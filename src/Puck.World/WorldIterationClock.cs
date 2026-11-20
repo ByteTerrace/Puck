@@ -39,13 +39,15 @@ public sealed class WorldIterationClock(WorldServer server) : IWorldIterationRea
     // The loops kept for world.iteration besides the boot's.
     private const int Kept = 16;
     // The source work a loop's line counts, as the world.boot ledger counts it: sources compiled, compositions merged
-    // and the root members they merged, documents read, and whole-document validations.
+    // and the root members they merged, keyed rows considered on reload, documents read, and validations.
     private static readonly Puck.Abstractions.Counting.WorkKind[] Work = [
         WorldBootWork.Compiles,
         WorldBootWork.Compositions,
         WorldBootWork.CompositionMembers,
+        WorldBootWork.ReloadRowsMerged,
         WorldBootWork.DocumentsRead,
         WorldBootWork.Validations,
+        WorldBootWork.CompileStampReads,
     ];
 
     private readonly List<Loop> m_loops = [];

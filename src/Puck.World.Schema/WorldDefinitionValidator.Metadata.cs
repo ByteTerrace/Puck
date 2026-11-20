@@ -144,7 +144,7 @@ public static partial class WorldDefinitionValidator {
 
             RequireNonNegative(
                 value: attractor.Mass,
-                name: $"{path}.mass",
+                name: new Subject(Member: ".mass", Path: path),
                 errors: errors
             );
         }
@@ -178,12 +178,12 @@ public static partial class WorldDefinitionValidator {
 
                 RequirePositive(
                     value: point.SurfaceGravity,
-                    name: $"{path}.surfaceGravity",
+                    name: new Subject(Member: ".surfaceGravity", Path: path),
                     errors: errors
                 );
                 RequirePositive(
                     value: point.ReferenceRadius,
-                    name: $"{path}.referenceRadius",
+                    name: new Subject(Member: ".referenceRadius", Path: path),
                     errors: errors
                 );
 
@@ -244,7 +244,7 @@ public static partial class WorldDefinitionValidator {
                 case WorldGravityAreaBounds.SphereBounds sphere:
                     RequirePositive(
                         value: sphere.Radius,
-                        name: $"{path}.bounds.radius",
+                        name: new Subject(Member: ".bounds.radius", Path: path),
                         errors: errors
                     );
                     break;
@@ -282,7 +282,7 @@ public static partial class WorldDefinitionValidator {
                 case WorldGravityAreaAcceleration.Radial radial:
                     RequirePositive(
                         value: radial.Magnitude,
-                        name: $"{path}.acceleration.magnitude",
+                        name: new Subject(Member: ".acceleration.magnitude", Path: path),
                         errors: errors
                     );
                     break;
@@ -490,13 +490,13 @@ public static partial class WorldDefinitionValidator {
                 if (allowZeroDisc) {
                     RequireNonNegative(
                         value: disc.Radius,
-                        name: $"{path}.region.radius",
+                        name: new Subject(Member: ".region.radius", Path: path),
                         errors: errors
                     );
                 } else {
                     RequirePositive(
                         value: disc.Radius,
-                        name: $"{path}.region.radius",
+                        name: new Subject(Member: ".region.radius", Path: path),
                         errors: errors
                     );
                 }
@@ -532,7 +532,7 @@ public static partial class WorldDefinitionValidator {
 
                 RequireNonNegative(
                     value: points.HalfExtent,
-                    name: $"{path}.region.halfExtent",
+                    name: new Subject(Member: ".region.halfExtent", Path: path),
                     errors: errors
                 );
                 ValidateSequence(

@@ -35,6 +35,21 @@ public sealed class BoundedWorkQueue<T> {
         m_run = run;
     }
 
+    /// <summary>Creates a queue the process waits for as it exits, up to <paramref name="exitDrain"/>: the writer for
+    /// a cache's files, whose writes no caller waits for but which a process that ends must not abandon.</summary>
+    /// <param name="concurrency">The items that run at once at most; at least one.</param>
+    /// <param name="run">Runs one item.</param>
+    /// <param name="exitDrain">The longest the process waits at exit for the items still unfinished.</param>
+    /// <returns>The queue.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="concurrency"/> is not positive.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="run"/> is <see langword="null"/>.</exception>
+    public static BoundedWorkQueue<T> DrainedAtExit(int concurrency, Action<T> run, TimeSpan exitDrain) {
+        var queue = new BoundedWorkQueue<T>(concurrency: concurrency, run: run);
+
+        AppDomain.CurrentDomain.ProcessExit += (_, _) => _ = queue.WaitIdle(timeout: exitDrain);
+        return queue;
+    }
+
     /// <summary>Gets the items that run at once at most.</summary>
     public int Concurrency { get; }
     /// <summary>Gets the items queued and not yet finished, running ones included.</summary>

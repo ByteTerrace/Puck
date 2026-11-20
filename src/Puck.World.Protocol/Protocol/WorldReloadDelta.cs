@@ -99,27 +99,6 @@ public sealed record WorldReloadDelta(string BaseHash, string TargetHash, byte[]
     /// <exception cref="InvalidDataException">The patch is not a JSON object.</exception>
     public IReadOnlyList<string> Members() => [.. PatchTree().Select(selector: static member => member.Key)];
 
-    /// <summary>Records what the source edit actually changed after merging over the live document.</summary>
-    public byte[] AcceptedPatch(WorldDefinition live, WorldDefinition candidate) {
-        var patch = PatchTree();
-        foreach (var name in patch.Select(static pair => pair.Key).ToArray()) {
-            var before = WorldDefinitionMembers.Value(live, name);
-            var after = WorldDefinitionMembers.Value(candidate, name);
-            if (ReferenceEquals(before, after)) {
-                patch.Remove(name);
-                continue;
-            }
-            var basis = WorldDefinitionMembers.Write(name, before);
-            var target = WorldDefinitionMembers.Write(name, after);
-            if (OrderedJson.Equals(basis, target)) {
-                patch.Remove(name);
-            } else {
-                patch[name] = MemberDelta(name, basis, target);
-            }
-        }
-        return CanonicalJsonDocument.SerializeCompact(patch);
-    }
-
     /// <summary>Reproduces the next revision over the revision the delta was cut from: each named member merged from
     /// its delta, every other member <paramref name="previous"/>'s own instance, and within a merged member every row
     /// the delta leaves alone <paramref name="previous"/>'s own (<see cref="WorldDefinitionMembers.Replace"/>).</summary>
@@ -184,60 +163,30 @@ public sealed record WorldReloadDelta(string BaseHash, string TargetHash, byte[]
         }
     }
 
-    /// <summary>Applies the change between two revisions over the live document, which may have moved from
-    /// <paramref name="previous"/> on its own: a member the live document still holds as <paramref name="previous"/>'s
-    /// own instance takes <paramref name="next"/>'s, and a member both changed is merged three ways
-    /// (<see cref="WorldDocumentBasis.MergeThree"/>), the source winning each row both changed. Every member the delta
-    /// does not name, and every row a merge leaves as it stood, is the live document's own instance.</summary>
+    /// <summary>Merges a reconstructed source delta over the live document and returns the accepted undo patch.
+    /// An unchanged keyed row keeps its live instance. A row both sides changed takes the source's value and is
+    /// named in <paramref name="conflicts"/>.</summary>
     /// <param name="previous">The revision the delta was cut from.</param>
     /// <param name="next">The revision it reproduces (<see cref="TryReconstruct"/>).</param>
     /// <param name="live">The live document.</param>
     /// <param name="candidate">The merged document, or <see langword="null"/> on refusal.</param>
-    /// <param name="conflicts">The path of every row and value both the source and the live document changed, where
-    /// the source's was taken; empty when none.</param>
+    /// <param name="conflicts">The paths of rows and values the source won from the live document.</param>
+    /// <param name="accepted">The overlay that replays this edit, or empty on refusal.</param>
     /// <param name="reason">The named refusal, or empty on success.</param>
     /// <returns>Whether the merge produced a document.</returns>
     public bool TryMergeOver(WorldDefinition previous, WorldDefinition next, WorldDefinition live,
-        [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out WorldDefinition? candidate, out IReadOnlyList<string> conflicts, out string reason) {
+        [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out WorldDefinition? candidate, out IReadOnlyList<string> conflicts, out byte[] accepted, out string reason) {
         ArgumentNullException.ThrowIfNull(argument: previous);
         ArgumentNullException.ThrowIfNull(argument: next);
         ArgumentNullException.ThrowIfNull(argument: live);
 
         candidate = null;
         conflicts = [];
+        accepted = [];
         try {
-            var named = Members();
-            var taken = new Dictionary<string, object?>(comparer: StringComparer.Ordinal);
-            var merged = new List<(string Name, ReadOnlyMemory<byte>? Value)>();
             var found = new List<string>();
-            var liveTrees = new Dictionary<string, JsonNode?>(comparer: StringComparer.Ordinal);
-            var before = WorldDefinitionMembers.Of(definition: previous);
-            var after = WorldDefinitionMembers.Of(definition: next);
-
-            foreach (var name in named) {
-                var liveValue = WorldDefinitionMembers.Value(definition: live, name: name);
-
-                if (ReferenceEquals(objA: liveValue, objB: WorldDefinitionMembers.Value(definition: previous, name: name))) {
-                    taken[name] = WorldDefinitionMembers.Value(definition: next, name: name);
-                    continue;
-                }
-
-                var liveTree = WorldDefinitionMembers.Write(name: name, value: liveValue);
-                var three = WorldDocumentBasis.MergeThree(
-                    conflicts: found,
-                    live: liveTree,
-                    next: (after.TryGet(name: name, member: out var nextMember) ? nextMember.Tree() : null),
-                    path: $"$.{name}",
-                    previous: (before.TryGet(name: name, member: out var previousMember) ? previousMember.Tree() : null)
-                );
-
-                liveTrees[name] = liveTree;
-                merged.Add(item: (name, ((three is null) ? null : CanonicalJsonDocument.SerializeCompact(three))));
-            }
-
-            var result = WorldDefinitionMembers.With(basis: live, documentDirectory: next.DocumentDirectory, values: taken);
-
-            candidate = WorldDefinitionMembers.Replace(basis: result, basisTrees: liveTrees, documentDirectory: next.DocumentDirectory, replacements: merged);            conflicts = found;
+            candidate = WorldDefinitionMembers.MergeReload(previous, next, live, PatchTree(), MemberDelta, found, out accepted);
+            conflicts = found;
             reason = string.Empty;
             return true;
         } catch (Exception exception) when (exception is ArgumentException or InvalidDataException or JsonException or NotSupportedException) {
