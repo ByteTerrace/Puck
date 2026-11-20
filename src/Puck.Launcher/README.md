@@ -114,7 +114,7 @@ inside the attestation's bounded payload. `ReleaseSigner` signs a manifest with
 a root key that vouches for fresh issuing and application keys; who holds the
 root is the caller's (a development key file, a channel host's key custody), and
 the verifier treats every root alike. An install root that follows a channel
-holds its subscription (`ChannelSubscription`, `channel.json`): the channel's
+holds its subscription (`ChannelSubscription`, in the file `ChannelSubscription.FileName` names): the channel's
 address, name and the root anchor pinned at first install. The installer
 ([Puck.Launcher.Setup](../Puck.Launcher.Setup/README.md)) writes it, and a
 `Puck.World` running from that install reads it to update from the same channel

@@ -27,6 +27,11 @@ public static class InstallLayout {
     /// <summary>The version directories' parent, directly under the install root.</summary>
     public const string VersionsDirectoryName = "versions";
 
+    /// <summary>Returns an executable's file name on this platform, as a stub's configuration and an installer name it:
+    /// <c>.exe</c> appended on Windows, the name itself elsewhere.</summary>
+    /// <param name="name">The executable's name without an extension (<c>Puck.World</c>).</param>
+    /// <returns>The file name.</returns>
+    public static string ExecutableFileName(string name) => (OperatingSystem.IsWindows() ? $"{name}.exe" : name);
     /// <summary>Gets how two version directory names are compared: ignoring case on Windows, where such names name one
     /// directory, and ordinally on Linux. Every comparison of a version name with another (a registration, the release
     /// record's current version, a proof of health, a pruner entry) uses it.</summary>

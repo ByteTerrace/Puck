@@ -15,7 +15,6 @@ internal static class LocalAdapterInstall {
     private const string BuildReadyFileName = "puck-build-ready";
     private const string StubName = "Puck.Launcher.Stub";
 
-    private static string Executable(string name) => (OperatingSystem.IsWindows() ? $"{name}.exe" : name);
 
     public static async Task<string> ActivateAsync(string build, string install, CancellationToken token) {
         string current, version;
@@ -74,7 +73,7 @@ internal static class LocalAdapterInstall {
         var manifest = Path.Combine(path1: build, path2: $"{StubName}.deps.json");
 
         if (!File.Exists(path: manifest)) { throw new IOException(message: $"The CLI build at {build} carries no {StubName}; rebuild src/Puck.Cli."); }
-        var files = new SortedSet<string>(comparer: StringComparer.Ordinal) { Executable(name: StubName), $"{StubName}.deps.json", $"{StubName}.runtimeconfig.json" };
+        var files = new SortedSet<string>(comparer: StringComparer.Ordinal) { InstallLayout.ExecutableFileName(name: StubName), $"{StubName}.deps.json", $"{StubName}.runtimeconfig.json" };
 
         // The stub's runtime closure is what its own dependency manifest names, so a dependency added to the stub ships
         // without this list changing.
@@ -95,7 +94,7 @@ internal static class LocalAdapterInstall {
             }
         }
         _ = AtomicFile.WriteAllBytesIfChanged(path: Path.Combine(path1: install, path2: InstallLayout.StubConfigFileName),
-            bytes: new StubConfiguration(AppExecutableFileName: Executable(name: "Puck.Cli")).Serialize());
+            bytes: new StubConfiguration(AppExecutableFileName: InstallLayout.ExecutableFileName(name: "Puck.Cli")).Serialize());
     }
     // The front's activation: notices a completed build by its stamp and has that build activate itself, so the release
     // record and the stub are always written by code at least as new as the worker the stub launches next. One activation
@@ -118,7 +117,7 @@ internal static class LocalAdapterInstall {
             var answer = await CliProcess.RunAsync(
                 arguments: ["mcp", "--profile", "operator", "--prepare-install", "--install-root", install, "--build-source", build],
                 cancellationToken: token,
-                fileName: Path.Combine(path1: build, path2: Executable(name: "Puck.Cli")),
+                fileName: Path.Combine(path1: build, path2: InstallLayout.ExecutableFileName(name: "Puck.Cli")),
                 workingDirectory: build
             ).ConfigureAwait(continueOnCapturedContext: false);
 

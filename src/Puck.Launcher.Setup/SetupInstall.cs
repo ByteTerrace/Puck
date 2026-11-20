@@ -10,7 +10,6 @@ public static class SetupInstall {
     private const string LauncherDirectoryName = Puck.Launcher.Release.PlayerBuildLayout.LauncherDirectoryName;
     private const string PlayerRecordName = Puck.Launcher.Release.PlayerBuildLayout.RecordName;
 
-    private static string Executable(string name) => (OperatingSystem.IsWindows() ? $"{name}.exe" : name);
 
     /// <summary>Copies every file of a version's launcher directory
     /// (<see cref="Puck.Launcher.Release.PlayerBuildLayout.LauncherDirectoryName"/>) into the install root, replacing a file
@@ -22,8 +21,8 @@ public static class SetupInstall {
     public static void LayLauncher(string installRoot, string version) {
         var launcher = Path.Combine(path1: Path.Combine(path1: installRoot, path2: InstallLayout.VersionsDirectoryName, path3: version), path2: LauncherDirectoryName);
 
-        if (!File.Exists(path: Path.Combine(path1: launcher, path2: Executable(name: "Puck.Launcher.Stub")))) {
-            throw new IOException(message: $"version {version} carries no {LauncherDirectoryName}/{Executable(name: "Puck.Launcher.Stub")}");
+        if (!File.Exists(path: Path.Combine(path1: launcher, path2: InstallLayout.ExecutableFileName(name: "Puck.Launcher.Stub")))) {
+            throw new IOException(message: $"version {version} carries no {LauncherDirectoryName}/{InstallLayout.ExecutableFileName(name: "Puck.Launcher.Stub")}");
         }
         foreach (var file in Directory.EnumerateFiles(path: launcher)) {
             var target = Path.Combine(path1: installRoot, path2: Path.GetFileName(path: file));
@@ -32,7 +31,7 @@ public static class SetupInstall {
             _ = AtomicFile.WriteAllBytesIfChanged(bytes: File.ReadAllBytes(path: file), path: target);
         }
         _ = AtomicFile.WriteAllBytesIfChanged(path: Path.Combine(path1: installRoot, path2: InstallLayout.StubConfigFileName),
-            bytes: new StubConfiguration(AppExecutableFileName: Executable(name: "Puck.World")).Serialize());
+            bytes: new StubConfiguration(AppExecutableFileName: InstallLayout.ExecutableFileName(name: "Puck.World")).Serialize());
     }
     /// <summary>Returns the command line that starts a version through the stub: its world and its prewarmed caches, as
     /// the player build's record names them, relative to the version's directory, where the stub starts it.</summary>
@@ -49,6 +48,6 @@ public static class SetupInstall {
             world = ((string?)record?["world"] ?? world);
             cache = ((string?)record?["cacheDirectory"] ?? cache);
         } catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or JsonException or InvalidOperationException) { }
-        return $"\"{Path.Combine(path1: installRoot, path2: Executable(name: "Puck.Launcher.Stub"))}\" --world {world} --cache-dir {cache}";
+        return $"\"{Path.Combine(path1: installRoot, path2: InstallLayout.ExecutableFileName(name: "Puck.Launcher.Stub"))}\" --world {world} --cache-dir {cache}";
     }
 }

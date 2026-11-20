@@ -18,7 +18,7 @@ laid out as `puck publish` and `puck channel push` write it. A first install
 reads the root key the channel publishes beside its manifest
 (`<address>/<channel>/trust.json`), checks that the key's fingerprint is the
 one the file names, and pins it by writing the install root's subscription
-(`ChannelSubscription`, `channel.json`): the address, the channel and the
+(`ChannelSubscription`, in the file `ChannelSubscription.FileName` names): the address, the channel and the
 anchor. `--trust` requires a fingerprint instead of accepting the published
 one. Every later run reads the subscription and verifies each release against
 the pinned anchor, so a different address or channel for the same root is
