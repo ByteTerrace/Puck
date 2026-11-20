@@ -1223,7 +1223,21 @@ Next: fill the engine gaps first
   resolve (close it to one crease, as `SdfSampledLattice.CloseSheets` closes a
   sheet, or refine it), and the non-manifold edges on the shins' soles sit on
   the same edges. The one detail rule exposes the defect and does not cause
-  it.
+  it. Read in the left blade group's contour: 940 of its 1,003 narrow faces
+  lie in measured cells of stride one (2.1 mm), as triangles 0.3 to 0.4 mm
+  high beside crease vertices on the shell's cut edge, where the flared field
+  reads a fifth of the distance (slope 0.2), so the rule acts in the measured
+  contour, not in the ring or the refinement.
+- [high] `shape-blend-xor`'s 112 flipped triangles lie along the pinch curves
+  where the sphere crosses the box's faces, where the XOR's two solids touch
+  along a line. 102 of its 108 narrow faces lie in ring cells, and the usual
+  flip joins two lattice vertices to a ring cell's merged vertex (24 to 33
+  fine vertices of one 15 mm cell) that the field check then moved 2 to 4 mm
+  onto one sheet. Declaring the XOR's seam as detail, to refine the pinch at
+  2 mm, moved the defects into measured cells and left 101 flips and 314
+  folds, so the cause is the contour at a pinch at any spacing: it needs a
+  rule that keeps the two wedges' vertices on the pinch line and never joins
+  them through one vertex, not more refinement.
 - [high] [Moving blends](moving-blends.md) steps 4 and 5 still need the lead's
   presented striped-neck check and the quiet-window cost of a skinned
   close-up and a crowd on both backends.
