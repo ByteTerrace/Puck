@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Puck.Abstractions;
+using Puck.Abstractions.Documents;
 using Puck.Assets;
 
 namespace Puck.World.Transpiler.Assets;
@@ -251,36 +252,25 @@ public sealed class AssetLock {
         return NormalizeReferences(references: [reference], root: root)[0].Key;
     }
     /// <summary>Serializes this lock with ordinal entries, two-space indentation, and LF endings.</summary>
-    public string Serialize() {
-        var builder = new StringBuilder();
-
-        builder.Append(value: "{\n  \"format\": 1,\n  \"assets\": {");
-
-        if (m_assets.Count != 0) {
-            builder.Append(value: '\n');
-            var entries = m_assets.OrderBy(keySelector: static pair => pair.Key, comparer: StringComparer.Ordinal).ToArray();
-
-            for (var index = 0; (index < entries.Length); index++) {
-                var entry = entries[index];
-
-                builder.Append(value: "    ");
-                builder.Append(value: JsonValue.Create(value: entry.Key)!.ToJsonString());
-                builder.Append(value: ": ");
-                builder.Append(value: JsonValue.Create(value: entry.Value)!.ToJsonString());
-                builder.Append(value: (((index + 1) == entries.Length) ? "\n" : ",\n"));
-            }
-
-            builder.Append(value: "  ");
-        }
-
-        builder.Append(value: "}\n}\n");
-        return builder.ToString();
-    }
+    public string Serialize() => Utf8WithoutBom.GetString(bytes: ToBytes());
     /// <summary>Writes the derived lock beside <paramref name="sourcePath"/> only when its bytes changed.</summary>
     /// <param name="sourcePath">The source or lock path.</param>
     /// <returns><see langword="true"/> when bytes were written.</returns>
     public bool Write(string sourcePath) => AtomicFile.WriteAllBytesIfChanged(
-        path: DeriveLockPath(sourcePath: sourcePath), bytes: Utf8WithoutBom.GetBytes(s: Serialize()));
+        path: DeriveLockPath(sourcePath: sourcePath), bytes: ToBytes());
+
+    private byte[] ToBytes() {
+        var assets = new JsonObject();
+
+        foreach (var (path, hash) in m_assets.OrderBy(keySelector: static pair => pair.Key, comparer: StringComparer.Ordinal)) {
+            assets.Add(propertyName: path, value: hash);
+        }
+
+        return CanonicalJsonDocument.Serialize(node: new JsonObject {
+            ["format"] = SupportedFormat,
+            ["assets"] = assets,
+        });
+    }
 
     private static string ReadHash(string path, JsonElement value) {
         if (value.ValueKind != JsonValueKind.String) {
