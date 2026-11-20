@@ -574,8 +574,8 @@ made from, and `WorldDocument.PlanProducts` intersects the two for each product:
 |---|---|
 | The population | `WorldPopulation.BuiltFrom`: its construction or its last `Rebuild`, and the reconcile of inhabited placements after it |
 | The solid field | `WorldSolidField.BuiltFrom`, with what deciding whether the document needs a field reads (`WorldDocument.SolidInputsOf`) |
-| The render envelope's fit | the last fit an install ran |
-| The addon host | the preparation that mounted it (`AttachAddons`' `preparedFrom`, or the checkpoint it restored from), then the last `IWorldAddonHost.TryPrepare` an install ran |
+| The render envelope's fit | the last fit an install ran, valid while no measurer has registered since (`WorldRenderEnvelope.Revision`) |
+| The addon host | the preparation that mounted it (`AttachAddons'` `preparedFrom`, or the checkpoint it restored from; a host attached in place of a mounted one, such as a decorator, keeps the mount's inputs), then the last `IWorldAddonHost.TryPrepare` an install ran |
 | The machine host | the boot preparation, then the last `IWorldMachineHost.TryPrepare` an install ran |
 | The input runtime's owners | `WorldInputRuntime.BuiltFrom`: its construction, every owner it prepared and every `Reconfigure`, never forgetting a part |
 

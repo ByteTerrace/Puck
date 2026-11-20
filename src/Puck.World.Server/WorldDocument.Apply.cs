@@ -2248,8 +2248,10 @@ public sealed partial class WorldDocument {
     /// <param name="runtime">The mounted host.</param>
     /// <param name="preparedFrom">What the preparation that mounted the host read of the live document
     /// (<see cref="WorldDocumentReads"/>), which the next install judges the host by; <see langword="null"/> when the
-    /// caller did not record it, which keeps what is known of a host attached again and otherwise prepares the host at
-    /// the next install. A pending checkpoint the attach restores the host from records its own.</param>
+    /// caller did not record it. A host that takes the place of one already attached (a decorator over the mounted
+    /// host, or the same host attached again after its factory attached it) is the same mount, so the inputs recorded
+    /// for the attached one stand; a first attach with none recorded prepares the host at the next install. A pending
+    /// checkpoint the attach restores the host from records its own.</param>
     /// <exception cref="ArgumentNullException"><paramref name="runtime"/> is <see langword="null"/>.</exception>
     /// <exception cref="InvalidOperationException">A tick-pumped host does not implement recomputed contributions.</exception>
     internal void AttachAddons(IWorldAddonHost runtime, WorldDocumentInputs? preparedFrom = null) {
@@ -2267,7 +2269,7 @@ public sealed partial class WorldDocument {
         } finally {
             restored = restoring.End();
         }
-        m_addonInputs = (restoresCheckpoint ? restored : (preparedFrom ?? (ReferenceEquals(objA: Host.Addons, objB: runtime) ? m_addonInputs : null)));
+        m_addonInputs = (restoresCheckpoint ? restored : (preparedFrom ?? ((Host.Addons is not null) ? m_addonInputs : null)));
         Host.AdoptAddonHost(runtime: runtime);
 
         StageAddonContentionArrays(

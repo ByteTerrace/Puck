@@ -6,6 +6,7 @@ public sealed partial class WorldDocument {
     // as every part, so a product never stands stale for want of a recording. The population records its own
     // (WorldPopulation.BuiltFrom), and the solid field's is derived from the field it holds (SolidInputs).
     private WorldDocumentInputs? m_envelopeInputs;
+    private long m_envelopeRevision;
     private WorldDocumentInputs? m_addonInputs;
     private WorldDocumentInputs? m_machineInputs;
     private WorldDocumentInputs? m_solidInputs;
@@ -28,7 +29,7 @@ public sealed partial class WorldDocument {
         return new WorldProductPlan(
             Addons: changed.Intersect(other: (m_addonInputs ?? WorldDocumentInputs.All)),
             Changed: changed,
-            Envelope: changed.Intersect(other: (m_envelopeInputs ?? WorldDocumentInputs.All)),
+            Envelope: changed.Intersect(other: EnvelopeInputs),
             Input: changed.Intersect(other: Host.Input.BuiltFrom),
             Machines: changed.Intersect(other: (m_machineInputs ?? WorldDocumentInputs.All)),
             Population: changed.Intersect(other: Host.Population.BuiltFrom),
@@ -39,6 +40,11 @@ public sealed partial class WorldDocument {
             SolidsReachPopulation: (!solids.IsEmpty && ((m_solids is not null) || RequiresSolidField(definition: candidate)))
         );
     }
+
+    // What the envelope's last fit read, as long as the measurers that fit consulted are the ones registered now: a
+    // measurer registered since reads parts the fit never saw, so the next install fits again.
+    private WorldDocumentInputs EnvelopeInputs =>
+        ((m_envelopeInputs is { } fitted) && (m_envelopeRevision == Host.Envelope.Revision)) ? fitted : WorldDocumentInputs.All;
 
     // The solid field's inputs: what deciding whether the document needs a field reads, and what the field held was
     // built from. Derived from the field the document holds, so every door that adopts a field (a mutation, a reload,
@@ -116,7 +122,10 @@ public sealed partial class WorldDocument {
 
     // Adopts what an installed candidate's product builds read. A product the install kept keeps its inputs.
     private void AdoptProductInputs(WorldDocumentInputs? envelope, WorldDocumentInputs? addons, WorldDocumentInputs? machines) {
-        if (envelope is { } fitted) { m_envelopeInputs = fitted; }
+        if (envelope is { } fitted) {
+            m_envelopeInputs = fitted;
+            m_envelopeRevision = Host.Envelope.Revision;
+        }
         if (addons is { } prepared) { m_addonInputs = prepared; }
         if (machines is { } machine) { m_machineInputs = machine; }
     }
@@ -143,7 +152,7 @@ public sealed partial class WorldDocument {
             var live = document.m_definition;
 
             m_document = document;
-            m_envelope = (live, (document.m_envelopeInputs ?? WorldDocumentInputs.All));
+            m_envelope = (live, document.EnvelopeInputs);
             m_solids = (live, document.SolidInputsOf(definition: live));
             m_addons = (live, (document.m_addonInputs ?? WorldDocumentInputs.All));
         }
