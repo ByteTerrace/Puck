@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using Puck.Hosting;
 using Puck.Shaders;
 
 namespace Puck.SdfVm;
@@ -12,14 +13,16 @@ namespace Puck.SdfVm;
 /// arrives (<see cref="TakeReady"/>). An unchanged source is a cache hit in the compiler's cache.
 /// </summary>
 public sealed class SdfKernelTreeLoad : IDisposable {
-    private readonly CancellationTokenSource m_cancellation;
+    // The finished compile's result: the build's value is only that it finished.
+    private static readonly object Finished = new();
+
+    private readonly BackgroundBuild<object> m_build = new();
     private readonly ConcurrentQueue<(SdfKernel Kernel, ReadOnlyMemory<byte> Bytecode, SdfKernelSource? Source)> m_ready = new();
     private readonly ConcurrentQueue<string> m_errors = new();
-    private readonly Task m_completion;
+    private string? m_failure;
+    private bool m_settled;
 
-    private SdfKernelTreeLoad(ShaderTarget target, string directory, ShaderCompiler compiler, CancellationToken cancellationToken) {
-        m_cancellation = CancellationTokenSource.CreateLinkedTokenSource(token: cancellationToken);
-
+    private SdfKernelTreeLoad(ShaderTarget target, string directory, ShaderCompiler compiler) {
         var bytecodeExtension = target.FileExtension();
         var sources = new List<(SdfKernel Kernel, string Path)>();
 
@@ -56,35 +59,34 @@ public sealed class SdfKernelTreeLoad : IDisposable {
         }
 
         SdfKernelSet.LoadWork.Count(kind: SdfKernelSet.Loads);
-        m_completion = Task.Run(
-            cancellationToken: m_cancellation.Token,
-            function: () => CompileAsync(
-                cancellationToken: m_cancellation.Token,
+        m_build.Start(build: new Func<CancellationToken, Task<object>>(async cancellationToken => {
+            await CompileAsync(
+                cancellationToken: cancellationToken,
                 compiler: compiler,
                 sources: sources,
                 target: target
-            )
-        );
+            ).ConfigureAwait(continueOnCapturedContext: false);
+
+            return Finished;
+        }));
     }
 
-    /// <summary>Gets whether every carried kernel has been read or compiled, successfully or not.</summary>
-    public bool IsCompleted => m_completion.IsCompleted;
-    /// <summary>Gets the task that completes once every carried kernel has been read or compiled.</summary>
-    public Task Completion => m_completion;
+    /// <summary>Gets whether every carried kernel has been read or compiled, successfully or not; <see langword="false"/>
+    /// once the load is disposed while its compiles still ran.</summary>
+    public bool IsCompleted => Settle();
 
     /// <summary>Starts reading a kernel tree's passes directory.</summary>
     /// <param name="target">The running backend's target: its compiled-kernel extension names the bytecode a carried kernel
     /// is read from, and a carried source compiles to it alone.</param>
     /// <param name="directory">The directory holding the kernels it replaces.</param>
     /// <param name="compiler">The compiler a carried source compiles with.</param>
-    /// <param name="cancellationToken">The token that cancels the compiles.</param>
     /// <returns>The load, whose kernels arrive through <see cref="TakeReady"/>.</returns>
     /// <exception cref="ArgumentException"><paramref name="directory"/> is empty.</exception>
     /// <exception cref="ArgumentNullException"><paramref name="compiler"/> is <see langword="null"/>.</exception>
     /// <exception cref="DirectoryNotFoundException"><paramref name="directory"/> does not exist.</exception>
     /// <exception cref="IOException"><paramref name="directory"/> carries no kernel, or a kernel file cannot be
     /// read.</exception>
-    public static SdfKernelTreeLoad Start(ShaderTarget target, string directory, ShaderCompiler compiler, CancellationToken cancellationToken = default) {
+    public static SdfKernelTreeLoad Start(ShaderTarget target, string directory, ShaderCompiler compiler) {
         ArgumentException.ThrowIfNullOrEmpty(directory);
         ArgumentNullException.ThrowIfNull(compiler);
 
@@ -93,7 +95,6 @@ public sealed class SdfKernelTreeLoad : IDisposable {
         }
 
         return new SdfKernelTreeLoad(
-            cancellationToken: cancellationToken,
             compiler: compiler,
             directory: directory,
             target: target
@@ -119,37 +120,38 @@ public sealed class SdfKernelTreeLoad : IDisposable {
     /// <summary>Returns why the load failed once it has completed: each compile error's file, line and column, or a
     /// fault of the load itself; <see langword="null"/> while it runs or when every kernel compiled.</summary>
     /// <returns>The failure, or <see langword="null"/>.</returns>
-    public string? FailureOf() {
-        if (!m_completion.IsCompleted) {
-            return null;
-        }
-        if (m_completion.Exception is { } fault) {
-            return fault.InnerException?.Message ?? fault.Message;
-        }
-        if (m_completion.IsCanceled) {
-            return "canceled";
-        }
-
-        return (m_errors.IsEmpty
-            ? null
-            : $"A kernel source does not compile: {string.Join(separator: "; ", values: m_errors)}");
-    }
+    public string? FailureOf() => (Settle() ? m_failure : null);
     /// <summary>Cancels the compiles still running without waiting for them to stop. A second call does nothing.</summary>
-    public void Dispose() {
-        if (m_disposed) { return; }
-        m_disposed = true;
-        m_cancellation.Cancel();
-        // The compiles hold no device object, so nothing waits for them: the token source goes once they stop.
-        _ = m_completion.ContinueWith(
-            cancellationToken: CancellationToken.None,
-            continuationAction: static (_, state) => ((CancellationTokenSource)state!).Dispose(),
-            continuationOptions: TaskContinuationOptions.ExecuteSynchronously,
-            scheduler: TaskScheduler.Default,
-            state: m_cancellation
-        );
-    }
+    public void Dispose() =>
+        // The compiles hold no device object, so nothing waits for them: the build releases its token source once they stop.
+        m_build.Cancel();
+    /// <summary>Blocks until every carried kernel has been read or compiled, successfully or not; a failed load is
+    /// reported by <see cref="FailureOf"/>.</summary>
+    /// <param name="cancellationToken">The token that ends the wait; the compiles keep running.</param>
+    /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
+    public void WaitFinished(CancellationToken cancellationToken) =>
+        m_build.WaitFinished(cancellationToken: cancellationToken);
 
-    private bool m_disposed;
+    // Takes the finished build once and keeps what it reports, since the build forgets it after a take.
+    private bool Settle() {
+        if (m_settled) {
+            return true;
+        }
+        if (!m_build.TryTake(error: out var fault, result: out _)) {
+            return false;
+        }
+
+        m_settled = true;
+        m_failure = ((fault is not null)
+            ? ((fault is OperationCanceledException) ? "canceled" : fault.Message)
+            : (m_errors.IsEmpty
+                ? null
+                : $"A kernel source does not compile: {string.Join(separator: "; ", values: m_errors)}"
+            )
+        );
+
+        return true;
+    }
 
     private async Task CompileAsync(IReadOnlyList<(SdfKernel Kernel, string Path)> sources, ShaderTarget target, ShaderCompiler compiler, CancellationToken cancellationToken) {
         var plans = new List<(SdfKernel Kernel, ShaderOutputPlan Plan)>(capacity: sources.Count);
