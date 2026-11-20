@@ -328,7 +328,13 @@ instance that reads it within the frame, up to the root. An external source
 no image of its own therefore answers as its capture fill does
 (`WorldCaptureGate.FillsFeed`), showing the fill instead, so a minimized or
 closed window never holds the World's frame, readiness or captures; the fill
-waits only while it converts. The offscreen host paces by `HostPacing.OneTickPerFrame` and
+waits only while it converts. An uploaded source whose producer is not running
+(`IRenderGraphSourceUpload.IsAbsent`, a machine that was refused at boot or
+names no running machine) is the same defined outcome: the instance is current
+with no output, its readers draw their stand-in and the screen draws the
+producer's own not-running state, so a world on a machine without a machine's
+toolchain is ready (`AnAbsentUploadHoldsNoReaderIncomplete`); a refused upload
+that is not absent (a producer fault) still refuses its readers. The offscreen host paces by `HostPacing.OneTickPerFrame` and
 `FixedStepPump.TryStep`, steps the next tick only once the root reports the
 frame rendered, and holds the tick (composing it again, stepping none) while it
 is not yet renderable; a refused frame releases the tick. Both rendered hosts
@@ -336,7 +342,8 @@ also hold their clock at an armed, unserved capture.
 
 **Laws.** `RenderGraphRuntimeLawTests.Completion`, `OffscreenTickPacingLawTests`,
 `WorldCaptureHoldLawTests`,
-`WorldCaptureFillLawTests.AnExternalSourceWithNoImageShowsItsFillAndNeverHoldsTheRoot` and `SdfPipelineBuildLivenessLawTests` (the pump never
+`WorldCaptureFillLawTests.AnExternalSourceWithNoImageShowsItsFillAndNeverHoldsTheRoot`,
+`RenderGraphRuntimeLawTests.AnAbsentUploadHoldsNoReaderIncomplete` and `SdfPipelineBuildLivenessLawTests` (the pump never
 blocks on pipeline creation).
 
 **Where the code is weaker.** The classification is only as good as each

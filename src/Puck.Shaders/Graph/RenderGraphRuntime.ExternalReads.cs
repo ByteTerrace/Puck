@@ -163,7 +163,7 @@ public sealed partial class RenderGraphRuntime {
                         tainted: output.Tainted
                     );
                 } else {
-                    NoteStandIn(frame: frame, index: index, producer: m_set.Instances[producer].Name);
+                    NoteStandIn(frame: frame, index: index, producer: producer);
                 }
 
                 continue;
@@ -206,7 +206,7 @@ public sealed partial class RenderGraphRuntime {
             } else {
                 acquired.Lease.Retire();
                 if (!acquired.Image.IsSameDeviceImage) {
-                    NoteStandIn(frame: frame, index: index, producer: m_set.Instances[producer].Name);
+                    NoteStandIn(frame: frame, index: index, producer: producer);
                 }
             }
         }
