@@ -144,6 +144,15 @@ public sealed class SdfMeshStore {
     /// <param name="geometry">The group's geometry.</param>
     /// <returns><see langword="true"/> when an entry's file exists.</returns>
     public bool Contains(UInt128 identity, SdfMeshGeometry geometry) => File.Exists(path: PathOf(identity: identity, key: KeyOf(geometry: geometry, identity: identity)));
+    /// <summary>Returns whether the store may hold an entry for a geometry under a bake's identity, as
+    /// <see cref="MayHoldSamples(UInt128, UInt128)"/> answers for a sample set: false only when the identity's directory
+    /// has been listed (or found absent) and the entry is not in it nor written since by this process, with no file
+    /// read. An entry another process wrote after the listing reads as absent, so its geometry bakes again; one the listing
+    /// named that is gone reads as present, and its read misses. A caller that must know asks <see cref="Contains"/>.</summary>
+    /// <param name="identity">The bake's identity.</param>
+    /// <param name="geometry">The group's geometry.</param>
+    /// <returns><see langword="false"/> when the entry is known to be absent.</returns>
+    public bool MayHold(UInt128 identity, SdfMeshGeometry geometry) => EntrySetOf(identity, Extension).MayHold(KeyOf(identity, geometry));
     /// <summary>Reads a geometry's mesh under a bake's identity: the mesh and the material ids its group's shapes carried,
     /// in the order the geometry numbers them (<see cref="SdfMeshLibrary.Store"/>). An entry the store refuses is
     /// deleted.</summary>
@@ -163,7 +172,10 @@ public sealed class SdfMeshStore {
         var path = PathOf(identity: identity, key: KeyOf(geometry: geometry, identity: identity), extension: extension);
         var read = TryReadEntry(damaged: out var damaged, declined: out declined, geometry: geometry, identity: identity, materials: out materials, mesh: out mesh, refusal: out refusal, storage: storage, taking: taking, extension: extension);
 
-        if (!read && damaged) { Delete(path: path); }
+        if (!read && damaged) {
+            Delete(path: path);
+            Forget(identity, extension, KeyOf(identity: identity, geometry: geometry));
+        }
         if (read || declined) { Puck.Abstractions.CacheRetention.Stamp(path: path); }
 
         return read;
@@ -324,6 +336,8 @@ public sealed class SdfMeshStore {
                 return false;
             }
         } catch (Exception exception) when ((exception is FileNotFoundException or DirectoryNotFoundException)) {
+            Forget(identity, extension, key);
+
             return false;
         } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
             refusal = $"cannot read {Path.GetFileName(path: path)}: {exception.Message}";
@@ -371,7 +385,12 @@ public sealed class SdfMeshStore {
         var path = PathOf(identity: identity, key: key);
 
         stored = null;
-        return WriteEntry(path, new MeshPayload(key, mesh, materials, ref stored), static (output, entry) => entry.Stored = SdfMeshStoreCodec.Encode(output, entry.Key, entry.Mesh, entry.Materials), queued: false);
+
+        var written = WriteEntry(path, new MeshPayload(key, mesh, materials, ref stored), static (output, entry) => entry.Stored = SdfMeshStoreCodec.Encode(output, entry.Key, entry.Mesh, entry.Materials), queued: false);
+
+        KeepIfWritten(written, identity, Extension, key);
+
+        return written;
     }
 
     // Writes an entry's file, encoded straight into the temporary: atomically, so a reader finds the old entry or the
@@ -473,8 +492,7 @@ public sealed class SdfMeshStore {
     private static bool IsIntermediateEntry(string name) =>
         name.EndsWith(value: CheckpointExtension, comparisonType: StringComparison.Ordinal) || name.EndsWith(value: SampleExtension, comparisonType: StringComparison.Ordinal);
 
-    internal bool ContainsCheckpoint(UInt128 identity, SdfMeshGeometry geometry) =>
-        File.Exists(PathOf(identity, KeyOf(identity, geometry), CheckpointExtension));
+    internal bool MayHoldCheckpoint(UInt128 identity, SdfMeshGeometry geometry) => EntrySetOf(identity, CheckpointExtension).MayHold(KeyOf(identity, geometry));
 
     internal bool TryReadCheckpoint(UInt128 identity, SdfMeshGeometry geometry, out SdfMesh? mesh) {
         try {
@@ -497,11 +515,11 @@ public sealed class SdfMeshStore {
             var encoded = new MemoryStream();
 
             if (Quietly(action: () => SdfMeshStoreCodec.EncodeExact(encoded, key, mesh))) {
-                _ = WriteLater(bytes: encoded.Length, behind: Behind.Inline, write: () => WriteEntry(path, encoded, static (output, buffer) => buffer.WriteTo(stream: output), queued: true));
+                _ = WriteLater(bytes: encoded.Length, behind: Behind.Inline, write: () => KeepIfWritten(WriteEntry(path, encoded, static (output, buffer) => buffer.WriteTo(stream: output), queued: true), identity, CheckpointExtension, key));
             }
             return;
         }
-        _ = WriteLater(bytes: (mesh?.StorageBytes ?? 0L), behind: Behind.Inline, write: () => WriteEntry(path, (key, mesh), static (output, entry) => SdfMeshStoreCodec.EncodeExact(output, entry.key, entry.mesh), queued: true));
+        _ = WriteLater(bytes: (mesh?.StorageBytes ?? 0L), behind: Behind.Inline, write: () => KeepIfWritten(WriteEntry(path, (key, mesh), static (output, entry) => SdfMeshStoreCodec.EncodeExact(output, entry.key, entry.mesh), queued: true), identity, CheckpointExtension, key));
     }
 
     internal bool TryReadSamples(UInt128 identity, UInt128 key, int length, OwnedBuffer<byte> samples) {
@@ -526,7 +544,7 @@ public sealed class SdfMeshStore {
             return true;
         } catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or OutOfMemoryException) {
             // A file the listing named that is gone (evicted, or another World's set) is a miss like any other.
-            m_sampleSets.GetValueOrDefault(identity)?.Remove(key);
+            Forget(identity, SampleExtension, key);
             return false;
         }
     }
@@ -559,9 +577,7 @@ public sealed class SdfMeshStore {
     // Writes a sample set on the store's writer (KeepSamples); a root of the sampling stage's code (SdfMeshBakeClosure).
     internal void WriteSamples(UInt128 identity, UInt128 key, ReadOnlySpan<byte> samples) {
         key = SampleKeyOf(identity, key);
-        if (WriteEntry(PathOf(identity, key, SampleExtension), new SamplePayload(key, samples), static (output, entry) => SdfMeshStoreCodec.EncodePayload(output, entry.Key, entry.Samples), queued: true)) {
-            m_sampleSets.GetValueOrDefault(identity)?.Add(key);
-        }
+        KeepIfWritten(WriteEntry(PathOf(identity, key, SampleExtension), new SamplePayload(key, samples), static (output, entry) => SdfMeshStoreCodec.EncodePayload(output, entry.Key, entry.Samples), queued: true), identity, SampleExtension, key);
     }
 
     /// <summary>Returns whether the store may hold a sample set under a sampling identity: false only when it knows the
@@ -569,7 +585,7 @@ public sealed class SdfMeshStore {
     /// a file.</summary>
     /// <param name="identity">The sampling stage's identity.</param>
     /// <returns><see langword="false"/> when no sample set of the identity is held.</returns>
-    internal bool MayHoldSamples(UInt128 identity) => SampleSetOf(identity).MayHoldAny;
+    internal bool MayHoldSamples(UInt128 identity) => EntrySetOf(identity, SampleExtension).MayHoldAny;
     /// <summary>Returns whether the store may hold one sample set: false only when it has listed the identity's directory
     /// (or found none) and the set is not in it nor written since by this process. A set another World wrote after the
     /// listing reads as absent, and its lattice is sampled again; one the listing named that is gone reads as present,
@@ -577,32 +593,38 @@ public sealed class SdfMeshStore {
     /// <param name="identity">The sampling stage's identity.</param>
     /// <param name="key">The sample input (<c>SdfMeshPathBake.SampleInput</c>).</param>
     /// <returns><see langword="false"/> when the set is known to be absent.</returns>
-    internal bool MayHoldSamples(UInt128 identity, UInt128 key) => SampleSetOf(identity).MayHold(SampleKeyOf(identity, key));
+    internal bool MayHoldSamples(UInt128 identity, UInt128 key) => EntrySetOf(identity, SampleExtension).MayHold(SampleKeyOf(identity, key));
 
-    // The sample sets' keys this store knows, by sampling identity.
-    private readonly System.Collections.Concurrent.ConcurrentDictionary<UInt128, SampleSet> m_sampleSets = new();
+    // The entry keys this store knows, by identity and entry kind (a finished mesh's, a checkpoint's or a sample set's).
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<(UInt128 Identity, string Extension), EntrySet> m_entrySets = new();
 
-    private SampleSet SampleSetOf(UInt128 identity) {
-        if (m_sampleSets.TryGetValue(identity, out var known)) { return known; }
-        var set = new SampleSet();
+    private EntrySet EntrySetOf(UInt128 identity, string extension) {
+        if (m_entrySets.TryGetValue((identity, extension), out var known)) { return known; }
+        var set = new EntrySet();
 
-        if (!m_sampleSets.TryAdd(identity, set)) { return m_sampleSets[identity]; }
-        var directory = Path.Combine(IntermediateDirectory, identity.ToString(format: "x32", provider: null));
+        if (!m_entrySets.TryAdd((identity, extension), set)) { return m_entrySets[(identity, extension)]; }
+        var directory = Path.Combine(string.Equals(a: extension, b: Extension, comparisonType: StringComparison.Ordinal) ? Directory : IntermediateDirectory, identity.ToString(format: "x32", provider: null));
 
         // A cold store has no directory, which one look settles; a directory is listed on the pool, and the set answers
         // "may hold" until the listing stands.
         if (!System.IO.Directory.Exists(directory)) {
             set.Listed([]);
         } else {
-            _ = ThreadPool.UnsafeQueueUserWorkItem(callBack: static state => state.Set.Listed(ListSamples(state.Directory)), preferLocal: false, state: (Set: set, Directory: directory));
+            _ = ThreadPool.UnsafeQueueUserWorkItem(callBack: static state => state.Set.Listed(ListEntries(state.Directory, state.Extension)), preferLocal: false, state: (Set: set, Directory: directory, Extension: extension));
         }
         return set;
     }
-    private static List<UInt128> ListSamples(string directory) {
+    // Records an entry this process wrote in the known entries of its identity and kind, when they exist.
+    private void KeepIfWritten(bool written, UInt128 identity, string extension, UInt128 key) {
+        if (written) { m_entrySets.GetValueOrDefault((identity, extension))?.Add(key); }
+    }
+    // Records that an entry is gone or refused, so no start asks for it again.
+    private void Forget(UInt128 identity, string extension, UInt128 key) => m_entrySets.GetValueOrDefault((identity, extension))?.Remove(key);
+    private static List<UInt128> ListEntries(string directory, string extension) {
         var keys = new List<UInt128>();
 
         try {
-            foreach (var path in System.IO.Directory.EnumerateFiles(directory, "*" + SampleExtension)) {
+            foreach (var path in System.IO.Directory.EnumerateFiles(directory, "*" + extension)) {
                 var name = Path.GetFileNameWithoutExtension(path.AsSpan());
 
                 if ((name.Length == 32) && UInt128.TryParse(name, System.Globalization.NumberStyles.HexNumber, null, out var key)) { keys.Add(key); }
@@ -613,15 +635,15 @@ public sealed class SdfMeshStore {
         return keys;
     }
     private void DeleteSamples(UInt128 identity, UInt128 key, string path) {
-        m_sampleSets.GetValueOrDefault(identity)?.Remove(key);
+        Forget(identity, SampleExtension, key);
         Delete(path);
     }
     // A sample set's file key: the sampling identity and the sample input, as a geometry's entry key is formed.
     private static UInt128 SampleKeyOf(UInt128 identity, UInt128 key) => KeyOf(identity, new SdfMeshGeometry(Dynamic: false, Hash: key));
 
-    // The file keys of one sampling identity's sample sets: those its directory held when listed, and those this process
-    // wrote or deleted since. Until the listing stands, every set may be held.
-    private sealed class SampleSet {
+    // The file keys of one identity's entries of one kind: those its directory held when listed, and those this process
+    // wrote or deleted since. Until the listing stands, every entry may be held.
+    private sealed class EntrySet {
         private readonly Lock m_gate = new();
         private readonly HashSet<UInt128> m_keys = [];
         private readonly HashSet<UInt128> m_removed = [];

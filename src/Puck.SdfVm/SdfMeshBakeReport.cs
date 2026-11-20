@@ -223,6 +223,35 @@ internal static class SdfMeshBakeReport {
     // reports the seconds from then to the bake's end, the serial tail in which the last groups finish alone.
     private static long PoolSaturatedAt;
 
+    // The lines written while the calling thread holds a bake's gate, written once it lets the last one go: a write to a
+    // piped standard error can block on its reader, and a frame thread blocked there under the gate holds every worker
+    // waiting for it. The one door every line goes through (Say); a thread outside a gate writes at once.
+    [ThreadStatic]
+    private static int GatesHeld;
+    [ThreadStatic]
+    private static List<Func<string>>? HeldLines;
+
+    /// <summary>Notes that the calling thread took a bake's gate, so the lines it writes meanwhile wait for the gate's
+    /// release (<see cref="GateLeft"/>).</summary>
+    public static void GateEntered() => GatesHeld++;
+    /// <summary>Notes that the calling thread let a bake's gate go, and writes the lines held for it once it holds no
+    /// other: after the lock is released, never under it.</summary>
+    public static void GateLeft() {
+        if ((--GatesHeld > 0) || (HeldLines is not { Count: > 0 } held)) { return; }
+
+        var lines = held.ToArray();
+
+        held.Clear();
+        foreach (var line in lines) { Console.Error.WriteLine(value: line()); }
+    }
+    private static void Say(string line) => Say(line: () => line);
+    // A line whose text is read where it is written, so a line that samples the process (the memory account) reads it
+    // outside the gate.
+    private static void Say(Func<string> line) {
+        if (GatesHeld > 0) { (HeldLines ??= []).Add(item: line); return; }
+        Console.Error.WriteLine(value: line());
+    }
+
     /// <summary>Records that the bake's pool took work with more still queued, so every worker was busy.</summary>
     public static void PoolSaturated() => Volatile.Write(location: ref PoolSaturatedAt, value: Stopwatch.GetTimestamp());
 
@@ -254,7 +283,7 @@ internal static class SdfMeshBakeReport {
     public static void Start(string residency, string residencyId, int groups, int dynamic, int instances, string cause, int baking, int loading, int shared, int joined, IReadOnlyList<Begun>? named, SdfMeshStore? disk, SdfMeshBakeIdentity identity) {
         var names = string.Join(separator: ',', values: (named ?? []).Select(selector: static group => string.Create(provider: CultureInfo.InvariantCulture, handler: $"{group.Selector}/{(group.Dynamic ? $"slot{group.Place}" : $"union{group.Place}")}/{(group.Loading ? "load" : "bake")}")));
 
-        Console.Error.WriteLine(value: $"[sdf.mesh-bake] start residency={residency} residency-id={residencyId} groups={groups} baking={baking} loading={loading} shared={shared} joined={joined} dynamic={dynamic} instances={instances} cause={cause} begun=[{names}{(((baking + loading) > NamedMost) ? ",…" : "")}]");
+        Say(line: $"[sdf.mesh-bake] start residency={residency} residency-id={residencyId} groups={groups} baking={baking} loading={loading} shared={shared} joined={joined} dynamic={dynamic} instances={instances} cause={cause} begun=[{names}{(((baking + loading) > NamedMost) ? ",…" : "")}]");
         // The store's account reads its directory, so it runs off the frame's thread.
         if (disk is not null) {
             _ = Task.Run(action: () => {
@@ -288,7 +317,7 @@ internal static class SdfMeshBakeReport {
         // The groups that finished with no mesh, each with why: a group the bake drops renders nothing.
         var empty = string.Join(separator: "; ", values: groups.Where(predicate: static group => (group.Mesh is null)).Select(selector: static group => $"{group.Selector}: {group.Outcome}"));
 
-        Console.Error.WriteLine(value: (($"[sdf.mesh-bake] done residency={residency} residency-id={residencyId} groups={groups.Count} meshes={meshes} dispatches={accounts.Dispatches} samples={accounts.Samples} discarded={accounts.Discarded} returned={accounts.Returned} taps={accounts.Taps} refined={accounts.RefinedCells} edges={accounts.CutEdges} softened={accounts.Softened} merged={accounts.Merged} loaded={accounts.Loaded} skinned={skinned} triangles={triangles} vertices={vertices} levelled={levelled} level1={first} level2={second} seconds={seconds:0.000}" + accounts.Describe(dispatches: dispatches)) + ((empty.Length > 0) ? $" empty=[{empty}]" : string.Empty)));
+        Say(line: (($"[sdf.mesh-bake] done residency={residency} residency-id={residencyId} groups={groups.Count} meshes={meshes} dispatches={accounts.Dispatches} samples={accounts.Samples} discarded={accounts.Discarded} returned={accounts.Returned} taps={accounts.Taps} refined={accounts.RefinedCells} edges={accounts.CutEdges} softened={accounts.Softened} merged={accounts.Merged} loaded={accounts.Loaded} skinned={skinned} triangles={triangles} vertices={vertices} levelled={levelled} level1={first} level2={second} seconds={seconds:0.000}" + accounts.Describe(dispatches: dispatches)) + ((empty.Length > 0) ? $" empty=[{empty}]" : string.Empty)));
     }
     /// <summary>Writes the line for a stage that held one group's worker past <see cref="SlowStageSeconds"/>, so the
     /// bake's long poles can be found; a faster stage writes nothing.</summary>
@@ -309,30 +338,30 @@ internal static class SdfMeshBakeReport {
             _ => string.Empty,
         };
 
-        Console.Error.WriteLine(value: string.Create(provider: CultureInfo.InvariantCulture, handler: $"[sdf.mesh-bake] slow residency={residency} group={selector} {(dynamic ? "dynamic" : $"instances={instances}")} stage={stage.ToString().ToLowerInvariant()} seconds={(ticks / ((double)Stopwatch.Frequency)):0.00} {text}"));
+        Say(line: string.Create(provider: CultureInfo.InvariantCulture, handler: $"[sdf.mesh-bake] slow residency={residency} group={selector} {(dynamic ? "dynamic" : $"instances={instances}")} stage={stage.ToString().ToLowerInvariant()} seconds={(ticks / ((double)Stopwatch.Frequency)):0.00} {text}"));
     }
     /// <summary>Writes the line for a group the memory account could not admit beside the groups already admitted.</summary>
     /// <param name="residency">The residency's name.</param>
     /// <param name="selector">The group's selector.</param>
     /// <param name="peak">The group's peak bytes.</param>
     /// <param name="admitted">The groups admitted this take.</param>
-    public static void Deferred(string residency, int selector, long peak, int admitted) => Console.Error.WriteLine(value: $"[sdf.mesh-bake] deferred residency={residency} group={selector} peak={peak} admitted={admitted} budget={MemoryAccount.Shared.Read().Budget} room={MemoryAccount.Shared.ReadAdmission(pool: Puck.Abstractions.Memory.PhysicalMemory.Host).Room}");
+    public static void Deferred(string residency, int selector, long peak, int admitted) => Say(line: () => $"[sdf.mesh-bake] deferred residency={residency} group={selector} peak={peak} admitted={admitted} budget={MemoryAccount.Shared.Read().Budget} room={MemoryAccount.Shared.ReadAdmission(pool: Puck.Abstractions.Memory.PhysicalMemory.Host).Room}");
     /// <summary>Writes the line for a group admitted alone as the process's one forced job, whatever the account's host
     /// pool holds.</summary>
     /// <param name="residency">The residency's name.</param>
     /// <param name="selector">The group's selector.</param>
     /// <param name="peak">The group's peak bytes.</param>
-    public static void AdmittedAlone(string residency, int selector, long peak) => Console.Error.WriteLine(value: $"[sdf.mesh-bake] admitted alone residency={residency} group={selector} peak={peak} budget={MemoryAccount.Shared.Read().Budget} room={MemoryAccount.Shared.ReadAdmission(pool: Puck.Abstractions.Memory.PhysicalMemory.Host).Room}");
+    public static void AdmittedAlone(string residency, int selector, long peak) => Say(line: () => $"[sdf.mesh-bake] admitted alone residency={residency} group={selector} peak={peak} budget={MemoryAccount.Shared.Read().Budget} room={MemoryAccount.Shared.ReadAdmission(pool: Puck.Abstractions.Memory.PhysicalMemory.Host).Room}");
     /// <summary>Writes the line for a group whose bake refused.</summary>
     /// <param name="selector">The group's selector.</param>
     /// <param name="refusal">Why.</param>
-    public static void Refused(int selector, string refusal) => Console.Error.WriteLine(value: $"[sdf.mesh-bake] group {selector} refused: {refusal}");
+    public static void Refused(int selector, string refusal) => Say(line: $"[sdf.mesh-bake] group {selector} refused: {refusal}");
     /// <summary>Names a rest skin that fell back to rigid owner contours.</summary>
-    public static void SkinSplit(int selector, SdfMeshGeometry geometry, string? reason) => Console.Error.WriteLine(value: $"[sdf.mesh-bake] group {selector} geometry={geometry.Hash:x32} bakes as a crease: {reason}");
+    public static void SkinSplit(int selector, SdfMeshGeometry geometry, string? reason) => Say(line: $"[sdf.mesh-bake] group {selector} geometry={geometry.Hash:x32} bakes as a crease: {reason}");
     /// <summary>Writes the line for a group whose store entry the store refused.</summary>
     /// <param name="selector">The group's selector.</param>
     /// <param name="refusal">Why.</param>
-    public static void StoreRefused(int selector, string refusal) => Console.Error.WriteLine(value: $"[sdf.mesh-bake] group {selector} store refused: {refusal}");
+    public static void StoreRefused(int selector, string refusal) => Say(line: $"[sdf.mesh-bake] group {selector} store refused: {refusal}");
     /// <summary>Writes the lines for a group whose stage threw: the group's geometry, the box and lattice it had reached,
     /// and the exception with its stack, so the failure can be found again and baked alone.</summary>
     /// <param name="residency">The residency's name.</param>
@@ -343,11 +372,11 @@ internal static class SdfMeshBakeReport {
     /// <param name="refinements">The narrowing passes the group had taken.</param>
     /// <param name="lattice">The group's final lattice and its refinement factor, once it has one.</param>
     /// <param name="exception">What was thrown.</param>
-    public static void Failed(string residency, int selector, SdfMeshGeometry geometry, Vector3 low, Vector3 high, int refinements, (SdfMeshBakeRequest Request, int Factor)? lattice, Exception exception) => Console.Error.WriteLine(value: string.Create(
+    public static void Failed(string residency, int selector, SdfMeshGeometry geometry, Vector3 low, Vector3 high, int refinements, (SdfMeshBakeRequest Request, int Factor)? lattice, Exception exception) => Say(line: string.Create(
         provider: CultureInfo.InvariantCulture,
         handler: $"[sdf.mesh-bake] residency={residency} group={selector} geometry={geometry.Hash:x32} failed: {exception.GetType().Name}: {exception.Message} box=({low.X:R}, {low.Y:R}, {low.Z:R})..({high.X:R}, {high.Y:R}, {high.Z:R}) refinements={refinements} {((lattice is { } final) ? $"dims={final.Request.Dims} cell=({final.Request.Cell.X:R}, {final.Request.Cell.Y:R}, {final.Request.Cell.Z:R}) factor={final.Factor}" : "no final lattice")}\n{exception}"
     ));
     /// <summary>Writes the line for a pool work item that threw past its own settling.</summary>
     /// <param name="exception">What was thrown.</param>
-    public static void WorkFailed(Exception exception) => Console.Error.WriteLine(value: $"[sdf.mesh-bake] work failed: {exception}");
+    public static void WorkFailed(Exception exception) => Say(line: $"[sdf.mesh-bake] work failed: {exception}");
 }
