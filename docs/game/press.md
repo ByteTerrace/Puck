@@ -72,7 +72,7 @@ on its front like any plaque.
 | Typed text as input | Every character is a Text event at the time it was typed, judged by one rule against the word's letters. A replay reproduces every keystroke. | `typingPlay` in `worlds/standard/typing.puck` |
 | Keyboard lamps | The `keyLights` section lights the next letter, the two after it, each waiting word's first letter and the stand-up key, from state cells and the active binding page, and flashes on a hit, a miss and a lost slug. | `worlds/debug/press.puck` |
 | Per-glyph text | The lane's word is marked-up HUD text: a `caret` effect dims the typed letters and lifts the next, and the rule swaps it for `shake` for a moment after a miss. | `press.puck`, drawn by the HUD writer through `TextGlyphChannel` |
-| Music direction | The score moves to the `press` segment when a run starts and `press-run` at the second page. A second and a third voice are layers held by cues the rules emit while the run of set words lasts, and a set word, a lost slug and a page turn are stingers. | `worlds/debug/score.music.json`, the rules' cues |
+| Music direction | The score moves to the `press` segment when a run starts and `press-run` at the second page. Every voice joins on a bar line; a second and a third are layers held by cues the rules emit while the run of set words lasts, and a set word, a lost slug and a page turn are stingers. | `worlds/debug/score.music.json`, the rules' cues |
 | Frame capture | A `highlights` row keeps the frame half a second after a new best score, through the capture sink. | `press.puck` |
 | Speech | The run's last line, `OUT OF SORTS`, is spoken once by the HUD's text speech. | `press.puck` |
 | State-driven motion | The slugs are parts of the bench's creation. Two drivers on each read the lane's state cells: one lifts it out of the bed, one carries it down the slope, eased so it settles into each notch. | `press.puck` |
@@ -110,8 +110,6 @@ knows the press exists.
   own.
 - The words ride the panel, not the slugs. Text on a moving creation part is
   baked relief today, so a slug cannot carry a word that changes.
-- The layers start when their cue arrives, not on a bar line, so a voice can
-  enter off the beat. A layer needs a boundary as a transition has.
 - A lost slug and a set one leave the bed the same way. The stick should fill
   with the set words.
 - One seat plays. The standard's play takes a seat number; a second bench or a

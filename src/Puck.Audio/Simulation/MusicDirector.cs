@@ -1,13 +1,14 @@
 namespace Puck.Audio.Simulation;
 
-/// <summary>When a matched transition actually swaps segments, relative to <see cref="MusicClock"/>'s own boundary
-/// crossings — never a tune's playback position.</summary>
+/// <summary>Which point of the score's grid a change waits for, relative to <see cref="MusicClock"/>'s own boundary
+/// crossings — never a tune's playback position: when an armed transition swaps segments, and when a layer whose
+/// condition holds joins the mix.</summary>
 public enum MusicTransitionBoundary : byte {
-    /// <summary>Swaps on the same tick the condition is observed.</summary>
+    /// <summary>Changes on the same tick the condition is observed.</summary>
     Immediate,
-    /// <summary>Swaps on the next beat boundary at or after the condition is observed.</summary>
+    /// <summary>Changes on the next beat boundary at or after the condition is observed.</summary>
     BeatEnd,
-    /// <summary>Swaps on the next bar boundary at or after the condition is observed.</summary>
+    /// <summary>Changes on the next bar boundary at or after the condition is observed.</summary>
     BarEnd,
 }
 /// <summary>One compiled segment transition: the destination segment, the sense family that arms it, and the
@@ -17,14 +18,21 @@ public enum MusicTransitionBoundary : byte {
 /// <param name="At">The boundary the armed transition waits for.</param>
 /// <param name="Cue">The cue name when matching a rule cue.</param>
 public readonly record struct MusicTransition(string ToSegmentId, MusicSenseFamily When, MusicTransitionBoundary At, string? Cue = null);
-/// <summary>One compiled conditional audio layer: a tune id, and the sense family that gates it on top of segment
-/// membership — never queued, level-triggered every tick.</summary>
+/// <summary>One compiled conditional audio layer: a tune id, the sense family that gates it on top of segment
+/// membership, and the grid point it joins on — level-triggered every tick, never queued.</summary>
 /// <param name="TuneId">The tune the layer plays while active.</param>
 /// <param name="When">The gating sense family, or <see langword="null"/> for "active whenever the owning segment is
 /// current" (the unconditional case).</param>
 /// <param name="GainThousandths">The level of the layer in the mix.</param>
 /// <param name="Cue">The cue name when matching a rule cue.</param>
-public readonly record struct MusicLayer(string TuneId, MusicSenseFamily? When, int GainThousandths = 1000, string? Cue = null);
+/// <param name="At">The grid point a layer whose condition holds waits for before it joins:
+/// <see cref="MusicTransitionBoundary.Immediate"/> (the neutral default) joins the tick its condition first holds.</param>
+public readonly record struct MusicLayer(string TuneId, MusicSenseFamily? When, int GainThousandths = 1000, string? Cue = null, MusicTransitionBoundary At = MusicTransitionBoundary.Immediate);
+/// <summary>One layer sounding this tick and the tick it joined on, which stays fixed for as long as the layer keeps
+/// sounding.</summary>
+/// <param name="Layer">The compiled layer.</param>
+/// <param name="JoinedTick">The tick the layer joined the mix on.</param>
+public readonly record struct MusicActiveLayer(MusicLayer Layer, ulong JoinedTick);
 /// <summary>One compiled director embellishment: a patch id, and the sense family that fires it — instantaneous, no
 /// boundary wait.</summary>
 /// <param name="PatchId">The patch voiced when this embellishment fires.</param>
@@ -78,21 +86,23 @@ public sealed record MusicSegmentGraph(IReadOnlyList<MusicSegment> Segments) {
         return null;
     }
 }
-/// <summary>The event-driven segment/cue state machine: a sim-side pure function of (compiled graph, tick-ordered
-/// sense edges, clock boundary crossings), ticked once per <c>WorldServer.Step</c>. Never references the project
-/// that computes the world's own event feed — the host projects edges into <see cref="MusicSenseEdge"/> at its own
-/// call site and hands them here. A transition ARMS the tick its <see cref="MusicTransition.When"/> family appears
-/// among this tick's edges, then COMMITS the first tick at or after arming that <see cref="MusicClock"/> reports the
-/// matching boundary crossed — a queued transition, never a mid-bar hard cut for a
+/// <summary>The event-driven segment/cue state machine: a pure function of (compiled graph, tick-ordered sense
+/// edges, clock boundary crossings), stepped once per delivered tick by the listener that hears it. It is
+/// presentation, not simulation state: what it hears is what its recipient was told (the delivered cues and senses,
+/// each admitted against that recipient's view), so two recipients told different things hear different music, and
+/// nothing the authority computes reads it. A transition ARMS the tick its <see cref="MusicTransition.When"/> family
+/// appears among this tick's edges, then COMMITS the first tick at or after arming that <see cref="MusicClock"/>
+/// reports the matching boundary crossed — a queued transition, never a mid-bar hard cut for a
 /// <see cref="MusicTransitionBoundary.BeatEnd"/>/<see cref="MusicTransitionBoundary.BarEnd"/> transition. A layer
-/// never queues: its membership in <see cref="ActiveLayerTuneIds"/> is recomputed whole every <see cref="Step"/>. An
-/// embellishment never queues either, but unlike a layer it is edge-triggered, not level-triggered — it fires once
-/// per matching edge, recorded in <see cref="LastEmbellishmentPatchId"/>/<see cref="LastEmbellishmentTick"/>.</summary>
+/// never queues: it sounds on the ticks its condition holds, joining on the first of them that reaches its
+/// <see cref="MusicLayer.At"/> grid point and keeping its join tick while it holds (across a segment change that
+/// keeps its tune too). An embellishment never queues either, but unlike a layer it is edge-triggered — it fires
+/// once per matching edge, recorded in <see cref="LastEmbellishmentPatchId"/>/<see cref="LastEmbellishmentTick"/>.</summary>
 public sealed class MusicDirector {
-    private readonly List<string> m_activeLayerTuneIds = [];
-    private readonly List<MusicLayer> m_activeLayers = [];
     private readonly MusicSegmentGraph m_graph;
 
+    private List<MusicActiveLayer> m_activeLayers = [];
+    private List<MusicActiveLayer> m_previousLayers = [];
     private MusicTransition? m_armed;
     private string m_currentSegmentId;
 
@@ -112,14 +122,9 @@ public sealed class MusicDirector {
         m_graph = graph;
     }
 
-    /// <summary>Gets the tune ids of every conditional audio layer active THIS tick — the current segment's
-    /// unconditional layers plus every conditional layer whose <see cref="MusicLayer.When"/> matched this tick's
-    /// edges. Recomputed whole by every <see cref="Step"/> call (level-triggered, never queued — unlike
-    /// <see cref="PendingSegmentId"/>, nothing here survives to a tick that does not re-satisfy it), in the owning
-    /// segment's declared order. Empty before the first <see cref="Step"/>.</summary>
-    public IReadOnlyList<string> ActiveLayerTuneIds => m_activeLayerTuneIds;
-    /// <summary>The active layers and their authored gains in declared order.</summary>
-    public IReadOnlyList<MusicLayer> ActiveLayers => m_activeLayers;
+    /// <summary>Gets every layer sounding THIS tick with the tick it joined on, in the current segment's declared
+    /// order. Recomputed by every <see cref="Step"/>; empty before the first one.</summary>
+    public IReadOnlyList<MusicActiveLayer> ActiveLayers => m_activeLayers;
     /// <summary>Gets the currently active segment's id.</summary>
     public string CurrentSegmentId => m_currentSegmentId;
     /// <summary>Gets the patch id the most recently fired embellishment voiced, or <see langword="null"/> before the
@@ -140,8 +145,6 @@ public sealed class MusicDirector {
     /// <summary>Gets the segment id a currently armed transition will switch to, or <see langword="null"/> when
     /// nothing is armed.</summary>
     public string? PendingSegmentId => m_armed?.ToSegmentId;
-    /// <summary>Gets the armed transition, including the boundary a checkpoint must preserve.</summary>
-    public MusicTransition? ArmedTransition => m_armed;
     /// <summary>Gets how many transitions have committed since construction.</summary>
     public ulong TransitionCount { get; private set; }
 
@@ -192,6 +195,15 @@ public sealed class MusicDirector {
             }
         }
     }
+    private ulong? JoinedTick(string tuneId) {
+        foreach (var previous in m_previousLayers) {
+            if (string.Equals(previous.Layer.TuneId, tuneId, StringComparison.Ordinal)) {
+                return previous.JoinedTick;
+            }
+        }
+
+        return null;
+    }
     private static bool Matches(MusicSenseFamily family, IReadOnlyList<MusicSenseEdge> edges, string? cue) {
         foreach (var edge in edges) {
             if (edge.Family == family && string.Equals(edge.Cue, cue, StringComparison.Ordinal)) {
@@ -202,29 +214,28 @@ public sealed class MusicDirector {
         return false;
     }
     // Evaluated against the FINAL current segment for this tick (after any Commit above) — the active set always
-    // describes the segment now playing. Rebuilt in place (clear + refill) so a director that never changes its
-    // active set allocates nothing steady-state.
-    private void RecomputeActiveLayers(IReadOnlyList<MusicSenseEdge> edges) {
-        m_activeLayerTuneIds.Clear();
+    // describes the segment now playing. A layer whose condition holds keeps sounding when its tune sounded last tick
+    // (keeping that join tick), and otherwise joins only on a tick that reaches its grid point. The two lists swap, so
+    // a director whose active set never changes allocates nothing steady-state.
+    private void RecomputeActiveLayers(IReadOnlyList<MusicSenseEdge> edges, MusicClockBoundary boundary, ulong tick) {
+        (m_previousLayers, m_activeLayers) = (m_activeLayers, m_previousLayers);
         m_activeLayers.Clear();
 
-        if (m_graph.Find(id: m_currentSegmentId) is not { } segment) {
-            return;
-        }
+        if (m_graph.Find(id: m_currentSegmentId) is { } segment) {
+            foreach (var layer in segment.Layers) {
+                if ((layer.When is { } when) && !Matches(family: when, edges: edges, cue: layer.Cue)) {
+                    continue;
+                }
 
-        foreach (var layer in segment.Layers) {
-            if (
-                (layer.When is not { } when) ||
-                Matches(
-                edges: edges,
-                family: when,
-                cue: layer.Cue
-            )
-            ) {
-                m_activeLayerTuneIds.Add(item: layer.TuneId);
-                m_activeLayers.Add(layer);
+                if (JoinedTick(tuneId: layer.TuneId) is { } joined) {
+                    m_activeLayers.Add(item: new(Layer: layer, JoinedTick: joined));
+                } else if (Satisfied(at: layer.At, boundary: boundary)) {
+                    m_activeLayers.Add(item: new(Layer: layer, JoinedTick: tick));
+                }
             }
         }
+
+        m_previousLayers.Clear();
     }
     private static bool Satisfied(MusicTransitionBoundary at, MusicClockBoundary boundary) => (at switch {
         MusicTransitionBoundary.Immediate => true,
@@ -233,40 +244,14 @@ public sealed class MusicDirector {
         _ => false,
     });
 
-    /// <summary>Overwrites this director's whole live state — a checkpoint restore's one write door. Never called
-    /// from ordinary simulation, which only ever advances through <see cref="Step"/>.</summary>
-    /// <param name="currentSegmentId">The active segment id to resume on.</param>
-    /// <param name="armed">The currently armed transition, or <see langword="null"/>.</param>
-    /// <param name="transitionCount">The committed-transition count to resume from.</param>
-    /// <param name="lastTransitionTick">The tick the most recent transition committed on, or <see langword="null"/>.</param>
-    /// <param name="lastTransitionFromSegmentId">The segment the most recent transition left, or <see langword="null"/>.</param>
-    /// <param name="lastTransitionToSegmentId">The segment the most recent transition entered, or <see langword="null"/>.</param>
-    /// <param name="lastEmbellishmentPatchId">The patch the most recent embellishment voiced, or <see langword="null"/>.</param>
-    /// <param name="lastEmbellishmentTick">The tick the most recent embellishment fired on, or <see langword="null"/>.</param>
-    public void Restore(string currentSegmentId, MusicTransition? armed, ulong transitionCount, ulong? lastTransitionTick, string? lastTransitionFromSegmentId, string? lastTransitionToSegmentId, string? lastEmbellishmentPatchId = null, ulong? lastEmbellishmentTick = null) {
-        ArgumentException.ThrowIfNullOrEmpty(argument: currentSegmentId);
-
-        m_currentSegmentId = currentSegmentId;
-        m_armed = armed;
-        TransitionCount = transitionCount;
-        LastTransitionTick = lastTransitionTick;
-        LastTransitionFromSegmentId = lastTransitionFromSegmentId;
-        LastTransitionToSegmentId = lastTransitionToSegmentId;
-        LastEmbellishmentPatchId = lastEmbellishmentPatchId;
-        LastEmbellishmentTick = lastEmbellishmentTick;
-        // Active layers are purely level-triggered off this tick's edges (see ActiveLayerTuneIds' remarks) — never
-        // sticky state, so a restore leaves the list empty until the next Step recomputes it, the same posture
-        // PendingSegmentId already takes before its first Arm.
-        m_activeLayerTuneIds.Clear();
-        m_activeLayers.Clear();
-    }
     /// <summary>Evaluates one tick: arms a matching transition off this tick's edges (if none is already armed),
     /// fires any embellishment whose condition this tick's edges satisfy, commits an armed transition whose boundary
-    /// this tick's <paramref name="boundary"/> crossed, then recomputes the active layer set off the (possibly just
+    /// this tick's <paramref name="boundary"/> crossed, then recomputes the active layers off the (possibly just
     /// switched) current segment.</summary>
-    /// <param name="tick">The tick this step reports — recorded on commit and on an embellishment firing.</param>
-    /// <param name="boundary">The boundaries <see cref="MusicClock.Advance"/> crossed this same step.</param>
-    /// <param name="edges">This tick's projected sense edges, in the host's own pinned order.</param>
+    /// <param name="tick">The tick this step reports — recorded on commit, on an embellishment firing and on a layer
+    /// joining.</param>
+    /// <param name="boundary">The score boundaries the authority's clock crossed on this tick.</param>
+    /// <param name="edges">This tick's sense edges, in the host's own pinned order.</param>
     public void Step(ulong tick, MusicClockBoundary boundary, IReadOnlyList<MusicSenseEdge> edges) {
         if (m_armed is null) {
             Arm(edges: edges);
@@ -290,6 +275,10 @@ public sealed class MusicDirector {
             );
         }
 
-        RecomputeActiveLayers(edges: edges);
+        RecomputeActiveLayers(
+            boundary: boundary,
+            edges: edges,
+            tick: tick
+        );
     }
 }

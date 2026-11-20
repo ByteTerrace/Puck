@@ -67,11 +67,11 @@ public sealed record WorldInputCrossing(
 /// <param name="EngineStart">Exact interval start on the engine clock.</param>
 /// <param name="EngineDuration">Exact positive interval width.</param>
 /// <param name="Music">The existing music clock at interval start, if declared.</param>
-public readonly record struct WorldInputInterval(ulong Tick, ulong EngineStart, ulong EngineDuration, WorldInputMusicSegment? Music = null) {
+public readonly record struct WorldInputInterval(ulong Tick, ulong EngineStart, ulong EngineDuration, WorldInputMusicClock? Music = null) {
     /// <summary>Folds the exact interval and its historical music coordinates.</summary>
     public void AppendStateHash(ref Fnv1aHash hash) {
         hash.Add(value: Tick); hash.Add(value: EngineStart); hash.Add(value: EngineDuration); hash.Add(value: ((byte)(Music.HasValue ? 1 : 0)));
-        if (Music is { } music) { hash.Add(value: music.ElapsedTicks); hash.Add(value: music.TicksPerBeat); hash.Add(value: music.Segment); hash.Add(value: music.BeatsPerBar); }
+        if (Music is { } music) { hash.Add(value: music.ElapsedTicks); hash.Add(value: music.TicksPerBeat); hash.Add(value: music.BeatsPerBar); }
     }
     /// <summary>Tests the half-open interval before admitting a fixed sub-tick timestamp.</summary>
     public bool Contains(FixedQ4816 offset) => ((offset.Value >= 0) &&
@@ -107,12 +107,11 @@ public readonly record struct WorldInputInterval(ulong Tick, ulong EngineStart, 
         return (checked((Tick + 1)), FixedQ4816.Zero);
     }
 }
-/// <summary>The existing music clock at capture-interval start, preserved through tempo/segment changes.</summary>
+/// <summary>The music clock at capture-interval start, which a press's beat facets are judged against.</summary>
 /// <param name="ElapsedTicks">Engine ticks the clock had counted at interval start.</param>
 /// <param name="TicksPerBeat">The authored engine-tick length of one beat.</param>
-/// <param name="Segment">The score segment playing at interval start.</param>
 /// <param name="BeatsPerBar">The authored beat count of one bar.</param>
-public readonly record struct WorldInputMusicSegment(ulong ElapsedTicks, long TicksPerBeat, string Segment, int BeatsPerBar) {
+public readonly record struct WorldInputMusicClock(ulong ElapsedTicks, long TicksPerBeat, int BeatsPerBar) {
     /// <summary>Gets the beat nearest an event's captured time, with the same tie toward the later beat that
     /// <see cref="PhaseError"/> uses; a press before the first beat reads -1 or less.</summary>
     /// <param name="offset">The event's offset inside its interval, in Q48.16 seconds.</param>

@@ -3416,7 +3416,7 @@ that stops compiling.
     `TheIdentityVerbPrintsABuildsIdentityItsPartsAndWhatDiffers`,
     `AStoredDummyADamagedEntryAndAMissingMeshAreReportedAsSuch`).
 - The keep-list the owner approves: exact results and determinism
-  (`Puck.Maths.Tests`' laws; World.Server `MusicReplayReDerivabilityLawTests`,
+  (`Puck.Maths.Tests`' laws; World.Server
   `CrossingReplayLawTests`, `ReplayForkLawTests`,
   `WorldStateHashCompositionLawTests`, `BodyContinuationHashLawTests`;
   World.Games `ContinuationHashLawTests`; State `ArenaHashLawTests`,
@@ -4319,8 +4319,7 @@ the model.
   a real RGB keyboard's keys on the device-output path.
 - The press ([design](../game/press.md), `worlds/debug/press.puck`) is the first
   typing place, and what it does not do yet is listed there: a seated camera
-  framing, words on the slugs themselves, layers that join on a bar line, and
-  a second seat. The lamp loop (`LampLegendDriver`) has not been run against
+  framing, words on the slugs themselves, and a second seat. The lamp loop (`LampLegendDriver`) has not been run against
   a lamp array.
 - Chat typed in the world: a HUD prompt that enters a text-focus mode and
   submits through `chat.whisper` and `chat.log` (`ChatCommandModule`).

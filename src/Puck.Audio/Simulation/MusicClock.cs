@@ -1,7 +1,7 @@
 namespace Puck.Audio.Simulation;
 
 /// <summary>Which musical boundaries a <see cref="MusicClock.Advance"/> call crossed — the vocabulary a
-/// <see cref="MusicDirector"/> transition's <see cref="MusicTransitionBoundary"/> field evaluates against.</summary>
+/// <see cref="MusicDirector"/> transition's or layer's <see cref="MusicTransitionBoundary"/> evaluates against.</summary>
 [Flags]
 public enum MusicClockBoundary : byte {
     /// <summary>No boundary crossed this step.</summary>

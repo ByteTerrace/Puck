@@ -145,7 +145,7 @@ public sealed partial class WorldAudioDirector : IWorldAudioLever, IWorldAudioFr
     private int m_listenerSeat = -1;
     // The delivered score's active layers as of the last delivered tick (PresentDeliveredCues): the derived layer-bed
     // plan is re-reconciled against them whenever they change, without waiting for the next definition delivery.
-    private IReadOnlyList<MusicLayer> m_activeMusicLayers = [];
+    private IReadOnlyList<MusicActiveLayer> m_activeMusicLayers = [];
 
     /// <summary>The live master gain in Q16 — the value an attached mixer's <c>MasterGainQ16</c> follows: the
     /// document master gain until the <c>world.volume</c> session lever engages, the lever thereafter (see
@@ -592,14 +592,13 @@ public sealed partial class WorldAudioDirector : IWorldAudioLever, IWorldAudioFr
             }
         }
     }
-    // One continuous Bed emitter per tune id in m_activeMusicLayerTuneIds — a tune not (yet) declared on this
-    // definition is skipped rather than admitted silent (the server only taps ids MusicDirectorFactory already
-    // compiled off a validated document, so this is a defensive skip, never a policy). A key that drops out because
-    // its tune left the active set also drops out of m_plan (Admit is never called for it this reconcile), so the
-    // NEXT time the same tune re-activates it re-enters the registry as a fresh id and ramps in from silence — the
-    // same "absent this reconcile = departs" contract every other derived row already follows.
+    // One continuous Bed emitter per sounding layer's tune — a tune not (yet) declared on this definition is skipped
+    // rather than admitted silent (a defensive skip, never a policy). A key that drops out because its tune left the
+    // active set also drops out of m_plan, and ApplyMixerBindings releases the tune's host, so the NEXT time the layer
+    // joins (on its authored grid point, MusicLayer.At) its tune starts again from its head and ramps in from silence.
     private void DeriveMusicLayers(WorldDefinition definition, WorldAudioDefaults audio) {
-        foreach (var layer in m_activeMusicLayers) {
+        foreach (var active in m_activeMusicLayers) {
+            var layer = active.Layer;
             var tuneId = layer.TuneId;
             if (FindTune(
                 definition: definition,
@@ -1806,7 +1805,7 @@ public sealed partial class WorldAudioDirector : IWorldAudioLever, IWorldAudioFr
     /// existing Bed presence slew — see <see cref="DeriveMusicLayers"/>), without waiting for the next document
     /// mutation. A no-op before the first <see cref="ReconcileSpeakers"/> call (nothing to re-derive against yet;
     /// the coming first reconcile picks up whatever was last applied here).</summary>
-    private void SetActiveMusicLayers(IReadOnlyList<MusicLayer> layers) {
+    private void SetActiveMusicLayers(IReadOnlyList<MusicActiveLayer> layers) {
         if (layers.SequenceEqual(m_activeMusicLayers)) { return; }
         m_activeMusicLayers = [.. layers];
         if (m_definition is { } definition) { ReconcileDefinition(definition); }

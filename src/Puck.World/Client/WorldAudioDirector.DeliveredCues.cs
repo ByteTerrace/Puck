@@ -14,7 +14,12 @@ public sealed partial class WorldAudioDirector {
     // The span of the routed mirror the routed sound was made from: what it plays ends with that span.
     private WorldStreamSpan m_routedAudioSpan;
 
-    internal void PresentLocalCues(WorldDefinition definition, WorldPresentationCueTick tick) {
+    /// <summary>Presents one tick the in-process authority delivered: its cues the listener's seat may hear sound, and
+    /// the delivered score steps on the tick's boundary and the cues and senses the seat was told. Ignored while a routed
+    /// mirror supplies the sound (<see cref="PresentRoutedAudio"/>).</summary>
+    /// <param name="definition">The delivered definition, whose first <c>music</c> row is the score.</param>
+    /// <param name="tick">The delivered tick.</param>
+    public void PresentLocalCues(WorldDefinition definition, WorldPresentationCueTick tick) {
         lock (m_gate) {
             if (m_routedAudio is null) {
                 if (m_definition is null) { ReconcileSpeakers(definition); }
@@ -76,16 +81,30 @@ public sealed partial class WorldAudioDirector {
         if (m_deliveredMusic is not { } director) { SetActiveMusicLayers([]); return; }
 
         m_deliveredSenses.Clear();
-        for (var family = 0; family <= (int)MusicSenseFamily.SeatJoin; family++) {
-            if ((tick.MusicSenses & (1 << family)) != 0) { m_deliveredSenses.Add(new((MusicSenseFamily)family, 0, 0)); }
+        for (var family = 0; family < (int)MusicSenseFamily.RuleCue; family++) {
+            if ((tick.MusicSenses & (1 << family)) != 0) { m_deliveredSenses.Add(new((MusicSenseFamily)family)); }
         }
         foreach (var delivered in tick.Cues) {
-            if (delivered.Cue.AdmitsSeat(listener)) { m_deliveredSenses.Add(new(MusicSenseFamily.RuleCue, 0, 0, delivered.Cue.Name)); }
+            if (delivered.Cue.AdmitsSeat(listener)) { m_deliveredSenses.Add(new(MusicSenseFamily.RuleCue, delivered.Cue.Name)); }
         }
 
         director.Step(tick.Tick, (MusicClockBoundary)tick.MusicBoundary, m_deliveredSenses);
         SetActiveMusicLayers(director.ActiveLayers);
         if (director.LastTransitionTick == tick.Tick) { SubmitCue(WorldAudioCue.MusicTransition, null); }
         if (director.LastEmbellishmentTick == tick.Tick) { SubmitEmbellishment(director.LastEmbellishmentPatchId!); }
+    }
+
+    /// <summary>Describes the score this listener hears (the score half of <c>music.state</c>): its current segment,
+    /// any pending transition, the most recent transition and embellishment, and each sounding layer with the tick it
+    /// joined on.</summary>
+    /// <returns>The bracketed echo, or a fixed "none" line before a score has been delivered.</returns>
+    public string DescribeMusicState() {
+        lock (m_gate) {
+            if (m_deliveredMusic is not { } director) { return "[music.state: none delivered]"; }
+            var layers = director.ActiveLayers.Count == 0 ? "none"
+                : string.Join(",", director.ActiveLayers.Select(static active => $"{active.Layer.TuneId}@{active.JoinedTick}"));
+            return string.Create(System.Globalization.CultureInfo.InvariantCulture,
+                $"[music.state: segment={director.CurrentSegmentId} pending={director.PendingSegmentId ?? "none"} transitions={director.TransitionCount} lastTick={(director.LastTransitionTick?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "none")} lastFrom={director.LastTransitionFromSegmentId ?? "none"} lastTo={director.LastTransitionToSegmentId ?? "none"} layers={layers} lastEmbellishment={director.LastEmbellishmentPatchId ?? "none"} lastEmbellishmentTick={(director.LastEmbellishmentTick?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "none")}]");
+        }
     }
 }

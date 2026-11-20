@@ -76,15 +76,19 @@ coefficient ramps carry the change without retriggering a sustained patch.
 
 ## The music-transition cue lane
 
-The presentation's `MusicDirector` steps on the recipient's delivered tick.
+The presentation's `MusicDirector` is the only one: it steps on the
+recipient's delivered tick, and the authority keeps no copy of the score.
 A committed transition submits `music.transition` through the authored cue
-table. The authority's score clock supplies the beat and bar boundaries.
+table. The authority's score clock supplies the beat and bar boundaries, with
+an engaged instrument's beat folded in.
 
 ## The conditional-layer and embellishment lanes
 
 A score matches ambient events or a named `cue:<name>` it received through
-recipient disclosure. `WorldAudioDirector` gives each active tune a bed
-emitter at the layer's gain. An embellishment fires its own patch through the
+recipient disclosure. A layer joins on its authored `at` grid point (the next
+beat or bar, or at once), and `WorldAudioDirector` gives each sounding tune a
+bed emitter at the layer's gain; the tune's host starts from its head when the
+layer joins and is released when it leaves. An embellishment fires its own patch through the
 one-shot transient pool and appears in `speaker.state` under
 `music.embellishment`.
 

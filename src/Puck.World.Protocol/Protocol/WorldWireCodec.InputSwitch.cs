@@ -6,11 +6,11 @@ public static partial class WorldWireCodec {
     /// <summary>Writes a captured interval with its optional music coordinates, the leaf shared by barriers and records.</summary>
     public static void WriteInputInterval(WireWriter writer, WorldInputInterval interval) {
         writer.WriteUInt64(value: interval.Tick); writer.WriteUInt64(value: interval.EngineStart); writer.WriteUInt64(value: interval.EngineDuration);
-        writer.WriteOptional(value: interval.Music, writeValue: static (w, music) => { w.WriteUInt64(value: music.ElapsedTicks); w.WriteInt64(value: music.TicksPerBeat); w.WriteString(value: music.Segment); w.WriteInt32(value: music.BeatsPerBar); });
+        writer.WriteOptional(value: interval.Music, writeValue: static (w, music) => { w.WriteUInt64(value: music.ElapsedTicks); w.WriteInt64(value: music.TicksPerBeat); w.WriteInt32(value: music.BeatsPerBar); });
     }
     /// <summary>Reads a captured interval written by <see cref="WriteInputInterval"/>.</summary>
     public static WorldInputInterval ReadInputInterval(ref WireReader reader) => new(reader.ReadUInt64(), reader.ReadUInt64(), reader.ReadUInt64(),
-        reader.ReadOptional(readValue: static (ref WireReader r) => new WorldInputMusicSegment(r.ReadUInt64(), r.ReadInt64(), r.ReadString("input music segment"), r.ReadInt32())));
+        reader.ReadOptional(readValue: static (ref WireReader r) => new WorldInputMusicClock(r.ReadUInt64(), r.ReadInt64(), r.ReadInt32())));
     /// <summary>Writes the complete barrier leaf shared by publications and checkpoints.</summary>
     public static void WriteInputSwitch(WireWriter writer, WorldInputSwitch value) {
         WriteInputInterval(writer, value.Interval);

@@ -3,16 +3,15 @@ using Puck.Assets.Documents;
 
 namespace Puck.World.Authoring;
 
-/// <summary>When an armed transition actually swaps segments, mirroring
-/// <c>Puck.Audio.Simulation.MusicTransitionBoundary</c> as a document-side, string-persisted spelling — this
-/// document layer never references the sim-side enum (a lower-rank engine-services project cannot be referenced
-/// from an authoring-time document type without inverting the dependency).</summary>
+/// <summary>Which point of the score's grid a change waits for — when an armed transition swaps segments, and when a
+/// layer whose condition holds joins — mirroring <c>Puck.Audio.Simulation.MusicTransitionBoundary</c> as a
+/// document-side, string-persisted spelling (this document layer never references the audio-side enum).</summary>
 public enum MusicTransitionBoundary {
-    /// <summary>Swaps on the same tick the condition is observed.</summary>
+    /// <summary>Changes on the same tick the condition is observed.</summary>
     Immediate,
-    /// <summary>Swaps on the next beat boundary at or after the condition is observed.</summary>
+    /// <summary>Changes on the next beat boundary at or after the condition is observed.</summary>
     BeatEnd,
-    /// <summary>Swaps on the next bar boundary at or after the condition is observed.</summary>
+    /// <summary>Changes on the next bar boundary at or after the condition is observed.</summary>
     BarEnd,
 }
 /// <summary>The authored tempo map: one beat's engine-tick length plus how many beats make a bar.</summary>
@@ -31,9 +30,9 @@ public sealed record MusicTempoDocument(int? BeatsPerBar, int TicksPerBeat);
 public sealed record MusicTransitionDocument(string To, string When, MusicTransitionBoundary? At);
 /// <summary>One authored conditional audio layer: a tune that plays as a simultaneous bed alongside the segment's own
 /// score while its condition holds — a segment can declare several, layering (an "alert" segment might always carry
-/// a percussion bed plus a brass layer that only joins while a boss body is present). Never queues or waits for a
-/// boundary like <see cref="MusicTransitionDocument"/>: a layer is level-triggered, active exactly the ticks its
-/// condition holds.</summary>
+/// a percussion bed plus a brass layer that only joins while a boss body is present). A layer is level-triggered: it
+/// sounds on the ticks its condition holds, joining on the first of them that reaches its <see cref="At"/> grid
+/// point, and leaves the tick its condition stops holding.</summary>
 /// <param name="TuneId">The referenced tune's declared name (must resolve to a sibling <c>WorldTune</c> row —
 /// validated one layer up, not here, since this document layer cannot reference that vocabulary's owner).</param>
 /// <param name="GainThousandths">The layer's authored gain in thousandths (1000 = unity), or <see langword="null"/>
@@ -42,7 +41,14 @@ public sealed record MusicTransitionDocument(string To, string When, MusicTransi
 /// <param name="When">The event token gating this layer on top of segment membership (same sense-mappable
 /// vocabulary <see cref="MusicTransitionDocument.When"/> already uses — validated one layer up), or
 /// <see langword="null"/> for "active whenever this segment is current" (the base, unconditional case).</param>
-public sealed record MusicLayerDocument(string TuneId, int? GainThousandths, string? When);
+/// <param name="At">The grid point a layer whose condition holds waits for before it joins, so its tune starts on
+/// the score's beat or bar; <see langword="null"/> joins the tick the condition first holds.</param>
+public sealed record MusicLayerDocument(
+    string TuneId,
+    int? GainThousandths,
+    string? When,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] MusicTransitionBoundary? At = null
+);
 /// <summary>One authored director embellishment: a one-shot stinger voiced the instant its condition is observed —
 /// never queued, never waiting for a beat/bar boundary like <see cref="MusicTransitionDocument"/>, and never a
 /// looping bed like <see cref="MusicLayerDocument"/>. A segment can declare several, each with its own patch (a
@@ -276,6 +282,16 @@ public static class MusicCanonicalizer {
                         errors.Add(item: new(
                             Message: "tuneId is required.",
                             Path: $"{layerPath}.tuneId"
+                        ));
+                    }
+
+                    if (
+                        (layer.At is { } layerAt) &&
+                        !Enum.IsDefined(value: layerAt)
+                    ) {
+                        errors.Add(item: new(
+                            Message: $"'{((int)layerAt)}' is not a defined boundary.",
+                            Path: $"{layerPath}.at"
                         ));
                     }
                 }

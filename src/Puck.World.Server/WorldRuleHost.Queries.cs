@@ -519,9 +519,9 @@ public sealed partial class WorldRuleHost {
             WorldQuery.ProfileCatalog => AnswerProfileCatalog(),
             WorldQuery.FindProfile find => AnswerFindProfile(query: find),
             WorldQuery.PreferredControllerProfile preferred => AnswerPreferredControllerProfile(query: preferred),
-            WorldQuery.MusicState state when (Host.Body(index: (state.Index - 1)) is not null) => new QueryAnswer(Text: Host.DescribeMusicState()),
-            WorldQuery.MusicState state => new QueryAnswer(
-            Text: $"[music.state: player {state.Index} is not an active population entry — see world.population]",
+            WorldQuery.MusicClock state when (Host.Body(index: (state.Index - 1)) is not null) => new QueryAnswer(Text: Host.DescribeMusicClock()),
+            WorldQuery.MusicClock state => new QueryAnswer(
+            Text: $"[music.clock: player {state.Index} is not an active population entry — see world.population]",
             Refused: true
         ),
             WorldQuery.InstrumentState state when (Host.Body(index: (state.Index - 1)) is not null) => new QueryAnswer(Text: Host.DescribeInstrumentState(seatSlot: (state.Index - 1))),

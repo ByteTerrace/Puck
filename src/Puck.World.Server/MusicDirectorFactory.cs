@@ -2,33 +2,32 @@ using Puck.Audio.Simulation;
 
 namespace Puck.World.Server;
 
-/// <summary>Compiles an authored music document into the sim-side <c>Puck.Audio.Simulation</c> shapes, and
-/// projects one tick's <see cref="WorldEventEdge"/> list into <see cref="MusicSenseEdge"/>s — the two document-
-/// and-vocabulary-aware conversions <c>Puck.Audio</c> itself cannot perform (it parses no document and cannot
-/// reference the project that declares <see cref="WorldEventEdge"/>).</summary>
+/// <summary>Compiles an authored music document into the <c>Puck.Audio.Simulation</c> segment graph a listener's
+/// <see cref="MusicDirector"/> steps, and names the ambient world events a recipient is told about as sense families
+/// — the document- and vocabulary-aware conversions <c>Puck.Audio</c> itself cannot perform (it parses no document
+/// and cannot reference the project that declares <see cref="WorldEventFamily"/>).</summary>
 public static class MusicDirectorFactory {
     private static MusicTransitionBoundary CompileBoundary(Puck.World.Authoring.MusicTransitionBoundary boundary) => (boundary switch {
         Puck.World.Authoring.MusicTransitionBoundary.Immediate => MusicTransitionBoundary.Immediate,
         Puck.World.Authoring.MusicTransitionBoundary.BeatEnd => MusicTransitionBoundary.BeatEnd,
         _ => MusicTransitionBoundary.BarEnd,
     });
-    // Null for a world-event family the music sense vocabulary does not name — the same open-set posture ParseFamily
-    // takes for a cue token with no edge behind it.
-    private static MusicSenseFamily? CompileFamily(WorldEventFamily family) => (family switch {
+
+    /// <summary>Gets the sense family a world event delivers to a score as, or <see langword="null"/> for an event the
+    /// score vocabulary does not name.</summary>
+    /// <param name="family">The world event's family.</param>
+    /// <returns>The sense family, or <see langword="null"/>.</returns>
+    public static MusicSenseFamily? SenseOf(WorldEventFamily family) => (family switch {
         WorldEventFamily.RegionEnter => MusicSenseFamily.RegionEnter,
         WorldEventFamily.RegionExit => MusicSenseFamily.RegionExit,
         WorldEventFamily.SeatJoin => MusicSenseFamily.SeatJoin,
-        WorldEventFamily.SeatLeave => MusicSenseFamily.SeatLeave,
-        WorldEventFamily.CollisionBegin => MusicSenseFamily.CollisionBegin,
-        WorldEventFamily.CollisionEnd => MusicSenseFamily.CollisionEnd,
-        WorldEventFamily.RouteEngaged => MusicSenseFamily.RouteEngaged,
-        WorldEventFamily.RouteDisengaged => MusicSenseFamily.RouteDisengaged,
         _ => null,
     });
 
-    /// <summary>Compiles an authored score into a sim-side segment graph. Every non-null <c>when</c> token maps to a
-    /// sense family by construction: the world schema validator refuses any token outside
-    /// <see cref="WorldAudioCue.IsMusicWhenToken"/>. The compiled layers carry their mix gains.</summary>
+    /// <summary>Compiles an authored score into a segment graph. Every non-null <c>when</c> token maps to a sense
+    /// family by construction: the world schema validator refuses any token outside
+    /// <see cref="WorldAudioCue.IsMusicWhenToken"/>. The compiled layers carry their mix gains and join grid points;
+    /// a layer that authors none joins immediately.</summary>
     /// <param name="document">The validated, normalized music document.</param>
     /// <returns>The compiled segment graph.</returns>
     public static MusicSegmentGraph CompileGraph(Puck.World.Authoring.MusicDocument document) {
@@ -56,7 +55,8 @@ public static class MusicDirectorFactory {
                     Cue: WorldAudioCue.MusicCueName(layer.When),
                     When: ((layer.When is { } when)
                     ? ParseFamily(token: when)
-                    : null)
+                    : null),
+                    At: CompileBoundary(boundary: (layer.At ?? Puck.World.Authoring.MusicTransitionBoundary.Immediate))
                 ));
             }
 
@@ -94,29 +94,4 @@ public static class MusicDirectorFactory {
         _ when WorldAudioCue.MusicCueName(token) is not null => MusicSenseFamily.RuleCue,
         _ => throw new InvalidOperationException(message: $"'{token}' has no sense-family mapping."),
     });
-    /// <summary>Projects one tick's world-scoped event edges into the audio-owned sense-edge shape, dropping the
-    /// grant-gating fields (music state is never addon-observation-filtered).</summary>
-    /// <remarks><see cref="MusicSenseFamily"/> covers a SUBSET of <see cref="WorldEventFamily"/>: an edge family the
-    /// music vocabulary does not name is skipped, never thrown on. A world-event family added without a music
-    /// counterpart must not be able to kill the tick that emits it.</remarks>
-    /// <param name="edges">This tick's <see cref="WorldEventFeed.Edges"/>.</param>
-    /// <param name="projected">The caller-owned list to fill, cleared first; the projected edges the music
-    /// vocabulary names, in the same pinned order.</param>
-    public static void ProjectSenseEdges(IReadOnlyList<WorldEventEdge> edges, List<MusicSenseEdge> projected) {
-        ArgumentNullException.ThrowIfNull(argument: projected);
-        projected.Clear();
-
-        foreach (var edge in edges) {
-            if (CompileFamily(family: edge.Family) is not { } family) {
-                continue;
-            }
-
-            projected.Add(item: new MusicSenseEdge(
-                A: edge.A,
-                B: edge.B,
-                Family: family
-            ));
-        }
-
-    }
 }

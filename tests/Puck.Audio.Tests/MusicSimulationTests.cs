@@ -159,7 +159,8 @@ public sealed class MusicDirectorTests {
                 ),
                 new MusicLayer(
                     TuneId: "danger-bed",
-                    When: MusicSenseFamily.CollisionBegin
+                    When: MusicSenseFamily.RuleCue,
+                    Cue: "danger"
                 ),
             ],
             Embellishments: [
@@ -188,11 +189,7 @@ public sealed class MusicDirectorTests {
         director.Step(
             tick: 1,
             boundary: MusicClockBoundary.None,
-            edges: [new MusicSenseEdge(
-                    A: 0,
-                    B: 0,
-                    Family: MusicSenseFamily.RegionEnter
-                )]
+            edges: [new MusicSenseEdge(Family: MusicSenseFamily.RegionEnter)]
         );
         director.Step(
             boundary: MusicClockBoundary.Beat,
@@ -234,11 +231,7 @@ public sealed class MusicDirectorTests {
         director.Step(
             tick: 1,
             boundary: MusicClockBoundary.None,
-            edges: [new MusicSenseEdge(
-                    A: 0,
-                    B: 0,
-                    Family: MusicSenseFamily.RegionEnter
-                )]
+            edges: [new MusicSenseEdge(Family: MusicSenseFamily.RegionEnter)]
         );
 
         Assert.Equal(
@@ -257,11 +250,7 @@ public sealed class MusicDirectorTests {
         director.Step(
             tick: 5,
             boundary: MusicClockBoundary.Bar,
-            edges: [new MusicSenseEdge(
-                    A: 0,
-                    B: 0,
-                    Family: MusicSenseFamily.RegionEnter
-                )]
+            edges: [new MusicSenseEdge(Family: MusicSenseFamily.RegionEnter)]
         );
 
         Assert.Equal(
@@ -280,16 +269,12 @@ public sealed class MusicDirectorTests {
         director.Step(
             tick: 1,
             boundary: MusicClockBoundary.None,
-            edges: [new MusicSenseEdge(
-                    A: 0,
-                    B: 0,
-                    Family: MusicSenseFamily.CollisionBegin
-                )]
+            edges: [new MusicSenseEdge(Family: MusicSenseFamily.RuleCue, Cue: "danger")]
         );
 
         Assert.Contains(
             expected: "danger-bed",
-            collection: director.ActiveLayerTuneIds
+            collection: director.ActiveLayers.Select(selector: static active => active.Layer.TuneId)
         );
     }
     [Fact]
@@ -304,7 +289,7 @@ public sealed class MusicDirectorTests {
 
         Assert.DoesNotContain(
             expected: "danger-bed",
-            collection: director.ActiveLayerTuneIds
+            collection: director.ActiveLayers.Select(selector: static active => active.Layer.TuneId)
         );
     }
     [Fact]
@@ -314,16 +299,12 @@ public sealed class MusicDirectorTests {
         director.Step(
             tick: 1,
             boundary: MusicClockBoundary.None,
-            edges: [new MusicSenseEdge(
-                    A: 0,
-                    B: 0,
-                    Family: MusicSenseFamily.SeatLeave
-                )]
+            edges: [new MusicSenseEdge(Family: MusicSenseFamily.RuleCue, Cue: "calm")]
         );
 
         Assert.DoesNotContain(
             expected: "danger-bed",
-            collection: director.ActiveLayerTuneIds
+            collection: director.ActiveLayers.Select(selector: static active => active.Layer.TuneId)
         );
     }
     [Fact]
@@ -333,11 +314,7 @@ public sealed class MusicDirectorTests {
         director.Step(
             tick: 1,
             boundary: MusicClockBoundary.None,
-            edges: [new MusicSenseEdge(
-                    A: 0,
-                    B: 0,
-                    Family: MusicSenseFamily.SeatJoin
-                )]
+            edges: [new MusicSenseEdge(Family: MusicSenseFamily.SeatJoin)]
         );
         director.Step(
             boundary: MusicClockBoundary.None,
@@ -357,11 +334,7 @@ public sealed class MusicDirectorTests {
         director.Step(
             tick: 1,
             boundary: MusicClockBoundary.None,
-            edges: [new MusicSenseEdge(
-                    A: 0,
-                    B: 0,
-                    Family: MusicSenseFamily.SeatJoin
-                )]
+            edges: [new MusicSenseEdge(Family: MusicSenseFamily.SeatJoin)]
         );
 
         Assert.Equal(
@@ -380,11 +353,7 @@ public sealed class MusicDirectorTests {
         director.Step(
             tick: 1,
             boundary: MusicClockBoundary.None,
-            edges: [new MusicSenseEdge(
-                    A: 0,
-                    B: 0,
-                    Family: MusicSenseFamily.RegionEnter
-                )]
+            edges: [new MusicSenseEdge(Family: MusicSenseFamily.RegionEnter)]
         );
 
         Assert.Equal(
@@ -411,11 +380,7 @@ public sealed class MusicDirectorTests {
         director.Step(
             tick: 1,
             boundary: MusicClockBoundary.None,
-            edges: [new MusicSenseEdge(
-                    A: 0,
-                    B: 0,
-                    Family: MusicSenseFamily.CollisionEnd
-                )]
+            edges: [new MusicSenseEdge(Family: MusicSenseFamily.RegionExit)]
         );
 
         Assert.Null(@object: director.LastEmbellishmentPatchId);
@@ -444,11 +409,7 @@ public sealed class MusicDirectorTests {
         director.Step(
             tick: 1,
             boundary: MusicClockBoundary.None,
-            edges: [new MusicSenseEdge(
-                    A: 0,
-                    B: 0,
-                    Family: MusicSenseFamily.RegionEnter
-                )]
+            edges: [new MusicSenseEdge(Family: MusicSenseFamily.RegionEnter)]
         );
 
         Assert.Equal(
@@ -467,11 +428,7 @@ public sealed class MusicDirectorTests {
         director.Step(
             tick: 1,
             boundary: MusicClockBoundary.Beat | MusicClockBoundary.Bar,
-            edges: [new MusicSenseEdge(
-                    A: 0,
-                    B: 0,
-                    Family: MusicSenseFamily.SeatJoin
-                )]
+            edges: [new MusicSenseEdge(Family: MusicSenseFamily.SeatJoin)]
         );
 
         Assert.Equal(
@@ -504,7 +461,7 @@ public sealed class MusicDirectorTests {
         );
         Assert.Contains(
             expected: "ambient-bed",
-            collection: director.ActiveLayerTuneIds
+            collection: director.ActiveLayers.Select(selector: static active => active.Layer.TuneId)
         );
 
         director.Step(
@@ -514,7 +471,7 @@ public sealed class MusicDirectorTests {
         );
         Assert.Contains(
             expected: "ambient-bed",
-            collection: director.ActiveLayerTuneIds
+            collection: director.ActiveLayers.Select(selector: static active => active.Layer.TuneId)
         );
     }
     [Fact]
@@ -529,11 +486,7 @@ public sealed class MusicDirectorTests {
         director.Step(
             tick: 2,
             boundary: MusicClockBoundary.None,
-            edges: [new MusicSenseEdge(
-                    A: 0,
-                    B: 0,
-                    Family: MusicSenseFamily.RegionEnter
-                )]
+            edges: [new MusicSenseEdge(Family: MusicSenseFamily.RegionEnter)]
         );
         director.Step(
             boundary: MusicClockBoundary.Bar,
@@ -547,7 +500,56 @@ public sealed class MusicDirectorTests {
         );
         Assert.DoesNotContain(
             expected: "ambient-bed",
-            collection: director.ActiveLayerTuneIds
+            collection: director.ActiveLayers.Select(selector: static active => active.Layer.TuneId)
         );
+    }
+    [Fact]
+    public void AGriddedLayerJoinsOnItsBoundaryKeepsThatJoinTickAndRejoinsOnTheNextOne() {
+        var held = new MusicSenseEdge(Family: MusicSenseFamily.RuleCue, Cue: "heat");
+        var director = new MusicDirector(graph: new MusicSegmentGraph(Segments: [
+            new MusicSegment(
+                Id: "run",
+                Transitions: [],
+                Layers: [new MusicLayer(TuneId: "heat-bed", When: MusicSenseFamily.RuleCue, Cue: "heat", At: MusicTransitionBoundary.BarEnd)]
+            ),
+        ]));
+        ulong? Joined() => director.ActiveLayers.Count == 0 ? null : director.ActiveLayers[0].JoinedTick;
+
+        // The condition holds from tick 1, but the layer waits through a beat for the bar at tick 3.
+        director.Step(tick: 1, boundary: MusicClockBoundary.None, edges: [held]);
+        Assert.Null(@object: Joined());
+        director.Step(tick: 2, boundary: MusicClockBoundary.Beat, edges: [held]);
+        Assert.Null(@object: Joined());
+        director.Step(tick: 3, boundary: MusicClockBoundary.Beat | MusicClockBoundary.Bar, edges: [held]);
+        Assert.Equal(expected: 3UL, actual: Joined());
+        director.Step(tick: 4, boundary: MusicClockBoundary.None, edges: [held]);
+        Assert.Equal(expected: 3UL, actual: Joined());
+
+        // It leaves the tick the condition stops holding, and a renewed hold waits for the next bar again.
+        director.Step(tick: 5, boundary: MusicClockBoundary.None, edges: []);
+        Assert.Null(@object: Joined());
+        director.Step(tick: 6, boundary: MusicClockBoundary.Beat, edges: [held]);
+        Assert.Null(@object: Joined());
+        director.Step(tick: 7, boundary: MusicClockBoundary.Beat | MusicClockBoundary.Bar, edges: [held]);
+        Assert.Equal(expected: 7UL, actual: Joined());
+    }
+    [Fact]
+    public void ALayerSoundingAcrossASegmentChangeKeepsItsJoinTick() {
+        var bed = new MusicLayer(TuneId: "bed", When: null, At: MusicTransitionBoundary.BarEnd);
+        var director = new MusicDirector(graph: new MusicSegmentGraph(Segments: [
+            new MusicSegment(
+                Id: "first",
+                Transitions: [new MusicTransition(ToSegmentId: "second", When: MusicSenseFamily.RuleCue, At: MusicTransitionBoundary.BeatEnd, Cue: "next")],
+                Layers: [bed]
+            ),
+            new MusicSegment(Id: "second", Transitions: [], Layers: [bed]),
+        ]));
+
+        director.Step(tick: 1, boundary: MusicClockBoundary.Bar, edges: []);
+        director.Step(tick: 2, boundary: MusicClockBoundary.None, edges: [new MusicSenseEdge(Family: MusicSenseFamily.RuleCue, Cue: "next")]);
+        director.Step(tick: 3, boundary: MusicClockBoundary.Beat, edges: []);
+
+        Assert.Equal(expected: "second", actual: director.CurrentSegmentId);
+        Assert.Equal(expected: 1UL, actual: Assert.Single(collection: director.ActiveLayers).JoinedTick);
     }
 }

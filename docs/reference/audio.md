@@ -16,22 +16,24 @@ This is presentation-adjacent state: it carries no replay/hash contract of
 its own, and its own byte-identity proofs (when they exist) are
 self-referential—two fresh runs agreeing, never a pinned historical value.
 
-`Puck.Audio.Simulation` is sim state, not presentation: `MusicClock`
+`Puck.Audio.Simulation` holds the music primitives. `MusicClock`
 (tick-denominated tempo-map position—plain integer tick accumulation, since
 an authored `ticksPerBeat` is already a whole engine-tick count with no
-fractional remainder to carry), `MusicDirector` (an event-driven segment state
-machine—a transition arms on a matching `MusicSenseEdge` this tick and
-commits on the next boundary `MusicClock` reports; a segment's conditional
-audio layers recompute whole every `Step`, level-triggered off that tick's
-edges rather than queued like a transition—`ActiveLayerTuneIds` names every
-tune active this tick; a segment's director embellishments fire instantaneously
-on a matching edge, recorded in `LastEmbellishmentPatchId`/`LastEmbellishmentTick`).
-Neither type references
-`WorldEventFeed`/`WorldEventEdge` (the project that declares them sits above
-this one in the layering)—`Puck.World.Server.MusicDirectorFactory` compiles
-an authored `puck.music.v1` document into these shapes and
-projects one tick's `WorldEventFeed.Edges` into `MusicSenseEdge`s at the
-`WorldServer.Step` call site, immediately after `Collect()`. A rhythm hit
+fractional remainder to carry) is simulation state: the authority advances it
+before the tick's rules, checkpoints it, and delivers the boundary it crossed
+with the tick's cues. `MusicDirector` is an event-driven segment state machine
+each listener runs over what it is delivered: a transition arms on a matching
+`MusicSenseEdge` and commits on the next boundary the delivered tick reports; a
+segment's conditional audio layers sound on the ticks their condition holds,
+each joining on its authored grid point (`MusicLayer.At`: the next beat, the
+next bar, or at once) and keeping its join tick while it holds, so a layer's
+tune starts on the score's grid; a segment's embellishments fire instantly on a
+matching edge, recorded in `LastEmbellishmentPatchId`/`LastEmbellishmentTick`.
+Neither type references the world's event feed (the project that declares it
+sits above this one in the layering)—`Puck.World.Server.MusicDirectorFactory`
+compiles an authored `puck.music.v1` document into the director's segment graph
+and names the ambient events (`SenseOf`) the authority discloses per recipient
+as the delivered tick's `MusicSenses`. A rhythm hit
 window is an authored `compareState` range over the `$clock:<music>:phaseError`
 world-rule operand (the signed tick distance from `MusicClock`'s current
 position to the nearest beat) rather than a dedicated grader type; the
@@ -119,8 +121,12 @@ pitch when the argument is absent or outside the pitch range.
 
 A score can use `when = "cue:phrase.ready"` in a transition, layer, or
 embellishment. The listener evaluates the condition over its own delivered
-cues. Transitions honor the score's boundary, layers use `gainThousandths`
-at the bed emitter, and embellishments fire on the matching delivery.
+cues, and the score has no copy on the authority: two seats told different cues
+hear different music. Transitions honor the score's boundary, layers use
+`gainThousandths` at the bed emitter and join on their `at` grid point
+(`BeatEnd`, `BarEnd`, or at once when it is absent), and embellishments fire on
+the matching delivery. `music.state` reports the listener's score (each layer
+as `<tune>@<joined tick>`) beside the authority's clock, and answers headless.
 `VoiceSynth` takes a free slot or replaces the quietest voice by its current
 envelope times authored gain. Equal levels replace the oldest voice first.
 
@@ -266,8 +272,9 @@ or backend row. The authoritative server references it directly.
 closure above); `dotnet test tests/Puck.Audio.Tests` for the mixer/synth and
 `MusicClock`/`MusicDirector`/`VoiceBabbler` laws. Behavioral verification runs
 the real windowed `Puck.World` and reads
-`audio.state`/`audio.emitters`/`audio.mix`/`speaker.state`/`voice.state`/`music.state`
-over stdin—there is no build-only gate for a world-audio feature. `audio.mix`
+`audio.state`/`audio.emitters`/`audio.mix`/`speaker.state`/`voice.state`
+over stdin—there is no build-only gate for a world-audio feature; `music.state`
+needs no device and answers in a headless World too. `audio.mix`
 reads what the director last handed the mixer: whether a mixer is attached, the
 live transient cues, and from the latest published snapshot the emitters in the
 mix, the synth triggers and a count per emitter kind, so a music layer joining
@@ -294,9 +301,10 @@ director embellishment fires exactly once off a matching sense edge (the
 `music.embellishment` cue token, keyed by the embellishment's own authored
 patch id—never an `audio.cues` row, since that table can only bind one
 patch per token) and that an unconditional layer stays active throughout; a
-conditional layer's own per-tick activation is proved with exact tick control
-by `MusicDirectorTests` and `MusicReplayReDerivabilityLawTests`, not
-re-proved against a canary's wall-clock-uncertain pacing.
+conditional layer's own per-tick activation and grid join are proved with
+exact tick control by `MusicDirectorTests`, and the press's score following
+its cues onto bar lines by `WorldDeliveredScoreLawTests`, not re-proved
+against a canary's wall-clock-uncertain pacing.
 
 ## Documentation
 
