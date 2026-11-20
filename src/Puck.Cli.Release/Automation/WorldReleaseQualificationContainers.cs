@@ -50,7 +50,7 @@ internal sealed class WorldReleaseQualificationDocker(TimeProvider clock) : IWor
                 "run", "--name", container, "--rm", "--network", "none", "--read-only", "--cap-drop", "ALL",
                 "--security-opt", "no-new-privileges", "--pids-limit", "256", "--memory", "4g", "--cpus", "2",
                 "--tmpfs", "/tmp:rw,nosuid,nodev,size=256m", "--mount", $"type=bind,source={fixture},target=/fixture",
-                "--entrypoint", "dotnet", image, "/puck-cli/Puck.Cli.dll", "world", "release", "exercise", "/fixture",
+                "--entrypoint", "dotnet", image, WorldSiloImageLayout.CliAssembly, "world", "release", "exercise", "/fixture",
                 "--steps", steps.ToString(provider: CultureInfo.InvariantCulture),
             ],
             cancellationToken: cancellationToken,

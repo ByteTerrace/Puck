@@ -154,6 +154,7 @@ public sealed class WorldReleaseOfficialPackageTests {
             ),
             image,
             source,
+            source,
             output
         );
         var first = File.ReadAllBytes(path: Path.Combine(
@@ -206,6 +207,7 @@ public sealed class WorldReleaseOfficialPackageTests {
             ),
             image,
             source,
+            source,
             output
         );
         Assert.Equal(
@@ -226,6 +228,7 @@ public sealed class WorldReleaseOfficialPackageTests {
                 count: 40
             ),
             image,
+            source,
             source,
             output
         ));

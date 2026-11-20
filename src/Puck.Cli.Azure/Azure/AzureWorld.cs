@@ -4,6 +4,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
+using Puck.Cli.Automation;
 using Puck.World.Server;
 
 namespace Puck.Cli.Azure;
@@ -14,11 +15,6 @@ public static partial class AzureCommand {
     /// published port to the container's interface, so neither reaches a loopback bind. Only these deployment documents
     /// name it; a local World or silo listens on loopback.</summary>
     public const string DeploymentListenAddress = "0.0.0.0";
-    /// <summary>The directory the world-silo image keeps its composed hosted documents in, inside the authored asset
-    /// layout it ships beside them (<c>src/Puck.World.Silo/Dockerfile</c>): the directory a hosted document's relative
-    /// machine content and assets resolve beside, which a silo document in the image names as its
-    /// <c>documentDirectory</c>.</summary>
-    public const string ImageWorldsDirectory = "/app/worlds";
     /// <summary>The asset package of the primary world the release prepares and the silo hosts, repository-relative.
     /// The silo image prepares the same package (<c>src/Puck.World.Silo/Dockerfile</c>), whose manifest's entry is
     /// <see cref="HostedWorldName"/>.</summary>
@@ -27,6 +23,12 @@ public static partial class AzureCommand {
     /// primary, the official build's composed root, and the deployment's configured <c>worldName</c>
     /// (<c>src/Puck.Azure.Resources/main.bicepparam</c>).</summary>
     public const string HostedWorldName = "debug";
+
+    /// <summary>Gets this checkout's copy of the asset layout the world-silo image ships at
+    /// <see cref="WorldSiloImageLayout.WorldsDirectory"/>, which the image copies from <see cref="HostedWorldSource"/>: the directory a
+    /// step on this machine validates the composed documents beside, so their relative assets resolve against the files
+    /// the deployed silo resolves them against. Resolved against the current directory, the checkout's root.</summary>
+    public static string LocalWorldsDirectory => Puck.Abstractions.PuckPaths.Normalize(path: Path.GetFullPath(path: HostedWorldSource));
 
     private static JsonObject SiloDocument(string keyFile, string owner, JsonObject store, string world, JsonNode? lifecycle = null, string? documentDirectory = null) {
         var result = new JsonObject {
@@ -157,7 +159,7 @@ public static partial class AzureCommand {
                 };
             }
             var silo = SiloDocument(
-                documentDirectory: ImageWorldsDirectory,
+                documentDirectory: WorldSiloImageLayout.WorldsDirectory,
                 keyFile: "/configuration/federation.pk8",
                 lifecycle: lifecycle,
                 owner: owner,
@@ -251,7 +253,7 @@ public static partial class AzureCommand {
                 : "--entrypoint dotnet"),
                 ["__MCP_ARGUMENTS__"] = ((mcpOptions is null)
                 ? "--silo /configuration/silo.json"
-                : "/puck-cli/Puck.Cli.dll mcp --silo /configuration/silo.json --http /configuration/mcp.json"),
+                : $"{WorldSiloImageLayout.CliAssembly} mcp --silo /configuration/silo.json --http /configuration/mcp.json"),
                 ["__SILO_DOCUMENT__"] = Convert.ToBase64String(inArray: Encoding.UTF8.GetBytes(s: silo.ToJsonString())),
                 ["__FEDERATION_KEYS__"] = Convert.ToBase64String(inArray: Encoding.UTF8.GetBytes(s: keyFiles.ToJsonString())),
                 ["__CLIENT_ID__"] = Text(value: Value(

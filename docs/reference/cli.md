@@ -428,7 +428,9 @@ application before. Exit 0 pushed, 1 the host failed, 2 an unreadable tree or
 usage error.
 
 `world release prepare` loads the validated silo inventory, requires one canonical
-composed `*.world.json` output for every owner/world row, and writes a
+composed `*.world.json` output for every owner/world row, validates each beside
+the silo's `documentDirectory` (the asset layout the documents run in, which the
+package does not carry; a silo naming none refuses a relative asset path), and writes a
 content-addressed manifest (`release.json` in the package directory unless
 `--output` names another path) after hashing those definitions and the remaining
 package artifacts. Stable owner/world identities and package paths are recorded
@@ -514,7 +516,8 @@ a retained manifest.
 `azure prepare-world-release` applies the official endpoint and delegated
 admission bindings to the staged composed worlds, then hashes the complete
 inventory. It reads the deployment outputs, `artifacts/release-source.json`, image digest,
-and `artifacts/azure/silo-worlds`. Every world is pinned with its own retained
+and `artifacts/azure/silo-worlds`, and validates the worlds beside the checkout's
+`worlds/debug`, the layout the image ships them into. Every world is pinned with its own retained
 signing key at deployment. Temporary preparation keys are never packaged.
 
 Deploy, rollback, resume, and finalization use a renewable Azure Blob lease to exclude competing

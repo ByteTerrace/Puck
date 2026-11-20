@@ -76,6 +76,7 @@ public static partial class AzureCommand {
                     context.Archive,
                     context.Authority,
                     context.Owner,
+                    LocalWorldsDirectory,
                     ct
                 ),
                 context.Clock
@@ -90,8 +91,22 @@ public static partial class AzureCommand {
         }
     }
 
+    /// <summary>Publishes each definition of a first release through an unowned authority root, after proving it admits
+    /// beside the asset layout it runs in. A retry compares exact published bytes and refuses a different definition or
+    /// any existing gameplay state.</summary>
+    /// <param name="manifest">The release whose definitions are published.</param>
+    /// <param name="archive">The archive retaining the release's files.</param>
+    /// <param name="authority">The authority store the definitions are published into.</param>
+    /// <param name="owner">The deployment's owner; every definition must belong to it.</param>
+    /// <param name="documentDirectory">The local copy of the asset layout the deployed silo resolves the documents'
+    /// relative paths beside (<see cref="LocalWorldsDirectory"/>), or <see langword="null"/> for documents that author
+    /// none.</param>
+    /// <param name="cancellationToken">The token that cancels storage reads and writes.</param>
+    /// <exception cref="InvalidDataException">A definition belongs to another owner, does not admit, or would replace
+    /// existing state or a different published definition.</exception>
+    /// <exception cref="IOException">The authority store refuses a publication.</exception>
     public static async Task InitializeWorldReleaseBootstrapAsync(WorldReleaseManifest manifest, WorldReleaseArchive archive,
-        WorldAuthorityBlobStore authority, Guid owner, CancellationToken cancellationToken) {
+        WorldAuthorityBlobStore authority, Guid owner, string? documentDirectory, CancellationToken cancellationToken) {
         _ = CliWorldVocabulary.EnsureInstalled();
         var definitions = new List<(WorldAuthorityIdentity Identity, WorldDefinition Definition)>();
 
@@ -114,6 +129,7 @@ public static partial class AzureCommand {
 
             if (!WorldDefinitionLoader.TryReadPublishable(
                 definition: out var definition,
+                documentDirectory: documentDirectory,
                 json: System.Text.Encoding.UTF8.GetString(bytes: bytes.Span),
                 reason: out var reason,
                 sourceName: row.Value
