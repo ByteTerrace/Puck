@@ -56,21 +56,9 @@ public static class WorldPrepareCommand {
     /// <param name="reason">Why the argument names no world, or empty.</param>
     /// <returns><see langword="true"/> when the argument names a world.</returns>
     public static bool TryResolvePrimary(string primary, out string entry, out string reason) {
-        entry = primary;
-        if (WorldPackageManifest.IsPackagePath(path: primary)) {
-            if (!WorldPackageManifest.TryResolveEntry(
-                entryPath: out var entryPath,
-                manifest: out _,
-                path: primary,
-                reason: out var packageReason
-            )) {
-                reason = packageReason;
-                return false;
-            }
-
-            entry = entryPath;
+        if (!WorldPackageManifest.TryResolveWorld(manifest: out _, path: primary, reason: out reason, worldPath: out entry)) {
+            return false;
         }
-
         if (!WorldDocumentName.IsSourceFile(path: entry) && !WorldDocumentName.IsDocumentFile(path: entry)) {
             reason = $"names no world: the primary world is a {WorldDocumentName.SourceSuffix} source or a {WorldDocumentName.DocumentSuffix} document.";
             return false;

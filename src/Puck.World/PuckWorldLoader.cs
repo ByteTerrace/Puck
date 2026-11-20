@@ -133,21 +133,15 @@ internal static class PuckWorldLoader {
             return false;
         }
 
-        if (WorldPackageManifest.IsPackagePath(path: path)) {
-            if (!WorldPackageManifest.TryResolveEntry(
-                entryPath: out var entryPath,
-                manifest: out var package,
-                path: path,
-                reason: out var packageReason
-            )) {
-                source = null!;
-                failure = $"[world] definition refused: {packageReason}";
-                return false;
-            }
-
-            Console.Error.WriteLine(value: $"[world] package: '{package.Id}' ({package.Name}) at {path}; entry '{package.Entry}'");
-            path = entryPath;
+        if (!WorldPackageManifest.TryResolveWorld(manifest: out var package, path: path, reason: out var packageReason, worldPath: out var worldFile)) {
+            source = null!;
+            failure = $"[world] definition refused: {packageReason}";
+            return false;
         }
+        if (package is not null) {
+            Console.Error.WriteLine(value: $"[world] package: '{package.Id}' ({package.Name}) at {path}; entry '{package.Entry}'");
+        }
+        path = worldFile;
 
         if (!path.EndsWith(
             comparisonType: StringComparison.OrdinalIgnoreCase,
