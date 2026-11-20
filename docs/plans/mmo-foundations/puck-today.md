@@ -400,20 +400,9 @@ purpose string `puck.world.tcp-admission` appears only at its declaration
 record, projection or arrival is signed anywhere **[inference]** from the
 signer list.
 
-The federation proof's subject becomes the source namespace, and the claim's
-payload must equal the bound challenge **[opened]**
-(`src/Puck.World.Protocol/Codecs/WorldAttestedAuthenticator.cs:140-147`):
-
-```csharp
-        if (
-            (claim.PayloadKind != AttestationPayloadKind.Opaque) ||
-            !challenge.SequenceEqual(other: claim.PayloadBytes.Span)
-        ) {
-            return false;
-        }
-
-        sourceAuthority = claim.Header.Subject;
-```
+The federation proof's subject becomes the source namespace. The verifier
+requires an opaque claim whose payload matches the bound challenge
+**[opened]** (`WorldAttestedAuthenticator.VerifyAsync`).
 
 The challenge binds both nonces, both transport key hashes, the direction and
 the destination namespace (`WorldFederationCodec.BindProofChallenge`,
@@ -549,21 +538,13 @@ subject-binding age ceiling and no replay horizon **[opened]**
         );
 ```
 
-A live connection is re-verified when the clock second or the admission
-policy changes, swept every second, and evicted for good when it fails
-**[opened]** (`src/Puck.World.Server/WorldPeerHost.cs:2073-2075`):
-
-```csharp
-    // Verification is repeated only when its clock second or immutable policy changes. This preserves the
-    // attestation verifier's Unix-second windows without doing signature work for every simulation tick.
-    // Once a credential fails, a later re-grant cannot revive its already-evicted session.
-```
-
-For a federation connection the re-check replays the original proof and also
-requires the namespace's arrival row to persist
-(`src/Puck.World.Server/WorldPeerHost.cs:476-489`) **[opened]**. A live
-connection therefore ends when its claim or token expires, or within a second
-of an admission edit that no longer admits it **[inference]**.
+A live connection caches its verified identity through the earliest expiry
+of its proof chain. A policy or trust change requires a fresh verification
+off the tick thread. Queued work checks expiry and the current policy when
+the row applies it. The host also checks idle connections every second and
+closes a connection whose proof has expired or whose authority is no longer
+admitted **[opened]** (`WorldPeerHost.EvictInvalidCredentialsAsync`,
+`WorldPeerHost.ExecuteAuthenticatedAsync`).
 
 ## 4. Adjacency and crossing
 
@@ -931,7 +912,7 @@ and `TryAdopt` mints from it (`:577`) **[opened]**. Nothing restores the
 resolver's map. But **[opened]**:
 
 - A continuation's generation id is narration only, never re-verified
-  (`src/Puck.World.Server/WorldInstanceHost.Transfers.cs:2331-2334`):
+  (`src/Puck.World.Server/WorldInstanceHost.Transfers.cs:2370-2373`):
 
   ```csharp
     /// <param name="FrozenGenerationId">The resolver-issued generation id the resolve produced — carried purely for

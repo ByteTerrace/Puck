@@ -238,10 +238,10 @@ public sealed class WorldPeerHost : IDisposable {
             Connection[] peers;
             lock (m_connectionsLock) { peers = [.. m_connections]; }
             foreach (var (client, credential) in m_federationConnections) {
-                if (!await credential.RefreshAsync().ConfigureAwait(false)) { CloseConnection(client); }
+                if (!await credential.RefreshAsync(refreshTrust: true).ConfigureAwait(false)) { CloseConnection(client); }
             }
             foreach (var connection in peers) {
-                if (!await connection.Credential.RefreshAsync().ConfigureAwait(false)) { CloseConnection(connection.Client); }
+                if (!await connection.Credential.RefreshAsync(refreshTrust: true).ConfigureAwait(false)) { CloseConnection(connection.Client); }
             }
         } finally {
             Volatile.Write(ref m_sweepingCredentials, 0);
@@ -1992,7 +1992,7 @@ public sealed class WorldPeerHost : IDisposable {
 
     // Network readers and queued work consult one immutable verdict. Readers and the idle timer refresh it after a trust change.
     private sealed class Credential : IDisposable {
-        private sealed record Verdict(IReadOnlyList<WorldAdmissionEntry>? Policy, VerifiedPeerIdentity Proof);
+        private sealed record Verdict(IReadOnlyList<WorldAdmissionEntry>? Policy, VerifiedPeerIdentity Proof, long VerifiedAt);
         private readonly WorldPeerHost m_host;
         private readonly Func<IReadOnlyList<WorldAdmissionEntry>?, CancellationToken, ValueTask<VerifiedPeerIdentity?>> m_verify;
         private readonly CancellationTokenSource m_lifetime;
@@ -2004,25 +2004,32 @@ public sealed class WorldPeerHost : IDisposable {
             m_verify = verify;
             m_lifetime = CancellationTokenSource.CreateLinkedTokenSource(ct);
             Token = m_lifetime.Token;
-            m_verdict = new(policy, proof);
+            m_verdict = new(policy, proof, host.m_timeProvider.GetUtcNow().ToUnixTimeSeconds());
         }
         public CancellationToken Token { get; }
         public void RequireValid() {
             if (!IsValid()) { throw new OperationCanceledException("the authenticated session credential is no longer valid"); }
         }
+        private bool WithinWindow(Verdict verdict) {
+            var now = m_host.m_timeProvider.GetUtcNow().ToUnixTimeSeconds();
+            return now >= verdict.VerifiedAt && now <= verdict.Proof.ValidThrough;
+        }
         public bool IsValid() => Volatile.Read(ref m_verdict) is { } verdict &&
             ReferenceEquals(verdict.Policy, m_host.m_server.Definition.Admission) &&
-            m_host.m_timeProvider.GetUtcNow().ToUnixTimeSeconds() <= verdict.Proof.ValidThrough && verdict.Proof.TrustIsCurrent?.Invoke() != false && !Token.IsCancellationRequested;
+            WithinWindow(verdict) && verdict.Proof.TrustIsCurrent?.Invoke() != false && !Token.IsCancellationRequested;
 
-        public async ValueTask<bool> RefreshAsync() {
+        public async ValueTask<bool> RefreshAsync(bool refreshTrust = false) {
             var prior = Volatile.Read(ref m_verdict);
             if (prior is null || Token.IsCancellationRequested) { return false; }
-            var policy = m_host.m_server.Definition.Admission;
-            if (m_host.m_timeProvider.GetUtcNow().ToUnixTimeSeconds() <= prior.Proof.ValidThrough) {
+            if (WithinWindow(prior)) {
+                if (refreshTrust && prior.Proof.RefreshTrustAsync is { } refresh) {
+                    await refresh(Token).ConfigureAwait(false);
+                }
+                var policy = m_host.m_server.Definition.Admission;
                 if (ReferenceEquals(policy, prior.Policy) && prior.Proof.TrustIsCurrent?.Invoke() != false) { return true; }
                 try {
                     if (await m_verify(policy, Token).ConfigureAwait(false) is { } through) {
-                        Interlocked.CompareExchange(ref m_verdict, new(policy, through), prior);
+                        Interlocked.CompareExchange(ref m_verdict, new(policy, through, prior.VerifiedAt), prior);
                         return IsValid();
                     }
                 } catch (OperationCanceledException) when (Token.IsCancellationRequested) { return false; }

@@ -34,7 +34,8 @@ public interface IAuthenticator {
     ValueTask<VerifiedPeerIdentity?> VerifyAsync(ReadOnlyMemory<byte> challenge, ReadOnlyMemory<byte> proof, CancellationToken ct);
 }
 /// <summary>The proof's verified namespace and last inclusive Unix second of validity.</summary>
-public sealed record VerifiedPeerIdentity(string Authority, long ValidThrough, Func<bool>? TrustIsCurrent = null);
+public sealed record VerifiedPeerIdentity(string Authority, long ValidThrough, Func<bool>? TrustIsCurrent = null,
+    Func<CancellationToken, ValueTask>? RefreshTrustAsync = null);
 
 /// <summary>Requires an authenticated transport identity to be pinned before disclosing a credential.</summary>
 public interface IRemoteIdentityVerifier {

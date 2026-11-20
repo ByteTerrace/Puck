@@ -713,7 +713,7 @@ with a retry ceiling of eight ticks **[opened]**
     public const string GlobalScopeKey = "global";
 ```
 
-and (`src/Puck.World.Server/WorldInstanceHost.Transfers.cs:613-614`):
+and (`src/Puck.World.Server/WorldInstanceHost.Transfers.cs:644-645`):
 
 ```csharp
             if (!standing.Allowed) {

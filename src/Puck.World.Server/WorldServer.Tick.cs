@@ -97,7 +97,10 @@ public sealed partial class WorldServer {
         );
     /// <inheritdoc cref="WorldTick.DrainAdministrative"/>
     [Replaces(root: typeof(StateArena))]
-    public bool DrainAdministrative() => m_tick.DrainAdministrative();
+    public bool DrainAdministrative() {
+        DrainMailbox();
+        return m_tick.DrainAdministrative();
+    }
     /// <inheritdoc cref="WorldTick.EnqueueIntent"/>
     public void EnqueueIntent(in IntentSubmission submission) => m_tick.EnqueueIntent(submission: in submission);
     /// <inheritdoc cref="WorldTick.PublishFederatedIntent"/>

@@ -25,6 +25,7 @@ public sealed class EntraWorldAuthenticator : IAuthenticator, IRemoteIdentityVer
     private readonly string m_scope;
     private readonly string m_tenant;
 
+    private OpenIdConnectConfiguration? m_observedConfiguration;
     private AccessToken m_cachedToken;
     private string? m_userId;
 
@@ -139,6 +140,20 @@ public sealed class EntraWorldAuthenticator : IAuthenticator, IRemoteIdentityVer
         if (challenge.Length != ChallengeBytes) { throw new ArgumentException(message: "Invalid federation challenge."); }
         return Encoding.UTF8.GetBytes(s: (((((Prefix + Convert.ToBase64String(challenge)) + "\n") + m_session) + "\n") + ReadClientToken()));
     }
+    private async ValueTask<OpenIdConnectConfiguration> ReadConfigurationAsync(CancellationToken ct) {
+        using var timeout = new CancellationTokenSource(MetadataTimeout, m_clock);
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, timeout.Token);
+        var configuration = await m_configuration.GetConfigurationAsync(linked.Token).ConfigureAwait(false);
+        Volatile.Write(ref m_observedConfiguration, configuration);
+        return configuration;
+    }
+    private async ValueTask RefreshTrustAsync(CancellationToken ct) {
+        try {
+            await ReadConfigurationAsync(ct).ConfigureAwait(false);
+        } catch (Exception error) when (error is HttpRequestException or IOException or InvalidOperationException or OperationCanceledException) {
+            if (!ct.IsCancellationRequested) { Volatile.Write(ref m_observedConfiguration, null); }
+        }
+    }
     /// <inheritdoc/>
     public async ValueTask<VerifiedPeerIdentity?> VerifyAsync(ReadOnlyMemory<byte> challenge, ReadOnlyMemory<byte> proof, CancellationToken ct) {
         if (proof.Length > 18000) { return null; }
@@ -166,12 +181,7 @@ public sealed class EntraWorldAuthenticator : IAuthenticator, IRemoteIdentityVer
         )
         ) { return null; }
         try {
-            using var timeout = new CancellationTokenSource(
-                delay: MetadataTimeout,
-                timeProvider: m_clock
-            );
-            using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, timeout.Token);
-            var metadata = await m_configuration.GetConfigurationAsync(linked.Token).ConfigureAwait(false);
+            var metadata = await ReadConfigurationAsync(ct).ConfigureAwait(false);
             var validation = await m_tokens.ValidateTokenAsync(
                 token: parts[2],
                 validationParameters: new TokenValidationParameters {
@@ -214,8 +224,9 @@ public sealed class EntraWorldAuthenticator : IAuthenticator, IRemoteIdentityVer
                 result: out var oid
             )
             ) { return null; }
-            return new VerifiedPeerIdentity($"{oid:D}/{session:N}", new DateTimeOffset(validation.SecurityToken.ValidTo).ToUnixTimeSeconds() - 1);
-        } catch (Exception error) when ((error is SecurityTokenException or ArgumentException or InvalidOperationException or HttpRequestException or OperationCanceledException)) {
+            return new VerifiedPeerIdentity($"{oid:D}/{session:N}", new DateTimeOffset(validation.SecurityToken.ValidTo).ToUnixTimeSeconds() - 1,
+                () => ReferenceEquals(metadata, Volatile.Read(ref m_observedConfiguration)), RefreshTrustAsync);
+        } catch (Exception error) when ((error is SecurityTokenException or ArgumentException or InvalidOperationException or HttpRequestException or IOException or OperationCanceledException)) {
             return null;
         }
     }
