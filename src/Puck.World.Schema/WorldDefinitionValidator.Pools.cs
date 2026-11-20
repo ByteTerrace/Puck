@@ -3,18 +3,9 @@ namespace Puck.World;
 public static partial class WorldDefinitionValidator {
     private static WorldRuleCompilation? ValidateCore(WorldDefinition definition, IWorldNeighbourResolver? neighbours, bool validateAdjacencyClaims, bool retainCompilation = false) =>
         ValidateCore(definition, neighbours, validateAdjacencyClaims, retainCompilation, throwOnErrors: true, errorSink: null, deferredSink: null);
-    private static bool ValidatePoolExpansion(WorldDefinition definition, bool throwOnErrors, ICollection<string>? errorSink) {
-        if (TryValidatePoolExpansion(definition: definition, reason: out var reason)) {
-            return true;
-        }
-        if (throwOnErrors) {
-            RefuseCollected(errors: [reason]);
-        }
-        errorSink?.Add(item: reason);
-        return false;
-    }
-    // Expansion precedes every consumer of State. Invalid declarations must become validation refusals,
-    // including on collecting APIs, rather than escaping from the expanded-row property midway through a walk.
+    // Expansion precedes every consumer of State (the state.expansion partition runs first and stops the run on a
+    // refusal). Invalid declarations must become validation refusals, including on collecting APIs, rather than
+    // escaping from the expanded-row property midway through a walk.
     private static bool TryValidatePoolExpansion(WorldDefinition definition, out string reason) {
         if (definition.AuthoredState.Any(predicate: row => (row is { Generated: true }))) {
             reason = "authored state rows cannot claim the generated storage marker";

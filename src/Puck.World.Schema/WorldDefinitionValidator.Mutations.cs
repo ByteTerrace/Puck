@@ -43,7 +43,11 @@ public static partial class WorldDefinitionValidator {
 
         TouchedStateScratch = null;
         try {
-            return ValidateTouchedStateRowsCore(definition: definition, reason: out reason, rowNames: rowNames, workspace: workspace);
+            var valid = ValidateTouchedStateRowsCore(definition: definition, reason: out reason, rowNames: rowNames, workspace: workspace);
+
+            // Each row the walk judged, the named rows and the rows keyed over them, is one unit validated.
+            WorldBootWork.Count(kind: WorldBootWork.Validations, amount: workspace.Seen.Count);
+            return valid;
         } finally {
             workspace.Clear();
             TouchedStateScratch = workspace;

@@ -4,40 +4,8 @@ using Puck.Maths;
 namespace Puck.World;
 
 public static partial class WorldDefinitionValidator {
-    // The prototype rows: every creation document, then every inline mesh. A mesh draws wherever its creation renders:
-    // a static placement, an animated or attached stamp, an inhabited body, a session view or a neighbour's border.
-    private static HashSet<string> ValidatePrototypes(WorldDefinition definition, IReadOnlyList<WorldPrototype> creations, HashSet<string> fontNames, bool hasTextCatalog, List<string> errors) {
-        var ids = ValidateCreations(
-            creations: creations,
-            definition: definition,
-            errors: errors,
-            fontNames: fontNames,
-            hasTextCatalog: hasTextCatalog
-        );
-
-        if (creations is null) {
-            return ids;
-        }
-
-        for (var index = 0; (index < creations.Count); index++) {
-            if (
-                (creations[index] is not { Mesh: { } mesh } creation) ||
-                (creation.Document is null)
-            ) {
-                continue;
-            }
-
-            ValidatePrototypeMesh(
-                errors: errors,
-                mesh: mesh,
-                paletteCount: (creation.Document.Palette?.Count ?? 0),
-                path: $"prototypes[{index}].mesh"
-            );
-        }
-
-        return ids;
-    }
-    // One inline mesh: at least one triangle, whole triangles, every index naming a vertex, finite vertices, no
+    // One inline mesh, which draws wherever its creation renders (a static placement, an animated or attached stamp, an
+    // inhabited body, a session view or a neighbour's border): at least one triangle, whole triangles, every index naming a vertex, finite vertices, no
     // degenerate triangle (a repeated index or zero area), and a material the creation's palette declares.
     private static void ValidatePrototypeMesh(WorldPrototypeMesh mesh, int paletteCount, string path, List<string> errors) {
         var vertices = (mesh.Vertices ?? []);

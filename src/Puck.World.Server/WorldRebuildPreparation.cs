@@ -89,7 +89,7 @@ internal sealed record WorldRebuildPreparation(WorldRebuildRequest Request, Prin
                         }
                         break;
                     case WorldInstallKind.Presentation:
-                        if (!WorldDefinitionValidator.TryValidate(prepared.Candidate, out var presentationReason, Neighbours, Machines)) {
+                        if (!WorldDefinitionValidator.TryValidateChange(after: prepared.Candidate, before: Live, compilation: out _, machines: Machines, neighbours: Neighbours, proveNeighbours: true, reason: out var presentationReason)) {
                             failure = $"cross-document load proof failed before enqueue — {presentationReason}";
                         } else {
                             reload = prepared with { Validated = true };

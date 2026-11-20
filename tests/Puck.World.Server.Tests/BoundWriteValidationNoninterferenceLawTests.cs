@@ -70,6 +70,30 @@ public sealed class BoundWriteValidationNoninterferenceLawTests {
     }
 
     [Fact]
+    public void ARecipientWriteRunsEveryCheckOfTheUnitItBindsNotItsGeometryAlone() {
+        // A mirror whose normal a public row binds: a zero normal reads as a vector, so only the placement's own mirror
+        // check, which no geometry check makes, refuses it, exactly as the authority's whole validation does.
+        var document = Document() with {
+            PlacementsRaw = new WorldPlacementsSection([
+                new WorldPlacement("marker", "piece", new DocumentVector3(System.Numerics.Vector3.Zero), 0, 1, Mirror: new WorldPlacementMirror(Bound("state.spot"), 0f)),
+            ], Policy: Fixtures.StandardAuthoring),
+        };
+        Assert.True(WorldStateDocumentValues.TryResolve(document with { StateRaw = document.StateRaw! with {
+            World = [new(CellName.Parse(candidate: "spot"), CellKind.Text, Cells: [new StateCell(StateRow.SlotKey, CellValue.Text(value: "[1,0,0]"))])],
+        } }, out document, out var resolved), resolved);
+        using var fixture = Fixtures.FreshServer(document);
+        fixture.Server.Grant(new WorldGrant(Grantee: Writer, Capability: WorldCapability.Mutate, Subject: GrantSubject.Section(WorldSection.State),
+            Exclusive: false, Budget: 64, KindMask: WorldMutationKindCatalog.KindsOf(WorldSection.State)), Principal.Console);
+        fixture.Server.Grant(new WorldGrant(Grantee: Writer, Capability: WorldCapability.Edit, Subject: GrantSubject.State("spot"),
+            Exclusive: false, KindMask: WorldMutationKindCatalog.KindsOf(WorldSection.State)), Principal.Console);
+
+        var refused = fixture.SubmitMutation(new WorldMutation.UpsertStateCell(Writer, "spot", StateRow.SlotKey.Value, 0, WorldDocumentWriteKind.Set, Text: "[0,0,0]"));
+        var applied = fixture.SubmitMutation(new WorldMutation.UpsertStateCell(Writer, "spot", StateRow.SlotKey.Value, 0, WorldDocumentWriteKind.Set, Text: "[0,1,0]"));
+
+        Assert.NotEqual(WorldMutationDecision.Applied, refused.Decision);
+        Assert.Equal(WorldMutationDecision.Applied, applied.Decision);
+    }
+    [Fact]
     public void AHiddenUnitLeftInvalidAnswersNothingToARecipientWriteIntoAnotherBoundRow() {
         var hidden = HiddenUnitRows(Document());
         Assert.NotEmpty(hidden);
