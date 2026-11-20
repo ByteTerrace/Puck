@@ -46,7 +46,7 @@ public sealed class GpuBufferPages {
     internal void OweChanged(ulong after, long offset, long bytes, GpuUploadRuns owed) {
         if ((after == m_generation) || (bytes == 0)) { return; }
         var end = (offset + bytes);
-        var last = ((int)((end - 1) / PageBytes));
+        var last = ((int)offset.LastUnitOf(bytes: bytes, unit: (long)PageBytes));
 
         for (var page = ((int)(offset / PageBytes)); (page <= last); page++) {
             if (m_generations[page] <= after) { continue; }
@@ -64,7 +64,7 @@ public sealed class GpuBufferPages {
     public Lease? TryLease(long offset, long bytes) {
         if ((offset < 0) || (bytes <= 0) || (offset > m_bytes) || (bytes > (m_bytes - offset))) { return null; }
         var first = ((int)(offset / PageBytes));
-        var last = ((int)(((offset + bytes) - 1) / PageBytes));
+        var last = ((int)offset.LastUnitOf(bytes: bytes, unit: (long)PageBytes));
         var generation = m_generation;
 
         for (var page = first; (page <= last); page++) { if (!m_writable[page]) { return null; } }
@@ -141,7 +141,7 @@ public sealed class GpuBufferPages {
             get {
                 if ((m_owner is null) || ((m_offset + m_bytes) > m_owner.m_bytes)) { return false; }
                 if (m_owner.m_generation == m_generation) { return true; }
-                var last = ((int)(((m_offset + m_bytes) - 1) / m_owner.PageBytes));
+                var last = ((int)m_offset.LastUnitOf(bytes: m_bytes, unit: (long)m_owner.PageBytes));
 
                 for (var page = ((int)(m_offset / m_owner.PageBytes)); (page <= last); page++) {
                     if (!m_owner.m_writable[page] || (m_owner.m_generations[page] > m_generation)) { return false; }

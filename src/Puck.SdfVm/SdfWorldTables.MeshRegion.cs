@@ -975,7 +975,7 @@ public sealed partial class SdfWorldTables {
 
         void Cover(long offset, long bytes) {
             if (bytes <= 0L) { return; }
-            var last = Math.Min(val1: (chunks - 1), val2: ((int)(((offset + bytes) - 1L) / chunk)));
+            var last = Math.Min(val1: (chunks - 1), val2: ((int)offset.LastUnitOf(bytes: bytes, unit: chunk)));
 
             for (var index = ((int)(offset / chunk)); (index <= last); index++) { m_meshCovered[index] = true; }
         }
