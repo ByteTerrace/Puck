@@ -9,11 +9,11 @@ public sealed partial class CompanionCrossingLawTests {
     // A checkpoint's custody records are its own: changing a captured record changes neither the live history nor what
     // another restore of the same capture derives.
     [Fact]
-    public void ACapturedCustodyHistoryIsACopy() {
+    public async Task ACapturedCustodyHistoryIsACopy() {
         using var rows = new Rows();
         var incarnation = rows.Companions[0];
 
-        _ = rows.Home.Server.AuthorizeOwnHop(destination: rows.B.Server.AuthorityIdentity, incarnations: [incarnation], key: new WorldTransferKey(SourceAuthority: rows.Home.Server.AuthorityIdentity, TransferId: 993UL));
+        _ = await rows.Home.Server.AuthorizeOwnHopAsync(destination: rows.B.Server.AuthorityIdentity, incarnations: [incarnation], key: new WorldTransferKey(SourceAuthority: rows.Home.Server.AuthorityIdentity, TransferId: 993UL));
 
         var captured = rows.Home.Server.ExecuteAuthorityOperation(operation: () => rows.Home.Server.TransferEscrow.Capture());
         var members = Assert.IsType<WorldCustodyHopMember[]>(captured.Custody.OfType<WorldCrossingRecord.Hop>().Single().Members);

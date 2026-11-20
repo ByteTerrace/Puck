@@ -79,6 +79,21 @@ public sealed partial class WorldPopulation {
         }
         entry.Generation = checked((entry.Generation + 1));
     }
+    /// <summary>Gives an inactive body index back the occupant generation it had before one landing, undoing a landing
+    /// no one observed: a destination lands a cohort only to build its arrival record, undoes it while the record is
+    /// in flight, and lands it again at the same generations once the record is durable.</summary>
+    /// <param name="index">The body index.</param>
+    /// <param name="generation">The generation the index held before the landing: one below its current one.</param>
+    /// <exception cref="InvalidOperationException">The index is active, or its generation is not one above
+    /// <paramref name="generation"/>.</exception>
+    public void RestoreGeneration(int index, int generation) {
+        var entry = m_entries[index];
+
+        if (entry.Active || (entry.Generation != checked((generation + 1)))) {
+            throw new InvalidOperationException(message: $"body:{index} at generation {entry.Generation} ({(entry.Active ? "active" : "inactive")}) cannot return to generation {generation}");
+        }
+        entry.Generation = generation;
+    }
 
     // Activate a simulated entry: re-seed its canonical pose/color/producer state from its index, then mint its own body from
     // its kit row (tuning + primary-action binding) spawned at that pose with the stored peer-source default. The

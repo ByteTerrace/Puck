@@ -15,8 +15,40 @@ internal sealed class AuthorityCrashedException : Exception {
 /// each activation fences every earlier one, and a crash point can be armed on one record kind.</summary>
 internal sealed class MemoryCrossingStore {
     private readonly List<byte[]> m_entries = [];
+    private readonly List<ulong> m_sent = [];
 
     private long m_epoch;
+    private (byte[] Encoded, WorldCrossingRecord Record, TaskCompletionSource<WorldCrossingAppend> Answer)? m_deferred;
+
+    /// <summary>Whether appends wait for <see cref="AnswerDeferred"/> instead of answering at once, as a store across a
+    /// network does.</summary>
+    public bool Defer { get; set; }
+    /// <summary>Gets the record of the append awaiting its answer, or null.</summary>
+    public WorldCrossingRecord? DeferredRecord => m_deferred?.Record;
+    /// <summary>Gets every sequence an append was sent under, in the order sent, whatever became of it.</summary>
+    public IReadOnlyList<ulong> Sent => m_sent;
+    /// <summary>Gets how many appends arrived while another was still awaiting its answer.</summary>
+    public int Overlaps { get; private set; }
+
+    /// <summary>Answers the append awaiting its answer, if any: a durable answer makes its record durable first.</summary>
+    /// <param name="durability">The answer.</param>
+    /// <returns>Whether an append was waiting.</returns>
+    public bool AnswerDeferred(WorldCrossingDurability durability = WorldCrossingDurability.Durable) {
+        if (m_deferred is not { } deferred) {
+            return false;
+        }
+        m_deferred = null;
+        if (durability == WorldCrossingDurability.Durable) {
+            m_entries.Add(item: deferred.Encoded);
+        }
+        deferred.Answer.SetResult(result: new WorldCrossingAppend(
+            Durability: durability,
+            Reason: ((durability == WorldCrossingDurability.Durable)
+                ? string.Empty
+                : $"the store answered {durability}")
+        ));
+        return true;
+    }
 
     /// <summary>The record kind whose append kills the authority before the record lands, or null.</summary>
     public Type? CrashBefore { get; set; }
@@ -56,10 +88,16 @@ internal sealed class MemoryCrossingStore {
     })];
 
     private sealed class Writer(MemoryCrossingStore store, long epoch) : IWorldCrossingLog {
-        public WorldCrossingDurability Append(in WorldCrossingEntry entry, out string reason) {
+        public ValueTask<WorldCrossingAppend> Append(in WorldCrossingEntry entry) {
             if (epoch != store.m_epoch) {
-                reason = $"activation {epoch} was superseded by activation {store.m_epoch}";
-                return WorldCrossingDurability.Refused;
+                return new(result: new WorldCrossingAppend(
+                    Durability: WorldCrossingDurability.Refused,
+                    Reason: $"activation {epoch} was superseded by activation {store.m_epoch}"
+                ));
+            }
+            store.m_sent.Add(item: entry.Sequence);
+            if (store.m_deferred is not null) {
+                store.Overlaps++;
             }
             if (store.CrashBefore == entry.Record.GetType()) {
                 throw new AuthorityCrashedException(step: $"{entry.Record.GetType().Name} before it was durable");
@@ -69,15 +107,22 @@ internal sealed class MemoryCrossingStore {
                 if (store.LostAnswerLands) {
                     store.m_entries.Add(item: WorldAuthorityCheckpointCodec.EncodeCrossingEntry(entry: in entry));
                 }
-                reason = "the store's answer was lost";
-                return store.LostAnswer;
+                return new(result: new WorldCrossingAppend(Durability: store.LostAnswer, Reason: "the store's answer was lost"));
             }
-            store.m_entries.Add(item: WorldAuthorityCheckpointCodec.EncodeCrossingEntry(entry: in entry));
+
+            var encoded = WorldAuthorityCheckpointCodec.EncodeCrossingEntry(entry: in entry);
+
+            if (store.Defer) {
+                var answer = new TaskCompletionSource<WorldCrossingAppend>(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously);
+
+                store.m_deferred = (encoded, entry.Record, answer);
+                return new(task: answer.Task);
+            }
+            store.m_entries.Add(item: encoded);
             if (store.CrashAfter == entry.Record.GetType()) {
                 throw new AuthorityCrashedException(step: $"{entry.Record.GetType().Name} after it was durable");
             }
-            reason = string.Empty;
-            return WorldCrossingDurability.Durable;
+            return new(result: WorldCrossingAppend.Durable);
         }
     }
 }

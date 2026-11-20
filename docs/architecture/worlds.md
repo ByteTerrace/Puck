@@ -1302,6 +1302,25 @@ means the store's answer was lost, so the record may or may not have landed. Aft
 record the authority records no further crossing step until it recovers, because the next record
 would take the same sequence.
 
+The authority never waits for that answer on its tick thread. A log that answers at once (an
+in-memory log) is acted on in the same step. A log across a network, such as a silo's blob store,
+answers later: the record is in flight, and the step that wrote it waits in a pending state while
+every world keeps stepping. The authority learns the answer at its next tick boundary
+(`WorldServer.SettleCrossingIfAnswered`) and finishes the step there, in one hold of its gate. Two
+invariants hold, both kept by the one door every record passes (`WorldServer.RecordCrossingHeld`):
+
+- **The sequence stays dense.** An authority has at most one record in flight. Any other step that
+  would write a record waits until it settles, and a refused record's sequence is taken by the next.
+  No checkpoint is captured while a record is in flight, since the image would hold the step's early
+  effects under a sequence that does not cover the record.
+- **A step acts only once its record is durable.** A source holds a detached cohort in doubt until its
+  departure is durable, and only then sends the commit. A destination holds a lease's slots without
+  accepting until the lease is durable. It lands a cohort only to build the arrival record, undoes that
+  landing (generations included) before the record goes out, and lands the record as written once it
+  is durable. A reservation or commit waiting on a record is decided again when the record settles
+  (`WorldServer.DecideCrossingAsync`), matched to its record by the step it opened rather than by the
+  value of the record it would build again.
+
 A source acts only on a durable record. If its departure is not durable, it aborts and keeps the
 cohort. If its settlement is not durable, the settlement stays pending until it lands. Recovery
 redoes whichever of these records did land.

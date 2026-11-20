@@ -216,6 +216,14 @@ public sealed partial class WorldInstanceHost {
             return;
         }
 
+        // A source records its crossing steps one at a time: while one of its records is in flight, the transfer waits
+        // for it, as it is, and runs at a later drain. Nothing below records before this check holds again.
+        if (source.Server.ExecuteAuthorityOperation(operation: () => source.Server.CrossingInFlight)) {
+            source.DrainedTransfers.Undrain(transferId: transferId);
+            m_pendingTransfers.Enqueue(item: transfer);
+            return;
+        }
+
         WorldPeerCall targetAuthority;
         string targetName;
         bool spawned;
@@ -227,6 +235,14 @@ public sealed partial class WorldInstanceHost {
             targetAuthority = sentTarget;
             targetName = sent.TargetName!;
             spawned = sent.Spawned;
+        } else if (transfer.Allocation is { } parkedAllocation) {
+            if (parkedAllocation.Target.Local is { } local && (local.Server.IsRetiring || m_instances.GetValueOrDefault(local.Name) != local)) {
+                NoteTransferOutcome(in transfer, source.Name, outcome: "refused-destination:destination retired while the transfer id was allocated");
+                return;
+            }
+            targetAuthority = parkedAllocation.Target;
+            targetName = parkedAllocation.TargetName;
+            spawned = parkedAllocation.Spawned;
         } else if (!TryResolveWorldPeerCall(
             authority: out targetAuthority,
             reason: out var destinationReason,
@@ -427,20 +443,54 @@ public sealed partial class WorldInstanceHost {
         WorldCustodyMintMember[] mintedCompanions = [.. reservationMembers.Where(predicate: static member => ((member.Companion is not null) && (member.Mobility is not null))).Select(selector: static member => new WorldCustodyMintMember(Home: member.Companion!.Home, Incarnation: member.Mobility!.Value.Incarnation))];
         var mintedId = transfer.TransferId;
         var unminted = ((mintedCompanions.Length > 0) && !source.Server.ExecuteAuthorityOperation(operation: () => source.Server.TransferEscrow.Custody.IsMinted(transferId: mintedId)));
+        // An allocation an earlier attempt sent has settled: a durable one already raised the allocated range (and
+        // minted its companions), so only a refused or lost one decides anything here.
+        var parkedRefusal = ((transfer.Allocation is { Step: { Outcome: not WorldCrossingDurability.Durable } parkedStep })
+            ? parkedStep.Reason
+            : null);
 
-        if ((transfer.TransferId >= source.AllocatedTransferIds) || unminted) {
+        if ((parkedRefusal is not null) || (transfer.TransferId >= source.AllocatedTransferIds) || unminted) {
             var allocated = Math.Max(
                 val1: Math.Max(val1: source.NextTransferId, val2: source.AllocatedTransferIds),
                 val2: checked((transfer.TransferId + 1UL))
             );
+            var allocationReason = parkedRefusal ?? string.Empty;
+            WorldCrossingStep? opened = null;
+            var allocation = ((parkedRefusal is not null)
+                ? WorldCrossingDurability.Refused
+                : source.Server.RecordCrossing(
+                    continuation: step => {
+                        if (step.Outcome == WorldCrossingDurability.Durable) {
+                            source.AllocatedTransferIds = Math.Max(
+                                val1: source.AllocatedTransferIds,
+                                val2: ((WorldCrossingRecord.Allocation)step.Record).Next
+                            );
+                        }
+                    },
+                    opened: out opened,
+                    reason: out allocationReason,
+                    record: new WorldCrossingRecord.Allocation(
+                        Mint: (unminted ? new WorldTransferMint(Companions: mintedCompanions, To: destinationAuthority, TransferId: transfer.TransferId) : null),
+                        Next: allocated
+                    )
+                ));
 
-            if (!source.Server.TryRecordCrossing(
-                reason: out var allocationReason,
-                record: new WorldCrossingRecord.Allocation(
-                    Mint: (unminted ? new WorldTransferMint(Companions: mintedCompanions, To: destinationAuthority, TransferId: transfer.TransferId) : null),
-                    Next: allocated
-                )
-            )) {
+            if (allocation == WorldCrossingDurability.Pending) {
+                source.DrainedTransfers.Undrain(transferId: transferId);
+                m_pendingTransfers.Enqueue(item: ((opened is null)
+                    ? transfer
+                    : (transfer with {
+                        Allocation = new ParkedAllocation(
+                            Members: members,
+                            Spawned: spawned,
+                            Step: opened,
+                            Target: targetAuthority,
+                            TargetName: targetName
+                        ),
+                    })));
+                return;
+            }
+            if (allocation != WorldCrossingDurability.Durable) {
                 var unallocated = $"'{sourceInstanceName}' could not make transfer id {transfer.TransferId} durable ({allocationReason})";
 
                 if (m_narration.HasNarrationSink) {
@@ -492,6 +542,8 @@ public sealed partial class WorldInstanceHost {
             reservationRequest = reservationRequest with { Members = reservationMembers };
         }
 
+        // The members the reservation was sent for, before its acceptance narrows them to what it leased.
+        var sentMembers = members;
         var answer = transfer.Sent?.Answer ?? targetAuthority.ReserveAsync(reservationRequest);
         if (!answer.IsCompleted) {
             source.DrainedTransfers.Undrain(transferId);
@@ -717,6 +769,25 @@ public sealed partial class WorldInstanceHost {
             }
         }
 
+        // The departure record follows the detach, so the cohort detaches only while no other record of the source is
+        // in flight (a lease or arrival it took as a destination since this transfer's first check): otherwise the
+        // transfer waits, holding its accepted reservation, and departs at a later drain.
+        if ((abortReason is null) && source.Server.ExecuteAuthorityOperation(operation: () => source.Server.CrossingInFlight)) {
+            source.DrainedTransfers.Undrain(transferId: transferId);
+            m_pendingTransfers.Enqueue(item: (transfer with {
+                Hops = null,
+                Sent = new SentReservation(
+                    Answer: answer,
+                    Members: sentMembers,
+                    Request: reservationRequest,
+                    Spawned: spawned,
+                    Target: targetAuthority,
+                    TargetName: targetName
+                ),
+            }));
+            return;
+        }
+
         // Detach every source member first, then send one cohort commit to the destination escrow. The source
         // remains the lease authority until that commit is acknowledged; a refused commit restores every body.
         var landed = new List<LandedMember>(capacity: members.Length);
@@ -881,13 +952,33 @@ public sealed partial class WorldInstanceHost {
         }
 
         var departed = false;
+        var departure = new InDoubtTransfer(
+            Transfer: transfer with { FrozenCohortSlots = [.. members], Sent = null, Hops = null, Allocation = null },
+            TargetAuthority: targetAuthority,
+            SourceAuthority: sourceAuthority,
+            TargetName: targetName,
+            Spawned: spawned,
+            SourceDeadlineTick: reservationRequest.DeadlineSourceTick,
+            Landed: landed,
+            CommitMembers: commitMembers,
+            MemberCount: members.Length
+        );
 
         if (abortReason is null) {
-            if (TryRecordDeparture(
-                departure: new InDoubtTransfer(transfer with { FrozenCohortSlots = [.. members], Sent = null, Hops = null }, targetAuthority, sourceAuthority, targetName, spawned, reservationRequest.DeadlineSourceTick, landed, commitMembers, members.Length),
+            var recorded = RecordDeparture(
+                departure: departure,
+                opened: out var departing,
                 reason: out var departureReason
-            )) {
+            );
+
+            if (recorded == WorldCrossingDurability.Durable) {
                 departed = true;
+            } else if (departing is not null) {
+                // The cohort waits detached and in doubt until its departure record settles: the reconciliation then
+                // sends the commit under the live lease, or returns the cohort if the record was not durable.
+                departure.Departure = departing;
+                m_inDoubtTransfers.Add(item: departure);
+                return;
             } else {
                 abortReason = $"'{sourceInstanceName}' could not make its departure durable ({departureReason})";
             }
@@ -904,18 +995,9 @@ public sealed partial class WorldInstanceHost {
                 // query the destination's idempotent status and either publish the committed route, retry the live
                 // lease, or restore the source after a confirmed missing/expired reservation. Never infer from a
                 // failed transport or an uncertain arrival record whether the destination applied the commit.
-                m_inDoubtTransfers.Add(item: new InDoubtTransfer(
-                    Transfer: transfer with { FrozenCohortSlots = [.. members], Sent = null, Hops = null },
-                    TargetAuthority: targetAuthority,
-                    SourceAuthority: sourceAuthority,
-                    TargetName: targetName,
-                    Spawned: spawned,
-                    SourceDeadlineTick: reservationRequest.DeadlineSourceTick,
-                    Landed: landed,
-                    CommitMembers: commitMembers,
-                    MemberCount: members.Length,
-                    CommitAnswer: step == WorldTransferStep.Pending ? commit : null
-                ));
+                m_inDoubtTransfers.Add(item: departure with {
+                    CommitAnswer = ((step == WorldTransferStep.Pending) ? commit : null),
+                });
                 if (step != WorldTransferStep.Pending && m_narration.HasNarrationSink) {
                     m_narration.Narrate(
                         channel: "world.transfer",
@@ -931,89 +1013,96 @@ public sealed partial class WorldInstanceHost {
         }
 
         if (abortReason is not null) {
-            try {
-                targetAuthority.Abort(
-                    sourceAuthority: sourceAuthority,
-                    transferId: transfer.TransferId
-                );
-            } catch (Exception exception) when ((exception is IOException or System.Net.Sockets.SocketException or OperationCanceledException)) {
-                // No ambiguous commit reaches this arm. A failed abort leaves only the expiring destination lease.
-            }
-            var rollback = new InDoubtTransfer(transfer with { FrozenCohortSlots = [.. members], Sent = null, Hops = null }, targetAuthority, sourceAuthority, targetName, spawned, reservationRequest.DeadlineSourceTick, landed, commitMembers, members.Length, RollbackOnly: true);
-            // A companion whose title an install released while its departure was in doubt is retired, never restored.
-            var retired = (departed
-                ? InstallRetired(commits: commitMembers, landed: [], source: source)
-                : []);
-            var kept = Enumerable.Range(start: 0, count: commitMembers.Count).Where(predicate: ordinal => !retired.Contains(value: MemberIdAt(commits: commitMembers, ordinal: ordinal))).ToArray();
-
-            // A departure already made durable is settled home before the cohort returns, so a restart redoes the
-            // return instead of asking the destination again.
-            var settled = (!departed || TrySettle(arrived: false, pending: rollback, retired: retired));
-
-            if (!settled) {
-                m_inDoubtTransfers.Add(item: rollback);
-            }
-            if (!settled || !RestoreOrRetain(
-                commits: [.. kept.Select(selector: ordinal => commitMembers[ordinal])],
-                members: [.. kept.Select(selector: ordinal => landed[ordinal])],
-                pending: rollback,
-                source: source
-            )) {
-                if (m_narration.HasNarrationSink) {
-                    m_narration.Narrate(
-                        channel: "world.transfer",
-                        text: $"[world.transfer: transfer={transferId} ROLLBACK-PENDING ({abortReason}) — {landed.Count} source member(s) retain recovery state]"
-                    );
-                }
-                return;
-            }
-
-            if (m_narration.HasNarrationSink) {
-                m_narration.Narrate(
-                    channel: "world.transfer",
-                    text: $"[world.transfer: transfer={transferId} ABORTED ({abortReason}) — every landed member returned to '{sourceInstanceName}' at its exact source pose]"
-                );
-            }
-
-            if (spawned) {
-                ReapIfEmpty(name: targetName);
-            }
-
-            NoteTransferOutcome(
-                transfer: in transfer,
-                sourceName: transfer.SourceInstance,
-                target: targetAuthority,
-                outcome: $"aborted:{abortReason}"
-            );
-            // The abort above already restored every member to its exact source pose — the party-atomicity contract.
-            // A crossing abort then clamps inside on top of that restore, because the restored pose is the pose that
-            // just left through the boundary.
-            CloseAdjacencyAfterRefusal(
-                reason: abortReason,
+            AbortDeparture(
+                abortReason: abortReason,
+                departed: departed,
+                departure: departure,
+                source: source,
                 transfer: in transfer
             );
-
             return;
         }
 
-        var confirmed = new InDoubtTransfer(
-            transfer with { FrozenCohortSlots = [.. members], Sent = null, Hops = null },
-            targetAuthority,
-            sourceAuthority,
-            targetName,
-            spawned,
-            reservationRequest.DeadlineSourceTick,
-            landed,
-            commitMembers,
-            members.Length,
-            CommitConfirmed: true
-        );
+        var confirmed = departure with { CommitConfirmed = true };
 
         m_inDoubtTransfers.Add(item: confirmed);
         if (TryPublishCommittedTransfer(pending: confirmed)) {
             m_inDoubtTransfers.Remove(item: confirmed);
             CompleteCommittedTransfer(pending: confirmed);
         }
+    }
+    // Ends a transfer whose cohort does not depart after all, because its commit was refused or its departure record
+    // was not durable: the destination's lease is let go, a durable departure is settled home first, and every member
+    // returns to the source at its exact pose, or stays owed to it. `transfer` is the transfer whose outcome and
+    // adjacency the abort reports.
+    private void AbortDeparture(InDoubtTransfer departure, WorldInstance source, in PendingTransfer transfer, string abortReason, bool departed) {
+        var targetAuthority = departure.TargetAuthority!.Value;
+        var transferId = transfer.TransferId;
+        var sourceInstanceName = transfer.SourceInstance;
+        var landed = departure.Landed;
+        var commitMembers = departure.CommitMembers;
+
+        try {
+            targetAuthority.Abort(
+                sourceAuthority: departure.SourceAuthority,
+                transferId: transferId
+            );
+        } catch (Exception exception) when ((exception is IOException or System.Net.Sockets.SocketException or OperationCanceledException)) {
+            // No ambiguous commit reaches this arm. A failed abort leaves only the expiring destination lease.
+        }
+        var rollback = departure with { RollbackOnly = true };
+        // A companion whose title an install released while its departure was in doubt is retired, never restored.
+        var retired = (departed
+            ? InstallRetired(commits: commitMembers, landed: [], source: source)
+            : []);
+        var kept = Enumerable.Range(start: 0, count: commitMembers.Count).Where(predicate: ordinal => !retired.Contains(value: MemberIdAt(commits: commitMembers, ordinal: ordinal))).ToArray();
+
+        // A departure already made durable is settled home before the cohort returns, so a restart redoes the
+        // return instead of asking the destination again.
+        var settled = (!departed || TrySettle(arrived: false, pending: rollback, retired: retired));
+
+        if (!settled) {
+            m_inDoubtTransfers.Add(item: rollback);
+        }
+        if (!settled || !RestoreOrRetain(
+            commits: [.. kept.Select(selector: ordinal => commitMembers[ordinal])],
+            members: [.. kept.Select(selector: ordinal => landed[ordinal])],
+            pending: rollback,
+            source: source
+        )) {
+            if (m_narration.HasNarrationSink) {
+                m_narration.Narrate(
+                    channel: "world.transfer",
+                    text: $"[world.transfer: transfer={transferId} ROLLBACK-PENDING ({abortReason}) — {landed.Count} source member(s) retain recovery state]"
+                );
+            }
+            return;
+        }
+
+        if (m_narration.HasNarrationSink) {
+            m_narration.Narrate(
+                channel: "world.transfer",
+                text: $"[world.transfer: transfer={transferId} ABORTED ({abortReason}) — every landed member returned to '{sourceInstanceName}' at its exact source pose]"
+            );
+        }
+
+        if (departure.Spawned) {
+            ReapIfEmpty(name: departure.TargetName);
+        }
+
+        NoteTransferOutcome(
+            transfer: in transfer,
+            sourceName: transfer.SourceInstance,
+            target: targetAuthority,
+            outcome: $"aborted:{abortReason}"
+        );
+        // The abort above already restored every member to its exact source pose — the party-atomicity contract.
+        // A crossing abort then clamps inside on top of that restore, because the restored pose is the pose that
+        // just left through the boundary.
+        CloseAdjacencyAfterRefusal(
+            reason: abortReason,
+            transfer: in transfer
+        );
     }
     // The candidate cohort a set of local seats resolves as — read live off the server, shared by every resolver
     // call this file makes (the per-hit TryDeriveScopeKey probe and the per-group TryResolve mint/reuse alike).
@@ -1420,6 +1509,8 @@ public sealed partial class WorldInstanceHost {
 
             if (transfer.Sent is { } sent) {
                 foreach (var slot in sent.Members) { held[slot] = transfer.TransferId; }
+            } else if (transfer.Allocation is { } parked) {
+                foreach (var slot in parked.Members) { held[slot] = transfer.TransferId; }
             } else if (transfer.FrozenCohortSlots is { } frozen) {
                 foreach (var slot in frozen) {
                     held[slot] = transfer.TransferId;
@@ -2011,7 +2102,8 @@ public sealed partial class WorldInstanceHost {
         var batchCount = m_pendingTransfers.Count;
 
         for (var index = 0; ((index < batchCount) && m_pendingTransfers.TryDequeue(result: out var transfer)); index++) {
-            if (transfer.Sent?.Answer is { IsCompleted: false } || transfer.Hops?.Any(question => !question.Answer.IsCompleted) == true) {
+            if (transfer.Sent?.Answer is { IsCompleted: false } || transfer.Hops?.Any(question => !question.Answer.IsCompleted) == true ||
+                transfer.Allocation is { Step.IsSettled: false }) {
                 m_pendingTransfers.Enqueue(transfer);
                 continue;
             }
@@ -2419,6 +2511,8 @@ public sealed partial class WorldInstanceHost {
     /// <param name="Hops">Companion title replies outstanding for the frozen reservation members.</param>
     /// <param name="Sent">The reservation an earlier attempt sent and got no decided answer to, which this attempt sends
     /// again unchanged; <see langword="null"/> for an attempt that builds its own.</param>
+    /// <param name="Allocation">The allocation record an earlier attempt sent and the source's log had not answered,
+    /// with the members and destination that attempt held; <see langword="null"/> for an attempt that sent none.</param>
     private readonly record struct PendingTransfer(
         string SourceInstance,
         TransferScope Scope,
@@ -2450,8 +2544,14 @@ public sealed partial class WorldInstanceHost {
         IReadOnlyList<WorldEntityAddress?>? Travellers = null,
         bool CompanionReturn = false,
         HopQuestion[]? Hops = null,
-        SentReservation? Sent = null
+        SentReservation? Sent = null,
+        ParkedAllocation? Allocation = null
     );
+    // An allocation record in flight to the source's log, and what the attempt that sent it held: the transfer waits,
+    // holding these members and this destination, and resumes at the drain after the record settles. The record's
+    // durable effect (the source's allocated id range) is applied when it settles; the resumed attempt only reads the
+    // fate.
+    private sealed record ParkedAllocation(WorldCrossingStep Step, int[] Members, WorldPeerCall Target, string TargetName, bool Spawned);
     // A reservation already sent whose answer never came back (a lost request or reply, or a destination that could not
     // decide yet): the retry sends this same request for these same source slots, never a recomputed one, so a lease the
     // destination already holds answers it and no hop is asked for again.
@@ -2507,5 +2607,11 @@ public sealed partial class WorldInstanceHost {
         // The settlement this source wrote ahead of acknowledging or restoring the cohort.
         public bool SettlementRecorded { get; set; }
         public bool SettlementFailureReported { get; set; }
+        // The departure record in flight for this cohort: until it settles the transfer is neither asked about nor
+        // committed, and the cohort stays detached.
+        public WorldCrossingStep? Departure { get; set; }
+        // The settlement record in flight for this transfer; the next settle attempt reads its fate instead of sending
+        // another.
+        public WorldCrossingStep? Settlement { get; set; }
     }
 }

@@ -5,12 +5,13 @@ namespace Puck.World.Silo;
 
 public sealed partial class WorldSiloHost {
     // One activation's crossing log: each record joins the row's publication queue behind every checkpoint and
-    // mutation already queued, is appended under the activation's fence, and is answered only once the store says
-    // what became of it. The store refuses an append from an activation its fence has closed, so that activation can
-    // never claim a crossing step. A root compare-and-swap whose outcome the store could not reconcile is Uncertain:
-    // the record may be durable, and the activation is blocked until a recovery reads the log back.
+    // mutation already queued, is appended under the activation's fence, and is answered once the store says what
+    // became of it. The step thread never waits for that answer: the row's authority parks the step and settles it at
+    // a later tick boundary. The store refuses an append from an activation its fence has closed, so that activation
+    // can never claim a crossing step. A root compare-and-swap whose outcome the store could not reconcile is
+    // Uncertain: the record may be durable, and the activation is blocked until a recovery reads the log back.
     private sealed class RowCrossingLog(WorldSiloHost host, WorldAuthorityIdentity identity, RowBookkeeping bookkeeping, WorldServer server) : IWorldCrossingLog {
-        public WorldCrossingDurability Append(in WorldCrossingEntry entry, out string reason) {
+        public ValueTask<WorldCrossingAppend> Append(in WorldCrossingEntry entry) {
             // The caller holds the row's authority gate, so the engine clock it reads here is the step boundary the
             // record describes.
             var journal = new WorldAuthorityJournalEntry(
@@ -20,7 +21,7 @@ public sealed partial class WorldSiloHost {
                 Tick: entry.Tick
             );
             host.FlushJournal(bookkeeping);
-            Task<(WorldCrossingDurability Durability, string Reason)> append;
+            Task<WorldCrossingAppend> append;
 
             lock (bookkeeping.TailGate) {
                 var previous = bookkeeping.JournalTail;
@@ -33,22 +34,30 @@ public sealed partial class WorldSiloHost {
                 ));
                 bookkeeping.JournalTail = append;
             }
-
-            (var durability, reason) = append.GetAwaiter().GetResult();
-            if (durability == WorldCrossingDurability.Durable) {
-                Interlocked.Increment(location: ref bookkeeping.JournalAdmitted);
-                Interlocked.Add(location1: ref bookkeeping.JournalAdmittedBytes, value: journal.Encoded.Length);
-            }
-            return durability;
+            return new ValueTask<WorldCrossingAppend>(task: append);
         }
     }
 
-    private async Task<(WorldCrossingDurability Durability, string Reason)> AppendCrossingAfterAsync(Task previous, RowBookkeeping bookkeeping, WorldAuthorityIdentity identity, WorldAuthorityJournalEntry entry) {
+    private async Task<WorldCrossingAppend> AppendCrossingAfterAsync(Task previous, RowBookkeeping bookkeeping, WorldAuthorityIdentity identity, WorldAuthorityJournalEntry entry) {
+        var answer = await AppendCrossingCoreAsync(
+            bookkeeping: bookkeeping,
+            entry: entry,
+            identity: identity,
+            previous: previous
+        ).ConfigureAwait(continueOnCapturedContext: false);
+
+        if (answer.Durability == WorldCrossingDurability.Durable) {
+            Interlocked.Increment(location: ref bookkeeping.JournalAdmitted);
+            Interlocked.Add(location1: ref bookkeeping.JournalAdmittedBytes, value: entry.Encoded.Length);
+        }
+        return answer;
+    }
+    private async Task<WorldCrossingAppend> AppendCrossingCoreAsync(Task previous, RowBookkeeping bookkeeping, WorldAuthorityIdentity identity, WorldAuthorityJournalEntry entry) {
         await ObservePersistenceAsync(
             ct: CancellationToken.None,
             operation: previous
         ).ConfigureAwait(continueOnCapturedContext: false);
-        if (bookkeeping.PersistenceBlocked) { return (WorldCrossingDurability.Refused, "this activation must recover before publishing again"); }
+        if (bookkeeping.PersistenceBlocked) { return new(Durability: WorldCrossingDurability.Refused, Reason: "this activation must recover before publishing again"); }
 
         WorldAuthorityStoreOutcome outcome;
 
@@ -61,7 +70,7 @@ public sealed partial class WorldSiloHost {
             ).ConfigureAwait(continueOnCapturedContext: false);
         } catch (Exception exception) {
             // The store reconciles its own commit point, so a throw escapes only before the record could land.
-            return (WorldCrossingDurability.Refused, $"the authority store did not take the record ({exception.Message})");
+            return new(Durability: WorldCrossingDurability.Refused, Reason: $"the authority store did not take the record ({exception.Message})");
         }
         try {
             ObservePublication(
@@ -69,12 +78,12 @@ public sealed partial class WorldSiloHost {
                 outcome: outcome
             );
         } catch (InvalidDataException exception) {
-            return (WorldCrossingDurability.Uncertain, exception.Message);
+            return new(Durability: WorldCrossingDurability.Uncertain, Reason: exception.Message);
         }
         return (outcome.Kind switch {
-            WorldAuthorityStoreOutcomeKind.Ok => (WorldCrossingDurability.Durable, string.Empty),
-            WorldAuthorityStoreOutcomeKind.RecoveryRequired => (WorldCrossingDurability.Uncertain, $"the authority store could not say whether it took the record ({outcome.Detail})"),
-            _ => (WorldCrossingDurability.Refused, $"the authority store refused the record ({outcome.Kind}: {outcome.Detail})"),
+            WorldAuthorityStoreOutcomeKind.Ok => WorldCrossingAppend.Durable,
+            WorldAuthorityStoreOutcomeKind.RecoveryRequired => new(Durability: WorldCrossingDurability.Uncertain, Reason: $"the authority store could not say whether it took the record ({outcome.Detail})"),
+            _ => new(Durability: WorldCrossingDurability.Refused, Reason: $"the authority store refused the record ({outcome.Kind}: {outcome.Detail})"),
         });
     }
     // Replay the publication order after admission and host-slice restore. A mutation can change the spawn,
@@ -119,6 +128,53 @@ public sealed partial class WorldSiloHost {
         }
         reason = string.Empty;
         return true;
+    }
+    // Suspends ingress to each named row and freezes it on the pump, then waits for the log to answer any crossing
+    // record a frozen row still has in flight: the final capture that follows settles an answered record before it
+    // images the row, and a frozen row sends no further record. Draining marks the silo draining in the same pump action.
+    private async Task FreezeRowsAsync(string[] worldIds, CancellationToken ct, bool draining = false) {
+        var frozen = new TaskCompletionSource<Task[]>(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously);
+
+        Post(action: () => {
+            try {
+                ct.ThrowIfCancellationRequested();
+                if (draining) {
+                    Volatile.Write(
+                        location: ref m_draining,
+                        value: 1
+                    );
+                }
+                var answers = new List<Task>(capacity: worldIds.Length);
+
+                foreach (var worldId in worldIds) {
+                    if (
+                        !Instances.TryGet(instance: out var row, name: worldId) ||
+                        (row is null) ||
+                        (draining && m_rows.TryGetValue(key: worldId, value: out var bookkeeping) && bookkeeping.Released)
+                    ) {
+                        continue;
+                    }
+                    row.Door?.SuspendIngress();
+                    row.Server.FreezeForRetirement();
+                    answers.Add(item: row.Server.CrossingAnswered);
+                }
+                frozen.TrySetResult(result: [.. answers]);
+            } catch (OperationCanceledException) when (ct.IsCancellationRequested) {
+                frozen.TrySetCanceled(cancellationToken: ct);
+            } catch (Exception error) {
+                frozen.TrySetException(exception: error);
+            }
+        });
+
+        var answered = await frozen.Task.WaitAsync(cancellationToken: ct).ConfigureAwait(continueOnCapturedContext: false);
+
+        // A failed answer still counts as an answer: the capture settles it as uncertain.
+        foreach (var answer in answered) {
+            try {
+                await answer.WaitAsync(cancellationToken: ct).ConfigureAwait(continueOnCapturedContext: false);
+            } catch (Exception) when (!ct.IsCancellationRequested) {
+            }
+        }
     }
     // Runs on the mailbox: an activation that admitted its row but cannot finish leaves no row and no bookkeeping.
     private void DiscardActivation(WorldInstance row) {

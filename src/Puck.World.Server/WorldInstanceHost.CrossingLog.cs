@@ -61,17 +61,19 @@ public sealed partial class WorldInstanceHost {
         );
     }
     // Written ahead of the commit: once the destination may hold the cohort, a restart of this source must find the
-    // cohort in doubt rather than at home.
-    private bool TryRecordDeparture(InDoubtTransfer departure, out string reason) {
+    // cohort in doubt rather than at home. A departure in flight opens a step the cohort waits on.
+    private WorldCrossingDurability RecordDeparture(InDoubtTransfer departure, out WorldCrossingStep? opened, out string reason) {
         if (!m_instances.TryGetValue(
             key: departure.Transfer.SourceInstance,
             value: out var source
         )) {
+            opened = null;
             reason = $"no instance named '{departure.Transfer.SourceInstance}'";
-            return false;
+            return WorldCrossingDurability.Refused;
         }
 
-        return source.Server.TryRecordCrossing(
+        return source.Server.RecordCrossing(
+            opened: out opened,
             reason: out reason,
             record: new WorldCrossingRecord.Departure(Transfer: CaptureInDoubt(pending: departure))
         );
@@ -81,9 +83,23 @@ public sealed partial class WorldInstanceHost {
     // that does not land keeps the transfer where it is, and the next drain tries again.
     // A commit member's request-local id: the one it carries, or its ordinal.
     private static int MemberIdAt(IReadOnlyList<WorldTransferCommitMember> commits, int ordinal) => ((commits[ordinal].MemberId < 0) ? ordinal : commits[ordinal].MemberId);
+    // A settlement in flight is matched by the step this transfer holds, never by the settlement it would build now:
+    // the next attempt reads that step's fate, and builds a new record only after a refused or lost one.
     private bool TrySettle(InDoubtTransfer pending, bool arrived, IReadOnlyList<int>? landed = null, IReadOnlyList<int>? retired = null) {
         if (pending.SettlementRecorded) {
             return true;
+        }
+        if (pending.Settlement is { } inFlight) {
+            if (!inFlight.IsSettled) {
+                return false;
+            }
+            pending.Settlement = null;
+            if (inFlight.Outcome == WorldCrossingDurability.Durable) {
+                pending.SettlementRecorded = true;
+                return true;
+            }
+            NoteSettlementFailure(arrived: arrived, pending: pending, reason: inFlight.Reason);
+            return false;
         }
         if (!m_instances.TryGetValue(
             key: pending.Transfer.SourceInstance,
@@ -108,7 +124,8 @@ public sealed partial class WorldInstanceHost {
             }
         }
 
-        if (!source.Server.TryRecordCrossing(
+        var durability = source.Server.RecordCrossing(
+            opened: out var opened,
             reason: out var reason,
             record: new WorldCrossingRecord.Settlement(
                 Forwarded: forwarded,
@@ -120,24 +137,33 @@ public sealed partial class WorldInstanceHost {
                 Retired: [.. (retired ?? [])],
                 TransferId: pending.Transfer.TransferId
             )
-        )) {
-            if (
-                !pending.SettlementFailureReported &&
-                m_narration.HasNarrationSink
-            ) {
-                m_narration.Narrate(
-                    channel: "world.transfer",
-                    text: $"[world.transfer: transfer={pending.Transfer.TransferId} SETTLEMENT-PENDING — the {(arrived
-                        ? "arrival"
-                        : "return")} could not be made durable ({reason}); recovery state retained]"
-                );
-            }
-            pending.SettlementFailureReported = true;
+        );
+
+        if (durability == WorldCrossingDurability.Durable) {
+            pending.SettlementRecorded = true;
+            return true;
+        }
+        if (durability == WorldCrossingDurability.Pending) {
+            // In flight (this record, or another this source sent first): a later drain settles it.
+            pending.Settlement = opened;
             return false;
         }
-
-        pending.SettlementRecorded = true;
-        return true;
+        NoteSettlementFailure(arrived: arrived, pending: pending, reason: reason);
+        return false;
+    }
+    private void NoteSettlementFailure(InDoubtTransfer pending, bool arrived, string reason) {
+        if (
+            !pending.SettlementFailureReported &&
+            m_narration.HasNarrationSink
+        ) {
+            m_narration.Narrate(
+                channel: "world.transfer",
+                text: $"[world.transfer: transfer={pending.Transfer.TransferId} SETTLEMENT-PENDING — the {(arrived
+                    ? "arrival"
+                    : "return")} could not be made durable ({reason}); recovery state retained]"
+            );
+        }
+        pending.SettlementFailureReported = true;
     }
 
     /// <summary>Redoes, in order, every crossing record <paramref name="row"/>'s restored checkpoint does not reflect:

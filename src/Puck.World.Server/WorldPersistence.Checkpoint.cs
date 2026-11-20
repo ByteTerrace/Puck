@@ -640,6 +640,19 @@ public sealed partial class WorldPersistence {
 
                 return false;
             }
+            // An image taken while a crossing record is in flight would hold its step's early effects (a detached cohort,
+            // a held lease) under a sequence that does not cover the record. One the log has answered settles first.
+            Host.SettleCrossingIfAnswered();
+            if (Host.CrossingInFlight) {
+                checkpoint = null;
+                reason = $"a crossing record is in flight at sequence {Host.TransferEscrow.CrossingSequence} — retry at the next master boundary";
+                return false;
+            }
+            if (Host.UnappliedCrossing is { } unapplied) {
+                checkpoint = null;
+                reason = $"crossing record {unapplied} is durable but this activation could not carry it out; recover from the crossing log";
+                return false;
+            }
             if (Host.Tick.ExecutionInterrupted) {
                 checkpoint = null;
                 reason = "an interrupted guest left an incomplete tick; recover from the last durable checkpoint";

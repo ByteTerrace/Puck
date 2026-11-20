@@ -214,17 +214,19 @@ public sealed partial class WorldTick {
             reason = "closed rewind group refuses an external transfer"; return WorldTransferStatus.Missing;
         }
         var resolvedReason = string.Empty;
-        var status = Host.ExecuteAuthorityOperation(operation: () => Host.TransferEscrow.Commit(
+        // A commit waiting on a crossing record in flight is decided again when it settles: it is not uncertain.
+        var (status, waiting) = Host.ExecuteAuthorityOperation(operation: () => (Host.TransferEscrow.Commit(
             confirmed: confirmed,
             members: members,
             reason: out resolvedReason,
             sourceAuthority: sourceAuthority,
             transferId: transferId
-        ));
+        ), Host.CrossingInFlight));
 
         reason = resolvedReason;
         if (
             (status == WorldTransferStatus.Uncertain) &&
+            !waiting &&
             Host.Output.HasNarrationSink
         ) {
             Host.Output.Narrate(

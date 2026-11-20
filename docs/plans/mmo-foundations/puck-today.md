@@ -602,21 +602,26 @@ incarnations itself **[inference]** from the search.
 
 ### The crossing log and which hosts install one
 
-The log interface **[opened]** (`src/Puck.World.Server/WorldCrossingRecord.cs:171-174`):
+The log interface **[opened]** (`src/Puck.World.Server/WorldCrossingRecord.cs:185-192`):
 
 ```csharp
 /// <summary>The durable log an authority writes its crossing records ahead through. An implementation answers only
 /// once it knows what became of the record, and refuses an append from an activation its store has fenced off, so a
 /// superseded authority can never claim a step its successor will not recover. An authority with no log installed
-/// records nothing and keeps no crossing beyond its own process.</summary>
+/// records nothing and keeps no crossing beyond its own process. The authority never blocks on an answer: an append
+/// that completes synchronously is acted on at once, and one that does not parks its step until the answer arrives
+/// (<see cref="WorldServer.RecordCrossing"/>). The authority sends at most one record at a time, so the sequence stays
+/// dense whatever the log answers.</summary>
 public interface IWorldCrossingLog {
 ```
 
 `WorldServer.InstallCrossingLog` has one caller, the silo, which installs a
-`RowCrossingLog` per activation (`src/Puck.World.Silo/WorldSiloHost.cs:1474-1479`)
-**[opened]**. Its append blocks until the store answers
-(`src/Puck.World.Silo/WorldSiloHost.Crossings.cs:24-37`) **[opened]**. The
-desktop installs none (`docs/architecture/worlds.md:1295-1296`) **[opened]**.
+`RowCrossingLog` per activation (`WorldSiloHost.cs`) **[opened]**. Its append
+returns the store's answer as a task the step thread never waits on
+(`src/Puck.World.Silo/WorldSiloHost.Crossings.cs:13-37`) **[opened]**: the row's
+authority parks the step that wrote the record and settles it at a later tick
+boundary. The desktop installs none (`docs/architecture/worlds.md`, the crossing
+log's hosts) **[opened]**.
 
 ## 5. Federation
 
