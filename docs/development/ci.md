@@ -994,8 +994,11 @@ Docker and the runtime are ready.
 `puck azure deploy-world-platform` creates the
 runtime identity and its scoped grants. `puck azure prepare-world-release` binds
 the official endpoint and admission policy before hashing every composed world.
-`puck world release deploy artifacts/world-release` verifies this package and retains exact files, versioned
-Key Vault deployment inputs, and the compiled compute template. It protects the
+`puck world release deploy artifacts/world-release` verifies this package and retains its exact files and its
+deployment inputs (the compute parameters, the compiled compute template and the rendered bootstrap) as immutable
+objects in the owner's private release content store (`WorldReleaseDeploymentStore`). A versioned Key Vault secret
+holds only the hosted worlds' signing keys and the inputs' content pin, so its size grows with the world count, not
+with the bootstrap or template. It protects the
 source and target ACR manifests from writes and deletion, checks their readability,
 and pulls both digests for qualification using temporary Docker credentials.
 On a pipeline retry, container publication verifies and reuses the existing
@@ -1196,8 +1199,10 @@ exclusive world ownership, eligible placement, and replacement capacity.
 The silo identity `bytrcidp008` can read only `world-silo` in ACR and has a custom
 `Puck World Store` role on its own blob container: container read/create plus
 blob read/write, with no delete or role-management grant. CI retains its signing
-key in Key Vault and injects it through protected VM extension settings into a private mounted file; the runtime needs no vault
-permissions. CI temporarily admits its single runner IPv4 address to the vault
+keys in Key Vault and passes them, with the pin of the retained deployment inputs, in the protected VM extension command.
+That command runs `build/Boot-WorldSilo.py`, which reads the inputs from the release content store with the silo
+identity, refuses bytes that do not match the pin, and runs the bootstrap with the keys in its environment; the bootstrap
+writes them to private mounted files. The runtime needs no vault permissions. CI temporarily admits its single runner IPv4 address to the vault
 firewall; an `always()` step removes only the rule that run added. Secret
 parameter files are removed and excluded from artifacts.
 The image installs `libmsquic`, which .NET requires for Linux QUIC support.

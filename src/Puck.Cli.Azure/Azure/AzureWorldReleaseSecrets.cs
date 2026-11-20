@@ -1,11 +1,29 @@
 using System.IO.Compression;
-using System.Text;
 using Puck.Assets;
 
 namespace Puck.Cli.Azure;
 
 public static partial class AzureCommand {
-    /// <summary>Keeps credential-bearing bootstrap inputs in Key Vault and returns a pinned secret version URI.</summary>
+    /// <summary>The most characters a release's encoded deployment secret may hold: Key Vault refuses a secret value
+    /// above 25 KiB.</summary>
+    public const int WorldReleaseSecretBudget = 25000;
+
+    /// <summary>Encodes a release's deployment secret as Key Vault stores it: gzip at its smallest size, then base64.</summary>
+    /// <param name="content">The secret bytes.</param>
+    /// <returns>The encoded secret value; it fits Key Vault only when no longer than <see cref="WorldReleaseSecretBudget"/>.</returns>
+    public static string EncodeWorldReleaseSecret(ReadOnlySpan<byte> content) {
+        using var compressed = new MemoryStream();
+
+        using (var gzip = new GZipStream(
+            compressed,
+            CompressionLevel.SmallestSize,
+            leaveOpen: true
+        )) { gzip.Write(buffer: content); }
+        return Convert.ToBase64String(inArray: compressed.ToArray());
+    }
+
+    /// <summary>Keeps a release's deployment secret (its signing keys and the pin of its retained inputs) in Key Vault
+    /// and returns a pinned secret version URI.</summary>
     private sealed class AzureWorldReleaseSecretVersions(string vault, string prefix) : IWorldReleaseSecretVersions {
         private void ValidateVersion(string version) {
             if (
@@ -62,7 +80,7 @@ public static partial class AzureCommand {
             ).ConfigureAwait(continueOnCapturedContext: false);
 
             CliGitHub.Mask(value: encoded);
-            if (encoded.Length > 25000) { throw new InvalidDataException(message: "retained deployment secret exceeds its encoded budget"); }
+            if (encoded.Length > WorldReleaseSecretBudget) { throw new InvalidDataException(message: "retained deployment secret exceeds its encoded budget"); }
             using var compressed = new MemoryStream(buffer: Convert.FromBase64String(s: encoded));
             using var gzip = new GZipStream(
                 mode: CompressionMode.Decompress,
@@ -102,21 +120,11 @@ public static partial class AzureCommand {
             ) {
                 throw new InvalidDataException(message: "deployment secret prefix cannot form a valid retained Key Vault name");
             }
-            using var compressed = new MemoryStream();
+            var encoded = EncodeWorldReleaseSecret(content: content.Span);
 
-            using (var gzip = new GZipStream(
-                compressed,
-                CompressionLevel.SmallestSize,
-                leaveOpen: true
-            )) {
-                await gzip.WriteAsync(
-                    buffer: content,
-                    cancellationToken: cancellationToken
-                ).ConfigureAwait(continueOnCapturedContext: false);
+            if (encoded.Length > WorldReleaseSecretBudget) {
+                throw new InvalidDataException(message: $"the deployment's signing keys encode to {encoded.Length} characters, beyond the Key Vault secret budget of {WorldReleaseSecretBudget}");
             }
-            var encoded = Convert.ToBase64String(inArray: compressed.ToArray());
-
-            if (Encoding.UTF8.GetByteCount(s: encoded) > 25000) { throw new InvalidDataException(message: "compressed deployment inputs exceed the Key Vault secret budget"); }
             CliGitHub.Mask(value: encoded);
             var file = Path.Combine(
                 path1: Path.GetTempPath(),
