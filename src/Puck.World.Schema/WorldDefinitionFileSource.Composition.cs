@@ -53,11 +53,13 @@ public static partial class WorldDefinitionFileSource {
         var mergedFromTop = objects[^1];
 
         for (var index = (chain.Count - 2); (index >= 0); index--) {
-            var overlay = ((JsonObject)objects[index].DeepClone());
+            // Each link's tree was parsed for this walk alone, so the merge consumes it.
+            var overlay = objects[index];
 
             overlay.Remove(propertyName: WorldDocumentBasis.BasisMemberName);
 
             if (!WorldDocumentBasis.TryMergeInto(
+                consume: true,
                 target: mergedFromTop,
                 overlay: overlay,
                 reason: out var mergeReason

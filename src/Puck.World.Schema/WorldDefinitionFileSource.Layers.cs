@@ -189,12 +189,13 @@ public static partial class WorldDefinitionFileSource {
 
             if (!WorldDocumentBasis.TryMergeImports(
                     composed: out var importsLayer,
+                    consume: true,
                     imports: [.. imports.Where(predicate: layer => (layer.IndexOf(name: name) >= 0)).Select(selector: layer => (layer.Description, Part(layer: layer)))],
                     reason: out _,
                     restated: restated
                 ) ||
-                !WorldDocumentBasis.TryMergeInto(overlay: importsLayer!, reason: out _, target: target) ||
-                !WorldDocumentBasis.TryMergeInto(overlay: restated, reason: out _, target: target) ||
+                !WorldDocumentBasis.TryMergeInto(consume: true, overlay: importsLayer!, reason: out _, target: target) ||
+                !WorldDocumentBasis.TryMergeInto(consume: true, overlay: restated, reason: out _, target: target) ||
                 !target.TryGetPropertyValue(jsonNode: out var value, propertyName: name)) {
                 return null;
             }
@@ -632,6 +633,7 @@ public static partial class WorldDefinitionFileSource {
             if (hasImports) {
                 if (!WorldDocumentBasis.TryMergeImports(
                     composed: out var mergedImports,
+                    consume: true,
                     imports: [.. imports.Select(selector: static slot => (slot.Description, slot.ShapedTree()))],
                     origins: origins,
                     reason: out var mergeReason,
@@ -646,6 +648,7 @@ public static partial class WorldDefinitionFileSource {
             }
 
             if (!WorldDocumentBasis.TryMergeInto(
+                consume: true,
                 target: basisComposed,
                 origins: origins,
                 overlay: importsLayer,
@@ -661,6 +664,7 @@ public static partial class WorldDefinitionFileSource {
             stack = serveHeldImage ? null : (JsonObject)WorldDocumentOrigins.Clone(basisComposed, origins)!;
 
             if (!WorldDocumentBasis.TryMergeInto(
+                consume: true,
                 target: basisComposed,
                 origins: origins,
                 overlay: body,
