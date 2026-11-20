@@ -146,6 +146,13 @@ public sealed class WorldBootWork : WorkLedger<WorkCounterSet> {
     public static WorkKind WatchStampReads { get; } = Registry.Declare("world.boot.watch-stamp-reads", "count", WorkClass.Pacing);
     /// <summary>Gets the kind counting source input queries that read file contents or directory listings.</summary>
     public static WorkKind WatchContentReads { get; } = Registry.Declare("world.boot.watch-content-reads", "count", WorkClass.Pacing);
+    /// <summary>Gets the kind counting the file and directory stamps a reload's preparation read through the compile
+    /// input door (<c>Puck.Assets.CompileInputs.StampReads</c>): what proving its sources and held compositions still
+    /// stand cost it.</summary>
+    public static WorkKind CompileStampReads { get; } = Registry.Declare("world.boot.compile-stamp-reads", "count", WorkClass.Pacing);
+    /// <summary>Gets the kind counting the file contents a reload's preparation read and the directories it listed
+    /// through the compile input door (<c>Puck.Assets.CompileInputs.ContentReads</c>).</summary>
+    public static WorkKind CompileContentReads { get; } = Registry.Declare("world.boot.compile-content-reads", "count", WorkClass.Pacing);
     /// <summary>Gets the kind counting creation and shade rows delivered to local or replica clients.</summary>
     public static WorkKind PresentationRowsDelivered { get; } = Registry.Declare("world.boot.presentation-rows-delivered", "count", WorkClass.Deterministic);
     /// <summary>Gets the kind counting compact row payload bytes delivered to local or replica clients.</summary>
