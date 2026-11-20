@@ -207,7 +207,7 @@ The design underneath all of these: LINQ's internal concrete iterator types (`Ar
 ### `Contains` specialized across ~30 iterator types
 - **What changed:** dotnet/runtime#112684 extends the iterator-specialization machinery to `Contains`. Order-irrelevant or work-skippable predecessors — `OrderBy`, `Distinct`, `Reverse`, `Union`, `Append`, `Concat`, `DefaultIfEmpty`, `SelectMany`, `Where.Select`, ... — now answer `Contains` by searching the underlying source directly instead of executing the pipeline.
 - **Mechanism:** `Contains` doesn't care about order or duplication, so sorts/reversals/dedup buffers are skipped entirely; concrete iterator types avoid per-element interface dispatch.
-- **Magnitude (1000-element array source):** `OrderBy.Contains` ~12,884 ns → ~50 ns (~257x, 12,280 B → 88 B); `Distinct.Contains` ~363x; `Union.Contains` ~304x; `Reverse.Contains` ~9x; `Append/Concat/SelectMany + Contains` ~50-60x; `Where.Select.Contains` ~7x; `DefaultIfEmpty.Contains` ~16%.
+- **Magnitude (1000-element array source):** `OrderBy.Contains` ~12,884 ns → ~50 ns (~257x, 12,280 B → 88 B); `Distinct.Contains` ~363x; `Union(...).Contains(...)` ~304x; `Reverse.Contains` ~9x; `Append/Concat/SelectMany + Contains` ~50-60x; `Where.Select.Contains` ~7x; `DefaultIfEmpty.Contains` ~16%.
 - **Adoption:** FREE.
 - **Guidance:** Don't manually restructure `query.OrderBy(...).Contains(x)` / `Distinct().Contains(x)` "because LINQ will sort/dedup first" — it won't anymore. Composed LINQ ending in `Contains` is near raw-scan cost (same family as the pre-existing `OrderBy(...).First()` O(N) special case).
 - **Caveats:** In-memory LINQ-to-Objects only; on Native AOT depends on the size/speed LINQ build (see below).
