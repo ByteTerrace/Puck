@@ -1,3 +1,4 @@
+using Puck.Abstractions.Documents;
 using System.Text.Json.Serialization;
 
 namespace Puck.Commands;
@@ -59,15 +60,15 @@ namespace Puck.Commands;
 /// authored before this member existed round-trips byte-identical.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record BindingPageEntryDefinition(
-    IReadOnlyList<string>? Sources,
-    string? Command = null,
+    [property: DocumentText("input source identifiers")] IReadOnlyList<string>? Sources,
+    [property: DocumentText("console command text")] string? Command = null,
     ChannelRef? Channel = null,
     float? Scale = null,
     CommandPhase? ActivateOn = null,
-    string? Label = null,
-    string? Id = null,
+    [property: DocumentText("literal text")] string? Label = null,
+    [property: DocumentText("a binding entry id")] string? Id = null,
     CommandValue? Value = null,
-    string? Text = null,
+    [property: DocumentText("literal text")] string? Text = null,
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] BindingActivatorDefinition? Activator = null,
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingDefault)] BindingEntryMode Mode = BindingEntryMode.Hold
 ) {

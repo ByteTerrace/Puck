@@ -35,13 +35,13 @@ public enum WorldHapticMode : byte {
 /// joined seat.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record WorldHapticRow(
-    string Id,
+    [property: DocumentText("a haptic row id")] string Id,
     BindableScalar Low,
     BindableScalar High,
     float DurationSeconds,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] BindableScalar? Signal = null,
     WorldHapticMode Mode = WorldHapticMode.Level,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Seat = null
+    [property: DocumentText("a seat selector")] [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Seat = null
 );
 /// <summary>The <see cref="WorldHapticRow"/> bounds <see cref="WorldDefinitionValidator"/> enforces.</summary>
 public static class WorldHapticCapacity {

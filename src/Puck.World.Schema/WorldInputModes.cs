@@ -9,9 +9,9 @@ namespace Puck.World;
 /// <param name="Combinations">The complete allowed tuples, keyed by family; absence admits the Cartesian product.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record WorldInputModes(
-    IReadOnlyList<string> Global,
+    [property: DocumentText("logical input channels")] IReadOnlyList<string> Global,
     IReadOnlyList<WorldInputModeFamily> Families,
-    IReadOnlyList<IReadOnlyDictionary<string, string>>? Combinations = null
+    [property: DocumentText("input mode selections by family")] IReadOnlyList<IReadOnlyDictionary<string, string>>? Combinations = null
 );
 /// <summary>One selected state and directed continuation policy.</summary>
 /// <param name="Name">Family name.</param>
@@ -22,9 +22,9 @@ public sealed record WorldInputModes(
 /// <param name="Transitions">Directed keep sets; omission releases every action.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record WorldInputModeFamily(
-    string Name,
+    [property: DocumentText("a composed-world input mode family")] string Name,
     WorldInputModeSelector Selector,
-    string Default,
+    [property: DocumentText("input mode selections")] string Default,
     IReadOnlyList<WorldInputModeState> States,
     IReadOnlyList<WorldInputModeSuppression>? SuspendedBy = null,
     IReadOnlyList<WorldInputModeTransition>? Transitions = null
@@ -33,7 +33,10 @@ public sealed record WorldInputModeFamily(
 /// <param name="Kind">The state owner.</param>
 /// <param name="Name">Body register or seat state family, when required by the kind.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record WorldInputModeSelector(WorldInputModeSelectorKind Kind, string? Name = null);
+public sealed record WorldInputModeSelector(
+    WorldInputModeSelectorKind Kind,
+    [property: DocumentText("a body register or shared seat-mode family selected by the selector kind")] string? Name = null
+);
 /// <summary>Sources whose finite envelopes can be proved when a document is admitted.</summary>
 [JsonConverter(typeof(StrictEnumConverter<WorldInputModeSelectorKind>))]
 public enum WorldInputModeSelectorKind : byte {
@@ -53,9 +56,9 @@ public enum WorldInputModeSelectorKind : byte {
 /// <param name="Ranges">Inclusive Q48.16 ranges; adjacent endpoints differ by one raw unit.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record WorldInputModeState(
-    string Name,
-    IReadOnlyList<string> Channels,
-    IReadOnlyList<string>? Values = null,
+    [property: DocumentText("a state token local to its input mode family")] string Name,
+    [property: DocumentText("logical input channels")] IReadOnlyList<string> Channels,
+    [property: DocumentText("discrete selector values")] IReadOnlyList<string>? Values = null,
     IReadOnlyList<WorldInputModeRange>? Ranges = null
 );
 /// <summary>An inclusive, exactly quantized selector interval.</summary>
@@ -67,19 +70,29 @@ public sealed record WorldInputModeRange(decimal Minimum, decimal Maximum);
 /// <param name="Family">Other family.</param>
 /// <param name="States">Selections which suppress this family's channels.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record WorldInputModeSuppression(string Family, IReadOnlyList<string> States);
+public sealed record WorldInputModeSuppression(
+    [property: DocumentText("a composed-world input mode family")] string Family,
+    [property: DocumentText("input mode selections")] IReadOnlyList<string> States
+);
 /// <summary>Directed continuity, intersected across every changed family.</summary>
 /// <param name="From">Old state.</param>
 /// <param name="To">New state.</param>
 /// <param name="Keep">Same-meaning held actions allowed to continue.</param>
 /// <param name="ConditionalKeep">Additional continuing actions when the old and new tuples match authored selections.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record WorldInputModeTransition(string From, string To, IReadOnlyList<string> Keep,
-    IReadOnlyList<WorldInputConditionalKeep>? ConditionalKeep = null);
+public sealed record WorldInputModeTransition(
+    [property: DocumentText("a state token local to its input mode family")] string From,
+    [property: DocumentText("a state token local to its input mode family")] string To,
+    [property: DocumentText("logical input channels")] IReadOnlyList<string> Keep,
+    IReadOnlyList<WorldInputConditionalKeep>? ConditionalKeep = null
+);
 /// <summary>Adds continuity for named actions under finite source and destination tuple conditions.</summary>
 /// <param name="Keep">Additional same-meaning actions.</param>
 /// <param name="From">Required selections in the old tuple; omitted families are unconstrained.</param>
 /// <param name="To">Required selections in the new tuple; omitted families are unconstrained.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record WorldInputConditionalKeep(IReadOnlyList<string> Keep,
-    IReadOnlyDictionary<string, string>? From = null, IReadOnlyDictionary<string, string>? To = null);
+public sealed record WorldInputConditionalKeep(
+    [property: DocumentText("logical input channels")] IReadOnlyList<string> Keep,
+    [property: DocumentText("input mode selections")] IReadOnlyDictionary<string, string>? From = null,
+    [property: DocumentText("input mode selections")] IReadOnlyDictionary<string, string>? To = null
+);

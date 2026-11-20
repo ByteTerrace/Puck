@@ -1,3 +1,4 @@
+using Puck.Abstractions.Documents;
 using System.Collections.Frozen;
 using System.Text.Json.Serialization.Metadata;
 
@@ -125,10 +126,11 @@ public static class WorldCallArguments {
         }
     }
     private static WorldArgumentForm FormOf(WorldModelMember member) {
-        if (WorldNameRegistry.TryResolve(declaringType: member.DeclaringType, field: out var field, member: member.Member, propertyType: member.Type)) {
+        if (member.NameField is { } field) {
             return (field.Role switch {
                 WorldNameRole.Names => WorldArgumentForm.Name,
                 WorldNameRole.Key => WorldArgumentForm.Key,
+                WorldNameRole.BodyReference => WorldArgumentForm.Text,
                 WorldNameRole.Expression => WorldArgumentForm.Expression,
                 _ => WorldArgumentForm.Unclassified,
             });

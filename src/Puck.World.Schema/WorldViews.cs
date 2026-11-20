@@ -1,3 +1,5 @@
+using Puck.Abstractions.Documents;
+
 namespace Puck.World;
 
 /// <summary>A view's durable render quality. A name of <c>*</c> supplies the defaults for the world's own player views
@@ -7,10 +9,12 @@ namespace Puck.World;
 /// <param name="RenderScale">The scalar allocation ceiling, or null to inherit the render defaults.</param>
 /// <param name="RenderScaleFloor">The lowest dynamic grid tier, or null to use the selected tier's floor (Quarter by default).</param>
 /// <param name="Tier">The authored quality preset whose floor this view uses.</param>
-public sealed record WorldViewQuality(string Name,
+public sealed record WorldViewQuality(
+    [property: DocumentText("a render view instance name or the default selector *")] string Name,
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] float? RenderScale = null,
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] WorldRenderScaleTier? RenderScaleFloor = null,
-    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] Puck.Abstractions.Presentation.QualityTier? Tier = null);
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] Puck.Abstractions.Presentation.QualityTier? Tier = null
+);
 /// <summary>One slot of a <see cref="WorldViewLayout"/> — a normalized rect (origin top-left, Y down) plus what fills it.
 /// A slot whose <see cref="Camera"/> and <see cref="Instance"/> are both <see langword="null"/> shows the seat that owns
 /// this slot (the next joined seat in slot order); a named camera renders that authored view into the rect; a named graph
@@ -26,8 +30,15 @@ public sealed record WorldViewQuality(string Name,
 /// <param name="Instance">The <c>views.graphs</c> row name whose output fills this slot, or <see langword="null"/> for
 /// a seat or camera slot.</param>
 [method: System.Text.Json.Serialization.JsonConstructor]
-public readonly record struct WorldViewSlot(float X = 0f, float Y = 0f, float Width = 1f, float Height = 1f, string? Camera = null,
-    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] string? Instance = null) {
+public readonly record struct WorldViewSlot(
+    float X = 0f,
+    float Y = 0f,
+    float Width = 1f,
+    float Height = 1f,
+    [property: DocumentText("a camera name")] string? Camera = null,
+    [property: DocumentText("a view instance name")]
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] string? Instance = null
+) {
     /// <summary>Creates a full-window slot, matching an authored slot with omitted rectangle fields.</summary>
     public WorldViewSlot() : this(X: 0f, Y: 0f, Width: 1f, Height: 1f, Camera: null, Instance: null) { }
 }
@@ -46,7 +57,11 @@ public sealed record WorldViewGraphRefresh(
 /// previous frame.</param>
 /// <param name="PreviousFrame">Whether the read takes the producer's previous completed frame, which lets two instances
 /// show each other. Default <see langword="false"/>: the producer renders first in the same frame.</param>
-public sealed record WorldViewGraphInput(string Resource, string Instance, bool PreviousFrame = false);
+public sealed record WorldViewGraphInput(
+    [property: DocumentText("a render graph resource")] string Resource,
+    [property: DocumentText("a view instance name")] string Instance,
+    bool PreviousFrame = false
+);
 /// <summary>One named instance of a frame graph: a view rendered by a <c>puck.render.graph.v1</c> document, such as a
 /// pane, a game camera shown on a screen, or a nested world, or an engine package's producer such as the SDF world. A
 /// <see cref="WorldViewSlot.Instance"/> shows it in a layout, and the <c>pipeline.*</c> console verbs address it by
@@ -95,18 +110,23 @@ public sealed record WorldViewGraphInput(string Resource, string Instance, bool 
 /// bars where it does not reach the slot's edges, which a pointer passes through to the game. A window capture's aspect
 /// ratio is the captured window's, whatever its profile extent. A pane is never cropped, so
 /// <see cref="Puck.Commands.SourceFit.Cover"/> is refused. <see langword="null"/> stretches.</param>
-public sealed record WorldViewGraph(string Name,
+public sealed record WorldViewGraph(
+    [property: DocumentText("a view graph instance name")] string Name,
+    [property: DocumentText("a view graph's source is a document path")]
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] string? Source = null,
+    [property: DocumentText("a shader package name")]
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] string? Package = null,
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] WorldViewGraphRefresh? Refresh = null,
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldViewGraphInput>? Inputs = null,
     float TimeScale = 1f,
+    [property: DocumentText("a render graph resource")]
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] string? Output = null,
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] IReadOnlyDictionary<string, System.Text.Json.JsonElement>? Overrides = null,
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] IReadOnlyDictionary<string, System.Text.Json.JsonElement>? Settings = null,
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] IReadOnlyDictionary<string, IReadOnlyDictionary<string, BindableScalar>>? Parameters = null,
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] Puck.Abstractions.Presentation.QualityTier? Tier = null,
-    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] Puck.Commands.SourceFit? Fit = null);
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] Puck.Commands.SourceFit? Fit = null
+);
 /// <summary>One pass the render graph composition synthesizes runs over the composed frame: a post-process package pass
 /// of the root graph (<c>WorldViewGraphs.MainInstance</c>), written as a <c>puck.render.graph.v1</c> document's
 /// <c>packages</c> row is, less its ports. The rows run in order after every view and pane is placed and before the
@@ -120,8 +140,11 @@ public sealed record WorldViewGraph(string Name,
 /// <param name="Config">The package's config values, each absent field at its default, or <see langword="null"/> for
 /// every default. The graph compiler binds them against the package's schema when the root graph is composed, and a
 /// boot refuses a value that does not bind, naming the row.</param>
-public sealed record WorldViewPostPass(string Name, string Package,
-    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] System.Text.Json.JsonElement? Config = null);
+public sealed record WorldViewPostPass(
+    [property: DocumentText("a post pass name")] string Name,
+    [property: DocumentText("a shader package name")] string Package,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] System.Text.Json.JsonElement? Config = null
+);
 /// <summary>The presentation's price ceilings: the pass-pixels the graph scheduler holds the instances the display does
 /// not show directly to, and the bytes the <c>views.graphs</c> rows' bound parameters may owe their passes
 /// (<see cref="WorldBindingCost"/>).</summary>
@@ -142,8 +165,12 @@ public sealed record WorldViewGraphBudget(long PassPixelsPerFrame = 0, long Byte
 /// <param name="SeatCount">The joined-seat count this layout composes for, or 0 for the catch-all. Default 0.</param>
 /// <param name="Transition">The ease into this composition when it becomes active: how long it takes and how far the
 /// render scale dips while it runs. Absent is the neutral <see cref="WorldViewTransition"/>, a cut with no dip.</param>
-public sealed record WorldViewLayout(string Name, IReadOnlyList<WorldViewSlot> Slots, int SeatCount = 0,
-    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] WorldViewTransition? Transition = null) {
+public sealed record WorldViewLayout(
+    [property: DocumentText("a view layout name")] string Name,
+    IReadOnlyList<WorldViewSlot> Slots,
+    int SeatCount = 0,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] WorldViewTransition? Transition = null
+) {
     private readonly IReadOnlyList<WorldViewSlot> m_slots = (Slots ?? []);
 
     /// <summary>Gets the slots, in order. The absence-coalesce lives in the accessor for the same reason
@@ -239,19 +266,23 @@ public enum WorldSeatYawReference : byte {
 /// <param name="BuiltinTransition">The ease into or out of the built-in seat ladder (the composition no authored
 /// layout selects), or <see langword="null"/> for the neutral <see cref="WorldViewTransition"/> defaults (a cut). An authored layout
 /// brings its own envelope.</param>
-public sealed record WorldViewDefaults(IReadOnlyList<WorldViewLayout>? Layouts = null,
+public sealed record WorldViewDefaults(
+    IReadOnlyList<WorldViewLayout>? Layouts = null,
     [property: System.Text.Json.Serialization.JsonPropertyName("seatRig"), System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] WorldCameraProgram? SeatRigRaw = null,
     [property: System.Text.Json.Serialization.JsonPropertyName("seatControl"), System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] WorldSeatViewControl? SeatControlRaw = null,
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] WorldCameraProgram? CameraRig = null,
+    [property: DocumentText("a shader toolchain id")]
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] string? ShaderToolchain = null,
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldViewGraph>? Graphs = null,
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] WorldViewGraphBudget? GraphBudget = null,
+    [property: DocumentText("a view instance name")]
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] string? Root = null,
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldViewPostPass>? Post = null,
     [property: System.Text.Json.Serialization.JsonPropertyName("nestingDepth"), System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] int? NestingDepthRaw = null,
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldViewQuality>? Quality = null,
     [property: System.Text.Json.Serialization.JsonPropertyName("programs"), System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldCameraProgram>? ProgramsRaw = null,
-    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] WorldViewTransition? BuiltinTransition = null) {
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] WorldViewTransition? BuiltinTransition = null
+) {
     private readonly IReadOnlyList<WorldViewLayout> m_layouts = (Layouts ?? []);
 
     /// <summary>Gets the named camera programs the section declares for selects and blends to name, or an empty list

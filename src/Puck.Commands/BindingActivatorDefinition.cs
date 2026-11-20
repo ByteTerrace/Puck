@@ -1,3 +1,4 @@
+using Puck.Abstractions.Documents;
 using System.Text.Json.Serialization;
 
 namespace Puck.Commands;
@@ -46,7 +47,7 @@ namespace Puck.Commands;
 /// <see cref="BindingActivatorMode.Held"/> activator.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record BindingActivatorDefinition(
-    IReadOnlyList<string> Sequence,
+    [property: DocumentText("input source identifiers")] IReadOnlyList<string> Sequence,
     BindingActivatorMode Mode = BindingActivatorMode.Held,
     int? TimeoutTicks = null
 );

@@ -74,7 +74,7 @@ public interface IDiscreteLatticeTopology {
 [JsonDerivedType(typeof(Graph), typeDiscriminator: "graph")]
 [JsonDerivedType(typeof(Tiling), typeDiscriminator: "tiling")]
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public abstract record LatticeTopology(string Name, DocumentVector3 Origin, float CellSize) {
+public abstract record LatticeTopology([property: DocumentName(WorldNameKind.Topology, WorldNameRole.Declares)] string Name, DocumentVector3 Origin, float CellSize) {
     /// <summary>A dense field or a discrete grid, ring, hex, or box — the case's own kind, never authored.</summary>
     [JsonIgnore]
     public abstract TopologyKind Kind { get; }
@@ -92,8 +92,13 @@ public abstract record LatticeTopology(string Name, DocumentVector3 Origin, floa
     /// <param name="Directions">See <see cref="IDiscreteLatticeTopology.Directions"/>.</param>
     /// <param name="ElementAliases">See <see cref="IDiscreteLatticeTopology.ElementAliases"/>.</param>
     public sealed record Grid(
-        string Name, DocumentVector3 Origin, float CellSize,
-        int Width, int Depth, TopologyWrap Wrap = TopologyWrap.None, float Band = 0f,
+        string Name,
+        DocumentVector3 Origin,
+        float CellSize,
+        int Width,
+        int Depth,
+        TopologyWrap Wrap = TopologyWrap.None,
+        float Band = 0f,
         IReadOnlyList<TopologyDirection>? Directions = null,
         IReadOnlyList<TopologyElementAlias>? ElementAliases = null
     ) : LatticeTopology(
@@ -120,7 +125,10 @@ public abstract record LatticeTopology(string Name, DocumentVector3 Origin, floa
     /// <param name="Directions">See <see cref="IDiscreteLatticeTopology.Directions"/>.</param>
     /// <param name="ElementAliases">See <see cref="IDiscreteLatticeTopology.ElementAliases"/>.</param>
     public sealed record Ring(
-        string Name, DocumentVector3 Origin, float CellSize, int Width,
+        string Name,
+        DocumentVector3 Origin,
+        float CellSize,
+        int Width,
         IReadOnlyList<TopologyDirection>? Directions = null,
         IReadOnlyList<TopologyElementAlias>? ElementAliases = null
     ) : LatticeTopology(
@@ -147,7 +155,10 @@ public abstract record LatticeTopology(string Name, DocumentVector3 Origin, floa
     /// <param name="Directions">See <see cref="IDiscreteLatticeTopology.Directions"/>.</param>
     /// <param name="ElementAliases">See <see cref="IDiscreteLatticeTopology.ElementAliases"/>.</param>
     public sealed record Hex(
-        string Name, DocumentVector3 Origin, float CellSize, int Radius,
+        string Name,
+        DocumentVector3 Origin,
+        float CellSize,
+        int Radius,
         IReadOnlyList<TopologyDirection>? Directions = null,
         IReadOnlyList<TopologyElementAlias>? ElementAliases = null
     ) : LatticeTopology(
@@ -179,8 +190,13 @@ public abstract record LatticeTopology(string Name, DocumentVector3 Origin, floa
     /// <param name="Directions">See <see cref="IDiscreteLatticeTopology.Directions"/>.</param>
     /// <param name="ElementAliases">See <see cref="IDiscreteLatticeTopology.ElementAliases"/>.</param>
     public sealed record Box(
-        string Name, DocumentVector3 Origin, float CellSize,
-        int Width, int Depth, int Layers, float LayerHeight,
+        string Name,
+        DocumentVector3 Origin,
+        float CellSize,
+        int Width,
+        int Depth,
+        int Layers,
+        float LayerHeight,
         IReadOnlyList<TopologyDirection>? Directions = null,
         IReadOnlyList<TopologyElementAlias>? ElementAliases = null
     ) : LatticeTopology(
@@ -230,8 +246,12 @@ public abstract record LatticeTopology(string Name, DocumentVector3 Origin, floa
     /// <param name="Directions">The direction slots, each naming its opposite (possibly itself).</param>
     /// <param name="Edges">The edges.</param>
     public sealed record Graph(
-        string Name, DocumentVector3 Origin, float CellSize,
-        IReadOnlyList<GraphCell> Cells, IReadOnlyList<GraphDirection> Directions, IReadOnlyList<GraphEdge> Edges
+        string Name,
+        DocumentVector3 Origin,
+        float CellSize,
+        IReadOnlyList<GraphCell> Cells,
+        IReadOnlyList<GraphDirection> Directions,
+        IReadOnlyList<GraphEdge> Edges
     ) : LatticeTopology(
         Name,
         Origin,
@@ -258,7 +278,7 @@ public abstract record LatticeTopology(string Name, DocumentVector3 Origin, floa
 /// <param name="Y">The signed planar row step.</param>
 /// <param name="Z">The signed layer step; zero except on a <see cref="TopologyKind.Box"/>.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record TopologyDirection(string Name, int X, int Y, int Z = 0);
+public sealed record TopologyDirection([property: DocumentText("a direction name is local to its topology")] string Name, int X, int Y, int Z = 0);
 /// <summary>A friendlier name for one point-group element, resolved by <see cref="CompiledTopology.Element"/>
 /// alongside its canonical signed-axis spelling (<see cref="CompiledTopology.ElementName"/> always answers the
 /// canonical form).</summary>
@@ -266,17 +286,23 @@ public sealed record TopologyDirection(string Name, int X, int Y, int Z = 0);
 /// <param name="Element">The canonical element name (a <see cref="CompiledTopology.ElementName"/> value) this
 /// alias resolves to.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record TopologyElementAlias(string Name, string Element);
+public sealed record TopologyElementAlias(
+    [property: DocumentText("an element alias is local to its topology")] string Name,
+    [property: DocumentText("a direction or symmetry element local to its topology")] string Element
+);
 /// <summary>One cell of a <see cref="LatticeTopology.Graph"/>.</summary>
 /// <param name="Id">The id edges name it by; distinct within the graph.</param>
 /// <param name="Centre">The centre, relative to the topology's origin, in world units.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record GraphCell(string Id, DocumentVector3 Centre);
+public sealed record GraphCell([property: DocumentText("a graph cell id, local to its topology")] string Id, DocumentVector3 Centre);
 /// <summary>One direction slot of a <see cref="LatticeTopology.Graph"/>.</summary>
 /// <param name="Name">The direction's name, as rules and patterns spell it.</param>
 /// <param name="Opposite">The direction an edge is followed back along; a symmetric link names itself.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record GraphDirection(string Name, string Opposite);
+public sealed record GraphDirection(
+    [property: DocumentText("a direction name is local to its topology")] string Name,
+    [property: DocumentText("a direction or symmetry element local to its topology")] string Opposite
+);
 /// <summary>One edge of a <see cref="LatticeTopology.Graph"/>: <paramref name="From"/> reaches <paramref name="To"/>
 /// along <paramref name="Direction"/>, and unless <paramref name="OneWay"/>, <paramref name="To"/> reaches
 /// <paramref name="From"/> along the direction's opposite.</summary>
@@ -285,4 +311,9 @@ public sealed record GraphDirection(string Name, string Opposite);
 /// <param name="Direction">The direction slot.</param>
 /// <param name="OneWay">Whether the reverse edge is left unfilled (a ladder, a one-way street).</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record GraphEdge(string From, string To, CellName Direction, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] bool OneWay = false);
+public sealed record GraphEdge(
+    [property: DocumentText("a graph cell id is local to its topology")] string From,
+    [property: DocumentText("a graph cell id is local to its topology")] string To,
+    [property: DocumentText("a direction local to its own topology")] CellName Direction,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] bool OneWay = false
+);

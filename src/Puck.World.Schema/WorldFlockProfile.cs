@@ -32,12 +32,28 @@ public enum WorldFlockSpace : byte {
 /// <param name="CohesionAffinity">Optional Fixed expression weighting each retained neighbor in the centroid. Left is the observer, right the neighbor. State-backed facts only; sampled at UpdateSeconds, clamped to [0,1], arithmetic failure reads zero, absent reads one. This does not filter separation or increase the candidate budget.</param>
 /// <param name="AlignmentAffinity">Independent Fixed expression weighting each retained neighbor's heading, under the same contract as CohesionAffinity. Affinities select relative influence; the outer Alignment and Cohesion weights set term strength.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record WorldFlockProfile(float Range, float SeparationRadius, int CandidateBudget, int MaxNeighbors,
-    float UpdateSeconds, WorldFlockSpace Space, float Separation, float Alignment, float Cohesion, float Goal,
-    float Inertia, float ArrivalDistance, float HalfAngleDegrees, bool RequiresLineOfSight,
+public sealed record WorldFlockProfile(
+    float Range,
+    float SeparationRadius,
+    int CandidateBudget,
+    int MaxNeighbors,
+    float UpdateSeconds,
+    WorldFlockSpace Space,
+    float Separation,
+    float Alignment,
+    float Cohesion,
+    float Goal,
+    float Inertia,
+    float ArrivalDistance,
+    float HalfAngleDegrees,
+    bool RequiresLineOfSight,
+    [property: DocumentText("a navigation domain")]
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? MovementDomain = null,
+    [property: DocumentName(WorldNameKind.State, WorldNameRole.Expression)]
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ExpressionProgram? CohesionAffinity = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ExpressionProgram? AlignmentAffinity = null);
+    [property: DocumentName(WorldNameKind.State, WorldNameRole.Expression)]
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ExpressionProgram? AlignmentAffinity = null
+);
 /// <summary>The fixed-point, allocation-free runtime arguments for one validated flock profile.</summary>
 public sealed class FixedWorldFlockProfile {
     /// <summary>Compiles a validated profile at the document boundary.</summary>

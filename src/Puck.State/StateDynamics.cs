@@ -1,3 +1,5 @@
+using Puck.Abstractions.Documents;
+
 namespace Puck.State;
 
 /// <summary>
@@ -13,4 +15,4 @@ namespace Puck.State;
 /// stored value as the follower's position, at rest — see <see cref="StateSeedReader.TryEvaluateDynamics"/>.
 /// </summary>
 /// <param name="Row">The referenced <c>dynamics</c> row name; must resolve.</param>
-public sealed record StateDynamics(string Row);
+public sealed record StateDynamics([property: DocumentName(WorldNameKind.Dynamics, WorldNameRole.Names)] string Row);

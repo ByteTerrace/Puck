@@ -1399,7 +1399,7 @@ meant to establish.
 - A document field that carries a state, zone, rule, table, pattern, topology,
   generator, field, or dynamics name is registered in `WorldNameRegistry`
   (`src/Puck.World.Schema`); `puck registry --check` fails on an unregistered
-  name-shaped member or a stale `docs/world-name-registry.md`, and
+  unclassified text position or a stale `docs/world-name-registry.md`, and
   `puck registry` rewrites the table.
 - Derive descriptor counts, pool sizes, strides, and capacities from the data
   that defines them.

@@ -1,3 +1,4 @@
+using Puck.Abstractions.Documents;
 using System.Globalization;
 using Puck.Maths;
 using System.Text.Json.Serialization;
@@ -6,14 +7,27 @@ namespace Puck.World;
 
 /// <summary>A bounded semantic history pattern. Adjacent steps with one group name match in any order.</summary>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record WorldInputPattern(string Name, IReadOnlyList<WorldInputPatternStep> Steps,
-    decimal MaximumDurationSeconds = 0.5m, decimal MaximumGapSeconds = 0.25m,
-    ulong? BufferTicks = null, IReadOnlyList<string>? Held = null, string? ConsumptionGroup = null);
+public sealed record WorldInputPattern(
+    [property: DocumentText("a shared semantic input-pattern name")] string Name,
+    IReadOnlyList<WorldInputPatternStep> Steps,
+    decimal MaximumDurationSeconds = 0.5m,
+    decimal MaximumGapSeconds = 0.25m,
+    ulong? BufferTicks = null,
+    [property: DocumentText("shared logical input channel names")] IReadOnlyList<string>? Held = null,
+    [property: DocumentText("an input pattern group")] string? ConsumptionGroup = null
+);
 /// <summary>One event predicate. Tick gaps refer to the preceding stage's admitted tick.</summary>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record WorldInputPatternStep(string Channel, WorldInputEventKind Kind = WorldInputEventKind.Press,
-    long? RawValue = null, string? Crossing = null, string? SimultaneousGroup = null,
-    decimal ToleranceSeconds = 0, ulong MinimumTickGap = 0, ulong? MaximumTickGap = null);
+public sealed record WorldInputPatternStep(
+    [property: DocumentText("logical input channels")] string Channel,
+    WorldInputEventKind Kind = WorldInputEventKind.Press,
+    long? RawValue = null,
+    [property: DocumentText("an input crossing")] string? Crossing = null,
+    [property: DocumentText("an input pattern group")] string? SimultaneousGroup = null,
+    decimal ToleranceSeconds = 0,
+    ulong MinimumTickGap = 0,
+    ulong? MaximumTickGap = null
+);
 /// <summary>A pattern's compiled event predicate.</summary>
 public readonly record struct WorldInputPatternTerm(ushort Channel, WorldInputEventKind Kind, long? RawValue, int Crossing);
 /// <summary>An ordered stage, containing one event or several independent simultaneous predicates.</summary>

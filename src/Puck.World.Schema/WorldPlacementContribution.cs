@@ -53,7 +53,7 @@ public enum WorldContributionTenure : byte {
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record WorldPlacementContribution(
     WorldContributionTenure Tenure,
-    string SlotCreationId,
+    [property: DocumentName(WorldNameKind.Prototype, WorldNameRole.Names)] string SlotCreationId,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] SafeName? Link = null,
     float GraceSeconds = 0f,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] Principal? Contributor = null,

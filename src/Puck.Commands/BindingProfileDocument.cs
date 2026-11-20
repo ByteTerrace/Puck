@@ -1,3 +1,4 @@
+using Puck.Abstractions.Documents;
 using System.Text.Json.Serialization;
 
 namespace Puck.Commands;
@@ -29,7 +30,7 @@ namespace Puck.Commands;
 /// <see langword="null"/>, so a document authored before this member existed round-trips byte-identical.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record BindingProfileDocument(
-    string Version,
+    [property: DocumentText("a schema or program version")] string Version,
     IReadOnlyList<BindingModifierDefinition> Modifiers,
     IReadOnlyList<BindingChordDefinition> Chords,
     IReadOnlyList<BindingContextDefinition>? Contexts = null,
@@ -57,6 +58,6 @@ public sealed record BindingBarPreferences(
     float? Scale = null,
     float? ContrastBoost = null,
     float? UiScale = null,
-    string? Layout = null,
-    string? Model = null
+    [property: DocumentText("a bar layout name")] string? Layout = null,
+    [property: DocumentText("a bar model")] string? Model = null
 );

@@ -15,7 +15,11 @@ namespace Puck.World;
 /// <param name="Subject">The issuer's subject claim. It is non-empty and free of control characters.</param>
 /// <param name="World">The optional validated world name for which the claim was attested.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public readonly record struct WorldMemberIdentity(string Issuer, string Subject, SafeName? World) {
+public readonly record struct WorldMemberIdentity(
+    [property: DocumentText("an identity issuer")] string Issuer,
+    [property: DocumentText("a principal identifier")] string Subject,
+    SafeName? World
+) {
     /// <summary>The token prefix for a verified participant identity.</summary>
     public const string TokenPrefix = "member:";
 
@@ -261,4 +265,9 @@ public readonly record struct WorldMemberRef(MemberRefKind Kind, Principal? Prin
 /// <param name="JoinOrdinal">The monotonic succession ordinal assigned when this member joined the group.</param>
 /// <param name="Tags">Optional non-empty tags attached to this member.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record WorldGroupMember(WorldMemberRef Ref, string? Role, int JoinOrdinal, IReadOnlyList<string>? Tags = null);
+public sealed record WorldGroupMember(
+    WorldMemberRef Ref,
+    [property: DocumentText("a role name")] string? Role,
+    int JoinOrdinal,
+    [property: DocumentText("a tag")] IReadOnlyList<string>? Tags = null
+);

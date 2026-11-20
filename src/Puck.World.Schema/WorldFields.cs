@@ -1,3 +1,4 @@
+using Puck.Abstractions.Documents;
 using Puck.Abstractions.Collections;
 using System.Text.Json.Serialization;
 using Puck.Assets.Documents;
@@ -383,8 +384,13 @@ public sealed record WorldFieldsSection(
 /// <param name="TravelResistance">A nonnegative scalar body motion reads within the bounded region. Zero leaves motion unchanged.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record WorldFieldTopology(
-    string Name, DocumentVector3 Origin, float CellSize,
-    int Width, int Depth, int Layers = 1, int StepEveryTicks = 8,
+    string Name,
+    DocumentVector3 Origin,
+    float CellSize,
+    int Width,
+    int Depth,
+    int Layers = 1,
+    int StepEveryTicks = 8,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldReaction>? Reactions = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldLatticeScalar? TravelResistance = null
 ) : LatticeTopology(
@@ -424,6 +430,7 @@ public sealed record WorldStateFieldTrait(
     float Min = 0f,
     float Max = 1f,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] float HeightScale = 0f,
+    [property: DocumentText("a color literal")]
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Color = null,
     IReadOnlyList<WorldLatticeFill>? Paint = null,
     WorldLatticeMedium? Medium = null,
@@ -479,7 +486,7 @@ public sealed record WorldFieldLatticeDefinition(
 /// <param name="SimulationOnly">Keep this row in lattice reactions and omit its surface and body coupling.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record WorldFieldRow(
-    string Name,
+    [property: DocumentName(WorldNameKind.Field, WorldNameRole.Declares)] string Name,
     float Initial = 0f,
     float Min = 0f,
     float Max = 1f,
@@ -504,6 +511,7 @@ public sealed record WorldFieldRow(
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "$type")]
 public abstract record WorldLatticeFill {
     /// <summary>Gets the filled row's name -- compile-stamped, never authored inside a trait.</summary>
+    [DocumentText("compile-stamped from the carrying row, never authored")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public string Field { get; init; } = string.Empty;
 
@@ -546,7 +554,11 @@ public abstract record WorldLatticeFill {
     /// load/reset, and a draw-rewinding undo repaint the pass the document names.</summary>
     /// <param name="Source">A declared <c>generators</c> row, or <see langword="null"/> when <paramref name="Generator"/> is inlined.</param>
     /// <param name="Generator">An inline numeric source, or <see langword="null"/> when <paramref name="Source"/> is named.</param>
-    public sealed record Draw([property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] CellName? Source = null, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] StateGenerator? Generator = null) : WorldLatticeFill;
+    public sealed record Draw(
+        [property: DocumentName(WorldNameKind.Generator, WorldNameRole.Names)]
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] CellName? Source = null,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] StateGenerator? Generator = null
+    ) : WorldLatticeFill;
 
     /// <summary>Returns the one <see cref="Draw"/> fill a field trait's paint carries, or <see langword="null"/>.</summary>
     /// <param name="trait">The trait, or <see langword="null"/> for a row that is not a field.</param>
@@ -568,7 +580,7 @@ public abstract record WorldLatticeFill {
 /// <param name="Literal">The literal value, or <see langword="null"/> when <paramref name="Row"/> is set.</param>
 /// <param name="Row">The referenced scalar state row, or <see langword="null"/> for a literal.</param>
 [JsonConverter(typeof(WorldLatticeScalarJsonConverter))]
-public readonly record struct WorldLatticeScalar(float? Literal = null, string? Row = null) {
+public readonly record struct WorldLatticeScalar(float? Literal = null, [property: DocumentName(WorldNameKind.State, WorldNameRole.Names)] string? Row = null) {
     /// <summary>Creates a literal scalar.</summary>
     /// <param name="value">The literal.</param>
     public static implicit operator WorldLatticeScalar(float value) => new(Literal: value);
@@ -630,7 +642,11 @@ public sealed class WorldLatticeScalarJsonConverter : System.Text.Json.Serializa
 /// <param name="Comparison">The comparison.</param>
 /// <param name="Value">The scalar compared against (literal or state-row reference).</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record WorldFieldCondition(string Field, [property: JsonConverter(typeof(ExpressionComparisonJsonConverter))] ExpressionOp Comparison, WorldLatticeScalar Value);
+public sealed record WorldFieldCondition(
+    [property: DocumentName(WorldNameKind.Field, WorldNameRole.Names)] string Field,
+    [property: JsonConverter(typeof(ExpressionComparisonJsonConverter))] ExpressionOp Comparison,
+    WorldLatticeScalar Value
+);
 /// <summary>One per-cell write of a <see cref="WorldReaction.Transform"/>.</summary>
 /// <param name="Field">The field written at the cell.</param>
 /// <param name="Op">Set or add.</param>
@@ -639,9 +655,14 @@ public sealed record WorldFieldCondition(string Field, [property: JsonConverter(
 /// availability above its minimum, and destination capacity; debits exactly what is deposited.</param>
 /// <param name="Retain">Optional amount to leave in the donor, or its declared minimum when greater. Requires TakeFrom.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record WorldFieldWrite(string Field, WorldFieldWriteOp Op, WorldLatticeScalar Value,
+public sealed record WorldFieldWrite(
+    [property: DocumentName(WorldNameKind.Field, WorldNameRole.Names, WorldExportFacet.Action)] string Field,
+    WorldFieldWriteOp Op,
+    WorldLatticeScalar Value,
+    [property: DocumentName(WorldNameKind.Field, WorldNameRole.Names, WorldExportFacet.Action)]
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? TakeFrom = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldLatticeScalar? Retain = null);
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldLatticeScalar? Retain = null
+);
 /// <summary>One reaction — a local rule every cell (or every tagged body) applies each lattice step. Reactions run
 /// in document order; <see cref="Diffuse"/> reads the previous step's values for the whole field, every other kind
 /// reads and writes cells in place, row-major.</summary>
@@ -657,11 +678,17 @@ public abstract record WorldReaction {
     /// lattice, six in a volume).</summary>
     /// <param name="Field">The field diffused.</param>
     /// <param name="Rate">The fraction per step, in [0, 1].</param>
-    public sealed record Diffuse(string Field, WorldLatticeScalar Rate) : WorldReaction;
+    public sealed record Diffuse(
+        [property: DocumentName(WorldNameKind.Field, WorldNameRole.Names, WorldExportFacet.Action)] string Field,
+        WorldLatticeScalar Rate
+    ) : WorldReaction;
     /// <summary>Scales each cell toward zero: <c>v -= v·rate</c>.</summary>
     /// <param name="Field">The field decayed.</param>
     /// <param name="Rate">The fraction per step, in [0, 1].</param>
-    public sealed record Decay(string Field, WorldLatticeScalar Rate) : WorldReaction;
+    public sealed record Decay(
+        [property: DocumentName(WorldNameKind.Field, WorldNameRole.Names, WorldExportFacet.Action)] string Field,
+        WorldLatticeScalar Rate
+    ) : WorldReaction;
     /// <summary>Where every condition holds at a cell, applies every write at that cell — ignition, melting,
     /// evaporation, freezing are rows of this shape.</summary>
     /// <param name="When">The conditions, all of which must hold.</param>
@@ -673,7 +700,11 @@ public abstract record WorldReaction {
     /// <param name="Tag">The keyed int state row whose nonzero cells name the emitting bodies.</param>
     /// <param name="Field">The field deposited into.</param>
     /// <param name="Amount">The amount per step; the cell clamps to the field's range.</param>
-    public sealed record Emit(string Tag, string Field, WorldLatticeScalar Amount) : WorldReaction;
+    public sealed record Emit(
+        [property: DocumentText("an emission tag")] string Tag,
+        [property: DocumentName(WorldNameKind.Field, WorldNameRole.Names, WorldExportFacet.Action)] string Field,
+        WorldLatticeScalar Amount
+    ) : WorldReaction;
     /// <summary>Writes 1 or 0 into <paramref name="Row"/>'s cell for every active body, by whether
     /// <paramref name="Field"/> at the body's cell satisfies the comparison — a body standing in a burning cell
     /// becomes tagged, and body-level chemistry takes it from there.</summary>
@@ -681,7 +712,12 @@ public abstract record WorldReaction {
     /// <param name="Comparison">The comparison.</param>
     /// <param name="Value">The constant compared against.</param>
     /// <param name="Row">The keyed int state row written, keyed by body index.</param>
-    public sealed record Expose(string Field, [property: JsonConverter(typeof(ExpressionComparisonJsonConverter))] ExpressionOp Comparison, WorldLatticeScalar Value, string Row) : WorldReaction;
+    public sealed record Expose(
+        [property: DocumentName(WorldNameKind.Field, WorldNameRole.Names, WorldExportFacet.Action)] string Field,
+        [property: JsonConverter(typeof(ExpressionComparisonJsonConverter))] ExpressionOp Comparison,
+        WorldLatticeScalar Value,
+        [property: DocumentName(WorldNameKind.State, WorldNameRole.Names, WorldExportFacet.Action)] string Row
+    ) : WorldReaction;
     /// <summary>Moves <paramref name="Field"/> downhill, cell to cell, over the combined surface height of
     /// <paramref name="Over"/> plus <paramref name="Field"/>'s own value -- mass-conserving except where a cell's
     /// clamp to its declared [min, max] binds. Every cell donates an equal share of its previous-step value to each
@@ -695,7 +731,12 @@ public abstract record WorldReaction {
     /// against; empty or omitted means the field flows over its own height alone.</param>
     /// <param name="SpillRow">The scalar <c>fixed</c>-kind state row an edge cell's outward share accumulates into
     /// each step (a clamped add), or <see langword="null"/> to treat every lattice edge as a wall.</param>
-    public sealed record Flow(string Field, WorldLatticeScalar Rate, IReadOnlyList<string>? Over = null, string? SpillRow = null) : WorldReaction;
+    public sealed record Flow(
+        [property: DocumentName(WorldNameKind.Field, WorldNameRole.Names, WorldExportFacet.Action)] string Field,
+        WorldLatticeScalar Rate,
+        [property: DocumentName(WorldNameKind.Field, WorldNameRole.Names)] IReadOnlyList<string>? Over = null,
+        [property: DocumentName(WorldNameKind.State, WorldNameRole.Names, WorldExportFacet.Action)] string? SpillRow = null
+    ) : WorldReaction;
 }
 /// <summary>How a transform writes a field cell.</summary>
 [JsonConverter(typeof(Puck.Abstractions.Documents.StrictEnumConverter<WorldFieldWriteOp>))]

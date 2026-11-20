@@ -32,7 +32,7 @@ public abstract record BodyTargetSource {
     public sealed record Sensed(BodyTargetScope Scope, float Range, float HalfAngleDegrees, bool RequiresLineOfSight) : BodyTargetSource;
     /// <summary>Reads the named target register owned by the body running the producer.</summary>
     /// <param name="Register">The authored target-register name.</param>
-    public sealed record Designated(string Register) : BodyTargetSource;
+    public sealed record Designated([property: DocumentText("a target register name")] string Register) : BodyTargetSource;
     /// <summary>Feeds the producer a point that travels along a named <c>curves</c> row at a constant authored arc
     /// rate — the deterministic, fixed-point curve-follow target the kart-track charter inherits. The travelled arc
     /// position is per-body simulation state (see <c>Puck.World.Server.BodyProducerSupport.BodyProducerState.
@@ -42,9 +42,12 @@ public abstract record BodyTargetSource {
     /// <param name="Rate">The signed arc-length rate, in the curve's own units per second. Negative travels the
     /// curve in reverse. A closed row wraps at the loop point; an open row clamps at either end and holds the
     /// endpoint target rather than overshooting it.</param>
-    public sealed record CurveFollow(string Curve, float Rate) : BodyTargetSource;
+    public sealed record CurveFollow([property: DocumentText("a curve name")] string Curve, float Rate) : BodyTargetSource;
     /// <summary>Routes toward a target register through a named bounded surface, volume, or medium domain.</summary>
     /// <param name="Domain">The authored navigation-domain name.</param>
     /// <param name="Register">The target register supplying a body or world-space point destination.</param>
-    public sealed record Navigated(string Domain, string Register) : BodyTargetSource;
+    public sealed record Navigated(
+        [property: DocumentText("a navigation domain")] string Domain,
+        [property: DocumentText("a target register name")] string Register
+    ) : BodyTargetSource;
 }

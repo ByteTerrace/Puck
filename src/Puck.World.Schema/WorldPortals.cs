@@ -80,10 +80,10 @@ public enum WorldPortalArrival {
 /// border at once, or <see langword="null"/> to use the destination population's remaining capacity. A full border
 /// refuses the current attempt immediately; it never queues.</param>
 public sealed record WorldPlacementPortal(
-    string Destination,
+    [property: DocumentText("a destination name")] string Destination,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldPortalTravel? Travel = null,
     WorldPortalArrival Arrival = WorldPortalArrival.Spawn,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Counterpart = null,
+    [property: DocumentText("a counterpart in the destination world")] [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Counterpart = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? Capacity = null
 );
 /// <summary>Parses and resolves a <see cref="WorldPlacementPortal.Counterpart"/> string — the one spelling shared by

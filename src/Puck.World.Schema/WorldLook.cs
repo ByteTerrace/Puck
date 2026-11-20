@@ -1,3 +1,4 @@
+using Puck.Abstractions.Documents;
 using System.Text.Json.Serialization;
 using Puck.Assets.Documents;
 
@@ -32,7 +33,10 @@ public abstract record WorldLookSource {
     /// <summary>A sculpted creation worn by the body — resolved against the world's <see cref="WorldPrototype"/> rows.</summary>
     /// <param name="PrototypeId">The referenced <see cref="WorldPrototype.Id"/>, authored literally or through a Text
     /// state cell; it must resolve at validation.</param>
-    public sealed record Creation([property: System.Text.Json.Serialization.JsonPropertyName("prototypeId")] DocumentIdentifier PrototypeId) : WorldLookSource;
+    public sealed record Creation(
+        [property: DocumentName(WorldNameKind.Prototype, WorldNameRole.Names)]
+        [property: System.Text.Json.Serialization.JsonPropertyName("prototypeId")] DocumentIdentifier PrototypeId
+    ) : WorldLookSource;
 }
 /// <summary>One cue of a creation look: a named timeline frame the body holds for <paramref name="HoldSeconds"/>
 /// when the cue fires — a blink, a twitch, a tail flick. A cue fires by itself on a semi-random interval drawn
@@ -48,7 +52,7 @@ public abstract record WorldLookSource {
 /// <param name="MaxSeconds">The longest rest between self-fires, seconds.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record WorldLookCue(
-    string Frame,
+    [property: DocumentText("a creation frame")] string Frame,
     float HoldSeconds,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? MinSeconds = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? MaxSeconds = null
@@ -79,9 +83,13 @@ public readonly record struct WorldLookMotion(
     bool ReplayFrames,
     float SecondsPerFrame,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldLookCue>? Cues = null,
+    [property: DocumentName(WorldNameKind.Dynamics, WorldNameRole.Names, WorldExportFacet.Binding)]
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Dynamics = null,
+    [property: DocumentName(WorldNameKind.Dynamics, WorldNameRole.Names, WorldExportFacet.Binding)]
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyDictionary<string, string>? PartDynamics = null,
+    [property: DocumentName(WorldNameKind.State, WorldNameRole.Binding, WorldExportFacet.Binding)]
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyDictionary<string, string>? Poses = null,
+    [property: DocumentName(WorldNameKind.State, WorldNameRole.Expression)]
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     [property: JsonConverter(typeof(WorldRenderLanesConverter))] IReadOnlyList<ExpressionProgram?>? Lanes = null
 ) {

@@ -1,3 +1,4 @@
+using Puck.Abstractions.Documents;
 using System.Text.Json.Serialization;
 
 namespace Puck.World;
@@ -36,7 +37,7 @@ public static class WorldIconFontCatalog {
 /// <c>U+XXXX</c> escape (1-6 hex digits) for a glyph with no convenient literal spelling.</summary>
 /// <param name="Font">The font id (<see cref="WorldIconFontCatalog"/>).</param>
 /// <param name="Glyph">The glyph spelling: one literal character, or <c>U+XXXX</c>.</param>
-public sealed record WorldIconGlyphRef(string Font, string Glyph) {
+public sealed record WorldIconGlyphRef([property: DocumentText("a font name")] string Font, [property: DocumentText("font characters or code points")] string Glyph) {
     /// <summary>Parses <see cref="Glyph"/> to exactly one Unicode scalar value.</summary>
     /// <param name="glyph">The glyph spelling.</param>
     /// <param name="codePoint">The parsed scalar value on success.</param>
@@ -96,15 +97,19 @@ public sealed record WorldIconGlyphRef(string Font, string Glyph) {
 /// <param name="Glyph">The glyph content, or <see langword="null"/> when this row carries <see cref="Label"/> instead.</param>
 /// <param name="Label">The short text content, or <see langword="null"/> when this row carries <see cref="Glyph"/> instead.</param>
 public sealed record WorldIconRow(
-    string Name,
+    [property: DocumentText("an icon name")] string Name,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldIconGlyphRef? Glyph = null,
+    [property: DocumentText("literal text")]
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Label = null
 );
 /// <summary>One family-specific badge override: the same physical button renders a different icon on the named
 /// controller family (<c>Puck.Input.Devices.GamepadType</c> member name).</summary>
 /// <param name="Family">The controller family name.</param>
 /// <param name="Icon">The icon name this family shows instead of the row's default.</param>
-public sealed record WorldIconBadgeOverride(string Family, string Icon);
+public sealed record WorldIconBadgeOverride(
+    [property: DocumentText("a badge override family is a controller family name, not a state row")] string Family,
+    [property: DocumentText("an icon name")] string Icon
+);
 /// <summary>One physical-control badge mapping: which authored icon an INPUT SOURCE ID shows on the binding bar, with
 /// optional per-family overrides — the engine holds no button→glyph switch, and a control the bar can name is a
 /// control a badge row can key. A slot, a modifier indicator, and a chord hint all resolve their badge through this
@@ -114,8 +119,8 @@ public sealed record WorldIconBadgeOverride(string Family, string Icon);
 /// <param name="Icon">The default icon name.</param>
 /// <param name="OverridesRaw">Family-specific overrides — ABSENT resolves to none.</param>
 public sealed record WorldIconBadgeRow(
-    string Source,
-    string Icon,
+    [property: DocumentText("an input source id")] string Source,
+    [property: DocumentText("an icon name")] string Icon,
     [property: JsonPropertyName("overrides"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldIconBadgeOverride>? OverridesRaw = null
 ) {
     /// <summary>Gets the family-specific overrides — ABSENT resolves to none.</summary>

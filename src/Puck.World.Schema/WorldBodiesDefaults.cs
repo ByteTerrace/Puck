@@ -60,6 +60,7 @@ public readonly record struct WorldBodiesDefaults(
     [property: JsonPropertyName("seatActivation"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<SeatActivationPolicy>? SeatActivationRaw = null,
     int NetworkPlayers = 0,
     [property: JsonPropertyName("defaultPeerSource"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IntentSource? DefaultPeerSourceRaw = null,
+    [property: DocumentText("a spawn point id")]
     [property: JsonPropertyName("seatSpawns"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<string>? SeatSpawnsRaw = null,
     [property: JsonPropertyName("distribution"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldDistribution? DistributionRaw = null,
     [property: JsonPropertyName("peerVariation"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldPopulationVariation? PeerVariationRaw = null,
@@ -70,6 +71,7 @@ public readonly record struct WorldBodiesDefaults(
     // OPTIONAL — reads the census from a scalar kind=Int state row's slot at boot, AFTER row first-fills, so a
     // Boot-drawn row IS the drawn census: the draw facet lives on the ROW, this site only reads it. Re-resolved on
     // every fresh load; the row itself is the persisted evidence of what was drawn.
+    [property: DocumentName(WorldNameKind.State, WorldNameRole.Names)]
     [property: JsonPropertyName("capacityRow"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? CapacityRow = null,
     // OPTIONAL per-observer snapshot disclosure. Null resolves to WorldObserverDisclosure.Default (disclose-all),
     // which is what every world authoring none delivers.
@@ -81,6 +83,7 @@ public readonly record struct WorldBodiesDefaults(
     // another world carries it with the body (the destination reads it through the register it declares under the
     // same name), a checkpoint restores it, and a replay moves it at the same tick. WorldPopulation.SyncBodyScale
     // resolves it once a tick after the world rules, at the install choke points, and when a crossing lands.
+    [property: DocumentText("a per-body scale register")]
     [property: JsonPropertyName("scale"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Scale = null,
     // Seconds, a whole number of engine ticks (FixedTickConversion.TryDurationEngineTicksExact): a body's own idle
     // floor before its motion program and contact solve stop running. 0 (the default) means never sleep.

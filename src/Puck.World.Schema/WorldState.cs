@@ -1,3 +1,4 @@
+using Puck.Abstractions.Documents;
 using Puck.Abstractions.Collections;
 using System.Text.Json.Serialization;
 
@@ -43,9 +44,11 @@ public sealed record WorldStateSection(
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public IReadOnlyList<WorldStateRow>? World { get => field; init => field = OwnedLists.Freeze(items: MarkHostOwned(rows: value)); } = OwnedLists.Freeze(items: MarkHostOwned(rows: World));
     /// <inheritdoc cref="Body"/>
+    [DocumentText("per-body slots, the body-state lane's own namespace")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public IReadOnlyList<ActionStateSlot>? Body { get => field; init => field = OwnedLists.Freeze(items: value); } = OwnedLists.Freeze(items: Body);
     /// <inheritdoc cref="Identity"/>
+    [DocumentText("per-body slots, the identity lane's own namespace")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public IReadOnlyList<ActionStateSlot>? Identity { get => field; init => field = OwnedLists.Freeze(items: value); } = OwnedLists.Freeze(items: Identity);
     /// <inheritdoc cref="Lattices"/>
@@ -185,13 +188,16 @@ public sealed record WorldStateRow(
     StateDomain? Domain = null,
     string? ValuesFrom = null,
     StateInverse? Inverse = null,
-    StatePhase? Phase = null, StateVisibility? Visibility = null, StateKnowledge? Knowledge = null, string? PhaseOf = null,
+    StatePhase? Phase = null,
+    StateVisibility? Visibility = null,
+    StateKnowledge? Knowledge = null,
+    string? PhaseOf = null,
     long HistoryCursor = 0,
     string? Space = null,
     CellName? Enum = null,
     bool HostOwned = false,
     WorldVerdictTrait? Verdict = null,
-    CellName? Witness = null,
+    [property: DocumentName(WorldNameKind.State, WorldNameRole.Names)] CellName? Witness = null,
     bool CellVisibility = false
 ) : StateRow(
     Name,

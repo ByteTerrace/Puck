@@ -149,11 +149,14 @@ public sealed record WorldAdmissionVerdict {
 /// projection-only wire is the default and nothing has to be edited to stay closed.
 /// <see cref="WorldDisclosureTier.Replica"/> is reachable only by authoring it.</param>
 public sealed record WorldAdmissionEntry(
-    string Domain,
+    [property: DocumentText("an authority namespace")] string Domain,
     WorldAdmissionTrustMode Mode,
     IReadOnlyList<WorldAdmissionGrant> Grants,
+    [property: DocumentText("a principal identifier")]
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Subject = null,
+    [property: DocumentText("a signature algorithm")]
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Algorithm = null,
+    [property: DocumentText("a public key")]
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? PublicKey = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldDisclosureTier? Disclosure = null
 ) {

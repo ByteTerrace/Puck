@@ -3622,11 +3622,9 @@ puck registry --check       regenerate in memory and compare against the file on
 puck registry -h / --help   this text
 ```
 
-Both modes first refuse, exit 1, on a name-shaped document member the registry
-neither registers nor excludes with a reason—a `CellName`, `ExpressionProgram`,
-`BindableScalar`, `BindableColor`, or `WorldLatticeScalar` member, or a string
-member whose C# name reads like a name position—so a field added to the model
-without a registration cannot pass. Exit codes: **0** wrote or matched, **1**
+Both modes report each unclassified text position. A property declares its module name
+kind and spelling, takes its binding from its type, or identifies its literal or local
+meaning. Run `puck schema` and rebuild after changing a declaration. Exit codes: **0** wrote or matched, **1**
 drift or an uncovered member, **2** usage error or missing repository root.
 
 ## `puck verbs`—console verb catalog

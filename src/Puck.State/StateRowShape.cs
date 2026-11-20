@@ -1,3 +1,4 @@
+using Puck.Abstractions.Documents;
 using System.Text.Json.Serialization;
 
 namespace Puck.State;
@@ -25,7 +26,7 @@ namespace Puck.State;
 /// <param name="HostOwned">Whether a host facet serves the row.</param>
 /// <param name="CellVisibility">Whether the declaration permits per-cell audience policies.</param>
 public abstract record StateRowShape(
-    CellName Name,
+    [property: DocumentName(WorldNameKind.State, WorldNameRole.Declares)] CellName Name,
     CellKind Kind,
     long? Min = null,
     long? Max = null,
@@ -36,13 +37,13 @@ public abstract record StateRowShape(
     StateDynamics? Dynamics = null,
     StateCycle? Cycle = null,
     StateDomain? Domain = null,
-    string? ValuesFrom = null,
+    [property: DocumentName(WorldNameKind.State, WorldNameRole.Names)] string? ValuesFrom = null,
     StateInverse? Inverse = null,
     StateVisibility? Visibility = null,
     StateKnowledge? Knowledge = null,
-    string? PhaseOf = null,
-    string? Space = null,
-    CellName? Enum = null,
+    [property: DocumentName(WorldNameKind.State, WorldNameRole.Names)] string? PhaseOf = null,
+    [property: DocumentText("an embedding space")] string? Space = null,
+    [property: DocumentText("an enum name is local to the document")] CellName? Enum = null,
     bool HostOwned = false,
     bool CellVisibility = false
 ) {
