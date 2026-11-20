@@ -13,27 +13,43 @@ public sealed partial class SdfMeshPathBake {
     private sealed record PackedField(UInt128 Hash);
     private static readonly Puck.Abstractions.CodeDerivedTable<SdfProgram, PackedField> PackedFields = new();
 
-    // Checkpoints keep the numeric palette and poses. The drawn product can use the group's canonical geometry.
-    private static SdfMeshGeometry CheckpointInput(Group group, SdfProgram program) {
+    // The key a group's stage checkpoints (its contour and simplified meshes) are kept under: its sealed geometry, tier
+    // included, with the numeric palette and poses (GroupInput). The drawn product can use the group's canonical geometry.
+    private static SdfMeshGeometry CheckpointInput(Group group, SdfProgram program) => GroupInput(group, program, geometry: group.Sealed.Hash);
+
+    // What a group's samples depend on beside each lattice's own row: its shape (SdfMeshBakeGroup.Shape, its geometry
+    // before the tier and the operands' poses join it) and what GroupInput adds, whose pose rows hold every slot pose the
+    // kernel reads, a skin member's and an operand's included. Everything a tier changes in what a lattice samples reaches
+    // the kernel through those rows (an operand's pose snapped to the tier's cell) or the lattice's row (its spacing, a
+    // glyph's cell), so a detail tier takes its floor's coarse search and final slabs from the store when they sample
+    // alike, and no sample set of another field is ever taken.
+    private static SdfMeshGeometry SampleFieldInput(Group group, SdfProgram program) => GroupInput(group, program, geometry: group.Shape);
+
+    // A group's geometry hash with what the bake reads beside it: the program's packed field and step scale, the
+    // group's numeric palette and the pose rows its lattices read.
+    private static SdfMeshGeometry GroupInput(Group group, SdfProgram program, UInt128 geometry) {
         var hash = new XxHash128();
         var packed = PackedFields.GetValue(program, static field =>
             new PackedField(XxHash128.HashToUInt128(MemoryMarshal.AsBytes(field.FieldWords))));
-        Span<byte> header = stackalloc byte[44];
-        BinaryPrimitives.WriteUInt128LittleEndian(header, group.Sealed.Hash);
+        Span<byte> header = stackalloc byte[48];
+        BinaryPrimitives.WriteUInt128LittleEndian(header, geometry);
         BinaryPrimitives.WriteUInt128LittleEndian(header[16..], packed.Hash);
         BinaryPrimitives.WriteInt32LittleEndian(header[32..], group.MaterialOrder.Length);
         BinaryPrimitives.WriteInt32LittleEndian(header[36..], group.PoseRows.Length);
         BinaryPrimitives.WriteInt32LittleEndian(header[40..], group.PoseFirst);
+        BinaryPrimitives.WriteSingleLittleEndian(header[44..], program.StepScale);
         hash.Append(header);
         hash.Append(MemoryMarshal.AsBytes(group.MaterialOrder.AsSpan()));
         hash.Append(MemoryMarshal.AsBytes(group.PoseRows.AsSpan()));
         return new SdfMeshGeometry(Dynamic: group.Dynamic, Hash: hash.GetCurrentHashAsUInt128());
     }
 
+    // The one key a lattice's samples are kept and probed by: a probe (ProbeSamples) and a write (Complete's KeepSamples)
+    // both call it with the group and the request, so a hit restores the samples the same request dispatched.
     private static UInt128 SampleInput(Group group, in SdfMeshBakeRequest request) {
         var hash = new XxHash128();
         Span<byte> geometry = stackalloc byte[16];
-        BinaryPrimitives.WriteUInt128LittleEndian(destination: geometry, value: group.CheckpointGeometry.Hash);
+        BinaryPrimitives.WriteUInt128LittleEndian(destination: geometry, value: group.SampleGeometry.Hash);
         hash.Append(geometry);
         Span<byte> row = stackalloc byte[SdfMeshBakeBlock.LatticeBytes];
         // Use the same packer that writes the dispatch. Offsets into a batch are rebased to the start of this request.
@@ -105,32 +121,52 @@ public sealed partial class SdfMeshPathBake {
         }
     }
 
-    // A group owns one request at a time. Probe on its worker after the usual lattice admission, then give a miss
-    // back to the normal dispatch path. An answered probe never consumes GPU dispatch budget.
+    // Whether a take hands a group's next lattice to the store instead of dispatching it; under the gate, from the take,
+    // which dispatches the lattice when this answers false. A group owns one request at a time. A lattice the store is
+    // known not to hold dispatches in this take, decided from the store's knowledge of its sample sets
+    // (SdfMeshStore.MayHoldSamples) with no file read: on a cold store, every lattice. One it may hold is read on the
+    // bake's pool ahead of every queued stage, an answer's place; a miss hands it back to the next take, which dispatches
+    // it unprobed. A probe is never a stage (Schedule), so a group's lead (SdfMeshBakeBacklog.ObserveLead) runs from its
+    // admission to its first real stage. An answered probe never consumes GPU dispatch budget.
     private bool ProbeSamples(Group group, in SdfMeshBakeRequest request) {
-        if (group.SampleProbe.HasValue || (CheckpointStore(group) is not { } store)) { return false; }
+        if (CheckpointStore(group) is not { } store) { return false; }
         if (!group.CheckedCheckpoints) {
             group.CheckedCheckpoints = true;
             m_accounts.SimplifyMisses++;
             m_accounts.ContourMisses++;
         }
+
+        var sampling = group.Checkpoints!.Sampling;
+        var missed = group.ProbeMissed;
+
+        group.ProbeMissed = false;
+        if (missed || !store.MayHoldSamples(sampling) || !store.MayHoldSamples(sampling, SampleInput(group, in request))) {
+            m_accounts.SampleMisses++;
+            return false;
+        }
+        // A retired group takes no lattice: its bake no longer plans it.
+        if (!group.QueueWork()) { return true; }
+
         group.Contouring = true;
-        ScheduleSampleLoad(group, request, store);
+        QueueSampleLoad(group, request, store);
         return true;
     }
     // Its own method, so a probe that returns early above allocates no closure.
-    private void ScheduleSampleLoad(Group group, in SdfMeshBakeRequest request, SdfMeshStore store) {
+    private void QueueSampleLoad(Group group, in SdfMeshBakeRequest request, SdfMeshStore store) {
         var pending = request;
 
-        Schedule(group: group, work: () => LoadSamples(group, pending, store));
+        Enqueue(group: group, urgent: true, work: () => LoadSamples(group, pending, store));
     }
 
+    // Reads a probed lattice's samples and answers the group with them, or hands the lattice back to the next take, which
+    // dispatches it.
     private void LoadSamples(Group group, SdfMeshBakeRequest request, SdfMeshStore store) {
-        var input = SampleInput(group, in request);
+        if (group.Retired) { return; }
+
         var length = request.OutputBytes;
         using var samples = new OwnedBuffer<byte>(allocator: Library.Allocator, observer: group.Memory);
 
-        if (store.TryReadSamples(group.Checkpoints!.Sampling, input, length, samples)) {
+        if (store.TryReadSamples(group.Checkpoints!.Sampling, SampleInput(group, in request), length, samples)) {
             using var answer = Decode(group, in request, samples.GetSpan());
             using (EnterGate(site: BakeGate.Checkpoint)) {
                 if (!GroupList.Holds(group: group)) { return; }
@@ -145,20 +181,16 @@ public sealed partial class SdfMeshPathBake {
 
         using (EnterGate(site: BakeGate.Checkpoint)) {
             group.Contouring = false;
-            group.SampleProbe = input;
-            m_accounts.SampleMisses++;
+            group.ProbeMissed = true;
         }
     }
 
-    private OwnedBuffer<byte>? CaptureSamples(Group group, ReadOnlySpan<byte> samples) {
-        if (!group.SampleProbe.HasValue || CheckpointStore(group) is null) { return null; }
-        var copy = new OwnedBuffer<byte>(allocator: Library.Allocator, observer: group.Memory);
-        try {
-            copy.CopyFrom(samples);
-            return copy;
-        } catch (OutOfMemoryException) {
-            copy.Dispose();
-            return null;
-        }
+    // Keeps a dispatched lattice's samples for a later bake, on the store's writer; the answer does not wait for it.
+    private void KeepSamples(Group group, in SdfMeshBakeRequest request, ReadOnlySpan<byte> samples) {
+        if (CheckpointStore(group) is not { } store) { return; }
+
+        var kept = request;
+
+        store.KeepSamples(group.Checkpoints!.Sampling, samples, key: () => SampleInput(group, in kept));
     }
 }

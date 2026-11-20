@@ -31,11 +31,17 @@ public sealed partial class SdfMeshPathBakeLawTests {
                 return !bake.Pending;
             });
             Assert.True(bake.TryLandedMesh(selector: -1, out _), bake.Describe());
+            // A stage's checkpoints and samples are written beside the bake, on the store's writer.
+            Assert.True(SdfMeshStore.WaitForWrites(TimeSpan.FromSeconds(30)));
             return (dispatches, bake.Describe());
         }
 
+        // A finished mesh's set stands under the store's directory, a stage's intermediates under its intermediates'.
+        string SetOf(UInt128 stage) => (stage == identity.Value)
+            ? store.SetDirectoryOf(stage)
+            : Path.Combine(store.IntermediateDirectory, stage.ToString("x32", provider: null));
         void Drop(UInt128 stage) {
-            foreach (var path in Directory.EnumerateFiles(store.SetDirectoryOf(stage))) { File.Delete(path); }
+            foreach (var path in Directory.EnumerateFiles(SetOf(stage))) { File.Delete(path); }
         }
 
         var cold = Bake();
@@ -68,7 +74,7 @@ public sealed partial class SdfMeshPathBakeLawTests {
         Drop(identity.Value);
         Drop(identity.Simplification);
         Drop(identity.Contouring);
-        File.WriteAllBytes(Directory.EnumerateFiles(store.SetDirectoryOf(identity.Sampling)).First(), [0]);
+        File.WriteAllBytes(Directory.EnumerateFiles(SetOf(identity.Sampling)).First(), [0]);
         Assert.Equal(1, Bake().Dispatches);
         Assert.Equal(original, File.ReadAllBytes(entry));
     }

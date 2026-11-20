@@ -131,6 +131,8 @@ public sealed class SdfMeshBakeClosure {
         (string Assembly, string Type, string? Method)[] sampleRoots = [
             .. SampleInputs,
             ("Puck.SdfVm", typeof(SdfMeshPathBake).FullName!, "SampleInput"),
+            ("Puck.SdfVm", typeof(SdfMeshPathBake).FullName!, "SampleFieldInput"),
+            ("Puck.SdfVm", typeof(SdfMeshPathBake).FullName!, "GroupInput"),
             ("Puck.SdfVm", typeof(SdfMeshPathBake).FullName!, "CheckpointInput"),
             ("Puck.SdfVm", typeof(SdfMeshStore).FullName!, nameof(SdfMeshStore.TryReadSamples)),
             ("Puck.SdfVm", typeof(SdfMeshStore).FullName!, nameof(SdfMeshStore.WriteSamples)),

@@ -835,7 +835,7 @@ limit, waits for a measured need; none of the consumers above has one.
 
 Each group stage the bake schedules today (`SdfMeshPathBake.Schedule`)
 becomes a `Bake` job under the descending
-demand comparer (section 1); urgent answers (`SdfMeshPathBake.RunFirst`) keep their
+demand comparer (section 1); urgent answers and sample probes (`SdfMeshPathBake.Enqueue` with `urgent`) keep their
 place ahead by a reserved rank. Admission of a group's final lattice reads the
 pool's backlog as wall time (`SdfMeshBakeBacklog`: the stages queued and on
 their way against what the workers drain in an admission's lead), which under

@@ -383,8 +383,11 @@ laws exercise that boundary.
   whatever its size; one under a pixel ranks after. Ranking by projected size
   instead let far terrain and shells outrank the lobby's small parts, and the
   occupied area landed no sooner than in plan order. `TryTake` takes
-  lattices, the work queue (`Schedule`) runs store loads, lattice answers and
-  every CPU stage of the bake, and `SdfWorldTables.OrderLanding`
+  lattices in the order `Prioritize` sorts once per measure, outside the bake's
+  gate (`SdfMeshPathBake.Order`; a take orders again only when the group list
+  changed since, `GroupList.Version`), the work queue runs store loads and
+  lattice answers ahead of its stages (`Enqueue`, urgent) and every CPU stage of
+  the bake (`Schedule`), and `SdfWorldTables.OrderLanding`
   orders owed meshes for landing in that order, the plan's or the list's order among
   equals and a draw no host box bounds first. With no demand point (the CPU
   laws, `puck mesh audit --cpu`) the plan's order stands. Order never changes
@@ -405,11 +408,19 @@ laws exercise that boundary.
   5 to 17 seconds while the runtime injected threads. The done line's
   `tail=` is the seconds from the last moment work was queued behind every
   worker to the bake's end: the serial tail in which the largest groups finish
-  alone. A completed batch's readback is copied and decoded into each
-  group's answer buffers on the pool, ahead of every queued stage
-  (`SdfMeshPathBake.RunFirst`, from `SdfMeshBakeGpuWork.Complete`), and its slot
-  is released as soon as the copy is taken, so the frame thread reads no
-  samples. Only the groups the process memory account admits hold a final lattice
+  alone. A completed batch's readback is copied out by a reader of its own,
+  never behind the pool (`SdfMeshBakeGpuWork.Complete`'s `Readers`, a
+  `BoundedWorkQueue` of a reader a slot on the host's thread pool), and its slot
+  is released as soon as the copy is taken, so neither the frame thread nor a
+  worker busy contouring holds the GPU's next batch back; the reader decodes
+  each group's answer buffers and queues each answer on the pool ahead of every
+  queued stage, then advances `Progress` (`SdfMeshPathBake.Progressed`), since a
+  field slice's answer queues no work item. A group's lead, which paces
+  admission (`SdfMeshBakeBacklog.ObserveLead`), runs from its admission to its
+  first `Schedule`d stage: a sample probe and an answer are queued urgent
+  (`Enqueue`), never through `Schedule`: a probe ended in the admitting take
+  would measure a lead of microseconds and clamp admission to one round of the
+  workers. Only the groups the process memory account admits hold a final lattice
   (admitted at its first slab, whose answer allocates the lattice's values), by
   each group's own peak (`PeakOf`); the admission rules are in
   [data and memory](../../dotnet-performance/references/data-and-memory.md#owned-storage-and-byte-admission).
@@ -1251,8 +1262,34 @@ laws exercise that boundary.
   finished contour, including material cuts and skinning. Both use the
   lossless path in `SdfMeshStoreCodec.EncodeExact`. An earlier miss drives
   contouring normally, and it may reuse individual samples for any unchanged
-  lattice or point request. The sample lookup uses the dispatch's packed
-  lattice and immutable group inputs. All products share the store's byte
+  lattice or point request. The sample key (`SdfMeshPathBake.SampleInput`, the
+  one derivation a probe and a write share) is the dispatch's packed lattice row
+  and points over the group's sample input (`SampleFieldInput`): its `Shape`,
+  which the geometry hashes before the tier and the operands' poses, the
+  program's packed field and step scale, its palette and its pose rows. A tier
+  changes what a lattice samples only through those rows or the lattice's own
+  row, so a detail tier takes its floor's coarse search and final slabs from the
+  store when they sample alike. The take decides a probe inline from what the
+  store knows of the sampling identity's sets (`SdfMeshStore.MayHoldSamples`:
+  the directory listed once on the pool, or found missing, then kept by this
+  process's writes and deletes), so a cold store dispatches every lattice in its
+  first take with no file read; a lattice the store may hold is read on the
+  pool's urgent queue, and one that misses there dispatches in the next take
+  unprobed. A dispatched
+  lattice's samples, its contour and its simplified mesh go to the store's
+  writer (`SdfMeshStore.KeepSamples`, `WriteCheckpoint`: a `BoundedWorkQueue`
+  of two pool items, drained for up to ten seconds at process exit), never
+  ahead of the answer or the landing; past `MostPendingWriteBytes` held, a
+  checkpoint writes on its caller and a sample set is not kept
+  (`store-writes-dropped` on the residency's store line). Every entry is encoded
+  straight into its temporary file and written atomically without a flush to
+  stable storage (`AtomicFile.WriteVerifiedCache`): its checksum refuses what a
+  power loss leaves. A native checkpoint alone is encoded on its caller into a
+  buffer the writer copies out, since its parts may go before the writer runs.
+  The finished mesh's write stays on the landing, since a published mesh
+  restores its parts from that entry, and returns the position planes it stored
+  (`SdfMeshStoreCodec.Encode`), which the published native copy conforms to;
+  its bound's enforcement runs on the writer. All products share the store's byte
   budget. The bake's done line prints hit/miss counts for the three intermediate
   stages beside its actual GPU dispatch count.
 
@@ -1349,7 +1386,8 @@ laws exercise that boundary.
   directory named for the identity (`SdfMeshStore.SetDirectoryOf`). The debug
   world's set is compressed with its mesh codec; the store keeps `SdfMeshStore.DefaultCapacityBytes`
   (8 GiB), shared by every World and worktree on the machine, a set at a
-  time (`CacheRetention.EnforceSetsOnWrite`): a set's last use is its most
+  time (`CacheRetention.EnforceSetsOnWrite`, which the store's writer runs after
+  each entry stands): a set's last use is its most
   recently read or written entry's, and a write removes whole sets, least
   recently used first, keeping its own. A peer's write may evict a set being
   baked or loaded unless it is pinned (`SdfMeshStore.Hold`). An unpinned writer's

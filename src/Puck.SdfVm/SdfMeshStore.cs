@@ -15,7 +15,10 @@ namespace Puck.SdfVm;
 /// (<see cref="SdfMeshGeometryBuilder"/>), so a change to either reads no entry the other made. An entry names its key and
 /// ends with a checksum of its bytes; one that is truncated, damaged, another key's or not a mesh
 /// (<see cref="SdfMesh"/> refuses it) is refused by name and deleted, and its group bakes. Writes replace an entry
-/// atomically, so concurrent Worlds may share a directory.</para>
+/// atomically, so concurrent Worlds may share a directory, and without a flush to stable storage, since the checksum
+/// refuses whatever a power loss leaves behind a name. The writes no bake waits for (a stage's checkpoint, a lattice's
+/// samples, a bound's enforcement) run on the store's writer, beside the bake rather than ahead of it, holding at most
+/// <see cref="MostPendingWriteBytes"/>.</para>
 /// <para>Each identity's entries are one set, kept in a directory named for the identity, and the store holds at most
 /// <see cref="CapacityBytes"/> bytes a set at a time, under Puck's one cache retention
 /// (<see cref="Puck.Abstractions.CacheRetention.EnforceSetsOnWrite"/>): a read stamps an entry, a set's last use is its
@@ -23,7 +26,8 @@ namespace Puck.SdfVm;
 /// the writer's own, down to an eighth below it (<see cref="Puck.Abstractions.CacheBound.LowWater"/>). A peer's write
 /// may evict a set being baked or loaded unless it is pinned by <see cref="Hold"/>. An unpinned writer's set that alone
 /// exceeds the bound is trimmed entry by entry, keeping the entry being written. One process's
-/// writes never leave the store over its bound; Worlds writing it at once count one another's writes only at their next
+/// writes leave the store over its bound only until its writer enforces it after each, which a process that ends waits
+/// for; Worlds writing it at once count one another's writes only at their next
 /// listing, at least once a minute while they write. A file directly in the directory, which no identity's set holds,
 /// is a set of its own and ages out first once nothing reads it. A bake's intermediates (its stage checkpoints and
 /// sample sets, which let a later bake resume past a stage whose code did not change) are kept apart, in
@@ -285,11 +289,13 @@ public sealed class SdfMeshStore {
     private long m_decodeTicks;
 
     /// <summary>Describes the entries this store has read: their count, their file bytes, and the seconds its readers
-    /// spent reading files and decoding them, each summed over the threads that read concurrently.</summary>
+    /// spent reading files and decoding them, each summed over the threads that read concurrently; and the bytes its
+    /// writer holds for writes it has not finished, with the sample sets it kept none of for want of room
+    /// (<see cref="MostPendingWriteBytes"/>).</summary>
     /// <returns>One line of <c>key=value</c> pairs.</returns>
     public string DescribeReads() => string.Create(
         provider: System.Globalization.CultureInfo.InvariantCulture,
-        handler: $"store-reads={Interlocked.Read(location: ref m_reads)} store-read-bytes={Interlocked.Read(location: ref m_readBytes)}B store-read-thread-seconds={(((double)Interlocked.Read(location: ref m_readTicks)) / System.Diagnostics.Stopwatch.Frequency):0.000}s store-decode-thread-seconds={(((double)Interlocked.Read(location: ref m_decodeTicks)) / System.Diagnostics.Stopwatch.Frequency):0.000}s"
+        handler: $"store-reads={Interlocked.Read(location: ref m_reads)} store-read-bytes={Interlocked.Read(location: ref m_readBytes)}B store-read-thread-seconds={(((double)Interlocked.Read(location: ref m_readTicks)) / System.Diagnostics.Stopwatch.Frequency):0.000}s store-decode-thread-seconds={(((double)Interlocked.Read(location: ref m_decodeTicks)) / System.Diagnostics.Stopwatch.Frequency):0.000}s store-writes-pending={Interlocked.Read(location: ref m_pendingWriteBytes)}B store-writes-dropped={Interlocked.Read(location: ref m_droppedWrites)}"
     );
 
     // Reads an entry into a storage, answering whether a held entry's bytes were refused (damaged) rather than unreadable
@@ -365,18 +371,30 @@ public sealed class SdfMeshStore {
         var path = PathOf(identity: identity, key: key);
 
         stored = null;
-        return WriteEntry(path, new MeshPayload(key, mesh, materials, ref stored), static (output, entry) => entry.Stored = SdfMeshStoreCodec.Encode(output, entry.Key, entry.Mesh, entry.Materials));
+        return WriteEntry(path, new MeshPayload(key, mesh, materials, ref stored), static (output, entry) => entry.Stored = SdfMeshStoreCodec.Encode(output, entry.Key, entry.Mesh, entry.Materials), queued: false);
     }
 
-    // A finished mesh and an intermediate are bounded apart, each in its own directory: PathOf puts every entry under the
-    // root its extension names, and this is the one place either bound is enforced. The entry is encoded straight into
-    // the temporary file.
-    private bool WriteEntry<TState>(string path, TState state, Action<Stream, TState> encode) where TState : allows ref struct {
+    // Writes an entry's file, encoded straight into the temporary: atomically, so a reader finds the old entry or the
+    // whole new one, and without a flush to stable storage, since every entry ends in a checksum its read refuses and the
+    // store derives again on (the store is a cache). A finished mesh and an intermediate are bounded apart, each in its
+    // own directory: PathOf puts every entry under the root its extension names, and Enforce, which every written entry
+    // passes, is the one place either bound is enforced. A write the bake waits for (`queued` false, a finished mesh)
+    // leaves the enforcement to the store's writer, so it never lists the directory; a write already on the writer
+    // enforces at once.
+    private bool WriteEntry<TState>(string path, TState state, Action<Stream, TState> encode, bool queued) where TState : allows ref struct {
         try {
-            Puck.Confinement.AtomicFile.Write(path: path, state: state, write: encode);
-        } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
+            Puck.Confinement.AtomicFile.WriteVerifiedCache(path: path, state: state, write: encode);
+        } catch (Exception exception) when (Refused(exception: exception)) {
             return false;
         }
+        if (queued) {
+            Enforce(path: path);
+        } else {
+            _ = WriteLater(bytes: 0L, behind: Behind.Inline, write: () => Enforce(path: path));
+        }
+        return true;
+    }
+    private void Enforce(string path) {
         var finished = IsMeshEntry(name: path);
 
         _ = Puck.Abstractions.CacheRetention.EnforceSetsOnWrite(
@@ -385,7 +403,70 @@ public sealed class SdfMeshStore {
             inUse: path,
             isEntry: (finished ? IsMeshEntry : IsIntermediateEntry)
         );
+    }
 
+    /// <summary>The bytes the store's writer holds at most for writes it has not finished (their samples and meshes);
+    /// a write past them waits for no writer: a checkpoint or a bound's enforcement runs on its caller, and a sample set
+    /// is not kept.</summary>
+    public const long MostPendingWriteBytes = (512L << 20);
+    // How long a process that is ending waits for the store's writer to finish what is queued.
+    private static readonly TimeSpan ExitDrain = TimeSpan.FromSeconds(seconds: 10);
+
+    /// <summary>Waits until every write the process's stores queued on their writer (checkpoints, sample sets and the
+    /// bounds' enforcement) has finished, those queued meanwhile included, or the timeout passes: a tool that reads the
+    /// store a bake just wrote, or holds it to its bound, waits here first. A process that ends waits by itself.</summary>
+    /// <param name="timeout">The longest wait.</param>
+    /// <returns><see langword="true"/> when no write is left unfinished.</returns>
+    public static bool WaitForWrites(TimeSpan timeout) => Writes.WaitIdle(timeout: timeout);
+    // The writes no bake waits for (checkpoints, sample sets and the bounds' enforcement), run off the bake's workers on
+    // at most two pool items, in the order they came, for every store of the process.
+    private static readonly BoundedWorkQueue<Action> Writes = CreateWrites();
+
+    private static BoundedWorkQueue<Action> CreateWrites() {
+        AppDomain.CurrentDomain.ProcessExit += static (_, _) => _ = Writes.WaitIdle(timeout: ExitDrain);
+        return new BoundedWorkQueue<Action>(concurrency: 2, run: static write => write());
+    }
+
+    private enum Behind { Inline, Drop }
+
+    private long m_pendingWriteBytes;
+    private long m_droppedWrites;
+    private MemoryAccount.Owner? m_writeOwner;
+
+    // The owner a queued sample set's copy is charged to while it waits.
+    private MemoryAccount.Owner WriteOwner {
+        get {
+            if (Volatile.Read(location: ref m_writeOwner) is { } owner) { return owner; }
+            var created = Account.CreateOwner(memoryClass: MemoryClass.Workspace, name: "mesh-store-writes");
+
+            if (Interlocked.CompareExchange(comparand: null, location1: ref m_writeOwner, value: created) is { } raced) {
+                created.Dispose();
+                return raced;
+            }
+            return created;
+        }
+    }
+
+    // Runs a write on the store's writer, holding `bytes` while it waits; when the writer already holds
+    // MostPendingWriteBytes, the write runs on the caller (Inline) or not at all (Drop), and false says it did not run.
+    // A failing write leaves the store as it was: the store is a cache.
+    private bool WriteLater(long bytes, Behind behind, Action write) {
+        if (Interlocked.Add(location1: ref m_pendingWriteBytes, value: bytes) > MostPendingWriteBytes) {
+            _ = Interlocked.Add(location1: ref m_pendingWriteBytes, value: -bytes);
+            if (behind == Behind.Drop) {
+                _ = Interlocked.Increment(location: ref m_droppedWrites);
+                return false;
+            }
+            _ = Quietly(action: write);
+            return true;
+        }
+        Writes.Enqueue(item: () => {
+            try {
+                _ = Quietly(action: write);
+            } finally {
+                _ = Interlocked.Add(location1: ref m_pendingWriteBytes, value: -bytes);
+            }
+        });
         return true;
     }
     private static bool IsMeshEntry(string name) => name.EndsWith(value: Extension, comparisonType: StringComparison.Ordinal);
@@ -404,17 +485,27 @@ public sealed class SdfMeshStore {
         }
     }
 
+    // Keeps a stage's mesh on the store's writer, encoded there straight into the entry's file. A managed mesh is
+    // immutable once built and lives while the queued write holds it; a native one may let its parts go once its claims
+    // end, so it is encoded here into a buffer the queued write copies to the file. A writer already holding
+    // MostPendingWriteBytes writes on the caller, as the bake did before it had one.
     internal void WriteCheckpoint(UInt128 identity, SdfMeshGeometry geometry, SdfMesh? mesh) {
         var key = KeyOf(identity, geometry);
-        try {
-            _ = WriteEntry(PathOf(identity, key, CheckpointExtension), (key, mesh), static (output, entry) => SdfMeshStoreCodec.EncodeExact(output, entry.key, entry.mesh));
-        } catch (Exception exception) when (exception is OutOfMemoryException or OverflowException) {
-            // The surface is still available to the next stage.
+        var path = PathOf(identity, key, CheckpointExtension);
+
+        if (mesh is { OwnsNativeStorage: true }) {
+            var encoded = new MemoryStream();
+
+            if (Quietly(action: () => SdfMeshStoreCodec.EncodeExact(encoded, key, mesh))) {
+                _ = WriteLater(bytes: encoded.Length, behind: Behind.Inline, write: () => WriteEntry(path, encoded, static (output, buffer) => buffer.WriteTo(stream: output), queued: true));
+            }
+            return;
         }
+        _ = WriteLater(bytes: (mesh?.StorageBytes ?? 0L), behind: Behind.Inline, write: () => WriteEntry(path, (key, mesh), static (output, entry) => SdfMeshStoreCodec.EncodeExact(output, entry.key, entry.mesh), queued: true));
     }
 
     internal bool TryReadSamples(UInt128 identity, UInt128 key, int length, OwnedBuffer<byte> samples) {
-        key = KeyOf(identity, new SdfMeshGeometry(Dynamic: false, Hash: key));
+        key = SampleKeyOf(identity, key);
         var path = PathOf(identity, key, SampleExtension);
         var workspace = Workspace;
         using var owner = workspace.CreateOwner("mesh-bake-samples");
@@ -422,28 +513,148 @@ public sealed class SdfMeshStore {
         try {
             if (!TryReadEntryBytes(entry, owner, path, in workspace)) { return false; }
             if (!SdfMeshStoreDecoder.TryPayload(entry.GetSpan(), key, out var compressed, out var storedLength, out _) || (storedLength != length)) {
-                Delete(path);
+                DeleteSamples(identity, key, path);
                 return false;
             }
             if (!workspace.TryReserve(owner, checked((long)entry.Length + length))) { return false; }
             samples.Resize(length, clear: false, preserve: false);
             if (!SdfMeshStoreDecoder.TryInflate(compressed, samples.GetSpan())) {
-                Delete(path);
+                DeleteSamples(identity, key, path);
                 return false;
             }
             Puck.Abstractions.CacheRetention.Stamp(path);
             return true;
         } catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or OutOfMemoryException) {
+            // A file the listing named that is gone (evicted, or another World's set) is a miss like any other.
+            m_sampleSets.GetValueOrDefault(identity)?.Remove(key);
             return false;
         }
     }
 
-    internal void WriteSamples(UInt128 identity, UInt128 key, ReadOnlySpan<byte> samples) {
-        key = KeyOf(identity, new SdfMeshGeometry(Dynamic: false, Hash: key));
+    // Keeps a lattice's samples, copied now while the caller's span lives, on the store's writer: `key` is the sample
+    // input the probe asks by (SdfMeshPathBake.SampleInput), computed on the writer. A writer already holding
+    // MostPendingWriteBytes keeps nothing: a later bake samples that lattice again.
+    internal void KeepSamples(UInt128 identity, ReadOnlySpan<byte> samples, Func<UInt128> key) {
+        if ((Interlocked.Read(location: ref m_pendingWriteBytes) + samples.Length) > MostPendingWriteBytes) {
+            _ = Interlocked.Increment(location: ref m_droppedWrites);
+            return;
+        }
+
+        var copy = new OwnedBuffer<byte>(allocator: m_allocator, observer: WriteOwner);
+
         try {
-            _ = WriteEntry(PathOf(identity, key, SampleExtension), new SamplePayload(key, samples), static (output, entry) => SdfMeshStoreCodec.EncodePayload(output, entry.Key, entry.Samples));
+            copy.CopyFrom(samples);
         } catch (OutOfMemoryException) {
-            // The sample answer is already available to the contour.
+            copy.Dispose();
+            _ = Interlocked.Increment(location: ref m_droppedWrites);
+            return;
+        }
+        if (!WriteLater(bytes: copy.Length, behind: Behind.Drop, write: () => {
+            using (copy) { WriteSamples(identity, key(), copy.GetSpan()); }
+        })) {
+            copy.Dispose();
+        }
+    }
+
+    // Writes a sample set on the store's writer (KeepSamples); a root of the sampling stage's code (SdfMeshBakeClosure).
+    internal void WriteSamples(UInt128 identity, UInt128 key, ReadOnlySpan<byte> samples) {
+        key = SampleKeyOf(identity, key);
+        if (WriteEntry(PathOf(identity, key, SampleExtension), new SamplePayload(key, samples), static (output, entry) => SdfMeshStoreCodec.EncodePayload(output, entry.Key, entry.Samples), queued: true)) {
+            m_sampleSets.GetValueOrDefault(identity)?.Add(key);
+        }
+    }
+
+    /// <summary>Returns whether the store may hold a sample set under a sampling identity: false only when it knows the
+    /// identity's directory holds none, which a store that has listed it, or found no directory, answers without reading
+    /// a file.</summary>
+    /// <param name="identity">The sampling stage's identity.</param>
+    /// <returns><see langword="false"/> when no sample set of the identity is held.</returns>
+    internal bool MayHoldSamples(UInt128 identity) => SampleSetOf(identity).MayHoldAny;
+    /// <summary>Returns whether the store may hold one sample set: false only when it has listed the identity's directory
+    /// (or found none) and the set is not in it nor written since by this process. A set another World wrote after the
+    /// listing reads as absent, and its lattice is sampled again; one the listing named that is gone reads as present,
+    /// and its read misses.</summary>
+    /// <param name="identity">The sampling stage's identity.</param>
+    /// <param name="key">The sample input (<c>SdfMeshPathBake.SampleInput</c>).</param>
+    /// <returns><see langword="false"/> when the set is known to be absent.</returns>
+    internal bool MayHoldSamples(UInt128 identity, UInt128 key) => SampleSetOf(identity).MayHold(SampleKeyOf(identity, key));
+
+    // The sample sets' keys this store knows, by sampling identity.
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<UInt128, SampleSet> m_sampleSets = new();
+
+    private SampleSet SampleSetOf(UInt128 identity) {
+        if (m_sampleSets.TryGetValue(identity, out var known)) { return known; }
+        var set = new SampleSet();
+
+        if (!m_sampleSets.TryAdd(identity, set)) { return m_sampleSets[identity]; }
+        var directory = Path.Combine(IntermediateDirectory, identity.ToString(format: "x32", provider: null));
+
+        // A cold store has no directory, which one look settles; a directory is listed on the pool, and the set answers
+        // "may hold" until the listing stands.
+        if (!System.IO.Directory.Exists(directory)) {
+            set.Listed([]);
+        } else {
+            _ = ThreadPool.UnsafeQueueUserWorkItem(callBack: static state => state.Set.Listed(ListSamples(state.Directory)), preferLocal: false, state: (Set: set, Directory: directory));
+        }
+        return set;
+    }
+    private static List<UInt128> ListSamples(string directory) {
+        var keys = new List<UInt128>();
+
+        try {
+            foreach (var path in System.IO.Directory.EnumerateFiles(directory, "*" + SampleExtension)) {
+                var name = Path.GetFileNameWithoutExtension(path.AsSpan());
+
+                if ((name.Length == 32) && UInt128.TryParse(name, System.Globalization.NumberStyles.HexNumber, null, out var key)) { keys.Add(key); }
+            }
+        } catch (Exception exception) when (exception is IOException or UnauthorizedAccessException) {
+            // A directory that cannot be listed holds nothing this store knows of.
+        }
+        return keys;
+    }
+    private void DeleteSamples(UInt128 identity, UInt128 key, string path) {
+        m_sampleSets.GetValueOrDefault(identity)?.Remove(key);
+        Delete(path);
+    }
+    // A sample set's file key: the sampling identity and the sample input, as a geometry's entry key is formed.
+    private static UInt128 SampleKeyOf(UInt128 identity, UInt128 key) => KeyOf(identity, new SdfMeshGeometry(Dynamic: false, Hash: key));
+
+    // The file keys of one sampling identity's sample sets: those its directory held when listed, and those this process
+    // wrote or deleted since. Until the listing stands, every set may be held.
+    private sealed class SampleSet {
+        private readonly Lock m_gate = new();
+        private readonly HashSet<UInt128> m_keys = [];
+        private readonly HashSet<UInt128> m_removed = [];
+
+        private bool m_listed;
+
+        public bool MayHoldAny {
+            get { lock (m_gate) { return (!m_listed || (m_keys.Count > 0)); } }
+        }
+
+        public bool MayHold(UInt128 key) {
+            lock (m_gate) { return (!m_listed || m_keys.Contains(key)); }
+        }
+        public void Listed(List<UInt128> keys) {
+            lock (m_gate) {
+                foreach (var key in keys) {
+                    if (!m_removed.Contains(key)) { _ = m_keys.Add(key); }
+                }
+                m_removed.Clear();
+                m_listed = true;
+            }
+        }
+        public void Add(UInt128 key) {
+            lock (m_gate) {
+                _ = m_keys.Add(key);
+                _ = m_removed.Remove(key);
+            }
+        }
+        public void Remove(UInt128 key) {
+            lock (m_gate) {
+                _ = m_keys.Remove(key);
+                if (!m_listed) { _ = m_removed.Add(key); }
+            }
         }
     }
     /// <summary>Records a bake's identity beside the entries: its parts and its code's members, written once
@@ -643,16 +854,20 @@ public sealed class SdfMeshStore {
     }
     // Deletes a file the store owns, leaving one another World holds open for a later trim or refusal to remove.
     private static void Delete(string path) => _ = Quietly(action: () => File.Delete(path: path));
-    // Runs a file-system action, answering whether the file system allowed it.
+    // Runs a file-system action, or an entry's encode and write, answering whether it ran: one the file system refused,
+    // or whose encode found no memory or overflowed an entry's counts, leaves the entry as it was, and a later bake
+    // derives it again (the store is a cache).
     private static bool Quietly(Action action) {
         try {
             action();
 
             return true;
-        } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
+        } catch (Exception exception) when (Refused(exception: exception)) {
             return false;
         }
     }
+    // The failures Quietly and WriteEntry answer as a refusal rather than throw.
+    private static bool Refused(Exception exception) => (exception is IOException or UnauthorizedAccessException or OutOfMemoryException or OverflowException);
 }
 
 /// <summary>
